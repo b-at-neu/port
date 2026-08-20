@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/b-at-neu/port/main/schema/port.config.schema.json",
+  "tracker": "github",
+  "repo": "OWNER/NAME",
+  "branches": {
+    "integration": "dev",
+    "production": "main"
+  },
+  "commands": {
+    "bootstrap": [],
+    "checks": []
+  },
+  "docs": {
+    "engineering": null,
+    "design": null
+  },
+  "models": {
+    "plan": "opus",
+    "impl": "sonnet",
+    "review": "sonnet",
+    "revise": "sonnet"
+  },
+  "labels": {},
+  "modules": {
+    "approvalGate": false,
+    "previewDatabase": false,
+    "release": true,
+    "scope": true
+  },
+  "reviewCycleCap": 5,
+  "sessionRequiredPaths": ["CLAUDE.md", ".claude/**", "port.config.json"],
+  "extraAllow": []
+}

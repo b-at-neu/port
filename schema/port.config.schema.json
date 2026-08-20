@@ -1,0 +1,284 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/b-at-neu/port/main/schema/port.config.schema.json",
+  "title": "port.config.json",
+  "description": "Per-repository configuration for the port agent pipeline. Committed at the repository root and read at runtime by every stage agent and skill, so it travels into worktrees and is reviewable in pull requests. Only `repo` is required; every other field has a documented default. Note that `default` here is documentation, not behaviour — JSON Schema does not populate values, so each consumer applies these defaults itself when a key is absent.",
+  "type": "object",
+  "required": ["repo"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional pointer to this schema, for editor completion and validation."
+    },
+
+    "tracker": {
+      "description": "Which issue tracker holds pipeline state. Only GitHub is implemented; this field exists so a second backend can be added without a breaking change.",
+      "enum": ["github"],
+      "default": "github"
+    },
+
+    "repo": {
+      "type": "string",
+      "description": "The GitHub repository this pipeline operates on, as `owner/name`. Every `gh` call the agents make is scoped to it.",
+      "pattern": "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$",
+      "examples": ["b-at-neu/portfolio"]
+    },
+
+    "branches": {
+      "type": "object",
+      "description": "The two long-lived branches. Feature work targets `integration`; `production` is only ever reached by a release.",
+      "additionalProperties": false,
+      "properties": {
+        "integration": {
+          "type": "string",
+          "description": "Branch that feature pull requests target and that agents rebase onto.",
+          "default": "dev",
+          "minLength": 1
+        },
+        "production": {
+          "type": "string",
+          "description": "Branch that releases promote to. Agents never open a feature pull request against it.",
+          "default": "main",
+          "minLength": 1
+        }
+      }
+    },
+
+    "commands": {
+      "type": "object",
+      "description": "Shell commands the implementing agents run. Every entry must start with its binary and parse cleanly, or the permission allowlist will not match it.",
+      "additionalProperties": false,
+      "properties": {
+        "bootstrap": {
+          "type": "array",
+          "description": "Commands that make a fresh checkout workable, run in order, one per shell invocation. Typically a dependency install and any code generation. Empty when a checkout needs no preparation.",
+          "items": { "type": "string", "minLength": 1 },
+          "default": [],
+          "examples": [["npm ci", "npm run prisma:generate"]]
+        },
+        "checks": {
+          "type": "array",
+          "description": "The checks that must pass before a pull request is opened, run in order. An agent runs `run`; on failure it runs `fix` when one is given and retries once.",
+          "items": {
+            "type": "object",
+            "required": ["run"],
+            "additionalProperties": false,
+            "properties": {
+              "run": {
+                "type": "string",
+                "description": "The command that reports pass or fail.",
+                "minLength": 1
+              },
+              "fix": {
+                "type": ["string", "null"],
+                "description": "Command that repairs what `run` reports, when one exists. Null for checks nothing can auto-fix, such as type checking.",
+                "default": null
+              }
+            }
+          },
+          "default": []
+        }
+      }
+    },
+
+    "docs": {
+      "type": "object",
+      "description": "Repository-authored documents the agents read. Null means the repository has none, and the agents fall back to the plan and the surrounding code.",
+      "additionalProperties": false,
+      "properties": {
+        "engineering": {
+          "type": ["string", "null"],
+          "description": "Path to the engineering standards every stage agent reads before working, and that review treats as a review dimension.",
+          "default": null,
+          "examples": [".claude/docs/ENGINEERING.md"]
+        },
+        "design": {
+          "type": ["string", "null"],
+          "description": "Path to the design system or token reference, for repositories with a user interface.",
+          "default": null
+        }
+      }
+    },
+
+    "models": {
+      "type": "object",
+      "description": "Which model runs each stage. Accepts an alias (`opus`, `sonnet`, `haiku`, `fable`), `inherit` to use the session's model, or an exact model id. Also determines the co-authorship trailer on commits an agent makes.",
+      "additionalProperties": false,
+      "properties": {
+        "plan": {
+          "type": "string",
+          "description": "Stage 1. Defaults to the strongest model because planning quality amplifies through every later stage.",
+          "default": "opus",
+          "minLength": 1
+        },
+        "impl": {
+          "type": "string",
+          "description": "Stage 2, which writes the bulk of the code.",
+          "default": "sonnet",
+          "minLength": 1
+        },
+        "review": {
+          "type": "string",
+          "description": "Stage 3, which must catch real problems reliably.",
+          "default": "sonnet",
+          "minLength": 1
+        },
+        "revise": {
+          "type": "string",
+          "description": "Stage 4, which applies a structured list of findings.",
+          "default": "sonnet",
+          "minLength": 1
+        }
+      }
+    },
+
+    "labels": {
+      "type": "object",
+      "description": "Overrides for the label vocabulary. Labels are the durable state machine, so these are the strings the agents read and write. An omitted key uses the standard name shown as its default; override only where a repository already uses a different word.",
+      "additionalProperties": false,
+      "properties": {
+        "marker": {
+          "type": "string",
+          "description": "Marks an item as pipeline-owned. On a pull request it is also what activates the approval gate.",
+          "default": "claude"
+        },
+        "ready": {
+          "type": "string",
+          "description": "Trigger: plan this issue.",
+          "default": "ready"
+        },
+        "planning": {
+          "type": "string",
+          "description": "In flight: a plan is being researched.",
+          "default": "planning"
+        },
+        "planReview": {
+          "type": "string",
+          "description": "Gate: the plan is written and awaiting human approval.",
+          "default": "plan review"
+        },
+        "planChangesRequested": {
+          "type": "string",
+          "description": "Trigger: revise the plan from human feedback.",
+          "default": "plan changes requested"
+        },
+        "planApproved": {
+          "type": "string",
+          "description": "Trigger: implement the approved plan.",
+          "default": "plan approved"
+        },
+        "autoPlan": {
+          "type": "string",
+          "description": "Marker: skip the plan gate and approve automatically.",
+          "default": "auto plan"
+        },
+        "inProgress": {
+          "type": "string",
+          "description": "In flight: implementation underway.",
+          "default": "in progress"
+        },
+        "prOpened": {
+          "type": "string",
+          "description": "Terminal on the issue: remaining state lives on the pull request.",
+          "default": "pr opened"
+        },
+        "blocked": {
+          "type": "string",
+          "description": "Gate: implementation hit something needing a human decision.",
+          "default": "blocked"
+        },
+        "readyForReview": {
+          "type": "string",
+          "description": "Trigger: review this pull request.",
+          "default": "ready for review"
+        },
+        "reviewing": {
+          "type": "string",
+          "description": "In flight: review underway.",
+          "default": "reviewing"
+        },
+        "needsRevision": {
+          "type": "string",
+          "description": "Trigger: apply the review findings.",
+          "default": "needs revision"
+        },
+        "revising": {
+          "type": "string",
+          "description": "In flight: fixes underway.",
+          "default": "revising"
+        },
+        "approved": {
+          "type": "string",
+          "description": "Terminal: findings are at or under the current cycle's bar; a human merges.",
+          "default": "approved"
+        },
+        "needsHuman": {
+          "type": "string",
+          "description": "Gate: the pipeline stopped and needs a person.",
+          "default": "needs human"
+        },
+        "refreshBranch": {
+          "type": "string",
+          "description": "Trigger: rebase and force-push with no code changes. Requires the previewDatabase module.",
+          "default": "refresh branch"
+        },
+        "refreshing": {
+          "type": "string",
+          "description": "In flight: branch refresh underway. Requires the previewDatabase module.",
+          "default": "refreshing"
+        }
+      }
+    },
+
+    "modules": {
+      "type": "object",
+      "description": "Optional subsystems. Turning one off removes it entirely: its labels are never created, its queries never run, and the agents carry no instructions about it.",
+      "additionalProperties": false,
+      "properties": {
+        "approvalGate": {
+          "type": "boolean",
+          "description": "Enforce the merge gate in CI. When off, no workflow is installed and review still applies the approved label, but the merge gate is conversational rather than enforced. Leave it off unless a branch ruleset makes the check required, since otherwise the workflow is noise.",
+          "default": true
+        },
+        "previewDatabase": {
+          "type": "boolean",
+          "description": "Account for a finite pool of preview databases, one per open pull request. When on, a red deployment check is read as an infrastructure condition rather than a code finding, and merges trigger a branch refresh to reclaim a freed slot. Only relevant to repositories whose previews hold a database branch.",
+          "default": false
+        },
+        "release": {
+          "type": "boolean",
+          "description": "Offer the release flow that promotes integration to production and publishes a tagged release.",
+          "default": true
+        },
+        "scope": {
+          "type": "boolean",
+          "description": "Offer the stage-zero flow that decomposes a feature into an epic with dependency-ordered sub-issues.",
+          "default": true
+        }
+      }
+    },
+
+    "reviewCycleCap": {
+      "type": "integer",
+      "description": "How many review cycles may run before the pipeline stops and asks for a human. Counted from the review comments on the pull request.",
+      "minimum": 1,
+      "default": 5
+    },
+
+    "sessionRequiredPaths": {
+      "type": "array",
+      "description": "Globs that cannot be handed to a dispatched agent, because the harness denies edits under them to subagents. A plan touching any of these is marked so the operator runs that stage in their own session instead. Also seeds the never-touch list for automatic rebase conflict resolution.",
+      "items": { "type": "string", "minLength": 1 },
+      "default": ["CLAUDE.md", ".claude/**", "port.config.json"]
+    },
+
+    "extraAllow": {
+      "type": "array",
+      "description": "Additional permission patterns merged into the repository's allowlist by the installer, for tooling the base list does not cover. Keep these narrow: the allowlist is the safety surface, and a broad entry can hand an agent a general command-execution escape hatch.",
+      "items": { "type": "string", "minLength": 1 },
+      "default": [],
+      "examples": [["Bash(npx shadcn@latest *)"]]
+    }
+  }
+}
