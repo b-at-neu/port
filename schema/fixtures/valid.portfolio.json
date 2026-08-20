@@ -1,0 +1,16 @@
+{
+  "$schema": "../port.config.schema.json",
+  "repo": "b-at-neu/portfolio",
+  "branches": { "integration": "dev", "production": "main" },
+  "commands": {
+    "bootstrap": ["npm ci"],
+    "checks": [{ "run": "npm run lint", "fix": null }]
+  },
+  "docs": { "engineering": null, "design": null },
+  "modules": {
+    "approvalGate": false,
+    "previewDatabase": false,
+    "release": false,
+    "scope": true
+  }
+}

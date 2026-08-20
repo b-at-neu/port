@@ -1,0 +1,6 @@
+{
+  "repo": "b-at-neu/port",
+  "commands": {
+    "checks": [{ "fix": "npm run lint:fix" }]
+  }
+}

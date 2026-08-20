@@ -1,0 +1,39 @@
+{
+  "$schema": "../port.config.schema.json",
+  "tracker": "github",
+  "repo": "SGAOperations/aplio",
+  "branches": { "integration": "dev", "production": "main" },
+  "commands": {
+    "bootstrap": ["npm ci", "npm run prisma:generate"],
+    "checks": [
+      { "run": "npm run prettier:check", "fix": "npm run prettier:fix" },
+      { "run": "npm run eslint:check", "fix": null },
+      { "run": "npm run tsc:check", "fix": null }
+    ]
+  },
+  "docs": {
+    "engineering": ".claude/docs/ENGINEERING.md",
+    "design": ".claude/docs/DESIGN.md"
+  },
+  "models": {
+    "plan": "opus",
+    "impl": "sonnet",
+    "review": "sonnet",
+    "revise": "sonnet"
+  },
+  "modules": {
+    "approvalGate": true,
+    "previewDatabase": true,
+    "release": true,
+    "scope": true
+  },
+  "reviewCycleCap": 5,
+  "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"],
+  "extraAllow": [
+    "Bash(npx shadcn *)",
+    "Bash(npx shadcn@latest *)",
+    "Bash(npx shadcn@* *)",
+    "WebFetch(domain:nextjs.org)",
+    "WebFetch(domain:ui.shadcn.com)"
+  ]
+}
