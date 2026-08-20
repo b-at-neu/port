@@ -1,0 +1,85 @@
+# Installed by /port:init when modules.approvalGate is enabled.
+#
+# Gates pull requests into {{integration}} on the `{{approvedLabel}}` label, but ONLY when
+# the pull request carries `{{markerLabel}}`. Everything else — human, dependency bot —
+# gets a skipped check run, which GitHub counts as satisfied, so it merges on its own merits.
+#
+# NEVER narrow the trigger and never rename the job. A workflow that does not run creates
+# no check run at all, which leaves a required check pending forever — strictly worse than
+# a failing one, because nothing surfaces why.
+#
+# Deliberately FAIL-OPEN: an unlabelled pipeline pull request is indistinguishable in CI
+# from a human one and simply loses its gate. Nothing here can close that. The mitigations
+# live upstream — impl-agent applies the label at creation time so the gate is live on the
+# first event, and the cockpit's ungated sweep reports any tracked pull request missing it.
+#
+# Scoped to {{integration}} only. Release pull requests into {{production}} carry no
+# pipeline labels, so gating them would block every release.
+#
+# This check only *enforces* anything if it is registered as a required status check in a
+# branch ruleset. Creating that ruleset is an administrative action the installer does not
+# take; until it exists this gate is advisory.
+
+name: Approval Check
+
+on:
+  pull_request:
+    branches: [{{integration}}]
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  run-approval-check:
+    runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.labels.*.name, '{{markerLabel}}')
+    timeout-minutes: 5
+    steps:
+      - name: Check pipeline labels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -uo pipefail
+
+          # One label per line. Any of these means the item is mid-pipeline.
+          BLOCKING_LABELS="{{blockingLabels}}"
+
+          if ! gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json labels \
+              --jq '.labels[].name' > "$RUNNER_TEMP/labels.txt"; then
+            echo "::error::Could not read labels for PR #$PR."
+            exit 1
+          fi
+
+          echo "Labels on PR #$PR:"
+          cat "$RUNNER_TEMP/labels.txt"
+
+          FAILED=0
+          FOUND_BLOCKING=""
+
+          while IFS= read -r LABEL; do
+            [ -z "$LABEL" ] && continue
+            if grep -Fxq "$LABEL" "$RUNNER_TEMP/labels.txt"; then
+              FOUND_BLOCKING="$FOUND_BLOCKING$LABEL, "
+            fi
+          done <<EOF
+          $BLOCKING_LABELS
+          EOF
+
+          if ! grep -Fxq "{{approvedLabel}}" "$RUNNER_TEMP/labels.txt"; then
+            echo "::error::Missing the '{{approvedLabel}}' label. This PR carries '{{markerLabel}}', so it is a pipeline PR and merges only once review applies '{{approvedLabel}}'. If it is not a pipeline PR, remove the '{{markerLabel}}' label and this check will skip."
+            FAILED=1
+          fi
+
+          if [ -n "$FOUND_BLOCKING" ]; then
+            echo "::error::Blocking pipeline label(s): ${FOUND_BLOCKING%, }. The PR is mid-pipeline; wait for it to reach '{{approvedLabel}}'."
+            FAILED=1
+          fi
+
+          if [ "$FAILED" -eq 1 ]; then
+            exit 1
+          fi
+
+          echo "'{{approvedLabel}}' present, no blocking pipeline labels — merge gate satisfied."

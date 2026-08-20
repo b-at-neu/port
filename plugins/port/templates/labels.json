@@ -1,0 +1,41 @@
+{
+  "$comment": [
+    "Label vocabulary /port:init creates in a managed repository.",
+    "",
+    "Each entry names the module that owns it. `core` labels are always created; a label",
+    "owned by an optional module is created only when that module is enabled, so a",
+    "repository with previewDatabase off never gets the two refresh labels.",
+    "",
+    "`key` is the port.config.json `labels` key. `name` is the default string, which a",
+    "repository may override there. Agents read the configured name, never these defaults",
+    "directly.",
+    "",
+    "Colours group by role: markers slate, triggers blue, in-flight amber, gates red,",
+    "terminal green — so the pipeline stage of an item is legible at a glance on GitHub."
+  ],
+
+  "labels": [
+    { "key": "marker",               "name": "claude",                 "module": "core",            "color": "5C6370", "description": "The port pipeline owns this item" },
+    { "key": "autoPlan",             "name": "auto plan",              "module": "core",            "color": "5C6370", "description": "Plan gate skipped: the plan is auto-approved" },
+
+    { "key": "ready",                "name": "ready",                  "module": "core",            "color": "1F6FEB", "description": "Trigger: plan this issue" },
+    { "key": "planChangesRequested", "name": "plan changes requested", "module": "core",            "color": "1F6FEB", "description": "Trigger: revise the plan from human feedback" },
+    { "key": "planApproved",         "name": "plan approved",          "module": "core",            "color": "1F6FEB", "description": "Trigger: implement the approved plan" },
+    { "key": "readyForReview",       "name": "ready for review",       "module": "core",            "color": "1F6FEB", "description": "Trigger: review this pull request" },
+    { "key": "needsRevision",        "name": "needs revision",         "module": "core",            "color": "1F6FEB", "description": "Trigger: apply the review findings" },
+    { "key": "refreshBranch",        "name": "refresh branch",         "module": "previewDatabase", "color": "1F6FEB", "description": "Trigger: rebase and force-push, no code changes" },
+
+    { "key": "planning",             "name": "planning",               "module": "core",            "color": "D4A72C", "description": "In flight: a plan is being researched" },
+    { "key": "inProgress",           "name": "in progress",            "module": "core",            "color": "D4A72C", "description": "In flight: implementation underway" },
+    { "key": "reviewing",            "name": "reviewing",              "module": "core",            "color": "D4A72C", "description": "In flight: review underway" },
+    { "key": "revising",             "name": "revising",               "module": "core",            "color": "D4A72C", "description": "In flight: fixes underway" },
+    { "key": "refreshing",           "name": "refreshing",             "module": "previewDatabase", "color": "D4A72C", "description": "In flight: branch refresh underway" },
+
+    { "key": "planReview",           "name": "plan review",            "module": "core",            "color": "D1242F", "description": "Gate: plan written, awaiting human approval" },
+    { "key": "blocked",              "name": "blocked",                "module": "core",            "color": "D1242F", "description": "Gate: needs a human decision, details in a comment" },
+    { "key": "needsHuman",           "name": "needs human",            "module": "core",            "color": "D1242F", "description": "Gate: the pipeline stopped and needs a person" },
+
+    { "key": "prOpened",             "name": "pr opened",              "module": "core",            "color": "1A7F37", "description": "Terminal on the issue: state now lives on the pull request" },
+    { "key": "approved",             "name": "approved",               "module": "core",            "color": "1A7F37", "description": "Terminal: findings are at or under the bar, a human merges" }
+  ]
+}
