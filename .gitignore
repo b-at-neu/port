@@ -1,0 +1,11 @@
+node_modules/
+
+# Pipeline scratch space
+.agents/
+.temp/
+.claude/worktrees/
+
+# Local-only Claude settings
+.claude/settings.local.json
+
+.DS_Store
