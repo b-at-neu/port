@@ -1,0 +1,14 @@
+{
+  "name": "port",
+  "owner": {
+    "name": "Benedikt Winkler",
+    "url": "https://github.com/b-at-neu"
+  },
+  "plugins": [
+    {
+      "name": "port",
+      "source": "./plugins/port",
+      "description": "A GitHub-driven agent pipeline — plan, implement, review, revise — installable into any repository."
+    }
+  ]
+}

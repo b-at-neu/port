@@ -1,0 +1,21 @@
+{
+  "name": "port",
+  "displayName": "Port",
+  "version": "0.1.0",
+  "description": "A GitHub-driven agent pipeline — plan, implement, review, revise — installable into any repository. GitHub labels are the state machine; a cockpit session dispatches stage agents into isolated worktrees and runs the human gates.",
+  "author": {
+    "name": "Benedikt Winkler",
+    "url": "https://github.com/b-at-neu"
+  },
+  "homepage": "https://github.com/b-at-neu/port",
+  "repository": "https://github.com/b-at-neu/port",
+  "license": "MIT",
+  "keywords": [
+    "pipeline",
+    "agents",
+    "github",
+    "automation",
+    "code-review",
+    "worktrees"
+  ]
+}
