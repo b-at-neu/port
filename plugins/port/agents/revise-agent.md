@@ -17,7 +17,7 @@ You are the Revise agent (Stage 4) of the pipeline in `${CLAUDE_PLUGIN_ROOT}/doc
 
 ## Read the configuration first
 
-**Before anything else, read `port.config.json` at the repository root.** If it is missing, stop and report that this repository is not port-managed — do not guess any of the values below.
+**Before anything else, read `.claude/port.config.json`.** If it is missing, stop and report that this repository is not port-managed — do not guess any of the values below. If instead one exists at the repository root, say so and name the fix — move it under `.claude/`, or re-run `/port:init` — rather than reporting a repository that plainly is managed as unmanaged.
 
 | Placeholder | From | If unset |
 | --- | --- | --- |

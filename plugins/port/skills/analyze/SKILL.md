@@ -9,13 +9,13 @@ allowed-tools: Read, Grep, Glob, Write, Edit, AskUserQuestion, Bash(git log *) B
 
 **Trigger:** manual, or offered by `/port:init`. **Input:** none.
 
-`docs.engineering` is the highest-leverage field in `port.config.json`: all four stage agents read it, and `review-agent` cites it as a review dimension. A repository with it null gets a pipeline working from the plan and the surrounding code alone. This skill is how it gets filled with something true.
+`docs.engineering` is the highest-leverage field in `.claude/port.config.json`: all four stage agents read it, and `review-agent` cites it as a review dimension. A repository with it null gets a pipeline working from the plan and the surrounding code alone. This skill is how it gets filled with something true.
 
 **Expect this to be slow.** Reading enough of a codebase to say something accurate takes time, and the operator will be asked real questions. That is the cost of a document worth citing.
 
 ## Read the configuration first
 
-Read `port.config.json` at the repository root for `repo`, `docs.engineering`, and `commands`. If it is missing, stop — this repository is not port-managed, and `/port:init` comes first.
+Read `.claude/port.config.json` for `repo`, `docs.engineering`, and `commands`. If it is missing, stop — this repository is not port-managed, and `/port:init` comes first. If instead one exists at the repository root, say so and name the fix — move it under `.claude/`, or re-run `/port:init` — rather than reporting a repository that plainly is managed as unmanaged.
 
 If `docs.engineering` is already set and that file exists, this is a **re-run**: see "Re-running" at the end before doing anything else.
 
@@ -71,7 +71,7 @@ Write it for the reader it actually has: a stage agent about to make a change, a
 
 **Section 8, the pre-pull-request self-check, is the highest-value part of the document.** It is what implementation builds toward, what revision must not reintroduce, and what review uses as its dimensions. It must be derived from what actually recurs in *this* repository — the churn from step 1, what the linter keeps catching, what the existing document already warns about. **A generic checklist here is the main way this skill fails while appearing to succeed:** the document looks complete, and adds nothing.
 
-Then set `docs.engineering` in `port.config.json` to the written path.
+Then set `docs.engineering` in `.claude/port.config.json` to the written path.
 
 ## 5. Recommend plugins for this stack
 

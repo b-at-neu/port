@@ -27,7 +27,7 @@ claude plugin marketplace update port
 
 ## Writing hooks
 
-Once installed at user scope the plugin loads in every session, whatever the working directory. A hook must therefore return immediately when the repository has no `port.config.json` — without that guard, installing this plugin changes behaviour in every unrelated project on the machine.
+Once installed at user scope the plugin loads in every session, whatever the working directory. A hook must therefore return immediately when the repository has no `.claude/port.config.json` — without that guard, installing this plugin changes behaviour in every unrelated project on the machine.
 
 ## Commit messages
 

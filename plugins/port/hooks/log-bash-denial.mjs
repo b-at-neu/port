@@ -8,7 +8,7 @@
 //
 // Two invariants worth stating, because both are easy to break:
 //
-//  1. It no-ops unless the repository has a `port.config.json`. A plugin's
+//  1. It no-ops unless the repository has a `.claude/port.config.json`. A plugin's
 //     hooks fire in EVERY session once installed at user scope, regardless of
 //     working directory, so without this guard installing port would start
 //     writing logs into unrelated projects.
@@ -86,7 +86,7 @@ try {
   const cwd = data?.cwd ?? process.cwd();
 
   // Invariant 1: silent outside a port-managed repository.
-  const configRoot = findUp(cwd, 'port.config.json');
+  const configRoot = findUp(cwd, join('.claude', 'port.config.json'));
   if (!configRoot) process.exit(0);
 
   // Invariant 2: matchers come from the settings actually in effect. A
