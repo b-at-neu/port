@@ -6,16 +6,20 @@ GitHub labels are the state machine. A cockpit session polls them, dispatches fo
 
 This repository is both the plugin and its own marketplace.
 
-## Install
+## Install into a repository
 
-Once per machine. **This is not per-repository** — see [Adopt a repository](#adopt-a-repository) for that.
+Everything here is **per-repository**. Nothing is installed globally.
+
+From inside the repository you want the pipeline to manage:
 
 ```bash
-claude plugin marketplace add b-at-neu/port
-claude plugin install port@port
+claude plugin marketplace add b-at-neu/port --scope project
+claude plugin install port@port --scope project
 ```
 
-Check it loaded:
+Both write to that repository's `.claude/settings.json`, which is committed. So the pipeline **travels with the repository**: anyone who clones it gets the same plugin from the same source, with no separate setup, and nothing leaks into your other projects.
+
+Reload so the plugin loads — `/reload-plugins`, or start a new session — then check:
 
 ```bash
 claude plugin details port
@@ -23,15 +27,15 @@ claude plugin details port
 
 You should see 7 skills, 4 agents, and 1 hook. A component that fails to parse is **silently absent** from that inventory rather than reported as an error, so check the counts rather than looking for a complaint.
 
-### Which scope
+### Why project scope
 
-The commands above install at **user scope**, which is the right default: `/port:init` has to be available in a repository *before* that repository is set up, and project scope creates a chicken-and-egg — you would have to install into the repo, reload, and only then adopt it.
+A repository that declares its own tooling is self-describing: the pipeline, its version, and the plugins chosen for its stack are all recorded in the repository rather than in one person's machine state. Clone it and you have the same setup.
 
-For a team, add `--scope project` in each managed repository as well. That commits `enabledPlugins` and `extraKnownMarketplaces` to its `.claude/settings.json`, so a teammate gets the pipeline on clone instead of setting it up themselves. Costs an extra step and a reload; worth it once more than one person operates the same repository.
+The alternative — installing once at user scope — is fewer keystrokes and makes `/port:init` available everywhere, but it means the pipeline exists only on the machine that installed it, and every plugin picked for one repository's stack loads in all your others. `/port:analyze` scopes its plugin recommendations to the repository for the same reason.
 
 ## Adopt a repository
 
-Once per repository you want the pipeline to manage. From inside it:
+Once installed, from inside the same repository:
 
 ```
 /port:init

@@ -1,6 +1,6 @@
 # Using the pipeline
 
-Install and adoption are in the [README](../README.md). This is the operator's walkthrough for running it.
+Install and adoption are in the [README](../README.md) — both are per-repository, and nothing is installed globally. This is the operator’s walkthrough for running it.
 
 Reference material — the full label lifecycle, permission model, output formats, and recovery runbook — lives in [plugins/port/docs/PIPELINE.md](../plugins/port/docs/PIPELINE.md). This document points at it rather than repeating it.
 
