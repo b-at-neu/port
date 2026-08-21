@@ -77,12 +77,30 @@ Validate the result against `schema/port.config.schema.json` if a validator is a
 
 Read `${CLAUDE_PLUGIN_ROOT}/templates/permissions.base.json` and merge into `.claude/settings.json`:
 
+**You own exactly two things in this file: `permissions.allow` and `permissions.deny`.** Merge key-wise into the existing document and **preserve every other top-level key byte-for-byte.** Never rebuild the file from a template plus a permissions block.
+
+This is not tidiness. Installation is per-repository, so this same file carries the plugin's own declarations:
+
+```json
+{
+  "extraKnownMarketplaces": { "port": { "source": { "source": "github", "repo": "b-at-neu/port" } } },
+  "enabledPlugins": { "port@port": true },
+  "permissions": { ... }
+}
+```
+
+Drop `enabledPlugins` or `extraKnownMarketplaces` and you have **uninstalled the plugin that is currently running this skill** — `/port:init` disables itself partway through, and the symptom looks like the plugin vanishing rather than like a bad merge. `hooks` is the same story. Anything you did not put there, leave alone.
+
+Then, within the two lists you do own:
+
 - Substitute `{{integration}}` and `{{production}}` into the push-deny rules, and `{{packageManager}}` into the package-manager entries. **If the repository has no package manager, drop those entries** rather than leaving a literal placeholder — an unsubstituted pattern matches nothing and silently grants nothing.
 - Append `extraAllow` to the allow list.
 - **Union with what is already there. Never drop an existing entry**, even one that looks redundant; it may be load-bearing for something outside the pipeline.
 - Deduplicate exact repeats.
 
 **Show the diff and confirm before writing.** This is the single most consequential file this skill touches.
+
+Show it as a **diff against the current file**, not as the proposed contents — and **call out any removal explicitly in words**, separately from the diff. A diff that silently drops two keys is easy to approve while reading the permission entries you asked for, so the confirmation cannot be the only thing standing between a mistake and a written file.
 
 ## 5. Create the labels
 
