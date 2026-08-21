@@ -1,6 +1,6 @@
 ---
 name: init
-description: Install the port agent pipeline into this repository — detect its toolchain, choose which subsystems to enable, write port.config.json, merge the permission lists into .claude/settings.json, create the label vocabulary, and optionally install the CI merge gate. Idempotent; nothing is written without confirmation. Manual only. Usage: /port:init
+description: Install the port agent pipeline into this repository — detect its toolchain, choose which subsystems to enable, write port.config.json, merge the permission lists into .claude/settings.json, create the label vocabulary, optionally install the CI merge gate, and offer to generate engineering standards from the codebase. Idempotent; nothing is written without confirmation. Manual only. Usage: /port:init
 disable-model-invocation: true
 allowed-tools: Read, Write, Edit, Glob, Grep, AskUserQuestion, Bash(gh label *) Bash(gh api repos/*) Bash(gh repo view *) Bash(git branch *) Bash(git remote *) Bash(git rev-parse *)
 ---
@@ -59,7 +59,7 @@ The answers decide which of the remaining steps run at all.
 
 From `${CLAUDE_PLUGIN_ROOT}/templates/port.config.json`, filled in with the detected values and the module choices. Show it in full and confirm before writing.
 
-Set `docs.engineering` to a path only if that file **exists and says something real**. Leave it null otherwise — the agents fall back to the plan and the surrounding code, which is honest, whereas pointing at an empty skeleton makes review cite a document with no content.
+Set `docs.engineering` to a path only if that file **exists and says something real**. Leave it null otherwise — pointing it at an empty skeleton makes review cite a document with no content. Step 8 offers to fill it properly, and sets the field itself if the operator accepts.
 
 Validate the result against `schema/port.config.schema.json` if a validator is available; at minimum confirm it parses and that `repo` matches the detected remote.
 
@@ -71,7 +71,6 @@ Read `${CLAUDE_PLUGIN_ROOT}/templates/permissions.base.json` and merge into `.cl
 - Append `extraAllow` to the allow list.
 - **Union with what is already there. Never drop an existing entry**, even one that looks redundant; it may be load-bearing for something outside the pipeline.
 - Deduplicate exact repeats.
-- Add the `PreToolUse` hook only if the repository does not already have it. The plugin ships its own hook configuration, so in most cases there is nothing to add here.
 
 **Show the diff and confirm before writing.** This is the single most consequential file this skill touches.
 
@@ -91,12 +90,24 @@ gh label create "<name>" --color "<color>" --description "<description>"
 
 If the file already exists, diff it rather than overwriting, and ask.
 
-## 7. Bootstrap docs and ignores
+## 7. Bootstrap ignores
 
-- Offer `${CLAUDE_PLUGIN_ROOT}/templates/ENGINEERING.template.md` at the `docs.engineering` path when that is set and the file is absent.
-- Ensure `.gitignore` covers `.agents/`, `.temp/`, and the worktree root `.claude/worktrees/`. Append only what is missing.
+Ensure `.gitignore` covers `.agents/`, `.temp/`, and the worktree root `.claude/worktrees/`. Append only what is missing.
 
-## 8. Report, including what you did not do
+## 8. Offer the codebase analysis
+
+The repository is usable at this point, so this is the last thing asked and the only optional one.
+
+`docs.engineering` is the highest-leverage field in the configuration: all four stage agents read it and `review-agent` cites it as a review dimension. `/port:analyze` fills it by reading the codebase and proposing standards — conventions inferred from the code, inconsistencies put to you as decisions, improvements approved individually. It also recommends plugins that suit the stack.
+
+Ask whether to run it now.
+
+- **Accepted** → read `${CLAUDE_PLUGIN_ROOT}/skills/analyze/SKILL.md` and follow it end to end. It writes the document and sets `docs.engineering` itself, so do not write either here. **Pass on what detection already found** in step 1 rather than making it re-derive the stack.
+- **Declined** → leave `docs.engineering` null and **say what that means**: the stage agents will work from the plan and the surrounding code, and review will have no standards document to cite. Then note that `/port:analyze` can be run at any time.
+
+**Declining is a genuinely supported path.** The analysis is slow and asks real questions, and an operator who just wants the pipeline running would rush exactly the decisions that matter most. State the consequence once and move on — do not press it.
+
+## 9. Report, including what you did not do
 
 Summarize: the config written, permissions added versus already present, labels created versus skipped, whether the workflow was installed, and files touched.
 
