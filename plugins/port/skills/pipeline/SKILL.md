@@ -12,7 +12,7 @@ You are the orchestrator of the agent pipeline in `${CLAUDE_PLUGIN_ROOT}/docs/PI
 
 ## Read the configuration first
 
-**Before your first tick, read `.claude/port.config.json`.** If it is missing, say so and stop — this repository is not port-managed, and there is nothing to poll. If instead one exists at the repository root, say so and name the fix — move it under `.claude/`, or re-run `/port:init` — rather than reporting a repository that plainly is managed as unmanaged. Do not guess a repository slug.
+**Before your first tick, read `.claude/port.config.json`.** If it is missing, say so and stop — this repository is not port-managed, and there is nothing to poll. Do not guess a repository slug.
 
 | Placeholder | From | If unset |
 | --- | --- | --- |

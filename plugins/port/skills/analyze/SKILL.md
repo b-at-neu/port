@@ -15,7 +15,7 @@ allowed-tools: Read, Grep, Glob, Write, Edit, AskUserQuestion, Bash(git log *) B
 
 ## Read the configuration first
 
-Read `.claude/port.config.json` for `repo`, `docs.engineering`, and `commands`. If it is missing, stop — this repository is not port-managed, and `/port:init` comes first. If instead one exists at the repository root, say so and name the fix — move it under `.claude/`, or re-run `/port:init` — rather than reporting a repository that plainly is managed as unmanaged.
+Read `.claude/port.config.json` for `repo`, `docs.engineering`, and `commands`. If it is missing, stop — this repository is not port-managed, and `/port:init` comes first.
 
 If `docs.engineering` is already set and that file exists, this is a **re-run**: see "Re-running" at the end before doing anything else.
 

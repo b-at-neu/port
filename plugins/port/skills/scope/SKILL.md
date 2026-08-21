@@ -16,7 +16,7 @@ Small bug fixes and single-scope tickets do **not** need this stage — file an 
 
 ## Read the configuration first
 
-Read `.claude/port.config.json` for `repo` (written `<repo>` below, and `<owner>`/`<name>` where a call needs them split) and `docs.engineering`. If it is missing, stop — this repository is not port-managed. If instead one exists at the repository root, say so and name the fix — move it under `.claude/`, or re-run `/port:init` — rather than reporting a repository that plainly is managed as unmanaged.
+Read `.claude/port.config.json` for `repo` (written `<repo>` below, and `<owner>`/`<name>` where a call needs them split) and `docs.engineering`. If it is missing, stop — this repository is not port-managed.
 
 ## 1. Brainstorm
 
