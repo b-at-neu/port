@@ -2,7 +2,7 @@
 name: analyze
 description: Read this repository and produce a real ENGINEERING.md — conventions inferred from the code, inconsistencies surfaced as decisions, improvements proposed for approval — then recommend stack-relevant plugins. Sets docs.engineering. Re-runnable as the codebase evolves. Manual only. Usage: /port:analyze
 disable-model-invocation: true
-allowed-tools: Read, Grep, Glob, Write, Edit, AskUserQuestion, Bash(git log *) Bash(git ls-files *) Bash(git diff *) Bash(claude plugin list *) Bash(claude plugin install *) Bash(claude plugin marketplace list *)
+allowed-tools: Read, Grep, Glob, Write, Edit, AskUserQuestion, Bash(git log *) Bash(git ls-files *) Bash(git diff *) Bash(claude plugin list *) Bash(claude plugin install *) Bash(claude plugin marketplace list *) Bash(claude plugin marketplace add *)
 ---
 
 # Analyze — generate this repository's engineering standards
@@ -83,15 +83,31 @@ Configured marketplace catalogs are cached on disk at `~/.claude/plugins/marketp
 2. Match against catalog `name` and `description` **with judgment**. Substring matching is not good enough — searching the official catalog for `next` returns an endpoint-security plugin and a courseware plugin, neither relevant. **If you cannot justify a recommendation in one sentence referencing what the analysis found, drop it.**
 3. **Exclude anything already installed** (`claude plugin list`). Recommending what the operator already has reads as noise and costs their attention.
 4. Present a handful at most, each with the specific evidence that motivates it. A list of twenty is the same as no list.
-5. Ask which to install. **Install only explicitly-picked plugins, one confirmation each:**
+5. Ask which to install. **Install only explicitly-picked plugins, one confirmation each, at project scope:**
 
    ```bash
-   claude plugin install <name>@<marketplace>
+   claude plugin install <name>@<marketplace> --scope project
    ```
 
-6. **Say plainly that installs are user-scoped** — they affect every project on this machine, not just this repository.
+   If that marketplace is not already declared at project scope, declare it too, or a fresh clone will have an `enabledPlugins` entry it cannot resolve:
 
-**Never install anything unprompted.** Third-party plugin installation is a supply-chain decision and a global change to the operator's machine. An agent making that call on its own initiative is the wrong default however good the recommendation is.
+   ```bash
+   claude plugin marketplace add <source> --scope project
+   ```
+
+6. Report what was installed and where it landed.
+
+### Why project scope, not user
+
+Both commands take `--scope user|project|local`. **Project is the right one here**, and the reason is mechanical rather than tidiness:
+
+- **`project`** writes `enabledPlugins` and `extraKnownMarketplaces` into the repository's **committed** `.claude/settings.json`. Because it is committed, it travels into **dispatched agents' worktrees** — which is the entire point. These recommendations exist so the stage agents have better grounding in this stack; a plugin the agents cannot see does nothing for the pipeline. It also means a teammate gets the same tooling on clone.
+- **`local`** writes `.claude/settings.local.json`, which is gitignored. Personal to this checkout, and **invisible to worktrees**, so the agents never see it. Offer it only if the operator does not want the choice committed, and say plainly that the agents will not benefit.
+- **`user`** applies the plugin to every project on the machine. Wrong for a recommendation derived from analyzing *this* codebase — a database plugin picked for this repository has no business loading in an unrelated one.
+
+**One portability caveat.** A marketplace whose source is a local directory records an **absolute path** in the committed settings, which will not resolve on anyone else's machine. Only declare a marketplace at project scope when its source is portable — a git or GitHub repository. For a directory source, install at `local` scope instead and say why.
+
+**Never install anything unprompted.** Third-party plugin installation is a supply-chain decision, and at project scope it is also a committed change other people inherit. An agent making that call on its own initiative is the wrong default however good the recommendation is.
 
 No marketplaces configured, or no relevant matches → say so in one line and move on. **Do not pad the list to look useful.**
 
@@ -101,7 +117,7 @@ No marketplaces configured, or no relevant matches → say so in one line and mo
 - Counts by tier: observed, flagged-and-decided, proposals accepted and dropped.
 - Existing rules carried forward, and any replaced with what and why.
 - Roughly what was sampled, so coverage is judgeable.
-- Plugins installed and skipped, with the note that installs are global.
+- Plugins installed and skipped, the scope each landed at, and that a project-scope install is a **committed** change to `.claude/settings.json` that teammates inherit.
 - `docs.engineering` now set — and that review will cite this document from the next cycle onward.
 
 If the operator abandons the run, **write nothing and leave `docs.engineering` as it was.** A half-approved document is worse than none, because the unapproved half is indistinguishable from the approved half once written.
