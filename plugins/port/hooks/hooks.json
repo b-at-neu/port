@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ["node", "${CLAUDE_PLUGIN_ROOT}/hooks/log-bash-denial.mjs"]
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/log-bash-denial.mjs\""
           }
         ]
       }
