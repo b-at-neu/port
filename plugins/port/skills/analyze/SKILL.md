@@ -1,8 +1,8 @@
 ---
 name: analyze
-description: Read this repository and produce a real ENGINEERING.md — conventions inferred from the code, inconsistencies surfaced as decisions, improvements proposed for approval — then recommend stack-relevant plugins. Sets docs.engineering. Re-runnable as the codebase evolves. Manual only. Usage: /port:analyze
+description: Read this repository and produce a real ENGINEERING.md — conventions inferred from the code, inconsistencies surfaced as decisions, improvements proposed for approval — then recommend stack-relevant plugins from the local, org, and public catalogs. Files findings as tickets rather than fixing them. Sets docs.engineering. Re-runnable as the codebase evolves. Manual only. Usage: /port:analyze
 disable-model-invocation: true
-allowed-tools: Read, Grep, Glob, Write, Edit, AskUserQuestion, Bash(git log *) Bash(git ls-files *) Bash(git diff *) Bash(claude plugin list *) Bash(claude plugin install *) Bash(claude plugin marketplace list *) Bash(claude plugin marketplace add *)
+allowed-tools: Read, Grep, Glob, Write, Edit, AskUserQuestion, WebSearch, WebFetch, SearchPlugins, Bash(git log *) Bash(git ls-files *) Bash(git diff *) Bash(gh issue create *) Bash(claude plugin list *) Bash(claude plugin install *) Bash(claude plugin marketplace list *) Bash(claude plugin marketplace add *) Bash(claude plugin marketplace update *)
 ---
 
 # Analyze — generate this repository's engineering standards
@@ -12,6 +12,14 @@ allowed-tools: Read, Grep, Glob, Write, Edit, AskUserQuestion, Bash(git log *) B
 `docs.engineering` is the highest-leverage field in `.claude/port.config.json`: all four stage agents read it, and `review-agent` cites it as a review dimension. A repository with it null gets a pipeline working from the plan and the surrounding code alone. This skill is how it gets filled with something true.
 
 **Expect this to be slow.** Reading enough of a codebase to say something accurate takes time, and the operator will be asked real questions. That is the cost of a document worth citing.
+
+## You do not change code. Ever.
+
+**The only two files you may write are the engineering document and `.claude/port.config.json`.** Everything else in the repository is read-only to you, however obvious a fix looks and however small.
+
+This is not merely scope. A fix made here has no plan, no review, no pull request, and no approval gate — it bypasses the entire mechanism the pipeline exists to provide. This skill is the one part of the system that runs *outside* the pipeline, which makes it exactly the wrong place to change code. When you find something worth fixing, it becomes a ticket in step 7, and the pipeline does it properly.
+
+You hold `Write` and `Edit` because the two files above need them. That means this restriction is an **instruction, not an enforcement** — the tools cannot be scoped to a path that is itself configurable. Follow it as a rule, the same way the stage agents follow "write files with the tools" as a convention rather than a guarantee.
 
 ## Read the configuration first
 
@@ -63,7 +71,15 @@ Be honest about which tier something is in. Dressing a proposal up as an observa
 
 Batch related questions rather than asking twenty times, but never bundle unrelated decisions into one answer.
 
-## 4. Write the document
+## 4. Present the whole document for approval, before writing anything
+
+**Writing is the last action of this phase.** Before it, show the operator the complete proposed contents: every rule, grouped by the section it will live in, each tagged **observed** / **flagged-and-decided** / **proposed-and-approved**.
+
+Approving individual questions in step 3 is **not** approving the result. An operator who accepted three proposals in isolation has still never seen the document they are about to be held to — and from the next review cycle onward, every rule in it gets cited against their code.
+
+So: present it, take edits, re-present if the changes are substantial, and only then write. **If the operator abandons at this point, write nothing** — not the document, not `docs.engineering`.
+
+## 5. Write the document
 
 Follow the section structure in `${CLAUDE_PLUGIN_ROOT}/templates/ENGINEERING.template.md`. **Omit sections you have nothing true to say about** — an empty heading invites someone to fill it with something generic later, and review cites headings as if they carried rules.
 
@@ -73,16 +89,29 @@ Write it for the reader it actually has: a stage agent about to make a change, a
 
 Then set `docs.engineering` in `.claude/port.config.json` to the written path.
 
-## 5. Recommend plugins for this stack
+## 6. Recommend plugins for this stack
 
 You now know the stack better than a keyword search ever could. Use it.
 
-Configured marketplace catalogs are cached on disk at `~/.claude/plugins/marketplaces/*/.claude-plugin/marketplace.json` — no network needed. Read them with the Read tool.
+Aim for **coverage across the stack's domains**, not a fixed count: language and type tooling, framework, data layer, hosting, testing, and any notable service the code actually talks to. One good match per domain. For a rich stack that lands somewhere around 8–15; for a simple one, two or three is the correct answer.
 
-1. List the stack signals worth matching: language, framework, database, hosting, test runner, notable services.
-2. Match against catalog `name` and `description` **with judgment**. Substring matching is not good enough — searching the official catalog for `next` returns an endpoint-security plugin and a courseware plugin, neither relevant. **If you cannot justify a recommendation in one sentence referencing what the analysis found, drop it.**
-3. **Exclude anything already installed** (`claude plugin list`). Recommending what the operator already has reads as noise and costs their attention.
-4. Present a handful at most, each with the specific evidence that motivates it. A list of twenty is the same as no list.
+There is deliberately **no cap**. Most plugins cost almost nothing to have installed — measured across a real set, `context7` is ~0 tokens always-on, `code-simplifier` ~64, and only skill-heavy plugins like `superpowers` (~688) or this one (~1,195) are meaningful. Breadth is cheap; irrelevance is not. So the filter is relevance, and it is this: **if you cannot justify a recommendation in one sentence referencing what the analysis found, drop it.**
+
+### Where to search — three tiers, in order
+
+1. **Configured marketplaces.** **Refresh first** — `claude plugin marketplace update` — or you are searching however stale the last sync was. Then **Grep** the catalogs at `~/.claude/plugins/marketplaces/*/.claude-plugin/marketplace.json`, using context to pull each entry's neighbouring fields. **Never read a catalog whole** (the official one is ~4,000 lines) and **never shell out to an interpreter or `jq` to filter it** — same rule the stage agents follow, for the same reasons.
+2. **The claude.ai catalog**, via the `SearchPlugins` tool. It does **not** cover locally-configured marketplaces, so it is a genuinely separate source rather than a duplicate of tier 1. An empty result means this account has no organisation catalog — not that nothing exists.
+3. **The wider internet**, via web search. Plugins and marketplaces not configured locally at all: search the detected stack terms alongside "Claude Code plugin" or "marketplace". Adding one is `claude plugin marketplace add <source> --scope project`, then installing from it.
+
+**Match with judgment, not substrings.** Searching the official catalog for `next` returns an endpoint-security plugin and a courseware plugin, neither relevant.
+
+**Exclude anything already installed** (`claude plugin list`) — recommending what the operator has reads as noise.
+
+### Risk differs by tier, and you must say so
+
+A plugin from the official directory has a known publisher. One from an arbitrary repository found by web search is **unvetted third-party code that will load in every session** — and because installs are project-scoped and committed, for everyone who clones the repository too.
+
+So for tier 3, present the **provenance**: the repository, its owner, whether it looks maintained. Make the confirmation informed rather than a formality. **If provenance cannot be established, say so and recommend against it.**
 5. Ask which to install. **Install only explicitly-picked plugins, one confirmation each, at project scope:**
 
    ```bash
@@ -111,13 +140,28 @@ Both commands take `--scope user|project|local`. **Project is the right one here
 
 No marketplaces configured, or no relevant matches → say so in one line and move on. **Do not pad the list to look useful.**
 
-## 6. Report
+## 7. Offer to file the findings as tickets
+
+The analysis will have surfaced work: inconsistencies worth resolving, places the code diverges from a rule that was just approved, gaps an accepted proposal implies. **Offer to write these up as issues.**
+
+This is the right destination and the reason step "You do not change code" exists. A ticket enters the pipeline, gets a plan, gets reviewed, and lands as a pull request with an approval gate. **The analysis identifies work; the pipeline does it.** Fixing something here would skip all of that.
+
+```bash
+gh issue create --repo <repo> --title "<title>" --body-file .temp/finding-<n>.md
+```
+
+- **Offer, never create unprompted.** The operator picks which findings become tickets, one confirmation each.
+- **Significant findings only.** A ticket per nit buries the two that matter — and an operator who gets twenty issues from one analysis will close them all unread.
+- Each body stands alone: what the inconsistency is, where it shows (paths), and **which rule in the new document it relates to**. A finding that cannot name its rule probably should not be a ticket.
+- Write bodies with the Write tool and pass `--body-file`, never inline — the same file-based GitHub I/O rule the rest of the harness follows.
+
+## 8. Report
 
 - The document written, and which sections were omitted for lack of anything true to say.
 - Counts by tier: observed, flagged-and-decided, proposals accepted and dropped.
 - Existing rules carried forward, and any replaced with what and why.
 - Roughly what was sampled, so coverage is judgeable.
-- Plugins installed and skipped, the scope each landed at, and that a project-scope install is a **committed** change to `.claude/settings.json` that teammates inherit.
+- Plugins installed and skipped, the scope each landed at, the **cumulative always-on token cost** of the set (from `claude plugin details`), and that a project-scope install is a **committed** change to `.claude/settings.json` that teammates inherit.
 - `docs.engineering` now set — and that review will cite this document from the next cycle onward.
 
 If the operator abandons the run, **write nothing and leave `docs.engineering` as it was.** A half-approved document is worse than none, because the unapproved half is indistinguishable from the approved half once written.
