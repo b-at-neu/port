@@ -1,6 +1,6 @@
 # port.config.json schema
 
-`port.config.schema.json` defines the per-repository configuration the pipeline reads. Each managed repository commits its own `port.config.json` at the root; the installer writes it from `plugins/port/templates/port.config.json`.
+`port.config.schema.json` defines the per-repository configuration the pipeline reads. Each managed repository commits its own `.claude/port.config.json`; the installer writes it from `plugins/port/templates/port.config.json`.
 
 Only `repo` is required. Every other key has a default recorded in the schema — but `default` in JSON Schema is documentation, not behaviour: nothing populates a missing value, so each agent and skill applies the defaults itself.
 

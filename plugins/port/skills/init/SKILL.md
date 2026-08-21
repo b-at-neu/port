@@ -27,7 +27,9 @@ gh repo view --json nameWithOwner,defaultBranchRef
 
 Stop if this is not a git repository, or has no GitHub remote.
 
-If `port.config.json` already exists, this is a **reconcile**: read it, say so, and ask whether to continue. Do not silently overwrite an existing configuration.
+If `.claude/port.config.json` already exists, this is a **reconcile**: read it, say so, and ask whether to continue. Do not silently overwrite an existing configuration.
+
+**If a `port.config.json` exists at the repository root instead**, it predates the move into `.claude/`. Migrate it with `git mv port.config.json .claude/port.config.json` so history follows the file, say that you did, and continue as a reconcile from the migrated config. Nothing reads the root location any more, so leaving it there would silently break every agent.
 
 ## 1. Detect
 
@@ -55,9 +57,17 @@ Ask about each `modules` flag with `AskUserQuestion`, presenting the detected de
 
 The answers decide which of the remaining steps run at all.
 
-## 3. Write `port.config.json`
+## 3. Write `.claude/port.config.json`
 
-From `${CLAUDE_PLUGIN_ROOT}/templates/port.config.json`, filled in with the detected values and the module choices. Show it in full and confirm before writing.
+From `${CLAUDE_PLUGIN_ROOT}/templates/port.config.json`, filled in with the detected values and the module choices, written to `.claude/port.config.json`. Show it in full and confirm before writing.
+
+**First, check the path is not ignored:**
+
+```bash
+git check-ignore -v .claude/port.config.json
+```
+
+If it is ignored, **stop and explain** rather than writing it. The config has to be committed: it travels into dispatched agents' worktrees, and an ignored one means every agent reports the repository as unmanaged and halts. Tell the operator which `.gitignore` rule is responsible — `check-ignore -v` names the file and line — so they can narrow it. A repository that ignores all of `.claude/` usually wants to ignore `settings.local.json` and the worktree root, not this.
 
 Set `docs.engineering` to a path only if that file **exists and says something real**. Leave it null otherwise — pointing it at an empty skeleton makes review cite a document with no content. Step 8 offers to fill it properly, and sets the field itself if the operator accepts.
 

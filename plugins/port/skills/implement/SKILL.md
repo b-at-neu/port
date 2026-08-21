@@ -17,7 +17,7 @@ This skill is a **thin wrapper**: it points you at the existing agent definition
 
 ## Read the configuration first
 
-Read `port.config.json` at the repository root for `repo` (`<repo>`), `branches.integration` (`<integration>`), the label names (`<labels.X>`), `commands.bootstrap`, `commands.checks`, `docs.engineering`, and `modules.approvalGate`. If it is missing, stop — this repository is not port-managed.
+Read `.claude/port.config.json` for `repo` (`<repo>`), `branches.integration` (`<integration>`), the label names (`<labels.X>`), `commands.bootstrap`, `commands.checks`, `docs.engineering`, and `modules.approvalGate`. If it is missing, stop — this repository is not port-managed.
 
 ## 1. Name this session (first output line)
 

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/b-at-neu/port/main/schema/port.config.schema.json",
   "title": "port.config.json",
-  "description": "Per-repository configuration for the port agent pipeline. Committed at the repository root and read at runtime by every stage agent and skill, so it travels into worktrees and is reviewable in pull requests. Only `repo` is required; every other field has a documented default. Note that `default` here is documentation, not behaviour — JSON Schema does not populate values, so each consumer applies these defaults itself when a key is absent.",
+  "description": "Per-repository configuration for the port agent pipeline. Committed at `.claude/port.config.json` and read at runtime by every stage agent and skill, so it travels into worktrees and is reviewable in pull requests. Only `repo` is required; every other field has a documented default. Note that `default` here is documentation, not behaviour — JSON Schema does not populate values, so each consumer applies these defaults itself when a key is absent.",
   "type": "object",
   "required": ["repo"],
   "additionalProperties": false,
@@ -296,7 +296,7 @@
       "type": "array",
       "description": "Globs that cannot be handed to a dispatched agent, because the harness denies edits under them to subagents. A plan touching any of these is marked so the operator runs that stage in their own session instead. Also seeds the never-touch list for automatic rebase conflict resolution.",
       "items": { "type": "string", "minLength": 1 },
-      "default": ["CLAUDE.md", ".claude/**", "port.config.json"]
+      "default": ["CLAUDE.md", ".claude/**"]
     },
 
     "extraAllow": {

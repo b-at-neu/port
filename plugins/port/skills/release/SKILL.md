@@ -9,11 +9,11 @@ allowed-tools: Read, Edit, Write, AskUserQuestion, ScheduleWakeup, Bash(git *), 
 
 **Trigger:** manual. **Input:** none — the version is always derived from repository state.
 
-**Requires `modules.release`.** If `port.config.json` sets it false, say the repository has no release flow configured and stop.
+**Requires `modules.release`.** If `.claude/port.config.json` sets it false, say the repository has no release flow configured and stop.
 
 ## Read the configuration first
 
-Read `port.config.json` for `repo` (`<repo>`), `branches.integration` (`<integration>`), `branches.production` (`<production>`), and the `release` block: `versionSource`, `versionFiles`, and `versionCommand`.
+Read `.claude/port.config.json` for `repo` (`<repo>`), `branches.integration` (`<integration>`), `branches.production` (`<production>`), and the `release` block: `versionSource`, `versionFiles`, and `versionCommand`.
 
 **`versionSource` changes the shape of this flow, so resolve it before anything else:**
 

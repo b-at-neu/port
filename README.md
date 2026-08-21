@@ -23,4 +23,4 @@ plugins/port/                     # the plugin itself
 schema/port.config.schema.json    # the per-repo config contract
 ```
 
-Each managed repository commits a `port.config.json` describing its branches, toolchain commands, and which optional subsystems it wants. Plugins cannot ship permission rules, so a `/port-init` skill installs those into the target repo's `.claude/settings.json` along with the label vocabulary and an optional CI merge gate.
+Each managed repository commits a `.claude/port.config.json` describing its branches, toolchain commands, and which optional subsystems it wants. Plugins cannot ship permission rules, so a `/port-init` skill installs those into the target repo's `.claude/settings.json` along with the label vocabulary and an optional CI merge gate.

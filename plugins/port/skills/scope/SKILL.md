@@ -12,11 +12,11 @@ allowed-tools: Bash(gh issue create *) Bash(gh issue view *) Bash(gh issue edit 
 
 Small bug fixes and single-scope tickets do **not** need this stage — file an issue and opt it in through `/port:pipeline` directly.
 
-**Requires `modules.scope`.** If `port.config.json` sets it false, say the repository has no decomposition flow configured and stop.
+**Requires `modules.scope`.** If `.claude/port.config.json` sets it false, say the repository has no decomposition flow configured and stop.
 
 ## Read the configuration first
 
-Read `port.config.json` at the repository root for `repo` (written `<repo>` below, and `<owner>`/`<name>` where a call needs them split) and `docs.engineering`. If it is missing, stop — this repository is not port-managed.
+Read `.claude/port.config.json` for `repo` (written `<repo>` below, and `<owner>`/`<name>` where a call needs them split) and `docs.engineering`. If it is missing, stop — this repository is not port-managed.
 
 ## 1. Brainstorm
 

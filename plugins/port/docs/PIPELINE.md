@@ -8,7 +8,7 @@ Agents and skills reference it as `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md`, whic
 
 ## Configuration
 
-Everything repository-specific lives in `port.config.json`, committed at the repository root. Agents read it with the Read tool, so it travels into worktrees and is reviewable in pull requests. Field reference: `schema/port.config.schema.json`.
+Everything repository-specific lives in `.claude/port.config.json`, committed alongside the repository’s Claude settings. Agents read it with the Read tool, so it travels into worktrees and is reviewable in pull requests. Field reference: `schema/port.config.schema.json`.
 
 Throughout this document:
 
@@ -195,7 +195,7 @@ Some hosting setups give every open pull request a preview deployment backed by 
 
 **The harness denies a subagent's edits under `.claude/`, and settings cannot grant it back** — that restriction sits above project configuration, so there is nothing to fix in the permission model. An operator's **main session** is unaffected: reading an agent definition and acting on it spawns no subagent, so no subagent restriction applies. That asymmetry is the whole basis of this route.
 
-The paths that trigger it come from `sessionRequiredPaths`, which defaults to `CLAUDE.md`, `.claude/**`, and `port.config.json`.
+The paths that trigger it come from `sessionRequiredPaths`, which defaults to `CLAUDE.md`, `.claude/**`, and `.claude/port.config.json`.
 
 ### The marker
 
