@@ -259,6 +259,32 @@
       }
     },
 
+    "release": {
+      "type": "object",
+      "description": "Configures the release flow. Whether that flow is offered at all is `modules.release`; these settings only shape it once it is.",
+      "additionalProperties": false,
+      "properties": {
+        "versionSource": {
+          "description": "Where the canonical version number lives. `tags` means git release tags are the only record, so there is no version file to bump and the release flow opens one pull request rather than two. `package` means a manifest in the repository carries it, and the flow opens a version-bump pull request first.",
+          "enum": ["tags", "package"],
+          "default": "tags"
+        },
+        "versionFiles": {
+          "type": "array",
+          "description": "Files the version bump edits, in order, when `versionSource` is `package`. Typically a manifest and its lockfile. Ignored for `tags`.",
+          "items": { "type": "string", "minLength": 1 },
+          "default": [],
+          "examples": [["package.json", "package-lock.json"]]
+        },
+        "versionCommand": {
+          "type": ["string", "null"],
+          "description": "Command that writes the new version into `versionFiles` without committing or tagging, with `{{version}}` substituted. Null means edit the files directly instead. Ignored for `tags`.",
+          "default": null,
+          "examples": ["npm version {{version}} --no-git-tag-version --allow-same-version"]
+        }
+      }
+    },
+
     "reviewCycleCap": {
       "type": "integer",
       "description": "How many review cycles may run before the pipeline stops and asks for a human. Counted from the review comments on the pull request.",
