@@ -18,6 +18,7 @@ No dependencies, no plugin install, no model calls. Runs in seconds, in CI on ev
 | `hooks.json` `command` is a shell string, not an argv array | The hook loading as `Hooks (0)` — no error, just absent |
 | Templates and manifests are valid JSON | Anything downstream reading `undefined` |
 | Label keys in `labels.json` match the schema exactly, both directions | Two files listing the same vocabulary and drifting |
+| Every label `color` is a well-formed hex, and no two labels share one | A role's ramp collapsing back to one repeated hex |
 | `commands.checks` entries are `{run, fix}` objects | Bare strings, which parse fine and read plausibly while every consumer gets `undefined` |
 | Stale references — the former installer name, the former config location, unprefixed skill names | Docs naming things that were renamed or moved |
 
