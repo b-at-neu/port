@@ -32,7 +32,17 @@
     "   the refspec form catches HEAD:branch, <sha>:branch, +HEAD:branch, and :branch.",
     "   Neither covers the other.",
     "",
-    "4. find needs its no-leading-path forms too. GNU find defaults to searching '.' when",
+    "4. Read(~/.claude/plugins/**) is required, not convenience. Every stage agent is told to",
+    "   read ${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md for its operating rules, and the plugin's",
+    "   installed location is outside the project. Without this, that read prompts in default",
+    "   mode and is AUTO-DENIED under dontAsk — so agents would be instructed to read a file",
+    "   they cannot open, silently, looking like agents that ignored their own rules.",
+    "   The '~/' form matters: this file is committed and travels into worktrees, so an",
+    "   absolute path would break for anyone else who cloned the repository.",
+    "   Read only. Never grant Edit or Write there — an agent must not be able to rewrite the",
+    "   instructions it is running under.",
+    "",
+    "5. find needs its no-leading-path forms too. GNU find defaults to searching '.' when",
     "   given no path, so `find -delete` has no token between 'find' and the flag for a",
     "   leading-argument pattern to match. Without these, the broad find allow becomes an",
     "   rm-equivalent escape hatch.",
@@ -71,6 +81,8 @@
 
     "Edit(**)",
     "Write(**)",
+
+    "Read(~/.claude/plugins/**)",
 
     "WebFetch(domain:code.claude.com)"
   ],
