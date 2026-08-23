@@ -328,6 +328,7 @@ Closing the cockpit session also halts dispatch, since it is the only dispatcher
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
+| `Unknown skill: port:init` right after installing | The session resolved its plugins at startup, before the install | Start a new session in the same directory — the install itself is fine |
 | Item stuck in an in-flight label with no agent running | Agent crashed or the session closed mid-flight | `retry #N` in the cockpit, or re-apply the trigger label |
 | Nothing dispatches for an item | It has no trigger label (paused, in-flight, or gated) | `status` shows where it is; `resume #N` re-applies the right trigger |
 | Nothing dispatches **and** `status` does not list it at all | It is unassigned, or owned by another operator — queries are assignee-filtered | The tick's unowned sweep reports it; claim it with `work on #N` |
