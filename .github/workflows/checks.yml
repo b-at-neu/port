@@ -1,0 +1,48 @@
+# Layer 1 of the testing loop. See docs/TESTING.md.
+#
+# Deliberately runs on every pull request regardless of what it touches: these
+# checks are free, take seconds, and the defects they catch are silent ones —
+# a malformed component is absent from Claude Code's inventory rather than
+# reported, so nothing else would notice.
+
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+
+jobs:
+  run-static-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Static checks
+        run: node scripts/checks.mjs
+
+      # Full JSON Schema validation needs a real validator, which the checks
+      # script deliberately does not depend on so it can run in an agent's
+      # worktree with no install. CI has no such constraint, so it does the
+      # part the script reports as skipped.
+      - name: Install a JSON Schema validator
+        run: pipx install check-jsonschema || pip install --user check-jsonschema
+      - name: Fixtures that must validate
+        run: |
+          check-jsonschema --schemafile schema/port.config.schema.json \
+            plugins/port/templates/port.config.json schema/fixtures/valid.*.json
+      - name: Fixtures that must be rejected
+        run: |
+          for f in schema/fixtures/invalid.*.json; do
+            if check-jsonschema --schemafile schema/port.config.schema.json "$f" >/dev/null 2>&1; then
+              echo "::error::$f validated but should have been rejected"
+              exit 1
+            fi
+            echo "correctly rejected: $f"
+          done
