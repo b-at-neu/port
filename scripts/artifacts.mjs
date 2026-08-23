@@ -301,9 +301,15 @@ for (const n of targets) {
     } else {
       ok();
     }
-    // The marker is repeated in the pull request directly under `Closes #N`,
-    // because the cockpit reads it there to route stage 4.
-    const issueMarked = issueBody.includes('SESSION REQUIRED');
+    // Both surfaces are checked at the marker's *defined position*, never by
+    // searching the whole body: a plan that merely writes about the marker —
+    // this ticket's own does — is not a marked plan. On the issue it is the
+    // first line of the plan block, before `## Overview`; on the pull request it
+    // is directly under `Closes #N`, where the cockpit reads it to route stage 4.
+    const issuePlan = lines(issueBody).slice(
+      lines(issueBody).findIndex((l) => l.trim() === '## Implementation Plan') + 1,
+    );
+    const issueMarked = firstNonEmpty(issuePlan).includes('SESSION REQUIRED');
     const prMarked = firstNonEmpty(body.slice(1)).includes('SESSION REQUIRED');
     if (issueMarked && !prMarked) {
       fail(at('cross-surface'), `issue #${issueNo} is marked SESSION REQUIRED but the pull request does not repeat it under 'Closes #${issueNo}'`);
