@@ -124,7 +124,7 @@ So for tier 3, present the **provenance**: the repository, its owner, whether it
    claude plugin marketplace add <source> --scope project
    ```
 
-6. Report what was installed and where it landed.
+6. Report what was installed and where it landed — and that a newly installed plugin is not available in this session until a new one is started, with unresolving skills or commands as the symptom.
 
 ### Why project scope, not user
 

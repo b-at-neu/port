@@ -6,11 +6,13 @@ GitHub labels are the state machine. A cockpit session polls them, dispatches fo
 
 This repository is both the plugin and its own marketplace.
 
-## Install into a repository
+## Install and adopt
 
 Everything here is **per-repository**. Nothing is installed globally.
 
 From inside the repository you want the pipeline to manage:
+
+**Step 1 — install.**
 
 ```bash
 claude plugin marketplace add b-at-neu/port --scope project
@@ -19,31 +21,17 @@ claude plugin install port@port --scope project
 
 Both write to that repository's `.claude/settings.json`, which is committed. So the pipeline **travels with the repository**: anyone who clones it gets the same plugin from the same source, with no separate setup, and nothing leaks into your other projects.
 
-Reload so the plugin loads — `/reload-plugins`, or start a new session — then check:
+**Step 2 — load it into a session.** Installing does not load the plugin into the session you installed from — that session resolved its plugins at startup, before the install existed. **Start a new session** in the same directory. Skipping this makes the next step fail with `Unknown skill: port:init`, an error that says nothing about reloading.
 
-```bash
-claude plugin details port
-```
-
-You should see 7 skills, 4 agents, and 1 hook. A component that fails to parse is **silently absent** from that inventory rather than reported as an error, so check the counts rather than looking for a complaint.
-
-### Why project scope
-
-A repository that declares its own tooling is self-describing: the pipeline, its version, and the plugins chosen for its stack are all recorded in the repository rather than in one person's machine state. Clone it and you have the same setup.
-
-The alternative — installing once at user scope — is fewer keystrokes and makes `/port:init` available everywhere, but it means the pipeline exists only on the machine that installed it, and every plugin picked for one repository's stack loads in all your others. `/port:analyze` scopes its plugin recommendations to the repository for the same reason.
-
-## Adopt a repository
-
-Once installed, from inside the same repository:
+**Step 3 — run `/port:init`.** This is the verification and the adoption in one: it either resolves or it does not, and that is the only question worth asking at this point.
 
 ```
 /port:init
 ```
 
-It detects the toolchain, asks which subsystems you want, then writes `.claude/port.config.json`, merges the permission lists into `.claude/settings.json`, creates the label vocabulary, and optionally installs a CI merge gate. Nothing is written without showing you first, and re-running reconciles rather than duplicating.
+It detects the toolchain, asks which subsystems you want, then writes `.claude/port.config.json`, merges the permission lists into `.claude/settings.json`, creates the label vocabulary, and optionally installs a CI merge gate. Nothing is written without showing you first, and re-running reconciles rather than duplicating. See [Before you start](#before-you-start) for the four prerequisites.
 
-It finishes by offering `/port:analyze`, which reads the codebase and proposes engineering standards. Worth accepting: `docs.engineering` is what gives the stage agents a quality bar to build to and review something to cite.
+**Step 4 — accept the `/port:analyze` offer.** `/port:init` finishes by offering it — it reads the codebase and proposes engineering standards. Worth accepting: `docs.engineering` is what gives the stage agents a quality bar to build to and review something to cite.
 
 ### Before you start
 
@@ -53,6 +41,22 @@ Four things, each of which otherwise fails confusingly:
 - **An integration branch distinct from your default branch.** Feature pull requests target `branches.integration` (`dev` by default) and never the production branch. *This repository has only `main`* — so adopting the pipeline here means creating one first.
 - **Run the cockpit in `default` permission mode.** Not `acceptEdits`, `bypassPermissions`, or `auto`. A parent session in any of those overrides the stage agents' `dontAsk`, and their denied commands start prompting *you* instead of being auto-denied. This is the most likely cause of "why is it asking me things".
 - **A branch ruleset**, if you want the approval gate enforced rather than advisory. `/port:init` will tell you it has not created one; making a check required is an administrative change it deliberately leaves to you.
+
+### Why project scope
+
+A repository that declares its own tooling is self-describing: the pipeline, its version, and the plugins chosen for its stack are all recorded in the repository rather than in one person's machine state. Clone it and you have the same setup.
+
+The alternative — installing once at user scope — is fewer keystrokes and makes `/port:init` available everywhere, but it means the pipeline exists only on the machine that installed it, and every plugin picked for one repository's stack loads in all your others. `/port:analyze` scopes its plugin recommendations to the repository for the same reason.
+
+### Checking the component inventory
+
+```bash
+claude plugin details port
+```
+
+You should see 7 skills, 4 agents, and 1 hook. A component that fails to parse is **silently absent** from that inventory rather than reported as an error, so check the counts rather than looking for a complaint.
+
+This reports what is **installed**, not what your session has **loaded** — it can list all seven skills in a session where `/port:init` does not resolve, which is why it is not the verification step.
 
 ## Day to day
 

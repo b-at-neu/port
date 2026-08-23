@@ -11,13 +11,13 @@ claude plugin install port@port
 
 Edits under `plugins/port/` take effect immediately — there is no build step and nothing to invalidate. A session that is already running has loaded its components, so run `/reload-plugins` there to pick up changes.
 
-## Checking that a change loaded
+## Checking that a change parsed
 
 ```bash
 claude plugin details port
 ```
 
-This prints the component inventory. **A skill that fails to parse is silently absent from it rather than reported as an error** — so check that the counts went up, rather than looking for a complaint.
+This prints the component inventory. **A skill that fails to parse is silently absent from it rather than reported as an error** — so check that the counts went up, rather than looking for a complaint. It confirms the component parsed, not that the running session has it — that is confirmed only by invoking it.
 
 After editing `marketplace.json` or `plugin.json`, re-validate them:
 
