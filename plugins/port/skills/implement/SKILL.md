@@ -25,7 +25,9 @@ Derive `#<issue>: <2–5 lowercase words>` from the issue title and print it as 
 
 > Name this session: `#503: operator config route`
 
-If the session was not launched with `claude -n "<that string>"`, tell the operator to relaunch with `-n`, or rename in-client if theirs supports it. You can neither read nor set your own display name, so this is an instruction to the human — **state it and move on; never block on it.** In revise mode the name still carries the **issue** number, not the pull request number.
+If a session-title tool is in scope, set the title directly. Otherwise tell the operator to run `/rename <that string>` — **never to relaunch the session.** Throwing away a session mid-task over its title is not a reasonable ask when a rename does the same job.
+
+You cannot emit a slash command yourself, so where no tool exists this is an instruction to the human: **state it and move on; never block on it.** In revise mode the name still carries the **issue** number, not the pull request number.
 
 ## 2. Record the main checkout
 

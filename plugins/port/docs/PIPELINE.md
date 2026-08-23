@@ -228,7 +228,9 @@ The literal string `SESSION REQUIRED` is the contract — **never reword it**; t
 claude -n "#503: operator config route"   # then, in that session: /port:implement 503
 ```
 
-`-n/--name` is settable **only at launch** — a running session can neither read nor change its own name — so the cockpit's announcement hands over the command with the name pre-filled. The name always carries the **issue** number, even when the command takes a pull request number.
+A running session **can** be renamed: `/rename <name>` works, and where a session-title tool is in scope a skill can set the title itself. So the cockpit hands over the launch command with the name pre-filled as a convenience, not a necessity — an operator who already has a session open renames it rather than starting a new one. The name always carries the **issue** number, even when the command takes a pull request number.
+
+Note the asymmetry when implementing this: a session-title **tool** can be called by a skill, while `/rename` is typed by the operator. A skill can never issue the slash command itself.
 
 **Always in a worktree.** `/port:implement` never works in the main checkout, for two reasons: editing `.claude/` from the session that is *using* it mutates live configuration mid-task, and the ticket may be editing the very agent file the session is following. In a worktree the session reads its instructions from the installed plugin while every edit lands on the worktree copy, so the committed behaviour holds for the whole run.
 

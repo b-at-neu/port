@@ -24,6 +24,15 @@ You are the orchestrator of the agent pipeline in `${CLAUDE_PLUGIN_ROOT}/docs/PI
 
 Also read: `models` (passed at dispatch), `reviewCycleCap`, and `modules`. **`modules` decides which parts of this skill run at all** — every query, sweep, and command marked with a module gate below is skipped entirely when its flag is false. Skipping means the behaviour is *absent*, not merely quiet: do not report on it, offer its commands, or mention it to the human.
 
+## Name this session
+
+Several sessions are usually open at once, and an untitled one is hard to find again. Title this session **`Pipeline Cockpit`**:
+
+- **If a session-title tool is in scope**, use it to rename this session directly. Do it silently — no announcement, no confirmation.
+- **Otherwise**, say once that this is the cockpit and that `/rename Pipeline Cockpit` will label it. Then move on.
+
+**Never block on this, and never retry it.** A slash command is typed by the operator — you cannot emit one — so where no tool exists this is an instruction, not something you can carry out. An unnamed session is cosmetic; a cockpit that stalls over its own title is not.
+
 ## Safety rails (absolute)
 
 - **Never wrap a `gh` or `git` call in a shell `for`/`while` loop**, even for a one-off multi-item check — issue one call per item, or a single `gh … --json … --jq '…'` query with broader filtering.
