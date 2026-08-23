@@ -37,6 +37,8 @@ Gather, without writing anything:
 
 - **Branches** — `git branch -r`. Look for an integration branch distinct from the default. If only one long-lived branch exists, say so; the pipeline needs an integration branch, and creating one is the operator's decision.
 - **Toolchain** — read the manifest and lockfiles the repository actually has, and list the available scripts. **Do not assume a package manager**; a repository may have none.
+  - **Propose the repository's declared scripts, not ad-hoc invocations.** A repository with a `lint` script gets that script — not a direct call to whatever binary you guess it wraps. The script is what its authors maintain and what CI runs; a direct invocation drifts from both the moment either changes.
+  - **A check with no backing script is proposed by asking, never assumed.** A repository with no type-check script may simply not have that check. Inventing one produces an agent that fails every run, and — worse than failing — fails by *prompting*, because an invented command is usually one the allowlist does not cover.
 - **Existing checks** — read `.github/workflows/` to see what CI already runs. A check the pipeline runs locally should match something CI enforces, or the agent's green run means nothing.
 - **Branch protection** — `gh api repos/<owner>/<name>/rulesets`. An empty result is the common case and drives the `approvalGate` default below.
 - **Existing labels** — `gh label list`, so the report can distinguish created from already-present.
@@ -71,7 +73,17 @@ If it is ignored, **stop and explain** rather than writing it. The config has to
 
 Set `docs.engineering` to a path only if that file **exists and says something real**. Leave it null otherwise — pointing it at an empty skeleton makes review cite a document with no content. Step 8 offers to fill it properly, and sets the field itself if the operator accepts.
 
-Validate the result against `schema/port.config.schema.json` if a validator is available; at minimum confirm it parses and that `repo` matches the detected remote.
+**Validation is mandatory, not conditional. Never write a config that does not validate.** Check it against `schema/port.config.schema.json` with a validator if one is available; if none is, walk the schema by hand and confirm every field's type and shape. A config that fails validation is a config every consumer misreads.
+
+Get `commands.checks` right in particular: its items are **objects** with a required `run` and an optional `fix` —
+
+```json
+"checks": [{ "run": "npm run lint", "fix": null }]
+```
+
+— **not bare strings.** A list of strings still parses as JSON and still looks plausible, so nothing downstream complains; every consumer reading `entry.run` simply gets `undefined`. This has already shipped once.
+
+Also confirm `repo` matches the detected remote.
 
 ## 4. Merge the permission lists
 
@@ -101,6 +113,19 @@ Then, within the two lists you do own:
 **Show the diff and confirm before writing.** This is the single most consequential file this skill touches.
 
 Show it as a **diff against the current file**, not as the proposed contents — and **call out any removal explicitly in words**, separately from the diff. A diff that silently drops two keys is easy to approve while reading the permission entries you asked for, so the confirmation cannot be the only thing standing between a mistake and a written file.
+
+### Then check the commands against the allowlist you just built
+
+You write the config and the allowlist in the same run, so you are the only thing positioned to notice a mismatch. **Verify that every `commands.bootstrap` and `commands.checks` entry matches an allow pattern.**
+
+A command matches only if it **starts with an allowlisted binary**. `Bash(npm *)` does not cover `npx` — they are different binaries, and this exact pair has already shipped a repository whose every check prompted on every run. In `default` mode the operator approves them forever; under a stage agent's `dontAsk` they are **auto-denied**, so the agent can never reach a green check and never pushes.
+
+**An unmatched command is a hard stop**, resolved one of two ways:
+
+- **Pick a command that is already covered** — usually the repository's own script, which is the better answer anyway.
+- **Add a narrow allow entry for that specific tool**, such as `Bash(npx tsc *)`, and record it in `extraAllow` so a later reconcile keeps it.
+
+**Never widen to bare `Bash(npx *)`.** That is not a permission for one tool; it is a general package-execution primitive handed to every agent, which is exactly why the base list omits it.
 
 ## 5. Create the labels
 
