@@ -35,6 +35,7 @@ Several sessions are usually open at once, and an untitled one is hard to find a
 
 ## Safety rails (absolute)
 
+- **Never describe a tool call you have not made.** Announcing a wakeup, a removal, or a dispatch is not performing it — write the sentence only after the call returns, and let its result decide the wording. A closing report is a record of what happened this tick, never a stand-in for what you meant to do.
 - **Never wrap a `gh` or `git` call in a shell `for`/`while` loop**, even for a one-off multi-item check — issue one call per item, or a single `gh … --json … --jq '…'` query with broader filtering.
 - **Never merge or close a pull request.** The human merges on GitHub; `gh pr merge` is denied.
 - Never touch pull requests labeled `<labels.approved>` or `<labels.needsHuman>` beyond announcing them. **One carve-out:** applying a refresh to an approved pull request is permitted when `modules.previewDatabase` is true (see Preview refresh) — nothing else about an approved pull request may be touched.
@@ -88,7 +89,15 @@ gh pr list --repo <repo> --assignee "@me" --json number,title,labels
 
 For the ungated sweep, filter with `--jq` to pull requests carrying any pipeline stage label but **not** `<labels.marker>`.
 
-Then, in order: **(1)** reconcile merged pull requests, **(2)** handle human gates, **(3)** announce every session-required item, **(4)** unless draining, dispatch for every remaining actionable trigger item (all `Agent` calls in one message), **(5)** report the sweeps if their sets changed, **(6)** schedule the next wakeup, skipping while draining.
+Then, in this order. Steps 6 and 7 are split apart deliberately — they are the two that get skipped when folded into closing prose, so each is its own checkable action rather than a sentence:
+
+1. **Reconcile merged pull requests.**
+2. **Handle human gates.**
+3. **Announce every session-required item.**
+4. **Unless draining, dispatch** for every remaining actionable trigger item (all `Agent` calls in one message).
+5. **Housekeeping** — run worktree hygiene, then the denial, unowned, and ungated reports (only the ones whose sets changed).
+6. **Call `ScheduleWakeup`**, skipped only while draining. **A non-draining tick that ends without this call has failed**, no matter how much of the above happened.
+7. **Only then, write the tick report.** Its closing "next tick" line is not a fresh decision — it is the record of step 6: state the delay you actually passed to `ScheduleWakeup`, or that you are draining and skipped the call. Never write this line before step 6 runs.
 
 **Merged-pull-request reconciliation (each tick).** The approved query is open-only, so a merged pull request silently drops out of it — **never trust in-session memory for "awaiting merge."** Diff the set you have announced as approved against the live result; for each one no longer present, confirm and announce it once:
 
@@ -98,7 +107,53 @@ gh pr view <n> --repo <repo> --json state,mergedAt,closed --jq '{state,mergedAt,
 
 If merged or closed, announce it once, **remove it from your announced set**, and clean up its worktree. This keeps `status` truthful without the human telling you.
 
-**Worktree hygiene (each tick).** Run `git worktree prune`, which safely clears registrations whose directory is already gone. Then, for any item whose work is done — pull request merged or closed, or no active pipeline label — **and** whose path appears in `git worktree list`, remove it with `git worktree remove --force <exact path from git worktree list>`. **Only ever pass a path that `git worktree list` shows**; an orphan directory is not a worktree and will error. **Never** remove a worktree for an in-flight item.
+**Worktree hygiene (each tick).** Start with `git worktree prune`, which safely clears registrations whose directory is already gone. Then correlate every remaining candidate against a live active set and remove the finished ones, capped so a large backlog drains gradually rather than in one tick.
+
+- **A. Enumerate.** `git worktree list --porcelain`. Skip the entry that is the main checkout — it never has `.claude/worktrees/` in its path, and is never a candidate. Every other entry is a candidate, whichever naming scheme it uses.
+- **B. Derive one number per candidate.** `.claude/worktrees/impl-<n>` → `<n>`, read straight off the path. `.claude/worktrees/agent-<hash>` carries nothing in its name, so resolve its `HEAD` sha instead, in a **single** batched query with one alias per agent-form candidate (never a loop — usually only 0–2 exist):
+
+  ```bash
+  gh api graphql -f query='query { repository(owner:"<owner>",name:"<name>"){ c0: object(oid:"<sha0>"){ ... on Commit { messageHeadline } } } }'
+  ```
+
+  The port commit format guarantees the subject starts with `#N` (see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Commit messages"), so the headline yields the issue number. **Uncorrelatable** — `object` is null, the subject has no `#N` prefix, or it is `#0` — means **never remove**; carry it into this tick's report instead, for `/port:worktree-clean` to resolve by hand.
+- **C. Decide done against a live active set.** Two extra queries, **not** assignee-filtered — a worktree belongs to this checkout regardless of who owns the item, and filtering by assignee would delete a co-operator's in-flight worktree on a shared checkout:
+
+  ```bash
+  gh issue list --repo <repo> --state open --label "<labels.marker>" --limit 100 --json number
+  gh pr list --repo <repo> --state open --label "<labels.marker>" --limit 100 --json number
+  ```
+
+  Union the numbers — GitHub numbers issues and pull requests in one shared sequence, so a bare number is unambiguous and you never need to know whether an `impl-<n>` came from impl or revise mode. A candidate is **done** when its number is absent from that union. As a second guard, never remove a path a running agent reports as its worktree (`TaskList`) even if it looks done. **If either query errors, skip hygiene entirely this tick** and say so — never remove against a stale or partial active set.
+- **D. Remove, capped.** For each done candidate: `git worktree remove --force "<exact path from git worktree list>"` — one Bash call per path, **at most 5 per tick**, oldest first. 25 removals in one tick is 25 calls; the remainder is picked up next tick. **Only ever pass a path that `git worktree list` shows.**
+
+**Worked example:**
+
+```
+/repo                                        → main checkout, never a candidate
+/repo/.claude/worktrees/impl-51              → 51, from the path
+/repo/.claude/worktrees/agent-aa714ce408044821d
+  HEAD 06e73c76…  →  "#60 fix install-to-adopt verification and reload step"  →  60
+active set = {62}  →  51 and 60 are done  →  remove both
+```
+
+**Report every tick, in one of these exact forms.** An adjective like "pruned" is never a sufficient report, and zero removals must say `none`, never be implied:
+
+- Removals made:
+
+  > **Worktrees:** removed 5 — `.claude/worktrees/impl-1`, `impl-2`, `impl-3`, `impl-4`, `impl-5`. 20 finished remain; continuing next tick.
+
+- Nothing to do:
+
+  > **Worktrees:** none removed — 1 registered, all active.
+
+- Uncorrelatable candidates present, appended to either line above:
+
+  > 2 uncorrelatable (`agent-1a2b…`, `agent-3c4d…`) — run `/port:worktree-clean`.
+
+- Active-set query failed:
+
+  > **Worktrees:** skipped this tick — the active-set query failed; nothing removed.
 
 On Windows, `git worktree remove` often fails once a dependency directory exists, and orphans accumulate that neither `remove` nor `prune` can clear. **Do not claim "prune will fix it next tick" — it will not.** Report the failure and tell the human to run `/port:worktree-clean`.
 
@@ -249,12 +304,18 @@ While draining, a tick still reports gates and relays completions, but dispatche
 
 ## Pacing
 
-After each tick, schedule the next wakeup with ScheduleWakeup, prompt `/port:pipeline` — **not while draining**:
+**Step 6 of every non-draining tick** (see Tick procedure) is calling `ScheduleWakeup` with prompt `/port:pipeline`, before the tick report is written:
 
 - Any agent in flight, or any item mid-pipeline → ~270 seconds.
 - Fully idle → ~1500 seconds.
 
-Background-agent completions wake this session automatically; the scheduled wakeup is the fallback that catches human-applied label changes and stalled work. On every wakeup, run the tick procedure again.
+**The idle path is where this call gets skipped, and it is the path that matters most.** With nothing in flight there are no agent completions to wake the session, so the scheduled wakeup is the *only* thing that catches a human applying a label on GitHub. An idle tick that ends in prose instead of the `ScheduleWakeup` call never ticks again — silently, and after telling the human it would.
+
+**Self-check, every non-draining tick:** before ending the turn, confirm `ScheduleWakeup` was actually called this tick. If it was not, call it now — do not write the closing line first and let the sentence stand in for the call.
+
+Close every non-draining tick's report with the delay you actually scheduled: `**Next tick:** ~1500s (scheduled)` or `**Next tick:** ~270s (scheduled)`. While draining, step 6 is skipped entirely (see Stop controls) and the closing line reads `**Next tick:** none — draining. Say "resume" to restart ticking.`
+
+Background-agent completions wake this session automatically in between ticks; the scheduled wakeup is only the fallback that catches everything else. On every wakeup, run the tick procedure again.
 
 ## Manual and recovery
 
