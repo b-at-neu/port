@@ -126,6 +126,26 @@ for (const t of [
   ok();
 }
 
+// --- Label colours are well-formed and distinct -----------------------------
+// Every label's position within its role ramp depends on a unique hex; a
+// duplicate collapses two labels back to pixel-identical, silently.
+{
+  const labels = readJson('plugins/port/templates/labels.json').labels;
+  const seen = new Map();
+  for (const l of labels) {
+    if (!/^[0-9A-F]{6}$/.test(l.color)) {
+      fail('label-colors', `'${l.key}' has a malformed color '${l.color}', expected six uppercase hex digits`);
+      continue;
+    }
+    if (seen.has(l.color)) {
+      fail('label-colors', `'${l.key}' and '${seen.get(l.color)}' share color '${l.color}'`);
+    } else {
+      seen.set(l.color, l.key);
+    }
+  }
+  ok();
+}
+
 // --- The config template matches its own schema's shape --------------------
 // Regression test for checks written as bare strings: still valid JSON, still
 // plausible-looking, and every consumer reading `entry.run` gets undefined.
