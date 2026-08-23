@@ -105,7 +105,12 @@ const BODY_HEADINGS = ['## Summary', '## Changes', '## Testing plan', '## Automa
 const REVIEW_PREFIX = '## Code Review';
 const REVIEW_HEADING = /^## Code Review — Cycle (\d+) · (approved|needs revision)$/;
 const REVISION_HEADING = /^## Revision — Cycle (\d+)$/;
-const REVISION_DETAIL = /^fixed\b.*·\s*skipped\b.*·\s*[0-9a-f]{7,40}\b/;
+// `fixed <ids> · skipped <ids> · <sha>`, with either segment dropped when empty
+// (revise-agent.md), and an optional `· rebase: <file> (<strategy>)` after the
+// sha. One of the two segments must be there — a cycle that did neither writes
+// no comment at all.
+const REVISION_OPENS = /^(?:fixed|skipped)\b/;
+const REVISION_DETAIL = /^(?:fixed\b[^·]*·\s*)?(?:skipped\b[^·]*·\s*)?[0-9a-f]{7,40}\b/;
 const COMMIT_SUBJECT = /^#\d+ [a-z]/;
 const SCRATCH_PATHS = /^(\.temp|\.agents)\//;
 
@@ -221,7 +226,7 @@ for (const n of targets) {
     }
     ok();
     const detail = firstNonEmpty(cl.slice(1)).trim();
-    if (!REVISION_DETAIL.test(detail)) {
+    if (!REVISION_OPENS.test(detail) || !REVISION_DETAIL.test(detail)) {
       fail(at('revision'), `cycle ${m[1]} needs one 'fixed … · skipped … · <sha>' line, got ${JSON.stringify(detail)}`);
     } else {
       ok();
