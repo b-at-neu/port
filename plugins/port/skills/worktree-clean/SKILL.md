@@ -32,7 +32,7 @@ The cockpit deliberately does **not** force-delete them in its autonomous loop. 
 
 3. **Identify the deletable set:**
    - **Orphans** — directories under `.claude/worktrees/` that do **not** appear in `git worktree list`. No `.git` file, so git does not track them; always safe to delete.
-   - **Registered but done** — a worktree that *is* listed, but whose pull request is merged or closed. Confirm with `gh pr list`, then try `git worktree remove --force "<exact listed path>"` first; if it fails, fall through to the force-delete below and re-run `git worktree prune`.
+   - **Registered but done** — a worktree that *is* listed, but whose item carries no open pipeline label. Correlate it the same way the cockpit's per-tick hygiene does (`skills/pipeline/SKILL.md` → "Worktree hygiene"): `.claude/worktrees/impl-<n>` carries its number straight off the path; `.claude/worktrees/agent-<hash>` carries none, so resolve it through its `HEAD` commit's `#N` subject (`gh api graphql`) first, then check that number against `gh issue list`/`gh pr list` for an open pipeline label. Then try `git worktree remove --force "<exact listed path>"` first; if it fails, fall through to the force-delete below and re-run `git worktree prune`.
 
    Show the human the list, with sizes where useful (`du -sh .claude/worktrees/* 2>/dev/null`), and **confirm before deleting**.
 
