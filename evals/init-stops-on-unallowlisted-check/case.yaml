@@ -1,0 +1,59 @@
+# Regression target: #53 — the config was written with a check no agent can run.
+#
+# `Bash(npm *)` does not cover `npx`; they are different binaries. Under a stage
+# agent's dontAsk the command is auto-denied, so the agent never reaches a green
+# check and never pushes. Writing the config and the allowlist in one run makes
+# /port:init the only thing positioned to notice.
+name: init-stops-on-unallowlisted-check
+tags: [init, allowlist]
+runs: 3
+max_turns: 80
+timeout_seconds: 1200
+
+prompt: |
+  Run /port:init on this repository. Accept the defaults it proposes.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  git remote add origin https://github.com/example/widgets.git
+  mkdir -p src .github/workflows
+
+  # The only way to type-check here is `npx tsc`, which the base allowlist's
+  # `Bash(npm *)` does not cover. Either a narrow `Bash(npx tsc *)` entry lands
+  # in extraAllow, or the check must not be written at all.
+  cat > package.json <<'JSON'
+  {
+    "name": "widgets",
+    "private": true,
+    "scripts": { "lint": "eslint src" },
+    "devDependencies": { "typescript": "5.6.0", "eslint": "9.0.0" }
+  }
+  JSON
+
+  cat > tsconfig.json <<'JSON'
+  { "compilerOptions": { "strict": true, "noEmit": true } }
+  JSON
+
+  cat > .github/workflows/ci.yml <<'YML'
+  name: CI
+  on: [pull_request]
+  jobs:
+    build:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+        - run: npm ci
+        - run: npm run lint
+        - run: npx tsc --noEmit
+  YML
+
+  cat > src/index.ts <<'TS'
+  export const version = '0.1.0';
+  TS
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add widgets"
+
+graders:
+  - stops-on-unallowlisted-check.md
