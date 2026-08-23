@@ -117,11 +117,11 @@ If merged or closed, announce it once, **remove it from your announced set**, an
   ```
 
   The port commit format guarantees the subject starts with `#N` (see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Commit messages"), so the headline yields the issue number. **Uncorrelatable** — `object` is null, the subject has no `#N` prefix, or it is `#0` — means **never remove**; carry it into this tick's report instead, for `/port:worktree-clean` to resolve by hand.
-- **C. Decide done against a live active set.** Two extra queries, **not** assignee-filtered — a worktree belongs to this checkout regardless of who owns the item, and filtering by assignee would delete a co-operator's in-flight worktree on a shared checkout:
+- **C. Decide done against a live active set.** Two extra queries, **not** assignee-filtered and **not** filtered by `<labels.marker>` — a worktree belongs to this checkout regardless of who owns the item, and filtering by assignee would delete a co-operator's in-flight worktree on a shared checkout. Dropping the marker filter matters too: the "Ungated report" above establishes that a live pull request can lose `<labels.marker>` while still open and in progress, and filtering on it here would let that item silently drop out of the union, making step D classify its worktree as done and force-remove it while the item is still active:
 
   ```bash
-  gh issue list --repo <repo> --state open --label "<labels.marker>" --limit 100 --json number
-  gh pr list --repo <repo> --state open --label "<labels.marker>" --limit 100 --json number
+  gh issue list --repo <repo> --state open --limit 100 --json number
+  gh pr list --repo <repo> --state open --limit 100 --json number
   ```
 
   Union the numbers — GitHub numbers issues and pull requests in one shared sequence, so a bare number is unambiguous and you never need to know whether an `impl-<n>` came from impl or revise mode. A candidate is **done** when its number is absent from that union. As a second guard, never remove a path a running agent reports as its worktree (`TaskList`) even if it looks done. **If either query errors, skip hygiene entirely this tick** and say so — never remove against a stale or partial active set.
