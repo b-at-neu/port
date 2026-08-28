@@ -89,19 +89,28 @@ Also confirm `repo` matches the detected remote.
 
 Read `${CLAUDE_PLUGIN_ROOT}/templates/permissions.base.json` and merge into `.claude/settings.json`:
 
-**You own exactly two things in this file: `permissions.allow` and `permissions.deny`.** Merge key-wise into the existing document and **preserve every other top-level key byte-for-byte.** Never rebuild the file from a template plus a permissions block.
+**You own exactly three things in this file: `permissions.allow`, `permissions.deny`, and the `extraKnownMarketplaces` entry for the marketplace this plugin came from.** Merge key-wise into the existing document and **preserve every other top-level key byte-for-byte** — including any *other* marketplace entry. Never rebuild the file from a template plus a permissions block.
 
-This is not tidiness. Installation is per-repository, so this same file carries the plugin's own declarations:
+This is not tidiness. Installation is per-repository, so this same file carries the plugin's own declarations. The `port` entry you own must be exactly this form:
 
 ```json
 {
-  "extraKnownMarketplaces": { "port": { "source": { "source": "github", "repo": "b-at-neu/port" } } },
+  "extraKnownMarketplaces": {
+    "port": {
+      "source": { "source": "github", "repo": "b-at-neu/port", "ref": "main" },
+      "autoUpdate": true
+    }
+  },
   "enabledPlugins": { "port@port": true },
   "permissions": { ... }
 }
 ```
 
-Drop `enabledPlugins` or `extraKnownMarketplaces` and you have **uninstalled the plugin that is currently running this skill** — `/port:init` disables itself partway through, and the symptom looks like the plugin vanishing rather than like a bad merge. `hooks` is the same story. Anything you did not put there, leave alone.
+Write it even when reconciling an entry that already exists but is missing `ref` or `autoUpdate`. **Why:** `claude plugin marketplace add b-at-neu/port --scope project` — the command README tells a consumer to run — writes a bare `{source, repo}` with no `ref`, which tracks `port`'s *default* branch (`dev`, the integration branch, not a release line). Left that way, a repository's pinned install silently tracks unreleased work instead of the last cut release. `autoUpdate: true` is what lets a later release actually reach an existing install rather than sitting unfetched.
+
+**`ref` pins the plugin's own repository (`b-at-neu/port`, production branch `main`) — it is not the target repository's `branches.production`.** These are unrelated values that happen to share a name; never substitute the managed repository's own production branch here.
+
+Drop `enabledPlugins` or `extraKnownMarketplaces` entirely and you have **uninstalled the plugin that is currently running this skill** — `/port:init` disables itself partway through, and the symptom looks like the plugin vanishing rather than like a bad merge. `hooks` is the same story. Anything you did not put there, leave alone.
 
 Then, within the two lists you do own:
 
@@ -169,6 +178,8 @@ Then state the manual steps explicitly. Chiefly:
 > **The approval gate is advisory until you make it a required check.** Add `run-approval-check` as a required status check in a branch ruleset on `<integration>`. I have not done this: it is an administrative change, hard to reverse, and it can block every merge if misconfigured.
 
 Never let the operator walk away believing they have a merge gate they do not have. If `approvalGate` was left off, say that too — plainly, not as a footnote.
+
+**Plugin updates land on the next session, not mid-session.** Say that once. If a release lands on `main` and this install still never advances, have the operator enable auto-update for the `port` marketplace from `/plugin` — `autoUpdate` in project settings is documented for managed-settings contexts and may not be honoured everywhere. Note also that `DISABLE_AUTOUPDATER` suppresses plugin updates entirely unless `FORCE_AUTOUPDATE_PLUGINS=1` is also set.
 
 Also flag anything detection could not settle: no integration branch, no CI checks to mirror, an empty `commands.checks`. Finish with the next step:
 

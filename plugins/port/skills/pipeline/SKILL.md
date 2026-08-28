@@ -24,6 +24,21 @@ You are the orchestrator of the agent pipeline in `${CLAUDE_PLUGIN_ROOT}/docs/PI
 
 Also read: `models` (passed at dispatch), `reviewCycleCap`, and `modules`. **`modules` decides which parts of this skill run at all** — every query, sweep, and command marked with a module gate below is skipped entirely when its flag is false. Skipping means the behaviour is *absent*, not merely quiet: do not report on it, offer its commands, or mention it to the human.
 
+## Report the running plugin (once, at startup)
+
+**Startup only — never on a wakeup tick, never acted on, at most two `Read` calls.** This needs no new tool: `Read` already covers it, and no `git` invocation is involved.
+
+Read `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` and open with one line naming the copy actually running:
+
+> `port` v0.1.0 — /home/you/.claude/plugins/cache/port/port/0.1.0
+
+Then check for self-host drift. Read `.claude-plugin/marketplace.json` at the repository root:
+
+- **Absent** — the normal case for a managed repository. Say nothing further.
+- **Present and it declares a plugin whose `name` matches the running plugin** — this repository is the *source* of that plugin. If `${CLAUDE_PLUGIN_ROOT}` does not resolve to a path inside this working tree, warn once:
+
+  > ⚠️ This repository is the source of the `port` plugin, but this session is running <path>, not the working tree. Edits here — and `git pull` — have no effect on this session. See CONTRIBUTING.md.
+
 ## Name this session
 
 Several sessions are usually open at once, and an untitled one is hard to find again. Title this session **`Pipeline Cockpit`**:

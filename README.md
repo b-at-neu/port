@@ -31,6 +31,8 @@ Both write to that repository's `.claude/settings.json`, which is committed. So 
 
 It detects the toolchain, asks which subsystems you want, then writes `.claude/port.config.json`, merges the permission lists into `.claude/settings.json`, creates the label vocabulary, and optionally installs a CI merge gate. Nothing is written without showing you first, and re-running reconciles rather than duplicating. See [Before you start](#before-you-start) for the four prerequisites.
 
+It also reconciles the `port` marketplace entry that step 1's install command wrote — pinning `ref` to `main` and turning `autoUpdate` on, so a later release actually reaches your install instead of sitting unfetched. Plugin updates land on the **next** session, never mid-session, and `DISABLE_AUTOUPDATER` suppresses them entirely unless `FORCE_AUTOUPDATE_PLUGINS=1` is also set.
+
 **Step 4 — accept the `/port:analyze` offer.** `/port:init` finishes by offering it — it reads the codebase and proposes engineering standards. Worth accepting: `docs.engineering` is what gives the stage agents a quality bar to build to and review something to cite.
 
 ### Before you start

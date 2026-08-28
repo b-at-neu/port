@@ -110,6 +110,22 @@ for (const t of [
   }
 }
 
+// --- Self-hosted marketplace entry stays pinned -----------------------------
+// A bare `claude plugin marketplace add` rewrites this entry back to its
+// unpinned form, which tracks the default branch instead of a release and
+// silently reintroduces the drift #119 fixed.
+{
+  const settings = readJson('.claude/settings.json');
+  const port = settings.extraKnownMarketplaces?.port;
+  if (port?.source?.ref !== 'main') {
+    fail('marketplace', `extraKnownMarketplaces.port.source.ref must be 'main', got ${JSON.stringify(port?.source?.ref)}`);
+  }
+  if (port?.autoUpdate !== true) {
+    fail('marketplace', `extraKnownMarketplaces.port.autoUpdate must be true, got ${JSON.stringify(port?.autoUpdate)}`);
+  }
+  ok();
+}
+
 // --- Label vocabulary matches the schema -----------------------------------
 // Two files independently list the same label keys. They have drifted before.
 {
