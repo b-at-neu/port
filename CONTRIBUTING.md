@@ -70,3 +70,20 @@ Write the message to a file and `git commit -F <file>` rather than using inline 
 ## Engineering standards
 
 This repository has no standards document of its own yet. Until it does: small focused files, no dead scaffolding or transitional shims, comments only where a fluent reader would still get it wrong, and no placeholder content committed in anticipation of a later ticket.
+
+## Working on the desktop app
+
+`apps/desktop` is a pnpm workspace member — an Electron + TypeScript app built with electron-vite. The root is a two-level pnpm workspace (`pnpm-workspace.yaml` lists `apps/*`); running `pnpm install` at the repository root links the shared, content-addressable pnpm store into every member, so a fresh worktree checkout never re-downloads packages it already has cached.
+
+Common commands, run from the repository root:
+
+```bash
+pnpm install                          # bootstrap the workspace
+pnpm --filter @port/desktop dev       # launch the app
+pnpm typecheck                        # both tsconfigs, across all members
+pnpm lint
+pnpm test
+pnpm build                            # produces apps/desktop/out/{main,preload,renderer}
+```
+
+The IPC contract between the main and renderer processes lives in `apps/desktop/src/shared/ipc.ts`: a request/response type map plus a runtime channel list, checked against each other at compile time. Add a channel to both, or `pnpm typecheck` fails.
