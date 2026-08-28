@@ -101,7 +101,7 @@ Same literal string as the issue plan. **The routing marker is never a label.**
 1. **`permissionMode: dontAsk` and "auto-denied silently"** — not your mode. Your session prompts normally.
 2. **"Stop and emit `BLOCKED:`"** — pointless with a human present. Ask the operator directly and wait. Never emit a `BLOCKED:` sentinel, never guess.
 3. **"Never spawn subagents"** — not applicable.
-4. **The shell-allowlist discipline** — no `cat`/`grep`/`sed`/`find`, bare commands only, no `cd`, quoted cwd-relative paths — exists for the subagent's allowlist. Use whatever is clearest. **Still preferred:** the repository's declared `commands` over ad-hoc equivalents, and `git rm` for tracked deletions.
+4. **The shell-discipline block** (`${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Operating rules (all stage agents)") — one command per call, no `cd`/`ENV=val` prefix, quoted cwd-relative paths — exists for the subagent's allowlist. Use whatever is clearest. **Still preferred:** the repository's declared `commands` over ad-hoc equivalents, and `git rm` for tracked deletions.
 5. **"You are already in a worktree; never run `git worktree`"** — inverted. You create the worktree in step 4 and work inside it.
 6. **Instruction files are read from the installed plugin and the recorded main checkout**, not the cwd — the worktree copy may be the very thing you are editing.
 

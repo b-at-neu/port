@@ -91,12 +91,21 @@ Agents never pass large markdown (plans, reviews, comments) as an inline `--body
 Canonical rules every stage agent follows. A Bash command matches the allowlist only if it **starts with an allowlisted binary AND parses cleanly**; otherwise it falls through to a prompt that a background agent auto-denies.
 
 - **Check the repository's `.claude/settings.json` for what is actually allowed** rather than guessing from memory. The base allowlist grants `gh`, `git`, the repository's package manager, a set of read-only inspection commands, and `Edit(**)`/`Write(**)`; `extraAllow` adds anything else the repository needs.
-- **Content emitters are deliberately absent from the allowlist** — `echo`, `cat`, `head`, `tail`, `cut`, `diff`, `true`. Their whole purpose is emitting bytes to stdout, and a redirect turns each into a clean file-write primitive. Use the Read tool instead of `cat`/`head`/`tail`, and Write/Edit instead of `echo >`. See "Known gap" under the permission model for why this is the control rather than a deny rule.
-- **Inspect with tools, not the shell** — Read, Grep, and Glob are the default for reading, searching, and listing (cheaper, gitignore-aware, skips dependency directories). The allowlisted shell commands exist for what those tools cannot do — piping, chaining, one-off counts — not as a first resort. Scope Glob to source directories; prefer Grep over a root-level `**/*`, which descends dependency directories and times out.
-- **Run commands bare** — no `cd … && …` and no `ENV=val cmd` prefix; both move the start token off the binary, so `GIT_EDITOR=true git …` misses `Bash(git *)`. For a non-interactive git editor use `git -c core.editor=true …`. The same applies to multi-line Bash calls, `for`/`while` loops, and subshells — each moves the first token off the allowlisted binary exactly as `cd` does, so issue one command per Bash call. **Never `sh -c '…'` or `bash -c '…'`** — a generic command-execution escape hatch that could smuggle any denied command through as a string argument.
-- **Quote every path argument.** Parentheses and brackets are shell-special, and appear in real source paths. Use cwd-relative paths with forward slashes, never an absolute or base-repository path. `git add -A` avoids enumerating them.
-- **Write files with the Write and Edit tools** at cwd-relative paths — never shell redirection (`cat >`, `printf >`, `echo >`, heredocs). Delete tracked files with `git rm`.
-- **GitHub I/O is file-based** — large markdown goes to `.temp/` via `gh … --body-file`/`--input`, never inline `--body "…"`. Extract data with `gh … --json … --jq '…'`, never piped to an interpreter.
+
+<!-- shell-discipline:begin -->
+**Shell discipline — every Bash call.** The allowlist matches the **whole command string from its first token**, so a command that chains or pipes into anything else fails the match no matter what its parts do.
+
+- **One command per call.** No `;`, `&&`, `||`, `for`/`while`, `if`/`[`, subshells, multi-line scripts, or a pipe into a non-allowlisted binary. Never `sh -c '…'` or `bash -c '…'`.
+- **Start with an allowlisted binary, bare.** No `cd …` prefix and no `ENV=val` prefix — `GIT_EDITOR=true git …` misses `Bash(git *)`; use `git -c core.editor=true …`.
+- **Never allowlisted, in any repository** — `echo`, `cat`, `head`, `tail`, `cut`, `diff`, `which`, `tee`, `xargs`, `base64`, `jq`, `sed`, `awk`, `python3`, `node -e`, `perl`. A denial there means *use a tool*, not retry with different flags. Probing the host or the Claude install is never part of a stage's job; if you genuinely need an unlisted binary that is a `BLOCKED:`, not something to route around.
+- **Read, search, and list with Read, Grep, and Glob.** `grep`, `find`, `ls`, and `wc` *are* in the base allowlist, but the tools are cheaper and gitignore-aware. List a directory → **Glob**, scoped to source directories, never a root-level `**/*`; read or count a file → **Read**; search or test for text → **Grep**.
+- **Quote every path argument**, cwd-relative with forward slashes. **Write files with Write and Edit** — never a redirect or heredoc; delete tracked files with `git rm "<path>"`.
+- **Sanctioned recipes** for what the tools cannot reach:
+  - filter JSON → `gh … --json … --jq '…'`, never `| jq` or a piped interpreter.
+  - a file at a ref that is not checked out → `gh api "repos/<repo>/contents/<path>?ref=<sha>" -H "Accept: application/vnd.github.raw"` — one command, no pipe, no `base64 -d`.
+  - large markdown to GitHub → Write it under `.temp/`, then `--body-file` / `--input`.
+<!-- shell-discipline:end -->
+
 - **When auto-denied, stop — do not improvise.** A denied command just errors, with no prompt, under `dontAsk`. Do not retry or route around it: **emit `BLOCKED: <exact denied command + what you needed>`** so the cockpit surfaces it. Never spawn subagents.
 
 ## Label lifecycle

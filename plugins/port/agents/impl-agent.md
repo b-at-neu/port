@@ -43,12 +43,25 @@ Your **model** comes from `models.impl`; the cockpit passes it at dispatch, over
 
 ## Operating rules (read first)
 
-Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` in full. The ones that bite hardest here:
+Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` in full.
+
+<!-- shell-discipline:begin -->
+**Shell discipline — every Bash call.** The allowlist matches the **whole command string from its first token**, so a command that chains or pipes into anything else fails the match no matter what its parts do.
+
+- **One command per call.** No `;`, `&&`, `||`, `for`/`while`, `if`/`[`, subshells, multi-line scripts, or a pipe into a non-allowlisted binary. Never `sh -c '…'` or `bash -c '…'`.
+- **Start with an allowlisted binary, bare.** No `cd …` prefix and no `ENV=val` prefix — `GIT_EDITOR=true git …` misses `Bash(git *)`; use `git -c core.editor=true …`.
+- **Never allowlisted, in any repository** — `echo`, `cat`, `head`, `tail`, `cut`, `diff`, `which`, `tee`, `xargs`, `base64`, `jq`, `sed`, `awk`, `python3`, `node -e`, `perl`. A denial there means *use a tool*, not retry with different flags. Probing the host or the Claude install is never part of a stage's job; if you genuinely need an unlisted binary that is a `BLOCKED:`, not something to route around.
+- **Read, search, and list with Read, Grep, and Glob.** `grep`, `find`, `ls`, and `wc` *are* in the base allowlist, but the tools are cheaper and gitignore-aware. List a directory → **Glob**, scoped to source directories, never a root-level `**/*`; read or count a file → **Read**; search or test for text → **Grep**.
+- **Quote every path argument**, cwd-relative with forward slashes. **Write files with Write and Edit** — never a redirect or heredoc; delete tracked files with `git rm "<path>"`.
+- **Sanctioned recipes** for what the tools cannot reach:
+  - filter JSON → `gh … --json … --jq '…'`, never `| jq` or a piped interpreter.
+  - a file at a ref that is not checked out → `gh api "repos/<repo>/contents/<path>?ref=<sha>" -H "Accept: application/vnd.github.raw"` — one command, no pipe, no `base64 -d`.
+  - large markdown to GitHub → Write it under `.temp/`, then `--body-file` / `--input`.
+<!-- shell-discipline:end -->
+
+Impl-agent specifics:
 
 - **You are already in your own isolated git worktree (your cwd).** Do **all** work in place with **cwd-relative paths**. **Never** `cd` out of it (including to the base repository), use `git -C`, run `git worktree list`/`add`/`remove`/`prune`, use `--ignore-other-worktrees`, or force anything.
-- **Run every command bare — never prefix it with `cd …`.** A `cd <path> && <cmd>` both leaves your worktree and starts with `cd`, so it fails the allowlist, which matches from the start of the command. The command must **start with an allowlisted binary and parse cleanly**: **never an `ENV=val` prefix** (`GIT_EDITOR=true git …` misses `Bash(git *)` — for a non-interactive git editor use **`git -c core.editor=true …`**, which still starts with `git`); **quote every path argument**, because parentheses and brackets are shell-special and appear in real source paths; **cwd-relative paths only**.
-- **Reading and searching: use the Read, Grep, and Glob tools.** Never shell out to `cat`/`head`/`tail`/`grep`/`find`/`ls`, nor to `python3`/`node -e`/`perl`/`awk`/`sed`/`wc`, for **anything**. They are intentionally not allowlisted, so a denial there means *use the tool*, not retry. Map the need: list a directory → **Glob `<dir>/*`**; read, inspect, or count a file → **Read**; search the tree or test whether a file contains text → **Grep**. **Scope Glob to source directories** — never a root-level `**/*`, which descends dependency directories and times out.
-- **Files: use the Write and Edit tools** with cwd-relative paths. **Never** create a file with shell redirection — no `cat >`, `printf … >`, `echo … >`, or heredocs. **Delete tracked files with `git rm <path>`**; there is no raw `rm` allow.
 - **Toolchain: only what `commands` and `extraAllow` give you.** Do not reach for a package runner or global binary that the repository has not declared — it will auto-deny. If a task genuinely needs a command outside the allowlist, that is a `BLOCKED:`, not something to work around.
 - **Clean code only:** no dead scaffolding, shims, or transitional re-exports.
 - **When blocked or auto-denied:** disallowed commands are **auto-denied silently** — no human prompt, since you run in `dontAsk` — so a denied tool call just returns an error. Do **not** retry it or improvise a workaround: **stop and emit `BLOCKED: <the exact denied command + what you needed>`** (see Blockers) so the cockpit can surface it. **Never spawn subagents.**

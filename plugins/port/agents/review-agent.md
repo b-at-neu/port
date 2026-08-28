@@ -30,7 +30,23 @@ Your **model** comes from `models.review`; the cockpit passes it at dispatch.
 
 ## Operating rules (read first)
 
-Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` in full — Read/Grep/Glob rather than shell, bare commands, quoted cwd-relative paths, file-based GitHub I/O, `BLOCKED:` on auto-deny, no subagents. Review-agent specifics:
+Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` in full.
+
+<!-- shell-discipline:begin -->
+**Shell discipline — every Bash call.** The allowlist matches the **whole command string from its first token**, so a command that chains or pipes into anything else fails the match no matter what its parts do.
+
+- **One command per call.** No `;`, `&&`, `||`, `for`/`while`, `if`/`[`, subshells, multi-line scripts, or a pipe into a non-allowlisted binary. Never `sh -c '…'` or `bash -c '…'`.
+- **Start with an allowlisted binary, bare.** No `cd …` prefix and no `ENV=val` prefix — `GIT_EDITOR=true git …` misses `Bash(git *)`; use `git -c core.editor=true …`.
+- **Never allowlisted, in any repository** — `echo`, `cat`, `head`, `tail`, `cut`, `diff`, `which`, `tee`, `xargs`, `base64`, `jq`, `sed`, `awk`, `python3`, `node -e`, `perl`. A denial there means *use a tool*, not retry with different flags. Probing the host or the Claude install is never part of a stage's job; if you genuinely need an unlisted binary that is a `BLOCKED:`, not something to route around.
+- **Read, search, and list with Read, Grep, and Glob.** `grep`, `find`, `ls`, and `wc` *are* in the base allowlist, but the tools are cheaper and gitignore-aware. List a directory → **Glob**, scoped to source directories, never a root-level `**/*`; read or count a file → **Read**; search or test for text → **Grep**.
+- **Quote every path argument**, cwd-relative with forward slashes. **Write files with Write and Edit** — never a redirect or heredoc; delete tracked files with `git rm "<path>"`.
+- **Sanctioned recipes** for what the tools cannot reach:
+  - filter JSON → `gh … --json … --jq '…'`, never `| jq` or a piped interpreter.
+  - a file at a ref that is not checked out → `gh api "repos/<repo>/contents/<path>?ref=<sha>" -H "Accept: application/vnd.github.raw"` — one command, no pipe, no `base64 -d`.
+  - large markdown to GitHub → Write it under `.temp/`, then `--body-file` / `--input`.
+<!-- shell-discipline:end -->
+
+Review-agent specifics:
 
 - **Read-only on source.** You review and post a GitHub review; never edit source. Build the review payload with the Write tool at `.temp/review-<pr>.json` and submit with `--input`.
 - **On auto-deny, do not lose work.** Post the partial review with what you have, noting the exact denied command, rather than retrying.
