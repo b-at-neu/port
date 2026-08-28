@@ -113,6 +113,11 @@ const REVISION_OPENS = /^(?:fixed|skipped)\b/;
 const REVISION_DETAIL = /^(?:fixed\b[^·]*·\s*)?(?:skipped\b[^·]*·\s*)?[0-9a-f]{7,40}\b/;
 const COMMIT_SUBJECT = /^#\d+ [a-z]/;
 const SCRATCH_PATHS = /^(\.temp|\.agents)\//;
+// A verification step only the operator can run, at its defined position — a
+// checkbox item whose text opens with the bolded prefix. Never a bare
+// substring search: a plan that merely *writes about* the prefix (this
+// ticket's own does) is not a marked plan.
+const OPERATOR_ONLY_STEP = /^\s*[-*]\s*\[[ xX]\]\s*\*\*operator-only\*\*/;
 
 /** Pull request stage labels, at most one of which may be present. The refresh
  *  pair is excluded on purpose: a refresh leaves the other labels in place. */
@@ -317,6 +322,21 @@ for (const n of targets) {
       fail(at('cross-surface'), `the pull request is marked SESSION REQUIRED but issue #${issueNo} is not`);
     } else {
       ok();
+    }
+
+    // An operator-only testing step on the issue must reach the pull
+    // request's testing plan — it is the human's only warning that one box is
+    // theirs alone to tick. One-directional on purpose: dropping it loses that
+    // warning, while an extra one in the pull request is harmless caution.
+    const issueTesting = section(lines(issueBody), '## Testing') ?? [];
+    const issueHasOperatorOnly = issueTesting.some((l) => OPERATOR_ONLY_STEP.test(l));
+    if (issueHasOperatorOnly) {
+      const prHasOperatorOnly = (plan ?? []).some((l) => OPERATOR_ONLY_STEP.test(l));
+      if (!prHasOperatorOnly) {
+        fail(at('cross-surface'), `issue #${issueNo}'s '## Testing' has an operator-only step that '## Testing plan' does not repeat`);
+      } else {
+        ok();
+      }
     }
   }
 }

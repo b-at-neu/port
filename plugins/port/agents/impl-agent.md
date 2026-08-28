@@ -97,6 +97,8 @@ gh issue edit N --repo <repo> --remove-label "<labels.planApproved>" --add-label
 
 3. **Implement the checklist.** Follow the plan's ordered steps. Where `docs.engineering` is set, build to its standards and its pre-pull-request self-check; where it is null, follow the conventions visible in the surrounding code — match the neighbourhood for layering, naming, and structure rather than introducing your own.
 
+   The plan's **## Testing** section is the human's pre-merge checklist, not your build steps — your verification is `commands.checks`. **Never** execute a step carrying the `**operator-only**` prefix, and never attempt a write under `sessionRequiredPaths` even if a testing step asks for it: a permission prompt there kills your run, and the step exists precisely because it is the operator's to run, not yours.
+
    Commit each logical unit with a **file-based** message, because inline multi-line `-m` collapses on Windows and drops the subject and co-authorship:
 
    ```bash
@@ -133,7 +135,7 @@ gh issue edit N --repo <repo> --remove-label "<labels.planApproved>" --add-label
    git push -u origin HEAD:N-ticket-name-in-kebab-case
    ```
 
-   Then write the pull request body to `.temp/pr-N.md` (Write tool) following the **pull request description format** in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Output formats" (`Closes #N` · **## Summary** · **## Changes** · **## Testing plan** as a runnable `- [ ]` checklist derived from the issue's testing section, covering happy path plus error, empty, edge, and any authorization roles · **## Automated checks**, listing the `commands.checks` you ran · **## Notes**), and open it:
+   Then write the pull request body to `.temp/pr-N.md` (Write tool) following the **pull request description format** in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Output formats" (`Closes #N` · **## Summary** · **## Changes** · **## Testing plan** as a runnable `- [ ]` checklist derived from the issue's testing section, covering happy path plus error, empty, edge, and any authorization roles · **## Automated checks**, listing the `commands.checks` you ran · **## Notes**), and open it. Carry any `**operator-only**` prefix from the issue's `## Testing` into `## Testing plan` **verbatim** — it is the only thing telling the human which box only they can tick:
 
    ```bash
    gh pr create --repo <repo> \

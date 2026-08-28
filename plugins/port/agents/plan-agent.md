@@ -104,20 +104,25 @@ Construct the **full new issue body** — the original ticket description preser
 gh issue edit N --repo <repo> --body-file .temp/plan-N.md
 ```
 
-**Session-required declaration.** Some tickets cannot be handed to a dispatched agent at all, because the harness denies a subagent's edits under certain paths. If this plan's **## Changes** touches any glob in `sessionRequiredPaths`, the body's **first line, directly under the `## Implementation Plan` heading and before `## Overview`**, is the marker, with the reason after the colon:
+**Session-required declaration.** Some tickets cannot be handed to a dispatched agent at all, because the harness denies a subagent's edits under certain paths. Scan the **whole plan** — `## Changes`, `## Implementation`, **and `## Testing`** — for every write anyone is asked to make, **including a transient one that gets reverted**: a write under a `sessionRequiredPaths` glob is unreachable for a dispatched subagent by any route, even inside its own disposable worktree, so a step that reverts itself is still a step that agent cannot run.
 
-```
-> **SESSION REQUIRED:** touches `.claude/**` — a dispatched agent can't edit those
-```
+- **A deliverable touch** (`## Changes` / `## Implementation`) forces the whole-plan marker, unchanged: the body's **first line, directly under the `## Implementation Plan` heading and before `## Overview`**, with the reason after the colon:
 
-Name the paths you actually matched in the reason. The literal string `SESSION REQUIRED` is what the cockpit greps for — **never reword it**; the reason after the colon is free text and is the part that generalizes. Emit it in **revision mode** too, since a revised plan can change the routing, and never emit it for a plan that does not need a session. Full rules: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Session-required tickets".
+  ```
+  > **SESSION REQUIRED:** touches `.claude/**` in the "update the label schema" step — a dispatched agent can't edit those
+  ```
+
+  Name the paths you actually matched, **and the step that needs them**, so the routing decision is auditable from the body.
+- **A verification-only touch** (the write appears **only** in `## Testing`) leaves the ticket dispatchable — emit **no** whole-plan marker — and instead marks that one step **operator-only**: `- [ ] **operator-only** — <step> (<why a dispatched agent cannot run it>)`. `impl-agent` must never execute that step; the pull request's testing plan carries the prefix verbatim.
+
+Never move a session-required write out of `## Testing` into `## Implementation` (or vice versa) to dodge either outcome — the section it actually lives in decides the routing. The literal string `SESSION REQUIRED` is what the cockpit greps for — **never reword it**; the reason after the colon is free text and is the part that generalizes. Emit it in **revision mode** too, since a revised plan can change the routing, and never emit it for a plan that does not need a session. Full rules: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Session-required tickets".
 
 **Use the fixed structure** in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Implementation plan" for the canonical section list, order, and writing style. Think through how the feature should actually work and look — it is a product and interaction design, not just a file checklist — but write it tight: bullets, short sentences, do not restate the ticket, omit sections that do not apply. Brevity does not excuse indecision; the plan must still **decide the substance**:
 
 - **Design each state** — happy path plus unhappy and edge cases — along with layout, hierarchy, key interactions, and the actual **copy**, in **## UX states** (only when there is a user interface).
 - **Files to create or modify, with reasons**, in **## Changes**; the ordered `- [ ]` work goes in **## Implementation**. Follow the layering the repository already uses rather than inventing one.
 - **Schema, validation, and the error model** in **## Data & contracts** (only when a schema or a server-side contract changes). Per entry point: what validates the input, how access is scoped to the caller, and which failures are shown to the user versus raised as unexpected. Where `docs.engineering` states the repository's rule for that distinction, apply it and cite it rather than restating it. This is the contract implementation builds to and review checks against.
-- **Human-runnable manual steps** in **## Testing**, which feed the pull request's testing plan.
+- **Human-runnable manual steps** in **## Testing**, which feed the pull request's testing plan. A step whose only reachable path is a `sessionRequiredPaths` write and did not already force the whole-plan marker gets the `- [ ] **operator-only** — <step> (<why>)` form, per "Session-required declaration" above.
 
 ## Handoff
 
