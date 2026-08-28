@@ -63,7 +63,7 @@ try {
   const actor = data?.agent_id
     ? `agent:${data?.agent_type ?? 'unknown'}:${data.agent_id}`
     : `session:${data?.session_id ?? 'unknown'}`;
-  const mode = data?.permission_mode ?? 'mode?';
+  const mode = field(data?.permission_mode, 20) || 'mode?';
 
   const dir = join(baseRepoRoot(cwd), '.agents');
   mkdirSync(dir, { recursive: true });
