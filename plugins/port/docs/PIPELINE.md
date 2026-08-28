@@ -74,11 +74,13 @@ The **double-dispatch race is known and unfixed**: the trigger-to-in-flight labe
 
 ### Why background dispatch needs care
 
-A non-allowlisted command must **auto-deny** (never prompt the human), or every stray command interrupts the operator. Stage agents therefore run **`permissionMode: dontAsk`** (auto-deny anything not allowlisted, no prompt) and the **cockpit session must run in `default` mode** — a parent in `acceptEdits`, `bypassPermissions`, or `auto` overrides the subagent's `dontAsk`, and the prompts start surfacing to the operator again. Because `dontAsk` only runs allowlisted actions, the allowlist must also grant **`Edit(**)` and `Write(**)`** so impl and revise can edit source at all; file edits are not auto-accepted under `dontAsk`.
+A non-allowlisted command must **auto-deny** (never prompt the human), or every stray command interrupts the operator. **A `PreToolUse` guard hook is what denies** — `${CLAUDE_PLUGIN_ROOT}/hooks/agent-guard.mjs`, registered on both `Bash` and the write tools (`Edit`/`Write`/`NotebookEdit`). It identifies a dispatched subagent from the hook payload (`agent_type`/`agent_id`, the transcript path, or a cwd under an `agent-<hash>` worktree — any one signal is sufficient; `/port:implement`'s own `impl-<n>` worktrees deliberately do not match, since that skill runs in an operator's session), and for a subagent call that misses the repository's allowlist (Bash) or targets a `sessionRequiredPaths` path (a write), it returns an explicit `permissionDecision: "deny"`. That decision is independent of the parent session's permission mode — no dialog can reach the operator regardless of whether the cockpit is running `default`, `acceptEdits`, `bypassPermissions`, or `auto`.
+
+Stage agents still declare **`permissionMode: dontAsk`** in their frontmatter — that stays as declared intent and a second line of defence, but it has never been observed denying anything on its own; the guard hook is what actually does. **Run the cockpit session in `default` mode anyway** — not for the deny, but so *your own* edits are not auto-accepted and any residual dialog (a harness-level case the guard hook does not cover) is visible rather than silently approved. Because dispatched agents edit source, the allowlist must also grant **`Edit(**)` and `Write(**)`** so impl and revise can edit files the guard hook does not deny.
 
 The model is **broad allow, authoritative deny**: allow whole dev-command categories, and use the `deny` list as the real safety surface for dangerous or interactive commands. Deny beats allow at every scope. A worktree is a checkout of `<integration>`, so it carries the *committed* settings — see "What a dispatched agent can see" for the full lag this creates, plugins included.
 
-Agents also run with **`disallowedTools: Agent`** (no nested subagents), a **`maxTurns`** backstop, and the rule to **stop and emit `BLOCKED:`** rather than improvise when a command is auto-denied.
+Agents also run with **`disallowedTools: Agent`** (no nested subagents), a **`maxTurns`** backstop, and the rule to **stop and emit `BLOCKED:`** rather than improvise when a command is denied. That instruction is reachable for the first time now: the guard hook's deny reason tells the agent to do exactly that, and the agent survives the denial to act on it, rather than stalling on an unanswered prompt.
 
 ### What a dispatched agent can see
 
@@ -94,7 +96,7 @@ A **plugin** addition needs three things lined up, not just the merge:
 
 The ordering rule that follows: **a plugin addition is its own prerequisite ticket.** Land it, merge it, refresh the install per `CONTRIBUTING.md`, restart the cockpit — then dependent tickets, which declare the plugin ticket via `blockedBy` (the cockpit already warns about unmerged blockers at opt-in).
 
-**Denial visibility:** a `PermissionDenied` Bash hook records every command the harness actually denied — the decision itself, never a prediction of it — to a gitignored `.agents/denials.log`. Each line is five tab-separated fields: `<iso8601>` `<actor>` `<mode>` `<reason>` `<command>`, where `actor` is `agent:<agent_type>:<agent_id>` for a dispatched subagent or `session:<session_id>` for the main thread, and `reason`/`command` are whitespace-collapsed and truncated. The cockpit reads it each tick and reports clusters, so systemic denials are visible without prompting. Logging only — it never blocks. The event is new (CLI 2.1.238); on an older CLI the hook never fires, so silence there means no visibility, not health.
+**Denial visibility:** the guard hook logs every decision it makes — never an `allow` — to a gitignored `.agents/denials.log`. Each line is four tab-separated fields: `<iso8601>` `<decision>` `<who>` `<command-or-path>`, where `decision` is `deny`, `miss` (a non-subagent call that missed the allowlist — logged for visibility, never denied), or `hook-error` (an internal failure, logged so a fail-open silently-broken hook is still visible); `who` is `port:<agent_type>` when the agent's type is known, else `subagent:<signal>`, else `session:<session_id>`; and `command-or-path` is whitespace-collapsed and truncated. The cockpit reads it each tick and reports clusters of `deny` lines, so systemic denials are visible without prompting. A denied command now returns with the guard hook's reason rather than just erroring.
 
 ### File-based GitHub I/O
 
@@ -120,11 +122,11 @@ Canonical rules every stage agent follows. A Bash command matches the allowlist 
   - large markdown to GitHub → Write it under `.temp/`, then `--body-file` / `--input`.
 <!-- shell-discipline:end -->
 
-- **When auto-denied, stop — do not improvise.** A denied command just errors, with no prompt, under `dontAsk`. Do not retry or route around it: **emit `BLOCKED: <exact denied command + what you needed>`** so the cockpit surfaces it. Never spawn subagents.
+- **When denied, stop — do not improvise.** A denied command returns a hook denial with a reason, not a prompt — the guard hook decided, not you. Do not retry or route around it: **emit `BLOCKED: <exact denied command + what you needed>`** so the cockpit surfaces it. Never spawn subagents.
 
 ## Label lifecycle
 
-Rule: **every stage agent's first action is swapping its trigger label for its in-flight label.** Absence of a trigger label means the cockpit skips the item, so a tick can never double-dispatch. A crashed agent leaves the item parked in an in-flight label; recovery is re-applying the trigger label (`retry #N`).
+Rule: **every stage agent's first action is swapping its trigger label for its in-flight label.** Absence of a trigger label means the cockpit skips the item, so a tick can never double-dispatch. **An in-flight label means a stage *claimed* the item, never that an agent is still alive** — a crashed or killed agent leaves the label in place with nothing running. Liveness is a separate question, answered by `TaskList`, not by the label; see "Liveness" under Escalation. Recovery either way is re-applying the trigger label (`retry #N`).
 
 ### Issue labels
 
@@ -186,7 +188,7 @@ A `permissions.deny` pattern cannot stop an allowlisted read-only command from w
 
 **The mitigation is the allowlist itself**, which is why content emitters are excluded. The commands that remain emit search results, paths, or metadata rather than arbitrary content. **This narrows the bypass; it does not close it** — `grep -v x f > f` still strips lines, any allowed command can truncate a redirect target, and a broad `git` allow has always offered write primitives through `git apply` and `git checkout --`.
 
-So "write files with the Write and Edit tools" is a **convention agents are expected to follow, not a technical guarantee** — and `plan-agent`'s and `review-agent`'s read-only status rests on them following it. Closing it properly needs a *new*, separate `PreToolUse` hook that inspects the raw command string and returns a deny decision. That is not the denial-visibility hook described above: this one fires on `PermissionDenied`, only records a decision the harness already made, and cannot gate anything itself.
+So "write files with the Write and Edit tools" is a **convention agents are expected to follow, not a technical guarantee** — and `plan-agent`'s and `review-agent`'s read-only status rests on them following it. **The guard hook described above is the `PreToolUse` deny this section used to ask for** — it inspects the raw Bash command string and returns a deny decision for a dispatched subagent's allowlist miss. What it does not close: shell redirection through an *allowed* command remains ungated, since the hook (like the harness's own matching) operates on parsed command tokens, and the redirection operators are consumed by the shell layer before either ever sees them.
 
 ### CI merge gate
 
@@ -329,6 +331,19 @@ Write the message to `.temp/commit-msg.txt` and `git commit -F .temp/commit-msg.
 - **Rebase conflict during revision** — `revise-agent` attempts autonomous resolution per the protocol below; it aborts, comments `## Pipeline Escalation`, and labels `needs human` **only** when a conflict is ambiguous or on the never-touch list.
 - **Plan questions** — `plan-agent` never guesses: it returns `QUESTIONS FOR HUMAN:` and the cockpit relays, then resumes it with answers.
 
+### Liveness
+
+An in-flight label is a claim, not a heartbeat — nothing about it tells the cockpit whether an agent is still running. Every tick, the cockpit queries the in-flight labels (`planning`, `in progress`, `reviewing`, `revising`, and `refreshing` under `previewDatabase`) and cross-checks the result against `TaskList`, matching entries by the dispatch `description` (`"<stage> #<n>"`). Four termination classes distinguish what a completed or vanished agent means:
+
+| Class | Signature | Response |
+| --- | --- | --- |
+| **Completed** | Agent finished normally, final message available | Relay its message per the relay loop; the labels it set drive the next tick |
+| **Failed** | Agent errored before finishing | Item stays at its in-flight label with no matching `TaskList` entry — report it **stalled**; remedy is `retry #N` |
+| **Stopped / killed** | Operator ran `stop #N`/`halt`, or `TaskStop` | Label already reset to trigger by the stop command; nothing further to report |
+| **Usage limit** | A `session limit` message, typically across every in-flight agent at once | Do not redispatch and do not change models; reset each affected item's in-flight label to its trigger label (one `gh` call per item), report the reset time verbatim, and schedule the next wakeup just after it |
+
+An in-flight item with **no** live `TaskList` entry and **no** completion notice is **stalled** (the failed class): report it every tick while the set is non-empty, as one grouped line, and dispatch nothing for it — `retry #N` is the human's call, not an automatic one. If `TaskList` cannot be correlated to numbers at all, report the in-flight set alongside the running-agent count and say the match is uncertain rather than guessing.
+
 ### Rebase conflict protocol (`revise-agent`)
 
 When `git rebase origin/<base>` hits conflicts, `revise-agent` resolves the structurally unambiguous ones and escalates the rest. **Fail closed:** if any single conflict is ambiguous or on the never-touch list, abort the **entire** rebase and escalate — never partially resolve, and never let an auto-resolve silently drop a side's logic.
@@ -381,6 +396,8 @@ Closing the cockpit session also halts dispatch, since it is the only dispatcher
 | A permission change was merged but agents still hit denials | A worktree carries the *committed* settings | Confirm it merged to `<integration>`; agents pick it up on their next fresh worktree |
 | `/port:pipeline` refuses to start | The checked-out branch carries no `.claude/port.config.json`, or no `permissions.allow` | Check out the branch the harness was installed on, or run `/port:init` on this one |
 | A plugin was installed and merged, but agents behave as if it is absent | Merging declares a plugin, it does not install one | Update the main checkout, refresh the install per `CONTRIBUTING.md`, restart the cockpit |
+| An item parked at an in-flight label, with no matching `TaskList` entry | The dispatched agent failed or the session closed mid-flight | The liveness cross-check reports it as **stalled** each tick; `retry #N` |
+| Every dispatched agent failed at once, all reporting a session-limit message | The operator's usage window was exhausted | The cockpit parks each affected item back at its trigger label and schedules the next wakeup just after the reported reset time; nothing to retry manually |
 
 ## Reading current state without the cockpit
 

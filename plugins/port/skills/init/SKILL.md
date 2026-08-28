@@ -9,7 +9,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep, AskUserQuestion, Bash(gh label *) 
 
 Run this once, from inside the repository you are adopting.
 
-**This skill exists because a plugin cannot ship permission rules.** `permissions.allow` and `permissions.deny` live only in user or project settings; a plugin's own settings file supports just a couple of unrelated keys. But that allowlist *is* the pipeline's safety model — stage agents run `permissionMode: dontAsk`, which auto-denies anything not allowlisted, so without it installed **no agent can do anything at all**. Installing it is load-bearing, not convenience.
+**This skill exists because a plugin cannot ship permission rules.** `permissions.allow` and `permissions.deny` live only in user or project settings; a plugin's own settings file supports just a couple of unrelated keys. But that allowlist *is* the pipeline's safety model — a `PreToolUse` guard hook denies a dispatched agent's call against whatever is (or is not) allowlisted, so without it installed **no agent can do anything at all**. Installing it is load-bearing, not convenience.
 
 ## Ground rules
 
@@ -127,7 +127,7 @@ Show it as a **diff against the current file**, not as the proposed contents —
 
 You write the config and the allowlist in the same run, so you are the only thing positioned to notice a mismatch. **Verify that every `commands.bootstrap` and `commands.checks` entry matches an allow pattern.**
 
-A command matches only if it **starts with an allowlisted binary**. `Bash(npm *)` does not cover `npx` — they are different binaries, and this exact pair has already shipped a repository whose every check prompted on every run. In `default` mode the operator approves them forever; under a stage agent's `dontAsk` they are **auto-denied**, so the agent can never reach a green check and never pushes.
+A command matches only if it **starts with an allowlisted binary**. `Bash(npm *)` does not cover `npx` — they are different binaries, and this exact pair has already shipped a repository whose every check prompted on every run. In `default` mode the operator approves them forever; for a dispatched agent the guard hook **denies** them outright, so the agent can never reach a green check and never pushes.
 
 **An unmatched command is a hard stop**, resolved one of two ways:
 
