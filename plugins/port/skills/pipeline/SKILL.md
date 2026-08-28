@@ -14,7 +14,7 @@ You are the orchestrator of the agent pipeline in `${CLAUDE_PLUGIN_ROOT}/docs/PI
 
 Run once, before the first tick — never on a wakeup, never acted on beyond what each step says. A refused or stopped preflight schedules no wakeup (see Pacing).
 
-**Step 1 — config.** Read `.claude/port.config.json`. Present → continue to step 2. Absent →
+**Step 1 — config.** Read `.claude/port.config.json`. Present and parses as JSON → continue to step 2. Absent, or present but unparseable → treat a parse failure identically to absent, with the same hard-stop messages:
 
 ```bash
 git rev-parse --abbrev-ref HEAD
@@ -38,7 +38,7 @@ Then check for self-host drift. Read `.claude-plugin/marketplace.json` at the re
 **Step 4 — integration drift.** One call, report-only, never acted on:
 
 ```bash
-gh api graphql -f query='query { repository(owner:"<owner>",name:"<name>"){ object(expression:"<integration>:.claude/settings.json"){ ... on Blob { text } } } }' --jq '.data.repository.object.text'
+gh api graphql -f query='query { repository(owner: "<owner>", name: "<name>") { object(expression: "<integration>:.claude/settings.json") { ... on Blob { text } } } }' --jq '.data.repository.object.text'
 ```
 
 Compare the returned `enabledPlugins` keys against the local file's, and warn on either direction of difference, or on `object` being null (`<integration>` carries no settings file at all) — see **UX states**. **If the call errors, say so in one line and continue.** Never block a tick on it.
@@ -49,13 +49,13 @@ Also in this pass, when both files are present but the branch from step 1's `git
 
 Exact copy, one message per state, `<…>` substituted:
 
-- **Config absent, other refs carry it** (hard stop):
+- **Config absent or unparseable, other refs carry it** (hard stop):
 
-  > ⛔ Not port-managed on this branch. `.claude/port.config.json` is absent on `<branch>`, but it exists on `<refs>`. Check one of those out and start me again — I'm not ticking until then.
+  > ⛔ Not port-managed on this branch. `<.claude/port.config.json is absent | .claude/port.config.json fails to parse as JSON>` on `<branch>`, but it exists on `<refs>`. Check one of those out and start me again — I'm not ticking until then.
 
-- **Config absent, nothing carries it** (hard stop):
+- **Config absent or unparseable, nothing carries it** (hard stop):
 
-  > ⛔ Not port-managed. `.claude/port.config.json` is absent on `<branch>` and on every ref I can see. Run `/port:init` to adopt the pipeline here. Not ticking.
+  > ⛔ Not port-managed. `<.claude/port.config.json is absent | .claude/port.config.json fails to parse as JSON>` on `<branch>` and on every ref I can see. Run `/port:init` to adopt the pipeline here. Not ticking.
 
 - **Permissions missing or empty** (warn, then Stop / Start anyway):
 
