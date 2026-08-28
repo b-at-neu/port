@@ -25,6 +25,7 @@ No dependencies, no plugin install, no model calls. Runs in seconds, in CI on ev
 | No `commands.checks` entry invokes an eval or the layer 2 audit | Every dispatched agent spawning its own model runs before it can push |
 | The denial hook is registered on `PermissionDenied` (and no other event), and a spawned fixture run attributes a subagent denial to `agent:<type>:<id>`, a main-thread denial to `session:<id>`, no-ops outside a port-managed repository, and never writes on a malformed payload | Denial visibility (#63) |
 | The shell-discipline block between its marker comments in `PIPELINE.md` exists, and every agent granting Bash carries a byte-identical copy | Shell-shape rules present in one agent and not its siblings (#66) |
+| The session-required determination still names the testing steps, and the `operator-only` literal exists in both agent files | #118 |
 
 Each rule is worth testing by breaking it deliberately. If a check cannot be made to fail, it is not a check.
 
@@ -51,6 +52,7 @@ It targets a real exposure: the output formats live in `PIPELINE.md` prose and w
 | At most one stage label; a merged pull request keeps no trigger or in-flight label | Label lifecycle |
 | Nothing under `.temp/` or `.agents/` in the diff | Operating rules |
 | The closing issue has an `## Implementation Plan`, and `SESSION REQUIRED` appears on both surfaces or neither | Session-required tickets |
+| An operator-only testing step on the issue plan reaches the pull request's testing plan | Session-required tickets |
 
 **A pull request without the `claude` marker is skipped, never failed.** A human or dependency-bot pull request is not a deviation, and the marker is what makes one the pipeline's.
 

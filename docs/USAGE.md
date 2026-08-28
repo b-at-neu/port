@@ -65,7 +65,7 @@ Anything else is reported, not asked.
 
 ## Tickets an agent cannot be given
 
-Some tickets touch paths the harness will not let a subagent edit — `.claude/**` and `CLAUDE.md` by default, configurable via `sessionRequiredPaths`. Their plan carries a `SESSION REQUIRED` marker, and the cockpit **announces instead of dispatching**.
+Some tickets touch paths the harness will not let a subagent edit — `.claude/**` and `CLAUDE.md` by default, configurable via `sessionRequiredPaths`. Their plan carries a `SESSION REQUIRED` marker, and the cockpit **announces instead of dispatching**. When only a *verification* step needs such a path, the ticket still dispatches, and the plan marks that one step operator-only for you to run before merge.
 
 Nothing moves until you run it yourself, in a **separate** session:
 

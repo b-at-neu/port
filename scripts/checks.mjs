@@ -406,6 +406,42 @@ for (const t of [
   ok();
 }
 
+// --- Session-required determination reads the whole plan, not just changes -
+// Regression guard for #118: the determination looked only at the changed-file
+// list, so a plan whose testing steps needed a sessionRequiredPaths write (but
+// whose deliverables did not) was declared plainly dispatchable, and the
+// dispatched agent died on the permission prompt.
+{
+  const planAgent = readFileSync(join(root, 'plugins/port/agents/plan-agent.md'), 'utf8');
+  const implAgent = readFileSync(join(root, 'plugins/port/agents/impl-agent.md'), 'utf8');
+
+  const start = planAgent.indexOf('**Session-required declaration.**');
+  if (start === -1) {
+    fail('session-required-scan', 'plugins/port/agents/plan-agent.md has no "Session-required declaration" section');
+  } else {
+    const rest = planAgent.slice(start);
+    const end = /\n## /.exec(rest);
+    const section = end ? rest.slice(0, end.index) : rest;
+    for (const heading of ['## Testing', '## Changes']) {
+      if (!section.includes(heading)) {
+        fail('session-required-scan', `plan-agent.md's Session-required declaration does not name '${heading}' as scanned`);
+      }
+    }
+    ok();
+  }
+
+  for (const [rel, text] of [
+    ['plugins/port/agents/plan-agent.md', planAgent],
+    ['plugins/port/agents/impl-agent.md', implAgent],
+  ]) {
+    if (!text.includes('operator-only')) {
+      fail('session-required-scan', `${rel} never mentions 'operator-only' — one file defines the prefix, the other must act on it`);
+    } else {
+      ok();
+    }
+  }
+}
+
 // --- Eval cases are structurally sound --------------------------------------
 // Everything statically knowable about a layer 3 case is checked here, for free,
 // so a broken case is caught without an API key or early access. Presence and

@@ -208,6 +208,15 @@ Some hosting setups give every open pull request a preview deployment backed by 
 
 The paths that trigger it come from `sessionRequiredPaths`, which defaults to `CLAUDE.md`, `.claude/**`, and `.claude/port.config.json`.
 
+### What the determination covers
+
+`plan-agent` scans the **whole plan** — `## Changes`, `## Implementation`, and `## Testing` — not just the changed-file list, because a write under `sessionRequiredPaths` is unreachable for a dispatched subagent by any route, even a transient one that gets reverted before the plan finishes. Two outcomes:
+
+- **A deliverable touch** (`## Changes` / `## Implementation`) forces the whole-plan `SESSION REQUIRED` marker.
+- **A verification-only touch** (the write appears only in `## Testing`) leaves the ticket dispatchable, and that one step is marked **operator-only** instead — `impl-agent` skips it, and it carries into the pull request's testing plan verbatim for the operator to run before merge.
+
+This closes #55: a plan whose deliverables never touched `.claude/**` but whose testing steps did was classified plainly dispatchable, and the dispatched agent died on the permission prompt the first outcome above now prevents.
+
 ### The marker
 
 One string, one rendering, both surfaces — **`SESSION REQUIRED`**, with the reason after the colon:
@@ -269,7 +278,7 @@ Appended below the ticket under a `---` then `## Implementation Plan`; revision 
 - **## Implementation** — ordered `- [ ]` checkboxes, one line each; fold validation, states, and error-model notes into the step they belong to.
 - **## Data & contracts** *(only if a schema or a server-side contract changes)* — the change, and per entry point its validation and authorization.
 - **## UX states** *(only if there is a user interface)* — loading, empty, error, plus key copy.
-- **## Testing** — human-runnable manual steps as `- [ ]`, feeding the pull request's testing plan.
+- **## Testing** — human-runnable manual steps as `- [ ]`, feeding the pull request's testing plan. A step whose only reachable path is `sessionRequiredPaths` and did not already trigger the whole-plan marker takes the form `- [ ] **operator-only** — <step> (<why>)`.
 - **## Risks / notes** *(optional)* — only real, non-obvious ones.
 
 Most plans fit on one screen. No preamble, no restated goal, no empty sections.
@@ -290,6 +299,8 @@ The code review is a **real GitHub pull request review** (`gh api …/pulls/<pr>
 ### Pull request description (`impl-agent` writes it via `--body-file`)
 
 `Closes #N` · **## Summary** (what was built and the approach) · **## Changes** (notable files and areas) · **## Testing plan** — reproducible **manual** steps as a `- [ ]` checklist a human runs before merge, covering happy path, error and empty and edge cases, and any authorization roles, derived from the issue's testing section · **## Automated checks** (the `commands.checks` that were run) · **## Notes** (schema changes, risks, follow-ups).
+
+Any `- [ ] **operator-only**` step in the issue's `## Testing` carries into `## Testing plan` **verbatim** — the prefix is the only thing telling the human which box only they can tick.
 
 The pull request is **assigned to the issue's assignee**, falling back to `@me` when the issue has none — never a hardcoded login. The pull-request-stage queries are assignee-filtered too, so a pull request with the wrong owner is invisible to the cockpit that shepherded its issue.
 
