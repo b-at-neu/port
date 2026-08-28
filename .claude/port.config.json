@@ -7,7 +7,7 @@
     "production": "main"
   },
   "commands": {
-    "bootstrap": [],
+    "bootstrap": ["pnpm install"],
     "checks": [{ "run": "node scripts/checks.mjs", "fix": null }]
   },
   "docs": {
