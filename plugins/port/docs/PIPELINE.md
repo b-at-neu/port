@@ -98,6 +98,8 @@ The ordering rule that follows: **a plugin addition is its own prerequisite tick
 
 **Denial visibility:** the guard hook logs every decision it makes — never an `allow` — to a gitignored `.agents/denials.log`. Each line is four tab-separated fields: `<iso8601>` `<decision>` `<who>` `<command-or-path>`, where `decision` is `deny`, `miss` (a non-subagent call that missed the allowlist — logged for visibility, never denied), or `hook-error` (an internal failure, logged so a fail-open silently-broken hook is still visible); `who` is `port:<agent_type>` when the agent's type is known, else `subagent:<signal>`, else `session:<session_id>`; and `command-or-path` is whitespace-collapsed and truncated. The cockpit reads it each tick and reports clusters of `deny` lines, so systemic denials are visible without prompting. A denied command now returns with the guard hook's reason rather than just erroring.
 
+**Known gap — a native `permissions.deny` match is not logged.** The guard hook only ever sees `PreToolUse`, and only ever writes a line when *its own* classifier reaches `deny` or `miss` for one of its two cases (allowlist-missing Bash, a write to a `sessionRequiredPaths` path). A command that instead matches an explicit entry in `.claude/settings.json`'s native `permissions.deny` list — independent of the guard hook's own logic — is still denied (deny beats allow at every scope, per "The model is broad allow, authoritative deny" above), but nothing writes to `.agents/denials.log` for it: the hook that used to log that event (`PermissionDenied`) was removed with this change, and nothing replaces it. That class of denial is real but currently invisible to the cockpit's cluster reporting.
+
 ### File-based GitHub I/O
 
 Agents never pass large markdown (plans, reviews, comments) as an inline `--body "..."` argument — shell quoting of backticks and code fences fails cross-platform. They write the payload to `.temp/` (gitignored) and use `gh ... --body-file`. The same applies to the cockpit's escalation comments.
@@ -330,6 +332,7 @@ Write the message to `.temp/commit-msg.txt` and `git commit -F .temp/commit-msg.
 - **Implementation blocker** — `impl-agent` comments `## Blocker`, labels `blocked`, and reports `BLOCKED:`; the cockpit relays and resumes the same agent with the human's decision.
 - **Rebase conflict during revision** — `revise-agent` attempts autonomous resolution per the protocol below; it aborts, comments `## Pipeline Escalation`, and labels `needs human` **only** when a conflict is ambiguous or on the never-touch list.
 - **Plan questions** — `plan-agent` never guesses: it returns `QUESTIONS FOR HUMAN:` and the cockpit relays, then resumes it with answers.
+- **Stalled or usage-limited agent** — an in-flight label with no live `TaskList` entry means the agent crashed or hit a usage limit, not that work is proceeding; see "Liveness" for how the cockpit tells the two apart and responds.
 
 ### Liveness
 
