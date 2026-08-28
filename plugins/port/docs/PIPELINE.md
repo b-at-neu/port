@@ -76,9 +76,23 @@ The **double-dispatch race is known and unfixed**: the trigger-to-in-flight labe
 
 A non-allowlisted command must **auto-deny** (never prompt the human), or every stray command interrupts the operator. Stage agents therefore run **`permissionMode: dontAsk`** (auto-deny anything not allowlisted, no prompt) and the **cockpit session must run in `default` mode** — a parent in `acceptEdits`, `bypassPermissions`, or `auto` overrides the subagent's `dontAsk`, and the prompts start surfacing to the operator again. Because `dontAsk` only runs allowlisted actions, the allowlist must also grant **`Edit(**)` and `Write(**)`** so impl and revise can edit source at all; file edits are not auto-accepted under `dontAsk`.
 
-The model is **broad allow, authoritative deny**: allow whole dev-command categories, and use the `deny` list as the real safety surface for dangerous or interactive commands. Deny beats allow at every scope. A worktree is a checkout of `<integration>`, so it carries the *committed* settings — **permission changes take effect for dispatched agents only after they merge.**
+The model is **broad allow, authoritative deny**: allow whole dev-command categories, and use the `deny` list as the real safety surface for dangerous or interactive commands. Deny beats allow at every scope. A worktree is a checkout of `<integration>`, so it carries the *committed* settings — see "What a dispatched agent can see" for the full lag this creates, plugins included.
 
 Agents also run with **`disallowedTools: Agent`** (no nested subagents), a **`maxTurns`** backstop, and the rule to **stop and emit `BLOCKED:`** rather than improvise when a command is auto-denied.
+
+### What a dispatched agent can see
+
+Committed `.claude/settings.json` and `.claude/port.config.json` both lag by one merge: a worktree is cut from `<integration>`, so whatever is on disk on some other branch — including the main checkout's own branch — is invisible to it until that branch merges. The cockpit's startup preflight (`skills/pipeline/SKILL.md`) is what turns this from a silent trap into a reported one: it refuses to tick when the main checkout itself carries neither file, and warns when it is on a non-integration branch.
+
+A **plugin** addition needs three things lined up, not just the merge:
+
+- **Declared** — `enabledPlugins` merged to `<integration>`.
+- **Cached** — the declared `version` present under `~/.claude/plugins/cache/`, a **machine-local** copy no git operation in the repository touches.
+- **Loaded** — the cockpit session started after both of the above.
+
+**Merging declares a plugin; it does not install one.** Whether a dispatched subagent re-resolves project settings from its worktree or inherits the parent session's plugin set does not change this sequence, because the **cached** condition is machine-level either way — verified empirically, see `CONTRIBUTING.md` → "The three gates on a GitHub-sourced install".
+
+The ordering rule that follows: **a plugin addition is its own prerequisite ticket.** Land it, merge it, refresh the install per `CONTRIBUTING.md`, restart the cockpit — then dependent tickets, which declare the plugin ticket via `blockedBy` (the cockpit already warns about unmerged blockers at opt-in).
 
 **Denial visibility:** a `PermissionDenied` Bash hook records every command the harness actually denied — the decision itself, never a prediction of it — to a gitignored `.agents/denials.log`. Each line is five tab-separated fields: `<iso8601>` `<actor>` `<mode>` `<reason>` `<command>`, where `actor` is `agent:<agent_type>:<agent_id>` for a dispatched subagent or `session:<session_id>` for the main thread, and `reason`/`command` are whitespace-collapsed and truncated. The cockpit reads it each tick and reports clusters, so systemic denials are visible without prompting. Logging only — it never blocks. The event is new (CLI 2.1.238); on an older CLI the hook never fires, so silence there means no visibility, not health.
 
@@ -354,6 +368,8 @@ Closing the cockpit session also halts dispatch, since it is the only dispatcher
 | Cockpit session closed | All state is in labels | Start `/port:pipeline` again; it resumes from the labels |
 | Labels changed manually on GitHub | Fine — labels are the source of truth | The next tick acts on whatever the labels say |
 | A permission change was merged but agents still hit denials | A worktree carries the *committed* settings | Confirm it merged to `<integration>`; agents pick it up on their next fresh worktree |
+| `/port:pipeline` refuses to start | The checked-out branch carries no `.claude/port.config.json`, or no `permissions.allow` | Check out the branch the harness was installed on, or run `/port:init` on this one |
+| A plugin was installed and merged, but agents behave as if it is absent | Merging declares a plugin, it does not install one | Update the main checkout, refresh the install per `CONTRIBUTING.md`, restart the cockpit |
 
 ## Reading current state without the cockpit
 
