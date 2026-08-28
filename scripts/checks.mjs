@@ -420,7 +420,13 @@ for (const t of [
     fail('session-required-scan', 'plugins/port/agents/plan-agent.md has no "Session-required declaration" section');
   } else {
     const rest = planAgent.slice(start);
-    const end = /\n## /.exec(rest);
+    // Scope tightly to the declaration's determination paragraph — stop at the
+    // first blank line, not the next `## ` heading. The old bound ran all the
+    // way to `## Handoff`, which also swallows the later "Human-runnable
+    // manual steps ... in `## Testing`" bullet under "Use the fixed
+    // structure", so a real deletion of the `## Testing` reference from the
+    // determination sentence went undetected (R1-C1).
+    const end = /\n\s*\n/.exec(rest);
     const section = end ? rest.slice(0, end.index) : rest;
     for (const heading of ['## Testing', '## Changes']) {
       if (!section.includes(heading)) {

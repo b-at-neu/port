@@ -109,7 +109,7 @@ gh issue edit N --repo <repo> --body-file .temp/plan-N.md
 - **A deliverable touch** (`## Changes` / `## Implementation`) forces the whole-plan marker, unchanged: the body's **first line, directly under the `## Implementation Plan` heading and before `## Overview`**, with the reason after the colon:
 
   ```
-  > **SESSION REQUIRED:** touches `.claude/**` — a dispatched agent can't edit those
+  > **SESSION REQUIRED:** touches `.claude/**` in the "update the label schema" step — a dispatched agent can't edit those
   ```
 
   Name the paths you actually matched, **and the step that needs them**, so the routing decision is auditable from the body.
