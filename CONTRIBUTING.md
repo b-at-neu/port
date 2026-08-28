@@ -59,6 +59,8 @@ Three layers, separated by cost: static file checks, artifact assertions on real
 
 Once installed at user scope the plugin loads in every session, whatever the working directory. A hook must therefore return immediately when the repository has no `.claude/port.config.json` — without that guard, installing this plugin changes behaviour in every unrelated project on the machine.
 
+A hook records a harness decision; it never re-derives one. Re-implementing permission matching (or any other engine the harness already runs) as a second copy inside a hook drifts from the original and reports what the hook *predicts* happened rather than what actually did — the failure #63 fixed.
+
 ## Commit messages
 
 Subject: `#<issue> <imperative lowercase summary>`, under 80 characters, no trailing period. Use `#0` when a commit genuinely has no issue.

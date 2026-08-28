@@ -8,7 +8,18 @@
 // Each check exists because something actually broke. The failure mode these
 // guard against is silence: a malformed component is *absent* from Claude
 // Code's inventory rather than reported as an error, so nothing complains.
-import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import {
+  readFileSync,
+  readdirSync,
+  existsSync,
+  statSync,
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  rmSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, basename, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createReporter } from './lib/report.mjs';
@@ -86,6 +97,113 @@ for (const [dir, kind] of [
       }
       ok();
     }
+  }
+}
+
+// --- Denial hook is registered on PermissionDenied, and nothing else -------
+// Regression guard for #63: the hook now records the harness's actual
+// decision, which only the PermissionDenied event carries. Registering it
+// under PreToolUse (or anything else) silently reintroduces prediction.
+{
+  const hooks = readJson('plugins/port/hooks/hooks.json').hooks ?? {};
+  const isDenialHook = (h) =>
+    typeof h.command === 'string' && h.command.includes('log-bash-denial.mjs');
+  let registeredOnPermissionDenied = false;
+  for (const [event, matchers] of Object.entries(hooks)) {
+    for (const matcher of matchers) {
+      for (const h of matcher.hooks ?? []) {
+        if (!isDenialHook(h)) continue;
+        if (event === 'PermissionDenied') registeredOnPermissionDenied = true;
+        else fail('denial-hook', `log-bash-denial.mjs is registered under '${event}', expected 'PermissionDenied'`);
+      }
+    }
+  }
+  if (!registeredOnPermissionDenied) fail('denial-hook', 'log-bash-denial.mjs is not registered under PermissionDenied');
+  ok();
+}
+
+// --- Denial hook payload handling -------------------------------------------
+// Spawns the real hook script against representative PermissionDenied
+// payloads. The fixture directory must sit outside any git repository, or
+// `git rev-parse --git-common-dir` resolves to this checkout and the fixture
+// appends to the operator's own `.agents/denials.log`.
+{
+  const hookPath = join(root, 'plugins/port/hooks/log-bash-denial.mjs');
+  const fixture = mkdtempSync(join(tmpdir(), 'port-denial-hook-'));
+  try {
+    mkdirSync(join(fixture, '.claude'), { recursive: true });
+    writeFileSync(join(fixture, '.claude', 'port.config.json'), '{}');
+
+    const run = (payload) => {
+      execFileSync(process.execPath, [hookPath], {
+        cwd: fixture,
+        input: JSON.stringify(payload),
+        stdio: ['pipe', 'ignore', 'ignore'],
+      });
+    };
+    const readLog = () => {
+      const p = join(fixture, '.agents', 'denials.log');
+      return existsSync(p) ? readFileSync(p, 'utf8').trim().split('\n').filter(Boolean) : [];
+    };
+
+    // Subagent denial → agent: actor.
+    run({
+      cwd: fixture,
+      session_id: 'sess-1',
+      permission_mode: 'dontAsk',
+      agent_id: 'agent-1',
+      agent_type: 'impl-agent',
+      reason: 'not in allowlist',
+      tool_input: { command: 'rm -rf /' },
+    });
+    let lines = readLog();
+    if (lines.length !== 1) fail('denial-hook-fixture', `expected 1 line after a subagent denial, got ${lines.length}`);
+    else if (lines[0].split('\t').length !== 5) fail('denial-hook-fixture', `expected 5 tab-separated fields, got ${JSON.stringify(lines[0])}`);
+    else if (!lines[0].includes('\tagent:impl-agent:agent-1\t')) fail('denial-hook-fixture', `expected an agent: actor, got ${JSON.stringify(lines[0])}`);
+    ok();
+
+    // Main-thread denial → session: actor.
+    run({
+      cwd: fixture,
+      session_id: 'sess-2',
+      permission_mode: 'default',
+      reason: 'not in allowlist',
+      tool_input: { command: 'gh pr merge 1' },
+    });
+    lines = readLog();
+    if (lines.length !== 2) fail('denial-hook-fixture', `expected 2 lines after a main-thread denial, got ${lines.length}`);
+    else if (!lines[1].includes('\tsession:sess-2\t')) fail('denial-hook-fixture', `expected a session: actor, got ${JSON.stringify(lines[1])}`);
+    ok();
+
+    // No port.config.json in cwd → nothing written.
+    const unmanaged = mkdtempSync(join(tmpdir(), 'port-denial-hook-unmanaged-'));
+    try {
+      execFileSync(process.execPath, [hookPath], {
+        cwd: unmanaged,
+        input: JSON.stringify({ cwd: unmanaged, session_id: 'sess-3', tool_input: { command: 'rm -rf /' } }),
+        stdio: ['pipe', 'ignore', 'ignore'],
+      });
+      if (existsSync(join(unmanaged, '.agents', 'denials.log'))) {
+        fail('denial-hook-fixture', 'wrote a log file outside a port-managed repository');
+      }
+      ok();
+    } finally {
+      rmSync(unmanaged, { recursive: true, force: true });
+    }
+
+    // Malformed payload → exits 0, nothing written.
+    execFileSync(process.execPath, [hookPath], {
+      cwd: fixture,
+      input: 'not json',
+      stdio: ['pipe', 'ignore', 'ignore'],
+    });
+    if (readLog().length !== 2) fail('denial-hook-fixture', 'a malformed payload should not append a line');
+    ok();
+  } catch (e) {
+    if (e.status !== undefined) fail('denial-hook-fixture', `hook exited non-zero: ${e.message}`);
+    else throw e;
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
   }
 }
 

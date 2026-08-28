@@ -1,21 +1,16 @@
-// PreToolUse hook (matcher: Bash) for the port agent pipeline.
+// PermissionDenied hook (matcher: Bash) for the port agent pipeline.
 //
-// Logs every Bash command NOT on the repository's permission allowlist to
+// Records every Bash command the harness actually denied to
 // `.agents/denials.log` in the base repository, so the cockpit can surface
-// clustered denials without interrupting the operator. Logging only: it always
-// exits 0 and never blocks. The actual denying is done by the stage agents'
-// `permissionMode: dontAsk`.
+// clustered denials without interrupting the operator. Logging only: it
+// always exits 0, never blocks, and never writes to stdout — stdout is
+// parsed as hook output, and a JSON reply here would tell the model to retry
+// the call.
 //
-// Two invariants worth stating, because both are easy to break:
-//
-//  1. It no-ops unless the repository has a `.claude/port.config.json`. A plugin's
-//     hooks fire in EVERY session once installed at user scope, regardless of
-//     working directory, so without this guard installing port would start
-//     writing logs into unrelated projects.
-//
-//  2. The allowlist is derived from the repository's own settings at runtime
-//     rather than duplicated here. A hardcoded copy is a second source of
-//     truth that silently drifts from the one being enforced.
+// It no-ops unless the repository has a `.claude/port.config.json`. A
+// plugin's hooks fire in EVERY session once installed at user scope,
+// regardless of working directory, so without this guard installing port
+// would start writing logs into unrelated projects.
 import { execSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -45,68 +40,42 @@ function baseRepoRoot(cwd) {
   }
 }
 
-function readJson(path) {
-  try {
-    return JSON.parse(readFileSync(path, 'utf8'));
-  } catch {
-    return null;
-  }
-}
-
-/**
- * `Bash(...)` allow patterns → anchored regexes.
- *
- * Claude Code matches these against the command string with `*` as the only
- * wildcard, so every other regex metacharacter is escaped. `Bash(grep)` and
- * `Bash(grep *)` are distinct entries covering the bare and argument forms;
- * deriving both from settings keeps this faithful to what is enforced.
- */
-function allowMatchers(settingsFiles) {
-  const patterns = new Set();
-  for (const file of settingsFiles) {
-    const allow = readJson(file)?.permissions?.allow;
-    if (!Array.isArray(allow)) continue;
-    for (const entry of allow) {
-      if (typeof entry !== 'string') continue;
-      const m = /^Bash\((.*)\)$/.exec(entry.trim());
-      if (m) patterns.add(m[1]);
-    }
-  }
-  return [...patterns].map((p) => {
-    const escaped = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp('^' + escaped.replace(/\\\*/g, '.*') + '$');
-  });
+/** Whitespace-collapsed and length-capped, so a value can never break the
+ *  positional tab-separated format or grow unbounded. */
+function field(value, max) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
 try {
-  const data = JSON.parse(readFileSync(0, 'utf8')); // PreToolUse JSON on stdin
-  const command = (data?.tool_input?.command ?? '').trim();
+  const data = JSON.parse(readFileSync(0, 'utf8')); // PermissionDenied JSON on stdin
+  const command = data?.tool_input?.command;
   if (!command) process.exit(0);
 
   const cwd = data?.cwd ?? process.cwd();
 
-  // Invariant 1: silent outside a port-managed repository.
+  // Silent outside a port-managed repository.
   const configRoot = findUp(cwd, join('.claude', 'port.config.json'));
   if (!configRoot) process.exit(0);
 
-  // Invariant 2: matchers come from the settings actually in effect. A
-  // worktree carries the committed settings, so resolve from cwd upward.
-  const settingsRoot = findUp(cwd, join('.claude', 'settings.json')) ?? configRoot;
-  const matchers = allowMatchers([
-    join(settingsRoot, '.claude', 'settings.json'),
-    join(settingsRoot, '.claude', 'settings.local.json'),
-  ]);
-
-  // No parseable allowlist means nothing can be classified as denied.
-  if (matchers.length === 0) process.exit(0);
-  if (matchers.some((re) => re.test(command))) process.exit(0);
+  // `agent_id` is present only inside a dispatched subagent; the main thread
+  // (cockpit, /port:implement, or an ordinary interactive session) has none,
+  // and always shares a subagent's own session_id with its parent otherwise.
+  const actor = data?.agent_id
+    ? `agent:${data?.agent_type ?? 'unknown'}:${data.agent_id}`
+    : `session:${data?.session_id ?? 'unknown'}`;
+  const mode = data?.permission_mode ?? 'mode?';
 
   const dir = join(baseRepoRoot(cwd), '.agents');
   mkdirSync(dir, { recursive: true });
-  const who = data?.agent ?? data?.subagent_type ?? data?.session_id ?? 'unknown';
   appendFileSync(
     join(dir, 'denials.log'),
-    `${new Date().toISOString()}\t${who}\t${command.replace(/\s+/g, ' ').slice(0, 500)}\n`,
+    [
+      new Date().toISOString(),
+      actor,
+      mode,
+      field(data?.reason, 200),
+      field(command, 500),
+    ].join('\t') + '\n',
   );
 } catch {
   // Never block or fail the tool call.

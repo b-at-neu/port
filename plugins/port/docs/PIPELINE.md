@@ -78,7 +78,7 @@ The model is **broad allow, authoritative deny**: allow whole dev-command catego
 
 Agents also run with **`disallowedTools: Agent`** (no nested subagents), a **`maxTurns`** backstop, and the rule to **stop and emit `BLOCKED:`** rather than improvise when a command is auto-denied.
 
-**Denial visibility:** a `PreToolUse` Bash hook appends every non-allowlisted command to a gitignored `.agents/denials.log`; the cockpit reads it each tick and reports clusters, so systemic denials are visible without prompting. Logging only — it never blocks; `dontAsk` does the denying.
+**Denial visibility:** a `PermissionDenied` Bash hook records every command the harness actually denied — the decision itself, never a prediction of it — to a gitignored `.agents/denials.log`. Each line is five tab-separated fields: `<iso8601>` `<actor>` `<mode>` `<reason>` `<command>`, where `actor` is `agent:<agent_type>:<agent_id>` for a dispatched subagent or `session:<session_id>` for the main thread, and `reason`/`command` are whitespace-collapsed and truncated. The cockpit reads it each tick and reports clusters, so systemic denials are visible without prompting. Logging only — it never blocks. The event is new (CLI 2.1.238); on an older CLI the hook never fires, so silence there means no visibility, not health.
 
 ### File-based GitHub I/O
 
@@ -161,7 +161,7 @@ A `permissions.deny` pattern cannot stop an allowlisted read-only command from w
 
 **The mitigation is the allowlist itself**, which is why content emitters are excluded. The commands that remain emit search results, paths, or metadata rather than arbitrary content. **This narrows the bypass; it does not close it** — `grep -v x f > f` still strips lines, any allowed command can truncate a redirect target, and a broad `git` allow has always offered write primitives through `git apply` and `git checkout --`.
 
-So "write files with the Write and Edit tools" is a **convention agents are expected to follow, not a technical guarantee** — and `plan-agent`'s and `review-agent`'s read-only status rests on them following it. Closing it properly needs a `PreToolUse` hook that inspects the raw command string and returns a deny decision; the denial hook is logging-only and does not do this.
+So "write files with the Write and Edit tools" is a **convention agents are expected to follow, not a technical guarantee** — and `plan-agent`'s and `review-agent`'s read-only status rests on them following it. Closing it properly needs a *new*, separate `PreToolUse` hook that inspects the raw command string and returns a deny decision. That is not the denial-visibility hook described above: this one fires on `PermissionDenied`, only records a decision the harness already made, and cannot gate anything itself.
 
 ### CI merge gate
 

@@ -23,6 +23,7 @@ No dependencies, no plugin install, no model calls. Runs in seconds, in CI on ev
 | Stale references — the former installer name, the former config location, unprefixed skill names | Docs naming things that were renamed or moved |
 | Every eval case declares `name`, `prompt` and `graders`, and every grader resolves both ways | A layer 3 case broken by a rename, invisible while the evals cannot run |
 | No `commands.checks` entry invokes an eval or the layer 2 audit | Every dispatched agent spawning its own model runs before it can push |
+| The denial hook is registered on `PermissionDenied` (and no other event), and a spawned fixture run attributes a subagent denial to `agent:<type>:<id>`, a main-thread denial to `session:<id>`, no-ops outside a port-managed repository, and never writes on a malformed payload | Denial visibility (#63) |
 
 Each rule is worth testing by breaking it deliberately. If a check cannot be made to fail, it is not a check.
 
