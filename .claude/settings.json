@@ -3,8 +3,10 @@
     "port": {
       "source": {
         "source": "github",
-        "repo": "b-at-neu/port"
-      }
+        "repo": "b-at-neu/port",
+        "ref": "main"
+      },
+      "autoUpdate": true
     }
   },
   "enabledPlugins": {
