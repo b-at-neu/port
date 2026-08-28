@@ -1,6 +1,6 @@
 {
   "hooks": {
-    "PreToolUse": [
+    "PermissionDenied": [
       {
         "matcher": "Bash",
         "hooks": [
