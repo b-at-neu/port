@@ -292,6 +292,21 @@ for (const t of [
   ok();
 }
 
+// --- This repository's own permissions are non-empty -----------------------
+// This is the exact condition the cockpit's startup preflight checks at
+// runtime: a repository with `.claude/settings.json` present but
+// `permissions.allow` missing or empty left the pilot repository with no
+// permission rules at all, fully silently — stage agents run `dontAsk` and
+// auto-deny anything not allowlisted.
+{
+  const settings = readJson('.claude/settings.json');
+  const allow = settings.permissions?.allow;
+  if (!Array.isArray(allow) || allow.length === 0) {
+    fail('permissions', `.claude/settings.json's permissions.allow must be a non-empty array, got ${JSON.stringify(allow)}`);
+  }
+  ok();
+}
+
 // --- Label vocabulary matches the schema -----------------------------------
 // Two files independently list the same label keys. They have drifted before.
 {

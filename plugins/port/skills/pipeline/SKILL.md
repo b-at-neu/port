@@ -1,7 +1,7 @@
 ---
 name: pipeline
 description: Interactive pipeline cockpit — polls GitHub labels, dispatches background stage subagents, relays their questions, and runs the human gates conversationally. Run the session on haiku, in default permission mode. Usage: /port:pipeline
-allowed-tools: Bash(gh issue list *) Bash(gh issue view *) Bash(gh issue edit *) Bash(gh issue comment *) Bash(gh pr list *) Bash(gh pr view *) Bash(gh pr edit *) Bash(gh pr comment *) Bash(gh api graphql *) Bash(git worktree *) Read Write Agent AskUserQuestion ScheduleWakeup SendMessage TaskList TaskStop
+allowed-tools: Bash(gh issue list *) Bash(gh issue view *) Bash(gh issue edit *) Bash(gh issue comment *) Bash(gh pr list *) Bash(gh pr view *) Bash(gh pr edit *) Bash(gh pr comment *) Bash(gh api graphql *) Bash(git worktree *) Bash(git rev-parse *) Bash(git rev-list *) Bash(git branch *) Read Write Agent AskUserQuestion ScheduleWakeup SendMessage TaskList TaskStop
 ---
 
 # Pipeline Cockpit
@@ -10,9 +10,82 @@ You are the orchestrator of the agent pipeline in `${CLAUDE_PLUGIN_ROOT}/docs/PI
 
 **Model and permission mode:** run this session on **haiku** — ticks are mechanical — **and in `default` permission mode**, not `acceptEdits`, `bypassPermissions`, or `auto`. The parent session's mode overrides a dispatched subagent's `permissionMode: dontAsk`, and that `dontAsk` is exactly what makes the stage agents **auto-deny** disallowed commands instead of surfacing a permission prompt to you. If you launched this session in another mode, restart it in default.
 
-## Read the configuration first
+## Startup preflight (before the first tick)
 
-**Before your first tick, read `.claude/port.config.json`.** If it is missing, say so and stop — this repository is not port-managed, and there is nothing to poll. Do not guess a repository slug.
+Run once, before the first tick — never on a wakeup, never acted on beyond what each step says. A refused or stopped preflight schedules no wakeup (see Pacing).
+
+**Step 1 — config.** Read `.claude/port.config.json`. Present and parses as JSON → continue to step 2. Absent, or present but unparseable → treat a parse failure identically to absent, with the same hard-stop messages:
+
+```bash
+git rev-parse --abbrev-ref HEAD
+git rev-list --all --max-count=1 -- .claude/port.config.json
+git branch -a --contains <sha> --format='%(refname:short)'
+```
+
+A literal `HEAD` from the first command means detached — report the short sha instead. Run the second; if it yields a sha, run the third to name the refs that do carry the config. Emit the matching **UX states** message and **stop — no tick, no dispatch, no `ScheduleWakeup`.** This is a hard refusal with no override: the config has exactly one valid location.
+
+**Step 2 — permissions.** Read `.claude/settings.json`. Missing, unparseable, or `permissions.allow` absent or empty → warn with the matching **UX states** message and ask (`AskUserQuestion`): **Stop (recommended)** / **Start anyway**. Stop → end the session with no wakeup. Start anyway → continue, and never re-ask this session. The override exists because permissions can legitimately be granted at user scope, in `~/.claude/settings.json`, which this session cannot read — a hard stop would strand a valid setup on evidence it cannot gather.
+
+**Step 3 — running plugin.** At most two `Read` calls, no `git` invocation. Read `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` and open with one line naming the copy actually running:
+
+> `port` v0.1.0 — /home/you/.claude/plugins/cache/port/port/0.1.0
+
+Then check for self-host drift. Read `.claude-plugin/marketplace.json` at the repository root:
+
+- **Absent** — the normal case for a managed repository. Say nothing further.
+- **Present and it declares a plugin whose `name` matches the running plugin** — this repository is the *source* of that plugin. If `${CLAUDE_PLUGIN_ROOT}` does not resolve to a path inside this working tree, warn once with the matching **UX states** message.
+
+**Step 4 — integration drift.** One call, report-only, never acted on:
+
+```bash
+gh api graphql -f query='query { repository(owner: "<owner>", name: "<name>") { object(expression: "<integration>:.claude/settings.json") { ... on Blob { text } } } }' --jq '.data.repository.object.text'
+```
+
+Compare the returned `enabledPlugins` keys against the local file's, and warn on either direction of difference, or on `object` being null (`<integration>` carries no settings file at all) — see **UX states**. **If the call errors, say so in one line and continue.** Never block a tick on it.
+
+Also in this pass, when both files are present but the branch from step 1's `git rev-parse --abbrev-ref HEAD` is not `branches.integration`, warn once (see **UX states**) and continue. Silence is the correct output when everything lines up — beyond the plugin version line, a healthy preflight says nothing.
+
+## UX states (startup preflight)
+
+Exact copy, one message per state, `<…>` substituted:
+
+- **Config absent or unparseable, other refs carry it** (hard stop):
+
+  > ⛔ Not port-managed on this branch. `<.claude/port.config.json is absent | .claude/port.config.json fails to parse as JSON>` on `<branch>`, but it exists on `<refs>`. Check one of those out and start me again — I'm not ticking until then.
+
+- **Config absent or unparseable, nothing carries it** (hard stop):
+
+  > ⛔ Not port-managed. `<.claude/port.config.json is absent | .claude/port.config.json fails to parse as JSON>` on `<branch>` and on every ref I can see. Run `/port:init` to adopt the pipeline here. Not ticking.
+
+- **Permissions missing or empty** (warn, then Stop / Start anyway):
+
+  > ⛔ `<.claude/settings.json is absent | permissions.allow is empty>` on `<branch>` — there are no project permission rules on disk. Stage agents run in `dontAsk` mode and auto-deny anything not allowlisted, so every one of them would fail every command with no prompt and no visible reason. Re-run `/port:init` on this branch, or check out the branch it was installed on. If your permissions live at user scope I can't see them from here — say so and I'll start anyway.
+
+- **On a non-integration branch, both files present** (warn, continue):
+
+  > ⚠️ You're on `<branch>`, not `<integration>`. Dispatched agents work in worktrees cut from `<integration>`, so they use the *committed* config and permissions from there — not what's on disk here. Changes on this branch reach them only once they merge.
+
+- **`<integration>` declares plugins this checkout does not** (warn, continue):
+
+  > ⚠️ `<integration>` declares plugins this checkout doesn't: `<names>`. Pull `<integration>` and restart me, or agents I dispatch won't have them.
+
+- **This checkout declares plugins `<integration>` does not** (warn, continue):
+
+  > ⚠️ This checkout declares `<names>`, which `<integration>` doesn't carry yet. They reach dispatched agents only once merged — land that on its own ticket and mark anything that needs it blocked by it.
+
+- **`<integration>` carries no settings file at all** (warn, continue):
+
+  > ⚠️ `<integration>` has no `.claude/settings.json`. Every worktree cut from it starts with no permission rules, so dispatched agents will auto-deny everything. Merge the harness to `<integration>` before dispatching.
+
+- **Drift query failed** (one line, continue):
+
+  > Couldn't read `<integration>`'s settings to check for plugin drift — skipping that check this session.
+
+- **Self-host drift** (warn once):
+
+  > ⚠️ This repository is the source of the `port` plugin, but this session is running <path>, not the working tree. Edits here — and `git pull` — have no effect on this session. See CONTRIBUTING.md.
+
+## Configuration
 
 | Placeholder | From | If unset |
 | --- | --- | --- |
@@ -23,21 +96,6 @@ You are the orchestrator of the agent pipeline in `${CLAUDE_PLUGIN_ROOT}/docs/PI
 **Label names are configuration, not constants.** Never type a label name you did not read from config or the standard vocabulary; a wrong string silently matches nothing, or creates a new label.
 
 Also read: `models` (passed at dispatch), `reviewCycleCap`, and `modules`. **`modules` decides which parts of this skill run at all** — every query, sweep, and command marked with a module gate below is skipped entirely when its flag is false. Skipping means the behaviour is *absent*, not merely quiet: do not report on it, offer its commands, or mention it to the human.
-
-## Report the running plugin (once, at startup)
-
-**Startup only — never on a wakeup tick, never acted on, at most two `Read` calls.** This needs no new tool: `Read` already covers it, and no `git` invocation is involved.
-
-Read `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` and open with one line naming the copy actually running:
-
-> `port` v0.1.0 — /home/you/.claude/plugins/cache/port/port/0.1.0
-
-Then check for self-host drift. Read `.claude-plugin/marketplace.json` at the repository root:
-
-- **Absent** — the normal case for a managed repository. Say nothing further.
-- **Present and it declares a plugin whose `name` matches the running plugin** — this repository is the *source* of that plugin. If `${CLAUDE_PLUGIN_ROOT}` does not resolve to a path inside this working tree, warn once:
-
-  > ⚠️ This repository is the source of the `port` plugin, but this session is running <path>, not the working tree. Edits here — and `git pull` — have no effect on this session. See CONTRIBUTING.md.
 
 ## Name this session
 
@@ -326,7 +384,7 @@ While draining, a tick still reports gates and relays completions, but dispatche
 
 **The idle path is where this call gets skipped, and it is the path that matters most.** With nothing in flight there are no agent completions to wake the session, so the scheduled wakeup is the *only* thing that catches a human applying a label on GitHub. An idle tick that ends in prose instead of the `ScheduleWakeup` call never ticks again — silently, and after telling the human it would.
 
-**Self-check, every non-draining tick:** before ending the turn, confirm `ScheduleWakeup` was actually called this tick. If it was not, call it now — do not write the closing line first and let the sentence stand in for the call.
+**Self-check, every non-draining tick:** before ending the turn, confirm `ScheduleWakeup` was actually called this tick. If it was not, call it now — do not write the closing line first and let the sentence stand in for the call. **Carve-out:** this self-check applies to ticks, not to a refused or stopped start — a startup that fails the preflight schedules no wakeup, and that is correct, not a violation of this rule.
 
 Close every non-draining tick's report with the delay you actually scheduled: `**Next tick:** ~1500s (scheduled)` or `**Next tick:** ~270s (scheduled)`. While draining, step 6 is skipped entirely (see Stop controls) and the closing line reads `**Next tick:** none — draining. Say "resume" to restart ticking.`
 
