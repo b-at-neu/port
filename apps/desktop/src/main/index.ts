@@ -42,9 +42,13 @@ if (!gotLock) {
 
     const rendererUrl = process.env['ELECTRON_RENDERER_URL']
     if (rendererUrl) {
-      void window.loadURL(rendererUrl)
+      window.loadURL(rendererUrl).catch((error: unknown) => {
+        console.error('[window] load failed', error)
+      })
     } else {
-      void window.loadFile(join(__dirname, '../renderer/index.html'))
+      window.loadFile(join(__dirname, '../renderer/index.html')).catch((error: unknown) => {
+        console.error('[window] load failed', error)
+      })
     }
   }
 
