@@ -81,11 +81,11 @@ for (const [dir, kind] of [
 }
 
 // --- Shell-discipline block stays byte-identical everywhere it fires -------
-// Regression guard for #66: the Bash hygiene rules drifted between agents
-// because they were copied by hand. The canonical text lives once in
-// PIPELINE.md between marker comments; every agent granting Bash must carry
-// an exact copy, or the rules it actually has in context can silently fall
-// behind the ones it was reviewed against.
+// Regression guard: the Bash hygiene rules drifted between agents because
+// they were copied by hand. The canonical text lives once in PIPELINE.md
+// between marker comments; every agent granting Bash must carry an exact
+// copy, or the rules it actually has in context can silently fall behind the
+// ones it was reviewed against.
 {
   const BEGIN = '<!-- shell-discipline:begin -->';
   const END = '<!-- shell-discipline:end -->';
@@ -117,7 +117,9 @@ for (const [dir, kind] of [
     const block = extractBlock(readFileSync(f, 'utf8'));
     if (block === null) {
       fail('shell-discipline', `${rel} grants Bash but is missing the shell-discipline markers`);
-    } else if (canonical !== null && block !== canonical) {
+    } else if (canonical === null) {
+      note(`${rel}: skipped comparison — no canonical block to compare against`);
+    } else if (block !== canonical) {
       fail('shell-discipline', `${rel}'s shell-discipline block has drifted from ${pipelineRel}'s canonical text`);
     } else {
       ok();
