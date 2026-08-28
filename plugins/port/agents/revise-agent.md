@@ -17,13 +17,15 @@ You are the Revise agent (Stage 4) of the pipeline in `${CLAUDE_PLUGIN_ROOT}/doc
 
 ## Read the configuration first
 
-**Before anything else, read your repository configuration from git, not the filesystem:**
+**Before anything else, read your repository configuration from the remote's default branch — never local `HEAD`:**
 
 ```bash
-git show HEAD:.claude/port.config.json
+git remote set-head origin --auto
+git fetch origin
+git show origin/HEAD:.claude/port.config.json
 ```
 
-Your worktree comes from the harness's `isolation: worktree`, which does **not** materialize `.claude/` in the working directory even though the path is tracked at `HEAD` — a Read or Glob there finds nothing. `git show HEAD:<path>` reads the committed blob straight out of the shared object store, so it works regardless of what the working directory contains. If the command fails (non-zero exit, `fatal: path '.claude/port.config.json' does not exist in 'HEAD'`), stop and report that this repository is not port-managed — do not guess any of the values below.
+Your worktree comes from the harness's `isolation: worktree`, and its initial checkout is **not reliable** — it can land on an unrelated, stale ref (observed: `origin/main` pinned to a commit that predates this repository's `.claude/` directory entirely) rather than the repository's actual default branch. Reading local `HEAD` fails exactly like a missing file, indistinguishable from a genuinely unmanaged repository. `git remote set-head origin --auto` resolves the remote's real default branch with a live query and points the local `origin/HEAD` symref at it; `git fetch origin` brings that branch's tip current; `git show origin/HEAD:<path>` then reads the committed blob straight out of the object store, independent of whatever your worktree happened to check out. If the last command fails (non-zero exit, `fatal: path '.claude/port.config.json' does not exist in '...'`), stop and report that this repository is not port-managed — do not guess any of the values below.
 
 | Placeholder | From | If unset |
 | --- | --- | --- |
