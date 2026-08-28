@@ -51,6 +51,10 @@ After editing `marketplace.json` or `plugin.json`, re-validate them:
 claude plugin marketplace update port
 ```
 
+## Testing a change
+
+Three layers, separated by cost: static file checks, artifact assertions on real pipeline runs, and behavioural evals. What to run and when is in [docs/TESTING.md](docs/TESTING.md).
+
 ## Writing hooks
 
 Once installed at user scope the plugin loads in every session, whatever the working directory. A hook must therefore return immediately when the repository has no `.claude/port.config.json` — without that guard, installing this plugin changes behaviour in every unrelated project on the machine.

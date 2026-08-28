@@ -1,0 +1,95 @@
+# Layer 3 of the testing loop. See docs/TESTING.md and evals/README.md.
+#
+# Path-filtered on purpose: a prompt change must not merge unevaluated, while a
+# docs or schema change stays instant. Cost proportional to what changed.
+#
+# NEVER add this to commands.checks. That list is what impl-agent runs before
+# pushing, so an eval there means every dispatched agent spawning its own model
+# runs — recursive, slow, and paid for on every ticket. scripts/checks.mjs
+# enforces that mechanically.
+
+name: Evals
+
+on:
+  pull_request:
+    # The ticket's `agents/**` and `skills/**`, at their real location here.
+    # evals/** is deliberately NOT listed: a case is prompt input, not a prompt,
+    # and everything statically wrong with one is already caught by layer 1.
+    paths:
+      - 'plugins/port/agents/**'
+      - 'plugins/port/skills/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  run-behavioural-evals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Guard, part one: no key, nothing to run. Checked before installing the
+      # CLI so the common skip costs one step.
+      - name: Guard — credentials
+        id: key
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+            echo "::notice::Evals skipped: no ANTHROPIC_API_KEY secret is set on this repository."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install the Claude Code CLI
+        if: steps.key.outputs.ready == 'true'
+        run: npm install -g @anthropic-ai/claude-code
+
+      # Guard, part two. The ticket proposed probing `--help`, but `--help` is
+      # printed before the gate is reached, so it never reports early access.
+      # A real subcommand filtered to a case name that cannot match is the cheap
+      # probe instead: it does nothing if access is live, and prints the gate
+      # message if it is not.
+      - name: Guard — early access
+        id: access
+        if: steps.key.outputs.ready == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          PROBE="$(claude plugin eval port@port --eval-dir evals --case __no_such_case__ 2>&1 || true)"
+          printf '%s\n' "$PROBE"
+          if printf '%s' "$PROBE" | grep -qF 'currently in early access'; then
+            echo "::notice::Evals skipped: \`plugin eval\` is currently in early access on this account. See evals/README.md."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # One command line. The flags come from the ticket's own reasoning:
+      # --runs 3 for variance, --ablation with-without for the no-plugin baseline
+      # delta, --threshold as the exit code. --scaffold is required because each
+      # case builds its own fixture repository.
+      #
+      # RE-CHECK ALL OF THIS AGAINST `claude plugin eval --help` WHEN EARLY
+      # ACCESS LANDS. It was written against the flag reference, not against a
+      # run that succeeded. Two things are most likely to need correcting:
+      #
+      #   1. The target and --eval-dir pair. `--eval-dir` is documented as a
+      #      directory "below the plugin", while this repository's evals/ sits at
+      #      the root per the plan. `port@port` is used as the target so a plugin
+      #      resolves and the ablation arm is available.
+      #   2. The threshold. analyze-surfaces-user-scope-plugin is a regression
+      #      target for the still-open #50 and is EXPECTED TO FAIL, so a run
+      #      today would be red on that case by design. Fix #50 or exclude the
+      #      case before this workflow can be treated as a gate.
+      - name: Run behavioural evals
+        if: steps.access.outputs.ready == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: claude plugin eval port@port --eval-dir evals --scaffold --runs 3 --ablation with-without --threshold 0.67 --no-publish

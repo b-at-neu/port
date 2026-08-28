@@ -1,0 +1,52 @@
+# Regression target: #47 — merging permissions dropped keys it did not own.
+#
+# Dropping enabledPlugins or extraKnownMarketplaces uninstalls the plugin that is
+# currently running the skill, so /port:init disables itself partway through. The
+# symptom reads like the plugin vanishing rather than like a bad merge, which is
+# why nothing caught it.
+name: init-preserves-enabled-plugins
+tags: [init, settings]
+runs: 3
+max_turns: 80
+timeout_seconds: 1200
+
+prompt: |
+  Run /port:init on this repository. Accept the defaults it proposes.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  git remote add origin https://github.com/example/widgets.git
+  mkdir -p .claude src
+
+  # Every key here except `permissions` is owned by something else. All of them
+  # must survive the merge byte for byte.
+  cat > .claude/settings.json <<'JSON'
+  {
+    "enabledPlugins": { "port@port": true, "superpowers@obra": true },
+    "extraKnownMarketplaces": {
+      "port": { "source": { "source": "github", "repo": "b-at-neu/port" } }
+    },
+    "hooks": {
+      "SessionStart": [
+        { "hooks": [{ "type": "command", "command": "echo hello" }] }
+      ]
+    },
+    "permissions": { "allow": ["Bash(git status)"] },
+    "env": { "WIDGETS_ENV": "dev" }
+  }
+  JSON
+
+  cat > package.json <<'JSON'
+  { "name": "widgets", "private": true, "scripts": { "lint": "eslint src" } }
+  JSON
+
+  cat > src/index.js <<'JS'
+  export const version = '0.1.0';
+  JS
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add widgets"
+
+graders:
+  - preserves-enabled-plugins.md
