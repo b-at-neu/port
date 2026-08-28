@@ -23,9 +23,11 @@ No dependencies, no plugin install, no model calls. Runs in seconds, in CI on ev
 | Stale references — the former installer name, the former config location, unprefixed skill names | Docs naming things that were renamed or moved |
 | Every eval case declares `name`, `prompt` and `graders`, and every grader resolves both ways | A layer 3 case broken by a rename, invisible while the evals cannot run |
 | No `commands.checks` entry invokes an eval or the layer 2 audit | Every dispatched agent spawning its own model runs before it can push |
-| The denial hook is registered on `PermissionDenied` (and no other event), and a spawned fixture run attributes a subagent denial to `agent:<type>:<id>`, a main-thread denial to `session:<id>`, no-ops outside a port-managed repository, and never writes on a malformed payload | Denial visibility (#63) |
 | The shell-discipline block between its marker comments in `PIPELINE.md` exists, and every agent granting Bash carries a byte-identical copy | Shell-shape rules present in one agent and not its siblings (#66) |
 | The session-required determination still names the testing steps, and the `operator-only` literal exists in both agent files | #118 |
+| Every `hooks.json` matcher's `command` references a file that actually exists, and `PreToolUse` declares a matcher covering `Bash` and one covering the write tools | The guard hook silently absent after a rename or a dropped matcher (#67) |
+| The guard hook's classifier — `hooks/lib/guard-rules.mjs` — denies a subagent's allowlist-missing Bash command and a subagent's write to a `sessionRequiredPaths` path, never denies the same calls without an agent signal, and each of the three caller signals (`agent_type`, transcript, worktree) reaches `deny` on its own | The mechanism that actually denies, independent of parent-session mode (#67) |
+| A spawned run of the guard hook itself emits the deny JSON and a `deny` log line for a subagent's allowlist miss, no stdout and a `miss` line for the same command from a non-subagent, no log line at all for an allowed command, stays silent outside a port-managed repository, and logs `hook-error` rather than crashing on a malformed payload | Stdin/stdout/exit-code wiring the classifier's direct import cannot see (#67) |
 
 Each rule is worth testing by breaking it deliberately. If a check cannot be made to fail, it is not a check.
 

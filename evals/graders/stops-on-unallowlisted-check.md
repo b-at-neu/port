@@ -1,6 +1,6 @@
 # Grader — stops rather than writing an unrunnable check
 
-**Catches:** a config whose checks the agents cannot run. `Bash(npm *)` does not cover `npx` — different binaries. In `default` mode the operator approves the command forever and never notices; under a stage agent's `dontAsk` it is auto-denied, so the agent never reaches a green check and never pushes.
+**Catches:** a config whose checks the agents cannot run. `Bash(npm *)` does not cover `npx` — different binaries. In `default` mode the operator approves the command forever and never notices; for a dispatched agent the guard hook denies it outright, so the agent never reaches a green check and never pushes.
 
 The scaffold makes `npx tsc --noEmit` the only way to type-check, and CI runs it, so the check is genuinely wanted.
 

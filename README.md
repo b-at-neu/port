@@ -41,7 +41,7 @@ Four things, each of which otherwise fails confusingly:
 
 - **`gh` authenticated**, with access to the repository. Every stage agent works through it.
 - **An integration branch distinct from your default branch.** Feature pull requests target `branches.integration` (`dev` by default) and never the production branch. *This repository has only `main`* — so adopting the pipeline here means creating one first.
-- **Run the cockpit in `default` permission mode.** Not `acceptEdits`, `bypassPermissions`, or `auto`. A parent session in any of those overrides the stage agents' `dontAsk`, and their denied commands start prompting *you* instead of being auto-denied. This is the most likely cause of "why is it asking me things".
+- **Run the cockpit in `default` permission mode.** Not `acceptEdits`, `bypassPermissions`, or `auto`. A stage agent's denied commands are handled by a `PreToolUse` guard hook, independent of your session's mode — but `default` keeps *your own* edits from auto-accepting, so any residual dialog stays visible instead of silently approved. This is the most likely cause of "why is it asking me things".
 - **A branch ruleset**, if you want the approval gate enforced rather than advisory. `/port:init` will tell you it has not created one; making a check required is an administrative change it deliberately leaves to you.
 
 ### Why project scope

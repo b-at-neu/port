@@ -15,7 +15,7 @@ You talk to a cockpit. It talks to GitHub. Agents do the work.
 Run this in its own session, on **haiku**, in **`default` permission mode**. Both matter:
 
 - **haiku**, because a tick is mechanical — run some queries, swap some labels, dispatch, relay. Spending a strong model on it is waste.
-- **`default` mode**, because a parent session in `acceptEdits`, `bypassPermissions`, or `auto` overrides the stage agents' `dontAsk`. That flag is what makes an agent's disallowed command auto-deny silently instead of interrupting you. Get this wrong and the pipeline works, but you get prompted for every stray command an agent tries.
+- **`default` mode**, because a stage agent's disallowed commands are denied by a `PreToolUse` guard hook regardless of this session's mode — but `default` keeps your own edits in this session from auto-accepting, so anything unexpected stays visible. Get this wrong and the pipeline still works, but you lose visibility into your own actions here.
 
 Leave the session open. It schedules its own wakeups and reports as things move.
 

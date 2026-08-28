@@ -152,107 +152,288 @@ for (const [dir, kind] of [
   }
 }
 
-// --- Denial hook is registered on PermissionDenied, and nothing else -------
-// Regression guard for #63: the hook now records the harness's actual
-// decision, which only the PermissionDenied event carries. Registering it
-// under PreToolUse (or anything else) silently reintroduces prediction.
+// --- Guard hook is wired on PreToolUse for Bash and the write tools --------
+// Regression guard for #67: the deny is a hook decision now, not a
+// prediction from `dontAsk`. A renamed hook file or a dropped matcher is
+// otherwise silently absent — nothing errors, the guard simply never fires.
 {
-  const hooks = readJson('plugins/port/hooks/hooks.json').hooks ?? {};
-  const isDenialHook = (h) =>
-    typeof h.command === 'string' && h.command.includes('log-bash-denial.mjs');
-  let registeredOnPermissionDenied = false;
-  for (const [event, matchers] of Object.entries(hooks)) {
+  const hooksJson = readJson('plugins/port/hooks/hooks.json');
+  const entries = Object.entries(hooksJson.hooks ?? {});
+
+  for (const [event, matchers] of entries) {
     for (const matcher of matchers) {
       for (const h of matcher.hooks ?? []) {
-        if (!isDenialHook(h)) continue;
-        if (event === 'PermissionDenied') registeredOnPermissionDenied = true;
-        else fail('denial-hook', `log-bash-denial.mjs is registered under '${event}', expected 'PermissionDenied'`);
+        const m = /\$\{CLAUDE_PLUGIN_ROOT\}\/(.+?)"/.exec(h.command ?? '');
+        const rel = m?.[1];
+        if (!rel || !existsSync(join(root, 'plugins/port', rel))) {
+          fail('hook-wiring', `${event}/${matcher.matcher}: command references a missing file (${JSON.stringify(h.command)})`);
+        } else {
+          ok();
+        }
       }
     }
   }
-  if (!registeredOnPermissionDenied) fail('denial-hook', 'log-bash-denial.mjs is not registered under PermissionDenied');
+
+  const preToolUse = hooksJson.hooks?.PreToolUse ?? [];
+  const coversBash = preToolUse.some((m) => m.matcher === 'Bash');
+  const coversWrites = preToolUse.some((m) => /\bEdit\b/.test(m.matcher ?? '') && /\bWrite\b/.test(m.matcher ?? ''));
+  if (!coversBash) fail('hook-wiring', 'PreToolUse declares no matcher covering Bash');
+  if (!coversWrites) fail('hook-wiring', 'PreToolUse declares no matcher covering the write tools (Edit/Write/NotebookEdit)');
   ok();
 }
 
-// --- Denial hook payload handling -------------------------------------------
-// Spawns the real hook script against representative PermissionDenied
-// payloads. The fixture directory must sit outside any git repository, or
-// `git rev-parse --git-common-dir` resolves to this checkout and the fixture
-// appends to the operator's own `.agents/denials.log`.
+// --- Guard hook classifier ---------------------------------------------------
+// Unit-tests the pure decision logic in isolation from stdin/stdout/exit-code
+// plumbing. Each case is the regression a real incident or the ticket's own
+// acceptance criteria named.
 {
-  const hookPath = join(root, 'plugins/port/hooks/log-bash-denial.mjs');
-  const fixture = mkdtempSync(join(tmpdir(), 'port-denial-hook-'));
+  const { allowMatchers, decide, callerKind, globToRegExp } = await import(
+    'file://' + join(root, 'plugins/port/hooks/lib/guard-rules.mjs')
+  );
+
+  const settingsFile = join(root, '.claude/settings.json');
+  const matchers = allowMatchers([settingsFile]);
+  if (matchers === null) fail('guard-classifier', 'allowMatchers found no Bash allow entries in .claude/settings.json');
+
+  const subagentPayload = (overrides = {}) => ({
+    cwd: root,
+    session_id: 'sess-1',
+    agent_type: 'impl-agent',
+    agent_id: 'agent-1',
+    tool_name: 'Bash',
+    tool_input: { command: 'which claude' },
+    ...overrides,
+  });
+
+  const check = (label, result, expected) => {
+    if (result.decision !== expected) {
+      fail('guard-classifier', `${label}: expected '${expected}', got '${result.decision}'`);
+    } else {
+      ok();
+    }
+  };
+
+  // Subagent + non-allowlisted Bash → deny.
+  check(
+    'subagent non-allowlisted bash',
+    decide({ payload: subagentPayload(), matchers, sessionRequiredPaths: [], root }),
+    'deny',
+  );
+
+  // Same command, no agent signal → miss, never deny. A fabricated cwd, not
+  // this checkout's own path — this script may itself be running inside a
+  // dispatched agent's worktree, whose path legitimately matches the
+  // worktree signal, which would otherwise make this case pass for the
+  // wrong reason.
+  check(
+    'no-signal non-allowlisted bash',
+    decide({
+      payload: {
+        cwd: '/home/operator/some-other-project',
+        session_id: 'sess-2',
+        tool_name: 'Bash',
+        tool_input: { command: 'which claude' },
+      },
+      matchers,
+      sessionRequiredPaths: [],
+      root,
+    }),
+    'miss',
+  );
+
+  // Allowlisted command with an agent signal → allow.
+  check(
+    'subagent allowlisted bash',
+    decide({
+      payload: subagentPayload({ tool_input: { command: 'git status' } }),
+      matchers,
+      sessionRequiredPaths: [],
+      root,
+    }),
+    'allow',
+  );
+
+  // Subagent write to a sessionRequiredPaths path → deny.
+  check(
+    'subagent write to session-required path',
+    decide({
+      payload: subagentPayload({
+        tool_name: 'Write',
+        tool_input: { file_path: join(root, '.claude/port.config.json') },
+      }),
+      matchers,
+      sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
+      root,
+    }),
+    'deny',
+  );
+
+  // Subagent write outside sessionRequiredPaths → allow.
+  check(
+    'subagent write outside session-required paths',
+    decide({
+      payload: subagentPayload({
+        tool_name: 'Write',
+        tool_input: { file_path: join(root, 'plugins/port/x.md') },
+      }),
+      matchers,
+      sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
+      root,
+    }),
+    'allow',
+  );
+
+  // The transcript and worktree signals each reach 'deny' on their own,
+  // with no agent_type/agent_id present.
+  check(
+    'transcript signal alone',
+    decide({
+      payload: {
+        cwd: root,
+        session_id: 'sess-3',
+        transcript_path: '/home/x/.claude/subagents/agent-abc123.jsonl',
+        tool_name: 'Bash',
+        tool_input: { command: 'which claude' },
+      },
+      matchers,
+      sessionRequiredPaths: [],
+      root,
+    }),
+    'deny',
+  );
+  check(
+    'worktree signal alone',
+    decide({
+      payload: {
+        cwd: join(root, '.claude/worktrees/agent-abc123'),
+        session_id: 'sess-4',
+        tool_name: 'Bash',
+        tool_input: { command: 'which claude' },
+      },
+      matchers,
+      sessionRequiredPaths: [],
+      root,
+    }),
+    'deny',
+  );
+
+  // callerKind never string-matches a stage name — a namespaced agentType
+  // still resolves via the agent_type signal.
+  if (!callerKind({ agent_type: 'port:plan-agent' }).isSubagent) {
+    fail('guard-classifier', 'callerKind missed a namespaced agent_type');
+  }
+  ok();
+
+  // globToRegExp: '**' spans directories, '*' does not.
+  if (!globToRegExp('.claude/**').test('.claude/settings.json')) {
+    fail('guard-classifier', "globToRegExp('.claude/**') should match '.claude/settings.json'");
+  }
+  if (globToRegExp('.claude/*').test('.claude/a/b')) {
+    fail('guard-classifier', "globToRegExp('.claude/*') should not cross a directory boundary");
+  }
+  ok();
+}
+
+// --- Guard hook end-to-end wiring -------------------------------------------
+// Spawns the real hook script, so a stdin/stdout/exit-code mistake the
+// classifier's direct import cannot see still surfaces. The fixture directory
+// must sit outside any git repository, or `git rev-parse --git-common-dir`
+// resolves to this checkout and the fixture appends to the operator's own
+// `.agents/denials.log`.
+{
+  const hookPath = join(root, 'plugins/port/hooks/agent-guard.mjs');
+  const fixture = mkdtempSync(join(tmpdir(), 'port-guard-hook-'));
   try {
     mkdirSync(join(fixture, '.claude'), { recursive: true });
-    writeFileSync(join(fixture, '.claude', 'port.config.json'), '{}');
+    writeFileSync(join(fixture, '.claude', 'port.config.json'), '{"sessionRequiredPaths":["CLAUDE.md",".claude/**"]}');
+    writeFileSync(
+      join(fixture, '.claude', 'settings.json'),
+      JSON.stringify({ permissions: { allow: ['Bash(git *)'] } }),
+    );
 
-    const run = (payload) => {
+    const run = (payload) =>
       execFileSync(process.execPath, [hookPath], {
         cwd: fixture,
         input: JSON.stringify(payload),
-        stdio: ['pipe', 'ignore', 'ignore'],
+        stdio: ['pipe', 'pipe', 'ignore'],
+        encoding: 'utf8',
       });
-    };
     const readLog = () => {
       const p = join(fixture, '.agents', 'denials.log');
       return existsSync(p) ? readFileSync(p, 'utf8').trim().split('\n').filter(Boolean) : [];
     };
 
-    // Subagent denial → agent: actor.
-    run({
+    // Subagent, non-allowlisted Bash → stdout carries the deny JSON, log gets a 'deny' line.
+    let stdout = run({
       cwd: fixture,
       session_id: 'sess-1',
-      permission_mode: 'dontAsk',
       agent_id: 'agent-1',
       agent_type: 'impl-agent',
-      reason: 'not in allowlist',
+      tool_name: 'Bash',
       tool_input: { command: 'rm -rf /' },
     });
+    let parsed;
+    try {
+      parsed = JSON.parse(stdout);
+    } catch {
+      fail('guard-hook-fixture', `expected JSON deny output, got ${JSON.stringify(stdout)}`);
+    }
+    if (parsed && parsed.hookSpecificOutput?.permissionDecision !== 'deny') {
+      fail('guard-hook-fixture', `expected permissionDecision 'deny', got ${JSON.stringify(parsed)}`);
+    }
     let lines = readLog();
-    if (lines.length !== 1) fail('denial-hook-fixture', `expected 1 line after a subagent denial, got ${lines.length}`);
-    else if (lines[0].split('\t').length !== 5) fail('denial-hook-fixture', `expected 5 tab-separated fields, got ${JSON.stringify(lines[0])}`);
-    else if (!lines[0].includes('\tagent:impl-agent:agent-1\t')) fail('denial-hook-fixture', `expected an agent: actor, got ${JSON.stringify(lines[0])}`);
+    if (lines.length !== 1) fail('guard-hook-fixture', `expected 1 log line after a subagent deny, got ${lines.length}`);
+    else if (lines[0].split('\t').length !== 4) fail('guard-hook-fixture', `expected 4 tab-separated fields, got ${JSON.stringify(lines[0])}`);
+    else if (!lines[0].includes('\tdeny\t')) fail('guard-hook-fixture', `expected a 'deny' line, got ${JSON.stringify(lines[0])}`);
+    else if (!lines[0].includes('\tport:impl-agent\t')) fail('guard-hook-fixture', `expected actor 'port:impl-agent', got ${JSON.stringify(lines[0])}`);
     ok();
 
-    // Main-thread denial → session: actor.
-    run({
+    // Non-subagent, non-allowlisted Bash → no stdout, log gets a 'miss' line.
+    stdout = run({
       cwd: fixture,
       session_id: 'sess-2',
-      permission_mode: 'default',
-      reason: 'not in allowlist',
+      tool_name: 'Bash',
       tool_input: { command: 'gh pr merge 1' },
     });
+    if (stdout.trim() !== '') fail('guard-hook-fixture', `expected no stdout for a non-subagent miss, got ${JSON.stringify(stdout)}`);
     lines = readLog();
-    if (lines.length !== 2) fail('denial-hook-fixture', `expected 2 lines after a main-thread denial, got ${lines.length}`);
-    else if (!lines[1].includes('\tsession:sess-2\t')) fail('denial-hook-fixture', `expected a session: actor, got ${JSON.stringify(lines[1])}`);
+    if (lines.length !== 2) fail('guard-hook-fixture', `expected 2 lines after a non-subagent miss, got ${lines.length}`);
+    else if (!lines[1].includes('\tmiss\t')) fail('guard-hook-fixture', `expected a 'miss' line, got ${JSON.stringify(lines[1])}`);
     ok();
 
-    // No port.config.json in cwd → nothing written.
-    const unmanaged = mkdtempSync(join(tmpdir(), 'port-denial-hook-unmanaged-'));
+    // Allowlisted Bash → no stdout, nothing logged (an 'allow' is never logged).
+    run({ cwd: fixture, session_id: 'sess-3', tool_name: 'Bash', tool_input: { command: 'git status' } });
+    if (readLog().length !== 2) fail('guard-hook-fixture', 'an allowed command should not append a line');
+    ok();
+
+    // No port.config.json in cwd → silent, nothing written.
+    const unmanaged = mkdtempSync(join(tmpdir(), 'port-guard-hook-unmanaged-'));
     try {
       execFileSync(process.execPath, [hookPath], {
         cwd: unmanaged,
-        input: JSON.stringify({ cwd: unmanaged, session_id: 'sess-3', tool_input: { command: 'rm -rf /' } }),
+        input: JSON.stringify({ cwd: unmanaged, session_id: 'sess-4', tool_name: 'Bash', tool_input: { command: 'rm -rf /' } }),
         stdio: ['pipe', 'ignore', 'ignore'],
       });
       if (existsSync(join(unmanaged, '.agents', 'denials.log'))) {
-        fail('denial-hook-fixture', 'wrote a log file outside a port-managed repository');
+        fail('guard-hook-fixture', 'wrote a log file outside a port-managed repository');
       }
       ok();
     } finally {
       rmSync(unmanaged, { recursive: true, force: true });
     }
 
-    // Malformed payload → exits 0, nothing written.
+    // Malformed payload → fails open, logs 'hook-error'.
     execFileSync(process.execPath, [hookPath], {
       cwd: fixture,
       input: 'not json',
       stdio: ['pipe', 'ignore', 'ignore'],
     });
-    if (readLog().length !== 2) fail('denial-hook-fixture', 'a malformed payload should not append a line');
+    lines = readLog();
+    if (lines.length !== 3) fail('guard-hook-fixture', `expected a hook-error line for a malformed payload, got ${lines.length} lines`);
+    else if (!lines[2].includes('\thook-error\t')) fail('guard-hook-fixture', `expected a 'hook-error' line, got ${JSON.stringify(lines[2])}`);
     ok();
   } catch (e) {
-    if (e.status !== undefined) fail('denial-hook-fixture', `hook exited non-zero: ${e.message}`);
+    if (e.status !== undefined) fail('guard-hook-fixture', `hook exited non-zero: ${e.message}`);
     else throw e;
   } finally {
     rmSync(fixture, { recursive: true, force: true });
