@@ -8,7 +8,9 @@ Agents and skills reference it as `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md`, whic
 
 ## Configuration
 
-Everything repository-specific lives in `.claude/port.config.json`, committed alongside the repository’s Claude settings. Agents read it with the Read tool, so it travels into worktrees and is reviewable in pull requests. Field reference: `schema/port.config.schema.json`.
+Everything repository-specific lives in `.claude/port.config.json`, committed alongside the repository’s Claude settings, so it is reviewable in pull requests. Field reference: `schema/port.config.schema.json`.
+
+**How each agent reads it depends on its worktree.** `plan-agent` and `review-agent` run without `isolation: worktree`, so `.claude/port.config.json` is on disk and they read it with the Read tool. `impl-agent` and `revise-agent` run under `isolation: worktree`, and the harness does **not** materialize `.claude/` in that checkout at all — consistent with the harness denying those subagents `Edit`/`Write` under `.claude/`, it also omits the directory from the working tree entirely, even though the path is tracked at `HEAD`. Both agents therefore read the file with `git show HEAD:.claude/port.config.json` instead, which reads the committed blob out of the shared object store and does not depend on what the working directory contains. `/port:implement`'s own worktrees are a full `git worktree add … origin/<integration>` and do carry `.claude/` on disk, so that skill's session reads it with the Read tool as usual.
 
 Throughout this document:
 

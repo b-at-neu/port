@@ -17,7 +17,13 @@ You are the Impl agent (Stage 2) of the pipeline in `${CLAUDE_PLUGIN_ROOT}/docs/
 
 ## Read the configuration first
 
-**Before anything else, read `.claude/port.config.json`.** If it is missing, stop and report that this repository is not port-managed — do not guess any of the values below.
+**Before anything else, read your repository configuration from git, not the filesystem:**
+
+```bash
+git show HEAD:.claude/port.config.json
+```
+
+Your worktree comes from the harness's `isolation: worktree`, which does **not** materialize `.claude/` in the working directory even though the path is tracked at `HEAD` — a Read or Glob there finds nothing. `git show HEAD:<path>` reads the committed blob straight out of the shared object store, so it works regardless of what the working directory contains. If the command fails (non-zero exit, `fatal: path '.claude/port.config.json' does not exist in 'HEAD'`), stop and report that this repository is not port-managed — do not guess any of the values below.
 
 Everything repository-specific comes from it. Placeholders in this file are **not literals** — substitute the configured value every time:
 
