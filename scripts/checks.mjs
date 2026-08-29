@@ -1071,7 +1071,7 @@ for (const t of [
     ok();
   }
 
-  // Regression guard for #143: the `<labels.approved>` never-touch rail is a
+  // Regression guard: the `<labels.approved>` never-touch rail is a
   // precondition too, not a bare prohibition — and the announcement that
   // claims a pull request is merge-ready has to show its work.
   if (!text.includes('only when a check on it has gone red')) {
@@ -1088,10 +1088,10 @@ for (const t of [
 }
 
 // --- Review evidence gate — verdicts wait for concluded checks --------------
-// Regression guard for #143 (#141's symptom): review-agent formed a verdict
-// five seconds after posting, before the head commit's own artifact check had
-// concluded — a check with no conclusion is pending, not passing, but was
-// read as passing. This checks that the agent definition actually says to
+// Regression guard: review-agent could form a verdict before the head
+// commit's own artifact check had concluded — a check with no conclusion is
+// pending, not passing, but was read as passing. This checks that the agent
+// definition actually says to
 // wait, names the timeout verdict, and conditions the one carve-out on the
 // module that installs it, rather than a literal check name that would break
 // the moment a repository renamed its workflow job.
@@ -1131,12 +1131,11 @@ for (const t of [
 }
 
 // --- Generality guard — no literal CI check name in a stage prompt ----------
-// Regression guard for #143's "Generality" requirement: hard-coding a check
-// name (rather than deriving the one excused check from
-// approval-check.yml's own jobs: key) breaks the moment a repository renames
-// its workflow job or runs a different CI setup. `skills/init/SKILL.md` is
-// deliberately exempt — it tells the operator which check to mark required,
-// which is the one legitimate literal.
+// Regression guard: hard-coding a check name (rather than deriving the one
+// excused check from approval-check.yml's own jobs: key) breaks the moment a
+// repository renames its workflow job or runs a different CI setup.
+// `skills/init/SKILL.md` is deliberately exempt — it tells the operator which
+// check to mark required, which is the one legitimate literal.
 {
   const bannedNames = ['run-approval-check', 'run-static-checks', 'audit-artifacts', 'run-behavioural-evals'];
   const scanDirs = [join(root, 'plugins/port/agents'), join(root, 'plugins/port/skills/pipeline')];
@@ -1155,12 +1154,11 @@ for (const t of [
 }
 
 // --- Rebase protocol resolves-and-escalates, not fail-closed-and-narrate ----
-// Regression guard for #143 (#140's symptom): the old protocol aborted the
-// whole rebase on any single ambiguous hunk, discarding the correct
-// resolution of every other one, and escalated by dumping conflict markers
-// at a human who was never going to open an editor. This checks that the
-// widened auto-resolvable rows and the decision-request escalation format
-// are both still present.
+// Regression guard: a protocol that aborts the whole rebase on any single
+// ambiguous hunk discards the correct resolution of every other one, and
+// escalating by dumping conflict markers at a human who was never going to
+// open an editor is unhelpful. This checks that the widened auto-resolvable
+// rows and the decision-request escalation format are both still present.
 {
   const rel = 'plugins/port/docs/PIPELINE.md';
   const text = readFileSync(join(root, rel), 'utf8');

@@ -103,10 +103,10 @@ if (sweep) {
 // --- Format contracts -------------------------------------------------------
 const BODY_HEADINGS = ['## Summary', '## Changes', '## Testing plan', '## Automated checks'];
 const REVIEW_PREFIX = '## Code Review';
-// Third verdict added for #143: `review-agent` posts this when the head
-// commit's checks never concluded within the bounded wait — a timeout is a
-// `BLOCKED:`, never a pass, and the heading says so rather than silently
-// reusing one of the other two.
+// Third verdict: `review-agent` posts this when the head commit's checks
+// never concluded within the bounded wait — a timeout is a `BLOCKED:`, never
+// a pass, and the heading says so rather than silently reusing one of the
+// other two.
 const REVIEW_HEADING = /^## Code Review — Cycle (\d+) · (approved|needs revision|blocked — checks pending)$/;
 const REVISION_HEADING = /^## Revision — Cycle (\d+)$/;
 const APPROVAL_WITHDRAWN_HEADING = '## Approval withdrawn';
@@ -114,8 +114,8 @@ const SHA_RE = /\b[0-9a-f]{7,40}\b/;
 // `fixed <ids> · skipped <ids> · <sha>`, with either segment dropped when empty
 // (revise-agent.md), and an optional `· rebase: <file> (<strategy>)` after the
 // sha. One of the two segments must be there — a cycle that did neither writes
-// no comment at all. `check <name> · <sha>` is the #143 check-fix-mode form:
-// no threads to resolve, so no `fixed`/`skipped` segment at all.
+// no comment at all. `check <name> · <sha>` is the check-fix-mode form: no
+// threads to resolve, so no `fixed`/`skipped` segment at all.
 const REVISION_OPENS = /^(?:fixed|skipped|check)\b/;
 const REVISION_DETAIL = /^(?:(?:fixed\b[^·]*·\s*)?(?:skipped\b[^·]*·\s*)?[0-9a-f]{7,40}\b|check\s+\S+\s*·\s*[0-9a-f]{7,40}\b)/;
 const COMMIT_SUBJECT = /^#\d+ [a-z]/;
@@ -204,7 +204,10 @@ for (const n of targets) {
 
     const m = REVIEW_HEADING.exec(first);
     if (!m) {
-      fail(at('review'), `heading must be '${REVIEW_PREFIX} — Cycle <n> · <approved|needs revision>', got ${JSON.stringify(first)}`);
+      fail(
+        at('review'),
+        `heading must be '${REVIEW_PREFIX} — Cycle <n> · <approved|needs revision|blocked — checks pending>', got ${JSON.stringify(first)}`,
+      );
       continue;
     }
     ok();
@@ -239,7 +242,10 @@ for (const n of targets) {
     ok();
     const detail = firstNonEmpty(cl.slice(1)).trim();
     if (!REVISION_OPENS.test(detail) || !REVISION_DETAIL.test(detail)) {
-      fail(at('revision'), `cycle ${m[1]} needs one 'fixed … · skipped … · <sha>' line, got ${JSON.stringify(detail)}`);
+      fail(
+        at('revision'),
+        `cycle ${m[1]} needs one 'fixed … · skipped … · <sha>' or 'check <name> · <sha>' line, got ${JSON.stringify(detail)}`,
+      );
     } else {
       ok();
     }
@@ -250,7 +256,7 @@ for (const n of targets) {
     }
   }
 
-  // --- Approval withdrawn (#143) ---
+  // --- Approval withdrawn ---
   // The cockpit's carve-out to the `<labels.approved>` never-touch rail: a
   // comment naming the check, its conclusion, its link, and the head SHA the
   // conclusion belongs to — the four facts that authorise the removal.

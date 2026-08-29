@@ -86,7 +86,7 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --a
 1. **Read the latest review — or the withdrawn check.** Reviews are real GitHub pull request reviews — read the most recent one's body **and** its inline comments, and the pull request's comments for a newer `## Approval withdrawn`:
 
    ```bash
-   gh pr view <pr-number> --repo <repo> --json reviews,comments --jq '.reviews[-1].body'
+   gh pr view <pr-number> --repo <repo> --json reviews,comments --jq '{review: (.reviews // [] | max_by(.submittedAt) | {body, submittedAt}), comments: (.comments // [] | map({body, createdAt}))}'
    gh api repos/<repo>/pulls/<pr-number>/comments --jq '.[] | "\(.path):\(.line) — \(.body)"'
    ```
 
