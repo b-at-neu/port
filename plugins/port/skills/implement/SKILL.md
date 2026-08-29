@@ -98,7 +98,7 @@ Same literal string as the issue plan. **The routing marker is never a label.**
 
 **This is the whole list. Anything not here applies unchanged** — if an agent file gains a rule that only makes sense for a subagent, it belongs here.
 
-1. **`permissionMode: dontAsk` and "auto-denied silently"** — not your mode. The guard hook (`agent-guard.mjs`) only denies calls it identifies as coming from a dispatched subagent, and this is an operator session — none of its signals fire here, so your session prompts normally.
+1. **`permissionMode: dontAsk` and "auto-denied silently"** — not your mode. The guard hook (`agent-guard.mjs`) only denies calls it identifies as coming from a dispatched subagent, and this is an operator session — none of its signals fire here, so your session prompts normally. The guard's **cockpit rules** (the loop and `needsHuman`-gate checks that fire for the cockpit's own session too) are also inert here, for the same reason the cockpit's own rails don't apply: an `impl-<n>` worktree is the exempt caller kind both rules check for first.
 2. **"Stop and emit `BLOCKED:`"** — pointless with a human present. Ask the operator directly and wait. Never emit a `BLOCKED:` sentinel, never guess.
 3. **"Never spawn subagents"** — not applicable.
 4. **The shell-discipline block** (`${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Operating rules (all stage agents)") — one command per call, no `cd`/`ENV=val` prefix, quoted cwd-relative paths — exists for the subagent's allowlist. Use whatever is clearest. **Still preferred:** the repository's declared `commands` over ad-hoc equivalents, and `git rm` for tracked deletions.
