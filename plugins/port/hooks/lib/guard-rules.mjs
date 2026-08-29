@@ -164,7 +164,14 @@ export function targetsGhOrGit(command) {
  *  item numbers it targets — a bare positional digit, or the trailing digits
  *  of a `github.com/**\/(issues|pull)/<n>` URL. Quote-aware, so a label name
  *  with spaces (`"needs human"`) is read correctly. `numbers` is always
- *  collected, even when `isAttempt` is false, so a caller never re-tokenizes. */
+ *  collected, even when `isAttempt` is false, so a caller never re-tokenizes.
+ *  `hasNumbers` is `false` whenever `gh` was given no digit and no
+ *  `issues|pull` URL to key off — e.g. `gh pr edit <branch-name> ...` or
+ *  `gh pr edit --remove-label ...` with no identifier at all, which `gh`
+ *  accepts as "the current branch's PR". A caller must not treat an empty
+ *  `numbers` array as "nothing to verify": `[].every(...)` is vacuously
+ *  `true`, so skipping this check would let an unidentified item's gate
+ *  clear through with nothing for the operator to have named. */
 export function gateClearAttempt(command, label) {
   const tokens = tokenize(command);
   const isEdit =
@@ -183,8 +190,9 @@ export function gateClearAttempt(command, label) {
     const m = /\/(?:issues|pull)\/(\d+)(?:[/?#].*)?$/.exec(t);
     if (m) numbers.push(Number(m[1]));
   }
+  const hasNumbers = numbers.length > 0;
 
-  if (!isEdit) return { isAttempt: false, numbers };
+  if (!isEdit) return { isAttempt: false, numbers, hasNumbers };
 
   const target = label.trim().toLowerCase();
   let isAttempt = false;
@@ -197,7 +205,7 @@ export function gateClearAttempt(command, label) {
     if (value.split(',').map((v) => v.trim().toLowerCase()).includes(target)) isAttempt = true;
   }
 
-  return { isAttempt, numbers };
+  return { isAttempt, numbers, hasNumbers };
 }
 
 /** The last `limit` operator (human) messages found in a session transcript's
@@ -245,11 +253,17 @@ export function recentOperatorMessages(jsonlText, limit = 5) {
 /** True when every number in `numbers` is named in at least one of
  *  `messages`, as `#N` or as a standalone `N`. `messages === null` means the
  *  transcript could not be read at all — unverifiable, not unauthorised, so
- *  this returns `null` rather than `false`. */
+ *  this returns `null` rather than `false`. An empty `numbers` means there is
+ *  nothing to verify a name against, so this returns `false` rather than the
+ *  vacuously-true result `[].every(...)` would otherwise give — a caller
+ *  should prefer checking `gateClearAttempt`'s `hasNumbers` directly so it
+ *  can give a specific "no identifier found" reason, but this is the
+ *  defense-in-depth backstop if it doesn't. */
 export function operatorNamed(numbers, messages) {
   if (messages === null) return null;
+  if (numbers.length === 0) return false;
   const namesNumber = (n, message) =>
-    new RegExp(`#${n}(?!\\d)`).test(message) || new RegExp(`(?:^|[^\\d])${n}(?!\\d)`).test(message);
+    new RegExp(`#${n}(?!\\d)`).test(message) || new RegExp(`(?:^|[^\\w])${n}(?!\\w)`).test(message);
   return numbers.every((n) => messages.some((m) => namesNumber(n, m)));
 }
 
@@ -307,6 +321,19 @@ export function decide({ payload, matchers, sessionRequiredPaths, root, needsHum
             who,
             subject: command,
             reason: `port: only an operator can clear the "${needsHumanLabel}" gate. Stop and emit BLOCKED: <what you needed>.`,
+          };
+        }
+        if (!gate.hasNumbers) {
+          // No bare digit and no issues|pull URL to key off — e.g. a
+          // branch-name form, or `--remove-label` with no identifier at all
+          // (`gh` defaults to the current branch's PR). There is nothing to
+          // check an operator message against, so this must never fall
+          // through to operatorNamed's vacuously-true `[].every(...)`.
+          return {
+            decision: 'deny',
+            who,
+            subject: command,
+            reason: `port: removing "${needsHumanLabel}" is denied — the command names no item number (no bare digit, no issues/pull URL), so it can't be checked against what the operator named. Re-run with the explicit number after the operator says so, e.g. gh pr edit <n> --remove-label "${needsHumanLabel}".`,
           };
         }
         const named = operatorNamed(gate.numbers, operatorMessages ?? null);

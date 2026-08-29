@@ -495,6 +495,44 @@ for (const [dir, kind] of [
     'gate-clear',
   );
 
+  // #142/R1-C1 — a gate-clear attempt with no bare digit and no issues/pull
+  // URL (a branch-name identifier, which `gh` accepts) must be denied
+  // outright, never fall through to operatorNamed's vacuously-true
+  // `[].every(...)` on an empty numbers array. Even an operator message that
+  // would otherwise satisfy some *other* item must not let this through —
+  // there is nothing here for it to have named.
+  check(
+    '#142 gate clear denied — command names no item number (branch form)',
+    decide({
+      payload: plainPayload({
+        tool_input: { command: 'gh pr edit 139-guard-cockpit-loop-and-gate-rules --repo b-at-neu/port --remove-label "needs human"' },
+      }),
+      matchers,
+      sessionRequiredPaths: [],
+      root,
+      needsHumanLabel,
+      operatorMessages: ['unblock #134'],
+    }),
+    'deny',
+  );
+
+  // Same bug, the no-identifier-at-all form (`gh` defaults to the current
+  // branch's PR).
+  check(
+    '#142 gate clear denied — command names no item number (no identifier)',
+    decide({
+      payload: plainPayload({
+        tool_input: { command: 'gh pr edit --repo b-at-neu/port --remove-label "needs human"' },
+      }),
+      matchers,
+      sessionRequiredPaths: [],
+      root,
+      needsHumanLabel,
+      operatorMessages: null,
+    }),
+    'deny',
+  );
+
   // Adding, not removing, the needsHuman label is not a gate-clear attempt at
   // all — it is not guarded by this rule.
   check(
@@ -546,6 +584,22 @@ for (const [dir, kind] of [
     if (batch.isAttempt) fail('guard-classifier', 'gateClearAttempt: a different label was read as a needsHuman clear');
     else if (batch.numbers.length !== 3) fail('guard-classifier', `gateClearAttempt: expected 3 numbers, got ${JSON.stringify(batch.numbers)}`);
     else ok();
+
+    // #142/R1-C1 — hasNumbers is false for a branch-name identifier and for
+    // no identifier at all, even though isAttempt is still true.
+    const branchForm = gateClearAttempt('gh pr edit my-feature-branch --remove-label "needs human"', 'needs human');
+    if (!branchForm.isAttempt || branchForm.hasNumbers || branchForm.numbers.length !== 0) {
+      fail('guard-classifier', `gateClearAttempt: expected isAttempt with hasNumbers false for a branch name, got ${JSON.stringify(branchForm)}`);
+    } else {
+      ok();
+    }
+
+    const noIdentifier = gateClearAttempt('gh pr edit --remove-label "needs human"', 'needs human');
+    if (!noIdentifier.isAttempt || noIdentifier.hasNumbers) {
+      fail('guard-classifier', `gateClearAttempt: expected isAttempt with hasNumbers false for no identifier, got ${JSON.stringify(noIdentifier)}`);
+    } else {
+      ok();
+    }
   }
 
   // --- recentOperatorMessages / operatorNamed --------------------------------
@@ -584,6 +638,23 @@ for (const [dir, kind] of [
     else ok();
     if (operatorNamed([134], ['reset #63']) !== false) fail('guard-classifier', 'operatorNamed: expected false when no message names #134');
     else ok();
+
+    // #142/R1-C1 — an empty numbers array must never be vacuously true.
+    if (operatorNamed([], ['unblock #134']) !== false) fail('guard-classifier', 'operatorNamed: expected false (not vacuously true) for an empty numbers array');
+    else ok();
+
+    // #142/R1-L1 — a coincidental numeric suffix on an unrelated word must
+    // not stand in for naming the item; only a real word boundary counts.
+    if (operatorNamed([134], ['bumped to sprint134']) !== false) {
+      fail('guard-classifier', 'operatorNamed: expected false — "sprint134" merely ends in 134, it does not name it');
+    } else {
+      ok();
+    }
+    if (operatorNamed([134], ['clear 134 please']) !== true) {
+      fail('guard-classifier', 'operatorNamed: expected true — a real standalone 134 still names it');
+    } else {
+      ok();
+    }
   }
 }
 
