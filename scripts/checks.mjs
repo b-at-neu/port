@@ -1070,6 +1070,128 @@ for (const t of [
   } else {
     ok();
   }
+
+  // Regression guard for #143: the `<labels.approved>` never-touch rail is a
+  // precondition too, not a bare prohibition — and the announcement that
+  // claims a pull request is merge-ready has to show its work.
+  if (!text.includes('only when a check on it has gone red')) {
+    fail('cockpit-rails', `${skillRel} is missing the approved-carve-out precondition phrase 'only when a check on it has gone red'`);
+  } else {
+    ok();
+  }
+
+  if (!/every check and its conclusion/.test(text)) {
+    fail('cockpit-rails', `${skillRel}'s approved-announcement copy never shows a check conclusion`);
+  } else {
+    ok();
+  }
+}
+
+// --- Review evidence gate — verdicts wait for concluded checks --------------
+// Regression guard for #143 (#141's symptom): review-agent formed a verdict
+// five seconds after posting, before the head commit's own artifact check had
+// concluded — a check with no conclusion is pending, not passing, but was
+// read as passing. This checks that the agent definition actually says to
+// wait, names the timeout verdict, and conditions the one carve-out on the
+// module that installs it, rather than a literal check name that would break
+// the moment a repository renamed its workflow job.
+{
+  const rel = 'plugins/port/agents/review-agent.md';
+  const text = readFileSync(join(root, rel), 'utf8');
+
+  if (!text.includes('statusCheckRollup')) {
+    fail('review-evidence', `${rel} never reads 'statusCheckRollup' — the evidence gate has nothing to reduce`);
+  } else {
+    ok();
+  }
+
+  if (!text.includes('--watch')) {
+    fail('review-evidence', `${rel} never uses 'gh pr checks --watch' — nothing bounds the wait for pending checks`);
+  } else {
+    ok();
+  }
+
+  if (!text.includes('no verdict is formed while any check on the head commit is pending')) {
+    fail('review-evidence', `${rel} is missing the literal phrase 'no verdict is formed while any check on the head commit is pending'`);
+  } else {
+    ok();
+  }
+
+  if (!/modules\.approvalGate/.test(text)) {
+    fail('review-evidence', `${rel} never conditions the carve-out on 'modules.approvalGate'`);
+  } else {
+    ok();
+  }
+
+  if (!text.includes('blocked — checks pending')) {
+    fail('review-evidence', `${rel} never names the 'blocked — checks pending' verdict`);
+  } else {
+    ok();
+  }
+}
+
+// --- Generality guard — no literal CI check name in a stage prompt ----------
+// Regression guard for #143's "Generality" requirement: hard-coding a check
+// name (rather than deriving the one excused check from
+// approval-check.yml's own jobs: key) breaks the moment a repository renames
+// its workflow job or runs a different CI setup. `skills/init/SKILL.md` is
+// deliberately exempt — it tells the operator which check to mark required,
+// which is the one legitimate literal.
+{
+  const bannedNames = ['run-approval-check', 'run-static-checks', 'audit-artifacts', 'run-behavioural-evals'];
+  const scanDirs = [join(root, 'plugins/port/agents'), join(root, 'plugins/port/skills/pipeline')];
+  for (const dir of scanDirs) {
+    for (const f of walk(dir).filter((p) => p.endsWith('.md'))) {
+      const rel = f.slice(root.length + 1);
+      const text = readFileSync(f, 'utf8');
+      for (const name of bannedNames) {
+        if (text.includes(name)) {
+          fail('review-evidence', `${rel} names the literal check '${name}' — check identity must come from the repository's own workflow, never a hard-coded string`);
+        }
+      }
+    }
+  }
+  ok();
+}
+
+// --- Rebase protocol resolves-and-escalates, not fail-closed-and-narrate ----
+// Regression guard for #143 (#140's symptom): the old protocol aborted the
+// whole rebase on any single ambiguous hunk, discarding the correct
+// resolution of every other one, and escalated by dumping conflict markers
+// at a human who was never going to open an editor. This checks that the
+// widened auto-resolvable rows and the decision-request escalation format
+// are both still present.
+{
+  const rel = 'plugins/port/docs/PIPELINE.md';
+  const text = readFileSync(join(root, rel), 'utf8');
+
+  for (const phrase of ['take the union', 'deterministic order', 'apply the addition inside the new structure']) {
+    if (!text.includes(phrase)) {
+      fail('rebase-protocol', `${rel} is missing the auto-resolvable phrase '${phrase}'`);
+    } else {
+      ok();
+    }
+  }
+
+  for (const name of ['sessionRequiredPaths', 'migration', 'environment', 'build configuration']) {
+    if (!text.includes(name)) {
+      fail('rebase-protocol', `${rel}'s never-auto-resolve list is missing '${name}'`);
+    } else {
+      ok();
+    }
+  }
+
+  if (!text.includes('Recommendation')) {
+    fail('rebase-protocol', `${rel}'s escalation format declares no 'Recommendation'`);
+  } else {
+    ok();
+  }
+
+  if (!/D<n>/.test(text)) {
+    fail('rebase-protocol', `${rel}'s escalation format declares no 'D<n>' decision ID form`);
+  } else {
+    ok();
+  }
 }
 
 // --- Eval cases are structurally sound --------------------------------------

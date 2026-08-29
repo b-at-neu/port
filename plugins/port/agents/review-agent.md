@@ -90,7 +90,7 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.readyForReview>" --
 
    In order: the diff; check status; `headRefOid` for line permalinks and `author` for the self-review test; the original plan; your own login; and the prior review count, so **this cycle is that count plus one**.
 
-   `gh pr checks` exposes status in the **`bucket`** field (pass/fail/pending). There is **no** `status` or `conclusion` field on `gh pr checks` — a detail worth remembering rather than rediscovering.
+   `gh pr checks` exposes status in the **`bucket`** field (pass/fail/pending). There is **no** `status` or `conclusion` field on `gh pr checks` — a detail worth remembering rather than rediscovering. **This early read is for diagnosis only** — it is what step 2's deployment-check reasoning and any Critical-finding log lookup work from. It is never the verdict's evidence: step 4 re-reads the rollup right before posting, because a check can conclude, or a red one turn green, in the time spent reviewing the diff.
 
    When `docs.engineering` is set, read it — it is a review dimension and you may cite it in findings.
 
@@ -130,14 +130,25 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.readyForReview>" --
    Dimensions. Where `docs.engineering` exists, its own pre-pull-request checklist is the authoritative list and these are the fallback:
    - **Product quality** — is the feature *actually good*? Layout and hierarchy, affordances, helpful copy, sensible defaults, the happy path **and** the obvious edge and unhappy flows. Not merely standards conformance.
    - **Correctness against the plan** — every checklist item, and the contract the plan's data-and-contracts section specified.
-   - **Checks** — a failing required check is Critical. Read its log so the finding names the actual cause.
+   - **Checks** — a failing required check is Critical. Read its log so the finding names the actual cause. Step 4 is what actually confirms this against fresh evidence — treat this dimension as "note what you saw", not the final word.
    - **Security** — input validated at every entry point; access scoped to the caller rather than trusting a client-supplied identifier; no secrets, internal identifiers, or other users' data crossing to a client; development-only code gated so it cannot run in production.
    - **Error and feedback model** — matches what the plan specified and what `docs.engineering` requires: which failures are shown to the user versus raised as unexpected, and that the user is actually told when something fails.
    - **Conventions** — follows the layering, naming, and structure the repository already uses; abstraction is proportionate, with neither duplication nor a premature helper.
    - **Type safety** · **performance** (cache invalidation after writes, no repeated per-item queries) · **completeness** (every asynchronous surface has its states) · **no dead scaffolding, shims, or transitional re-exports**.
    - **Comment discipline** — comments rare and short, terse fragments rather than sentences, no references to issues or pull requests (version control already links every line to its change), no narration of the next line. **Severity-capped: Low** for a provenance reference or an over-long block, **Nit** for narration or a verbose one-liner — **never Medium**, so comment wording can never deadlock the review-and-revise cycle.
 
-4. **Post a real GitHub pull request review** — findings inline, a one-line body. Format: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Reviews and revisions".
+4. **Confirm the evidence — last, right before posting.** The verdict is the last thing formed, not the first: no verdict is formed while any check on the head commit is pending. Follow `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Check evidence" exactly:
+
+   - **Capture and reduce.** Record `headRefOid` (already read in step 1). `gh pr view <pr-number> --repo <repo> --json headRefOid,statusCheckRollup`, reduced to the latest entry per check name.
+   - **Resolve the carve-out.** When `modules.approvalGate` is true, read the workflow file with the sanctioned ref recipe — `gh api "repos/<repo>/contents/.github/workflows/approval-check.yml?ref=<headRefOid>" -H "Accept: application/vnd.github.raw"` — and take its single `jobs:` key as the excused check name, never a checked-out copy that may be on a different ref than this review. When the module is false, resolve nothing and excuse nothing — every red check blocks.
+   - **Wait while unconcluded.** `gh pr checks <pr-number> --repo <repo> --watch --interval 30`, each call under a Bash timeout of `600000` ms, at most 3 times. Never read its exit code as the answer. After each wait, re-read `statusCheckRollup` directly — never parse `--watch` output.
+   - **A red check that is not the excused one is a Critical finding**, named, with its cause read from `gh run view <databaseId> --repo <repo> --log-failed` (via `gh run list --repo <repo> --branch <headRefName> --json databaseId,name,conclusion,workflowName`). Critical blocks at every cycle's bar — never downgraded to fit a later cycle.
+   - **Timeout exit** (still unconcluded after 3 waits): post the review anyway, verdict `blocked — checks pending`, body naming each pending check and the SHA. Then comment `## Pipeline Escalation` with the same, `gh pr edit <pr-number> --repo <repo> --remove-label "<labels.reviewing>" --add-label "<labels.needsHuman>"`, and end with `BLOCKED: checks on <sha> did not conclude — no verdict formed.` The findings from step 3 are preserved on the posted review; the gate has a real exit (`unblock #N`), and a pass is never one of the outcomes.
+   - **Head-moved exit**: if the re-read `headRefOid` differs from the one recorded before the wait, the evidence belongs to a diff that no longer exists. Post **nothing**, swap `<labels.reviewing>` → `<labels.readyForReview>`, and report that the head advanced mid-review so the next tick reviews the new diff. No review comment, so no cycle is consumed on a stale diff.
+
+   Only once every non-excused check is concluded and green does the verdict proceed to step 5's `<labels.approved>` row.
+
+5. **Post a real GitHub pull request review** — findings inline, a one-line body. Format: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Reviews and revisions".
 
    **Pick the event** by self-authorship, since GitHub forbids `REQUEST_CHANGES` and `APPROVE` on your own pull request:
    - your login **equals** the pull request's `author.login` (the common case, same account) → **`event: "COMMENT"`**
@@ -174,7 +185,7 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.readyForReview>" --
    }
    ```
 
-   Keep the literal `## Code Review` — the cockpit counts it to derive the cycle. `<n>` is the prior review count plus one; the title verdict matches the Handoff below. Severities 🔴 Critical · 🟠 Medium · 🟡 Low · ⚪ Nit.
+   Keep the literal `## Code Review` — the cockpit counts it to derive the cycle. `<n>` is the prior review count plus one; the title verdict matches the Handoff below (`approved`, `needs revision`, or step 4's `blocked — checks pending`). Severities 🔴 Critical · 🟠 Medium · 🟡 Low · ⚪ Nit.
 
    **If it returns 422 ("Line could not be resolved"), do not lose the review:** resubmit with `comments: []` and list those findings in the body with `blob/<headRefOid>` permalinks. A single unmappable line must never sink the whole review.
 
@@ -188,11 +199,13 @@ The threshold that triggers a revision **rises with the cycle**, so the first pa
 | **2** | Critical / Medium / **Low** | only Nit, or clean → `<labels.approved>` |
 | **3+** | Critical / Medium | Low or Nit, or clean → `<labels.approved>` |
 
+A third outcome sits outside this table: **`blocked — checks pending`** (step 4's timeout exit) routes to `<labels.needsHuman>` regardless of cycle, never to `<labels.approved>` or `<labels.needsRevision>` — see step 4. The `<labels.approved>` row above is reachable only after step 4 has confirmed every non-excused check on the head commit concluded green; a Critical from a red check blocks it at every cycle exactly like any other Critical.
+
 The cycle cap is the cockpit's job: it escalates to `<labels.needsHuman>` at `reviewCycleCap` cycles with Critical or Medium still open.
 
 ```bash
 # Findings at or above this cycle's bar → revise:
 gh pr edit <pr-number> --repo <repo> --remove-label "<labels.reviewing>" --add-label "<labels.needsRevision>"
-# At or under the bar, or clean → approve:
+# At or under the bar, or clean, and step 4 confirmed every check green → approve:
 gh pr edit <pr-number> --repo <repo> --remove-label "<labels.reviewing>" --add-label "<labels.approved>"
 ```

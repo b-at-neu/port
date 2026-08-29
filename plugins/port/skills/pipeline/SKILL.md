@@ -170,7 +170,8 @@ Several sessions are usually open at once, and an untitled one is hard to find a
 - **Never describe a tool call you have not made.** Announcing a wakeup, a removal, or a dispatch is not performing it — write the sentence only after the call returns, and let its result decide the wording. A closing report is a record of what happened this tick, never a stand-in for what you meant to do.
 - **A multi-item label change is one `gh issue edit` naming every number, then a re-query to confirm each one moved** — e.g. `gh issue edit 63 67 71 --repo <repo> --remove-label "planning" --add-label "ready"`. `gh pr edit` takes a single number, so a pull request is one call each. This is not only a style rule: the guard hook mechanically **denies** a `gh`/`git` call wrapped in a shell `for`/`while`/`until` loop, and it fires for this session too (#120), so falling back to a loop here is not a shortcut that works.
 - **Never merge or close a pull request.** The human merges on GitHub; `gh pr merge` is denied.
-- Never touch a pull request labeled `<labels.approved>` beyond announcing it. **`<labels.needsHuman>` clears only when an operator instruction names that item** — the route is `unblock #N` (see Conversational commands) — and the guard hook **denies** any other attempt to remove it, cockpit included (#138): an announcement is not an instruction, and neither is general pressure to keep the pipeline moving. **One carve-out:** applying a refresh to an approved pull request is permitted when `modules.previewDatabase` is true (see Preview refresh) — nothing else about an approved pull request may be touched.
+- **Never touch a pull request labeled `<labels.approved>` beyond announcing it.** The label is removed **only when a check on it has gone red** — read in the same tick, and named in the announcement (see "Approved pull requests" and `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Check evidence") — never a general licence to revisit terminal states, and never authorized by operator instruction or elapsed time. A pull request being slow, stale, or unmerged is never itself a reason to touch it. **A second carve-out:** applying a refresh to an approved pull request is permitted when `modules.previewDatabase` is true (see Preview refresh). Nothing else about an approved pull request may be touched.
+- **`<labels.needsHuman>` clears only when an operator instruction names that item** — the route is `unblock #N` (see Conversational commands) — and the guard hook **denies** any other attempt to remove it, cockpit included (#138): an announcement is not an instruction, and neither is general pressure to keep the pipeline moving.
 - Never act on an item that lacks a pipeline **trigger** label — opt-in is human-initiated.
 - **Never act on an item assigned to another operator** — ownership transfers only through an explicit human take-over.
 - Never dispatch for an item with an **in-flight** label — an agent owns it, or a human paused it.
@@ -411,9 +412,11 @@ The gate applies **no special label** for a session-required plan; the marker is
 
   If the gate came from the cycle cap rather than a rebase escalation, append: *"This one hit the review cycle cap, so the revision route will escalate straight back to `needs human` on the next tick. Choose review, or merge it yourself."*
 
-  Then write `.temp/gate-cleared-<n>.md`, `gh pr comment <n> --repo <repo> --body-file .temp/gate-cleared-<n>.md` (`## Gate cleared`), swap the label (`<labels.needsHuman>` → `<labels.needsRevision>` or `<labels.readyForReview>`), and announce:
+  **When the escalation comment carries `### D<n>` blocks** (a rebase escalation with decisions to make), present **every decision in one `AskUserQuestion` call** — it takes up to 4 questions of up to 4 options each — never one call per decision. The guard hook's gate rule authorises the clear from the last **5** operator messages in this session's own transcript, and one call per decision would push the operator's own `unblock #N` out of that window and get the clear denied. More than 4 decisions → batch across multiple calls, and re-confirm the count with the operator before the label swap.
 
-  > ✅ Gate cleared on PR #134 at your instruction — `needs human` → `needs revision`, and I commented the clear on the pull request. Revision dispatches this tick.
+  Then write `.temp/gate-cleared-<n>.md` — for a rebase escalation, a `### Rebase decisions` block, one line per decision: `` - D<n> `path` — **<letter> <label>** ``, this is the machine-readable half of the operator's answer and the only place the selection is durable. Comment it **before** the label swap, so the decisions are durable even if the swap fails: `gh pr comment <n> --repo <repo> --body-file .temp/gate-cleared-<n>.md` (`## Gate cleared`), then swap the label (`<labels.needsHuman>` → `<labels.needsRevision>` or `<labels.readyForReview>`), and announce:
+
+  > ✅ Gate cleared on PR #134 at your instruction — D1 **C**. Recorded on the pull request and swapped to `needs revision`; revision redoes the rebase this tick, reapplying both automatic resolutions alongside your choice.
 
 **`resume #N` and `retry #N` never clear this gate** — they re-apply a trigger for an *in-flight* label only. Say so if asked to use either on a `<labels.needsHuman>` item.
 
@@ -435,9 +438,17 @@ The gate applies **no special label** for a session-required plan; the marker is
 
 ### Approved pull requests
 
-Announce each newly approved pull request once with a one-line summary and its URL; the human merges on GitHub. Track which you have announced in-session; re-announce only on request. When one is merged, the next tick's reconciliation drops it and announces the merge — **never keep listing a merged pull request as awaiting merge.**
+**Re-verify before announcing, every tick.** For each pull request in the `<labels.approved>` query result (the approved set is small, so this is bounded), one call: `gh pr view <n> --repo <repo> --json headRefOid,statusCheckRollup`. Reduce per `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Check evidence" — resolve the excused check name from `.github/workflows/approval-check.yml` with the **Read** tool, the same as `.claude/port.config.json` and `.claude/settings.json` are already read: it is the repository's own workflow file, not tied to any one pull request's head, so the main checkout's copy is the right one to read (same one-merge-lag caveat as those two). Then branch:
+
+- **All checks concluded green** (the carve-out check excluded from the read but still listed) → announce once, listing every check and its conclusion — never merge-ready without naming what that claim rests on.
+- **Anything unconcluded** → say so and do **not** call it merge-ready; re-check next tick.
+- **Any red, excluding the excused carve-out check** → **route it back**, the sole exception to the never-touch rail on `<labels.approved>`: write `.temp/withdrawn-<n>.md` (`## Approval withdrawn`, naming the check, its conclusion, its link, and the head SHA), `gh pr comment <n> --repo <repo> --body-file .temp/withdrawn-<n>.md`, then `gh pr edit <n> --repo <repo> --remove-label "<labels.approved>" --add-label "<labels.needsRevision>"`, then drop it from the announced set so a later re-approval announces again. Revision dispatches on the same tick under the existing rules — the cycle cap and `SESSION REQUIRED` check both still apply, unchanged.
+
+Announce each newly approved pull request once with a one-line summary, its URL, and the check conclusions the claim rests on; the human merges on GitHub. Track which you have announced in-session; re-announce only on request. When one is merged, the next tick's reconciliation drops it and announces the merge — **never keep listing a merged pull request as awaiting merge.**
 
 *(`modules.previewDatabase`)* If its rollup shows the deployment check red, append `⚠️ deployment red — not merge-ready; a slot frees on the next merge`, so the human is never told to merge something GitHub will refuse.
+
+**Pressed to "move it along" with nothing red** — decline, and point at the merge: an approved, all-green pull request is not touched just because it is sitting there. See "Safety rails".
 
 ### Agent questions and blockers (relay loop)
 

@@ -103,14 +103,21 @@ if (sweep) {
 // --- Format contracts -------------------------------------------------------
 const BODY_HEADINGS = ['## Summary', '## Changes', '## Testing plan', '## Automated checks'];
 const REVIEW_PREFIX = '## Code Review';
-const REVIEW_HEADING = /^## Code Review — Cycle (\d+) · (approved|needs revision)$/;
+// Third verdict added for #143: `review-agent` posts this when the head
+// commit's checks never concluded within the bounded wait — a timeout is a
+// `BLOCKED:`, never a pass, and the heading says so rather than silently
+// reusing one of the other two.
+const REVIEW_HEADING = /^## Code Review — Cycle (\d+) · (approved|needs revision|blocked — checks pending)$/;
 const REVISION_HEADING = /^## Revision — Cycle (\d+)$/;
+const APPROVAL_WITHDRAWN_HEADING = '## Approval withdrawn';
+const SHA_RE = /\b[0-9a-f]{7,40}\b/;
 // `fixed <ids> · skipped <ids> · <sha>`, with either segment dropped when empty
 // (revise-agent.md), and an optional `· rebase: <file> (<strategy>)` after the
 // sha. One of the two segments must be there — a cycle that did neither writes
-// no comment at all.
-const REVISION_OPENS = /^(?:fixed|skipped)\b/;
-const REVISION_DETAIL = /^(?:fixed\b[^·]*·\s*)?(?:skipped\b[^·]*·\s*)?[0-9a-f]{7,40}\b/;
+// no comment at all. `check <name> · <sha>` is the #143 check-fix-mode form:
+// no threads to resolve, so no `fixed`/`skipped` segment at all.
+const REVISION_OPENS = /^(?:fixed|skipped|check)\b/;
+const REVISION_DETAIL = /^(?:(?:fixed\b[^·]*·\s*)?(?:skipped\b[^·]*·\s*)?[0-9a-f]{7,40}\b|check\s+\S+\s*·\s*[0-9a-f]{7,40}\b)/;
 const COMMIT_SUBJECT = /^#\d+ [a-z]/;
 const SCRATCH_PATHS = /^(\.temp|\.agents)\//;
 // A verification step only the operator can run, at its defined position — a
@@ -238,6 +245,30 @@ for (const n of targets) {
     }
     if (Number(m[1]) > cycles.length) {
       fail(at('revision'), `cycle ${m[1]} exceeds the ${cycles.length} review(s) on this pull request`);
+    } else {
+      ok();
+    }
+  }
+
+  // --- Approval withdrawn (#143) ---
+  // The cockpit's carve-out to the `<labels.approved>` never-touch rail: a
+  // comment naming the check, its conclusion, its link, and the head SHA the
+  // conclusion belongs to — the four facts that authorise the removal.
+  for (const c of pr.comments) {
+    const cl = lines(c.body);
+    const first = (cl[0] ?? '').trim();
+    if (first !== APPROVAL_WITHDRAWN_HEADING) continue;
+    const rest = cl.slice(1).join('\n');
+    if (!SHA_RE.test(rest)) {
+      fail(at('approval-withdrawn'), `'${APPROVAL_WITHDRAWN_HEADING}' carries no 7-40 character hex SHA`);
+      continue;
+    }
+    // At least one other backtick-quoted token beside the SHA itself — the
+    // check name.
+    const FULL_SHA = /^[0-9a-f]{7,40}$/;
+    const backticked = [...rest.matchAll(/`([^`]+)`/g)].map((mm) => mm[1]);
+    if (!backticked.some((b) => !FULL_SHA.test(b))) {
+      fail(at('approval-withdrawn'), `'${APPROVAL_WITHDRAWN_HEADING}' names no check — only a SHA`);
     } else {
       ok();
     }

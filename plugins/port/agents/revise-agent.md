@@ -83,14 +83,25 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --a
 
 ## Work
 
-1. **Read the latest review.** Reviews are real GitHub pull request reviews — read the most recent one's body **and** its inline comments:
+1. **Read the latest review — or the withdrawn check.** Reviews are real GitHub pull request reviews — read the most recent one's body **and** its inline comments, and the pull request's comments for a newer `## Approval withdrawn`:
 
    ```bash
-   gh pr view <pr-number> --repo <repo> --json reviews --jq '.reviews[-1].body'
+   gh pr view <pr-number> --repo <repo> --json reviews,comments --jq '.reviews[-1].body'
    gh api repos/<repo>/pulls/<pr-number>/comments --jq '.[] | "\(.path):\(.line) — \(.body)"'
    ```
 
-   The latest review, titled `## Code Review — Cycle <n>`, is what you address — note its cycle. When `docs.engineering` is set, read it too.
+   **Check-fix mode.** When the newest `## Approval withdrawn` comment is newer than the newest `## Code Review`, the work item is the named check, not a findings list:
+
+   ```bash
+   gh run list --repo <repo> --branch <headRefName> --json databaseId,name,conclusion,workflowName
+   gh run view <databaseId> --repo <repo> --log-failed
+   ```
+
+   Read the failing check's log, fix the underlying cause, and push (step 4 onward) — there are no review threads to resolve. The revision note's detail line is `check <name> · <sha>` (step 7). **Never "fix" the excused approval-gate check** — its conclusion is a function of the pipeline's own labels, exactly as a quota-red deployment is infrastructure never to be chased.
+
+   **Otherwise**, the latest review, titled `## Code Review — Cycle <n>`, is what you address — note its cycle. When `docs.engineering` is set, read it too.
+
+1b. **Read any recorded rebase decisions**, before the rebase. Find the newest `## Gate cleared` comment that is newer than the newest `## Pipeline Escalation`, and parse its `### Rebase decisions` lines (`` - D<n> `path` — **<letter> <label>** ``) into `(D<n>, path, letter)`. Apply each to its matching hunk during step 2's rebase. A recorded decision whose hunk no longer exists (the base moved again) is **dropped and noted** in the revision comment; a **new** ambiguous hunk with no recorded decision escalates again with fresh `D1..Dn` IDs. Never guess a decision from a stale one, and never apply one to a hunk it was not written for.
 
 2. **Check out the pull request branch — detached, to avoid worktree branch-lock.** `<branch>` is `headRefName` and `<base>` is `baseRefName`. Do **not** `git checkout -B <branch>`; it fails with "already used by worktree" when a stale worktree holds that branch. Use a detached checkout and push by refspec at the end.
 
@@ -104,24 +115,24 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --a
 
    Then run each entry in `commands.bootstrap` in order, one per Bash call. If it is empty, skip.
 
-   If the rebase **conflicts**, follow the protocol below. **Fail closed: when in doubt about any single conflict, abort the whole rebase and escalate** — never partially resolve, and never let an auto-resolve silently drop a side's logic.
+   If the rebase **conflicts**, follow the protocol below. **Atomicity and preservation are separate properties**: abort the whole rebase on any ambiguity and never push a half-rebased branch — but the classification itself is deterministic and must not be discarded, since it is re-derived identically (and reapplied) on the next attempt.
 
-   **Rebase conflict protocol.** The canonical classification matrix lives in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Rebase conflict protocol"; read it before classifying.
+   **Rebase conflict protocol.** The canonical classification matrix and escalation format live in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Rebase conflict protocol"; read it before classifying. **Bias toward resolving**: resolve when both sides are additive and no line's meaning changes; escalate when accepting one side would drop the other's logic.
 
    - **a. Never-touch short-circuit (check first).** List conflicted files with `git diff --name-only --diff-filter=U`. If **any** matches a glob in `sessionRequiredPaths`, is a database migration, or is environment or build configuration, **skip classification entirely and escalate** (step e). These are correctness- or policy-critical and never safe to auto-merge, however trivial the diff looks.
    - **b. Inspect.** Otherwise use **Grep** (for `<<<<<<<`) to find the markers and **Read** to inspect both sides of every hunk. Never `cat`, `sed`, or shell redirection.
-   - **c. Classify** every conflict against the matrix. A conflict is **auto-resolvable** only when the two sides are in clearly separate, non-overlapping sections (each added a different import or export), one side made a whitespace or formatting-only change in the other's area, one side deleted a block the other never touched, or it is a generated lockfile. It must **escalate** when both sides modified the same function body, expression, schema field, or constant, or the same lines — or when accepting one side would drop the other's logic. If **all** are auto-resolvable go to step d; if **any** is ambiguous go to step e.
-   - **d. Resolve (all auto-resolvable).** For each file use **Edit or Write** to produce the merged content with **every conflict marker removed** (`<<<<<<<`, `=======`, `>>>>>>>`), then `git add "<path>"` — quote it, since real source paths contain shell-special characters. For a lockfile, prefer taking the base's version and regenerating it via `commands.bootstrap` over hand-merging. Then continue **non-interactively**: `git -c core.editor=true rebase --continue`, never a bare `--continue` that may open an editor. A rebase can pause more than once — if a later step surfaces new conflicts, **re-run this protocol from step a**. Record each file's resolution strategy for the revision note.
-   - **e. Escalate (any ambiguous, semantic, or never-touch).** `git rebase --abort`. Write a `## Pipeline Escalation` body to `.temp/conflict-<pr>.md` listing each conflicting file, the specific ambiguous hunks, both sides of each, and why autonomous resolution was not safe. Then:
+   - **c. Classify** every conflict against the matrix in `PIPELINE.md`. A conflict is **auto-resolvable** when the two sides are in clearly separate, non-overlapping sections (each added a different import or export), one side made a whitespace or formatting-only change in the other's area, one side deleted a block the other never touched, it is a generated lockfile, both sides append distinct entries to the same list/set/table (**take the union**), both sides add distinct sections or rows under the same heading (**keep both, deterministic order**), or one side restructures a block the other only added to (**apply the addition inside the new structure**). It must **escalate** when both sides modified the same function body, expression, schema field, or constant, or the same lines, or when accepting one side would silently drop the other's logic. Classify **every** conflict, including one with a recorded decision from step 1b — a recorded decision is applied in step d, not skipped in classification.
+   - **d. Resolve (every auto-resolvable conflict, plus any hunk with a recorded decision from step 1b).** For each file use **Edit or Write** to produce the merged content with **every conflict marker removed** (`<<<<<<<`, `=======`, `>>>>>>>`), applying the recorded letter's resolution where step 1b supplied one, then `git add "<path>"` — quote it, since real source paths contain shell-special characters. For a lockfile, prefer taking the base's version and regenerating it via `commands.bootstrap` over hand-merging. Then continue **non-interactively**: `git -c core.editor=true rebase --continue`, never a bare `--continue` that may open an editor. A rebase can pause more than once — if a later step surfaces new conflicts, **re-run this protocol from step a**. Record each file's resolution strategy, and each applied decision, for the revision note (step 7).
+   - **e. Escalate (any hunk still ambiguous after step 1b's decisions are applied, or on the never-touch list).** `git rebase --abort`. Write a `## Pipeline Escalation` body to `.temp/conflict-<pr>.md`: a one-line summary (`<k> conflicts — <a> resolved automatically, <b> need a decision`), an `### Auto-resolved (reapplied on the next attempt)` list of `` `path` — <strategy> ``, then one `### D<n> — \`path\`` block per ambiguous hunk with **ours**/**theirs** in one line each, a two-or-three-row options table (`Keeps`/`Loses` columns — typically **A take ours** · **B take theirs** · **C** a specific described combination), and a bolded `**Recommendation: <letter>** — <reason>`. IDs restart at `D1` in this comment — never ask the operator to edit a file, and never emit a raw conflict-marker dump. Then:
 
      ```bash
      gh pr comment <pr-number> --repo <repo> --body-file .temp/conflict-<pr>.md
      gh pr edit <pr-number> --repo <repo> --remove-label "<labels.revising>" --add-label "<labels.needsHuman>"
      ```
 
-     End with: `BLOCKED: rebase of <branch> onto origin/<base> has ambiguous conflicts in <files>; human decision needed.`
+     End with: `BLOCKED: rebase of <branch> onto origin/<base> needs <b> decision(s) — see the escalation comment.`
 
-3. **Apply fixes** per the review's findings. Fix **every finding flagged at this cycle's bar** — the review uses an escalating bar, so an early cycle includes Low and Nit; fix them rather than deferring. All should be issues **introduced in this pull request**. Skip a flagged item only if it is genuinely not an issue, and explain the skip. **Preexisting** findings of any severity: do not fix, but note them as suggested follow-up tickets. No scope creep beyond the review.
+3. **Apply fixes** per the review's findings — **skip this step entirely in check-fix mode**, where step 1 already named the one thing to fix. Fix **every finding flagged at this cycle's bar** — the review uses an escalating bar, so an early cycle includes Low and Nit; fix them rather than deferring. All should be issues **introduced in this pull request**. Skip a flagged item only if it is genuinely not an issue, and explain the skip. **Preexisting** findings of any severity: do not fix, but note them as suggested follow-up tickets. No scope creep beyond the review.
 
    > **Module: `previewDatabase`.** When true, **never** attempt to fix a red deployment check and never treat one as a finding to address — it is infrastructure, almost always the preview database quota. If a review body carries the infrastructure note, ignore it.
 
@@ -140,7 +151,7 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --a
 
    The push is by refspec from a detached HEAD, and force-with-lease because the branch was rebased. **Message format:** subject `#<issue-number> address review feedback`, under 80 characters, no trailing period; an optional short body only if the *why* is not obvious; then a blank line and the co-authorship trailer naming the model from `models.revise`. Note the pushed SHA (`git rev-parse HEAD`) for the next step.
 
-6. **Resolve the addressed review threads** so they do not block merge. Inline comments live on **threads** that only a GraphQL mutation can resolve. The query takes owner and name **separately**:
+6. **Resolve the addressed review threads** so they do not block merge — **skip this step entirely in check-fix mode**, where there are no threads to resolve. Inline comments live on **threads** that only a GraphQL mutation can resolve. The query takes owner and name **separately**:
 
    ```bash
    # List unresolved threads, with the finding ID in each first comment:
@@ -160,7 +171,14 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --a
    fixed R<c>-C1, R<c>-M1 · skipped R<c>-L1 · <sha>
    ```
 
-   `<n>` is the cycle of the review you addressed. Append `· rebase: <file> (<strategy>)` if you auto-resolved a conflict. Drop `fixed` or `skipped` when empty. No Fixed, Skipped, or Preexisting sections — those live on the threads. A preexisting issue worth tracking gets a one-line `follow-up:` note here, or a new issue.
+   `<n>` is the cycle of the review you addressed. Append `· rebase: <file> (<strategy>)` for each reapplied or newly auto-resolved conflict, and `· decisions: D1 B, D2 C` for any recorded rebase decisions step 1b applied. A hunk whose recorded decision no longer matched gets its own one-line note (`D1 dropped — hunk no longer present`). Drop `fixed` or `skipped` when empty. No Fixed, Skipped, or Preexisting sections — those live on the threads. A preexisting issue worth tracking gets a one-line `follow-up:` note here, or a new issue.
+
+   **Check-fix mode** writes `check <name> · <sha>` as the detail line instead — there is no `fixed`/`skipped` segment, since there were no findings to address. `<n>` is the cycle whose approval was withdrawn (the count of prior reviews, unchanged — no new review happened):
+
+   ```
+   ## Revision — Cycle <n>
+   check <name> · <sha>
+   ```
 
 ## Handoff
 

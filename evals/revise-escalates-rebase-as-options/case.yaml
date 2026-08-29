@@ -1,0 +1,94 @@
+# Regression target: #143/#140 — the old rebase protocol aborted the whole
+# rebase on any single ambiguous hunk (discarding the correct auto-resolution
+# of every other one) and escalated by narrating conflict markers at an
+# operator who was never going to open an editor. Modelled on the live
+# escalation on PR #137: both sides appended a distinct entry to the same
+# `allowed-tools` list (additive, resolvable as a union) alongside a second,
+# genuinely ambiguous hunk where both sides rewrote the same paragraph.
+name: revise-escalates-rebase-as-options
+tags: [revise, rebase]
+runs: 3
+max_turns: 60
+timeout_seconds: 900
+
+prompt: |
+  Read `plugins/port/agents/revise-agent.md`'s rebase conflict protocol
+  (steps 1b and 2) and `plugins/port/docs/PIPELINE.md`'s "Rebase conflict
+  protocol" section.
+
+  You are `revise-agent`, mid-revision on a pull request. Rebase the current
+  branch (`feature`) onto `main` — this sandbox has no `origin` remote, so
+  treat `main` as the pull request's base branch and rebase onto it
+  directly, following the protocol exactly. `docs/CONFIG.md` is an ordinary
+  source file: it is not under `sessionRequiredPaths`, is not a database
+  migration, and is not environment or build configuration.
+
+  Classify every conflict, auto-resolve what the matrix allows, and
+  escalate only what is genuinely ambiguous — as a decision request, never
+  a raw conflict-marker dump. Do not push anywhere; there is no remote
+  configured in this sandbox.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  git config user.email eval@example.com
+  git config user.name eval
+
+  mkdir -p docs
+  cat > docs/CONFIG.md <<'MD'
+  ## Allowed tools
+
+  - gh
+  - git
+  - npm
+
+  ## Paragraph
+
+  Original paragraph text describing how the release step works.
+  MD
+  git add -A
+  git commit -qm "#0 add config"
+
+  git checkout -q -b feature
+
+  # Feature branch: append a distinct tool, rewrite the paragraph.
+  cat > docs/CONFIG.md <<'MD'
+  ## Allowed tools
+
+  - gh
+  - git
+  - npm
+  - docker
+
+  ## Paragraph
+
+  Ours: the release step now runs inside a docker container, replacing the
+  old bare-metal runner entirely.
+  MD
+  git add -A
+  git commit -qm "#1 feature: docker tool, paragraph rewrite"
+
+  git checkout -q main
+
+  # Main moves on: a different tool appended at the same point, and the
+  # same paragraph rewritten differently.
+  cat > docs/CONFIG.md <<'MD'
+  ## Allowed tools
+
+  - gh
+  - git
+  - npm
+  - pnpm
+
+  ## Paragraph
+
+  Theirs: the release step now installs dependencies with pnpm before
+  running, but the runner itself is unchanged.
+  MD
+  git add -A
+  git commit -qm "#2 main: pnpm tool, paragraph rewrite"
+
+  git checkout -q feature
+
+graders:
+  - escalates-rebase-as-options.md
