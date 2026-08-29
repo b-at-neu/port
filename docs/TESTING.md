@@ -28,6 +28,8 @@ No dependencies, no plugin install, no model calls. Runs in seconds, in CI on ev
 | Every `hooks.json` matcher's `command` references a file that actually exists, and `PreToolUse` declares a matcher covering `Bash` and one covering the write tools | The guard hook silently absent after a rename or a dropped matcher (#67) |
 | The guard hook's classifier — `hooks/lib/guard-rules.mjs` — denies a subagent's allowlist-missing Bash command and a subagent's write to a `sessionRequiredPaths` path, never denies the same calls without an agent signal, and each of the three caller signals (`agent_type`, transcript, worktree) reaches `deny` on its own | The mechanism that actually denies, independent of parent-session mode (#67) |
 | A spawned run of the guard hook itself emits the deny JSON and a `deny` log line for a subagent's allowlist miss, no stdout and a `miss` line for the same command from a non-subagent, no log line at all for an allowed command, stays silent outside a port-managed repository, and logs `hook-error` rather than crashing on a malformed payload | Stdin/stdout/exit-code wiring the classifier's direct import cannot see (#67) |
+| The cockpit's inline `Config key \| Default name` table names the same keys and default names as `labels.json`, both directions | The cockpit resolving a config key it cannot map to a real label name (#61) |
+| No `--label`/`--add-label`/`--remove-label` argument under `plugins/**/*.md` is a bare config key whose name differs from it | A key typed where a resolved label name belongs, matching nothing silently (#61) |
 
 Each rule is worth testing by breaking it deliberately. If a check cannot be made to fail, it is not a check.
 

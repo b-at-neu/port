@@ -130,34 +130,36 @@ Canonical rules every stage agent follows. A Bash command matches the allowlist 
 
 Rule: **every stage agent's first action is swapping its trigger label for its in-flight label.** Absence of a trigger label means the cockpit skips the item, so a tick can never double-dispatch. **An in-flight label means a stage *claimed* the item, never that an agent is still alive** — a crashed or killed agent leaves the label in place with nothing running. Liveness is a separate question, answered by `TaskList`, not by the label; see "Liveness" under Escalation. Recovery either way is re-applying the trigger label (`retry #N`).
 
+**The `<labels.X>` placeholder is a config lookup, never a label name.** `X` is a `.claude/port.config.json` `labels` key from the `Config key` column below; the resolved name a `gh` call actually uses is `labels[key] ?? default` — the repository's override when `labels` sets one, otherwise the `Label` column's default. So `<labels.planApproved>` resolves to `plan approved` in a repository with no override, never to the literal string `planApproved`. Because `gh issue list --label <unknown>` returns `[]` with exit code 0, a component that types the key instead of the resolved name gets a silently empty result, never an error — resolve every name from this table (or the live config) before issuing a `--label` argument.
+
 ### Issue labels
 
-| Label | Set by | Type | Meaning |
-| --- | --- | --- | --- |
-| `claude` | Cockpit (at opt-in) | marker | The pipeline is handling this ticket |
-| `ready` | Cockpit (at opt-in) | trigger | Dispatch `plan-agent` |
-| `planning` | `plan-agent` | in-flight | Plan being researched and written |
-| `plan review` | `plan-agent` | gate | Plan written — awaiting human approval in the cockpit |
-| `plan changes requested` | Cockpit (human feedback) | trigger | Dispatch `plan-agent` in revision mode |
-| `plan approved` | Cockpit (human approval, or `auto plan`) | trigger | Dispatch `impl-agent` |
-| `auto plan` | Cockpit (at opt-in) | marker | Plan gate skipped: `plan review` auto-approved |
-| `in progress` | `impl-agent` | in-flight | Implementation underway |
-| `pr opened` | `impl-agent` | terminal | Pull request open; remaining state tracked there |
-| `blocked` | `impl-agent` | gate | Needs a human decision; details in an issue comment |
+| Config key | Label | Set by | Type | Meaning |
+| --- | --- | --- | --- | --- |
+| `marker` | `claude` | Cockpit (at opt-in) | marker | The pipeline is handling this ticket |
+| `ready` | `ready` | Cockpit (at opt-in) | trigger | Dispatch `plan-agent` |
+| `planning` | `planning` | `plan-agent` | in-flight | Plan being researched and written |
+| `planReview` | `plan review` | `plan-agent` | gate | Plan written — awaiting human approval in the cockpit |
+| `planChangesRequested` | `plan changes requested` | Cockpit (human feedback) | trigger | Dispatch `plan-agent` in revision mode |
+| `planApproved` | `plan approved` | Cockpit (human approval, or `auto plan`) | trigger | Dispatch `impl-agent` |
+| `autoPlan` | `auto plan` | Cockpit (at opt-in) | marker | Plan gate skipped: `plan review` auto-approved |
+| `inProgress` | `in progress` | `impl-agent` | in-flight | Implementation underway |
+| `prOpened` | `pr opened` | `impl-agent` | terminal | Pull request open; remaining state tracked there |
+| `blocked` | `blocked` | `impl-agent` | gate | Needs a human decision; details in an issue comment |
 
 ### Pull request labels
 
-| Label | Set by | Type | Meaning |
-| --- | --- | --- | --- |
-| `claude` | `impl-agent` (at `gh pr create`) | marker | The pipeline owns this pull request |
-| `ready for review` | `impl-agent` / `revise-agent` | trigger | Dispatch `review-agent` |
-| `reviewing` | `review-agent` | in-flight | Review underway |
-| `needs revision` | `review-agent` | trigger | Dispatch `revise-agent` (subject to the cycle cap) |
-| `revising` | `revise-agent` | in-flight | Fixes underway |
-| `approved` | `review-agent` | terminal | Findings are at or under the current cycle's bar; a human merges |
-| `needs human` | Cockpit / `revise-agent` | gate | Cycle cap reached without convergence, or an ambiguous rebase conflict; the pipeline stops |
-| `refresh branch` | Cockpit / human | trigger | *(`previewDatabase`)* Dispatch `revise-agent` in refresh mode |
-| `refreshing` | `revise-agent` | in-flight | *(`previewDatabase`)* Branch refresh underway; other labels are left in place |
+| Config key | Label | Set by | Type | Meaning |
+| --- | --- | --- | --- | --- |
+| `marker` | `claude` | `impl-agent` (at `gh pr create`) | marker | The pipeline owns this pull request |
+| `readyForReview` | `ready for review` | `impl-agent` / `revise-agent` | trigger | Dispatch `review-agent` |
+| `reviewing` | `reviewing` | `review-agent` | in-flight | Review underway |
+| `needsRevision` | `needs revision` | `review-agent` | trigger | Dispatch `revise-agent` (subject to the cycle cap) |
+| `revising` | `revising` | `revise-agent` | in-flight | Fixes underway |
+| `approved` | `approved` | `review-agent` | terminal | Findings are at or under the current cycle's bar; a human merges |
+| `needsHuman` | `needs human` | Cockpit / `revise-agent` | gate | Cycle cap reached without convergence, or an ambiguous rebase conflict; the pipeline stops |
+| `refreshBranch` | `refresh branch` | Cockpit / human | trigger | *(`previewDatabase`)* Dispatch `revise-agent` in refresh mode |
+| `refreshing` | `refreshing` | `revise-agent` | in-flight | *(`previewDatabase`)* Branch refresh underway; other labels are left in place |
 
 ## Stages and models
 

@@ -71,6 +71,7 @@ One documented grader form is **not** used here yet: `--ablation` mentions grade
 | `init-stops-on-unallowlisted-check` | #53 | `/port:init` will not write a check the allowlist forbids — it narrows the allowlist or drops the check, deliberately |
 | `init-preserves-enabled-plugins` | #47 | Merging settings keeps `enabledPlugins`, `extraKnownMarketplaces`, `hooks` and `env` intact |
 | `plan-marks-operator-only-test-step` | #118 | A plan whose only `.claude/**` reference is a testing step is never declared plainly dispatchable — it is marked `SESSION REQUIRED` or that step is marked operator-only |
+| `pipeline-resolves-label-vocabulary` | #61 | The cockpit resolves every `--label` argument to a real label name — honouring a partial config override and every unoverridden default — never a bare config key |
 
 `analyze-surfaces-user-scope-plugin` is tagged `known-failing` and **is expected to fail** against the current prompt, which still excludes anything already installed with no scope distinction. Issue #50 is the fix. A regression target written before its fix is the point of the tag, not an oversight — remove the tag when #50 lands.
 

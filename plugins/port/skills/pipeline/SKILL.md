@@ -1,7 +1,7 @@
 ---
 name: pipeline
 description: Interactive pipeline cockpit — polls GitHub labels, dispatches background stage subagents, relays their questions, and runs the human gates conversationally. Run the session on haiku, in default permission mode. Usage: /port:pipeline
-allowed-tools: Bash(gh issue list *) Bash(gh issue view *) Bash(gh issue edit *) Bash(gh issue comment *) Bash(gh pr list *) Bash(gh pr view *) Bash(gh pr edit *) Bash(gh pr comment *) Bash(gh api graphql *) Bash(git worktree *) Bash(git rev-parse *) Bash(git rev-list *) Bash(git branch *) Read Write Agent AskUserQuestion ScheduleWakeup SendMessage TaskList TaskStop
+allowed-tools: Bash(gh issue list *) Bash(gh issue view *) Bash(gh issue edit *) Bash(gh issue comment *) Bash(gh pr list *) Bash(gh pr view *) Bash(gh pr edit *) Bash(gh pr comment *) Bash(gh label list *) Bash(gh api graphql *) Bash(git worktree *) Bash(git rev-parse *) Bash(git rev-list *) Bash(git branch *) Read Write Agent AskUserQuestion ScheduleWakeup SendMessage TaskList TaskStop
 ---
 
 # Pipeline Cockpit
@@ -44,6 +44,65 @@ gh api graphql -f query='query { repository(owner: "<owner>", name: "<name>") { 
 Compare the returned `enabledPlugins` keys against the local file's, and warn on either direction of difference, or on `object` being null (`<integration>` carries no settings file at all) — see **UX states**. **If the call errors, say so in one line and continue.** Never block a tick on it.
 
 Also in this pass, when both files are present but the branch from step 1's `git rev-parse --abbrev-ref HEAD` is not `branches.integration`, warn once (see **UX states**) and continue. Silence is the correct output when everything lines up — beyond the plugin version line, a healthy preflight says nothing.
+
+**Step 5 — label vocabulary.** Every `--label` argument and every `--jq` label comparison this session issues, for the rest of its life, is copied out of the artifact this step produces — never retyped from memory or reconstructed from the table below.
+
+1. **Resolve each key** as `labels[key] ?? default` — the repository's `labels` config for the override, this table for the default. A row's `Module` gates whether it applies at all; skip a row whose module is false in `modules`.
+
+   | Config key | Default name | Role | Module |
+   | --- | --- | --- | --- |
+   | `marker` | `claude` | marker | core |
+   | `autoPlan` | `auto plan` | marker | core |
+   | `ready` | `ready` | trigger | core |
+   | `planChangesRequested` | `plan changes requested` | trigger | core |
+   | `planApproved` | `plan approved` | trigger | core |
+   | `readyForReview` | `ready for review` | trigger | core |
+   | `needsRevision` | `needs revision` | trigger | core |
+   | `refreshBranch` | `refresh branch` | trigger | previewDatabase |
+   | `planning` | `planning` | in-flight | core |
+   | `inProgress` | `in progress` | in-flight | core |
+   | `reviewing` | `reviewing` | in-flight | core |
+   | `revising` | `revising` | in-flight | core |
+   | `refreshing` | `refreshing` | in-flight | previewDatabase |
+   | `planReview` | `plan review` | gate | core |
+   | `blocked` | `blocked` | gate | core |
+   | `needsHuman` | `needs human` | gate | core |
+   | `prOpened` | `pr opened` | terminal | core |
+   | `approved` | `approved` | terminal | core |
+
+2. **Verify against the repository's real labels**, one call:
+
+   ```bash
+   gh label list --repo <repo> --limit 100 --json name --jq '.[].name'
+   ```
+
+3. **Write `.temp/label-vocabulary.md`** (Write tool) — the target `<repo>` this artifact was resolved for, a table of key, resolved name, and present/missing against that result, plus one verdict line: `verified` (every enabled label is present), `partial` (some but not all are present — the affected stages are invisible, distinct from a genuinely empty queue), `mis-resolved` (none are present — a resolution failure, never an empty backlog), or `unverified` (the `gh label list` call itself failed). `.temp/` is already gitignored.
+
+4. **Echo the result once**, grouped by role so a wrong string stands out against its neighbours:
+
+   - **Verified (verdict `verified`):**
+
+     > **Label vocabulary** — resolved from `.claude/port.config.json` + defaults, all <n> present in `<repo>`:
+     > triggers `ready` · `plan changes requested` · `plan approved` · `ready for review` · `needs revision`
+     > in flight `planning` · `in progress` · `reviewing` · `revising`
+     > gates `plan review` · `blocked` · `needs human`
+     > marker / terminal `claude` · `auto plan` · `pr opened` · `approved`
+
+     Append one line per config override: `overrides from config: <key> → <name>`.
+
+   - **Some names missing (verdict `partial`):**
+
+     > ⚠️ <n> resolved label names do not exist in `<repo>`: `<name>`, `<name>`. Queries for them return nothing **silently**, so those stages are invisible. Run `/port:init` to create them, or fix `labels` in the config. I'll keep ticking and won't report "all clear" for the affected stages.
+
+   - **No overlap at all (mis-resolved):**
+
+     > ⚠️ **None** of the resolved label names exist in `<repo>`. That is a resolution failure, not an empty queue — I will not report "all clear" this session. The repository's labels are: `<name>`, `<name>`, … Fix `labels` in the config, then restart me.
+
+   - **Verification unavailable:**
+
+     > ⚠️ Couldn't read the label list for `<repo>` (`gh label list` failed: <reason>). Using the names resolved from config, unverified — an empty result this session is not evidence of an empty queue.
+
+**Every tick after the first** reads `.temp/label-vocabulary.md` instead of re-deriving it — see Tick procedure, step 0. If the file is absent (a fresh session, or another checkout's leftover artifact with a different repository's vocabulary), re-run this section before that tick's queries.
 
 ## UX states (startup preflight)
 
@@ -93,7 +152,7 @@ Exact copy, one message per state, `<…>` substituted:
 | `<owner>` / `<name>` | `repo`, split on `/` | required — stop |
 | `<labels.X>` | `labels.X` | the standard name in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Label lifecycle" |
 
-**Label names are configuration, not constants.** Never type a label name you did not read from config or the standard vocabulary; a wrong string silently matches nothing, or creates a new label.
+**`<labels.X>` names a slot, never a literal.** The value that belongs on a command line is the resolved **Name** for that key — `labels[key] ?? default` — read from the label vocabulary you resolve below, never the bare key itself and never retyped from memory. `<labels.planApproved>` resolves to `plan approved` in a repository with no override; it must never appear on a command line as `planApproved`. `gh issue list --label <unknown>` returns `[]` with exit code 0, so a wrong string here is never an error — it is silence, indistinguishable from a genuinely empty queue.
 
 Also read: `models` (passed at dispatch), `reviewCycleCap`, and `modules`. **`modules` decides which parts of this skill run at all** — every query, sweep, and command marked with a module gate below is skipped entirely when its flag is false. Skipping means the behaviour is *absent*, not merely quiet: do not report on it, offer its commands, or mention it to the human.
 
@@ -130,6 +189,10 @@ Unassigned items are invisible to every cockpit by design — the **unowned swee
 ## Tick procedure
 
 On start and on every wakeup, run one polling pass.
+
+**Step 0 — read the resolved vocabulary.** Before any query below, Read `.temp/label-vocabulary.md`. If it is absent, or names a different `<repo>` than this session's, re-run Startup preflight's **Step 5 — label vocabulary** first. Every `--label` value and `--jq` label comparison this tick is copied verbatim from that file — never retyped from the placeholders shown below, and never reconstructed from memory.
+
+**An empty trigger-query result is never reported as "all clear" while the file's verdict is `unverified`, `mis-resolved`, or `partial`.** Say the queue could not be confirmed instead, and name the verdict — a blank result under any of those is at least as likely a resolution failure (or, for `partial`, a missing label for exactly the affected stage) as a genuinely empty queue. Once the verdict is `verified`, an empty result is trustworthy and reports normally.
 
 ```bash
 # Trigger labels → dispatch — this operator's items only
@@ -169,7 +232,7 @@ gh pr list --repo <repo> --assignee "@me" --label "<labels.refreshing>" --json n
 gh pr list --repo <repo> --assignee "@me" --json number,title,labels
 ```
 
-For the ungated sweep, filter with `--jq` to pull requests carrying any pipeline stage label but **not** `<labels.marker>`.
+For the ungated sweep, filter with `--jq` to pull requests carrying any pipeline stage label but **not** the resolved name for `<labels.marker>` (`claude` unless step 0's vocabulary shows an override).
 
 Then, in this order. Steps 7 and 8 are split apart deliberately — they are the two that get skipped when folded into closing prose, so each is its own checkable action rather than a sentence:
 
@@ -255,11 +318,11 @@ On Windows, `git worktree remove` often fails once a dependency directory exists
 
 > ⚠️ Unowned pipeline items (no assignee — no cockpit will act on them): #412 (ready), #388 (plan review). Say "work on #412" to claim one.
 
-An **empty** sweep result is only meaningful if the `--jq` filter works — verify it once against a known unassigned, trigger-labeled issue rather than trusting silence.
+An **empty** sweep result is only meaningful when step 0's verdict is `verified` — that already confirms the label strings the `--jq` filter compares against are real labels in this repository, so no separate ad-hoc check is needed here.
 
-**Ungated report (each tick).** *(`modules.approvalGate`)* A pipeline pull request that lost `<labels.marker>` merges with no gate at all, and CI cannot tell it from a human pull request. Report changes only, and **never add the label automatically**:
+**Ungated report (each tick).** *(`modules.approvalGate`)* A pipeline pull request that lost the resolved `<labels.marker>` name merges with no gate at all, and CI cannot tell it from a human pull request. Report changes only, and **never add the label automatically**:
 
-> ⚠️ Pipeline pull requests without the `<labels.marker>` label (approval gate inactive): #501. Say "gate #501" or add the label on GitHub.
+> ⚠️ Pipeline pull requests without the `claude` label (approval gate inactive): #501. Say "gate #501" or add the label on GitHub.
 
 **Preview refresh (right after confirming merges).** *(`modules.previewDatabase`)* Each merge frees exactly one preview database slot, which unblocks one quota-red deployment. Count the merges you confirmed **this tick** as `k`, then label **at most `k`** pull requests `<labels.refreshBranch>` — **oldest first**, each open, approved, with the deployment check red while the other checks are green, and skipping any whose `headRefOid` this session already refreshed at that same SHA. Read the rollup per candidate:
 
