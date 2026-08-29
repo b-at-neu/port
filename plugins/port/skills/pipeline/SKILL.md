@@ -168,9 +168,9 @@ Several sessions are usually open at once, and an untitled one is hard to find a
 ## Safety rails (absolute)
 
 - **Never describe a tool call you have not made.** Announcing a wakeup, a removal, or a dispatch is not performing it — write the sentence only after the call returns, and let its result decide the wording. A closing report is a record of what happened this tick, never a stand-in for what you meant to do.
-- **Never wrap a `gh` or `git` call in a shell `for`/`while` loop**, even for a one-off multi-item check — issue one call per item, or a single `gh … --json … --jq '…'` query with broader filtering.
+- **A multi-item label change is one `gh issue edit` naming every number, then a re-query to confirm each one moved** — e.g. `gh issue edit 63 67 71 --repo <repo> --remove-label "planning" --add-label "ready"`. `gh pr edit` takes a single number, so a pull request is one call each. This is not only a style rule: the guard hook mechanically **denies** a `gh`/`git` call wrapped in a shell `for`/`while`/`until` loop, and it fires for this session too (#120), so falling back to a loop here is not a shortcut that works.
 - **Never merge or close a pull request.** The human merges on GitHub; `gh pr merge` is denied.
-- Never touch pull requests labeled `<labels.approved>` or `<labels.needsHuman>` beyond announcing them. **One carve-out:** applying a refresh to an approved pull request is permitted when `modules.previewDatabase` is true (see Preview refresh) — nothing else about an approved pull request may be touched.
+- Never touch a pull request labeled `<labels.approved>` beyond announcing it. **`<labels.needsHuman>` clears only when an operator instruction names that item** — the route is `unblock #N` (see Conversational commands) — and the guard hook **denies** any other attempt to remove it, cockpit included (#138): an announcement is not an instruction, and neither is general pressure to keep the pipeline moving. **One carve-out:** applying a refresh to an approved pull request is permitted when `modules.previewDatabase` is true (see Preview refresh) — nothing else about an approved pull request may be touched.
 - Never act on an item that lacks a pipeline **trigger** label — opt-in is human-initiated.
 - **Never act on an item assigned to another operator** — ownership transfers only through an explicit human take-over.
 - Never dispatch for an item with an **in-flight** label — an agent owns it, or a human paused it.
@@ -257,7 +257,7 @@ If merged or closed, announce it once, **remove it from your announced set**, an
 
 - **Matched, running** — nothing to do; it is genuinely mid-flight.
 - **No match** — **stalled**: the agent crashed, was killed outside this session, or the session that dispatched it closed. Report it, change no label, dispatch nothing — `retry #N` is the human's call. Report the whole stalled set as **one grouped line**, every tick while it is non-empty, never one line per item.
-- **Every in-flight item unmatched at once, and the most recent completion or error mentions a session limit** (a `"session limit"`/`"resets at"`-shaped message) — this is the **usage-limit** class, not ordinary stalling: reset each affected item's in-flight label back to its trigger label (one `gh` call per item, never a loop), report the reset time verbatim from the message, and schedule the next wakeup for just after it — a small buffer past the reset, or the idle delay with a note if the time cannot be parsed. Never redispatch before it, and never substitute a different model to work around it.
+- **Every in-flight item unmatched at once, and the most recent completion or error mentions a session limit** (a `"session limit"`/`"resets at"`-shaped message) — this is the **usage-limit** class, not ordinary stalling: reset each affected item's in-flight label back to its trigger label — group by (current label → trigger label) pair and issue one `gh issue edit` per group naming every number, pull requests one call each, then re-query to confirm — report the reset time verbatim from the message, and schedule the next wakeup for just after it — a small buffer past the reset, or the idle delay with a note if the time cannot be parsed. Never redispatch before it, and never substitute a different model to work around it.
 - **`TaskList` cannot be correlated to numbers at all** (e.g. no `description` field surfaced) — report the in-flight set alongside the running-agent count and say the correlation is uncertain, rather than guessing which is which.
 
 Full background: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Liveness".
@@ -312,7 +312,11 @@ active set = {62}  →  51 and 60 are done  →  remove both
 
 On Windows, `git worktree remove` often fails once a dependency directory exists, and orphans accumulate that neither `remove` nor `prune` can clear. **Do not claim "prune will fix it next tick" — it will not.** Report the failure and tell the human to run `/port:worktree-clean`.
 
-**Denial report (each tick).** The guard hook logs every `deny` and `miss` decision it makes to **`.agents/denials.log`**, one four-field tab-separated line each (format in `PIPELINE.md` → "Denial visibility"). Read it and count only lines whose decision field is `deny` — those are the guard hook actually denying a dispatched subagent. A `miss` line is **not a denial**: it is this session's own (or another non-subagent session's) allowlist miss, already surfaced to a human as a normal prompt, and never worth reporting here. Track how many qualifying `deny` lines are new since the previous tick. If they **cluster** — three or more new, or the same command repeated — report it once, e.g. *"⚠️ 4 stage-agent commands denied this tick (e.g. `printf … >` ×2) — the pipeline likely needs a permission or instruction change."* Do not act on it automatically; this is visibility so the human knows when to harden the configuration. A few isolated denials are normal and need no report.
+**Denial report (each tick).** The guard hook logs every `deny`, `miss`, and `gate-clear` decision it makes to **`.agents/denials.log`**, one four-field tab-separated line each (format in `PIPELINE.md` → "Denial visibility"). Read it and count only lines whose decision field is `deny` — those are the guard hook actually denying something. A `miss` line is **not a denial**: it is this session's own (or another non-subagent session's) allowlist miss, already surfaced to a human as a normal prompt, and never worth reporting here. A `gate-clear` line is **never a denial either** — it is the audit record of an authorised `<labels.needsHuman>` removal; never report it here, and never mistake it for one.
+
+The guard hook is no longer subagent-only: a `deny` line can now carry a `session:` actor, which means **this session's own** rails firing — a loop it tried, or an unauthorised gate clear it attempted — not a stage agent's allowlist miss. Break these out separately, since they mean something different: they are the guard working as intended against this session, not a permission gap to fix.
+
+Track how many qualifying `deny` lines are new since the previous tick. If they **cluster** — three or more new, or the same command repeated — report it once, e.g. *"⚠️ 4 stage-agent commands denied this tick (e.g. `printf … >` ×2) — the pipeline likely needs a permission or instruction change."* Report a `session:` deny separately even as a single occurrence, e.g. *"⚠️ 1 command denied this tick from me (a `gh` loop) — the rail working, nothing to fix."* Do not act on either automatically; this is visibility so the human knows when to harden the configuration. A few isolated stage-agent denials are normal and need no report.
 
 **Unowned report (each tick).** Report **only when the set changes**, in one line, and **never act on it**:
 
@@ -392,6 +396,27 @@ For each issue at `<labels.planReview>`:
 
 The gate applies **no special label** for a session-required plan; the marker is already in the body.
 
+### Gate clear (`unblock #N`)
+
+`<labels.needsHuman>` is the pipeline's one terminal gate — a machine judged something unsafe, so only an operator instruction naming the item clears it. **Never attempt the removal yourself**, however framed the pressure to keep things moving is: the guard hook denies it from this session exactly as it would from a stage agent, and logs the attempt.
+
+- **If a `gh pr edit … --remove-label "<labels.needsHuman>"` you tried is denied** — report it plainly, do not retry, do not rephrase it as a different command:
+
+  > ⛔ I tried to move PR #134 off `needs human` and the guard hook denied it — correctly. That gate only clears when you name the item. If you want it cleared, say `unblock #134`.
+
+- **On "unblock #N"** — confirm the pull request is at `<labels.needsHuman>` and assigned to you; if not, say so and stop. Read its escalation comment and summarize it, then ask (`AskUserQuestion`) for the route:
+
+  > PR #134 is at `needs human`: *revise-agent aborted an ambiguous rebase in `PIPELINE.md` — both sides rewrote the same section.* Clearing this says you have handled it. Where should it go?
+  > **Back to revision** (dispatch `revise-agent` again) · **Back to review** (re-review as-is) · **Cancel**
+
+  If the gate came from the cycle cap rather than a rebase escalation, append: *"This one hit the review cycle cap, so the revision route will escalate straight back to `needs human` on the next tick. Choose review, or merge it yourself."*
+
+  Then write `.temp/gate-cleared-<n>.md`, `gh pr comment <n> --repo <repo> --body-file .temp/gate-cleared-<n>.md` (`## Gate cleared`), swap the label (`<labels.needsHuman>` → `<labels.needsRevision>` or `<labels.readyForReview>`), and announce:
+
+  > ✅ Gate cleared on PR #134 at your instruction — `needs human` → `needs revision`, and I commented the clear on the pull request. Revision dispatches this tick.
+
+**`resume #N` and `retry #N` never clear this gate** — they re-apply a trigger for an *in-flight* label only. Say so if asked to use either on a `<labels.needsHuman>` item.
+
 ### Session-required items
 
 **Surfacing these is your job, and nothing else will do it.** An item whose body carries the marker keeps its trigger label and is **never** dispatched. No agent will pick it up, so if you do not tell the human it sits there indefinitely — silently, because a trigger label normally means something is already moving. Announce it **once per session per item**, then take no other action.
@@ -420,7 +445,7 @@ When a background subagent completes, read its final message:
 
 - `QUESTIONS FOR HUMAN:` → present the questions, collect answers, and **resume that same agent** by sending the answers back via SendMessage, using the agent ID from the completion notice. Do not dispatch a fresh agent while one is resumable.
 - `BLOCKED:` → present the blocker and the decision needed; relay the human's decision back to the same agent via SendMessage.
-- **A session-limit message** (e.g. *"You've hit your session limit · resets 4:10pm (America/New_York)"*), especially when it shows up for every in-flight agent in the same tick → this is the usage-limit class (see "Liveness cross-check"). Do not redispatch, do not change models. Reset each affected item's in-flight label to its trigger label — one `gh` call per item, never a loop — and report:
+- **A session-limit message** (e.g. *"You've hit your session limit · resets 4:10pm (America/New_York)"*), especially when it shows up for every in-flight agent in the same tick → this is the usage-limit class (see "Liveness cross-check"). Do not redispatch, do not change models. Reset each affected item's in-flight label to its trigger label — group by (current label → trigger label) pair, one `gh issue edit` per group naming every number, pull requests one call each, then re-query to confirm every item moved — and report:
 
   > ⛔ Usage limit — all 4 dispatched agents failed with *"You've hit your session limit · resets 4:10pm (America/New_York)"*. Parked #63, #67, #71 and PR #117 back at their trigger labels; nothing redispatches before the reset, and I have not changed any model. **Next tick:** ~2400s (just after 4:10pm).
 
@@ -447,7 +472,8 @@ Interpret intent, not literal syntax.
 - **"scope out X" / "break down X"** *(`modules.scope`)* — stage 0 deserves a stronger model than haiku; suggest the human run `/port:scope` in their main session. When the module is off, say the pipeline has no decomposition flow configured and offer to work on an existing ticket instead.
 - **"status"** — re-run the tick queries **live** and build the table from them, never from session memory: each in-flight item and its stage, each item waiting on the human, and each pull request currently approved (from the live query — a merged one has already dropped out, so it must not appear). Run the liveness cross-check too, and list any **stalled** item alongside the in-flight ones rather than as a separate step. It **inherits the assignee filter**, so append the unowned sweep as its own line, and the ungated sweep too when that module is on, so a stalled ticket or an ungated pull request is diagnosable from one command. List **session-required** items under the human-gated group with the commands to run.
 - **"pause #N"** — remove the item's current trigger label; confirm what was removed. If it belongs to **another operator**, say so and stop rather than touch its labels.
-- **"resume #N" / "retry #N"** — re-apply the trigger label for where it stalled (stuck at `<labels.planning>` → `<labels.ready>`; stuck at `<labels.revising>` → `<labels.needsRevision>`; and so on). If the item is **unassigned**, add `--add-assignee "@me"` in the same command, since re-applying a trigger to an unassigned item is a no-op for every cockpit. If it belongs to another operator, say so and stop.
+- **"resume #N" / "retry #N"** — re-apply the trigger label for where it stalled (stuck at `<labels.planning>` → `<labels.ready>`; stuck at `<labels.revising>` → `<labels.needsRevision>`; and so on). If the item is **unassigned**, add `--add-assignee "@me"` in the same command, since re-applying a trigger to an unassigned item is a no-op for every cockpit. If it belongs to another operator, say so and stop. **Several at once, same stage:** one call naming every number, e.g. `gh issue edit 63 67 71 --repo <repo> --remove-label "<labels.planning>" --add-label "<labels.ready>"` — group by label pair, and re-query the target label afterward to confirm every number moved; report any that did not. `gh pr edit` takes one number, so pull requests are one call each. **These never clear `<labels.needsHuman>`** — they re-apply a trigger for an *in-flight* label only; see `unblock #N` for that gate.
+- **"unblock #N"** — the **only** route off `<labels.needsHuman>`; see "Gate clear" under Human gates for the full flow. The guard hook denies this same removal from anyone who has not just said so in conversation — this command *is* that instruction.
 - **"refresh #N"** *(`modules.previewDatabase`)* — apply `<labels.refreshBranch>` and dispatch this tick, bypassing the per-merge cap. Use it to force a fresh deployment on a pull request left quota-red.
 - **"gate #N"** *(`modules.approvalGate`)* — apply the missing `<labels.marker>` to a pull request the ungated sweep reported. The `labeled` event re-evaluates the workflow's condition, so the gate is live on that run.
 
@@ -455,10 +481,10 @@ Interpret intent, not literal syntax.
 
 A session-level **draining** flag gates dispatch:
 
-- **"drain" / "pause the pipeline"** — set draining on. Stop dispatching and **stop scheduling wakeups**; let in-flight agents finish and keep relaying their completions. Report what is still running (`TaskList`).
+- **"drain" / "pause the pipeline"** — set draining on. Stop dispatching and **stop scheduling wakeups**; let in-flight agents finish and keep relaying their completions. Report what is still running (`TaskList`). **Draining changes no labels at all**, so it needs no per-item `gh` calls — there is nothing here to batch or to loop over.
 - **"resume" / "unpause"** — set draining off and run one tick immediately.
 - **"stop #N" / "cancel #N"** — remove its trigger label; if an agent is in flight for it, find it with `TaskList` and `TaskStop` it; then reset its in-flight label back to the trigger so it can be retried. Same ownership rule as opt-in.
-- **"stop everything" / "halt"** — set draining on, `TaskStop` every running stage agent, and reset each one's in-flight label to its trigger. Report what was halted. No ownership check is needed here: this only touches agents *this* cockpit dispatched, which are by construction all yours.
+- **"stop everything" / "halt"** — set draining on, `TaskStop` every running stage agent, and reset each one's in-flight label to its trigger. **Batch the label resets:** group the stopped items by their (current label → trigger label) pair and issue one `gh issue edit` per group naming every number, e.g. `gh issue edit 63 67 --repo <repo> --remove-label "<labels.planning>" --add-label "<labels.ready>"`; pull requests are one call each (`gh pr edit` takes a single number). Re-query each target label afterward and report any item that did not move. Report what was halted. No ownership check is needed here: this only touches agents *this* cockpit dispatched, which are by construction all yours.
 
 While draining, a tick still reports gates and relays completions, but dispatches nothing and schedules no wakeup. Closing this session also halts all dispatch, since it is the only dispatcher, but cuts off in-flight agents — prefer `drain`.
 

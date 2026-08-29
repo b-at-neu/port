@@ -31,7 +31,7 @@ claude          # open a session (haiku recommended for the cockpit)
 /port:pipeline  # start the cockpit
 ```
 
-Then talk to it: `work on #142` · `scope out a notifications feature` · `status` · `pause #142` · `retry #142` · `drain` · `resume` · `stop #142`.
+Then talk to it: `work on #142` · `scope out a notifications feature` · `status` · `pause #142` · `retry #142` · `unblock #142` · `drain` · `resume` · `stop #142`.
 
 ## The flows
 
@@ -82,6 +82,13 @@ The model is **broad allow, authoritative deny**: allow whole dev-command catego
 
 Agents also run with **`disallowedTools: Agent`** (no nested subagents), a **`maxTurns`** backstop, and the rule to **stop and emit `BLOCKED:`** rather than improvise when a command is denied. That instruction is reachable for the first time now: the guard hook's deny reason tells the agent to do exactly that, and the agent survives the denial to act on it, rather than stalling on an unanswered prompt.
 
+**Cockpit rules.** The guard hook is not subagent-only: two rules apply to **any** caller — the cockpit's own session included — except an `/port:implement` operator worktree (`impl-<n>`, exempt because that skill's whole premise is running unguarded). Both exist because the cockpit itself violated the rail it was supposed to follow, under the same standing incentive to keep the pipeline moving:
+
+- **Loop rule** (#120) — a `gh`/`git` call wrapped in a shell `for`/`while`/`until` loop is denied. Purely syntactic: a `for`/`while`/`until` keyword and a `do` keyword, each at a shell command position, on the command with every quoted span blanked out first (so prose inside a `-b`/`-m`/`--jq` argument, e.g. `"a loop for each item to do"`, can never trip it). One dead turn inside such a loop left a split state machine across three issues for four days, because one iteration lands and the rest die with the turn.
+- **Gate rule** (#138) — a `gh pr edit`/`gh issue edit` call removing `<labels.needsHuman>` is denied unless a recent operator message names that item (`#N`, or `N` standalone, in one of the last 5 user messages of the calling session's own transcript). The cockpit cleared its own `needs human` escalation thirteen minutes after `revise-agent` set it, unprompted and on a false justification (*"now that the conflict is resolved"* — nothing had moved), so the gate needed a check the same machine could not talk itself past. An unreadable or absent transcript is treated as **unverifiable, not unauthorised** — it still allows the call, but logs it as `gate-clear` rather than silently as an `allow`, so an unverified clear is auditable rather than invisible.
+
+Both rules check `who.isOperatorWorktree` first and allow immediately when it is true — an `/port:implement` session's own loop or gate-label edit is never in scope for either.
+
 ### What a dispatched agent can see
 
 Committed `.claude/settings.json` and `.claude/port.config.json` both lag by one merge: a worktree is cut from `<integration>`, so whatever is on disk on some other branch — including the main checkout's own branch — is invisible to it until that branch merges. The cockpit's startup preflight (`skills/pipeline/SKILL.md`) is what turns this from a silent trap into a reported one: it refuses to tick when the main checkout itself carries neither file, and warns when it is on a non-integration branch.
@@ -96,7 +103,7 @@ A **plugin** addition needs three things lined up, not just the merge:
 
 The ordering rule that follows: **a plugin addition is its own prerequisite ticket.** Land it, merge it, refresh the install per `CONTRIBUTING.md`, restart the cockpit — then dependent tickets, which declare the plugin ticket via `blockedBy` (the cockpit already warns about unmerged blockers at opt-in).
 
-**Denial visibility:** the guard hook logs every decision it makes — never an `allow` — to a gitignored `.agents/denials.log`. Each line is four tab-separated fields: `<iso8601>` `<decision>` `<who>` `<command-or-path>`, where `decision` is `deny`, `miss` (a non-subagent call that missed the allowlist — logged for visibility, never denied), or `hook-error` (an internal failure, logged so a fail-open silently-broken hook is still visible); `who` is `port:<agent_type>` when the agent's type is known, else `subagent:<signal>`, else `session:<session_id>`; and `command-or-path` is whitespace-collapsed and truncated. The cockpit reads it each tick and reports clusters of `deny` lines, so systemic denials are visible without prompting. A denied command now returns with the guard hook's reason rather than just erroring.
+**Denial visibility:** the guard hook logs every decision it makes — never an `allow` — to a gitignored `.agents/denials.log`. Each line is four tab-separated fields: `<iso8601>` `<decision>` `<who>` `<command-or-path>`, where `decision` is `deny`, `miss` (a non-subagent call that missed the allowlist — logged for visibility, never denied), `gate-clear` (an allowed, authorised removal of `<labels.needsHuman>` — **not a denial**, the audit record for a human gate being cleared), or `hook-error` (an internal failure, logged so a fail-open silently-broken hook is still visible); `who` is `port:<agent_type>` when the agent's type is known, else `subagent:<signal>`, else `session:<session_id>`; and `command-or-path` is whitespace-collapsed and truncated. A `deny` line can now carry a `session:` actor — the cockpit's own loop or gate rule firing against its own session, not a stage agent's allowlist miss, and worth reading differently: it means a rail held, not that a permission is missing. The cockpit reads it each tick and reports clusters of `deny` lines, breaking out any `session:`-actor line separately. A denied command now returns with the guard hook's reason rather than just erroring.
 
 **Known gap — a native `permissions.deny` match is not logged.** The guard hook only ever sees `PreToolUse`, and only ever writes a line when *its own* classifier reaches `deny` or `miss` for one of its two cases (allowlist-missing Bash, a write to a `sessionRequiredPaths` path). A command that instead matches an explicit entry in `.claude/settings.json`'s native `permissions.deny` list — independent of the guard hook's own logic — is still denied (deny beats allow at every scope, per "The model is broad allow, authoritative deny" above), but nothing writes to `.agents/denials.log` for it: the hook that used to log that event (`PermissionDenied`) was removed with this change, and nothing replaces it. That class of denial is real but currently invisible to the cockpit's cluster reporting.
 
@@ -157,7 +164,7 @@ Rule: **every stage agent's first action is swapping its trigger label for its i
 | `needsRevision` | `needs revision` | `review-agent` | trigger | Dispatch `revise-agent` (subject to the cycle cap) |
 | `revising` | `revising` | `revise-agent` | in-flight | Fixes underway |
 | `approved` | `approved` | `review-agent` | terminal | Findings are at or under the current cycle's bar; a human merges |
-| `needsHuman` | `needs human` | Cockpit / `revise-agent` | gate | Cycle cap reached without convergence, or an ambiguous rebase conflict; the pipeline stops |
+| `needsHuman` | `needs human` | Cockpit / `revise-agent` | gate | Cycle cap reached without convergence, or an ambiguous rebase conflict; the pipeline stops. Clears only via `unblock #N` — the guard hook denies any other removal, cockpit included |
 | `refreshBranch` | `refresh branch` | Cockpit / human | trigger | *(`previewDatabase`)* Dispatch `revise-agent` in refresh mode |
 | `refreshing` | `refreshing` | `revise-agent` | in-flight | *(`previewDatabase`)* Branch refresh underway; other labels are left in place |
 
@@ -314,7 +321,7 @@ The code review is a **real GitHub pull request review** (`gh api …/pulls/<pr>
 - **Escalating bar — what blocks rises with the cycle.** Pass 1 polishes everything, later passes converge: **cycle 1** any finding blocks; **cycle 2** Low and above (Nit does not); **cycle 3+** Critical and Medium only. A nit introduced during a revision cannot re-trigger at cycle 2 or later. The cockpit's cap is `reviewCycleCap` with Critical or Medium still open, which routes to `needs human`.
 - **Inline anchoring.** A comment is accepted only on a line **in the diff** — map it from `gh pr diff` hunk headers (added and context lines → `side:"RIGHT"`, new-version line; deletions → `side:"LEFT"`, old-version line). If the reviews API returns 422 for an unresolvable line, **resubmit with `comments:[]`** and list those findings in the body with permalinks, so a review always lands.
 - **Revision resolves threads, it does not summarize.** After pushing fixes, for each **fixed** finding reply `Fixed in <sha>` on its thread and resolve it via GraphQL (`addPullRequestReviewThreadReply` then `resolveReviewThread`), matched by ID; **genuinely-skipped** threads get a one-line reason and stay open. Then one short comment per cycle, or none: `## Revision — Cycle <n>` plus a single line `fixed <ids> · skipped <ids> · <sha>`, appending `· rebase: <file> (<strategy>)` if a conflict was auto-resolved.
-- **Other comments** — `## Pipeline Escalation` (revise: ambiguous rebase) and `## Blocker` (impl: on the issue) stay short: what is blocked and the decision needed, via `--body-file`.
+- **Other comments** — `## Pipeline Escalation` (revise: ambiguous rebase), `## Blocker` (impl: on the issue), and `## Gate cleared` (cockpit: on the pull request, at `unblock #N`) stay short: what is blocked/cleared and the decision needed, via `--body-file`.
 
 ### Pull request description (`impl-agent` writes it via `--body-file`)
 
@@ -377,6 +384,7 @@ The pipeline runs autonomously once started; these cockpit commands are the clea
 - **`drain` / `pause`** — finish in-flight work, start nothing new (stops dispatch **and** wakeups). **`resume`** restarts ticking.
 - **`stop #N`** — halt one item: drop its trigger label and `TaskStop` its in-flight agent, resetting the label so it can be retried.
 - **`stop` / `halt`** — drain, `TaskStop` all running agents, and reset their labels.
+- **`unblock #N`** — the **only** route off `<labels.needsHuman>`. Not a variant of `retry`/`resume`: those re-apply a trigger for an in-flight label and never touch this gate. `unblock` reads the escalation comment, asks which way to route (back to revision or back to review), comments the clear onto the pull request, then swaps the label — the guard hook denies the same removal from any other route, so this command is the one place it succeeds.
 
 Closing the cockpit session also halts dispatch, since it is the only dispatcher, but cuts off in-flight agents mid-run — prefer `drain` for a graceful stop.
 
@@ -403,6 +411,8 @@ Closing the cockpit session also halts dispatch, since it is the only dispatcher
 | A plugin was installed and merged, but agents behave as if it is absent | Merging declares a plugin, it does not install one | Update the main checkout, refresh the install per `CONTRIBUTING.md`, restart the cockpit |
 | An item parked at an in-flight label, with no matching `TaskList` entry | The dispatched agent failed or the session closed mid-flight | The liveness cross-check reports it as **stalled** each tick; `retry #N` |
 | Every dispatched agent failed at once, all reporting a session-limit message | The operator's usage window was exhausted | The cockpit parks each affected item back at its trigger label and schedules the next wakeup just after the reported reset time; nothing to retry manually |
+| The cockpit says a gate clear was denied | Correct behaviour — the guard hook denies removing `<labels.needsHuman>` unless an operator instruction just named that item | Say `unblock #N` if you actually mean to clear it |
+| A batch label change moved only some of the items | A partial application — the same failure mode a shell loop used to hide | The re-query the cockpit runs after every multi-item change reports exactly which one did not move; re-issue for the remainder |
 
 ## Reading current state without the cockpit
 

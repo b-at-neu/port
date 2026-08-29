@@ -45,6 +45,7 @@ Intent, not syntax. These all work:
 | `status` | Live state — everything in flight, everything waiting on you |
 | `pause #142` | Drop its trigger label; nothing more happens to it |
 | `retry #142` | Re-apply the right trigger for wherever it stalled |
+| `unblock #142` | Clear a `needs human` gate deliberately; nothing else can |
 | `drain` | Finish what is in flight, start nothing new |
 | `resume` | Start ticking again |
 | `stop #142` | Halt one item and reset it so it can be retried |
