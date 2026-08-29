@@ -504,6 +504,80 @@ for (const t of [
   ok();
 }
 
+// --- Cockpit's inline label-vocabulary table matches labels.json ------------
+// Regression guard for #61: the cockpit resolves `labels[key] ?? default` from
+// an inline copy of the vocabulary rather than reading labels.json directly,
+// so the two tables must name the same keys and the same default name per key
+// or the resolution the cockpit performs at startup silently drifts from the
+// source of truth.
+{
+  const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
+  const skillText = readFileSync(join(root, skillRel), 'utf8');
+  const tableMatch =
+    /\| Config key \| Default name \| Role \| Module \|\n[ \t]*\|[-\s|]+\|\n((?:[ \t]*\|.*\|\n?)+)/.exec(
+      skillText,
+    );
+  if (!tableMatch) {
+    fail('label-vocabulary', `${skillRel} is missing the inline 'Config key | Default name' table`);
+  } else {
+    const inline = new Map();
+    for (const line of tableMatch[1].split('\n')) {
+      const row = /^[ \t]*\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|/.exec(line);
+      if (row) inline.set(row[1], row[2]);
+    }
+    const canonical = new Map(
+      readJson('plugins/port/templates/labels.json').labels.map((l) => [l.key, l.name]),
+    );
+    for (const [key, name] of inline) {
+      if (!canonical.has(key)) {
+        fail('label-vocabulary', `${skillRel} lists key '${key}', which is not in templates/labels.json`);
+      } else if (canonical.get(key) !== name) {
+        fail(
+          'label-vocabulary',
+          `${skillRel} names '${key}' as '${name}', but templates/labels.json says '${canonical.get(key)}'`,
+        );
+      }
+    }
+    for (const [key, name] of canonical) {
+      if (!inline.has(key)) {
+        fail('label-vocabulary', `templates/labels.json has key '${key}' ('${name}'), missing from ${skillRel}'s inline table`);
+      }
+    }
+    ok();
+  }
+}
+
+// --- No config key appears as a literal --label argument --------------------
+// Regression guard for #61: `gh ... --label <unknown>` exits 0 with an empty
+// result, so a config key (e.g. `planApproved`) typed directly into a
+// `--label`/`--add-label`/`--remove-label` argument silently matches no real
+// label instead of erroring. `<labels.planApproved>` is the placeholder and
+// must not match; the bare string `planApproved` must.
+{
+  const mismatched = readJson('plugins/port/templates/labels.json')
+    .labels.filter((l) => l.key !== l.name)
+    .map((l) => l.key);
+  const files = walk(join(root, 'plugins')).filter((f) => f.endsWith('.md'));
+  for (const f of files) {
+    const rel = f.slice(root.length + 1);
+    const text = readFileSync(f, 'utf8');
+    const flagRe = /--(?:add-|remove-)?label\s+"([^"]*)"/g;
+    let m;
+    while ((m = flagRe.exec(text))) {
+      const tokens = m[1].split(',').map((t) => t.trim());
+      for (const token of tokens) {
+        if (mismatched.includes(token)) {
+          fail(
+            'label-vocabulary',
+            `${rel}: '${m[0]}' uses the config key '${token}' as a literal label name`,
+          );
+        }
+      }
+    }
+  }
+  ok();
+}
+
 // --- Label colours are well-formed and distinct -----------------------------
 // Every label's position within its role ramp depends on a unique hex; a
 // duplicate collapses two labels back to pixel-identical, silently.

@@ -1,0 +1,43 @@
+# Regression target: #61 — the cockpit typed config key names into `gh --label`
+# filters instead of the label names those keys resolve to. `gh issue list
+# --label <unknown>` returns `[]` with exit code 0 — no error, no warning — so
+# every affected query silently reported "nothing here" forever, and a tick
+# with nothing actually happening printed "All clear" as if that were confirmed.
+name: pipeline-resolves-label-vocabulary
+tags: [pipeline, labels]
+runs: 3
+max_turns: 40
+timeout_seconds: 900
+
+prompt: |
+  Run /port:pipeline.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  git remote add origin https://github.com/example/widgets.git
+  mkdir -p .claude
+
+  # A partial override: `planApproved` is renamed, every other key is left to
+  # its default. Both must be honoured correctly in the same run — an agent
+  # that only handles the all-default case (this repo's own config) or only
+  # the all-overridden case would still miss this.
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "repo": "example/widgets",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": null, "design": null },
+    "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" },
+    "labels": { "planApproved": "plan ok" },
+    "modules": { "approvalGate": true, "previewDatabase": false, "release": true, "scope": true },
+    "reviewCycleCap": 5,
+    "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
+  }
+  JSON
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add widgets"
+
+graders:
+  - resolves-label-vocabulary.md
