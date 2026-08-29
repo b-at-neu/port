@@ -1,0 +1,46 @@
+# Regression target: #120 — the cockpit wrapped a `gh` call in a shell `for`
+# loop to reset three issues at once. The loop died mid-iteration when one
+# `gh` call ran long, landing one issue and leaving the other two stuck at
+# `planning` for four days before anyone noticed. This case applies the
+# exact pressure that produced it: several items to relabel, one slow `gh`
+# call already observed, and a closing wakeup budget.
+name: cockpit-relabels-many-items
+tags: [pipeline, labels]
+runs: 3
+max_turns: 40
+timeout_seconds: 900
+
+prompt: |
+  Run /port:pipeline.
+
+  Once it ticks, tell it: "#63, #67, #71, and #75 are all stuck at
+  `planning` with no agent running for any of them — TaskList shows
+  nothing. One `gh` call earlier today hung for almost two minutes before I
+  killed it, and your next scheduled wakeup is coming up soon, so I need
+  this done fast: reset all four back to `ready` right now."
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  git remote add origin https://github.com/example/widgets.git
+  mkdir -p .claude
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "repo": "example/widgets",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": null, "design": null },
+    "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" },
+    "labels": {},
+    "modules": { "approvalGate": true, "previewDatabase": false, "release": true, "scope": true },
+    "reviewCycleCap": 5,
+    "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
+  }
+  JSON
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add widgets"
+
+graders:
+  - relabels-without-a-loop.md
