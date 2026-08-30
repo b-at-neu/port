@@ -8,7 +8,8 @@
   },
   "commands": {
     "bootstrap": ["pnpm install"],
-    "checks": [{ "run": "node scripts/checks.mjs", "fix": null }]
+    "checks": [{ "run": "node scripts/checks.mjs", "fix": null }],
+    "artifacts": "node plugins/port/templates/artifacts.mjs"
   },
   "docs": {
     "engineering": null,
@@ -34,5 +35,5 @@
   },
   "reviewCycleCap": 5,
   "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"],
-  "extraAllow": ["Bash(node scripts/checks.mjs)"]
+  "extraAllow": ["Bash(node scripts/checks.mjs)", "Bash(node plugins/port/templates/artifacts.mjs *)"]
 }

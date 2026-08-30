@@ -46,6 +46,9 @@ No dependencies, no plugin install, no model calls. Runs in seconds, in CI on ev
 | The pacing ladder's constants (`270`, `540`, `1080`, `1800`) and its reset-on-change and never-stop preconditions are literal, checkable phrases in `SKILL.md` | The two-speed pacing rule, which measured as one speed in a real 25-hour run, regressing back in after the ladder replaces it (#148) |
 | `SKILL.md` contains no `sleep <n>`-shaped busy-wait | The cockpit blocking a turn on `sleep`/`--watch` instead of letting the next scheduled tick or an event-driven completion do the waiting (#148) |
 | `SKILL.md` states the client-side ownership precondition ("never acted on, only reported") and the blind-tick precondition ("dispatch nothing, run no hygiene, reset nothing") | Dropping the per-alias assignee filter silently dropping the ownership rail with it, and a failed collapsed query being read as an empty, all-clear tick (#148) |
+| `plugins/port/templates/artifacts.mjs` carries no relative import | The one file an adopting repository copies alone breaking silently outside this checkout (#149) |
+| Its exported `LABELS` table and `labels.json` agree on keys, names, and modules, both directions | `audit`'s label resolution drifting from the source of truth now that it can't import the file directly (#149) |
+| Its exported patterns each accept a good example and reject a bad one, including the real historical failure — a paragraph subject with no `#N ` prefix | A pattern that cannot be made to fail is not a pattern (#149) |
 
 Each rule is worth testing by breaking it deliberately. If a check cannot be made to fail, it is not a check.
 
@@ -53,15 +56,24 @@ The script reports full schema validation as **skipped**, because a draft 2020-1
 
 ## Layer 2 — artifact assertions on real runs
 
+The output formats live in `PIPELINE.md` prose and, until now, were asserted nowhere. The one that matters most is the review heading — the cockpit **counts** occurrences of the literal `## Code Review` to derive the cycle number, so renaming it silently breaks the cycle cap and the escalating bar, with no error anywhere. That is why the literal prefix is asserted separately from the rest of the heading.
+
+`plugins/port/templates/artifacts.mjs` is the one executable statement of these patterns. Two modes read from the exact same constants, so there is nothing to keep in sync between them:
+
 ```bash
-node scripts/artifacts.mjs 65      # audit named pull requests
-node scripts/artifacts.mjs         # the 5 most recent, plus the parked sweep
-node scripts/artifacts.mjs --limit 10
+node plugins/port/templates/artifacts.mjs check commit .temp/commit-msg.txt --issue 149      # one artifact file, offline
+node plugins/port/templates/artifacts.mjs check pr-body .temp/pr-149.md --issue 149
+node plugins/port/templates/artifacts.mjs check review .temp/review-65.json --cycle 1
+node plugins/port/templates/artifacts.mjs check revision .temp/revision-65.md --cycle 1
+
+node plugins/port/templates/artifacts.mjs audit 65      # audit named pull requests
+node plugins/port/templates/artifacts.mjs audit         # the 5 most recent, plus the parked sweep
+node plugins/port/templates/artifacts.mjs audit --limit 10
 ```
 
-Needs `gh` and a login; no model calls. This repository's own pull requests are the fixtures — no sandbox repository to maintain, and no stubbed `gh` whose fidelity has to be trusted.
+**`check <kind> <file>` is the earlier net, not a second layer.** It is what `commands.artifacts` points the three stage agents at: each validates the file it just wrote — a commit message, a pull request body, a review payload, a revision note — before producing it, so a malformed one fails in the worktree seconds after it is written instead of after `<labels.approved>`. It is offline: no `gh`, no network, no config read, and it works in any worktree, including one with no `.claude/port.config.json`. A repository with no Node leaves `commands.artifacts` null and gets no production-time validation at all — `audit` below is then the only net.
 
-It targets a real exposure: the output formats live in `PIPELINE.md` prose and were asserted nowhere. The one that matters most is the review heading — the cockpit **counts** occurrences of the literal `## Code Review` to derive the cycle number, so renaming it silently breaks the cycle cap and the escalating bar, with no error anywhere. That is why the literal prefix is asserted separately from the rest of the heading.
+**`audit [<pr>...] [--limit <n>]`** is today's `gh`-driven pass over finished pull requests, unchanged in what it asserts. Needs `gh` and a login; no model calls. This repository's own pull requests are the fixtures — no sandbox repository to maintain, and no stubbed `gh` whose fidelity has to be trusted.
 
 | Assertion | Source |
 | --- | --- |

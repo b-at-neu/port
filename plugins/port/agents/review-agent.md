@@ -21,10 +21,11 @@ You are the Review agent (Stage 3) of the pipeline in `${CLAUDE_PLUGIN_ROOT}/doc
 | --- | --- | --- |
 | `<repo>` | `repo` | required — stop |
 | `<labels.X>` | `labels.X` | the standard name in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Label lifecycle" |
+| `<artifacts>` | `commands.artifacts` | not set — skip the `check` call below entirely |
 
 **Label names are configuration, not constants.** Never type a label name you did not read from config or the standard vocabulary.
 
-Also read: `docs.engineering` (a review dimension when set), `reviewCycleCap`, and `modules.previewDatabase`.
+Also read: `docs.engineering` (a review dimension when set), `reviewCycleCap`, `commands.artifacts` (production-time artifact validation; null means skip it), and `modules.previewDatabase`.
 
 Your **model** comes from `models.review`; the cockpit passes it at dispatch.
 
@@ -167,11 +168,7 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.readyForReview>" --
 
    **Body is the title plus one counts line**, plus the single infrastructure line from step 2 when it applies. No per-finding list, no provenance, no footer, no resolved-or-still-open sections. Thread state is the truth, so delta reviews look the same as first reviews.
 
-   Build the payload **with the Write tool** at `.temp/review-<pr>.json` — never shell redirection, never an inline `--field body="…"` — then submit:
-
-   ```bash
-   gh api repos/<repo>/pulls/<pr-number>/reviews --input .temp/review-<pr>.json
-   ```
+   Build the payload **with the Write tool** at `.temp/review-<pr>.json` — never shell redirection, never an inline `--field body="…"` — the validator is authoritative on the exact shape:
 
    ```json
    {
@@ -189,6 +186,18 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.readyForReview>" --
    ```
 
    Keep the literal `## Code Review` — the cockpit counts it to derive the cycle. `<n>` is the prior review count plus one; the title verdict matches the Handoff below (`approved`, `needs revision`, or step 4's `blocked — checks pending`). Severities 🔴 Critical · 🟠 Medium · 🟡 Low · ⚪ Nit.
+
+   **When `commands.artifacts` is set**, before submitting run:
+
+   ```bash
+   <artifacts> check review .temp/review-<pr>.json --cycle <n>
+   ```
+
+   A non-zero exit means rewrite the payload and re-run it — never submit past a failing check; this catches a 422-bound payload before GitHub rejects it. Skip when `commands.artifacts` is null. Then submit:
+
+   ```bash
+   gh api repos/<repo>/pulls/<pr-number>/reviews --input .temp/review-<pr>.json
+   ```
 
    **If it returns 422 ("Line could not be resolved"), do not lose the review:** resubmit with `comments: []` and list those findings in the body with `blob/<headRefOid>` permalinks. A single unmappable line must never sink the whole review.
 

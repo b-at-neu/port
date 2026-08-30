@@ -34,10 +34,11 @@ Everything repository-specific comes from it. Placeholders in this file are **no
 | `<repo>` | `repo` | required — stop |
 | `<integration>` | `branches.integration` | `dev` |
 | `<labels.X>` | `labels.X` | the standard name in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Label lifecycle" |
+| `<artifacts>` | `commands.artifacts` | not set — skip every `check` call below entirely |
 
 **Label names are configuration, not constants.** `<labels.inProgress>` means the string this repository calls that label — usually `in progress`, but a repository may rename any of them. Never type a label name you did not read from config or the standard vocabulary; a wrong label string silently does nothing, or worse, creates a new label.
 
-Also read from config: `commands.bootstrap`, `commands.checks`, `docs.engineering`, `models.impl` (for the commit trailer), and `modules.approvalGate`.
+Also read from config: `commands.bootstrap`, `commands.checks`, `commands.artifacts` (production-time artifact validation; null means skip it), `docs.engineering`, `models.impl` (for the commit trailer), and `modules.approvalGate`.
 
 Your **model** comes from `models.impl`; the cockpit passes it at dispatch, overriding this file's frontmatter default.
 
@@ -103,11 +104,14 @@ gh issue edit N --repo <repo> --remove-label "<labels.planApproved>" --add-label
 
    ```bash
    # Write .temp/commit-msg.txt (Write tool), then:
+   <artifacts> check commit .temp/commit-msg.txt --issue N
    git add -A
    git commit -F .temp/commit-msg.txt
    ```
 
-   Use **`git add -A`** to stage everything (`.temp/` is gitignored, so it is never staged). If you must stage selectively, **quote each path**. **Message format:** subject `#N <imperative lowercase summary>` **under 80 characters, no trailing period**; then, only if the *why* is not obvious, a blank line and a short body (wrap around 72, a few lines at most — narrative belongs in the pull request); then a blank line and the co-authorship trailer naming the model from `models.impl`.
+   Use **`git add -A`** to stage everything (`.temp/` is gitignored, so it is never staged). If you must stage selectively, **quote each path**. **Message format:** subject `#N <imperative lowercase summary>`, under 80 characters, no trailing period, a `Co-Authored-By:` trailer naming the model from `models.impl` — the validator is authoritative on the exact shape.
+
+   **When `commands.artifacts` is set**, run the `check commit` command above before every commit. A non-zero exit means rewrite `.temp/commit-msg.txt` and re-run it — never `git commit` past a failing check. Skip this when `commands.artifacts` is null.
 
 4. **Blockers — report back, stay resumable.** If something the plan did not cover blocks you and you cannot resolve it within the plan's intent: write the blocker text to `.temp/blocker-N.md` (the Write tool creates `.temp/`), then
 
@@ -135,7 +139,17 @@ gh issue edit N --repo <repo> --remove-label "<labels.planApproved>" --add-label
    git push -u origin HEAD:N-ticket-name-in-kebab-case
    ```
 
-   Then write the pull request body to `.temp/pr-N.md` (Write tool) following the **pull request description format** in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Output formats" (`Closes #N` · **## Summary** · **## Changes** · **## Testing plan** as a runnable `- [ ]` checklist derived from the issue's testing section, covering happy path plus error, empty, edge, and any authorization roles · **## Automated checks**, listing the `commands.checks` you ran · **## Notes**), and open it. Carry any `**operator-only**` prefix from the issue's `## Testing` into `## Testing plan` **verbatim** — it is the only thing telling the human which box only they can tick:
+   Then write the pull request body to `.temp/pr-N.md` (Write tool) following the **pull request description format** in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Output formats" — the validator is authoritative on the exact shape. Carry any `**operator-only**` prefix from the issue's `## Testing` into `## Testing plan` **verbatim** — it is the only thing telling the human which box only they can tick.
+
+   **When `commands.artifacts` is set**, before `gh pr create` run:
+
+   ```bash
+   <artifacts> check pr-body .temp/pr-N.md --issue N
+   ```
+
+   A non-zero exit means rewrite `.temp/pr-N.md` and re-run it — never open the pull request past a failing check. Skip this when `commands.artifacts` is null.
+
+   Open it:
 
    ```bash
    gh pr create --repo <repo> \
