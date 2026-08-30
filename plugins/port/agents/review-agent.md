@@ -82,15 +82,17 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.readyForReview>" --
    ```bash
    gh pr diff <pr-number> --repo <repo>
    gh pr checks <pr-number> --repo <repo> --json name,bucket,link
-   gh pr view <pr-number> --repo <repo> --json body,title,headRefName,headRefOid,author
+   gh pr view <pr-number> --repo <repo> --json body,title,headRefName,headRefOid,author,baseRefName,mergeable
    gh issue view <issue-number> --repo <repo>
    gh api user --jq .login
    gh pr view <pr-number> --repo <repo> --json reviews --jq '[.reviews[] | select(.body|startswith("## Code Review"))] | length'
    ```
 
-   In order: the diff; check status; `headRefOid` for line permalinks and `author` for the self-review test; the original plan; your own login; and the prior review count, so **this cycle is that count plus one**.
+   In order: the diff; check status; `headRefOid` for line permalinks, `author` for the self-review test, `baseRefName` and `mergeable` for the conflict exit below; the original plan; your own login; and the prior review count, so **this cycle is that count plus one**.
 
    `gh pr checks` exposes status in the **`bucket`** field (pass/fail/pending). There is **no** `status` or `conclusion` field on `gh pr checks` — a detail worth remembering rather than rediscovering. **This early read is for diagnosis only** — it is what step 2's deployment-check reasoning and any Critical-finding log lookup work from. It is never the verdict's evidence: step 4 re-reads the rollup right before posting, because a check can conclude, or a red one turn green, in the time spent reviewing the diff.
+
+   **Mergeability exit — check before doing any of the work below.** If `mergeable` reads `CONFLICTING`, **no verdict is formed on a pull request that cannot be merged**: GitHub cannot build a merge ref, so no check has ever run on this diff. Write `.temp/rebase-required-<pr-number>.md` (`## Rebase required`, naming `baseRefName` and `headRefOid` — format in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Rebase required"), `gh pr comment <pr-number> --repo <repo> --body-file .temp/rebase-required-<pr-number>.md`, then `gh pr edit <pr-number> --repo <repo> --remove-label "<labels.reviewing>" --add-label "<labels.needsRevision>"`. Post **no** review — no cycle is consumed, exactly like step 4's head-moved exit — and report that the pull request conflicts with its base and revision will rebase it this tick. `UNKNOWN` never blocks this exit: proceed as normal, since GitHub has not computed mergeability yet and the read above is what triggers it.
 
    When `docs.engineering` is set, read it — it is a review dimension and you may cite it in findings.
 
@@ -139,7 +141,8 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.readyForReview>" --
 
 4. **Confirm the evidence — last, right before posting.** The verdict is the last thing formed, not the first: no verdict is formed while any check on the head commit is pending. Follow `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Check evidence" exactly:
 
-   - **Capture and reduce.** Record `headRefOid` (already read in step 1). `gh pr view <pr-number> --repo <repo> --json headRefOid,statusCheckRollup`, reduced to the latest entry per check name.
+   - **Capture and reduce.** Record `headRefOid` (already read in step 1). `gh pr view <pr-number> --repo <repo> --json headRefOid,statusCheckRollup,mergeable`, reduced to the latest entry per check name.
+   - **Re-check mergeability before waiting.** If `mergeable` now reads `CONFLICTING` — the base moved during review, even though step 1's read was clean — take the **same exit** as step 1's mergeability exit: no review, `## Rebase required`, swap `<labels.reviewing>` → `<labels.needsRevision>`, no cycle consumed. Never proceed to the bounded wait below on a conflicting head.
    - **Resolve the carve-out.** When `modules.approvalGate` is true, read the workflow file with the sanctioned ref recipe — `gh api "repos/<repo>/contents/.github/workflows/approval-check.yml?ref=<headRefOid>" -H "Accept: application/vnd.github.raw"` — and take its single `jobs:` key as the excused check name, never a checked-out copy that may be on a different ref than this review. When the module is false, resolve nothing and excuse nothing — every red check blocks.
    - **Wait while unconcluded.** `gh pr checks <pr-number> --repo <repo> --watch --interval 30`, each call under a Bash timeout of `600000` ms, at most 3 times. Never read its exit code as the answer. After each wait, re-read `statusCheckRollup` directly — never parse `--watch` output.
    - **A red check that is not the excused one is a Critical finding**, named, with its cause read from `gh run view <databaseId> --repo <repo> --log-failed` (via `gh run list --repo <repo> --branch <headRefName> --json databaseId,name,conclusion,workflowName`). Critical blocks at every cycle's bar — never downgraded to fit a later cycle.
