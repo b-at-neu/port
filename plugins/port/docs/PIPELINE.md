@@ -293,9 +293,13 @@ One shared contract, read by `review-agent` before it forms a verdict and by the
 
 **The head must not move.** Record `headRefOid` before any wait and re-read it after. A different SHA means the evidence belongs to a different diff, and no verdict formed against the old one is valid — the caller re-reads or bails out; see `review-agent.md` step 4 for the exact exit.
 
+**Mergeability precondition, ahead of the wait.** Read `mergeable` in the same `gh pr view` call (`headRefOid,statusCheckRollup,mergeable`). `CONFLICTING` means GitHub cannot build a merge ref for this pull request, so its check rollup **never concludes** — not slowly, not eventually, never — because the workflows that would populate it never run against a diff GitHub cannot construct. Without this precondition, the empty-rollup-is-pending rule above would park a conflicting pull request through the full bounded wait and then hand it to `<labels.needsHuman>` after roughly 30 minutes, misreporting a mechanical fact (the branches diverged) as an unexplained check timeout. So `CONFLICTING` is read **before** the bounded wait and short-circuits it: no verdict is formed, no check is waited on, and the pull request routes to `<labels.needsRevision>` with a `## Rebase required` comment instead (see "Rebase required" under Output formats) — `review-agent` at its own exit, the cockpit at the dispatch gate and the approved re-verify. `UNKNOWN` never blocks this precondition: GitHub has not computed mergeability yet, which is normal on a freshly opened or freshly pushed pull request, and the caller proceeds as if `MERGEABLE` — the read itself is what triggers GitHub to compute it.
+
 **Bounded wait.** `gh pr checks <n> --repo <repo> --watch --interval 30` under a Bash timeout of `600000` ms, at most **3** times (~30 minutes total). `--watch`'s own output shape is not part of the contract — never parse it; after each wait, re-read `statusCheckRollup` directly. A timeout is a `BLOCKED:`, never a pass: a repository with genuinely slow checks parks here rather than getting a wrong answer.
 
-**The `<labels.approved>` carve-out to the never-touch rail.** The cockpit may remove `<labels.approved>` from a pull request **only** when it has just read a red conclusion — other than the excused check above — for a named check on that pull request's **current** head, and its announcement names that check. This is the **sole** exception to the never-touch rail; it is not a general licence to revisit terminal states, and it is deliberately **not** a guard-hook rule — the hook cannot observe "a check went red," so the mechanical guard here is the layer-1 prose check plus the eval case regression-testing it, not `agent-guard.mjs`.
+**The `<labels.approved>` carve-out to the never-touch rail — exactly two authorising facts.** The cockpit may remove `<labels.approved>` from a pull request **only** when it has just read, on that pull request's **current** head: a red conclusion — other than the excused check above — for a named check, **or** `mergeable: CONFLICTING`. Either fact's announcement names what it rests on: the check and its conclusion, or the conflict. These are the **sole** exceptions to the never-touch rail; neither is a general licence to revisit terminal states, and neither is a guard-hook rule — the hook cannot observe "a check went red" or "GitHub reports a conflict," so the mechanical guard here is the layer-1 prose check plus the eval cases regression-testing each, not `agent-guard.mjs`. The conflicting case comments `## Rebase required`, never `## Approval withdrawn`, which contracts to name a check.
+
+**No scheduled rebase — on demand, from `mergeable`, only.** A rebase force-pushes and re-runs every check on a pull request, so refreshing every open one whenever `<integration>` moves would multiply CI churn to prevent a condition `mergeable` already reports exactly and for free. Pull requests are therefore rebased **only** when GitHub itself reports `CONFLICTING` — at the review dispatch gate, at the approved re-verify, or inside `revise-agent`'s own rebase step — never on a schedule and never because the base "might have moved." This is a decision, not an omission: it was considered and rejected for the CI-churn cost above, and is recorded here so it is not re-litigated.
 
 ## Output formats
 
@@ -337,7 +341,7 @@ The code review is a **real GitHub pull request review** (`gh api …/pulls/<pr>
 - **Escalating bar — what blocks rises with the cycle.** Pass 1 polishes everything, later passes converge: **cycle 1** any finding blocks; **cycle 2** Low and above (Nit does not); **cycle 3+** Critical and Medium only. A nit introduced during a revision cannot re-trigger at cycle 2 or later. The cockpit's cap is `reviewCycleCap` with Critical or Medium still open, which routes to `needs human`. A red required check, other than the `## Check evidence` carve-out, is **always** Critical, at every cycle — never downgraded to fit a later cycle's bar.
 - **Inline anchoring.** A comment is accepted only on a line **in the diff** — map it from `gh pr diff` hunk headers (added and context lines → `side:"RIGHT"`, new-version line; deletions → `side:"LEFT"`, old-version line). If the reviews API returns 422 for an unresolvable line, **resubmit with `comments:[]`** and list those findings in the body with permalinks, so a review always lands.
 - **Revision resolves threads, it does not summarize.** After pushing fixes, for each **fixed** finding reply `Fixed in <sha>` on its thread and resolve it via GraphQL (`addPullRequestReviewThreadReply` then `resolveReviewThread`), matched by ID; **genuinely-skipped** threads get a one-line reason and stay open. Then one short comment per cycle, or none: `## Revision — Cycle <n>` plus a single line `fixed <ids> · skipped <ids> · <sha>`, appending `· rebase: <file> (<strategy>)` if a conflict was auto-resolved. The detail line may instead open `check <name> · <sha>` for a check-fix cycle — see `revise-agent.md` step 1 — with no `fixed`/`skipped` segment, since there are no threads to resolve.
-- **Other comments** — `## Pipeline Escalation` (revise: ambiguous rebase), `## Blocker` (impl: on the issue), `## Gate cleared` (cockpit: on the pull request, at `unblock #N`), and `## Approval withdrawn` (cockpit: on the pull request, when a check goes red after approval — see "The `<labels.approved>` carve-out" in `## Check evidence`) stay short: what is blocked/cleared/withdrawn and the decision needed, via `--body-file`.
+- **Other comments** — `## Pipeline Escalation` (revise: ambiguous rebase), `## Blocker` (impl: on the issue), `## Gate cleared` (cockpit: on the pull request, at `unblock #N`), `## Approval withdrawn` (cockpit: on the pull request, when a check goes red after approval — see "The `<labels.approved>` carve-out" in `## Check evidence`), and `## Rebase required` (cockpit or `review-agent`: when `mergeable` reads `CONFLICTING` — see "Rebase required" below) stay short: what is blocked/cleared/withdrawn/needed and the decision required, via `--body-file`.
 
 ### Approval withdrawn (cockpit writes it via `--body-file`)
 
@@ -349,6 +353,17 @@ Posted the same tick the cockpit routes an approved pull request back to `<label
 ```
 
 Names the check, its conclusion, its link, and the head SHA the conclusion belongs to — the four facts that authorise the removal, so the record stands on its own without the cockpit's own reasoning attached.
+
+### Rebase required (cockpit and `review-agent` write it via `--body-file`)
+
+Posted whenever `mergeable` reads `CONFLICTING` — at the cockpit's dispatch gate, at its approved re-verify, or at `review-agent`'s own exit — the moment a pull request routes to `<labels.needsRevision>` for this reason rather than for review findings. Two lines, no restated context:
+
+```
+## Rebase required
+Conflicts with `<base>` at `<head-sha>` — GitHub can't build a merge ref, so no checks ran on this diff.
+```
+
+Names the base branch and the head SHA the conflict was read against — enough for `revise-agent` to enter rebase-only mode (see `revise-agent.md`) without re-deriving anything, and enough for a human reading the thread to know the pipeline never had checks to go on.
 
 ### Pull request description (`impl-agent` writes it via `--body-file`)
 
@@ -371,6 +386,7 @@ Write the message to `.temp/commit-msg.txt` and `git commit -F .temp/commit-msg.
 - **No verdict formed while checks are pending** — `review-agent` waits, bounded, for every check on the head commit to conclude before posting; a timeout is `blocked — checks pending`, never a pass. See `## Check evidence`.
 - **A check goes red after approval** — the cockpit re-verifies every `<labels.approved>` pull request each tick and, under the sole carve-out in `## Check evidence`, routes it back to `<labels.needsRevision>` with `## Approval withdrawn` naming the check.
 - **Stalled or usage-limited agent** — an in-flight label with no live `TaskList` entry means the agent crashed or hit a usage limit, not that work is proceeding; see "Liveness" for how the cockpit tells the two apart and responds.
+- **A pull request cannot be reviewed against a diff CI never validated** — the cockpit reads `mergeable` at the dispatch gate and at the approved re-verify, and `review-agent` reads it again at its own exit; `CONFLICTING` forms no verdict, dispatches no review, and routes to `<labels.needsRevision>` with `## Rebase required` instead. See `## Check evidence` → "Mergeability precondition" and "Rebase required" under Output formats.
 
 ### Liveness
 
@@ -379,11 +395,22 @@ An in-flight label is a claim, not a heartbeat — nothing about it tells the co
 | Class | Signature | Response |
 | --- | --- | --- |
 | **Completed** | Agent finished normally, final message available | Relay its message per the relay loop; the labels it set drive the next tick |
-| **Failed** | Agent errored before finishing | Item stays at its in-flight label with no matching `TaskList` entry — report it **stalled**; remedy is `retry #N` |
+| **Failed** | Agent errored before finishing | Item stays at its in-flight label with no matching `TaskList` entry — see the two classes below |
 | **Stopped / killed** | Operator ran `stop #N`/`halt`, or `TaskStop` | Label already reset to trigger by the stop command; nothing further to report |
-| **Usage limit** | A `session limit` message, typically across every in-flight agent at once | Do not redispatch and do not change models; reset each affected item's in-flight label to its trigger label (one `gh` call per item), report the reset time verbatim, and schedule the next wakeup just after it |
+| **Usage limit** | A `session limit` message, typically across every in-flight agent at once | Takes precedence over the two classes below: do not redispatch and do not change models; reset each affected item's in-flight label to its trigger label (one `gh` call per item), report the reset time verbatim, and schedule the next wakeup just after it |
 
-An in-flight item with **no** live `TaskList` entry and **no** completion notice is **stalled** (the failed class): report it every tick while the set is non-empty, as one grouped line, and dispatch nothing for it — `retry #N` is the human's call, not an automatic one. If `TaskList` cannot be correlated to numbers at all, report the in-flight set alongside the running-agent count and say the match is uncertain rather than guessing.
+**An in-flight item with no live `TaskList` entry splits into exactly two classes, proven by this session's own dispatch log (`.temp/dispatch-log.md`, written fresh at startup and rewritten at every dispatch and every liveness transition) — never by guessing from how long it has sat there:**
+
+| Class | Proof | Response |
+| --- | --- | --- |
+| **Dispatched this session, now dead** | The log carries a row for the item | **Provably dead — safe to auto-reset.** First unmatched tick: mark the row `suspect`, report, change nothing. Still unmatched the tick after: reset the label to its trigger (batched by current→trigger pair, one `gh` call per group, re-queried to confirm), mark the row `reset`. **At most one automatic reset per item per session** (the log's `Resets` column) — a crash loop reports instead of burning the session. |
+| **No dispatch record** | The log carries no row — a prior session's work, or another cockpit's | **This cockpit cannot prove anything about it — report-only, forever.** Never reset it automatically; a restarted cockpit's fresh (empty) dispatch log must not stampede a co-operator's live agents back to their trigger labels. `retry #N` is the human's route. |
+
+Reset is never immediate: the one-tick `suspect` debounce, the dispatch-log requirement, and the once-per-session cap are three independent guards against the one real risk — resetting an item whose agent is actually still alive, which would double-dispatch against one branch. Every failure direction points toward report-only. A reset item redispatches on the **next** tick (dispatch is step 4, liveness is step 5, in that order), never the same one. Never reset `<labels.approved>` or `<labels.needsHuman>` — they are not in-flight labels. A `SESSION REQUIRED` item at an in-flight label is never reported as a stall — it is the operator's own `/port:implement` session, and it can never carry a dispatch-log row by construction.
+
+The log itself is a gitignored `.temp/dispatch-log.md`, overwritten fresh at startup — the overwrite alone is what scopes it to one session, no clock or session ID needed. A file whose header names a different repository is treated as absent. Two cockpits sharing one checkout clobber each other's copy, which degrades both to report-only — the safe direction, never a false reset.
+
+If `TaskList` cannot be correlated to numbers at all, report the in-flight set alongside the running-agent count and say the match is uncertain rather than guessing which is which.
 
 ### Rebase conflict protocol (`revise-agent`)
 
@@ -443,12 +470,15 @@ Closing the cockpit session also halts dispatch, since it is the only dispatcher
 | A permission change was merged but agents still hit denials | A worktree carries the *committed* settings | Confirm it merged to `<integration>`; agents pick it up on their next fresh worktree |
 | `/port:pipeline` refuses to start | The checked-out branch carries no `.claude/port.config.json`, or no `permissions.allow` | Check out the branch the harness was installed on, or run `/port:init` on this one |
 | A plugin was installed and merged, but agents behave as if it is absent | Merging declares a plugin, it does not install one | Update the main checkout, refresh the install per `CONTRIBUTING.md`, restart the cockpit |
-| An item parked at an in-flight label, with no matching `TaskList` entry | The dispatched agent failed or the session closed mid-flight | The liveness cross-check reports it as **stalled** each tick; `retry #N` |
+| An item parked at an in-flight label, this session dispatched it, and no matching `TaskList` entry | The dispatched agent failed or the session closed mid-flight | The liveness cross-check reports it **suspect**, then auto-resets it to its trigger label the tick after — `retry #N` works too, immediately |
+| An item parked at an in-flight label with no matching `TaskList` entry, and this session's dispatch log has no row for it | A prior session's (or another cockpit's) work — this session cannot prove it is dead | Reported every tick as "in flight with no dispatch record," never touched automatically; `retry #N` resets it by hand |
+| An item was auto-reset once and stalls again in the same session | The once-per-session cap held — a crash loop reports rather than resetting forever | `retry #N` for another attempt; restarting the cockpit clears the cap (fresh dispatch log) |
 | Every dispatched agent failed at once, all reporting a session-limit message | The operator's usage window was exhausted | The cockpit parks each affected item back at its trigger label and schedules the next wakeup just after the reported reset time; nothing to retry manually |
 | The cockpit says a gate clear was denied | Correct behaviour — the guard hook denies removing `<labels.needsHuman>` unless an operator instruction just named that item | Say `unblock #N` if you actually mean to clear it |
 | A batch label change moved only some of the items | A partial application — the same failure mode a shell loop used to hide | The re-query the cockpit runs after every multi-item change reports exactly which one did not move; re-issue for the remainder |
-| A pull request was approved and then moved back to `needs revision` | A check on it went red after approval | The `## Approval withdrawn` comment names it; revision dispatches this tick |
+| A pull request was approved and then moved back to `needs revision` | A check on it went red after approval, or `mergeable` reads `CONFLICTING` | The `## Approval withdrawn` or `## Rebase required` comment names why; revision dispatches this tick |
 | `review-agent` stopped without a verdict | Checks never concluded within the bounded wait | The pull request is at `<labels.needsHuman>`; `unblock #N` is the route |
+| A pull request at `ready for review` never gets reviewed, and the cockpit reports it conflicting | `mergeable` reads `CONFLICTING` — GitHub never ran checks on this diff | The cockpit posts `## Rebase required` and moves it to `needs revision`; `revise-agent` rebases and pushes it back to `ready for review` automatically |
 
 ## Reading current state without the cockpit
 

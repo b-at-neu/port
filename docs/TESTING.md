@@ -35,6 +35,8 @@ No dependencies, no plugin install, no model calls. Runs in seconds, in CI on ev
 | `review-agent.md` reads `statusCheckRollup` and `--watch`, states the literal phrase "no verdict is formed while any check on the head commit is pending", conditions the approval-gate carve-out on `modules.approvalGate`, and names the `blocked — checks pending` verdict; no agent or skill file names a literal CI check name | A verdict formed before its evidence exists, and a carve-out hard-coded to one repository's check names (#143) |
 | `plugins/port/skills/pipeline/SKILL.md` carries the `<labels.approved>` carve-out's precondition phrase "only when a check on it has gone red", and the approved-announcement copy shows a check conclusion | The cockpit's terminal-state rail widening back into a general licence to revisit `approved` (#143) |
 | `PIPELINE.md`'s rebase protocol declares the widened auto-resolvable rows ("take the union", "deterministic order", "apply the addition inside the new structure"), the never-auto-resolve list, and the escalation's `Recommendation` / `D<n>` decision-ID form | The rebase protocol regressing to fail-closed-and-narrate instead of resolve-and-escalate-as-options (#143) |
+| `plugins/port/skills/pipeline/SKILL.md` names the `.temp/dispatch-log.md` artifact, states the literal preconditions "reset only an item this session's own dispatch log records" and "at most one automatic reset per item per session", and its `<labels.approved>` carve-out names "GitHub reports it conflicting with its base" | A dead-agent reset firing on an item this session never dispatched, or firing more than once per crash loop (#150) |
+| `review-agent.md` reads `mergeable`, checks for `CONFLICTING`, and states the literal phrase "no verdict is formed on a pull request that cannot be merged"; `revise-agent.md` and `PIPELINE.md` both name `## Rebase required`; `PIPELINE.md` records the rebase-on-demand decision ("never on a schedule") | A verdict formed, or a rebase scheduled speculatively, against a diff GitHub never actually validated (#150) |
 
 Each rule is worth testing by breaking it deliberately. If a check cannot be made to fail, it is not a check.
 
@@ -56,8 +58,9 @@ It targets a real exposure: the output formats live in `PIPELINE.md` prose and w
 | --- | --- |
 | Body opens `Closes #N`, carries `## Summary` / `## Changes` / `## Testing plan` / `## Automated checks`, and the testing plan is a real `- [ ]` checklist | Pull request description format |
 | Every review heading is `## Code Review — Cycle <n> · <approved\|needs revision\|blocked — checks pending>` with a counts line under it, cycles running 1..N | Reviews and revisions |
-| Revision notes are `## Revision — Cycle <n>` plus one `fixed … · skipped … · <sha>` line, or a `check <name> · <sha>` line in check-fix mode, no cycle above the review count | Reviews and revisions |
+| Revision notes are `## Revision — Cycle <n>` plus one `fixed … · skipped … · <sha>` line, a `check <name> · <sha>` line in check-fix mode, or a `rebase onto <base> · <sha>` line in rebase-only mode, no cycle above the review count | Reviews and revisions |
 | An `## Approval withdrawn` comment names both a check and a 7–40 character hex SHA | Check evidence — the `<labels.approved>` carve-out |
+| A `## Rebase required` comment names both a base branch and a 7–40 character hex SHA | Rebase required |
 | Commit subjects are `#N <imperative lowercase>`, under 80 characters, no trailing period, with a `Co-Authored-By:` trailer | Commit messages |
 | At most one stage label; a merged pull request keeps no trigger or in-flight label | Label lifecycle |
 | Nothing under `.temp/` or `.agents/` in the diff | Operating rules |

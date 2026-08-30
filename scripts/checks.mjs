@@ -1259,5 +1259,97 @@ for (const t of [
   }
 }
 
+// --- Liveness reset — the cockpit resets only what it can prove it dispatched
+// Regression guard for #150: every no-match used to be treated identically
+// (report, never act), which left #66/#67 parked at `in progress` across a
+// session boundary with no way to tell "this session's own dead dispatch"
+// apart from "someone else's live agent" — recovery was a human noticing.
+// This checks that the split, its proof artifact, and its one-reset cap are
+// all still named, not quietly reverted to the old single-branch prose.
+{
+  const rel = 'plugins/port/skills/pipeline/SKILL.md';
+  const text = readFileSync(join(root, rel), 'utf8');
+
+  if (!text.includes('.temp/dispatch-log.md')) {
+    fail('liveness-reset', `${rel} never names the '.temp/dispatch-log.md' artifact`);
+  } else {
+    ok();
+  }
+
+  if (!text.includes("reset only an item this session's own dispatch log records")) {
+    fail(
+      'liveness-reset',
+      `${rel} is missing the literal precondition phrase "reset only an item this session's own dispatch log records"`,
+    );
+  } else {
+    ok();
+  }
+
+  if (!text.includes('at most one automatic reset per item per session')) {
+    fail(
+      'liveness-reset',
+      `${rel} is missing the literal phrase 'at most one automatic reset per item per session'`,
+    );
+  } else {
+    ok();
+  }
+
+  if (!text.includes('GitHub reports it conflicting with its base')) {
+    fail(
+      'liveness-reset',
+      `${rel}'s '<labels.approved>' carve-out never names the conflicting-with-base half`,
+    );
+  } else {
+    ok();
+  }
+}
+
+// --- Mergeability — no review dispatched against a diff CI never validated --
+// Regression guard for #150: PR #134 was reviewed while `mergeable:
+// CONFLICTING`, so the findings were against a diff CI had never actually run
+// on — the conflict surfaced one stage later, in revise-agent. This checks
+// that review-agent reads mergeable at both points named in the plan and
+// states the no-verdict rule literally, and that both revise-agent and
+// PIPELINE.md carry the '## Rebase required' contract the fix routes through.
+{
+  const reviewRel = 'plugins/port/agents/review-agent.md';
+  const reviewText = readFileSync(join(root, reviewRel), 'utf8');
+
+  for (const phrase of ['mergeable', 'CONFLICTING']) {
+    if (!reviewText.includes(phrase)) {
+      fail('mergeability', `${reviewRel} never reads '${phrase}'`);
+    } else {
+      ok();
+    }
+  }
+
+  if (!reviewText.includes('no verdict is formed on a pull request that cannot be merged')) {
+    fail(
+      'mergeability',
+      `${reviewRel} is missing the literal phrase 'no verdict is formed on a pull request that cannot be merged'`,
+    );
+  } else {
+    ok();
+  }
+
+  const reviseRel = 'plugins/port/agents/revise-agent.md';
+  const pipelineRel = 'plugins/port/docs/PIPELINE.md';
+  for (const rel of [reviseRel, pipelineRel]) {
+    const text = readFileSync(join(root, rel), 'utf8');
+    if (!text.includes('## Rebase required')) {
+      fail('mergeability', `${rel} never names the '## Rebase required' comment`);
+    } else {
+      ok();
+    }
+  }
+
+  const pipelineText = readFileSync(join(root, pipelineRel), 'utf8');
+  if (!pipelineText.includes('never on a schedule')) {
+    fail('mergeability', `${pipelineRel} is missing the rebase-on-demand decision ('never on a schedule')`);
+  } else {
+    ok();
+  }
+}
+
 // --- Report -----------------------------------------------------------------
 report();

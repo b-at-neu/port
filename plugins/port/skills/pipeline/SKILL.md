@@ -104,6 +104,17 @@ Also in this pass, when both files are present but the branch from step 1's `git
 
 **Every tick after the first** reads `.temp/label-vocabulary.md` instead of re-deriving it — see Tick procedure, step 0. If the file is absent (a fresh session, or another checkout's leftover artifact with a different repository's vocabulary), re-run this section before that tick's queries.
 
+**Step 6 — dispatch log.** `.temp/dispatch-log.md` is this session's own proof of what it has dispatched — the record the liveness cross-check reads to decide whether a stalled item is safe to reset. Write it fresh (Write tool), overwriting any prior session's copy: that overwrite *is* the session scoping, so no clock and no session id are needed.
+
+```
+# Dispatch log — <repo>
+
+| Item | Stage | State | Resets |
+| --- | --- | --- | --- |
+```
+
+Never acted on here beyond writing it. Every dispatch (see Dispatching) adds or updates the item's row; every tick's liveness step (see Tick procedure, step 5) reads it before classifying a no-match. A file whose `<repo>` header names a **different** repository — another checkout's leftover, or this checkout used for a different repository since — is treated as absent and rewritten fresh, exactly like a mismatched `.temp/label-vocabulary.md`. Two cockpits sharing one checkout clobber each other's copy; that degrades both to report-only on liveness, which is the safe direction, never a false reset.
+
 ## UX states (startup preflight)
 
 Exact copy, one message per state, `<…>` substituted:
@@ -170,7 +181,7 @@ Several sessions are usually open at once, and an untitled one is hard to find a
 - **Never describe a tool call you have not made.** Announcing a wakeup, a removal, or a dispatch is not performing it — write the sentence only after the call returns, and let its result decide the wording. A closing report is a record of what happened this tick, never a stand-in for what you meant to do.
 - **A multi-item label change is one `gh issue edit` naming every number, then a re-query to confirm each one moved** — e.g. `gh issue edit 63 67 71 --repo <repo> --remove-label "planning" --add-label "ready"`. `gh pr edit` takes a single number, so a pull request is one call each. This is not only a style rule: the guard hook mechanically **denies** a `gh`/`git` call wrapped in a shell `for`/`while`/`until` loop, and it fires for this session too (#120), so falling back to a loop here is not a shortcut that works.
 - **Never merge or close a pull request.** The human merges on GitHub; `gh pr merge` is denied.
-- **Never touch a pull request labeled `<labels.approved>` beyond announcing it.** The label is removed **only when a check on it has gone red** — read in the same tick, and named in the announcement (see "Approved pull requests" and `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Check evidence") — never a general licence to revisit terminal states, and never authorized by operator instruction or elapsed time. A pull request being slow, stale, or unmerged is never itself a reason to touch it. **A second carve-out:** applying a refresh to an approved pull request is permitted when `modules.previewDatabase` is true (see Preview refresh). Nothing else about an approved pull request may be touched.
+- **Never touch a pull request labeled `<labels.approved>` beyond announcing it.** The label is removed **only when a check on it has gone red, or GitHub reports it conflicting with its base** — both read in the same tick, and named in the announcement (see "Approved pull requests" and `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Check evidence") — never a general licence to revisit terminal states, and never authorized by operator instruction or elapsed time. A pull request being slow, stale, or unmerged is never itself a reason to touch it. **A further carve-out:** applying a refresh to an approved pull request is permitted when `modules.previewDatabase` is true (see Preview refresh). Nothing else about an approved pull request may be touched.
 - **`<labels.needsHuman>` clears only when an operator instruction names that item** — the route is `unblock #N` (see Conversational commands) — and the guard hook **denies** any other attempt to remove it, cockpit included (#138): an announcement is not an instruction, and neither is general pressure to keep the pipeline moving.
 - Never act on an item that lacks a pipeline **trigger** label — opt-in is human-initiated.
 - **Never act on an item assigned to another operator** — ownership transfers only through an explicit human take-over.
@@ -200,7 +211,7 @@ On start and on every wakeup, run one polling pass.
 gh issue list --repo <repo> --assignee "@me" --label "<labels.ready>" --json number,title
 gh issue list --repo <repo> --assignee "@me" --label "<labels.planChangesRequested>" --json number,title
 gh issue list --repo <repo> --assignee "@me" --label "<labels.planApproved>" --json number,title,body
-gh pr list --repo <repo> --assignee "@me" --label "<labels.readyForReview>" --json number,title
+gh pr list --repo <repo> --assignee "@me" --label "<labels.readyForReview>" --json number,title,mergeable
 gh pr list --repo <repo> --assignee "@me" --label "<labels.needsRevision>" --json number,title,body
 
 # Gates and announcements → talk to the human
@@ -211,9 +222,9 @@ gh pr list --repo <repo> --assignee "@me" --label "<labels.needsHuman>" --json n
 
 # In-flight labels → read for liveness only, never dispatched from
 gh issue list --repo <repo> --assignee "@me" --label "<labels.planning>" --json number,title
-gh issue list --repo <repo> --assignee "@me" --label "<labels.inProgress>" --json number,title
+gh issue list --repo <repo> --assignee "@me" --label "<labels.inProgress>" --json number,title,body
 gh pr list --repo <repo> --assignee "@me" --label "<labels.reviewing>" --json number,title
-gh pr list --repo <repo> --assignee "@me" --label "<labels.revising>" --json number,title
+gh pr list --repo <repo> --assignee "@me" --label "<labels.revising>" --json number,title,body
 
 # Unowned sweep → report only, never act
 gh issue list --repo <repo> --search "no:assignee" --limit 100 --json number,title,labels
@@ -240,8 +251,8 @@ Then, in this order. Steps 7 and 8 are split apart deliberately — they are the
 1. **Reconcile merged pull requests.**
 2. **Handle human gates.**
 3. **Announce every session-required item.**
-4. **Unless draining, dispatch** for every remaining actionable trigger item (all `Agent` calls in one message).
-5. **Liveness cross-check** — correlate the in-flight query results against `TaskList`; report any stalled item or a usage-limit condition (see "Liveness" and "Agent questions and blockers" below). Change no label here except the usage-limit reset.
+4. **Unless draining, dispatch** for every remaining actionable trigger item (all `Agent` calls in one message) — a pull request whose mergeability reads `CONFLICTING` routes to revision instead of review; see "Mergeability gate".
+5. **Liveness cross-check** — correlate the in-flight query results against `TaskList` and this session's own dispatch log (`.temp/dispatch-log.md`); auto-reset a dispatch this session provably lost, report every other case, and handle a usage-limit condition (see "Liveness" and "Agent questions and blockers" below).
 6. **Housekeeping** — run worktree hygiene, then the denial, unowned, and ungated reports (only the ones whose sets changed).
 7. **Call `ScheduleWakeup`**, skipped only while draining. **A non-draining tick that ends without this call has failed**, no matter how much of the above happened.
 8. **Only then, write the tick report.** Its closing "next tick" line is not a fresh decision — it is the record of step 7: state the delay you actually passed to `ScheduleWakeup`, or that you are draining and skipped the call. Never write this line before step 7 runs.
@@ -254,11 +265,50 @@ gh pr view <n> --repo <repo> --json state,mergedAt,closed --jq '{state,mergedAt,
 
 If merged or closed, announce it once, **remove it from your announced set**, and clean up its worktree. This keeps `status` truthful without the human telling you.
 
-**Liveness cross-check (each tick, step 5).** An in-flight label is a claim, never a heartbeat. Take the results of the four in-flight queries above (plus `<labels.refreshing>` under `previewDatabase`) and match each item against `TaskList` by the dispatch `description`, which the harness records verbatim (`"<stage> #<n>"`).
+**Mergeability gate (each tick, step 4, before dispatching review).** `<labels.readyForReview>`'s query already reads `mergeable` (see above) — no extra round trip. Branch on it per item, before deciding whether to dispatch `review-agent`:
+
+- **`MERGEABLE`** — dispatch normally.
+- **`CONFLICTING`** — do not dispatch review. Write `.temp/rebase-required-<pr>.md` (see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Rebase required"), `gh pr comment <pr-number> --repo <repo> --body-file .temp/rebase-required-<pr>.md`, swap `<labels.readyForReview>` → `<labels.needsRevision>`, and dispatch `revise-agent` this same tick under the unchanged rules — the cycle cap and the `SESSION REQUIRED` check both still apply. Report:
+
+  > 🔀 PR #134 conflicts with `dev` — GitHub can't build a merge ref, so no checks ran on this diff and there's nothing to review against. Commented and moved it to `needs revision`; revision rebases it this tick.
+
+- **`UNKNOWN`** — GitHub has not computed it yet (normal on a freshly opened pull request; the query itself is what triggers computation). Hold review one tick and report:
+
+  > ⏳ PR #134's mergeability is still `UNKNOWN` — holding review one tick.
+
+  On a **second** consecutive `UNKNOWN` tick for the same pull request, dispatch review anyway — `review-agent` re-checks mergeability itself before posting — and say so:
+
+  > ⚠️ PR #134's mergeability is still `UNKNOWN` after two ticks — dispatching review anyway; it re-checks before it posts.
+
+**Approved-and-conflicting is the same fact read at a different gate** — see "Approved pull requests" under Human gates for that carve-out; both routes post the identical `## Rebase required` comment and land at `<labels.needsRevision>`.
+
+**Liveness cross-check (each tick, step 5).** An in-flight label is a claim, never a heartbeat. Take the results of the four in-flight queries above (plus `<labels.refreshing>` under `previewDatabase`) and match each item against `TaskList` by the dispatch `description`, which the harness records verbatim (`"<stage> #<n>"`). Before classifying, Read `.temp/dispatch-log.md` — the precondition for every reset below is **"reset only an item this session's own dispatch log records"**, never an item this session never dispatched.
 
 - **Matched, running** — nothing to do; it is genuinely mid-flight.
-- **No match** — **stalled**: the agent crashed, was killed outside this session, or the session that dispatched it closed. Report it, change no label, dispatch nothing — `retry #N` is the human's call. Report the whole stalled set as **one grouped line**, every tick while it is non-empty, never one line per item.
-- **Every in-flight item unmatched at once, and the most recent completion or error mentions a session limit** (a `"session limit"`/`"resets at"`-shaped message) — this is the **usage-limit** class, not ordinary stalling: reset each affected item's in-flight label back to its trigger label — group by (current label → trigger label) pair and issue one `gh issue edit` per group naming every number, pull requests one call each, then re-query to confirm — report the reset time verbatim from the message, and schedule the next wakeup for just after it — a small buffer past the reset, or the idle delay with a note if the time cannot be parsed. Never redispatch before it, and never substitute a different model to work around it.
+- **No match** — an in-flight label with no live agent, resolved against the dispatch log into exactly three outcomes. The invariant across all three: **at most one automatic reset per item per session** (the log's `Resets` column) — a crash loop reports instead of burning the session on repeated resets:
+  - **Log row `State: dispatched`** (this session dispatched it, and this is the first unmatched tick) — rewrite its row to `State: suspect`, report it, change no label:
+
+    > ⏳ #63 (`in progress`) has no live agent — confirming next tick before I reset it.
+
+  - **Log row `State: suspect`, still unmatched, and `Resets: 0`** — provably dead: **reset**. Use the retry mapping (`planning`→`ready`, `in progress`→`plan approved`, `reviewing`→`ready for review`, `revising`→`needs revision`, `refreshing`→`refresh branch`), batched by (current → trigger) pair in one `gh issue edit` naming every number, pull requests one call each, then re-query to confirm every item moved. Rewrite the row to `State: reset`, `Resets: 1`. Dispatch is step 4 and liveness is step 5, so a reset item redispatches on the **next** tick, never this one — say so:
+
+    > ♻️ **Reset 2 stalled items** — #63 (`in progress` → `plan approved`), PR #117 (`reviewing` → `ready for review`). I dispatched both this session and neither has a live agent. They redispatch next tick.
+
+  - **No row at all** (a prior session's work, or another cockpit's) — this session cannot prove anything about it: **report-only, never touch**, every tick while the set is non-empty, as one grouped line:
+
+    > ⚠️ **In flight with no dispatch record:** #66, #67 (`in progress`). I didn't dispatch these — a previous session or another cockpit did — so I won't touch them. Say `retry #66` to reset one.
+
+  - **Already reset once this session and stalled again** (`Resets: 1` and still unmatched) — report, never reset a second time:
+
+    > ⚠️ #63 stalled again after I reset it once this session — leaving it at `in progress`. Say `retry #63` for another attempt.
+
+  Never reset `<labels.approved>` or `<labels.needsHuman>` — they are not in-flight labels, and nothing above ever matches them.
+
+  **A `SESSION REQUIRED` item at an in-flight label is never reported as a stall.** `<labels.inProgress>` and `<labels.revising>`'s queries already carry `body` for exactly this: an item whose body carries the marker is the operator's own `/port:implement` session, not a stalled dispatch, and it can never have a dispatch-log row (this cockpit never dispatches one), so it is report-only by construction:
+
+  > 🧰 PR #512 is `revising` under `SESSION REQUIRED` — that's your `/port:implement` session, not a stall.
+
+- **Every in-flight item unmatched at once, and the most recent completion or error mentions a session limit** (a `"session limit"`/`"resets at"`-shaped message) — this is the **usage-limit** class, not ordinary stalling, and it takes precedence: when it fires, it has already reset everything and no per-item liveness reset above runs that tick. Reset each affected item's in-flight label back to its trigger label — group by (current label → trigger label) pair and issue one `gh issue edit` per group naming every number, pull requests one call each, then re-query to confirm — report the reset time verbatim from the message, and schedule the next wakeup for just after it — a small buffer past the reset, or the idle delay with a note if the time cannot be parsed. Never redispatch before it, and never substitute a different model to work around it.
 - **`TaskList` cannot be correlated to numbers at all** (e.g. no `description` field surfaced) — report the in-flight set alongside the running-agent count and say the correlation is uncertain, rather than guessing which is which.
 
 Full background: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Liveness".
@@ -353,6 +403,8 @@ Agent({
 
 **`model` is the one field you set beyond the stage.** Agent frontmatter is static, so an agent file cannot read `models` from config; passing it here is what honours the configuration, and it takes precedence over the frontmatter default. Everything else — tool scope, permission mode, `maxTurns`, worktree isolation — comes from the agent definition.
 
+**Every dispatch updates `.temp/dispatch-log.md`** (Write tool, rewriting the whole file) — add or update the item's row with `State: dispatched` and `Resets` left at whatever it already was (`0` on a first dispatch). This is what lets the liveness cross-check later tell "this session's own dispatch, now dead" apart from "an in-flight label this session never touched."
+
 Stage mapping:
 
 | Trigger | `subagent_type` | Model |
@@ -360,7 +412,7 @@ Stage mapping:
 | Issue at `<labels.ready>` | `plan-agent` (fresh plan) | `models.plan` |
 | Issue at `<labels.planChangesRequested>` | `plan-agent` (revision) | `models.plan` |
 | Issue at `<labels.planApproved>` | `impl-agent` — **unless `SESSION REQUIRED`: announce, never dispatch** | `models.impl` |
-| Pull request at `<labels.readyForReview>` | `review-agent` | `models.review` |
+| Pull request at `<labels.readyForReview>` | `review-agent` — **unless `mergeable` is `CONFLICTING`: route to revision instead, see "Mergeability gate"** | `models.review` |
 | Pull request at `<labels.needsRevision>` | `revise-agent` — **after the cycle-cap check**; **unless `SESSION REQUIRED`: announce, never dispatch** | `models.revise` |
 | Pull request at `<labels.refreshBranch>` *(`previewDatabase`)* | `revise-agent` in **refresh mode** | `models.revise` |
 
@@ -438,11 +490,17 @@ The gate applies **no special label** for a session-required plan; the marker is
 
 ### Approved pull requests
 
-**Re-verify before announcing, every tick.** For each pull request in the `<labels.approved>` query result (the approved set is small, so this is bounded), one call: `gh pr view <n> --repo <repo> --json headRefOid,statusCheckRollup`. Reduce per `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Check evidence" — resolve the excused check name from `.github/workflows/approval-check.yml` with the **Read** tool, the same as `.claude/port.config.json` and `.claude/settings.json` are already read: it is the repository's own workflow file, not tied to any one pull request's head, so the main checkout's copy is the right one to read (same one-merge-lag caveat as those two). Then branch:
+**Re-verify before announcing, every tick.** For each pull request in the `<labels.approved>` query result (the approved set is small, so this is bounded), one call: `gh pr view <n> --repo <repo> --json headRefOid,statusCheckRollup,mergeable`. Reduce per `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Check evidence" — resolve the excused check name from `.github/workflows/approval-check.yml` with the **Read** tool, the same as `.claude/port.config.json` and `.claude/settings.json` are already read: it is the repository's own workflow file, not tied to any one pull request's head, so the main checkout's copy is the right one to read (same one-merge-lag caveat as those two). Then branch:
 
-- **All checks concluded green** (the carve-out check excluded from the read but still listed) → announce once, listing every check and its conclusion — never merge-ready without naming what that claim rests on.
-- **Anything unconcluded** → say so and do **not** call it merge-ready; re-check next tick.
-- **Any red, excluding the excused carve-out check** → **route it back**, the sole exception to the never-touch rail on `<labels.approved>`: write `.temp/withdrawn-<n>.md` (`## Approval withdrawn`, naming the check, its conclusion, its link, and the head SHA), `gh pr comment <n> --repo <repo> --body-file .temp/withdrawn-<n>.md`, then `gh pr edit <n> --repo <repo> --remove-label "<labels.approved>" --add-label "<labels.needsRevision>"`, then drop it from the announced set so a later re-approval announces again. Revision dispatches on the same tick under the existing rules — the cycle cap and `SESSION REQUIRED` check both still apply, unchanged.
+- **All checks concluded green** (the carve-out check excluded from the read but still listed) **and `mergeable` is `MERGEABLE`** → announce once, listing every check and its conclusion — never merge-ready without naming what that claim rests on.
+- **Anything unconcluded** — a check still pending, or `mergeable` still `UNKNOWN` — → say so and do **not** call it merge-ready; re-check next tick.
+- **The never-touch rail on `<labels.approved>` has exactly two authorising facts** — only when a check on it has gone red, or GitHub reports it conflicting with its base — and either one routes it back the same way:
+  - **A red check, excluding the excused carve-out** → write `.temp/withdrawn-<n>.md` (`## Approval withdrawn`, naming the check, its conclusion, its link, and the head SHA), `gh pr comment <n> --repo <repo> --body-file .temp/withdrawn-<n>.md`, then swap the label (below).
+  - **`mergeable: CONFLICTING`** → write `.temp/rebase-required-<n>.md` (`## Rebase required` — see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Rebase required" — never `## Approval withdrawn`, which contracts to name a check), `gh pr comment <n> --repo <repo> --body-file .temp/rebase-required-<n>.md`, then swap the label. Announce:
+
+    > 🔀 PR #134 was approved but now conflicts with `dev` — GitHub will refuse the merge. Withdrew the approval and moved it to `needs revision`; revision rebases it this tick.
+
+  Either way: `gh pr edit <n> --repo <repo> --remove-label "<labels.approved>" --add-label "<labels.needsRevision>"`, then drop it from the announced set so a later re-approval announces again. Revision dispatches on the same tick under the existing rules — the cycle cap and `SESSION REQUIRED` check both still apply, unchanged. No new label and no new operator command — this is the same `<labels.needsRevision>` route as the mergeability gate above, read at a different point in the pipeline.
 
 Announce each newly approved pull request once with a one-line summary, its URL, and the check conclusions the claim rests on; the human merges on GitHub. Track which you have announced in-session; re-announce only on request. When one is merged, the next tick's reconciliation drops it and announces the merge — **never keep listing a merged pull request as awaiting merge.**
 

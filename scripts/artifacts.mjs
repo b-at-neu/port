@@ -110,14 +110,17 @@ const REVIEW_PREFIX = '## Code Review';
 const REVIEW_HEADING = /^## Code Review — Cycle (\d+) · (approved|needs revision|blocked — checks pending)$/;
 const REVISION_HEADING = /^## Revision — Cycle (\d+)$/;
 const APPROVAL_WITHDRAWN_HEADING = '## Approval withdrawn';
+const REBASE_REQUIRED_HEADING = '## Rebase required';
 const SHA_RE = /\b[0-9a-f]{7,40}\b/;
 // `fixed <ids> · skipped <ids> · <sha>`, with either segment dropped when empty
 // (revise-agent.md), and an optional `· rebase: <file> (<strategy>)` after the
 // sha. One of the two segments must be there — a cycle that did neither writes
 // no comment at all. `check <name> · <sha>` is the check-fix-mode form: no
-// threads to resolve, so no `fixed`/`skipped` segment at all.
-const REVISION_OPENS = /^(?:fixed|skipped|check)\b/;
-const REVISION_DETAIL = /^(?:(?:fixed\b[^·]*·\s*)?(?:skipped\b[^·]*·\s*)?[0-9a-f]{7,40}\b|check\s+\S+\s*·\s*[0-9a-f]{7,40}\b)/;
+// threads to resolve, so no `fixed`/`skipped` segment at all. `rebase onto
+// <base> · <sha>` is the rebase-only-mode form: same reasoning, the work item
+// was the rebase itself.
+const REVISION_OPENS = /^(?:fixed|skipped|check|rebase)\b/;
+const REVISION_DETAIL = /^(?:(?:fixed\b[^·]*·\s*)?(?:skipped\b[^·]*·\s*)?[0-9a-f]{7,40}\b|check\s+\S+\s*·\s*[0-9a-f]{7,40}\b|rebase\s+onto\s+\S+\s*·\s*[0-9a-f]{7,40}\b)/;
 const COMMIT_SUBJECT = /^#\d+ [a-z]/;
 const SCRATCH_PATHS = /^(\.temp|\.agents)\//;
 // A verification step only the operator can run, at its defined position — a
@@ -275,6 +278,29 @@ for (const n of targets) {
     const backticked = [...rest.matchAll(/`([^`]+)`/g)].map((mm) => mm[1]);
     if (!backticked.some((b) => !FULL_SHA.test(b))) {
       fail(at('approval-withdrawn'), `'${APPROVAL_WITHDRAWN_HEADING}' names no check — only a SHA`);
+    } else {
+      ok();
+    }
+  }
+
+  // --- Rebase required ---
+  // Posted by the cockpit (dispatch gate, approved re-verify) or review-agent
+  // (its own mergeability exit) whenever GitHub reports a pull request
+  // conflicting with its base: names the base branch and the head SHA the
+  // conflict was read against, mirroring the approval-withdrawn assertion.
+  for (const c of pr.comments) {
+    const cl = lines(c.body);
+    const first = (cl[0] ?? '').trim();
+    if (first !== REBASE_REQUIRED_HEADING) continue;
+    const rest = cl.slice(1).join('\n');
+    if (!SHA_RE.test(rest)) {
+      fail(at('rebase-required'), `'${REBASE_REQUIRED_HEADING}' carries no 7-40 character hex SHA`);
+      continue;
+    }
+    const FULL_SHA = /^[0-9a-f]{7,40}$/;
+    const backticked = [...rest.matchAll(/`([^`]+)`/g)].map((mm) => mm[1]);
+    if (!backticked.some((b) => !FULL_SHA.test(b))) {
+      fail(at('rebase-required'), `'${REBASE_REQUIRED_HEADING}' names no base branch — only a SHA`);
     } else {
       ok();
     }
