@@ -1,6 +1,6 @@
 ---
 name: release
-description: Cut a release end to end — work out the next version from what has merged since the last release and confirm it with the operator, open the release pull request with a ticket-led changelog, then watch for it to merge and publish the GitHub release and tag with short user-facing notes, approval-gated. Manual only. Usage: /port:release
+description: Cut a release end to end — work out the next version from what has merged since the last release and confirm it with the operator, open the release pull request with a ticket-led changelog, then watch for it to merge (the moment the release actually ships) and draft a GitHub release and tag as changelog and provenance, with short user-facing notes, approval-gated. Manual only. Usage: /port:release
 disable-model-invocation: true
 allowed-tools: Read, Edit, Write, AskUserQuestion, ScheduleWakeup, Bash(git *), Bash(gh *)
 ---
@@ -15,6 +15,8 @@ allowed-tools: Read, Edit, Write, AskUserQuestion, ScheduleWakeup, Bash(git *), 
 
 Read `.claude/port.config.json` for `repo` (`<repo>`), `branches.integration` (`<integration>`), `branches.production` (`<production>`), and the `release` block: `versionSource`, `versionFiles`, and `versionCommand`.
 
+**`branches.production` unset → stop and report.** A release is a promotion between two branches; with one branch there is nothing to promote into, and inventing a production branch is the failure #54 exists to prevent.
+
 **`versionSource` changes the shape of this flow, so resolve it before anything else:**
 
 - **`tags`** — git release tags are the only record of the version. There is no file to bump, so **Part 1 is skipped entirely** and a release is one pull request.
@@ -28,19 +30,33 @@ You run this **once**. It then:
 
 1. **Works out the version** — gathers everything merged since the last release, computes the candidates, recommends one with its reasoning, and asks you to confirm.
 2. Opens the **release pull request** (`<integration>` → `<production>`), preceded by a **bump pull request** when `versionSource` is `package`.
-3. **Watches** — re-checking on its own schedule via `ScheduleWakeup` — until you merge the release. You never re-run it.
-4. Once merged, drafts short **user-facing** release notes, **gets your approval**, and creates the GitHub release and tag.
+3. **Watches** — re-checking on its own schedule via `ScheduleWakeup` — until you merge the release. That merge is the moment the release actually ships; you never re-run it.
+4. Once merged, drafts short **user-facing** release notes as changelog and provenance, **gets your approval**, and creates the GitHub release and tag.
 
 It is **state-driven**: every run, including each self-scheduled wake-up, re-resolves the version and phase from the remote and the open pull requests, then continues from wherever things stand. If a session ends, invoking `/port:release` again resumes cleanly.
+
+## What actually delivers the release
+
+Phase B creates a tag and a GitHub release. By itself, that **distributes nothing**.
+
+Where consumers resolve a git ref — the default for a plugin marketplace source, which never consults releases or tags automatically — **the merge of the release pull request into `<production>` is the delivery**, carrying the version bump with it. Every consumer tracking `<production>` with `autoUpdate` gets the change on their next session, whether or not Phase B ever runs.
+
+Two consequences follow, stated once so nothing downstream re-derives them:
+
+- The window between merge and publish is **not** a staging window.
+- `<production>` must be releasable at every moment, since the merge — not the tag — is what ships.
+
+A repository that instead publishes a distributed artifact from Phase B still reads correctly: the framing above is about what consumers resolve, not about this repository's particular arrangement.
 
 ## 0. Preflight (every run)
 
 ```bash
 git fetch origin
 git rev-parse --verify origin/<integration> origin/<production>
+git rev-parse --abbrev-ref HEAD
 ```
 
-Both must exist.
+Both branches must exist. Record the working tree's entry ref, **`<entry-ref>`**: if `rev-parse --abbrev-ref HEAD` prints `HEAD`, the checkout is detached, so record `git rev-parse HEAD` (a SHA) instead. **`/port:release` leaves the working tree on the ref it found it on — every run, every wake-up** (see Part 1 and Guardrails).
 
 ## 0.5 Resolve the version (every run)
 
@@ -79,23 +95,33 @@ gh pr list --repo <repo> --base <production> --head <integration> --state all --
 
 The version recommendation and the changelog are built from this **one** list. Run it **once per invocation** and reuse the result.
 
-1. **Range — since the last published release**, deliberately *not* `<production>..<integration>`. The production branch carries release-merge commits that were never part of a published release, so **the tag is what "since last time" actually means.**
+1. **Range — resolved in order, first match wins:**
 
    ```bash
    gh release list --repo <repo> --limit 1 --json tagName --jq '.[0].tagName'
-   git log --oneline --no-merges <prev-tag>..origin/<integration>
    ```
 
-   No previous release → the full history of the integration branch.
-2. **Empty → stop:** `Nothing to release — origin/<integration> has no commits ahead of origin/<production>.` Never prompt for a version with nothing to release.
-3. **Extract every `#<n>`** from the subjects — the commit convention is `#<n> message`, and merge commits read `Merge pull request #<n>`. Deduplicate, newest first.
-4. **Resolve each number**, preferring pull request metadata and falling back to the commit subject:
+   1. **A previous published release exists** → `<prev-tag>..origin/<integration>`, deliberately *not* `<production>..<integration>`. The production branch carries release-merge commits that were never part of a published release, so **the tag is what "since last time" actually means.**
+   2. **No previous release, and `git merge-base --is-ancestor origin/<production> origin/<integration>` exits 0** → `origin/<production>..origin/<integration>`. With no release ever cut, `<production>` cannot carry release-merge commits, so the objection that motivates the tag-based range above does not exist yet.
+   3. **No previous release and production is not an ancestor** (empty, unrelated, or diverged history) → the full history of `origin/<integration>`. State which of the three cases was hit rather than falling through silently.
 
    ```bash
-   gh pr view <n> --repo <repo> --json number,title,author,labels --jq '{number,title,login:.author.login,bot:.author.is_bot,labels:[.labels[].name]}'
+   git log --oneline --no-merges <range-from-above>
+   ```
+2. **Empty → stop:** `Nothing to release — <range used> has no commits.` Name the range actually used (it may be a tag range, a production-branch range, or full history), never a hard-coded `origin/<production>`. Never prompt for a version with nothing to release.
+3. **Extract every `#<n>`** from the subjects — the commit convention is `#<n> message`. The log is `--no-merges` deliberately: under a merge-commit convention the ticket number already lives on the branch commits, and the merge subject (`Merge pull request #<n>`) would only duplicate it under a different, unrelated number; under a squash convention the squash commit is itself a non-merge commit and is already covered. Do not "fix" this by dropping `--no-merges`. Deduplicate, newest first.
+4. **Resolve every number with two bulk calls, issued once per invocation:**
+
+   ```bash
+   gh pr list --repo <repo> --state merged --limit 200 --json number,title,author,labels --jq '[.[] | {number, title, login: .author.login, bot: .author.is_bot, labels: [.labels[].name]}]'
+   gh issue list --repo <repo> --state all --limit 200 --json number,title,labels --jq '[.[] | {number, title, labels: [.labels[].name]}]'
    ```
 
-   Keep `{number, title, labels, isBot}`. A **dependency-bot** entry is one whose author is a bot, or which carries a dependency-related label. A commit with **no** `#<n>` that is not a merge becomes a numberless entry keeping its subject.
+   GitHub shares one number space between issues and pull requests, so `#<n>` in a commit subject is an **issue** number under a `#<n> message` convention and a **pull request** number under a `… (#<n>)` squash convention. Each extracted number resolves from exactly one of the two maps, so the pair covers both conventions without knowing which one is in use.
+
+   - **Sizing:** start at `--limit 200`. If a map's lowest returned number is still above the lowest extracted number, the window was too short — re-issue **that one call once** at `--limit 500`, and stop there.
+   - **Fallback, explicitly bounded:** a number in neither map gets a single per-item lookup (`gh pr view <n>` / `gh issue view <n>`), capped at **10 lookups per invocation**. Past the cap, remaining entries keep their commit subject and the skill states how many it did that for. The cap is the point — an unbounded per-item fallback is the defect this step removes.
+   - **Classification:** keep `{number, title, labels, isBot}`. A **dependency-bot** entry is one that is `bot: true` in the pull request map, or carries a dependency-related label in either map. An entry that only appears in the issue map is never dependency-bot. A commit with **no** `#<n>` that is not a merge becomes a numberless entry keeping its subject.
 
 ## Fresh cycle — propose the version
 
@@ -130,22 +156,35 @@ Guard: only run Phase A if the working tree is clean (`git status --porcelain` e
 
 **Skip entirely** if `origin/<integration>` is already at `<version>` — the bump has merged. **If `bump/v<version>` already exists on origin**, do not recreate or re-commit it: open its pull request if it lacks one, then continue to Part 2.
 
-1. **Branch off the current integration branch**, so the bump rides into the release:
+**Invariant: `/port:release` leaves the working tree on `<entry-ref>` — restore before anything else runs, and assert rather than assume.**
+
+1. **Detach onto the current integration branch**, so the bump rides into the release without a local branch surviving the run:
 
    ```bash
-   git checkout -b bump/v<version> origin/<integration>
+   git checkout --detach origin/<integration>
    ```
 
+   **Detached, not `-b`:** no local `bump/v<version>` branch survives, so a retry after a failed push cannot collide with a stale local one — case 1 in "Resolve the version" (an open bump branch on origin) stays the single source of truth for in-flight state.
 2. **Write the version.** If `versionCommand` is set, run it with `{{version}}` substituted — it must not commit or tag. Otherwise edit each entry in `versionFiles` directly with the Edit tool, changing only the version field. **Never hand-edit unrelated lockfile entries.**
-3. **Commit** with the exact subject `bump version to v<version>`. Write `.temp/commit-msg.txt` with the Write tool, including the co-authorship trailer, then:
+3. **Commit and push the bump to a remote branch**, no local branch involved. Write `.temp/commit-msg.txt` with the Write tool, exact subject `bump version to v<version>`, including the co-authorship trailer, then:
 
    ```bash
    git add <versionFiles>
    git commit -F .temp/commit-msg.txt
-   git push -u origin HEAD:bump/v<version>
+   git push origin HEAD:refs/heads/bump/v<version>
    ```
 
-4. **Open the bump pull request** against `<integration>` unless one is already open, with a one-line body via `--body-file`.
+4. **Restore the entry ref, then assert it:**
+
+   ```bash
+   git checkout "<entry-ref>"
+   git rev-parse --abbrev-ref HEAD
+   ```
+
+   The result must equal `<entry-ref>` (or, if `<entry-ref>` was a SHA, `git rev-parse HEAD` must equal it). **If it does not, stop and report loudly** — name both refs and the branch the operator must return to. A silent mismatch is the whole defect this restores.
+5. **Restore on failure too.** If the edit, commit, or push fails, restore `<entry-ref>` first and report second — never end a turn detached or on `bump/v<version>`.
+6. **If the restore itself fails** because `versionCommand` left artifacts outside `versionFiles`, **stop and report** the dirty paths and `<entry-ref>` — never `--force` the checkout, which would discard the operator's files to satisfy this invariant.
+7. **Open the bump pull request** against `<integration>` unless one is already open, with a one-line body via `--body-file`.
 
 ### Part 2 — release pull request
 
@@ -198,8 +237,10 @@ You cannot finish until the human merges. Poll on a schedule rather than blockin
 Runs once the production branch is at `<version>`. These notes are **shorter than the release pull request's**: single plain-language bullets, **only what a user would care about**. Exclude all behind-the-scenes work — dependency bumps, pipeline, tooling, CI, docs, refactors, chores. No ticket numbers.
 
 1. **Confirm state.** `gh release view v<version>` must not exist. If the production branch is not at `<version>` yet, go back to the wait — **never publish early.**
-2. **Find the previous release** for the range: `gh release list --repo <repo> --limit 1 --json tagName --jq '.[0].tagName'`. With none, the range is the full history.
-3. **Gather user-facing changes** between the previous tag and the production branch, the same extraction as before with `origin/<production>` in place of the integration branch. **Keep only user-visible features and fixes.** When unsure whether a change is user-relevant, **leave it out** — these notes are for users, not maintainers.
+2. **Find the previous release** for the range: `gh release list --repo <repo> --limit 1 --json tagName --jq '.[0].tagName'`.
+   - **A previous release exists** → the range is `<prev-tag>..origin/<production>`, unchanged.
+   - **No previous release** — this is the first release, so full history of `origin/<production>` is not the fallback here either: read the merged release pull request's own body instead — `gh pr view <release-pr-number> --repo <repo> --json body` — and distil the user-facing bullets from the changelog already there. It is the same set of changes, already computed in "Gather merged work" and already reviewed by the operator at merge. Full history of `origin/<production>` remains the last-resort fallback only if that body cannot be read.
+3. **Gather user-facing changes.** With a previous release, the same extraction as before with `origin/<production>` in place of the integration branch. With none, distil from the release pull request body per the previous step. **Keep only user-visible features and fixes.** When unsure whether a change is user-relevant, **leave it out** — these notes are for users, not maintainers.
 4. **Draft the notes** to `.temp/release-notes.md` — bullets only, each short and in plain language. **The last bullet is always exactly `- Minor enhancements and bug fixes`.** No heading; the release title is the version. If nothing is user-facing, that single bullet stands alone.
 5. **Get approval — required before creating anything.** Present the drafted notes verbatim and apply any edits, re-showing them. **Do not run `gh release create` until the human explicitly approves.**
 6. **Create the release and tag**, which creates `v<version>` at the production branch's head:
@@ -214,6 +255,7 @@ Runs once the production branch is at `<version>`. These notes are **shorter tha
 ## Guardrails
 
 - **Never push to `<production>` or `<integration>` directly**, never run `gh pr merge`, and never create a tag by hand. The tag is created only by `gh release create` in Phase B, only after approval.
+- **`/port:release` leaves the working tree on the ref it found it on — every run, every wake-up.** Restore `<entry-ref>` before anything else runs and assert the restoration; never end a turn detached or on `bump/v<version>`.
 - **The version prompt happens at most once per release cycle.** An in-flight bump branch or release pull request is a release to *continue*, never an error.
 - **Phase B never publishes without explicit human approval of the notes.**
 - The wait is driven by `ScheduleWakeup` re-entering this skill; you invoke it only once.
