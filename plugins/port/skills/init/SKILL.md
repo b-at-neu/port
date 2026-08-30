@@ -118,9 +118,10 @@ gh api repos/b-at-neu/port/releases/latest --jq .tag_name
 
 Write it even when reconciling an entry that already exists but is missing `ref` or `autoUpdate`, and **write it even when the resolved `ref` is unchanged from what is already there.**
 
-**A `ref` change is called out in words, too, naming both values — the settings diff below is not enough on its own.** Never write a moved `ref` silently. Use, verbatim:
+**A `ref` change is called out in words, too, naming both values — the settings diff below is not enough on its own.** Never write a moved `ref` silently. `moved` applies whenever the previous value is set — a tag **or** `main` — and differs from the newly resolved value; that covers a repository's first release shipping after an earlier no-release-yet run just as much as a tag-to-tag bump. Use, verbatim:
 
 - moved → `Marketplace pin: port ref v0.1.0 → v0.2.0. This changes which version of the pipeline this repository runs; it takes effect on your next session.`
+- moved (main → tag) → `Marketplace pin: port ref main → v0.2.0. b-at-neu/port has published its first release; this pins you to it instead of tracking main. This takes effect on your next session.`
 - first pin → `Marketplace pin: port ref unset → v0.2.0. Unset tracked b-at-neu/port's default branch; this pins you to its last published release.`
 - no release yet → `b-at-neu/port has no published release yet — pinning ref to main, its release branch. Marketplace pin: port ref unset → main.`
 - unchanged → `Marketplace pin: port ref v0.2.0 (unchanged).`
