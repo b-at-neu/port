@@ -23,7 +23,7 @@ An install from a `github` marketplace source — the consumer path, and this re
 - **`ref`** — defaults to the marketplace repository's *default* branch when unset. For `b-at-neu/port` that is `dev`, the integration branch, not a release line; the committed entry pins it to `main` for exactly this reason.
 - **`autoUpdate`** — off by default for third-party marketplaces, so even a real version bump on `main` sits unfetched until this is `true` or someone updates manually.
 
-One line covers all three: **pushing to `main` releases nothing; a version bump does.** `/port:release` is what performs that bump.
+One line covers all three: **a version bump landing on `main` is what releases — the bump alone, sitting on the integration branch, releases nothing.** `/port:release` is what lands it.
 
 ### Refreshing a GitHub-sourced install by hand
 

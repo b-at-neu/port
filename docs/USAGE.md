@@ -120,7 +120,7 @@ On Windows especially, a populated dependency tree defeats git's own `worktree r
 /port:release
 ```
 
-Works out the next version from what has merged since the last release, recommends a bump with its reasoning, opens the release pull request with a ticket-led changelog, then watches until you merge it and publishes the release and tag — after showing you the notes for approval.
+Works out the next version from what has merged since the last release, recommends a bump with its reasoning, opens the release pull request with a ticket-led changelog, then watches until you merge it — that merge is what ships the release — and drafts the GitHub release and tag as changelog and provenance, after showing you the notes for approval.
 
 Run it once. It schedules its own re-checks, so if a session ends, invoking it again resumes from wherever things stand.
 
