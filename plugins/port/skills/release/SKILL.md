@@ -178,7 +178,7 @@ Guard: only run Phase A if the working tree is clean (`git status --porcelain` e
 
    ```bash
    git checkout "<entry-ref>"
-   git rev-parse --abbrev-ref HEAD
+   git rev-parse --abbrev-ref HEAD   # if <entry-ref> is a SHA, run `git rev-parse HEAD` instead
    ```
 
    The result must equal `<entry-ref>` (or, if `<entry-ref>` was a SHA, `git rev-parse HEAD` must equal it). **If it does not, stop and report loudly** — name both refs and the branch the operator must return to. A silent mismatch is the whole defect this restores.
@@ -190,7 +190,7 @@ Guard: only run Phase A if the working tree is clean (`git status --porcelain` e
 
 The body is **minimal**: short bullets, **ticket number first**. No paragraphs, no per-change detail.
 
-1. **Take the gathered list.** Per entry, the title is the pull request title with a leading `#<n> ` and any conventional prefix stripped. Dependency-bot entries go in their own section; everything else, numberless entries included, goes in **Changes**.
+1. **Take the gathered list.** Per entry, the title is the entry's title (pull request title, or the issue's when resolution fell back to the issue map) with a leading `#<n> ` and any conventional prefix stripped. Dependency-bot entries go in their own section; everything else, numberless entries included, goes in **Changes**.
 2. **Build the body** at `.temp/release-pr.md`, one short line per bullet, omitting the dependency section when empty:
 
    ```
