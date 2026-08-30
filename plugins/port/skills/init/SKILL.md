@@ -97,7 +97,7 @@ This is not tidiness. Installation is per-repository, so this same file carries 
 {
   "extraKnownMarketplaces": {
     "port": {
-      "source": { "source": "github", "repo": "b-at-neu/port", "ref": "main" },
+      "source": { "source": "github", "repo": "b-at-neu/port", "ref": "v0.2.0" },
       "autoUpdate": true
     }
   },
@@ -106,9 +106,26 @@ This is not tidiness. Installation is per-repository, so this same file carries 
 }
 ```
 
-Write it even when reconciling an entry that already exists but is missing `ref` or `autoUpdate`. **Why:** `claude plugin marketplace add b-at-neu/port --scope project` — the command README tells a consumer to run — writes a bare `{source, repo}` with no `ref`, which tracks `port`'s *default* branch (`dev`, the integration branch, not a release line). Left that way, a repository's pinned install silently tracks unreleased work instead of the last cut release. `autoUpdate: true` is what lets a later release actually reach an existing install rather than sitting unfetched.
+**Resolve `ref` before writing, from the plugin's newest published release — never a branch name:**
 
-**`ref` pins the plugin's own repository (`b-at-neu/port`, production branch `main`) — it is not the target repository's `branches.production`.** These are unrelated values that happen to share a name; never substitute the managed repository's own production branch here.
+```bash
+gh api repos/b-at-neu/port/releases/latest --jq .tag_name
+```
+
+**Use `gh api`, not `gh release`**: this skill's `allowed-tools` grants `Bash(gh api repos/*)` and not `Bash(gh release *)`, so this keeps the tool scope unwidened. On success, `ref` is that tag. On a 404, an empty result, or a non-zero exit — no release has been published yet — `ref` is `main`, the release branch. **Never leave `ref` unset.** Keep `autoUpdate: true` regardless: it is harmless under an immutable tag, and it is what lets a later re-pin take effect on the next session.
+
+**Why:** `claude plugin marketplace add b-at-neu/port --scope project` — the command README tells a consumer to run — writes a bare `{source, repo}` with no `ref`, which tracks whatever `b-at-neu/port`'s default branch is at that moment. So the pin above is what makes the installed version a decision rather than a coincidence.
+
+Write it even when reconciling an entry that already exists but is missing `ref` or `autoUpdate`, and **write it even when the resolved `ref` is unchanged from what is already there.**
+
+**A `ref` change is called out in words, too, naming both values — the settings diff below is not enough on its own.** Never write a moved `ref` silently. Use, verbatim:
+
+- moved → `Marketplace pin: port ref v0.1.0 → v0.2.0. This changes which version of the pipeline this repository runs; it takes effect on your next session.`
+- first pin → `Marketplace pin: port ref unset → v0.2.0. Unset tracked b-at-neu/port's default branch; this pins you to its last published release.`
+- no release yet → `b-at-neu/port has no published release yet — pinning ref to main, its release branch. Marketplace pin: port ref unset → main.`
+- unchanged → `Marketplace pin: port ref v0.2.0 (unchanged).`
+
+**`ref` pins the plugin's own repository (`b-at-neu/port`), not the managed repository's `branches.production`.** These are unrelated values that happen to share a name — reading the latter would be actively wrong, and it is why the value above is resolved from `b-at-neu/port`'s own releases rather than from anything in `.claude/port.config.json`. This is also why a single-branch repository (#54, where `branches.production` is null) needs no special case here: this field never reads that config in the first place.
 
 Drop `enabledPlugins` or `extraKnownMarketplaces` entirely and you have **uninstalled the plugin that is currently running this skill** — `/port:init` disables itself partway through, and the symptom looks like the plugin vanishing rather than like a bad merge. `hooks` is the same story. Anything you did not put there, leave alone.
 
@@ -121,7 +138,7 @@ Then, within the two lists you do own:
 
 **Show the diff and confirm before writing.** This is the single most consequential file this skill touches.
 
-Show it as a **diff against the current file**, not as the proposed contents — and **call out any removal explicitly in words**, separately from the diff. A diff that silently drops two keys is easy to approve while reading the permission entries you asked for, so the confirmation cannot be the only thing standing between a mistake and a written file.
+Show it as a **diff against the current file**, not as the proposed contents — and **call out any removal explicitly in words**, separately from the diff. A diff that silently drops two keys is easy to approve while reading the permission entries you asked for, so the confirmation cannot be the only thing standing between a mistake and a written file. **A `ref` change is called out in words the same way** — see above — and never written silently.
 
 ### Then check the commands against the allowlist you just built
 
@@ -183,7 +200,9 @@ Never let the operator walk away believing they have a merge gate they do not ha
 
 > ⚠️ You're on `<branch>`, not `<integration>`. Everything I just wrote — the config, the permission lists, and the plugin declaration — reaches dispatched agents only once it merges to `<integration>`, because their worktrees are checkouts of that branch and carry the committed files. Until then the cockpit works and dispatch does not.
 
-**Plugin updates land on the next session, not mid-session.** Say that once. If a release lands on `main` and this install still never advances, have the operator enable auto-update for the `port` marketplace from `/plugin` — `autoUpdate` in project settings is documented for managed-settings contexts and may not be honoured everywhere. Note also that `DISABLE_AUTOUPDATER` suppresses plugin updates entirely unless `FORCE_AUTOUPDATE_PLUGINS=1` is also set.
+**Plugin updates land on the next session, not mid-session.** Say that once. Under a tag pin, an immutable `ref` never advances on its own — the supported way to move to a newer release is **re-running `/port:init`**, which re-resolves the newest published tag and reports the move in words, as above. Note also that `DISABLE_AUTOUPDATER` suppresses plugin updates entirely unless `FORCE_AUTOUPDATE_PLUGINS=1` is also set.
+
+**The config just written must reach this repository's default branch — `<default branch>`, from step 0's `gh repo view --json defaultBranchRef` — before any dispatched agent can read it.** `impl-agent` and `revise-agent` bootstrap from `git show origin/HEAD:.claude/port.config.json`, which resolves the default branch, not `branches.integration`. If the default branch and the integration branch differ, say so here and be explicit: a config change merged only to `<integration>` does not reach dispatched agents until it also reaches `<default branch>`.
 
 Also flag anything detection could not settle: no integration branch, no CI checks to mirror, an empty `commands.checks`. Finish with the next step:
 

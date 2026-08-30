@@ -20,14 +20,14 @@ Edits under `plugins/port/` take effect immediately — there is no build step a
 An install from a `github` marketplace source — the consumer path, and this repository's own committed entry — advances only when all three of these line up. Any one wrong, and the running copy silently never changes:
 
 - **`version`** in `plugins/port/.claude-plugin/plugin.json` — the release signal. The plugin's on-disk cache directory is keyed by this string (`~/.claude/plugins/cache/port/port/<version>/`), so `claude plugin marketplace update port` refreshes the marketplace's own clone but **cannot advance a pinned install** whose version has not moved.
-- **`ref`** — defaults to the marketplace repository's *default* branch when unset. For `b-at-neu/port` that is `dev`, the integration branch, not a release line; the committed entry pins it to `main` for exactly this reason.
-- **`autoUpdate`** — off by default for third-party marketplaces, so even a real version bump on `main` sits unfetched until this is `true` or someone updates manually.
+- **`ref`** — defaults to the marketplace repository's *default* branch when unset, which tracks whatever merges there rather than a release. `/port:init` pins a consumer's `ref` to `b-at-neu/port`'s newest published release tag (`v<semver>`), or `main` — this repository's release branch — if none has shipped yet; either is a deliberate pin, but an immutable tag never advances on its own, so a consumer moves forward only by re-running `/port:init`. This repository's own committed entry stays pinned to `main` for now, as the contributor-facing form (see below).
+- **`autoUpdate`** — off by default for third-party marketplaces, so even a real version bump sits unfetched until this is `true` or someone updates manually.
 
-One line covers all three: **a version bump landing on `main` is what releases — the bump alone, sitting on the integration branch, releases nothing.** `/port:release` is what lands it.
+One line covers all three: **publishing a release tag is what reaches a pinned consumer — merging the release pull request into `main` alone does not, since an immutable tag pin never moves on its own.** `/port:release` is what lands that merge and cuts the tag.
 
 ### Refreshing a GitHub-sourced install by hand
 
-`git pull` does nothing for it — the loader never reads this working tree, only the fetched marketplace clone and the versioned cache. `/reload-plugins` does nothing either — the bytes already on disk are unchanged; there is nothing for it to reload. To force a GitHub-sourced install to catch up to a real version bump on `main`:
+`git pull` does nothing for it — the loader never reads this working tree, only the fetched marketplace clone and the versioned cache. `/reload-plugins` does nothing either — the bytes already on disk are unchanged; there is nothing for it to reload. Under a tag pin, this recipe re-fetches the **same** tag `ref` already names, so it does not move a pinned consumer forward on its own — moving forward means changing `ref` first, which is what re-running `/port:init` does. To force a GitHub-sourced install to catch up to a real version bump:
 
 ```bash
 claude plugin marketplace update port
