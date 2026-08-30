@@ -32,6 +32,9 @@ No dependencies, no plugin install, no model calls. Runs in seconds, in CI on ev
 | No `--label`/`--add-label`/`--remove-label` argument under `plugins/**/*.md` is a bare config key whose name differs from it | A key typed where a resolved label name belongs, matching nothing silently (#61) |
 | The guard hook's classifier denies a `gh`/`git` call wrapped in a shell `for`/`while`/`until` loop for the cockpit as well as a subagent, never for an `impl-<n>` operator worktree, and never trips on loop keywords quoted inside a `-b`/`-m`/`--jq` argument | The cockpit wrapping `gh` in a loop and losing everything but the first iteration when the turn dies mid-loop (#120) |
 | The guard hook's classifier denies a `gh pr edit`/`gh issue edit --remove-label` call targeting `<labels.needsHuman>` unless a recent operator message names that item, allows it unverified (logged as `gate-clear`, never silently) when the transcript can't be read, and never guards an `impl-<n>` operator worktree | The cockpit clearing its own `needs human` escalation gate, unprompted, under throughput pressure (#138) |
+| `review-agent.md` reads `statusCheckRollup` and `--watch`, states the literal phrase "no verdict is formed while any check on the head commit is pending", conditions the approval-gate carve-out on `modules.approvalGate`, and names the `blocked — checks pending` verdict; no agent or skill file names a literal CI check name | A verdict formed before its evidence exists, and a carve-out hard-coded to one repository's check names (#143) |
+| `plugins/port/skills/pipeline/SKILL.md` carries the `<labels.approved>` carve-out's precondition phrase "only when a check on it has gone red", and the approved-announcement copy shows a check conclusion | The cockpit's terminal-state rail widening back into a general licence to revisit `approved` (#143) |
+| `PIPELINE.md`'s rebase protocol declares the widened auto-resolvable rows ("take the union", "deterministic order", "apply the addition inside the new structure"), the never-auto-resolve list, and the escalation's `Recommendation` / `D<n>` decision-ID form | The rebase protocol regressing to fail-closed-and-narrate instead of resolve-and-escalate-as-options (#143) |
 
 Each rule is worth testing by breaking it deliberately. If a check cannot be made to fail, it is not a check.
 
@@ -52,8 +55,9 @@ It targets a real exposure: the output formats live in `PIPELINE.md` prose and w
 | Assertion | Source |
 | --- | --- |
 | Body opens `Closes #N`, carries `## Summary` / `## Changes` / `## Testing plan` / `## Automated checks`, and the testing plan is a real `- [ ]` checklist | Pull request description format |
-| Every review heading is `## Code Review — Cycle <n> · <approved\|needs revision>` with a counts line under it, cycles running 1..N | Reviews and revisions |
-| Revision notes are `## Revision — Cycle <n>` plus one `fixed … · skipped … · <sha>` line, no cycle above the review count | Reviews and revisions |
+| Every review heading is `## Code Review — Cycle <n> · <approved\|needs revision\|blocked — checks pending>` with a counts line under it, cycles running 1..N | Reviews and revisions |
+| Revision notes are `## Revision — Cycle <n>` plus one `fixed … · skipped … · <sha>` line, or a `check <name> · <sha>` line in check-fix mode, no cycle above the review count | Reviews and revisions |
+| An `## Approval withdrawn` comment names both a check and a 7–40 character hex SHA | Check evidence — the `<labels.approved>` carve-out |
 | Commit subjects are `#N <imperative lowercase>`, under 80 characters, no trailing period, with a `Co-Authored-By:` trailer | Commit messages |
 | At most one stage label; a merged pull request keeps no trigger or in-flight label | Label lifecycle |
 | Nothing under `.temp/` or `.agents/` in the diff | Operating rules |

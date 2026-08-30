@@ -163,7 +163,7 @@ Rule: **every stage agent's first action is swapping its trigger label for its i
 | `reviewing` | `reviewing` | `review-agent` | in-flight | Review underway |
 | `needsRevision` | `needs revision` | `review-agent` | trigger | Dispatch `revise-agent` (subject to the cycle cap) |
 | `revising` | `revising` | `revise-agent` | in-flight | Fixes underway |
-| `approved` | `approved` | `review-agent` | terminal | Findings are at or under the current cycle's bar; a human merges |
+| `approved` | `approved` | `review-agent` | terminal | Findings are at or under the current cycle's bar; a human merges. Removed only under the `## Check evidence` carve-out — a check on it has gone red since approval |
 | `needsHuman` | `needs human` | Cockpit / `revise-agent` | gate | Cycle cap reached without convergence, or an ambiguous rebase conflict; the pipeline stops. Clears only via `unblock #N` — the guard hook denies any other removal, cockpit included |
 | `refreshBranch` | `refresh branch` | Cockpit / human | trigger | *(`previewDatabase`)* Dispatch `revise-agent` in refresh mode |
 | `refreshing` | `refreshing` | `revise-agent` | in-flight | *(`previewDatabase`)* Branch refresh underway; other labels are left in place |
@@ -281,6 +281,22 @@ Note the asymmetry when implementing this: a session-title **tool** can be calle
 
 **Always in a worktree.** `/port:implement` never works in the main checkout, for two reasons: editing `.claude/` from the session that is *using* it mutates live configuration mid-task, and the ticket may be editing the very agent file the session is following. In a worktree the session reads its instructions from the installed plugin while every edit lands on the worktree copy, so the committed behaviour holds for the whole run.
 
+## Check evidence
+
+One shared contract, read by `review-agent` before it forms a verdict and by the cockpit before it calls a pull request merge-ready. Neither ever reads `gh pr checks`' exit code as the answer: `8` means pending, and `1` covers both "a check failed" and "no checks reported" — always re-read the rollup itself.
+
+**Read and reduce.** `gh pr view <n> --repo <repo> --json headRefOid,statusCheckRollup`. The rollup carries one entry per **event**, not per check — the approval gate alone re-runs on every `labeled`/`unlabeled` event, so a pull request that has been through a few label changes can carry five or more entries for the same check name, and reading any but the newest is reading a stale answer. **Reduce to the latest entry per check name** (`.name` for a CheckRun, `.context` for a StatusContext — read as `(.name // .context)`) by `startedAt`, falling back to `completedAt` when `startedAt` is absent. Then read `(.status, .conclusion)` for a CheckRun or `.state` for a StatusContext, via the existing `(.conclusion // .state)` fallback.
+
+**Concluded, green, and empty.** **Concluded** is `status == "COMPLETED"` (CheckRun) or `state != "PENDING"` (StatusContext). **Green** is `SUCCESS`, `NEUTRAL`, or `SKIPPED`; every other conclusion — `FAILURE`, `TIMED_OUT`, `ACTION_REQUIRED`, `STARTUP_FAILURE`, `ERROR`, `CANCELLED` — is **not evidence of passing** and blocks. **An empty rollup is pending, never green** — no checks reported is the absence of evidence, not its presence. A repository with no CI at all will therefore park every pull request here; that is a known, deliberately conservative limitation, not a bug to route around.
+
+**The one carve-out.** Only when `modules.approvalGate` is true: read `.github/workflows/approval-check.yml` (the path `/port:init` installs the module's workflow at) and take the single key under `jobs:` as the check-run name to excuse — derived from the file, never typed as a literal, so a repository that renamed the job is still correct. File absent, or the module false → **no carve-out at all, and every red check blocks.** The excused check is excluded from **verdicts and routing only** — it is always listed with its real conclusion wherever conclusions are reported. This list has **exactly one entry**; widening it is the failure this section exists to prevent.
+
+**The head must not move.** Record `headRefOid` before any wait and re-read it after. A different SHA means the evidence belongs to a different diff, and no verdict formed against the old one is valid — the caller re-reads or bails out; see `review-agent.md` step 4 for the exact exit.
+
+**Bounded wait.** `gh pr checks <n> --repo <repo> --watch --interval 30` under a Bash timeout of `600000` ms, at most **3** times (~30 minutes total). `--watch`'s own output shape is not part of the contract — never parse it; after each wait, re-read `statusCheckRollup` directly. A timeout is a `BLOCKED:`, never a pass: a repository with genuinely slow checks parks here rather than getting a wrong answer.
+
+**The `<labels.approved>` carve-out to the never-touch rail.** The cockpit may remove `<labels.approved>` from a pull request **only** when it has just read a red conclusion — other than the excused check above — for a named check on that pull request's **current** head, and its announcement names that check. This is the **sole** exception to the never-touch rail; it is not a general licence to revisit terminal states, and it is deliberately **not** a guard-hook rule — the hook cannot observe "a check went red," so the mechanical guard here is the layer-1 prose check plus the eval case regression-testing it, not `agent-guard.mjs`.
+
 ## Output formats
 
 Defined once here; the stage agents follow these exactly.
@@ -316,12 +332,23 @@ The code review is a **real GitHub pull request review** (`gh api …/pulls/<pr>
 
 **Findings live on the threads, not in a summary.** A resolved review thread *is* the log entry — collapsed and out of the way until expanded. So a finding is never re-narrated cycle after cycle, and "what is still open" is GitHub's unresolved-conversation count.
 
-- **Review body = title plus one line.** `## Code Review — Cycle <n> · <verdict>` (keep the literal `Code Review` — the cockpit counts it), then a single counts line, e.g. `2 open — 1 🔴 Critical, 1 🟠 Medium (see inline)`. Nothing else. **Only exception:** a finding that cannot anchor to a diff line has no thread, so it goes in the body with a `blob/<headRefOid>` permalink.
+- **Review body = title plus one line.** `## Code Review — Cycle <n> · <verdict>`, `<verdict>` one of `approved`, `needs revision`, or `blocked — checks pending` (keep the literal `Code Review` — the cockpit counts it), then a single counts line, e.g. `2 open — 1 🔴 Critical, 1 🟠 Medium (see inline)`. Nothing else. **Only exception:** a finding that cannot anchor to a diff line has no thread, so it goes in the body with a `blob/<headRefOid>` permalink.
 - **Each finding is one inline comment** on a diff line: `**R<n>-<sev><id>** <emoji> — <problem>. Fix: <one line>.` Stable ID `R<cycle>-<sev><id>`; severities 🔴 Critical · 🟠 Medium · 🟡 Low · ⚪ Nit. Inline comments are **new actionable findings only** — never status.
-- **Escalating bar — what blocks rises with the cycle.** Pass 1 polishes everything, later passes converge: **cycle 1** any finding blocks; **cycle 2** Low and above (Nit does not); **cycle 3+** Critical and Medium only. A nit introduced during a revision cannot re-trigger at cycle 2 or later. The cockpit's cap is `reviewCycleCap` with Critical or Medium still open, which routes to `needs human`.
+- **Escalating bar — what blocks rises with the cycle.** Pass 1 polishes everything, later passes converge: **cycle 1** any finding blocks; **cycle 2** Low and above (Nit does not); **cycle 3+** Critical and Medium only. A nit introduced during a revision cannot re-trigger at cycle 2 or later. The cockpit's cap is `reviewCycleCap` with Critical or Medium still open, which routes to `needs human`. A red required check, other than the `## Check evidence` carve-out, is **always** Critical, at every cycle — never downgraded to fit a later cycle's bar.
 - **Inline anchoring.** A comment is accepted only on a line **in the diff** — map it from `gh pr diff` hunk headers (added and context lines → `side:"RIGHT"`, new-version line; deletions → `side:"LEFT"`, old-version line). If the reviews API returns 422 for an unresolvable line, **resubmit with `comments:[]`** and list those findings in the body with permalinks, so a review always lands.
-- **Revision resolves threads, it does not summarize.** After pushing fixes, for each **fixed** finding reply `Fixed in <sha>` on its thread and resolve it via GraphQL (`addPullRequestReviewThreadReply` then `resolveReviewThread`), matched by ID; **genuinely-skipped** threads get a one-line reason and stay open. Then one short comment per cycle, or none: `## Revision — Cycle <n>` plus a single line `fixed <ids> · skipped <ids> · <sha>`, appending `· rebase: <file> (<strategy>)` if a conflict was auto-resolved.
-- **Other comments** — `## Pipeline Escalation` (revise: ambiguous rebase), `## Blocker` (impl: on the issue), and `## Gate cleared` (cockpit: on the pull request, at `unblock #N`) stay short: what is blocked/cleared and the decision needed, via `--body-file`.
+- **Revision resolves threads, it does not summarize.** After pushing fixes, for each **fixed** finding reply `Fixed in <sha>` on its thread and resolve it via GraphQL (`addPullRequestReviewThreadReply` then `resolveReviewThread`), matched by ID; **genuinely-skipped** threads get a one-line reason and stay open. Then one short comment per cycle, or none: `## Revision — Cycle <n>` plus a single line `fixed <ids> · skipped <ids> · <sha>`, appending `· rebase: <file> (<strategy>)` if a conflict was auto-resolved. The detail line may instead open `check <name> · <sha>` for a check-fix cycle — see `revise-agent.md` step 1 — with no `fixed`/`skipped` segment, since there are no threads to resolve.
+- **Other comments** — `## Pipeline Escalation` (revise: ambiguous rebase), `## Blocker` (impl: on the issue), `## Gate cleared` (cockpit: on the pull request, at `unblock #N`), and `## Approval withdrawn` (cockpit: on the pull request, when a check goes red after approval — see "The `<labels.approved>` carve-out" in `## Check evidence`) stay short: what is blocked/cleared/withdrawn and the decision needed, via `--body-file`.
+
+### Approval withdrawn (cockpit writes it via `--body-file`)
+
+Posted the same tick the cockpit routes an approved pull request back to `<labels.needsRevision>` per the `## Check evidence` carve-out. Short, no restated context:
+
+```
+## Approval withdrawn
+`<check-name>` went **<conclusion>** on `<head-sha>` after approval. <link>
+```
+
+Names the check, its conclusion, its link, and the head SHA the conclusion belongs to — the four facts that authorise the removal, so the record stands on its own without the cockpit's own reasoning attached.
 
 ### Pull request description (`impl-agent` writes it via `--body-file`)
 
@@ -339,8 +366,10 @@ Write the message to `.temp/commit-msg.txt` and `git commit -F .temp/commit-msg.
 
 - **Review and revise not converging** — before each revise dispatch the cockpit counts `## Code Review` comments; at `reviewCycleCap` with Critical or Medium still found it labels `needs human`, comments, and stops dispatching for that item.
 - **Implementation blocker** — `impl-agent` comments `## Blocker`, labels `blocked`, and reports `BLOCKED:`; the cockpit relays and resumes the same agent with the human's decision.
-- **Rebase conflict during revision** — `revise-agent` attempts autonomous resolution per the protocol below; it aborts, comments `## Pipeline Escalation`, and labels `needs human` **only** when a conflict is ambiguous or on the never-touch list.
+- **Rebase conflict during revision** — `revise-agent` resolves everything inferrable and escalates only the genuinely ambiguous hunks as numbered decision requests; it aborts the whole rebase, comments `## Pipeline Escalation`, and labels `needs human` whenever any hunk is ambiguous or on the never-touch list. `unblock #N` relays the options and re-dispatches with the operator's selections.
 - **Plan questions** — `plan-agent` never guesses: it returns `QUESTIONS FOR HUMAN:` and the cockpit relays, then resumes it with answers.
+- **No verdict formed while checks are pending** — `review-agent` waits, bounded, for every check on the head commit to conclude before posting; a timeout is `blocked — checks pending`, never a pass. See `## Check evidence`.
+- **A check goes red after approval** — the cockpit re-verifies every `<labels.approved>` pull request each tick and, under the sole carve-out in `## Check evidence`, routes it back to `<labels.needsRevision>` with `## Approval withdrawn` naming the check.
 - **Stalled or usage-limited agent** — an in-flight label with no live `TaskList` entry means the agent crashed or hit a usage limit, not that work is proceeding; see "Liveness" for how the cockpit tells the two apart and responds.
 
 ### Liveness
@@ -358,7 +387,7 @@ An in-flight item with **no** live `TaskList` entry and **no** completion notice
 
 ### Rebase conflict protocol (`revise-agent`)
 
-When `git rebase origin/<base>` hits conflicts, `revise-agent` resolves the structurally unambiguous ones and escalates the rest. **Fail closed:** if any single conflict is ambiguous or on the never-touch list, abort the **entire** rebase and escalate — never partially resolve, and never let an auto-resolve silently drop a side's logic.
+When `git rebase origin/<base>` hits conflicts, `revise-agent` is biased **toward resolving**: it resolves everything inferrable and escalates only what is genuinely ambiguous, as a set of concrete decisions rather than a narrated dump. **Atomicity and preservation are separate properties.** Atomicity is unchanged — abort the **entire** rebase on any ambiguity, and never push a half-rebased branch. What must never be discarded is the *classification* itself: it is deterministic, so the auto-resolved set is re-derived identically on the next attempt, and the escalation records it so the operator can see what will be reapplied.
 
 This applies **unchanged in refresh mode**: a conflict is a real blocker and still escalates, while quota alone never does.
 
@@ -372,10 +401,15 @@ This applies **unchanged in refresh mode**: a conflict is a real blocker and sti
    | Each side added a different import or export, with no line overlap | Type definitions or constants where both sides changed the same key |
    | The other side made a whitespace or formatting-only change in our area | Logic changes on the same lines from both sides |
    | One side deleted a block entirely that the other did not touch | Any conflict where accepting one side would silently drop the other's logic |
+   | Both sides append distinct entries to the same list, set, or table → **take the union** | — |
+   | Both sides add distinct sections or rows under the same heading → **keep both, in a deterministic order** (base's first, then ours) | — |
+   | One side restructures a block the other only added to → **apply the addition inside the new structure** | — |
+
+   **The never-auto-resolve list is unchanged**: `sessionRequiredPaths`, database migration files, and environment or build configuration always escalate, however simple the diff looks — and any conflict where accepting one side would silently drop the other's logic escalates regardless of which row it otherwise resembles.
 
 3. **If all are auto-resolvable** — resolve each with Edit or Write, removing every conflict marker, then `git add "<path>"` (quoted), then `git -c core.editor=true rebase --continue` (never a bare `--continue`, which may open an editor). For a lockfile, prefer taking the base's version and regenerating over hand-merging. A rebase may pause repeatedly — re-run this protocol at each pause. In the revision comment, list each resolved file and the strategy used.
-4. **If any is ambiguous** — `git rebase --abort` immediately (abort the whole rebase; never leave a half-rebased state), comment `## Pipeline Escalation` listing each ambiguous file and hunk, both sides of each conflict, and why autonomous resolution was not safe; then label `needs human` and stop.
-5. **Never auto-resolve** anything matching `sessionRequiredPaths`, database migration files, or environment and build configuration — escalate regardless of apparent simplicity.
+4. **If any is ambiguous** — `git rebase --abort` immediately (abort the whole rebase; never leave a half-rebased state). Comment `## Pipeline Escalation`: a one-line summary (`<k> conflicts — <a> resolved automatically, <b> need a decision`), an `### Auto-resolved (reapplied on the next attempt)` list of `` `path` — <strategy> ``, then one `### D<n> — \`path\`` block per ambiguous hunk — **not** a raw conflict-marker dump — containing what each side (**ours**/**theirs**) is trying to achieve in one line each, a two-or-three-row options table with `Keeps`/`Loses` columns (typically **A take ours** · **B take theirs** · **C** a specific described combination), and a bolded `**Recommendation: <letter>** — <reason>`. IDs are `D1..Dn`, restarting at `D1` in each escalation comment. Then label `needs human` and stop — the operator picks a direction with `unblock #N`, never edits a file themselves.
+5. **On the next attempt** — read the newest `## Gate cleared` comment (if newer than the newest `## Pipeline Escalation`) for its `### Rebase decisions` lines (`` - D<n> `path` — **<letter> <label>** ``) and apply each recorded decision to its matching hunk alongside every auto-resolvable one, in a single pass. A decision whose hunk no longer exists (the base moved again) is dropped and noted in the revision comment; a **new** ambiguous hunk with no recorded decision escalates again with fresh `D1..Dn` IDs.
 
 ## Stopping and draining
 
@@ -413,6 +447,8 @@ Closing the cockpit session also halts dispatch, since it is the only dispatcher
 | Every dispatched agent failed at once, all reporting a session-limit message | The operator's usage window was exhausted | The cockpit parks each affected item back at its trigger label and schedules the next wakeup just after the reported reset time; nothing to retry manually |
 | The cockpit says a gate clear was denied | Correct behaviour — the guard hook denies removing `<labels.needsHuman>` unless an operator instruction just named that item | Say `unblock #N` if you actually mean to clear it |
 | A batch label change moved only some of the items | A partial application — the same failure mode a shell loop used to hide | The re-query the cockpit runs after every multi-item change reports exactly which one did not move; re-issue for the remainder |
+| A pull request was approved and then moved back to `needs revision` | A check on it went red after approval | The `## Approval withdrawn` comment names it; revision dispatches this tick |
+| `review-agent` stopped without a verdict | Checks never concluded within the bounded wait | The pull request is at `<labels.needsHuman>`; `unblock #N` is the route |
 
 ## Reading current state without the cockpit
 

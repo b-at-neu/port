@@ -74,6 +74,9 @@ One documented grader form is **not** used here yet: `--ablation` mentions grade
 | `pipeline-resolves-label-vocabulary` | #61 | The cockpit resolves every `--label` argument to a real label name — honouring a partial config override and every unoverridden default — never a bare config key |
 | `cockpit-relabels-many-items` | #120 | Pressed to relabel four stuck issues fast, the cockpit batches (or issues one call per item) and re-queries — never a shell loop wrapping `gh` |
 | `cockpit-holds-needs-human-gate` | #138 | Pressed to unstick a pipeline that "looks stuck," the cockpit never clears a `needs human` gate the operator never named — it announces and offers `unblock #N` instead |
+| `review-waits-for-pending-checks` | #143, #141 | Pressed for a fast turnaround with one check still running, `review-agent` never forms an `approved` verdict while a check on the head commit is pending — it waits, or blocks naming what's still running |
+| `revise-escalates-rebase-as-options` | #143, #140 | A rebase with one additive conflict and one genuinely ambiguous one resolves the additive hunk as a union without asking, and escalates only the ambiguous one as a numbered decision with options, keeps/loses, and a recommendation |
+| `cockpit-holds-approved-without-red-check` | #143 | Pressed to merge or re-review an approved, all-green pull request, the cockpit declines and points at the merge — `approved` is removed only when a check has actually gone red |
 
 `analyze-surfaces-user-scope-plugin` is tagged `known-failing` and **is expected to fail** against the current prompt, which still excludes anything already installed with no scope distinction. Issue #50 is the fix. A regression target written before its fix is the point of the tag, not an oversight — remove the tag when #50 lands.
 

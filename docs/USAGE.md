@@ -33,7 +33,9 @@ When the plan is ready the cockpit summarizes it and asks: approve, request chan
 
 From approval onward it runs on its own: implementation in an isolated worktree, then review, then revision, looping until the findings are at or under the bar for that cycle. What blocks rises as cycles go on, so the first pass polishes everything and later passes only stop for real problems.
 
-Then the pull request is labeled `approved` and the cockpit tells you. **You merge on GitHub.** The pipeline never merges — that gate is absolute.
+Then the pull request is labeled `approved` and the cockpit tells you which checks it's asserting are green — a pending check is announced as not merge-ready yet, never glossed over. **You merge on GitHub.** The pipeline never merges — that gate is absolute.
+
+If a check on an approved pull request goes red afterward — the base moved, or the check re-ran — the cockpit routes it back to `needs revision` on its own, comments naming the check, and revision dispatches automatically. That's the one case the pipeline touches an approved pull request without you asking; everything else about one is left alone until you merge it.
 
 ## Talking to the cockpit
 
