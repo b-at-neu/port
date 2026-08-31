@@ -122,34 +122,45 @@ const die = (msg) => {
 const ok = () => ({ ok: true });
 const fail = (detail, expected) => ({ ok: false, detail, expected });
 
-function checkCommit(text, { issue } = {}) {
+/** Every failing assertion, not just the first — `audit` reports each one
+ *  independently (so a commit with several defects surfaces all of them, as
+ *  the pre-move script did), while `checkCommit` below surfaces only the
+ *  first, since a single-file `check` reports one `FAIL` line. Both read
+ *  from this one list, so there is nothing to keep in sync between them. */
+function commitViolations(text, { issue } = {}) {
+  const violations = [];
   const ls = lines(text);
   const subject = ls[0] ?? '';
   if (!COMMIT_SUBJECT.test(subject)) {
-    return fail(
+    violations.push(fail(
       `subject must match '#<issue> <imperative lowercase summary>', got ${JSON.stringify(subject)}`,
       "'#<issue> <imperative lowercase summary>'",
-    );
+    ));
   }
   if (subject.length >= 80) {
-    return fail(`subject is ${subject.length} characters, must be under 80`, 'a subject under 80 characters');
+    violations.push(fail(`subject is ${subject.length} characters, must be under 80`, 'a subject under 80 characters'));
   }
   if (subject.endsWith('.')) {
-    return fail('subject must not end with a period', 'a subject with no trailing period');
+    violations.push(fail('subject must not end with a period', 'a subject with no trailing period'));
   }
   if (issue != null) {
     const m = /^#(\d+)/.exec(subject);
     if (!m || Number(m[1]) !== Number(issue)) {
-      return fail(`subject's issue number must be ${issue}, got ${JSON.stringify(subject)}`, `a subject starting '#${issue} '`);
+      violations.push(fail(`subject's issue number must be ${issue}, got ${JSON.stringify(subject)}`, `a subject starting '#${issue} '`));
     }
   }
   if (ls.length > 1 && ls[1].trim() !== '') {
-    return fail('line 2 must be blank when a body follows the subject', 'a blank line 2');
+    violations.push(fail('line 2 must be blank when a body follows the subject', 'a blank line 2'));
   }
   if (!/^Co-Authored-By:/im.test(text)) {
-    return fail("message carries no 'Co-Authored-By:' trailer", "a 'Co-Authored-By: <name> <email>' trailer");
+    violations.push(fail("message carries no 'Co-Authored-By:' trailer", "a 'Co-Authored-By: <name> <email>' trailer"));
   }
-  return ok();
+  return violations;
+}
+
+function checkCommit(text, opts = {}) {
+  const violations = commitViolations(text, opts);
+  return violations.length === 0 ? ok() : violations[0];
 }
 
 function checkPrBody(text, { issue } = {}) {
@@ -481,7 +492,9 @@ function runAudit(argv) {
       // The commits API returns no parent count, so a merge is recognized by
       // its subject. Merges are exempt: GitHub writes them, not the pipeline.
       if (subject.startsWith('Merge ')) continue;
-      fold(at('commit'), checkCommit(`${subject}\n\n${c.messageBody ?? ''}`));
+      const violations = commitViolations(`${subject}\n\n${c.messageBody ?? ''}`);
+      if (violations.length === 0) auditOk();
+      else for (const v of violations) auditFail(at('commit'), v.detail);
     }
 
     // --- Labels ---

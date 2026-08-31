@@ -35,7 +35,7 @@ If `.claude/port.config.json` already exists, this is a **reconcile**: read it, 
 
 Gather, without writing anything:
 
-- **Branches** — `git branch -r` and `git rev-parse --abbrev-ref HEAD`. Look for an integration branch distinct from the default. If only one long-lived branch exists, say so; the pipeline needs an integration branch, and creating one is the operator's decision. Keep the current branch from this pass — step 9's report reuses it rather than looking it up again.
+- **Branches** — `git branch -r` and `git rev-parse --abbrev-ref HEAD`. Look for an integration branch distinct from the default. If only one long-lived branch exists, say so; the pipeline needs an integration branch, and creating one is the operator's decision. Keep the current branch from this pass — step 10's report reuses it rather than looking it up again.
 - **Toolchain** — read the manifest and lockfiles the repository actually has, and list the available scripts. **Do not assume a package manager**; a repository may have none.
   - **Propose the repository's declared scripts, not ad-hoc invocations.** A repository with a `lint` script gets that script — not a direct call to whatever binary you guess it wraps. The script is what its authors maintain and what CI runs; a direct invocation drifts from both the moment either changes.
   - **A check with no backing script is proposed by asking, never assumed.** A repository with no type-check script may simply not have that check. Inventing one produces an agent that fails every run, and — worse than failing — fails by *prompting*, because an invented command is usually one the allowlist does not cover.
@@ -178,7 +178,7 @@ If the file already exists, diff it rather than overwriting, and ask.
 node --version
 ```
 
-**No Node, or the operator declines** → leave `commands.artifacts` null, install nothing, and say plainly in step 9's report that the agents will produce the strict format above but nothing validates it locally.
+**No Node, or the operator declines** → leave `commands.artifacts` null, install nothing, and say plainly in step 10's report that the agents will produce the strict format above but nothing validates it locally.
 
 **Node present and the operator accepts:**
 
