@@ -806,6 +806,23 @@ const MARKETPLACE_REF_PATTERN = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
   ok();
 }
 
+// --- README's documented install source stays pinned ------------------------
+// The command adopters copy-paste. A docs edit that drops the `@main` pin
+// looks like a harmless simplification but silently reinstates default-branch
+// tracking -- the exact drift #146 fixed. `owner/repo@ref` and `owner/repo#ref`
+// both parse; only a bare, ref-less source is disallowed here.
+{
+  const readme = readFileSync(join(root, 'README.md'), 'utf8');
+  for (const line of readme.split('\n')) {
+    const m = /claude plugin marketplace add\s+(\S+)/.exec(line);
+    if (!m || !m[1].startsWith('b-at-neu/port')) continue;
+    if (!/^b-at-neu\/port[@#]/.test(m[1])) {
+      fail('marketplace', `README.md: marketplace add source must carry an @<ref> or #<ref> pin, got ${JSON.stringify(m[1])}`);
+    }
+  }
+  ok();
+}
+
 // --- This repository's own permissions are non-empty -----------------------
 // This is the exact condition the cockpit's startup preflight checks at
 // runtime: a repository with `.claude/settings.json` present but
