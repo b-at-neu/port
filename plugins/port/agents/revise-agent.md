@@ -32,10 +32,11 @@ Your worktree comes from the harness's `isolation: worktree`, and its initial ch
 | `<repo>` | `repo` | required — stop |
 | `<owner>` / `<name>` | `repo`, split on `/` | required — stop |
 | `<labels.X>` | `labels.X` | the standard name in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Label lifecycle" |
+| `<artifacts>` | `commands.artifacts` | not set — skip every `check` call below entirely |
 
 **Label names are configuration, not constants.** Never type a label name you did not read from config or the standard vocabulary.
 
-Also read: `commands.bootstrap`, `commands.checks`, `docs.engineering`, `models.revise` (for the commit trailer), `sessionRequiredPaths` (which seeds the never-touch list), and `modules.previewDatabase`.
+Also read: `commands.bootstrap`, `commands.checks`, `commands.artifacts` (production-time artifact validation; null means skip it), `docs.engineering`, `models.revise` (for the commit trailer), `sessionRequiredPaths` (which seeds the never-touch list), and `modules.previewDatabase`.
 
 Your **model** comes from `models.revise`; the cockpit passes it at dispatch.
 
@@ -148,12 +149,13 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --a
 
    ```bash
    # Write .temp/commit-msg.txt (Write tool), then:
+   <artifacts> check commit .temp/commit-msg.txt --issue <issue-number>
    git add -A
    git commit -F .temp/commit-msg.txt
    git push --force-with-lease origin HEAD:<branch>
    ```
 
-   The push is by refspec from a detached HEAD, and force-with-lease because the branch was rebased. **Message format:** subject `#<issue-number> address review feedback`, under 80 characters, no trailing period; an optional short body only if the *why* is not obvious; then a blank line and the co-authorship trailer naming the model from `models.revise`. Note the pushed SHA (`git rev-parse HEAD`) for the next step.
+   The push is by refspec from a detached HEAD, and force-with-lease because the branch was rebased. **Message format:** subject `#<issue-number> address review feedback`, under 80 characters, no trailing period, a co-authorship trailer naming the model from `models.revise` — the validator is authoritative on the exact shape. **When `commands.artifacts` is set**, run the `check commit` command above before every commit; a non-zero exit means rewrite `.temp/commit-msg.txt` and re-run it — never `git commit` past a failing check. Skip when `commands.artifacts` is null. Note the pushed SHA (`git rev-parse HEAD`) for the next step.
 
    **Rebase-only mode differs here.** There are no findings to commit, so check whether the rebase (plus `commands.bootstrap`/`commands.checks`) actually changed the tree:
    - **`git rev-parse HEAD` still equals the `headRefOid` recorded at pre-flight** — the rebase was a genuine no-op (the branch was already current with `<base>`). **Skip the push entirely**; report `rebase: no-op (already current)`. Never fabricate an empty commit to force one.
@@ -173,20 +175,18 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --a
 
    Match threads to findings by the **finding ID** (`R<c>-<id>`) the review agent put in each inline comment. **Resolve only what you actually fixed** — a genuinely-skipped thread gets a one-line reason and stays open.
 
-7. **Post one short revision note**, or none. The resolved threads are the log, so do not re-summarize findings. Write `.temp/revision-<pr>.md`, then `gh pr comment <pr-number> --repo <repo> --body-file .temp/revision-<pr>.md`:
+7. **Post one short revision note**, or none. The resolved threads are the log, so do not re-summarize findings. Write `.temp/revision-<pr>.md` — the validator is authoritative on the exact shape (heading `## Revision — Cycle <n>` plus one `fixed … · skipped … · <sha>` line, or `check <name> · <sha>` in check-fix mode). Append `· rebase: <file> (<strategy>)` for each reapplied or newly auto-resolved conflict, and `· decisions: D1 B, D2 C` for any recorded rebase decisions step 1b applied. A hunk whose recorded decision no longer matched gets its own one-line note (`D1 dropped — hunk no longer present`). No Fixed, Skipped, or Preexisting sections — those live on the threads. A preexisting issue worth tracking gets a one-line `follow-up:` note here, or a new issue. `<n>` is the cycle of the review you addressed, or — in check-fix mode — the cycle whose approval was withdrawn (the count of prior reviews, unchanged — no new review happened).
 
+   **When `commands.artifacts` is set**, before `gh pr comment` run:
+
+   ```bash
+   <artifacts> check revision .temp/revision-<pr>.md --cycle <n>
    ```
-   ## Revision — Cycle <n>
-   fixed R<c>-C1, R<c>-M1 · skipped R<c>-L1 · <sha>
-   ```
 
-   `<n>` is the cycle of the review you addressed. Append `· rebase: <file> (<strategy>)` for each reapplied or newly auto-resolved conflict, and `· decisions: D1 B, D2 C` for any recorded rebase decisions step 1b applied. A hunk whose recorded decision no longer matched gets its own one-line note (`D1 dropped — hunk no longer present`). Drop `fixed` or `skipped` when empty. No Fixed, Skipped, or Preexisting sections — those live on the threads. A preexisting issue worth tracking gets a one-line `follow-up:` note here, or a new issue.
+   A non-zero exit means rewrite `.temp/revision-<pr>.md` and re-run it — never post past a failing check. Skip when `commands.artifacts` is null. Then:
 
-   **Check-fix mode** writes `check <name> · <sha>` as the detail line instead — there is no `fixed`/`skipped` segment, since there were no findings to address. `<n>` is the cycle whose approval was withdrawn (the count of prior reviews, unchanged — no new review happened):
-
-   ```
-   ## Revision — Cycle <n>
-   check <name> · <sha>
+   ```bash
+   gh pr comment <pr-number> --repo <repo> --body-file .temp/revision-<pr>.md
    ```
 
    **Rebase-only mode** writes `rebase onto <base> · <sha>` instead — no `fixed`/`skipped` segment, since there were no findings and no threads. `<n>` is the count of prior reviews, unchanged (no new review happened). Skip the comment entirely when step 5 reported `rebase: no-op (already current)` — nothing moved, so there is nothing to note:

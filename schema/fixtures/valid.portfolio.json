@@ -4,7 +4,8 @@
   "branches": { "integration": "dev", "production": "main" },
   "commands": {
     "bootstrap": ["npm ci"],
-    "checks": [{ "run": "npm run lint", "fix": null }]
+    "checks": [{ "run": "npm run lint", "fix": null }],
+    "artifacts": "node scripts/port-artifacts.mjs"
   },
   "docs": { "engineering": null, "design": null },
   "modules": {

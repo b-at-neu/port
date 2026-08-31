@@ -2,7 +2,7 @@
 name: init
 description: Install the port agent pipeline into this repository — detect its toolchain, choose which subsystems to enable, write port.config.json, merge the permission lists into .claude/settings.json, create the label vocabulary, optionally install the CI merge gate, and offer to generate engineering standards from the codebase. Idempotent; nothing is written without confirmation. Manual only. Usage: /port:init
 disable-model-invocation: true
-allowed-tools: Read, Write, Edit, Glob, Grep, AskUserQuestion, Bash(gh label *) Bash(gh api repos/*) Bash(gh repo view *) Bash(git branch *) Bash(git remote *) Bash(git rev-parse *)
+allowed-tools: Read, Write, Edit, Glob, Grep, AskUserQuestion, Bash(gh label *) Bash(gh api repos/*) Bash(gh repo view *) Bash(git branch *) Bash(git remote *) Bash(git rev-parse *) Bash(node --version)
 ---
 
 # Initialize a repository for the port pipeline
@@ -35,7 +35,7 @@ If `.claude/port.config.json` already exists, this is a **reconcile**: read it, 
 
 Gather, without writing anything:
 
-- **Branches** — `git branch -r` and `git rev-parse --abbrev-ref HEAD`. Look for an integration branch distinct from the default. If only one long-lived branch exists, say so; the pipeline needs an integration branch, and creating one is the operator's decision. Keep the current branch from this pass — step 9's report reuses it rather than looking it up again.
+- **Branches** — `git branch -r` and `git rev-parse --abbrev-ref HEAD`. Look for an integration branch distinct from the default. If only one long-lived branch exists, say so; the pipeline needs an integration branch, and creating one is the operator's decision. Keep the current branch from this pass — step 10's report reuses it rather than looking it up again.
 - **Toolchain** — read the manifest and lockfiles the repository actually has, and list the available scripts. **Do not assume a package manager**; a repository may have none.
   - **Propose the repository's declared scripts, not ad-hoc invocations.** A repository with a `lint` script gets that script — not a direct call to whatever binary you guess it wraps. The script is what its authors maintain and what CI runs; a direct invocation drifts from both the moment either changes.
   - **A check with no backing script is proposed by asking, never assumed.** A repository with no type-check script may simply not have that check. Inventing one produces an agent that fails every run, and — worse than failing — fails by *prompting*, because an invented command is usually one the allowlist does not cover.
@@ -170,11 +170,29 @@ gh label create "<name>" --color "<color>" --description "<description>"
 
 If the file already exists, diff it rather than overwriting, and ask.
 
-## 7. Bootstrap ignores
+## 7. Install the artifact validator
+
+`commands.artifacts` gives the three stage agents a production-time check on the commit, pull request, and review formats they write — the same patterns the layer 2 audit asserts, run before the artifact is committed rather than after. Installing it needs Node.
+
+```bash
+node --version
+```
+
+**No Node, or the operator declines** → leave `commands.artifacts` null, install nothing, and say plainly in step 10's report that the agents will produce the strict format above but nothing validates it locally.
+
+**Node present and the operator accepts:**
+
+- Copy `${CLAUDE_PLUGIN_ROOT}/templates/artifacts.mjs` to `scripts/port-artifacts.mjs`.
+- Copy `${CLAUDE_PLUGIN_ROOT}/templates/artifacts.yml` to `.github/workflows/artifacts.yml`, substituting `{{artifactsCommand}}` with `node scripts/port-artifacts.mjs`, `{{markerLabel}}` with the configured marker label name, and `{{approvedLabel}}` with the configured approved label name.
+- If either file already exists, diff it rather than overwriting, and ask.
+- Set `commands.artifacts` to `"node scripts/port-artifacts.mjs"` in `.claude/port.config.json`.
+- Add `Bash(node scripts/port-artifacts.mjs *)` to **both** `.claude/settings.json`'s `permissions.allow` and `.claude/port.config.json`'s `extraAllow`, so a later reconcile keeps it.
+
+## 8. Bootstrap ignores
 
 Ensure `.gitignore` covers `.agents/`, `.temp/`, and the worktree root `.claude/worktrees/`. Append only what is missing.
 
-## 8. Offer the codebase analysis
+## 9. Offer the codebase analysis
 
 The repository is usable at this point, so this is the last thing asked and the only optional one.
 
@@ -187,7 +205,7 @@ Ask whether to run it now.
 
 **Declining is a genuinely supported path.** The analysis is slow and asks real questions, and an operator who just wants the pipeline running would rush exactly the decisions that matter most. State the consequence once and move on — do not press it.
 
-## 9. Report, including what you did not do
+## 10. Report, including what you did not do
 
 Summarize: the config written, permissions added versus already present, labels created versus skipped, whether the workflow was installed, and files touched.
 
@@ -196,6 +214,8 @@ Then state the manual steps explicitly. Chiefly:
 > **The approval gate is advisory until you make it a required check.** Add `run-approval-check` as a required status check in a branch ruleset on `<integration>`. I have not done this: it is an administrative change, hard to reverse, and it can block every merge if misconfigured.
 
 Never let the operator walk away believing they have a merge gate they do not have. If `approvalGate` was left off, say that too — plainly, not as a footnote.
+
+**If `commands.artifacts` was left null** — no Node, or the operator declined — say so here too: the stage agents will still produce the strict commit/pull-request/review/revision format, but nothing validates it locally, and a malformed one surfaces only in the layer 2 audit at `<labels.approved>`, or not at all if that workflow was never installed either.
 
 **If step 1 found this checkout is not on the integration branch**, say so here:
 

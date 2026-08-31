@@ -78,6 +78,12 @@
             }
           },
           "default": []
+        },
+        "artifacts": {
+          "type": ["string", "null"],
+          "description": "Command prefix the stage agents append `check <kind> <file>` (production-time artifact validation) and the layer 2 audit appends `audit` to. Null when the repository has no Node, in which case agents produce the artifact format but nothing validates it locally.",
+          "default": null,
+          "examples": ["node scripts/port-artifacts.mjs"]
         }
       }
     },
