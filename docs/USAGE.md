@@ -12,12 +12,12 @@ You talk to a cockpit. It talks to GitHub. Agents do the work.
 /port:pipeline
 ```
 
-Run this in its own session, on **haiku**, in **`default` permission mode**. Both matter:
+Run this in its own session, on **haiku** if you can — recommended, not required — and in **`default` permission mode**, which matters more:
 
-- **haiku**, because a tick is mechanical — run some queries, swap some labels, dispatch, relay. Spending a strong model on it is waste.
-- **`default` mode**, because a stage agent's disallowed commands are denied by a `PreToolUse` guard hook regardless of this session's mode — but `default` keeps your own edits in this session from auto-accepting, so anything unexpected stays visible. Get this wrong and the pipeline still works, but you lose visibility into your own actions here.
+- **haiku is the recommendation**, because a tick is mechanical — one collapsed query, swap some labels, dispatch, relay. Spending a strong model on it is waste, and a stronger model is also more willing to improvise past the rails below, which is not a trade this stage needs to make. But a skill cannot set the session's model — by the time it runs, the session already is what it is — so this is genuinely your call; the startup report names whichever model you're actually running, as information, with no warning either way.
+- **`default` mode**, because a stage agent's disallowed commands are denied by a `PreToolUse` guard hook regardless of this session's mode — but `default` keeps your own edits in this session from auto-accepting, so anything unexpected stays visible. Get this wrong and the pipeline still works, but you lose visibility into your own actions here. The startup report warns if `.claude/settings.json` sets anything else.
 
-Leave the session open. It schedules its own wakeups and reports as things move.
+Leave the session open. It schedules its own wakeups and reports as things move — see "Pacing" below for how fast.
 
 ## Getting a ticket built
 
@@ -53,7 +53,13 @@ Intent, not syntax. These all work:
 | `stop #142` | Halt one item and reset it so it can be retried |
 | `halt` | Drain, stop every running agent, reset their labels |
 
-`status` re-runs its queries live rather than reading from memory, so it is trustworthy after a long session.
+`status` re-runs its query live rather than reading from memory, so it is trustworthy after a long session.
+
+## Pacing
+
+While anything can move on its own — an agent running, an item about to dispatch — the cockpit polls every ~4.5 minutes and never backs off. Once everything left is waiting on a human (a plan to approve, an `approved` pull request to merge, a `needs human` gate), it backs off a step each tick with nothing new to report: ~4.5, ~9, ~18, then ~30 minutes, and holds there.
+
+**This means a label change you make by hand while the cockpit is fully idle can take up to 30 minutes to be noticed**, not 4.5. That is a deliberate trade — a resting cockpit polling every 4.5 minutes forever burns API calls to catch an event that is, by definition, waiting on you anyway — and the cockpit never goes quiet altogether: it keeps scheduling wakeups indefinitely, because it is the only thing that would ever notice a fresh `ready` label. The moment anything changes — a completion, a merge, a new trigger label — it resets to the fast cadence immediately. Say anything to it, or apply the label that unblocks it, and the next tick picks it up without waiting for the backoff to expire.
 
 ## When something needs you
 

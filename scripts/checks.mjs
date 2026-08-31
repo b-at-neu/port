@@ -902,7 +902,11 @@ const MARKETPLACE_REF_PATTERN = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 // result, so a config key (e.g. `planApproved`) typed directly into a
 // `--label`/`--add-label`/`--remove-label` argument silently matches no real
 // label instead of erroring. `<labels.planApproved>` is the placeholder and
-// must not match; the bare string `planApproved` must.
+// must not match; the bare string `planApproved` must. Extended for #148: the
+// collapsed tick query expresses the same thing as a GraphQL `labels: [...]`
+// list, which the original regex — keyed on `--label` flags only — would
+// silently miss, letting the collapse reintroduce #61's exact failure mode
+// one syntax over.
 {
   const mismatched = readJson('plugins/port/templates/labels.json')
     .labels.filter((l) => l.key !== l.name)
@@ -920,6 +924,19 @@ const MARKETPLACE_REF_PATTERN = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
           fail(
             'label-vocabulary',
             `${rel}: '${m[0]}' uses the config key '${token}' as a literal label name`,
+          );
+        }
+      }
+    }
+
+    const graphqlRe = /labels:\s*\[([^\]]*)\]/g;
+    while ((m = graphqlRe.exec(text))) {
+      const tokens = [...m[1].matchAll(/"([^"]*)"/g)].map((t) => t[1]);
+      for (const token of tokens) {
+        if (mismatched.includes(token)) {
+          fail(
+            'label-vocabulary',
+            `${rel}: GraphQL '${m[0]}' uses the config key '${token}' as a literal label name`,
           );
         }
       }
@@ -1509,6 +1526,124 @@ const SESSION_MARKER_LINE = /^>\s*\*\*SESSION REQUIRED:\*\*\s+\S/;
 
   if (!skillText.includes('dispatch #N anyway')) {
     fail('file-contention', `${skillRel} never declares the 'dispatch #N anyway' override`);
+  } else {
+    ok();
+  }
+}
+
+// --- Collapsed tick query — one round trip, never a per-label poll ---------
+// Regression guard for #148: a tick used to cost ~15 `gh issue list`/`gh pr
+// list --label` round trips. This checks that the Tick procedure actually
+// names the collapsed single-call contract, and that no per-label polling
+// call has crept back in under that heading — scoped to the Tick procedure
+// section itself, so the Configuration section's illustrative mention of
+// `gh issue list --label <unknown>` (explaining why a wrong string is silent,
+// not the tick's own polling call) is correctly exempt.
+{
+  const rel = 'plugins/port/skills/pipeline/SKILL.md';
+  const text = readFileSync(join(root, rel), 'utf8');
+
+  for (const phrase of ['gh api graphql', '--include', '.temp/tick-state.md']) {
+    if (!text.includes(phrase)) {
+      fail('tick-query', `${rel} never names '${phrase}' — the collapsed tick contract is missing a piece`);
+    } else {
+      ok();
+    }
+  }
+
+  const tickStart = text.indexOf('## Tick procedure');
+  if (tickStart === -1) {
+    fail('tick-query', `${rel} has no '## Tick procedure' heading`);
+  } else {
+    const tickEnd = text.indexOf('\n## ', tickStart + 1);
+    const tickSection = tickEnd === -1 ? text.slice(tickStart) : text.slice(tickStart, tickEnd);
+    const pollRe = /gh (?:issue|pr) list[^\n]*--label/g;
+    const hits = [...tickSection.matchAll(pollRe)];
+    if (hits.length > 0) {
+      fail(
+        'tick-query',
+        `${rel}'s Tick procedure still issues a per-label poll (${JSON.stringify(hits[0][0])}) — the collapse must fold it into the one query`,
+      );
+    } else {
+      ok();
+    }
+  }
+}
+
+// --- Pacing ladder — reset-on-change and never-stop are checkable, not prose
+// Regression guard for #148: the old pacing rule measured as one speed in
+// practice (26 of 27 wakeups at the floor over a real 25-hour run) because it
+// conflated "an agent is running" with "something will move without a
+// human". This checks the ladder's constants and its two load-bearing
+// preconditions are still literal, checkable phrases.
+{
+  const rel = 'plugins/port/skills/pipeline/SKILL.md';
+  const text = readFileSync(join(root, rel), 'utf8');
+
+  for (const n of ['270', '540', '1080', '1800']) {
+    if (!text.includes(n)) {
+      fail('pacing-ladder', `${rel} is missing the ladder constant '${n}'`);
+    } else {
+      ok();
+    }
+  }
+
+  if (!text.includes('Reset to the floor immediately on any observed change')) {
+    fail(
+      'pacing-ladder',
+      `${rel} is missing the literal reset-on-change phrase 'Reset to the floor immediately on any observed change'`,
+    );
+  } else {
+    ok();
+  }
+
+  if (!text.includes('Never stop — a stopped cockpit is the only dispatcher')) {
+    fail(
+      'pacing-ladder',
+      `${rel} is missing the literal never-stop phrase 'Never stop — a stopped cockpit is the only dispatcher'`,
+    );
+  } else {
+    ok();
+  }
+}
+
+// --- No busy-waiting in the cockpit skill -----------------------------------
+// Regression guard for #148: a real run issued 6 `sleep`-based waits inside
+// tool calls, busy-waiting on CI instead of letting the next scheduled tick
+// (or an event-driven completion) do the waiting.
+{
+  const rel = 'plugins/port/skills/pipeline/SKILL.md';
+  const text = readFileSync(join(root, rel), 'utf8');
+  if (/\bsleep\s+\d/.test(text)) {
+    fail('no-busy-wait', `${rel} contains a 'sleep <n>'-shaped busy-wait — the next tick is how this cockpit waits`);
+  } else {
+    ok();
+  }
+}
+
+// --- Ownership enforced client-side, and the blind-tick contract -----------
+// Regression guard for #148: dropping the per-alias assignee filter (what
+// makes the unowned sweep derivable from one call) must not silently drop
+// the ownership rail itself, and a failed collapsed query must never be
+// mistaken for an empty, all-clear tick.
+{
+  const rel = 'plugins/port/skills/pipeline/SKILL.md';
+  const text = readFileSync(join(root, rel), 'utf8');
+
+  if (!text.includes('never acted on, only reported')) {
+    fail(
+      'tick-query',
+      `${rel} is missing the literal client-side ownership precondition phrase 'never acted on, only reported'`,
+    );
+  } else {
+    ok();
+  }
+
+  if (!text.includes('dispatch nothing, run no hygiene, reset nothing')) {
+    fail(
+      'tick-query',
+      `${rel} is missing the literal blind-tick precondition phrase 'dispatch nothing, run no hygiene, reset nothing'`,
+    );
   } else {
     ok();
   }

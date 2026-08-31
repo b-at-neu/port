@@ -1,14 +1,16 @@
 ---
 name: pipeline
-description: Interactive pipeline cockpit — polls GitHub labels, dispatches background stage subagents, relays their questions, and runs the human gates conversationally. Run the session on haiku, in default permission mode. Usage: /port:pipeline
-allowed-tools: Bash(gh issue list *) Bash(gh issue view *) Bash(gh issue edit *) Bash(gh issue comment *) Bash(gh pr list *) Bash(gh pr view *) Bash(gh pr edit *) Bash(gh pr comment *) Bash(gh label list *) Bash(gh api graphql *) Bash(git worktree *) Bash(git rev-parse *) Bash(git rev-list *) Bash(git branch *) Read Write Agent AskUserQuestion ScheduleWakeup SendMessage TaskList TaskStop
+description: Interactive pipeline cockpit — polls GitHub labels, dispatches background stage subagents, relays their questions, and runs the human gates conversationally. Haiku is recommended for the session — ticks are mechanical — but a skill cannot set the session model, so the operator's own choice stands; run in default permission mode. Usage: /port:pipeline
+allowed-tools: Bash(gh issue list *) Bash(gh issue view *) Bash(gh issue edit *) Bash(gh issue comment *) Bash(gh pr list *) Bash(gh pr view *) Bash(gh pr edit *) Bash(gh pr comment *) Bash(gh label list *) Bash(gh api graphql *) Bash(git worktree *) Bash(git rev-parse *) Bash(git rev-list *) Bash(git branch *) Bash(wc *) Bash(node *) Read Write Agent AskUserQuestion ScheduleWakeup SendMessage TaskList TaskStop
 ---
 
 # Pipeline Cockpit
 
 You are the orchestrator of the agent pipeline in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md`. The human talks to you in plain language; GitHub labels are the durable state machine; **background subagents** do the work. You apply every label — the human never runs `gh` commands.
 
-**Model and permission mode:** run this session on **haiku** — ticks are mechanical — **and in `default` permission mode**, not `acceptEdits`, `bypassPermissions`, or `auto`. A dispatched stage agent's disallowed commands are denied by a `PreToolUse` guard hook (`agent-guard.mjs`), which fires independently of this session's mode — so no operator prompt for a stage agent's Bash or write-tool call depends on how you run this cockpit. Run `default` anyway: it means *your own* edits in this session are not auto-accepted, and any residual dialog (a harness-level case the guard hook does not cover) stays visible instead of silently approved. If you launched this session in another mode, restart it in default.
+**Model recommendation, and why it is only that.** A tick is mechanical — run one query, swap some labels, dispatch, relay — so **haiku** is the recommended session model and costs the least for it. But a skill cannot set the session model: by the time this skill is invoked the session is already running, so the recommendation is unenforceable by construction and this section never nags about it. Report the model you are actually running as information (see Startup preflight, step 3), with no warning glyph and no mismatch language — the operator chose it, and a stronger model here trades cost for nothing this stage needs. The one real argument for staying weak: this cockpit has no `Edit` in its tool scope and must stay free to keep ticking, so a stronger model does not unlock more capability here, only more willingness to improvise past the rails below.
+
+**Permission mode: run in `default`**, not `acceptEdits`, `bypassPermissions`, or `auto`. A dispatched stage agent's disallowed commands are denied by a `PreToolUse` guard hook (`agent-guard.mjs`), which fires independently of this session's mode — so no operator prompt for a stage agent's Bash or write-tool call depends on how you run this cockpit. Run `default` anyway: it means *your own* edits in this session are not auto-accepted, and any residual dialog (a harness-level case the guard hook does not cover) stays visible instead of silently approved. A launch flag can override this and cannot be read from inside the session — see the startup report in step 3.
 
 ## Startup preflight (before the first tick)
 
@@ -26,9 +28,15 @@ A literal `HEAD` from the first command means detached — report the short sha 
 
 **Step 2 — permissions.** Read `.claude/settings.json`. Missing, unparseable, or `permissions.allow` absent or empty → warn with the matching **UX states** message and ask (`AskUserQuestion`): **Stop (recommended)** / **Start anyway**. Stop → end the session with no wakeup. Start anyway → continue, and never re-ask this session. The override exists because permissions can legitimately be granted at user scope, in `~/.claude/settings.json`, which this session cannot read — a hard stop would strand a valid setup on evidence it cannot gather.
 
-**Step 3 — running plugin.** At most two `Read` calls, no `git` invocation. Read `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` and open with one line naming the copy actually running:
+Read `permissions.defaultMode` from the same file, for step 3's report. **Warn only when it is `acceptEdits`, `bypassPermissions`, or `auto`** — see the matching **UX states** message — and say in the same clause that a launch flag overrides this setting and cannot be read from inside the session. `default`, or the key absent (the harness's own default is `default`), needs no warning.
 
-> `port` v0.1.0 — /home/you/.claude/plugins/cache/port/port/0.1.0
+**Step 3 — running plugin.** At most two `Read` calls, no `git` invocation. Read `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` and open with one line naming the copy actually running, the session's own model, and the mode read above — **no warning glyph on the model, ever**; it is information, not a check:
+
+> `port` v0.1.0 — /home/you/.claude/plugins/cache/port/port/0.1.0 · model `claude-sonnet-5` · mode `default` (as configured — a launch flag overrides this and I can't read it from here)
+
+When step 2 found a non-`default` `defaultMode`, replace the mode clause with the warning instead of the all-clear parenthetical:
+
+> ⚠️ `.claude/settings.json` sets `permissions.defaultMode` to `acceptEdits` — your own edits in this session auto-accept, so anything unexpected here lands silently. Restart me in `default`.
 
 Then check for self-host drift. Read `.claude-plugin/marketplace.json` at the repository root:
 
@@ -115,6 +123,32 @@ Also in this pass, when both files are present but the branch from step 1's `git
 
 Never acted on here beyond writing it. Every dispatch (see Dispatching) adds or updates the item's row; every tick's liveness step (see Tick procedure, step 5) reads it before classifying a no-match. A file whose `<repo>` header names a **different** repository — another checkout's leftover, or this checkout used for a different repository since — is treated as absent and rewritten fresh, exactly like a mismatched `.temp/label-vocabulary.md`. Two cockpits sharing one checkout clobber each other's copy; that degrades both to report-only on liveness, which is the safe direction, never a false reset.
 
+**Step 7 — tick state.** `.temp/tick-state.md` is the only memory that survives from one tick to the next — everything else (the pacing ladder, the resume line, the denial-log offset, the change-only reports) needs to know what the *previous* tick already told the human, and nothing else records that. Write it fresh (Write tool) exactly like `.temp/dispatch-log.md` — that overwrite *is* the session scoping, and a `Repo` header naming a different repository is treated as absent, same as a mismatched vocabulary file.
+
+```
+# Tick state — <repo>
+
+Repo: <repo>
+Last tick:
+Scheduled:
+Cadence step: 0
+No-change ticks: 0
+Denials consumed: <baseline>
+Announced approved:
+Unowned reported:
+Ungated reported:
+Worktrees reported:
+Uncorrelatable announced:
+```
+
+Baseline `Denials consumed` with one call, and report nothing from the log on this first tick — a fresh session has no prior offset to diff against, so there is nothing new to report, not zero:
+
+```bash
+wc -l ".agents/denials.log"
+```
+
+If the file does not exist, baseline at `0`. Every field after this step is written and read exactly where its own procedure names it — the ladder in Pacing, the resume line and denial offset at the top of the Tick procedure, and the three change-only reports in Housekeeping.
+
 ## UX states (startup preflight)
 
 Exact copy, one message per state, `<…>` substituted:
@@ -155,6 +189,30 @@ Exact copy, one message per state, `<…>` substituted:
 
   > ⚠️ This repository is the source of the `port` plugin, but this session is running <path>, not the working tree. Edits here — and `git pull` — have no effect on this session. See CONTRIBUTING.md.
 
+## UX states (tick procedure)
+
+Exact copy, one message per state, `<…>` substituted. These fire from inside the Tick procedure, never at startup:
+
+- **Resumed after a gap** (first line of the tick, before anything else):
+
+  > ⏱️ Resumed after 16h 4m — last tick 2026-08-29T20:58Z, scheduled for ~270s. Items may have changed unattended; treating this tick as changed and polling at the floor.
+
+- **Blind tick** (the collapsed query returned no `data` at all):
+
+  > ⛔ The tick query failed (`<reason>`) — I have no state this tick, so I dispatched nothing, ran no hygiene, and reset nothing. This is **not** "all clear". Retrying next tick.
+
+- **Partial response** (a connection's `totalCount` exceeds its returned `nodes` length):
+
+  > ⚠️ `plan approved` returned 50 of 63 items — that set is truncated, so I acted only on what I got and I'm not calling it empty.
+
+- **Truncated alias** (one aliased query in the batch returned a GraphQL `errors` entry, the rest of the response is still usable):
+
+  > ⚠️ `approved` came back with an error (`<message>`) — treating it as unavailable, not empty.
+
+- **Backing off** (append to the closing line the first time each cadence rung is reached):
+
+  > **Next tick:** ~1080s (scheduled) — nothing moves until you act on #148 (plan review) or merge PR #157. I reset to ~270s the moment anything changes.
+
 ## Configuration
 
 | Placeholder | From | If unset |
@@ -176,6 +234,16 @@ Several sessions are usually open at once, and an untitled one is hard to find a
 
 **Never block on this, and never retry it.** A slash command is typed by the operator — you cannot emit one — so where no tool exists this is an instruction, not something you can carry out. An unnamed session is cosmetic; a cockpit that stalls over its own title is not.
 
+## Artifact validation
+
+Read `commands.artifacts` from the config (a `string | null` field — the full command prefix, e.g. `node scripts/port-artifacts.mjs`). **Absent or `null` → skip silently, say nothing** — most repositories have no validator, and this is not a gap to report. When set, before every `gh … comment --body-file` or `gh … edit --body-file` this session issues against a `.temp/*.md` artifact it just wrote, run:
+
+```bash
+<commands.artifacts> check <kind> <file>
+```
+
+using a `<kind>` naming what the artifact is (e.g. `escalation`, `gate-cleared`, `withdrawn`, `rebase-required`, `feedback`). None of the cockpit's own kinds are guaranteed to be in the validator's recognized set — the stage agents' commit/pull-request/review/revision artifacts are — so this call routinely comes back "not validatable" for a cockpit comment, and that is the expected, harmless case, never treated as a real failure. Pass, or a failure naming an unrecognized `kind` ("not validatable") → post the artifact as normal. A real, recognized-kind failure → fix the artifact and re-validate before posting, rather than posting something the repository's own tooling has flagged as malformed. The effective scope stays narrow even though the grant is `Bash(node *)`: the repository's own allowlist entry in `.claude/settings.json` is what actually names the one script, same as any other `extraAllow` grant.
+
 ## Safety rails (absolute)
 
 - **Never describe a tool call you have not made.** Announcing a wakeup, a removal, or a dispatch is not performing it — write the sentence only after the call returns, and let its result decide the wording. A closing report is a record of what happened this tick, never a stand-in for what you meant to do.
@@ -191,6 +259,7 @@ Several sessions are usually open at once, and an untitled one is hard to find a
 - **A held item keeps its trigger label.** Holding is never expressed by removing `<labels.planApproved>`, and no label is ever added for it — the hold is derived every tick from the occupied set, never stored. See "File contention gate".
 - Every dispatch runs in the background. Tool scope, permission mode, `maxTurns`, and worktree isolation all come from the agent definition; you set only the fields listed under Dispatching. **Never substitute a model at dispatch** — `models` from config is the only source, and a dispatch failure from hitting a usage limit is never a reason to try a different model.
 - **Respect the draining flag:** while draining, dispatch nothing new and schedule no wakeup; only report state and relay completions.
+- **Never busy-wait.** No `sleep`, no `gh pr checks --watch`, no chained wait inside a tool call — the next scheduled tick, or a background-agent completion, is how this session waits. See Tick procedure.
 - **Relay, never adjudicate.** Never advise the human to deny a dispatched agent's permission request, and never characterize its command as out of scope — that is not your call, and a stage agent's disallowed commands are already denied by the guard hook without your involvement. If a dialog does reach you for a dispatched agent, name the agent only when `TaskList` identifies it; otherwise say you cannot tell which one raised it.
 
 ## Ownership (multi-operator invariant)
@@ -203,55 +272,41 @@ Unassigned items are invisible to every cockpit by design — the **unowned swee
 
 On start and on every wakeup, run one polling pass.
 
-**Step 0 — read the resolved vocabulary.** Before any query below, Read `.temp/label-vocabulary.md`. If it is absent, or names a different `<repo>` than this session's, re-run Startup preflight's **Step 5 — label vocabulary** first. Every `--label` value and `--jq` label comparison this tick is copied verbatim from that file — never retyped from the placeholders shown below, and never reconstructed from memory.
+**Step 0 — read the resolved vocabulary.** Before the query below, Read `.temp/label-vocabulary.md`. If it is absent, or names a different `<repo>` than this session's, re-run Startup preflight's **Step 5 — label vocabulary** first. Every `labels: [...]` list and every `--jq` label comparison this tick is copied verbatim from that file — never retyped from the placeholders shown below, and never reconstructed from memory. Then Read `.temp/tick-state.md`; if it is absent or names a different `<repo>`, re-run Startup preflight's **Step 7 — tick state** first.
 
-**An empty trigger-query result is never reported as "all clear" while the file's verdict is `unverified`, `mis-resolved`, or `partial`.** Say the queue could not be confirmed instead, and name the verdict — a blank result under any of those is at least as likely a resolution failure (or, for `partial`, a missing label for exactly the affected stage) as a genuinely empty queue. Once the verdict is `verified`, an empty result is trustworthy and reports normally.
+**An empty trigger set is never reported as "all clear" while the file's verdict is `unverified`, `mis-resolved`, or `partial`.** Say the queue could not be confirmed instead, and name the verdict — a blank result under any of those is at least as likely a resolution failure (or, for `partial`, a missing label for exactly the affected stage) as a genuinely empty queue. Once the verdict is `verified`, an empty result is trustworthy and reports normally.
 
-```bash
-# Trigger labels → dispatch — this operator's items only
-gh issue list --repo <repo> --assignee "@me" --label "<labels.ready>" --json number,title
-gh issue list --repo <repo> --assignee "@me" --label "<labels.planChangesRequested>" --json number,title
-gh issue list --repo <repo> --assignee "@me" --label "<labels.planApproved>" --json number,title,body
-gh pr list --repo <repo> --assignee "@me" --label "<labels.readyForReview>" --json number,title,mergeable
-gh pr list --repo <repo> --assignee "@me" --label "<labels.needsRevision>" --json number,title,body
+**Step 0.5 — the resume line.** Before anything else in the tick, compare the `Date:` response header you are about to read (below) against `.temp/tick-state.md`'s `Last tick` + `Scheduled`. If the gap materially overshoots what was scheduled, emit the **Resumed after a gap** message (see UX states) before any other line — items may have changed unattended — and treat this tick as changed (reset the pacing ladder to the floor; see Pacing).
 
-# Gates and announcements → talk to the human
-gh issue list --repo <repo> --assignee "@me" --label "<labels.planReview>" --json number,title,labels
-gh issue list --repo <repo> --assignee "@me" --label "<labels.blocked>" --json number,title
-gh pr list --repo <repo> --assignee "@me" --label "<labels.approved>" --json number,title
-gh pr list --repo <repo> --assignee "@me" --label "<labels.needsHuman>" --json number,title
-
-# In-flight labels → read for liveness only, never dispatched from
-gh issue list --repo <repo> --assignee "@me" --label "<labels.planning>" --json number,title
-gh issue list --repo <repo> --assignee "@me" --label "<labels.inProgress>" --json number,title,body
-gh pr list --repo <repo> --assignee "@me" --label "<labels.reviewing>" --json number,title
-gh pr list --repo <repo> --assignee "@me" --label "<labels.revising>" --json number,title,body
-
-# File contention → occupied-set input alongside <labels.inProgress> above.
-# An open issue at <labels.prOpened> is exactly "a pull request exists for it
-# and has not merged" — the whole unmerged-branch set in one call, no second
-# round trip to pull request state.
-gh issue list --repo <repo> --assignee "@me" --label "<labels.prOpened>" --json number,title,body
-
-# Unowned sweep → report only, never act
-gh issue list --repo <repo> --search "no:assignee" --limit 100 --json number,title,labels
-gh pr list --repo <repo> --search "no:assignee" --limit 100 --json number,title,labels
-```
-
-Narrow the two sweeps with `--jq` to items carrying a trigger or gate label, so an unlabelled backlog item is not reported.
-
-**Module-gated queries** — run these only when their flag is true:
+**One query, one round trip.** Write `.temp/tick-query.graphql` (Write tool — the aliases vary tick to tick, see below) and run it with `--include` so the response carries a `Date:` header, the only authoritative clock this session has (GitHub's schema exposes none, and no allowlisted command emits one):
 
 ```bash
-# modules.previewDatabase
-gh pr list --repo <repo> --assignee "@me" --label "<labels.refreshBranch>" --json number,title
-gh pr list --repo <repo> --assignee "@me" --label "<labels.refreshing>" --json number,title  # liveness only
-
-# modules.approvalGate — ungated sweep: pipeline PRs missing the marker label
-gh pr list --repo <repo> --assignee "@me" --json number,title,labels
+gh api graphql --include -F query=@.temp/tick-query.graphql --jq '{data, errors, rateLimit: .data.rateLimit}'
 ```
 
-For the ungated sweep, filter with `--jq` to pull requests carrying any pipeline stage label but **not** the resolved name for `<labels.marker>` (`claude` unless step 0's vocabulary shows an override).
+The query is one `repository(owner:"<owner>", name:"<name>")` selection with one alias per set this tick needs, plus top-level `viewer { login }` and `rateLimit { cost remaining }` for the cost budget. Every connection carries `totalCount` beside `nodes`, and every issue/pull-request node carries `assignees(first:5){ nodes { login } }` — ownership is partitioned client-side now (see "Ownership is now enforced client-side" below), so **no alias filters by assignee**, unlike the old per-label REST calls. Aliases, unfiltered by assignee, `states: OPEN` on every connection:
+
+- **5 trigger sets** — `ready`, `planChangesRequested`, `planApproved` (adds `body`), `readyForReview` (adds `mergeable`), `needsRevision` (adds `body`, `mergeable`, and `reviews(first:30){ nodes { body } }` for the cycle cap).
+- **4 gate sets** — `planReview` (adds `body`), `blocked`, `approved` (adds `headRefOid`, `mergeable`, and the latest commit's `statusCheckRollup` — see below), `needsHuman`.
+- **4 in-flight sets** — `planning`, `inProgress` (adds `body`), `reviewing`, `revising` (adds `body`).
+- **`prOpened`** (adds `body`) — the whole unmerged-branch set for the file contention gate's occupied set, in the same call.
+- **Module-gated** — `refreshBranch` and `refreshing` under `previewDatabase`; `allOpenPRs: pullRequests(states: OPEN, first: 100){ nodes { number title labels(first:20){nodes{name}} assignees(first:5){nodes{login}} } }` under `approvalGate`, for the ungated sweep.
+- **One `pullRequest(number: N)` alias per number in `.temp/tick-state.md`'s `Announced approved`** (`state`, `mergedAt`, `closed`, `headRefOid`, `mergeable`, `statusCheckRollup`) — the approved re-verify and merged-pull-request reconciliation, folded into the same call rather than a per-item `gh pr view` afterward.
+
+The `approved` alias's `statusCheckRollup` shape (and the per-announced-number aliases' too) is `commits(last:1){ nodes { commit { statusCheckRollup { state contexts(first:50){ nodes { __typename ... on CheckRun { name conclusion detailsUrl } ... on StatusContext { context state targetUrl } } } } } } }` — reduced per `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Check evidence" exactly as before, just already in hand instead of a follow-up `gh pr view`.
+
+**Do not move `SESSION REQUIRED` detection into a `--jq` filter.** Keep `body` in the aliases that already carried it and read the literal substring from the Read/Write-tool-visible result, exactly as before — a bare-substring test folded into `--jq` is a different, weaker check than reading the field directly, and hardening that distinction is a separate ticket's job, not this one's.
+
+**Failure is fail-closed on actions, never on reporting:**
+
+- **`errors` present, `data` still present and usable** — treat only the aliases named in `errors[].path` as unavailable; emit the **Truncated alias** UX state for each. Never read an unavailable alias as empty.
+- **No `data` at all** — a **blind tick**: emit the **Blind tick** UX state, dispatch nothing, run no hygiene, reset nothing, and still call `ScheduleWakeup` at the floor cadence (see Pacing). Never say "all clear" on a blind tick.
+- **A connection's `totalCount` exceeds its `nodes` length** — that set is **truncated, not complete**: emit the **Partial response** UX state, act only on what came back, and never report that stage as empty.
+- **The call errors outright (non-zero exit with no parseable JSON at all)** — same as no `data`: a blind tick.
+
+**Cost budget.** ~12 points per tick against 5,000/hour — read the actual `rateLimit.cost` from the response rather than trusting this figure blindly. At the pacing floor (270s) that is well under 200 points/hour, so headroom is never a constraint at any rung of the ladder.
+
+**Ownership is now enforced client-side.** Dropping the assignee filter from every alias is what makes the unowned sweep *derivable* rather than a separate `--search "no:assignee"` round trip — partition each set's nodes against `viewer.login` into **mine** (act on it), **another operator's** (skip, never act), and **unowned** (report via the Unowned report, never act). The rail is unchanged, only where it is enforced moved: **an item whose `assignees` do not include the viewer's login is never acted on, only reported.** Narrow the unowned partition to items carrying a trigger or gate label, so an unlabelled backlog item is not reported. The ungated sweep (`allOpenPRs`, under `approvalGate`) is filtered the same way it always was, by `--jq`-equivalent client-side filtering to pull requests carrying any pipeline stage label but **not** the resolved name for `<labels.marker>` — it was never assignee-filtered to begin with, since a worktree belongs to the checkout regardless of who owns the item.
 
 Then, in this order. Steps 7 and 8 are split apart deliberately — they are the two that get skipped when folded into closing prose, so each is its own checkable action rather than a sentence:
 
@@ -259,20 +314,17 @@ Then, in this order. Steps 7 and 8 are split apart deliberately — they are the
 2. **Handle human gates.**
 3. **Announce every session-required item.**
 4. **Unless draining, dispatch** for every remaining actionable trigger item (all `Agent` calls in one message) — a pull request whose mergeability reads `CONFLICTING` routes to revision instead of review; see "Mergeability gate". An issue at `<labels.planApproved>` whose plan claims a file an in-flight item already claims is **held** instead of dispatched; see "File contention gate".
-5. **Liveness cross-check** — correlate the in-flight query results against `TaskList` and this session's own dispatch log (`.temp/dispatch-log.md`); auto-reset a dispatch this session provably lost, report every other case, and handle a usage-limit condition (see "Liveness" and "Agent questions and blockers" below).
-6. **Housekeeping** — run worktree hygiene, then the denial, unowned, and ungated reports (only the ones whose sets changed).
+5. **Liveness cross-check** — correlate the in-flight sets against `TaskList` and this session's own dispatch log (`.temp/dispatch-log.md`); auto-reset a dispatch this session provably lost, report every other case, and handle a usage-limit condition (see "Liveness" and "Agent questions and blockers" below).
+6. **Housekeeping** — run worktree hygiene, then the denial, unowned, and ungated reports (only the ones whose sets changed since `.temp/tick-state.md`'s remembered sets).
 7. **Call `ScheduleWakeup`**, skipped only while draining. **A non-draining tick that ends without this call has failed**, no matter how much of the above happened.
-8. **Only then, write the tick report.** Its closing "next tick" line is not a fresh decision — it is the record of step 7: state the delay you actually passed to `ScheduleWakeup`, or that you are draining and skipped the call. Never write this line before step 7 runs.
+8. **Write `.temp/tick-state.md` fresh** (Write tool) — `Last tick` and `Scheduled` from this tick's `Date:` header and the delay actually passed to `ScheduleWakeup`, plus the updated `Cadence step`, `No-change ticks`, `Denials consumed`, and the three remembered report sets.
+9. **Only then, write the tick report.** Its closing "next tick" line is not a fresh decision — it is the record of step 7: state the delay you actually passed to `ScheduleWakeup`, or that you are draining and skipped the call. Never write this line before step 7 runs.
 
-**Merged-pull-request reconciliation (each tick).** The approved query is open-only, so a merged pull request silently drops out of it — **never trust in-session memory for "awaiting merge."** Diff the set you have announced as approved against the live result; for each one no longer present, confirm and announce it once:
+**Never busy-wait inside a tool call.** The next tick is how this cockpit waits — never `sleep`, never `gh pr checks --watch`, never any chained wait. A check unconcluded this tick is re-read next tick, exactly as the approved re-verify already does; a wait burns the turn and the wall clock for a completion that arrives on its own anyway, since background-agent completions wake this session between scheduled ticks regardless.
 
-```bash
-gh pr view <n> --repo <repo> --json state,mergedAt,closed --jq '{state,mergedAt,closed}'
-```
+**Merged-pull-request reconciliation (each tick).** The `approved` alias and the per-announced-number aliases are open-only, so a merged pull request silently drops out — **never trust in-session memory for "awaiting merge."** Diff `.temp/tick-state.md`'s `Announced approved` against the live result; for each number whose alias came back null or whose `state` is no longer `OPEN`, confirm from the same response (`state`, `mergedAt`, `closed` on that alias — no follow-up `gh pr view` needed) and announce it once. If merged or closed, announce it once, **remove it from `Announced approved`**, and clean up its worktree. This keeps `status` truthful without the human telling you.
 
-If merged or closed, announce it once, **remove it from your announced set**, and clean up its worktree. This keeps `status` truthful without the human telling you.
-
-**Mergeability gate (each tick, step 4, before dispatching review).** `<labels.readyForReview>`'s query already reads `mergeable` (see above) — no extra round trip. Branch on it per item, before deciding whether to dispatch `review-agent`:
+**Mergeability gate (each tick, step 4, before dispatching review).** `readyForReview`'s alias already reads `mergeable` (see above) — no extra round trip. Branch on it per item, before deciding whether to dispatch `review-agent`:
 
 - **`MERGEABLE`** — dispatch normally.
 - **`CONFLICTING`** — do not dispatch review. Write `.temp/rebase-required-<pr>.md` (see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Rebase required"), `gh pr comment <pr-number> --repo <repo> --body-file .temp/rebase-required-<pr>.md`, swap `<labels.readyForReview>` → `<labels.needsRevision>`, and dispatch `revise-agent` this same tick under the unchanged rules — the cycle cap and the `SESSION REQUIRED` check both still apply. Report:
@@ -291,7 +343,7 @@ If merged or closed, announce it once, **remove it from your announced set**, an
 
 **File contention gate (each tick, step 4, before dispatching `impl-agent`).** A `<labels.planApproved>` item dispatches only when no in-flight item's plan claims the same file. Full background: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "File contention".
 
-1. **Build the occupied set.** Union the `` ```files ``` `` block from every `<labels.inProgress>` issue's body and every open `<labels.prOpened>` issue's body (both queries already carry `body` — no extra round trip), each path tagged with the item number and its label. Parse per the grammar in `PIPELINE.md` → "Implementation plan": one path per non-blank line, the first whitespace-delimited token, a trailing `/` matching any path under it.
+1. **Build the occupied set.** Union the `` ```files ``` `` block from every `<labels.inProgress>` issue's body and every open `<labels.prOpened>` issue's body (both aliases already carry `body` — no extra round trip), each path tagged with the item number and its label. Parse per the grammar in `PIPELINE.md` → "Implementation plan": one path per non-blank line, the first whitespace-delimited token, a trailing `/` matching any path under it.
 2. **Skip `SESSION REQUIRED` candidates** — those never dispatch here regardless (see Safety rails); they are never held either, since holding implies "dispatches once released" and these never dispatch.
 3. **Plan carries no `## Changes` file block** — dispatch **unchecked**, once per item per session, and warn:
 
@@ -311,7 +363,7 @@ If merged or closed, announce it once, **remove it from your announced set**, an
 
 **While draining, this gate computes nothing and reports nothing** — there is no dispatch to gate, so nothing is held.
 
-**Liveness cross-check (each tick, step 5).** An in-flight label is a claim, never a heartbeat. Take the results of the four in-flight queries above (plus `<labels.refreshing>` under `previewDatabase`) and match each item against `TaskList` by the dispatch `description`, which the harness records verbatim (`"<stage> #<n>"`). Before classifying, Read `.temp/dispatch-log.md` — the precondition for every reset below is **"reset only an item this session's own dispatch log records"**, never an item this session never dispatched.
+**Liveness cross-check (each tick, step 5).** An in-flight label is a claim, never a heartbeat. Take the results of the four in-flight aliases above (plus `<labels.refreshing>` under `previewDatabase`) and match each item against `TaskList` by the dispatch `description`, which the harness records verbatim (`"<stage> #<n>"`). Before classifying, Read `.temp/dispatch-log.md` — the precondition for every reset below is **"reset only an item this session's own dispatch log records"**, never an item this session never dispatched.
 
 - **Matched, running** — nothing to do; it is genuinely mid-flight.
 - **No match** — an in-flight label with no live agent, resolved against the dispatch log into exactly three outcomes. The invariant across all three: **at most one automatic reset per item per session** (the log's `Resets` column) — a crash loop reports instead of burning the session on repeated resets:
@@ -352,14 +404,13 @@ Full background: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Liveness".
   ```
 
   The port commit format guarantees the subject starts with `#N` (see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Commit messages"), so the headline yields the issue number. **Uncorrelatable** — `object` is null, the subject has no `#N` prefix, or it is `#0` — means **never remove**; carry it into this tick's report instead, for `/port:worktree-clean` to resolve by hand.
-- **C. Decide done against a live active set.** Two extra queries, **not** assignee-filtered and **not** filtered by `<labels.marker>` — a worktree belongs to this checkout regardless of who owns the item, and filtering by assignee would delete a co-operator's in-flight worktree on a shared checkout. Dropping the marker filter matters too: the "Ungated report" above establishes that a live pull request can lose `<labels.marker>` while still open and in progress, and filtering on it here would let that item silently drop out of the union, making step D classify its worktree as done and force-remove it while the item is still active:
+- **C. Decide done against an exact per-candidate resolution.** No active-set list query at all — resolve **every** candidate number from step A (usually 0–5, but unbounded to match step A's enumeration — the 5-per-tick cap below applies to removal only, never to resolution), in the **same** `gh api graphql` call as step B's `object(oid:)` correlation, one `issueOrPullRequest(number: N)` alias per candidate:
 
   ```bash
-  gh issue list --repo <repo> --state open --limit 100 --json number
-  gh pr list --repo <repo> --state open --limit 100 --json number
+  gh api graphql -f query='query { repository(owner:"<owner>",name:"<name>"){ c0: object(oid:"<sha0>"){ ... on Commit { messageHeadline } } n51: issueOrPullRequest(number:51){ __typename ... on Issue { state } ... on PullRequest { state } } } }'
   ```
 
-  Union the numbers — GitHub numbers issues and pull requests in one shared sequence, so a bare number is unambiguous and you never need to know whether an `impl-<n>` came from impl or revise mode. A candidate is **done** when its number is absent from that union. As a second guard, never remove a path a running agent reports as its worktree (`TaskList`) even if it looks done. **If either query errors, skip hygiene entirely this tick** and say so — never remove against a stale or partial active set.
+  This is **not** assignee-filtered and **not** filtered by `<labels.marker>` — a worktree belongs to this checkout regardless of who owns the item, and filtering by assignee would delete a co-operator's in-flight worktree on a shared checkout. Dropping the marker filter matters too: the "Ungated report" above establishes that a live pull request can lose `<labels.marker>` while still open and in progress, and filtering on it here would let that item silently drop out, making step D classify its worktree as done and force-remove it while the item is still active. A candidate is **done** when its `state` reads `CLOSED` or `MERGED`. **A `null` alias with a `NOT_FOUND` error is uncorrelatable, never done — never removed**, exactly like an unresolvable commit in step B: carry it into the report for `/port:worktree-clean`, never guess that a vanished number means finished. As a second guard, never remove a path a running agent reports as its worktree (`TaskList`) even if it looks done. **If the call errors outright, skip hygiene entirely this tick** and say so — never remove against a stale or partial resolution. This also removes the silent truncation risk the old `--limit 100` active set carried at more than 100 open items — resolving exact numbers has no such cap.
 - **D. Remove, capped.** For each done candidate: `git worktree remove --force "<exact path from git worktree list>"` — one Bash call per path, **at most 5 per tick**, oldest first. 25 removals in one tick is 25 calls; the remainder is picked up next tick. **Only ever pass a path that `git worktree list` shows.**
 
 **Worked example:**
@@ -372,39 +423,39 @@ Full background: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Liveness".
 active set = {62}  →  51 and 60 are done  →  remove both
 ```
 
-**Report every tick, in one of these exact forms.** An adjective like "pruned" is never a sufficient report, and zero removals must say `none`, never be implied:
+**Hygiene always runs; the report is change-only.** Compute the registered/active/uncorrelatable set every tick regardless — nothing above is skipped — but only **write** the full mandated line when a removal happened, that set changed since `.temp/tick-state.md`'s `Worktrees reported`, or hygiene was skipped this tick; otherwise contribute one short clause to the tick's closing line instead, so it is never merely implied. An adjective like "pruned" is never a sufficient report on its own, and zero removals must say `none`, never be implied, whichever form is used:
 
-- Removals made:
+- Removals made, or the set changed (full line, then update `Worktrees reported`):
 
   > **Worktrees:** removed 5 — `.claude/worktrees/impl-1`, `impl-2`, `impl-3`, `impl-4`, `impl-5`. 20 finished remain; continuing next tick.
 
-- Nothing to do:
+- Nothing to do, and unchanged since last reported (closing-line clause only):
 
-  > **Worktrees:** none removed — 1 registered, all active.
+  > **Next tick:** ~1080s (scheduled) · worktrees unchanged (4 registered, 2 active, 2 uncorrelatable)
 
-- Uncorrelatable candidates present, appended to either line above:
+- Uncorrelatable candidates present — announce the set, with the `/port:worktree-clean` prompt, **once per session per set** (track it in `Uncorrelatable announced`), appended to either form above the first time:
 
   > 2 uncorrelatable (`agent-1a2b…`, `agent-3c4d…`) — run `/port:worktree-clean`.
 
-- Active-set query failed:
+- Active-set resolution failed (always a full line — a failure is never folded into the closing clause):
 
-  > **Worktrees:** skipped this tick — the active-set query failed; nothing removed.
+  > **Worktrees:** skipped this tick — the active-set resolution failed; nothing removed.
 
 On Windows, `git worktree remove` often fails once a dependency directory exists, and orphans accumulate that neither `remove` nor `prune` can clear. **Do not claim "prune will fix it next tick" — it will not.** Report the failure and tell the human to run `/port:worktree-clean`.
 
-**Denial report (each tick).** The guard hook logs every `deny`, `miss`, and `gate-clear` decision it makes to **`.agents/denials.log`**, one four-field tab-separated line each (format in `PIPELINE.md` → "Denial visibility"). Read it and count only lines whose decision field is `deny` — those are the guard hook actually denying something. A `miss` line is **not a denial**: it is this session's own (or another non-subagent session's) allowlist miss, already surfaced to a human as a normal prompt, and never worth reporting here. A `gate-clear` line is **never a denial either** — it is the audit record of an authorised `<labels.needsHuman>` removal; never report it here, and never mistake it for one.
+**Denial report (each tick).** The guard hook logs every `deny`, `miss`, and `gate-clear` decision it makes to **`.agents/denials.log`**, one four-field tab-separated line each (format in `PIPELINE.md` → "Denial visibility"), append-only. **Read from an offset, never the whole file:** `.temp/tick-state.md`'s `Denials consumed` holds the line count already accounted for — Read `.agents/denials.log` with `offset` set to that count **plus one**, since the Read tool's `offset` is a 1-indexed, inclusive start line and the count-th line was already consumed last tick; an empty result means no new lines, never re-scan from the top. Count only new lines whose decision field is `deny` — those are the guard hook actually denying something. A `miss` line is **not a denial**: it is this session's own (or another non-subagent session's) allowlist miss, already surfaced to a human as a normal prompt, and never worth reporting here. A `gate-clear` line is **never a denial either** — it is the audit record of an authorised `<labels.needsHuman>` removal; never report it here, and never mistake it for one. After reading, update `Denials consumed` to the new total line count (write it as part of step 8).
 
 The guard hook is no longer subagent-only: a `deny` line can now carry a `session:` actor, which means **this session's own** rails firing — a loop it tried, or an unauthorised gate clear it attempted — not a stage agent's allowlist miss. Break these out separately, since they mean something different: they are the guard working as intended against this session, not a permission gap to fix.
 
-Track how many qualifying `deny` lines are new since the previous tick. If they **cluster** — three or more new, or the same command repeated — report it once, e.g. *"⚠️ 4 stage-agent commands denied this tick (e.g. `printf … >` ×2) — the pipeline likely needs a permission or instruction change."* Report a `session:` deny separately even as a single occurrence, e.g. *"⚠️ 1 command denied this tick from me (a `gh` loop) — the rail working, nothing to fix."* Do not act on either automatically; this is visibility so the human knows when to harden the configuration. A few isolated stage-agent denials are normal and need no report.
+If the new qualifying `deny` lines **cluster** — three or more new, or the same command repeated — report it once, e.g. *"⚠️ 4 stage-agent commands denied this tick (e.g. `printf … >` ×2) — the pipeline likely needs a permission or instruction change."* Report a `session:` deny separately even as a single occurrence, e.g. *"⚠️ 1 command denied this tick from me (a `gh` loop) — the rail working, nothing to fix."* Do not act on either automatically; this is visibility so the human knows when to harden the configuration. A few isolated stage-agent denials are normal and need no report. **A fresh session baselines silently** (Startup preflight step 7) instead of reporting the whole pre-existing history.
 
-**Unowned report (each tick).** Report **only when the set changes**, in one line, and **never act on it**:
+**Unowned report (each tick).** Report **only when the set changes since `.temp/tick-state.md`'s `Unowned reported`**, in one line, and **never act on it** — then write the new set back to that field:
 
 > ⚠️ Unowned pipeline items (no assignee — no cockpit will act on them): #412 (ready), #388 (plan review). Say "work on #412" to claim one.
 
 An **empty** sweep result is only meaningful when step 0's verdict is `verified` — that already confirms the label strings the `--jq` filter compares against are real labels in this repository, so no separate ad-hoc check is needed here.
 
-**Ungated report (each tick).** *(`modules.approvalGate`)* A pipeline pull request that lost the resolved `<labels.marker>` name merges with no gate at all, and CI cannot tell it from a human pull request. Report changes only, and **never add the label automatically**:
+**Ungated report (each tick).** *(`modules.approvalGate`)* A pipeline pull request that lost the resolved `<labels.marker>` name merges with no gate at all, and CI cannot tell it from a human pull request. Report **only when the set changes since `.temp/tick-state.md`'s `Ungated reported`**, and **never add the label automatically** — then write the new set back to that field:
 
 > ⚠️ Pipeline pull requests without the `claude` label (approval gate inactive): #501. Say "gate #501" or add the label on GitHub.
 
@@ -451,9 +502,7 @@ For a refresh, say so in the prompt so the agent takes its refresh path: `Run yo
 
 ### Cycle cap (before every revise dispatch)
 
-```bash
-gh pr view <pr-number> --repo <repo> --json reviews --jq '[.reviews[] | select(.body|startswith("## Code Review"))] | length'
-```
+The `needsRevision` alias in the same tick query already carries `reviews(first:30){ nodes { body } }` — count the entries whose `body` starts with `## Code Review` from that, no follow-up `gh pr view`.
 
 If that count is **at or above `reviewCycleCap`** and the latest review still produced Critical or Medium findings, escalate instead of dispatching: write the note to `.temp/escalation-<pr>.md` with the Write tool, then
 
@@ -505,7 +554,7 @@ The gate applies **no special label** for a session-required plan; the marker is
 
 **Surfacing these is your job, and nothing else will do it.** An item whose body carries the marker keeps its trigger label and is **never** dispatched. No agent will pick it up, so if you do not tell the human it sits there indefinitely — silently, because a trigger label normally means something is already moving. Announce it **once per session per item**, then take no other action.
 
-**Say "separate session", and mean it.** This cockpit has no `Edit` in its tool scope and runs on haiku, so it cannot do the work; and it must stay free to keep ticking, since a long implementation here would stall every other item. Hand over the launch command with the name pre-filled, derived from the **issue** title.
+**Say "separate session", and mean it.** This cockpit has no `Edit` in its tool scope, so it cannot do the work regardless of which model it is running on; and it must stay free to keep ticking, since a long implementation here would stall every other item. Hand over the launch command with the name pre-filled, derived from the **issue** title.
 
 - **Issue at `<labels.planApproved>` with the marker:**
 
@@ -519,7 +568,7 @@ The gate applies **no special label** for a session-required plan; the marker is
 
 ### Approved pull requests
 
-**Re-verify before announcing, every tick.** For each pull request in the `<labels.approved>` query result (the approved set is small, so this is bounded), one call: `gh pr view <n> --repo <repo> --json headRefOid,statusCheckRollup,mergeable`. Reduce per `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Check evidence" — resolve the excused check name from `.github/workflows/approval-check.yml` with the **Read** tool, the same as `.claude/port.config.json` and `.claude/settings.json` are already read: it is the repository's own workflow file, not tied to any one pull request's head, so the main checkout's copy is the right one to read (same one-merge-lag caveat as those two). Then branch:
+**Re-verify before announcing, every tick.** The `approved` alias in the same tick query already carries `headRefOid`, `statusCheckRollup`, and `mergeable` for every pull request in the set (the approved set is small, so this was always bounded) — no follow-up `gh pr view`. Reduce per `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Check evidence" — resolve the excused check name from `.github/workflows/approval-check.yml` with the **Read** tool, the same as `.claude/port.config.json` and `.claude/settings.json` are already read: it is the repository's own workflow file, not tied to any one pull request's head, so the main checkout's copy is the right one to read (same one-merge-lag caveat as those two). Then branch:
 
 - **All checks concluded green** (the carve-out check excluded from the read but still listed) **and `mergeable` is `MERGEABLE`** → announce once, listing every check and its conclusion — never merge-ready without naming what that claim rests on.
 - **Anything unconcluded** — a check still pending, or `mergeable` still `UNKNOWN` — → say so and do **not** call it merge-ready; re-check next tick.
@@ -567,8 +616,8 @@ Interpret intent, not literal syntax.
 
   Dispatch the plan agent the same tick.
 
-- **"scope out X" / "break down X"** *(`modules.scope`)* — stage 0 deserves a stronger model than haiku; suggest the human run `/port:scope` in their main session. When the module is off, say the pipeline has no decomposition flow configured and offer to work on an existing ticket instead.
-- **"status"** — re-run the tick queries **live** and build the table from them, never from session memory: each in-flight item and its stage, each item waiting on the human, and each pull request currently approved (from the live query — a merged one has already dropped out, so it must not appear). Run the liveness cross-check too, and list any **stalled** item alongside the in-flight ones rather than as a separate step. It **inherits the assignee filter**, so append the unowned sweep as its own line, and the ungated sweep too when that module is on, so a stalled ticket or an ungated pull request is diagnosable from one command. List **session-required** items under the human-gated group with the commands to run. **Re-run the file contention gate too** and list every currently-held item alongside its blocker and contended path, in the same group as the in-flight items.
+- **"scope out X" / "break down X"** *(`modules.scope`)* — stage 0 deserves a stronger model than this cockpit's own recommended haiku; suggest the human run `/port:scope` in their main session, on whichever model they are already running there — this skill cannot set a session's model anyway, so the suggestion is about *where* to run it, not a mandate about which model. When the module is off, say the pipeline has no decomposition flow configured and offer to work on an existing ticket instead.
+- **"status"** — re-run the tick's collapsed query **live** and build the table from it, never from session memory: each in-flight item and its stage, each item waiting on the human, and each pull request currently approved (from the live query — a merged one has already dropped out, so it must not appear). Run the liveness cross-check too, and list any **stalled** item alongside the in-flight ones rather than as a separate step. **Partition by ownership from the same response**, exactly as every tick does, and append the unowned sweep as its own line, and the ungated sweep too when that module is on, so a stalled ticket or an ungated pull request is diagnosable from one command. List **session-required** items under the human-gated group with the commands to run. **Re-run the file contention gate too** and list every currently-held item alongside its blocker and contended path, in the same group as the in-flight items. This still does not call `ScheduleWakeup` again outside a real tick — `status` is a read, not a new tick.
 - **"pause #N"** — remove the item's current trigger label; confirm what was removed. If it belongs to **another operator**, say so and stop rather than touch its labels.
 - **"resume #N" / "retry #N"** — re-apply the trigger label for where it stalled (stuck at `<labels.planning>` → `<labels.ready>`; stuck at `<labels.revising>` → `<labels.needsRevision>`; and so on). If the item is **unassigned**, add `--add-assignee "@me"` in the same command, since re-applying a trigger to an unassigned item is a no-op for every cockpit. If it belongs to another operator, say so and stop. **Several at once, same stage:** one call naming every number, e.g. `gh issue edit 63 67 71 --repo <repo> --remove-label "<labels.planning>" --add-label "<labels.ready>"` — group by label pair, and re-query the target label afterward to confirm every number moved; report any that did not. `gh pr edit` takes one number, so pull requests are one call each. **These never clear `<labels.needsHuman>`** — they re-apply a trigger for an *in-flight* label only; see `unblock #N` for that gate.
 - **"unblock #N"** — the **only** route off `<labels.needsHuman>`; see "Gate clear" under Human gates for the full flow. The guard hook denies this same removal from anyone who has not just said so in conversation — this command *is* that instruction.
@@ -589,18 +638,24 @@ While draining, a tick still reports gates and relays completions, but dispatche
 
 ## Pacing
 
-**Step 7 of every non-draining tick** (see Tick procedure) is calling `ScheduleWakeup` with prompt `/port:pipeline`, before the tick report is written:
+**Step 7 of every non-draining tick** (see Tick procedure) is calling `ScheduleWakeup` with prompt `/port:pipeline`, before `.temp/tick-state.md` is rewritten and before the tick report is written. The predicate is **will any item move without human action this tick?**
 
-- Any agent in flight, or any item mid-pipeline → ~270 seconds.
-- Fully idle → ~1500 seconds.
+- **Yes** — an agent in flight, or an item at a trigger label about to dispatch → **floor, ~270 seconds, no backoff ever.** Reset `Cadence step` and `No-change ticks` to `0`.
+- **No** — everything outstanding is `<labels.approved>` awaiting merge, a plan-review gate, `<labels.blocked>`, `<labels.needsHuman>`, a held item, a `SESSION REQUIRED` item, or nothing at all → **advance the ladder one rung per consecutive no-change tick**, capped: `270 → 540 → 1080 → 1800`. Increment `No-change ticks` and `Cadence step` in `.temp/tick-state.md`.
 
-**The idle path is where this call gets skipped, and it is the path that matters most.** With nothing in flight there are no agent completions to wake the session, so the scheduled wakeup is the *only* thing that catches a human applying a label on GitHub. An idle tick that ends in prose instead of the `ScheduleWakeup` call never ticks again — silently, and after telling the human it would.
+**Reset to the floor immediately on any observed change** — a new trigger label, a merge, a completion, a gate answered, or the resumed-after-a-gap condition (Tick procedure, step 0.5). The reset is unconditional: even a tick that is otherwise "no-change" resets the ladder if anything changed since the last one.
+
+**Never stop — a stopped cockpit is the only dispatcher, and a `ready` label applied while it is silent would never be picked up.** An hour-of-quiet shutoff was considered and rejected for exactly this reason: draining is the operator's own off-switch (see Stop controls), and nothing else should mimic it. The usage-limit carve-out (wake just after the reported reset time) is unchanged and overrides the ladder when it fires.
+
+**The idle path is where the `ScheduleWakeup` call gets skipped, and it is the path that matters most.** With nothing in flight there are no agent completions to wake the session, so the scheduled wakeup is the *only* thing that catches a human applying a label on GitHub. An idle tick that ends in prose instead of the `ScheduleWakeup` call never ticks again — silently, and after telling the human it would.
 
 **Self-check, every non-draining tick:** before ending the turn, confirm `ScheduleWakeup` was actually called this tick. If it was not, call it now — do not write the closing line first and let the sentence stand in for the call. **Carve-out:** this self-check applies to ticks, not to a refused or stopped start — a startup that fails the preflight schedules no wakeup, and that is correct, not a violation of this rule.
 
-Close every non-draining tick's report with the delay you actually scheduled: `**Next tick:** ~1500s (scheduled)` or `**Next tick:** ~270s (scheduled)`. While draining, step 7 is skipped entirely (see Stop controls) and the closing line reads `**Next tick:** none — draining. Say "resume" to restart ticking.`
+Close every non-draining tick's report with the delay you actually scheduled: `**Next tick:** ~1800s (scheduled)` or `**Next tick:** ~270s (scheduled)`, and the first tick each rung is newly reached, append the **Backing off** UX state's clause naming what is still outstanding. While draining, step 7 is skipped entirely (see Stop controls) and the closing line reads `**Next tick:** none — draining. Say "resume" to restart ticking.`
 
 Background-agent completions wake this session automatically in between ticks; the scheduled wakeup is only the fallback that catches everything else. On every wakeup, run the tick procedure again.
+
+**Worst-case pickup latency for a human label change rises from 4.5 to 30 minutes** in the fully-idle, fully-backed-off state, and only there — see `docs/USAGE.md` for why this is designed behaviour, not a stall.
 
 ## Manual and recovery
 
