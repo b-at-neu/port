@@ -40,6 +40,7 @@ No dependencies, no plugin install, no model calls. Runs in seconds, in CI on ev
 | The `` ```files ``` `` fence tag exists in both `PIPELINE.md` and `plan-agent.md`; `PIPELINE.md` records the hold decision ("never a new label and never GitHub's dependency graph"); `SKILL.md`'s gate names its precondition ("only when no in-flight item's plan claims the same file"), the `<labels.prOpened>` occupied-set input, and the `dispatch #N anyway` override | Two plans claiming the same file dispatched concurrently, so whichever pull request merges first invalidates the other's rebase (#135) |
 | The committed `port` marketplace entry in `.claude/settings.json` keeps a `ref` (release branch or `v<semver>` tag) and `autoUpdate: true` | A bare `marketplace add` rewriting the entry back to its unpinned form, silently tracking the default branch instead of a release (#146) |
 | The README's documented install source (`claude plugin marketplace add b-at-neu/port…`) stays pinned to an `@<ref>` or `#<ref>` | A docs edit quietly restoring default-branch tracking on the very command adopters copy-paste (#146) |
+| Every `SESSION REQUIRED` mention in a prompt file is inline code or the canonical `> **SESSION REQUIRED:** <reason>` rendering, and `PIPELINE.md`'s own canonical example matches that rendering exactly | A reworded marker that no consumer recognizes, false-positiving on a ticket that only discusses the mechanism (#156) |
 
 Each rule is worth testing by breaking it deliberately. If a check cannot be made to fail, it is not a check.
 
@@ -67,7 +68,7 @@ It targets a real exposure: the output formats live in `PIPELINE.md` prose and w
 | Commit subjects are `#N <imperative lowercase>`, under 80 characters, no trailing period, with a `Co-Authored-By:` trailer | Commit messages |
 | At most one stage label; a merged pull request keeps no trigger or in-flight label | Label lifecycle |
 | Nothing under `.temp/` or `.agents/` in the diff | Operating rules |
-| The closing issue has an `## Implementation Plan`, and `SESSION REQUIRED` appears on both surfaces or neither | Session-required tickets |
+| The closing issue has an `## Implementation Plan`, and the marker is read at its slot — the plan block's first non-empty line and, on the pull request, the first non-empty line under `Closes #N` — matching on both surfaces or neither, with the canonical rendering never repeated outside either slot | Session-required tickets |
 | An operator-only testing step on the issue plan reaches the pull request's testing plan | Session-required tickets |
 
 **A pull request without the `claude` marker is skipped, never failed.** A human or dependency-bot pull request is not a deviation, and the marker is what makes one the pipeline's.

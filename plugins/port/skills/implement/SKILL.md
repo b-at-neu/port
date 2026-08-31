@@ -54,7 +54,7 @@ gh pr view <n> --repo <repo> --json labels,headRefName,baseRefName,title,body
 
 - Anything else → stop, report the current labels, change nothing: `#<n> is not awaiting an operator (labels: …). Nothing was changed.`
 
-**If the item carries the trigger label but its body has no `SESSION REQUIRED` marker,** ask first (AskUserQuestion): *"#412 isn't marked `SESSION REQUIRED`, so the cockpit will dispatch an agent for it too. Proceed anyway / Cancel."* A double dispatch — cockpit and operator on the same item — is the hazard this guards.
+**If the item carries the trigger label but its marker slot does not hold `SESSION REQUIRED`** (see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Detection" — a mention elsewhere in the body, in prose or inline code, does not count), ask first (AskUserQuestion): *"#412 isn't marked `SESSION REQUIRED`, so the cockpit will dispatch an agent for it too. Proceed anyway / Cancel."* A double dispatch — cockpit and operator on the same item — is the hazard this guards.
 
 Then report the resolved mode, worktree path, and branch **before** the slow steps, so the operator can see you picked the right stage.
 

@@ -1026,6 +1026,83 @@ const MARKETPLACE_REF_PATTERN = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
   ok();
 }
 
+// --- SESSION REQUIRED never rendered as a bare, uncoded marker line --------
+// Regression guard for #156: the cockpit's consumer check used to be a bare
+// substring search over the whole body, so any prompt file merely
+// *discussing* the marker in prose false-positived. This is the producer-side
+// mechanical half: every `SESSION REQUIRED` mention across the same doc set
+// "Stale references" scans is either inside backticks or is the canonical
+// `> **SESSION REQUIRED:** <reason>` rendering at line start — a reworded or
+// unrendered marker fails here, in CI, rather than silently at dispatch time.
+const SESSION_MARKER_LINE = /^>\s*\*\*SESSION REQUIRED:\*\*\s+\S/;
+{
+  const docs = [
+    ...walk(join(root, 'plugins')),
+    ...walk(join(root, 'docs')),
+    ...walk(join(root, 'schema')),
+    ...walk(join(root, 'evals')),
+    join(root, 'README.md'),
+    join(root, 'CONTRIBUTING.md'),
+  ].filter((f) => f.endsWith('.md') && existsSync(f));
+
+  for (const f of docs) {
+    const rel = f.slice(root.length + 1);
+    const text = readFileSync(f, 'utf8');
+    // Skip YAML frontmatter — a skill's `description:` line may name the
+    // marker bare (implement/SKILL.md's does), and no frontmatter value uses
+    // backticks.
+    const fm = /^---\n[\s\S]*?\n---\n?/.exec(text);
+    const fileLines = text.split('\n');
+    const startLine = fm ? fm[0].split('\n').length - 1 : 0;
+    for (let i = startLine; i < fileLines.length; i++) {
+      const line = fileLines[i];
+      if (!line.includes('SESSION REQUIRED')) continue;
+      if (SESSION_MARKER_LINE.test(line.trim())) continue;
+      const outsideBackticks = line.replace(/`[^`]*`/g, '');
+      if (outsideBackticks.includes('SESSION REQUIRED')) {
+        fail(
+          'session-required-rendering',
+          `${rel}:${i + 1}: 'SESSION REQUIRED' appears outside inline code and is not the canonical '> **SESSION REQUIRED:** <reason>' rendering`,
+        );
+      }
+    }
+  }
+  ok();
+}
+
+// A pure hyphenation or spacing mutation of the marker (e.g. `SESSION-REQUIRED`)
+// drops the two-word substring the scan above keys on, so it slips through
+// unnoticed there. This pins PIPELINE.md's own canonical example — the one
+// directly under "One string, one rendering, both surfaces" — to the exact
+// form, which is the copy every other file's example is meant to match.
+{
+  const rel = 'plugins/port/docs/PIPELINE.md';
+  const fileLines = readFileSync(join(root, rel), 'utf8').split('\n');
+  const anchor = 'One string, one rendering, both surfaces';
+  const anchorIdx = fileLines.findIndex((l) => l.includes(anchor));
+  if (anchorIdx === -1) {
+    fail('session-required-rendering', `${rel} no longer declares the canonical marker anchor '${anchor}'`);
+  } else {
+    let exampleIdx = -1;
+    for (let i = anchorIdx + 1; i < Math.min(anchorIdx + 8, fileLines.length); i++) {
+      if (fileLines[i].trim().startsWith('>')) {
+        exampleIdx = i;
+        break;
+      }
+    }
+    if (exampleIdx === -1) {
+      fail('session-required-rendering', `${rel}:${anchorIdx + 1}: no blockquote example follows the canonical marker anchor`);
+    } else if (!SESSION_MARKER_LINE.test(fileLines[exampleIdx].trim())) {
+      fail(
+        'session-required-rendering',
+        `${rel}:${exampleIdx + 1}: canonical marker example is not '> **SESSION REQUIRED:** <reason>', got ${JSON.stringify(fileLines[exampleIdx].trim())}`,
+      );
+    } else {
+      ok();
+    }
+  }
+}
+
 // --- Session-required determination reads the whole plan, not just changes -
 // Regression guard for #118: the determination looked only at the changed-file
 // list, so a plan whose testing steps needed a sessionRequiredPaths write (but
