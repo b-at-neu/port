@@ -15,9 +15,11 @@ From inside the repository you want the pipeline to manage:
 **Step 1 — install.**
 
 ```bash
-claude plugin marketplace add b-at-neu/port --scope project
+claude plugin marketplace add b-at-neu/port@main --scope project
 claude plugin install port@port --scope project
 ```
+
+The `@main` pin is the release branch, so this installs a released version regardless of which branch happens to be default. Step 3's `/port:init` then narrows the install to the exact published release, pinning it in place.
 
 Both write to that repository's `.claude/settings.json`, which is committed. So the pipeline **travels with the repository**: anyone who clones it gets the same plugin from the same source, with no separate setup, and nothing leaks into your other projects.
 
@@ -29,18 +31,19 @@ Both write to that repository's `.claude/settings.json`, which is committed. So 
 /port:init
 ```
 
-It detects the toolchain, asks which subsystems you want, then writes `.claude/port.config.json`, merges the permission lists into `.claude/settings.json`, creates the label vocabulary, and optionally installs a CI merge gate. Nothing is written without showing you first, and re-running reconciles rather than duplicating. See [Before you start](#before-you-start) for the four prerequisites.
+It detects the toolchain, asks which subsystems you want, then writes `.claude/port.config.json`, merges the permission lists into `.claude/settings.json`, creates the label vocabulary, and optionally installs a CI merge gate. Nothing is written without showing you first, and re-running reconciles rather than duplicating. See [Before you start](#before-you-start) for the five prerequisites.
 
-It also reconciles the `port` marketplace entry that step 1's install command wrote — pinning `ref` to `main` and turning `autoUpdate` on, so a later release actually reaches your install instead of sitting unfetched. Plugin updates land on the **next** session, never mid-session, and `DISABLE_AUTOUPDATER` suppresses them entirely unless `FORCE_AUTOUPDATE_PLUGINS=1` is also set.
+It also reconciles the `port` marketplace entry that step 1's install command wrote — pinning `ref` to the **last published release** (a `v<semver>` tag, or `main` if none has shipped yet) and turning `autoUpdate` on, so a later release actually reaches your install instead of sitting unfetched. It tells you when that pin changes what you are running, naming both the previous and the new ref. Plugin updates land on the **next** session, never mid-session, and `DISABLE_AUTOUPDATER` suppresses them entirely unless `FORCE_AUTOUPDATE_PLUGINS=1` is also set.
 
 **Step 4 — accept the `/port:analyze` offer.** `/port:init` finishes by offering it — it reads the codebase and proposes engineering standards. Worth accepting: `docs.engineering` is what gives the stage agents a quality bar to build to and review something to cite.
 
 ### Before you start
 
-Four things, each of which otherwise fails confusingly:
+Five things, each of which otherwise fails confusingly:
 
 - **`gh` authenticated**, with access to the repository. Every stage agent works through it.
-- **An integration branch distinct from your default branch.** Feature pull requests target `branches.integration` (`dev` by default) and never the production branch. *This repository has only `main`* — so adopting the pipeline here means creating one first.
+- **An integration branch distinct from your default branch.** Feature pull requests target `branches.integration` (`dev` by default) and never the production branch. If your repository only has one long-lived branch, adopting the pipeline means creating an integration branch first.
+- **The committed `.claude/port.config.json` must land on your repository's default branch.** Dispatched agents resolve their config from `origin/HEAD` before they have read any config at all, so a config change that only reaches your integration branch does not reach them — it has to reach the default branch too, whether that is directly or through your normal release flow. Skip this and dispatch halts, reporting the repository as unmanaged.
 - **Run the cockpit in `default` permission mode.** Not `acceptEdits`, `bypassPermissions`, or `auto`. A stage agent's denied commands are handled by a `PreToolUse` guard hook, independent of your session's mode — but `default` keeps *your own* edits from auto-accepting, so any residual dialog stays visible instead of silently approved. This is the most likely cause of "why is it asking me things".
 - **A branch ruleset**, if you want the approval gate enforced rather than advisory. `/port:init` will tell you it has not created one; making a check required is an administrative change it deliberately leaves to you.
 
