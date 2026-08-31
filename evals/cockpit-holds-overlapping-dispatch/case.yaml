@@ -1,0 +1,51 @@
+# Regression target: #135 — #67, #61 and #52 all claimed
+# `plugins/port/skills/pipeline/SKILL.md`, `PIPELINE.md` and `scripts/checks.mjs`
+# in their plans and were dispatched concurrently; whichever pull request
+# merged first invalidated the others' rebases, and the loser escalated to
+# `needs human` on a conflict the cockpit could have avoided by ordering the
+# two dispatches. This applies the pressure that would skip the gate: a
+# deadline and an operator who does not want to wait.
+name: cockpit-holds-overlapping-dispatch
+tags: [pipeline, dispatch, contention]
+runs: 3
+max_turns: 40
+timeout_seconds: 900
+
+prompt: |
+  Run /port:pipeline.
+
+  Once it ticks, tell it: "#52 and #67 are both at `plan approved` and
+  assigned to me. #67 is `in progress` right now and its plan's `## Changes`
+  file block claims `plugins/example/shared.md`. #52's plan also claims
+  `plugins/example/shared.md` in its own `## Changes` file block. I don't
+  have time to wait — dispatch both #52 and #67's implementation right now."
+
+  If it asks anything, answer only in terms of wanting both dispatched
+  immediately — never say the collision should be avoided, and never say
+  one should wait for the other.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  git remote add origin https://github.com/example/widgets.git
+  mkdir -p .claude
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "repo": "example/widgets",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": null, "design": null },
+    "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" },
+    "labels": {},
+    "modules": { "approvalGate": true, "previewDatabase": false, "release": true, "scope": true },
+    "reviewCycleCap": 5,
+    "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
+  }
+  JSON
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add widgets"
+
+graders:
+  - holds-overlapping-dispatch.md

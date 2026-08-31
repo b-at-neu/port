@@ -188,6 +188,7 @@ Several sessions are usually open at once, and an untitled one is hard to find a
 - Never dispatch for an item with an **in-flight** label — an agent owns it, or a human paused it.
 - **An in-flight label is not evidence of a live agent.** Cross-check every tick against `TaskList` (see "Liveness cross-check") before treating it as active — a crashed or killed agent leaves the label behind with nothing running.
 - **Never dispatch `impl-agent` or `revise-agent` for an item whose body carries `SESSION REQUIRED`.** Announce it instead, and tell the human to run `/port:implement` in a **separate** session, never this one.
+- **A held item keeps its trigger label.** Holding is never expressed by removing `<labels.planApproved>`, and no label is ever added for it — the hold is derived every tick from the occupied set, never stored. See "File contention gate".
 - Every dispatch runs in the background. Tool scope, permission mode, `maxTurns`, and worktree isolation all come from the agent definition; you set only the fields listed under Dispatching. **Never substitute a model at dispatch** — `models` from config is the only source, and a dispatch failure from hitting a usage limit is never a reason to try a different model.
 - **Respect the draining flag:** while draining, dispatch nothing new and schedule no wakeup; only report state and relay completions.
 - **Relay, never adjudicate.** Never advise the human to deny a dispatched agent's permission request, and never characterize its command as out of scope — that is not your call, and a stage agent's disallowed commands are already denied by the guard hook without your involvement. If a dialog does reach you for a dispatched agent, name the agent only when `TaskList` identifies it; otherwise say you cannot tell which one raised it.
@@ -226,6 +227,12 @@ gh issue list --repo <repo> --assignee "@me" --label "<labels.inProgress>" --jso
 gh pr list --repo <repo> --assignee "@me" --label "<labels.reviewing>" --json number,title
 gh pr list --repo <repo> --assignee "@me" --label "<labels.revising>" --json number,title,body
 
+# File contention → occupied-set input alongside <labels.inProgress> above.
+# An open issue at <labels.prOpened> is exactly "a pull request exists for it
+# and has not merged" — the whole unmerged-branch set in one call, no second
+# round trip to pull request state.
+gh issue list --repo <repo> --assignee "@me" --label "<labels.prOpened>" --json number,title,body
+
 # Unowned sweep → report only, never act
 gh issue list --repo <repo> --search "no:assignee" --limit 100 --json number,title,labels
 gh pr list --repo <repo> --search "no:assignee" --limit 100 --json number,title,labels
@@ -251,7 +258,7 @@ Then, in this order. Steps 7 and 8 are split apart deliberately — they are the
 1. **Reconcile merged pull requests.**
 2. **Handle human gates.**
 3. **Announce every session-required item.**
-4. **Unless draining, dispatch** for every remaining actionable trigger item (all `Agent` calls in one message) — a pull request whose mergeability reads `CONFLICTING` routes to revision instead of review; see "Mergeability gate".
+4. **Unless draining, dispatch** for every remaining actionable trigger item (all `Agent` calls in one message) — a pull request whose mergeability reads `CONFLICTING` routes to revision instead of review; see "Mergeability gate". An issue at `<labels.planApproved>` whose plan claims a file an in-flight item already claims is **held** instead of dispatched; see "File contention gate".
 5. **Liveness cross-check** — correlate the in-flight query results against `TaskList` and this session's own dispatch log (`.temp/dispatch-log.md`); auto-reset a dispatch this session provably lost, report every other case, and handle a usage-limit condition (see "Liveness" and "Agent questions and blockers" below).
 6. **Housekeeping** — run worktree hygiene, then the denial, unowned, and ungated reports (only the ones whose sets changed).
 7. **Call `ScheduleWakeup`**, skipped only while draining. **A non-draining tick that ends without this call has failed**, no matter how much of the above happened.
@@ -281,6 +288,28 @@ If merged or closed, announce it once, **remove it from your announced set**, an
   > ⚠️ PR #134's mergeability is still `UNKNOWN` after two ticks — dispatching review anyway; it re-checks before it posts.
 
 **Approved-and-conflicting is the same fact read at a different gate** — see "Approved pull requests" under Human gates for that carve-out; both routes post the identical `## Rebase required` comment and land at `<labels.needsRevision>`.
+
+**File contention gate (each tick, step 4, before dispatching `impl-agent`).** A `<labels.planApproved>` item dispatches only when no in-flight item's plan claims the same file. Full background: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "File contention".
+
+1. **Build the occupied set.** Union the `` ```files ``` `` block from every `<labels.inProgress>` issue's body and every open `<labels.prOpened>` issue's body (both queries already carry `body` — no extra round trip), each path tagged with the item number and its label. Parse per the grammar in `PIPELINE.md` → "Implementation plan": one path per non-blank line, the first whitespace-delimited token, a trailing `/` matching any path under it.
+2. **Skip `SESSION REQUIRED` candidates** — those never dispatch here regardless (see Safety rails); they are never held either, since holding implies "dispatches once released" and these never dispatch.
+3. **Plan carries no `## Changes` file block** — dispatch **unchecked**, once per item per session, and warn:
+
+   > ⚠️ #52's plan has no `## Changes` file block, so I can't check it for collisions — dispatching it unchecked.
+
+   Fail-open: silently holding every unstructured plan (typically one written before this contract landed) would stall the pipeline harder than the collision this gate prevents.
+4. **Overlap with the occupied set** → **hold**: do not dispatch, and report every tick while it stays held:
+
+   > ⏸️ **#52 held** — its plan claims `plugins/port/skills/pipeline/SKILL.md`, which #67 (`pr opened`) is already changing. It dispatches automatically once #67's pull request merges or closes. Say `dispatch #52 anyway` to override.
+
+   The item **keeps `<labels.planApproved>`** — holding is never expressed by removing it, and no label is ever added for it.
+5. **No overlap** → a survivor. Sort survivors ascending by how many *other survivors* they overlap, and dispatch in that order, adding each dispatched survivor's claimed files to the occupied set as you go — a later survivor that now overlaps an earlier one's freshly-claimed files is held this same tick, not dispatched.
+
+**Override taken ("dispatch #N anyway" / "force #N"):**
+
+> ⚠️ Dispatching #52 despite the overlap with #67 on `plugins/port/skills/pipeline/SKILL.md`, at your instruction. Whichever lands second needs a rebase in that file, and it may be one `revise-agent` has to escalate.
+
+**While draining, this gate computes nothing and reports nothing** — there is no dispatch to gate, so nothing is held.
 
 **Liveness cross-check (each tick, step 5).** An in-flight label is a claim, never a heartbeat. Take the results of the four in-flight queries above (plus `<labels.refreshing>` under `previewDatabase`) and match each item against `TaskList` by the dispatch `description`, which the harness records verbatim (`"<stage> #<n>"`). Before classifying, Read `.temp/dispatch-log.md` — the precondition for every reset below is **"reset only an item this session's own dispatch log records"**, never an item this session never dispatched.
 
@@ -539,12 +568,13 @@ Interpret intent, not literal syntax.
   Dispatch the plan agent the same tick.
 
 - **"scope out X" / "break down X"** *(`modules.scope`)* — stage 0 deserves a stronger model than haiku; suggest the human run `/port:scope` in their main session. When the module is off, say the pipeline has no decomposition flow configured and offer to work on an existing ticket instead.
-- **"status"** — re-run the tick queries **live** and build the table from them, never from session memory: each in-flight item and its stage, each item waiting on the human, and each pull request currently approved (from the live query — a merged one has already dropped out, so it must not appear). Run the liveness cross-check too, and list any **stalled** item alongside the in-flight ones rather than as a separate step. It **inherits the assignee filter**, so append the unowned sweep as its own line, and the ungated sweep too when that module is on, so a stalled ticket or an ungated pull request is diagnosable from one command. List **session-required** items under the human-gated group with the commands to run.
+- **"status"** — re-run the tick queries **live** and build the table from them, never from session memory: each in-flight item and its stage, each item waiting on the human, and each pull request currently approved (from the live query — a merged one has already dropped out, so it must not appear). Run the liveness cross-check too, and list any **stalled** item alongside the in-flight ones rather than as a separate step. It **inherits the assignee filter**, so append the unowned sweep as its own line, and the ungated sweep too when that module is on, so a stalled ticket or an ungated pull request is diagnosable from one command. List **session-required** items under the human-gated group with the commands to run. **Re-run the file contention gate too** and list every currently-held item alongside its blocker and contended path, in the same group as the in-flight items.
 - **"pause #N"** — remove the item's current trigger label; confirm what was removed. If it belongs to **another operator**, say so and stop rather than touch its labels.
 - **"resume #N" / "retry #N"** — re-apply the trigger label for where it stalled (stuck at `<labels.planning>` → `<labels.ready>`; stuck at `<labels.revising>` → `<labels.needsRevision>`; and so on). If the item is **unassigned**, add `--add-assignee "@me"` in the same command, since re-applying a trigger to an unassigned item is a no-op for every cockpit. If it belongs to another operator, say so and stop. **Several at once, same stage:** one call naming every number, e.g. `gh issue edit 63 67 71 --repo <repo> --remove-label "<labels.planning>" --add-label "<labels.ready>"` — group by label pair, and re-query the target label afterward to confirm every number moved; report any that did not. `gh pr edit` takes one number, so pull requests are one call each. **These never clear `<labels.needsHuman>`** — they re-apply a trigger for an *in-flight* label only; see `unblock #N` for that gate.
 - **"unblock #N"** — the **only** route off `<labels.needsHuman>`; see "Gate clear" under Human gates for the full flow. The guard hook denies this same removal from anyone who has not just said so in conversation — this command *is* that instruction.
 - **"refresh #N"** *(`modules.previewDatabase`)* — apply `<labels.refreshBranch>` and dispatch this tick, bypassing the per-merge cap. Use it to force a fresh deployment on a pull request left quota-red.
 - **"gate #N"** *(`modules.approvalGate`)* — apply the missing `<labels.marker>` to a pull request the ungated sweep reported. The `labeled` event re-evaluates the workflow's condition, so the gate is live on that run.
+- **"dispatch #N anyway" / "force #N"** — dispatch this tick despite the file contention gate holding it, acknowledging the overlap and the rebase it invites. Confirm the item is actually held (its `<labels.planApproved>` plan overlaps an in-flight item's claimed files) before overriding; if it is not held, say so — there is nothing to force. Dispatch normally, then report per the "Override taken" UX state.
 
 ## Stop controls
 

@@ -1351,5 +1351,65 @@ for (const t of [
   }
 }
 
+// --- File contention — the cockpit holds overlapping dispatch, never races --
+// Regression guard for #135: #67, #61 and #52 all claimed the same three
+// files and were dispatched concurrently, so whichever pull request merged
+// first invalidated the others' rebases. This checks that the fenced
+// `files` contract exists in both PIPELINE.md and plan-agent.md, that
+// PIPELINE.md records the decision never to express a hold as a new label
+// or GitHub's dependency graph, and that SKILL.md's gate names its
+// precondition, the `<labels.prOpened>` occupied-set input, and the
+// `dispatch #N anyway` override.
+{
+  const pipelineRel = 'plugins/port/docs/PIPELINE.md';
+  const planAgentRel = 'plugins/port/agents/plan-agent.md';
+  const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
+
+  const pipelineText = readFileSync(join(root, pipelineRel), 'utf8');
+  const planAgentText = readFileSync(join(root, planAgentRel), 'utf8');
+  const skillText = readFileSync(join(root, skillRel), 'utf8');
+
+  for (const [rel, text] of [
+    [pipelineRel, pipelineText],
+    [planAgentRel, planAgentText],
+  ]) {
+    if (!text.includes('```files')) {
+      fail('file-contention', `${rel} never carries the '\`\`\`files' fence tag`);
+    } else {
+      ok();
+    }
+  }
+
+  if (!pipelineText.includes("never a new label and never GitHub's dependency graph")) {
+    fail(
+      'file-contention',
+      `${pipelineRel} is missing the literal phrase "never a new label and never GitHub's dependency graph"`,
+    );
+  } else {
+    ok();
+  }
+
+  if (!skillText.includes('only when no in-flight item\'s plan claims the same file')) {
+    fail(
+      'file-contention',
+      `${skillRel} is missing the literal precondition phrase "only when no in-flight item's plan claims the same file"`,
+    );
+  } else {
+    ok();
+  }
+
+  if (!skillText.includes('<labels.prOpened>')) {
+    fail('file-contention', `${skillRel} never names '<labels.prOpened>' as part of the occupied-set input`);
+  } else {
+    ok();
+  }
+
+  if (!skillText.includes('dispatch #N anyway')) {
+    fail('file-contention', `${skillRel} never declares the 'dispatch #N anyway' override`);
+  } else {
+    ok();
+  }
+}
+
 // --- Report -----------------------------------------------------------------
 report();

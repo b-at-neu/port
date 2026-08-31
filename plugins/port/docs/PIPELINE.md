@@ -72,6 +72,27 @@ Ownership is the second dimension of pipeline state: **labels say what stage an 
 
 The **double-dispatch race is known and unfixed**: the trigger-to-in-flight label swap happens inside the agent after spawn, so a check-then-act window of tens of seconds remains. Disjoint assignee sets avoid it in practice; closing it properly means moving the swap into the cockpit, before the `Agent()` call.
 
+### File contention
+
+Concurrency is otherwise correct and desirable — the account's usage window is time-based, not concurrency-based, so more agents running inside one window is strictly better. The one thing dispatch must never do is start two plans that write the same file at the same time: whichever pull request merges first invalidates the other's rebase, and the loser escalates to `<labels.needsHuman>` on a conflict a human never needed to see, because the information to prevent it — each plan's own `## Changes` file list — was sitting in the issue body unread.
+
+**The occupied set.** Before dispatching `impl-agent` (step 4 of the tick), build the union of every in-flight item's claimed files: every `<labels.inProgress>` issue's `## Changes` block, plus every open `<labels.prOpened>` issue's — an **open** issue at that label is exactly "a pull request exists for it and has not merged," so it is the whole unmerged-branch set without a second query for pull request state.
+
+**The gate.** A `<labels.planApproved>` candidate whose claimed files overlap the occupied set is **held**, not dispatched — reported every tick with the conflicting item and the contended path, never silently skipped (a silent hold is the same invisibility #67's orphaned worktree taught this project to avoid). It dispatches automatically once the conflicting item's pull request merges or closes; no operator action required. Non-overlapping candidates dispatch freely, so throughput for genuinely independent work is unchanged.
+
+**Fewest-conflicts-first.** Sort the surviving (non-held) candidates ascending by how many *other survivors* they overlap, and dispatch in that order, adding each dispatched candidate's claimed files to the occupied set as you go — so a ticket touching one contended file is not stuck behind one touching five, and a later survivor that now overlaps an earlier one's freshly-claimed files is held this same tick.
+
+**Fail-open on an unstructured plan.** A plan with no `## Changes` file block (typically one written before this contract landed) dispatches **unchecked**, with a one-line warning — silently holding every unstructured plan would stall the pipeline harder than the collision this section exists to prevent.
+
+**The gate applies to `impl-agent` dispatch only.** `plan-agent` and `review-agent` are read-only, so they claim nothing. A `revise-agent` dispatch is for a branch that already exists and rebases itself on its own turn — holding it would stall an already-open pull request rather than prevent a new collision, so it is never gated here.
+
+**The hold is derived every tick, never stored.** It is recomputed from live labels and plan bodies on every pass, so it cannot go stale and cannot strand an item the way an ad-hoc hold once did. Two alternatives were considered and rejected:
+
+- **A `held` label** — a new vocabulary entry no already-`/port:init`-ed repository has until re-run, and a second place the truth lives that can strand an item exactly as an unreleased ad-hoc hold once did.
+- **GitHub's native `blockedBy` graph** — issue-to-issue only, and it would overwrite the real dependency record `/port:scope` writes with a transient scheduling fact.
+
+**The decision, stated literally: a hold is derived every tick from live labels and plan bodies, never a new label and never GitHub's dependency graph.** A `<labels.planApproved>` item dispatches only when no in-flight item's plan claims the same file.
+
 ### Why background dispatch needs care
 
 A non-allowlisted command must **auto-deny** (never prompt the human), or every stray command interrupts the operator. **A `PreToolUse` guard hook is what denies** — `${CLAUDE_PLUGIN_ROOT}/hooks/agent-guard.mjs`, registered on both `Bash` and the write tools (`Edit`/`Write`/`NotebookEdit`). It identifies a dispatched subagent from the hook payload (`agent_type`/`agent_id`, the transcript path, or a cwd under an `agent-<hash>` worktree — any one signal is sufficient; `/port:implement`'s own `impl-<n>` worktrees deliberately do not match, since that skill runs in an operator's session), and for a subagent call that misses the repository's allowlist (Bash) or targets a `sessionRequiredPaths` path (a write), it returns an explicit `permissionDecision: "deny"`. That decision is independent of the parent session's permission mode — no dialog can reach the operator regardless of whether the cockpit is running `default`, `acceptEdits`, `bypassPermissions`, or `auto`.
@@ -321,7 +342,7 @@ Appended below the ticket under a `---` then `## Implementation Plan`; revision 
 
 - **`SESSION REQUIRED` marker** *(only when a `sessionRequiredPaths` entry is touched)* — the first line, before `## Overview`.
 - **## Overview** — 2–4 sentences: what, why, the approach.
-- **## Changes** — files to create or modify, one bullet each: `` `path` — one-line reason ``.
+- **## Changes** — a single fenced ` ```files ` block, one claimed path per non-blank line: `` path — one-line reason ``. The **path is the first whitespace-delimited token**; everything after the first space is a human-readable reason and is never parsed. Paths are repo-relative, forward-slashed, no leading `./`, case-sensitive. List **every** file the plan creates or modifies, including a new file at the path it will be created at — a `## Testing` step that writes a file is not a claim. **No globs** — a directory that will gain files whose names are not yet decided is listed once with a trailing `/`, which matches any path under it. Exactly one fence per plan; an absent or empty block means the plan dispatches unchecked, with a warning (see "File contention").
 - **## Implementation** — ordered `- [ ]` checkboxes, one line each; fold validation, states, and error-model notes into the step they belong to.
 - **## Data & contracts** *(only if a schema or a server-side contract changes)* — the change, and per entry point its validation and authorization.
 - **## UX states** *(only if there is a user interface)* — loading, empty, error, plus key copy.
@@ -458,6 +479,7 @@ Closing the cockpit session also halts dispatch, since it is the only dispatcher
 | Nothing dispatches for an item | It has no trigger label (paused, in-flight, or gated) | `status` shows where it is; `resume #N` re-applies the right trigger |
 | Nothing dispatches **and** `status` does not list it at all | It is unassigned, or owned by another operator — queries are assignee-filtered | The tick's unowned sweep reports it; claim it with `work on #N` |
 | An item sits at a trigger label and nothing dispatches | Its body carries `SESSION REQUIRED` — the cockpit never dispatches those | Open a named session and run `/port:implement <n>` |
+| An item sits at `plan approved` and nothing dispatches, and its body has no `SESSION REQUIRED` marker | It is held behind an in-flight item claiming the same file | The tick's held line names the blocker and the path; `dispatch #N anyway` overrides |
 | No check runs at all on a new push, while the deployment still runs | The pull request conflicts with its base, so GitHub cannot build the merge ref that `pull_request` workflows run against | `gh pr view <n> --json mergeable` reports `CONFLICTING`. Rebase onto the base and force-push |
 | The approval check shows **Skipped** on a pipeline pull request | It is missing the `claude` label, so the gate is inactive | Add the label; the `labeled` event re-evaluates the job condition |
 | Deployment check red on two or more open pull requests while other checks are green | *(`previewDatabase`)* The preview database pool is at its cap | Nothing to debug in the code. Merging any pull request frees a slot; force one with `refresh #N` |
