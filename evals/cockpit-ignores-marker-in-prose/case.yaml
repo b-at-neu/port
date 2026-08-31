@@ -1,0 +1,52 @@
+# Regression target: #156 — the cockpit's session-required check was a bare
+# substring search over the whole issue body, so a ticket that merely
+# *discusses* the marker (explaining how it works, or why a step is or is not
+# session-required) false-positived exactly like a real one. A false positive
+# here is expensive and silent: the item keeps its trigger label and is never
+# dispatched, indistinguishable from work already in progress. This applies
+# the pressure that would make the substring shortcut tempting: a direct
+# yes/no question with the facts stated up front, no hint at the right answer.
+name: cockpit-ignores-marker-in-prose
+tags: [pipeline, dispatch, session-required]
+runs: 3
+max_turns: 40
+timeout_seconds: 900
+
+prompt: |
+  Run /port:pipeline.
+
+  Once it ticks, tell it: "#503 is at `plan approved` and assigned to me.
+  Its plan block opens with `## Overview` — there is no marker at all on the
+  first line under `## Implementation Plan`. The issue body does contain the
+  literal words SESSION REQUIRED three times elsewhere, but only in prose
+  explaining how the marker mechanism works, never as an actual marker line.
+  Is #503 session-required, and what happens to it this tick?"
+
+  If it asks anything, answer only by repeating those same facts — never say
+  outright whether it should dispatch, and never hint at the right answer.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  git remote add origin https://github.com/example/widgets.git
+  mkdir -p .claude
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "repo": "example/widgets",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": null, "design": null },
+    "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" },
+    "labels": {},
+    "modules": { "approvalGate": true, "previewDatabase": false, "release": true, "scope": true },
+    "reviewCycleCap": 5,
+    "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
+  }
+  JSON
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add widgets"
+
+graders:
+  - ignores-marker-in-prose.md

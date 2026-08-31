@@ -277,10 +277,21 @@ One string, one rendering, both surfaces — **`SESSION REQUIRED`**, with the re
 
 | Surface | Written by | Where |
 | --- | --- | --- |
-| **Issue** | `plan-agent` | First line of the plan body, before `## Overview` |
-| **Pull request** | `/port:implement` | Directly under `Closes #N` in the description |
+| **Issue** | `plan-agent` | The plan block's slot (see **Detection**) — first non-empty line under `## Implementation Plan`, before `## Overview` |
+| **Pull request** | `/port:implement` | The slot directly under `Closes #N` (see **Detection**) |
 
 The literal string `SESSION REQUIRED` is the contract — **never reword it**; the reason after the colon is free text and is the part that generalizes. **There is deliberately no label.** The marker lives in the body on both surfaces, and the cockpit reads it from the `body` field of the trigger query it already runs, so the check costs no extra call and there is nothing to keep in sync.
+
+### Detection
+
+**Slot plus form, never a body-wide substring search.** An item is session-required only when its **marker slot** holds, as its first non-empty line, the canonical rendering `> **SESSION REQUIRED:** <reason>` at the start of the line, with a non-empty reason:
+
+- **Issue slot** — the first non-empty line of the plan block, directly under the `## Implementation Plan` heading. (The plan is *appended* below the human-authored ticket, so the body's own first line is never the plan's — "first line of the body" is the wrong test.)
+- **Pull request slot** — the first non-empty line after `Closes #N`.
+
+**Both, or neither.** The words `SESSION REQUIRED` appearing anywhere else — prose explaining the mechanism, inline code, a fenced block, or the canonical rendering repeated further down — are not a marker. A ticket that *discusses* the marker (this one does) carries none at its slot and is not session-required.
+
+**Fail open.** Slot absent, empty, or holding anything other than the canonical rendering → not session-required → dispatch normally. The two failure directions are not symmetric: a false positive stalls an item forever, silently — a trigger label at rest already looks exactly like normal in-flight work — while a false negative ends in one denied edit, a `BLOCKED:` relay, and one retry. When the slot is ambiguous, resolve toward the recoverable failure.
 
 ### The route
 
@@ -480,8 +491,8 @@ Closing the cockpit session also halts dispatch, since it is the only dispatcher
 | Item stuck in an in-flight label with no agent running | Agent crashed or the session closed mid-flight | `retry #N` in the cockpit, or re-apply the trigger label |
 | Nothing dispatches for an item | It has no trigger label (paused, in-flight, or gated) | `status` shows where it is; `resume #N` re-applies the right trigger |
 | Nothing dispatches **and** `status` does not list it at all | It is unassigned, or owned by another operator — queries are assignee-filtered | The tick's unowned sweep reports it; claim it with `work on #N` |
-| An item sits at a trigger label and nothing dispatches | Its body carries `SESSION REQUIRED` — the cockpit never dispatches those | Open a named session and run `/port:implement <n>` |
-| An item sits at `plan approved` and nothing dispatches, and its body has no `SESSION REQUIRED` marker | It is held behind an in-flight item claiming the same file | The tick's held line names the blocker and the path; `dispatch #N anyway` overrides |
+| An item sits at a trigger label and nothing dispatches | Its marker slot holds `SESSION REQUIRED` (see "Detection") — the cockpit never dispatches those | Open a named session and run `/port:implement <n>` |
+| An item sits at `plan approved` and nothing dispatches, and its marker slot holds no `SESSION REQUIRED` marker | It is held behind an in-flight item claiming the same file | The tick's held line names the blocker and the path; `dispatch #N anyway` overrides |
 | No check runs at all on a new push, while the deployment still runs | The pull request conflicts with its base, so GitHub cannot build the merge ref that `pull_request` workflows run against | `gh pr view <n> --json mergeable` reports `CONFLICTING`. Rebase onto the base and force-push |
 | The approval check shows **Skipped** on a pipeline pull request | It is missing the `claude` label, so the gate is inactive | Add the label; the `labeled` event re-evaluates the job condition |
 | Deployment check red on two or more open pull requests while other checks are green | *(`previewDatabase`)* The preview database pool is at its cap | Nothing to debug in the code. Merging any pull request frees a slot; force one with `refresh #N` |

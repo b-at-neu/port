@@ -187,7 +187,7 @@ Several sessions are usually open at once, and an untitled one is hard to find a
 - **Never act on an item assigned to another operator** — ownership transfers only through an explicit human take-over.
 - Never dispatch for an item with an **in-flight** label — an agent owns it, or a human paused it.
 - **An in-flight label is not evidence of a live agent.** Cross-check every tick against `TaskList` (see "Liveness cross-check") before treating it as active — a crashed or killed agent leaves the label behind with nothing running.
-- **Never dispatch `impl-agent` or `revise-agent` for an item whose body carries `SESSION REQUIRED`.** Announce it instead, and tell the human to run `/port:implement` in a **separate** session, never this one.
+- **Never dispatch `impl-agent` or `revise-agent` for an item marked `SESSION REQUIRED` at its slot** (see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Detection" — never a body-wide substring search). Announce it instead, and tell the human to run `/port:implement` in a **separate** session, never this one.
 - **A held item keeps its trigger label.** Holding is never expressed by removing `<labels.planApproved>`, and no label is ever added for it — the hold is derived every tick from the occupied set, never stored. See "File contention gate".
 - Every dispatch runs in the background. Tool scope, permission mode, `maxTurns`, and worktree isolation all come from the agent definition; you set only the fields listed under Dispatching. **Never substitute a model at dispatch** — `models` from config is the only source, and a dispatch failure from hitting a usage limit is never a reason to try a different model.
 - **Respect the draining flag:** while draining, dispatch nothing new and schedule no wakeup; only report state and relay completions.
@@ -333,7 +333,7 @@ If merged or closed, announce it once, **remove it from your announced set**, an
 
   Never reset `<labels.approved>` or `<labels.needsHuman>` — they are not in-flight labels, and nothing above ever matches them.
 
-  **A `SESSION REQUIRED` item at an in-flight label is never reported as a stall.** `<labels.inProgress>` and `<labels.revising>`'s queries already carry `body` for exactly this: an item whose body carries the marker is the operator's own `/port:implement` session, not a stalled dispatch, and it can never have a dispatch-log row (this cockpit never dispatches one), so it is report-only by construction:
+  **A `SESSION REQUIRED` item at an in-flight label is never reported as a stall.** `<labels.inProgress>` and `<labels.revising>`'s queries already carry `body` for exactly this: an item marked `SESSION REQUIRED` at its slot is the operator's own `/port:implement` session, not a stalled dispatch, and it can never have a dispatch-log row (this cockpit never dispatches one), so it is report-only by construction:
 
   > 🧰 PR #512 is `revising` under `SESSION REQUIRED` — that's your `/port:implement` session, not a stall.
 
@@ -445,7 +445,7 @@ Stage mapping:
 | Pull request at `<labels.needsRevision>` | `revise-agent` — **after the cycle-cap check**; **unless `SESSION REQUIRED`: announce, never dispatch** | `models.revise` |
 | Pull request at `<labels.refreshBranch>` *(`previewDatabase`)* | `revise-agent` in **refresh mode** | `models.revise` |
 
-**Session-required items never dispatch.** Before dispatching impl or revise, check that item's `body` for the literal string `SESSION REQUIRED`. It is already in the trigger query's result — both request `body` — so this costs no extra call. Present → announce, do not dispatch. Absent → dispatch normally.
+**Session-required items never dispatch.** Before dispatching impl or revise, read that item's `body` (already in the trigger query's result — both request `body` — so this costs no extra call) at its **marker slot** — the first non-empty line of the plan block, directly under `## Implementation Plan`, for an issue; the first non-empty line after `Closes #N`, for a pull request. Slot holds `> **SESSION REQUIRED:** <reason>` → announce, do not dispatch. Anything else at the slot, or no slot at all → dispatch normally. **Never search the rest of the body for the literal string** — a ticket that mentions `SESSION REQUIRED` in prose (explaining the mechanism, or why a step is or is not session-required) or inline code is not marked; read the one line at the slot, never a substring anywhere in the body. Full rule: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Session-required tickets" → "Detection".
 
 For a refresh, say so in the prompt so the agent takes its refresh path: `Run your pipeline stage for PR #<n> in refresh mode.`
 
@@ -470,7 +470,7 @@ then notify the human.
 
 For each issue at `<labels.planReview>`:
 
-- **Without `<labels.autoPlan>`:** summarize the plan from the issue body in a few sentences, then ask (AskUserQuestion): **Approve** / **Request changes** / **Discuss**. If the plan carries the `SESSION REQUIRED` marker, say so in the summary — the human should learn at the gate that they will be running this one themselves.
+- **Without `<labels.autoPlan>`:** summarize the plan from the issue body in a few sentences, then ask (AskUserQuestion): **Approve** / **Request changes** / **Discuss**. If the plan is marked `SESSION REQUIRED` at its slot, say so in the summary — the human should learn at the gate that they will be running this one themselves.
   - Approve → `gh issue edit <n> --repo <repo> --remove-label "<labels.planReview>" --add-label "<labels.planApproved>"`. Implementation dispatches this tick, unless the plan is session-required, in which case this tick announces instead.
   - Request changes → write the feedback to `.temp/feedback-<n>.md`, `gh issue comment <n> --repo <repo> --body-file .temp/feedback-<n>.md`, then swap to `<labels.planChangesRequested>`.
   - Discuss → converse, then finish with one of the two transitions above.

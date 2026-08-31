@@ -128,6 +128,12 @@ const SCRATCH_PATHS = /^(\.temp|\.agents)\//;
 // substring search: a plan that merely *writes about* the prefix (this
 // ticket's own does) is not a marked plan.
 const OPERATOR_ONLY_STEP = /^\s*[-*]\s*\[[ xX]\]\s*\*\*operator-only\*\*/;
+// The session-required marker's canonical rendering, anchored at the start of
+// the (trimmed) line, reason non-empty. Detection is slot-plus-form, never a
+// substring search of the whole body — see PIPELINE.md → "Detection". A plan
+// that merely *discusses* the marker (this ticket's own does, three times)
+// must not read as marked.
+const SESSION_MARKER = /^>\s*\*\*SESSION REQUIRED:\*\*\s+\S/;
 
 /** Pull request stage labels, at most one of which may be present. The refresh
  *  pair is excluded on purpose: a refresh leaves the other labels in place. */
@@ -146,6 +152,7 @@ const section = (ls, heading) => {
   return end === -1 ? rest : rest.slice(0, end);
 };
 const firstNonEmpty = (ls) => ls.find((l) => l.trim() !== '') ?? '';
+const firstNonEmptyIndex = (ls) => ls.findIndex((l) => l.trim() !== '');
 
 // --- Audit ------------------------------------------------------------------
 const PR_FIELDS = 'number,state,body,labels,author,commits,files,reviews,comments';
@@ -369,20 +376,43 @@ for (const n of targets) {
     } else {
       ok();
     }
-    // Both surfaces are checked at the marker's *defined position*, never by
-    // searching the whole body: a plan that merely writes about the marker —
-    // this ticket's own does — is not a marked plan. On the issue it is the
-    // first line of the plan block, before `## Overview`; on the pull request it
-    // is directly under `Closes #N`, where the cockpit reads it to route stage 4.
+    // Both surfaces are checked at the marker's *slot*, never by searching the
+    // whole body: a plan that merely writes about the marker — this ticket's
+    // own does, three times — is not a marked plan. On the issue the slot is
+    // the first non-empty line of the plan block, before `## Overview`; on the
+    // pull request it is directly under `Closes #N`, where the cockpit reads
+    // it to route stage 4.
     const issuePlan = lines(issueBody).slice(
       lines(issueBody).findIndex((l) => l.trim() === '## Implementation Plan') + 1,
     );
-    const issueMarked = firstNonEmpty(issuePlan).includes('SESSION REQUIRED');
-    const prMarked = firstNonEmpty(body.slice(1)).includes('SESSION REQUIRED');
+    const prBody = body.slice(1);
+    const issueSlotIdx = firstNonEmptyIndex(issuePlan);
+    const prSlotIdx = firstNonEmptyIndex(prBody);
+    const issueMarked = issueSlotIdx !== -1 && SESSION_MARKER.test(issuePlan[issueSlotIdx].trim());
+    const prMarked = prSlotIdx !== -1 && SESSION_MARKER.test(prBody[prSlotIdx].trim());
     if (issueMarked && !prMarked) {
       fail(at('cross-surface'), `issue #${issueNo} is marked SESSION REQUIRED but the pull request does not repeat it under 'Closes #${issueNo}'`);
     } else if (!issueMarked && prMarked) {
       fail(at('cross-surface'), `the pull request is marked SESSION REQUIRED but issue #${issueNo} is not`);
+    } else {
+      ok();
+    }
+
+    // The canonical rendering must appear only at the slot, in pipeline-authored
+    // text. Scoped deliberately: the issue's plan block (never the human-authored
+    // ticket text above it, which is not the pipeline's to constrain) and the
+    // whole pull request body (all of it pipeline-authored, once `Closes #N` is
+    // excluded). A rendering elsewhere would be misread as a second marker by
+    // anything that ever regresses to a substring search.
+    const outsideIssue = issuePlan.some((l, i) => i !== issueSlotIdx && SESSION_MARKER.test(l.trim()));
+    const outsidePr = prBody.some((l, i) => i !== prSlotIdx && SESSION_MARKER.test(l.trim()));
+    if (outsideIssue) {
+      fail(at('cross-surface'), `issue #${issueNo}'s plan renders the canonical SESSION REQUIRED marker outside its slot`);
+    } else {
+      ok();
+    }
+    if (outsidePr) {
+      fail(at('cross-surface'), `the pull request renders the canonical SESSION REQUIRED marker outside its slot`);
     } else {
       ok();
     }
