@@ -440,9 +440,9 @@ Stage mapping:
 | --- | --- | --- |
 | Issue at `<labels.ready>` | `plan-agent` (fresh plan) | `models.plan` |
 | Issue at `<labels.planChangesRequested>` | `plan-agent` (revision) | `models.plan` |
-| Issue at `<labels.planApproved>` | `impl-agent` — **unless `SESSION REQUIRED`: announce, never dispatch** | `models.impl` |
+| Issue at `<labels.planApproved>` | `impl-agent` — **unless `SESSION REQUIRED` at its slot: announce, never dispatch** | `models.impl` |
 | Pull request at `<labels.readyForReview>` | `review-agent` — **unless `mergeable` is `CONFLICTING`: route to revision instead, see "Mergeability gate"** | `models.review` |
-| Pull request at `<labels.needsRevision>` | `revise-agent` — **after the cycle-cap check**; **unless `SESSION REQUIRED`: announce, never dispatch** | `models.revise` |
+| Pull request at `<labels.needsRevision>` | `revise-agent` — **after the cycle-cap check**; **unless `SESSION REQUIRED` at its slot: announce, never dispatch** | `models.revise` |
 | Pull request at `<labels.refreshBranch>` *(`previewDatabase`)* | `revise-agent` in **refresh mode** | `models.revise` |
 
 **Session-required items never dispatch.** Before dispatching impl or revise, read that item's `body` (already in the trigger query's result — both request `body` — so this costs no extra call) at its **marker slot** — the first non-empty line of the plan block, directly under `## Implementation Plan`, for an issue; the first non-empty line after `Closes #N`, for a pull request. Slot holds `> **SESSION REQUIRED:** <reason>` → announce, do not dispatch. Anything else at the slot, or no slot at all → dispatch normally. **Never search the rest of the body for the literal string** — a ticket that mentions `SESSION REQUIRED` in prose (explaining the mechanism, or why a step is or is not session-required) or inline code is not marked; read the one line at the slot, never a substring anywhere in the body. Full rule: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Session-required tickets" → "Detection".

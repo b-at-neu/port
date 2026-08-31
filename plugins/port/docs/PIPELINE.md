@@ -353,7 +353,7 @@ Every plan, review, summary, and comment is written for a human scanning fast:
 
 Appended below the ticket under a `---` then `## Implementation Plan`; revision mode replaces only that block. **Do not restate the ticket** — reference it. Fixed sections in this order; conditional ones appear **only when they apply**:
 
-- **`SESSION REQUIRED` marker** *(only when a `sessionRequiredPaths` entry is touched)* — the first line, before `## Overview`.
+- **`SESSION REQUIRED` marker** *(only when a `sessionRequiredPaths` entry is touched)* — the plan block's first non-empty line, before `## Overview` (see "Detection").
 - **## Overview** — 2–4 sentences: what, why, the approach.
 - **## Changes** — a single fenced ` ```files ` block, one claimed path per non-blank line: `` path — one-line reason ``. The **path is the first whitespace-delimited token**; everything after the first space is a human-readable reason and is never parsed. Paths are repo-relative, forward-slashed, no leading `./`, case-sensitive. List **every** file the plan creates or modifies, including a new file at the path it will be created at — a `## Testing` step that writes a file is not a claim. **No globs** — a directory that will gain files whose names are not yet decided is listed once with a trailing `/`, which matches any path under it. Exactly one fence per plan; an absent or empty block means the plan dispatches unchecked, with a warning (see "File contention").
 - **## Implementation** — ordered `- [ ]` checkboxes, one line each; fold validation, states, and error-model notes into the step they belong to.
