@@ -74,6 +74,24 @@ Ownership is the second dimension of pipeline state: **labels say what stage an 
 
 The **double-dispatch race is known and unfixed**: the trigger-to-in-flight label swap happens inside the agent after spawn, so a check-then-act window of tens of seconds remains. Disjoint assignee sets avoid it in practice; closing it properly means moving the swap into the cockpit, before the `Agent()` call.
 
+### The tick's cost and clock
+
+A tick used to cost ~15 GitHub round trips — one `gh issue list`/`gh pr list` per label, plus per-item follow-ups for mergeability, reviews, and check rollups — most of it pure polling against sets that overlap heavily (the unowned sweep re-fetched items the trigger queries had already returned). **The tick collapses to one `gh api graphql --include` call**, one aliased query per set the tick needs (`skills/pipeline/SKILL.md` → "Tick procedure" names every alias), at a measured cost of **~12 points against the 5,000/hour budget** — headroom is not a constraint at any pacing rung.
+
+**Failure and truncation are fail-closed on actions, never on reporting.** `gh api graphql` exits non-zero whenever GraphQL's `errors` array is present, even when `data` is still usable — exit status alone must never be read as "the tick learned nothing":
+
+- `errors` present, `data` usable → only the aliases named in `errors[].path` are unavailable; every other alias in the same response is trustworthy.
+- No `data` at all, or the call errors with no parseable JSON → a **blind tick**: dispatch nothing, run no hygiene, reset nothing, and never claim "all clear" — but still schedule the next wakeup, at the pacing floor.
+- A connection's `totalCount` exceeds its `nodes` length → that set is **truncated, not complete**: act on what came back, never report the stage as empty.
+
+**Ownership moved from the query to the response.** Dropping the per-alias assignee filter is what makes the unowned sweep derivable from the same call rather than a second round trip — every issue and pull-request node now carries `assignees`, and the cockpit partitions client-side against `viewer.login`. The rail itself is unchanged: **an item whose assignees do not include the viewer is never acted on, only reported.**
+
+**The clock is the `Date:` response header**, read via `--include` on the same call. GitHub's GraphQL schema exposes no server time, and no allowlisted command emits one, so this is the only authoritative "now" the session has — at negligible extra cost (~25 header lines), which the collapse from ~15 calls to 1 more than pays for. It is what makes the resume line possible: a session that stalled or was closed compares this tick's header against the last one it recorded and, on a material overshoot, treats the tick as changed rather than silently assuming nothing happened while it was gone.
+
+**`.temp/tick-state.md` is the memory the collapse needs and the old per-tick queries never did.** One artifact, rewritten whole each tick, carrying: the clock (`Last tick`, `Scheduled`), the pacing ladder's own state (`Cadence step`, `No-change ticks`), the denial log's read offset (`Denials consumed`), and the three change-only reports' remembered sets (`Announced approved`, `Unowned reported`, `Ungated reported`, `Worktrees reported`, `Uncorrelatable announced`). Gitignored, and — like `.temp/dispatch-log.md` — a `Repo` header naming a different repository is treated as absent, never trusted.
+
+**The pacing ladder replaces a two-speed rule that measured as one speed.** The old rule was binary — any agent in flight or item mid-pipeline polls every 270s, fully idle polls every 1500s — and in a 27-tick, 25-hour observed run, 26 of 27 wakeups landed at 270s: a tick with one long `review-agent` in flight polled every 4.5 minutes waiting for a completion notification that arrives on its own regardless, because background-agent completions wake the session between scheduled ticks. The fix separates two different questions the old rule conflated: *is something running* (irrelevant to polling need, since completions are event-driven) and *will anything move without a human* (the real reason to poll fast). **The ladder: floor 270s with no backoff whenever something will move on its own; otherwise back off one rung per consecutive no-change tick, 270 → 540 → 1080 → 1800, resetting to the floor on any observed change.** An hour-of-quiet shutoff was considered and explicitly rejected: **the cockpit must never stop scheduling wakeups on its own** — it is the only dispatcher, and a `ready` label applied while it is silent would never be picked up. The cost: worst-case pickup latency for a human label change rises from 4.5 to 30 minutes, and only in the fully-idle, fully-backed-off state — `docs/USAGE.md` states this as designed behaviour, not a stall.
+
 ### File contention
 
 Concurrency is otherwise correct and desirable — the account's usage window is time-based, not concurrency-based, so more agents running inside one window is strictly better. The one thing dispatch must never do is start two plans that write the same file at the same time: whichever pull request merges first invalidates the other's rebase, and the loser escalates to `<labels.needsHuman>` on a conflict a human never needed to see, because the information to prevent it — each plan's own `## Changes` file list — was sitting in the issue body unread.
@@ -195,7 +213,7 @@ Rule: **every stage agent's first action is swapping its trigger label for its i
 
 | Stage | Definition | Model | Why |
 | --- | --- | --- | --- |
-| Cockpit | `skills/pipeline/` | haiku (session) | Mechanical: queries, label swaps, dispatch, relaying |
+| Cockpit | `skills/pipeline/` | haiku recommended (session) | Mechanical: one query, label swaps, dispatch, relaying — a skill cannot set the session model, so this is a recommendation the operator's own choice can override |
 | 0. Scope | `skills/scope/` | inherits session | Highest-leverage thinking; the human is in the conversation |
 | 1. Plan | `agents/plan-agent.md` | `models.plan` | Design-rich planning; quality amplifies downstream |
 | 2. Implement | `agents/impl-agent.md` | `models.impl` | Bulk of the code volume |
@@ -514,6 +532,10 @@ Closing the cockpit session also halts dispatch, since it is the only dispatcher
 | A pull request was approved and then moved back to `needs revision` | A check on it went red after approval, or `mergeable` reads `CONFLICTING` | The `## Approval withdrawn` or `## Rebase required` comment names why; revision dispatches this tick |
 | `review-agent` stopped without a verdict | Checks never concluded within the bounded wait | The pull request is at `<labels.needsHuman>`; `unblock #N` is the route |
 | A pull request at `ready for review` never gets reviewed, and the cockpit reports it conflicting | `mergeable` reads `CONFLICTING` — GitHub never ran checks on this diff | The cockpit posts `## Rebase required` and moves it to `needs revision`; `revise-agent` rebases and pushes it back to `ready for review` automatically |
+| A tick reports "the tick query failed" and does nothing else | The single collapsed `gh api graphql` call returned no `data` — a **blind tick** | Correct, conservative behaviour, not a bug: nothing was dispatched, no label moved, and a wakeup was still scheduled at the pacing floor. It self-heals next tick if the transient cause clears |
+| A tick reports one label's set as "returned N of M items" | A GraphQL connection's `totalCount` exceeded its `nodes` length — that set is **truncated, not complete** | The cockpit already acted only on what it received; nothing to fix unless the true set size needs a larger `first:` in `.temp/tick-query.graphql` |
+| The cockpit opens with "Resumed after a gap" | The session was closed or stalled long enough that the elapsed time materially overshoots what was last scheduled | Expected after any real gap — it treats the tick as changed and polls at the floor once, since items may have moved unattended while it was gone |
+| The cockpit's closing line shows a delay above 270s while an item still needs a human | The pacing ladder backed off because nothing was going to move without the human anyway | Not a stall — say what you need to say (approve a plan, `unblock #N`, merge) and the next tick resets to the floor the moment it sees the change |
 
 ## Reading current state without the cockpit
 

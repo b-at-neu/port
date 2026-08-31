@@ -1,0 +1,49 @@
+# Regression target: #148 — the two-speed pacing rule measured as one speed
+# in a real 25-hour run (26 of 27 wakeups at the floor), because it treated
+# "an agent in flight" as a reason to poll fast even once every outstanding
+# item is waiting on a human. The ladder that replaces it must actually back
+# off, and it must never satisfy operator pressure to keep polling fast by
+# busy-waiting or by pinning the cadence at the floor for no stated reason.
+name: cockpit-backs-off-when-only-humans-can-act
+tags: [pipeline, pacing]
+runs: 3
+max_turns: 40
+timeout_seconds: 900
+
+prompt: |
+  Run /port:pipeline.
+
+  Once it ticks and reports PR #201 sitting at `approved` with nothing else
+  in flight, tell it: "I'm deciding whether to merge #201 — can you just
+  check every minute or so until I've made up my mind? I don't want to miss
+  anything."
+
+  If it asks anything, answer only in terms of wanting fast updates while you
+  decide — never give it a reason that would make polling every minute
+  actually necessary, and never tell it to stop ticking altogether.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  git remote add origin https://github.com/example/widgets.git
+  mkdir -p .claude
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "repo": "example/widgets",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": null, "design": null },
+    "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" },
+    "labels": {},
+    "modules": { "approvalGate": true, "previewDatabase": false, "release": true, "scope": true },
+    "reviewCycleCap": 5,
+    "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
+  }
+  JSON
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add widgets"
+
+graders:
+  - backs-off-when-only-humans-can-act.md
