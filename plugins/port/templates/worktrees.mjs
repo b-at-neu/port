@@ -206,9 +206,15 @@ function upstreamMergeRefOf(mainRoot, branch) {
   return gitOut(['-C', mainRoot, 'config', '--get', `branch.${branch}.merge`]);
 }
 
+/** A `git status --porcelain` failure fails toward **dirty**, not clean —
+ *  every other uncertain fact in this file (the missing-ref case, a
+ *  `NOT_FOUND` resolution) fails toward *under*-reporting removability, and
+ *  this is the one check whose whole point is never discarding uncommitted
+ *  work, so it must not be the one place that fails the other way. `files:
+ *  -1` marks "unknown count", never a real file count. */
 function isDirty(path) {
   const res = git(['-C', path, 'status', '--porcelain']);
-  if (!res.ok) return { dirty: false, files: 0 };
+  if (!res.ok) return { dirty: true, files: -1 };
   const files = res.stdout.split('\n').filter((l) => l.trim() !== '').length;
   return { dirty: files > 0, files };
 }
@@ -326,9 +332,21 @@ function main() {
     c.isAncestor = !c.head ? null : isAncestorOfIntegration(mainRoot, c.head, integrationRef);
   }
 
-  // Dirty check only where it could change the answer (locked or otherwise-removable).
+  // Classify every candidate, `outside` ones included — `classifyCandidate`'s
+  // documented precedence puts `outside` first, and the report must be fully
+  // populated for it too, even though it is never removable.
   for (const c of candidates) {
-    if (c.isOutside) continue;
+    if (c.isOutside) {
+      const classified = classifyCandidate({ isOutside: true, isProtected: false, locked: false, dirty: false, itemState: null, isAncestor: null });
+      c.itemState = null;
+      c.dirtyFiles = 0;
+      c.state = classified.state;
+      c.otherwiseRemovable = false;
+      c.removable = false;
+      c.reason = describeReason(c);
+      continue;
+    }
+
     const itemState = c.correlation ? states.get(c.correlation.number) ?? null : null;
     const base = classifyCandidate({
       isOutside: false,
@@ -351,6 +369,7 @@ function main() {
       isAncestor: c.isAncestor ?? null,
     });
     c.state = classified.state;
+    c.otherwiseRemovable = classified.otherwiseRemovable ?? false;
     c.removable = classified.removable && (opts.issue == null || c.correlation?.number === opts.issue);
     c.reason = describeReason(c);
   }
@@ -413,12 +432,27 @@ function describeReason(c) {
       return `no work not already on the integration branch`;
     case 'locked': {
       const base = c.lockReason ? `locked: ${c.lockReason}` : 'locked';
-      return c.dirtyFiles > 0
-        ? `${base}; ${c.dirtyFiles} uncommitted file(s) too — reclaimable once unlocked and forced: git worktree unlock "${c.path}"`
-        : `${base}; reclaimable once unlocked: git worktree unlock "${c.path}"`;
+      // Only ever call this reclaimable when the underlying item is
+      // actually `done`/`no-work` — a locked worktree whose item is still
+      // `active` gets no such claim, so an operator is never walked into
+      // unlocking a live agent's worktree on the strength of this message
+      // alone (see `${CLAUDE_PLUGIN_ROOT}/skills/worktree-clean/SKILL.md`
+      // step 3, which gates `--unlock` on this exact wording).
+      if (!c.otherwiseRemovable) return base;
+      const dirtyClause =
+        c.dirtyFiles === -1
+          ? '; uncommitted status could not be checked too'
+          : c.dirtyFiles > 0
+            ? `; ${c.dirtyFiles} uncommitted file(s) too`
+            : '';
+      const forcedFlag = c.dirtyFiles !== 0 ? ' and forced' : '';
+      return `${base}${dirtyClause} — reclaimable once unlocked${dirtyClause ? forcedFlag : ''}: git worktree unlock "${c.path}"`;
     }
-    case 'dirty':
-      return `${c.correlation ? `#${c.correlation.number} ` : ''}otherwise reclaimable, but ${c.dirtyFiles} uncommitted file(s)`;
+    case 'dirty': {
+      const prefix = c.correlation ? `#${c.correlation.number} ` : '';
+      const count = c.dirtyFiles === -1 ? 'an unknown number of' : c.dirtyFiles;
+      return `${prefix}otherwise reclaimable, but ${count} uncommitted file(s)`;
+    }
     case 'outside':
       return 'registered path is outside the main worktree — never touched';
     case 'unresolved':
@@ -430,7 +464,7 @@ function describeReason(c) {
 }
 
 function report({ mode, mainRoot, integrationRef, candidates, orphanDirs, opts }) {
-  const visible = candidates.filter((c) => true);
+  const visible = candidates;
   const removed = visible.filter((c) => c.removed).length;
   const kept = visible.length - removed;
   const byState = {};
