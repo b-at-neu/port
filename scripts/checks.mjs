@@ -1726,5 +1726,70 @@ const SESSION_MARKER_LINE = /^>\s*\*\*SESSION REQUIRED:\*\*\s+\S/;
   }
 }
 
+// --- Unconditional cycle cap and the zero-diff review gate (#162) ----------
+// Regression guard for #162: PR #157 ran 7 review cycles because the cap
+// only fired "at reviewCycleCap and the latest review still produced
+// Critical or Medium findings" — a condition every CI-only bounce (a
+// liveness reset, an approval withdrawal, a manual re-label) arrives at
+// with a clean latest review, so it never fired. This checks the cap
+// dropped that qualifier, and that the zero-diff gate it gained alongside
+// names the fields and comment it reads.
+{
+  const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
+  const pipelineRel = 'plugins/port/docs/PIPELINE.md';
+  const skillText = readFileSync(join(root, skillRel), 'utf8');
+  const pipelineText = readFileSync(join(root, pipelineRel), 'utf8');
+
+  const capStart = skillText.indexOf('### Cycle cap');
+  if (capStart === -1) {
+    fail('cycle-cap', `${skillRel} has no '### Cycle cap' section`);
+  } else {
+    const capEnd = skillText.indexOf('\n## ', capStart);
+    const capSection = capEnd === -1 ? skillText.slice(capStart) : skillText.slice(capStart, capEnd);
+
+    if (capSection.includes('and the latest review still produced Critical or Medium findings')) {
+      fail(
+        'cycle-cap',
+        `${skillRel}'s cycle cap still carries the 'and the latest review still produced Critical or Medium findings' qualifier — this is exactly what let #157 bounce through 7 clean cycles`,
+      );
+    } else {
+      ok();
+    }
+
+    if (!capSection.includes('unconditional')) {
+      fail('cycle-cap', `${skillRel}'s cycle cap section never states the cap is 'unconditional'`);
+    } else {
+      ok();
+    }
+  }
+
+  const zeroDiffStart = skillText.indexOf('Zero-diff review gate');
+  if (zeroDiffStart === -1) {
+    fail('zero-diff-review', `${skillRel} never declares a 'Zero-diff review gate'`);
+  } else {
+    const zeroDiffEnd = skillText.indexOf('\n**File contention gate', zeroDiffStart);
+    const zeroDiffSection = zeroDiffEnd === -1 ? skillText.slice(zeroDiffStart) : skillText.slice(zeroDiffStart, zeroDiffEnd);
+    for (const phrase of ['commit.oid', 'headRefOid', '## Gate cleared']) {
+      if (!zeroDiffSection.includes(phrase)) {
+        fail('zero-diff-review', `${skillRel}'s zero-diff review gate never names '${phrase}'`);
+      } else {
+        ok();
+      }
+    }
+  }
+
+  if (!pipelineText.includes('unconditional')) {
+    fail('cycle-cap', `${pipelineRel} never states the cycle cap is 'unconditional'`);
+  } else {
+    ok();
+  }
+
+  if (!pipelineText.includes('Zero-diff review')) {
+    fail('zero-diff-review', `${pipelineRel} carries no 'Zero-diff review' rule`);
+  } else {
+    ok();
+  }
+}
+
 // --- Report -----------------------------------------------------------------
 report();

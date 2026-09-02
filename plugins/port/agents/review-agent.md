@@ -213,7 +213,7 @@ The threshold that triggers a revision **rises with the cycle**, so the first pa
 
 A third outcome sits outside this table: **`blocked — checks pending`** (step 4's timeout exit) routes to `<labels.needsHuman>` regardless of cycle, never to `<labels.approved>` or `<labels.needsRevision>` — see step 4. The `<labels.approved>` row above is reachable only after step 4 has confirmed every non-excused check on the head commit concluded green; a Critical from a red check blocks it at every cycle exactly like any other Critical.
 
-The cycle cap is the cockpit's job: it escalates to `<labels.needsHuman>` at `reviewCycleCap` cycles with Critical or Medium still open.
+The cycle cap is the cockpit's job: it escalates to `<labels.needsHuman>` at `reviewCycleCap` cycles, unconditionally — whatever the latest verdict said.
 
 ```bash
 # Findings at or above this cycle's bar → revise:

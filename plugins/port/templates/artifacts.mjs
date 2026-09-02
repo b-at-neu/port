@@ -396,6 +396,7 @@ function runAudit(argv) {
     // heading. The second clause is what makes a *renamed* heading fail
     // rather than quietly skip.
     const cycles = [];
+    const reviewOids = [];
     for (const r of pr.reviews) {
       const first = (lines(r.body)[0] ?? '').trim();
       const byAuthor = r.author?.login && r.author.login === pr.author?.login;
@@ -413,6 +414,7 @@ function runAudit(argv) {
 
       const m = REVIEW_HEADING.exec(first);
       cycles.push(Number(m[1]));
+      if (r.commit?.oid) reviewOids.push(r.commit.oid);
     }
     if (cycles.length > 0) {
       const sorted = [...cycles].sort((a, b) => a - b);
@@ -421,6 +423,27 @@ function runAudit(argv) {
         auditFail(at('review'), `cycle numbers must run 1..${cycles.length} with no gaps or duplicates, got ${sorted.join(', ')}`);
       } else {
         auditOk();
+      }
+    }
+
+    // --- Zero-diff review bounce (#162) ---
+    // The cockpit's zero-diff gate stops a *second* review from ever being
+    // dispatched against a head already reviewed, but a `## Gate cleared`
+    // exception authorizes exactly one more — so one repeat (two reviews
+    // sharing a `commit.oid`) is the sanctioned escape, never a failure.
+    // Three or more sharing one oid means the gate was bypassed, or predates
+    // this fix, and the cap-without-convergence loop #162 exists for is back.
+    {
+      const byOid = new Map();
+      for (const oid of reviewOids) byOid.set(oid, (byOid.get(oid) ?? 0) + 1);
+      for (const [oid, count] of byOid) {
+        if (count >= 3) {
+          auditFail(at('review'), `${count} reviews share commit ${oid} — the zero-diff gate should stop at one authorized repeat`);
+        } else if (count === 2) {
+          note(`#${n}: 2 reviews share commit ${oid} — the operator-authorized zero-diff re-review, not a failure`);
+        } else {
+          auditOk();
+        }
       }
     }
 

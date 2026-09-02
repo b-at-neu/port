@@ -286,7 +286,7 @@ gh api graphql --include -F query=@.temp/tick-query.graphql --jq '{data, errors,
 
 The query is one `repository(owner:"<owner>", name:"<name>")` selection with one alias per set this tick needs, plus top-level `viewer { login }` and `rateLimit { cost remaining }` for the cost budget. Every connection carries `totalCount` beside `nodes`, and every issue/pull-request node carries `assignees(first:5){ nodes { login } }` — ownership is partitioned client-side now (see "Ownership is now enforced client-side" below), so **no alias filters by assignee**, unlike the old per-label REST calls. Aliases, unfiltered by assignee, `states: OPEN` on every connection:
 
-- **5 trigger sets** — `ready`, `planChangesRequested`, `planApproved` (adds `body`), `readyForReview` (adds `mergeable`), `needsRevision` (adds `body`, `mergeable`, and `reviews(first:30){ nodes { body } }` for the cycle cap).
+- **5 trigger sets** — `ready`, `planChangesRequested`, `planApproved` (adds `body`), `readyForReview` (adds `mergeable`, `headRefOid`, `reviews(first:30){ nodes { body submittedAt commit { oid } } }` for the zero-diff gate below, and `comments(last:20){ nodes { body createdAt } }` for its `## Gate cleared` exception), `needsRevision` (adds `body`, `mergeable`, and `reviews(first:30){ nodes { body } }` for the cycle cap). Read `rateLimit.cost` from the response after this widening rather than trusting the ~12-point figure below blindly — it is what the Cost budget paragraph already says to do, and the widened alias is exactly the kind of change that moves it.
 - **4 gate sets** — `planReview` (adds `body`), `blocked`, `approved` (adds `headRefOid`, `mergeable`, and the latest commit's `statusCheckRollup` — see below), `needsHuman`.
 - **4 in-flight sets** — `planning`, `inProgress` (adds `body`), `reviewing`, `revising` (adds `body`).
 - **`prOpened`** (adds `body`) — the whole unmerged-branch set for the file contention gate's occupied set, in the same call.
@@ -340,6 +340,23 @@ Then, in this order. Steps 7 and 8 are split apart deliberately — they are the
   > ⚠️ PR #134's mergeability is still `UNKNOWN` after two ticks — dispatching review anyway; it re-checks before it posts.
 
 **Approved-and-conflicting is the same fact read at a different gate** — see "Approved pull requests" under Human gates for that carve-out; both routes post the identical `## Rebase required` comment and land at `<labels.needsRevision>`.
+
+**Zero-diff review gate (each tick, step 4, after the mergeability gate, before dispatching review).** A head a `## Code Review` has already been submitted against gets no second cycle — a clean review that keeps not merging (a liveness reset, an `## Approval withdrawn` bounce, a manual re-label) is otherwise invisible to both the cap above and to review itself, since neither compares the review's own commit against the current head. `readyForReview`'s alias already carries `headRefOid`, `reviews` (with `submittedAt` and `commit.oid`), and `comments` for exactly this (see the widened alias above) — no extra round trip. A `CONFLICTING` pull request already routed to revision at the mergeability gate above and never reaches this test.
+
+1. From the alias's `reviews`, take the newest node whose `body` starts with the literal `## Code Review` — the same predicate the cycle counter uses, so an empty drive-by review is never counted. **None** → dispatch.
+2. Its `commit.oid` differs from `headRefOid` → **dispatch**. Real progress always moves the head.
+3. Equal, **and** the newest `## Gate cleared` comment (from the alias's `comments`) is newer than that review's `submittedAt` → **dispatch, once**. The operator authorized this re-review through `unblock #N`; the next review resets the comparison by construction.
+4. Otherwise → **do not dispatch**. Write `.temp/zero-diff-<pr>.md` — a `## Pipeline Escalation` body (the same heading `revise-agent`'s rebase escalation uses, with no `### D<n>` blocks, so `unblock #N`'s plain-clear path applies):
+
+   ```
+   ## Pipeline Escalation
+   Cycle <n> already reviewed `<sha>` and the head has not moved, so no new review cycle was opened.
+   Whatever is blocking this pull request is not visible to review or revision.
+   ```
+
+   then `gh pr comment <pr-number> --repo <repo> --body-file .temp/zero-diff-<pr>.md`, `gh pr edit <pr-number> --repo <repo> --remove-label "<labels.readyForReview>" --add-label "<labels.needsHuman>"`, and announce:
+
+   > ⛔ PR #157 is at `ready for review`, but cycle 7 already reviewed `cb2dc1a` and the head hasn't moved — a new cycle would grade the same diff. Escalated to `needs human` and commented. If a check on that SHA has since changed, say `unblock #157` and choose **Back to review**; I'll dispatch one review against it.
 
 **File contention gate (each tick, step 4, before dispatching `impl-agent`).** A `<labels.planApproved>` item dispatches only when no in-flight item's plan claims the same file. Full background: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "File contention".
 
@@ -492,7 +509,7 @@ Stage mapping:
 | Issue at `<labels.ready>` | `plan-agent` (fresh plan) | `models.plan` |
 | Issue at `<labels.planChangesRequested>` | `plan-agent` (revision) | `models.plan` |
 | Issue at `<labels.planApproved>` | `impl-agent` — **unless `SESSION REQUIRED` at its slot: announce, never dispatch** | `models.impl` |
-| Pull request at `<labels.readyForReview>` | `review-agent` — **unless `mergeable` is `CONFLICTING`: route to revision instead, see "Mergeability gate"** | `models.review` |
+| Pull request at `<labels.readyForReview>` | `review-agent` — **unless `mergeable` is `CONFLICTING`: route to revision instead, see "Mergeability gate"; or the newest review already covers the current head with no `## Gate cleared` since: escalate instead, see "Zero-diff review gate"** | `models.review` |
 | Pull request at `<labels.needsRevision>` | `revise-agent` — **after the cycle-cap check**; **unless `SESSION REQUIRED` at its slot: announce, never dispatch** | `models.revise` |
 | Pull request at `<labels.refreshBranch>` *(`previewDatabase`)* | `revise-agent` in **refresh mode** | `models.revise` |
 
@@ -504,7 +521,7 @@ For a refresh, say so in the prompt so the agent takes its refresh path: `Run yo
 
 The `needsRevision` alias in the same tick query already carries `reviews(first:30){ nodes { body } }` — count the entries whose `body` starts with `## Code Review` from that, no follow-up `gh pr view`.
 
-If that count is **at or above `reviewCycleCap`** and the latest review still produced Critical or Medium findings, escalate instead of dispatching: write the note to `.temp/escalation-<pr>.md` with the Write tool, then
+**The cap is unconditional** — at or above `reviewCycleCap`, escalate regardless of what the latest review found. At cycle 3+ a `<labels.needsRevision>` verdict reached *by a review finding* already implies Critical or Medium (the escalating bar), so a findings qualifier was redundant on the path it was written for, and unsatisfiable on every path that actually loops without one — `## Rebase required`, `## Approval withdrawn`, a liveness reset, or a manual re-label, all of which arrive here with a clean latest review. Write the note to `.temp/escalation-<pr>.md` with the Write tool — its `## Pipeline Escalation` first line names the cycle count and the cap (`<n> review cycles reached the cap of <reviewCycleCap> without merging`) and never claims findings are open, since under this rule there need not be any — then
 
 ```bash
 gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --add-label "<labels.needsHuman>"
@@ -541,6 +558,8 @@ The gate applies **no special label** for a session-required plan; the marker is
   > **Back to revision** (dispatch `revise-agent` again) · **Back to review** (re-review as-is) · **Cancel**
 
   If the gate came from the cycle cap rather than a rebase escalation, append: *"This one hit the review cycle cap, so the revision route will escalate straight back to `needs human` on the next tick. Choose review, or merge it yourself."*
+
+  If the gate came from the **zero-diff review gate** instead, append: *"This one hit the zero-diff gate — the latest review already covered this head. **Back to review** is the authorized one-shot re-review this clear grants; **back to revision** only helps if the revision actually moves the head, or it escalates straight back."*
 
   **When the escalation comment carries `### D<n>` blocks** (a rebase escalation with decisions to make), present **every decision in one `AskUserQuestion` call** — it takes up to 4 questions of up to 4 options each — never one call per decision. The guard hook's gate rule authorises the clear from the last **5** operator messages in this session's own transcript, and one call per decision would push the operator's own `unblock #N` out of that window and get the clear denied. More than 4 decisions → batch across multiple calls, and re-confirm the count with the operator before the label swap.
 

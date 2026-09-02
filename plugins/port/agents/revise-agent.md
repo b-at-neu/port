@@ -162,6 +162,8 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --a
    - **Otherwise, if the working tree is dirty** (rare — a bootstrap step wrote something) — commit normally as above, subject `#<issue-number> rebase onto <base>`.
    - **Otherwise** — the rebase moved `HEAD` with no new content to commit. **Push the rebased head as-is, no commit**: `git push --force-with-lease origin HEAD:<branch>`.
 
+   **Findings mode has the same no-op**, from the opposite direction: if step 3 skipped every flagged item as genuinely not an issue, there is nothing staged. **`git status --porcelain` empty** → skip the commit and the push entirely, exactly like rebase-only's no-op above — report `no new commit (every finding skipped)` rather than committing nothing or forcing an empty commit.
+
 6. **Resolve the addressed review threads** so they do not block merge — **skip this step entirely in check-fix mode and in rebase-only mode**, where there are no threads to resolve. Inline comments live on **threads** that only a GraphQL mutation can resolve. The query takes owner and name **separately**:
 
    ```bash
@@ -201,6 +203,8 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --a
 ```bash
 gh pr edit <pr-number> --repo <repo> --remove-label "<labels.revising>" --add-label "<labels.readyForReview>"
 ```
+
+The label swap above is unchanged **regardless of whether this cycle produced a new commit** — enforcement of "did this actually move anything" stays in one place, the cockpit's own zero-diff review gate, not duplicated here. But when the cycle ended with no new commit — rebase-only mode's `rebase: no-op (already current)` (step 5), or a findings cycle where every flagged item was skipped as not-an-issue and nothing was pushed — say so plainly in the final report (e.g. "no new commit — head remains `<sha>`"), since the cockpit's zero-diff gate will decline to open a new review cycle against this head rather than dispatching one.
 
 ## Refresh mode
 

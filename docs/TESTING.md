@@ -49,6 +49,7 @@ No dependencies, no plugin install, no model calls. Runs in seconds, in CI on ev
 | `plugins/port/templates/artifacts.mjs` carries no relative import | The one file an adopting repository copies alone breaking silently outside this checkout (#149) |
 | Its exported `LABELS` table and `labels.json` agree on keys, names, and modules, both directions | `audit`'s label resolution drifting from the source of truth now that it can't import the file directly (#149) |
 | Its exported patterns each accept a good example and reject a bad one, including the real historical failure — a paragraph subject with no `#N ` prefix | A pattern that cannot be made to fail is not a pattern (#149) |
+| `SKILL.md`'s cycle cap no longer conditions escalation on the latest review still carrying Critical or Medium findings, and states the cap is unconditional; its zero-diff review gate names `commit.oid`, `headRefOid`, and `## Gate cleared`; `PIPELINE.md` states both rules too | A review cycle cap that never fires on a clean-but-unmerged bounce, and a review dispatched twice against a diff it already graded (#162) |
 
 Each rule is worth testing by breaking it deliberately. If a check cannot be made to fail, it is not a check.
 
@@ -87,6 +88,7 @@ node plugins/port/templates/artifacts.mjs audit --limit 10
 | Nothing under `.temp/` or `.agents/` in the diff | Operating rules |
 | The closing issue has an `## Implementation Plan`, and the marker is read at its slot — the plan block's first non-empty line and, on the pull request, the first non-empty line under `Closes #N` — matching on both surfaces or neither, with the canonical rendering never repeated outside either slot | Session-required tickets |
 | An operator-only testing step on the issue plan reaches the pull request's testing plan | Session-required tickets |
+| Reviews sharing one `commit.oid`: two is a note (the operator-authorized zero-diff re-review), three or more is a failure | Zero-diff review |
 
 **A pull request without the `claude` marker is skipped, never failed.** A human or dependency-bot pull request is not a deviation, and the marker is what makes one the pipeline's.
 

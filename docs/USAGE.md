@@ -68,7 +68,7 @@ Four things come back to you, and only these:
 - **The plan gate** — approve, revise, or discuss.
 - **A blocker.** Implementation hit something the plan did not cover. The cockpit relays the question and sends your answer back to the same agent, which picks up where it stopped.
 - **A question during planning.** Same relay, earlier stage. The planner is instructed never to guess.
-- **`needs human`.** Either review and revision failed to converge within the cycle cap, or a rebase hit a conflict too ambiguous to resolve safely. The pipeline stops and waits.
+- **`needs human`.** Review and revision failed to converge within the cycle cap (unconditional — it fires however clean the latest review was), a rebase hit a conflict too ambiguous to resolve safely, or a review would grade a diff it already graded (a clean bounce that never moved the head). The pipeline stops and waits.
 
 Anything else is reported, not asked.
 
