@@ -1,7 +1,7 @@
 ---
 name: pipeline
 description: Interactive pipeline cockpit — polls GitHub labels, dispatches background stage subagents, relays their questions, and runs the human gates conversationally. Haiku is recommended for the session — ticks are mechanical — but a skill cannot set the session model, so the operator's own choice stands; run in default permission mode. Usage: /port:pipeline
-allowed-tools: Bash(gh issue list *) Bash(gh issue view *) Bash(gh issue edit *) Bash(gh issue comment *) Bash(gh pr list *) Bash(gh pr view *) Bash(gh pr edit *) Bash(gh pr comment *) Bash(gh label list *) Bash(gh api graphql *) Bash(git worktree *) Bash(git rev-parse *) Bash(git rev-list *) Bash(git branch *) Bash(wc *) Bash(node *) Read Write Agent AskUserQuestion ScheduleWakeup SendMessage TaskList TaskStop
+allowed-tools: Bash(gh issue list *) Bash(gh issue view *) Bash(gh issue edit *) Bash(gh issue comment *) Bash(gh pr list *) Bash(gh pr view *) Bash(gh pr edit *) Bash(gh pr comment *) Bash(gh label list *) Bash(gh api graphql *) Bash(git rev-parse *) Bash(git rev-list *) Bash(git branch *) Bash(wc *) Bash(node *) Read Write Agent AskUserQuestion ScheduleWakeup SendMessage TaskList TaskStop
 ---
 
 # Pipeline Cockpit
@@ -30,13 +30,26 @@ A literal `HEAD` from the first command means detached — report the short sha 
 
 Read `permissions.defaultMode` from the same file, for step 3's report. **Warn only when it is `acceptEdits`, `bypassPermissions`, or `auto`** — see the matching **UX states** message — and say in the same clause that a launch flag overrides this setting and cannot be read from inside the session. `default`, or the key absent (the harness's own default is `default`), needs no warning.
 
-**Step 3 — running plugin.** At most two `Read` calls, no `git` invocation. Read `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` and open with one line naming the copy actually running, the session's own model, and the mode read above — **no warning glyph on the model, ever**; it is information, not a check:
+**Step 3 — running plugin identity, by commit, not path.** A path under `~/.claude/plugins/cache/` is identical for every install regardless of which commit it holds — a directory-sourced plugin is *copied* into the cache at install time, so the path alone cannot tell a stale copy from the working tree it came from. Report the resolved commit and scope instead:
 
-> `port` v0.1.0 — /home/you/.claude/plugins/cache/port/port/0.1.0 · model `claude-sonnet-5` · mode `default` (as configured — a launch flag overrides this and I can't read it from here)
+1. Read `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` for the version string.
+2. Read the plugin registry, `installed_plugins.json` — it sits **four directory levels above `${CLAUDE_PLUGIN_ROOT}`** when the running copy is a cache install (`<plugins>/cache/<marketplace>/<plugin>/<version>`), derived by trimming those four path segments — never a hard-coded `~/.claude/`, and never assuming a marketplace or plugin name. **Registry unreadable, or no record's `installPath` equals `${CLAUDE_PLUGIN_ROOT}`** → say so in one clause and fall back to the version-only line (see **UX states**); never print a path-only line that looks like an answer.
+3. **Resolve the applicable record.** Among records whose `installPath` equals `${CLAUDE_PLUGIN_ROOT}`, apply **local > project > user** scope precedence; within a scope, prefer the record whose `projectPath` is this session's cwd or an ancestor of it.
+
+Open with one line naming the resolved short commit sha, scope, `projectPath`, the session's own model, and the mode read in step 2 — **no warning glyph on the model, ever**; it is information, not a check:
+
+> `port` v0.1.0 — `1a12608` · **local** scope · `/home/you/port` · model `claude-sonnet-5` · mode `default` (as configured — a launch flag overrides this and I can't read it from here)
 
 When step 2 found a non-`default` `defaultMode`, replace the mode clause with the warning instead of the all-clear parenthetical:
 
 > ⚠️ `.claude/settings.json` sets `permissions.defaultMode` to `acceptEdits` — your own edits in this session auto-accept, so anything unexpected here lands silently. Restart me in `default`.
+
+**Two hazard warnings, checked against the resolved record(s), both from the same registry read — no extra call:**
+
+- **The resolved record's `projectPath` is inside a managed worktree** (a `/.claude/worktrees/` path segment) — warn once: that install was made from a worktree, and because every install scope shares one `installPath`, that commit is what **every** session on this machine loads — worktree or not — and keeps loading after the worktree is gone. Reinstalling from the main checkout is the fix.
+- **Two or more records share this running `installPath` with a different `gitCommitSha`** — warn once, naming both shas: whichever installed last wins globally, for every scope.
+
+**Also warn when this session's own cwd is inside a managed worktree** (the same `/.claude/worktrees/` test), in this same preflight step, with the policy stated inline: never install or reinstall the plugin from here — the guard hook denies it (see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Why background dispatch needs care"), because every install scope shares one `installPath` and the change would outlive this worktree.
 
 Then check for self-host drift. Read `.claude-plugin/marketplace.json` at the repository root:
 
@@ -112,7 +125,15 @@ Also in this pass, when both files are present but the branch from step 1's `git
 
 **Every tick after the first** reads `.temp/label-vocabulary.md` instead of re-deriving it — see Tick procedure, step 0. If the file is absent (a fresh session, or another checkout's leftover artifact with a different repository's vocabulary), re-run this section before that tick's queries.
 
-**Step 6 — dispatch log.** `.temp/dispatch-log.md` is this session's own proof of what it has dispatched — the record the liveness cross-check reads to decide whether a stalled item is safe to reset. Write it fresh (Write tool), overwriting any prior session's copy: that overwrite *is* the session scoping, so no clock and no session id are needed.
+**Step 6 — worktree reconciliation.** Read `commands.worktrees` (a `string | null` field — the full command prefix, e.g. `node scripts/port-worktrees.mjs`). **Absent or `null`** → say so once (see **UX states**) and skip this step entirely for the rest of the session — hygiene reports `not configured` in the tick's closing clause instead. **Set** → run it once, before the first tick:
+
+```bash
+<commands.worktrees> reclaim --max 5
+```
+
+Echo its output block verbatim — this is the ticket's "reconciled and reported on startup." It runs the identical safety rules a tick does (locked, dirty, and unresolved candidates are never force-removed), so nothing is reclaimed here that a tick would have refused. A non-zero exit is reported plainly, never treated as "nothing to reclaim."
+
+**Step 7 — dispatch log.** `.temp/dispatch-log.md` is this session's own proof of what it has dispatched — the record the liveness cross-check reads to decide whether a stalled item is safe to reset. Write it fresh (Write tool), overwriting any prior session's copy: that overwrite *is* the session scoping, so no clock and no session id are needed.
 
 ```
 # Dispatch log — <repo>
@@ -123,7 +144,7 @@ Also in this pass, when both files are present but the branch from step 1's `git
 
 Never acted on here beyond writing it. Every dispatch (see Dispatching) adds or updates the item's row; every tick's liveness step (see Tick procedure, step 5) reads it before classifying a no-match. A file whose `<repo>` header names a **different** repository — another checkout's leftover, or this checkout used for a different repository since — is treated as absent and rewritten fresh, exactly like a mismatched `.temp/label-vocabulary.md`. Two cockpits sharing one checkout clobber each other's copy; that degrades both to report-only on liveness, which is the safe direction, never a false reset.
 
-**Step 7 — tick state.** `.temp/tick-state.md` is the only memory that survives from one tick to the next — everything else (the pacing ladder, the resume line, the denial-log offset, the change-only reports) needs to know what the *previous* tick already told the human, and nothing else records that. Write it fresh (Write tool) exactly like `.temp/dispatch-log.md` — that overwrite *is* the session scoping, and a `Repo` header naming a different repository is treated as absent, same as a mismatched vocabulary file.
+**Step 8 — tick state.** `.temp/tick-state.md` is the only memory that survives from one tick to the next — everything else (the pacing ladder, the resume line, the denial-log offset, the change-only reports) needs to know what the *previous* tick already told the human, and nothing else records that. Write it fresh (Write tool) exactly like `.temp/dispatch-log.md` — that overwrite *is* the session scoping, and a `Repo` header naming a different repository is treated as absent, same as a mismatched vocabulary file.
 
 ```
 # Tick state — <repo>
@@ -189,6 +210,26 @@ Exact copy, one message per state, `<…>` substituted:
 
   > ⚠️ This repository is the source of the `port` plugin, but this session is running <path>, not the working tree. Edits here — and `git pull` — have no effect on this session. See CONTRIBUTING.md.
 
+- **Registry unreadable** (fall back to the version-only line):
+
+  > `port` v0.1.0 — commit unresolved (couldn't read the plugin registry) · model `claude-sonnet-5` · mode `default`. The path alone can't tell a stale copy from your working tree, so treat the version as unverified.
+
+- **Install record pinned to a worktree** (warn once):
+
+  > ⚠️ The install record for `port` was made from `<path>`, a worktree — and every install scope shares one `installPath`, so that commit is what **every** session on this machine loads, worktree or not. Reinstall from the main checkout to correct it.
+
+- **Two records differ only by commit** (warn once):
+
+  > ⚠️ Two install records share `<path>` with different commits (`<sha1>`, `<sha2>`) — whichever installed last wins globally. Running `<sha>`.
+
+- **This session's own cwd is inside a managed worktree** (warn once):
+
+  > ⚠️ You're running me from `<path>`, a managed worktree. Don't install or reinstall the plugin from here — the guard hook denies it, because every scope shares one `installPath` and the change would follow you out of this worktree.
+
+- **`commands.worktrees` not configured** (say once at startup, then a closing-line clause every tick thereafter):
+
+  > ⚠️ `commands.worktrees` isn't set, so I can't reclaim worktrees — and the pipeline creates one per ticket. Re-run `/port:init` to install the script, or run `/port:worktree-clean` by hand.
+
 ## UX states (tick procedure)
 
 Exact copy, one message per state, `<…>` substituted. These fire from inside the Tick procedure, never at startup:
@@ -220,6 +261,7 @@ Exact copy, one message per state, `<…>` substituted. These fire from inside t
 | `<repo>` | `repo` | required — stop |
 | `<owner>` / `<name>` | `repo`, split on `/` | required — stop |
 | `<labels.X>` | `labels.X` | the standard name in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Label lifecycle" |
+| `<commands.worktrees>` | `commands.worktrees` | hygiene unavailable — see Startup preflight step 6 |
 
 **`<labels.X>` names a slot, never a literal.** The value that belongs on a command line is the resolved **Name** for that key — `labels[key] ?? default` — read from the label vocabulary you resolve below, never the bare key itself and never retyped from memory. `<labels.planApproved>` resolves to `plan approved` in a repository with no override; it must never appear on a command line as `planApproved`. `gh issue list --label <unknown>` returns `[]` with exit code 0, so a wrong string here is never an error — it is silence, indistinguishable from a genuinely empty queue.
 
@@ -272,7 +314,7 @@ Unassigned items are invisible to every cockpit by design — the **unowned swee
 
 On start and on every wakeup, run one polling pass.
 
-**Step 0 — read the resolved vocabulary.** Before the query below, Read `.temp/label-vocabulary.md`. If it is absent, or names a different `<repo>` than this session's, re-run Startup preflight's **Step 5 — label vocabulary** first. Every `labels: [...]` list and every `--jq` label comparison this tick is copied verbatim from that file — never retyped from the placeholders shown below, and never reconstructed from memory. Then Read `.temp/tick-state.md`; if it is absent or names a different `<repo>`, re-run Startup preflight's **Step 7 — tick state** first.
+**Step 0 — read the resolved vocabulary.** Before the query below, Read `.temp/label-vocabulary.md`. If it is absent, or names a different `<repo>` than this session's, re-run Startup preflight's **Step 5 — label vocabulary** first. Every `labels: [...]` list and every `--jq` label comparison this tick is copied verbatim from that file — never retyped from the placeholders shown below, and never reconstructed from memory. Then Read `.temp/tick-state.md`; if it is absent or names a different `<repo>`, re-run Startup preflight's **Step 8 — tick state** first.
 
 **An empty trigger set is never reported as "all clear" while the file's verdict is `unverified`, `mis-resolved`, or `partial`.** Say the queue could not be confirmed instead, and name the verdict — a blank result under any of those is at least as likely a resolution failure (or, for `partial`, a missing label for exactly the affected stage) as a genuinely empty queue. Once the verdict is `verified`, an empty result is trustworthy and reports normally.
 
@@ -322,7 +364,7 @@ Then, in this order. Steps 7 and 8 are split apart deliberately — they are the
 
 **Never busy-wait inside a tool call.** The next tick is how this cockpit waits — never `sleep`, never `gh pr checks --watch`, never any chained wait. A check unconcluded this tick is re-read next tick, exactly as the approved re-verify already does; a wait burns the turn and the wall clock for a completion that arrives on its own anyway, since background-agent completions wake this session between scheduled ticks regardless.
 
-**Merged-pull-request reconciliation (each tick).** The `approved` alias and the per-announced-number aliases are open-only, so a merged pull request silently drops out — **never trust in-session memory for "awaiting merge."** Diff `.temp/tick-state.md`'s `Announced approved` against the live result; for each number whose alias came back null or whose `state` is no longer `OPEN`, confirm from the same response (`state`, `mergedAt`, `closed` on that alias — no follow-up `gh pr view` needed) and announce it once. If merged or closed, announce it once, **remove it from `Announced approved`**, and clean up its worktree. This keeps `status` truthful without the human telling you.
+**Merged-pull-request reconciliation (each tick).** The `approved` alias and the per-announced-number aliases are open-only, so a merged pull request silently drops out — **never trust in-session memory for "awaiting merge."** Diff `.temp/tick-state.md`'s `Announced approved` against the live result; for each number whose alias came back null or whose `state` is no longer `OPEN`, confirm from the same response (`state`, `mergedAt`, `closed` on that alias — no follow-up `gh pr view` needed) and announce it once. If merged or closed, announce it once, **remove it from `Announced approved`**, and reclaim its worktree (see "Worktree hygiene" below — one `<commands.worktrees> reclaim --issue <n>` call per confirmed number). This keeps `status` truthful without the human telling you.
 
 **Mergeability gate (each tick, step 4, before dispatching review).** `readyForReview`'s alias already reads `mergeable` (see above) — no extra round trip. Branch on it per item, before deciding whether to dispatch `review-agent`:
 
@@ -411,60 +453,56 @@ Then, in this order. Steps 7 and 8 are split apart deliberately — they are the
 
 Full background: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Liveness".
 
-**Worktree hygiene (each tick, step 6).** Start with `git worktree prune`, which safely clears registrations whose directory is already gone. Then correlate every remaining candidate against a live active set and remove the finished ones, capped so a large backlog drains gradually rather than in one tick.
+**Worktree hygiene (each tick, step 6).** `commands.worktrees` collapses everything this section used to do by hand — enumeration, correlation, gh resolution, and removal — into one deterministic call whose stdout *is* the report; see `${CLAUDE_PLUGIN_ROOT}/templates/worktrees.mjs`. This cockpit no longer runs `git worktree` itself at all.
 
-- **A. Enumerate.** `git worktree list --porcelain`. Skip the entry that is the main checkout — it never has `.claude/worktrees/` in its path, and is never a candidate. Every other entry is a candidate, whichever naming scheme it uses.
-- **B. Derive one number per candidate.** `.claude/worktrees/impl-<n>` → `<n>`, read straight off the path. `.claude/worktrees/agent-<hash>` carries nothing in its name, so resolve its `HEAD` sha instead, in a **single** batched query with one alias per agent-form candidate (never a loop — usually only 0–2 exist):
+**Not configured** (`commands.worktrees` is null) — skip this step; the Startup preflight already said so once, and the closing line carries `not configured` every tick instead of a hygiene line.
 
-  ```bash
-  gh api graphql -f query='query { repository(owner:"<owner>",name:"<name>"){ c0: object(oid:"<sha0>"){ ... on Commit { messageHeadline } } } }'
-  ```
+**Configured** — one call, one `--protect` per live agent worktree `TaskList` reports (belt and braces on top of the script's own `OPEN` check):
 
-  The port commit format guarantees the subject starts with `#N` (see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Commit messages"), so the headline yields the issue number. **Uncorrelatable** — `object` is null, the subject has no `#N` prefix, or it is `#0` — means **never remove**; carry it into this tick's report instead, for `/port:worktree-clean` to resolve by hand.
-- **C. Decide done against an exact per-candidate resolution.** No active-set list query at all — resolve **every** candidate number from step A (usually 0–5, but unbounded to match step A's enumeration — the 5-per-tick cap below applies to removal only, never to resolution), in the **same** `gh api graphql` call as step B's `object(oid:)` correlation, one `issueOrPullRequest(number: N)` alias per candidate:
-
-  ```bash
-  gh api graphql -f query='query { repository(owner:"<owner>",name:"<name>"){ c0: object(oid:"<sha0>"){ ... on Commit { messageHeadline } } n51: issueOrPullRequest(number:51){ __typename ... on Issue { state } ... on PullRequest { state } } } }'
-  ```
-
-  This is **not** assignee-filtered and **not** filtered by `<labels.marker>` — a worktree belongs to this checkout regardless of who owns the item, and filtering by assignee would delete a co-operator's in-flight worktree on a shared checkout. Dropping the marker filter matters too: the "Ungated report" above establishes that a live pull request can lose `<labels.marker>` while still open and in progress, and filtering on it here would let that item silently drop out, making step D classify its worktree as done and force-remove it while the item is still active. A candidate is **done** when its `state` reads `CLOSED` or `MERGED`. **A `null` alias with a `NOT_FOUND` error is uncorrelatable, never done — never removed**, exactly like an unresolvable commit in step B: carry it into the report for `/port:worktree-clean`, never guess that a vanished number means finished. As a second guard, never remove a path a running agent reports as its worktree (`TaskList`) even if it looks done. **If the call errors outright, skip hygiene entirely this tick** and say so — never remove against a stale or partial resolution. This also removes the silent truncation risk the old `--limit 100` active set carried at more than 100 open items — resolving exact numbers has no such cap.
-- **D. Remove, capped.** For each done candidate: `git worktree remove --force "<exact path from git worktree list>"` — one Bash call per path, **at most 5 per tick**, oldest first. 25 removals in one tick is 25 calls; the remainder is picked up next tick. **Only ever pass a path that `git worktree list` shows.**
-
-**Worked example:**
-
-```
-/repo                                        → main checkout, never a candidate
-/repo/.claude/worktrees/impl-51              → 51, from the path
-/repo/.claude/worktrees/agent-aa714ce408044821d
-  HEAD 06e73c76…  →  "#60 fix install-to-adopt verification and reload step"  →  60
-active set = {62}  →  51 and 60 are done  →  remove both
+```bash
+<commands.worktrees> reclaim --max 5 --json --protect "<path>" --protect "<path>"
 ```
 
-**Hygiene always runs; the report is change-only.** Compute the registered/active/uncorrelatable set every tick regardless — nothing above is skipped — but only **write** the full mandated line when a removal happened, that set changed since `.temp/tick-state.md`'s `Worktrees reported`, or hygiene was skipped this tick; otherwise contribute one short clause to the tick's closing line instead, so it is never merely implied. An adjective like "pruned" is never a sufficient report on its own, and zero removals must say `none`, never be implied, whichever form is used:
+Parse its JSON `summary` and `candidates` — never re-derive them by hand. The script owns `git worktree prune` internally; nothing here runs it separately.
 
-- Removals made, or the set changed (full line, then update `Worktrees reported`):
+**Hygiene always runs; the report is change-only.** Compute the classification every tick regardless — nothing above is skipped — but only **write** the full mandated line when a removal happened, the classified set changed since `.temp/tick-state.md`'s `Worktrees reported`, or the call failed; otherwise contribute one short clause to the tick's closing line instead, so it is never merely implied. Zero removals must say `none`, never be implied, whichever form is used:
 
-  > **Worktrees:** removed 5 — `.claude/worktrees/impl-1`, `impl-2`, `impl-3`, `impl-4`, `impl-5`. 20 finished remain; continuing next tick.
+- Removals made, or the set changed (full line, one row per candidate, then update `Worktrees reported`):
+
+  > **Worktrees:** 5 registered · removed 2 · kept 3.
+  > `removed` `.claude/worktrees/impl-149` — #149 merged (path)
+  > `removed` `.claude/worktrees/agent-aa681115…` — #149 merged (commit subject)
+  > `locked` `.claude/worktrees/agent-aabac3c1…` — no work not already on `dev`; reclaimable once unlocked: `git worktree unlock "<path>"`
+  > `dirty` `.claude/worktrees/agent-a9fccca6…` — #67 closed, but 3 uncommitted files; run `/port:worktree-clean` to review them
+  > `active` `.claude/worktrees/agent-b1c2d3e4…` — #158 open
 
 - Nothing to do, and unchanged since last reported (closing-line clause only):
 
-  > **Next tick:** ~1080s (scheduled) · worktrees unchanged (4 registered, 2 active, 2 uncorrelatable)
+  > **Next tick:** ~1080s (scheduled) · worktrees unchanged (4 registered, 2 active, 1 locked, 1 unresolved)
 
-- Uncorrelatable candidates present — announce the set, with the `/port:worktree-clean` prompt, **once per session per set** (track it in `Uncorrelatable announced`), appended to either form above the first time:
+- Unresolved candidates present — announce the set, with the `/port:worktree-clean` prompt, **once per session per set** (track it in `Uncorrelatable announced`), appended to either form above the first time:
 
-  > 2 uncorrelatable (`agent-1a2b…`, `agent-3c4d…`) — run `/port:worktree-clean`.
+  > 1 unresolved (`agent-3c4d…` — no upstream branch, no `#N` subject, HEAD not on `dev`) — run `/port:worktree-clean`.
 
-- Active-set resolution failed (always a full line — a failure is never folded into the closing clause):
+- The call failed (non-zero exit, or unparseable output — always a full line, never folded into the closing clause):
 
-  > **Worktrees:** skipped this tick — the active-set resolution failed; nothing removed.
+  > **Worktrees:** skipped this tick — `<commands.worktrees> reclaim` exited 1 (`<first line of stderr>`); nothing removed, and I'm not calling this clear.
 
-On Windows, `git worktree remove` often fails once a dependency directory exists, and orphans accumulate that neither `remove` nor `prune` can clear. **Do not claim "prune will fix it next tick" — it will not.** Report the failure and tell the human to run `/port:worktree-clean`.
+- A removal itself failed (script exit `2` — the Windows dependency-tree case):
+
+  > `failed` `.claude/worktrees/agent-a9fccca6…` — `git worktree remove` refused (`Invalid argument`). A later prune will **not** clear this; run `/port:worktree-clean`.
+
+On Windows especially, a populated dependency tree can defeat even `--force`, and the failure above is exactly that case — never claim "prune will fix it next tick." Report the failure and tell the human to run `/port:worktree-clean`.
+
+**Tie removal to the merge, in step 1.** For every number this tick confirmed merged or closed (see "Merged-pull-request reconciliation" above), run `<commands.worktrees> reclaim --issue <n> --json` and report the line it printed — this is the acceptance criterion "removed when its pull request merges or closes," with an exact known number rather than a correlation guess:
+
+> **Worktrees:** #157 merged — removed `.claude/worktrees/impl-157`; branch `worktree-agent-a1b2c3…` deleted.
 
 **Denial report (each tick).** The guard hook logs every `deny`, `miss`, and `gate-clear` decision it makes to **`.agents/denials.log`**, one four-field tab-separated line each (format in `PIPELINE.md` → "Denial visibility"), append-only. **Read from an offset, never the whole file:** `.temp/tick-state.md`'s `Denials consumed` holds the line count already accounted for — Read `.agents/denials.log` with `offset` set to that count **plus one**, since the Read tool's `offset` is a 1-indexed, inclusive start line and the count-th line was already consumed last tick; an empty result means no new lines, never re-scan from the top. Count only new lines whose decision field is `deny` — those are the guard hook actually denying something. A `miss` line is **not a denial**: it is this session's own (or another non-subagent session's) allowlist miss, already surfaced to a human as a normal prompt, and never worth reporting here. A `gate-clear` line is **never a denial either** — it is the audit record of an authorised `<labels.needsHuman>` removal; never report it here, and never mistake it for one. After reading, update `Denials consumed` to the new total line count (write it as part of step 8).
 
 The guard hook is no longer subagent-only: a `deny` line can now carry a `session:` actor, which means **this session's own** rails firing — a loop it tried, or an unauthorised gate clear it attempted — not a stage agent's allowlist miss. Break these out separately, since they mean something different: they are the guard working as intended against this session, not a permission gap to fix.
 
-If the new qualifying `deny` lines **cluster** — three or more new, or the same command repeated — report it once, e.g. *"⚠️ 4 stage-agent commands denied this tick (e.g. `printf … >` ×2) — the pipeline likely needs a permission or instruction change."* Report a `session:` deny separately even as a single occurrence, e.g. *"⚠️ 1 command denied this tick from me (a `gh` loop) — the rail working, nothing to fix."* Do not act on either automatically; this is visibility so the human knows when to harden the configuration. A few isolated stage-agent denials are normal and need no report. **A fresh session baselines silently** (Startup preflight step 7) instead of reporting the whole pre-existing history.
+If the new qualifying `deny` lines **cluster** — three or more new, or the same command repeated — report it once, e.g. *"⚠️ 4 stage-agent commands denied this tick (e.g. `printf … >` ×2) — the pipeline likely needs a permission or instruction change."* Report a `session:` deny separately even as a single occurrence, e.g. *"⚠️ 1 command denied this tick from me (a `gh` loop) — the rail working, nothing to fix."* Do not act on either automatically; this is visibility so the human knows when to harden the configuration. A few isolated stage-agent denials are normal and need no report. **A fresh session baselines silently** (Startup preflight step 8) instead of reporting the whole pre-existing history.
 
 **Unowned report (each tick).** Report **only when the set changes since `.temp/tick-state.md`'s `Unowned reported`**, in one line, and **never act on it** — then write the new set back to that field:
 
