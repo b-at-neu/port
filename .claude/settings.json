@@ -45,7 +45,8 @@
       "Read(~/.claude/plugins/**)",
       "WebFetch(domain:code.claude.com)",
       "Bash(node scripts/checks.mjs)",
-      "Bash(node plugins/port/templates/artifacts.mjs *)"
+      "Bash(node plugins/port/templates/artifacts.mjs *)",
+      "Bash(node plugins/port/templates/worktrees.mjs *)"
     ],
     "deny": [
       "Bash(gh pr merge *)",
