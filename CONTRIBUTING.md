@@ -13,7 +13,11 @@ claude plugin install port@port --scope local
 
 This writes to `.claude/settings.local.json`, already covered by this repository's `.gitignore`.
 
-Edits under `plugins/port/` take effect immediately — there is no build step and nothing to invalidate. A session that is already running has loaded its components, so run `/reload-plugins` there to pick up changes. **Confirm the override actually took** by checking the cockpit's first line (see "Report the running plugin" in `pipeline/SKILL.md`): a path under `~/.claude/plugins/cache/` means you are still running the committed GitHub-sourced copy, not your local checkout.
+Edits under `plugins/port/` take effect immediately — there is no build step and nothing to invalidate. A session that is already running has loaded its components, so run `/reload-plugins` there to pick up changes. **Confirm the override actually took** by checking the cockpit's first line (see "Running plugin identity" in `pipeline/SKILL.md`) — and check the **commit it prints, not the path**. A directory-sourced plugin is *copied* into `~/.claude/plugins/cache/` at install time, so a path under there is **not** evidence of a stale copy — a local-scope install from this checkout lands at exactly the same kind of cache path a GitHub-sourced one does. The cockpit's first line resolves and prints the applicable install record's short commit sha and scope; that sha should equal `git rev-parse --short HEAD` in this checkout once the local-scope override is running. If it does not, the override has not taken yet — reinstall and start a new session.
+
+### Never install from inside a managed worktree
+
+Every install scope — `user`, `project`, `local` — resolves to the **same** `installPath` on disk. An install performed from inside `.claude/worktrees/<anything>` (a dispatched agent's own worktree, or an `/port:implement` operator worktree) silently repoints what **every** session on this machine loads, worktree or not, and keeps doing so after that worktree is gone — the failure is silent and survives the worktree's deletion. The guard hook denies `claude plugin install`/`uninstall`/`marketplace add`/`marketplace remove` from any cwd under `.claude/worktrees/`, for any caller, with no exemption for an `/port:implement` session (see `docs/PIPELINE.md` → "Why background dispatch needs care"). Always install and reinstall from the main checkout.
 
 ### The three gates on a GitHub-sourced install
 
