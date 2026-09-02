@@ -84,6 +84,12 @@
           "description": "Command prefix the stage agents append `check <kind> <file>` (production-time artifact validation) and the layer 2 audit appends `audit` to. Null when the repository has no Node, in which case agents produce the artifact format but nothing validates it locally.",
           "default": null,
           "examples": ["node scripts/port-artifacts.mjs"]
+        },
+        "worktrees": {
+          "type": ["string", "null"],
+          "description": "Command prefix the cockpit appends `report`/`reclaim` to for worktree reclamation, and that `/port:worktree-clean` drives interactively. Null means hygiene is unavailable — worktrees still accumulate under `.claude/worktrees/` per ticket, and the cockpit says so once at startup rather than silently doing nothing.",
+          "default": null,
+          "examples": ["node scripts/port-worktrees.mjs"]
         }
       }
     },

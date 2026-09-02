@@ -9,7 +9,8 @@
   "commands": {
     "bootstrap": [],
     "checks": [],
-    "artifacts": null
+    "artifacts": null,
+    "worktrees": null
   },
   "docs": {
     "engineering": null,

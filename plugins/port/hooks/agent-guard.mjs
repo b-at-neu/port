@@ -10,12 +10,16 @@
 // `permissionMode: dontAsk` on the stage agents is a second line of defence,
 // not the mechanism this relies on.
 //
-// Two more rules apply to *any* caller, cockpit included, except an
-// `/port:implement` operator worktree: a `gh`/`git` call wrapped in a shell
-// loop (#120) and an unauthorised removal of the `needsHuman` gate label
-// (#138). The gate rule is the one call path that does extra I/O — reading
-// the calling session's transcript tail — and only when the command is
-// actually an attempt to remove that label, from a non-subagent.
+// Three more rules apply to *any* caller, cockpit included: a `gh`/`git`
+// call wrapped in a shell loop (#120), an unauthorised removal of the
+// `needsHuman` gate label (#138), and a `claude plugin` install/uninstall/
+// marketplace mutation run from inside any `.claude/worktrees/` cwd (#144).
+// The first two exempt an `/port:implement` operator worktree; the install
+// rule deliberately does not, since every install scope shares one
+// `installPath` regardless of who is typing the command. The gate rule is
+// the one call path that does extra I/O — reading the calling session's
+// transcript tail — and only when the command is actually an attempt to
+// remove that label, from a non-subagent.
 //
 // Every decision — deny, a same-shape miss from a non-subagent session, an
 // allowed gate clear, or an internal failure — is logged to a gitignored
