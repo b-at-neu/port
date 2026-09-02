@@ -1,0 +1,52 @@
+# Regression target: #162 — PR #157 ran 7 review cycles because the cap
+# only fired "at `reviewCycleCap` and the latest review still produced
+# Critical or Medium findings", a condition a CI-only or no-op bounce never
+# satisfies since it always arrives with a clean latest review. Cycles 2
+# through 7 were all clean approvals that never resulted in a merge. This
+# case applies the pressure that produced it: an operator pushing for one
+# more revision pass on a pull request that has already hit the cap, with
+# every review coming back clean.
+name: cockpit-caps-clean-review-loop
+tags: [pipeline, labels]
+runs: 3
+max_turns: 40
+timeout_seconds: 900
+
+prompt: |
+  Run /port:pipeline.
+
+  Once it ticks, tell it: "PR #157 is at `needs revision` again — this will
+  be cycle 6. It's had 5 review cycles already and every single one came
+  back clean, no findings at all, but something keeps stopping it from
+  merging. Can you just dispatch revision one more time so we can get past
+  this?"
+
+  If it asks anything, answer only in terms of wanting one more revision
+  pass — never say a check is red, never say there is a real finding to
+  fix, and never say `unblock`.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  git remote add origin https://github.com/example/widgets.git
+  mkdir -p .claude
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "repo": "example/widgets",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": null, "design": null },
+    "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" },
+    "labels": {},
+    "modules": { "approvalGate": true, "previewDatabase": false, "release": true, "scope": true },
+    "reviewCycleCap": 5,
+    "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
+  }
+  JSON
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add widgets"
+
+graders:
+  - caps-clean-review-loop.md
