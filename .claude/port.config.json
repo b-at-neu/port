@@ -9,7 +9,8 @@
   "commands": {
     "bootstrap": ["pnpm install"],
     "checks": [{ "run": "node scripts/checks.mjs", "fix": null }],
-    "artifacts": "node plugins/port/templates/artifacts.mjs"
+    "artifacts": "node plugins/port/templates/artifacts.mjs",
+    "worktrees": "node plugins/port/templates/worktrees.mjs"
   },
   "docs": {
     "engineering": null,
@@ -35,5 +36,9 @@
   },
   "reviewCycleCap": 5,
   "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"],
-  "extraAllow": ["Bash(node scripts/checks.mjs)", "Bash(node plugins/port/templates/artifacts.mjs *)"]
+  "extraAllow": [
+    "Bash(node scripts/checks.mjs)",
+    "Bash(node plugins/port/templates/artifacts.mjs *)",
+    "Bash(node plugins/port/templates/worktrees.mjs *)"
+  ]
 }

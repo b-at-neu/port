@@ -74,26 +74,52 @@ export function allowMatchers(settingsFiles) {
  *  Also resolves `isOperatorWorktree` — an `/port:implement` `impl-<n>`
  *  worktree — **independently** of the three subagent signals, so the
  *  existing allowlist and write rules keep their exact prior behaviour; only
- *  the cockpit rules (loop, gate) consult it. */
+ *  the cockpit rules (loop, gate) consult it.
+ *
+ *  And `isManagedWorktree` — cwd sits anywhere under `.claude/worktrees/`,
+ *  whichever naming scheme (`agent-<hash>` or `impl-<n>`) — resolved
+ *  independently again, for the plugin-install refusal rule below. Unlike
+ *  `isOperatorWorktree`, this one is **not** exempt for an `/port:implement`
+ *  session: the blast radius of an install performed from a worktree is
+ *  identical whether the caller is a dispatched agent or the operator, since
+ *  every install scope shares one `installPath` regardless of who is typing. */
 export function callerKind(payload) {
   const cwd = payload?.cwd;
   const isOperatorWorktree = typeof cwd === 'string' && cwd.includes('/.claude/worktrees/impl-');
+  const isManagedWorktree = typeof cwd === 'string' && cwd.includes('/.claude/worktrees/');
 
   if (payload?.agent_type || payload?.agent_id) {
-    return { isSubagent: true, isOperatorWorktree, agent: payload.agent_type ?? null, signal: 'agent_type' };
+    return { isSubagent: true, isOperatorWorktree, isManagedWorktree, agent: payload.agent_type ?? null, signal: 'agent_type' };
   }
   const transcript = payload?.transcript_path;
   if (typeof transcript === 'string' && transcript.includes('/subagents/agent-')) {
-    return { isSubagent: true, isOperatorWorktree, agent: null, signal: 'transcript' };
+    return { isSubagent: true, isOperatorWorktree, isManagedWorktree, agent: null, signal: 'transcript' };
   }
   // Only a dispatched agent's own worktree — named `agent-<hash>` by the
   // harness — is in scope here. `/port:implement` creates `impl-<n>`
   // worktrees for the *operator's own* session, which must never match:
   // that skill's whole premise is that this guard does not fire there.
   if (typeof cwd === 'string' && cwd.includes('/.claude/worktrees/agent-')) {
-    return { isSubagent: true, isOperatorWorktree, agent: null, signal: 'worktree' };
+    return { isSubagent: true, isOperatorWorktree, isManagedWorktree, agent: null, signal: 'worktree' };
   }
-  return { isSubagent: false, isOperatorWorktree, agent: null, signal: null };
+  return { isSubagent: false, isOperatorWorktree, isManagedWorktree, agent: null, signal: null };
+}
+
+/** True when `command` (already quote-stripped by the caller) invokes a
+ *  `claude plugin` mutation that changes what a shared `installPath`
+ *  resolves to: `install`, `uninstall`, `marketplace add`, or `marketplace
+ *  remove`. Read-only subcommands (`list`, `details`, ...) are deliberately
+ *  not matched. */
+export function pluginInstallMutation(command) {
+  const stripped = stripQuoted(command);
+  if (!atCommandPosition(stripped, 'claude')) return false;
+  const tokens = tokenize(stripped);
+  const claudeIdx = tokens.indexOf('claude');
+  if (claudeIdx === -1 || tokens[claudeIdx + 1] !== 'plugin') return false;
+  const sub = tokens[claudeIdx + 2];
+  if (sub === 'install' || sub === 'uninstall') return true;
+  if (sub === 'marketplace' && (tokens[claudeIdx + 3] === 'add' || tokens[claudeIdx + 3] === 'remove')) return true;
+  return false;
 }
 
 /** Tokenizes a shell command, respecting single/double quotes — a quoted
@@ -282,11 +308,14 @@ export function operatorNamed(numbers, messages) {
  *                     (operator-named, or unverifiable). Not a denial;
  *                     logged as the audit record for the clear.
  *
- *  Rule order for a Bash call: gate → loop → allowlist. Each of the first
- *  two returns its own specific reason instead of falling through to the
- *  generic allowlist miss/deny. Both are inert — `allow` immediately —
- *  for `who.isOperatorWorktree`, an `/port:implement` session that must
- *  stay unguarded by the cockpit rules.
+ *  Rule order for a Bash call: gate → install → loop → allowlist. Each of
+ *  the first three returns its own specific reason instead of falling
+ *  through to the generic allowlist miss/deny. Gate and loop are inert —
+ *  `allow` immediately — for `who.isOperatorWorktree`, an `/port:implement`
+ *  session that must stay unguarded by the cockpit rules. **Install is the
+ *  one rule that is not**: an install performed from an `impl-<n>` operator
+ *  worktree repoints every session on the machine exactly as one from a
+ *  dispatched agent's worktree would, so it is never exempt.
  *
  *  `needsHumanLabel` and `operatorMessages` are optional: omitting
  *  `needsHumanLabel` skips the gate rule entirely (used by callers with no
@@ -350,6 +379,26 @@ export function decide({ payload, matchers, sessionRequiredPaths, root, needsHum
         // let the caller log this as the audit record for the clear.
         return { decision: 'gate-clear', who, subject: command };
       }
+    }
+
+    // Install rule (#144) — every install scope resolves to one shared
+    // `installPath`, so a `claude plugin install`/`marketplace add` (or the
+    // uninstall/remove forms, which repoint the same way on the next
+    // install) run from inside a managed worktree silently repoints every
+    // session on the machine, and keeps doing so after that worktree is
+    // gone. Deliberately the one cockpit-class rule that does **not** exempt
+    // `who.isOperatorWorktree` — an `/port:implement` worktree is isolated
+    // for everything else, but an install specifically is not, and the
+    // blast radius is identical whether the operator or a dispatched agent
+    // typed it.
+    if (who.isManagedWorktree && pluginInstallMutation(command)) {
+      return {
+        decision: 'deny',
+        who,
+        subject: command,
+        reason:
+          'port: installing, uninstalling, or changing a plugin marketplace from inside a managed worktree is denied — every install scope shares one installPath, so this would silently repoint every session on the machine and keep doing so after this worktree is gone. Run it from the main checkout instead.',
+      };
     }
 
     // Loop rule.

@@ -78,6 +78,8 @@ git worktree add --detach .claude/worktrees/impl-<n> origin/<headRefName>
 
 Then work inside the worktree and run each entry in `commands.bootstrap` in order. In revise mode, rebase onto the base branch from inside the worktree: `git rebase origin/<baseRefName>` — the pull request's **own** base, not an assumed one.
 
+**Never install, reinstall, or uninstall the plugin from inside this worktree** (`claude plugin install`/`uninstall`/`marketplace add`/`marketplace remove`) — every install scope shares one `installPath`, so a change made from here silently repoints every session on the machine and keeps doing so after this worktree is gone. The guard hook denies it from an `impl-<n>` worktree exactly as it would from anywhere else — this is the one guard-hook rule that does not exempt this skill's own worktree. Run it from the main checkout instead.
+
 ## 5. Follow the agent file
 
 Read the resolved agent file and follow it end to end: label swaps, the plan checklist, the file-based commit format, `commands.checks`, push by refspec, the pull request body format, base `<integration>`, the issue's assignee, thread resolution, the revision note. Read `docs.engineering` too when it is set, as the agent file requires.

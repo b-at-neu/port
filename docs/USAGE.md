@@ -112,13 +112,15 @@ Re-run it as the codebase evolves. It diffs against the existing document rather
 
 ## Housekeeping
 
-Agents leave worktrees under `.claude/worktrees/`. The cockpit removes what it safely can each tick and reports what it cannot. When they accumulate:
+Agents leave worktrees under `.claude/worktrees/`. When `commands.worktrees` is configured (`/port:init` offers to install it, given Node), the cockpit reclaims one automatically **the same tick** its issue or pull request merges or closes, plus a startup sweep and a general per-tick pass for anything left over — no confirmation needed, because it only ever removes a worktree that is provably done or holds nothing not already on the integration branch.
+
+What it deliberately never force-removes on its own: a **locked** worktree, a **dirty** one (uncommitted changes), or an **unresolved** one (no correlation to a real issue or pull request, and not provably safe either). It reports each with a reason and, for a locked one, the exact unlock command. When these accumulate, or to force-delete an untracked directory git isn't tracking at all:
 
 ```
 /port:worktree-clean
 ```
 
-On Windows especially, a populated dependency tree defeats git's own `worktree remove` and `prune`, and orphaned directories build up that neither command can clear. This skill force-deletes them, interactively, from the main checkout.
+This skill drives the same reclamation script interactively — review the classified table, then unlock, force-clear dirty candidates, and force-delete orphan directories, each with its own confirmation. On Windows especially, a populated dependency tree can defeat even a forced remove; this skill is what recovers those.
 
 ## Releasing
 
