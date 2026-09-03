@@ -2107,5 +2107,21 @@ const SESSION_MARKER_LINE = /^>\s*\*\*SESSION REQUIRED:\*\*\s+\S/;
   }
 }
 
+// --- CI workflow names every platform in its matrix -------------------------
+// Regression guard: quietly dropping `windows-latest` after a red run would
+// look like a tidy-up in review, and nothing else would notice the platform
+// stopped being tested.
+{
+  const rel = '.github/workflows/checks.yml';
+  const text = readFileSync(join(root, rel), 'utf8');
+  for (const label of ['ubuntu-latest', 'macos-latest', 'windows-latest']) {
+    if (!text.includes(label)) {
+      fail('platform-matrix', `${rel} never names the runner label '${label}'`);
+    } else {
+      ok();
+    }
+  }
+}
+
 // --- Report -----------------------------------------------------------------
 report();
