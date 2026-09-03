@@ -5,9 +5,12 @@
 // Kept deliberately dumb — a collector and a printer. The scripts decide what is
 // worth checking; this decides nothing.
 
-/** A collector plus its terminal printer. `report()` exits the process, because
- *  that is the last thing either script does and splitting the exit code away
- *  from the printing only invites a caller that forgets to use it. */
+/** A collector plus its terminal printer. `report()` sets `process.exitCode`
+ *  rather than calling `process.exit`, because `process.stdout` is
+ *  asynchronous when connected to a pipe on Windows — exiting immediately
+ *  after writing risks truncating these very lines. Setting `exitCode` and
+ *  letting the process end naturally is safe everywhere, since `report()` is
+ *  the last thing either script does. */
 export function createReporter() {
   const failures = [];
   const notes = [];
@@ -33,11 +36,12 @@ export function createReporter() {
       for (const n of notes) console.log(`note  ${n}`);
       if (failures.length === 0) {
         console.log(`ok    ${checked} checks passed`);
-        process.exit(0);
+        process.exitCode = 0;
+        return;
       }
       for (const f of failures) console.error(`FAIL  ${f}`);
       console.error(`\n${failures.length} failure(s), ${checked} checks run`);
-      process.exit(1);
+      process.exitCode = 1;
     },
   };
 }

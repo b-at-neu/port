@@ -154,4 +154,9 @@ if (configRoot) {
     }
   }
 }
-process.exit(0);
+// Nothing runs after this line in either branch, so setting exitCode and
+// letting the process end naturally is equivalent to exiting immediately —
+// except on Windows, where process.stdout is asynchronous when connected to
+// a pipe, and an immediate process.exit(0) can truncate the deny JSON this
+// hook just wrote to stdout.
+process.exitCode = 0;

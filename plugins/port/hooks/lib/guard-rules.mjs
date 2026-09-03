@@ -83,15 +83,20 @@ export function allowMatchers(settingsFiles) {
  *  session: the blast radius of an install performed from a worktree is
  *  identical whether the caller is a dispatched agent or the operator, since
  *  every install scope shares one `installPath` regardless of who is typing. */
+/** Forward-slashed, so a substring test written against POSIX-shaped
+ *  worktree/transcript paths still matches on Windows, where `cwd` and
+ *  `transcript_path` arrive with `\` separators. */
+const toPosix = (p) => (typeof p === 'string' ? p.split('\\').join('/') : p);
+
 export function callerKind(payload) {
-  const cwd = payload?.cwd;
+  const cwd = toPosix(payload?.cwd);
   const isOperatorWorktree = typeof cwd === 'string' && cwd.includes('/.claude/worktrees/impl-');
   const isManagedWorktree = typeof cwd === 'string' && cwd.includes('/.claude/worktrees/');
 
   if (payload?.agent_type || payload?.agent_id) {
     return { isSubagent: true, isOperatorWorktree, isManagedWorktree, agent: payload.agent_type ?? null, signal: 'agent_type' };
   }
-  const transcript = payload?.transcript_path;
+  const transcript = toPosix(payload?.transcript_path);
   if (typeof transcript === 'string' && transcript.includes('/subagents/agent-')) {
     return { isSubagent: true, isOperatorWorktree, isManagedWorktree, agent: null, signal: 'transcript' };
   }
