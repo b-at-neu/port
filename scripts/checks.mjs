@@ -2172,5 +2172,147 @@ const SESSION_MARKER_LINE = /^>\s*\*\*SESSION REQUIRED:\*\*\s+\S/;
   ok();
 }
 
+// --- Liveness is a TaskList call, never a label inference (#158) -----------
+// Regression guard for #158: TaskList was granted and referenced but never
+// actually called across 96 ticks and 62 dispatches, and when asked a direct
+// liveness question the cockpit answered from labels, then blamed the
+// operator's own observation on a stale UI element. This checks the
+// unconditional-call contract, the inverse-sign rail, the liveness-question
+// recipe's three prohibitions, and that both stop paths name TaskList and
+// TaskStop.
+{
+  const rel = 'plugins/port/skills/pipeline/SKILL.md';
+  const text = readFileSync(join(root, rel), 'utf8');
+
+  if (!/a tick that reports on liveness without a `?TaskList`? call this tick has failed/i.test(text)) {
+    fail(
+      'liveness-call',
+      `${rel} is missing the literal unconditional-call phrase 'a tick that reports on liveness without a TaskList call this tick has failed'`,
+    );
+  } else {
+    ok();
+  }
+
+  if (!text.includes('not evidence of liveness or of non-liveness')) {
+    fail(
+      'liveness-call',
+      `${rel} is missing the literal inverse-sign phrase 'not evidence of liveness or of non-liveness'`,
+    );
+  } else {
+    ok();
+  }
+
+  if (!text.includes('stale UI element')) {
+    fail('liveness-call', `${rel} never names the 'stale UI element' failure the liveness recipe exists to prevent`);
+  } else {
+    ok();
+  }
+
+  if (/\bI don't have a way to\b.*\bagent\b/i.test(text) || /the tool is unavailable\.[^N]/i.test(text)) {
+    fail('liveness-call', `${rel} appears to claim the TaskList tool is unavailable somewhere outside the never-do rail`);
+  } else {
+    ok();
+  }
+
+  const stopN = /- \*\*"stop #N"[\s\S]*?(?=\n- \*\*"stop everything")/.exec(text)?.[0] ?? '';
+  const stopAll = /- \*\*"stop everything"[\s\S]*?(?=\n## Pacing)/.exec(text)?.[0] ?? '';
+  for (const [label, section] of [['stop #N', stopN], ['stop everything', stopAll]]) {
+    if (!section) {
+      fail('liveness-call', `${rel} has no '${label}' entry under Stop controls to check`);
+      continue;
+    }
+    for (const tool of ['TaskList', 'TaskStop']) {
+      if (!section.includes(tool)) {
+        fail('liveness-call', `${rel}'s '${label}' entry never names '${tool}'`);
+      } else {
+        ok();
+      }
+    }
+  }
+}
+
+// --- Running-plugin staleness is resolved, not printed from a path (#158) --
+// Regression guard for #158/#127: the startup line used to report only a
+// path, identical for a current and a days-stale copy. This checks the
+// resolution mechanism is named (the registry, the marketplace record, the
+// scope precedence), that the new tick-state field is written in both
+// places that must stay in sync, that CONTRIBUTING.md carries the three-way
+// ground-truth test and the corrected cache-path claim, and that the new
+// staleness prose in SKILL.md never hard-codes this repository's own name —
+// the generality requirement the feature is supposed to satisfy for every
+// consumer, not just this one.
+{
+  const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
+  const contributingRel = 'CONTRIBUTING.md';
+  const skillText = readFileSync(join(root, skillRel), 'utf8');
+  const contributingText = readFileSync(join(root, contributingRel), 'utf8');
+
+  for (const phrase of ['installed_plugins.json', 'gitCommitSha', 'known_marketplaces.json', 'commits behind']) {
+    if (!skillText.includes(phrase)) {
+      fail('plugin-staleness', `${skillRel} never names '${phrase}'`);
+    } else {
+      ok();
+    }
+  }
+
+  if (!skillText.includes('local > project > user')) {
+    fail('plugin-staleness', `${skillRel} never states the 'local > project > user' scope precedence`);
+  } else {
+    ok();
+  }
+
+  const tickStateMentions = [...skillText.matchAll(/Plugin staleness/g)].length;
+  if (tickStateMentions < 2) {
+    fail(
+      'plugin-staleness',
+      `${skillRel} names 'Plugin staleness' only ${tickStateMentions} time(s) — it must appear in both the Startup preflight tick-state template and the Tick procedure's field list`,
+    );
+  } else {
+    ok();
+  }
+
+  if (!contributingText.includes('git rev-list --count') || !contributingText.includes('diff -rq')) {
+    fail(`plugin-staleness`, `${contributingRel} is missing one half of the three-way test ('git rev-list --count' and 'diff -rq')`);
+  } else {
+    ok();
+  }
+
+  if (!/a cache path is not evidence of a stale copy/i.test(contributingText)) {
+    fail(
+      'plugin-staleness',
+      `${contributingRel} is missing the literal correction 'a cache path is not evidence of a stale copy'`,
+    );
+  } else {
+    ok();
+  }
+
+  // Generality: the staleness prose (Startup preflight step 4 through the
+  // start of step 5) must derive the marketplace, owner, and target ref from
+  // config/the plugin registry — never hard-code this repository's own name.
+  // UX-state blockquote lines are exempt, matching how the existing UX-state
+  // copy already shows concrete example names.
+  const start = skillText.indexOf('**Step 4 — integration drift');
+  const end = skillText.indexOf('**Step 5 — label vocabulary');
+  if (start === -1 || end === -1) {
+    fail('plugin-staleness', `${skillRel} is missing the Startup preflight staleness step (Step 4 → Step 5)`);
+  } else {
+    const proseLines = skillText
+      .slice(start, end)
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('>'));
+    const prose = proseLines.join('\n');
+    for (const literal of ['b-at-neu/port', '`dev`', '0.1.0']) {
+      if (prose.includes(literal)) {
+        fail(
+          'plugin-staleness',
+          `${skillRel}'s staleness step names the literal '${literal}' outside a UX-state example — it must derive from config or the plugin registry`,
+        );
+      } else {
+        ok();
+      }
+    }
+  }
+}
+
 // --- Report -----------------------------------------------------------------
 report();

@@ -33,12 +33,12 @@ Read `permissions.defaultMode` from the same file, for step 3's report. **Warn o
 **Step 3 — running plugin identity, by commit, not path.** A path under `~/.claude/plugins/cache/` is identical for every install regardless of which commit it holds — a directory-sourced plugin is *copied* into the cache at install time, so the path alone cannot tell a stale copy from the working tree it came from. Report the resolved commit and scope instead:
 
 1. Read `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` for the version string.
-2. Read the plugin registry, `installed_plugins.json` — it sits **four directory levels above `${CLAUDE_PLUGIN_ROOT}`** when the running copy is a cache install (`<plugins>/cache/<marketplace>/<plugin>/<version>`), derived by trimming those four path segments — never a hard-coded `~/.claude/`, and never assuming a marketplace or plugin name. **Registry unreadable, or no record's `installPath` equals `${CLAUDE_PLUGIN_ROOT}`** → say so in one clause and fall back to the version-only line (see **UX states**); never print a path-only line that looks like an answer.
+2. **Derive `<marketplace>`, `<plugin>` and `<version>`** from `${CLAUDE_PLUGIN_ROOT}`'s trailing path segments (`…/cache/<marketplace>/<plugin>/<version>`) — never hard-coded, and the whole basis of the generality that step 4's staleness lookup and its `known_marketplaces.json` key depend on. Read the plugin registry, `installed_plugins.json` — it sits **four directory levels above `${CLAUDE_PLUGIN_ROOT}`** when the running copy is a cache install, derived by trimming those four path segments — never a hard-coded `~/.claude/`. **Registry unreadable, or no record's `installPath` equals `${CLAUDE_PLUGIN_ROOT}`** → say so in one clause and fall back to the version-only line (see **UX states**); never print a path-only line that looks like an answer.
 3. **Resolve the applicable record.** Among records whose `installPath` equals `${CLAUDE_PLUGIN_ROOT}`, apply **local > project > user** scope precedence; within a scope, prefer the record whose `projectPath` is this session's cwd or an ancestor of it.
 
-Open with one line naming the resolved short commit sha, scope, `projectPath`, the session's own model, and the mode read in step 2 — **no warning glyph on the model, ever**; it is information, not a check:
+Open with one line naming the resolved short commit sha, scope, `projectPath`, the session's own model, and the mode read in step 2 — **no warning glyph on the model, ever**; it is information, not a check. Append step 4's staleness verdict, once it has run, in place of the plain scope clause — `current with <marketplace>@<target-ref>` when `behindBy` is `0`, or the **stale** UX state's warning form when it is not, or `staleness not computable — <reason>` when no target resolved:
 
-> `port` v0.1.0 — `1a12608` · **local** scope · `/home/you/port` · model `claude-sonnet-5` · mode `default` (as configured — a launch flag overrides this and I can't read it from here)
+> `port` v0.1.0 · `1a12608` (local scope, installed 2026-08-31) · current with `b-at-neu/port@dev` · model `claude-sonnet-5` · mode `default` (as configured — a launch flag overrides this and I can't read it from here)
 
 When step 2 found a non-`default` `defaultMode`, replace the mode clause with the warning instead of the all-clear parenthetical:
 
@@ -56,15 +56,32 @@ Then check for self-host drift. Read `.claude-plugin/marketplace.json` at the re
 - **Absent** — the normal case for a managed repository. Say nothing further.
 - **Present and it declares a plugin whose `name` matches the running plugin** — this repository is the *source* of that plugin. If `${CLAUDE_PLUGIN_ROOT}` does not resolve to a path inside this working tree, warn once with the matching **UX states** message.
 
-**Step 4 — integration drift.** One call, report-only, never acted on:
+**Step 4 — integration drift, and plugin staleness relative to the remote.** Two purposes, one call, report-only, never acted on. Add `--include` so the response also carries the `Date:` header this step's cache-age rendering needs — the same header the Tick procedure already reads for its own clock:
+
+**Resolve the staleness comparison target first**, from `~/.claude/plugins/known_marketplaces.json`, keyed by the `<marketplace>` segment step 3 already derived from `${CLAUDE_PLUGIN_ROOT}` — never from `repo`/`branches.integration`, which describe the *managed* repository and are only incidentally the same one here:
+
+- `source.source == "github"` → `<po>`/`<pn>` from `source.repo`; `<target-ref>` is `source.ref`, or that repository's default branch when unset.
+- `source.source == "directory"` whose `path` is this working tree (the self-hosting case) → `<po>`/`<pn>` is `<owner>`/`<name>`; `<target-ref>` is `<integration>`.
+- Anything else (a directory source pointing elsewhere, no marketplace record, no resolvable owner/name) → **not computable** — say so once at startup (see **UX states**) and omit the `pluginRepo` alias below for the rest of the session; never print a number.
+
+When a target resolved, fold a second aliased root selection into the same query:
 
 ```bash
-gh api graphql -f query='query { repository(owner: "<owner>", name: "<name>") { object(expression: "<integration>:.claude/settings.json") { ... on Blob { text } } } }' --jq '.data.repository.object.text'
+gh api graphql --include -f query='query {
+  repository(owner: "<owner>", name: "<name>") { object(expression: "<integration>:.claude/settings.json") { ... on Blob { text } } }
+  pluginRepo: repository(owner: "<po>", name: "<pn>") {
+    ref(qualifiedName: "<target-ref>") { compare(headRef: "<installed-sha>") { behindBy } }
+  }
+}' --jq '{settings: .data.repository.object.text, behindBy: .data.pluginRepo.ref.compare.behindBy}'
 ```
 
-Compare the returned `enabledPlugins` keys against the local file's, and warn on either direction of difference, or on `object` being null (`<integration>` carries no settings file at all) — see **UX states**. **If the call errors, say so in one line and continue.** Never block a tick on it.
+Verify the field names against a live call during implementation; if `Ref.compare` is unavailable, fall back to `gh api "repos/<po>/<pn>/compare/<target-ref>...<installed-sha>" --jq '.behind_by'` and widen `allowed-tools` from `Bash(gh api graphql *)` to `Bash(gh api *)` — the repository allowlist already grants `Bash(gh *)`, so no settings change either way.
+
+Compare the `settings` half's returned `enabledPlugins` keys against the local file's, and warn on either direction of difference, or on `object` being null (`<integration>` carries no settings file at all) — see **UX states**. **If the call errors, say so in one line and continue.** Never block a tick on it.
 
 Also in this pass, when both files are present but the branch from step 1's `git rev-parse --abbrev-ref HEAD` is not `branches.integration`, warn once (see **UX states**) and continue. Silence is the correct output when everything lines up — beyond the plugin version line, a healthy preflight says nothing.
+
+**Render the staleness half.** A null `pluginRepo`, a null `ref`, a null `compare` (GitHub cannot resolve the installed sha — routine under a directory source, where the commit may be local and unpushed), or an errored call all render as **not computable**, with the reason — never guess, never print a number, never block startup on it. Otherwise `behindBy` is the count: `0` folds into the version line as `current with <marketplace>@<target-ref>` (see step 3's opening line); non-zero renders the **stale** UX state instead, naming the count, the target, and the refresh-and-restart recipe. This first reading is usually `0` — a session is typically started right after installing — so it is the **per-tick recheck** (Tick procedure, Housekeeping) that actually catches drift accumulating *during* a long session, since the installed sha is fixed for the session and only the target ref moves.
 
 **Step 5 — label vocabulary.** Every `--label` argument and every `--jq` label comparison this session issues, for the rest of its life, is copied out of the artifact this step produces — never retyped from memory or reconstructed from the table below.
 
@@ -160,6 +177,7 @@ Unowned reported:
 Ungated reported:
 Worktrees reported:
 Uncorrelatable announced:
+Plugin staleness: <not computable | N>
 ```
 
 Baseline `Denials consumed` with one call, and report nothing from the log on this first tick — a fresh session has no prior offset to diff against, so there is nothing new to report, not zero:
@@ -214,6 +232,14 @@ Exact copy, one message per state, `<…>` substituted:
 
   > `port` v0.1.0 — commit unresolved (couldn't read the plugin registry) · model `claude-sonnet-5` · mode `default`. The path alone can't tell a stale copy from your working tree, so treat the version as unverified.
 
+- **Running plugin, stale relative to the remote** (warn, in place of the plain scope clause):
+
+  > ⚠️ `port` v0.1.0 · `4634fc1` (project scope, installed 2026-08-23) · **42 commits behind `b-at-neu/port@dev`** — I'm running a copy from before those merged, so I'm following the older rails whatever `dev` says. Refresh the install (CONTRIBUTING.md → "Refreshing a GitHub-sourced install by hand") and restart me. · model `claude-haiku-4-5` · mode `default`
+
+- **Staleness not computable** (substitute the reason: no install record matched this directory · the record has no `gitCommitSha` · no marketplace record for `<marketplace>` · the source is a directory outside this working tree · GitHub can't resolve `<sha>`, so it was probably never pushed):
+
+  > `port` v0.1.0 · `4634fc1` (project scope, installed 2026-08-23) · staleness not computable — `<reason>` · model `claude-haiku-4-5` · mode `default`
+
 - **Install record pinned to a worktree** (warn once):
 
   > ⚠️ The install record for `port` was made from `<path>`, a worktree — and every install scope shares one `installPath`, so that commit is what **every** session on this machine loads, worktree or not. Reinstall from the main checkout to correct it.
@@ -249,6 +275,28 @@ Exact copy, one message per state, `<…>` substituted. These fire from inside t
 - **Truncated alias** (one aliased query in the batch returned a GraphQL `errors` entry, the rest of the response is still usable):
 
   > ⚠️ `approved` came back with an error (`<message>`) — treating it as unavailable, not empty.
+
+- **Liveness clause** (every tick's report, always, including the zero case):
+
+  > **Liveness:** 2 agents live — `plan #146`, `review #151` · 2 in-flight items matched
+
+  > **Liveness:** 0 agents live · no in-flight items
+
+- **The running copy just went stale** (once, at the `0 → non-zero` crossing):
+
+  > ⚠️ The copy of the plugin I'm running is now **7 commits behind `b-at-neu/port@dev`** — including anything merged this session. Nothing breaks; I keep following the rails I loaded at startup until you refresh the install and restart me.
+
+- **Closing-line staleness clause thereafter** (every tick once the crossing above has fired):
+
+  > **Next tick:** ~540s (scheduled) · plugin 7 commits behind
+
+- **Operator asks whether an agent is running — `TaskList` confirms it:**
+
+  > `TaskList` shows 2 running: `plan #146` and `review #151`. You're right — `plan #146` is mine, dispatched from this session. #146's labels say otherwise, but a label is a claim, not a heartbeat, so the agent is the answer.
+
+- **Operator asserts an agent is running and `TaskList` disagrees:**
+
+  > I checked `TaskList`: 2 agents running, `review #151` and `impl #149` — nothing for #146. I can't see what your view is showing, so I won't call either of us wrong. If you want it gone regardless, say `stop #146` and I'll try `TaskStop` on it.
 
 - **Backing off** (append to the closing line the first time each cadence rung is reached):
 
@@ -297,6 +345,7 @@ using a `<kind>` naming what the artifact is (e.g. `escalation`, `gate-cleared`,
 - **Never act on an item assigned to another operator** — ownership transfers only through an explicit human take-over.
 - Never dispatch for an item with an **in-flight** label — an agent owns it, or a human paused it.
 - **An in-flight label is not evidence of a live agent.** Cross-check every tick against `TaskList` (see "Liveness cross-check") before treating it as active — a crashed or killed agent leaves the label behind with nothing running.
+- **Never answer a question about whether an agent is running from labels, elapsed time, or an assumption about the operator's display.** `TaskList` is the only evidence, in either direction. Never claim the tool is unavailable — it is granted and named in this file's own frontmatter. Never resolve the question by reasoning backwards from a label. And never attribute the operator's own observation of a running agent to a stale UI element without checking `TaskList` first — call it, then answer from what it returned (see "Conversational commands" → the liveness-question recipe).
 - **Never dispatch `impl-agent` or `revise-agent` for an item marked `SESSION REQUIRED` at its slot** (see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Detection" — never a body-wide substring search). Announce it instead, and tell the human to run `/port:implement` in a **separate** session, never this one.
 - **A held item keeps its trigger label.** Holding is never expressed by removing `<labels.planApproved>`, and no label is ever added for it — the hold is derived every tick from the occupied set, never stored. See "File contention gate".
 - Every dispatch runs in the background. Tool scope, permission mode, `maxTurns`, and worktree isolation all come from the agent definition; you set only the fields listed under Dispatching. **Never substitute a model at dispatch** — `models` from config is the only source, and a dispatch failure from hitting a usage limit is never a reason to try a different model.
@@ -334,6 +383,7 @@ The query is one `repository(owner:"<owner>", name:"<name>")` selection with one
 - **`prOpened`** (adds `body`) — the whole unmerged-branch set for the file contention gate's occupied set, in the same call.
 - **Module-gated** — `refreshBranch` and `refreshing` under `previewDatabase`; `allOpenPRs: pullRequests(states: OPEN, first: 100){ nodes { number title labels(first:20){nodes{name}} assignees(first:5){nodes{login}} } }` under `approvalGate`, for the ungated sweep.
 - **One `pullRequest(number: N)` alias per number in `.temp/tick-state.md`'s `Announced approved`** (`state`, `mergedAt`, `closed`, `headRefOid`, `mergeable`, `statusCheckRollup`) — the approved re-verify and merged-pull-request reconciliation, folded into the same call rather than a per-item `gh pr view` afterward.
+- **`pluginRepo`, when Startup preflight step 4 resolved a staleness comparison target** — the same `ref(qualifiedName: "<target-ref>") { compare(headRef: "<installed-sha>") { behindBy } }` alias, recomputed every tick since the installed sha is fixed for the session but the target ref moves; see "Plugin staleness" under Housekeeping. Omitted for the rest of the session when step 4 found no computable target.
 
 The `approved` alias's `statusCheckRollup` shape (and the per-announced-number aliases' too) is `commits(last:1){ nodes { commit { statusCheckRollup { state contexts(first:50){ nodes { __typename ... on CheckRun { name conclusion detailsUrl } ... on StatusContext { context state targetUrl } } } } } } }` — reduced per `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Check evidence" exactly as before, just already in hand instead of a follow-up `gh pr view`.
 
@@ -356,11 +406,11 @@ Then, in this order. Steps 7 and 8 are split apart deliberately — they are the
 2. **Handle human gates.**
 3. **Announce every session-required item.**
 4. **Unless draining, dispatch** for every remaining actionable trigger item (all `Agent` calls in one message) — a pull request whose mergeability reads `CONFLICTING` routes to revision instead of review; see "Mergeability gate". An issue at `<labels.planApproved>` whose plan claims a file an in-flight item already claims is **held** instead of dispatched; see "File contention gate".
-5. **Liveness cross-check** — correlate the in-flight sets against `TaskList` and this session's own dispatch log (`.temp/dispatch-log.md`); auto-reset a dispatch this session provably lost, report every other case, and handle a usage-limit condition (see "Liveness" and "Agent questions and blockers" below).
-6. **Housekeeping** — run worktree hygiene, then the denial, unowned, and ungated reports (only the ones whose sets changed since `.temp/tick-state.md`'s remembered sets).
+5. **Liveness cross-check** — call `TaskList` **first, unconditionally**, before anything else in this step (an empty in-flight set is not a reason to skip it — it is the case a stall is invisible in), then correlate the in-flight sets against its result and this session's own dispatch log (`.temp/dispatch-log.md`); auto-reset a dispatch this session provably lost, report every other case, and handle a usage-limit condition (see "Liveness" and "Agent questions and blockers" below).
+6. **Housekeeping** — run worktree hygiene, then the denial, unowned, ungated, and plugin-staleness reports (only the ones whose sets changed since `.temp/tick-state.md`'s remembered sets).
 7. **Call `ScheduleWakeup`**, skipped only while draining. **A non-draining tick that ends without this call has failed**, no matter how much of the above happened.
-8. **Write `.temp/tick-state.md` fresh** (Write tool) — `Last tick` and `Scheduled` from this tick's `Date:` header and the delay actually passed to `ScheduleWakeup`, plus the updated `Cadence step`, `No-change ticks`, `Denials consumed`, and the three remembered report sets.
-9. **Only then, write the tick report.** Its closing "next tick" line is not a fresh decision — it is the record of step 7: state the delay you actually passed to `ScheduleWakeup`, or that you are draining and skipped the call. Never write this line before step 7 runs.
+8. **Write `.temp/tick-state.md` fresh** (Write tool) — `Last tick` and `Scheduled` from this tick's `Date:` header and the delay actually passed to `ScheduleWakeup`, plus the updated `Cadence step`, `No-change ticks`, `Denials consumed`, `Plugin staleness`, and the three remembered report sets.
+9. **Only then, write the tick report.** Its closing "next tick" line is not a fresh decision — it is the record of step 7: state the delay you actually passed to `ScheduleWakeup`, or that you are draining and skipped the call. Never write this line before step 7 runs. **Every report carries a Liveness clause** naming the live agent count and each live agent's `description` (see UX states) — the number cannot be written without step 5's `TaskList` call, so its absence is what makes a skipped call visible to the operator, not just to this session.
 
 **Never busy-wait inside a tool call.** The next tick is how this cockpit waits — never `sleep`, never `gh pr checks --watch`, never any chained wait. A check unconcluded this tick is re-read next tick, exactly as the approved re-verify already does; a wait burns the turn and the wall clock for a completion that arrives on its own anyway, since background-agent completions wake this session between scheduled ticks regardless.
 
@@ -422,7 +472,9 @@ Then, in this order. Steps 7 and 8 are split apart deliberately — they are the
 
 **While draining, this gate computes nothing and reports nothing** — there is no dispatch to gate, so nothing is held.
 
-**Liveness cross-check (each tick, step 5).** An in-flight label is a claim, never a heartbeat. Take the results of the four in-flight aliases above (plus `<labels.refreshing>` under `previewDatabase`) and match each item against `TaskList` by the dispatch `description`, which the harness records verbatim (`"<stage> #<n>"`). Before classifying, Read `.temp/dispatch-log.md` — the precondition for every reset below is **"reset only an item this session's own dispatch log records"**, never an item this session never dispatched.
+**Liveness cross-check (each tick, step 5).** An in-flight label is a claim, never a heartbeat, and neither is its absence — a label is not evidence of liveness or of non-liveness. Call `TaskList` first, before reading anything else in this step, whether or not any set below is non-empty: the zero-agent case is exactly where a stall goes unnoticed, and it is the case a 96-tick session once sat in without ever making this call. Take the results of the four in-flight aliases above (plus `<labels.refreshing>` under `previewDatabase`) and match each item against that `TaskList` result by the dispatch `description`, which the harness records verbatim (`"<stage> #<n>"`). Before classifying, Read `.temp/dispatch-log.md` — the precondition for every reset below is **"reset only an item this session's own dispatch log records"**, never an item this session never dispatched.
+
+**The tick report's Liveness clause is what makes the call checkable, not the sentence.** State the live agent count and each live agent's `description` — the same shape worktree hygiene already requires ("an adjective like *pruned* is never a sufficient report"). **A tick that reports on liveness without a `TaskList` call this tick has failed**, and an empty count is written as `**Liveness:** 0 agents live · no in-flight items` (see UX states), never omitted.
 
 - **Matched, running** — nothing to do; it is genuinely mid-flight.
 - **No match** — an in-flight label with no live agent, resolved against the dispatch log into exactly three outcomes. The invariant across all three: **at most one automatic reset per item per session** (the log's `Resets` column) — a crash loop reports instead of burning the session on repeated resets:
@@ -513,6 +565,8 @@ An **empty** sweep result is only meaningful when step 0's verdict is `verified`
 **Ungated report (each tick).** *(`modules.approvalGate`)* A pipeline pull request that lost the resolved `<labels.marker>` name merges with no gate at all, and CI cannot tell it from a human pull request. Report **only when the set changes since `.temp/tick-state.md`'s `Ungated reported`**, and **never add the label automatically** — then write the new set back to that field:
 
 > ⚠️ Pipeline pull requests without the `claude` label (approval gate inactive): #501. Say "gate #501" or add the label on GitHub.
+
+**Plugin staleness (each tick).** When Startup preflight step 4 resolved a comparison target, this tick's `pluginRepo` alias carries a fresh `behindBy`. **Report change-only**: announce once at the `0 → non-zero` crossing (see UX states, "The running copy just went stale"), compared against `.temp/tick-state.md`'s `Plugin staleness` field, then carry a one-clause reminder on every later tick's closing line for the rest of the session instead of repeating the full announcement — `behindBy` is monotonic within a session (the installed sha is fixed; only the target ref moves), so a single crossing plus a persistent clause is the whole report. Write the new count back to `Plugin staleness` every tick regardless of whether it changed. No computable target → this report is silently absent, exactly as step 4 already said once at startup.
 
 **Preview refresh (right after confirming merges).** *(`modules.previewDatabase`)* Each merge frees exactly one preview database slot, which unblocks one quota-red deployment. Count the merges you confirmed **this tick** as `k`, then label **at most `k`** pull requests `<labels.refreshBranch>` — **oldest first**, each open, approved, with the deployment check red while the other checks are green, and skipping any whose `headRefOid` this session already refreshed at that same SHA. Read the rollup per candidate:
 
@@ -673,8 +727,9 @@ Interpret intent, not literal syntax.
 
   Dispatch the plan agent the same tick.
 
+- **"is anything running?" / "why is <agent> still running on #N?"** — call `TaskList` **first**, before saying anything, and answer entirely from its result, naming any live agents by `description`. Three explicit prohibitions, each drawn from a recorded failure: **never** claim the tool is unavailable (it is granted in this file's own frontmatter); **never** resolve the question by inference from a label (an in-flight label is not evidence either direction); **never** attribute the operator's own observation to a stale UI element without having checked first. **When `TaskList` shows nothing and the operator says otherwise, the disagreement is unresolved, not settled** — say what `TaskList` returned, say it cannot see what the operator's view shows, and offer `stop #N`. Never assert the operator is mistaken (see UX states, "Operator asserts an agent is running and `TaskList` disagrees").
 - **"scope out X" / "break down X"** *(`modules.scope`)* — stage 0 deserves a stronger model than this cockpit's own recommended haiku; suggest the human run `/port:scope` in their main session, on whichever model they are already running there — this skill cannot set a session's model anyway, so the suggestion is about *where* to run it, not a mandate about which model. When the module is off, say the pipeline has no decomposition flow configured and offer to work on an existing ticket instead.
-- **"status"** — re-run the tick's collapsed query **live** and build the table from it, never from session memory: each in-flight item and its stage, each item waiting on the human, and each pull request currently approved (from the live query — a merged one has already dropped out, so it must not appear). Run the liveness cross-check too, and list any **stalled** item alongside the in-flight ones rather than as a separate step. **Partition by ownership from the same response**, exactly as every tick does, and append the unowned sweep as its own line, and the ungated sweep too when that module is on, so a stalled ticket or an ungated pull request is diagnosable from one command. List **session-required** items under the human-gated group with the commands to run. **Re-run the file contention gate too** and list every currently-held item alongside its blocker and contended path, in the same group as the in-flight items. This still does not call `ScheduleWakeup` again outside a real tick — `status` is a read, not a new tick.
+- **"status"** — re-run the tick's collapsed query **live** and build the table from it, never from session memory: each in-flight item and its stage, each item waiting on the human, and each pull request currently approved (from the live query — a merged one has already dropped out, so it must not appear). Run the liveness cross-check too — **the live agent count comes from a fresh `TaskList` call made on this invocation, never from session memory**, since `status` re-runs the query live already and liveness must be live too — and list any **stalled** item alongside the in-flight ones rather than as a separate step. **Partition by ownership from the same response**, exactly as every tick does, and append the unowned sweep as its own line, and the ungated sweep too when that module is on, so a stalled ticket or an ungated pull request is diagnosable from one command. List **session-required** items under the human-gated group with the commands to run. **Re-run the file contention gate too** and list every currently-held item alongside its blocker and contended path, in the same group as the in-flight items. This still does not call `ScheduleWakeup` again outside a real tick — `status` is a read, not a new tick.
 - **"pause #N"** — remove the item's current trigger label; confirm what was removed. If it belongs to **another operator**, say so and stop rather than touch its labels.
 - **"resume #N" / "retry #N"** — re-apply the trigger label for where it stalled (stuck at `<labels.planning>` → `<labels.ready>`; stuck at `<labels.revising>` → `<labels.needsRevision>`; and so on). If the item is **unassigned**, add `--add-assignee "@me"` in the same command, since re-applying a trigger to an unassigned item is a no-op for every cockpit. If it belongs to another operator, say so and stop. **Several at once, same stage:** one call naming every number, e.g. `gh issue edit 63 67 71 --repo <repo> --remove-label "<labels.planning>" --add-label "<labels.ready>"` — group by label pair, and re-query the target label afterward to confirm every number moved; report any that did not. `gh pr edit` takes one number, so pull requests are one call each. **These never clear `<labels.needsHuman>`** — they re-apply a trigger for an *in-flight* label only; see `unblock #N` for that gate.
 - **"unblock #N"** — the **only** route off `<labels.needsHuman>`; see "Gate clear" under Human gates for the full flow. The guard hook denies this same removal from anyone who has not just said so in conversation — this command *is* that instruction.
@@ -688,8 +743,8 @@ A session-level **draining** flag gates dispatch:
 
 - **"drain" / "pause the pipeline"** — set draining on. Stop dispatching and **stop scheduling wakeups**; let in-flight agents finish and keep relaying their completions. Report what is still running (`TaskList`). **Draining changes no labels at all**, so it needs no per-item `gh` calls — there is nothing here to batch or to loop over.
 - **"resume" / "unpause"** — set draining off and run one tick immediately.
-- **"stop #N" / "cancel #N"** — remove its trigger label; if an agent is in flight for it, find it with `TaskList` and `TaskStop` it; then reset its in-flight label back to the trigger so it can be retried. Same ownership rule as opt-in.
-- **"stop everything" / "halt"** — set draining on, `TaskStop` every running stage agent, and reset each one's in-flight label to its trigger. **Batch the label resets:** group the stopped items by their (current label → trigger label) pair and issue one `gh issue edit` per group naming every number, e.g. `gh issue edit 63 67 --repo <repo> --remove-label "<labels.planning>" --add-label "<labels.ready>"`; pull requests are one call each (`gh pr edit` takes a single number). Re-query each target label afterward and report any item that did not move. Report what was halted. No ownership check is needed here: this only touches agents *this* cockpit dispatched, which are by construction all yours.
+- **"stop #N" / "cancel #N"** — an ordered, explicit sequence, never a single fused step. Remove its trigger label first. Then call `TaskList` to find the entry whose `description` is `"<stage> #<n>"`: a match → `TaskStop` it, and report the outcome — an error from `TaskStop` is reported by name, never silently swallowed, and the label reset below still runs regardless. No match → nothing to stop; say so plainly (no live entry means the label was already stale, or the agent had already finished). Either branch, reset its in-flight label back to the trigger so it can be retried, and state which of the two branches happened. Same ownership rule as opt-in.
+- **"stop everything" / "halt"** — set draining on, then enumerate with `TaskList` **first** — never assume the set from what this session remembers dispatching — and `TaskStop` each entry it returns. Report each `TaskStop` call's outcome per agent; an error on one never aborts the rest, and is never silently swallowed. Reset every stopped item's in-flight label to its trigger, sourcing the stopped count from `TaskList`'s result, never from memory of what was dispatched. **Batch the label resets:** group the stopped items by their (current label → trigger label) pair and issue one `gh issue edit` per group naming every number, e.g. `gh issue edit 63 67 --repo <repo> --remove-label "<labels.planning>" --add-label "<labels.ready>"`; pull requests are one call each (`gh pr edit` takes a single number). Re-query each target label afterward and report any item that did not move. Report what was halted. No ownership check is needed here: this only touches agents *this* cockpit dispatched, which are by construction all yours.
 
 While draining, a tick still reports gates and relays completions, but dispatches nothing and schedules no wakeup. Closing this session also halts all dispatch, since it is the only dispatcher, but cuts off in-flight agents — prefer `drain`.
 
@@ -706,7 +761,7 @@ While draining, a tick still reports gates and relays completions, but dispatche
 
 **The idle path is where the `ScheduleWakeup` call gets skipped, and it is the path that matters most.** With nothing in flight there are no agent completions to wake the session, so the scheduled wakeup is the *only* thing that catches a human applying a label on GitHub. An idle tick that ends in prose instead of the `ScheduleWakeup` call never ticks again — silently, and after telling the human it would.
 
-**Self-check, every non-draining tick:** before ending the turn, confirm `ScheduleWakeup` was actually called this tick. If it was not, call it now — do not write the closing line first and let the sentence stand in for the call. **Carve-out:** this self-check applies to ticks, not to a refused or stopped start — a startup that fails the preflight schedules no wakeup, and that is correct, not a violation of this rule.
+**Self-check, every non-draining tick:** before ending the turn, confirm **both** `ScheduleWakeup` **and** `TaskList` were actually called this tick. If either was not, make that call now — do not write the closing line, or the Liveness clause it accompanies, first and let the sentence stand in for the call. **Carve-out:** this self-check applies to ticks, not to a refused or stopped start — a startup that fails the preflight schedules no wakeup, and that is correct, not a violation of this rule.
 
 Close every non-draining tick's report with the delay you actually scheduled: `**Next tick:** ~1800s (scheduled)` or `**Next tick:** ~270s (scheduled)`, and the first tick each rung is newly reached, append the **Backing off** UX state's clause naming what is still outstanding. While draining, step 7 is skipped entirely (see Stop controls) and the closing line reads `**Next tick:** none — draining. Say "resume" to restart ticking.`
 
