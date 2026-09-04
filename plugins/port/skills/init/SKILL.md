@@ -166,7 +166,7 @@ gh label create "<name>" --color "<color>" --description "<description>"
 
 ## 6. Install the CI gate
 
-*Only when `approvalGate` is enabled.* Copy `${CLAUDE_PLUGIN_ROOT}/templates/approval-check.yml` to `.github/workflows/approval-check.yml`, substituting the integration branch, the marker and approved label names, and the blocking-label list (the in-flight and gate labels, one per line).
+*Only when `approvalGate` is enabled.* Copy `${CLAUDE_PLUGIN_ROOT}/templates/approval-check.yml` to `.github/workflows/approval-check.yml`, substituting the integration branch, the marker and approved label names, and the blocking-label list: the labels whose `role` is `in-flight` or `gate` in `labels.json`, in file order, restricted to enabled modules, using this repository's configured names, one per line. Indent every continuation line to the placeholder's own indentation — the value sits inside a YAML block scalar whose indentation is stripped before the shell ever sees it, so a flush-left continuation line collapses the list into one word.
 
 If the file already exists, diff it rather than overwriting, and ask.
 

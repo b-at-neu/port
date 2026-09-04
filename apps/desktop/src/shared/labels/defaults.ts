@@ -41,4 +41,10 @@ function isLabelDefault(entry: unknown): entry is LabelDefault {
   )
 }
 
-export const LABEL_DEFAULTS: readonly LabelDefault[] = template.labels.filter(isLabelDefault)
+// Cast to `unknown[]` before filtering: `labels.json` entries carry a `role`
+// field this app has no use for and `LabelDefault` deliberately omits, and
+// TypeScript's generic filter overload requires `LabelDefault` to extend the
+// JSON's own inferred element type — which fails the moment the JSON has a
+// field the interface lacks. The predicate itself still verifies every field
+// this module actually needs.
+export const LABEL_DEFAULTS: readonly LabelDefault[] = (template.labels as unknown[]).filter(isLabelDefault)

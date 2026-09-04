@@ -51,7 +51,3 @@ This repository is ~95% markdown prompts and zero-dependency Node scripts. The p
 
 - **Read by an adopter's install** → under `plugins/port/`, and it may reference only other shipped paths.
 - **This repository's own tooling** → `scripts/`, `evals/`, or `docs/`.
-
-## Known gap
-
-`.github/workflows/approval-check.yml` and `artifacts.yml` are rendered copies of `plugins/port/templates/*.yml`, with nothing pinning the two together (#170). Named here as a standing gap, not fixed by this ticket.

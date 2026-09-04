@@ -10,6 +10,11 @@
     "repository may override there. Agents read the configured name, never these defaults",
     "directly.",
     "",
+    "`role` is one of marker / trigger / in-flight / gate / terminal, copied from",
+    "pipeline/SKILL.md's own 'Role' column. It is the machine-readable authority the",
+    "rendered workflows' blocking-label list is derived from, pinned in both directions —",
+    "not merely documentation.",
+    "",
     "Colours group by role — triggers blue, in-flight amber, gates red, terminal green —",
     "and each role is an ordered Primer ramp, light to dark in pipeline order, so position",
     "within the role is legible from colour alone, not just the role itself.",
@@ -29,27 +34,27 @@
   ],
 
   "labels": [
-    { "key": "marker",               "name": "claude",                 "module": "core",            "color": "D97757", "description": "The port pipeline owns this item" },
-    { "key": "autoPlan",             "name": "auto plan",              "module": "core",            "color": "57606A", "description": "Plan gate skipped: the plan is auto-approved" },
+    { "key": "marker",               "name": "claude",                 "module": "core",            "color": "D97757", "role": "marker",   "description": "The port pipeline owns this item" },
+    { "key": "autoPlan",             "name": "auto plan",              "module": "core",            "color": "57606A", "role": "marker",   "description": "Plan gate skipped: the plan is auto-approved" },
 
-    { "key": "ready",                "name": "ready",                  "module": "core",            "color": "218BFF", "description": "Trigger: plan this issue" },
-    { "key": "planChangesRequested", "name": "plan changes requested", "module": "core",            "color": "0969DA", "description": "Trigger: revise the plan from human feedback" },
-    { "key": "planApproved",         "name": "plan approved",          "module": "core",            "color": "0550AE", "description": "Trigger: implement the approved plan" },
-    { "key": "readyForReview",       "name": "ready for review",       "module": "core",            "color": "033D8B", "description": "Trigger: review this pull request" },
-    { "key": "needsRevision",        "name": "needs revision",         "module": "core",            "color": "0A3069", "description": "Trigger: apply the review findings" },
-    { "key": "refreshBranch",        "name": "refresh branch",         "module": "previewDatabase", "color": "002155", "description": "Trigger: rebase and force-push, no code changes" },
+    { "key": "ready",                "name": "ready",                  "module": "core",            "color": "218BFF", "role": "trigger",  "description": "Trigger: plan this issue" },
+    { "key": "planChangesRequested", "name": "plan changes requested", "module": "core",            "color": "0969DA", "role": "trigger",  "description": "Trigger: revise the plan from human feedback" },
+    { "key": "planApproved",         "name": "plan approved",          "module": "core",            "color": "0550AE", "role": "trigger",  "description": "Trigger: implement the approved plan" },
+    { "key": "readyForReview",       "name": "ready for review",       "module": "core",            "color": "033D8B", "role": "trigger",  "description": "Trigger: review this pull request" },
+    { "key": "needsRevision",        "name": "needs revision",         "module": "core",            "color": "0A3069", "role": "trigger",  "description": "Trigger: apply the review findings" },
+    { "key": "refreshBranch",        "name": "refresh branch",         "module": "previewDatabase", "color": "002155", "role": "trigger",  "description": "Trigger: rebase and force-push, no code changes" },
 
-    { "key": "planning",             "name": "planning",               "module": "core",            "color": "FFF8C5", "description": "In flight: a plan is being researched" },
-    { "key": "inProgress",           "name": "in progress",            "module": "core",            "color": "FAE17D", "description": "In flight: implementation underway" },
-    { "key": "reviewing",            "name": "reviewing",              "module": "core",            "color": "EAC54F", "description": "In flight: review underway" },
-    { "key": "revising",             "name": "revising",               "module": "core",            "color": "D4A72C", "description": "In flight: fixes underway" },
-    { "key": "refreshing",           "name": "refreshing",             "module": "previewDatabase", "color": "BF8700", "description": "In flight: branch refresh underway" },
+    { "key": "planning",             "name": "planning",               "module": "core",            "color": "FFF8C5", "role": "in-flight", "description": "In flight: a plan is being researched" },
+    { "key": "inProgress",           "name": "in progress",            "module": "core",            "color": "FAE17D", "role": "in-flight", "description": "In flight: implementation underway" },
+    { "key": "reviewing",            "name": "reviewing",              "module": "core",            "color": "EAC54F", "role": "in-flight", "description": "In flight: review underway" },
+    { "key": "revising",             "name": "revising",               "module": "core",            "color": "D4A72C", "role": "in-flight", "description": "In flight: fixes underway" },
+    { "key": "refreshing",           "name": "refreshing",             "module": "previewDatabase", "color": "BF8700", "role": "in-flight", "description": "In flight: branch refresh underway" },
 
-    { "key": "planReview",           "name": "plan review",            "module": "core",            "color": "CF222E", "description": "Gate: plan written, awaiting human approval" },
-    { "key": "blocked",              "name": "blocked",                "module": "core",            "color": "82071E", "description": "Gate: needs a human decision, details in a comment" },
-    { "key": "needsHuman",           "name": "needs human",            "module": "core",            "color": "4C0014", "description": "Gate: the pipeline stopped and needs a person" },
+    { "key": "planReview",           "name": "plan review",            "module": "core",            "color": "CF222E", "role": "gate",     "description": "Gate: plan written, awaiting human approval" },
+    { "key": "blocked",              "name": "blocked",                "module": "core",            "color": "82071E", "role": "gate",     "description": "Gate: needs a human decision, details in a comment" },
+    { "key": "needsHuman",           "name": "needs human",            "module": "core",            "color": "4C0014", "role": "gate",     "description": "Gate: the pipeline stopped and needs a person" },
 
-    { "key": "prOpened",             "name": "pr opened",              "module": "core",            "color": "1A7F37", "description": "Terminal on the issue: state now lives on the pull request" },
-    { "key": "approved",             "name": "approved",               "module": "core",            "color": "044F1E", "description": "Terminal: findings are at or under the bar, a human merges" }
+    { "key": "prOpened",             "name": "pr opened",              "module": "core",            "color": "1A7F37", "role": "terminal", "description": "Terminal on the issue: state now lives on the pull request" },
+    { "key": "approved",             "name": "approved",               "module": "core",            "color": "044F1E", "role": "terminal", "description": "Terminal: findings are at or under the bar, a human merges" }
   ]
 }
