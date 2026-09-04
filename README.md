@@ -89,17 +89,8 @@ Full walkthrough: [docs/USAGE.md](docs/USAGE.md). Reference for the label lifecy
 
 ## Layout
 
-```
-.claude-plugin/marketplace.json   # this repo as a marketplace
-plugins/port/
-  agents/                         # plan, impl, review, revise
-  skills/                         # the seven above
-  hooks/                          # denial logging
-  templates/                      # written into managed repos by /port:init
-  docs/PIPELINE.md                # the operator's reference
-schema/port.config.schema.json    # the per-repo config contract
-```
-
 Each managed repository commits a `.claude/port.config.json` describing its branches, toolchain commands, and which optional subsystems it wants. Plugins cannot ship permission rules, which is why `/port:init` exists to install them into the repository itself.
+
+Full repository map, the ship boundary, and why several placements cannot move: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 Developing the plugin: [CONTRIBUTING.md](CONTRIBUTING.md).

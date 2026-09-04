@@ -2,6 +2,8 @@
 
 ## Working on the plugin
 
+Repository map and the ship boundary: [ARCHITECTURE.md](ARCHITECTURE.md).
+
 This repository is both a plugin marketplace and the plugin it distributes. `README.md`'s install command — `claude plugin marketplace add b-at-neu/port@main --scope project` — is the **consumer** path: it is what a managed repository commits so the pipeline travels with the checkout. It is wrong here, because this repository's own committed `.claude/settings.json` already carries a **project**-scope `port` marketplace entry, and a plain `marketplace add` with no `--scope` writes **user** scope — which project scope silently outranks. Following the README's instructions unscoped in this repository looks like it worked and changes nothing.
 
 The only scope that outranks the committed project-scope entry is **`local`** — gitignored, machine-specific, and exactly what a local-directory dev loop needs:

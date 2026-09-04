@@ -57,6 +57,7 @@ No dependencies, no plugin install, no model calls. Runs in seconds, in an agent
 | `.github/workflows/checks.yml` names all three runner labels (`ubuntu-latest`, `macos-latest`, `windows-latest`) | Quietly dropping a platform after a red run, which would look like a tidy-up in review (#73) |
 | `apps/desktop/src/shared/labels/vocabulary.ts`'s hand-maintained `LABEL_KEYS` array matches `labels.json`'s keys, both directions | The one literal union that can't be derived from the JSON import (TypeScript widens JSON strings to `string`) drifting from the template it must mirror (#75) |
 | No non-test file under `apps/desktop/src/shared/labels/` contains a string literal equal to a template default `name` whose `key !== name` | The app retyping a resolved label name by hand instead of reading it from the `LABEL_DEFAULTS` import — the same second-transcription drift this ticket exists to prevent (#75) |
+| `ARCHITECTURE.md`'s `## Map` table parses at least one row, every row's path exists on disk, every tracked top-level directory is covered by at least one row, and every `Ships` cell is exactly `yes` or `no` | The repository map going stale in either direction — a moved or renamed path, or a new top-level directory with no row (#167) |
 
 Each rule is worth testing by breaking it deliberately. If a check cannot be made to fail, it is not a check.
 
