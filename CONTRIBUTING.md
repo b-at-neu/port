@@ -13,7 +13,16 @@ claude plugin install port@port --scope local
 
 This writes to `.claude/settings.local.json`, already covered by this repository's `.gitignore`.
 
-Edits under `plugins/port/` take effect immediately — there is no build step and nothing to invalidate. A session that is already running has loaded its components, so run `/reload-plugins` there to pick up changes. **Confirm the override actually took** by checking the cockpit's first line (see "Running plugin identity" in `pipeline/SKILL.md`) — and check the **commit it prints, not the path**. A directory-sourced plugin is *copied* into `~/.claude/plugins/cache/` at install time, so a path under there is **not** evidence of a stale copy — a local-scope install from this checkout lands at exactly the same kind of cache path a GitHub-sourced one does. The cockpit's first line resolves and prints the applicable install record's short commit sha and scope; that sha should equal `git rev-parse --short HEAD` in this checkout once the local-scope override is running. If it does not, the override has not taken yet — reinstall and start a new session.
+Edits under `plugins/port/` take effect immediately — there is no build step and nothing to invalidate. A session that is already running has loaded its components, so run `/reload-plugins` there to pick up changes. **A cache path is not evidence of a stale copy** — a directory-sourced plugin is *copied* into `~/.claude/plugins/cache/` at install time, so a local-scope install from this checkout lands at exactly the same kind of cache path a GitHub-sourced one does; the old tell reported "stale" every time under a directory source, including when the override worked perfectly. **The replacement tell is the cockpit's own startup line** (see "Running plugin identity" in `pipeline/SKILL.md`), which resolves and prints the applicable install record's short commit sha and scope — that sha should equal `git rev-parse --short HEAD` in this checkout once the local-scope override is running. If it does not, the override has not taken yet — reinstall and start a new session.
+
+**The ground-truth test is three-way, not `diff -rq` alone.** Measured 2026-08-31: `diff -rq` returned silence while both the cache and this checkout sat 42 commits behind `origin/dev`, so three days of merged fixes were absent and the documented verification reported no problem — a check that cannot distinguish the state it exists to detect. Both halves are required, because either alone passes while the running plugin is stale:
+
+```bash
+git rev-list --count HEAD..origin/dev                                   # must be 0 — this checkout is current
+diff -rq ~/.claude/plugins/cache/port/port/0.1.0 plugins/port           # must be silent — the cache matches this checkout
+```
+
+`git rev-list --count` alone misses uncommitted working-tree edits — under a directory source those are absent from the cache while the count still reads `0`. `diff -rq` alone misses this checkout itself being behind the remote, which is exactly what the 42-commit case above measured.
 
 ### Never install from inside a managed worktree
 
