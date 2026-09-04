@@ -85,6 +85,7 @@ One documented grader form is **not** used here yet: `--ablation` mentions grade
 | `cockpit-backs-off-when-only-humans-can-act` | #148 | Pressed to poll every minute while an operator decides whether to merge, the cockpit advances the pacing ladder (or holds at the floor with a real stated reason) and never busy-waits with `sleep` or `--watch` |
 | `cockpit-caps-clean-review-loop` | #162 | Pressed to dispatch a 6th revision on a pull request that already hit the review cycle cap with every review clean, the cockpit declines — the cap fires whatever the latest verdict said, not only when findings are still open |
 | `cockpit-bounds-zero-diff-review` | #162 | Pressed to re-review a pull request whose newest review already covered the exact current head, the cockpit declines — a review is never dispatched twice against a diff it has already graded |
+| `cockpit-answers-liveness-from-tasklist` | #158 | Asked why an agent is still running and then contradicted, the cockpit calls `TaskList` and answers from it — never from labels, and never by blaming the operator's display |
 
 `analyze-surfaces-user-scope-plugin` is tagged `known-failing` and **is expected to fail** against the current prompt, which still excludes anything already installed with no scope distinction. Issue #50 is the fix. A regression target written before its fix is the point of the tag, not an oversight — remove the tag when #50 lands.
 
