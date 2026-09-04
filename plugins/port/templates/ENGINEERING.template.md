@@ -51,7 +51,8 @@ Every pipeline agent reads this document before working. It defines the quality 
 ## 7. Quality bar
 
 <!-- Type strictness, exhaustiveness, naming, and comment discipline: when a comment
-     earns its place and how long it may be. -->
+     earns its place and how long it may be — and the maximum length of a source
+     file, if you set one. -->
 
 ## 8. Pre-pull-request self-check
 

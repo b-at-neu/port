@@ -104,7 +104,7 @@ Narrow but real, because the pipeline's whole visible state is a set of GitHub l
 
 **Comments state why, never what.** Every check block in `scripts/checks/*.mjs` opens with the failure it exists to catch and, where one exists, its issue number. `labels.json` carries its entire colour rationale in a `$comment`. A comment restating the line below it has not earned its place.
 
-**Small, focused files. No dead scaffolding, no transitional shims, and no placeholder content committed in anticipation of a later ticket.**
+**Small, focused files. No dead scaffolding, no transitional shims, and no placeholder content committed in anticipation of a later ticket.** A source file is at most 500 lines — generated indexes (e.g. `pnpm-lock.yaml`), and fixtures whose entire content is the thing under test (`schema/fixtures/**`), are excluded, since neither is hand-authored prose or logic. An over-limit file is split by topic, following the runner-plus-modules shape §1 describes for `scripts/checks.mjs`. `scripts/checks/file-size.config.json`'s `limit` is this same number, checked by "File size limit and the shrinking ratchet"; its `allowlist` enumerates every file still over the limit with its exact current line count, as a ratchet — an entry may only be lowered, never raised, and removing a path from the allowlist is the definition of done for it.
 
 **A check that cannot be made to fail is not a check.** Every validator pattern is asserted against both a passing and a failing example, using the real historical failure where one exists ("Artifact validator's patterns accept a good example, reject a bad one"). Every new rule is worth breaking deliberately once, to confirm it catches anything at all.
 
@@ -142,3 +142,4 @@ Narrow but real, because the pipeline's whole visible state is a set of GitHub l
 - [ ] Every comment added explains why, not what.
 - [ ] `node scripts/checks.mjs` passes locally before pushing.
 - [ ] Commit subjects are `#<issue> <imperative lowercase>`, under 80 characters, no trailing period.
+- [ ] No file crossed the line limit, and no allowlisted file grew.

@@ -1,0 +1,16 @@
+{
+  "$comment": "The 500-line source file limit (#177), read by scripts/checks/file-size.mjs. limit: null (or a missing file) opts a repository out entirely — one note, zero failures. A line is counted as text.split('\\n').length, minus one when the file ends in a trailing newline, which matches `wc -l` for every newline-terminated file and is stable across platforms because .gitattributes forces eol=lf. allowlist is a ratchet: a listed file's recorded 'lines' may only ever be lowered to match reality, never raised — growth beyond the recorded count fails, and so does an undocumented shrink, so the debt list can't go stale in either direction. Removing a path once it is under the limit is the definition of done for it.",
+  "limit": 500,
+  "exclude": [
+    { "glob": "pnpm-lock.yaml", "why": "lockfile — generated, never hand-edited" },
+    { "glob": "schema/fixtures/**", "why": "fixtures — the document being validated is the point, not its length" }
+  ],
+  "allowlist": [
+    { "path": "plugins/port/skills/pipeline/SKILL.md", "lines": 774, "issue": 181 },
+    { "path": "scripts/checks/hooks.mjs", "lines": 763, "issue": 182 },
+    { "path": "plugins/port/templates/artifacts.mjs", "lines": 665, "issue": 183 },
+    { "path": "scripts/checks/cockpit.mjs", "lines": 611, "issue": 182 },
+    { "path": "plugins/port/docs/PIPELINE.md", "lines": 581, "issue": 181 },
+    { "path": "plugins/port/templates/worktrees.mjs", "lines": 518, "issue": 183 }
+  ]
+}

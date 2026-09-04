@@ -25,6 +25,7 @@ import cockpit from './checks/cockpit.mjs';
 import reviewEvidence from './checks/review-evidence.mjs';
 import harness from './checks/harness.mjs';
 import desktopPlatform from './checks/desktop-platform.mjs';
+import fileSize from './checks/file-size.mjs';
 
 const reporter = createReporter();
 
@@ -42,6 +43,7 @@ for (const module of [
   reviewEvidence,
   harness,
   desktopPlatform,
+  fileSize,
 ]) {
   await module(reporter);
 }
