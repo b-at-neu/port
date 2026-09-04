@@ -1409,6 +1409,7 @@ const MARKETPLACE_REF_PATTERN = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
     ...walk(join(root, 'evals')),
     join(root, 'README.md'),
     join(root, 'CONTRIBUTING.md'),
+    join(root, 'ARCHITECTURE.md'),
   ].filter((f) => f.endsWith('.md') && existsSync(f));
 
   const banned = [
@@ -1453,6 +1454,7 @@ const SESSION_MARKER_LINE = /^>\s*\*\*SESSION REQUIRED:\*\*\s+\S/;
     ...walk(join(root, 'evals')),
     join(root, 'README.md'),
     join(root, 'CONTRIBUTING.md'),
+    join(root, 'ARCHITECTURE.md'),
   ].filter((f) => f.endsWith('.md') && existsSync(f));
 
   for (const f of docs) {
@@ -2310,6 +2312,90 @@ const SESSION_MARKER_LINE = /^>\s*\*\*SESSION REQUIRED:\*\*\s+\S/;
       } else {
         ok();
       }
+    }
+  }
+}
+
+// --- Repository map covers the real tree, both directions ------------------
+// ARCHITECTURE.md (#167) is prose that goes stale silently, so it is pinned
+// to the real tree in both directions: every path it names must still exist,
+// and every tracked top-level directory must be named by at least one row.
+// Root-level *files* are deliberately outside this mechanical set — they are
+// covered by the "Placements that cannot move" prose instead, not by a row —
+// so the coverage check below only ever looks at directories.
+{
+  const rel = 'ARCHITECTURE.md';
+  const text = readFileSync(join(root, rel), 'utf8');
+  const lines = text.split('\n');
+
+  // Locate the table under its fixed heading, never by line number — the
+  // map will grow rows (#171 splits templates/) and a positional parser
+  // would break on the first edit.
+  const headingIdx = lines.findIndex((l) => l.trim() === '## Map');
+  const rows = [];
+  if (headingIdx === -1) {
+    fail('architecture-map', `${rel} no longer has a '## Map' heading for the repository map table`);
+  } else {
+    for (let i = headingIdx + 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (/^##\s/.test(line)) break; // next section — table ended
+      const m = /^\|\s*`([^`]+)`\s*\|.*\|\s*([^|]*)\|\s*$/.exec(line);
+      if (m) rows.push({ path: m[1], ships: m[2].trim() });
+    }
+  }
+
+  if (rows.length === 0) {
+    fail('architecture-map', `${rel}: the '## Map' table parsed 0 rows — the parser or the table itself has broken`);
+  } else {
+    note(`architecture-map: ${rows.length} rows parsed`);
+    ok();
+  }
+
+  // 1. Every path the map names must exist on disk.
+  for (const { path } of rows) {
+    if (!existsSync(join(root, path))) {
+      fail('architecture-map', `${rel}: row '${path}' does not exist on disk`);
+    } else {
+      ok();
+    }
+  }
+
+  // 2. Every tracked top-level directory is covered by at least one row.
+  // Fails open (a note, not a fail) if git ls-files is unavailable — a stale
+  // map is a documentation defect a reviewer still catches, while a hard
+  // failure in a git-less environment would block every unrelated pull
+  // request.
+  let lsFiles;
+  try {
+    lsFiles = execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' });
+  } catch (e) {
+    note(`architecture-map: 'git ls-files' unavailable (${e.message}) — skipping directory-coverage check`);
+    lsFiles = null;
+  }
+  if (lsFiles !== null) {
+    const topDirs = new Set();
+    for (const entry of lsFiles.split('\0')) {
+      const slash = entry.indexOf('/');
+      if (slash !== -1) topDirs.add(entry.slice(0, slash));
+    }
+    for (const dir of topDirs) {
+      const covered = rows.some(({ path }) => path === `${dir}/` || path.startsWith(`${dir}/`));
+      if (!covered) {
+        fail('architecture-map', `${rel}: top-level directory '${dir}/' is not covered by any row`);
+      } else {
+        ok();
+      }
+    }
+  }
+
+  // 3. Every row's Ships cell is exactly 'yes' or 'no' — the column is the
+  // load-bearing part of the map, so a blank or hedged cell silently drops
+  // the principle the map exists to state.
+  for (const { path, ships } of rows) {
+    if (ships !== 'yes' && ships !== 'no') {
+      fail('architecture-map', `${rel}: row '${path}' has Ships cell ${JSON.stringify(ships)} — must be exactly 'yes' or 'no'`);
+    } else {
+      ok();
     }
   }
 }
