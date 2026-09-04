@@ -22,6 +22,8 @@ This is **this repository's own** standards document, not a template — `plugin
 
 **No repository-specific value is ever a literal in prompt text.** Label names, check names, branch names, and the repository slug are resolved from `.claude/port.config.json` or from PIPELINE.md's default table at read time. A literal label name silently matches nothing — `gh issue list --label <unknown>` exits 0 with an empty result — and a literal CI check name breaks the moment a repository renames its workflow job ("No config key appears as a literal --label argument", "Generality guard — no literal CI check name in a stage prompt"). The test to apply: **would this behave correctly in a freshly `/port:init`-ed repository with renamed labels, a single branch, and a different set of CI checks?**
 
+**`apps/desktop/src/main/platform/` is the only place under `apps/desktop/src/` that may import `node:child_process` or `node:fs`.** The spawnable executables (`KNOWN_COMMANDS` in `run.ts`) are a literal union, so reaching for a POSIX-only utility is a compile-time error rather than a Windows-only runtime failure; path comparison and containment go through `paths.ts`'s `pathKey`/`contains`, never `startsWith`. The `desktop-platform-layer` check in `scripts/checks.mjs` pins all three rails mechanically.
+
 **Anything shipped may only reference other shipped paths.** A reference from a file under `plugins/port/` to a repository-only doc or script — `docs/USAGE.md`, `CONTRIBUTING.md`, `scripts/checks.mjs` — dangles in every adopter's plugin cache, which carries only `plugins/port/` (`scripts/checks.mjs` → "Shipped references stay inside plugins/port/").
 
 ## 2. Data and integrity
