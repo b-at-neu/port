@@ -17,7 +17,7 @@
 // this file alone. Every path is built with node:path; every child process is
 // invoked with an explicit argv array via node:child_process.spawnSync, never
 // a shell string — cross-platform by construction, and testable by importing
-// its pure functions directly (scripts/checks.mjs does).
+// its pure functions directly (the port repository's own layer 1 checks do).
 //
 // Never in this script: `git fetch`, `git worktree add`, a write to the main
 // checkout, deletion of an untracked directory, or removal of a path not
@@ -50,7 +50,7 @@ const gitOut = (args, opts) => {
   return res.ok ? res.stdout.trim() : null;
 };
 
-// --- Pure functions (exported for scripts/checks.mjs to unit-test) ----------
+// --- Pure functions (exported for this repository's own layer 1 checks) -----
 
 /** Parses `git worktree list --porcelain` into one record per entry, in the
  *  order git printed them (main worktree first). `branch` is `null` for a

@@ -226,7 +226,7 @@ Exact copy, one message per state, `<…>` substituted:
 
 - **Self-host drift** (warn once):
 
-  > ⚠️ This repository is the source of the `port` plugin, but this session is running <path>, not the working tree. Edits here — and `git pull` — have no effect on this session. See CONTRIBUTING.md.
+  > ⚠️ This repository is the source of the `port` plugin, but this session is running <path>, not the working tree. Edits here — and `git pull` — have no effect on this session. Refresh the installed plugin and restart this session to pick up edits made here.
 
 - **Registry unreadable** (fall back to the version-only line):
 
@@ -234,7 +234,7 @@ Exact copy, one message per state, `<…>` substituted:
 
 - **Running plugin, stale relative to the remote** (warn, in place of the plain scope clause):
 
-  > ⚠️ `port` v0.1.0 · `4634fc1` (project scope, installed 2026-08-23) · **42 commits behind `b-at-neu/port@dev`** — I'm running a copy from before those merged, so I'm following the older rails whatever `dev` says. Refresh the install (CONTRIBUTING.md → "Refreshing a GitHub-sourced install by hand") and restart me. · model `claude-haiku-4-5` · mode `default`
+  > ⚠️ `port` v0.1.0 · `4634fc1` (project scope, installed 2026-08-23) · **42 commits behind `b-at-neu/port@dev`** — I'm running a copy from before those merged, so I'm following the older rails whatever `dev` says. Refresh the installed plugin and restart me. · model `claude-haiku-4-5` · mode `default`
 
 - **Staleness not computable** (substitute the reason: no install record matched this directory · the record has no `gitCommitSha` · no marketplace record for `<marketplace>` · the source is a directory outside this working tree · GitHub can't resolve `<sha>`, so it was probably never pushed):
 
@@ -461,14 +461,14 @@ Then, in this order. Steps 7 and 8 are split apart deliberately — they are the
    Fail-open: silently holding every unstructured plan (typically one written before this contract landed) would stall the pipeline harder than the collision this gate prevents.
 4. **Overlap with the occupied set** → **hold**: do not dispatch, and report every tick while it stays held:
 
-   > ⏸️ **#52 held** — its plan claims `plugins/port/skills/pipeline/SKILL.md`, which #67 (`pr opened`) is already changing. It dispatches automatically once #67's pull request merges or closes. Say `dispatch #52 anyway` to override.
+   > ⏸️ **#52 held** — its plan claims `src/lib/auth.ts`, which #67 (`pr opened`) is already changing. It dispatches automatically once #67's pull request merges or closes. Say `dispatch #52 anyway` to override.
 
    The item **keeps `<labels.planApproved>`** — holding is never expressed by removing it, and no label is ever added for it.
 5. **No overlap** → a survivor. Sort survivors ascending by how many *other survivors* they overlap, and dispatch in that order, adding each dispatched survivor's claimed files to the occupied set as you go — a later survivor that now overlaps an earlier one's freshly-claimed files is held this same tick, not dispatched.
 
 **Override taken ("dispatch #N anyway" / "force #N"):**
 
-> ⚠️ Dispatching #52 despite the overlap with #67 on `plugins/port/skills/pipeline/SKILL.md`, at your instruction. Whichever lands second needs a rebase in that file, and it may be one `revise-agent` has to escalate.
+> ⚠️ Dispatching #52 despite the overlap with #67 on `src/lib/auth.ts`, at your instruction. Whichever lands second needs a rebase in that file, and it may be one `revise-agent` has to escalate.
 
 **While draining, this gate computes nothing and reports nothing** — there is no dispatch to gate, so nothing is held.
 
@@ -767,7 +767,7 @@ Close every non-draining tick's report with the delay you actually scheduled: `*
 
 Background-agent completions wake this session automatically in between ticks; the scheduled wakeup is only the fallback that catches everything else. On every wakeup, run the tick procedure again.
 
-**Worst-case pickup latency for a human label change rises from 4.5 to 30 minutes** in the fully-idle, fully-backed-off state, and only there — see `docs/USAGE.md` for why this is designed behaviour, not a stall.
+**Worst-case pickup latency for a human label change rises from 4.5 to 30 minutes** in the fully-idle, fully-backed-off state, and only there — nothing can move without you at that point, and the moment you say anything or apply the label that unblocks it, the next tick resets to the floor. Not a stall.
 
 ## Manual and recovery
 
