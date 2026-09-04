@@ -16,7 +16,7 @@
 | `plugins/port/templates/` | Files written into a managed repository by `/port:init` (permissions, labels, config, workflows) | `/port:init`, the desktop app's label vocabulary | yes |
 | `plugins/port/docs/` | `PIPELINE.md`, the operator's reference | Every stage agent, resolved as `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` | yes |
 | `schema/` | `port.config.schema.json`, the per-repo config contract | An adopter's editor, via the `$schema` key it inherits | no |
-| `scripts/` | The layer 1 static checks | Contributors, CI | no |
+| `scripts/` | The layer 1 static checks, and the committed file-size limit and ratchet they enforce | Contributors, CI | no |
 | `evals/` | Layer 3 behavioural eval cases and graders | Contributors, CI (gated) | no |
 | `docs/` | Contributor-facing reference (`TESTING.md`, `USAGE.md`) | Contributors | no |
 | `.github/workflows/` | CI workflow definitions | GitHub Actions | no |

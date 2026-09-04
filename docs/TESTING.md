@@ -65,6 +65,7 @@ No dependencies, no plugin install, no model calls. Runs in seconds, in an agent
 | `child_process` is referenced under `apps/desktop/src/` only in `main/platform/run.ts`, and that file's `node:child_process` import binds only `execFile`/`spawn` | A POSIX shell-out, or a synchronous/shell-spawning API, creeping into an adapter instead of staying behind the platform layer (#72) |
 | `main/platform/run.ts`'s `KNOWN_COMMANDS` contains no POSIX-only/shell utility (`grep`, `find`, `wc`, `stat`, `file`, `ls`, `cat`, `sed`, `awk`, `head`, `tail`, `which`, `xargs`, `sh`, `bash`, `cmd`, `powershell`, `pwsh`) | A POSIX-only or shell-only executable becoming spawnable, which fails only on Windows at runtime instead of at compile time (#72) |
 | No file under `apps/desktop/src/` sets `shell: true`, calls `execSync`/`spawnSync`, or calls any other synchronous filesystem function, and no file outside `main/platform/` imports `node:fs`/`node:fs/promises` | The cross-platform command and path layer's own rail — shelling out or blocking the main process — regressing silently in a future adapter (#72) |
+| Every tracked, non-excluded file is at or under the configured line limit, every allowlisted file matches its recorded count exactly, and the limit `ENGINEERING.md` states equals the one the config sets | A file growing past the bar with nothing to object, and the debt list going stale in either direction (#177) |
 
 Each rule is worth testing by breaking it deliberately. If a check cannot be made to fail, it is not a check.
 
