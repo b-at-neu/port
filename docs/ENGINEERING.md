@@ -16,7 +16,7 @@ This is **this repository's own** standards document, not a template — `plugin
 
 **Hook and script code separates pure decision logic from I/O.** `hooks/lib/guard-rules.mjs` exports pure functions unit-tested directly; `hooks/agent-guard.mjs` is the thin stdin/stdout/exit-code wrapper, tested separately by spawning the real script ("Guard hook classifier" and "Guard hook end-to-end wiring"). The same split applies to the worktree reclamation script ("Worktree reclamation classifier"). New logic goes in the library, not the wrapper — the wrapper's tests cannot see a classifier bug and the classifier's tests cannot see a wiring bug.
 
-**Scripts follow one runnable entry point plus a shared library.** `scripts/checks.mjs` is the entry; `scripts/lib/report.mjs` is a deliberately dumb collector and printer, shared by layers 1 and 2, which "decides nothing" (its own header). The scripts decide what is worth checking; the reporter decides nothing.
+**Scripts follow one runnable entry point plus a shared library.** `scripts/checks.mjs` is a runner that only wires — it imports and awaits each `scripts/checks/<topic>.mjs` module in order, then calls `report()`, with no assertions of its own. Each topic module exports a function taking the reporter. `scripts/lib/report.mjs` is a deliberately dumb collector and printer, shared by layers 1 and 2, which "decides nothing" (its own header); `scripts/lib/files.mjs` holds the file-system helpers (`root`, `readJson`, `walk`, `frontmatter`) the topic modules share. A new check goes into the topic module it belongs to, never into the runner — nearly every ticket adds a regression guard, so a runner that reabsorbed assertions directly would recreate the file-contention bottleneck the split exists to remove (`PIPELINE.md:95-114`).
 
 **A file that an adopting repository copies alone must be self-contained.** `plugins/port/templates/artifacts.mjs` and `templates/worktrees.mjs` carry no relative imports, because an import resolving only inside this checkout breaks silently for every adopter while passing here ("Artifact validator template is self-contained", "Worktree reclamation template is self-contained and cross-platform"). Cross-platform behaviour is part of the same contract — these run on an adopter's Windows machine, not just this one.
 
@@ -97,7 +97,7 @@ Narrow but real, because the pipeline's whole visible state is a set of GitHub l
 
 ## 7. Quality bar
 
-**Comments state why, never what.** Every check block in `scripts/checks.mjs` opens with the failure it exists to catch and, where one exists, its issue number. `labels.json` carries its entire colour rationale in a `$comment`. A comment restating the line below it has not earned its place.
+**Comments state why, never what.** Every check block in `scripts/checks/*.mjs` opens with the failure it exists to catch and, where one exists, its issue number. `labels.json` carries its entire colour rationale in a `$comment`. A comment restating the line below it has not earned its place.
 
 **Small, focused files. No dead scaffolding, no transitional shims, and no placeholder content committed in anticipation of a later ticket.**
 
@@ -125,6 +125,7 @@ Narrow but real, because the pipeline's whole visible state is a set of GitHub l
 - [ ] Any content newly duplicated across two files has its mechanical pin added in the same commit.
 - [ ] If a pinned file changed, its counterpart still agrees — and layer 1 says so, in both directions.
 - [ ] Every new check was made to fail once before being trusted to pass, and can distinguish the state it exists to detect.
+- [ ] A new layer 1 check lives in its topic module under `scripts/checks/`, never in the runner.
 - [ ] A fixed regression leaves a layer 1 guard behind, and `docs/TESTING.md` has its row.
 - [ ] A new rail is a checkable precondition, not "never do X" prose.
 - [ ] Any new failure mode states which direction it fails toward, and why.

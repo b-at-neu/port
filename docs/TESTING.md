@@ -58,6 +58,7 @@ No dependencies, no plugin install, no model calls. Runs in seconds, in an agent
 | `apps/desktop/src/shared/labels/vocabulary.ts`'s hand-maintained `LABEL_KEYS` array matches `labels.json`'s keys, both directions | The one literal union that can't be derived from the JSON import (TypeScript widens JSON strings to `string`) drifting from the template it must mirror (#75) |
 | No non-test file under `apps/desktop/src/shared/labels/` contains a string literal equal to a template default `name` whose `key !== name` | The app retyping a resolved label name by hand instead of reading it from the `LABEL_DEFAULTS` import — the same second-transcription drift this ticket exists to prevent (#75) |
 | `ARCHITECTURE.md`'s `## Map` table parses at least one row, every row's path exists on disk, every tracked top-level directory is covered by at least one row, and every `Ships` cell is exactly `yes` or `no` | The repository map going stale in either direction — a moved or renamed path, or a new top-level directory with no row (#167) |
+| `scripts/checks.mjs` calls none of `fail`/`note`/`ok` itself, and every `.mjs` file under `scripts/checks/` is imported by the runner | A topic module present on disk but never wired in, running nothing and reporting nothing — or check logic silently re-absorbed into the runner the split exists to keep thin (#168) |
 
 Each rule is worth testing by breaking it deliberately. If a check cannot be made to fail, it is not a check.
 
