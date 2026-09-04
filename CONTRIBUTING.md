@@ -91,3 +91,5 @@ pnpm build                            # produces apps/desktop/out/{main,preload,
 ```
 
 The IPC contract between the main and renderer processes lives in `apps/desktop/src/shared/ipc.ts`: a request/response type map plus a runtime channel list, checked against each other at compile time. Add a channel to both, or `pnpm typecheck` fails.
+
+These commands run in CI (`run-app-checks` in `.github/workflows/checks.yml`) on all three platforms, and are deliberately absent from `commands.checks` in `.claude/port.config.json`, which stays dependency-free — see `docs/TESTING.md` → "Layer 1 — static checks".

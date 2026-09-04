@@ -21,7 +21,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createReporter } from './lib/report.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -35,6 +35,9 @@ const walk = (dir) =>
         return statSync(p).isDirectory() ? walk(p) : [p];
       })
     : [];
+/** `f` relative to `root`, with `\` normalized to `/` so a failure message
+ *  names the same path on Windows as on macOS/Linux. */
+const relOf = (f) => f.slice(root.length + 1).split('\\').join('/');
 
 /** Frontmatter key/value pairs. Deliberately not a YAML parser — presence and
  *  scalar shape is all these checks need, and a dependency is not worth it. */
@@ -62,7 +65,7 @@ for (const [dir, kind] of [
   );
   if (files.length === 0) fail('components', `no ${kind}s found under ${dir}`);
   for (const f of files) {
-    const rel = f.slice(root.length + 1);
+    const rel = relOf(f);
     const fm = frontmatter(f);
     if (!fm) {
       fail('frontmatter', `${rel} has no --- delimited frontmatter`);
@@ -107,7 +110,7 @@ for (const [dir, kind] of [
   const agentFiles = walk(join(root, 'plugins/port/agents')).filter((f) => f.endsWith('.md'));
   let matched = 0;
   for (const f of agentFiles) {
-    const rel = f.slice(root.length + 1);
+    const rel = relOf(f);
     const fm = frontmatter(f) ?? {};
     const grantsBash =
       fm.tools === undefined || fm.tools.split(',').map((t) => t.trim()).includes('Bash');
@@ -196,7 +199,7 @@ for (const [dir, kind] of [
     recentOperatorMessages,
     operatorNamed,
     pluginInstallMutation,
-  } = await import('file://' + join(root, 'plugins/port/hooks/lib/guard-rules.mjs'));
+  } = await import(pathToFileURL(join(root, 'plugins/port/hooks/lib/guard-rules.mjs')).href);
 
   const settingsFile = join(root, '.claude/settings.json');
   const matchers = allowMatchers([settingsFile]);
@@ -866,7 +869,7 @@ for (const [dir, kind] of [
       }
       ok();
     } finally {
-      rmSync(unmanaged, { recursive: true, force: true });
+      rmSync(unmanaged, { recursive: true, force: true, maxRetries: 3 });
     }
 
     // Malformed payload → fails open, logs 'hook-error'.
@@ -883,7 +886,7 @@ for (const [dir, kind] of [
     if (e.status !== undefined) fail('guard-hook-fixture', `hook exited non-zero: ${e.message}`);
     else throw e;
   } finally {
-    rmSync(fixture, { recursive: true, force: true });
+    rmSync(fixture, { recursive: true, force: true, maxRetries: 3 });
   }
 }
 
@@ -998,7 +1001,7 @@ const MARKETPLACE_REF_PATTERN = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 // own copy. The two must agree on keys, names, and modules, both directions,
 // or `audit`'s label resolution silently drifts from the source of truth.
 {
-  const { LABELS } = await import('file://' + join(root, 'plugins/port/templates/artifacts.mjs'));
+  const { LABELS } = await import(pathToFileURL(join(root, 'plugins/port/templates/artifacts.mjs')).href);
   const canonical = new Map(readJson('plugins/port/templates/labels.json').labels.map((l) => [l.key, l]));
   for (const [key, entry] of Object.entries(LABELS)) {
     const c = canonical.get(key);
@@ -1024,7 +1027,7 @@ const MARKETPLACE_REF_PATTERN = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 // pipeline run before this validator existed.
 {
   const { COMMIT_SUBJECT, REVIEW_HEADING, REVISION_HEADING, REVISION_OPENS, REVISION_DETAIL, OPERATOR_ONLY_STEP } =
-    await import('file://' + join(root, 'plugins/port/templates/artifacts.mjs'));
+    await import(pathToFileURL(join(root, 'plugins/port/templates/artifacts.mjs')).href);
 
   const cases = [
     [
@@ -1101,7 +1104,7 @@ const MARKETPLACE_REF_PATTERN = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 // classification table, or an acceptance criterion the ticket named.
 {
   const { parsePorcelain, correlate, classifyCandidate } =
-    await import('file://' + join(root, 'plugins/port/templates/worktrees.mjs'));
+    await import(pathToFileURL(join(root, 'plugins/port/templates/worktrees.mjs')).href);
 
   // parsePorcelain: main worktree first, a linked one, a locked one with a
   // reason, and a detached one.
@@ -1303,7 +1306,7 @@ const MARKETPLACE_REF_PATTERN = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
     .map((l) => l.key);
   const files = walk(join(root, 'plugins')).filter((f) => f.endsWith('.md'));
   for (const f of files) {
-    const rel = f.slice(root.length + 1);
+    const rel = relOf(f);
     const text = readFileSync(f, 'utf8');
     const flagRe = /--(?:add-|remove-)?label\s+"([^"]*)"/g;
     let m;
@@ -1420,7 +1423,7 @@ const MARKETPLACE_REF_PATTERN = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
     [/(^|[^:\w/])\/(pipeline|scope|implement|release|worktree-clean|analyze|init)\b/, 'skill references need the `port:` prefix'],
   ];
   for (const f of docs) {
-    const rel = f.slice(root.length + 1);
+    const rel = relOf(f);
     for (const line of readFileSync(f, 'utf8').split('\n')) {
       for (const [re, why, exempt] of banned) {
         const m = re.exec(line);
@@ -1453,7 +1456,7 @@ const SESSION_MARKER_LINE = /^>\s*\*\*SESSION REQUIRED:\*\*\s+\S/;
   ].filter((f) => f.endsWith('.md') && existsSync(f));
 
   for (const f of docs) {
-    const rel = f.slice(root.length + 1);
+    const rel = relOf(f);
     const text = readFileSync(f, 'utf8');
     // Skip YAML frontmatter — a skill's `description:` line may name the
     // marker bare (implement/SKILL.md's does), and no frontmatter value uses
@@ -1651,7 +1654,7 @@ const SESSION_MARKER_LINE = /^>\s*\*\*SESSION REQUIRED:\*\*\s+\S/;
   const scanDirs = [join(root, 'plugins/port/agents'), join(root, 'plugins/port/skills/pipeline')];
   for (const dir of scanDirs) {
     for (const f of walk(dir).filter((p) => p.endsWith('.md'))) {
-      const rel = f.slice(root.length + 1);
+      const rel = relOf(f);
       const text = readFileSync(f, 'utf8');
       for (const name of bannedNames) {
         if (text.includes(name)) {
@@ -1714,7 +1717,7 @@ const SESSION_MARKER_LINE = /^>\s*\*\*SESSION REQUIRED:\*\*\s+\S/;
 
   const referenced = new Set();
   for (const f of caseFiles) {
-    const rel = f.slice(root.length + 1);
+    const rel = relOf(f);
     const text = readFileSync(f, 'utf8');
     for (const key of ['name', 'prompt', 'graders']) {
       if (!new RegExp(`^${key}:`, 'm').test(text)) {
@@ -2101,6 +2104,22 @@ const SESSION_MARKER_LINE = /^>\s*\*\*SESSION REQUIRED:\*\*\s+\S/;
     fail('zero-diff-review', `${pipelineRel} carries no 'Zero-diff review' rule`);
   } else {
     ok();
+  }
+}
+
+// --- CI workflow names every platform in its matrix -------------------------
+// Regression guard: quietly dropping `windows-latest` after a red run would
+// look like a tidy-up in review, and nothing else would notice the platform
+// stopped being tested.
+{
+  const rel = '.github/workflows/checks.yml';
+  const text = readFileSync(join(root, rel), 'utf8');
+  for (const label of ['ubuntu-latest', 'macos-latest', 'windows-latest']) {
+    if (!text.includes(label)) {
+      fail('platform-matrix', `${rel} never names the runner label '${label}'`);
+    } else {
+      ok();
+    }
   }
 }
 

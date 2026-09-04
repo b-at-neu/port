@@ -8,7 +8,7 @@ This plugin is almost entirely prompts, which makes it easy to change confidentl
 node scripts/checks.mjs
 ```
 
-No dependencies, no plugin install, no model calls. Runs in seconds, in CI on every pull request, and in an agent's worktree before it pushes.
+No dependencies, no plugin install, no model calls. Runs in seconds, in an agent's worktree before it pushes, and in CI's `run-static-checks` job on every pull request, matrixed across `ubuntu-latest`, `macos-latest`, and `windows-latest` with no install step — the empty `node_modules` in that job is what makes the dependency-free invariant an executed assertion rather than a comment. This is the only thing an agent runs before pushing; `.github/workflows/checks.yml` runs two further jobs CI-only: `run-schema-fixtures` (ubuntu only, full JSON Schema validation) and `run-app-checks` (the same three-OS matrix, `apps/desktop`'s typecheck/lint/test/build — see CONTRIBUTING.md → "Working on the desktop app" for why it stays out of `commands.checks`).
 
 **These guard against silence.** A skill or agent whose frontmatter is malformed is *absent* from Claude Code's component inventory rather than reported as an error, so nothing complains — the component simply is not there. Same for a hook. Every check below exists because something broke that way:
 
@@ -54,6 +54,7 @@ No dependencies, no plugin install, no model calls. Runs in seconds, in CI on ev
 | Its exported `parsePorcelain`, `correlate`, and `classifyCandidate` each resolve their documented cases — every correlation rung in order with `#0` excluded, and the classification precedence (`outside` → `protect` → `locked` → `dirty` → `active` → `done`/`no-work` → `unresolved`) | The correlation ladder or the classification precedence silently drifting from what `PIPELINE.md` documents (#144) |
 | The guard hook's classifier denies a `claude plugin install`/`uninstall`/`marketplace add`/`marketplace remove` call from any cwd under `.claude/worktrees/` — for a dispatched agent, a plain session, **and** an `impl-<n>` operator worktree alike — allows the same commands from the main checkout, and never trips on a read-only subcommand or the words quoted inside an unrelated argument | An install performed from inside any managed worktree silently repointing every session on the machine via the shared `installPath` (#144) |
 | `plugins/port/skills/pipeline/SKILL.md`'s hygiene section names `commands.worktrees` and never invokes `git worktree remove --force` directly; the schema, the template, and this repository's own self-hosted config all declare `commands.worktrees` | The cockpit's worktree hygiene collapsing back into the prose #62 already tried once, or the config key existing in only some of the places that must agree on it (#144) |
+| `.github/workflows/checks.yml` names all three runner labels (`ubuntu-latest`, `macos-latest`, `windows-latest`) | Quietly dropping a platform after a red run, which would look like a tidy-up in review (#73) |
 
 Each rule is worth testing by breaking it deliberately. If a check cannot be made to fail, it is not a check.
 
