@@ -48,8 +48,8 @@ export type GhResult =
   | { readonly ok: false; readonly kind: GhClassification; readonly stderr: string }
 
 /** `gh(args)` — never spawned by an adapter directly; a second failure
- *  classifier at a call site is the drift #75's scope correction was filed
- *  against. The layer never reads, stores, or logs a token. */
+ *  classifier at a call site would drift from this one over time. The layer
+ *  never reads, stores, or logs a token. */
 export async function gh(args: readonly string[], options: GhOptions = {}): Promise<GhResult> {
   const result = await runCommand('gh', args, options)
   if (result.ok) return result
@@ -74,11 +74,14 @@ export async function ghJson<T>(args: readonly string[], options?: GhOptions): P
 
 export type GhAuthStatusResult = { readonly ok: true; readonly authenticated: boolean } | Exclude<GhResult, { ok: true } | { ok: false; kind: 'unauthenticated' }>
 
-/** Runs `gh auth status` and reads the exit code only — `unauthenticated`
- *  vs. any other failure — so no token is ever buffered or inspected. */
+/** Runs `gh auth status` and reads its own exit code directly — 0 is
+ *  authenticated, any other nonzero exit is not — rather than routing
+ *  through `classifyGhExit`, which is tuned for HTTP-bearing API failures
+ *  and never sees an `(HTTP nnn)` string or exit code `4` from this
+ *  command. No token is ever buffered or inspected either way. */
 export async function ghAuthStatus(options?: GhOptions): Promise<GhAuthStatusResult> {
-  const result = await gh(['auth', 'status'], options)
+  const result = await runCommand('gh', ['auth', 'status'], options)
   if (result.ok) return { ok: true, authenticated: true }
-  if (result.kind === 'unauthenticated') return { ok: true, authenticated: false }
+  if (result.kind === 'nonzero') return { ok: true, authenticated: false }
   return result
 }

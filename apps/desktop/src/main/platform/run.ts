@@ -9,7 +9,8 @@ import type { WhichEnv, WhichResult } from './which'
 
 /** The spawnable executables are a literal union, so an adapter reaching for
  *  a POSIX-only utility (`grep`, `find`, …) is a compile-time error rather
- *  than a Windows-only runtime failure. #97 adds `claude` to this union. */
+ *  than a Windows-only runtime failure. Extend this union as new commands
+ *  need to be spawned. */
 export const KNOWN_COMMANDS = ['git', 'gh'] as const
 
 export type KnownCommand = (typeof KNOWN_COMMANDS)[number]
@@ -166,8 +167,8 @@ async function cwdExists(cwd: string): Promise<boolean> {
 }
 
 /** Resolves a `KnownCommand` on `PATH` (see `which.ts`), pre-checks `cwd`,
- *  then delegates to `runExecutable`. This is the entry point every adapter
- *  in #74–#78 actually calls. */
+ *  then delegates to `runExecutable`. This is the entry point every
+ *  higher-level adapter actually calls. */
 export async function runCommand(command: KnownCommand, args: readonly string[], options: RunCommandOptions = {}): Promise<CommandResult> {
   if (options.cwd !== undefined && !(await cwdExists(options.cwd))) {
     return { ok: false, kind: 'cwd-missing', cwd: options.cwd }

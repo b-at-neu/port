@@ -2,14 +2,15 @@ import type { Dirent } from 'node:fs'
 import { readFile, readdir, stat } from 'node:fs/promises'
 
 /** ENOENT is a value, never an exception — `.agents/denials.log` legitimately
- *  does not exist, and #74 must distinguish "no config" from "unreadable
+ *  does not exist, and callers must distinguish "no config" from "unreadable
  *  config". */
 export type FileFailureKind = 'not-found' | 'not-a-file' | 'permission-denied' | 'too-large' | 'unparseable' | 'io'
 
 export type FileResult<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly kind: FileFailureKind; readonly message: string }
 
-/** Keeps a runaway denials log from OOM-ing the main process; streaming for
- *  #84's tailing is out of scope and extends this module when it lands. */
+/** Keeps a runaway denials log from OOM-ing the main process; streaming
+ *  support for tailing large logs is out of scope and extends this module
+ *  when it lands. */
 const MAX_BYTES = 16 * 1024 * 1024
 
 interface ErrnoLike {
