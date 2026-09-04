@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { root, walk, relOf } from '../lib/files.mjs';
 
 // A pure hyphenation or spacing mutation of the marker (e.g. `SESSION-REQUIRED`)
@@ -45,6 +45,105 @@ export default async function ({ fail, note, ok }) {
         }
       }
     }
+    ok();
+  }
+
+  // --- Shipped references stay inside plugins/port/ --------------------------
+  // Regression guard for #169: PIPELINE.md and SKILL.md pointed an operator at
+  // `docs/USAGE.md` for the one explanation the reference was promising, but
+  // that file ships nowhere — an adopter's plugin cache carries only
+  // `plugins/port/`, so the reference resolved to nothing everywhere but this
+  // repository's own checkout. Existence-based, not link-resolving: a token
+  // fails only when this checkout provably has it *outside* plugins/port/ with
+  // no counterpart inside it — the exact violation of ENGINEERING.md §1's
+  // "anything shipped may only reference other shipped paths." It fails open
+  // (skips) on a token that resolves nowhere at all, because an adopter-only
+  // install target (`scripts/port-artifacts.mjs`) and a genuine typo are
+  // indistinguishable from files alone.
+  {
+    const EXTENSIONS = ['md', 'mjs', 'js', 'ts', 'json', 'yml', 'yaml', 'log', 'graphql', 'txt'];
+    const EXT_RE = new RegExp(`\\.(${EXTENSIONS.join('|')})$`);
+    const pluginRoot = join(root, 'plugins/port');
+
+    /** Backticked spans plus bare whitespace-delimited tokens (the latter is
+     *  what catches an unbackticked "See CONTRIBUTING.md." sentence), each
+     *  stripped of surrounding punctuation and kept only when it looks
+     *  path-shaped: contains a slash, or ends in a known text extension. */
+    function candidateTokens(line) {
+      const backticked = [...line.matchAll(/`([^`]+)`/g)].map((m) => m[1]);
+      const bare = line
+        .replace(/`[^`]*`/g, ' ')
+        .split(/\s+/)
+        .map((t) => t.replace(/^["'(\[]+/, '').replace(/[.,;:!?"')\]]+$/, ''))
+        .filter(Boolean);
+      return [...backticked, ...bare].filter((t) => t.includes('/') || EXT_RE.test(t));
+    }
+
+    /** Pure classifier — the two `existsSync` calls are the only I/O, both
+     *  passed in by the caller, so this is directly unit-testable against
+     *  literals. Returns 'pass' (resolves inside plugins/port/), 'fail'
+     *  (resolves only outside it), or 'skip' (templated, relative, dotfile,
+     *  or resolves nowhere this checkout can see). */
+    function classifyShippedReference(token, { pluginRoot, repoRoot, containingDir }) {
+      if (/[<>*]/.test(token)) return 'skip';
+      if (token.includes('${') && !token.startsWith('${CLAUDE_PLUGIN_ROOT}/')) return 'skip';
+      let rest = token;
+      if (rest.startsWith('${CLAUDE_PLUGIN_ROOT}/')) rest = rest.slice('${CLAUDE_PLUGIN_ROOT}/'.length);
+      if (rest.startsWith('./') || rest.startsWith('../')) return 'skip';
+      if (rest.split('/')[0].startsWith('.')) return 'skip';
+      if (containingDir && existsSync(join(containingDir, rest))) return 'skip';
+      if (existsSync(join(pluginRoot, rest))) return 'pass';
+      if (existsSync(join(repoRoot, rest))) return 'fail';
+      return 'skip';
+    }
+
+    // Prove it can fail before trusting it to pass — #169's own historical
+    // failure (`docs/USAGE.md`) is the first case.
+    const selfTestCases = [
+      ['docs/USAGE.md', 'fail'],
+      ['CONTRIBUTING.md', 'fail'],
+      ['scripts/checks.mjs', 'fail'],
+      ['schema/port.config.schema.json', 'fail'],
+      ['plugins/port/skills/pipeline/SKILL.md', 'fail'],
+      ['${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md', 'pass'],
+      ['templates/artifacts.mjs', 'pass'],
+      ['skills/pipeline/SKILL.md', 'pass'],
+      ['.claude/port.config.json', 'skip'],
+      ['.claude-plugin/marketplace.json', 'skip'],
+      ['.temp/plan-N.md', 'skip'],
+      ['scripts/port-artifacts.mjs', 'skip'],
+      ['./lib/guard-rules.mjs', 'skip'],
+    ];
+    for (const [token, expected] of selfTestCases) {
+      const got = classifyShippedReference(token, { pluginRoot, repoRoot: root, containingDir: null });
+      if (got !== expected) {
+        fail('shipped-reference-selftest', `classifyShippedReference(${JSON.stringify(token)}) = ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`);
+      } else {
+        ok();
+      }
+    }
+
+    // The real scan — every shipped file, not just markdown, since a stray
+    // comment in a `.mjs` template is exactly how #169 happened.
+    const files = walk(pluginRoot).filter((f) => EXT_RE.test(f));
+    let confirmedShipped = 0;
+    for (const f of files) {
+      const rel = relOf(f);
+      const containingDir = dirname(f);
+      const fileLines = readFileSync(f, 'utf8').split('\n');
+      for (let i = 0; i < fileLines.length; i++) {
+        for (const token of candidateTokens(fileLines[i])) {
+          const verdict = classifyShippedReference(token, { pluginRoot, repoRoot: root, containingDir });
+          if (verdict === 'fail') {
+            fail('shipped-reference', `${rel}:${i + 1}: references \`${token}\`, which exists only outside plugins/port/ — it dangles in an adopter's plugin cache`);
+          } else if (verdict === 'pass') {
+            ok();
+            confirmedShipped++;
+          }
+        }
+      }
+    }
+    note(`shipped-reference: ${files.length} files scanned, ${confirmedShipped} references confirmed shipped`);
     ok();
   }
 

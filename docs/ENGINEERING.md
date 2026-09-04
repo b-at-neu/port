@@ -22,6 +22,8 @@ This is **this repository's own** standards document, not a template — `plugin
 
 **No repository-specific value is ever a literal in prompt text.** Label names, check names, branch names, and the repository slug are resolved from `.claude/port.config.json` or from PIPELINE.md's default table at read time. A literal label name silently matches nothing — `gh issue list --label <unknown>` exits 0 with an empty result — and a literal CI check name breaks the moment a repository renames its workflow job ("No config key appears as a literal --label argument", "Generality guard — no literal CI check name in a stage prompt"). The test to apply: **would this behave correctly in a freshly `/port:init`-ed repository with renamed labels, a single branch, and a different set of CI checks?**
 
+**Anything shipped may only reference other shipped paths.** A reference from a file under `plugins/port/` to a repository-only doc or script — `docs/USAGE.md`, `CONTRIBUTING.md`, `scripts/checks.mjs` — dangles in every adopter's plugin cache, which carries only `plugins/port/` (`scripts/checks.mjs` → "Shipped references stay inside plugins/port/").
+
 ## 2. Data and integrity
 
 `.claude/port.config.json` validates against `schema/port.config.schema.json` (draft 2020-12). Fixtures come in pairs — `schema/fixtures/valid.*.json` must validate and `invalid.*.json` must be rejected — and both directions are asserted, because a fixture set that only proves acceptance proves nothing ("Schema fixtures still discriminate", plus the `run-schema-fixtures` CI job which does the full validation layer 1 deliberately cannot).
