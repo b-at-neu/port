@@ -68,5 +68,5 @@ describe('ghAuthStatus — integration', () => {
     if (result.ok) {
       expect(typeof result.authenticated).toBe('boolean')
     }
-  })
+  }, 15_000)
 })
