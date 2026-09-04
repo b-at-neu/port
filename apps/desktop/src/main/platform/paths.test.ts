@@ -80,6 +80,12 @@ describe('pathKey / samePath', () => {
     const ops = opsFor('win32', 'C:\\Users\\u')
     expect(ops.samePath('\\\\server\\share\\repo', '\\\\SERVER\\share\\Repo')).toBe(true)
   })
+
+  it('toNative preserves a UNC path\'s leading double separator [win32]', () => {
+    const ops = opsFor('win32', 'C:\\Users\\u')
+    expect(ops.toNative('\\\\server\\share\\repo')).toBe('\\\\server\\share\\repo')
+    expect(ops.toNative('//server/share/repo')).toBe('\\\\server\\share\\repo')
+  })
 })
 
 describe('contains', () => {

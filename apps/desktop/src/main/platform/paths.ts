@@ -41,7 +41,16 @@ function assertAbsolute(impl: PathImpl, p: string, fnName: string): void {
   }
 }
 
+/** A leading run of exactly two separators is a UNC prefix (`\\server\share`)
+ *  and must survive normalization as two separators, not collapse to one —
+ *  collapsing it silently turns a network path into a root-relative one on
+ *  the current drive. Everything after that prefix collapses as usual. */
+const uncPrefix = /^[\\/]{2}(?=[^\\/])/
+
 function withSeparator(p: string, sep: string): string {
+  if (uncPrefix.test(p)) {
+    return sep + sep + p.slice(2).replace(/[\\/]+/g, sep)
+  }
   return p.replace(/[\\/]+/g, sep)
 }
 
