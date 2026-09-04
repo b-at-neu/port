@@ -9,7 +9,7 @@ allowed-tools: Read, Bash
 
 Pipeline agents run in isolated worktrees under `.claude/worktrees/`; operator-run session-required tickets add their own there too. Both are in scope.
 
-`plugins/port/templates/worktrees.mjs` (addressed via `commands.worktrees`) is the one classifier and reclaimer this skill, the cockpit's own per-tick hygiene, and #109's worktree report all share — see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Worktree lifecycle". This skill drives it **interactively**, for the four cases the cockpit's automatic pass deliberately never touches on its own: a **locked** worktree, a **dirty** one, an **unresolved** one, and an **orphan directory** git does not track at all.
+`templates/worktrees.mjs` (addressed via `commands.worktrees`) is the one classifier and reclaimer this skill, the cockpit's own per-tick hygiene, and #109's worktree report all share — see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Worktree lifecycle". This skill drives it **interactively**, for the four cases the cockpit's automatic pass deliberately never touches on its own: a **locked** worktree, a **dirty** one, an **unresolved** one, and an **orphan directory** git does not track at all.
 
 > **Scope guard:** the script only ever removes a path `git worktree list` itself reports, fenced to inside the main checkout — never the main checkout, never a path outside it. This skill's own force-delete step (below) only ever targets a directory **directly under** the parent of a registered worktree, and only after the script has classified it `orphan-dir`.
 

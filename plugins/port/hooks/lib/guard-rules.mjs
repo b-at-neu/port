@@ -1,8 +1,8 @@
 // Pure classifier for the agent-guard PreToolUse hook.
 //
 // Kept separate from agent-guard.mjs (which owns stdin/stdout/exit-code
-// plumbing) so scripts/checks.mjs can unit-test the decision logic directly —
-// no stdin, no plugin install, no model call.
+// plumbing) so the port repository's own layer 1 checks can unit-test the
+// decision logic directly — no stdin, no plugin install, no model call.
 import { readFileSync, existsSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 

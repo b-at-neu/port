@@ -14,21 +14,22 @@
 //     patterns `check` does, against real fixtures instead of one file.
 //
 // Self-contained — no relative imports. An adopting repository copies this
-// file alone (no plugins/port/, no scripts/lib/), so it carries its own
-// reporter and its own label table rather than importing either.
+// file alone, with neither this repository's plugin tree nor its shared
+// scripts library beside it, so it carries its own reporter and its own
+// label table rather than importing either.
 //
 // NEVER add this to commands.checks — `audit` shells out to `gh`, which a
-// dispatched agent's allowlist does not grant. scripts/checks.mjs enforces
-// that mechanically.
+// dispatched agent's allowlist does not grant. The port repository's own
+// layer 1 checks enforce that mechanically.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 // --- Label vocabulary --------------------------------------------------------
-// Mirrors plugins/port/templates/labels.json (key, default name, module).
-// scripts/checks.mjs asserts the two agree, both directions, so a drift here
-// fails layer 1 rather than silently mismatching in `audit`.
+// Mirrors templates/labels.json (key, default name, module). The port
+// repository's own layer 1 checks assert the two agree, both directions, so
+// a drift here fails layer 1 rather than silently mismatching in `audit`.
 export const LABELS = {
   marker: { name: 'claude', module: 'core' },
   autoPlan: { name: 'auto plan', module: 'core' },

@@ -73,7 +73,7 @@ If it is ignored, **stop and explain** rather than writing it. The config has to
 
 Set `docs.engineering` to a path only if that file **exists and says something real**. Leave it null otherwise — pointing it at an empty skeleton makes review cite a document with no content. Step 8 offers to fill it properly, and sets the field itself if the operator accepts.
 
-**Validation is mandatory, not conditional. Never write a config that does not validate.** Check it against `schema/port.config.schema.json` with a validator if one is available; if none is, walk the schema by hand and confirm every field's type and shape. A config that fails validation is a config every consumer misreads.
+**Validation is mandatory, not conditional. Never write a config that does not validate.** Check it against the schema at the `$schema` URL the config template carries, with a validator if one is available; if none is, walk the schema by hand and confirm every field's type and shape. A config that fails validation is a config every consumer misreads.
 
 Get `commands.checks` right in particular: its items are **objects** with a required `run` and an optional `fix` —
 

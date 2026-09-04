@@ -144,6 +144,7 @@ The common causes, in rough order of likelihood:
 - **Not listed at all.** It is unassigned, or belongs to another operator — every query is filtered to your assignee. The unowned sweep reports these; `work on #N` claims one.
 - **Marked `SESSION REQUIRED`.** Nothing will ever dispatch for it. Run `/port:implement`.
 - **An agent stopped with `BLOCKED:`.** A clean stop by design. Resolve it and retry.
+- **The cockpit is fully idle, fully backed off.** A label change you make by hand can then wait up to 30 minutes before it's noticed, not the usual ~4.5 — the ladder holds at that ceiling only once everything left is waiting on a human, and any observed change resets it to the floor immediately. Not a stall.
 
 The full symptom-to-fix table is in [PIPELINE.md's recovery runbook](../plugins/port/docs/PIPELINE.md#recovery-runbook).
 
