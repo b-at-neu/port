@@ -24,6 +24,7 @@ import evals from './checks/evals.mjs';
 import cockpit from './checks/cockpit.mjs';
 import reviewEvidence from './checks/review-evidence.mjs';
 import harness from './checks/harness.mjs';
+import desktopPlatform from './checks/desktop-platform.mjs';
 
 const reporter = createReporter();
 
@@ -40,6 +41,7 @@ for (const module of [
   cockpit,
   reviewEvidence,
   harness,
+  desktopPlatform,
 ]) {
   await module(reporter);
 }
