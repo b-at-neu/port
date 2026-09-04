@@ -2123,5 +2123,54 @@ const SESSION_MARKER_LINE = /^>\s*\*\*SESSION REQUIRED:\*\*\s+\S/;
   }
 }
 
+// --- Desktop app's LABEL_KEYS matches labels.json, both directions ---------
+// #75: apps/desktop imports the shipped template directly (it can — same
+// repository, bundled at build time), so there is no second transcription to
+// drift. But LABEL_KEYS itself can't be derived from that import (TypeScript
+// widens JSON string values to `string`), so it is hand-maintained in
+// vocabulary.ts and must be diffed against the template here, the same shape
+// as the cockpit-table and artifacts-labels guards above.
+{
+  const rel = 'apps/desktop/src/shared/labels/vocabulary.ts';
+  const text = readFileSync(join(root, rel), 'utf8');
+  const m = /LABEL_KEYS\s*=\s*\[([^\]]*)\]\s*as const/.exec(text);
+  if (!m) {
+    fail('desktop-label-defaults', `${rel} has no 'LABEL_KEYS = [...] as const' array`);
+  } else {
+    const desktopKeys = new Set([...m[1].matchAll(/'([^']+)'/g)].map((t) => t[1]));
+    const templateKeys = new Set(readJson('plugins/port/templates/labels.json').labels.map((l) => l.key));
+    for (const k of desktopKeys) {
+      if (!templateKeys.has(k)) fail('desktop-label-defaults', `${rel}'s LABEL_KEYS has '${k}', which is not in labels.json`);
+    }
+    for (const k of templateKeys) {
+      if (!desktopKeys.has(k)) fail('desktop-label-defaults', `labels.json has key '${k}', missing from ${rel}'s LABEL_KEYS`);
+    }
+    ok();
+  }
+}
+
+// --- Desktop app never retypes a resolved label name it should import ------
+// #75: the strings where `key !== name` (`plan approved`, `ready for review`,
+// …) must come from the LABEL_DEFAULTS import, never be hand-typed again —
+// that is exactly the second-transcription drift this ticket exists to
+// prevent. Single-word names where `key === name` are excluded, since
+// LABEL_KEYS legitimately contains them as literals.
+{
+  const mismatched = readJson('plugins/port/templates/labels.json')
+    .labels.filter((l) => l.key !== l.name)
+    .map((l) => l.name);
+  const dir = join(root, 'apps/desktop/src/shared/labels');
+  for (const f of walk(dir).filter((p) => p.endsWith('.ts') && !p.endsWith('.test.ts'))) {
+    const rel = relOf(f);
+    const text = readFileSync(f, 'utf8');
+    for (const name of mismatched) {
+      if (text.includes(`'${name}'`) || text.includes(`"${name}"`)) {
+        fail('desktop-label-defaults', `${rel}: literal '${name}' must come from the LABEL_DEFAULTS import, not be retyped`);
+      }
+    }
+  }
+  ok();
+}
+
 // --- Report -----------------------------------------------------------------
 report();
