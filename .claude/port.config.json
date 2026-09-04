@@ -13,7 +13,7 @@
     "worktrees": "node plugins/port/templates/worktrees.mjs"
   },
   "docs": {
-    "engineering": null,
+    "engineering": "docs/ENGINEERING.md",
     "design": null
   },
   "models": {

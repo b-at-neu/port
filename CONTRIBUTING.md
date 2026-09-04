@@ -84,7 +84,11 @@ Write the message to a file and `git commit -F <file>` rather than using inline 
 
 ## Engineering standards
 
-This repository has no standards document of its own yet. Until it does: small focused files, no dead scaffolding or transitional shims, comments only where a fluent reader would still get it wrong, and no placeholder content committed in anticipation of a later ticket.
+[docs/ENGINEERING.md](docs/ENGINEERING.md) is this repository's standards document, and `docs.engineering` points at it — so all four stage agents read it before working and `review-agent` cites it as a review dimension. Every rule in it is one this codebase already follows, cited to the file it was inferred from.
+
+Read §8, the pre-pull-request self-check, before opening one. The short version, unchanged from what this section said before the document existed: small focused files, no dead scaffolding or transitional shims, comments only where a fluent reader would still get it wrong, and no placeholder content committed in anticipation of a later ticket.
+
+It is deliberately **not** shipped — it is this repository's own bar, not the plugin's. `plugins/port/templates/ENGINEERING.template.md` is the skeleton `/port:init` installs into an adopting repository, and `/port:analyze` is what fills one in from a codebase.
 
 ## Working on the desktop app
 
