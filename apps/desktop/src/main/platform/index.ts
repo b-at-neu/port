@@ -10,8 +10,8 @@ export { createPathOps, pathOps } from './paths'
 export type { WhichEnv, WhichOptions, WhichPlatform, WhichResult } from './which'
 export { createWhich, which } from './which'
 
-export type { CommandResult, KnownCommand, RunCommandOptions, RunExecutableOptions, Spawner, SpawnOutcome, SpawnParams } from './run'
-export { KNOWN_COMMANDS, runCommand, runExecutable } from './run'
+export type { CommandResult, KnownCommand, RunCommandOptions, Spawner, SpawnOutcome, SpawnParams } from './run'
+export { KNOWN_COMMANDS, runCommand } from './run'
 
 export type { GitLinesResult, GitOptions, GitRepoRootResult } from './git'
 export { git, gitLines, gitRepoRoot, parsePorcelainStanzas, splitNul } from './git'

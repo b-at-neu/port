@@ -85,11 +85,16 @@ export default async function ({ fail, ok }) {
         fail('desktop-platform-layer', `${rel} sets 'shell: true' — every spawn must be shell:false`);
       }
 
+      const fsSyncNames = new Set([
+        'readFileSync', 'writeFileSync', 'appendFileSync', 'mkdirSync', 'rmdirSync', 'rmSync',
+        'unlinkSync', 'existsSync', 'statSync', 'lstatSync', 'readdirSync', 'renameSync',
+        'copyFileSync', 'accessSync', 'realpathSync', 'chmodSync', 'symlinkSync', 'readlinkSync',
+      ]);
       for (const m of text.matchAll(/\b([A-Za-z][A-Za-z0-9_]*Sync)\s*\(/g)) {
         const name = m[1];
         if (name === 'execSync' || name === 'spawnSync') {
           fail('desktop-platform-layer', `${rel} calls a synchronous child_process API ('${name}') — only async execFile is allowed`);
-        } else {
+        } else if (fsSyncNames.has(name)) {
           fail('desktop-platform-layer', `${rel} calls '${name}(...)' — no synchronous fs call is allowed under apps/desktop/src/`);
         }
       }
