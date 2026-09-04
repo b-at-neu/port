@@ -40,6 +40,7 @@ This is **this repository's own** standards document, not a template — `plugin
 | `apps/desktop`'s `LABEL_KEYS` ↔ `labels.json` | "Desktop app's LABEL_KEYS matches labels.json, both directions" |
 | The shell-discipline block ↔ its canonical copy in PIPELINE.md | "Shell-discipline block stays byte-identical everywhere it fires" |
 | `ARCHITECTURE.md`'s map ↔ the real tree | "Repository map covers the real tree, both directions" |
+| `.github/workflows/*.yml` ↔ `plugins/port/templates/*.yml` | "Workflow copies stay rendered from their templates" |
 
 **If a change introduces a further copy of anything, it introduces its pin in the same commit.** A comment asking a future reader to remember is not a pin.
 
