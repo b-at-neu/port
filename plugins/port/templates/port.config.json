@@ -8,7 +8,9 @@
   },
   "commands": {
     "bootstrap": [],
-    "checks": []
+    "checks": [],
+    "artifacts": null,
+    "worktrees": null
   },
   "docs": {
     "engineering": null,

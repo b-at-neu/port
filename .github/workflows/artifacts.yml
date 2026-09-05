@@ -1,0 +1,51 @@
+# Layer 2 of the testing loop: a `gh`-driven pass over real pull requests,
+# asserting the same artifact patterns `check` does at write-time.
+#
+# NEVER register this as a required status check. It only runs on `labeled`, so
+# requiring it would leave the check pending forever on every pull request that
+# is never labelled `approved` — and a pending required check surfaces nothing
+# about why, which is strictly worse than a failing one.
+#
+# It runs once, at the end: a pull request reaching `approved` is the moment its
+# artifacts are complete, so that is when asserting them is worth anything.
+
+name: Artifacts
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'Pull request number to audit (blank audits the 5 most recent)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+
+jobs:
+  audit-artifacts:
+    runs-on: ubuntu-latest
+    # On `labeled`, only when the pull request has just reached `approved` and is
+    # one the pipeline owns. Everything else gets no run at all, which is fine —
+    # see the warning above about never requiring this check.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.label.name == 'approved' &&
+       contains(github.event.pull_request.labels.*.name, 'claude'))
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Audit pipeline artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event_name == 'workflow_dispatch' && inputs.pr || github.event.pull_request.number }}
+        # $PR is deliberately unquoted: a blank dispatch input must expand to no
+        # argument at all, which is how the script enters sweep mode.
+        run: node plugins/port/templates/artifacts.mjs audit $PR

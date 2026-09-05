@@ -8,7 +8,11 @@ Agents and skills reference it as `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md`, whic
 
 ## Configuration
 
-Everything repository-specific lives in `.claude/port.config.json`, committed alongside the repository’s Claude settings. Agents read it with the Read tool, so it travels into worktrees and is reviewable in pull requests. Field reference: `schema/port.config.schema.json`.
+Everything repository-specific lives in `.claude/port.config.json`, committed alongside the repository’s Claude settings, so it is reviewable in pull requests. Field reference: the `$schema` URL that `templates/port.config.json` already carries.
+
+**How each agent reads it depends on its worktree.** `plan-agent` and `review-agent` run without `isolation: worktree`, so `.claude/port.config.json` is on disk and they read it with the Read tool. `impl-agent` and `revise-agent` run under `isolation: worktree`, whose initial checkout is **not trustworthy** — confirmed by direct inspection, it can land on an unrelated, stale ref (`origin/main`, pinned to a commit predating this repository's `.claude/` directory) rather than the repository's actual default branch, regardless of what `branches.integration` says. Reading local `HEAD` there fails exactly like a missing file. Both agents instead resolve the remote's real default branch live (`git remote set-head origin --auto`), fetch it, and read `git show origin/HEAD:.claude/port.config.json` — the committed blob out of the object store, independent of whatever the worktree happened to check out. `/port:implement`'s own worktrees are a full `git worktree add … origin/<integration>` and do carry `.claude/` on disk, so that skill's session reads it with the Read tool as usual.
+
+**This means the repository's default branch must itself carry a current `.claude/port.config.json`.** It is the only ref `impl-agent` and `revise-agent` can resolve before they have read any config at all — they cannot ask `branches.integration` which branch to read, because that field lives in the config they have not read yet. The practical consequence: a config change merged only to `<integration>` does not reach these two agents until it also reaches the default branch, whether directly or through the repository's normal release flow. A repository whose default branch lacks `.claude/port.config.json` entirely is reported as unmanaged, and dispatch halts.
 
 Throughout this document:
 
@@ -29,7 +33,7 @@ claude          # open a session (haiku recommended for the cockpit)
 /port:pipeline  # start the cockpit
 ```
 
-Then talk to it: `work on #142` · `scope out a notifications feature` · `status` · `pause #142` · `retry #142` · `drain` · `resume` · `stop #142`.
+Then talk to it: `work on #142` · `scope out a notifications feature` · `status` · `pause #142` · `retry #142` · `unblock #142` · `drain` · `resume` · `stop #142`.
 
 ## The flows
 
@@ -70,15 +74,100 @@ Ownership is the second dimension of pipeline state: **labels say what stage an 
 
 The **double-dispatch race is known and unfixed**: the trigger-to-in-flight label swap happens inside the agent after spawn, so a check-then-act window of tens of seconds remains. Disjoint assignee sets avoid it in practice; closing it properly means moving the swap into the cockpit, before the `Agent()` call.
 
+### The tick's cost and clock
+
+A tick used to cost ~15 GitHub round trips — one `gh issue list`/`gh pr list` per label, plus per-item follow-ups for mergeability, reviews, and check rollups — most of it pure polling against sets that overlap heavily (the unowned sweep re-fetched items the trigger queries had already returned). **The tick collapses to one `gh api graphql --include` call**, one aliased query per set the tick needs (`skills/pipeline/SKILL.md` → "Tick procedure" names every alias), at a measured cost of **~12 points against the 5,000/hour budget** — headroom is not a constraint at any pacing rung.
+
+**Failure and truncation are fail-closed on actions, never on reporting.** `gh api graphql` exits non-zero whenever GraphQL's `errors` array is present, even when `data` is still usable — exit status alone must never be read as "the tick learned nothing":
+
+- `errors` present, `data` usable → only the aliases named in `errors[].path` are unavailable; every other alias in the same response is trustworthy.
+- No `data` at all, or the call errors with no parseable JSON → a **blind tick**: dispatch nothing, run no hygiene, reset nothing, and never claim "all clear" — but still schedule the next wakeup, at the pacing floor.
+- A connection's `totalCount` exceeds its `nodes` length → that set is **truncated, not complete**: act on what came back, never report the stage as empty.
+
+**Ownership moved from the query to the response.** Dropping the per-alias assignee filter is what makes the unowned sweep derivable from the same call rather than a second round trip — every issue and pull-request node now carries `assignees`, and the cockpit partitions client-side against `viewer.login`. The rail itself is unchanged: **an item whose assignees do not include the viewer is never acted on, only reported.**
+
+**The clock is the `Date:` response header**, read via `--include` on the same call. GitHub's GraphQL schema exposes no server time, and no allowlisted command emits one, so this is the only authoritative "now" the session has — at negligible extra cost (~25 header lines), which the collapse from ~15 calls to 1 more than pays for. It is what makes the resume line possible: a session that stalled or was closed compares this tick's header against the last one it recorded and, on a material overshoot, treats the tick as changed rather than silently assuming nothing happened while it was gone.
+
+**`.temp/tick-state.md` is the memory the collapse needs and the old per-tick queries never did.** One artifact, rewritten whole each tick, carrying: the clock (`Last tick`, `Scheduled`), the pacing ladder's own state (`Cadence step`, `No-change ticks`), the denial log's read offset (`Denials consumed`), and the three change-only reports' remembered sets (`Announced approved`, `Unowned reported`, `Ungated reported`, `Worktrees reported`, `Uncorrelatable announced`). Gitignored, and — like `.temp/dispatch-log.md` — a `Repo` header naming a different repository is treated as absent, never trusted.
+
+**The pacing ladder replaces a two-speed rule that measured as one speed.** The old rule was binary — any agent in flight or item mid-pipeline polls every 270s, fully idle polls every 1500s — and in a 27-tick, 25-hour observed run, 26 of 27 wakeups landed at 270s: a tick with one long `review-agent` in flight polled every 4.5 minutes waiting for a completion notification that arrives on its own regardless, because background-agent completions wake the session between scheduled ticks. The fix separates two different questions the old rule conflated: *is something running* (irrelevant to polling need, since completions are event-driven) and *will anything move without a human* (the real reason to poll fast). **The ladder: floor 270s with no backoff whenever something will move on its own; otherwise back off one rung per consecutive no-change tick, 270 → 540 → 1080 → 1800, resetting to the floor on any observed change.** An hour-of-quiet shutoff was considered and explicitly rejected: **the cockpit must never stop scheduling wakeups on its own** — it is the only dispatcher, and a `ready` label applied while it is silent would never be picked up. The cost: worst-case pickup latency for a human label change rises from 4.5 to 30 minutes, and only in the fully-idle, fully-backed-off state — the ladder only backs off once nothing can move without a human, and the first observed change resets it to the floor, so the delay is bounded by how long the operator was away rather than by the pipeline's own state.
+
+### File contention
+
+Concurrency is otherwise correct and desirable — the account's usage window is time-based, not concurrency-based, so more agents running inside one window is strictly better. The one thing dispatch must never do is start two plans that write the same file at the same time: whichever pull request merges first invalidates the other's rebase, and the loser escalates to `<labels.needsHuman>` on a conflict a human never needed to see, because the information to prevent it — each plan's own `## Changes` file list — was sitting in the issue body unread.
+
+**The occupied set.** Before dispatching `impl-agent` (step 4 of the tick), build the union of every in-flight item's claimed files: every `<labels.inProgress>` issue's `## Changes` block, plus every open `<labels.prOpened>` issue's — an **open** issue at that label is exactly "a pull request exists for it and has not merged," so it is the whole unmerged-branch set without a second query for pull request state.
+
+**The gate.** A `<labels.planApproved>` candidate whose claimed files overlap the occupied set is **held**, not dispatched — reported every tick with the conflicting item and the contended path, never silently skipped (a silent hold is the same invisibility #67's orphaned worktree taught this project to avoid). It dispatches automatically once the conflicting item's pull request merges or closes; no operator action required. Non-overlapping candidates dispatch freely, so throughput for genuinely independent work is unchanged.
+
+**Fewest-conflicts-first.** Sort the surviving (non-held) candidates ascending by how many *other survivors* they overlap, and dispatch in that order, adding each dispatched candidate's claimed files to the occupied set as you go — so a ticket touching one contended file is not stuck behind one touching five, and a later survivor that now overlaps an earlier one's freshly-claimed files is held this same tick.
+
+**Fail-open on an unstructured plan.** A plan with no `## Changes` file block (typically one written before this contract landed) dispatches **unchecked**, with a one-line warning — silently holding every unstructured plan would stall the pipeline harder than the collision this section exists to prevent.
+
+**The gate applies to `impl-agent` dispatch only.** `plan-agent` and `review-agent` are read-only, so they claim nothing. A `revise-agent` dispatch is for a branch that already exists and rebases itself on its own turn — holding it would stall an already-open pull request rather than prevent a new collision, so it is never gated here.
+
+**The hold is derived every tick, never stored.** It is recomputed from live labels and plan bodies on every pass, so it cannot go stale and cannot strand an item the way an ad-hoc hold once did. Two alternatives were considered and rejected:
+
+- **A `held` label** — a new vocabulary entry no already-`/port:init`-ed repository has until re-run, and a second place the truth lives that can strand an item exactly as an unreleased ad-hoc hold once did.
+- **GitHub's native `blockedBy` graph** — issue-to-issue only, and it would overwrite the real dependency record `/port:scope` writes with a transient scheduling fact.
+
+**The decision, stated literally: a hold is derived every tick from live labels and plan bodies, never a new label and never GitHub's dependency graph.** A `<labels.planApproved>` item dispatches only when no in-flight item's plan claims the same file.
+
+### Worktree lifecycle
+
+A worktree is created by the harness (`agent-<hash>`, for a dispatched stage) or by `/port:implement` (`impl-<n>`, for a session-required ticket) — never by the cockpit itself, which only ever reads and reclaims. #62 established that per-tick removal was announced but never actually performed; the fix (#144) moves reclamation into a shipped script, `templates/worktrees.mjs`, addressed through `commands.worktrees` — one deterministic call whose stdout *is* the report, rather than prose aimed at the cockpit's own model.
+
+**Reclaimed automatically, no confirmation needed:** a worktree whose correlated issue or pull request is closed or merged (`done`), or whose `HEAD` holds nothing not already on the integration branch (`no-work` — the residue no correlation rung can name, but safe to reclaim regardless, since nothing would be lost). The cockpit runs this at startup (reconciling anything accumulated while it was not running) and every tick — both the general sweep, capped per tick, and a targeted `--issue <n>` reclaim the moment that item's pull request is confirmed merged or closed, so the acceptance criterion is "the same tick that reconciles the merge removes it," not "eventually."
+
+**Reported, never force-removed automatically:** `locked` (a deliberate statement by a human or the harness — the report names the exact unlock command, never auto-unlocked), `dirty` (uncommitted changes a force-remove would destroy), and `unresolved` (no correlation rung resolved a number, and `HEAD` is not an ancestor of the integration branch — never guessed as either done or safe). `/port:worktree-clean` is the interactive front end for exactly these three, plus force-deleting an `orphan-dir` — an untracked directory beside a registered worktree, which the script never deletes on its own.
+
+**Correlation, first hit wins:** the branch's upstream (`branch.<B>.merge`, written by `git push -u`), the branch name (`^(\d+)-`), the directory basename (`^impl-(\d+)$`), or the `HEAD` commit's subject (`^#(\d+)\b`, never `#0`). Deliberately redundant — a detached worktree carries no upstream, so it falls through to the commit-subject rung; no single rung is load-bearing.
+
+**Never fetches.** `merge-base --is-ancestor` against `origin/<integration>` when the remote-tracking ref exists locally, else the local `<integration>` branch — a stale ref only makes `no-work` *under*-report, never over-report, which is the safe direction for something that removes files.
+
 ### Why background dispatch needs care
 
-A non-allowlisted command must **auto-deny** (never prompt the human), or every stray command interrupts the operator. Stage agents therefore run **`permissionMode: dontAsk`** (auto-deny anything not allowlisted, no prompt) and the **cockpit session must run in `default` mode** — a parent in `acceptEdits`, `bypassPermissions`, or `auto` overrides the subagent's `dontAsk`, and the prompts start surfacing to the operator again. Because `dontAsk` only runs allowlisted actions, the allowlist must also grant **`Edit(**)` and `Write(**)`** so impl and revise can edit source at all; file edits are not auto-accepted under `dontAsk`.
+A non-allowlisted command must **auto-deny** (never prompt the human), or every stray command interrupts the operator. **A `PreToolUse` guard hook is what denies** — `${CLAUDE_PLUGIN_ROOT}/hooks/agent-guard.mjs`, registered on both `Bash` and the write tools (`Edit`/`Write`/`NotebookEdit`). It identifies a dispatched subagent from the hook payload (`agent_type`/`agent_id`, the transcript path, or a cwd under an `agent-<hash>` worktree — any one signal is sufficient; `/port:implement`'s own `impl-<n>` worktrees deliberately do not match, since that skill runs in an operator's session), and for a subagent call that misses the repository's allowlist (Bash) or targets a `sessionRequiredPaths` path (a write), it returns an explicit `permissionDecision: "deny"`. That decision is independent of the parent session's permission mode — no dialog can reach the operator regardless of whether the cockpit is running `default`, `acceptEdits`, `bypassPermissions`, or `auto`.
 
-The model is **broad allow, authoritative deny**: allow whole dev-command categories, and use the `deny` list as the real safety surface for dangerous or interactive commands. Deny beats allow at every scope. A worktree is a checkout of `<integration>`, so it carries the *committed* settings — **permission changes take effect for dispatched agents only after they merge.**
+Stage agents still declare **`permissionMode: dontAsk`** in their frontmatter — that stays as declared intent and a second line of defence, but it has never been observed denying anything on its own; the guard hook is what actually does. **Run the cockpit session in `default` mode anyway** — not for the deny, but so *your own* edits are not auto-accepted and any residual dialog (a harness-level case the guard hook does not cover) is visible rather than silently approved. Because dispatched agents edit source, the allowlist must also grant **`Edit(**)` and `Write(**)`** so impl and revise can edit files the guard hook does not deny.
 
-Agents also run with **`disallowedTools: Agent`** (no nested subagents), a **`maxTurns`** backstop, and the rule to **stop and emit `BLOCKED:`** rather than improvise when a command is auto-denied.
+The model is **broad allow, authoritative deny**: allow whole dev-command categories, and use the `deny` list as the real safety surface for dangerous or interactive commands. Deny beats allow at every scope. A worktree is a checkout of `<integration>`, so it carries the *committed* settings — see "What a dispatched agent can see" for the full lag this creates, plugins included.
 
-**Denial visibility:** a `PreToolUse` Bash hook appends every non-allowlisted command to a gitignored `.agents/denials.log`; the cockpit reads it each tick and reports clusters, so systemic denials are visible without prompting. Logging only — it never blocks; `dontAsk` does the denying.
+Agents also run with **`disallowedTools: Agent`** (no nested subagents), a **`maxTurns`** backstop, and the rule to **stop and emit `BLOCKED:`** rather than improvise when a command is denied. That instruction is reachable for the first time now: the guard hook's deny reason tells the agent to do exactly that, and the agent survives the denial to act on it, rather than stalling on an unanswered prompt.
+
+**Cockpit rules.** The guard hook is not subagent-only: three rules apply to **any** caller — the cockpit's own session included. Two of them exempt an `/port:implement` operator worktree (`impl-<n>`, exempt because that skill's whole premise is running unguarded); the third deliberately does not. The first two exist because the cockpit itself violated the rail it was supposed to follow, under the same standing incentive to keep the pipeline moving:
+
+- **Loop rule** (#120) — a `gh`/`git` call wrapped in a shell `for`/`while`/`until` loop is denied. Purely syntactic: a `for`/`while`/`until` keyword and a `do` keyword, each at a shell command position, on the command with every quoted span blanked out first (so prose inside a `-b`/`-m`/`--jq` argument, e.g. `"a loop for each item to do"`, can never trip it). One dead turn inside such a loop left a split state machine across three issues for four days, because one iteration lands and the rest die with the turn.
+- **Gate rule** (#138) — a `gh pr edit`/`gh issue edit` call removing `<labels.needsHuman>` is denied unless a recent operator message names that item (`#N`, or `N` standalone, in one of the last 5 user messages of the calling session's own transcript). The cockpit cleared its own `needs human` escalation thirteen minutes after `revise-agent` set it, unprompted and on a false justification (*"now that the conflict is resolved"* — nothing had moved), so the gate needed a check the same machine could not talk itself past. An unreadable or absent transcript is treated as **unverifiable, not unauthorised** — it still allows the call, but logs it as `gate-clear` rather than silently as an `allow`, so an unverified clear is auditable rather than invisible.
+- **Install rule** (#144) — a `claude plugin install`/`uninstall`/`marketplace add`/`marketplace remove` call from a cwd anywhere under `.claude/worktrees/` is denied, for **any** caller, `impl-<n>` included. Every install scope resolves to the same `installPath` (see "Install identity" below), so an install performed from inside any managed worktree — a dispatched agent's, or an operator's own `/port:implement` worktree — silently repoints what **every** session on the machine loads, and keeps doing so after that worktree is gone. This is the one cockpit-class rule that does **not** exempt `who.isOperatorWorktree`: `/port:implement`'s premise is that the *worktree* is isolated, which an install specifically is not, since the blast radius reaches every other session regardless of who typed the command.
+
+The loop and gate rules check `who.isOperatorWorktree` first and allow immediately when it is true — an `/port:implement` session's own loop or gate-label edit is never in scope for either. The install rule checks `who.isManagedWorktree` instead — any `.claude/worktrees/` cwd, dispatched-agent or operator — and never exempts it.
+
+**Install identity.** Install records carry a scope (`user`/`project`/`local`) and a commit (`gitCommitSha`), but every scope resolves to the same `installPath` on disk — a directory-sourced plugin is *copied* into the cache at install time, so the path cannot tell a stale copy from the working tree it came from, and an unbumped manifest `version` claims the same string regardless of which commit it holds. The only test that cannot be fooled is diffing the cache directory against the plugin source in the working tree; silence means the running plugin is the working tree. The cockpit's startup preflight resolves and prints the applicable record's commit and scope (see `skills/pipeline/SKILL.md` → "Running plugin identity") precisely so a session never has to fall back to that diff by hand.
+
+### What a dispatched agent can see
+
+Committed `.claude/settings.json` and `.claude/port.config.json` both lag by one merge: a worktree is cut from `<integration>`, so whatever is on disk on some other branch — including the main checkout's own branch — is invisible to it until that branch merges. The cockpit's startup preflight (`skills/pipeline/SKILL.md`) is what turns this from a silent trap into a reported one: it refuses to tick when the main checkout itself carries neither file, and warns when it is on a non-integration branch.
+
+A **plugin** addition needs three things lined up, not just the merge:
+
+- **Declared** — `enabledPlugins` merged to `<integration>`.
+- **Cached** — the declared `version` present under `~/.claude/plugins/cache/`, a **machine-local** copy no git operation in the repository touches.
+- **Loaded** — the cockpit session started after both of the above.
+
+**Merging declares a plugin; it does not install one.** Whether a dispatched subagent re-resolves project settings from its worktree or inherits the parent session's plugin set does not change this sequence, because the **cached** condition is machine-level either way — verified empirically against a GitHub-sourced install, and the three gates are independent.
+
+The ordering rule that follows: **a plugin addition is its own prerequisite ticket.** Land it, merge it, refresh the machine's plugin install so the declared version is actually cached, restart the cockpit — then dependent tickets, which declare the plugin ticket via `blockedBy` (the cockpit already warns about unmerged blockers at opt-in).
+
+### The running plugin, and when it goes stale
+
+The lag above is one merge, for a **dispatched agent's** worktree. This is the same lag one level up, for the **cockpit itself** — and here it compounds, because a self-hosting repository's cockpit shipping a fix is never the cockpit running it. A merge to `<integration>` is inert for the running session until the install is refreshed — the declared version pulled into the machine's plugin cache — and the session is restarted; until then the cockpit keeps following the rails it loaded at startup, whatever `<integration>` now says.
+
+The startup preflight (`skills/pipeline/SKILL.md` → "Running plugin identity") resolves and prints the installed commit and scope so this is visible rather than silent, and computes **staleness relative to the remote** on top of that: how many commits the installed commit is behind the comparison target (a GitHub marketplace source's `ref`, or `<integration>` for the self-hosting case), recomputed on every tick because the count is usually `0` at startup and grows *during* the session as the target ref moves. A `0 → non-zero` crossing is announced once; every tick after that carries a one-clause staleness reminder on its closing line. Staleness is informational — nothing breaks while a session runs a stale copy, and the count is never computable without a resolvable comparison target, in which case the line says so rather than printing a wrong number.
+
+**Denial visibility:** the guard hook logs every decision it makes — never an `allow` — to a gitignored `.agents/denials.log`. Each line is four tab-separated fields: `<iso8601>` `<decision>` `<who>` `<command-or-path>`, where `decision` is `deny`, `miss` (a non-subagent call that missed the allowlist — logged for visibility, never denied), `gate-clear` (an allowed, authorised removal of `<labels.needsHuman>` — **not a denial**, the audit record for a human gate being cleared), or `hook-error` (an internal failure, logged so a fail-open silently-broken hook is still visible); `who` is `port:<agent_type>` when the agent's type is known, else `subagent:<signal>`, else `session:<session_id>`; and `command-or-path` is whitespace-collapsed and truncated. A `deny` line can now carry a `session:` actor — the cockpit's own loop or gate rule firing against its own session, not a stage agent's allowlist miss, and worth reading differently: it means a rail held, not that a permission is missing. The cockpit reads it each tick and reports clusters of `deny` lines, breaking out any `session:`-actor line separately. A denied command now returns with the guard hook's reason rather than just erroring.
+
+**Known gap — a native `permissions.deny` match is not logged.** The guard hook only ever sees `PreToolUse`, and only ever writes a line when *its own* classifier reaches `deny` or `miss` for one of its two cases (allowlist-missing Bash, a write to a `sessionRequiredPaths` path). A command that instead matches an explicit entry in `.claude/settings.json`'s native `permissions.deny` list — independent of the guard hook's own logic — is still denied (deny beats allow at every scope, per "The model is broad allow, authoritative deny" above), but nothing writes to `.agents/denials.log` for it: the hook that used to log that event (`PermissionDenied`) was removed with this change, and nothing replaces it. That class of denial is real but currently invisible to the cockpit's cluster reporting.
 
 ### File-based GitHub I/O
 
@@ -89,52 +178,63 @@ Agents never pass large markdown (plans, reviews, comments) as an inline `--body
 Canonical rules every stage agent follows. A Bash command matches the allowlist only if it **starts with an allowlisted binary AND parses cleanly**; otherwise it falls through to a prompt that a background agent auto-denies.
 
 - **Check the repository's `.claude/settings.json` for what is actually allowed** rather than guessing from memory. The base allowlist grants `gh`, `git`, the repository's package manager, a set of read-only inspection commands, and `Edit(**)`/`Write(**)`; `extraAllow` adds anything else the repository needs.
-- **Content emitters are deliberately absent from the allowlist** — `echo`, `cat`, `head`, `tail`, `cut`, `diff`, `true`. Their whole purpose is emitting bytes to stdout, and a redirect turns each into a clean file-write primitive. Use the Read tool instead of `cat`/`head`/`tail`, and Write/Edit instead of `echo >`. See "Known gap" under the permission model for why this is the control rather than a deny rule.
-- **Inspect with tools, not the shell** — Read, Grep, and Glob are the default for reading, searching, and listing (cheaper, gitignore-aware, skips dependency directories). The allowlisted shell commands exist for what those tools cannot do — piping, chaining, one-off counts — not as a first resort. Scope Glob to source directories; prefer Grep over a root-level `**/*`, which descends dependency directories and times out.
-- **Run commands bare** — no `cd … && …` and no `ENV=val cmd` prefix; both move the start token off the binary, so `GIT_EDITOR=true git …` misses `Bash(git *)`. For a non-interactive git editor use `git -c core.editor=true …`. The same applies to multi-line Bash calls, `for`/`while` loops, and subshells — each moves the first token off the allowlisted binary exactly as `cd` does, so issue one command per Bash call. **Never `sh -c '…'` or `bash -c '…'`** — a generic command-execution escape hatch that could smuggle any denied command through as a string argument.
-- **Quote every path argument.** Parentheses and brackets are shell-special, and appear in real source paths. Use cwd-relative paths with forward slashes, never an absolute or base-repository path. `git add -A` avoids enumerating them.
-- **Write files with the Write and Edit tools** at cwd-relative paths — never shell redirection (`cat >`, `printf >`, `echo >`, heredocs). Delete tracked files with `git rm`.
-- **GitHub I/O is file-based** — large markdown goes to `.temp/` via `gh … --body-file`/`--input`, never inline `--body "…"`. Extract data with `gh … --json … --jq '…'`, never piped to an interpreter.
-- **When auto-denied, stop — do not improvise.** A denied command just errors, with no prompt, under `dontAsk`. Do not retry or route around it: **emit `BLOCKED: <exact denied command + what you needed>`** so the cockpit surfaces it. Never spawn subagents.
+
+<!-- shell-discipline:begin -->
+**Shell discipline — every Bash call.** The allowlist matches the **whole command string from its first token**, so a command that chains or pipes into anything else fails the match no matter what its parts do.
+
+- **One command per call.** No `;`, `&&`, `||`, `for`/`while`, `if`/`[`, subshells, multi-line scripts, or a pipe into a non-allowlisted binary. Never `sh -c '…'` or `bash -c '…'`.
+- **Start with an allowlisted binary, bare.** No `cd …` prefix and no `ENV=val` prefix — `GIT_EDITOR=true git …` misses `Bash(git *)`; use `git -c core.editor=true …`.
+- **Never allowlisted, in any repository** — `echo`, `cat`, `head`, `tail`, `cut`, `diff`, `which`, `tee`, `xargs`, `base64`, `jq`, `sed`, `awk`, `python3`, `node -e`, `perl`. A denial there means *use a tool*, not retry with different flags. Probing the host or the Claude install is never part of a stage's job; if you genuinely need an unlisted binary that is a `BLOCKED:`, not something to route around.
+- **Read, search, and list with Read, Grep, and Glob.** `grep`, `find`, `ls`, and `wc` *are* in the base allowlist, but the tools are cheaper and gitignore-aware. List a directory → **Glob**, scoped to source directories, never a root-level `**/*`; read or count a file → **Read**; search or test for text → **Grep**.
+- **Quote every path argument**, cwd-relative with forward slashes. **Write files with Write and Edit** — never a redirect or heredoc; delete tracked files with `git rm "<path>"`.
+- **Sanctioned recipes** for what the tools cannot reach:
+  - filter JSON → `gh … --json … --jq '…'`, never `| jq` or a piped interpreter.
+  - a file at a ref that is not checked out → `gh api "repos/<repo>/contents/<path>?ref=<sha>" -H "Accept: application/vnd.github.raw"` — one command, no pipe, no `base64 -d`.
+  - large markdown to GitHub → Write it under `.temp/`, then `--body-file` / `--input`.
+<!-- shell-discipline:end -->
+
+- **When denied, stop — do not improvise.** A denied command returns a hook denial with a reason, not a prompt — the guard hook decided, not you. Do not retry or route around it: **emit `BLOCKED: <exact denied command + what you needed>`** so the cockpit surfaces it. Never spawn subagents.
 
 ## Label lifecycle
 
-Rule: **every stage agent's first action is swapping its trigger label for its in-flight label.** Absence of a trigger label means the cockpit skips the item, so a tick can never double-dispatch. A crashed agent leaves the item parked in an in-flight label; recovery is re-applying the trigger label (`retry #N`).
+Rule: **every stage agent's first action is swapping its trigger label for its in-flight label.** Absence of a trigger label means the cockpit skips the item, so a tick can never double-dispatch. **An in-flight label means a stage *claimed* the item, never that an agent is still alive** — a crashed or killed agent leaves the label in place with nothing running. Liveness is a separate question, answered by `TaskList`, not by the label; see "Liveness" under Escalation. Recovery either way is re-applying the trigger label (`retry #N`).
+
+**The `<labels.X>` placeholder is a config lookup, never a label name.** `X` is a `.claude/port.config.json` `labels` key from the `Config key` column below; the resolved name a `gh` call actually uses is `labels[key] ?? default` — the repository's override when `labels` sets one, otherwise the `Label` column's default. So `<labels.planApproved>` resolves to `plan approved` in a repository with no override, never to the literal string `planApproved`. Because `gh issue list --label <unknown>` returns `[]` with exit code 0, a component that types the key instead of the resolved name gets a silently empty result, never an error — resolve every name from this table (or the live config) before issuing a `--label` argument.
 
 ### Issue labels
 
-| Label | Set by | Type | Meaning |
-| --- | --- | --- | --- |
-| `claude` | Cockpit (at opt-in) | marker | The pipeline is handling this ticket |
-| `ready` | Cockpit (at opt-in) | trigger | Dispatch `plan-agent` |
-| `planning` | `plan-agent` | in-flight | Plan being researched and written |
-| `plan review` | `plan-agent` | gate | Plan written — awaiting human approval in the cockpit |
-| `plan changes requested` | Cockpit (human feedback) | trigger | Dispatch `plan-agent` in revision mode |
-| `plan approved` | Cockpit (human approval, or `auto plan`) | trigger | Dispatch `impl-agent` |
-| `auto plan` | Cockpit (at opt-in) | marker | Plan gate skipped: `plan review` auto-approved |
-| `in progress` | `impl-agent` | in-flight | Implementation underway |
-| `pr opened` | `impl-agent` | terminal | Pull request open; remaining state tracked there |
-| `blocked` | `impl-agent` | gate | Needs a human decision; details in an issue comment |
+| Config key | Label | Set by | Type | Meaning |
+| --- | --- | --- | --- | --- |
+| `marker` | `claude` | Cockpit (at opt-in) | marker | The pipeline is handling this ticket |
+| `ready` | `ready` | Cockpit (at opt-in) | trigger | Dispatch `plan-agent` |
+| `planning` | `planning` | `plan-agent` | in-flight | Plan being researched and written |
+| `planReview` | `plan review` | `plan-agent` | gate | Plan written — awaiting human approval in the cockpit |
+| `planChangesRequested` | `plan changes requested` | Cockpit (human feedback) | trigger | Dispatch `plan-agent` in revision mode |
+| `planApproved` | `plan approved` | Cockpit (human approval, or `auto plan`) | trigger | Dispatch `impl-agent` |
+| `autoPlan` | `auto plan` | Cockpit (at opt-in) | marker | Plan gate skipped: `plan review` auto-approved |
+| `inProgress` | `in progress` | `impl-agent` | in-flight | Implementation underway |
+| `prOpened` | `pr opened` | `impl-agent` | terminal | Pull request open; remaining state tracked there |
+| `blocked` | `blocked` | `impl-agent` | gate | Needs a human decision; details in an issue comment |
 
 ### Pull request labels
 
-| Label | Set by | Type | Meaning |
-| --- | --- | --- | --- |
-| `claude` | `impl-agent` (at `gh pr create`) | marker | The pipeline owns this pull request |
-| `ready for review` | `impl-agent` / `revise-agent` | trigger | Dispatch `review-agent` |
-| `reviewing` | `review-agent` | in-flight | Review underway |
-| `needs revision` | `review-agent` | trigger | Dispatch `revise-agent` (subject to the cycle cap) |
-| `revising` | `revise-agent` | in-flight | Fixes underway |
-| `approved` | `review-agent` | terminal | Findings are at or under the current cycle's bar; a human merges |
-| `needs human` | Cockpit / `revise-agent` | gate | Cycle cap reached without convergence, or an ambiguous rebase conflict; the pipeline stops |
-| `refresh branch` | Cockpit / human | trigger | *(`previewDatabase`)* Dispatch `revise-agent` in refresh mode |
-| `refreshing` | `revise-agent` | in-flight | *(`previewDatabase`)* Branch refresh underway; other labels are left in place |
+| Config key | Label | Set by | Type | Meaning |
+| --- | --- | --- | --- | --- |
+| `marker` | `claude` | `impl-agent` (at `gh pr create`) | marker | The pipeline owns this pull request |
+| `readyForReview` | `ready for review` | `impl-agent` / `revise-agent` | trigger | Dispatch `review-agent` |
+| `reviewing` | `reviewing` | `review-agent` | in-flight | Review underway |
+| `needsRevision` | `needs revision` | `review-agent` | trigger | Dispatch `revise-agent` (subject to the cycle cap) |
+| `revising` | `revising` | `revise-agent` | in-flight | Fixes underway |
+| `approved` | `approved` | `review-agent` | terminal | Findings are at or under the current cycle's bar; a human merges. Removed only under the `## Check evidence` carve-out — a check on it has gone red since approval |
+| `needsHuman` | `needs human` | Cockpit / `revise-agent` | gate | Cycle cap reached (unconditional — whatever the latest verdict said), an ambiguous rebase conflict, or a zero-diff review bounce (the newest review already covers the current head); the pipeline stops. Clears only via `unblock #N` — the guard hook denies any other removal, cockpit included |
+| `refreshBranch` | `refresh branch` | Cockpit / human | trigger | *(`previewDatabase`)* Dispatch `revise-agent` in refresh mode |
+| `refreshing` | `refreshing` | `revise-agent` | in-flight | *(`previewDatabase`)* Branch refresh underway; other labels are left in place |
 
 ## Stages and models
 
 | Stage | Definition | Model | Why |
 | --- | --- | --- | --- |
-| Cockpit | `skills/pipeline/` | haiku (session) | Mechanical: queries, label swaps, dispatch, relaying |
+| Cockpit | `skills/pipeline/` | haiku recommended (session) | Mechanical: one query, label swaps, dispatch, relaying — a skill cannot set the session model, so this is a recommendation the operator's own choice can override |
 | 0. Scope | `skills/scope/` | inherits session | Highest-leverage thinking; the human is in the conversation |
 | 1. Plan | `agents/plan-agent.md` | `models.plan` | Design-rich planning; quality amplifies downstream |
 | 2. Implement | `agents/impl-agent.md` | `models.impl` | Bulk of the code volume |
@@ -161,7 +261,7 @@ A `permissions.deny` pattern cannot stop an allowlisted read-only command from w
 
 **The mitigation is the allowlist itself**, which is why content emitters are excluded. The commands that remain emit search results, paths, or metadata rather than arbitrary content. **This narrows the bypass; it does not close it** — `grep -v x f > f` still strips lines, any allowed command can truncate a redirect target, and a broad `git` allow has always offered write primitives through `git apply` and `git checkout --`.
 
-So "write files with the Write and Edit tools" is a **convention agents are expected to follow, not a technical guarantee** — and `plan-agent`'s and `review-agent`'s read-only status rests on them following it. Closing it properly needs a `PreToolUse` hook that inspects the raw command string and returns a deny decision; the denial hook is logging-only and does not do this.
+So "write files with the Write and Edit tools" is a **convention agents are expected to follow, not a technical guarantee** — and `plan-agent`'s and `review-agent`'s read-only status rests on them following it. **The guard hook described above is the `PreToolUse` deny this section used to ask for** — it inspects the raw Bash command string and returns a deny decision for a dispatched subagent's allowlist miss. What it does not close: shell redirection through an *allowed* command remains ungated, since the hook (like the harness's own matching) operates on parsed command tokens, and the redirection operators are consumed by the shell layer before either ever sees them.
 
 ### CI merge gate
 
@@ -197,6 +297,15 @@ Some hosting setups give every open pull request a preview deployment backed by 
 
 The paths that trigger it come from `sessionRequiredPaths`, which defaults to `CLAUDE.md`, `.claude/**`, and `.claude/port.config.json`.
 
+### What the determination covers
+
+`plan-agent` scans the **whole plan** — `## Changes`, `## Implementation`, and `## Testing` — not just the changed-file list, because a write under `sessionRequiredPaths` is unreachable for a dispatched subagent by any route, even a transient one that gets reverted before the plan finishes. Two outcomes:
+
+- **A deliverable touch** (`## Changes` / `## Implementation`) forces the whole-plan `SESSION REQUIRED` marker.
+- **A verification-only touch** (the write appears only in `## Testing`) leaves the ticket dispatchable, and that one step is marked **operator-only** instead — `impl-agent` skips it, and it carries into the pull request's testing plan verbatim for the operator to run before merge.
+
+This closes #55: a plan whose deliverables never touched `.claude/**` but whose testing steps did was classified plainly dispatchable, and the dispatched agent died on the permission prompt the first outcome above now prevents.
+
 ### The marker
 
 One string, one rendering, both surfaces — **`SESSION REQUIRED`**, with the reason after the colon:
@@ -207,10 +316,21 @@ One string, one rendering, both surfaces — **`SESSION REQUIRED`**, with the re
 
 | Surface | Written by | Where |
 | --- | --- | --- |
-| **Issue** | `plan-agent` | First line of the plan body, before `## Overview` |
-| **Pull request** | `/port:implement` | Directly under `Closes #N` in the description |
+| **Issue** | `plan-agent` | The plan block's slot (see **Detection**) — first non-empty line under `## Implementation Plan`, before `## Overview` |
+| **Pull request** | `/port:implement` | The slot directly under `Closes #N` (see **Detection**) |
 
 The literal string `SESSION REQUIRED` is the contract — **never reword it**; the reason after the colon is free text and is the part that generalizes. **There is deliberately no label.** The marker lives in the body on both surfaces, and the cockpit reads it from the `body` field of the trigger query it already runs, so the check costs no extra call and there is nothing to keep in sync.
+
+### Detection
+
+**Slot plus form, never a body-wide substring search.** An item is session-required only when its **marker slot** holds, as its first non-empty line, the canonical rendering `> **SESSION REQUIRED:** <reason>` at the start of the line, with a non-empty reason:
+
+- **Issue slot** — the first non-empty line of the plan block, directly under the `## Implementation Plan` heading. (The plan is *appended* below the human-authored ticket, so the body's own first line is never the plan's — "first line of the body" is the wrong test.)
+- **Pull request slot** — the first non-empty line after `Closes #N`.
+
+**Both, or neither.** The words `SESSION REQUIRED` appearing anywhere else — prose explaining the mechanism, inline code, a fenced block, or the canonical rendering repeated further down — are not a marker. A ticket that *discusses* the marker (this one does) carries none at its slot and is not session-required.
+
+**Fail open.** Slot absent, empty, or holding anything other than the canonical rendering → not session-required → dispatch normally. The two failure directions are not symmetric: a false positive stalls an item forever, silently — a trigger label at rest already looks exactly like normal in-flight work — while a false negative ends in one denied edit, a `BLOCKED:` relay, and one retry. When the slot is ambiguous, resolve toward the recoverable failure.
 
 ### The route
 
@@ -228,9 +348,33 @@ The literal string `SESSION REQUIRED` is the contract — **never reword it**; t
 claude -n "#503: operator config route"   # then, in that session: /port:implement 503
 ```
 
-`-n/--name` is settable **only at launch** — a running session can neither read nor change its own name — so the cockpit's announcement hands over the command with the name pre-filled. The name always carries the **issue** number, even when the command takes a pull request number.
+A running session **can** be renamed: `/rename <name>` works, and where a session-title tool is in scope a skill can set the title itself. So the cockpit hands over the launch command with the name pre-filled as a convenience, not a necessity — an operator who already has a session open renames it rather than starting a new one. The name always carries the **issue** number, even when the command takes a pull request number.
+
+Note the asymmetry when implementing this: a session-title **tool** can be called by a skill, while `/rename` is typed by the operator. A skill can never issue the slash command itself.
 
 **Always in a worktree.** `/port:implement` never works in the main checkout, for two reasons: editing `.claude/` from the session that is *using* it mutates live configuration mid-task, and the ticket may be editing the very agent file the session is following. In a worktree the session reads its instructions from the installed plugin while every edit lands on the worktree copy, so the committed behaviour holds for the whole run.
+
+## Check evidence
+
+One shared contract, read by `review-agent` before it forms a verdict and by the cockpit before it calls a pull request merge-ready. Neither ever reads `gh pr checks`' exit code as the answer: `8` means pending, and `1` covers both "a check failed" and "no checks reported" — always re-read the rollup itself.
+
+**Read and reduce.** `gh pr view <n> --repo <repo> --json headRefOid,statusCheckRollup`. The rollup carries one entry per **event**, not per check — the approval gate alone re-runs on every `labeled`/`unlabeled` event, so a pull request that has been through a few label changes can carry five or more entries for the same check name, and reading any but the newest is reading a stale answer. **Reduce to the latest entry per check name** (`.name` for a CheckRun, `.context` for a StatusContext — read as `(.name // .context)`) by `startedAt`, falling back to `completedAt` when `startedAt` is absent. Then read `(.status, .conclusion)` for a CheckRun or `.state` for a StatusContext, via the existing `(.conclusion // .state)` fallback.
+
+**Concluded, green, and empty.** **Concluded** is `status == "COMPLETED"` (CheckRun) or `state != "PENDING"` (StatusContext). **Green** is `SUCCESS`, `NEUTRAL`, or `SKIPPED`; every other conclusion — `FAILURE`, `TIMED_OUT`, `ACTION_REQUIRED`, `STARTUP_FAILURE`, `ERROR`, `CANCELLED` — is **not evidence of passing** and blocks. **An empty rollup is pending, never green** — no checks reported is the absence of evidence, not its presence. A repository with no CI at all will therefore park every pull request here; that is a known, deliberately conservative limitation, not a bug to route around.
+
+**The one carve-out.** Only when `modules.approvalGate` is true: read `.github/workflows/approval-check.yml` (the path `/port:init` installs the module's workflow at) and take the single key under `jobs:` as the check-run name to excuse — derived from the file, never typed as a literal, so a repository that renamed the job is still correct. File absent, or the module false → **no carve-out at all, and every red check blocks.** The excused check is excluded from **verdicts and routing only** — it is always listed with its real conclusion wherever conclusions are reported. This list has **exactly one entry**; widening it is the failure this section exists to prevent.
+
+**The head must not move.** Record `headRefOid` before any wait and re-read it after. A different SHA means the evidence belongs to a different diff, and no verdict formed against the old one is valid — the caller re-reads or bails out; see `review-agent.md` step 4 for the exact exit.
+
+**Mergeability precondition, ahead of the wait.** Read `mergeable` in the same `gh pr view` call (`headRefOid,statusCheckRollup,mergeable`). `CONFLICTING` means GitHub cannot build a merge ref for this pull request, so its check rollup **never concludes** — not slowly, not eventually, never — because the workflows that would populate it never run against a diff GitHub cannot construct. Without this precondition, the empty-rollup-is-pending rule above would park a conflicting pull request through the full bounded wait and then hand it to `<labels.needsHuman>` after roughly 30 minutes, misreporting a mechanical fact (the branches diverged) as an unexplained check timeout. So `CONFLICTING` is read **before** the bounded wait and short-circuits it: no verdict is formed, no check is waited on, and the pull request routes to `<labels.needsRevision>` with a `## Rebase required` comment instead (see "Rebase required" under Output formats) — `review-agent` at its own exit, the cockpit at the dispatch gate and the approved re-verify. `UNKNOWN` never blocks this precondition: GitHub has not computed mergeability yet, which is normal on a freshly opened or freshly pushed pull request, and the caller proceeds as if `MERGEABLE` — the read itself is what triggers GitHub to compute it.
+
+**Bounded wait.** `gh pr checks <n> --repo <repo> --watch --interval 30` under a Bash timeout of `600000` ms, at most **3** times (~30 minutes total). `--watch`'s own output shape is not part of the contract — never parse it; after each wait, re-read `statusCheckRollup` directly. A timeout is a `BLOCKED:`, never a pass: a repository with genuinely slow checks parks here rather than getting a wrong answer.
+
+**The `<labels.approved>` carve-out to the never-touch rail — exactly two authorising facts.** The cockpit may remove `<labels.approved>` from a pull request **only** when it has just read, on that pull request's **current** head: a red conclusion — other than the excused check above — for a named check, **or** `mergeable: CONFLICTING`. Either fact's announcement names what it rests on: the check and its conclusion, or the conflict. These are the **sole** exceptions to the never-touch rail; neither is a general licence to revisit terminal states, and neither is a guard-hook rule — the hook cannot observe "a check went red" or "GitHub reports a conflict," so the mechanical guard here is the layer-1 prose check plus the eval cases regression-testing each, not `agent-guard.mjs`. The conflicting case comments `## Rebase required`, never `## Approval withdrawn`, which contracts to name a check.
+
+**No scheduled rebase — on demand, from `mergeable`, only.** A rebase force-pushes and re-runs every check on a pull request, so refreshing every open one whenever `<integration>` moves would multiply CI churn to prevent a condition `mergeable` already reports exactly and for free. Pull requests are therefore rebased **only** when GitHub itself reports `CONFLICTING` — at the review dispatch gate, at the approved re-verify, or inside `revise-agent`'s own rebase step — never on a schedule and never because the base "might have moved." This is a decision, not an omission: it was considered and rejected for the CI-churn cost above, and is recorded here so it is not re-litigated.
+
+**Zero-diff review.** A head SHA a `## Code Review` has already been submitted against gets no second cycle: before every `<labels.readyForReview>` dispatch the cockpit compares the newest review's `commit.oid` against the pull request's current `headRefOid` (see `SKILL.md` → "Zero-diff review gate"). Equal, with no `## Gate cleared` comment newer than that review's `submittedAt` → escalate to `<labels.needsHuman>` instead of dispatching a review that would grade a diff it already graded. A `## Gate cleared` comment newer than the review authorizes exactly one more review against the same head — the next review resets the comparison by construction. This is a head-SHA rule in the same family as "The head must not move" above, checking the other side of the same fact: that rule protects one review's evidence from going stale mid-wait; this one stops a *second* review from ever being dispatched against a diff already graded.
 
 ## Output formats
 
@@ -250,13 +394,13 @@ Every plan, review, summary, and comment is written for a human scanning fast:
 
 Appended below the ticket under a `---` then `## Implementation Plan`; revision mode replaces only that block. **Do not restate the ticket** — reference it. Fixed sections in this order; conditional ones appear **only when they apply**:
 
-- **`SESSION REQUIRED` marker** *(only when a `sessionRequiredPaths` entry is touched)* — the first line, before `## Overview`.
+- **`SESSION REQUIRED` marker** *(only when a `sessionRequiredPaths` entry is touched)* — the plan block's first non-empty line, before `## Overview` (see "Detection").
 - **## Overview** — 2–4 sentences: what, why, the approach.
-- **## Changes** — files to create or modify, one bullet each: `` `path` — one-line reason ``.
+- **## Changes** — a single fenced ` ```files ` block, one claimed path per non-blank line: `` path — one-line reason ``. The **path is the first whitespace-delimited token**; everything after the first space is a human-readable reason and is never parsed. Paths are repo-relative, forward-slashed, no leading `./`, case-sensitive. List **every** file the plan creates or modifies, including a new file at the path it will be created at — a `## Testing` step that writes a file is not a claim. **No globs** — a directory that will gain files whose names are not yet decided is listed once with a trailing `/`, which matches any path under it. Exactly one fence per plan; an absent or empty block means the plan dispatches unchecked, with a warning (see "File contention").
 - **## Implementation** — ordered `- [ ]` checkboxes, one line each; fold validation, states, and error-model notes into the step they belong to.
 - **## Data & contracts** *(only if a schema or a server-side contract changes)* — the change, and per entry point its validation and authorization.
 - **## UX states** *(only if there is a user interface)* — loading, empty, error, plus key copy.
-- **## Testing** — human-runnable manual steps as `- [ ]`, feeding the pull request's testing plan.
+- **## Testing** — human-runnable manual steps as `- [ ]`, feeding the pull request's testing plan. A step whose only reachable path is `sessionRequiredPaths` and did not already trigger the whole-plan marker takes the form `- [ ] **operator-only** — <step> (<why>)`.
 - **## Risks / notes** *(optional)* — only real, non-obvious ones.
 
 Most plans fit on one screen. No preamble, no restated goal, no empty sections.
@@ -267,16 +411,40 @@ The code review is a **real GitHub pull request review** (`gh api …/pulls/<pr>
 
 **Findings live on the threads, not in a summary.** A resolved review thread *is* the log entry — collapsed and out of the way until expanded. So a finding is never re-narrated cycle after cycle, and "what is still open" is GitHub's unresolved-conversation count.
 
-- **Review body = title plus one line.** `## Code Review — Cycle <n> · <verdict>` (keep the literal `Code Review` — the cockpit counts it), then a single counts line, e.g. `2 open — 1 🔴 Critical, 1 🟠 Medium (see inline)`. Nothing else. **Only exception:** a finding that cannot anchor to a diff line has no thread, so it goes in the body with a `blob/<headRefOid>` permalink.
+- **Review body = title plus one line.** `## Code Review — Cycle <n> · <verdict>`, `<verdict>` one of `approved`, `needs revision`, or `blocked — checks pending` (keep the literal `Code Review` — the cockpit counts it), then a single counts line, e.g. `2 open — 1 🔴 Critical, 1 🟠 Medium (see inline)`. Nothing else. **Only exception:** a finding that cannot anchor to a diff line has no thread, so it goes in the body with a `blob/<headRefOid>` permalink.
 - **Each finding is one inline comment** on a diff line: `**R<n>-<sev><id>** <emoji> — <problem>. Fix: <one line>.` Stable ID `R<cycle>-<sev><id>`; severities 🔴 Critical · 🟠 Medium · 🟡 Low · ⚪ Nit. Inline comments are **new actionable findings only** — never status.
-- **Escalating bar — what blocks rises with the cycle.** Pass 1 polishes everything, later passes converge: **cycle 1** any finding blocks; **cycle 2** Low and above (Nit does not); **cycle 3+** Critical and Medium only. A nit introduced during a revision cannot re-trigger at cycle 2 or later. The cockpit's cap is `reviewCycleCap` with Critical or Medium still open, which routes to `needs human`.
+- **Escalating bar — what blocks rises with the cycle.** Pass 1 polishes everything, later passes converge: **cycle 1** any finding blocks; **cycle 2** Low and above (Nit does not); **cycle 3+** Critical and Medium only. A nit introduced during a revision cannot re-trigger at cycle 2 or later. The cockpit's cap is `reviewCycleCap` cycles, **unconditional** — it fires whatever the latest verdict said, which routes to `needs human`. A red required check, other than the `## Check evidence` carve-out, is **always** Critical, at every cycle — never downgraded to fit a later cycle's bar.
 - **Inline anchoring.** A comment is accepted only on a line **in the diff** — map it from `gh pr diff` hunk headers (added and context lines → `side:"RIGHT"`, new-version line; deletions → `side:"LEFT"`, old-version line). If the reviews API returns 422 for an unresolvable line, **resubmit with `comments:[]`** and list those findings in the body with permalinks, so a review always lands.
-- **Revision resolves threads, it does not summarize.** After pushing fixes, for each **fixed** finding reply `Fixed in <sha>` on its thread and resolve it via GraphQL (`addPullRequestReviewThreadReply` then `resolveReviewThread`), matched by ID; **genuinely-skipped** threads get a one-line reason and stay open. Then one short comment per cycle, or none: `## Revision — Cycle <n>` plus a single line `fixed <ids> · skipped <ids> · <sha>`, appending `· rebase: <file> (<strategy>)` if a conflict was auto-resolved.
-- **Other comments** — `## Pipeline Escalation` (revise: ambiguous rebase) and `## Blocker` (impl: on the issue) stay short: what is blocked and the decision needed, via `--body-file`.
+- **Revision resolves threads, it does not summarize.** After pushing fixes, for each **fixed** finding reply `Fixed in <sha>` on its thread and resolve it via GraphQL (`addPullRequestReviewThreadReply` then `resolveReviewThread`), matched by ID; **genuinely-skipped** threads get a one-line reason and stay open. Then one short comment per cycle, or none: `## Revision — Cycle <n>` plus a single line `fixed <ids> · skipped <ids> · <sha>`, appending `· rebase: <file> (<strategy>)` if a conflict was auto-resolved. The detail line may instead open `check <name> · <sha>` for a check-fix cycle — see `revise-agent.md` step 1 — with no `fixed`/`skipped` segment, since there are no threads to resolve.
+- **Other comments** — `## Pipeline Escalation` (revise: ambiguous rebase), `## Blocker` (impl: on the issue), `## Gate cleared` (cockpit: on the pull request, at `unblock #N`), `## Approval withdrawn` (cockpit: on the pull request, when a check goes red after approval — see "The `<labels.approved>` carve-out" in `## Check evidence`), and `## Rebase required` (cockpit or `review-agent`: when `mergeable` reads `CONFLICTING` — see "Rebase required" below) stay short: what is blocked/cleared/withdrawn/needed and the decision required, via `--body-file`.
+
+### Approval withdrawn (cockpit writes it via `--body-file`)
+
+Posted the same tick the cockpit routes an approved pull request back to `<labels.needsRevision>` per the `## Check evidence` carve-out. Short, no restated context:
+
+```
+## Approval withdrawn
+`<check-name>` went **<conclusion>** on `<head-sha>` after approval. <link>
+```
+
+Names the check, its conclusion, its link, and the head SHA the conclusion belongs to — the four facts that authorise the removal, so the record stands on its own without the cockpit's own reasoning attached.
+
+### Rebase required (cockpit and `review-agent` write it via `--body-file`)
+
+Posted whenever `mergeable` reads `CONFLICTING` — at the cockpit's dispatch gate, at its approved re-verify, or at `review-agent`'s own exit — the moment a pull request routes to `<labels.needsRevision>` for this reason rather than for review findings. Two lines, no restated context:
+
+```
+## Rebase required
+Conflicts with `<base>` at `<head-sha>` — GitHub can't build a merge ref, so no checks ran on this diff.
+```
+
+Names the base branch and the head SHA the conflict was read against — enough for `revise-agent` to enter rebase-only mode (see `revise-agent.md`) without re-deriving anything, and enough for a human reading the thread to know the pipeline never had checks to go on.
 
 ### Pull request description (`impl-agent` writes it via `--body-file`)
 
 `Closes #N` · **## Summary** (what was built and the approach) · **## Changes** (notable files and areas) · **## Testing plan** — reproducible **manual** steps as a `- [ ]` checklist a human runs before merge, covering happy path, error and empty and edge cases, and any authorization roles, derived from the issue's testing section · **## Automated checks** (the `commands.checks` that were run) · **## Notes** (schema changes, risks, follow-ups).
+
+Any `- [ ] **operator-only**` step in the issue's `## Testing` carries into `## Testing plan` **verbatim** — the prefix is the only thing telling the human which box only they can tick.
 
 The pull request is **assigned to the issue's assignee**, falling back to `@me` when the issue has none — never a hardcoded login. The pull-request-stage queries are assignee-filtered too, so a pull request with the wrong owner is invisible to the cockpit that shepherded its issue.
 
@@ -286,14 +454,45 @@ Write the message to `.temp/commit-msg.txt` and `git commit -F .temp/commit-msg.
 
 ## Escalation
 
-- **Review and revise not converging** — before each revise dispatch the cockpit counts `## Code Review` comments; at `reviewCycleCap` with Critical or Medium still found it labels `needs human`, comments, and stops dispatching for that item.
+- **Review and revise not converging** — before each revise dispatch the cockpit counts `## Code Review` comments; at `reviewCycleCap`, **unconditional** — whatever the latest verdict said — it labels `needs human`, comments, and stops dispatching for that item.
+- **A clean review keeps not merging** — before each `readyForReview` dispatch the cockpit compares the newest `## Code Review`'s `commit.oid` against the current `headRefOid`; equal, with no newer `## Gate cleared`, means a review would grade a diff it already graded, so it labels `needs human` and comments instead of opening a redundant cycle. See `## Check evidence` → "Zero-diff review".
 - **Implementation blocker** — `impl-agent` comments `## Blocker`, labels `blocked`, and reports `BLOCKED:`; the cockpit relays and resumes the same agent with the human's decision.
-- **Rebase conflict during revision** — `revise-agent` attempts autonomous resolution per the protocol below; it aborts, comments `## Pipeline Escalation`, and labels `needs human` **only** when a conflict is ambiguous or on the never-touch list.
+- **Rebase conflict during revision** — `revise-agent` resolves everything inferrable and escalates only the genuinely ambiguous hunks as numbered decision requests; it aborts the whole rebase, comments `## Pipeline Escalation`, and labels `needs human` whenever any hunk is ambiguous or on the never-touch list. `unblock #N` relays the options and re-dispatches with the operator's selections.
 - **Plan questions** — `plan-agent` never guesses: it returns `QUESTIONS FOR HUMAN:` and the cockpit relays, then resumes it with answers.
+- **No verdict formed while checks are pending** — `review-agent` waits, bounded, for every check on the head commit to conclude before posting; a timeout is `blocked — checks pending`, never a pass. See `## Check evidence`.
+- **A check goes red after approval** — the cockpit re-verifies every `<labels.approved>` pull request each tick and, under the sole carve-out in `## Check evidence`, routes it back to `<labels.needsRevision>` with `## Approval withdrawn` naming the check.
+- **Stalled or usage-limited agent** — an in-flight label with no live `TaskList` entry means the agent crashed or hit a usage limit, not that work is proceeding; see "Liveness" for how the cockpit tells the two apart and responds.
+- **A pull request cannot be reviewed against a diff CI never validated** — the cockpit reads `mergeable` at the dispatch gate and at the approved re-verify, and `review-agent` reads it again at its own exit; `CONFLICTING` forms no verdict, dispatches no review, and routes to `<labels.needsRevision>` with `## Rebase required` instead. See `## Check evidence` → "Mergeability precondition" and "Rebase required" under Output formats.
+
+### Liveness
+
+An in-flight label is a claim, not a heartbeat — nothing about it tells the cockpit whether an agent is still running. **`TaskList` is called every tick, unconditionally; a tick that reports on liveness without a `TaskList` call this tick has failed.** The call happens whether or not anything is in flight — an empty in-flight set is exactly the case where a stall is invisible, so it is never a reason to skip the call. **A label is not evidence of liveness or of non-liveness** — an in-flight label never proves an agent is alive (it may have crashed), and a terminal or absent label never proves one is dead (a completion notice can arrive before the label swap lands, or the cockpit's own view of labels can be stale). `TaskList` is the only evidence either direction.
+
+Every tick, the cockpit queries the in-flight labels (`planning`, `in progress`, `reviewing`, `revising`, and `refreshing` under `previewDatabase`) and cross-checks the result against that `TaskList` call, matching entries by the dispatch `description` (`"<stage> #<n>"`). Four termination classes distinguish what a completed or vanished agent means:
+
+| Class | Signature | Response |
+| --- | --- | --- |
+| **Completed** | Agent finished normally, final message available | Relay its message per the relay loop; the labels it set drive the next tick |
+| **Failed** | Agent errored before finishing | Item stays at its in-flight label with no matching `TaskList` entry — see the two classes below |
+| **Stopped / killed** | Operator ran `stop #N`/`halt`, or `TaskStop` | Label already reset to trigger by the stop command; nothing further to report |
+| **Usage limit** | A `session limit` message, typically across every in-flight agent at once | Takes precedence over the two classes below: do not redispatch and do not change models; reset each affected item's in-flight label to its trigger label (one `gh` call per item), report the reset time verbatim, and schedule the next wakeup just after it |
+
+**An in-flight item with no live `TaskList` entry splits into exactly two classes, proven by this session's own dispatch log (`.temp/dispatch-log.md`, written fresh at startup and rewritten at every dispatch and every liveness transition) — never by guessing from how long it has sat there:**
+
+| Class | Proof | Response |
+| --- | --- | --- |
+| **Dispatched this session, now dead** | The log carries a row for the item | **Provably dead — safe to auto-reset.** First unmatched tick: mark the row `suspect`, report, change nothing. Still unmatched the tick after: reset the label to its trigger (batched by current→trigger pair, one `gh` call per group, re-queried to confirm), mark the row `reset`. **At most one automatic reset per item per session** (the log's `Resets` column) — a crash loop reports instead of burning the session. |
+| **No dispatch record** | The log carries no row — a prior session's work, or another cockpit's | **This cockpit cannot prove anything about it — report-only, forever.** Never reset it automatically; a restarted cockpit's fresh (empty) dispatch log must not stampede a co-operator's live agents back to their trigger labels. `retry #N` is the human's route. |
+
+Reset is never immediate: the one-tick `suspect` debounce, the dispatch-log requirement, and the once-per-session cap are three independent guards against the one real risk — resetting an item whose agent is actually still alive, which would double-dispatch against one branch. Every failure direction points toward report-only. A reset item redispatches on the **next** tick (dispatch is step 4, liveness is step 5, in that order), never the same one. Never reset `<labels.approved>` or `<labels.needsHuman>` — they are not in-flight labels. A `SESSION REQUIRED` item at an in-flight label is never reported as a stall — it is the operator's own `/port:implement` session, and it can never carry a dispatch-log row by construction.
+
+The log itself is a gitignored `.temp/dispatch-log.md`, overwritten fresh at startup — the overwrite alone is what scopes it to one session, no clock or session ID needed. A file whose header names a different repository is treated as absent. Two cockpits sharing one checkout clobber each other's copy, which degrades both to report-only — the safe direction, never a false reset.
+
+If `TaskList` cannot be correlated to numbers at all, report the in-flight set alongside the running-agent count and say the match is uncertain rather than guessing which is which.
 
 ### Rebase conflict protocol (`revise-agent`)
 
-When `git rebase origin/<base>` hits conflicts, `revise-agent` resolves the structurally unambiguous ones and escalates the rest. **Fail closed:** if any single conflict is ambiguous or on the never-touch list, abort the **entire** rebase and escalate — never partially resolve, and never let an auto-resolve silently drop a side's logic.
+When `git rebase origin/<base>` hits conflicts, `revise-agent` is biased **toward resolving**: it resolves everything inferrable and escalates only what is genuinely ambiguous, as a set of concrete decisions rather than a narrated dump. **Atomicity and preservation are separate properties.** Atomicity is unchanged — abort the **entire** rebase on any ambiguity, and never push a half-rebased branch. What must never be discarded is the *classification* itself: it is deterministic, so the auto-resolved set is re-derived identically on the next attempt, and the escalation records it so the operator can see what will be reapplied.
 
 This applies **unchanged in refresh mode**: a conflict is a real blocker and still escalates, while quota alone never does.
 
@@ -307,10 +506,15 @@ This applies **unchanged in refresh mode**: a conflict is a real blocker and sti
    | Each side added a different import or export, with no line overlap | Type definitions or constants where both sides changed the same key |
    | The other side made a whitespace or formatting-only change in our area | Logic changes on the same lines from both sides |
    | One side deleted a block entirely that the other did not touch | Any conflict where accepting one side would silently drop the other's logic |
+   | Both sides append distinct entries to the same list, set, or table → **take the union** | — |
+   | Both sides add distinct sections or rows under the same heading → **keep both, in a deterministic order** (base's first, then ours) | — |
+   | One side restructures a block the other only added to → **apply the addition inside the new structure** | — |
+
+   **The never-auto-resolve list is unchanged**: `sessionRequiredPaths`, database migration files, and environment or build configuration always escalate, however simple the diff looks — and any conflict where accepting one side would silently drop the other's logic escalates regardless of which row it otherwise resembles.
 
 3. **If all are auto-resolvable** — resolve each with Edit or Write, removing every conflict marker, then `git add "<path>"` (quoted), then `git -c core.editor=true rebase --continue` (never a bare `--continue`, which may open an editor). For a lockfile, prefer taking the base's version and regenerating over hand-merging. A rebase may pause repeatedly — re-run this protocol at each pause. In the revision comment, list each resolved file and the strategy used.
-4. **If any is ambiguous** — `git rebase --abort` immediately (abort the whole rebase; never leave a half-rebased state), comment `## Pipeline Escalation` listing each ambiguous file and hunk, both sides of each conflict, and why autonomous resolution was not safe; then label `needs human` and stop.
-5. **Never auto-resolve** anything matching `sessionRequiredPaths`, database migration files, or environment and build configuration — escalate regardless of apparent simplicity.
+4. **If any is ambiguous** — `git rebase --abort` immediately (abort the whole rebase; never leave a half-rebased state). Comment `## Pipeline Escalation`: a one-line summary (`<k> conflicts — <a> resolved automatically, <b> need a decision`), an `### Auto-resolved (reapplied on the next attempt)` list of `` `path` — <strategy> ``, then one `### D<n> — \`path\`` block per ambiguous hunk — **not** a raw conflict-marker dump — containing what each side (**ours**/**theirs**) is trying to achieve in one line each, a two-or-three-row options table with `Keeps`/`Loses` columns (typically **A take ours** · **B take theirs** · **C** a specific described combination), and a bolded `**Recommendation: <letter>** — <reason>`. IDs are `D1..Dn`, restarting at `D1` in each escalation comment. Then label `needs human` and stop — the operator picks a direction with `unblock #N`, never edits a file themselves.
+5. **On the next attempt** — read the newest `## Gate cleared` comment (if newer than the newest `## Pipeline Escalation`) for its `### Rebase decisions` lines (`` - D<n> `path` — **<letter> <label>** ``) and apply each recorded decision to its matching hunk alongside every auto-resolvable one, in a single pass. A decision whose hunk no longer exists (the base moved again) is dropped and noted in the revision comment; a **new** ambiguous hunk with no recorded decision escalates again with fresh `D1..Dn` IDs.
 
 ## Stopping and draining
 
@@ -319,6 +523,7 @@ The pipeline runs autonomously once started; these cockpit commands are the clea
 - **`drain` / `pause`** — finish in-flight work, start nothing new (stops dispatch **and** wakeups). **`resume`** restarts ticking.
 - **`stop #N`** — halt one item: drop its trigger label and `TaskStop` its in-flight agent, resetting the label so it can be retried.
 - **`stop` / `halt`** — drain, `TaskStop` all running agents, and reset their labels.
+- **`unblock #N`** — the **only** route off `<labels.needsHuman>`. Not a variant of `retry`/`resume`: those re-apply a trigger for an in-flight label and never touch this gate. `unblock` reads the escalation comment, asks which way to route (back to revision or back to review), comments the clear onto the pull request, then swaps the label — the guard hook denies the same removal from any other route, so this command is the one place it succeeds.
 
 Closing the cockpit session also halts dispatch, since it is the only dispatcher, but cuts off in-flight agents mid-run — prefer `drain` for a graceful stop.
 
@@ -326,19 +531,43 @@ Closing the cockpit session also halts dispatch, since it is the only dispatcher
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
+| `Unknown skill: port:init` right after installing | The session resolved its plugins at startup, before the install | Start a new session in the same directory — the install itself is fine |
 | Item stuck in an in-flight label with no agent running | Agent crashed or the session closed mid-flight | `retry #N` in the cockpit, or re-apply the trigger label |
 | Nothing dispatches for an item | It has no trigger label (paused, in-flight, or gated) | `status` shows where it is; `resume #N` re-applies the right trigger |
 | Nothing dispatches **and** `status` does not list it at all | It is unassigned, or owned by another operator — queries are assignee-filtered | The tick's unowned sweep reports it; claim it with `work on #N` |
-| An item sits at a trigger label and nothing dispatches | Its body carries `SESSION REQUIRED` — the cockpit never dispatches those | Open a named session and run `/port:implement <n>` |
+| An item sits at a trigger label and nothing dispatches | Its marker slot holds `SESSION REQUIRED` (see "Detection") — the cockpit never dispatches those | Open a named session and run `/port:implement <n>` |
+| An item sits at `plan approved` and nothing dispatches, and its marker slot holds no `SESSION REQUIRED` marker | It is held behind an in-flight item claiming the same file | The tick's held line names the blocker and the path; `dispatch #N anyway` overrides |
 | No check runs at all on a new push, while the deployment still runs | The pull request conflicts with its base, so GitHub cannot build the merge ref that `pull_request` workflows run against | `gh pr view <n> --json mergeable` reports `CONFLICTING`. Rebase onto the base and force-push |
 | The approval check shows **Skipped** on a pipeline pull request | It is missing the `claude` label, so the gate is inactive | Add the label; the `labeled` event re-evaluates the job condition |
 | Deployment check red on two or more open pull requests while other checks are green | *(`previewDatabase`)* The preview database pool is at its cap | Nothing to debug in the code. Merging any pull request frees a slot; force one with `refresh #N` |
-| Stale worktrees or orphaned dependency directories accumulating | Agents cut off mid-run; on Windows the harness leaves directories git cannot delete | Run **`/port:worktree-clean`** from the main checkout. The cockpit reports these but never deletes them automatically |
+| Untracked directories accumulating beside `.claude/worktrees/` entries (a *registered* worktree for a finished item is reclaimed automatically — see "Worktree lifecycle") | Agents cut off mid-run; on Windows the harness de-registers a worktree but cannot delete a populated dependency tree | Run **`/port:worktree-clean`** from the main checkout — the report names each `orphan-dir` |
+| A worktree the cockpit reports `locked`, with no in-flight item behind it | A human or the harness locked it deliberately; the reclaimer never auto-unlocks | The report names the exact `git worktree unlock "<path>"` command, or run `/port:worktree-clean`, which unlocks after confirmation |
+| A session prints a different commit than `git rev-parse --short HEAD` in this checkout, or warns that two install records share a commit | An install performed from inside a managed worktree — every install scope shares one `installPath` | Reinstall from the main checkout; see "Why background dispatch needs care" → install policy |
+| Cockpit sits idle and never ticks again | A tick ended without calling `ScheduleWakeup` — the closing line was narrated instead of the call being made | Say anything to it to force a tick; the tick's closing line is only trustworthy once it is the record of a real `ScheduleWakeup` call |
 | An agent stopped with `BLOCKED:` or hit `maxTurns` | A clean stop by design, not a crash | Resolve the blocker, or widen scope or permissions, then `retry #N` |
 | A stage misbehaved and you want to run it by hand | — | Mention the subagent directly, or run a whole session as it |
 | Cockpit session closed | All state is in labels | Start `/port:pipeline` again; it resumes from the labels |
 | Labels changed manually on GitHub | Fine — labels are the source of truth | The next tick acts on whatever the labels say |
 | A permission change was merged but agents still hit denials | A worktree carries the *committed* settings | Confirm it merged to `<integration>`; agents pick it up on their next fresh worktree |
+| `/port:pipeline` refuses to start | The checked-out branch carries no `.claude/port.config.json`, or no `permissions.allow` | Check out the branch the harness was installed on, or run `/port:init` on this one |
+| A plugin was installed and merged, but agents behave as if it is absent | Merging declares a plugin, it does not install one | Update the main checkout, refresh the machine's plugin install, restart the cockpit |
+| An item parked at an in-flight label, this session dispatched it, and no matching `TaskList` entry | The dispatched agent failed or the session closed mid-flight | The liveness cross-check reports it **suspect**, then auto-resets it to its trigger label the tick after — `retry #N` works too, immediately |
+| An item parked at an in-flight label with no matching `TaskList` entry, and this session's dispatch log has no row for it | A prior session's (or another cockpit's) work — this session cannot prove it is dead | Reported every tick as "in flight with no dispatch record," never touched automatically; `retry #N` resets it by hand |
+| An item was auto-reset once and stalls again in the same session | The once-per-session cap held — a crash loop reports rather than resetting forever | `retry #N` for another attempt; restarting the cockpit clears the cap (fresh dispatch log) |
+| Every dispatched agent failed at once, all reporting a session-limit message | The operator's usage window was exhausted | The cockpit parks each affected item back at its trigger label and schedules the next wakeup just after the reported reset time; nothing to retry manually |
+| The cockpit says a gate clear was denied | Correct behaviour — the guard hook denies removing `<labels.needsHuman>` unless an operator instruction just named that item | Say `unblock #N` if you actually mean to clear it |
+| A batch label change moved only some of the items | A partial application — the same failure mode a shell loop used to hide | The re-query the cockpit runs after every multi-item change reports exactly which one did not move; re-issue for the remainder |
+| A pull request was approved and then moved back to `needs revision` | A check on it went red after approval, or `mergeable` reads `CONFLICTING` | The `## Approval withdrawn` or `## Rebase required` comment names why; revision dispatches this tick |
+| `review-agent` stopped without a verdict | Checks never concluded within the bounded wait | The pull request is at `<labels.needsHuman>`; `unblock #N` is the route |
+| A pull request at `ready for review` never gets reviewed, and the cockpit reports it conflicting | `mergeable` reads `CONFLICTING` — GitHub never ran checks on this diff | The cockpit posts `## Rebase required` and moves it to `needs revision`; `revise-agent` rebases and pushes it back to `ready for review` automatically |
+| A pull request bounced through review cleanly `reviewCycleCap` times without ever merging | The cap is unconditional — it fires whatever the latest verdict said, not only when findings are still open | The pull request is at `<labels.needsHuman>`; `unblock #N` picks a route |
+| A pull request at `ready for review` never gets reviewed, and the cockpit says the head was already reviewed | The zero-diff gate — the newest `## Code Review`'s `commit.oid` equals the current `headRefOid`, so a new review would grade the same diff | `unblock #N` → **Back to review** authorizes exactly one more review against this head |
+| A tick reports "the tick query failed" and does nothing else | The single collapsed `gh api graphql` call returned no `data` — a **blind tick** | Correct, conservative behaviour, not a bug: nothing was dispatched, no label moved, and a wakeup was still scheduled at the pacing floor. It self-heals next tick if the transient cause clears |
+| A tick reports one label's set as "returned N of M items" | A GraphQL connection's `totalCount` exceeded its `nodes` length — that set is **truncated, not complete** | The cockpit already acted only on what it received; nothing to fix unless the true set size needs a larger `first:` in `.temp/tick-query.graphql` |
+| The cockpit opens with "Resumed after a gap" | The session was closed or stalled long enough that the elapsed time materially overshoots what was last scheduled | Expected after any real gap — it treats the tick as changed and polls at the floor once, since items may have moved unattended while it was gone |
+| The cockpit's closing line shows a delay above 270s while an item still needs a human | The pacing ladder backed off because nothing was going to move without the human anyway | Not a stall — say what you need to say (approve a plan, `unblock #N`, merge) and the next tick resets to the floor the moment it sees the change |
+| The cockpit warns it is N commits behind | Expected after any merge to `<integration>` (or the marketplace `ref`) this session — the running copy predates it | Nothing is broken meanwhile; refresh the machine's plugin install and restart the session to load it |
+| The cockpit warns two install records share one cache path | An install performed from a second scope (or from inside a worktree) repointed the shared `installPath` | Re-install from the main checkout so the record this session resolves matches what you intended |
 
 ## Reading current state without the cockpit
 

@@ -1,6 +1,6 @@
 ---
 name: worktree-clean
-description: Reclaim disk space from stale pipeline worktrees — prune git registrations and force-delete orphaned agent worktree directories left under .claude/worktrees/, the dependency-laden leftovers git's own remove and prune cannot clear on Windows. Run manually from the main checkout when worktrees accumulate.
+description: Interactive front end to the worktree reclamation script — reviews the classified table, then unlocks, force-clears dirty candidates, and force-deletes orphaned agent worktree directories the cockpit's own automatic reclaim (and git's own remove/prune) leave behind. Run manually from the main checkout when worktrees accumulate.
 disable-model-invocation: true
 allowed-tools: Read, Bash
 ---
@@ -9,52 +9,64 @@ allowed-tools: Read, Bash
 
 Pipeline agents run in isolated worktrees under `.claude/worktrees/`; operator-run session-required tickets add their own there too. Both are in scope.
 
-On Windows, once an agent has installed dependencies, the harness often **de-registers** the worktree — removing its `.git` file — but **cannot delete the directory**: a populated dependency tree, and long or bracketed paths, defeat both `git worktree remove` (which fails with `Invalid argument`) and `git worktree prune` (which only clears registrations whose directory is *already* gone). These **orphan directories** then accumulate, hundreds of megabytes each.
+`templates/worktrees.mjs` (addressed via `commands.worktrees`) is the one classifier and reclaimer this skill, the cockpit's own per-tick hygiene, and #109's worktree report all share — see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Worktree lifecycle". This skill drives it **interactively**, for the four cases the cockpit's automatic pass deliberately never touches on its own: a **locked** worktree, a **dirty** one, an **unresolved** one, and an **orphan directory** git does not track at all.
 
-The cockpit deliberately does **not** force-delete them in its autonomous loop. This skill does, interactively, run by you from the **main checkout**.
+> **Scope guard:** the script only ever removes a path `git worktree list` itself reports, fenced to inside the main checkout — never the main checkout, never a path outside it. This skill's own force-delete step (below) only ever targets a directory **directly under** the parent of a registered worktree, and only after the script has classified it `orphan-dir`.
 
-> **Scope guard:** this skill only ever deletes directories **directly under `.claude/worktrees/`**. Never delete anything outside that directory, never the main checkout, and never a worktree belonging to an **in-flight** pipeline item — check `gh pr list` or the cockpit first if unsure.
+**If `commands.worktrees` is null** — the repository has not installed the script (`/port:init` skips it when Node is unavailable, or it predates #144). Say so plainly and stop; there is nothing to drive.
 
 ## Steps
 
-1. **Prune dangling registrations.** Safe: this only affects worktrees whose directory is already gone.
+1. **Report first, remove nothing.**
 
    ```bash
-   git worktree prune
+   <commands.worktrees> report --json
    ```
 
-2. **Compare what git tracks against what is on disk:**
+   Show the human the classified table — path, state, reason, and size where useful (`du -sh <path>` per candidate). **Confirm before doing anything destructive.**
+
+2. **Reclaim what is plainly safe**, no confirmation needed beyond step 1's overview — this mirrors exactly what a tick would do on its own:
 
    ```bash
-   git worktree list
-   ls -1 .claude/worktrees/
+   <commands.worktrees> reclaim --max 20
    ```
 
-3. **Identify the deletable set:**
-   - **Orphans** — directories under `.claude/worktrees/` that do **not** appear in `git worktree list`. No `.git` file, so git does not track them; always safe to delete.
-   - **Registered but done** — a worktree that *is* listed, but whose pull request is merged or closed. Confirm with `gh pr list`, then try `git worktree remove --force "<exact listed path>"` first; if it fails, fall through to the force-delete below and re-run `git worktree prune`.
-
-   Show the human the list, with sizes where useful (`du -sh .claude/worktrees/* 2>/dev/null`), and **confirm before deleting**.
-
-4. **Force-delete each orphan directory.** Run one per directory so each is visible and separately approved.
+3. **Locked candidates.** For each the report marks `locked` with an "otherwise reclaimable" reason, confirm with the human, then:
 
    ```bash
-   rm -rf ".claude/worktrees/<dir>"
+   <commands.worktrees> reclaim --issue <n> --unlock
+   ```
+
+   Never unlock a candidate the report does **not** say is otherwise reclaimable — a lock on a genuinely active worktree is a deliberate statement, by a human or the harness, and stays.
+
+4. **Dirty candidates.** For each the report marks `dirty`, show the uncommitted file count, confirm the human wants to discard it, then:
+
+   ```bash
+   <commands.worktrees> reclaim --issue <n> --force-dirty
+   ```
+
+   This is destructive — uncommitted work is lost — so never run it without an explicit confirmation naming the candidate.
+
+5. **Unresolved candidates.** The report names the reason (no upstream branch, no `#N` subject, HEAD not on the integration branch). Resolve by hand — check `gh issue list` / `gh pr list` for the likely number, or ask the human — then either `reclaim --issue <n>` once you know it is done, or leave it: the script never guesses.
+
+6. **Orphan directories — force-delete, interactively, one at a time.** The report lists any directory beside a registered worktree that git does not track at all (`orphan-dir`); the script never deletes these itself. Show the human the list with sizes, confirm, then:
+
+   ```bash
+   rm -rf "<exact orphan-dir path from the report>"
    ```
 
    On Windows, where a locked dependency tree or a long path defeats `rm -rf`:
 
    ```bash
-   powershell -NoProfile -Command "Remove-Item -LiteralPath '.claude/worktrees/<dir>' -Recurse -Force"
+   powershell -NoProfile -Command "Remove-Item -LiteralPath '<path>' -Recurse -Force"
    # fallback if PowerShell balks on the path:
-   cmd //c rmdir /s /q ".claude\\worktrees\\<dir>"
+   cmd //c rmdir /s /q "<path, backslashes>"
    ```
 
-5. **Final prune**, to clear any registrations the deletions exposed:
+7. **Final report**, to confirm the state after every action above:
 
    ```bash
-   git worktree prune
-   git worktree list
+   <commands.worktrees> report
    ```
 
-Afterwards, `.claude/worktrees/` on disk should match `git worktree list` — nothing but the main checkout and genuinely in-flight worktrees.
+Afterwards, only genuinely in-flight worktrees (`active`) and anything still `unresolved` should remain.

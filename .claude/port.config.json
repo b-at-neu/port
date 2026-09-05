@@ -1,0 +1,44 @@
+{
+  "$schema": "https://raw.githubusercontent.com/b-at-neu/port/main/schema/port.config.schema.json",
+  "tracker": "github",
+  "repo": "b-at-neu/port",
+  "branches": {
+    "integration": "dev",
+    "production": "main"
+  },
+  "commands": {
+    "bootstrap": ["pnpm install"],
+    "checks": [{ "run": "node scripts/checks.mjs", "fix": null }],
+    "artifacts": "node plugins/port/templates/artifacts.mjs",
+    "worktrees": "node plugins/port/templates/worktrees.mjs"
+  },
+  "docs": {
+    "engineering": "docs/ENGINEERING.md",
+    "design": null
+  },
+  "models": {
+    "plan": "opus",
+    "impl": "sonnet",
+    "review": "sonnet",
+    "revise": "sonnet"
+  },
+  "labels": {},
+  "modules": {
+    "approvalGate": true,
+    "previewDatabase": false,
+    "release": true,
+    "scope": true
+  },
+  "release": {
+    "versionSource": "package",
+    "versionFiles": ["plugins/port/.claude-plugin/plugin.json"],
+    "versionCommand": null
+  },
+  "reviewCycleCap": 5,
+  "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"],
+  "extraAllow": [
+    "Bash(node scripts/checks.mjs)",
+    "Bash(node plugins/port/templates/artifacts.mjs *)",
+    "Bash(node plugins/port/templates/worktrees.mjs *)"
+  ]
+}

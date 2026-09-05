@@ -2,7 +2,7 @@
 name: analyze
 description: Read this repository and produce a real ENGINEERING.md — conventions inferred from the code, inconsistencies surfaced as decisions, improvements proposed for approval — then recommend stack-relevant plugins from the local, org, and public catalogs. Files findings as tickets rather than fixing them. Sets docs.engineering. Re-runnable as the codebase evolves. Manual only. Usage: /port:analyze
 disable-model-invocation: true
-allowed-tools: Read, Grep, Glob, Write, Edit, AskUserQuestion, WebSearch, WebFetch, SearchPlugins, Bash(git log *) Bash(git ls-files *) Bash(git diff *) Bash(gh issue create *) Bash(claude plugin list *) Bash(claude plugin install *) Bash(claude plugin marketplace list *) Bash(claude plugin marketplace add *) Bash(claude plugin marketplace update *)
+allowed-tools: Read, Grep, Glob, Write, Edit, AskUserQuestion, WebSearch, WebFetch, SearchPlugins, Bash(git log *) Bash(git ls-files *) Bash(git diff *) Bash(git rev-parse *) Bash(gh issue create *) Bash(claude plugin list *) Bash(claude plugin install *) Bash(claude plugin marketplace list *) Bash(claude plugin marketplace add *) Bash(claude plugin marketplace update *)
 ---
 
 # Analyze — generate this repository's engineering standards
@@ -23,9 +23,11 @@ You hold `Write` and `Edit` because the two files above need them. That means th
 
 ## Read the configuration first
 
-Read `.claude/port.config.json` for `repo`, `docs.engineering`, and `commands`. If it is missing, stop — this repository is not port-managed, and `/port:init` comes first.
+Read `.claude/port.config.json` for `repo`, `docs.engineering`, `branches.integration`, and `commands`. If it is missing, stop — this repository is not port-managed, and `/port:init` comes first.
 
 If `docs.engineering` is already set and that file exists, this is a **re-run**: see "Re-running" at the end before doing anything else.
+
+**Also note the current branch** (`git rev-parse --abbrev-ref HEAD`) against `branches.integration` — step 6 reuses it to caveat a project-scope install made off that branch.
 
 ## 1. Sample the codebase deliberately
 
@@ -124,13 +126,15 @@ So for tier 3, present the **provenance**: the repository, its owner, whether it
    claude plugin marketplace add <source> --scope project
    ```
 
-6. Report what was installed and where it landed.
+6. Report what was installed and where it landed — and that a newly installed plugin is not available in this session until a new one is started, with unresolving skills or commands as the symptom. **If any install landed at project scope and this checkout is not on the integration branch**, add:
+
+   > ⚠️ Installed at project scope on `<branch>`, not `<integration>`. A project-scope install is a committed change: it reaches dispatched agents only after it merges to `<integration>`, and only on a machine that already has the plugin cached. Merge it on its own ticket, and mark tickets that depend on it as blocked by it.
 
 ### Why project scope, not user
 
 Both commands take `--scope user|project|local`. **Project is the right one here**, and the reason is mechanical rather than tidiness:
 
-- **`project`** writes `enabledPlugins` and `extraKnownMarketplaces` into the repository's **committed** `.claude/settings.json`. Because it is committed, it travels into **dispatched agents' worktrees** — which is the entire point. These recommendations exist so the stage agents have better grounding in this stack; a plugin the agents cannot see does nothing for the pipeline. It also means a teammate gets the same tooling on clone.
+- **`project`** writes `enabledPlugins` and `extraKnownMarketplaces` into the repository's **committed** `.claude/settings.json`. Because it is committed, it travels into **dispatched agents' worktrees** — which is the entire point, **but only once this checkout's change merges to the integration branch**; worktrees are cut from there, not from whatever is on disk here. These recommendations exist so the stage agents have better grounding in this stack; a plugin the agents cannot see does nothing for the pipeline. It also means a teammate gets the same tooling on clone. A plugin addition is best treated as its own prerequisite ticket: land it on its own, and mark anything that depends on it as blocked by it.
 - **`local`** writes `.claude/settings.local.json`, which is gitignored. Personal to this checkout, and **invisible to worktrees**, so the agents never see it. Offer it only if the operator does not want the choice committed, and say plainly that the agents will not benefit.
 - **`user`** applies the plugin to every project on the machine. Wrong for a recommendation derived from analyzing *this* codebase — a database plugin picked for this repository has no business loading in an unrelated one.
 

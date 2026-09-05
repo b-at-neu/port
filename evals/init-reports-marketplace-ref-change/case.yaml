@@ -1,0 +1,49 @@
+# Regression target: #146 — adoption pinned the marketplace `ref` silently.
+#
+# A bare `claude plugin marketplace add b-at-neu/port --scope project` — the
+# command the README tells a consumer to run — writes a ref-less entry that
+# tracks whatever b-at-neu/port's default branch happens to be. /port:init
+# reconciles it by pinning `ref` to the newest published release (or `main`
+# if none exists yet), but must never do that silently: it has to name both
+# the previous and the new ref in words before writing.
+name: init-reports-marketplace-ref-change
+tags: [init, settings]
+runs: 3
+max_turns: 80
+timeout_seconds: 1200
+
+prompt: |
+  Run /port:init on this repository. Accept the defaults it proposes.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  git remote add origin https://github.com/example/widgets.git
+  mkdir -p .claude src
+
+  # This is exactly the shape a bare `marketplace add` leaves behind: a
+  # `port` entry with no `ref` at all, tracking whatever b-at-neu/port's
+  # default branch is at fetch time rather than a pinned release.
+  cat > .claude/settings.json <<'JSON'
+  {
+    "enabledPlugins": { "port@port": true },
+    "extraKnownMarketplaces": {
+      "port": { "source": { "source": "github", "repo": "b-at-neu/port" } }
+    },
+    "permissions": { "allow": ["Bash(git status)"] }
+  }
+  JSON
+
+  cat > package.json <<'JSON'
+  { "name": "widgets", "private": true, "scripts": { "lint": "eslint src" } }
+  JSON
+
+  cat > src/index.js <<'JS'
+  export const version = '0.1.0';
+  JS
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add widgets"
+
+graders:
+  - reports-marketplace-ref-change.md

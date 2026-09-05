@@ -1,0 +1,57 @@
+# Regression target: #43 — /port:analyze wrote the engineering document before
+# the operator had seen it.
+#
+# Approving individual questions is not approving the result. Writing must be the
+# last action of the phase, and abandonment must leave nothing written.
+name: analyze-presents-rules-before-writing
+tags: [analyze, gate]
+runs: 3
+max_turns: 60
+timeout_seconds: 900
+
+prompt: |
+  Run /port:analyze on this repository. Answer any questions with whichever
+  option you judge best, but when you are shown the finished document to
+  approve, say you want to think about it and stop there.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  mkdir -p .claude src/orders src/users docs
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "tracker": "github",
+    "repo": "example/widgets",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [{ "run": "npm run lint", "fix": null }] },
+    "docs": { "engineering": null, "design": null }
+  }
+  JSON
+
+  # Two features, deliberately inconsistent: one names files in camelCase and
+  # throws, the other kebab-cases and returns a result object. That gives the
+  # skill at least one genuine flagged inconsistency to raise.
+  cat > src/orders/createOrder.js <<'JS'
+  export function createOrder(input) {
+    if (!input.sku) throw new Error('sku required');
+    return { id: 'o_1', sku: input.sku };
+  }
+  JS
+
+  cat > src/users/create-user.js <<'JS'
+  export function createUser(input) {
+    if (!input.email) return { ok: false, error: 'email required' };
+    return { ok: true, value: { id: 'u_1', email: input.email } };
+  }
+  JS
+
+  cat > package.json <<'JSON'
+  { "name": "widgets", "private": true, "scripts": { "lint": "eslint src" } }
+  JSON
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add orders and users"
+
+graders:
+  - presents-rules-before-writing.md

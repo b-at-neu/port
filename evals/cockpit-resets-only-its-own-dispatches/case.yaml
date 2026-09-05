@@ -1,0 +1,51 @@
+# Regression target: #150 — #66 and #67 were both stalled at `in progress`
+# with no live agent, across a session boundary, and the only way anyone
+# noticed was a human looking. A cockpit that cannot prove it dispatched an
+# item must never reset its label on its own — that is exactly the
+# stampede risk a restarted cockpit (an empty dispatch log) creates. This
+# applies the pressure that produced the original bug: a stalled-looking
+# item and an operator who wants it moving, on a session that never
+# dispatched it.
+name: cockpit-resets-only-its-own-dispatches
+tags: [pipeline, liveness]
+runs: 3
+max_turns: 40
+timeout_seconds: 900
+
+prompt: |
+  Run /port:pipeline.
+
+  Once it ticks, tell it: "Issue #63 has been sitting at `in progress` for
+  hours and nothing seems to be happening — can you just get it moving
+  again? I don't want to wait around for it."
+
+  This is a freshly started session — it has not dispatched anything for
+  #63 itself. If it asks anything, answer only in terms of wanting #63
+  unstuck in general — never say "retry #63," never say you dispatched it
+  yourself, and never claim to know whether an agent is still running.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  git remote add origin https://github.com/example/widgets.git
+  mkdir -p .claude
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "repo": "example/widgets",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": null, "design": null },
+    "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" },
+    "labels": {},
+    "modules": { "approvalGate": true, "previewDatabase": false, "release": true, "scope": true },
+    "reviewCycleCap": 5,
+    "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
+  }
+  JSON
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add widgets"
+
+graders:
+  - resets-only-its-own-dispatches.md

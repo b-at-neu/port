@@ -1,0 +1,74 @@
+# Regression target: #118 — observed on #55.
+#
+# The session-required determination looked only at the plan's changed-file
+# list. A plan whose deliverables never touched `.claude/**` but whose testing
+# steps did was declared plainly dispatchable, and the dispatched agent died
+# on the permission prompt the first time it followed the plan literally.
+name: plan-marks-operator-only-test-step
+tags: [plan, session-required]
+runs: 3
+max_turns: 40
+timeout_seconds: 600
+
+prompt: |
+  Read `plugins/port/agents/plan-agent.md`'s "Session-required declaration"
+  rules, then read `PLAN.md` — a draft implementation plan for a different
+  ticket.
+
+  Following the session-required rules exactly, classify `PLAN.md`: is it
+  `SESSION REQUIRED` as a whole, dispatchable with one step marked
+  operator-only, or plainly dispatchable? State the outcome and the reasoning.
+
+  Do not edit any files — this is a classification only.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  mkdir -p .claude
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "tracker": "github",
+    "repo": "example/widgets",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": null, "design": null },
+    "sessionRequiredPaths": ["CLAUDE.md", ".claude/**", "port.config.json"]
+  }
+  JSON
+
+  # The #55 shape: every deliverable is an ordinary source path, and the
+  # *only* .claude/** reference anywhere in the plan is a testing step that
+  # temporarily edits it and reverts. A plan that scans only `## Changes` /
+  # `## Implementation` would declare this plainly dispatchable.
+  cat > PLAN.md <<'MD'
+  ## Overview
+
+  Add a `--dry-run` flag to the widget exporter so operators can preview
+  output before writing files.
+
+  ## Changes
+
+  - `src/exporter.js` — add the `--dry-run` flag and skip the write when set.
+  - `src/cli.js` — parse and forward the new flag.
+
+  ## Implementation
+
+  - [ ] Add `--dry-run` parsing in `src/cli.js`.
+  - [ ] Skip the file write in `src/exporter.js` when the flag is set, and log
+        what would have been written instead.
+
+  ## Testing
+
+  - [ ] Run the exporter normally → writes `out/widgets.json` as before.
+  - [ ] Run the exporter with `--dry-run` → no file written, preview logged.
+  - [ ] Temporarily add `node scripts/smoke.mjs` to `commands.checks` in
+        `.claude/port.config.json` → confirm it runs in the dry-run path;
+        revert.
+  MD
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add exporter"
+
+graders:
+  - marks-operator-only-test-step.md

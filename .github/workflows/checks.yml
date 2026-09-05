@@ -1,0 +1,105 @@
+# Layer 1 of the testing loop. See docs/TESTING.md.
+#
+# Deliberately runs on every pull request regardless of what it touches: these
+# checks are free, take seconds, and the defects they catch are silent ones —
+# a malformed component is absent from Claude Code's inventory rather than
+# reported, so nothing else would notice.
+
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  run-static-checks:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # Deliberately no install step and no `cache:` key on setup-node — an
+      # empty node_modules here is the assertion that scripts/checks.mjs runs
+      # from files alone. Do not add one back.
+      - name: Static checks
+        run: node scripts/checks.mjs
+
+  # JSON Schema validation is platform-invariant, so running it three times
+  # buys nothing; its `pipx` install and `for` loop are POSIX-shaped anyway.
+  run-schema-fixtures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      # Full JSON Schema validation needs a real validator, which the checks
+      # script deliberately does not depend on so it can run in an agent's
+      # worktree with no install. CI has no such constraint, so it does the
+      # part the script reports as skipped.
+      - name: Install a JSON Schema validator
+        run: pipx install check-jsonschema || pip install --user check-jsonschema
+      - name: Fixtures that must validate
+        run: |
+          check-jsonschema --schemafile schema/port.config.schema.json \
+            plugins/port/templates/port.config.json schema/fixtures/valid.*.json
+      - name: Fixtures that must be rejected
+        run: |
+          for f in schema/fixtures/invalid.*.json; do
+            if check-jsonschema --schemafile schema/port.config.schema.json "$f" >/dev/null 2>&1; then
+              echo "::error::$f validated but should have been rejected"
+              exit 1
+            fi
+            echo "correctly rejected: $f"
+          done
+
+  # apps/desktop's typecheck/lint/test/build. Deliberately CI-only and out of
+  # commands.checks — see CONTRIBUTING.md → "Working on the desktop app".
+  run-app-checks:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+      # Electron's postinstall pulls ~100 MB per platform per run otherwise.
+      # Keyed on the OS and the lockfile, and rooted under runner.temp so it
+      # can never appear in a diff. `runner` is only available in step-level
+      # `env`/`with`, not job-level `env` — GitHub rejects the workflow file
+      # outright (zero jobs scheduled) if it's hoisted up there.
+      - name: Cache Electron download
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/electron-cache
+          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Lint
+        run: pnpm lint
+      - name: Test
+        run: pnpm test
+      - name: Build
+        run: pnpm build

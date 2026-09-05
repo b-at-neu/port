@@ -25,7 +25,9 @@ Derive `#<issue>: <2–5 lowercase words>` from the issue title and print it as 
 
 > Name this session: `#503: operator config route`
 
-If the session was not launched with `claude -n "<that string>"`, tell the operator to relaunch with `-n`, or rename in-client if theirs supports it. You can neither read nor set your own display name, so this is an instruction to the human — **state it and move on; never block on it.** In revise mode the name still carries the **issue** number, not the pull request number.
+If a session-title tool is in scope, set the title directly. Otherwise tell the operator to run `/rename <that string>` — **never to relaunch the session.** Throwing away a session mid-task over its title is not a reasonable ask when a rename does the same job.
+
+You cannot emit a slash command yourself, so where no tool exists this is an instruction to the human: **state it and move on; never block on it.** In revise mode the name still carries the **issue** number, not the pull request number.
 
 ## 2. Record the main checkout
 
@@ -52,7 +54,7 @@ gh pr view <n> --repo <repo> --json labels,headRefName,baseRefName,title,body
 
 - Anything else → stop, report the current labels, change nothing: `#<n> is not awaiting an operator (labels: …). Nothing was changed.`
 
-**If the item carries the trigger label but its body has no `SESSION REQUIRED` marker,** ask first (AskUserQuestion): *"#412 isn't marked `SESSION REQUIRED`, so the cockpit will dispatch an agent for it too. Proceed anyway / Cancel."* A double dispatch — cockpit and operator on the same item — is the hazard this guards.
+**If the item carries the trigger label but its marker slot does not hold `SESSION REQUIRED`** (see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Detection" — a mention elsewhere in the body, in prose or inline code, does not count), ask first (AskUserQuestion): *"#412 isn't marked `SESSION REQUIRED`, so the cockpit will dispatch an agent for it too. Proceed anyway / Cancel."* A double dispatch — cockpit and operator on the same item — is the hazard this guards.
 
 Then report the resolved mode, worktree path, and branch **before** the slow steps, so the operator can see you picked the right stage.
 
@@ -76,6 +78,8 @@ git worktree add --detach .claude/worktrees/impl-<n> origin/<headRefName>
 
 Then work inside the worktree and run each entry in `commands.bootstrap` in order. In revise mode, rebase onto the base branch from inside the worktree: `git rebase origin/<baseRefName>` — the pull request's **own** base, not an assumed one.
 
+**Never install, reinstall, or uninstall the plugin from inside this worktree** (`claude plugin install`/`uninstall`/`marketplace add`/`marketplace remove`) — every install scope shares one `installPath`, so a change made from here silently repoints every session on the machine and keeps doing so after this worktree is gone. The guard hook denies it from an `impl-<n>` worktree exactly as it would from anywhere else — this is the one guard-hook rule that does not exempt this skill's own worktree. Run it from the main checkout instead.
+
 ## 5. Follow the agent file
 
 Read the resolved agent file and follow it end to end: label swaps, the plan checklist, the file-based commit format, `commands.checks`, push by refspec, the pull request body format, base `<integration>`, the issue's assignee, thread resolution, the revision note. Read `docs.engineering` too when it is set, as the agent file requires.
@@ -96,12 +100,13 @@ Same literal string as the issue plan. **The routing marker is never a label.**
 
 **This is the whole list. Anything not here applies unchanged** — if an agent file gains a rule that only makes sense for a subagent, it belongs here.
 
-1. **`permissionMode: dontAsk` and "auto-denied silently"** — not your mode. Your session prompts normally.
+1. **`permissionMode: dontAsk` and "auto-denied silently"** — not your mode. The guard hook (`agent-guard.mjs`) only denies calls it identifies as coming from a dispatched subagent, and this is an operator session — none of its signals fire here, so your session prompts normally. The guard's **cockpit rules** (the loop and `needsHuman`-gate checks that fire for the cockpit's own session too) are also inert here, for the same reason the cockpit's own rails don't apply: an `impl-<n>` worktree is the exempt caller kind both rules check for first.
 2. **"Stop and emit `BLOCKED:`"** — pointless with a human present. Ask the operator directly and wait. Never emit a `BLOCKED:` sentinel, never guess.
 3. **"Never spawn subagents"** — not applicable.
-4. **The shell-allowlist discipline** — no `cat`/`grep`/`sed`/`find`, bare commands only, no `cd`, quoted cwd-relative paths — exists for the subagent's allowlist. Use whatever is clearest. **Still preferred:** the repository's declared `commands` over ad-hoc equivalents, and `git rm` for tracked deletions.
+4. **The shell-discipline block** (`${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Operating rules (all stage agents)") — one command per call, no `cd`/`ENV=val` prefix, quoted cwd-relative paths — exists for the subagent's allowlist. Use whatever is clearest. **Still preferred:** the repository's declared `commands` over ad-hoc equivalents, and `git rm` for tracked deletions.
 5. **"You are already in a worktree; never run `git worktree`"** — inverted. You create the worktree in step 4 and work inside it.
 6. **Instruction files are read from the installed plugin and the recorded main checkout**, not the cwd — the worktree copy may be the very thing you are editing.
+7. **Operator-only `## Testing` steps are yours to run** — that is precisely what your session can do and a dispatched agent cannot. Run them, and record the outcome in the pull request's testing plan rather than leaving the box unticked.
 
 ## 7. Handoff
 

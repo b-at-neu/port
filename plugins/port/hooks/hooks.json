@@ -6,7 +6,16 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/log-bash-denial.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/agent-guard.mjs\""
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/agent-guard.mjs\""
           }
         ]
       }

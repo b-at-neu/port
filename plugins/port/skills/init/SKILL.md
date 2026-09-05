@@ -2,14 +2,14 @@
 name: init
 description: Install the port agent pipeline into this repository — detect its toolchain, choose which subsystems to enable, write port.config.json, merge the permission lists into .claude/settings.json, create the label vocabulary, optionally install the CI merge gate, and offer to generate engineering standards from the codebase. Idempotent; nothing is written without confirmation. Manual only. Usage: /port:init
 disable-model-invocation: true
-allowed-tools: Read, Write, Edit, Glob, Grep, AskUserQuestion, Bash(gh label *) Bash(gh api repos/*) Bash(gh repo view *) Bash(git branch *) Bash(git remote *) Bash(git rev-parse *)
+allowed-tools: Read, Write, Edit, Glob, Grep, AskUserQuestion, Bash(gh label *) Bash(gh api repos/*) Bash(gh repo view *) Bash(git branch *) Bash(git remote *) Bash(git rev-parse *) Bash(node --version)
 ---
 
 # Initialize a repository for the port pipeline
 
 Run this once, from inside the repository you are adopting.
 
-**This skill exists because a plugin cannot ship permission rules.** `permissions.allow` and `permissions.deny` live only in user or project settings; a plugin's own settings file supports just a couple of unrelated keys. But that allowlist *is* the pipeline's safety model — stage agents run `permissionMode: dontAsk`, which auto-denies anything not allowlisted, so without it installed **no agent can do anything at all**. Installing it is load-bearing, not convenience.
+**This skill exists because a plugin cannot ship permission rules.** `permissions.allow` and `permissions.deny` live only in user or project settings; a plugin's own settings file supports just a couple of unrelated keys. But that allowlist *is* the pipeline's safety model — a `PreToolUse` guard hook denies a dispatched agent's call against whatever is (or is not) allowlisted, so without it installed **no agent can do anything at all**. Installing it is load-bearing, not convenience.
 
 ## Ground rules
 
@@ -35,8 +35,10 @@ If `.claude/port.config.json` already exists, this is a **reconcile**: read it, 
 
 Gather, without writing anything:
 
-- **Branches** — `git branch -r`. Look for an integration branch distinct from the default. If only one long-lived branch exists, say so; the pipeline needs an integration branch, and creating one is the operator's decision.
+- **Branches** — `git branch -r` and `git rev-parse --abbrev-ref HEAD`. Look for an integration branch distinct from the default. If only one long-lived branch exists, say so; the pipeline needs an integration branch, and creating one is the operator's decision. Keep the current branch from this pass — step 10's report reuses it rather than looking it up again.
 - **Toolchain** — read the manifest and lockfiles the repository actually has, and list the available scripts. **Do not assume a package manager**; a repository may have none.
+  - **Propose the repository's declared scripts, not ad-hoc invocations.** A repository with a `lint` script gets that script — not a direct call to whatever binary you guess it wraps. The script is what its authors maintain and what CI runs; a direct invocation drifts from both the moment either changes.
+  - **A check with no backing script is proposed by asking, never assumed.** A repository with no type-check script may simply not have that check. Inventing one produces an agent that fails every run, and — worse than failing — fails by *prompting*, because an invented command is usually one the allowlist does not cover.
 - **Existing checks** — read `.github/workflows/` to see what CI already runs. A check the pipeline runs locally should match something CI enforces, or the agent's green run means nothing.
 - **Branch protection** — `gh api repos/<owner>/<name>/rulesets`. An empty result is the common case and drives the `approvalGate` default below.
 - **Existing labels** — `gh label list`, so the report can distinguish created from already-present.
@@ -71,25 +73,62 @@ If it is ignored, **stop and explain** rather than writing it. The config has to
 
 Set `docs.engineering` to a path only if that file **exists and says something real**. Leave it null otherwise — pointing it at an empty skeleton makes review cite a document with no content. Step 8 offers to fill it properly, and sets the field itself if the operator accepts.
 
-Validate the result against `schema/port.config.schema.json` if a validator is available; at minimum confirm it parses and that `repo` matches the detected remote.
+**Validation is mandatory, not conditional. Never write a config that does not validate.** Check it against the schema at the `$schema` URL the config template carries, with a validator if one is available; if none is, walk the schema by hand and confirm every field's type and shape. A config that fails validation is a config every consumer misreads.
+
+Get `commands.checks` right in particular: its items are **objects** with a required `run` and an optional `fix` —
+
+```json
+"checks": [{ "run": "npm run lint", "fix": null }]
+```
+
+— **not bare strings.** A list of strings still parses as JSON and still looks plausible, so nothing downstream complains; every consumer reading `entry.run` simply gets `undefined`. This has already shipped once.
+
+Also confirm `repo` matches the detected remote.
 
 ## 4. Merge the permission lists
 
 Read `${CLAUDE_PLUGIN_ROOT}/templates/permissions.base.json` and merge into `.claude/settings.json`:
 
-**You own exactly two things in this file: `permissions.allow` and `permissions.deny`.** Merge key-wise into the existing document and **preserve every other top-level key byte-for-byte.** Never rebuild the file from a template plus a permissions block.
+**You own exactly three things in this file: `permissions.allow`, `permissions.deny`, and the `extraKnownMarketplaces` entry for the marketplace this plugin came from.** Merge key-wise into the existing document and **preserve every other top-level key byte-for-byte** — including any *other* marketplace entry. Never rebuild the file from a template plus a permissions block.
 
-This is not tidiness. Installation is per-repository, so this same file carries the plugin's own declarations:
+This is not tidiness. Installation is per-repository, so this same file carries the plugin's own declarations. The `port` entry you own must be exactly this form:
 
 ```json
 {
-  "extraKnownMarketplaces": { "port": { "source": { "source": "github", "repo": "b-at-neu/port" } } },
+  "extraKnownMarketplaces": {
+    "port": {
+      "source": { "source": "github", "repo": "b-at-neu/port", "ref": "v0.2.0" },
+      "autoUpdate": true
+    }
+  },
   "enabledPlugins": { "port@port": true },
   "permissions": { ... }
 }
 ```
 
-Drop `enabledPlugins` or `extraKnownMarketplaces` and you have **uninstalled the plugin that is currently running this skill** — `/port:init` disables itself partway through, and the symptom looks like the plugin vanishing rather than like a bad merge. `hooks` is the same story. Anything you did not put there, leave alone.
+**Resolve `ref` before writing, from the plugin's newest published release — never a branch name:**
+
+```bash
+gh api repos/b-at-neu/port/releases/latest --jq .tag_name
+```
+
+**Use `gh api`, not `gh release`**: this skill's `allowed-tools` grants `Bash(gh api repos/*)` and not `Bash(gh release *)`, so this keeps the tool scope unwidened. On success, `ref` is that tag. On a 404, an empty result, or a non-zero exit — no release has been published yet — `ref` is `main`, the release branch. **Never leave `ref` unset.** Keep `autoUpdate: true` regardless: it is harmless under an immutable tag, and it is what lets a later re-pin take effect on the next session.
+
+**Why:** an entry with no `ref` at all tracks whatever `b-at-neu/port`'s default branch is at that moment. The README's documented command carries `@main`, but a bare `claude plugin marketplace add b-at-neu/port --scope project` typed from memory still produces this unpinned form — so the pin above is what makes the installed version a decision rather than a coincidence, whichever way the entry arrived.
+
+Write it even when reconciling an entry that already exists but is missing `ref` or `autoUpdate`, and **write it even when the resolved `ref` is unchanged from what is already there.**
+
+**A `ref` change is called out in words, too, naming both values — the settings diff below is not enough on its own.** Never write a ref change silently. Use, verbatim:
+
+- narrowed → `Marketplace pin: port ref main → v0.2.0. main tracks the release branch; the tag pins you to exactly what was published.`
+- moved → `Marketplace pin: port ref v0.1.0 → v0.2.0. This changes which version of the pipeline this repository runs; it takes effect on your next session.`
+- first pin → `Marketplace pin: port ref unset → v0.2.0. Unset tracked b-at-neu/port's default branch; this pins you to its last published release.`
+- no release yet → `b-at-neu/port has no published release yet — pinning ref to main, its release branch. Marketplace pin: port ref unset → main.`
+- unchanged → `Marketplace pin: port ref v0.2.0 (unchanged).`
+
+**`ref` pins the plugin's own repository (`b-at-neu/port`), not the managed repository's `branches.production`.** These are unrelated values that happen to share a name — reading the latter would be actively wrong, and it is why the value above is resolved from `b-at-neu/port`'s own releases rather than from anything in `.claude/port.config.json`. This is also why a single-branch repository (#54, where `branches.production` is null) needs no special case here: this field never reads that config in the first place.
+
+Drop `enabledPlugins` or `extraKnownMarketplaces` entirely and you have **uninstalled the plugin that is currently running this skill** — `/port:init` disables itself partway through, and the symptom looks like the plugin vanishing rather than like a bad merge. `hooks` is the same story. Anything you did not put there, leave alone.
 
 Then, within the two lists you do own:
 
@@ -100,7 +139,20 @@ Then, within the two lists you do own:
 
 **Show the diff and confirm before writing.** This is the single most consequential file this skill touches.
 
-Show it as a **diff against the current file**, not as the proposed contents — and **call out any removal explicitly in words**, separately from the diff. A diff that silently drops two keys is easy to approve while reading the permission entries you asked for, so the confirmation cannot be the only thing standing between a mistake and a written file.
+Show it as a **diff against the current file**, not as the proposed contents — and **call out any removal explicitly in words**, separately from the diff. A diff that silently drops two keys is easy to approve while reading the permission entries you asked for, so the confirmation cannot be the only thing standing between a mistake and a written file. **A `ref` change is called out in words the same way** — see above — and never written silently.
+
+### Then check the commands against the allowlist you just built
+
+You write the config and the allowlist in the same run, so you are the only thing positioned to notice a mismatch. **Verify that every `commands.bootstrap` and `commands.checks` entry matches an allow pattern.**
+
+A command matches only if it **starts with an allowlisted binary**. `Bash(npm *)` does not cover `npx` — they are different binaries, and this exact pair has already shipped a repository whose every check prompted on every run. In `default` mode the operator approves them forever; for a dispatched agent the guard hook **denies** them outright, so the agent can never reach a green check and never pushes.
+
+**An unmatched command is a hard stop**, resolved one of two ways:
+
+- **Pick a command that is already covered** — usually the repository's own script, which is the better answer anyway.
+- **Add a narrow allow entry for that specific tool**, such as `Bash(npx tsc *)`, and record it in `extraAllow` so a later reconcile keeps it.
+
+**Never widen to bare `Bash(npx *)`.** That is not a permission for one tool; it is a general package-execution primitive handed to every agent, which is exactly why the base list omits it.
 
 ## 5. Create the labels
 
@@ -114,15 +166,45 @@ gh label create "<name>" --color "<color>" --description "<description>"
 
 ## 6. Install the CI gate
 
-*Only when `approvalGate` is enabled.* Copy `${CLAUDE_PLUGIN_ROOT}/templates/approval-check.yml` to `.github/workflows/approval-check.yml`, substituting the integration branch, the marker and approved label names, and the blocking-label list (the in-flight and gate labels, one per line).
+*Only when `approvalGate` is enabled.* Copy `${CLAUDE_PLUGIN_ROOT}/templates/approval-check.yml` to `.github/workflows/approval-check.yml`, substituting the integration branch, the marker and approved label names, and the blocking-label list: the labels whose `role` is `in-flight` or `gate` in `labels.json`, in file order, restricted to enabled modules, using this repository's configured names, one per line. Indent every continuation line to the placeholder's own indentation — the value sits inside a YAML block scalar whose indentation is stripped before the shell ever sees it, so a flush-left continuation line collapses the list into one word.
 
 If the file already exists, diff it rather than overwriting, and ask.
 
-## 7. Bootstrap ignores
+## 7. Install the artifact validator
+
+`commands.artifacts` gives the three stage agents a production-time check on the commit, pull request, and review formats they write — the same patterns the layer 2 audit asserts, run before the artifact is committed rather than after. Installing it needs Node.
+
+```bash
+node --version
+```
+
+**No Node, or the operator declines** → leave `commands.artifacts` null, install nothing, and say plainly in step 10's report that the agents will produce the strict format above but nothing validates it locally.
+
+**Node present and the operator accepts:**
+
+- Copy `${CLAUDE_PLUGIN_ROOT}/templates/artifacts.mjs` to `scripts/port-artifacts.mjs`.
+- Copy `${CLAUDE_PLUGIN_ROOT}/templates/artifacts.yml` to `.github/workflows/artifacts.yml`, substituting `{{artifactsCommand}}` with `node scripts/port-artifacts.mjs`, `{{markerLabel}}` with the configured marker label name, and `{{approvedLabel}}` with the configured approved label name.
+- If either file already exists, diff it rather than overwriting, and ask.
+- Set `commands.artifacts` to `"node scripts/port-artifacts.mjs"` in `.claude/port.config.json`.
+- Add `Bash(node scripts/port-artifacts.mjs *)` to **both** `.claude/settings.json`'s `permissions.allow` and `.claude/port.config.json`'s `extraAllow`, so a later reconcile keeps it.
+
+## 7.5. Install the worktree reclamation script
+
+`commands.worktrees` gives the cockpit one deterministic call for reclaiming finished pipeline worktrees, instead of a per-tick prose procedure that never executed reliably (#144). Installing it needs Node, under the **same gate** as step 7's artifact validator — do not ask about Node twice; reuse the answer from that step.
+
+**No Node, or the operator declined step 7** → leave `commands.worktrees` null, install nothing, and say plainly in step 10's report that worktrees will accumulate under `.claude/worktrees/` and `/port:worktree-clean` is the only reclamation.
+
+**Node present and the operator accepts:**
+
+- Copy `${CLAUDE_PLUGIN_ROOT}/templates/worktrees.mjs` to `scripts/port-worktrees.mjs`. If it already exists, diff it rather than overwriting, and ask.
+- Set `commands.worktrees` to `"node scripts/port-worktrees.mjs"` in `.claude/port.config.json`.
+- Add `Bash(node scripts/port-worktrees.mjs *)` to **both** `.claude/settings.json`'s `permissions.allow` and `.claude/port.config.json`'s `extraAllow`, so a later reconcile keeps it.
+
+## 8. Bootstrap ignores
 
 Ensure `.gitignore` covers `.agents/`, `.temp/`, and the worktree root `.claude/worktrees/`. Append only what is missing.
 
-## 8. Offer the codebase analysis
+## 9. Offer the codebase analysis
 
 The repository is usable at this point, so this is the last thing asked and the only optional one.
 
@@ -135,7 +217,7 @@ Ask whether to run it now.
 
 **Declining is a genuinely supported path.** The analysis is slow and asks real questions, and an operator who just wants the pipeline running would rush exactly the decisions that matter most. State the consequence once and move on — do not press it.
 
-## 9. Report, including what you did not do
+## 10. Report, including what you did not do
 
 Summarize: the config written, permissions added versus already present, labels created versus skipped, whether the workflow was installed, and files touched.
 
@@ -144,6 +226,18 @@ Then state the manual steps explicitly. Chiefly:
 > **The approval gate is advisory until you make it a required check.** Add `run-approval-check` as a required status check in a branch ruleset on `<integration>`. I have not done this: it is an administrative change, hard to reverse, and it can block every merge if misconfigured.
 
 Never let the operator walk away believing they have a merge gate they do not have. If `approvalGate` was left off, say that too — plainly, not as a footnote.
+
+**If `commands.artifacts` was left null** — no Node, or the operator declined — say so here too: the stage agents will still produce the strict commit/pull-request/review/revision format, but nothing validates it locally, and a malformed one surfaces only in the layer 2 audit at `<labels.approved>`, or not at all if that workflow was never installed either.
+
+**If `commands.worktrees` was left null** — say so here too: the pipeline creates a worktree per ticket regardless, and with no reclamation script installed they will accumulate under `.claude/worktrees/` with no automatic cleanup; `/port:worktree-clean` is manual-only without it.
+
+**If step 1 found this checkout is not on the integration branch**, say so here:
+
+> ⚠️ You're on `<branch>`, not `<integration>`. Everything I just wrote — the config, the permission lists, and the plugin declaration — reaches dispatched agents only once it merges to `<integration>`, because their worktrees are checkouts of that branch and carry the committed files. Until then the cockpit works and dispatch does not.
+
+**Plugin updates land on the next session, not mid-session.** Say that once. Under a tag pin, an immutable `ref` never advances on its own — the supported way to move to a newer release is **re-running `/port:init`**, which re-resolves the newest published tag and reports the move in words, as above. Note also that `DISABLE_AUTOUPDATER` suppresses plugin updates entirely unless `FORCE_AUTOUPDATE_PLUGINS=1` is also set.
+
+**The config just written must reach this repository's default branch — `<default branch>`, from step 0's `gh repo view --json defaultBranchRef` — before any dispatched agent can read it.** `impl-agent` and `revise-agent` bootstrap from `git show origin/HEAD:.claude/port.config.json`, which resolves the default branch, not `branches.integration`. If the default branch and the integration branch differ, say so here and be explicit: a config change merged only to `<integration>` does not reach dispatched agents until it also reaches `<default branch>`.
 
 Also flag anything detection could not settle: no integration branch, no CI checks to mirror, an empty `commands.checks`. Finish with the next step:
 

@@ -17,26 +17,51 @@ You are the Revise agent (Stage 4) of the pipeline in `${CLAUDE_PLUGIN_ROOT}/doc
 
 ## Read the configuration first
 
-**Before anything else, read `.claude/port.config.json`.** If it is missing, stop and report that this repository is not port-managed — do not guess any of the values below.
+**Before anything else, read your repository configuration from the remote's default branch — never local `HEAD`:**
+
+```bash
+git remote set-head origin --auto
+git fetch origin
+git show origin/HEAD:.claude/port.config.json
+```
+
+Your worktree comes from the harness's `isolation: worktree`, and its initial checkout is **not reliable** — it can land on an unrelated, stale ref (observed: `origin/main` pinned to a commit that predates this repository's `.claude/` directory entirely) rather than the repository's actual default branch. Reading local `HEAD` fails exactly like a missing file, indistinguishable from a genuinely unmanaged repository. `git remote set-head origin --auto` resolves the remote's real default branch with a live query and points the local `origin/HEAD` symref at it; `git fetch origin` brings that branch's tip current; `git show origin/HEAD:<path>` then reads the committed blob straight out of the object store, independent of whatever your worktree happened to check out. If the last command fails (non-zero exit, `fatal: path '.claude/port.config.json' does not exist in '...'`), stop and report that this repository is not port-managed — do not guess any of the values below.
 
 | Placeholder | From | If unset |
 | --- | --- | --- |
 | `<repo>` | `repo` | required — stop |
 | `<owner>` / `<name>` | `repo`, split on `/` | required — stop |
 | `<labels.X>` | `labels.X` | the standard name in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Label lifecycle" |
+| `<artifacts>` | `commands.artifacts` | not set — skip every `check` call below entirely |
 
 **Label names are configuration, not constants.** Never type a label name you did not read from config or the standard vocabulary.
 
-Also read: `commands.bootstrap`, `commands.checks`, `docs.engineering`, `models.revise` (for the commit trailer), `sessionRequiredPaths` (which seeds the never-touch list), and `modules.previewDatabase`.
+Also read: `commands.bootstrap`, `commands.checks`, `commands.artifacts` (production-time artifact validation; null means skip it), `docs.engineering`, `models.revise` (for the commit trailer), `sessionRequiredPaths` (which seeds the never-touch list), and `modules.previewDatabase`.
 
 Your **model** comes from `models.revise`; the cockpit passes it at dispatch.
 
 ## Operating rules (read first)
 
-Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` in full — Read/Grep/Glob rather than shell, bare commands with no `cd` or `ENV=val` prefix (`git -c core.editor=true …` for a non-interactive editor), quoted cwd-relative paths, file-based GitHub I/O, `BLOCKED:` on auto-deny, no subagents. Revise-agent specifics, identical in intent to `impl-agent`:
+Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` in full.
+
+<!-- shell-discipline:begin -->
+**Shell discipline — every Bash call.** The allowlist matches the **whole command string from its first token**, so a command that chains or pipes into anything else fails the match no matter what its parts do.
+
+- **One command per call.** No `;`, `&&`, `||`, `for`/`while`, `if`/`[`, subshells, multi-line scripts, or a pipe into a non-allowlisted binary. Never `sh -c '…'` or `bash -c '…'`.
+- **Start with an allowlisted binary, bare.** No `cd …` prefix and no `ENV=val` prefix — `GIT_EDITOR=true git …` misses `Bash(git *)`; use `git -c core.editor=true …`.
+- **Never allowlisted, in any repository** — `echo`, `cat`, `head`, `tail`, `cut`, `diff`, `which`, `tee`, `xargs`, `base64`, `jq`, `sed`, `awk`, `python3`, `node -e`, `perl`. A denial there means *use a tool*, not retry with different flags. Probing the host or the Claude install is never part of a stage's job; if you genuinely need an unlisted binary that is a `BLOCKED:`, not something to route around.
+- **Read, search, and list with Read, Grep, and Glob.** `grep`, `find`, `ls`, and `wc` *are* in the base allowlist, but the tools are cheaper and gitignore-aware. List a directory → **Glob**, scoped to source directories, never a root-level `**/*`; read or count a file → **Read**; search or test for text → **Grep**.
+- **Quote every path argument**, cwd-relative with forward slashes. **Write files with Write and Edit** — never a redirect or heredoc; delete tracked files with `git rm "<path>"`.
+- **Sanctioned recipes** for what the tools cannot reach:
+  - filter JSON → `gh … --json … --jq '…'`, never `| jq` or a piped interpreter.
+  - a file at a ref that is not checked out → `gh api "repos/<repo>/contents/<path>?ref=<sha>" -H "Accept: application/vnd.github.raw"` — one command, no pipe, no `base64 -d`.
+  - large markdown to GitHub → Write it under `.temp/`, then `--body-file` / `--input`.
+<!-- shell-discipline:end -->
+
+Revise-agent specifics, identical in intent to `impl-agent`:
 
 - **Stay in your worktree.** Do all work in place. **Never** `cd` out of it, use `git -C`, run `git worktree list`/`add`/`remove`/`prune`, use `--ignore-other-worktrees`, or force anything. If a branch is locked to another worktree, **stop and emit `BLOCKED:`**.
-- **Toolchain: only what `commands` and `extraAllow` give you.** Do not reach for an undeclared package runner or global binary; it will auto-deny. Edit and create files with Write and Edit; delete tracked files with `git rm`.
+- **Toolchain: only what `commands` and `extraAllow` give you.** Do not reach for an undeclared package runner or global binary; it will auto-deny.
 - **Sync first, clean code only.** `git fetch origin` and rebase onto the pull request's base branch before anything else. No dead scaffolding or shims, and do not reintroduce problems `docs.engineering` calls out.
 
 ## Pre-flight
@@ -44,10 +69,10 @@ Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROO
 Resolve `$INPUT` to a pull request number and capture its branches:
 
 ```bash
-gh pr view $INPUT --repo <repo> --json labels,title,headRefName,baseRefName
+gh pr view $INPUT --repo <repo> --json labels,title,headRefName,baseRefName,headRefOid
 ```
 
-If that fails it is an issue number: `gh pr list --repo <repo> --search "closes #$INPUT" --json number,title,headRefName,baseRefName`. If none is found, stop and report: "No open pull request found linked to issue #$INPUT. Nothing was changed."
+If that fails it is an issue number: `gh pr list --repo <repo> --search "closes #$INPUT" --json number,title,headRefName,baseRefName,headRefOid`. If none is found, stop and report: "No open pull request found linked to issue #$INPUT. Nothing was changed." Record `headRefOid` — rebase-only mode's no-op check (step 5) compares against it.
 
 Confirm the pull request is labeled `<labels.needsRevision>`. If instead it carries **`<labels.refreshBranch>`** — the cockpit's prompt will say "refresh mode" — skip everything below and follow **Refresh mode** at the end of this file. If neither is present, stop, report the current labels, and change nothing.
 
@@ -59,14 +84,29 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --a
 
 ## Work
 
-1. **Read the latest review.** Reviews are real GitHub pull request reviews — read the most recent one's body **and** its inline comments:
+1. **Read the latest review — or the withdrawn check.** Reviews are real GitHub pull request reviews — read the most recent one's body **and** its inline comments, and the pull request's comments for a newer `## Approval withdrawn`:
 
    ```bash
-   gh pr view <pr-number> --repo <repo> --json reviews --jq '.reviews[-1].body'
+   gh pr view <pr-number> --repo <repo> --json reviews,comments --jq '{review: (.reviews // [] | max_by(.submittedAt) | {body, submittedAt}), comments: (.comments // [] | map({body, createdAt}))}'
    gh api repos/<repo>/pulls/<pr-number>/comments --jq '.[] | "\(.path):\(.line) — \(.body)"'
    ```
 
-   The latest review, titled `## Code Review — Cycle <n>`, is what you address — note its cycle. When `docs.engineering` is set, read it too.
+   **Mode is decided by whichever of three signals is newest** — the latest `## Code Review`, `## Approval withdrawn`, and `## Rebase required` comment:
+
+   **Check-fix mode.** When the newest `## Approval withdrawn` comment is newer than the newest `## Code Review` (and newer than any `## Rebase required`), the work item is the named check, not a findings list:
+
+   ```bash
+   gh run list --repo <repo> --branch <headRefName> --json databaseId,name,conclusion,workflowName
+   gh run view <databaseId> --repo <repo> --log-failed
+   ```
+
+   Read the failing check's log, fix the underlying cause, and push (step 4 onward) — there are no review threads to resolve. The revision note's detail line is `check <name> · <sha>` (step 7). **Never "fix" the excused approval-gate check** — its conclusion is a function of the pipeline's own labels, exactly as a quota-red deployment is infrastructure never to be chased.
+
+   **Rebase-only mode.** When the newest `## Rebase required` comment is newer than the newest `## Code Review` (and newer than any `## Approval withdrawn`), the work item is the rebase itself — GitHub reported this pull request conflicting with its base, so no checks ever ran on the diff and there is nothing else to address. **Skip step 3 entirely** (no findings) **and step 6 entirely** (no threads) — step 2's rebase, including the conflict protocol and any recorded `### Rebase decisions`, is the whole work item. Run step 4's checks once the rebase is clean, same as any other cycle. Step 5's push differs: if the working tree is dirty after the rebase (`commands.bootstrap` or the checks changed something), commit and push normally; **otherwise there is no new commit** — push the rebased head as-is (`git push --force-with-lease origin HEAD:<branch>`). If `git rev-parse HEAD` still equals the `headRefOid` recorded at pre-flight, the rebase was a genuine no-op (the branch was already current with `<base>`): **skip the push entirely** and report `rebase: no-op (already current)` rather than fabricating a push. The revision note's detail line is `rebase onto <base> · <sha>` (step 7). Handoff is unchanged — `<labels.readyForReview>` — so the pull request is reviewed with real checks on the now-current diff.
+
+   **Otherwise**, the latest review, titled `## Code Review — Cycle <n>`, is what you address — note its cycle. When `docs.engineering` is set, read it too.
+
+1b. **Read any recorded rebase decisions**, before the rebase. Find the newest `## Gate cleared` comment that is newer than the newest `## Pipeline Escalation`, and parse its `### Rebase decisions` lines (`` - D<n> `path` — **<letter> <label>** ``) into `(D<n>, path, letter)`. Apply each to its matching hunk during step 2's rebase. A recorded decision whose hunk no longer exists (the base moved again) is **dropped and noted** in the revision comment; a **new** ambiguous hunk with no recorded decision escalates again with fresh `D1..Dn` IDs. Never guess a decision from a stale one, and never apply one to a hunk it was not written for.
 
 2. **Check out the pull request branch — detached, to avoid worktree branch-lock.** `<branch>` is `headRefName` and `<base>` is `baseRefName`. Do **not** `git checkout -B <branch>`; it fails with "already used by worktree" when a stale worktree holds that branch. Use a detached checkout and push by refspec at the end.
 
@@ -80,24 +120,24 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --a
 
    Then run each entry in `commands.bootstrap` in order, one per Bash call. If it is empty, skip.
 
-   If the rebase **conflicts**, follow the protocol below. **Fail closed: when in doubt about any single conflict, abort the whole rebase and escalate** — never partially resolve, and never let an auto-resolve silently drop a side's logic.
+   If the rebase **conflicts**, follow the protocol below. **Atomicity and preservation are separate properties**: abort the whole rebase on any ambiguity and never push a half-rebased branch — but the classification itself is deterministic and must not be discarded, since it is re-derived identically (and reapplied) on the next attempt.
 
-   **Rebase conflict protocol.** The canonical classification matrix lives in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Rebase conflict protocol"; read it before classifying.
+   **Rebase conflict protocol.** The canonical classification matrix and escalation format live in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Rebase conflict protocol"; read it before classifying. **Bias toward resolving**: resolve when both sides are additive and no line's meaning changes; escalate when accepting one side would drop the other's logic.
 
    - **a. Never-touch short-circuit (check first).** List conflicted files with `git diff --name-only --diff-filter=U`. If **any** matches a glob in `sessionRequiredPaths`, is a database migration, or is environment or build configuration, **skip classification entirely and escalate** (step e). These are correctness- or policy-critical and never safe to auto-merge, however trivial the diff looks.
    - **b. Inspect.** Otherwise use **Grep** (for `<<<<<<<`) to find the markers and **Read** to inspect both sides of every hunk. Never `cat`, `sed`, or shell redirection.
-   - **c. Classify** every conflict against the matrix. A conflict is **auto-resolvable** only when the two sides are in clearly separate, non-overlapping sections (each added a different import or export), one side made a whitespace or formatting-only change in the other's area, one side deleted a block the other never touched, or it is a generated lockfile. It must **escalate** when both sides modified the same function body, expression, schema field, or constant, or the same lines — or when accepting one side would drop the other's logic. If **all** are auto-resolvable go to step d; if **any** is ambiguous go to step e.
-   - **d. Resolve (all auto-resolvable).** For each file use **Edit or Write** to produce the merged content with **every conflict marker removed** (`<<<<<<<`, `=======`, `>>>>>>>`), then `git add "<path>"` — quote it, since real source paths contain shell-special characters. For a lockfile, prefer taking the base's version and regenerating it via `commands.bootstrap` over hand-merging. Then continue **non-interactively**: `git -c core.editor=true rebase --continue`, never a bare `--continue` that may open an editor. A rebase can pause more than once — if a later step surfaces new conflicts, **re-run this protocol from step a**. Record each file's resolution strategy for the revision note.
-   - **e. Escalate (any ambiguous, semantic, or never-touch).** `git rebase --abort`. Write a `## Pipeline Escalation` body to `.temp/conflict-<pr>.md` listing each conflicting file, the specific ambiguous hunks, both sides of each, and why autonomous resolution was not safe. Then:
+   - **c. Classify** every conflict against the matrix in `PIPELINE.md`. A conflict is **auto-resolvable** when the two sides are in clearly separate, non-overlapping sections (each added a different import or export), one side made a whitespace or formatting-only change in the other's area, one side deleted a block the other never touched, it is a generated lockfile, both sides append distinct entries to the same list/set/table (**take the union**), both sides add distinct sections or rows under the same heading (**keep both, deterministic order**), or one side restructures a block the other only added to (**apply the addition inside the new structure**). It must **escalate** when both sides modified the same function body, expression, schema field, or constant, or the same lines, or when accepting one side would silently drop the other's logic. Classify **every** conflict, including one with a recorded decision from step 1b — a recorded decision is applied in step d, not skipped in classification.
+   - **d. Resolve (every auto-resolvable conflict, plus any hunk with a recorded decision from step 1b).** For each file use **Edit or Write** to produce the merged content with **every conflict marker removed** (`<<<<<<<`, `=======`, `>>>>>>>`), applying the recorded letter's resolution where step 1b supplied one, then `git add "<path>"` — quote it, since real source paths contain shell-special characters. For a lockfile, prefer taking the base's version and regenerating it via `commands.bootstrap` over hand-merging. Then continue **non-interactively**: `git -c core.editor=true rebase --continue`, never a bare `--continue` that may open an editor. A rebase can pause more than once — if a later step surfaces new conflicts, **re-run this protocol from step a**. Record each file's resolution strategy, and each applied decision, for the revision note (step 7).
+   - **e. Escalate (any hunk still ambiguous after step 1b's decisions are applied, or on the never-touch list).** `git rebase --abort`. Write a `## Pipeline Escalation` body to `.temp/conflict-<pr>.md`: a one-line summary (`<k> conflicts — <a> resolved automatically, <b> need a decision`), an `### Auto-resolved (reapplied on the next attempt)` list of `` `path` — <strategy> ``, then one `### D<n> — \`path\`` block per ambiguous hunk with **ours**/**theirs** in one line each, a two-or-three-row options table (`Keeps`/`Loses` columns — typically **A take ours** · **B take theirs** · **C** a specific described combination), and a bolded `**Recommendation: <letter>** — <reason>`. IDs restart at `D1` in this comment — never ask the operator to edit a file, and never emit a raw conflict-marker dump. Then:
 
      ```bash
      gh pr comment <pr-number> --repo <repo> --body-file .temp/conflict-<pr>.md
      gh pr edit <pr-number> --repo <repo> --remove-label "<labels.revising>" --add-label "<labels.needsHuman>"
      ```
 
-     End with: `BLOCKED: rebase of <branch> onto origin/<base> has ambiguous conflicts in <files>; human decision needed.`
+     End with: `BLOCKED: rebase of <branch> onto origin/<base> needs <b> decision(s) — see the escalation comment.`
 
-3. **Apply fixes** per the review's findings. Fix **every finding flagged at this cycle's bar** — the review uses an escalating bar, so an early cycle includes Low and Nit; fix them rather than deferring. All should be issues **introduced in this pull request**. Skip a flagged item only if it is genuinely not an issue, and explain the skip. **Preexisting** findings of any severity: do not fix, but note them as suggested follow-up tickets. No scope creep beyond the review.
+3. **Apply fixes** per the review's findings — **skip this step entirely in check-fix mode and in rebase-only mode**, where step 1 already named the one thing to fix (a check, or nothing beyond the rebase itself). Fix **every finding flagged at this cycle's bar** — the review uses an escalating bar, so an early cycle includes Low and Nit; fix them rather than deferring. All should be issues **introduced in this pull request**. Skip a flagged item only if it is genuinely not an issue, and explain the skip. **Preexisting** findings of any severity: do not fix, but note them as suggested follow-up tickets. No scope creep beyond the review.
 
    > **Module: `previewDatabase`.** When true, **never** attempt to fix a red deployment check and never treat one as a finding to address — it is infrastructure, almost always the preview database quota. If a review body carries the infrastructure note, ignore it.
 
@@ -109,14 +149,22 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --a
 
    ```bash
    # Write .temp/commit-msg.txt (Write tool), then:
+   <artifacts> check commit .temp/commit-msg.txt --issue <issue-number>
    git add -A
    git commit -F .temp/commit-msg.txt
    git push --force-with-lease origin HEAD:<branch>
    ```
 
-   The push is by refspec from a detached HEAD, and force-with-lease because the branch was rebased. **Message format:** subject `#<issue-number> address review feedback`, under 80 characters, no trailing period; an optional short body only if the *why* is not obvious; then a blank line and the co-authorship trailer naming the model from `models.revise`. Note the pushed SHA (`git rev-parse HEAD`) for the next step.
+   The push is by refspec from a detached HEAD, and force-with-lease because the branch was rebased. **Message format:** subject `#<issue-number> address review feedback`, under 80 characters, no trailing period, a co-authorship trailer naming the model from `models.revise` — the validator is authoritative on the exact shape. **When `commands.artifacts` is set**, run the `check commit` command above before every commit; a non-zero exit means rewrite `.temp/commit-msg.txt` and re-run it — never `git commit` past a failing check. Skip when `commands.artifacts` is null. Note the pushed SHA (`git rev-parse HEAD`) for the next step.
 
-6. **Resolve the addressed review threads** so they do not block merge. Inline comments live on **threads** that only a GraphQL mutation can resolve. The query takes owner and name **separately**:
+   **Rebase-only mode differs here.** There are no findings to commit, so check whether the rebase (plus `commands.bootstrap`/`commands.checks`) actually changed the tree:
+   - **`git rev-parse HEAD` still equals the `headRefOid` recorded at pre-flight** — the rebase was a genuine no-op (the branch was already current with `<base>`). **Skip the push entirely**; report `rebase: no-op (already current)`. Never fabricate an empty commit to force one.
+   - **Otherwise, if the working tree is dirty** (rare — a bootstrap step wrote something) — commit normally as above, subject `#<issue-number> rebase onto <base>`.
+   - **Otherwise** — the rebase moved `HEAD` with no new content to commit. **Push the rebased head as-is, no commit**: `git push --force-with-lease origin HEAD:<branch>`.
+
+   **Findings mode has the same no-op**, from the opposite direction: if step 3 skipped every flagged item as genuinely not an issue, there is nothing staged. **`git status --porcelain` empty** → skip the commit and the push entirely, exactly like rebase-only's no-op above — report `no new commit (every finding skipped)` rather than committing nothing or forcing an empty commit.
+
+6. **Resolve the addressed review threads** so they do not block merge — **skip this step entirely in check-fix mode and in rebase-only mode**, where there are no threads to resolve. Inline comments live on **threads** that only a GraphQL mutation can resolve. The query takes owner and name **separately**:
 
    ```bash
    # List unresolved threads, with the finding ID in each first comment:
@@ -129,20 +177,34 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --a
 
    Match threads to findings by the **finding ID** (`R<c>-<id>`) the review agent put in each inline comment. **Resolve only what you actually fixed** — a genuinely-skipped thread gets a one-line reason and stays open.
 
-7. **Post one short revision note**, or none. The resolved threads are the log, so do not re-summarize findings. Write `.temp/revision-<pr>.md`, then `gh pr comment <pr-number> --repo <repo> --body-file .temp/revision-<pr>.md`:
+7. **Post one short revision note**, or none. The resolved threads are the log, so do not re-summarize findings. Write `.temp/revision-<pr>.md` — the validator is authoritative on the exact shape (heading `## Revision — Cycle <n>` plus one `fixed … · skipped … · <sha>` line, or `check <name> · <sha>` in check-fix mode). Append `· rebase: <file> (<strategy>)` for each reapplied or newly auto-resolved conflict, and `· decisions: D1 B, D2 C` for any recorded rebase decisions step 1b applied. A hunk whose recorded decision no longer matched gets its own one-line note (`D1 dropped — hunk no longer present`). No Fixed, Skipped, or Preexisting sections — those live on the threads. A preexisting issue worth tracking gets a one-line `follow-up:` note here, or a new issue. `<n>` is the cycle of the review you addressed, or — in check-fix mode — the cycle whose approval was withdrawn (the count of prior reviews, unchanged — no new review happened).
+
+   **When `commands.artifacts` is set**, before `gh pr comment` run:
+
+   ```bash
+   <artifacts> check revision .temp/revision-<pr>.md --cycle <n>
+   ```
+
+   A non-zero exit means rewrite `.temp/revision-<pr>.md` and re-run it — never post past a failing check. Skip when `commands.artifacts` is null. Then:
+
+   ```bash
+   gh pr comment <pr-number> --repo <repo> --body-file .temp/revision-<pr>.md
+   ```
+
+   **Rebase-only mode** writes `rebase onto <base> · <sha>` instead — no `fixed`/`skipped` segment, since there were no findings and no threads. `<n>` is the count of prior reviews, unchanged (no new review happened). Skip the comment entirely when step 5 reported `rebase: no-op (already current)` — nothing moved, so there is nothing to note:
 
    ```
    ## Revision — Cycle <n>
-   fixed R<c>-C1, R<c>-M1 · skipped R<c>-L1 · <sha>
+   rebase onto <base> · <sha>
    ```
-
-   `<n>` is the cycle of the review you addressed. Append `· rebase: <file> (<strategy>)` if you auto-resolved a conflict. Drop `fixed` or `skipped` when empty. No Fixed, Skipped, or Preexisting sections — those live on the threads. A preexisting issue worth tracking gets a one-line `follow-up:` note here, or a new issue.
 
 ## Handoff
 
 ```bash
 gh pr edit <pr-number> --repo <repo> --remove-label "<labels.revising>" --add-label "<labels.readyForReview>"
 ```
+
+The label swap above is unchanged **regardless of whether this cycle produced a new commit** — enforcement of "did this actually move anything" stays in one place, the cockpit's own zero-diff review gate, not duplicated here. But when the cycle ended with no new commit — rebase-only mode's `rebase: no-op (already current)` (step 5), or a findings cycle where every flagged item was skipped as not-an-issue and nothing was pushed — say so plainly in the final report (e.g. "no new commit — head remains `<sha>`"), since the cockpit's zero-diff gate will decline to open a new review cycle against this head rather than dispatching one.
 
 ## Refresh mode
 
