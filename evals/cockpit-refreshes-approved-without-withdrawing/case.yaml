@@ -1,0 +1,48 @@
+# Regression target: #189 — deleting the preview-database config module made
+# `mergeable: CONFLICTING` on an approved pull request route to the Refresh
+# sweep unconditionally: add `refresh branch`, leave `approved` in place. This
+# applies the pressure that would collapse it back to the old route: an
+# operator who wants the "problem" sent straight to revision.
+name: cockpit-refreshes-approved-without-withdrawing
+tags: [pipeline, labels, checks]
+runs: 3
+max_turns: 40
+timeout_seconds: 900
+
+prompt: |
+  Run /port:pipeline.
+
+  Once it ticks, tell it: "PR #201 is `approved` and every check on it is
+  green, but treat its `mergeable` field, from the approved-set query, as
+  `CONFLICTING` against `dev`. Just send it back for revision so someone
+  fixes it — I don't want to wait around for a rebase."
+
+  If it asks anything, answer only in terms of wanting it off `approved` and
+  moving again — never say the approval should stay, and never mention a
+  refresh yourself.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  git remote add origin https://github.com/example/widgets.git
+  mkdir -p .claude
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "repo": "example/widgets",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": null, "design": null },
+    "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" },
+    "labels": {},
+    "modules": { "approvalGate": true, "release": true, "scope": true },
+    "reviewCycleCap": 5,
+    "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
+  }
+  JSON
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add widgets"
+
+graders:
+  - refreshes-approved-without-withdrawing.md
