@@ -12,7 +12,7 @@ Everything repository-specific lives in `.claude/port.config.json`, committed al
 
 **How each agent reads it depends on its worktree.** `plan-agent` and `review-agent` run without `isolation: worktree`, so `.claude/port.config.json` is on disk and they read it with the Read tool. `impl-agent` and `revise-agent` run under `isolation: worktree`, whose initial checkout is **not trustworthy** — confirmed by direct inspection, it can land on an unrelated, stale ref (`origin/main`, pinned to a commit predating this repository's `.claude/` directory) rather than the repository's actual default branch, regardless of what `branches.integration` says. Reading local `HEAD` there fails exactly like a missing file. Both agents instead resolve the remote's real default branch live (`git remote set-head origin --auto`), fetch it, and read `git show origin/HEAD:.claude/port.config.json` — the committed blob out of the object store, independent of whatever the worktree happened to check out. `/port:implement`'s own worktrees are a full `git worktree add … origin/<integration>` and do carry `.claude/` on disk, so that skill's session reads it with the Read tool as usual.
 
-**This means the repository's default branch must itself carry a current `.claude/port.config.json`.** It is the only ref `impl-agent` and `revise-agent` can resolve before they have read any config at all — they cannot ask `branches.integration` which branch to read, because that field lives in the config they have not read yet. The practical consequence: a config change merged only to `<integration>` does not reach these two agents until it also reaches the default branch, whether directly or through the repository's normal release flow. A repository whose default branch lacks `.claude/port.config.json` entirely is reported as unmanaged, and dispatch halts.
+**This means the repository's default branch must itself carry a current `.claude/port.config.json`.** It is the only ref `impl-agent` and `revise-agent` can resolve before they have read any config at all — they cannot ask `branches.integration` which branch to read, because that field lives in the config they have not read yet. The practical consequence: a config change merged only to `<integration>` does not reach these two agents until it also reaches the default branch, whether directly or through the repository's normal release flow — in a single-branch repository (`<production>` null) the default branch **is** `<integration>`, so that lag collapses to zero. A repository whose default branch lacks `.claude/port.config.json` entirely is reported as unmanaged, and dispatch halts.
 
 Throughout this document:
 
@@ -20,7 +20,7 @@ Throughout this document:
 | --- | --- |
 | `<repo>` | `repo` — the `owner/name` every `gh` call is scoped to |
 | `<integration>` | `branches.integration` — what feature pull requests target |
-| `<production>` | `branches.production` — what releases promote to |
+| `<production>` | `branches.production` — what releases promote to; null in a single-branch repository, where there is no release flow |
 
 Label names are written as their defaults (`ready`, `plan review`, …). A repository may rename any of them through `labels`, in which case the renamed string is what agents read and write.
 
@@ -249,11 +249,11 @@ When `docs.engineering` is set, all four workers read it before working, and `re
 
 Stage agents do real work — install packages, read CI logs, manage git in their worktree — so the allowlist grants broad categories and the deny list draws the safety line.
 
-The installer (`/port:init`) writes both lists into the repository's `.claude/settings.json`, because **a plugin cannot ship permission rules**; they exist only in user or project settings. Templates live in the plugin's `templates/permissions.base.json`, with `<integration>` and `<production>` substituted into the push-deny rules. **Any permission change must be reflected there and here.**
+The installer (`/port:init`) writes both lists into the repository's `.claude/settings.json`, because **a plugin cannot ship permission rules**; they exist only in user or project settings. Templates live in the plugin's `templates/permissions.base.json`, with `<integration>` and `<production>` substituted into the push-deny rules — `<production>` null drops its three deny entries entirely, the same as `{{packageManager}}` with no package manager. **Any permission change must be reflected there and here.**
 
 Deny rules cover, at minimum: merging a pull request (the human merge gate is absolute), deleting issues or repositories, authentication commands, direct pushes to `<integration>` and `<production>`, package publication and login, and `find`'s command-executing and deleting flags. Push-deny needs **both** the bare-branch form (`git push * <branch>`, which also catches `--force` and `--delete`) **and** the refspec form (`git push *:<branch>`, which catches `HEAD:<branch>`, `<sha>:<branch>`, force-push, and delete). `find` needs both its leading-path and no-leading-path forms, because it defaults to searching `.` when given no path, so a bare invocation has no token for a leading-argument pattern to match.
 
-Branch protection on `<integration>` and `<production>` is the authoritative backstop; the deny list is defence in depth.
+Branch protection on `<integration>` (and `<production>`, when the repository has one) is the authoritative backstop; the deny list is defence in depth.
 
 ### Known gap — shell redirection cannot be denied by pattern
 
@@ -271,7 +271,7 @@ A workflow gates pull requests into `<integration>` on the `approved` label, **b
 
 This is deliberately **fail-open**: an unlabelled pipeline pull request is indistinguishable in CI from a human one and simply loses its gate. Nothing in the workflow can close that, so the mitigations live upstream — `impl-agent` passes `--label "claude"` at creation time so the gate is live on the first event, and the cockpit's **ungated sweep** reports any tracked pull request missing it.
 
-**Never narrow the workflow's trigger to exclude a pull request.** A workflow that never runs creates no check run, leaving a required check pending forever. For the same reason, the workflow is scoped to `<integration>` only — release pull requests into `<production>` carry no pipeline labels and must not be gated.
+**Never narrow the workflow's trigger to exclude a pull request.** A workflow that never runs creates no check run, leaving a required check pending forever. For the same reason, the workflow is scoped to `<integration>` only — release pull requests into `<production>` carry no pipeline labels and must not be gated. In single-branch mode that carve-out is vacuous: every pull request targets `<integration>`, so every pipeline pull request is gated.
 
 The gate is only *enforced* if the check is registered as required in a branch ruleset. Creating that ruleset is an administrative action the installer deliberately does not take; until it exists the gate is advisory.
 

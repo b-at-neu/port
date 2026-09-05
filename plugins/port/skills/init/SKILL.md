@@ -35,7 +35,7 @@ If `.claude/port.config.json` already exists, this is a **reconcile**: read it, 
 
 Gather, without writing anything:
 
-- **Branches** — `git branch -r` and `git rev-parse --abbrev-ref HEAD`. Look for an integration branch distinct from the default. If only one long-lived branch exists, say so; the pipeline needs an integration branch, and creating one is the operator's decision. Keep the current branch from this pass — step 10's report reuses it rather than looking it up again.
+- **Branches** — `git branch -r` and `git rev-parse --abbrev-ref HEAD`. Classify the branch model: **two-branch** when a long-lived branch distinct from the default exists, **single-branch** when the default is the only long-lived branch. Report which was detected. In single-branch mode, state plainly, before proposing anything: "Only one long-lived branch here: `<default>`. I can adopt this as a single-branch repository — feature pull requests target `<default>`, and there is no release flow. I will not create a second branch for you." Keep the current branch from this pass — step 10's report reuses it rather than looking it up again.
 - **Toolchain** — read the manifest and lockfiles the repository actually has, and list the available scripts. **Do not assume a package manager**; a repository may have none.
   - **Propose the repository's declared scripts, not ad-hoc invocations.** A repository with a `lint` script gets that script — not a direct call to whatever binary you guess it wraps. The script is what its authors maintain and what CI runs; a direct invocation drifts from both the moment either changes.
   - **A check with no backing script is proposed by asking, never assumed.** A repository with no type-check script may simply not have that check. Inventing one produces an agent that fails every run, and — worse than failing — fails by *prompting*, because an invented command is usually one the allowlist does not cover.
@@ -46,15 +46,22 @@ Gather, without writing anything:
 
 Report what you found before proposing anything.
 
-## 2. Choose the modules
+## 2. Choose the branch model, then the modules
 
-Ask about each `modules` flag with `AskUserQuestion`, presenting the detected default as the recommendation and stating what the flag actually does.
+**Only when step 1 detected a single long-lived branch**, ask the branch-model question first, before any module question, with `AskUserQuestion` (header `Branch model`):
+
+- **Single branch — `<default>`** *(recommended)* — "`branches.production` is null and `modules.release` is off. `/port:release` will refuse; releasing is whatever you already do by hand. Every pipeline pull request targets `<default>`."
+- **Two branches** — "I need an integration branch distinct from `<default>` before I can write a two-branch config. Create one, then re-run `/port:init`." Choosing this **stops the run**; it never creates the branch itself.
+
+In single-branch mode, `modules.release` is `false` by construction and the `release` question below is **not asked**.
+
+Ask about each remaining `modules` flag with `AskUserQuestion`, presenting the detected default as the recommendation and stating what the flag actually does.
 
 | Flag | Recommend | Because |
 | --- | --- | --- |
 | `approvalGate` | **off** when no ruleset protects the integration branch | The check would never be required, so the workflow is pure noise. Say plainly that with no ruleset the gate is advisory either way. |
 | `previewDatabase` | **off** unless the repository's previews demonstrably hold a per-pull-request database branch from a finite pool | It is a narrow situation, and enabling it makes the pipeline treat a red deployment as infrastructure rather than a bug. |
-| `release` | on | Most repositories want an integration-to-production promotion flow. |
+| `release` | on, **skipped in single-branch mode** (forced `false`) | Most two-branch repositories want an integration-to-production promotion flow. |
 | `scope` | on | Cheap, and only used when invoked. |
 
 The answers decide which of the remaining steps run at all.
@@ -74,6 +81,11 @@ If it is ignored, **stop and explain** rather than writing it. The config has to
 Set `docs.engineering` to a path only if that file **exists and says something real**. Leave it null otherwise — pointing it at an empty skeleton makes review cite a document with no content. Step 8 offers to fill it properly, and sets the field itself if the operator accepts.
 
 **Validation is mandatory, not conditional. Never write a config that does not validate.** Check it against the schema at the `$schema` URL the config template carries, with a validator if one is available; if none is, walk the schema by hand and confirm every field's type and shape. A config that fails validation is a config every consumer misreads.
+
+**Two branch-model coherence rules, both hard stops, neither expressible by the schema alone:**
+
+- **Null `production` requires an explicit `modules.release: false`.** The schema rejects a null `production` paired with `release: true` or with `modules` omitted (`release` defaults to true), so single-branch mode always writes both together.
+- **A string `production` must differ from `integration` after defaults are resolved.** `integration ?? "dev"` compared against `production ?? "main"` — the schema cannot compare sibling values, so this is caught here or nowhere. On a match: "`branches.integration` and `branches.production` both resolve to `<name>`. Set `production` to null for single-branch mode, or name a distinct production branch — two identical values read as a mistake at every use site." Stop; do not write.
 
 Get `commands.checks` right in particular: its items are **objects** with a required `run` and an optional `fix` —
 
@@ -132,7 +144,7 @@ Drop `enabledPlugins` or `extraKnownMarketplaces` entirely and you have **uninst
 
 Then, within the two lists you do own:
 
-- Substitute `{{integration}}` and `{{production}}` into the push-deny rules, and `{{packageManager}}` into the package-manager entries. **If the repository has no package manager, drop those entries** rather than leaving a literal placeholder — an unsubstituted pattern matches nothing and silently grants nothing.
+- Substitute `{{integration}}` and `{{production}}` into the push-deny rules, and `{{packageManager}}` into the package-manager entries. **If the repository has no package manager, drop those entries**, and **if `branches.production` is null, drop its three `{{production}}` push-deny entries the same way** — never leave a literal placeholder, since an unsubstituted pattern matches nothing and silently grants nothing.
 - Append `extraAllow` to the allow list.
 - **Union with what is already there. Never drop an existing entry**, even one that looks redundant; it may be load-bearing for something outside the pipeline.
 - Deduplicate exact repeats.
@@ -230,6 +242,8 @@ Never let the operator walk away believing they have a merge gate they do not ha
 **If `commands.artifacts` was left null** — no Node, or the operator declined — say so here too: the stage agents will still produce the strict commit/pull-request/review/revision format, but nothing validates it locally, and a malformed one surfaces only in the layer 2 audit at `<labels.approved>`, or not at all if that workflow was never installed either.
 
 **If `commands.worktrees` was left null** — say so here too: the pipeline creates a worktree per ticket regardless, and with no reclamation script installed they will accumulate under `.claude/worktrees/` with no automatic cleanup; `/port:worktree-clean` is manual-only without it.
+
+**In single-branch mode**, say instead of the two warnings below (they are unreachable when there is only one branch): "Single-branch mode: `<default>` is both the integration branch and the default branch, so this config reaches dispatched agents on the merge that lands it. `/port:release` is unavailable. If you enabled the approval gate, it covers every pipeline pull request — there is no release pull request to exempt."
 
 **If step 1 found this checkout is not on the integration branch**, say so here:
 

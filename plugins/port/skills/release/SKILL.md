@@ -15,7 +15,7 @@ allowed-tools: Read, Edit, Write, AskUserQuestion, ScheduleWakeup, Bash(git *), 
 
 Read `.claude/port.config.json` for `repo` (`<repo>`), `branches.integration` (`<integration>`), `branches.production` (`<production>`), and the `release` block: `versionSource`, `versionFiles`, and `versionCommand`.
 
-**`branches.production` unset → stop and report.** A release is a promotion between two branches; with one branch there is nothing to promote into, and inventing a production branch is the failure #54 exists to prevent.
+**`branches.production` is `null` → stop and report, verbatim:** `branches.production is null — this repository has one long-lived branch, so there is nothing to promote into and modules.release is off. Nothing was changed.` An **absent** key is not this case — it still means the documented `main` default, and only an explicit `null` states single-branch mode (#54).
 
 **`versionSource` changes the shape of this flow, so resolve it before anything else:**
 
