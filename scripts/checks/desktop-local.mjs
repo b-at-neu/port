@@ -29,13 +29,13 @@ export default async function ({ fail, ok }) {
       // precedent to follow, which must not itself trip the guard.
       const codeOnly = text
         .split('\n')
-        .filter((l) => !/^\s*(\/\/|\*)/.test(l))
+        .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
         .join('\n');
       if (/\bgh\s*\(|\bghJson\s*\(|main\/github/.test(codeOnly)) {
         violated = true;
         fail('desktop-local-adapter', `${relOf(f)} references gh(/ghJson(/main/github — this directory is local-only (Decision 1), never a second GitHub caller`);
       }
-      if (/import\s*\{[^}]*\bgit\b[^}]*\}\s*from\s*'\.\.\/platform'/.test(text)) {
+      if (/import\s*\{[^}]*\bgit\b[^}]*\}\s*from\s*'\.\.\/platform'/.test(codeOnly)) {
         usesGit = true;
       }
     }

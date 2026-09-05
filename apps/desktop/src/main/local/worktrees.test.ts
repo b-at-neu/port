@@ -54,7 +54,12 @@ describe('readWorktrees — field mapping', () => {
         '',
       ]),
     )
-    const result = await readWorktrees({ repoRoot: '/repo', git: routedGit({ list }, calls), now })
+    const result = await readWorktrees({
+      repoRoot: '/repo',
+      git: routedGit({ list }, calls),
+      now,
+      pathOps: createPathOps('posix', { home: '/home/u' }),
+    })
     if (!result.ok) throw new Error('expected ok')
     expect(result.mainPath).toBe('/repo')
     expect(result.entries).toHaveLength(2)
