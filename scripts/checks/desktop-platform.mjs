@@ -109,4 +109,20 @@ export default async function ({ fail, ok }) {
     }
     ok();
   }
+
+  // --- runCommand( is called only from main/platform/ -------------------------
+  // #76: an adapter that spawns `gh` itself, or hand-rolls a second failure
+  // classifier, is exactly the drift this layer exists to prevent — #72's plan
+  // named it but left it unpinned until the first adapter (main/github/) landed.
+  {
+    for (const f of files) {
+      const rel = relOf(f);
+      if (rel.startsWith(`${platformDir}/`)) continue;
+      const text = readFileSync(f, 'utf8');
+      if (/\brunCommand\s*\(/.test(text)) {
+        fail('desktop-platform-layer', `${rel} calls 'runCommand(' directly — only files under ${platformDir}/ may; every other adapter goes through 'gh'/'git'`);
+      }
+    }
+    ok();
+  }
 }
