@@ -1,7 +1,7 @@
 {
   "name": "port",
   "displayName": "Port",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A GitHub-driven agent pipeline — plan, implement, review, revise — installable into any repository. GitHub labels are the state machine; a cockpit session dispatches stage agents into isolated worktrees and runs the human gates.",
   "author": {
     "name": "Benedikt Winkler",
