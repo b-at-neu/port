@@ -188,7 +188,7 @@ describe('fetchPipelineItems / fetchItemStates — live', () => {
       return
     }
 
-    const vocabulary = resolveVocabulary({ modules: { approvalGate: true, previewDatabase: false, release: true, scope: true } })
+    const vocabulary = resolveVocabulary({ modules: { approvalGate: true, release: true, scope: true } })
     const result = await fetchPipelineItems({ repo: { owner, name }, vocabulary })
 
     expect(result.ok).toBe(true)
