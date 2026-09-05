@@ -99,8 +99,12 @@ export default async function ({ fail, ok }) {
         }
       }
 
-      if (/from\s*'node:fs(?:\/promises)?'/.test(text) && !rel.startsWith(`${platformDir}/`)) {
-        fail('desktop-platform-layer', `${rel} imports 'node:fs' directly — only files under ${platformDir}/ may`);
+      // #74: a *.test.ts file is exempt — it verifies an adapter's behaviour
+      // rather than being one, and setting up a realistic fixture (a real
+      // mkdtemp directory, same as platform/'s own files.test.ts/paths.test.ts)
+      // needs the real async fs API. Production code stays fully gated.
+      if (/from\s*'node:fs(?:\/promises)?'/.test(text) && !rel.startsWith(`${platformDir}/`) && !rel.endsWith('.test.ts')) {
+        fail('desktop-platform-layer', `${rel} imports 'node:fs' directly — only files under ${platformDir}/ (or a *.test.ts fixture) may`);
       }
     }
     ok();
