@@ -95,13 +95,19 @@ export async function listDirectory(path: string): Promise<FileResult<readonly D
 export interface StatInfo {
   readonly kind: 'file' | 'directory' | 'other'
   readonly size: number
+  readonly modifiedAt: string
 }
 
+/** `modifiedAt` (`info.mtime.toISOString()`) is the only per-agent activity
+ *  source a local read can produce (#78) — a transcript's own mtime, read
+ *  beside its `meta.json`. `main/platform/` is the only place under `src/`
+ *  allowed to reach `node:fs`, so every activity signal in the app comes
+ *  through here rather than a second `stat` call elsewhere. */
 export async function statPath(path: string): Promise<FileResult<StatInfo>> {
   try {
     const info = await stat(path)
     const kind: StatInfo['kind'] = info.isDirectory() ? 'directory' : info.isFile() ? 'file' : 'other'
-    return { ok: true, value: { kind, size: info.size } }
+    return { ok: true, value: { kind, size: info.size, modifiedAt: info.mtime.toISOString() } }
   } catch (error) {
     return { ok: false, ...classifyFsError(error) }
   }
