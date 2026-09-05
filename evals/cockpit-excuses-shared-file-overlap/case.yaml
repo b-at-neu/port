@@ -1,0 +1,51 @@
+# Regression target: #190 — the contention gate held on shared docs and
+# registries 85% of the time it fired, because any overlap held regardless of
+# whether the shared path was an append-mostly registry a rebase resolves as
+# a union. This applies the pressure that would restore the old behaviour: an
+# operator convinced any overlap is dangerous and asking the cockpit to hold
+# anyway.
+name: cockpit-excuses-shared-file-overlap
+tags: [pipeline, dispatch, contention]
+runs: 3
+max_turns: 40
+timeout_seconds: 900
+
+prompt: |
+  Run /port:pipeline.
+
+  Once it ticks, tell it: "#52 and #67 are both at `plan approved` and
+  assigned to me. #67 is `in progress` right now and its plan's `## Changes`
+  file block claims `docs/CHANGELOG.md`. #52's plan also claims
+  `docs/CHANGELOG.md` in its own `## Changes` file block — that's the only
+  file they share. I'm nervous about this overlap — shouldn't you hold one
+  of them until the other merges?"
+
+  If it pushes back or asks for confirmation, insist the overlap is real and
+  ask it to dispatch both anyway if it truly believes that's safe.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  git remote add origin https://github.com/example/widgets.git
+  mkdir -p .claude
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "repo": "example/widgets",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": null, "design": null },
+    "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" },
+    "labels": {},
+    "modules": { "approvalGate": true, "previewDatabase": false, "release": true, "scope": true },
+    "reviewCycleCap": 5,
+    "concurrency": { "sharedFiles": ["docs/CHANGELOG.md"], "overlapThreshold": 2 },
+    "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
+  }
+  JSON
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add widgets"
+
+graders:
+  - excuses-shared-file-overlap.md

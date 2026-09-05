@@ -158,20 +158,28 @@ export default async function ({ fail, ok }) {
   // --- File contention — the cockpit holds overlapping dispatch, never races --
   // Regression guard for #135: #67, #61 and #52 all claimed the same three
   // files and were dispatched concurrently, so whichever pull request merged
-  // first invalidated the others' rebases. This checks that the fenced
-  // `files` contract exists in both PIPELINE.md and plan-agent.md, that
-  // PIPELINE.md records the decision never to express a hold as a new label
-  // or GitHub's dependency graph, and that SKILL.md's gate names its
-  // precondition, the `<labels.prOpened>` occupied-set input, and the
-  // `dispatch #N anyway` override.
+  // first invalidated the others' rebases. #190 narrowed the predicate from
+  // any shared path to enough shared, non-excused paths, via `concurrency`.
+  // This checks that the fenced `files` contract exists in both PIPELINE.md
+  // and plan-agent.md, that the schema and template carry both `concurrency`
+  // keys with their documented default and minimum, that PIPELINE.md and
+  // SKILL.md each name both keys and record the decision never to express a
+  // hold as a new label or GitHub's dependency graph, that PIPELINE.md states
+  // its fail-open direction, and that SKILL.md's gate names its reworded
+  // precondition, the depth rule, the `<labels.prOpened>` occupied-set input,
+  // and the `dispatch #N anyway` override.
   {
     const pipelineRel = 'plugins/port/docs/PIPELINE.md';
     const planAgentRel = 'plugins/port/agents/plan-agent.md';
     const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
+    const schemaRel = 'schema/port.config.schema.json';
+    const templateRel = 'plugins/port/templates/port.config.json';
 
     const pipelineText = readFileSync(join(root, pipelineRel), 'utf8');
     const planAgentText = readFileSync(join(root, planAgentRel), 'utf8');
     const skillText = readFileSync(join(root, skillRel), 'utf8');
+    const schemaText = readFileSync(join(root, schemaRel), 'utf8');
+    const templateText = readFileSync(join(root, templateRel), 'utf8');
 
     for (const [rel, text] of [
       [pipelineRel, pipelineText],
@@ -179,6 +187,38 @@ export default async function ({ fail, ok }) {
     ]) {
       if (!text.includes('```files')) {
         fail('file-contention', `${rel} never carries the '\`\`\`files' fence tag`);
+      } else {
+        ok();
+      }
+    }
+
+    if (!(schemaText.includes('"sharedFiles"') && schemaText.includes('"overlapThreshold"'))) {
+      fail('file-contention', `${schemaRel} is missing 'concurrency.sharedFiles' or 'concurrency.overlapThreshold'`);
+    } else {
+      ok();
+    }
+
+    if (!(schemaText.includes('"default": 2') && schemaText.includes('"minimum": 1'))) {
+      fail(
+        'file-contention',
+        `${schemaRel}'s 'concurrency.overlapThreshold' is missing its documented 'default: 2' or 'minimum: 1'`,
+      );
+    } else {
+      ok();
+    }
+
+    if (!(templateText.includes('sharedFiles') && templateText.includes('overlapThreshold'))) {
+      fail('file-contention', `${templateRel} never ships the 'concurrency' defaults`);
+    } else {
+      ok();
+    }
+
+    for (const [rel, text] of [
+      [pipelineRel, pipelineText],
+      [skillRel, skillText],
+    ]) {
+      if (!(text.includes('concurrency.sharedFiles') && text.includes('concurrency.overlapThreshold'))) {
+        fail('file-contention', `${rel} never names both 'concurrency.sharedFiles' and 'concurrency.overlapThreshold'`);
       } else {
         ok();
       }
@@ -193,10 +233,23 @@ export default async function ({ fail, ok }) {
       ok();
     }
 
-    if (!skillText.includes('only when no in-flight item\'s plan claims the same file')) {
+    if (!pipelineText.includes('fails open toward dispatch')) {
+      fail('file-contention', `${pipelineRel} is missing the literal phrase "fails open toward dispatch"`);
+    } else {
+      ok();
+    }
+
+    const reworded = 'only when no single in-flight item\'s plan claims concurrency.overlapThreshold or more of the same non-shared files';
+    if (!skillText.replaceAll('`', '').includes(reworded)) {
+      fail('file-contention', `${skillRel} is missing the reworded precondition phrase "${reworded}"`);
+    } else {
+      ok();
+    }
+
+    if (!skillText.includes('counted per in-flight item, never pooled')) {
       fail(
         'file-contention',
-        `${skillRel} is missing the literal precondition phrase "only when no in-flight item's plan claims the same file"`,
+        `${skillRel} is missing the literal phrase "counted per in-flight item, never pooled"`,
       );
     } else {
       ok();

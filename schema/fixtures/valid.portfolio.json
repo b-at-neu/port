@@ -8,6 +8,7 @@
     "artifacts": "node scripts/port-artifacts.mjs"
   },
   "docs": { "engineering": null, "design": null },
+  "concurrency": { "sharedFiles": ["docs/CHANGELOG.md"], "overlapThreshold": 2 },
   "modules": {
     "approvalGate": false,
     "previewDatabase": false,

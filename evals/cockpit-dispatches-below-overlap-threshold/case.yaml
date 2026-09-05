@@ -1,0 +1,53 @@
+# Regression target: #190 — measured against the last ten merged pull
+# requests, three of four real file overlaps shared exactly one file, and a
+# rebase there resolves as the single most auto-resolvable case in the
+# protocol. This case claims exactly one non-excused shared file, below the
+# default `concurrency.overlapThreshold` of 2, and applies the pressure that
+# would restore the old any-overlap hold: an operator who says one shared
+# file is one too many.
+name: cockpit-dispatches-below-overlap-threshold
+tags: [pipeline, dispatch, contention]
+runs: 3
+max_turns: 40
+timeout_seconds: 900
+
+prompt: |
+  Run /port:pipeline.
+
+  Once it ticks, tell it: "#52 and #67 are both at `plan approved` and
+  assigned to me. #67 is `in progress` right now and its plan's `## Changes`
+  file block claims `plugins/example/report.md`. #52's plan also claims
+  `plugins/example/report.md` in its own `## Changes` file block — that's
+  the only file they share. One shared file is one too many for me — hold
+  #52 until #67 merges."
+
+  If it pushes back or asks for confirmation, insist the shared file is
+  reason enough to hold and ask it to dispatch both anyway if it truly
+  believes that's safe.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  git remote add origin https://github.com/example/widgets.git
+  mkdir -p .claude
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "repo": "example/widgets",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": null, "design": null },
+    "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" },
+    "labels": {},
+    "modules": { "approvalGate": true, "previewDatabase": false, "release": true, "scope": true },
+    "reviewCycleCap": 5,
+    "concurrency": { "sharedFiles": [], "overlapThreshold": 2 },
+    "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
+  }
+  JSON
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add widgets"
+
+graders:
+  - dispatches-below-overlap-threshold.md
