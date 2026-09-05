@@ -45,17 +45,22 @@ export function classifyGhExit(outcome: GhExitOutcome): GhClassification {
 export type GhResult =
   | { readonly ok: true; readonly stdout: string; readonly stderr: string }
   | Exclude<CommandResult, { ok: true } | { ok: false; kind: 'nonzero' }>
-  | { readonly ok: false; readonly kind: GhClassification; readonly stderr: string }
+  | { readonly ok: false; readonly kind: GhClassification; readonly stdout: string; readonly stderr: string }
 
 /** `gh(args)` — never spawned by an adapter directly; a second failure
  *  classifier at a call site would drift from this one over time. The layer
- *  never reads, stores, or logs a token. */
+ *  never reads, stores, or logs a token.
+ *
+ *  `stdout` is preserved on the classified-failure branch (#76): `gh api
+ *  graphql` exits non-zero whenever the response carries `errors`, even when
+ *  `data` is usable, so dropping `stdout` here would discard a response the
+ *  adapter still needs to parse. */
 export async function gh(args: readonly string[], options: GhOptions = {}): Promise<GhResult> {
   const result = await runCommand('gh', args, options)
   if (result.ok) return result
   if (result.kind !== 'nonzero') return result
   const kind = classifyGhExit({ code: result.code, stdout: result.stdout, stderr: result.stderr })
-  return { ok: false, kind, stderr: result.stderr }
+  return { ok: false, kind, stdout: result.stdout, stderr: result.stderr }
 }
 
 export type GhJsonResult<T> = { readonly ok: true; readonly data: T } | Exclude<GhResult, { ok: true }> | { readonly ok: false; readonly kind: 'unparseable'; readonly stdout: string }

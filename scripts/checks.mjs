@@ -26,6 +26,7 @@ import reviewEvidence from './checks/review-evidence.mjs';
 import harness from './checks/harness.mjs';
 import desktopPlatform from './checks/desktop-platform.mjs';
 import desktopRegistry from './checks/desktop-registry.mjs';
+import desktopGithub from './checks/desktop-github.mjs';
 import fileSize from './checks/file-size.mjs';
 
 const reporter = createReporter();
@@ -45,6 +46,7 @@ for (const module of [
   harness,
   desktopPlatform,
   desktopRegistry,
+  desktopGithub,
   fileSize,
 ]) {
   await module(reporter);
