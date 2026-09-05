@@ -6,11 +6,11 @@
     { "glob": "schema/fixtures/**", "why": "fixtures — the document being validated is the point, not its length" }
   ],
   "allowlist": [
-    { "path": "plugins/port/skills/pipeline/SKILL.md", "lines": 772, "issue": 181 },
+    { "path": "plugins/port/skills/pipeline/SKILL.md", "lines": 771, "issue": 181 },
     { "path": "scripts/checks/hooks.mjs", "lines": 763, "issue": 182 },
-    { "path": "plugins/port/templates/artifacts.mjs", "lines": 665, "issue": 183 },
-    { "path": "scripts/checks/cockpit.mjs", "lines": 611, "issue": 182 },
-    { "path": "plugins/port/docs/PIPELINE.md", "lines": 581, "issue": 181 },
+    { "path": "plugins/port/templates/artifacts.mjs", "lines": 663, "issue": 183 },
+    { "path": "scripts/checks/cockpit.mjs", "lines": 610, "issue": 182 },
+    { "path": "plugins/port/docs/PIPELINE.md", "lines": 579, "issue": 181 },
     { "path": "plugins/port/templates/worktrees.mjs", "lines": 518, "issue": 183 }
   ]
 }

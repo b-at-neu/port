@@ -229,6 +229,29 @@ export default async function ({ fail, note, ok }) {
     ok();
   }
 
+  // --- No previewDatabase survives (#189) -------------------------------------
+  // Regression guard: #189 deleted modules.previewDatabase and promoted refresh
+  // mode to the pipeline's only rebase route. The flag's own literal is the one
+  // place it may still appear — this check's message and this comment — so the
+  // walk deliberately excludes scripts/, never the repository root.
+  {
+    const scanDirs = ['plugins', 'schema', 'apps/desktop/src', 'evals', '.github'];
+    const hits = [];
+    for (const dir of scanDirs) {
+      for (const f of walk(join(root, dir))) {
+        const text = readFileSync(f, 'utf8');
+        if (text.includes('previewDatabase')) hits.push(relOf(f));
+      }
+    }
+    const cfg = readJson('.claude/port.config.json');
+    if ('previewDatabase' in (cfg.modules ?? {})) hits.push('.claude/port.config.json');
+    if (hits.length > 0) {
+      fail('no-preview-database', `'previewDatabase' still appears outside scripts/: ${hits.join(', ')}`);
+    } else {
+      ok();
+    }
+  }
+
   // --- CI workflow names every platform in its matrix -------------------------
   // Regression guard: quietly dropping `windows-latest` after a red run would
   // look like a tidy-up in review, and nothing else would notice the platform
