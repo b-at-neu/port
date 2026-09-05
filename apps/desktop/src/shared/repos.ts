@@ -16,7 +16,7 @@ export type RepoId = string & { readonly [repoIdBrand]: true }
 
 /** One violation ajv reported, in a shape an operator can read without
  *  knowing JSON Schema — `path` is the instance path with an empty root
- *  rendered as `'.'`, `message` is ajv's own wording. */
+ *  rendered as `'(document root)'`, `message` is ajv's own wording. */
 export interface SchemaViolation {
   readonly path: string
   readonly message: string

@@ -112,8 +112,8 @@ function buildReadyCard(entry: Extract<RepositoryEntry, { status: 'ready' }>, hi
   card.appendChild(text('div', 'repo-card__path', entry.path))
 
   const labelCount = entry.config.vocabulary.labels.length
-  const summary = `${entry.config.branches.integration} → ${entry.config.branches.production} · ${labelCount} pipeline labels · ${moduleSummary(entry.config.modules)}`
-  card.appendChild(text('div', 'repo-card__summary', summary))
+  const parts = [`${entry.config.branches.integration} → ${entry.config.branches.production}`, `${labelCount} pipeline labels`, moduleSummary(entry.config.modules)].filter((part) => part !== '')
+  card.appendChild(text('div', 'repo-card__summary', parts.join(' · ')))
 
   if (entry.diagnostics.length > 0) {
     const list = document.createElement('ul')

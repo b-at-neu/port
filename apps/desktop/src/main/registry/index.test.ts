@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { CommandResult } from '../platform'
+import { pathOps } from '../platform'
 import type { GitRunner } from './harness'
 import { addRepository, listRepositories, removeRepository } from './index'
 import { readRegistry } from './store'
@@ -28,7 +29,7 @@ const NOT_FOUND: CommandResult = { ok: false, kind: 'not-found', command: 'git',
 function fakeGit(roots: readonly string[]): GitRunner {
   return (args, cwd) => {
     if (args[0] === 'rev-parse' && args.includes('--show-toplevel')) {
-      const containing = roots.filter((root) => cwd === root || cwd.startsWith(`${root}/`)).sort((a, b) => b.length - a.length)
+      const containing = roots.filter((root) => pathOps.samePath(cwd, root) || pathOps.contains(root, cwd)).sort((a, b) => b.length - a.length)
       const root = containing[0]
       return Promise.resolve(root === undefined ? NOT_FOUND : ok(`${root}\n`))
     }
