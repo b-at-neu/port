@@ -12,7 +12,7 @@
 import type { LabelVocabulary, ResolvedLabel } from '../../shared/labels/vocabulary'
 import type { ItemRef, PipelineItemKind, QueriedLabel } from '../../shared/github/types'
 
-const ISSUE_PAGE_SIZE = 100
+const PAGE_SIZE = 100
 const REPO_LABEL_PAGE_SIZE = 100
 const ASSIGNEE_PAGE_SIZE = 20
 const ITEM_LABEL_PAGE_SIZE = 20
@@ -70,8 +70,8 @@ export function buildPipelineQuery(vocabulary: LabelVocabulary): PipelineQuery {
     const prAlias = `p${idx}`
     const literal = graphqlStringLiteral(label.name)
     connections.push(
-      `  ${issueAlias}: issues(states: OPEN, first: ${ISSUE_PAGE_SIZE}, labels: [${literal}]) { totalCount nodes { ...IssueFields } }`,
-      `  ${prAlias}: pullRequests(states: OPEN, first: ${ISSUE_PAGE_SIZE}, labels: [${literal}]) { totalCount nodes { ...PullRequestFields } }`,
+      `  ${issueAlias}: issues(states: OPEN, first: ${PAGE_SIZE}, labels: [${literal}]) { totalCount nodes { ...IssueFields } }`,
+      `  ${prAlias}: pullRequests(states: OPEN, first: ${PAGE_SIZE}, labels: [${literal}]) { totalCount nodes { ...PullRequestFields } }`,
     )
     aliases.push({ key: label.key, name: label.name, source: label.source, issueAlias, prAlias })
   })

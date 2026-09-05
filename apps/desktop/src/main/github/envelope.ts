@@ -79,6 +79,10 @@ export function classifyFailure(ghResult: GhResult, envelope: ParsedEnvelope | u
         return { kind: ghResult.kind, message: ghResult.stderr }
       case 'unknown':
         break // fall through to the envelope check below
+      default: {
+        const _exhaustive: never = ghResult
+        return { kind: 'unknown', message: `unhandled gh classification: ${(_exhaustive as { kind: string }).kind}` }
+      }
     }
   }
 
