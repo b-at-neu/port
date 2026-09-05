@@ -1,5 +1,7 @@
 import type { Dirent } from 'node:fs'
-import { readFile, readdir, stat } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 
 /** ENOENT is a value, never an exception — `.agents/denials.log` legitimately
  *  does not exist, and callers must distinguish "no config" from "unreadable
@@ -101,6 +103,42 @@ export async function statPath(path: string): Promise<FileResult<StatInfo>> {
     const kind: StatInfo['kind'] = info.isDirectory() ? 'directory' : info.isFile() ? 'file' : 'other'
     return { ok: true, value: { kind, size: info.size } }
   } catch (error) {
+    return { ok: false, ...classifyFsError(error) }
+  }
+}
+
+/** Creates `path` and every missing parent, succeeding silently when it
+ *  already exists — the registry's userData directory may or may not exist
+ *  on first launch, and both cases are the same "make sure it's there". */
+export async function ensureDirectory(path: string): Promise<FileResult<void>> {
+  try {
+    await mkdir(path, { recursive: true })
+    return { ok: true, value: undefined }
+  } catch (error) {
+    return { ok: false, ...classifyFsError(error) }
+  }
+}
+
+/** Writes `value` as JSON to `path` without ever leaving a half-written file
+ *  behind: serialize first (a circular value throws before anything touches
+ *  disk), write a uuid-suffixed temp file beside the target, then `rename`
+ *  over it — `rename` replaces an existing file atomically on POSIX and on
+ *  Windows alike, unlike a plain `writeFile` to the target path. The temp
+ *  file is written in the target's own directory so the rename never crosses
+ *  a filesystem boundary, and a best-effort unlink cleans it up on failure. */
+export async function writeJsonFileAtomic(path: string, value: unknown): Promise<FileResult<void>> {
+  const text = JSON.stringify(value, null, 2)
+  const tempPath = join(dirname(path), `${randomUUID()}.tmp`)
+  try {
+    await writeFile(tempPath, text, 'utf8')
+    await rename(tempPath, path)
+    return { ok: true, value: undefined }
+  } catch (error) {
+    try {
+      await unlink(tempPath)
+    } catch {
+      // Best-effort only — the temp file may never have been created.
+    }
     return { ok: false, ...classifyFsError(error) }
   }
 }

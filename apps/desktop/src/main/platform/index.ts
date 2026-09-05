@@ -20,4 +20,4 @@ export type { GhAuthStatusResult, GhClassification, GhExitOutcome, GhJsonResult,
 export { classifyGhExit, gh, ghAuthStatus, ghJson } from './gh'
 
 export type { DirEntry, DirEntryKind, FileFailureKind, FileResult, StatInfo } from './files'
-export { listDirectory, readJsonFile, readTextFile, statPath } from './files'
+export { ensureDirectory, listDirectory, readJsonFile, readTextFile, statPath, writeJsonFileAtomic } from './files'

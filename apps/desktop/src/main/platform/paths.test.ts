@@ -149,6 +149,50 @@ describe('resolveFrom', () => {
   })
 })
 
+describe('join', () => {
+  it('joins segments onto an absolute base [posix]', () => {
+    const ops = opsFor('posix', '/home/u')
+    expect(ops.join('/a/b', 'c', 'd.json')).toBe('/a/b/c/d.json')
+  })
+
+  it('joins segments onto an absolute base [win32]', () => {
+    const ops = opsFor('win32', 'C:\\Users\\u')
+    expect(ops.join('C:\\a\\b', 'c', 'd.json')).toBe('C:\\a\\b\\c\\d.json')
+  })
+
+  it('throws TypeError on a relative base [posix]', () => {
+    const ops = opsFor('posix', '/home/u')
+    expect(() => ops.join('a/b', 'c')).toThrow(TypeError)
+  })
+
+  it('throws TypeError on a relative base [win32]', () => {
+    const ops = opsFor('win32', 'C:\\Users\\u')
+    expect(() => ops.join('a\\b', 'c')).toThrow(TypeError)
+  })
+})
+
+describe('dirname', () => {
+  it('returns the parent directory [posix]', () => {
+    const ops = opsFor('posix', '/home/u')
+    expect(ops.dirname('/a/b/c.json')).toBe('/a/b')
+  })
+
+  it('returns the parent directory [win32]', () => {
+    const ops = opsFor('win32', 'C:\\Users\\u')
+    expect(ops.dirname('C:\\a\\b\\c.json')).toBe('C:\\a\\b')
+  })
+
+  it('throws TypeError on a relative input [posix]', () => {
+    const ops = opsFor('posix', '/home/u')
+    expect(() => ops.dirname('a/b')).toThrow(TypeError)
+  })
+
+  it('throws TypeError on a relative input [win32]', () => {
+    const ops = opsFor('win32', 'C:\\Users\\u')
+    expect(() => ops.dirname('a\\b')).toThrow(TypeError)
+  })
+})
+
 // The acceptance case table: every row below runs under both flavours, so
 // the Windows cases execute on Linux and the POSIX cases on Windows.
 const table: readonly Case[] = [

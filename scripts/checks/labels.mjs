@@ -367,12 +367,15 @@ export default async function ({ fail, note, ok }) {
   // …) must come from the LABEL_DEFAULTS import, never be hand-typed again —
   // that is exactly the second-transcription drift this ticket exists to
   // prevent. Single-word names where `key === name` are excluded, since
-  // LABEL_KEYS legitimately contains them as literals.
+  // LABEL_KEYS legitimately contains them as literals. Widened for #74 from
+  // shared/labels/ to all of apps/desktop/src/: the registry and the
+  // renderer are consumers now too, not just the one directory that had a
+  // consumer when this guard was written.
   {
     const mismatched = readJson('plugins/port/templates/labels.json')
       .labels.filter((l) => l.key !== l.name)
       .map((l) => l.name);
-    const dir = join(root, 'apps/desktop/src/shared/labels');
+    const dir = join(root, 'apps/desktop/src');
     for (const f of walk(dir).filter((p) => p.endsWith('.ts') && !p.endsWith('.test.ts'))) {
       const rel = relOf(f);
       const text = readFileSync(f, 'utf8');
