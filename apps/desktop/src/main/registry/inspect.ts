@@ -47,7 +47,6 @@ interface LooseConfig {
   readonly models?: { readonly plan?: unknown; readonly impl?: unknown; readonly review?: unknown; readonly revise?: unknown }
   readonly modules?: {
     readonly approvalGate?: unknown
-    readonly previewDatabase?: unknown
     readonly release?: unknown
     readonly scope?: unknown
   }
@@ -133,7 +132,6 @@ export async function inspectRepository(path: string, deps: InspectDeps): Promis
   }
   const modules = {
     approvalGate: resolveField(cfg.modules?.approvalGate, '/modules/approvalGate', violatedPaths, CONFIG_DEFAULTS.modules.approvalGate),
-    previewDatabase: resolveField(cfg.modules?.previewDatabase, '/modules/previewDatabase', violatedPaths, CONFIG_DEFAULTS.modules.previewDatabase),
     release: resolveField(cfg.modules?.release, '/modules/release', violatedPaths, CONFIG_DEFAULTS.modules.release),
     scope: resolveField(cfg.modules?.scope, '/modules/scope', violatedPaths, CONFIG_DEFAULTS.modules.scope),
   }

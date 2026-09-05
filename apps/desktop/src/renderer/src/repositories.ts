@@ -25,7 +25,6 @@ export interface RendererState {
 
 const MODULE_LABELS: { readonly [K in keyof ResolvedRepoConfig['modules']]: string } = {
   approvalGate: 'approval gate',
-  previewDatabase: 'preview database',
   release: 'release',
   scope: 'scope',
 }

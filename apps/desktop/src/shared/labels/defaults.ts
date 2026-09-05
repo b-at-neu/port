@@ -9,7 +9,7 @@ import type { LabelKey } from './vocabulary'
  * `modules` keys plus the `core` sentinel for a label that is always
  * created regardless of config.
  */
-export const LABEL_MODULES = ['core', 'approvalGate', 'previewDatabase', 'release', 'scope'] as const
+export const LABEL_MODULES = ['core', 'approvalGate', 'release', 'scope'] as const
 export type LabelModule = (typeof LABEL_MODULES)[number]
 
 export interface LabelDefault {

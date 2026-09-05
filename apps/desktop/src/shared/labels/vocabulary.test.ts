@@ -57,18 +57,12 @@ describe('resolveVocabulary', () => {
     }
   })
 
-  it('omits exactly refreshBranch/refreshing when previewDatabase is off', () => {
-    const vocabulary = resolveVocabulary({ labels: {}, modules: { previewDatabase: false } })
-    expect([...vocabulary.disabled].sort()).toEqual(['refreshBranch', 'refreshing'])
-    expect(vocabulary.labels.some((l) => l.key === 'refreshBranch')).toBe(false)
-    expect(vocabulary.labels.some((l) => l.key === 'refreshing')).toBe(false)
-  })
-
-  it('includes refreshBranch/refreshing when previewDatabase is on', () => {
-    const vocabulary = resolveVocabulary({ labels: {}, modules: { previewDatabase: true } })
+  it('disables nothing — every label default is core', () => {
+    const vocabulary = resolveVocabulary({ labels: {} })
     expect(vocabulary.disabled).toEqual([])
-    expect(vocabulary.labels.some((l) => l.key === 'refreshBranch')).toBe(true)
-    expect(vocabulary.labels.some((l) => l.key === 'refreshing')).toBe(true)
+    for (const label of vocabulary.labels) {
+      expect(label.module).toBe('core')
+    }
   })
 
   it('flags a labels key that is not a known LabelKey', () => {
@@ -148,11 +142,6 @@ describe('verifyVocabulary', () => {
 })
 
 describe('labelName', () => {
-  it('returns undefined for a module-disabled key', () => {
-    const vocabulary = resolveVocabulary({ labels: {}, modules: { previewDatabase: false } })
-    expect(labelName(vocabulary, 'refreshBranch')).toBeUndefined()
-  })
-
   it('returns the resolved name for an enabled key', () => {
     const vocabulary = resolveVocabulary({ labels: { ready: 'todo' } })
     expect(labelName(vocabulary, 'ready')).toBe('todo')
