@@ -37,6 +37,7 @@ async function readAgents(
   repoId: AgentRecord['repoId'],
   subagentsDir: string,
   now: Date,
+  sessionLastModified: string,
 ): Promise<{ readonly agents: readonly AgentRecord[]; readonly unreadable: readonly MetaProblem[] }> {
   const listing = await listDirectory(subagentsDir)
   if (!listing.ok) return { agents: [], unreadable: [] }
@@ -65,7 +66,7 @@ async function readAgents(
     // `modifiedAt`); a stat hiccup on it falls back to the session's own
     // last-modified time rather than dropping an otherwise-valid record.
     const stat = await statPath(jsonlPath)
-    const lastActivityAt = stat.ok ? stat.value.modifiedAt : now.toISOString()
+    const lastActivityAt = stat.ok ? stat.value.modifiedAt : sessionLastModified
     const { idleMs, activity } = activityOf(lastActivityAt, now)
 
     agents.push({
@@ -128,7 +129,7 @@ export async function readSessionState(params: ReadSessionStateParams): Promise<
     const agentTypes: string[] = []
     if (attribution.repoId !== null) {
       const subagentsDir = pathOps.join(sessionDir, 'subagents')
-      const read = await readAgents(raw.sessionId, attribution.repoId, subagentsDir, now())
+      const read = await readAgents(raw.sessionId, attribution.repoId, subagentsDir, now(), raw.lastModified)
       for (const agent of read.agents) {
         agents.push(agent)
         agentIds.push(agent.agentId)

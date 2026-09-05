@@ -79,6 +79,14 @@ describe('sessionRole', () => {
     })
   })
 
+  it('#78 R1-L1: /port:pipeline-old does not match — a hyphen is not a word boundary', () => {
+    expect(sessionRole({ cwd: null, firstPrompt: '/port:pipeline-old' }, [])).toEqual({
+      role: 'other',
+      evidence: null,
+      itemNumber: null,
+    })
+  })
+
   it('/anything:implement classifies as implement', () => {
     expect(sessionRole({ cwd: null, firstPrompt: '/anything:implement' }, [])).toEqual({
       role: 'implement',

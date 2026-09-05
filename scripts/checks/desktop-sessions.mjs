@@ -69,12 +69,14 @@ export default async function ({ fail, ok }) {
     // The wildcard-prefix rung (Decision, SessionRole ladder) reads
     // /<prefix>:(pipeline|implement) — both must exist as real skill
     // directories, or the rung is testing against nothing.
+    let skillDirsOk = true;
     for (const skillName of ['pipeline', 'implement']) {
       if (!existsSync(join(root, 'plugins/port/skills', skillName))) {
+        skillDirsOk = false;
         fail('desktop-sessions', `plugins/port/skills/${skillName} does not exist — the role ladder's first-prompt rung names it`);
       }
     }
-    ok();
+    if (skillDirsOk) ok();
   }
 
   // --- No `running`/`alive`/`isLive` identifier or string literal in production code ---

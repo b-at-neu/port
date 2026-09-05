@@ -54,7 +54,7 @@ function isUnderClaudeWorktrees(path: string): boolean {
 }
 
 const IMPL_WORKTREE_DIRNAME = /^impl-(\d+)$/
-const FIRST_PROMPT_COMMAND = /^\/[A-Za-z0-9_-]+:(pipeline|implement)\b/
+const FIRST_PROMPT_COMMAND = /^\/[A-Za-z0-9_-]+:(pipeline|implement)(?![\w-])/
 
 export interface RoleInput {
   readonly cwd: string | null
@@ -75,7 +75,8 @@ export interface RoleVerdict {
  *    → `implement`, `worktree-name`, the captured number is `itemNumber`.
  * 2. At least one of `agentTypes` resolves to a port stage agent (via
  *    `stageOf`) → `cockpit`, `stage-agent`.
- * 3. `firstPrompt` matches `^/<prefix>:(pipeline|implement)\b` — the prefix
+ * 3. `firstPrompt` matches `^/<prefix>:(pipeline|implement)` as a whole word
+ *    (not followed by `[\w-]`, so `pipeline-old` does not match) — the prefix
  *    is a wildcard, never the literal `port`, since an adopter installs the
  *    plugin under whatever name they chose → `cockpit`/`implement`,
  *    `first-prompt`.

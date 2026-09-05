@@ -168,6 +168,35 @@ describe('readSessionState', () => {
     expect(result.unreadable[0]?.kind).toBe('unparseable')
   })
 
+  it('#78 R1-M1: a missing sibling .jsonl falls back to the session\'s own lastModified, never "now"', async () => {
+    const claudeHome = await makeTempDir('port-sessions-adapter-')
+    const repoRoot = await makeTempDir('port-sessions-repo-')
+    const projectDir = join(claudeHome, 'projects', 'project-a')
+    await mkdir(projectDir, { recursive: true })
+    await writeFile(join(projectDir, `${SESSION_WITH_AGENTS}.jsonl`), '')
+    const subagentsDir = join(projectDir, SESSION_WITH_AGENTS, 'subagents')
+    await mkdir(subagentsDir, { recursive: true })
+    // Meta written with no sibling agent-orphan.jsonl beside it, so
+    // statPath(jsonlPath) fails and the fallback rung is exercised.
+    await writeFile(
+      join(subagentsDir, 'agent-orphan.meta.json'),
+      JSON.stringify({ agentType: 'port:review-agent', description: 'review #5' }),
+    )
+
+    const sessionLastModified = '2020-01-01T00:00:00.000Z'
+    const result = await readSessionState({
+      repos: [{ id: pathOps.pathKey(repoRoot) as unknown as RepoRef['id'], root: repoRoot }],
+      claudeHome,
+      reader: () =>
+        Promise.resolve({ ok: true, sessions: [rawSession({ sessionId: SESSION_WITH_AGENTS, cwd: repoRoot, lastModified: sessionLastModified })] }),
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.agents).toHaveLength(1)
+    expect(result.agents[0]?.lastActivityAt).toBe(sessionLastModified)
+  })
+
   it('each ok: false kind carries no sessions field at all', async () => {
     const claudeHome = await makeTempDir('port-sessions-adapter-')
 
