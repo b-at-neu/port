@@ -180,7 +180,10 @@ describe('statPath', () => {
     const file = join(dir, 'a.txt')
     await writeFile(file, 'hello')
     const result = await statPath(file)
-    expect(result).toEqual({ ok: true, value: { kind: 'file', size: 5 } })
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.value.kind).toBe('file')
+    expect(result.value.size).toBe(5)
   })
 
   it('reports the kind of a directory', async () => {
@@ -189,5 +192,18 @@ describe('statPath', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error('unreachable')
     expect(result.value.kind).toBe('directory')
+  })
+
+  // #78: a transcript's mtime is the only per-agent activity signal a local
+  // read can produce — the session adapter stat's a subagent's sibling
+  // `.jsonl` for exactly this field.
+  it('reports modifiedAt as the file mtime, ISO-formatted', async () => {
+    const dir = await makeTempDir()
+    const file = join(dir, 'a.txt')
+    await writeFile(file, 'hello')
+    const result = await statPath(file)
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.value.modifiedAt).toBe(new Date(result.value.modifiedAt).toISOString())
   })
 })
