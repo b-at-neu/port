@@ -36,7 +36,7 @@ Your worktree comes from the harness's `isolation: worktree`, and its initial ch
 
 **Label names are configuration, not constants.** Never type a label name you did not read from config or the standard vocabulary.
 
-Also read: `commands.bootstrap`, `commands.checks`, `commands.artifacts` (production-time artifact validation; null means skip it), `docs.engineering`, `models.revise` (for the commit trailer), `sessionRequiredPaths` (which seeds the never-touch list), and `modules.previewDatabase`.
+Also read: `commands.bootstrap`, `commands.checks`, `commands.artifacts` (production-time artifact validation; null means skip it), `docs.engineering`, `models.revise` (for the commit trailer), and `sessionRequiredPaths` (which seeds the never-touch list).
 
 Your **model** comes from `models.revise`; the cockpit passes it at dispatch.
 
@@ -69,10 +69,10 @@ Revise-agent specifics, identical in intent to `impl-agent`:
 Resolve `$INPUT` to a pull request number and capture its branches:
 
 ```bash
-gh pr view $INPUT --repo <repo> --json labels,title,headRefName,baseRefName,headRefOid
+gh pr view $INPUT --repo <repo> --json labels,title,headRefName,baseRefName
 ```
 
-If that fails it is an issue number: `gh pr list --repo <repo> --search "closes #$INPUT" --json number,title,headRefName,baseRefName,headRefOid`. If none is found, stop and report: "No open pull request found linked to issue #$INPUT. Nothing was changed." Record `headRefOid` — rebase-only mode's no-op check (step 5) compares against it.
+If that fails it is an issue number: `gh pr list --repo <repo> --search "closes #$INPUT" --json number,title,headRefName,baseRefName`. If none is found, stop and report: "No open pull request found linked to issue #$INPUT. Nothing was changed."
 
 Confirm the pull request is labeled `<labels.needsRevision>`. If instead it carries **`<labels.refreshBranch>`** — the cockpit's prompt will say "refresh mode" — skip everything below and follow **Refresh mode** at the end of this file. If neither is present, stop, report the current labels, and change nothing.
 
@@ -91,9 +91,9 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --a
    gh api repos/<repo>/pulls/<pr-number>/comments --jq '.[] | "\(.path):\(.line) — \(.body)"'
    ```
 
-   **Mode is decided by whichever of three signals is newest** — the latest `## Code Review`, `## Approval withdrawn`, and `## Rebase required` comment:
+   **Mode is decided by whichever of two signals is newest** — the latest `## Code Review` and `## Approval withdrawn` comment:
 
-   **Check-fix mode.** When the newest `## Approval withdrawn` comment is newer than the newest `## Code Review` (and newer than any `## Rebase required`), the work item is the named check, not a findings list:
+   **Check-fix mode.** When the newest `## Approval withdrawn` comment is newer than the newest `## Code Review`, the work item is the named check, not a findings list:
 
    ```bash
    gh run list --repo <repo> --branch <headRefName> --json databaseId,name,conclusion,workflowName
@@ -101,8 +101,6 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --a
    ```
 
    Read the failing check's log, fix the underlying cause, and push (step 4 onward) — there are no review threads to resolve. The revision note's detail line is `check <name> · <sha>` (step 7). **Never "fix" the excused approval-gate check** — its conclusion is a function of the pipeline's own labels, exactly as a quota-red deployment is infrastructure never to be chased.
-
-   **Rebase-only mode.** When the newest `## Rebase required` comment is newer than the newest `## Code Review` (and newer than any `## Approval withdrawn`), the work item is the rebase itself — GitHub reported this pull request conflicting with its base, so no checks ever ran on the diff and there is nothing else to address. **Skip step 3 entirely** (no findings) **and step 6 entirely** (no threads) — step 2's rebase, including the conflict protocol and any recorded `### Rebase decisions`, is the whole work item. Run step 4's checks once the rebase is clean, same as any other cycle. Step 5's push differs: if the working tree is dirty after the rebase (`commands.bootstrap` or the checks changed something), commit and push normally; **otherwise there is no new commit** — push the rebased head as-is (`git push --force-with-lease origin HEAD:<branch>`). If `git rev-parse HEAD` still equals the `headRefOid` recorded at pre-flight, the rebase was a genuine no-op (the branch was already current with `<base>`): **skip the push entirely** and report `rebase: no-op (already current)` rather than fabricating a push. The revision note's detail line is `rebase onto <base> · <sha>` (step 7). Handoff is unchanged — `<labels.readyForReview>` — so the pull request is reviewed with real checks on the now-current diff.
 
    **Otherwise**, the latest review, titled `## Code Review — Cycle <n>`, is what you address — note its cycle. When `docs.engineering` is set, read it too.
 
@@ -137,9 +135,7 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --a
 
      End with: `BLOCKED: rebase of <branch> onto origin/<base> needs <b> decision(s) — see the escalation comment.`
 
-3. **Apply fixes** per the review's findings — **skip this step entirely in check-fix mode and in rebase-only mode**, where step 1 already named the one thing to fix (a check, or nothing beyond the rebase itself). Fix **every finding flagged at this cycle's bar** — the review uses an escalating bar, so an early cycle includes Low and Nit; fix them rather than deferring. All should be issues **introduced in this pull request**. Skip a flagged item only if it is genuinely not an issue, and explain the skip. **Preexisting** findings of any severity: do not fix, but note them as suggested follow-up tickets. No scope creep beyond the review.
-
-   > **Module: `previewDatabase`.** When true, **never** attempt to fix a red deployment check and never treat one as a finding to address — it is infrastructure, almost always the preview database quota. If a review body carries the infrastructure note, ignore it.
+3. **Apply fixes** per the review's findings — **skip this step entirely in check-fix mode**, where step 1 already named the one thing to fix (a check). Fix **every finding flagged at this cycle's bar** — the review uses an escalating bar, so an early cycle includes Low and Nit; fix them rather than deferring. All should be issues **introduced in this pull request**. Skip a flagged item only if it is genuinely not an issue, and explain the skip. **Preexisting** findings of any severity: do not fix, but note them as suggested follow-up tickets. No scope creep beyond the review.
 
 4. **Run the checks.** Work through `commands.checks` **in order**, each as its own Bash call — never prefixed with `cd`, never concatenated, never with an extra command appended. For each entry: run its `run` command; if it fails and the entry has a `fix`, run `fix` and re-run; if it still fails, fix the underlying code.
 
@@ -157,14 +153,9 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --a
 
    The push is by refspec from a detached HEAD, and force-with-lease because the branch was rebased. **Message format:** subject `#<issue-number> address review feedback`, under 80 characters, no trailing period, a co-authorship trailer naming the model from `models.revise` — the validator is authoritative on the exact shape. **When `commands.artifacts` is set**, run the `check commit` command above before every commit; a non-zero exit means rewrite `.temp/commit-msg.txt` and re-run it — never `git commit` past a failing check. Skip when `commands.artifacts` is null. Note the pushed SHA (`git rev-parse HEAD`) for the next step.
 
-   **Rebase-only mode differs here.** There are no findings to commit, so check whether the rebase (plus `commands.bootstrap`/`commands.checks`) actually changed the tree:
-   - **`git rev-parse HEAD` still equals the `headRefOid` recorded at pre-flight** — the rebase was a genuine no-op (the branch was already current with `<base>`). **Skip the push entirely**; report `rebase: no-op (already current)`. Never fabricate an empty commit to force one.
-   - **Otherwise, if the working tree is dirty** (rare — a bootstrap step wrote something) — commit normally as above, subject `#<issue-number> rebase onto <base>`.
-   - **Otherwise** — the rebase moved `HEAD` with no new content to commit. **Push the rebased head as-is, no commit**: `git push --force-with-lease origin HEAD:<branch>`.
+   **No-op case:** if step 3 skipped every flagged item as genuinely not an issue, there is nothing staged. **`git status --porcelain` empty** → skip the commit and the push entirely — report `no new commit (every finding skipped)` rather than committing nothing or forcing an empty commit.
 
-   **Findings mode has the same no-op**, from the opposite direction: if step 3 skipped every flagged item as genuinely not an issue, there is nothing staged. **`git status --porcelain` empty** → skip the commit and the push entirely, exactly like rebase-only's no-op above — report `no new commit (every finding skipped)` rather than committing nothing or forcing an empty commit.
-
-6. **Resolve the addressed review threads** so they do not block merge — **skip this step entirely in check-fix mode and in rebase-only mode**, where there are no threads to resolve. Inline comments live on **threads** that only a GraphQL mutation can resolve. The query takes owner and name **separately**:
+6. **Resolve the addressed review threads** so they do not block merge — **skip this step entirely in check-fix mode**, where there are no threads to resolve. Inline comments live on **threads** that only a GraphQL mutation can resolve. The query takes owner and name **separately**:
 
    ```bash
    # List unresolved threads, with the finding ID in each first comment:
@@ -191,26 +182,17 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --a
    gh pr comment <pr-number> --repo <repo> --body-file .temp/revision-<pr>.md
    ```
 
-   **Rebase-only mode** writes `rebase onto <base> · <sha>` instead — no `fixed`/`skipped` segment, since there were no findings and no threads. `<n>` is the count of prior reviews, unchanged (no new review happened). Skip the comment entirely when step 5 reported `rebase: no-op (already current)` — nothing moved, so there is nothing to note:
-
-   ```
-   ## Revision — Cycle <n>
-   rebase onto <base> · <sha>
-   ```
-
 ## Handoff
 
 ```bash
 gh pr edit <pr-number> --repo <repo> --remove-label "<labels.revising>" --add-label "<labels.readyForReview>"
 ```
 
-The label swap above is unchanged **regardless of whether this cycle produced a new commit** — enforcement of "did this actually move anything" stays in one place, the cockpit's own zero-diff review gate, not duplicated here. But when the cycle ended with no new commit — rebase-only mode's `rebase: no-op (already current)` (step 5), or a findings cycle where every flagged item was skipped as not-an-issue and nothing was pushed — say so plainly in the final report (e.g. "no new commit — head remains `<sha>`"), since the cockpit's zero-diff gate will decline to open a new review cycle against this head rather than dispatching one.
+The label swap above is unchanged **regardless of whether this cycle produced a new commit** — enforcement of "did this actually move anything" stays in one place, the cockpit's own zero-diff review gate, not duplicated here. But when the cycle ended with no new commit — a findings cycle where every flagged item was skipped as not-an-issue and nothing was pushed — say so plainly in the final report (e.g. "no new commit — head remains `<sha>`"), since the cockpit's zero-diff gate will decline to open a new review cycle against this head rather than dispatching one.
 
 ## Refresh mode
 
-> **Module: `previewDatabase`.** This mode exists only when the flag is true. With it false, `<labels.refreshBranch>` is never created and this section is unreachable.
-
-Entered **instead of** the Work steps above when the pull request carries `<labels.refreshBranch>`. The job is a rebase and a force-push — **no review reading, no bootstrap, no code edits, no new commits**. Its purpose is to trigger a fresh preview deployment now that a database slot has freed; **the push is the redeploy.**
+Entered **instead of** the Work steps above when the pull request carries `<labels.refreshBranch>`. The branch is stale — the job is to rebase it onto its base and force-push it, **no review reading, no bootstrap, no code edits, no new commits**. Freeing a preview-deployment slot by triggering a fresh redeploy is one reason a human might request this; a branch that has simply gone stale behind its base is another, and the automatic route below (mergeability read as `CONFLICTING`) is the common case.
 
 1. **Pre-flight.** `gh pr view <pr-number> --repo <repo> --json labels,headRefName,baseRefName,headRefOid` — confirm the label is present and **record `headRefOid`**. If absent, stop and report the labels; change nothing.
 2. **Label swap.** `gh pr edit <pr-number> --repo <repo> --remove-label "<labels.refreshBranch>" --add-label "<labels.refreshing>"`. **Leave every other label untouched** — an approved pull request stays approved.
@@ -222,7 +204,7 @@ Entered **instead of** the Work steps above when the pull request carries `<labe
    git rebase origin/<baseRefName>
    ```
 
-4. **Conflicts** → the **Rebase conflict protocol** in step 2, unchanged: auto-resolve the structurally unambiguous, otherwise abort, comment `## Pipeline Escalation`, and emit `BLOCKED:`. On escalation remove **both** `<labels.refreshing>` **and** `<labels.approved>` and add `<labels.needsHuman>` — the pull request is no longer merge-ready.
+4. **Conflicts** → the **Rebase conflict protocol** in step 2, unchanged: auto-resolve the structurally unambiguous, otherwise abort, comment `## Pipeline Escalation`, and emit `BLOCKED:`. On escalation remove **both** `<labels.refreshing>` **and** `<labels.approved>` and add `<labels.needsHuman>` — the pull request is no longer merge-ready. **Record whether any conflict was auto-resolved** (as opposed to a clean, conflict-free rebase) — step 7's approval rule reads it.
 5. **No-op check.** If `git rev-parse HEAD` equals the recorded `headRefOid`, the rebase changed nothing: **skip the push**, remove `<labels.refreshing>`, and report `refresh: no-op (already current)`. **Never** fabricate an empty commit to force a deployment.
 6. **Push.** `git push --force-with-lease origin HEAD:<headRefName>`.
-7. **Handoff.** `gh pr edit <pr-number> --repo <repo> --remove-label "<labels.refreshing>"` and add **nothing** — never `<labels.readyForReview>`. Report the new SHA and that a fresh deployment was triggered. **No pull request comment.**
+7. **Handoff.** `gh pr edit <pr-number> --repo <repo> --remove-label "<labels.refreshing>"`. **If step 4 auto-resolved any conflict**, the merged diff is no longer the diff that was approved: also `--remove-label "<labels.approved>" --add-label "<labels.readyForReview>"` in the same call, so the pull request returns to review with real checks on the new diff. **A clean rebase (no conflicts) adds nothing else** — never `<labels.readyForReview>`, and `<labels.approved>` stays exactly where it was. Report the new SHA. **No pull request comment.**

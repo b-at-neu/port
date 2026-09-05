@@ -96,12 +96,12 @@ Also in this pass, when both files are present but the branch from step 1's `git
    | `planApproved` | `plan approved` | trigger | core |
    | `readyForReview` | `ready for review` | trigger | core |
    | `needsRevision` | `needs revision` | trigger | core |
-   | `refreshBranch` | `refresh branch` | trigger | previewDatabase |
+   | `refreshBranch` | `refresh branch` | trigger | core |
    | `planning` | `planning` | in-flight | core |
    | `inProgress` | `in progress` | in-flight | core |
    | `reviewing` | `reviewing` | in-flight | core |
    | `revising` | `revising` | in-flight | core |
-   | `refreshing` | `refreshing` | in-flight | previewDatabase |
+   | `refreshing` | `refreshing` | in-flight | core |
    | `planReview` | `plan review` | gate | core |
    | `blocked` | `blocked` | gate | core |
    | `needsHuman` | `needs human` | gate | core |
@@ -121,8 +121,8 @@ Also in this pass, when both files are present but the branch from step 1's `git
    - **Verified (verdict `verified`):**
 
      > **Label vocabulary** — resolved from `.claude/port.config.json` + defaults, all <n> present in `<repo>`:
-     > triggers `ready` · `plan changes requested` · `plan approved` · `ready for review` · `needs revision`
-     > in flight `planning` · `in progress` · `reviewing` · `revising`
+     > triggers `ready` · `plan changes requested` · `plan approved` · `ready for review` · `needs revision` · `refresh branch`
+     > in flight `planning` · `in progress` · `reviewing` · `revising` · `refreshing`
      > gates `plan review` · `blocked` · `needs human`
      > marker / terminal `claude` · `auto plan` · `pr opened` · `approved`
 
@@ -178,6 +178,7 @@ Ungated reported:
 Worktrees reported:
 Uncorrelatable announced:
 Plugin staleness: <not computable | N>
+Refreshed:
 ```
 
 Baseline `Denials consumed` with one call, and report nothing from the log on this first tick — a fresh session has no prior offset to diff against, so there is nothing new to report, not zero:
@@ -186,7 +187,7 @@ Baseline `Denials consumed` with one call, and report nothing from the log on th
 wc -l ".agents/denials.log"
 ```
 
-If the file does not exist, baseline at `0`. Every field after this step is written and read exactly where its own procedure names it — the ladder in Pacing, the resume line and denial offset at the top of the Tick procedure, and the three change-only reports in Housekeeping.
+If the file does not exist, baseline at `0`. Every field after this step is written and read exactly where its own procedure names it — the ladder in Pacing, the resume line and denial offset at the top of the Tick procedure, the three change-only reports in Housekeeping, and `Refreshed:` in the Refresh sweep.
 
 ## UX states (startup preflight)
 
@@ -339,7 +340,7 @@ using a `<kind>` naming what the artifact is (e.g. `escalation`, `gate-cleared`,
 - **Never describe a tool call you have not made.** Announcing a wakeup, a removal, or a dispatch is not performing it — write the sentence only after the call returns, and let its result decide the wording. A closing report is a record of what happened this tick, never a stand-in for what you meant to do.
 - **A multi-item label change is one `gh issue edit` naming every number, then a re-query to confirm each one moved** — e.g. `gh issue edit 63 67 71 --repo <repo> --remove-label "planning" --add-label "ready"`. `gh pr edit` takes a single number, so a pull request is one call each. This is not only a style rule: the guard hook mechanically **denies** a `gh`/`git` call wrapped in a shell `for`/`while`/`until` loop, and it fires for this session too (#120), so falling back to a loop here is not a shortcut that works.
 - **Never merge or close a pull request.** The human merges on GitHub; `gh pr merge` is denied.
-- **Never touch a pull request labeled `<labels.approved>` beyond announcing it.** The label is removed **only when a check on it has gone red, or GitHub reports it conflicting with its base** — both read in the same tick, and named in the announcement (see "Approved pull requests" and `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Check evidence") — never a general licence to revisit terminal states, and never authorized by operator instruction or elapsed time. A pull request being slow, stale, or unmerged is never itself a reason to touch it. **A further carve-out:** applying a refresh to an approved pull request is permitted when `modules.previewDatabase` is true (see Preview refresh). Nothing else about an approved pull request may be touched.
+- **Never touch a pull request labeled `<labels.approved>` beyond announcing it.** The label is removed **only when a check on it has gone red** — named in the announcement (see "Approved pull requests" and `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Check evidence") — never a general licence to revisit terminal states, and never authorized by operator instruction or elapsed time. A pull request being slow, stale, or unmerged is never itself a reason to touch it. **A further carve-out:** adding `<labels.refreshBranch>` to an approved pull request when `mergeable` reads `CONFLICTING` is permitted **without** removing `<labels.approved>` — see "Refresh sweep". Nothing else about an approved pull request may be touched. **Refresh wins:** a pull request carrying `<labels.refreshBranch>` or `<labels.refreshing>` is never dispatched to review or revision in the same tick — see the Dispatching stage-mapping table.
 - **`<labels.needsHuman>` clears only when an operator instruction names that item** — the route is `unblock #N` (see Conversational commands) — and the guard hook **denies** any other attempt to remove it, cockpit included (#138): an announcement is not an instruction, and neither is general pressure to keep the pipeline moving.
 - Never act on an item that lacks a pipeline **trigger** label — opt-in is human-initiated.
 - **Never act on an item assigned to another operator** — ownership transfers only through an explicit human take-over.
@@ -377,11 +378,11 @@ gh api graphql --include -F query=@.temp/tick-query.graphql --jq '{data, errors,
 
 The query is one `repository(owner:"<owner>", name:"<name>")` selection with one alias per set this tick needs, plus top-level `viewer { login }` and `rateLimit { cost remaining }` for the cost budget. Every connection carries `totalCount` beside `nodes`, and every issue/pull-request node carries `assignees(first:5){ nodes { login } }` — ownership is partitioned client-side now (see "Ownership is now enforced client-side" below), so **no alias filters by assignee**, unlike the old per-label REST calls. Aliases, unfiltered by assignee, `states: OPEN` on every connection:
 
-- **5 trigger sets** — `ready`, `planChangesRequested`, `planApproved` (adds `body`), `readyForReview` (adds `mergeable`, `headRefOid`, `reviews(first:30){ nodes { body submittedAt commit { oid } } }` for the zero-diff gate below, and `comments(last:20){ nodes { body createdAt } }` for its `## Gate cleared` exception), `needsRevision` (adds `body`, `mergeable`, and `reviews(first:30){ nodes { body } }` for the cycle cap). Read `rateLimit.cost` from the response after this widening rather than trusting the ~12-point figure below blindly — it is what the Cost budget paragraph already says to do, and the widened alias is exactly the kind of change that moves it.
+- **6 trigger sets** — `ready`, `planChangesRequested`, `planApproved` (adds `body`), `readyForReview` (adds `mergeable`, `headRefOid`, `reviews(first:30){ nodes { body submittedAt commit { oid } } }` for the zero-diff gate below, and `comments(last:20){ nodes { body createdAt } }` for its `## Gate cleared` exception), `needsRevision` (adds `body`, `mergeable`, and `reviews(first:30){ nodes { body } }` for the cycle cap), `refreshBranch`. Read `rateLimit.cost` from the response after this widening rather than trusting the ~12-point figure below blindly — it is what the Cost budget paragraph already says to do, and the widened alias is exactly the kind of change that moves it.
 - **4 gate sets** — `planReview` (adds `body`), `blocked`, `approved` (adds `headRefOid`, `mergeable`, and the latest commit's `statusCheckRollup` — see below), `needsHuman`.
-- **4 in-flight sets** — `planning`, `inProgress` (adds `body`), `reviewing`, `revising` (adds `body`).
+- **5 in-flight sets** — `planning`, `inProgress` (adds `body`), `reviewing`, `revising` (adds `body`), `refreshing`.
 - **`prOpened`** (adds `body`) — the whole unmerged-branch set for the file contention gate's occupied set, in the same call.
-- **Module-gated** — `refreshBranch` and `refreshing` under `previewDatabase`; `allOpenPRs: pullRequests(states: OPEN, first: 100){ nodes { number title labels(first:20){nodes{name}} assignees(first:5){nodes{login}} } }` under `approvalGate`, for the ungated sweep.
+- **Module-gated** — `allOpenPRs: pullRequests(states: OPEN, first: 100){ nodes { number title labels(first:20){nodes{name}} assignees(first:5){nodes{login}} } }` under `approvalGate`, for the ungated sweep.
 - **One `pullRequest(number: N)` alias per number in `.temp/tick-state.md`'s `Announced approved`** (`state`, `mergedAt`, `closed`, `headRefOid`, `mergeable`, `statusCheckRollup`) — the approved re-verify and merged-pull-request reconciliation, folded into the same call rather than a per-item `gh pr view` afterward.
 - **`pluginRepo`, when Startup preflight step 4 resolved a staleness comparison target** — the same `ref(qualifiedName: "<target-ref>") { compare(headRef: "<installed-sha>") { behindBy } }` alias, recomputed every tick since the installed sha is fixed for the session but the target ref moves; see "Plugin staleness" under Housekeeping. Omitted for the rest of the session when step 4 found no computable target.
 
@@ -405,11 +406,11 @@ Then, in this order. Steps 7 and 8 are split apart deliberately — they are the
 1. **Reconcile merged pull requests.**
 2. **Handle human gates.**
 3. **Announce every session-required item.**
-4. **Unless draining, dispatch** for every remaining actionable trigger item (all `Agent` calls in one message) — a pull request whose mergeability reads `CONFLICTING` routes to revision instead of review; see "Mergeability gate". An issue at `<labels.planApproved>` whose plan claims a file an in-flight item already claims is **held** instead of dispatched; see "File contention gate".
+4. **Unless draining, dispatch** for every remaining actionable trigger item (all `Agent` calls in one message) — a pull request whose mergeability reads `CONFLICTING` is refreshed instead of reviewed; see "Refresh sweep". An issue at `<labels.planApproved>` whose plan claims a file an in-flight item already claims is **held** instead of dispatched; see "File contention gate".
 5. **Liveness cross-check** — call `TaskList` **first, unconditionally**, before anything else in this step (an empty in-flight set is not a reason to skip it — it is the case a stall is invisible in), then correlate the in-flight sets against its result and this session's own dispatch log (`.temp/dispatch-log.md`); auto-reset a dispatch this session provably lost, report every other case, and handle a usage-limit condition (see "Liveness" and "Agent questions and blockers" below).
 6. **Housekeeping** — run worktree hygiene, then the denial, unowned, ungated, and plugin-staleness reports (only the ones whose sets changed since `.temp/tick-state.md`'s remembered sets).
 7. **Call `ScheduleWakeup`**, skipped only while draining. **A non-draining tick that ends without this call has failed**, no matter how much of the above happened.
-8. **Write `.temp/tick-state.md` fresh** (Write tool) — `Last tick` and `Scheduled` from this tick's `Date:` header and the delay actually passed to `ScheduleWakeup`, plus the updated `Cadence step`, `No-change ticks`, `Denials consumed`, `Plugin staleness`, and the three remembered report sets.
+8. **Write `.temp/tick-state.md` fresh** (Write tool) — `Last tick` and `Scheduled` from this tick's `Date:` header and the delay actually passed to `ScheduleWakeup`, plus the updated `Cadence step`, `No-change ticks`, `Denials consumed`, `Plugin staleness`, `Refreshed`, and the three remembered report sets.
 9. **Only then, write the tick report.** Its closing "next tick" line is not a fresh decision — it is the record of step 7: state the delay you actually passed to `ScheduleWakeup`, or that you are draining and skipped the call. Never write this line before step 7 runs. **Every report carries a Liveness clause** naming the live agent count and each live agent's `description` (see UX states) — the number cannot be written without step 5's `TaskList` call, so its absence is what makes a skipped call visible to the operator, not just to this session.
 
 **Never busy-wait inside a tool call.** The next tick is how this cockpit waits — never `sleep`, never `gh pr checks --watch`, never any chained wait. A check unconcluded this tick is re-read next tick, exactly as the approved re-verify already does; a wait burns the turn and the wall clock for a completion that arrives on its own anyway, since background-agent completions wake this session between scheduled ticks regardless.
@@ -419,10 +420,7 @@ Then, in this order. Steps 7 and 8 are split apart deliberately — they are the
 **Mergeability gate (each tick, step 4, before dispatching review).** `readyForReview`'s alias already reads `mergeable` (see above) — no extra round trip. Branch on it per item, before deciding whether to dispatch `review-agent`:
 
 - **`MERGEABLE`** — dispatch normally.
-- **`CONFLICTING`** — do not dispatch review. Write `.temp/rebase-required-<pr>.md` (see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Rebase required"), `gh pr comment <pr-number> --repo <repo> --body-file .temp/rebase-required-<pr>.md`, swap `<labels.readyForReview>` → `<labels.needsRevision>`, and dispatch `revise-agent` this same tick under the unchanged rules — the cycle cap and the `SESSION REQUIRED` check both still apply. Report:
-
-  > 🔀 PR #134 conflicts with `dev` — GitHub can't build a merge ref, so no checks ran on this diff and there's nothing to review against. Commented and moved it to `needs revision`; revision rebases it this tick.
-
+- **`CONFLICTING`** — do not dispatch review. Handled by the **Refresh sweep** below, not restated here.
 - **`UNKNOWN`** — GitHub has not computed it yet (normal on a freshly opened pull request; the query itself is what triggers computation). Hold review one tick and report:
 
   > ⏳ PR #134's mergeability is still `UNKNOWN` — holding review one tick.
@@ -431,9 +429,23 @@ Then, in this order. Steps 7 and 8 are split apart deliberately — they are the
 
   > ⚠️ PR #134's mergeability is still `UNKNOWN` after two ticks — dispatching review anyway; it re-checks before it posts.
 
-**Approved-and-conflicting is the same fact read at a different gate** — see "Approved pull requests" under Human gates for that carve-out; both routes post the identical `## Rebase required` comment and land at `<labels.needsRevision>`.
+**Approved-and-conflicting is the same fact read at a different gate** — see "Approved pull requests" under Human gates and the **Refresh sweep** below; both routes handle it identically.
 
-**Zero-diff review gate (each tick, step 4, after the mergeability gate, before dispatching review).** A head a `## Code Review` has already been submitted against gets no second cycle — a clean review that keeps not merging (a liveness reset, an `## Approval withdrawn` bounce, a manual re-label) is otherwise invisible to both the cap above and to review itself, since neither compares the review's own commit against the current head. `readyForReview`'s alias already carries `headRefOid`, `reviews` (with `submittedAt` and `commit.oid`), and `comments` for exactly this (see the widened alias above) — no extra round trip. A `CONFLICTING` pull request already routed to revision at the mergeability gate above and never reaches this test.
+**Refresh sweep (each tick, step 4).** Replaces two ad-hoc branches — the mergeability gate above and the approved re-verify below both point here. Candidates: the union of `<labels.readyForReview>` ∪ `<labels.approved>` reading `mergeable: CONFLICTING` (both aliases already carry `mergeable` and `headRefOid` — no extra round trip). Process oldest pull request number first, up to the per-tick cap.
+
+1. **Same-SHA guard** — never refresh a head SHA this session already refreshed. This pull request's `.temp/tick-state.md` `Refreshed:` entry (`#<pr>@<sha>×<count>`) recorded the same sha as the current `headRefOid`? Refreshing again would change nothing — **escalate instead**: add `<labels.needsHuman>` (drop `<labels.approved>` only if present — a stuck refresh loop is its own authorising fact), comment naming the stuck sha:
+
+   > ⛔ PR #134 still reads `CONFLICTING` at `cb2dc1a`, which I already refreshed this session — a second refresh would change nothing. Escalated to `needs human`. Say `unblock #134` once you know why the rebase isn't clearing it.
+
+2. **Otherwise, refresh it.** Write `.temp/rebase-required-<pr>.md` (`${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Rebase required"), comment it, then `gh pr edit <pr-number> --repo <repo> --add-label "<labels.refreshBranch>"` — **remove nothing** — and dispatch `revise-agent` in refresh mode this same tick. Update `Refreshed:`: carry the count forward (`+1`) when the prior sha moved via this session's own dispatch-logged refresh; otherwise (an outside push) reset it to `1`. Report, e.g.:
+
+   > 🔄 PR #134 conflicts with `dev` — refreshing it (rebase + force-push) rather than calling it `needs revision`; nothing found anything wrong with it. It stays at `ready for review` and gets reviewed once the checks come back. (On an approved candidate, name why the approval survives: the approval stands, since a clean rebase doesn't change the diff that was approved; revision withdraws it only if the rebase has to resolve anything.)
+
+3. **Bounds** — at most 3 consecutive refreshes per pull request: step 2's count reaching `4` escalates instead of refreshing again, same form as step 1; and at most 5 refreshes per tick, oldest first — any remainder waits for the next tick, reported (e.g. *"Refreshed 5 conflicting pull requests this tick … — 2 more are waiting and go next tick"*).
+
+An entry is dropped from `Refreshed:` once its pull request reads `MERGEABLE`, since a refresh consumes no review cycle — see "Cycle cap".
+
+**Zero-diff review gate (each tick, step 4, after the mergeability gate, before dispatching review).** A head a `## Code Review` has already been submitted against gets no second cycle — a clean review that keeps not merging (a liveness reset, an `## Approval withdrawn` bounce, a manual re-label) is otherwise invisible to both the cap above and to review itself, since neither compares the review's own commit against the current head. `readyForReview`'s alias already carries `headRefOid`, `reviews` (with `submittedAt` and `commit.oid`), and `comments` for exactly this (see the widened alias above) — no extra round trip. A `CONFLICTING` pull request is already handled by the Refresh sweep above and never reaches this test.
 
 1. From the alias's `reviews`, take the newest node whose `body` starts with the literal `## Code Review` — the same predicate the cycle counter uses, so an empty drive-by review is never counted. **None** → dispatch.
 2. Its `commit.oid` differs from `headRefOid` → **dispatch**. Real progress always moves the head.
@@ -472,7 +484,7 @@ Then, in this order. Steps 7 and 8 are split apart deliberately — they are the
 
 **While draining, this gate computes nothing and reports nothing** — there is no dispatch to gate, so nothing is held.
 
-**Liveness cross-check (each tick, step 5).** An in-flight label is a claim, never a heartbeat, and neither is its absence — a label is not evidence of liveness or of non-liveness. Call `TaskList` first, before reading anything else in this step, whether or not any set below is non-empty: the zero-agent case is exactly where a stall goes unnoticed, and it is the case a 96-tick session once sat in without ever making this call. Take the results of the four in-flight aliases above (plus `<labels.refreshing>` under `previewDatabase`) and match each item against that `TaskList` result by the dispatch `description`, which the harness records verbatim (`"<stage> #<n>"`). Before classifying, Read `.temp/dispatch-log.md` — the precondition for every reset below is **"reset only an item this session's own dispatch log records"**, never an item this session never dispatched.
+**Liveness cross-check (each tick, step 5).** An in-flight label is a claim, never a heartbeat, and neither is its absence — a label is not evidence of liveness or of non-liveness. Call `TaskList` first, before reading anything else in this step, whether or not any set below is non-empty: the zero-agent case is exactly where a stall goes unnoticed, and it is the case a 96-tick session once sat in without ever making this call. Take the results of the five in-flight aliases above and match each item against that `TaskList` result by the dispatch `description`, which the harness records verbatim (`"<stage> #<n>"`). Before classifying, Read `.temp/dispatch-log.md` — the precondition for every reset below is **"reset only an item this session's own dispatch log records"**, never an item this session never dispatched.
 
 **The tick report's Liveness clause is what makes the call checkable, not the sentence.** State the live agent count and each live agent's `description` — the same shape worktree hygiene already requires ("an adjective like *pruned* is never a sufficient report"). **A tick that reports on liveness without a `TaskList` call this tick has failed**, and an empty count is written as `**Liveness:** 0 agents live · no in-flight items` (see UX states), never omitted.
 
@@ -568,13 +580,6 @@ An **empty** sweep result is only meaningful when step 0's verdict is `verified`
 
 **Plugin staleness (each tick).** When Startup preflight step 4 resolved a comparison target, this tick's `pluginRepo` alias carries a fresh `behindBy`. **Report change-only**: announce once at the `0 → non-zero` crossing (see UX states, "The running copy just went stale"), compared against `.temp/tick-state.md`'s `Plugin staleness` field, then carry a one-clause reminder on every later tick's closing line for the rest of the session instead of repeating the full announcement — `behindBy` is monotonic within a session (the installed sha is fixed; only the target ref moves), so a single crossing plus a persistent clause is the whole report. Write the new count back to `Plugin staleness` every tick regardless of whether it changed. No computable target → this report is silently absent, exactly as step 4 already said once at startup.
 
-**Preview refresh (right after confirming merges).** *(`modules.previewDatabase`)* Each merge frees exactly one preview database slot, which unblocks one quota-red deployment. Count the merges you confirmed **this tick** as `k`, then label **at most `k`** pull requests `<labels.refreshBranch>` — **oldest first**, each open, approved, with the deployment check red while the other checks are green, and skipping any whose `headRefOid` this session already refreshed at that same SHA. Read the rollup per candidate:
-
-```bash
-gh pr view <n> --repo <repo> --json headRefOid,statusCheckRollup --jq '{sha: .headRefOid, checks: [.statusCheckRollup[] | {n: (.name // .context), s: (.conclusion // .state)}]}'
-```
-
-Deployment providers often surface as a StatusContext rather than a CheckRun, hence the `//` fallbacks. Refreshing more than `k` would just re-exhaust the quota; a missed refresh is harmless because the next merge retries it.
 
 ## Dispatching
 
@@ -601,9 +606,9 @@ Stage mapping:
 | Issue at `<labels.ready>` | `plan-agent` (fresh plan) | `models.plan` |
 | Issue at `<labels.planChangesRequested>` | `plan-agent` (revision) | `models.plan` |
 | Issue at `<labels.planApproved>` | `impl-agent` — **unless `SESSION REQUIRED` at its slot: announce, never dispatch** | `models.impl` |
-| Pull request at `<labels.readyForReview>` | `review-agent` — **unless `mergeable` is `CONFLICTING`: route to revision instead, see "Mergeability gate"; or the newest review already covers the current head with no `## Gate cleared` since: escalate instead, see "Zero-diff review gate"** | `models.review` |
-| Pull request at `<labels.needsRevision>` | `revise-agent` — **after the cycle-cap check**; **unless `SESSION REQUIRED` at its slot: announce, never dispatch** | `models.revise` |
-| Pull request at `<labels.refreshBranch>` *(`previewDatabase`)* | `revise-agent` in **refresh mode** | `models.revise` |
+| Pull request at `<labels.readyForReview>` | `review-agent` — **unless `mergeable` is `CONFLICTING`: refresh instead, see "Refresh sweep"; or the newest review already covers the current head with no `## Gate cleared` since: escalate instead, see "Zero-diff review gate"; or it also carries `<labels.refreshBranch>`/`<labels.refreshing>`: refresh wins, never dispatch review this tick** | `models.review` |
+| Pull request at `<labels.needsRevision>` | `revise-agent` — **after the cycle-cap check**; **unless `SESSION REQUIRED` at its slot: announce, never dispatch**; **or it also carries `<labels.refreshBranch>`/`<labels.refreshing>`: refresh wins, never dispatch revision this tick** | `models.revise` |
+| Pull request at `<labels.refreshBranch>` | `revise-agent` in **refresh mode** | `models.revise` |
 
 **Session-required items never dispatch.** Before dispatching impl or revise, read that item's `body` (already in the trigger query's result — both request `body` — so this costs no extra call) at its **marker slot** — the first non-empty line of the plan block, directly under `## Implementation Plan`, for an issue; the first non-empty line after `Closes #N`, for a pull request. Slot holds `> **SESSION REQUIRED:** <reason>` → announce, do not dispatch. Anything else at the slot, or no slot at all → dispatch normally. **Never search the rest of the body for the literal string** — a ticket that mentions `SESSION REQUIRED` in prose (explaining the mechanism, or why a step is or is not session-required) or inline code is not marked; read the one line at the slot, never a substring anywhere in the body. Full rule: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Session-required tickets" → "Detection".
 
@@ -611,7 +616,7 @@ For a refresh, say so in the prompt so the agent takes its refresh path: `Run yo
 
 ### Cycle cap (before every revise dispatch)
 
-The `needsRevision` alias in the same tick query already carries `reviews(first:30){ nodes { body } }` — count the entries whose `body` starts with `## Code Review` from that, no follow-up `gh pr view`.
+The `needsRevision` alias in the same tick query already carries `reviews(first:30){ nodes { body } }` — count the entries whose `body` starts with `## Code Review` from that, no follow-up `gh pr view`. Note that a refresh consumes no review cycle — refresh mode posts no `## Code Review` comment, so a pull request bounced through the Refresh sweep any number of times never advances this counter.
 
 **The cap is unconditional** — at or above `reviewCycleCap`, escalate regardless of what the latest review found. At cycle 3+ a `<labels.needsRevision>` verdict reached *by a review finding* already implies Critical or Medium (the escalating bar), so a findings qualifier was redundant on the path it was written for, and unsatisfiable on every path that actually loops without one — `## Rebase required`, `## Approval withdrawn`, a liveness reset, or a manual re-label, all of which arrive here with a clean latest review. Write the note to `.temp/escalation-<pr>.md` with the Write tool — its `## Pipeline Escalation` first line names the cycle count and the cap (`<n> review cycles reached the cap of <reviewCycleCap> without merging`) and never claims findings are open, since under this rule there need not be any — then
 
@@ -683,17 +688,11 @@ The gate applies **no special label** for a session-required plan; the marker is
 
 - **All checks concluded green** (the carve-out check excluded from the read but still listed) **and `mergeable` is `MERGEABLE`** → announce once, listing every check and its conclusion — never merge-ready without naming what that claim rests on.
 - **Anything unconcluded** — a check still pending, or `mergeable` still `UNKNOWN` — → say so and do **not** call it merge-ready; re-check next tick.
-- **The never-touch rail on `<labels.approved>` has exactly two authorising facts** — only when a check on it has gone red, or GitHub reports it conflicting with its base — and either one routes it back the same way:
-  - **A red check, excluding the excused carve-out** → write `.temp/withdrawn-<n>.md` (`## Approval withdrawn`, naming the check, its conclusion, its link, and the head SHA), `gh pr comment <n> --repo <repo> --body-file .temp/withdrawn-<n>.md`, then swap the label (below).
-  - **`mergeable: CONFLICTING`** → write `.temp/rebase-required-<n>.md` (`## Rebase required` — see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Rebase required" — never `## Approval withdrawn`, which contracts to name a check), `gh pr comment <n> --repo <repo> --body-file .temp/rebase-required-<n>.md`, then swap the label. Announce:
-
-    > 🔀 PR #134 was approved but now conflicts with `dev` — GitHub will refuse the merge. Withdrew the approval and moved it to `needs revision`; revision rebases it this tick.
-
-  Either way: `gh pr edit <n> --repo <repo> --remove-label "<labels.approved>" --add-label "<labels.needsRevision>"`, then drop it from the announced set so a later re-approval announces again. Revision dispatches on the same tick under the existing rules — the cycle cap and `SESSION REQUIRED` check both still apply, unchanged. No new label and no new operator command — this is the same `<labels.needsRevision>` route as the mergeability gate above, read at a different point in the pipeline.
+- **The never-touch rail on `<labels.approved>` has exactly two authorising facts, one that removes it and one that does not:**
+  - **A red check, excluding the excused carve-out** → write `.temp/withdrawn-<n>.md` (`## Approval withdrawn`, naming the check, its conclusion, its link, and the head SHA), `gh pr comment <n> --repo <repo> --body-file .temp/withdrawn-<n>.md`, then `gh pr edit <n> --repo <repo> --remove-label "<labels.approved>" --add-label "<labels.needsRevision>"`, then drop it from the announced set so a later re-approval announces again. Revision dispatches on the same tick under the existing rules — the cycle cap and `SESSION REQUIRED` check both still apply, unchanged.
+  - **`mergeable: CONFLICTING`** → handled by the **Refresh sweep** above, not restated here — it adds `<labels.refreshBranch>` and **leaves `<labels.approved>` in place**, since a clean rebase does not change the diff that was approved.
 
 Announce each newly approved pull request once with a one-line summary, its URL, and the check conclusions the claim rests on; the human merges on GitHub. Track which you have announced in-session; re-announce only on request. When one is merged, the next tick's reconciliation drops it and announces the merge — **never keep listing a merged pull request as awaiting merge.**
-
-*(`modules.previewDatabase`)* If its rollup shows the deployment check red, append `⚠️ deployment red — not merge-ready; a slot frees on the next merge`, so the human is never told to merge something GitHub will refuse.
 
 **Pressed to "move it along" with nothing red** — decline, and point at the merge: an approved, all-green pull request is not touched just because it is sitting there. See "Safety rails".
 
@@ -733,7 +732,7 @@ Interpret intent, not literal syntax.
 - **"pause #N"** — remove the item's current trigger label; confirm what was removed. If it belongs to **another operator**, say so and stop rather than touch its labels.
 - **"resume #N" / "retry #N"** — re-apply the trigger label for where it stalled (stuck at `<labels.planning>` → `<labels.ready>`; stuck at `<labels.revising>` → `<labels.needsRevision>`; and so on). If the item is **unassigned**, add `--add-assignee "@me"` in the same command, since re-applying a trigger to an unassigned item is a no-op for every cockpit. If it belongs to another operator, say so and stop. **Several at once, same stage:** one call naming every number, e.g. `gh issue edit 63 67 71 --repo <repo> --remove-label "<labels.planning>" --add-label "<labels.ready>"` — group by label pair, and re-query the target label afterward to confirm every number moved; report any that did not. `gh pr edit` takes one number, so pull requests are one call each. **These never clear `<labels.needsHuman>`** — they re-apply a trigger for an *in-flight* label only; see `unblock #N` for that gate.
 - **"unblock #N"** — the **only** route off `<labels.needsHuman>`; see "Gate clear" under Human gates for the full flow. The guard hook denies this same removal from anyone who has not just said so in conversation — this command *is* that instruction.
-- **"refresh #N"** *(`modules.previewDatabase`)* — apply `<labels.refreshBranch>` and dispatch this tick, bypassing the per-merge cap. Use it to force a fresh deployment on a pull request left quota-red.
+- **"refresh #N"** — force a rebase and force-push now: apply `<labels.refreshBranch>` and dispatch this tick, bypassing the per-tick and per-pull-request caps. Use it for any reason a human wants a fresh push on a stale branch — freeing a preview-deployment slot after merge is one such reason, not the only one.
 - **"gate #N"** *(`modules.approvalGate`)* — apply the missing `<labels.marker>` to a pull request the ungated sweep reported. The `labeled` event re-evaluates the workflow's condition, so the gate is live on that run.
 - **"dispatch #N anyway" / "force #N"** — dispatch this tick despite the file contention gate holding it, acknowledging the overlap and the rebase it invites. Confirm the item is actually held (its `<labels.planApproved>` plan overlaps an in-flight item's claimed files) before overriding; if it is not held, say so — there is nothing to force. Dispatch normally, then report per the "Override taken" UX state.
 
