@@ -32,7 +32,6 @@ export interface ConfigDefaults {
   readonly models: { readonly plan: string; readonly impl: string; readonly review: string; readonly revise: string }
   readonly modules: {
     readonly approvalGate: boolean
-    readonly previewDatabase: boolean
     readonly release: boolean
     readonly scope: boolean
   }
@@ -56,7 +55,6 @@ export const CONFIG_DEFAULTS: ConfigDefaults = {
   },
   modules: {
     approvalGate: schema.properties.modules.properties.approvalGate.default,
-    previewDatabase: schema.properties.modules.properties.previewDatabase.default,
     release: schema.properties.modules.properties.release.default,
     scope: schema.properties.modules.properties.scope.default,
   },

@@ -342,10 +342,10 @@ export function decide({ payload, matchers, sessionRequiredPaths, root, needsHum
     //
     // Deliberately not extended to <labels.approved>: the same rail in
     // PIPELINE.md covers it too, but it has no observed violation, and it
-    // carries the previewDatabase refresh carve-out (an approved pull
-    // request's label set IS allowed to change there), which would need a
-    // second predicate this rule does not have. Noted here so the omission
-    // reads as a choice, not an oversight.
+    // carries the refresh carve-out (an approved pull request's label set IS
+    // allowed to change there), which would need a second predicate this rule
+    // does not have. Noted here so the omission reads as a choice, not an
+    // oversight.
     if (needsHumanLabel && !who.isOperatorWorktree) {
       const gate = gateClearAttempt(command, needsHumanLabel);
       if (gate.isAttempt) {

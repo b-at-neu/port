@@ -60,7 +60,6 @@ Ask about each remaining `modules` flag with `AskUserQuestion`, presenting the d
 | Flag | Recommend | Because |
 | --- | --- | --- |
 | `approvalGate` | **off** when no ruleset protects the integration branch | The check would never be required, so the workflow is pure noise. Say plainly that with no ruleset the gate is advisory either way. |
-| `previewDatabase` | **off** unless the repository's previews demonstrably hold a per-pull-request database branch from a finite pool | It is a narrow situation, and enabling it makes the pipeline treat a red deployment as infrastructure rather than a bug. |
 | `release` | on, **skipped in single-branch mode** (forced `false`) | Most two-branch repositories want an integration-to-production promotion flow. |
 | `scope` | on | Cheap, and only used when invoked. |
 

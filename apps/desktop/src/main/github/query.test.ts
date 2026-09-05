@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '../../shared/labels/vocabulary'
+import { resolveVocabulary, type LabelVocabulary } from '../../shared/labels/vocabulary'
 import { buildItemStatesQuery, buildPipelineQuery, graphqlStringLiteral } from './query'
 
 describe('graphqlStringLiteral', () => {
@@ -18,7 +18,20 @@ describe('graphqlStringLiteral', () => {
 
 describe('buildPipelineQuery', () => {
   it('emits two aliases per enabled label and none for a disabled one', () => {
-    const vocabulary = resolveVocabulary({ modules: { approvalGate: false, previewDatabase: false, release: false, scope: false } })
+    // No shipped label is module-gated any more (#189) — `resolveVocabulary`
+    // itself never produces a non-empty `disabled` today (see
+    // `vocabulary.test.ts` → "disables nothing"). `disabled` stays a designed
+    // extension point (`labels.json`'s own `$comment`), so this builds a
+    // `LabelVocabulary` by hand to keep `buildPipelineQuery`'s handling of it
+    // under test rather than dropping the case.
+    const vocabulary: LabelVocabulary = {
+      labels: [
+        { key: 'ready', name: 'ready', source: 'default', module: 'core' },
+        { key: 'blocked', name: 'blocked', source: 'default', module: 'core' },
+      ],
+      disabled: ['refreshBranch', 'refreshing'],
+      problems: [],
+    }
     const { document, aliases } = buildPipelineQuery(vocabulary)
 
     expect(aliases.length).toBe(vocabulary.labels.length)

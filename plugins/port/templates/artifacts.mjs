@@ -38,12 +38,12 @@ export const LABELS = {
   planApproved: { name: 'plan approved', module: 'core' },
   readyForReview: { name: 'ready for review', module: 'core' },
   needsRevision: { name: 'needs revision', module: 'core' },
-  refreshBranch: { name: 'refresh branch', module: 'previewDatabase' },
+  refreshBranch: { name: 'refresh branch', module: 'core' },
   planning: { name: 'planning', module: 'core' },
   inProgress: { name: 'in progress', module: 'core' },
   reviewing: { name: 'reviewing', module: 'core' },
   revising: { name: 'revising', module: 'core' },
-  refreshing: { name: 'refreshing', module: 'previewDatabase' },
+  refreshing: { name: 'refreshing', module: 'core' },
   planReview: { name: 'plan review', module: 'core' },
   blocked: { name: 'blocked', module: 'core' },
   needsHuman: { name: 'needs human', module: 'core' },
@@ -67,11 +67,9 @@ export const SHA_RE = /\b[0-9a-f]{7,40}\b/;
 // (revise-agent.md), and an optional `· rebase: <file> (<strategy>)` after the
 // sha. One of the two segments must be there — a cycle that did neither writes
 // no comment at all. `check <name> · <sha>` is the check-fix-mode form: no
-// threads to resolve, so no `fixed`/`skipped` segment at all. `rebase onto
-// <base> · <sha>` is the rebase-only-mode form: same reasoning, the work item
-// was the rebase itself.
-export const REVISION_OPENS = /^(?:fixed|skipped|check|rebase)\b/;
-export const REVISION_DETAIL = /^(?:(?:fixed\b[^·]*·\s*)?(?:skipped\b[^·]*·\s*)?[0-9a-f]{7,40}\b|check\s+\S+\s*·\s*[0-9a-f]{7,40}\b|rebase\s+onto\s+\S+\s*·\s*[0-9a-f]{7,40}\b)/;
+// threads to resolve, so no `fixed`/`skipped` segment at all.
+export const REVISION_OPENS = /^(?:fixed|skipped|check)\b/;
+export const REVISION_DETAIL = /^(?:(?:fixed\b[^·]*·\s*)?(?:skipped\b[^·]*·\s*)?[0-9a-f]{7,40}\b|check\s+\S+\s*·\s*[0-9a-f]{7,40}\b)/;
 export const COMMIT_SUBJECT = /^#\d+ [a-z]/;
 export const SCRATCH_PATHS = /^(\.temp|\.agents)\//;
 // A verification step only the operator can run, at its defined position — a

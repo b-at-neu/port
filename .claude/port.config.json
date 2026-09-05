@@ -25,7 +25,6 @@
   "labels": {},
   "modules": {
     "approvalGate": true,
-    "previewDatabase": false,
     "release": true,
     "scope": true
   },
