@@ -28,6 +28,7 @@ export interface PathOps {
   resolveFrom(base: string, p: string): string
   join(base: string, ...segments: string[]): string
   dirname(p: string): string
+  basename(p: string): string
 }
 
 function implFor(flavour: PathFlavour): PathImpl {
@@ -137,7 +138,12 @@ export function createPathOps(flavour: PathFlavour, options: PathOpsOptions): Pa
     return impl.dirname(p)
   }
 
-  return { flavour, toNative, toPosix, pathKey, samePath, contains, expandHome, resolveFrom, join, dirname }
+  function basename(p: string): string {
+    assertAbsolute(impl, p, 'basename')
+    return impl.basename(dropTrailingSeparator(impl, impl.normalize(withSeparator(p, impl.sep))))
+  }
+
+  return { flavour, toNative, toPosix, pathKey, samePath, contains, expandHome, resolveFrom, join, dirname, basename }
 }
 
 const hostFlavour: PathFlavour = process.platform === 'win32' ? 'win32' : 'posix'

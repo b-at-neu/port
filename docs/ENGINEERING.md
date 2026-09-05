@@ -24,6 +24,8 @@ This is **this repository's own** standards document, not a template — `plugin
 
 **`apps/desktop/src/main/platform/` is the only place under `apps/desktop/src/` that may import `node:child_process` or `node:fs`.** The spawnable executables (`KNOWN_COMMANDS` in `run.ts`) are a literal union, so reaching for a POSIX-only utility is a compile-time error rather than a Windows-only runtime failure; path comparison and containment go through `paths.ts`'s `pathKey`/`contains`, never `startsWith`. The `desktop-platform-layer` check in `scripts/checks.mjs` pins all three rails mechanically.
 
+**`apps/desktop/src/main/local/` is the app's only reader of the pipeline's local sources** (`git worktree list --porcelain` and `.agents/denials.log`) — it calls no `gh` and resolves no item state (that is #79's join), and derives the worktree producer from the basename rather than a hard-coded `.claude/worktrees` path, all pinned by the `desktop-local` layer 1 check.
+
 **A port config's shape and defaults are read from `schema/port.config.schema.json` at runtime, never transcribed into TypeScript.** `apps/desktop/src/main/registry/schema.ts` is the desktop app's single point of contact with the config contract — it compiles the shipped schema with ajv and reads every default off that same imported object — and the `desktop-registry` check in `scripts/checks.mjs` pins both the single import and the absence of a hand-retyped default.
 
 **Anything shipped may only reference other shipped paths.** A reference from a file under `plugins/port/` to a repository-only doc or script — `docs/USAGE.md`, `CONTRIBUTING.md`, `scripts/checks.mjs` — dangles in every adopter's plugin cache, which carries only `plugins/port/` (`scripts/checks.mjs` → "Shipped references stay inside plugins/port/").
@@ -43,6 +45,7 @@ This is **this repository's own** standards document, not a template — `plugin
 | The shell-discipline block ↔ its canonical copy in PIPELINE.md | "Shell-discipline block stays byte-identical everywhere it fires" |
 | `ARCHITECTURE.md`'s map ↔ the real tree | "Repository map covers the real tree, both directions" |
 | `.github/workflows/*.yml` ↔ `plugins/port/templates/*.yml` | "Workflow copies stay rendered from their templates" |
+| `templates/worktrees.mjs`'s `correlate` ↔ the desktop `correlate` (`apps/desktop/src/main/local/correlate.ts`) | the shared case table, `main/local/correlation.cases.json` |
 
 **If a change introduces a further copy of anything, it introduces its pin in the same commit.** A comment asking a future reader to remember is not a pin.
 

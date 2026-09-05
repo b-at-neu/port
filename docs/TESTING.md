@@ -80,6 +80,9 @@ No dependencies, no plugin install, no model calls. Runs in seconds, in an agent
 | `@anthropic-ai/claude-agent-sdk` is referenced under `apps/desktop/src/` only in `main/sessions/sdk.ts`, and that file does reference it | A second reader spawning the SDK directly instead of going through the one lazy-imported seam (#78) |
 | `main/sessions/classify.ts`'s `PORT_STAGE_AGENTS` array matches the `.md` basenames under `plugins/port/agents/`, both directions, and `pipeline`/`implement` exist as directories under `plugins/port/skills/` | The stage union or the role ladder's first-prompt rung drifting from the real agents and skills it names (#78) |
 | No non-test file under `main/sessions/` or `shared/sessions/` contains `running`, `alive`, or `isLive` as an identifier or string literal outside a comment | A local transcript's recency being reported as liveness, the exact distinction Decision 4 exists to hold (#78) |
+| No file under `apps/desktop/src/main/local/` references `gh(`/`ghJson(`/`main/github`, and at least one imports `git` from the platform layer | A second `gh`-calling adapter landing beside the one #76 already established, or the local-only rail (Decision 1) passing vacuously once the git call is removed (#77) |
+| No file under `apps/desktop/src/main/local/` contains the literal `.claude/worktrees` | The worktree producer/scan being hard-coded to one directory name instead of derived from the registered worktree's own basename (#77) |
+| `templates/worktrees.mjs`'s exported `correlate` resolves every case in `main/local/correlation.cases.json` identically to the desktop `correlate`, and that table covers all four rung names, a `#0` case, and a `null` case | The reclaimer's and the desktop app's correlation ladders silently disagreeing about which issue a worktree belongs to (#77) |
 
 Each rule is worth testing by breaking it deliberately. If a check cannot be made to fail, it is not a check.
 
