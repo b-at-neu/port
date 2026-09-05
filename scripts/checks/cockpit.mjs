@@ -274,11 +274,10 @@ export default async function ({ fail, ok }) {
       ok();
     }
 
-    if (!text.includes('GitHub reports it conflicting with its base')) {
-      fail(
-        'liveness-reset',
-        `${rel}'s '<labels.approved>' carve-out never names the conflicting-with-base half`,
-      );
+    // #189: CONFLICTING no longer removes '<labels.approved>' — it adds
+    // '<labels.refreshBranch>' instead, leaving the approval in place.
+    if (!text.includes('adding `<labels.refreshBranch>` to an approved pull request when `mergeable` reads `CONFLICTING` is permitted')) {
+      fail('liveness-reset', `${rel}'s '<labels.approved>' carve-out never documents the refresh-without-withdrawal fact`);
     } else {
       ok();
     }

@@ -37,7 +37,7 @@ scaffold_script: |
     "docs": { "engineering": null, "design": null },
     "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" },
     "labels": {},
-    "modules": { "approvalGate": true, "previewDatabase": false, "release": true, "scope": true },
+    "modules": { "approvalGate": true, "release": true, "scope": true },
     "reviewCycleCap": 5,
     "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
   }

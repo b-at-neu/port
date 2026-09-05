@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, walk, relOf } from '../lib/files.mjs';
+import { root, walk, relOf, readJson } from '../lib/files.mjs';
 
 export default async function ({ fail, ok }) {
   // --- Review evidence gate — verdicts wait for concluded checks --------------
@@ -115,6 +115,9 @@ export default async function ({ fail, ok }) {
   // that review-agent reads mergeable at both points named in the plan and
   // states the no-verdict rule literally, and that both revise-agent and
   // PIPELINE.md carry the '## Rebase required' contract the fix routes through.
+  // #189 retargeted the route itself: a conflicting pull request is refreshed,
+  // never sent to needs-revision, so this now pins '<labels.refreshBranch>' at
+  // review-agent's mergeability exit rather than '<labels.needsRevision>'.
   {
     const reviewRel = 'plugins/port/agents/review-agent.md';
     const reviewText = readFileSync(join(root, reviewRel), 'utf8');
@@ -136,10 +139,14 @@ export default async function ({ fail, ok }) {
       ok();
     }
 
-    const reviseRel = 'plugins/port/agents/revise-agent.md';
+    if (!reviewText.includes('<labels.refreshBranch>')) {
+      fail('mergeability', `${reviewRel} never routes its mergeability exit to '<labels.refreshBranch>'`);
+    } else {
+      ok();
+    }
+
     const pipelineRel = 'plugins/port/docs/PIPELINE.md';
-    for (const rel of [reviseRel, pipelineRel]) {
-      const text = readFileSync(join(root, rel), 'utf8');
+    for (const [rel, text] of [[reviewRel, reviewText], [pipelineRel, readFileSync(join(root, pipelineRel), 'utf8')]]) {
       if (!text.includes('## Rebase required')) {
         fail('mergeability', `${rel} never names the '## Rebase required' comment`);
       } else {
@@ -150,6 +157,56 @@ export default async function ({ fail, ok }) {
     const pipelineText = readFileSync(join(root, pipelineRel), 'utf8');
     if (!pipelineText.includes('never on a schedule')) {
       fail('mergeability', `${pipelineRel} is missing the rebase-on-demand decision ('never on a schedule')`);
+    } else {
+      ok();
+    }
+  }
+
+  // --- Refresh is the bounded route for a stale branch (#189) -----------------
+  // Regression guard: deleting modules.previewDatabase promoted refresh mode
+  // from an off-by-default subsystem to the pipeline's only rebase route, so
+  // its bounds and its no-cycle-cost accounting must actually be documented,
+  // not merely implemented — an untested behaviour that is also undocumented
+  // is invisible to review and to a future edit that quietly narrows it.
+  {
+    const labels = readJson('plugins/port/templates/labels.json');
+    for (const key of ['refreshBranch', 'refreshing']) {
+      const entry = labels.labels.find((l) => l.key === key);
+      if (!entry || entry.module !== 'core') {
+        fail('refresh-bounded', `labels.json's '${key}' entry must be module 'core', got ${JSON.stringify(entry?.module)}`);
+      } else {
+        ok();
+      }
+    }
+
+    const pipelineRel = 'plugins/port/docs/PIPELINE.md';
+    const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
+    const pipelineText = readFileSync(join(root, pipelineRel), 'utf8');
+    const skillText = readFileSync(join(root, skillRel), 'utf8');
+
+    for (const [rel, text] of [[pipelineRel, pipelineText], [skillRel, skillText]]) {
+      if (!text.includes('a refresh consumes no review cycle')) {
+        fail('refresh-bounded', `${rel} is missing the literal phrase 'a refresh consumes no review cycle'`);
+      } else {
+        ok();
+      }
+    }
+
+    for (const phrase of [
+      'never refresh a head SHA this session already refreshed',
+      'at most 5 refreshes per tick, oldest first',
+      'at most 3 consecutive refreshes per pull request',
+      'leaves `<labels.approved>` in place',
+    ]) {
+      if (!skillText.includes(phrase)) {
+        fail('refresh-bounded', `${skillRel} is missing the literal phrase '${phrase}'`);
+      } else {
+        ok();
+      }
+    }
+
+    if (!pipelineText.includes('never on a schedule')) {
+      fail('refresh-bounded', `${pipelineRel} is missing the rebase-on-demand decision ('never on a schedule')`);
     } else {
       ok();
     }
