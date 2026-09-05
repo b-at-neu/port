@@ -462,7 +462,7 @@ Then, in this order. Steps 7 and 8 are split apart deliberately — they are the
    > ⏸️ **#52 held** — its plan and #67's (`pr opened`) both claim 2 files: `src/lib/auth.ts`, `src/lib/session.ts`. It dispatches automatically once #67's pull request merges or closes. Say `dispatch #52 anyway` to override.
 5. **Below the threshold, or no overlap, after exclusions** → a survivor. Sort survivors ascending by how many *other survivors* they overlap at or above the threshold, after exclusions, and dispatch in that order, adding each dispatched survivor's claimed files to the occupied set as you go — a later survivor that now overlaps an earlier one's freshly-claimed files at or above the threshold is held this same tick, not dispatched. When the exclusion list or the threshold is what changed the outcome, report it once at dispatch — never for a candidate that never overlapped anything:
 
-   > ▶️ Dispatching #52 despite overlapping #67 on `src/lib/registry.ts` (a `concurrency.sharedFiles` entry) — no contended files left, so this isn't a hold.
+   > ▶️ Dispatching #52 despite overlapping #67 on `src/lib/registry.ts` (a `concurrency.sharedFiles` entry) — no contended files left, so this isn't a hold. With the threshold rather than the list doing the work: `… on 1 file (`src/lib/session.ts`), under the threshold of 2 — a rebase there resolves as a union.`
 
 **Override taken ("dispatch #N anyway" / "force #N"):**
 
