@@ -137,6 +137,23 @@ describe('readDenials — summary buckets', () => {
     })
   })
 
+  it('counts a subagent-signal deny into agentDenials, not railDenials', async () => {
+    const lines = ['2026-01-01T00:00:00Z\tdeny\tsubagent:some-signal\tcmd-a\n'].join('')
+    const { root, git } = await makeRepoWithLog(lines)
+    const result = await readDenials({ repoRoot: root, git, now })
+    if (!result.ok || !result.present) throw new Error('expected present')
+    expect(result.summary).toEqual({
+      agentDenials: 1,
+      railDenials: 0,
+      misses: 0,
+      gateClears: 0,
+      hookErrors: 0,
+      legacy: 0,
+      malformed: 0,
+      total: 1,
+    })
+  })
+
   it('caps entries at limit while summary.total counts every line', async () => {
     const lines = Array.from({ length: 10 }, (_, i) => `2026-01-01T00:00:0${i}Z\tdeny\tport:port:impl-agent\tcmd-${i}\n`).join('')
     const { root, git } = await makeRepoWithLog(lines)

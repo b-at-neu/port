@@ -103,10 +103,12 @@ function parseLine(raw: string): DenialEntry {
 }
 
 /** The buckets a consumer must not re-derive (Data & contracts): `deny` from
- *  a `stage-agent`/`subagent` actor is `agentDenials`; `deny` from a
- *  `session` actor is `railDenials` — a rail held, never a missing
- *  permission — and never folded into `agentDenials`. `miss`/`gate-clear`/
- *  `hook-error` are never denials at all. */
+ *  a `stage-agent`/`subagent`/`subagent-signal` actor is `agentDenials`
+ *  (`subagent-signal` is still known to be a subagent, just via a weaker
+ *  attribution rung — PIPELINE.md's own ladder — so it counts the same way);
+ *  `deny` from a `session` actor is `railDenials` — a rail held, never a
+ *  missing permission — and never folded into `agentDenials`. `miss`/
+ *  `gate-clear`/`hook-error` are never denials at all. */
 function buildSummary(entries: readonly DenialEntry[]): DenialSummary {
   let agentDenials = 0
   let railDenials = 0
@@ -132,7 +134,12 @@ function buildSummary(entries: readonly DenialEntry[]): DenialSummary {
         break
       case 'deny':
         if (entry.actor?.kind === 'session') railDenials++
-        else if (entry.actor?.kind === 'stage-agent' || entry.actor?.kind === 'subagent') agentDenials++
+        else if (
+          entry.actor?.kind === 'stage-agent' ||
+          entry.actor?.kind === 'subagent' ||
+          entry.actor?.kind === 'subagent-signal'
+        )
+          agentDenials++
         break
       default:
         break
