@@ -5,32 +5,161 @@
 
 body {
   margin: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   height: 100vh;
   background: #1e1e1e;
   color: #e6e6e6;
 }
 
 #app {
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  box-sizing: border-box;
+  padding: 1.5rem 2rem;
 }
 
 h1 {
-  font-size: 1.5rem;
-  margin-bottom: 0.5rem;
-}
-
-.versions {
-  margin: 0.25rem 0;
-}
-
-.app-version {
-  margin: 0.25rem 0;
-  opacity: 0.7;
+  font-size: 1.25rem;
+  margin: 0;
 }
 
 .error {
   color: #ff6b6b;
+}
+
+/* Header */
+
+.repos-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  margin-bottom: 1rem;
+}
+
+.repos-header__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.repos-header__actions button {
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #2a2a2a;
+  color: inherit;
+  cursor: pointer;
+}
+
+.repos-header__actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* List and empty state */
+
+.repos-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.repos-empty {
+  text-align: center;
+  margin: auto;
+  opacity: 0.8;
+}
+
+.repos-empty__title {
+  font-size: 1rem;
+  margin: 0 0 0.25rem;
+}
+
+.repos-empty__hint {
+  margin: 0;
+  opacity: 0.7;
+}
+
+/* Repository cards */
+
+.repo-card {
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  background: #262626;
+  text-align: left;
+}
+
+.repo-card--highlighted {
+  border-color: #6ba8ff;
+}
+
+.repo-card__title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.repo-card__title {
+  font-weight: 600;
+}
+
+.repo-card__remove {
+  font-family: inherit;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.repo-card__path {
+  opacity: 0.65;
+  font-size: 0.85rem;
+  margin-top: 0.15rem;
+}
+
+.repo-card__summary {
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+.repo-card__banner {
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+  color: #ff6b6b;
+}
+
+.repo-card__diagnostics {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.8rem;
+  color: #e0a83b;
+}
+
+.repo-card__diagnostic {
+  margin: 0.1rem 0;
+}
+
+/* Footer */
+
+.repos-footer {
+  flex-shrink: 0;
+  margin-top: 1rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #333;
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+.repos-footer .versions,
+.repos-footer .app-version {
+  margin: 0.15rem 0;
 }
