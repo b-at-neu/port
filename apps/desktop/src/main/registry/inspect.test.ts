@@ -48,7 +48,7 @@ describe('inspectRepository', () => {
         repo: 'acme/widgets',
         branches: { integration: 'dev', production: 'main' },
         models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
-        modules: { approvalGate: true, previewDatabase: true, release: true, scope: true },
+        modules: { approvalGate: true, release: true, scope: true },
         reviewCycleCap: 3,
       }),
     )
@@ -69,25 +69,16 @@ describe('inspectRepository', () => {
     if (!('config' in entry)) throw new Error('unreachable')
     expect(entry.config.branches).toEqual({ integration: 'dev', production: 'main' })
     expect(entry.config.models).toEqual({ plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' })
-    expect(entry.config.modules).toEqual({ approvalGate: true, previewDatabase: false, release: true, scope: true })
+    expect(entry.config.modules).toEqual({ approvalGate: true, release: true, scope: true })
     expect(entry.config.reviewCycleCap).toBe(5)
   })
 
-  it('previewDatabase: false leaves refreshBranch/refreshing disabled', async () => {
+  it('resolves refreshBranch/refreshing as core, always enabled', async () => {
     const root = await makeRepoDir()
     await writeConfig(root, JSON.stringify({ repo: 'o/n' }))
     const entry = await inspectRepository(root, { git: fakeGit(root) })
     if (!('config' in entry)) throw new Error('unreachable')
-    expect(entry.config.vocabulary.disabled).toEqual(expect.arrayContaining(['refreshBranch', 'refreshing']))
-    expect(labelName(entry.config.vocabulary, 'refreshBranch')).toBeUndefined()
-  })
-
-  it('previewDatabase: true includes refreshBranch/refreshing', async () => {
-    const root = await makeRepoDir()
-    await writeConfig(root, JSON.stringify({ repo: 'o/n', modules: { previewDatabase: true } }))
-    const entry = await inspectRepository(root, { git: fakeGit(root) })
-    if (!('config' in entry)) throw new Error('unreachable')
-    expect(entry.config.vocabulary.disabled).not.toEqual(expect.arrayContaining(['refreshBranch']))
+    expect(entry.config.vocabulary.disabled).toEqual([])
     expect(labelName(entry.config.vocabulary, 'refreshBranch')).toBe('refresh branch')
   })
 

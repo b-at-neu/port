@@ -23,7 +23,6 @@
   },
   "modules": {
     "approvalGate": true,
-    "previewDatabase": true,
     "release": true,
     "scope": true
   },

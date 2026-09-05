@@ -56,7 +56,7 @@ describe('CONFIG_DEFAULTS', () => {
     expect(CONFIG_DEFAULTS).toEqual({
       branches: { integration: 'dev', production: 'main' },
       models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
-      modules: { approvalGate: true, previewDatabase: false, release: true, scope: true },
+      modules: { approvalGate: true, release: true, scope: true },
       reviewCycleCap: 5,
     })
   })

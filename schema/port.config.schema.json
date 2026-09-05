@@ -232,12 +232,12 @@
         },
         "refreshBranch": {
           "type": "string",
-          "description": "Trigger: rebase and force-push with no code changes. Requires the previewDatabase module.",
+          "description": "Trigger: rebase and force-push with no code changes.",
           "default": "refresh branch"
         },
         "refreshing": {
           "type": "string",
-          "description": "In flight: branch refresh underway. Requires the previewDatabase module.",
+          "description": "In flight: branch refresh underway.",
           "default": "refreshing"
         }
       }
@@ -252,11 +252,6 @@
           "type": "boolean",
           "description": "Enforce the merge gate in CI. When off, no workflow is installed and review still applies the approved label, but the merge gate is conversational rather than enforced. Leave it off unless a branch ruleset makes the check required, since otherwise the workflow is noise.",
           "default": true
-        },
-        "previewDatabase": {
-          "type": "boolean",
-          "description": "Account for a finite pool of preview databases, one per open pull request. When on, a red deployment check is read as an infrastructure condition rather than a code finding, and merges trigger a branch refresh to reclaim a freed slot. Only relevant to repositories whose previews hold a database branch.",
-          "default": false
         },
         "release": {
           "type": "boolean",
