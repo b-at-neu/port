@@ -10,7 +10,6 @@
   "docs": { "engineering": null, "design": null },
   "modules": {
     "approvalGate": false,
-    "previewDatabase": false,
     "release": false,
     "scope": true
   }

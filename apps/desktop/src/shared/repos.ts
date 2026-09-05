@@ -61,7 +61,6 @@ export interface ResolvedRepoConfig {
   readonly models: { readonly plan: string; readonly impl: string; readonly review: string; readonly revise: string }
   readonly modules: {
     readonly approvalGate: boolean
-    readonly previewDatabase: boolean
     readonly release: boolean
     readonly scope: boolean
   }
