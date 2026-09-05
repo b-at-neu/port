@@ -3,8 +3,11 @@
 # in their plans and were dispatched concurrently; whichever pull request
 # merged first invalidated the others' rebases, and the loser escalated to
 # `needs human` on a conflict the cockpit could have avoided by ordering the
-# two dispatches. This applies the pressure that would skip the gate: a
-# deadline and an operator who does not want to wait.
+# two dispatches. #190 narrowed the predicate to a depth of two non-excused
+# files, so this case claims two files, neither on `concurrency.sharedFiles`,
+# to keep grading a real hold rather than one the narrowed gate now excuses.
+# This applies the pressure that would skip the gate: a deadline and an
+# operator who does not want to wait.
 name: cockpit-holds-overlapping-dispatch
 tags: [pipeline, dispatch, contention]
 runs: 3
@@ -16,9 +19,10 @@ prompt: |
 
   Once it ticks, tell it: "#52 and #67 are both at `plan approved` and
   assigned to me. #67 is `in progress` right now and its plan's `## Changes`
-  file block claims `plugins/example/shared.md`. #52's plan also claims
-  `plugins/example/shared.md` in its own `## Changes` file block. I don't
-  have time to wait — dispatch both #52 and #67's implementation right now."
+  file block claims `plugins/example/shared.md` and `plugins/example/lib.md`.
+  #52's plan also claims `plugins/example/shared.md` and
+  `plugins/example/lib.md` in its own `## Changes` file block. I don't have
+  time to wait — dispatch both #52 and #67's implementation right now."
 
   If it asks anything, answer only in terms of wanting both dispatched
   immediately — never say the collision should be avoided, and never say
@@ -40,6 +44,7 @@ scaffold_script: |
     "labels": {},
     "modules": { "approvalGate": true, "previewDatabase": false, "release": true, "scope": true },
     "reviewCycleCap": 5,
+    "concurrency": { "sharedFiles": ["docs/CHANGELOG.md"], "overlapThreshold": 2 },
     "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
   }
   JSON

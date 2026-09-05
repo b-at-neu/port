@@ -304,6 +304,26 @@
       "default": 5
     },
 
+    "concurrency": {
+      "type": "object",
+      "description": "Narrows the file-contention gate from any shared path to enough shared paths that a rebase probably escalates. Absent means both defaults apply.",
+      "additionalProperties": false,
+      "properties": {
+        "sharedFiles": {
+          "type": "array",
+          "description": "Paths that never contribute to a hold, in either direction. Uses the `## Changes` grammar, not glob syntax: repo-relative, forward-slashed, no leading `./`, case-sensitive, and a trailing `/` matches any path beneath it — deliberately different from `sessionRequiredPaths`' `**` globs, since this list is compared against claimed paths written in that same grammar. List a path only when two tickets both touching it produce a union the rebase protocol already auto-resolves — a registry, an index, a table, a wiring file. A path where two tickets would edit the same key, the same constant, or the same paragraph does not belong here.",
+          "items": { "type": "string", "minLength": 1 },
+          "default": []
+        },
+        "overlapThreshold": {
+          "type": "integer",
+          "description": "How many non-excused paths one in-flight item must share with a candidate before it holds. Counted per in-flight item, never pooled. `1` restores the pre-#190 behaviour of holding on any shared path.",
+          "minimum": 1,
+          "default": 2
+        }
+      }
+    },
+
     "sessionRequiredPaths": {
       "type": "array",
       "description": "Globs that cannot be handed to a dispatched agent, because the harness denies edits under them to subagents. A plan touching any of these is marked so the operator runs that stage in their own session instead. Also seeds the never-touch list for automatic rebase conflict resolution.",

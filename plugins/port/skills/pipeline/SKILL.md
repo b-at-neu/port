@@ -313,7 +313,7 @@ Exact copy, one message per state, `<…>` substituted. These fire from inside t
 
 **`<labels.X>` names a slot, never a literal.** The value that belongs on a command line is the resolved **Name** for that key — `labels[key] ?? default` — read from the label vocabulary you resolve below, never the bare key itself and never retyped from memory. `<labels.planApproved>` resolves to `plan approved` in a repository with no override; it must never appear on a command line as `planApproved`. `gh issue list --label <unknown>` returns `[]` with exit code 0, so a wrong string here is never an error — it is silence, indistinguishable from a genuinely empty queue.
 
-Also read: `models` (passed at dispatch), `reviewCycleCap`, and `modules`. **`modules` decides which parts of this skill run at all** — every query, sweep, and command marked with a module gate below is skipped entirely when its flag is false. Skipping means the behaviour is *absent*, not merely quiet: do not report on it, offer its commands, or mention it to the human.
+Also read: `models` (passed at dispatch), `reviewCycleCap`, `concurrency` (`sharedFiles` and `overlapThreshold`, defaulting to `[]` and `2` when absent — see "File contention gate"), and `modules`. **`modules` decides which parts of this skill run at all** — every query, sweep, and command marked with a module gate below is skipped entirely when its flag is false. Skipping means the behaviour is *absent*, not merely quiet: do not report on it, offer its commands, or mention it to the human.
 
 ## Name this session
 
@@ -405,7 +405,7 @@ Then, in this order. Steps 7 and 8 are split apart deliberately — they are the
 1. **Reconcile merged pull requests.**
 2. **Handle human gates.**
 3. **Announce every session-required item.**
-4. **Unless draining, dispatch** for every remaining actionable trigger item (all `Agent` calls in one message) — a pull request whose mergeability reads `CONFLICTING` routes to revision instead of review; see "Mergeability gate". An issue at `<labels.planApproved>` whose plan claims a file an in-flight item already claims is **held** instead of dispatched; see "File contention gate".
+4. **Unless draining, dispatch** for every remaining actionable trigger item (all `Agent` calls in one message) — a pull request whose mergeability reads `CONFLICTING` routes to revision instead of review; see "Mergeability gate". An issue at `<labels.planApproved>` whose plan claims enough non-shared files an in-flight item already claims is **held** instead of dispatched; see "File contention gate".
 5. **Liveness cross-check** — call `TaskList` **first, unconditionally**, before anything else in this step (an empty in-flight set is not a reason to skip it — it is the case a stall is invisible in), then correlate the in-flight sets against its result and this session's own dispatch log (`.temp/dispatch-log.md`); auto-reset a dispatch this session provably lost, report every other case, and handle a usage-limit condition (see "Liveness" and "Agent questions and blockers" below).
 6. **Housekeeping** — run worktree hygiene, then the denial, unowned, ungated, and plugin-staleness reports (only the ones whose sets changed since `.temp/tick-state.md`'s remembered sets).
 7. **Call `ScheduleWakeup`**, skipped only while draining. **A non-draining tick that ends without this call has failed**, no matter how much of the above happened.
@@ -450,21 +450,19 @@ Then, in this order. Steps 7 and 8 are split apart deliberately — they are the
 
    > ⛔ PR #157 is at `ready for review`, but cycle 7 already reviewed `cb2dc1a` and the head hasn't moved — a new cycle would grade the same diff. Escalated to `needs human` and commented. If a check on that SHA has since changed, say `unblock #157` and choose **Back to review**; I'll dispatch one review against it.
 
-**File contention gate (each tick, step 4, before dispatching `impl-agent`).** A `<labels.planApproved>` item dispatches only when no in-flight item's plan claims the same file. Full background: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "File contention".
+**File contention gate (each tick, step 4, before dispatching `impl-agent`).** A `<labels.planApproved>` item dispatches only when no single in-flight item's plan claims `concurrency.overlapThreshold` or more of the same non-shared files — counted per in-flight item, never pooled. Full background: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "File contention".
 
-1. **Build the occupied set.** Union the `` ```files ``` `` block from every `<labels.inProgress>` issue's body and every open `<labels.prOpened>` issue's body (both aliases already carry `body` — no extra round trip), each path tagged with the item number and its label. Parse per the grammar in `PIPELINE.md` → "Implementation plan": one path per non-blank line, the first whitespace-delimited token, a trailing `/` matching any path under it.
+1. **Build the occupied set.** Union the `` ```files ``` `` block from every `<labels.inProgress>` issue's body and every open `<labels.prOpened>` issue's body (both aliases already carry `body` — no extra round trip), each path tagged with the item number and its label, excluding any path in `concurrency.sharedFiles` — a `sharedFiles` path is still claimed by its plan, only never contended. Parse per the grammar in `PIPELINE.md` → "Implementation plan": one path per non-blank line, the first whitespace-delimited token, a trailing `/` matching any path under it.
 2. **Skip `SESSION REQUIRED` candidates** — those never dispatch here regardless (see Safety rails); they are never held either, since holding implies "dispatches once released" and these never dispatch.
-3. **Plan carries no `## Changes` file block** — dispatch **unchecked**, once per item per session, and warn:
+3. **Plan carries no `## Changes` file block** — dispatch **unchecked**, once per item per session, since silently holding every unstructured plan (typically one written before this contract landed) would stall the pipeline harder than the collision this gate prevents. Warn:
 
    > ⚠️ #52's plan has no `## Changes` file block, so I can't check it for collisions — dispatching it unchecked.
+4. **Depth at or above `concurrency.overlapThreshold` against one in-flight item's non-shared claims** → **hold**: do not dispatch — the item **keeps `<labels.planApproved>`**, since holding is never expressed by removing it and no label is ever added for it — and report every tick while it stays held, naming the depth:
 
-   Fail-open: silently holding every unstructured plan (typically one written before this contract landed) would stall the pipeline harder than the collision this gate prevents.
-4. **Overlap with the occupied set** → **hold**: do not dispatch, and report every tick while it stays held:
+   > ⏸️ **#52 held** — its plan and #67's (`pr opened`) both claim 2 files: `src/lib/auth.ts`, `src/lib/session.ts`. It dispatches automatically once #67's pull request merges or closes. Say `dispatch #52 anyway` to override.
+5. **Below the threshold, or no overlap, after exclusions** → a survivor. Sort survivors ascending by how many *other survivors* they overlap at or above the threshold, after exclusions, and dispatch in that order, adding each dispatched survivor's claimed files to the occupied set as you go — a later survivor that now overlaps an earlier one's freshly-claimed files at or above the threshold is held this same tick, not dispatched. When the exclusion list or the threshold is what changed the outcome, report it once at dispatch — never for a candidate that never overlapped anything:
 
-   > ⏸️ **#52 held** — its plan claims `src/lib/auth.ts`, which #67 (`pr opened`) is already changing. It dispatches automatically once #67's pull request merges or closes. Say `dispatch #52 anyway` to override.
-
-   The item **keeps `<labels.planApproved>`** — holding is never expressed by removing it, and no label is ever added for it.
-5. **No overlap** → a survivor. Sort survivors ascending by how many *other survivors* they overlap, and dispatch in that order, adding each dispatched survivor's claimed files to the occupied set as you go — a later survivor that now overlaps an earlier one's freshly-claimed files is held this same tick, not dispatched.
+   > ▶️ Dispatching #52 despite overlapping #67 on `src/lib/registry.ts` (a `concurrency.sharedFiles` entry) — no contended files left, so this isn't a hold.
 
 **Override taken ("dispatch #N anyway" / "force #N"):**
 

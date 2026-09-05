@@ -35,6 +35,17 @@
     "versionCommand": null
   },
   "reviewCycleCap": 5,
+  "concurrency": {
+    "sharedFiles": [
+      "ARCHITECTURE.md",
+      "CONTRIBUTING.md",
+      "docs/ENGINEERING.md",
+      "docs/TESTING.md",
+      "evals/README.md",
+      "scripts/checks.mjs"
+    ],
+    "overlapThreshold": 2
+  },
   "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"],
   "extraAllow": [
     "Bash(node scripts/checks.mjs)",
