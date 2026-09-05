@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyGhExit, ghAuthStatus, ghJson } from './gh'
+import { classifyGhExit, gh, ghAuthStatus, ghJson } from './gh'
 
 describe('classifyGhExit — pure classifier, no gh spawned', () => {
   it('exit code 4 is unauthenticated, ahead of any string match', () => {
@@ -36,6 +36,17 @@ describe('classifyGhExit — pure classifier, no gh spawned', () => {
 
   it('an unrecognised stderr lands on unknown, with stderr preserved by the caller', () => {
     expect(classifyGhExit({ code: 1, stdout: '', stderr: 'something entirely unexpected' })).toBe('unknown')
+  })
+})
+
+describe('gh — classified failure preserves stdout', () => {
+  it('a non-zero exit carries both stdout and stderr (#76: gh api graphql exits non-zero with data still in stdout)', async () => {
+    const result = await gh(['api', 'graphql'], {
+      resolve: () => Promise.resolve({ ok: true, path: '/usr/bin/gh' }),
+      spawner: () =>
+        Promise.reject(Object.assign(new Error('exit 1'), { code: 1, stdout: '{"data":{},"errors":[{}]}', stderr: 'gh: some errors' })),
+    })
+    expect(result).toEqual({ ok: false, kind: 'unknown', stdout: '{"data":{},"errors":[{}]}', stderr: 'gh: some errors' })
   })
 })
 
