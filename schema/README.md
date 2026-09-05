@@ -18,7 +18,7 @@ Any draft 2020-12 validator works; the fixtures carry no tool-specific content. 
 | --- | --- |
 | `valid.minimal.json` | `{ "repo": "..." }` alone is a complete config |
 | `valid.portfolio.json` | A single-check, no-engineering-doc repository validates |
-| `valid.aplio.json` | Multiple checks with fix commands, both optional modules on, and extra allow patterns validate |
+| `valid.aplio.json` | Multiple checks with fix commands, the optional module on, and extra allow patterns validate |
 | `invalid.missing-repo.json` | `repo` is required |
 | `invalid.bad-repo.json` | `repo` is `owner/name`, not a URL |
 | `invalid.unknown-tracker.json` | Only implemented trackers are accepted |

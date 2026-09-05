@@ -2,9 +2,10 @@
   "$comment": [
     "Label vocabulary /port:init creates in a managed repository.",
     "",
-    "Each entry names the module that owns it. `core` labels are always created; a label",
-    "owned by an optional module is created only when that module is enabled, so a",
-    "repository with previewDatabase off never gets the two refresh labels.",
+    "Each entry names the module that owns it, mirroring port.config.json's modules keys",
+    "plus the `core` sentinel for a label that is always created. No module currently gates",
+    "a label — every entry below is `core` — but the field stays as a designed extension",
+    "point for a future optional label, not dead weight.",
     "",
     "`key` is the port.config.json `labels` key. `name` is the default string, which a",
     "repository may override there. Agents read the configured name, never these defaults",
@@ -28,9 +29,9 @@
     "deficiency. Terminal keeps `pr opened` at the shade operators already know and pushes",
     "`approved` deeper, since it is the actual finish line.",
     "",
-    "A module-gated label (`refreshBranch`, `refreshing`) always takes its family's last,",
-    "boundary-adjacent step: it is out-of-band and absent in most repositories, so it is the",
-    "one that can afford to sit nearest the text-contrast threshold."
+    "`refreshBranch`/`refreshing` keep their family's last, boundary-adjacent step — the one",
+    "nearest the text-contrast threshold — unchanged from when they were module-gated;",
+    "recolouring them is out of scope here."
   ],
 
   "labels": [
@@ -42,13 +43,13 @@
     { "key": "planApproved",         "name": "plan approved",          "module": "core",            "color": "0550AE", "role": "trigger",  "description": "Trigger: implement the approved plan" },
     { "key": "readyForReview",       "name": "ready for review",       "module": "core",            "color": "033D8B", "role": "trigger",  "description": "Trigger: review this pull request" },
     { "key": "needsRevision",        "name": "needs revision",         "module": "core",            "color": "0A3069", "role": "trigger",  "description": "Trigger: apply the review findings" },
-    { "key": "refreshBranch",        "name": "refresh branch",         "module": "previewDatabase", "color": "002155", "role": "trigger",  "description": "Trigger: rebase and force-push, no code changes" },
+    { "key": "refreshBranch",        "name": "refresh branch",         "module": "core",            "color": "002155", "role": "trigger",  "description": "Trigger: rebase and force-push, no code changes" },
 
     { "key": "planning",             "name": "planning",               "module": "core",            "color": "FFF8C5", "role": "in-flight", "description": "In flight: a plan is being researched" },
     { "key": "inProgress",           "name": "in progress",            "module": "core",            "color": "FAE17D", "role": "in-flight", "description": "In flight: implementation underway" },
     { "key": "reviewing",            "name": "reviewing",              "module": "core",            "color": "EAC54F", "role": "in-flight", "description": "In flight: review underway" },
     { "key": "revising",             "name": "revising",               "module": "core",            "color": "D4A72C", "role": "in-flight", "description": "In flight: fixes underway" },
-    { "key": "refreshing",           "name": "refreshing",             "module": "previewDatabase", "color": "BF8700", "role": "in-flight", "description": "In flight: branch refresh underway" },
+    { "key": "refreshing",           "name": "refreshing",             "module": "core",            "color": "BF8700", "role": "in-flight", "description": "In flight: branch refresh underway" },
 
     { "key": "planReview",           "name": "plan review",            "module": "core",            "color": "CF222E", "role": "gate",     "description": "Gate: plan written, awaiting human approval" },
     { "key": "blocked",              "name": "blocked",                "module": "core",            "color": "82071E", "role": "gate",     "description": "Gate: needs a human decision, details in a comment" },
