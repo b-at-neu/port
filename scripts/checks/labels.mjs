@@ -275,7 +275,6 @@ export default async function ({ fail, note, ok }) {
         disabledNote: 'modules.approvalGate is off',
         subs: {
           integration: cfg.branches.integration,
-          production: cfg.branches.production,
           approvedLabel: resolvedName('approved'),
           markerLabel: resolvedName('marker'),
           blockingLabels,

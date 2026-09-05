@@ -27,7 +27,7 @@
 
     "branches": {
       "type": "object",
-      "description": "The two long-lived branches. Feature work targets `integration`; `production` is only ever reached by a release.",
+      "description": "The repository's long-lived branch(es). Feature work always targets `integration`. `production` is only ever reached by a release, or is null for a repository with no separate production branch — see the root allOf conditional pairing null `production` with `modules.release: false`.",
       "additionalProperties": false,
       "properties": {
         "integration": {
@@ -37,8 +37,8 @@
           "minLength": 1
         },
         "production": {
-          "type": "string",
-          "description": "Branch that releases promote to. Agents never open a feature pull request against it.",
+          "type": ["string", "null"],
+          "description": "Branch that releases promote to. Agents never open a feature pull request against it. Null means this repository has one long-lived branch and no release flow — prefer null over repeating `integration`'s name, which reads as a mistake at every use site.",
           "default": "main",
           "minLength": 1
         }
@@ -338,5 +338,29 @@
       "default": [],
       "examples": [["Bash(npx shadcn@latest *)"]]
     }
-  }
+  },
+
+  "$comment": "Root allOf: a null branches.production (single-branch mode) requires modules.release to be explicitly false, since release defaults to true and a config saying nothing would otherwise ask for both. Draft 2020-12 cannot compare two sibling values, so 'production must differ from integration' is NOT expressed here — /port:init's pre-write validation and layer 1's coherence check (comparing resolved defaults) enforce that instead.",
+  "allOf": [
+    {
+      "if": {
+        "required": ["branches"],
+        "properties": {
+          "branches": {
+            "required": ["production"],
+            "properties": { "production": { "type": "null" } }
+          }
+        }
+      },
+      "then": {
+        "required": ["modules"],
+        "properties": {
+          "modules": {
+            "required": ["release"],
+            "properties": { "release": { "const": false } }
+          }
+        }
+      }
+    }
+  ]
 }

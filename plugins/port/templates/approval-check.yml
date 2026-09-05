@@ -13,8 +13,10 @@
 # live upstream — impl-agent applies the label at creation time so the gate is live on the
 # first event, and the cockpit's ungated sweep reports any tracked pull request missing it.
 #
-# Scoped to {{integration}} only. Release pull requests into {{production}} carry no
-# pipeline labels, so gating them would block every release.
+# Scoped to {{integration}} only. In a two-branch repository, release pull requests carry
+# no pipeline labels, so gating them would block every release. In a single-branch
+# repository that carve-out is vacuous — there is no release pull request to exempt, so
+# every pipeline pull request is gated.
 #
 # This check only *enforces* anything if it is registered as a required status check in a
 # branch ruleset. Creating that ruleset is an administrative action the installer does not
