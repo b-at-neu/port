@@ -226,8 +226,8 @@ export default async function ({ fail, ok }) {
     // Regression guard: the `<labels.approved>` never-touch rail is a
     // precondition too, not a bare prohibition — and the announcement that
     // claims a pull request is merge-ready has to show its work.
-    if (!text.includes('only when a check on it has gone red')) {
-      fail('cockpit-rails', `${skillRel} is missing the approved-carve-out precondition phrase 'only when a check on it has gone red'`);
+    if (!text.includes('only when a check on it has gone red, or a same-SHA refresh loop is stuck')) {
+      fail('cockpit-rails', `${skillRel} is missing the approved-carve-out precondition phrase 'only when a check on it has gone red, or a same-SHA refresh loop is stuck'`);
     } else {
       ok();
     }
