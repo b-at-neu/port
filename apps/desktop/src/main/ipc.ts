@@ -3,6 +3,7 @@ import type { IpcMainInvokeEvent } from 'electron'
 import { IPC_CHANNELS, type IpcChannel, type IpcMap } from '../shared/ipc'
 import { chooseDirectory } from './dialogs'
 import { git } from './platform'
+import { readWorktreeReport } from './reclaimer'
 import { addRepository, listRepositories, removeRepository } from './registry'
 import type { RegistryDeps } from './registry'
 
@@ -73,6 +74,26 @@ export function registerIpc(): void {
       throw new Error("'repos:remove' requires a non-empty 'id'")
     }
     return removeRepository(registryDeps, request.id)
+  })
+
+  handle('worktrees:report', async (_event, request) => {
+    if (typeof request?.id !== 'string' || request.id === '') {
+      throw new Error("'worktrees:report' requires a non-empty 'id'")
+    }
+    // The renderer sends only the opaque id, never a path — resolved here
+    // through the same registry every other channel reads, so a repository
+    // that has moved, gone stale, or lost its 'ready' status is caught
+    // before anything is spawned.
+    const list = await listRepositories(registryDeps)
+    if (!list.ok) throw new Error(`'worktrees:report' could not list repositories: ${list.message}`)
+    const entry = list.repositories.find((repository) => repository.id === request.id)
+    if (!entry) throw new Error(`'worktrees:report' found no repository registered with id '${request.id}'`)
+    if (!('config' in entry)) throw new Error(`'worktrees:report' requires a 'ready' repository, got '${entry.problem.kind}'`)
+    return readWorktreeReport({
+      repoRoot: entry.path,
+      worktreesCommand: entry.config.commands.worktrees,
+      git: (args, cwd) => git(args, { cwd }),
+    })
   })
 
   for (const channel of IPC_CHANNELS) {

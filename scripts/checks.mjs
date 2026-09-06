@@ -29,6 +29,7 @@ import desktopRegistry from './checks/desktop-registry.mjs';
 import desktopGithub from './checks/desktop-github.mjs';
 import desktopSessions from './checks/desktop-sessions.mjs';
 import desktopLocal from './checks/desktop-local.mjs';
+import desktopReclaimer from './checks/desktop-reclaimer.mjs';
 import fileSize from './checks/file-size.mjs';
 
 const reporter = createReporter();
@@ -51,6 +52,7 @@ for (const module of [
   desktopGithub,
   desktopSessions,
   desktopLocal,
+  desktopReclaimer,
   fileSize,
 ]) {
   await module(reporter);

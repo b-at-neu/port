@@ -36,6 +36,7 @@ export interface ConfigDefaults {
     readonly scope: boolean
   }
   readonly reviewCycleCap: number
+  readonly commands: { readonly worktrees: string | null }
 }
 
 /** Every default read off the schema import above — never a typed-out
@@ -59,4 +60,7 @@ export const CONFIG_DEFAULTS: ConfigDefaults = {
     scope: schema.properties.modules.properties.scope.default,
   },
   reviewCycleCap: schema.properties.reviewCycleCap.default,
+  commands: {
+    worktrees: schema.properties.commands.properties.worktrees.default,
+  },
 }

@@ -1,5 +1,6 @@
 import type { AssertEqual } from './assert-type'
 import type { RepoId, RepositoryEntry } from './repos'
+import type { WorktreesReport } from './reclaimer/types'
 
 export interface AppInfo {
   app: string
@@ -44,9 +45,13 @@ export interface IpcMap {
     request: { id: RepoId }
     response: ReposRemoveResponse
   }
+  'worktrees:report': {
+    request: { id: RepoId }
+    response: WorktreesReport
+  }
 }
 
-export const IPC_CHANNELS = ['app:info', 'repos:list', 'repos:add', 'repos:remove'] as const
+export const IPC_CHANNELS = ['app:info', 'repos:list', 'repos:add', 'repos:remove', 'worktrees:report'] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]
 

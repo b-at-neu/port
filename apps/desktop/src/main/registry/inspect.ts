@@ -51,6 +51,7 @@ interface LooseConfig {
     readonly scope?: unknown
   }
   readonly reviewCycleCap?: unknown
+  readonly commands?: { readonly worktrees?: unknown }
 }
 
 function asLooseConfig(value: unknown): LooseConfig {
@@ -136,9 +137,12 @@ export async function inspectRepository(path: string, deps: InspectDeps): Promis
     scope: resolveField(cfg.modules?.scope, '/modules/scope', violatedPaths, CONFIG_DEFAULTS.modules.scope),
   }
   const reviewCycleCap = resolveField(cfg.reviewCycleCap, '/reviewCycleCap', violatedPaths, CONFIG_DEFAULTS.reviewCycleCap)
+  const commands = {
+    worktrees: resolveField(cfg.commands?.worktrees, '/commands/worktrees', violatedPaths, CONFIG_DEFAULTS.commands.worktrees),
+  }
   const vocabulary = resolveVocabulary({ labels: cfg.labels, modules })
 
-  const config: ResolvedRepoConfig = { repo, owner: owner ?? '', name: name ?? '', branches, models, modules, reviewCycleCap, vocabulary }
+  const config: ResolvedRepoConfig = { repo, owner: owner ?? '', name: name ?? '', branches, models, modules, reviewCycleCap, vocabulary, commands }
 
   const diagnostics: RepoDiagnostic[] = [...branchDiagnostics]
   if (branchInfo.kind === 'detached') {

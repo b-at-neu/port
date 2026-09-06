@@ -148,6 +148,165 @@ h1 {
   margin: 0.1rem 0;
 }
 
+/* Worktrees section (#86) */
+
+.worktrees {
+  margin-top: 0.6rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #333;
+}
+
+.worktrees__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.worktrees__title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.worktrees__button {
+  font-family: inherit;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.worktrees__button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.worktrees__banner {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: #e0a83b;
+}
+
+.worktrees__body {
+  margin-top: 0.4rem;
+}
+
+.worktrees__summary {
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+
+.worktrees__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.25rem;
+}
+
+.worktrees__checked {
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+.worktrees__empty {
+  margin: 0.4rem 0 0;
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.worktree-rows {
+  margin-top: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.worktree-row {
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  background: #202020;
+}
+
+.worktree-row__headline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.worktree-row__name {
+  font-weight: 600;
+}
+
+.worktree-row__chip {
+  font-size: 0.7rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 3px;
+  background: #333;
+  text-transform: uppercase;
+}
+
+.worktree-row__chip--active {
+  background: #2a5d34;
+}
+
+.worktree-row__chip--done,
+.worktree-row__chip--no-work {
+  background: #2f4d6b;
+}
+
+.worktree-row__chip--locked,
+.worktree-row__chip--dirty,
+.worktree-row__chip--unresolved {
+  background: #6b4a1f;
+}
+
+.worktree-row__chip--outside {
+  background: #444;
+}
+
+.worktree-row__branch,
+.worktree-row__issue {
+  opacity: 0.7;
+}
+
+.worktree-row__reason {
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.worktree-row__note {
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  opacity: 0.65;
+}
+
+.worktrees__orphans {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: #e0a83b;
+}
+
+.worktrees__orphans-title {
+  margin: 0;
+}
+
+.worktrees__orphan-path {
+  margin: 0.1rem 0 0;
+  opacity: 0.85;
+}
+
+.worktrees__reclaim-note {
+  margin-top: 0.5rem;
+  font-size: 0.72rem;
+  opacity: 0.55;
+}
+
 /* Footer */
 
 .repos-footer {

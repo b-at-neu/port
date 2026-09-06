@@ -66,6 +66,11 @@ export interface ResolvedRepoConfig {
   }
   readonly reviewCycleCap: number
   readonly vocabulary: LabelVocabulary
+  /** `worktrees` is the full `commands.worktrees` prefix (#86) — `string |
+   *  null`, `null` meaning the repository has not installed the reclamation
+   *  script. Nothing here validates or spawns it; that is `main/reclaimer/`'s
+   *  job. */
+  readonly commands: { readonly worktrees: string | null }
 }
 
 /** Discriminated on status, so "ready implies a config" is enforced by the

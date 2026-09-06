@@ -11,7 +11,7 @@ import type { WhichEnv, WhichResult } from './which'
  *  a POSIX-only utility (`grep`, `find`, …) is a compile-time error rather
  *  than a Windows-only runtime failure. Extend this union as new commands
  *  need to be spawned. */
-export const KNOWN_COMMANDS = ['git', 'gh'] as const
+export const KNOWN_COMMANDS = ['git', 'gh', 'node'] as const
 
 export type KnownCommand = (typeof KNOWN_COMMANDS)[number]
 

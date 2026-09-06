@@ -3,14 +3,16 @@ import type { AppInfo } from '../../shared/ipc'
 import type { RepoId, RepositoryEntry } from '../../shared/repos'
 import { render } from './repositories'
 import type { RegistryBanner, RendererState } from './repositories'
+import type { WorktreeSectionState } from './worktrees'
 
 const app = document.querySelector<HTMLDivElement>('#app')
 
 let state: RendererState = { status: 'loading', repositories: [] }
+let worktreeSections = new Map<RepoId, WorktreeSectionState>()
 
 function draw(): void {
   if (!app) return
-  render(app, state)
+  render(app, { ...state, worktreeSections })
 }
 
 function bannerFor(kind: string): RegistryBanner['reason'] {
@@ -98,6 +100,26 @@ async function handleRemove(id: RepoId): Promise<void> {
   }
 }
 
+/** Holds the per-repository inspection state in its own `Map` (never
+ *  blanking one card when another refreshes) and never polls — a
+ *  `worktrees:report` round trip runs only when the operator asks
+ *  (Decision 5). */
+async function handleInspectWorktrees(id: RepoId): Promise<void> {
+  worktreeSections = new Map(worktreeSections).set(id, { status: 'loading' })
+  draw()
+  try {
+    const report = await window.port.worktreesReport({ id })
+    worktreeSections = new Map(worktreeSections).set(id, { status: 'done', report })
+  } catch (error) {
+    console.error('Failed to inspect worktrees', error)
+    worktreeSections = new Map(worktreeSections).set(id, {
+      status: 'done',
+      report: { ok: false, kind: 'spawn-failed', message: 'Failed to reach the main process', readAt: new Date().toISOString() },
+    })
+  }
+  draw()
+}
+
 app?.addEventListener('click', (event) => {
   const target = event.target
   if (!(target instanceof HTMLElement)) return
@@ -105,6 +127,7 @@ app?.addEventListener('click', (event) => {
   if (action === 'add') void handleAdd()
   else if (action === 'rescan') void refresh()
   else if (action === 'remove' && target.dataset.repoId) void handleRemove(target.dataset.repoId as RepoId)
+  else if (action === 'inspect-worktrees' && target.dataset.repoId) void handleInspectWorktrees(target.dataset.repoId as RepoId)
 })
 
 void refresh()

@@ -19,5 +19,8 @@ export { git, gitLines, gitRepoRoot, parsePorcelainStanzas, splitNul } from './g
 export type { GhAuthStatusResult, GhClassification, GhExitOutcome, GhJsonResult, GhOptions, GhResult } from './gh'
 export { classifyGhExit, gh, ghAuthStatus, ghJson } from './gh'
 
+export type { NodeOptions } from './node'
+export { node } from './node'
+
 export type { DirEntry, DirEntryKind, FileFailureKind, FileResult, StatInfo } from './files'
 export { ensureDirectory, listDirectory, readJsonFile, readTextFile, statPath, writeJsonFileAtomic } from './files'

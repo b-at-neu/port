@@ -71,6 +71,25 @@ describe('inspectRepository', () => {
     expect(entry.config.models).toEqual({ plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' })
     expect(entry.config.modules).toEqual({ approvalGate: true, release: true, scope: true })
     expect(entry.config.reviewCycleCap).toBe(5)
+    expect(entry.config.commands).toEqual({ worktrees: null })
+  })
+
+  it('resolves commands.worktrees onto the config when present (#86)', async () => {
+    const root = await makeRepoDir()
+    await writeConfig(root, JSON.stringify({ repo: 'o/n', commands: { worktrees: 'node scripts/port-worktrees.mjs' } }))
+    const entry = await inspectRepository(root, { git: fakeGit(root) })
+    if (!('config' in entry)) throw new Error('unreachable')
+    expect(entry.config.commands).toEqual({ worktrees: 'node scripts/port-worktrees.mjs' })
+  })
+
+  it('falls back to null for a wrong-shaped commands.worktrees rather than carrying it through', async () => {
+    const root = await makeRepoDir()
+    await writeConfig(root, JSON.stringify({ repo: 'o/n', commands: { worktrees: 42 } }))
+    const entry = await inspectRepository(root, { git: fakeGit(root) })
+    if (!('config' in entry)) throw new Error('unreachable')
+    expect(entry.config.commands).toEqual({ worktrees: null })
+    const schemaDiagnostic = entry.diagnostics.find((d) => d.kind === 'schema-violations')
+    expect(schemaDiagnostic).toBeDefined()
   })
 
   it('resolves refreshBranch/refreshing as core, always enabled', async () => {
