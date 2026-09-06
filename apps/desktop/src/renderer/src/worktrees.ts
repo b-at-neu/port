@@ -36,17 +36,17 @@ function button(label: string, action: string, repoId: RepoId, disabled: boolean
 function failureCopy(failure: Extract<WorktreesReport, { ok: false }>): string {
   switch (failure.kind) {
     case 'not-configured':
-      return 'No `commands.worktrees` in this repository’s config, so worktree hygiene is unavailable. Run /port:init in it to install the reclamation script.'
+      return 'No commands.worktrees in this repository’s config, so worktree hygiene is unavailable. Run /port:init in it to install the reclamation script.'
     case 'unsupported-runner':
-      return `\`commands.worktrees\` starts with \`${failure.token}\`, which Port won’t run — only a \`node\` prefix is supported.`
+      return `commands.worktrees starts with ${failure.token}, which Port won’t run — only a node prefix is supported.`
     case 'unparseable-command':
-      return '`commands.worktrees` could not be parsed as a plain command — it may contain a shell metacharacter or an unbalanced quote. Nothing was run.'
+      return 'commands.worktrees could not be parsed as a plain command — it may contain a shell metacharacter or an unbalanced quote. Nothing was run.'
     case 'not-found':
-      return "Node.js wasn't found. Set `PORT_NODE_PATH` if it's installed somewhere unusual."
+      return "Node.js wasn't found. Set PORT_NODE_PATH if it's installed somewhere unusual."
     case 'cwd-missing':
       return "This repository's working directory couldn't be found on disk."
     case 'script-failed':
-      return `The reclamation script reported: \`${failure.message}\`.`
+      return `The reclamation script reported: ${failure.message}.`
     case 'report-unparseable':
       return "The script's output wasn't the expected JSON."
     case 'timeout':
@@ -83,7 +83,7 @@ function buildRow(worktree: InspectedWorktree): HTMLElement {
   row.appendChild(text('div', 'worktree-row__reason', worktree.reason))
 
   if (worktree.prunable === true) {
-    row.appendChild(text('div', 'worktree-row__note', 'Its directory is gone. `git worktree prune` clears the registration.'))
+    row.appendChild(text('div', 'worktree-row__note', 'Its directory is gone. git worktree prune clears the registration.'))
   }
   const producer = producerCopy(worktree.producer)
   if (producer !== null) row.appendChild(text('div', 'worktree-row__note', producer))
@@ -138,7 +138,7 @@ function buildReady(report: Extract<WorktreesReport, { ok: true }>, repoId: Repo
     const block = document.createElement('div')
     block.className = 'worktrees__orphans'
     block.appendChild(
-      text('p', 'worktrees__orphans-title', `${report.orphanDirs.length} untracked directory(ies) sit beside a registered worktree. \`git worktree prune\` can't clear these.`),
+      text('p', 'worktrees__orphans-title', `${report.orphanDirs.length} untracked directory(ies) sit beside a registered worktree. git worktree prune can't clear these.`),
     )
     for (const dir of report.orphanDirs) block.appendChild(text('p', 'worktrees__orphan-path', dir))
     section.appendChild(block)
@@ -167,7 +167,7 @@ export function buildWorktreesSection(commandsWorktrees: string | null, repoId: 
       text(
         'p',
         'worktrees__banner',
-        'No `commands.worktrees` in this repository’s config, so worktree hygiene is unavailable. Run /port:init in it to install the reclamation script.',
+        'No commands.worktrees in this repository’s config, so worktree hygiene is unavailable. Run /port:init in it to install the reclamation script.',
       ),
     )
     return section

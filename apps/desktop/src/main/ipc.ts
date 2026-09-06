@@ -1,9 +1,11 @@
 import { app, ipcMain } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { IPC_CHANNELS, type IpcChannel, type IpcMap } from '../shared/ipc'
+import type { WorktreesReport } from '../shared/reclaimer/types'
 import { chooseDirectory } from './dialogs'
 import { git } from './platform'
 import { readWorktreeReport } from './reclaimer'
+import type { ReadWorktreeReportParams } from './reclaimer'
 import { addRepository, listRepositories, removeRepository } from './registry'
 import type { RegistryDeps } from './registry'
 
@@ -35,6 +37,41 @@ function getAppInfo(): AppInfo {
     node: process.versions.node,
     chromium: process.versions.chrome
   }
+}
+
+/** The two calls `'worktrees:report'` composes — injected so the
+ *  id-validation/lookup/ready-check branching below is testable without
+ *  Electron or a real registry, the same seam `RegistryDeps` gives the
+ *  registry functions themselves. */
+export interface WorktreesReportDeps {
+  readonly listRepositories: typeof listRepositories
+  readonly readWorktreeReport: (params: ReadWorktreeReportParams) => Promise<WorktreesReport>
+}
+
+const defaultWorktreesReportDeps: WorktreesReportDeps = { listRepositories, readWorktreeReport }
+
+/** The renderer sends only the opaque id, never a path — resolved here
+ *  through the same registry every other channel reads, so a repository
+ *  that has moved, gone stale, or lost its 'ready' status is caught before
+ *  anything is spawned. */
+export async function resolveWorktreesReport(
+  registryDeps: RegistryDeps,
+  request: IpcMap['worktrees:report']['request'],
+  deps: WorktreesReportDeps = defaultWorktreesReportDeps,
+): Promise<WorktreesReport> {
+  if (typeof request?.id !== 'string' || request.id === '') {
+    throw new Error("'worktrees:report' requires a non-empty 'id'")
+  }
+  const list = await deps.listRepositories(registryDeps)
+  if (!list.ok) throw new Error(`'worktrees:report' could not list repositories: ${list.message}`)
+  const entry = list.repositories.find((repository) => repository.id === request.id)
+  if (!entry) throw new Error(`'worktrees:report' found no repository registered with id '${request.id}'`)
+  if (!('config' in entry)) throw new Error(`'worktrees:report' requires a 'ready' repository, got '${entry.problem.kind}'`)
+  return deps.readWorktreeReport({
+    repoRoot: entry.path,
+    worktreesCommand: entry.config.commands.worktrees,
+    git: registryDeps.git,
+  })
 }
 
 export function registerIpc(): void {
@@ -76,25 +113,7 @@ export function registerIpc(): void {
     return removeRepository(registryDeps, request.id)
   })
 
-  handle('worktrees:report', async (_event, request) => {
-    if (typeof request?.id !== 'string' || request.id === '') {
-      throw new Error("'worktrees:report' requires a non-empty 'id'")
-    }
-    // The renderer sends only the opaque id, never a path — resolved here
-    // through the same registry every other channel reads, so a repository
-    // that has moved, gone stale, or lost its 'ready' status is caught
-    // before anything is spawned.
-    const list = await listRepositories(registryDeps)
-    if (!list.ok) throw new Error(`'worktrees:report' could not list repositories: ${list.message}`)
-    const entry = list.repositories.find((repository) => repository.id === request.id)
-    if (!entry) throw new Error(`'worktrees:report' found no repository registered with id '${request.id}'`)
-    if (!('config' in entry)) throw new Error(`'worktrees:report' requires a 'ready' repository, got '${entry.problem.kind}'`)
-    return readWorktreeReport({
-      repoRoot: entry.path,
-      worktreesCommand: entry.config.commands.worktrees,
-      git: (args, cwd) => git(args, { cwd }),
-    })
-  })
+  handle('worktrees:report', (_event, request) => resolveWorktreesReport(registryDeps, request))
 
   for (const channel of IPC_CHANNELS) {
     if (!registered.has(channel)) {
