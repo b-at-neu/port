@@ -110,4 +110,16 @@ describe('runCommand', () => {
     })
     expect(result).toEqual({ ok: true, stdout: 'clean', stderr: '' })
   })
+
+  it('resolves and spawns a node invocation the same way as git/gh (#86)', async () => {
+    const result = await runCommand('node', ['worktrees.mjs', 'report', '--json'], {
+      resolve: () => Promise.resolve({ ok: true, path: '/usr/bin/node' }),
+      spawner: (absPath, args) => {
+        expect(absPath).toBe('/usr/bin/node')
+        expect(args).toEqual(['worktrees.mjs', 'report', '--json'])
+        return Promise.resolve({ stdout: '{}', stderr: '' })
+      },
+    })
+    expect(result).toEqual({ ok: true, stdout: '{}', stderr: '' })
+  })
 })

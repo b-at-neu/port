@@ -6,6 +6,8 @@
 // ~200-line screen is what it replaces; until then it stays plain DOM.
 import type { AppInfo } from '../../shared/ipc'
 import type { RepoDiagnostic, RepoId, RepoProblem, RepositoryEntry, ResolvedRepoConfig } from '../../shared/repos'
+import { buildWorktreesSection } from './worktrees'
+import type { WorktreeSectionState } from './worktrees'
 
 export type RegistryErrorReason = 'unreadable' | 'malformed' | 'unsupported-version'
 
@@ -21,7 +23,13 @@ export interface RendererState {
   readonly notice?: string
   readonly highlighted?: RepoId
   readonly appInfo?: AppInfo
+  /** One inspection state per ready repository (#86) — a `Map` so
+   *  inspecting one card's worktrees never blanks another's, and a repo
+   *  with no entry here renders as `idle`. */
+  readonly worktreeSections?: ReadonlyMap<RepoId, WorktreeSectionState>
 }
+
+const IDLE_WORKTREE_SECTION: WorktreeSectionState = { status: 'idle' }
 
 const MODULE_LABELS: { readonly [K in keyof ResolvedRepoConfig['modules']]: string } = {
   approvalGate: 'approval gate',
@@ -92,7 +100,7 @@ function moduleSummary(modules: ResolvedRepoConfig['modules']): string {
     .join(', ')
 }
 
-function buildReadyCard(entry: Extract<RepositoryEntry, { status: 'ready' }>, highlighted: boolean): HTMLElement {
+function buildReadyCard(entry: Extract<RepositoryEntry, { status: 'ready' }>, highlighted: boolean, worktreeSection: WorktreeSectionState): HTMLElement {
   const card = document.createElement('div')
   card.className = highlighted ? 'repo-card repo-card--highlighted' : 'repo-card'
   card.dataset.repoId = entry.id
@@ -122,6 +130,8 @@ function buildReadyCard(entry: Extract<RepositoryEntry, { status: 'ready' }>, hi
     }
     card.appendChild(list)
   }
+
+  card.appendChild(buildWorktreesSection(entry.config.commands.worktrees, entry.id, worktreeSection))
 
   return card
 }
@@ -157,8 +167,8 @@ function buildProblemCard(entry: Extract<RepositoryEntry, { problem: RepoProblem
   return card
 }
 
-function buildCard(entry: RepositoryEntry, highlighted: boolean): HTMLElement {
-  return 'config' in entry ? buildReadyCard(entry, highlighted) : buildProblemCard(entry, highlighted)
+function buildCard(entry: RepositoryEntry, highlighted: boolean, worktreeSection: WorktreeSectionState): HTMLElement {
+  return 'config' in entry ? buildReadyCard(entry, highlighted, worktreeSection) : buildProblemCard(entry, highlighted)
 }
 
 function buildHeader(state: RendererState): HTMLElement {
@@ -217,7 +227,8 @@ export function render(container: HTMLElement, state: RendererState): void {
     list.appendChild(empty)
   } else {
     for (const entry of state.repositories) {
-      list.appendChild(buildCard(entry, entry.id === state.highlighted))
+      const worktreeSection = state.worktreeSections?.get(entry.id) ?? IDLE_WORKTREE_SECTION
+      list.appendChild(buildCard(entry, entry.id === state.highlighted, worktreeSection))
     }
   }
 

@@ -101,6 +101,22 @@ describe('which', () => {
     expect(probeCount).toBe(1)
   })
 
+  it('resolves node from the win32 nodejs fallback dir (#86)', async () => {
+    const { which } = createWhich()
+    const probed: string[] = []
+    const result = await which({
+      command: 'node',
+      env: { PATH: 'C:\\tools' },
+      platform: 'win32',
+      probe: (candidate) => {
+        probed.push(candidate)
+        return Promise.resolve(candidate === 'C:\\Program Files\\nodejs\\node.exe')
+      },
+    })
+    expect(result).toEqual({ ok: true, path: 'C:\\Program Files\\nodejs\\node.exe' })
+    expect(probed).toContain('C:\\Program Files\\nodejs\\node.exe')
+  })
+
   it('a fresh createWhich() instance has its own cache', async () => {
     const first = createWhich()
     const second = createWhich()

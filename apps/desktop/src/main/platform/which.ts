@@ -27,10 +27,14 @@ export type WhichResult =
  *  ships neither by default, so the CLIs' own installer locations stand in. A
  *  login shell is never spawned to harvest `PATH` — that is exactly the
  *  POSIX-only shell-out this layer forbids. */
+// `C:\Program Files\nodejs` covers the GUI-launched case for `node` the same
+// way the Git/GitHub CLI entries above it do (#86) — the desktop app's own
+// `commands.worktrees` spawn is the first caller that needs a `node`
+// resolution on Windows with a truncated PATH.
 const FALLBACK_DIRS: Readonly<Record<WhichPlatform, readonly string[]>> = {
   darwin: ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin'],
   linux: ['/usr/local/bin', '/usr/bin'],
-  win32: ['C:\\Program Files\\Git\\cmd', 'C:\\Program Files\\Git\\bin', 'C:\\Program Files\\GitHub CLI'],
+  win32: ['C:\\Program Files\\Git\\cmd', 'C:\\Program Files\\Git\\bin', 'C:\\Program Files\\GitHub CLI', 'C:\\Program Files\\nodejs'],
 }
 
 function normalizePlatform(platform: NodeJS.Platform): WhichPlatform {

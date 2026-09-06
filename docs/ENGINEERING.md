@@ -28,6 +28,8 @@ This is **this repository's own** standards document, not a template — `plugin
 
 **`apps/desktop/src/shared/local/inspect.ts` is the app's only aggregation of the denial log**, pure and reader-free, joining #77's `readDenials` output with #78's session index while `main/local/` stays a single-source adapter — the `desktop-local` check pins both the purity and the absence of a second reader.
 
+**`apps/desktop/src/main/reclaimer/` drives the shipped reclamation script (`plugins/port/templates/worktrees.mjs report --json`) through `commands.worktrees` and never re-implements its classification** — this directory calls no `git worktree` itself, joining #77's `readWorktrees` for the one fact the script's own JSON omits (`prunable`). Only a `node` prefix is spawnable, the same `KNOWN_COMMANDS` rail as `git`/`gh`, all pinned by the `desktop-reclaimer` layer 1 check.
+
 **A port config's shape and defaults are read from `schema/port.config.schema.json` at runtime, never transcribed into TypeScript.** `apps/desktop/src/main/registry/schema.ts` is the desktop app's single point of contact with the config contract — it compiles the shipped schema with ajv and reads every default off that same imported object — and the `desktop-registry` check in `scripts/checks.mjs` pins both the single import and the absence of a hand-retyped default.
 
 **Anything shipped may only reference other shipped paths.** A reference from a file under `plugins/port/` to a repository-only doc or script — `docs/USAGE.md`, `CONTRIBUTING.md`, `scripts/checks.mjs` — dangles in every adopter's plugin cache, which carries only `plugins/port/` (`scripts/checks.mjs` → "Shipped references stay inside plugins/port/").
@@ -48,6 +50,8 @@ This is **this repository's own** standards document, not a template — `plugin
 | `ARCHITECTURE.md`'s map ↔ the real tree | "Repository map covers the real tree, both directions" |
 | `.github/workflows/*.yml` ↔ `plugins/port/templates/*.yml` | "Workflow copies stay rendered from their templates" |
 | `templates/worktrees.mjs`'s `correlate` ↔ the desktop `correlate` (`apps/desktop/src/main/local/correlate.ts`) | the shared case table, `main/local/correlation.cases.json` |
+| `templates/worktrees.mjs`'s state vocabulary (`describeReason`'s cases, and which states `classifyCandidate` returns `removable: true` for) ↔ `shared/reclaimer/types.ts`'s `WORKTREE_STATES`/`RECLAIMABLE_STATES` | `desktop-reclaimer` |
+| `templates/worktrees.mjs`'s two diagnostic literals (`die()`'s `FAIL` prefix, `gh issueOrPullRequest resolution failed`) ↔ `main/reclaimer/report.ts`'s pinned copies | `desktop-reclaimer` |
 
 **If a change introduces a further copy of anything, it introduces its pin in the same commit.** A comment asking a future reader to remember is not a pin.
 
