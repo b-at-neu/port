@@ -20,7 +20,7 @@ import type {
 } from '../../shared/github/types'
 import { classifyFailure, collectTruncated, collectUnavailable, parseEnvelope } from './envelope'
 import type { AliasInfo, EnvelopeFailureKind, GraphQLErrorEntry } from './envelope'
-import { applyItemStates, mapPipelineItems } from './map'
+import { applyItemStates, fieldListOf, mapPipelineItems } from './map'
 import { buildItemStatesQuery, buildItemsByNumberQuery, buildPipelineQuery } from './query'
 
 /** The injectable seam every call below takes instead of importing `gh`
@@ -300,6 +300,7 @@ export async function fetchItemsByNumber(params: FetchItemsByNumberParams): Prom
       closedAt: typeof raw.closedAt === 'string' ? raw.closedAt : null,
       title: typeof raw.title === 'string' ? raw.title : '',
       url: typeof raw.url === 'string' ? raw.url : '',
+      labels: fieldListOf(raw.labels, 'name'),
     })
   }
 

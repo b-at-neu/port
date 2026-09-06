@@ -5,7 +5,7 @@
 // file compiles under `typecheck:web` too. The error rule is #72's,
 // unchanged: a condition a human or the environment could cause is a value,
 // never a throw.
-import type { LabelKey } from '../labels/vocabulary'
+import type { LabelKey, VocabularyReport } from '../labels/vocabulary'
 import type { LabelRole } from '../labels/defaults'
 import type { PipelineFailureKind, PipelineItemKind, RateLimitInfo, TruncatedSet, UnavailableAlias } from '../github/types'
 import type { RepoDiagnostic, RepoId, RepoProblem } from '../repos'
@@ -186,6 +186,7 @@ export type RepositoryState =
       readonly uncorrelatedWorktrees: readonly { readonly path: string; readonly reason: UnresolvedReason }[]
       readonly denials: DenialsRead
       readonly diagnostics: readonly RepoDiagnostic[]
+      readonly vocabulary: VocabularyReport
       readonly unavailable: readonly UnavailableAlias[]
       readonly truncated: readonly TruncatedSet[]
       readonly rateLimit: RateLimitInfo

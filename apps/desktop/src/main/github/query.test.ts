@@ -139,4 +139,12 @@ describe('buildItemsByNumberQuery', () => {
     const { document } = buildItemsByNumberQuery([1, 2, 3])
     expect(document).not.toContain('search(')
   })
+
+  it('selects labels inside both the Issue and the PullRequest fragment', () => {
+    const { document } = buildItemsByNumberQuery([1])
+    const issueFragment = /\.\.\. on Issue \{([^}]*)\}/.exec(document)?.[1] ?? ''
+    const prFragment = /\.\.\. on PullRequest \{([^}]*)\}/.exec(document)?.[1] ?? ''
+    expect(issueFragment).toContain('labels(first:')
+    expect(prFragment).toContain('labels(first:')
+  })
 })

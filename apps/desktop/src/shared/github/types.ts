@@ -142,6 +142,7 @@ export interface ResolvedItem {
   readonly closedAt: string | null
   readonly title: string
   readonly url: string
+  readonly labels: readonly string[]
 }
 
 /** `fetchItemsByNumber`'s result — a number resolving to neither an issue
