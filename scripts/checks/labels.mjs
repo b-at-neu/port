@@ -189,6 +189,31 @@ export default async function ({ fail, note, ok }) {
     ok();
   }
 
+  // --- Desktop app's LABEL_ROLES matches labels.json's role field, both directions (#79) ---
+  // #79 Decision 1: the stage ladder reads `role` off `LABEL_DEFAULTS` rather
+  // than a hand-transcribed key→stage table. `LabelRole` itself can't be
+  // derived from the template import (TypeScript widens JSON strings to
+  // `string`), so it is hand-maintained in shared/labels/defaults.ts and must
+  // agree with every distinct role labels.json actually uses, both ways.
+  {
+    const rel = 'apps/desktop/src/shared/labels/defaults.ts';
+    const text = readFileSync(join(root, rel), 'utf8');
+    const m = /LABEL_ROLES\s*=\s*\[([^\]]*)\]\s*as const/.exec(text);
+    if (!m) {
+      fail('labels', `${rel} has no 'LABEL_ROLES = [...] as const' array`);
+    } else {
+      const declaredRoles = new Set([...m[1].matchAll(/'([^']+)'/g)].map((t) => t[1]));
+      const realRoles = new Set(readJson('plugins/port/templates/labels.json').labels.map((l) => l.role));
+      for (const r of declaredRoles) {
+        if (!realRoles.has(r)) fail('labels', `${rel}'s LABEL_ROLES has '${r}', which no labels.json entry uses`);
+      }
+      for (const r of realRoles) {
+        if (!declaredRoles.has(r)) fail('labels', `labels.json uses role '${r}', missing from ${rel}'s LABEL_ROLES`);
+      }
+      ok();
+    }
+  }
+
   // --- Label colours are well-formed and distinct -----------------------------
   // Every label's position within its role ramp depends on a unique hex; a
   // duplicate collapses two labels back to pixel-identical, silently.

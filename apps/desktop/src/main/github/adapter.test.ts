@@ -3,13 +3,13 @@ import { resolveVocabulary } from '../../shared/labels/vocabulary'
 import type { LabelVocabulary } from '../../shared/labels/vocabulary'
 import { ghAuthStatus, ghJson } from '../platform/gh'
 import type { GhResult } from '../platform/gh'
-import { fetchItemStates, fetchPipelineItems } from './adapter'
+import { fetchItemsByNumber, fetchItemStates, fetchPipelineItems } from './adapter'
 import type { GhRunner } from './adapter'
 
 const VOCABULARY: LabelVocabulary = {
   labels: [
-    { key: 'ready', name: 'ready', source: 'default', module: 'core' },
-    { key: 'planApproved', name: 'plan approved', source: 'default', module: 'core' },
+    { key: 'ready', name: 'ready', source: 'default', module: 'core', role: 'trigger' },
+    { key: 'planApproved', name: 'plan approved', source: 'default', module: 'core', role: 'trigger' },
   ],
   disabled: [],
   problems: [],
@@ -163,6 +163,77 @@ describe('fetchItemStates', () => {
     if (!result.ok) return
     expect(result.states).toEqual([{ kind: 'issue', number: 76, state: 'OPEN', mergedAt: null, closedAt: null, url: 'u' }])
     expect(result.unavailable).toEqual([{ kind: 'pull-request', number: 999999 }])
+  })
+})
+
+describe('fetchItemsByNumber', () => {
+  it('returns an empty result for no numbers without spawning gh', async () => {
+    let called = false
+    const runner: GhRunner = () => {
+      called = true
+      return Promise.resolve({ ok: true, stdout: '{}', stderr: '' })
+    }
+    const result = await fetchItemsByNumber({ repo: { owner: 'o', name: 'r' }, numbers: [], gh: runner })
+    expect(result).toEqual({ ok: true, resolved: [], unavailable: [], fetchedAt: result.ok ? result.fetchedAt : '' })
+    expect(called).toBe(false)
+  })
+
+  it('a mixed issue/pull-request response resolves each by its own __typename', async () => {
+    const stdout = JSON.stringify({
+      data: {
+        repository: {
+          n0: { __typename: 'Issue', number: 79, title: 'issue', url: 'u1', state: 'OPEN', closedAt: null },
+          n1: { __typename: 'PullRequest', number: 196, title: 'pr', url: 'u2', state: 'MERGED', mergedAt: '2026-01-01T00:00:00Z', closedAt: '2026-01-01T00:00:00Z' },
+        },
+      },
+    })
+    const result = await fetchItemsByNumber({
+      repo: { owner: 'o', name: 'r' },
+      numbers: [79, 196],
+      gh: fakeRunner({ ok: true, stdout, stderr: '' }),
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.resolved).toEqual([
+      { number: 79, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 'issue', url: 'u1' },
+      { number: 196, kind: 'pull-request', state: 'MERGED', mergedAt: '2026-01-01T00:00:00Z', closedAt: '2026-01-01T00:00:00Z', title: 'pr', url: 'u2' },
+    ])
+    expect(result.unavailable).toEqual([])
+  })
+
+  it('a merged pull request carries mergedAt', async () => {
+    const stdout = JSON.stringify({
+      data: { repository: { n0: { __typename: 'PullRequest', number: 1, title: 't', url: 'u', state: 'MERGED', mergedAt: '2026-02-01T00:00:00Z', closedAt: '2026-02-01T00:00:00Z' } } },
+    })
+    const result = await fetchItemsByNumber({ repo: { owner: 'o', name: 'r' }, numbers: [1], gh: fakeRunner({ ok: true, stdout, stderr: '' }) })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.resolved[0]?.mergedAt).toBe('2026-02-01T00:00:00Z')
+  })
+
+  it('a null node lands in unavailable, never inferred as a state', async () => {
+    const stdout = JSON.stringify({ data: { repository: { n0: null } } })
+    const result = await fetchItemsByNumber({ repo: { owner: 'o', name: 'r' }, numbers: [999999], gh: fakeRunner({ ok: true, stdout, stderr: '' }) })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.resolved).toEqual([])
+    expect(result.unavailable).toEqual([999999])
+  })
+
+  it('a partial error returns ok: true with the survivors', async () => {
+    const stdout = JSON.stringify({
+      data: { repository: { n0: { __typename: 'Issue', number: 1, title: 't', url: 'u', state: 'OPEN', closedAt: null }, n1: null } },
+      errors: [{ type: 'NOT_FOUND', path: ['repository', 'n1'], message: 'boom' }],
+    })
+    const result = await fetchItemsByNumber({
+      repo: { owner: 'o', name: 'r' },
+      numbers: [1, 2],
+      gh: fakeRunner({ ok: false, kind: 'unknown', stdout, stderr: 'gh: some errors' }),
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.resolved).toHaveLength(1)
+    expect(result.unavailable).toEqual([2])
   })
 })
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { resolveVocabulary, type LabelVocabulary } from '../../shared/labels/vocabulary'
-import { buildItemStatesQuery, buildPipelineQuery, graphqlStringLiteral } from './query'
+import { buildItemStatesQuery, buildItemsByNumberQuery, buildPipelineQuery, graphqlStringLiteral } from './query'
 
 describe('graphqlStringLiteral', () => {
   it('round-trips a name containing a double quote, a backslash, and a newline', () => {
@@ -26,8 +26,8 @@ describe('buildPipelineQuery', () => {
     // under test rather than dropping the case.
     const vocabulary: LabelVocabulary = {
       labels: [
-        { key: 'ready', name: 'ready', source: 'default', module: 'core' },
-        { key: 'blocked', name: 'blocked', source: 'default', module: 'core' },
+        { key: 'ready', name: 'ready', source: 'default', module: 'core', role: 'trigger' },
+        { key: 'blocked', name: 'blocked', source: 'default', module: 'core', role: 'gate' },
       ],
       disabled: ['refreshBranch', 'refreshing'],
       problems: [],
@@ -107,5 +107,36 @@ describe('buildItemStatesQuery', () => {
     const { document, aliases } = buildItemStatesQuery([])
     expect(aliases).toEqual([])
     expect(document).toContain('repository(owner: $owner, name: $name)')
+  })
+})
+
+describe('buildItemsByNumberQuery', () => {
+  it('emits one issueOrPullRequest alias per number', () => {
+    const { aliases } = buildItemsByNumberQuery([79, 184])
+    expect(aliases).toEqual([
+      { alias: 'n0', number: 79 },
+      { alias: 'n1', number: 184 },
+    ])
+  })
+
+  it('requests __typename, and selects mergedAt only inside the PullRequest fragment', () => {
+    const { document } = buildItemsByNumberQuery([1])
+    expect(document).toContain('n0: issueOrPullRequest(number: 1)')
+    expect(document).toContain('__typename')
+    const issueFragment = /\.\.\. on Issue \{([^}]*)\}/.exec(document)?.[1] ?? ''
+    const prFragment = /\.\.\. on PullRequest \{([^}]*)\}/.exec(document)?.[1] ?? ''
+    expect(issueFragment).not.toContain('mergedAt')
+    expect(prFragment).toContain('mergedAt')
+  })
+
+  it('returns an empty alias list and a still-valid document for no numbers', () => {
+    const { document, aliases } = buildItemsByNumberQuery([])
+    expect(aliases).toEqual([])
+    expect(document).toContain('repository(owner: $owner, name: $name)')
+  })
+
+  it('never uses GraphQL search', () => {
+    const { document } = buildItemsByNumberQuery([1, 2, 3])
+    expect(document).not.toContain('search(')
   })
 })
