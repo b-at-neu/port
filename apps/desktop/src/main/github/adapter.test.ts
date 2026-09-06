@@ -170,14 +170,18 @@ describe('fetchItemStates', () => {
 // `ctx.skip()` when `gh` is not authenticated, so the suite still runs in an
 // unauthenticated CI environment. Resolves the repository with
 // `gh repo view` rather than a hardcoded slug, so it is correct in a fork.
+// Both gating calls are bounded well under this test's own 30s timeout
+// (#200 review): the default 30s command timeout races the test framework's
+// own timeout on a slow CI runner, which fails the test on a hang instead of
+// classifying as `timeout` (not ok) and skipping cleanly.
 describe('fetchPipelineItems / fetchItemStates — live', () => {
   it('matches this repository — every matchedKeys is non-empty, vocabulary is verified, rateLimit.cost is present', async (ctx) => {
-    const auth = await ghAuthStatus()
+    const auth = await ghAuthStatus({ timeoutMs: 8_000 })
     if (!auth.ok || !auth.authenticated) {
       ctx.skip()
       return
     }
-    const repoInfo = await ghJson<{ nameWithOwner: string }>(['repo', 'view', '--json', 'nameWithOwner'])
+    const repoInfo = await ghJson<{ nameWithOwner: string }>(['repo', 'view', '--json', 'nameWithOwner'], { timeoutMs: 8_000 })
     if (!repoInfo.ok) {
       ctx.skip()
       return
@@ -203,12 +207,12 @@ describe('fetchPipelineItems / fetchItemStates — live', () => {
   }, 30_000)
 
   it('fetchItemStates resolves a real, known-open issue on this repository', async (ctx) => {
-    const auth = await ghAuthStatus()
+    const auth = await ghAuthStatus({ timeoutMs: 8_000 })
     if (!auth.ok || !auth.authenticated) {
       ctx.skip()
       return
     }
-    const repoInfo = await ghJson<{ nameWithOwner: string }>(['repo', 'view', '--json', 'nameWithOwner'])
+    const repoInfo = await ghJson<{ nameWithOwner: string }>(['repo', 'view', '--json', 'nameWithOwner'], { timeoutMs: 8_000 })
     if (!repoInfo.ok) {
       ctx.skip()
       return

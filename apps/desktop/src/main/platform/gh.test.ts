@@ -70,8 +70,12 @@ describe('ghJson', () => {
 
 describe('ghAuthStatus — integration', () => {
   it('reads only the exit code, distinguishing authenticated from unauthenticated', async (ctx) => {
-    const result = await ghAuthStatus()
-    if (!result.ok && result.kind === 'not-found') {
+    // Bounded well under this test's own 15s timeout (#200 review): the
+    // default 30s command timeout races the test framework's own timeout on
+    // a slow CI runner, which fails the test on a hang rather than letting it
+    // classify as `timeout` and skip cleanly.
+    const result = await ghAuthStatus({ timeoutMs: 8_000 })
+    if (!result.ok && (result.kind === 'not-found' || result.kind === 'timeout')) {
       ctx.skip()
       return
     }
