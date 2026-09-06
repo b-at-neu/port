@@ -39,8 +39,10 @@ function numberField(value: unknown): number | undefined {
 
 /** Reads `{ nodes: [{ <field>: string }] }`, filtering out anything that
  *  isn't a string — an unassigned item legitimately has an empty
- *  `assignees.nodes` and must map to `[]`, not be dropped. */
-function fieldListOf(value: unknown, field: 'login' | 'name'): readonly string[] {
+ *  `assignees.nodes` and must map to `[]`, not be dropped. Exported so
+ *  `fetchItemsByNumber` (`adapter.ts`) reads `ResolvedItem.labels` the same
+ *  way, rather than a second ad hoc reader. */
+export function fieldListOf(value: unknown, field: 'login' | 'name'): readonly string[] {
   const connection = asConnection(value)
   const nodes = connection?.nodes
   if (!Array.isArray(nodes)) return []

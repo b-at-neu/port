@@ -122,8 +122,9 @@ export function buildItemsByNumberQuery(numbers: readonly number[]): ItemsByNumb
 
   numbers.forEach((number, idx) => {
     const alias = `n${idx}`
+    const labelsField = `labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }`
     fields.push(
-      `  ${alias}: issueOrPullRequest(number: ${number}) { __typename ... on Issue { number title url state closedAt } ... on PullRequest { number title url state mergedAt closedAt } }`,
+      `  ${alias}: issueOrPullRequest(number: ${number}) { __typename ... on Issue { number title url state closedAt ${labelsField} } ... on PullRequest { number title url state mergedAt closedAt ${labelsField} } }`,
     )
     aliases.push({ alias, number })
   })

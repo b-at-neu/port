@@ -210,6 +210,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     uncorrelatedWorktrees,
     denials,
     diagnostics: entry.diagnostics,
+    vocabulary: pipelineFetch.vocabulary,
     unavailable: pipelineFetch.unavailable,
     truncated: pipelineFetch.truncated,
     rateLimit: pipelineFetch.rateLimit,

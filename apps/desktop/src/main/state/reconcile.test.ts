@@ -235,6 +235,24 @@ describe('reconcileRepository — linking', () => {
   })
 })
 
+describe('reconcileRepository — pass-through fields', () => {
+  it('carries the pipeline fetch\'s vocabulary report onto RepositoryState, not just entry.config.vocabulary used internally', () => {
+    const report = { verdict: 'partial' as const, present: [], missing: [], problems: [], repoLabels: { ok: true as const, names: [] } }
+    const fetch = fetchOf([])
+    if (!fetch.ok) throw new Error('unreachable')
+    const state = reconcileRepository({
+      entry: entry(),
+      pipelineFetch: { ...fetch, vocabulary: report },
+      itemsByNumberFetch: null,
+      repoSessions: sessionsOf(),
+      worktrees: worktreesOf(),
+      denials: denialsOf(),
+    })
+    if (!state.ok) throw new Error('unreachable')
+    expect(state.vocabulary).toEqual(report)
+  })
+})
+
 describe('reconcileRepository — failure paths', () => {
   it('a failed pipeline fetch never returns ok: true with an empty items array', () => {
     const state = reconcileRepository({
