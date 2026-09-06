@@ -33,6 +33,13 @@ describe('LABEL_KEYS / LABEL_DEFAULTS match the shipped template', () => {
       expect(def.module).toBe(t?.module)
     }
   })
+
+  it('carries every LABEL_DEFAULTS entry\'s role equal to the template\'s (#79)', () => {
+    const byKey = new Map(template.labels.map((l) => [l.key, l]))
+    for (const def of LABEL_DEFAULTS) {
+      expect(def.role).toBe(byKey.get(def.key)?.role)
+    }
+  })
 })
 
 describe('resolveVocabulary', () => {
@@ -55,6 +62,17 @@ describe('resolveVocabulary', () => {
       if (label.key === 'ready') continue
       expect(label.source).toBe('default')
     }
+  })
+
+  it('carries the template role onto every resolved label, unaffected by an overridden name (#79)', () => {
+    const byKey = new Map(LABEL_DEFAULTS.map((d) => [d.key, d]))
+    const vocabulary = resolveVocabulary({ labels: { ready: 'todo' } })
+    for (const label of vocabulary.labels) {
+      expect(label.role).toBe(byKey.get(label.key)?.role)
+    }
+    const ready = vocabulary.labels.find((l) => l.key === 'ready')
+    expect(ready?.name).toBe('todo')
+    expect(ready?.role).toBe(byKey.get('ready')?.role)
   })
 
   it('disables nothing — every label default is core', () => {

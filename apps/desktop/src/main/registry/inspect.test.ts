@@ -107,7 +107,7 @@ describe('inspectRepository', () => {
     const entry = await inspectRepository(root, { git: fakeGit(root) })
     if (!('config' in entry)) throw new Error('unreachable')
     const readyLabel = entry.config.vocabulary.labels.find((l) => l.key === ('ready' satisfies LabelKey))
-    expect(readyLabel).toEqual({ key: 'ready', name: 'go', source: 'config', module: 'core' })
+    expect(readyLabel).toEqual({ key: 'ready', name: 'go', source: 'config', module: 'core', role: 'trigger' })
   })
 
   it('reports config-malformed for invalid JSON', async () => {
