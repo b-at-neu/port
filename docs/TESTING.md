@@ -83,6 +83,9 @@ No dependencies, no plugin install, no model calls. Runs in seconds, in an agent
 | No file under `apps/desktop/src/main/local/` references `gh(`/`ghJson(`/`main/github`, and at least one imports `git` from the platform layer | A second `gh`-calling adapter landing beside the one #76 already established, or the local-only rail (Decision 1) passing vacuously once the git call is removed (#77) |
 | No file under `apps/desktop/src/main/local/` contains the literal `.claude/worktrees` | The worktree producer/scan being hard-coded to one directory name instead of derived from the registered worktree's own basename (#77) |
 | `templates/worktrees.mjs`'s exported `correlate` resolves every case in `main/local/correlation.cases.json` identically to the desktop `correlate`, and that table covers all four rung names, a `#0` case, and a `null` case | The reclaimer's and the desktop app's correlation ladders silently disagreeing about which issue a worktree belongs to (#77) |
+| No file under `apps/desktop/src/shared/local/` imports a `node:` builtin or anything from `src/main/` | `shared/local/inspect.ts` losing the purity that lets it compile under `typecheck:web` and be called from the renderer over IPC'd data (#85) |
+| No non-test file under `apps/desktop/src/` declares `totalDenials`/`denialCount`/`denialsCount`/`allDenials` as an identifier | The log's line count being presented as a denial count — the presentation contract's first rule, made mechanical (#85) |
+| `apps/desktop/src/shared/local/inspect.ts` exports `inspectDenials` and contains all three `SessionAttribution` literals (`'attributed'`, `'unknown-session'`, `'attribution-unavailable'`) | Collapsing a distinct attribution arm into another, most likely `attribution-unavailable` into `unknown-session` (#85) |
 
 Each rule is worth testing by breaking it deliberately. If a check cannot be made to fail, it is not a check.
 
