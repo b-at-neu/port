@@ -18,7 +18,7 @@
 | `schema/` | `port.config.schema.json`, the per-repo config contract | An adopter's editor, via the `$schema` key it inherits | no |
 | `scripts/` | The layer 1 static checks, and the committed file-size limit and ratchet they enforce | Contributors, CI | no |
 | `evals/` | Layer 3 behavioural eval cases and graders | Contributors, CI (gated) | no |
-| `docs/` | Contributor-facing reference (`TESTING.md`, `USAGE.md`) | Contributors | no |
+| `docs/` | Contributor-facing reference (`TESTING.md`, `USAGE.md`, `COORDINATION.md`) | Contributors | no |
 | `.github/workflows/` | CI workflow definitions | GitHub Actions | no |
 | `apps/desktop/` | The Electron + TypeScript desktop app | Contributors building the UI track | no |
 | `.claude/` | This repository's own settings and port config, self-hosting the pipeline it ships | The cockpit and dispatched agents, in this checkout only | no |
