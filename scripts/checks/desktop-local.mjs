@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { root, readJson, walk, relOf } from '../lib/files.mjs';
@@ -92,4 +92,71 @@ export default async function ({ fail, ok }) {
     }
     ok();
   }
+
+  // #85: apps/desktop/src/shared/local/ is the pure denial inspector — joins
+  // #77's DenialsRead with #78's SessionScan, so it must never itself read a
+  // file, spawn `git`, or import anything main-process-only (Decision 2).
+  const sharedLocalDir = 'apps/desktop/src/shared/local';
+  const inspectRel = `${sharedLocalDir}/inspect.ts`;
+  const inspectPath = join(root, inspectRel);
+
+  // --- (5) inspect.ts exists and exports inspectDenials, and carries all three attribution literals ---
+  if (!existsSync(inspectPath)) {
+    fail('desktop-local-inspector', `${inspectRel} does not exist — the guards below cannot pass vacuously if the file is deleted`);
+  } else {
+    const text = readFileSync(inspectPath, 'utf8');
+    if (!/\bexport function inspectDenials\b/.test(text)) {
+      fail('desktop-local-inspector', `${inspectRel} does not export 'inspectDenials'`);
+    } else {
+      ok();
+    }
+
+    let literalMissing = false;
+    for (const literal of ["'attributed'", "'unknown-session'", "'attribution-unavailable'"]) {
+      if (!text.includes(literal)) {
+        literalMissing = true;
+        fail('desktop-local-inspector', `${inspectRel} is missing the attribution literal ${literal} — collapsing a distinct SessionAttribution arm into another must fail here`);
+      }
+    }
+    if (!literalMissing) ok();
+  }
+
+  // --- (6) Decision 2: shared/local/ imports no node: builtin and nothing from src/main/ ---
+  {
+    let violated = false;
+    for (const f of walk(join(root, sharedLocalDir)).filter((p) => (p.endsWith('.ts') || p.endsWith('.tsx')) && !p.endsWith('.test.ts'))) {
+      const rel = relOf(f);
+      const codeOnly = stripComments(readFileSync(f, 'utf8'));
+      if (/from\s+['"]node:/.test(codeOnly)) {
+        violated = true;
+        fail('desktop-local-inspector', `${rel} imports a node: builtin — shared/local/ must compile under typecheck:web with no Node types (Decision 2)`);
+      }
+      if (/from\s+['"][^'"]*\bmain\//.test(codeOnly)) {
+        violated = true;
+        fail('desktop-local-inspector', `${rel} imports from src/main/ — the inspector reads nothing itself (Decision 2)`);
+      }
+    }
+    if (!violated) ok();
+  }
+
+  // --- (7) The presentation contract's first rule, made mechanical: no non-test file anywhere under apps/desktop/src/ presents the log's line count as a denial count ---
+  {
+    const forbidden = ['totalDenials', 'denialCount', 'denialsCount', 'allDenials'];
+    let violated = false;
+    for (const f of walk(join(root, 'apps/desktop/src')).filter((p) => (p.endsWith('.ts') || p.endsWith('.tsx')) && !p.endsWith('.test.ts'))) {
+      const rel = relOf(f);
+      const codeOnly = stripComments(readFileSync(f, 'utf8'));
+      for (const word of forbidden) {
+        if (new RegExp(`\\b${word}\\b`).test(codeOnly)) {
+          violated = true;
+          fail('desktop-local-inspector', `${rel} declares '${word}' — the file's line count must never be presented as a denial count (the presentation contract #80 inherits)`);
+        }
+      }
+    }
+    if (!violated) ok();
+  }
+}
+
+function stripComments(text) {
+  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
 }
