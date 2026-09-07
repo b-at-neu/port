@@ -42,6 +42,7 @@ function readyEntry(id: string, path: string, repo: string): Extract<RepositoryE
       owner: repo.split('/')[0] ?? '',
       name: repo.split('/')[1] ?? '',
       branches: { integration: 'dev', production: 'main' },
+      commands: { worktrees: null },
       models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
       modules: { approvalGate: true, release: true, scope: true },
       reviewCycleCap: 5,
