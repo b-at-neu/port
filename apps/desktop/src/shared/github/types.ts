@@ -131,6 +131,37 @@ export type PipelineFetch =
       readonly fetchedAt: string
     }
 
+/** `fetchItemsByNumber`'s per-number result (#79 Decision 4) — `kind` comes
+ *  from the response's own `__typename`, never assumed, since a worktree or
+ *  an agent record names a bare number with no kind attached. */
+export interface ResolvedItem {
+  readonly number: number
+  readonly kind: PipelineItemKind
+  readonly state: string
+  readonly mergedAt: string | null
+  readonly closedAt: string | null
+  readonly title: string
+  readonly url: string
+  readonly labels: readonly string[]
+}
+
+/** `fetchItemsByNumber`'s result — a number resolving to neither an issue
+ *  nor a pull request lands in `unavailable`, never inferred as any
+ *  particular state. */
+export type ItemsByNumberFetch =
+  | {
+      readonly ok: true
+      readonly resolved: readonly ResolvedItem[]
+      readonly unavailable: readonly number[]
+      readonly fetchedAt: string
+    }
+  | {
+      readonly ok: false
+      readonly kind: PipelineFailureKind
+      readonly message: string
+      readonly fetchedAt: string
+    }
+
 /** `fetchItemStates`'s result — a vanished number is reported in
  *  `unavailable`, never inferred as "still open" (#79's own rule). */
 export type ItemStatesFetch =

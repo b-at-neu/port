@@ -93,6 +93,47 @@ export function buildPipelineQuery(vocabulary: LabelVocabulary): PipelineQuery {
   return { document, aliases }
 }
 
+export interface ItemsByNumberAlias {
+  readonly alias: string
+  readonly number: number
+}
+
+export interface ItemsByNumberQuery {
+  readonly document: string
+  readonly aliases: readonly ItemsByNumberAlias[]
+}
+
+/**
+ * One `issueOrPullRequest(number:)` alias per input number (#79 Decision 4) —
+ * the kind is genuinely unknown for a number a worktree or an agent record
+ * merely names, unlike `buildItemStatesQuery`'s caller-supplied `kind`. Every
+ * alias requests `__typename` and selects `mergedAt` only inside the
+ * `PullRequest` inline fragment — an `Issue` has no such field, so
+ * requesting it unconditionally would be a GraphQL validation error, never a
+ * null. A number that resolves to neither comes back as a `null` node, read
+ * by the caller as `unavailable`, never inferred. Numbers are embedded as
+ * literals exactly as `buildItemStatesQuery` already does, for the same
+ * reason: every number here is caller-supplied (already a JS `number`),
+ * never untrusted string input requiring escaping.
+ */
+export function buildItemsByNumberQuery(numbers: readonly number[]): ItemsByNumberQuery {
+  const aliases: ItemsByNumberAlias[] = []
+  const fields: string[] = []
+
+  numbers.forEach((number, idx) => {
+    const alias = `n${idx}`
+    const labelsField = `labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }`
+    fields.push(
+      `  ${alias}: issueOrPullRequest(number: ${number}) { __typename ... on Issue { number title url state closedAt ${labelsField} } ... on PullRequest { number title url state mergedAt closedAt ${labelsField} } }`,
+    )
+    aliases.push({ alias, number })
+  })
+
+  const document = ['query($owner: String!, $name: String!) {', '  repository(owner: $owner, name: $name) {', ...fields, '  }', '}'].join('\n')
+
+  return { document, aliases }
+}
+
 export interface ItemStateAlias {
   readonly alias: string
   readonly kind: PipelineItemKind
