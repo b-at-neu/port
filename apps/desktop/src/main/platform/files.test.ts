@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { platform } from 'node:process'
 import { describe, expect, it } from 'vitest'
-import { ensureDirectory, listDirectory, readJsonFile, readTextFile, statPath, writeJsonFileAtomic } from './files'
+import { ensureDirectory, listDirectory, readJsonFile, readLines, readTextFile, statPath, writeJsonFileAtomic } from './files'
 
 // Vitest runs each test's temp directory through the OS's own tmpdir
 // cleanup; nothing here needs a teardown step.
@@ -171,6 +171,65 @@ describe('writeJsonFileAtomic', () => {
     await writeJsonFileAtomic(file, { version: 1, repositories: [{ path: '/a' }] })
     const text = await readFile(file, 'utf8')
     expect(JSON.parse(text)).toEqual({ version: 1, repositories: [{ path: '/a' }] })
+  })
+})
+
+describe('readLines', () => {
+  it('yields every line of a normal LF file', async () => {
+    const dir = await makeTempDir()
+    const file = join(dir, 'a.jsonl')
+    await writeFile(file, 'one\ntwo\nthree\n')
+    const lines: string[] = []
+    const result = await readLines(file, (line) => lines.push(line), { maxBytes: 1024 })
+    expect(result).toEqual({ ok: true })
+    expect(lines).toEqual(['one', 'two', 'three'])
+  })
+
+  it('yields the same lines for a CRLF file as for the LF equivalent', async () => {
+    const dir = await makeTempDir()
+    const file = join(dir, 'crlf.jsonl')
+    await writeFile(file, 'one\r\ntwo\r\nthree\r\n')
+    const lines: string[] = []
+    const result = await readLines(file, (line) => lines.push(line), { maxBytes: 1024 })
+    expect(result).toEqual({ ok: true })
+    expect(lines).toEqual(['one', 'two', 'three'])
+  })
+
+  it('yields no lines for an empty file', async () => {
+    const dir = await makeTempDir()
+    const file = join(dir, 'empty.jsonl')
+    await writeFile(file, '')
+    const lines: string[] = []
+    const result = await readLines(file, (line) => lines.push(line), { maxBytes: 1024 })
+    expect(result).toEqual({ ok: true })
+    expect(lines).toEqual([])
+  })
+
+  it('reports not-found for a missing file, never throwing', async () => {
+    const dir = await makeTempDir()
+    const lines: string[] = []
+    const result = await readLines(join(dir, 'missing.jsonl'), (line) => lines.push(line), { maxBytes: 1024 })
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('unreachable')
+    expect(result.kind).toBe('not-found')
+    expect(lines).toEqual([])
+  })
+
+  it('aborts with too-large once the byte cap is passed, without buffering the whole file', async () => {
+    // Large enough to arrive across many stream chunks (a small file can
+    // arrive in one chunk, which would make an abort-mid-stream assertion
+    // meaningless) — the same order-of-magnitude the readTextFile too-large
+    // test above already uses for its own cap.
+    const dir = await makeTempDir()
+    const file = join(dir, 'big.jsonl')
+    const oneLine = `${'x'.repeat(200)}\n`
+    await writeFile(file, oneLine.repeat(20_000)) // ~4 MB
+    const lines: string[] = []
+    const result = await readLines(file, (line) => lines.push(line), { maxBytes: 1024 * 1024 })
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('unreachable')
+    expect(result.kind).toBe('too-large')
+    expect(lines.length).toBeLessThan(20_000)
   })
 })
 
