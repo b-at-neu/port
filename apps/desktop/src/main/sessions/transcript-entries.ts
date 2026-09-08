@@ -50,10 +50,28 @@ export function sanitize(text: string): string {
   return out
 }
 
+/** Slack sanitized past `cap` before falling back to an approximate count --
+ *  covers a prefix that happens to hold a few stripped control/bidi
+ *  characters without still needing the full O(n) pass below. */
+const CAP_SLACK = 256
+
 export function capPayload(text: string, cap: number = MAX_PAYLOAD_CHARS): Payload {
-  const sanitized = sanitize(text)
-  if (sanitized.length <= cap) return { text: sanitized, omittedChars: 0 }
-  return { text: sanitized.slice(0, cap), omittedChars: sanitized.length - cap }
+  if (text.length <= cap) {
+    const sanitized = sanitize(text)
+    return sanitized.length <= cap ? { text: sanitized, omittedChars: 0 } : { text: sanitized.slice(0, cap), omittedChars: sanitized.length - cap }
+  }
+
+  // Everything past `cap` is discarded either way, so a large tool result
+  // (the ticket anticipates "tens of KB", e.g. a big `git log`) never pays
+  // the full sanitize pass for content that is mostly thrown away -- only a
+  // bounded prefix is sanitized. `omittedChars` for the untouched remainder
+  // is then the raw (unsanitized) count, a correct lower bound rather than
+  // an exact one.
+  const prefix = text.slice(0, cap + CAP_SLACK)
+  const sanitized = sanitize(prefix)
+  const rawRemainder = text.length - prefix.length
+  if (sanitized.length > cap) return { text: sanitized.slice(0, cap), omittedChars: rawRemainder + (sanitized.length - cap) }
+  return { text: sanitized, omittedChars: rawRemainder }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

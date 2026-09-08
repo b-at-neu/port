@@ -37,7 +37,9 @@ function failureCopy(kind: SessionFailureKind, message: string): string {
   }
 }
 
-function titleOf(session: SessionRecord): string {
+/** Exported for the transcript header (#83's UX spec: "the session title"
+ *  for a session transcript) so main.ts never re-derives this from a raw id. */
+export function titleOf(session: SessionRecord): string {
   const raw = session.customTitle ?? session.summary ?? session.firstPrompt ?? '(untitled session)'
   return raw.length > TITLE_MAX ? `${raw.slice(0, TITLE_MAX)}…` : raw
 }

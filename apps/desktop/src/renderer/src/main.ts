@@ -5,7 +5,7 @@ import type { RepoId, RepositoryEntry } from '../../shared/repos'
 import { render } from './repositories'
 import type { RegistryBanner, RendererState } from './repositories'
 import type { WorktreeSectionState } from './worktrees'
-import { renderSessionsPicker } from './sessions'
+import { renderSessionsPicker, titleOf } from './sessions'
 import type { SessionsPickerState } from './sessions'
 import { renderTranscript } from './transcript'
 import type { TranscriptViewState } from './transcript'
@@ -171,9 +171,21 @@ function handleBackToRepos(): void {
   draw()
 }
 
+/** #83's UX spec: "stage plus #N, else the session title" — resolved from
+ *  the already-loaded `sessionsState` (`SessionRecord`/`AgentRecord`), never
+ *  the raw id, so the transcript header and the back-to-sessions flow show
+ *  something scannable rather than an opaque `sessionId`/`agent-<id>`. Falls
+ *  back to the raw id only when the picker hasn't loaded (or is stale) yet. */
 function titleFor(sessionId: string, agentId: string | null): string {
-  if (agentId === null) return sessionId
-  return `agent-${agentId}`
+  const scan = sessionsState.status === 'ready' ? sessionsState.scan : null
+  if (agentId !== null) {
+    const agent = scan?.agents.find((a) => a.agentId === agentId)
+    if (agent === undefined) return `agent-${agentId}`
+    const stage = agent.stage ?? agent.agentType
+    return agent.itemNumber !== null ? `${stage} #${agent.itemNumber}` : stage
+  }
+  const session = scan?.sessions.find((s) => s.sessionId === sessionId)
+  return session !== undefined ? titleOf(session) : sessionId
 }
 
 async function loadTranscript(sessionId: string, agentId: string | null): Promise<void> {
