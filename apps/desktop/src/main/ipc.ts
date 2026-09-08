@@ -2,12 +2,17 @@ import { app, ipcMain } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { IPC_CHANNELS, type IpcChannel, type IpcMap } from '../shared/ipc'
 import type { WorktreesReport } from '../shared/reclaimer/types'
+import type { RepositoryEntry } from '../shared/repos'
+import type { SessionScan } from '../shared/sessions/types'
+import type { TranscriptRead } from '../shared/sessions/transcript'
 import { chooseDirectory } from './dialogs'
 import { git } from './platform'
 import { readWorktreeReport } from './reclaimer'
 import type { ReadWorktreeReportParams } from './reclaimer'
 import { addRepository, listRepositories, removeRepository } from './registry'
 import type { RegistryDeps } from './registry'
+import { readSessionState, readTranscript } from './sessions'
+import type { ReadSessionStateParams, ReadTranscriptParams, RepoRef } from './sessions'
 
 type AppInfo = IpcMap['app:info']['response']
 
@@ -74,6 +79,46 @@ export async function resolveWorktreesReport(
   })
 }
 
+/** `'sessions:scan'`'s only composition: the ready repository list becomes
+ *  `readSessionState`'s `repos`, never a second config or worktree reader —
+ *  reconciliation against labels is #79's job, not this channel's. */
+export interface SessionsScanDeps {
+  readonly listRepositories: typeof listRepositories
+  readonly readSessionState: (params: ReadSessionStateParams) => Promise<SessionScan>
+}
+
+const defaultSessionsScanDeps: SessionsScanDeps = { listRepositories, readSessionState }
+
+function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { status: 'ready' }> {
+  return 'config' in entry
+}
+
+export async function resolveSessionsScan(registryDeps: RegistryDeps, deps: SessionsScanDeps = defaultSessionsScanDeps): Promise<SessionScan> {
+  const list = await deps.listRepositories(registryDeps)
+  if (!list.ok) throw new Error(`'sessions:scan' could not list repositories: ${list.message}`)
+  const repos: readonly RepoRef[] = list.repositories.filter(isReady).map((entry) => ({ id: entry.id, root: entry.path }))
+  return deps.readSessionState({ repos })
+}
+
+export interface TranscriptReadDeps {
+  readonly readTranscript: (params: ReadTranscriptParams) => Promise<TranscriptRead>
+}
+
+const defaultTranscriptReadDeps: TranscriptReadDeps = { readTranscript }
+
+export async function resolveTranscriptRead(
+  request: IpcMap['transcript:read']['request'],
+  deps: TranscriptReadDeps = defaultTranscriptReadDeps,
+): Promise<TranscriptRead> {
+  if (typeof request?.sessionId !== 'string' || request.sessionId === '') {
+    throw new Error("'transcript:read' requires a non-empty 'sessionId'")
+  }
+  if (request.agentId !== null && typeof request.agentId !== 'string') {
+    throw new Error("'transcript:read' requires 'agentId' to be a string or null")
+  }
+  return deps.readTranscript({ sessionId: request.sessionId, agentId: request.agentId })
+}
+
 export function registerIpc(): void {
   // The one place a real `git` invocation and the real userData directory
   // reach the registry — every registry function itself takes these as
@@ -114,6 +159,15 @@ export function registerIpc(): void {
   })
 
   handle('worktrees:report', (_event, request) => resolveWorktreesReport(registryDeps, request))
+
+  handle('sessions:scan', (_event, request) => {
+    if (request !== undefined) {
+      throw new Error("'sessions:scan' takes no payload")
+    }
+    return resolveSessionsScan(registryDeps)
+  })
+
+  handle('transcript:read', (_event, request) => resolveTranscriptRead(request))
 
   for (const channel of IPC_CHANNELS) {
     if (!registered.has(channel)) {
