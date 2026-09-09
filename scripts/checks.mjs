@@ -15,6 +15,7 @@ import { createReporter } from './lib/report.mjs';
 import components from './checks/components.mjs';
 import shellDiscipline from './checks/shell-discipline.mjs';
 import hooks from './checks/hooks.mjs';
+import allowlist from './checks/allowlist.mjs';
 import config from './checks/config.mjs';
 import install from './checks/install.mjs';
 import labels from './checks/labels.mjs';
@@ -40,6 +41,7 @@ for (const module of [
   components,
   shellDiscipline,
   hooks,
+  allowlist,
   config,
   install,
   labels,

@@ -51,6 +51,11 @@
     "   leading-argument pattern to match. Without these, the broad find allow becomes an",
     "   rm-equivalent escape hatch.",
     "",
+    "6. Every entry appended from extraAllow for a commands.* command carries a trailing",
+    "   ' *' (#205). The matcher treats anything else as whole-command-exact, so a bare",
+    "   'Bash(<command>)' matches only that literal string — every agent that appended",
+    "   '2>&1 | tail -N' to limit its output was denied outright.",
+    "",
     "This file is public. Nothing secret may ever live here."
   ],
 

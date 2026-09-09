@@ -348,7 +348,7 @@
 
     "extraAllow": {
       "type": "array",
-      "description": "Additional permission patterns merged into the repository's allowlist by the installer, for tooling the base list does not cover. Keep these narrow: the allowlist is the safety surface, and a broad entry can hand an agent a general command-execution escape hatch.",
+      "description": "Additional permission patterns merged into the repository's allowlist by the installer, for tooling the base list does not cover. An entry covering a `commands.*` command ends in ` *` (#205) — the matcher treats anything else as whole-command-exact, so a bare form denies every invocation an agent appends output-limiting flags to. Keep these narrow otherwise: the allowlist is the safety surface, and a broad entry can hand an agent a general command-execution escape hatch.",
       "items": { "type": "string", "minLength": 1 },
       "default": [],
       "examples": [["Bash(npx shadcn@latest *)"]]
