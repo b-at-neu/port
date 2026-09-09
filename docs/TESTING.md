@@ -52,6 +52,7 @@ No dependencies, no plugin install, no model calls. Runs in seconds, in an agent
 | `plugins/port/templates/artifacts.mjs` carries no relative import | The one file an adopting repository copies alone breaking silently outside this checkout (#149) |
 | Its exported `LABELS` table and `labels.json` agree on keys, names, and modules, both directions | `audit`'s label resolution drifting from the source of truth now that it can't import the file directly (#149) |
 | Its exported patterns each accept a good example and reject a bad one, including the real historical failure — a paragraph subject with no `#N ` prefix | A pattern that cannot be made to fail is not a pattern (#149) |
+| Every export matching `/_HEADING$/` is the `heading` of exactly one `CHECKS` registry entry, every non-null registry `heading` is `===` one of those exports, and every entry's `run` is a function | A seventh artifact kind reachable from `audit` but not from `check`, or a registry `heading` silently retyped as a literal (#204) |
 | `SKILL.md`'s cycle cap no longer conditions escalation on the latest review still carrying Critical or Medium findings, and states the cap is unconditional; its zero-diff review gate names `commit.oid`, `headRefOid`, and `## Gate cleared`; `PIPELINE.md` states both rules too | A review cycle cap that never fires on a clean-but-unmerged bounce, and a review dispatched twice against a diff it already graded (#162) |
 | `plugins/port/templates/worktrees.mjs` carries no relative import, no `execSync`, no `shell: true`, and never invokes `git fetch` or `git worktree add` | The one file an adopting repository copies alone breaking silently outside this checkout, or reaching outside its contract (#144) |
 | Its exported `parsePorcelain`, `correlate`, and `classifyCandidate` each resolve their documented cases — every correlation rung in order with `#0` excluded, and the classification precedence (`outside` → `protect` → `locked` → `dirty` → `active` → `done`/`no-work` → `unresolved`) | The correlation ladder or the classification precedence silently drifting from what `PIPELINE.md` documents (#144) |
@@ -110,6 +111,8 @@ node plugins/port/templates/artifacts.mjs check commit .temp/commit-msg.txt --is
 node plugins/port/templates/artifacts.mjs check pr-body .temp/pr-149.md --issue 149
 node plugins/port/templates/artifacts.mjs check review .temp/review-65.json --cycle 1
 node plugins/port/templates/artifacts.mjs check revision .temp/revision-65.md --cycle 1
+node plugins/port/templates/artifacts.mjs check withdrawn .temp/withdrawn-196.md
+node plugins/port/templates/artifacts.mjs check rebase-required .temp/rebase-required-196.md
 
 node plugins/port/templates/artifacts.mjs audit 65      # audit named pull requests
 node plugins/port/templates/artifacts.mjs audit         # the 5 most recent, plus the parked sweep
@@ -124,7 +127,7 @@ node plugins/port/templates/artifacts.mjs audit --limit 10
 | --- | --- |
 | Body opens `Closes #N`, carries `## Summary` / `## Changes` / `## Testing plan` / `## Automated checks`, and the testing plan is a real `- [ ]` checklist | Pull request description format |
 | Every review heading is `## Code Review — Cycle <n> · <approved\|needs revision\|blocked — checks pending>` with a counts line under it, cycles running 1..N | Reviews and revisions |
-| Revision notes are `## Revision — Cycle <n>` plus one `fixed … · skipped … · <sha>` line, a `check <name> · <sha>` line in check-fix mode, or a `rebase onto <base> · <sha>` line in rebase-only mode, no cycle above the review count | Reviews and revisions |
+| Revision notes are `## Revision — Cycle <n>` plus one `fixed … · skipped … · <sha>` line or a `check <name> · <sha>` line in check-fix mode, no cycle above the review count | Reviews and revisions |
 | An `## Approval withdrawn` comment names both a check and a 7–40 character hex SHA | Check evidence — the `<labels.approved>` carve-out |
 | A `## Rebase required` comment names both a base branch and a 7–40 character hex SHA | Rebase required |
 | Commit subjects are `#N <imperative lowercase>`, under 80 characters, no trailing period, with a `Co-Authored-By:` trailer | Commit messages |
