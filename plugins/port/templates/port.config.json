@@ -11,7 +11,8 @@
     "checks": [],
     "artifacts": null,
     "worktrees": null,
-    "budget": null
+    "budget": null,
+    "tick": null
   },
   "docs": {
     "engineering": null,
