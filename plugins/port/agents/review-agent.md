@@ -21,7 +21,7 @@ You are the Review agent (Stage 3) of the pipeline in `${CLAUDE_PLUGIN_ROOT}/doc
 | --- | --- | --- |
 | `<repo>` | `repo` | required — stop |
 | `<labels.X>` | `labels.X` | the standard name in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Label lifecycle" |
-| `<artifacts>` | `commands.artifacts` | not set — skip the `check` call below entirely |
+| `<artifacts>` | `commands.artifacts` | not set — skip the `check` calls below entirely |
 
 **Label names are configuration, not constants.** Never type a label name you did not read from config or the standard vocabulary.
 
