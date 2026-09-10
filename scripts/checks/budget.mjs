@@ -423,5 +423,35 @@ export default async function ({ fail, ok }) {
     } else {
       ok();
     }
+
+    // #188 (R3-M1): the hold fail-open could not fire — nothing recorded the
+    // first hold, so the rail collapsed to hold-forever on any ledger a
+    // human comment edit made unparseable. `Budget holds:` is the cross-tick
+    // memory, the same shape the Refresh sweep's `Refreshed:` already uses.
+    if (!/Budget holds:/.test(skillText)) {
+      fail('budget-docs', `${skillRel} must carry a 'Budget holds:' field in the tick-state template, or the second-hold dispatch has no cross-tick memory`);
+    } else {
+      ok();
+    }
+    if (!skillText.includes('dispatch anyway') || !/second or later consecutive hold/.test(skillText)) {
+      fail('budget-docs', `${skillRel} must branch the second consecutive 'hold' on the same item into dispatching anyway`);
+    } else {
+      ok();
+    }
+    if (!skillText.includes("Still can't read #158's cost ledger after two ticks")) {
+      fail('budget-docs', `${skillRel} is missing the plan's second-tick UX copy for a ledger still unreadable after two ticks`);
+    } else {
+      ok();
+    }
+
+    // #188 (R3-L1): the R2-M1 correlation fix is pinned script-side
+    // (budget-close, budget-session above) but the caller must also name
+    // which flag each dispatched row uses — a review/revise row called with
+    // --issue instead of --pr reintroduces the same under-count.
+    if (!/`--issue N` for the three issue-triggered rows.*`--pr N` for the three pull-request-triggered rows/.test(skillText)) {
+      fail('budget-docs', `${skillRel}'s Budget gate must name --issue vs --pr per stage row, or a caller can rebuild the R2-M1 ticket-keyed miss`);
+    } else {
+      ok();
+    }
   }
 }
