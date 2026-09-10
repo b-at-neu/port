@@ -1,11 +1,6 @@
----
-name: pipeline-tick-prose
-description: The prose tick procedure, refresh sweep, contention gate, zero-diff gate, liveness cross-check, cycle cap, and pacing ladder — followed when `commands.tick` is null. Moved byte-identical out of SKILL.md by #203; see PIPELINE.md → "Tick engine" for the boundary and why this fallback exists.
----
-
 # Tick procedure (prose fallback)
 
-Followed in place of `SKILL.md`'s "Tick procedure" section whenever `commands.tick` is `null` — the repository has not installed a tick engine, so every decision below stays a model judgment rather than a script's deterministic output. **Step 6 — Housekeeping** (worktree hygiene, and the denial/unowned/ungated/plugin-staleness reports) is unaffected either way and lives in `SKILL.md` itself, read alongside this document.
+Read alongside `SKILL.md`, not a standalone component. Followed in place of `SKILL.md`'s "Tick procedure" section whenever `commands.tick` is `null` — the repository has not installed a tick engine, so every decision below (the tick procedure, refresh sweep, contention gate, zero-diff gate, liveness cross-check, cycle cap, and pacing ladder) stays a model judgment rather than a script's deterministic output; moved byte-identical out of `SKILL.md` — see `PIPELINE.md` → "Tick engine" for the boundary and why this fallback exists. **Step 6 — Housekeeping** (worktree hygiene, and the denial/unowned/ungated/plugin-staleness reports) is unaffected either way and lives in `SKILL.md` itself, read alongside this document.
 
 ## Tick procedure
 
