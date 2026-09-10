@@ -77,20 +77,27 @@ export default async function ({ fail, note, ok }) {
   // scripts/port-tick.mjs itself) may spawn a mutating gh/git call — every
   // write is emitted as a `writes` string for the model to run.
   {
+    // Read-only against GitHub: only gh.mjs may spawn 'gh' at all (git is
+    // fine anywhere — port-tick.mjs's own repoRoot() reads it — the rail is
+    // specifically "no mutating gh subcommand under the engine"), and its
+    // one call must be 'gh api graphql', never an editing subcommand.
     const files = [join(root, 'scripts/port-tick.mjs'), ...walk(join(root, TICK_DIR)).filter((f) => f.endsWith('.mjs'))];
-    const mutatingRe = /\bspawnSync\(\s*['"](?:gh|git)['"]/;
+    const ghSpawnRe = /\b(?:spawnSync|spawn|execFileSync|execFile|execSync|exec)\(\s*['"]gh['"]/;
     const allowedCall = join(root, TICK_DIR, 'gh.mjs');
     for (const f of files) {
       const text = readFileSync(f, 'utf8');
-      if (mutatingRe.test(text) && f !== allowedCall) {
-        fail('tick-readonly', `${relOf(f)} spawns 'gh'/'git' directly — every write must be emitted as a 'writes' string, never issued by the engine itself`);
+      if (ghSpawnRe.test(text) && f !== allowedCall) {
+        fail('tick-readonly', `${relOf(f)} spawns 'gh' directly — every write must be emitted as a 'writes' string, never issued by the engine itself`);
       } else {
         ok();
       }
     }
     const ghText = readFileSync(allowedCall, 'utf8');
+    const mutatingGhRe = /\bgh['"]?,\s*\[\s*['"](issue|pr|label)['"]\s*,\s*['"](?!api\b)(edit|comment|create|merge|close)['"]/;
     if (!ghText.includes("'api'") || !ghText.includes("'graphql'")) {
       fail('tick-readonly', `${TICK_DIR}/gh.mjs must call 'gh api graphql', not a different subcommand`);
+    } else if (mutatingGhRe.test(ghText)) {
+      fail('tick-readonly', `${TICK_DIR}/gh.mjs appears to call a mutating gh subcommand — its one call must be 'gh api graphql'`);
     } else {
       ok();
     }
