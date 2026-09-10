@@ -187,7 +187,7 @@ Baseline `Denials consumed` with one call, and report nothing from the log on th
 wc -l ".agents/denials.log"
 ```
 
-If the file does not exist, baseline at `0`. Every field after this step is written and read exactly where its own procedure names it — the ladder in Pacing, the resume line and denial offset at the top of the Tick procedure, the three change-only reports in Housekeeping, and `Refreshed:` in the Refresh sweep.
+If the file does not exist, baseline at `0`. Every field after this step is written and read exactly where its own procedure names it — the ladder in Pacing, the resume line and denial offset at the top of the Tick procedure, the three change-only reports in Housekeeping, and `Refreshed:` in the Refresh sweep. **Step 9 — budget reset.** Read `commands.budget` (a `string | null` field — the full command prefix, e.g. `node scripts/port-budget.mjs`); **absent or `null` → skip silently, say nothing** for the rest of the session — no dispatch ceiling and no cost reporting, matching `commands.artifacts`. **Set** → run `<commands.budget> reset` once, before the first tick, closing any open dispatch a crashed prior session left running (flushed to its ticket's ledger as `lost`) and truncating the session log; echo its output only if it closed anything.
 
 ## UX states (startup preflight)
 
@@ -311,6 +311,7 @@ Exact copy, one message per state, `<…>` substituted. These fire from inside t
 | `<owner>` / `<name>` | `repo`, split on `/` | required — stop |
 | `<labels.X>` | `labels.X` | the standard name in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Label lifecycle" |
 | `<commands.worktrees>` | `commands.worktrees` | hygiene unavailable — see Startup preflight step 6 |
+| `<commands.budget>` | `commands.budget` | absent or `null` → skip silently, say nothing — no dispatch ceiling and no cost reporting |
 
 **`<labels.X>` names a slot, never a literal.** The value that belongs on a command line is the resolved **Name** for that key — `labels[key] ?? default` — read from the label vocabulary you resolve below, never the bare key itself and never retyped from memory. `<labels.planApproved>` resolves to `plan approved` in a repository with no override; it must never appear on a command line as `planApproved`. `gh issue list --label <unknown>` returns `[]` with exit code 0, so a wrong string here is never an error — it is silence, indistinguishable from a genuinely empty queue.
 
@@ -356,9 +357,7 @@ using a `<kind>` naming what the artifact is (e.g. `escalation`, `gate-cleared`,
 
 ## Ownership (multi-operator invariant)
 
-Labels say **what stage** an item is in; the GitHub **assignee** says **whose cockpit owns it** — so every query below is filtered to `--assignee "@me"`, and this cockpit acts only on its own operator's work. Two rules bind you: **act only on items assigned to you**, and **leave exactly one assignee** on an item you claim.
-
-Unassigned items are invisible to every cockpit by design — the **unowned sweep** is what keeps them diagnosable, and `work on #N` is what claims one. Full rationale: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Multi-operator partitioning".
+Labels say **what stage** an item is in; the GitHub **assignee** says **whose cockpit owns it** — so every query below is filtered to `--assignee "@me"`, and this cockpit acts only on its own operator's work. Two rules bind you: **act only on items assigned to you**, and **leave exactly one assignee** on an item you claim. Unassigned items are invisible to every cockpit by design — the **unowned sweep** is what keeps them diagnosable, and `work on #N` is what claims one. Full rationale: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Multi-operator partitioning".
 
 ## Tick procedure
 
@@ -515,9 +514,7 @@ An entry is dropped from `Refreshed:` once its pull request reads `MERGEABLE`, s
 
 Full background: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Liveness".
 
-**Worktree hygiene (each tick, step 6).** `commands.worktrees` collapses everything this section used to do by hand — enumeration, correlation, gh resolution, and removal — into one deterministic call whose stdout *is* the report; see `${CLAUDE_PLUGIN_ROOT}/templates/worktrees.mjs`. This cockpit no longer runs `git worktree` itself at all.
-
-**Not configured** (`commands.worktrees` is null) — skip this step; the Startup preflight already said so once, and the closing line carries `not configured` every tick instead of a hygiene line.
+**Worktree hygiene (each tick, step 6).** `commands.worktrees` collapses everything this section used to do by hand — enumeration, correlation, gh resolution, and removal — into one deterministic call whose stdout *is* the report; see `${CLAUDE_PLUGIN_ROOT}/templates/worktrees.mjs`. This cockpit no longer runs `git worktree` itself at all. **Not configured** (`commands.worktrees` is null) — skip this step; the Startup preflight already said so once, and the closing line carries `not configured` every tick instead of a hygiene line.
 
 **Configured** — one call, one `--protect` per live agent worktree `TaskList` reports (belt and braces on top of the script's own `OPEN` check):
 
@@ -576,8 +573,7 @@ An **empty** sweep result is only meaningful when step 0's verdict is `verified`
 
 > ⚠️ Pipeline pull requests without the `claude` label (approval gate inactive): #501. Say "gate #501" or add the label on GitHub.
 
-**Plugin staleness (each tick).** When Startup preflight step 4 resolved a comparison target, this tick's `pluginRepo` alias carries a fresh `behindBy`. **Report change-only**: announce once at the `0 → non-zero` crossing (see UX states, "The running copy just went stale"), compared against `.temp/tick-state.md`'s `Plugin staleness` field, then carry a one-clause reminder on every later tick's closing line for the rest of the session instead of repeating the full announcement — `behindBy` is monotonic within a session (the installed sha is fixed; only the target ref moves), so a single crossing plus a persistent clause is the whole report. Write the new count back to `Plugin staleness` every tick regardless of whether it changed. No computable target → this report is silently absent, exactly as step 4 already said once at startup.
-
+**Plugin staleness (each tick).** When Startup preflight step 4 resolved a comparison target, this tick's `pluginRepo` alias carries a fresh `behindBy`. **Report change-only**: announce once at the `0 → non-zero` crossing (see UX states, "The running copy just went stale"), compared against `.temp/tick-state.md`'s `Plugin staleness` field, then carry a one-clause reminder on every later tick's closing line for the rest of the session instead of repeating the full announcement — `behindBy` is monotonic within a session (the installed sha is fixed; only the target ref moves), so a single crossing plus a persistent clause is the whole report. Write the new count back to `Plugin staleness` every tick regardless of whether it changed. No computable target → this report is silently absent, exactly as step 4 already said once at startup. **Budget sweep (each tick, step 5, right after `TaskList`, when `commands.budget` is set):** `<commands.budget> sweep --live "<every TaskList description, comma-separated>"` closes any open dispatch that fell out of that list — completed, crashed, or reset — flushing it to its ticket's ledger as `lost`. Echo its output only when it closed something, and fold the running total into the tick's closing line: `**Budget:** #158 at 34m of its 120m ceiling (28%)`.
 
 ## Dispatching
 
@@ -611,6 +607,10 @@ Stage mapping:
 **Session-required items never dispatch.** Before dispatching impl or revise, read that item's `body` (already in the trigger query's result — both request `body` — so this costs no extra call) at its **marker slot** — the first non-empty line of the plan block, directly under `## Implementation Plan`, for an issue; the first non-empty line after `Closes #N`, for a pull request. Slot holds `> **SESSION REQUIRED:** <reason>` → announce, do not dispatch. Anything else at the slot, or no slot at all → dispatch normally. **Never search the rest of the body for the literal string** — a ticket that mentions `SESSION REQUIRED` in prose (explaining the mechanism, or why a step is or is not session-required) or inline code is not marked; read the one line at the slot, never a substring anywhere in the body. Full rule: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Session-required tickets" → "Detection".
 
 For a refresh, say so in the prompt so the agent takes its refresh path: `Run your pipeline stage for PR #<n> in refresh mode.`
+
+### Budget gate (before every dispatch, when `commands.budget` is set)
+
+`<commands.budget> dispatch (--issue N | --pr N) --stage <stage> --model <model>` checks the ticket's `budget.wallClockMinutes` ceiling — its first stdout line is the verdict, its second a human line to echo. **`allow`** → dispatch as above. **`exceeded`** → do not dispatch; write `.temp/escalation-<n>.md` (`## Pipeline Escalation`, naming the ceiling and the consumed wall-clock — the human line above already has both), swap the item's trigger label to `<labels.needsHuman>`, comment, and notify, the same shape the cycle cap uses. **`hold`** → an unreadable ledger; do not dispatch this tick, report the human line, and retry next tick — on a **second** consecutive `hold` for the same item, dispatch anyway (the ceiling isn't enforceable on this one until a read succeeds), same shape as the `UNKNOWN`-mergeability carve-out above.
 
 ### Cycle cap (before every revise dispatch)
 
@@ -666,9 +666,7 @@ The gate applies **no special label** for a session-required plan; the marker is
 
 ### Session-required items
 
-**Surfacing these is your job, and nothing else will do it.** An item whose body carries the marker keeps its trigger label and is **never** dispatched. No agent will pick it up, so if you do not tell the human it sits there indefinitely — silently, because a trigger label normally means something is already moving. Announce it **once per session per item**, then take no other action.
-
-**Say "separate session", and mean it.** This cockpit has no `Edit` in its tool scope, so it cannot do the work regardless of which model it is running on; and it must stay free to keep ticking, since a long implementation here would stall every other item. Hand over the launch command with the name pre-filled, derived from the **issue** title.
+**Surfacing these is your job, and nothing else will do it.** An item whose body carries the marker keeps its trigger label and is **never** dispatched. No agent will pick it up, so if you do not tell the human it sits there indefinitely — silently, because a trigger label normally means something is already moving. Announce it **once per session per item**, then take no other action. **Say "separate session", and mean it.** This cockpit has no `Edit` in its tool scope, so it cannot do the work regardless of which model it is running on; and it must stay free to keep ticking, since a long implementation here would stall every other item. Hand over the launch command with the name pre-filled, derived from the **issue** title.
 
 - **Issue at `<labels.planApproved>` with the marker:**
 
@@ -690,9 +688,7 @@ The gate applies **no special label** for a session-required plan; the marker is
   - **A red check, excluding the excused carve-out** → write `.temp/withdrawn-<n>.md` (`## Approval withdrawn`, naming the check, its conclusion, its link, and the head SHA), `gh pr comment <n> --repo <repo> --body-file .temp/withdrawn-<n>.md`, then `gh pr edit <n> --repo <repo> --remove-label "<labels.approved>" --add-label "<labels.needsRevision>"`, then drop it from the announced set so a later re-approval announces again. Revision dispatches on the same tick under the existing rules — the cycle cap and `SESSION REQUIRED` check both still apply, unchanged.
   - **`mergeable: CONFLICTING`** → handled by the **Refresh sweep** above, not restated here — it adds `<labels.refreshBranch>` and **leaves `<labels.approved>` in place**, since a clean rebase does not change the diff that was approved.
 
-Announce each newly approved pull request once with a one-line summary, its URL, and the check conclusions the claim rests on; the human merges on GitHub. Track which you have announced in-session; re-announce only on request. When one is merged, the next tick's reconciliation drops it and announces the merge — **never keep listing a merged pull request as awaiting merge.**
-
-**Pressed to "move it along" with nothing red** — decline, and point at the merge: an approved, all-green pull request is not touched just because it is sitting there. See "Safety rails".
+Announce each newly approved pull request once with a one-line summary, its URL, and the check conclusions the claim rests on; the human merges on GitHub. Track which you have announced in-session; re-announce only on request. When one is merged, the next tick's reconciliation drops it and announces the merge — **never keep listing a merged pull request as awaiting merge.** **Pressed to "move it along" with nothing red** — decline, and point at the merge: an approved, all-green pull request is not touched just because it is sitting there. See "Safety rails".
 
 ### Agent questions and blockers (relay loop)
 
@@ -752,9 +748,7 @@ While draining, a tick still reports gates and relays completions, but dispatche
 - **Yes** — an agent in flight, or an item at a trigger label about to dispatch → **floor, ~270 seconds, no backoff ever.** Reset `Cadence step` and `No-change ticks` to `0`.
 - **No** — everything outstanding is `<labels.approved>` awaiting merge, a plan-review gate, `<labels.blocked>`, `<labels.needsHuman>`, a held item, a `SESSION REQUIRED` item, or nothing at all → **advance the ladder one rung per consecutive no-change tick**, capped: `270 → 540 → 1080 → 1800`. Increment `No-change ticks` and `Cadence step` in `.temp/tick-state.md`.
 
-**Reset to the floor immediately on any observed change** — a new trigger label, a merge, a completion, a gate answered, or the resumed-after-a-gap condition (Tick procedure, step 0.5). The reset is unconditional: even a tick that is otherwise "no-change" resets the ladder if anything changed since the last one.
-
-**Never stop — a stopped cockpit is the only dispatcher, and a `ready` label applied while it is silent would never be picked up.** An hour-of-quiet shutoff was considered and rejected for exactly this reason: draining is the operator's own off-switch (see Stop controls), and nothing else should mimic it. The usage-limit carve-out (wake just after the reported reset time) is unchanged and overrides the ladder when it fires.
+**Reset to the floor immediately on any observed change** — a new trigger label, a merge, a completion, a gate answered, or the resumed-after-a-gap condition (Tick procedure, step 0.5). The reset is unconditional: even a tick that is otherwise "no-change" resets the ladder if anything changed since the last one. **Never stop — a stopped cockpit is the only dispatcher, and a `ready` label applied while it is silent would never be picked up.** An hour-of-quiet shutoff was considered and rejected for exactly this reason: draining is the operator's own off-switch (see Stop controls), and nothing else should mimic it. The usage-limit carve-out (wake just after the reported reset time) is unchanged and overrides the ladder when it fires.
 
 **The idle path is where the `ScheduleWakeup` call gets skipped, and it is the path that matters most.** With nothing in flight there are no agent completions to wake the session, so the scheduled wakeup is the *only* thing that catches a human applying a label on GitHub. An idle tick that ends in prose instead of the `ScheduleWakeup` call never ticks again — silently, and after telling the human it would.
 
@@ -762,9 +756,7 @@ While draining, a tick still reports gates and relays completions, but dispatche
 
 Close every non-draining tick's report with the delay you actually scheduled: `**Next tick:** ~1800s (scheduled)` or `**Next tick:** ~270s (scheduled)`, and the first tick each rung is newly reached, append the **Backing off** UX state's clause naming what is still outstanding. While draining, step 7 is skipped entirely (see Stop controls) and the closing line reads `**Next tick:** none — draining. Say "resume" to restart ticking.`
 
-Background-agent completions wake this session automatically in between ticks; the scheduled wakeup is only the fallback that catches everything else. On every wakeup, run the tick procedure again.
-
-**Worst-case pickup latency for a human label change rises from 4.5 to 30 minutes** in the fully-idle, fully-backed-off state, and only there — nothing can move without you at that point, and the moment you say anything or apply the label that unblocks it, the next tick resets to the floor. Not a stall.
+Background-agent completions wake this session automatically in between ticks; the scheduled wakeup is only the fallback that catches everything else. On every wakeup, run the tick procedure again. **Worst-case pickup latency for a human label change rises from 4.5 to 30 minutes** in the fully-idle, fully-backed-off state, and only there — nothing can move without you at that point, and the moment you say anything or apply the label that unblocks it, the next tick resets to the floor. Not a stall.
 
 ## Manual and recovery
 
