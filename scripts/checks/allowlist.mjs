@@ -10,34 +10,28 @@ import { root, readJson } from '../lib/files.mjs';
 // the allowlist outright. This module makes that coverage mechanically
 // checkable instead of a convention nobody re-verifies.
 export default async function ({ fail, note, ok }) {
-  const { allowMatchers, decide, bashPatternMatches } = await import(
+  const { allowMatchers, decide, bashPatternMatches, repoRelative } = await import(
     pathToFileURL(join(root, 'plugins/port/hooks/lib/guard-rules.mjs')).href
   );
 
   // --- Check A self-test — make it fail first ---------------------------------
   // The real historical failure, per ENGINEERING §7: a check that cannot be
-  // made to fail is not a check.
+  // made to fail is not a check. `bashPatternMatches` is called directly —
+  // Check A's own matcher-wrapper shape is `allowMatchers`'s job to build, and
+  // rebuilding it here would only re-derive fields nothing reads.
   {
-    const narrow = ['Bash(node scripts/checks.mjs)'].map((pattern) => ({
-      tool: 'Bash',
-      pattern,
-      test: (command) => bashPatternMatches(pattern.slice('Bash('.length, -1), command),
-    }));
-    const wildcarded = ['Bash(node scripts/checks.mjs *)'].map((pattern) => ({
-      tool: 'Bash',
-      pattern,
-      test: (command) => bashPatternMatches(pattern.slice('Bash('.length, -1), command),
-    }));
+    const narrowPattern = 'node scripts/checks.mjs';
+    const wildcardPattern = 'node scripts/checks.mjs *';
     const bare = 'node scripts/checks.mjs';
     const suffixed = 'node scripts/checks.mjs 2>&1 | tail -100';
 
-    if (!narrow.some((m) => m.test(bare))) fail('allowlist-selftest', 'narrow entry should match the bare command');
+    if (!bashPatternMatches(narrowPattern, bare)) fail('allowlist-selftest', 'narrow entry should match the bare command');
     else ok();
-    if (narrow.some((m) => m.test(suffixed))) fail('allowlist-selftest', 'narrow entry should NOT match a suffixed command — self-test is broken');
+    if (bashPatternMatches(narrowPattern, suffixed)) fail('allowlist-selftest', 'narrow entry should NOT match a suffixed command — self-test is broken');
     else ok();
-    if (!wildcarded.some((m) => m.test(bare))) fail('allowlist-selftest', 'wildcarded entry should match the bare command');
+    if (!bashPatternMatches(wildcardPattern, bare)) fail('allowlist-selftest', 'wildcarded entry should match the bare command');
     else ok();
-    if (!wildcarded.some((m) => m.test(suffixed))) fail('allowlist-selftest', 'wildcarded entry should match a suffixed command');
+    if (!bashPatternMatches(wildcardPattern, suffixed)) fail('allowlist-selftest', 'wildcarded entry should match a suffixed command');
     else ok();
   }
 
@@ -168,7 +162,70 @@ export default async function ({ fail, note, ok }) {
     );
   }
 
-  // --- Check C — phrase pins ---------------------------------------------------
+  // --- Check C — repoRelative, called directly --------------------------------
+  // Check B reaches this function only through `decide`, which can only ever
+  // observe the allow/deny it feeds into. These cases assert the rewrite's own
+  // documented contract — including the fail-closed arm, whose whole point is
+  // that a declined path comes back byte-identical rather than reshaped into
+  // the POSIX form the allow patterns are written in.
+  {
+    const rel = (label, command, configRoot, expected) => {
+      const actual = repoRelative(command, configRoot);
+      if (actual !== expected) {
+        fail('allowlist-reporelative', `${label}: expected '${expected}', got '${actual}'`);
+      } else {
+        ok();
+      }
+    };
+
+    const r = '/w/repo';
+
+    // (1) The plain rewrite the wildcard entry is written against.
+    rel('absolute in-root path becomes repo-relative', `node ${r}/scripts/checks.mjs`, r, 'node scripts/checks.mjs');
+
+    // (2) The docstring's quoted-argument claim: surrounding quotes go with
+    // the root prefix, because the allowlist matches the unquoted relative form.
+    rel(
+      'quoted absolute arguments lose their quotes with the root prefix',
+      `node "${r}/templates/artifacts.mjs" check review "${r}/.temp/r.json"`,
+      r,
+      'node templates/artifacts.mjs check review .temp/r.json',
+    );
+
+    // (3) The docstring's "any other quoted span is left untouched" claim.
+    rel(
+      'a quoted span not containing the root is left untouched',
+      `node ${r}/x.mjs --label "needs human"`,
+      r,
+      'node x.mjs --label "needs human"',
+    );
+
+    // (4) The docstring's `..`-escape claim — no root occurrence, so no rewrite.
+    rel('a relative .. escape is returned byte-identical', 'node ../../elsewhere/checks.mjs', r, 'node ../../elsewhere/checks.mjs');
+
+    // (5) The fail-closed arm's second effect, which used to leak: a
+    // backslash-spelled command outside the root must come back exactly as
+    // typed, never separator-normalized into something the POSIX-shaped allow
+    // patterns could match.
+    rel(
+      'a backslash path outside the root is not separator-normalized',
+      'node C:\\other\\scripts\\checks.mjs',
+      r,
+      'node C:\\other\\scripts\\checks.mjs',
+    );
+
+    // (6) A backslash-spelled path *inside* the root still resolves — the
+    // normalization is a by-product of a real strip, which is the only way it
+    // is ever reached.
+    rel(
+      'a backslash path inside the root still resolves',
+      'node C:\\w\\repo\\scripts\\checks.mjs',
+      'C:\\w\\repo',
+      'node scripts/checks.mjs',
+    );
+  }
+
+  // --- Check D — phrase pins ---------------------------------------------------
   // A future prose edit that quietly reverts either rule fails here rather
   // than in a live pipeline run.
   {
@@ -192,7 +249,48 @@ export default async function ({ fail, note, ok }) {
     } else {
       ok();
     }
+    if (!pipelineText.includes('fails toward availability')) {
+      fail('allowlist-phrase-pin', `${pipelineRel} no longer states which direction the wildcard fails toward (ENGINEERING §4)`);
+    } else {
+      ok();
+    }
   }
 
-  note('allowlist: commands.* coverage, normalization cases, and phrase pins (#205)');
+  // --- Check E — the prompt arm's own copies ------------------------------------
+  // The prose #205 records as having lost this argument 18 times lives in three
+  // stage prompts, so §2 needs it pinned: without this, the fix can be reverted
+  // in one file with CI silent. The long clause is byte-identical between
+  // impl-agent and revise-agent (both describe running commands.checks); the
+  // review-agent variant says the same thing about commands.artifacts in its own
+  // words, so only the two operative phrases are pinned across all three.
+  {
+    const runners = ['plugins/port/agents/impl-agent.md', 'plugins/port/agents/revise-agent.md'];
+    const allThree = [...runners, 'plugins/port/agents/review-agent.md'];
+    const texts = new Map(allThree.map((rel) => [rel, readFileSync(join(root, rel), 'utf8')]));
+
+    for (const phrase of ['no pipe into `tail`/`head`/`grep`', 'no expansion to an absolute path']) {
+      for (const rel of allThree) {
+        if (!texts.get(rel).includes(phrase)) {
+          fail('allowlist-prompt-pin', `${rel} no longer says "${phrase}" — the #205 prompt arm was reverted`);
+        } else {
+          ok();
+        }
+      }
+    }
+
+    // The shared clause, pinned byte-identical between its two copies rather
+    // than only asserted present in each — a reworded copy is exactly the drift
+    // §2 forbids.
+    const CLAUSE =
+      ': no `2>&1`, no pipe into `tail`/`head`/`grep` (#205 — the reporter prints one `ok` line or one `FAIL` line per failure, so there is nothing to truncate), and no expansion to an absolute path (the harness preamble\'s "use absolute file paths" is wrong for a `commands.*` invocation specifically — the allowlist entry is the repo-relative string, run it exactly as configured).';
+    for (const rel of runners) {
+      if (!texts.get(rel).includes(CLAUSE)) {
+        fail('allowlist-prompt-pin', `${rel}'s commands.checks clause has drifted from its byte-identical counterpart`);
+      } else {
+        ok();
+      }
+    }
+  }
+
+  note('allowlist: commands.* coverage, normalization cases, repoRelative cases, and phrase pins (#205)');
 }

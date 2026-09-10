@@ -45,16 +45,23 @@ export function bashPatternMatches(pattern, command) {
  *  absolute path. A quoted absolute argument (`"<root>/x" check "<root>/y"`)
  *  has its surrounding quotes dropped along with the root prefix, since an
  *  unquoted relative path is the form the allowlist actually matches — any
- *  *other* quoted span is left untouched. Fails closed: a command with no
- *  occurrence of `root` (elsewhere on disk, or a relative `..` escape) is
- *  returned unchanged and still misses the allowlist. */
+ *  *other* quoted span is left untouched. Fails closed **byte-for-byte**: a
+ *  command with no occurrence of `root` (elsewhere on disk, or a relative `..`
+ *  escape) is returned exactly as it came in — not separator-normalized —
+ *  because normalizing it would be a second, silent effect of a
+ *  security-relevant classifier: a backslash-spelled command outside the root
+ *  would get reshaped into the POSIX form the allow patterns are written in,
+ *  widening the match for a path this function deliberately declines to
+ *  resolve. Normalization is therefore only ever a by-product of an actual
+ *  strip. */
 export function repoRelative(command, root) {
   const posixRoot = toPosix(root);
   const posixCommand = toPosix(command);
   if (typeof posixRoot !== 'string' || typeof posixCommand !== 'string') return command;
   const escapedRoot = posixRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const quotedRoot = new RegExp(`(['"])${escapedRoot}/([^'"]*)\\1`, 'g');
-  return posixCommand.replace(quotedRoot, '$2').split(`${posixRoot}/`).join('');
+  const stripped = posixCommand.replace(quotedRoot, '$2').split(`${posixRoot}/`).join('');
+  return stripped === posixCommand ? command : stripped;
 }
 
 /** Reads `permissions.allow` out of each settings file that exists (missing
