@@ -51,6 +51,8 @@ This is **this repository's own** standards document, not a template — `plugin
 | `.github/workflows/*.yml` ↔ `plugins/port/templates/*.yml` | "Workflow copies stay rendered from their templates" |
 | `templates/worktrees.mjs`'s `correlate` ↔ the desktop `correlate` (`apps/desktop/src/main/local/correlate.ts`) | the shared case table, `main/local/correlation.cases.json` |
 | `templates/worktrees.mjs`'s state vocabulary (`describeReason`'s cases, and which states `classifyCandidate` returns `removable: true` for) ↔ `shared/reclaimer/types.ts`'s `WORKTREE_STATES`/`RECLAIMABLE_STATES` | `desktop-reclaimer` |
+| `scripts/port-tick/config.mjs`'s `LABEL_DEFAULTS`/`LABEL_ROLES` ↔ `templates/labels.json` | `tick-labels` (`scripts/checks/tick.mjs`) |
+| `scripts/port-tick/cases/*.json` ↔ every pure function in `scripts/port-tick/` it names | `tick-cases` (`scripts/checks/tick.mjs`) — the authoritative decision-case table a second implementation (`apps/desktop`'s own tick, when #105 converges onto this engine) is asserted against |
 | `templates/worktrees.mjs`'s two diagnostic literals (`die()`'s `FAIL` prefix, `gh issueOrPullRequest resolution failed`) ↔ `main/reclaimer/report.ts`'s pinned copies | `desktop-reclaimer` |
 
 **If a change introduces a further copy of anything, it introduces its pin in the same commit.** A comment asking a future reader to remember is not a pin.

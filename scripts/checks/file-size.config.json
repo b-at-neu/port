@@ -10,7 +10,7 @@
     { "path": "plugins/port/templates/artifacts.mjs", "lines": 663, "issue": 183 },
     { "path": "scripts/checks/cockpit.mjs", "lines": 609, "issue": 182 },
     { "path": "plugins/port/skills/pipeline/SKILL.md", "lines": 611, "issue": 181 },
-    { "path": "plugins/port/docs/PIPELINE.md", "lines": 578, "issue": 181 },
+    { "path": "plugins/port/docs/PIPELINE.md", "lines": 590, "issue": 181 },
     { "path": "plugins/port/templates/worktrees.mjs", "lines": 518, "issue": 183 }
   ]
 }
