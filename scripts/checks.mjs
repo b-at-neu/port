@@ -36,6 +36,7 @@ import desktopLocal from './checks/desktop-local.mjs';
 import desktopReclaimer from './checks/desktop-reclaimer.mjs';
 import desktopState from './checks/desktop-state.mjs';
 import fileSize from './checks/file-size.mjs';
+import tick from './checks/tick.mjs';
 
 const reporter = createReporter();
 
@@ -64,6 +65,7 @@ for (const module of [
   desktopReclaimer,
   desktopState,
   fileSize,
+  tick,
 ]) {
   await module(reporter);
 }

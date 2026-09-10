@@ -1,0 +1,14 @@
+{
+  "$comment": "Authoritative decision-case table for scripts/port-tick/envelope.mjs's classifyEnvelope. scripts/checks/tick.mjs asserts every case here resolves correctly — this is the contract a second implementation (apps/desktop's own, when #105 converges onto this engine) is tested against.",
+  "function": "classifyEnvelope",
+  "cases": [
+    { "name": "no body at all", "input": null, "expected": { "kind": "blind", "unavailable": [] } },
+    { "name": "body with data: null", "input": { "data": null }, "expected": { "kind": "blind", "unavailable": [] } },
+    { "name": "usable, no errors", "input": { "data": { "repository": {} } }, "expected": { "kind": "usable", "unavailable": [] } },
+    {
+      "name": "partial — one alias errored, data still usable",
+      "input": { "data": { "repository": {} }, "errors": [{ "path": ["repository", "ready", "nodes"] }] },
+      "expected": { "kind": "partial", "unavailable": ["ready"] }
+    }
+  ]
+}
