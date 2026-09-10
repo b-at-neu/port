@@ -305,7 +305,20 @@ export default async function ({ fail, note, ok }) {
   {
     const hookRel = 'plugins/port/hooks/agent-guard.mjs';
     const hookText = readFileSync(join(root, hookRel), 'utf8');
-    const emitted = [...hookText.matchAll(/permissionDecision:\s*['"]([^'"]*)['"]/g)].map((m) => m[1]);
+    // The hook's own header comment spells `permissionDecision: "deny"` in
+    // prose, so matching the raw file left `emitted` non-empty even with the
+    // real emission deleted — the presence assertion below reported green while
+    // looping over a comment (ENGINEERING §7, "a check must be able to
+    // distinguish the state it exists to detect"). Only whole-line and block
+    // comments are stripped: a trailing `//` strip would truncate any code line
+    // holding a `//` inside a string literal, and a stray decision spelled in a
+    // trailing comment failing this check errs toward the safe direction.
+    const hookCode = hookText
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('//'))
+      .join('\n');
+    const emitted = [...hookCode.matchAll(/permissionDecision:\s*['"]([^'"]*)['"]/g)].map((m) => m[1]);
     if (emitted.length === 0) {
       fail('allowlist-deny-only', `${hookRel} emits no permissionDecision at all — the deny-only property is unverifiable`);
     } else {
