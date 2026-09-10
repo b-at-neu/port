@@ -34,8 +34,60 @@ export default async function ({ fail, ok }) {
     }
   }
 
+  // #188 (R1-M1): the ledger read must parse the envelope from stdout rather
+  // than trusting `gh`'s exit code, which is non-zero on every partial-error
+  // response. A `if (!res.ok) return` in the GraphQL helper is the exact
+  // regression, so pin that the helper reads stdout unconditionally.
+  {
+    const graphql = /function ghGraphQL\([\s\S]*?\n}/.exec(templateText)?.[0] ?? '';
+    if (!graphql) {
+      fail('budget-template', `${templateRel} no longer defines ghGraphQL — the partial-error contract has nothing to pin`);
+    } else if (/if\s*\(!res\.ok\)/.test(graphql)) {
+      fail('budget-template', `${templateRel}'s ghGraphQL branches on 'res.ok' — a non-zero gh exit is not evidence of no data (docs/ENGINEERING.md §4)`);
+    } else if (!/parseJsonObject\(res\.stdout\)/.test(graphql)) {
+      fail('budget-template', `${templateRel}'s ghGraphQL must parse res.stdout regardless of exit status`);
+    } else {
+      ok();
+    }
+    // §6: the ledger read is one round trip, not a viewer query plus a
+    // comments query.
+    if (!/viewer \{ login \} repository\(/.test(templateText)) {
+      fail('budget-template', `${templateRel} must fetch 'viewer' and the issue's comments in one aliased query, not two round trips`);
+    } else {
+      ok();
+    }
+    // Matches a quoted argv entry, not the word in a comment — the header
+    // and ghGraphQL's docstring both name `--jq` to say it is never used.
+    if (/['"]--jq['"]/.test(templateText)) {
+      fail('budget-template', `${templateRel} passes --jq to gh — it silently skips that filter on the partial-error response the ledger read exists to handle`);
+    } else {
+      ok();
+    }
+
+    // #188 (R1-L2): `reset` used to truncate the session log unconditionally,
+    // discarding the wall-clock of any row whose ledger write had just failed
+    // — an under-count, i.e. a failure toward dispatch.
+    const reset = /function runReset\([\s\S]*?\n}/.exec(templateText)?.[0] ?? '';
+    if (!/state === 'pending'/.test(reset)) {
+      fail('budget-template', `${templateRel}'s runReset must keep the rows it could not flush, not truncate the session log unconditionally`);
+    } else {
+      ok();
+    }
+
+    // #188 (R1-M2): the gate commits an `open` row as it returns `allow`, so
+    // it is only correct as the last pre-dispatch check. Both the header
+    // contract here and the cockpit's own procedure must say so.
+    if (!/runs `dispatch` last/.test(templateText)) {
+      fail('budget-template', `${templateRel}'s header must state that the caller runs 'dispatch' last, after every other pre-dispatch veto`);
+    } else {
+      ok();
+    }
+  }
+
   const mod = await import(pathToFileURL(templatePath).href);
   const { parseLedger, renderLedger, verdict, closeRows, issueFromPrBody } = mod;
+  const { formatDuration, ceilingSecondsFrom, unavailableAliases } = mod;
+  const { parseSessionLog, renderSessionLog, sessionTotals, renderTickClause } = mod;
 
   // --- parseLedger/renderLedger round-trip a table byte-for-byte -------------
   // The table's row data must survive a render/parse cycle exactly — Seconds
@@ -83,21 +135,141 @@ export default async function ({ fail, ok }) {
     }
   }
 
-  // --- closeRows: a lost row's seconds are counted ----------------------------
+  // --- formatDuration rolls over into hours -----------------------------------
+  // #188 (R1-L1): a wall-clock ceiling is routinely exceeded past the hour,
+  // where a bare minute count ('127m 00s') reads worst.
+  {
+    const cases = [
+      [0, '0m 00s'],
+      [61, '1m 01s'],
+      [3599, '59m 59s'],
+      [3600, '1h 00m'],
+      [7620, '2h 07m'],
+    ];
+    for (const [input, want] of cases) {
+      const got = formatDuration(input);
+      if (got !== want) fail('budget-duration', `formatDuration(${input}) = '${got}', expected '${want}'`);
+      else ok();
+    }
+  }
+
+  // --- A malformed ceiling is fatal, an absent one unbounded ------------------
+  // #188 (R1-M4): '120' (string), 0 and -1 must never read as "no ceiling
+  // configured" — that silently disables the rail forever, and nothing
+  // validates a live config against the schema at runtime.
+  {
+    const unbounded = [{}, { budget: {} }, { budget: { wallClockMinutes: null } }];
+    for (const cfg of unbounded) {
+      const got = ceilingSecondsFrom(cfg);
+      if (got.ok !== true || got.ceilingSeconds !== null) {
+        fail('budget-ceiling', `ceilingSecondsFrom(${JSON.stringify(cfg)}) must be unbounded, got ${JSON.stringify(got)}`);
+      } else {
+        ok();
+      }
+    }
+    const good = ceilingSecondsFrom({ budget: { wallClockMinutes: 120 } });
+    if (good.ok !== true || good.ceilingSeconds !== 7200) {
+      fail('budget-ceiling', `ceilingSecondsFrom(120) must be 7200s, got ${JSON.stringify(good)}`);
+    } else {
+      ok();
+    }
+    for (const bad of ['120', 0, -1, 1.5, true, {}]) {
+      const got = ceilingSecondsFrom({ budget: { wallClockMinutes: bad } });
+      if (got.ok !== false) {
+        fail('budget-ceiling', `ceilingSecondsFrom(${JSON.stringify(bad)}) must be rejected as malformed, got ${JSON.stringify(got)}`);
+      } else {
+        ok();
+      }
+    }
+  }
+
+  // --- unavailableAliases names only what errors[].path names ----------------
+  // #188 (R1-M1): every other alias in the same envelope is trustworthy, so a
+  // partial-error response with a readable ledger must not become a hold.
+  {
+    const got = unavailableAliases([{ path: ['repository', 'issue'] }, { path: [] }, { message: 'no path' }]);
+    if (!(got instanceof Set) || got.size !== 2 || !got.has('repository') || !got.has('issue')) {
+      fail('budget-graphql', `unavailableAliases did not collect exactly the named paths: ${JSON.stringify([...(got ?? [])])}`);
+    } else {
+      ok();
+    }
+    if (unavailableAliases(undefined).size !== 0) {
+      fail('budget-graphql', 'unavailableAliases must treat a missing errors array as nothing unavailable');
+    } else {
+      ok();
+    }
+  }
+
+  // --- closeRows: lost by default, completed only when told -------------------
+  // #188 (R1-L3): 'lost' used to be the only reachable outcome, so the Outcome
+  // column had exactly one value and the plan's contract was unreachable.
   {
     const startedAt = new Date(Date.now() - 5000).toISOString();
-    const { closed, stillOpen } = closeRows([{ issue: 1, stage: 'plan', model: 'opus', startedAt }], [], Date.now());
-    if (closed.length !== 1 || closed[0].outcome !== 'lost' || !(closed[0].seconds >= 4)) {
-      fail('budget-close', `closeRows did not close and time an unmatched row: ${JSON.stringify(closed)}`);
+    const row = () => [{ issue: 1, stage: 'plan', model: 'opus', startedAt }];
+    const { closed, stillOpen } = closeRows(row(), [], Date.now());
+    if (closed.length !== 1 || closed[0].outcome !== 'lost' || !(closed[0].seconds >= 4) || closed[0].state !== 'pending') {
+      fail('budget-close', `closeRows did not close, time and mark an unmatched row pending: ${JSON.stringify(closed)}`);
     } else {
       ok();
     }
     if (stillOpen.length !== 0) fail('budget-close', 'closeRows left an unmatched row open');
     else ok();
 
-    const stillLive = closeRows([{ issue: 1, stage: 'plan', model: 'opus', startedAt }], ['plan #1'], Date.now());
+    const stillLive = closeRows(row(), ['plan #1'], Date.now());
     if (stillLive.closed.length !== 0 || stillLive.stillOpen.length !== 1) {
       fail('budget-close', 'closeRows closed a row whose description is in the live list');
+    } else {
+      ok();
+    }
+
+    const graceful = closeRows(row(), [], Date.now(), ['plan #1']);
+    if (graceful.closed.length !== 1 || graceful.closed[0].outcome !== 'completed') {
+      fail('budget-close', `closeRows must mark a --completed row 'completed', got ${JSON.stringify(graceful.closed)}`);
+    } else {
+      ok();
+    }
+  }
+
+  // --- The session log round-trips, and its aggregate needs no ledger --------
+  // #188 (R1-M3): the tick clause promised a session total that nothing
+  // emitted and that was not derivable after the fact, because a closed
+  // dispatch used to leave the session log entirely.
+  {
+    const rows = [
+      { issue: 7, stage: 'plan', model: 'opus', startedAt: '2026-09-07T14:02:31Z', state: 'closed', seconds: 401, outcome: 'completed' },
+      { issue: 7, stage: 'impl', model: 'sonnet', startedAt: '2026-09-07T14:19:08Z', state: 'pending', seconds: 1448, outcome: 'lost' },
+    ];
+    const parsed = parseSessionLog(renderSessionLog(rows));
+    if (JSON.stringify(parsed) !== JSON.stringify(rows)) {
+      fail('budget-session', `renderSessionLog → parseSessionLog did not round-trip: ${JSON.stringify(parsed)}`);
+    } else {
+      ok();
+    }
+    // A legacy four-field line still parses, so a session in flight survives
+    // an upgrade of the script rather than losing its open rows.
+    const legacy = parseSessionLog('7\tplan\topus\t2026-09-07T14:02:31Z\n');
+    if (legacy.length !== 1 || legacy[0].state !== 'open' || legacy[0].seconds !== 0) {
+      fail('budget-session', `a legacy four-field session line must read as an open row: ${JSON.stringify(legacy)}`);
+    } else {
+      ok();
+    }
+    const totals = sessionTotals(rows, Date.parse('2026-09-07T15:00:00Z'));
+    if (totals.dispatches !== 2 || totals.seconds !== 1849) {
+      fail('budget-session', `sessionTotals must sum closed and pending rows without any ledger read: ${JSON.stringify(totals)}`);
+    } else {
+      ok();
+    }
+    // The session half is always producible; a no-close tick still gets a
+    // clause, which is what the cockpit folds into its closing line.
+    const noClose = renderTickClause(totals, []);
+    if (!noClose.startsWith('**Budget:** session 2 dispatches · ') || !noClose.includes('agent wall-clock')) {
+      fail('budget-session', `renderTickClause must print the session half with no tickets: ${noClose}`);
+    } else {
+      ok();
+    }
+    const withTicket = renderTickClause(totals, [{ issue: 158, secondsUsed: 2041, ceilingSeconds: 7200 }]);
+    if (!withTicket.includes('#158 at 34m 01s of its 120m ceiling (28%)')) {
+      fail('budget-session', `renderTickClause must append the per-ticket half for a ledger it read: ${withTicket}`);
     } else {
       ok();
     }

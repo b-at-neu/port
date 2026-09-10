@@ -1,51 +1,37 @@
 #!/usr/bin/env node
-// Per-ticket dispatch cost accounting (#188) — one deterministic call whose
+// Per-ticket dispatch cost accounting (#188) — a self-contained script whose
 // stdout *is* the verdict, following the `templates/worktrees.mjs` /
-// `templates/artifacts.mjs` precedent: self-contained, copied into a managed
-// repository by `/port:init`, addressed through `commands.budget`.
+// `templates/artifacts.mjs` precedent: copied into a managed repository by
+// `/port:init`, addressed through `commands.budget`. Four subcommands —
+// `reset` (cockpit startup), `dispatch` (the gate), `sweep` (each tick) and
+// `report` (read-only); `SKILL.md` holds every call site. The enforced
+// ceiling is cumulative agent wall-clock per ticket
+// (`budget.wallClockMinutes`, null = unbounded); model, dispatch count and
+// outcome are recorded and reported but never enforced, because nothing in
+// the harness exposes turn counts or token cost to the cockpit.
 //
-// The enforced ceiling is cumulative agent wall-clock per ticket
-// (`budget.wallClockMinutes`, null = unbounded). Model, dispatch count and
-// outcome are recorded and reported but never enforced — nothing in the
-// harness exposes turn counts or token/dollar cost to the cockpit, and the
-// only source for either is the local transcript files (a later ticket's
-// tier, not this one's).
+// **The caller runs `dispatch` last — after every other pre-dispatch veto
+// and immediately before the `Agent` call.** An `allow` starts that row's
+// clock, so a veto evaluated afterwards charges a whole sweep interval to a
+// ticket that never dispatched. `reset` drops every row it manages to flush,
+// and that dropping *is* the session scoping, exactly as
+// `.temp/dispatch-log.md` documents — no clock or session id needed. The
+// ledger lives on the **issue**, never the pull request, because the issue
+// is the only object alive from `ready` through merge; writes are scoped to
+// this script's own `## Pipeline Cost` comment, authored by `viewer`.
 //
-//   reset [--offline]
-//     Close every `open` row in this session's local log as `lost`, flush
-//     each to its ticket's ledger, then truncate the session log. Run once
-//     at cockpit startup — the truncation *is* the session scoping, exactly
-//     as `.temp/dispatch-log.md` documents; no clock or session id needed.
-//
-//   dispatch (--issue N | --pr N) --stage <plan|impl|review|revise>
-//            --model <m> [--offline]
-//     Resolve the ticket, read its ledger, print the verdict
-//     (`allow`|`hold`|`exceeded`) as the first stdout line, a human line
-//     second, and append an `open` row to the session log only on `allow`.
-//
-//   sweep --live "<stage> #<n>, ..." [--offline]
-//     Close every open row whose "<stage> #<n>" is absent from `--live`,
-//     computing each duration from this script's own clock, updating each
-//     affected ticket's ledger, and printing the tick clause. An unparseable
-//     `--live` entry is reported and treated as **not** live, which closes
-//     the row rather than leaving it open forever.
-//
-//   report --issue N [--offline]
-//     Read-only: prints the ledger and the current verdict.
-//
-// Self-contained — no relative imports. Every path is built with node:path;
-// every child process is invoked with an explicit argv array via
-// node:child_process.spawnSync, never a shell string. `--offline` skips all
-// GitHub I/O — reading and writing the ledger falls back to a local file
-// under `.temp/`, which is what the unit tests exercise.
-//
-// The ledger lives on the **issue**, never the pull request — the issue is
-// the only object alive from `ready` through merge, so a pull-request-scoped
-// ledger would silently drop every plan and impl dispatch. Ledger writes are
-// scoped to the script's own comment: it only ever updates a comment that
-// both starts with `## Pipeline Cost` and was authored by `viewer`; anything
-// else means create a new one. A malformed ledger is absent, never zero — an
-// unreadable signal is never read as a passing one.
+// Every fail direction, stated — an absent signal is never a passing one:
+//   * A malformed ledger is **absent, never zero** — `hold`, not `allow`.
+//   * A non-zero `gh` exit is **not** evidence of no data: `gh` exits
+//     non-zero whenever a response carries `errors` even when `data` is
+//     still usable, so the envelope is parsed from stdout regardless of
+//     status and only aliases named in `errors[].path` count as unavailable.
+//   * A malformed `budget.wallClockMinutes` is **fatal, never unbounded** —
+//     reading `"120"` or `0` as "no ceiling" would disable the rail forever
+//     while looking identical to a repository that configured none.
+//   * A failed ledger write leaves its row `pending` to retry rather than
+//     dropping it, since discarding wall-clock really spent under-counts —
+//     i.e. fails toward dispatch, the one direction this rail prevents.
 import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -58,56 +44,63 @@ const die = (msg) => {
   process.exit(1);
 };
 
-// --- Process helpers ---------------------------------------------------------
-function run(cmd, args, opts = {}) {
-  const res = spawnSync(cmd, args, { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, ...opts });
-  if (res.error) return { ok: false, stdout: '', stderr: String(res.error.message ?? res.error), status: null };
-  return { ok: res.status === 0, stdout: res.stdout ?? '', stderr: res.stderr ?? '', status: res.status };
+function run(cmd, args) {
+  const res = spawnSync(cmd, args, { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+  if (res.error) return { ok: false, stdout: '', stderr: String(res.error.message ?? res.error) };
+  return { ok: res.status === 0, stdout: res.stdout ?? '', stderr: res.stderr ?? '' };
 }
-const git = (args, opts) => run('git', args, opts);
-const gitOut = (args, opts) => {
-  const res = git(args, opts);
-  return res.ok ? res.stdout.trim() : null;
+const firstLine = (text, fallback) => text.trim().split('\n')[0] || fallback;
+
+/** `null` for anything that is not a JSON *object* — an array or a bare
+ *  primitive is neither a config nor a GraphQL envelope. */
+function parseJsonObject(text) {
+  try {
+    const v = JSON.parse(text);
+    return typeof v === 'object' && v !== null && !Array.isArray(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whole seconds since `startedAt`, 0 for an unparseable one — such a row
+ *  contributes nothing rather than a wild span, but is still closed. */
+const elapsed = (startedAt, nowMs) => {
+  const startedMs = Date.parse(startedAt);
+  return Number.isFinite(startedMs) ? Math.max(0, Math.round((nowMs - startedMs) / 1000)) : 0;
 };
 
 // --- Pure functions (exported for this repository's own layer 1 checks) -----
 
-/** Formats a non-negative second count as `<m>m <ss>s`, always two-digit
- *  seconds — the human-readable form used only on the ledger's total line
- *  and in CLI verdict text, never parsed back. */
+/** `<m>m <ss>s` below an hour, `<h>h <mm>m` at or above one: a wall-clock
+ *  ceiling is routinely exceeded past the hour, where `127m 00s` reads
+ *  worst. Never parsed back. */
 export function formatDuration(totalSeconds) {
   const s = Math.max(0, Math.trunc(totalSeconds || 0));
-  const m = Math.floor(s / 60);
-  const rem = s % 60;
-  return `${m}m ${String(rem).padStart(2, '0')}s`;
+  if (s >= 3600) return `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}m`;
+  return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`;
 }
 
-/** `allow` when there is no ceiling, or usage is under it; `exceeded` at or
- *  over it. `hold` is never returned here — it is a caller-level state for
- *  an unreadable ledger, since this function only runs once a ledger has
- *  already parsed. */
+/** `hold` is deliberately not reachable here — it is a caller-level state
+ *  for an unreadable ledger, and this runs only once one has parsed. */
 export function verdict({ secondsUsed, ceilingSeconds }) {
   if (ceilingSeconds == null) return 'allow';
   return secondsUsed >= ceilingSeconds ? 'exceeded' : 'allow';
 }
 
-/** Parses a `## Pipeline Cost` ledger comment into `{ rows }`, or returns
- *  `null` when the table does not parse — a malformed ledger is absent,
- *  never zero. Reads only `Seconds` as a number;
- *  the total line is derived by `renderLedger` and never parsed back. */
+/** `null` when the table does not parse — a malformed ledger is absent,
+ *  never zero. Only `Seconds` is read as a number; the total line is derived
+ *  by `renderLedger` and never parsed back. */
 export function parseLedger(markdown) {
   const text = markdown ?? '';
   if (!/^##\s*Pipeline Cost\s*$/m.test(text)) return null;
   const lines = text.split('\n');
   const headerIdx = lines.findIndex((l) => /^\|\s*Stage\s*\|\s*Model\s*\|\s*Started/i.test(l));
   if (headerIdx === -1) return null;
-  const sep = lines[headerIdx + 1] ?? '';
-  if (!/^\|[\s:-]+\|/.test(sep)) return null;
+  if (!/^\|[\s:-]+\|/.test(lines[headerIdx + 1] ?? '')) return null;
   const rows = [];
   for (let i = headerIdx + 2; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line.trim().startsWith('|')) break;
-    const cells = line.split('|').slice(1, -1).map((c) => c.trim());
+    if (!lines[i].trim().startsWith('|')) break;
+    const cells = lines[i].split('|').slice(1, -1).map((c) => c.trim());
     if (cells.length < 5) return null;
     const [stage, model, startedAt, secondsStr, outcome] = cells;
     const seconds = Number(secondsStr);
@@ -117,239 +110,273 @@ export function parseLedger(markdown) {
   return { rows };
 }
 
-/** Renders a ledger comment byte-for-byte compatible with `parseLedger` —
- *  round-tripping the row data exactly, since `Seconds` is stored as an
- *  integer for that reason. The total line is human-readable and derived
- *  fresh every render; it is never itself read back by `parseLedger`. */
+/** Byte-for-byte compatible with `parseLedger`, which is why `Seconds` is
+ *  stored as an integer: the row data must survive a round trip exactly. */
 export function renderLedger(rows, ceilingSeconds) {
-  const header = ['## Pipeline Cost', '', '| Stage | Model | Started (UTC) | Seconds | Outcome |', '| --- | --- | --- | --- | --- |'];
-  const body = rows.map((r) => `| ${r.stage} | ${r.model} | ${r.startedAt} | ${r.seconds} | ${r.outcome} |`);
   const total = rows.reduce((acc, r) => acc + r.seconds, 0);
   const noun = rows.length === 1 ? 'dispatch' : 'dispatches';
-  const totalLine =
+  const head = `**Total:** ${rows.length} ${noun} · ${total}s (${formatDuration(total)})`;
+  const tail =
     ceilingSeconds == null
-      ? `**Total:** ${rows.length} ${noun} · ${total}s (${formatDuration(total)}) — no ceiling configured`
-      : `**Total:** ${rows.length} ${noun} · ${total}s (${formatDuration(total)}) of ${ceilingSeconds}s (${Math.round(ceilingSeconds / 60)}m) — ${Math.round((total / Math.max(1, ceilingSeconds)) * 100)}%`;
-  return [...header, ...body, '', totalLine].join('\n');
+      ? `${head} — no ceiling configured`
+      : `${head} of ${ceilingSeconds}s (${Math.round(ceilingSeconds / 60)}m) — ${Math.round((total / ceilingSeconds) * 100)}%`;
+  const body = rows.map((r) => `| ${r.stage} | ${r.model} | ${r.startedAt} | ${r.seconds} | ${r.outcome} |`);
+  const header = ['## Pipeline Cost', '', '| Stage | Model | Started (UTC) | Seconds | Outcome |', '| --- | --- | --- | --- | --- |'];
+  return [...header, ...body, '', tail].join('\n');
 }
 
-/** Splits a comma-separated `--live`/`--completed`-shaped argument into
- *  well-formed `"<stage> #<n>"` descriptions and the raw entries that did
- *  not match — an unparseable entry is reported by the caller and treated
- *  as **not** live, never silently dropped. */
+/** An entry that does not match `"<stage> #<n>"` comes back in `invalid`, so
+ *  the caller reports it and treats it as **not** live — closing the row
+ *  rather than leaving it open forever, never silently dropping it. */
 export function parseDescriptionList(raw) {
-  const descriptions = [];
-  const invalid = [];
-  for (const entry of (raw ?? '').split(',').map((s) => s.trim()).filter(Boolean)) {
-    if (/^[a-z]+ #\d+$/.test(entry)) descriptions.push(entry);
-    else invalid.push(entry);
-  }
-  return { descriptions, invalid };
+  const entries = (raw ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  const wellFormed = (e) => /^[a-z]+ #\d+$/.test(e);
+  return { descriptions: entries.filter(wellFormed), invalid: entries.filter((e) => !wellFormed(e)) };
 }
 
-/** Closes every open row whose `"<stage> #<issue>"` is absent from
- *  `liveDescriptions`, computing its duration from `nowMs` against the
- *  row's own `startedAt`. Every closed row is marked `lost` — this function
- *  cannot tell a graceful finish from a crash from the live list alone, and
- *  a `lost` row over-counts deliberately — biasing toward escalation rather
- *  than guessing `completed` — over a possibly-wrong graceful-finish guess. */
-export function closeRows(openRows, liveDescriptions, nowMs) {
+/** Closes every open row absent from `liveDescriptions`, timing it from
+ *  `nowMs`. A row named in `completedDescriptions` closes `completed` — the
+ *  one fact the caller holds and this argument carries, without which
+ *  nothing could tell a graceful finish from a crash. Anything else closes
+ *  `lost`, over-counting deliberately to bias toward visible escalation. A
+ *  closed row comes back `pending`: timed, not yet flushed. */
+export function closeRows(openRows, liveDescriptions, nowMs, completedDescriptions = []) {
   const live = new Set(liveDescriptions);
-  const closed = [];
-  const stillOpen = [];
-  for (const row of openRows) {
-    const desc = `${row.stage} #${row.issue}`;
-    if (live.has(desc)) {
-      stillOpen.push(row);
-      continue;
-    }
-    const startedMs = Date.parse(row.startedAt);
-    const seconds = Number.isFinite(startedMs) ? Math.max(0, Math.round((nowMs - startedMs) / 1000)) : 0;
-    closed.push({ ...row, seconds, outcome: 'lost' });
-  }
-  return { closed, stillOpen };
+  const done = new Set(completedDescriptions);
+  const desc = (row) => `${row.stage} #${row.issue}`;
+  return {
+    stillOpen: openRows.filter((row) => live.has(desc(row))),
+    closed: openRows
+      .filter((row) => !live.has(desc(row)))
+      .map((row) => ({ ...row, seconds: elapsed(row.startedAt, nowMs), outcome: done.has(desc(row)) ? 'completed' : 'lost', state: 'pending' })),
+  };
 }
 
-/** Extracts the issue number a pull request closes from the first line of
- *  its body (`Closes #N`), or `null` without one — the same grammar
- *  `templates/artifacts.mjs`'s `checkPrBody` validates. */
+/** Every field named in `errors[].path` — the only unavailable parts of a
+ *  partial GraphQL response. Every other alias in the same envelope is
+ *  trustworthy, which is why a non-zero exit is never read as "no data". */
+export function unavailableAliases(errors) {
+  const paths = (errors ?? []).flatMap((e) => e?.path ?? []);
+  return new Set(paths.filter((seg) => typeof seg === 'string'));
+}
+
+/** The same `Closes #N` grammar `templates/artifacts.mjs`'s `checkPrBody`
+ *  validates, read from the first line only. */
 export function issueFromPrBody(body) {
-  const first = (body ?? '').split('\n')[0]?.trim() ?? '';
-  const m = /^Closes #(\d+)$/.exec(first);
+  const m = /^Closes #(\d+)$/.exec((body ?? '').split('\n')[0]?.trim() ?? '');
   return m ? Number(m[1]) : null;
 }
 
-// --- Session log (.temp/budget-session.tsv) ----------------------------------
-// One line per open dispatch: issue\tstage\tmodel\tstartedAtISO. Truncated by
-// `reset`, exactly like `.temp/dispatch-log.md`'s own overwrite — the
-// truncation *is* the session scoping, no clock or session id needed.
-const SESSION_LOG = '.temp/budget-session.tsv';
+/** **Absent (`undefined`/`null`) is unbounded; anything else malformed is
+ *  fatal.** `"120"`, `0` and `-1` would otherwise be indistinguishable from
+ *  "no ceiling configured" and disable the rail forever — and nothing
+ *  validates a live config at runtime, so `minimum: 1` never sees it. */
+export function ceilingSecondsFrom(cfg) {
+  const minutes = cfg?.budget?.wallClockMinutes;
+  if (minutes === undefined || minutes === null) return { ok: true, ceilingSeconds: null };
+  if (typeof minutes !== 'number' || !Number.isInteger(minutes) || minutes < 1) return { ok: false, offending: JSON.stringify(minutes) };
+  return { ok: true, ceilingSeconds: minutes * 60 };
+}
 
-function readSessionLog(mainRoot) {
-  const path = join(mainRoot, SESSION_LOG);
-  if (!existsSync(path)) return [];
-  const text = readFileSync(path, 'utf8');
+// --- Session log (.temp/budget-session.tsv) ----------------------------------
+/** Tab-separated: issue, stage, model, startedAt, state, seconds, outcome. A
+ *  `closed` row is kept so the session aggregate survives the row leaving
+ *  the ledger's scope; a `pending` row is a close whose ledger write has not
+ *  landed. An unknown state reads as `open` and a legacy four-field line
+ *  still parses, so a session in flight survives upgrading this file. */
+export function parseSessionLog(text) {
   const rows = [];
-  for (const line of text.split('\n')) {
-    if (!line.trim()) continue;
-    const [issue, stage, model, startedAt] = line.split('\t');
-    if (!issue || !stage || !model || !startedAt) continue;
-    rows.push({ issue: Number(issue), stage, model, startedAt });
+  for (const line of (text ?? '').split('\n')) {
+    const [issue, stage, model, startedAt, state, seconds, outcome] = line.split('\t');
+    if (!line.trim() || !issue || !stage || !model || !startedAt) continue;
+    const secs = Number(seconds);
+    const known = state === 'pending' || state === 'closed';
+    const kept = Number.isInteger(secs) && secs >= 0 ? secs : 0;
+    rows.push({ issue: Number(issue), stage, model, startedAt, state: known ? state : 'open', seconds: kept, outcome: outcome || 'lost' });
   }
   return rows;
 }
 
+export function renderSessionLog(rows) {
+  const line = (r) => [r.issue, r.stage, r.model, r.startedAt, r.state ?? 'open', r.seconds ?? 0, r.outcome ?? ''].join('\t');
+  return rows.length > 0 ? `${rows.map(line).join('\n')}\n` : '';
+}
+
+/** From the local log alone — no GitHub I/O, which is what makes the tick
+ *  clause producible on every tick, including one that closed nothing. */
+export function sessionTotals(rows, nowMs) {
+  const seconds = rows.reduce((acc, r) => acc + (r.state === 'open' ? elapsed(r.startedAt, nowMs) : r.seconds ?? 0), 0);
+  return { dispatches: rows.length, seconds };
+}
+
+/** The session half always prints, since it needs no ledger read; a
+ *  per-ticket half is appended only for a ledger this sweep actually read,
+ *  because that is the only source for a cross-session total and re-reading
+ *  one every tick would buy a number that cannot have moved. */
+export function renderTickClause(totals, tickets) {
+  const noun = totals.dispatches === 1 ? 'dispatch' : 'dispatches';
+  const per = (t) =>
+    t.ceilingSeconds == null
+      ? `#${t.issue} at ${formatDuration(t.secondsUsed)}, no ceiling configured`
+      : `#${t.issue} at ${formatDuration(t.secondsUsed)} of its ${Math.round(t.ceilingSeconds / 60)}m ceiling (${Math.round((t.secondsUsed / t.ceilingSeconds) * 100)}%)`;
+  const parts = [`session ${totals.dispatches} ${noun}`, `${formatDuration(totals.seconds)} agent wall-clock`, ...tickets.map(per)];
+  return `**Budget:** ${parts.join(' · ')}`;
+}
+
+const sessionLogPath = (mainRoot) => join(mainRoot, '.temp', 'budget-session.tsv');
+
+function readSessionLog(mainRoot) {
+  const path = sessionLogPath(mainRoot);
+  return existsSync(path) ? parseSessionLog(readFileSync(path, 'utf8')) : [];
+}
+
 function writeSessionLog(mainRoot, rows) {
-  const path = join(mainRoot, SESSION_LOG);
-  mkdirSync(dirname(path), { recursive: true });
-  const text = rows.map((r) => `${r.issue}\t${r.stage}\t${r.model}\t${r.startedAt}`).join('\n');
-  writeFileSync(path, text.length > 0 ? `${text}\n` : '');
+  mkdirSync(dirname(sessionLogPath(mainRoot)), { recursive: true });
+  writeFileSync(sessionLogPath(mainRoot), renderSessionLog(rows));
 }
 
-function appendSessionRow(mainRoot, row) {
-  const rows = readSessionLog(mainRoot);
-  rows.push(row);
-  writeSessionLog(mainRoot, rows);
+// --- Config and repo facts ----------------------------------------------------
+function resolveRoot() {
+  const res = run('git', ['-C', process.cwd(), 'rev-parse', '--show-toplevel']);
+  if (!res.ok) die('not a git repository (git rev-parse --show-toplevel failed).');
+  return res.stdout.trim();
 }
 
-// --- Config -------------------------------------------------------------------
-function readConfig(mainRoot) {
+function resolveRepoAndCeiling(mainRoot) {
   const path = join(mainRoot, '.claude', 'port.config.json');
-  if (!existsSync(path)) return null;
-  try {
-    return JSON.parse(readFileSync(path, 'utf8'));
-  } catch {
-    return null;
-  }
+  const cfg = existsSync(path) ? parseJsonObject(readFileSync(path, 'utf8')) : null;
+  if (!cfg) die('.claude/port.config.json was not found, or does not parse, at the repository root — this repository is not port-managed.');
+  if (!cfg.repo) die('.claude/port.config.json declares no `repo`.');
+  const ceiling = ceilingSecondsFrom(cfg);
+  if (!ceiling.ok) die(`.claude/port.config.json's budget.wallClockMinutes is ${ceiling.offending} — it must be a positive integer, or null for no ceiling. Refusing to run rather than silently dropping the ceiling.`);
+  return { repo: cfg.repo, ceilingSeconds: ceiling.ceilingSeconds };
 }
 
-function ceilingSecondsFrom(cfg) {
-  const minutes = cfg?.budget?.wallClockMinutes;
-  return typeof minutes === 'number' && minutes > 0 ? minutes * 60 : null;
-}
+// --- Ledger storage -----------------------------------------------------------
+const offlinePath = (mainRoot, issue) => join(mainRoot, '.temp', `budget-ledger-${issue}.md`);
 
-// --- Ledger storage -------------------------------------------------------------
-// Offline: a local file per issue, under .temp/ — what the unit tests use.
-// Online: an issue comment starting with '## Pipeline Cost', authored by
-// `viewer`; the script's own comment, never anyone else's.
-function offlineLedgerPath(mainRoot, issue) {
-  return join(mainRoot, '.temp', `budget-ledger-${issue}.md`);
-}
-
-function readLedgerOffline(mainRoot, issue) {
-  const path = offlineLedgerPath(mainRoot, issue);
-  if (!existsSync(path)) return { found: false, body: null, ref: null };
-  return { found: true, body: readFileSync(path, 'utf8'), ref: path };
-}
-
-function writeLedgerOffline(mainRoot, issue, body) {
-  const path = offlineLedgerPath(mainRoot, issue);
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, body);
-  return { ok: true };
-}
-
+/** `gh` for a plain JSON command — never GraphQL, where a non-zero exit
+ *  proves nothing (see `ghGraphQL`). Here it is a real failure: there is no
+ *  error envelope to read instead. */
 function ghJson(args) {
   const res = run('gh', args);
-  if (!res.ok) return { ok: false, error: res.stderr.trim().split('\n')[0] || `gh ${args.join(' ')} failed` };
-  try {
-    return { ok: true, data: JSON.parse(res.stdout) };
-  } catch (e) {
-    return { ok: false, error: `gh ${args.join(' ')} produced unparseable JSON: ${e.message}` };
-  }
+  if (!res.ok) return { ok: false, error: firstLine(res.stderr, `gh ${args.join(' ')} failed`) };
+  const data = parseJsonObject(res.stdout);
+  return data ? { ok: true, data } : { ok: false, error: `gh ${args.join(' ')} produced unparseable JSON` };
 }
 
-function viewerLogin() {
-  const res = ghJson(['api', 'graphql', '-f', 'query=query { viewer { login } }']);
-  if (!res.ok) return { ok: false, error: res.error };
-  return { ok: true, login: res.data?.data?.viewer?.login ?? null };
+/** The envelope is parsed from stdout **regardless of the exit code** — `gh`
+ *  exits non-zero whenever a response carries `errors` even when `data` is
+ *  still usable, so only unparseable stdout or a missing `data` is a real
+ *  failure and `errors[].path` names what is actually unavailable. `--jq` is
+ *  never used: `gh` skips it on exactly that partial-error response. */
+function ghGraphQL(query) {
+  const res = run('gh', ['api', 'graphql', '-f', `query=${query}`]);
+  const envelope = parseJsonObject(res.stdout);
+  if (envelope == null) return { ok: false, error: firstLine(res.stderr, 'gh api graphql returned no parseable envelope') };
+  if (envelope.data == null) return { ok: false, error: envelope.errors?.[0]?.message || 'gh api graphql returned an envelope carrying no data' };
+  return { ok: true, data: envelope.data, unavailable: unavailableAliases(envelope.errors) };
 }
 
 function readLedgerOnline(repo, issue) {
   const [owner, name] = repo.split('/');
-  const viewer = viewerLogin();
-  if (!viewer.ok) return { found: false, body: null, ref: null, error: viewer.error };
-  const query = `query { repository(owner: "${owner}", name: "${name}") { issue(number: ${issue}) { comments(first: 100) { nodes { id databaseId body author { login } } } } } }`;
-  const res = ghJson(['api', 'graphql', '-f', `query=${query}`]);
-  if (!res.ok) return { found: false, body: null, ref: null, error: res.error };
-  const nodes = res.data?.data?.repository?.issue?.comments?.nodes ?? [];
-  const mine = nodes.find((n) => n.body?.startsWith('## Pipeline Cost') && n.author?.login === viewer.login);
-  if (!mine) return { found: false, body: null, ref: null };
-  return { found: true, body: mine.body, ref: mine.databaseId };
+  // One round trip for both facts (§6): the ledger comment is scoped to this
+  // script's own author, so `viewer` is needed on every read and a second
+  // query would double the cost of each one.
+  const query = `query { viewer { login } repository(owner: "${owner}", name: "${name}") { issue(number: ${issue}) { comments(first: 100) { nodes { databaseId body author { login } } } } } }`;
+  const absent = (error) => ({ found: false, body: null, ref: null, error });
+  const res = ghGraphQL(query);
+  if (!res.ok) return absent(res.error);
+  for (const alias of ['viewer', 'repository', 'issue', 'comments']) {
+    if (res.unavailable.has(alias)) return absent(`GitHub reported '${alias}' unavailable while reading #${issue}'s ledger`);
+  }
+  const login = res.data.viewer?.login;
+  if (!login) return absent("GitHub returned no viewer login — cannot tell this script's own ledger comment from anyone else's");
+  const nodes = res.data.repository?.issue?.comments?.nodes;
+  if (!Array.isArray(nodes)) return absent(`GitHub returned no comment list for #${issue} — an absent list is not an empty one`);
+  const mine = nodes.find((n) => n.body?.startsWith('## Pipeline Cost') && n.author?.login === login);
+  return mine ? { found: true, body: mine.body, ref: mine.databaseId } : { found: false, body: null, ref: null };
 }
 
-/** Writes `body` to a temp file and returns its path — `gh api`'s `@<file>`
- *  field syntax is how a multi-line ledger reaches the API without shell
- *  quoting of backticks or fences. */
-function writeTempBody(body) {
+/** `gh api`'s `@<file>` field syntax is how a multi-line ledger reaches the
+ *  API without shell quoting of its backticks and fences. */
+function writeLedgerOnline(repo, issue, existingRef, body) {
   const path = join(tmpdir(), `port-budget-${process.pid}-${Date.now()}.md`);
   writeFileSync(path, body);
-  return path;
-}
-
-function writeLedgerOnline(repo, issue, existingRef, body) {
-  const path = writeTempBody(body);
+  const args =
+    existingRef != null
+      ? ['api', '-X', 'PATCH', `repos/${repo}/issues/comments/${existingRef}`, '-F', `body=@${path}`]
+      : ['api', `repos/${repo}/issues/${issue}/comments`, '-F', `body=@${path}`];
+  const res = run('gh', args);
   try {
-    if (existingRef != null) {
-      const res = run('gh', ['api', '-X', 'PATCH', `repos/${repo}/issues/comments/${existingRef}`, '-F', `body=@${path}`]);
-      if (!res.ok) return { ok: false, error: res.stderr.trim().split('\n')[0] || 'gh api PATCH failed' };
-      return { ok: true };
-    }
-    const res = run('gh', ['api', `repos/${repo}/issues/${issue}/comments`, '-F', `body=@${path}`]);
-    if (!res.ok) return { ok: false, error: res.stderr.trim().split('\n')[0] || 'gh api POST failed' };
-    return { ok: true };
-  } finally {
-    try {
-      unlinkSync(path);
-    } catch {
-      // best-effort cleanup only
-    }
+    unlinkSync(path);
+  } catch {
+    // best-effort cleanup only
   }
+  return res.ok ? { ok: true } : { ok: false, error: firstLine(res.stderr, 'gh api write failed') };
 }
 
-function readLedger(mainRoot, repo, issue, offline) {
-  return offline ? readLedgerOffline(mainRoot, issue) : readLedgerOnline(repo, issue);
+function readLedgerRaw(mainRoot, repo, issue, offline) {
+  if (!offline) return readLedgerOnline(repo, issue);
+  const path = offlinePath(mainRoot, issue);
+  return existsSync(path) ? { found: true, body: readFileSync(path, 'utf8'), ref: path } : { found: false, body: null, ref: null };
 }
 
-function writeLedger(mainRoot, repo, issue, offline, existingRef, body) {
-  return offline ? writeLedgerOffline(mainRoot, issue, body) : writeLedgerOnline(repo, issue, existingRef, body);
+/** Reads and sums `issue`'s ledger. `{ ok: false, why }` for an unreadable
+ *  or unparseable one — absent, never zero, never a clean slate. */
+function readLedgerRows(mainRoot, repo, issue, offline) {
+  const existing = readLedgerRaw(mainRoot, repo, issue, offline);
+  if (existing.error) return { ok: false, why: existing.error };
+  if (!existing.found) return { ok: true, rows: [], seconds: 0, ref: null };
+  const parsed = parseLedger(existing.body);
+  if (!parsed) return { ok: false, why: "its comment doesn't parse as a '## Pipeline Cost' table" };
+  return { ok: true, rows: parsed.rows, seconds: parsed.rows.reduce((a, r) => a + r.seconds, 0), ref: existing.ref };
 }
 
-/** Appends `row` to `issue`'s ledger, reading first so a concurrent write
- *  never clobbers rows this script did not just produce. Returns the
- *  resulting row set on success, or `null` on an unreadable/unwritable
- *  ledger — the caller decides what that means for its own exit. */
+/** Reads first, so a concurrent write never clobbers rows this script did
+ *  not just produce. `null` on an unreadable or unwritable ledger. */
 function appendToLedger(mainRoot, repo, issue, offline, row, ceilingSeconds) {
-  const existing = readLedger(mainRoot, repo, issue, offline);
-  if (existing.error) return null;
-  let rows = [];
-  if (existing.found) {
-    const parsed = parseLedger(existing.body);
-    if (!parsed) return null;
-    rows = parsed.rows;
-  }
-  rows.push(row);
+  const existing = readLedgerRows(mainRoot, repo, issue, offline);
+  if (!existing.ok) return null;
+  const rows = [...existing.rows, row];
   const rendered = renderLedger(rows, ceilingSeconds);
-  const written = writeLedger(mainRoot, repo, issue, offline, existing.ref, rendered);
-  if (!written.ok) return null;
-  return rows;
+  if (offline) {
+    const path = offlinePath(mainRoot, issue);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, rendered);
+    return rows;
+  }
+  return writeLedgerOnline(repo, issue, existing.ref, rendered).ok ? rows : null;
 }
 
-// --- git/repo facts -------------------------------------------------------------
-const configRepoRoot = (path) => gitOut(['-C', path, 'rev-parse', '--show-toplevel']);
-
-function resolveRoot() {
-  const mainRoot = configRepoRoot(process.cwd());
-  if (!mainRoot) die('not a git repository (git rev-parse --show-toplevel failed).');
-  return mainRoot;
-}
-
-function resolveRepoAndCeiling(mainRoot) {
-  const cfg = readConfig(mainRoot);
-  if (!cfg) die('.claude/port.config.json was not found, or does not parse, at the repository root — this repository is not port-managed.');
-  const repo = cfg.repo;
-  if (!repo) die('.claude/port.config.json declares no `repo`.');
-  return { repo, ceilingSeconds: ceilingSecondsFrom(cfg) };
+/** Promotes each flushed `pending` row to `closed` and leaves a failure
+ *  `pending` to retry — a ledger blip must never discard wall-clock really
+ *  spent, since under-counting fails toward dispatch. `tickets` carries one
+ *  entry per *ticket* (the last write wins, since the ledger total is
+ *  cumulative), the tick clause's only cross-session source. */
+function flushPending(mainRoot, repo, offline, rows, ceilingSeconds) {
+  const tickets = new Map();
+  const out = [];
+  let failed = 0;
+  for (const row of rows) {
+    if (row.state !== 'pending') {
+      out.push(row);
+      continue;
+    }
+    const entry = { stage: row.stage, model: row.model, startedAt: row.startedAt, seconds: row.seconds, outcome: row.outcome };
+    const ledger = appendToLedger(mainRoot, repo, row.issue, offline, entry, ceilingSeconds);
+    if (ledger == null) {
+      failed++;
+      console.error(`FAIL  #${row.issue}: could not flush its ${row.stage} dispatch to the ledger — keeping the row for the next sweep`);
+      out.push(row);
+      continue;
+    }
+    out.push({ ...row, state: 'closed' });
+    const secondsUsed = ledger.reduce((acc, r) => acc + r.seconds, 0);
+    tickets.set(row.issue, { issue: row.issue, secondsUsed, ceilingSeconds });
+    console.log(`closed ${row.stage} #${row.issue} · ${formatDuration(row.seconds)} · ${row.outcome} · total ${formatDuration(secondsUsed)}`);
+  }
+  return { rows: out, tickets: [...tickets.values()], failed };
 }
 
 // --- CLI ----------------------------------------------------------------------
@@ -366,32 +393,44 @@ function parseCommonArgs(argv, spec) {
   return opts;
 }
 
+/** `reset` and `sweep` are one operation over different live sets: close
+ *  every open row the caller no longer vouches for, then flush. What each
+ *  keeps afterwards is the only difference, and is its own line below. */
+function closeAndFlush(mainRoot, opts, live, done) {
+  const { repo, ceilingSeconds } = resolveRepoAndCeiling(mainRoot);
+  const rows = readSessionLog(mainRoot);
+  const nowMs = Date.now();
+  const { closed, stillOpen } = closeRows(rows.filter((r) => r.state === 'open'), live, nowMs, done);
+  const pending = [...rows.filter((r) => r.state !== 'open'), ...closed];
+  return { ...flushPending(mainRoot, repo, opts.offline, pending, ceilingSeconds), stillOpen, nowMs, wasEmpty: rows.length === 0 };
+}
+
 function runReset(argv) {
   const opts = parseCommonArgs(argv, []);
   const mainRoot = resolveRoot();
-  const { repo, ceilingSeconds } = resolveRepoAndCeiling(mainRoot);
-  const open = readSessionLog(mainRoot);
-  if (open.length === 0) {
-    writeSessionLog(mainRoot, []);
-    console.log('ok    no open dispatches to close');
-    process.exit(0);
-  }
-  const nowMs = Date.now();
-  let failed = 0;
-  for (const row of open) {
-    const startedMs = Date.parse(row.startedAt);
-    const seconds = Number.isFinite(startedMs) ? Math.max(0, Math.round((nowMs - startedMs) / 1000)) : 0;
-    const closedRow = { stage: row.stage, model: row.model, startedAt: row.startedAt, seconds, outcome: 'lost' };
-    const result = appendToLedger(mainRoot, repo, row.issue, opts.offline, closedRow, ceilingSeconds);
-    if (result == null) {
-      failed++;
-      console.error(`FAIL  #${row.issue}: could not flush its open ${row.stage} dispatch to the ledger`);
-    } else {
-      console.log(`ok    #${row.issue} ${row.stage} closed lost (${formatDuration(seconds)})`);
-    }
-  }
-  writeSessionLog(mainRoot, []);
-  process.exit(failed > 0 ? 1 : 0);
+  const res = closeAndFlush(mainRoot, opts, [], []);
+  // Dropping every flushed row *is* the session scoping; a row whose ledger
+  // write failed stays `pending`, so a blip at startup discards nothing.
+  writeSessionLog(mainRoot, res.rows.filter((r) => r.state === 'pending'));
+  if (res.wasEmpty) console.log('ok    no open dispatches to close');
+  process.exit(res.failed > 0 ? 1 : 0);
+}
+
+function runSweep(argv) {
+  const opts = parseCommonArgs(argv, ['--live', '--completed']);
+  const mainRoot = resolveRoot();
+  const live = parseDescriptionList(opts.live);
+  const done = parseDescriptionList(opts.completed);
+  for (const bad of [...live.invalid, ...done.invalid]) console.log(`note  unparseable entry '${bad}' — treating it as not live`);
+  const res = closeAndFlush(mainRoot, opts, live.descriptions, done.descriptions);
+  // Every closed row is kept, so the session aggregate survives the row
+  // leaving the ledger's scope.
+  const all = [...res.stillOpen, ...res.rows];
+  writeSessionLog(mainRoot, all);
+  // The clause prints on every sweep once the session has dispatched
+  // anything, closing tick or not — its session half needs no ledger read.
+  console.log(all.length === 0 ? 'note  no dispatches this session' : renderTickClause(sessionTotals(all, res.nowMs), res.tickets));
+  process.exit(res.failed > 0 ? 1 : 0);
 }
 
 function runDispatch(argv) {
@@ -400,7 +439,6 @@ function runDispatch(argv) {
   if ((opts.issue == null) === (opts.pr == null)) die(`dispatch needs exactly one of --issue/--pr. ${usage}`);
   if (!STAGES.includes(opts.stage)) die(`--stage must be one of ${STAGES.join(', ')}. ${usage}`);
   if (!opts.model) die(`--model is required. ${usage}`);
-
   const mainRoot = resolveRoot();
   const { repo, ceilingSeconds } = resolveRepoAndCeiling(mainRoot);
 
@@ -418,71 +456,26 @@ function runDispatch(argv) {
     if (issue == null) die(`PR #${pr}'s body has no 'Closes #N' on its first line — cannot resolve its ticket.`);
   }
 
-  const existing = readLedger(mainRoot, repo, issue, opts.offline);
-  if (existing.error) {
+  const ledger = readLedgerRows(mainRoot, repo, issue, opts.offline);
+  if (!ledger.ok) {
     console.log('hold');
-    console.log(`⏳ Couldn't read #${issue}'s cost ledger (${existing.error}) — holding its dispatch one tick rather than dispatching blind.`);
+    console.log(`⏳ Couldn't read #${issue}'s cost ledger (${ledger.why}) — holding its dispatch one tick rather than dispatching blind.`);
     process.exit(0);
   }
-  let rows = [];
-  if (existing.found) {
-    const parsed = parseLedger(existing.body);
-    if (!parsed) {
-      console.log('hold');
-      console.log(`⏳ #${issue}'s cost ledger comment doesn't parse as a '## Pipeline Cost' table — holding its dispatch one tick rather than dispatching blind.`);
-      process.exit(0);
-    }
-    rows = parsed.rows;
-  }
-  const secondsUsed = rows.reduce((acc, r) => acc + r.seconds, 0);
+  const secondsUsed = ledger.seconds;
   const v = verdict({ secondsUsed, ceilingSeconds });
   console.log(v);
+  const ceilingMinutes = Math.round(ceilingSeconds / 60);
   if (v === 'exceeded') {
-    console.log(
-      `⛔ #${issue} has consumed ${formatDuration(secondsUsed)} of agent wall-clock against a ${Math.round(ceilingSeconds / 60)}m ceiling — escalate instead of dispatching ${opts.stage} #${issue}.`,
-    );
+    console.log(`⛔ #${issue} has consumed ${formatDuration(secondsUsed)} of agent wall-clock against a ${ceilingMinutes}m ceiling — escalate instead of dispatching ${opts.stage} #${issue}.`);
     process.exit(0);
   }
-  console.log(
-    ceilingSeconds == null
-      ? `✅ #${issue} dispatch allowed — ${formatDuration(secondsUsed)} of agent wall-clock so far, no ceiling configured.`
-      : `✅ #${issue} dispatch allowed — ${formatDuration(secondsUsed)} of its ${Math.round(ceilingSeconds / 60)}m ceiling used.`,
-  );
-  appendSessionRow(mainRoot, { issue, stage: opts.stage, model: opts.model, startedAt: new Date().toISOString() });
+  const used = `✅ #${issue} dispatch allowed — ${formatDuration(secondsUsed)}`;
+  console.log(ceilingSeconds == null ? `${used} of agent wall-clock so far, no ceiling configured.` : `${used} of its ${ceilingMinutes}m ceiling used.`);
+  // This row's clock starts here — the reason the caller runs the gate last.
+  const row = { issue, stage: opts.stage, model: opts.model, startedAt: new Date().toISOString(), state: 'open', seconds: 0, outcome: '' };
+  writeSessionLog(mainRoot, [...readSessionLog(mainRoot), row]);
   process.exit(0);
-}
-
-function runSweep(argv) {
-  const opts = parseCommonArgs(argv, ['--live']);
-  const mainRoot = resolveRoot();
-  const { repo, ceilingSeconds } = resolveRepoAndCeiling(mainRoot);
-  const { descriptions, invalid } = parseDescriptionList(opts.live);
-  for (const bad of invalid) {
-    console.log(`note  unparseable --live entry '${bad}' — treating it as not live`);
-  }
-  const open = readSessionLog(mainRoot);
-  const { closed, stillOpen } = closeRows(open, descriptions, Date.now());
-  if (closed.length === 0) {
-    console.log('note  no dispatches closed this sweep');
-    process.exit(0);
-  }
-  let failed = 0;
-  for (const row of closed) {
-    const ledgerRow = { stage: row.stage, model: row.model, startedAt: row.startedAt, seconds: row.seconds, outcome: row.outcome };
-    const rows = appendToLedger(mainRoot, repo, row.issue, opts.offline, ledgerRow, ceilingSeconds);
-    if (rows == null) {
-      failed++;
-      console.error(`FAIL  #${row.issue}: could not flush its closed ${row.stage} dispatch to the ledger`);
-      stillOpen.push(row); // don't lose the row if the ledger write failed
-      continue;
-    }
-    const secondsUsed = rows.reduce((acc, r) => acc + r.seconds, 0);
-    console.log(
-      `closed ${row.stage} #${row.issue} · ${formatDuration(row.seconds)} · lost · total ${formatDuration(secondsUsed)}${ceilingSeconds == null ? '' : ` of ${Math.round(ceilingSeconds / 60)}m (${Math.round((secondsUsed / ceilingSeconds) * 100)}%)`}`,
-    );
-  }
-  writeSessionLog(mainRoot, stillOpen);
-  process.exit(failed > 0 ? 1 : 0);
 }
 
 function runReport(argv) {
@@ -491,31 +484,17 @@ function runReport(argv) {
   if (!Number.isInteger(issue) || issue <= 0) die('report needs --issue N.');
   const mainRoot = resolveRoot();
   const { repo, ceilingSeconds } = resolveRepoAndCeiling(mainRoot);
-  const existing = readLedger(mainRoot, repo, issue, opts.offline);
-  if (existing.error) die(`could not read #${issue}'s cost ledger: ${existing.error}`);
-  let rows = [];
-  if (existing.found) {
-    const parsed = parseLedger(existing.body);
-    if (!parsed) die(`#${issue}'s cost ledger comment doesn't parse as a '## Pipeline Cost' table.`);
-    rows = parsed.rows;
-  }
-  console.log(renderLedger(rows, ceilingSeconds));
-  const secondsUsed = rows.reduce((acc, r) => acc + r.seconds, 0);
+  const ledger = readLedgerRows(mainRoot, repo, issue, opts.offline);
+  if (!ledger.ok) die(`could not read #${issue}'s cost ledger: ${ledger.why}`);
+  console.log(renderLedger(ledger.rows, ceilingSeconds));
   console.log('');
-  console.log(`verdict: ${verdict({ secondsUsed, ceilingSeconds })}`);
+  console.log(`verdict: ${verdict({ secondsUsed: ledger.seconds, ceilingSeconds })}`);
   process.exit(0);
 }
 
-function main() {
-  const [mode, ...rest] = process.argv.slice(2);
-  const usage = 'usage: node budget.mjs <reset|dispatch|sweep|report> ...';
-  if (mode === 'reset') return runReset(rest);
-  if (mode === 'dispatch') return runDispatch(rest);
-  if (mode === 'sweep') return runSweep(rest);
-  if (mode === 'report') return runReport(rest);
-  die(`unrecognized mode ${JSON.stringify(mode)}. ${usage}`);
-}
-
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  main();
+  const [mode, ...rest] = process.argv.slice(2);
+  const modes = { reset: runReset, dispatch: runDispatch, sweep: runSweep, report: runReport };
+  if (modes[mode]) modes[mode](rest);
+  else die(`unrecognized mode ${JSON.stringify(mode)}. usage: node budget.mjs <${Object.keys(modes).join('|')}> ...`);
 }

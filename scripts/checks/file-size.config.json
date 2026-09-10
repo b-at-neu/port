@@ -11,7 +11,6 @@
     { "path": "plugins/port/templates/artifacts.mjs", "lines": 663, "issue": 183 },
     { "path": "scripts/checks/cockpit.mjs", "lines": 610, "issue": 182 },
     { "path": "plugins/port/docs/PIPELINE.md", "lines": 578, "issue": 181 },
-    { "path": "plugins/port/templates/worktrees.mjs", "lines": 518, "issue": 183 },
-    { "path": "plugins/port/templates/budget.mjs", "lines": 521, "issue": 188 }
+    { "path": "plugins/port/templates/worktrees.mjs", "lines": 518, "issue": 183 }
   ]
 }
