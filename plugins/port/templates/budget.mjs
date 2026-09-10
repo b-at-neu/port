@@ -18,20 +18,16 @@
 // `.temp/dispatch-log.md` documents — no clock or session id needed. The
 // ledger lives on the **issue**, never the pull request, because the issue
 // is the only object alive from `ready` through merge; writes are scoped to
-// this script's own `## Pipeline Cost` comment, authored by `viewer`.
+// this script's own `## Pipeline Cost` comment, authored by `viewer`. A row
+// therefore carries both numbers: `issue` keys the ledger, `dispatchNumber`
+// keys the `<stage> #<n>` descriptions `--live`/`--completed` carry.
 //
-// Every fail direction, stated — an absent signal is never a passing one:
-//   * A malformed ledger is **absent, never zero** — `hold`, not `allow`.
-//   * A non-zero `gh` exit is **not** evidence of no data: `gh` exits
-//     non-zero whenever a response carries `errors` even when `data` is
-//     still usable, so the envelope is parsed from stdout regardless of
-//     status and only aliases named in `errors[].path` count as unavailable.
-//   * A malformed `budget.wallClockMinutes` is **fatal, never unbounded** —
-//     reading `"120"` or `0` as "no ceiling" would disable the rail forever
-//     while looking identical to a repository that configured none.
-//   * A failed ledger write leaves its row `pending` to retry rather than
-//     dropping it, since discarding wall-clock really spent under-counts —
-//     i.e. fails toward dispatch, the one direction this rail prevents.
+// Every fail direction is stated at its own site — an absent signal is never
+// a passing one: a malformed ledger holds (`parseLedger`), a non-zero `gh`
+// exit is not evidence of no data (`ghGraphQL`), a malformed
+// `budget.wallClockMinutes` is fatal (`ceilingSecondsFrom`), and a failed
+// ledger write stays `pending` (`flushPending`) — because discarding
+// wall-clock really spent under-counts, the one direction this rail prevents.
 import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -135,15 +131,18 @@ export function parseDescriptionList(raw) {
 }
 
 /** Closes every open row absent from `liveDescriptions`, timing it from
- *  `nowMs`. A row named in `completedDescriptions` closes `completed` — the
- *  one fact the caller holds and this argument carries, without which
- *  nothing could tell a graceful finish from a crash. Anything else closes
- *  `lost`, over-counting deliberately to bias toward visible escalation. A
- *  closed row comes back `pending`: timed, not yet flushed. */
+ *  `nowMs`. Correlation is on `dispatchNumber` — for `review`/`revise` the
+ *  pull request, not the `issue` the ledger is keyed on, since matching
+ *  `issue` closed every pull-request-stage row on its first sweep. A row
+ *  named in `completedDescriptions` closes `completed` — the one fact the
+ *  caller holds and this argument carries, without which nothing could tell
+ *  a graceful finish from a crash. Anything else closes `lost`,
+ *  over-counting deliberately to bias toward visible escalation. A closed
+ *  row comes back `pending`: timed, not yet flushed. */
 export function closeRows(openRows, liveDescriptions, nowMs, completedDescriptions = []) {
   const live = new Set(liveDescriptions);
   const done = new Set(completedDescriptions);
-  const desc = (row) => `${row.stage} #${row.issue}`;
+  const desc = (row) => `${row.stage} #${row.dispatchNumber ?? row.issue}`;
   return {
     stillOpen: openRows.filter((row) => live.has(desc(row))),
     closed: openRows
@@ -179,26 +178,28 @@ export function ceilingSecondsFrom(cfg) {
 }
 
 // --- Session log (.temp/budget-session.tsv) ----------------------------------
-/** Tab-separated: issue, stage, model, startedAt, state, seconds, outcome. A
- *  `closed` row is kept so the session aggregate survives the row leaving
- *  the ledger's scope; a `pending` row is a close whose ledger write has not
- *  landed. An unknown state reads as `open` and a legacy four-field line
- *  still parses, so a session in flight survives upgrading this file. */
+/** Tab-separated: issue, stage, model, startedAt, state, seconds, outcome,
+ *  dispatchNumber. A `closed` row is kept so the session aggregate survives
+ *  the row leaving the ledger's scope; a `pending` row is a close whose
+ *  ledger write has not landed. An unknown state reads as `open`, an absent
+ *  `dispatchNumber` falls back to `issue`, and a legacy four-field line still
+ *  parses, so a session in flight survives upgrading this file. */
 export function parseSessionLog(text) {
   const rows = [];
   for (const line of (text ?? '').split('\n')) {
-    const [issue, stage, model, startedAt, state, seconds, outcome] = line.split('\t');
+    const [issue, stage, model, startedAt, state, seconds, outcome, dispatch] = line.split('\t');
     if (!line.trim() || !issue || !stage || !model || !startedAt) continue;
     const secs = Number(seconds);
+    const dn = Number(dispatch);
     const known = state === 'pending' || state === 'closed';
     const kept = Number.isInteger(secs) && secs >= 0 ? secs : 0;
-    rows.push({ issue: Number(issue), stage, model, startedAt, state: known ? state : 'open', seconds: kept, outcome: outcome || 'lost' });
+    rows.push({ issue: Number(issue), dispatchNumber: Number.isInteger(dn) && dn > 0 ? dn : Number(issue), stage, model, startedAt, state: known ? state : 'open', seconds: kept, outcome: outcome || 'lost' });
   }
   return rows;
 }
 
 export function renderSessionLog(rows) {
-  const line = (r) => [r.issue, r.stage, r.model, r.startedAt, r.state ?? 'open', r.seconds ?? 0, r.outcome ?? ''].join('\t');
+  const line = (r) => [r.issue, r.stage, r.model, r.startedAt, r.state ?? 'open', r.seconds ?? 0, r.outcome ?? '', r.dispatchNumber ?? r.issue].join('\t');
   return rows.length > 0 ? `${rows.map(line).join('\n')}\n` : '';
 }
 
@@ -281,8 +282,7 @@ function ghGraphQL(query) {
 function readLedgerOnline(repo, issue) {
   const [owner, name] = repo.split('/');
   // One round trip for both facts (§6): the ledger comment is scoped to this
-  // script's own author, so `viewer` is needed on every read and a second
-  // query would double the cost of each one.
+  // script's own author, so `viewer` is needed on every read.
   const query = `query { viewer { login } repository(owner: "${owner}", name: "${name}") { issue(number: ${issue}) { comments(first: 100) { nodes { databaseId body author { login } } } } } }`;
   const absent = (error) => ({ found: false, body: null, ref: null, error });
   const res = ghGraphQL(query);
@@ -423,12 +423,10 @@ function runSweep(argv) {
   const done = parseDescriptionList(opts.completed);
   for (const bad of [...live.invalid, ...done.invalid]) console.log(`note  unparseable entry '${bad}' — treating it as not live`);
   const res = closeAndFlush(mainRoot, opts, live.descriptions, done.descriptions);
-  // Every closed row is kept, so the session aggregate survives the row
-  // leaving the ledger's scope.
+  // Every closed row is kept (see `parseSessionLog`).
   const all = [...res.stillOpen, ...res.rows];
   writeSessionLog(mainRoot, all);
-  // The clause prints on every sweep once the session has dispatched
-  // anything, closing tick or not — its session half needs no ledger read.
+  // Prints on every sweep, closing tick or not (see `renderTickClause`).
   console.log(all.length === 0 ? 'note  no dispatches this session' : renderTickClause(sessionTotals(all, res.nowMs), res.tickets));
   process.exit(res.failed > 0 ? 1 : 0);
 }
@@ -473,7 +471,8 @@ function runDispatch(argv) {
   const used = `✅ #${issue} dispatch allowed — ${formatDuration(secondsUsed)}`;
   console.log(ceilingSeconds == null ? `${used} of agent wall-clock so far, no ceiling configured.` : `${used} of its ${ceilingMinutes}m ceiling used.`);
   // This row's clock starts here — the reason the caller runs the gate last.
-  const row = { issue, stage: opts.stage, model: opts.model, startedAt: new Date().toISOString(), state: 'open', seconds: 0, outcome: '' };
+  const dispatchNumber = opts.pr != null ? Number(opts.pr) : issue;
+  const row = { issue, dispatchNumber, stage: opts.stage, model: opts.model, startedAt: new Date().toISOString(), state: 'open', seconds: 0, outcome: '' };
   writeSessionLog(mainRoot, [...readSessionLog(mainRoot), row]);
   process.exit(0);
 }

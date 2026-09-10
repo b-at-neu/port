@@ -82,6 +82,18 @@ export default async function ({ fail, ok }) {
     } else {
       ok();
     }
+
+    // #188 (R2-M1): the row the gate commits must record the number the
+    // cockpit dispatched with, or `--live` can never match a review/revise
+    // dispatch. `--pr`'s value when given, the ticket otherwise.
+    const dispatch = /function runDispatch\([\s\S]*?\n}/.exec(templateText)?.[0] ?? '';
+    if (!/dispatchNumber = opts\.pr != null \? Number\(opts\.pr\) : issue/.test(dispatch)) {
+      fail('budget-template', `${templateRel}'s runDispatch must record dispatchNumber as --pr's value when given and the ticket otherwise`);
+    } else if (!/\{ issue, dispatchNumber,/.test(dispatch)) {
+      fail('budget-template', `${templateRel}'s runDispatch must store dispatchNumber on the session-log row alongside issue`);
+    } else {
+      ok();
+    }
   }
 
   const mod = await import(pathToFileURL(templatePath).href);
@@ -228,6 +240,34 @@ export default async function ({ fail, ok }) {
     } else {
       ok();
     }
+
+    // #188 (R2-M1): correlation is on the number the cockpit *dispatched*
+    // with, not the ticket the ledger is keyed on. A review/revise dispatch
+    // on PR #213 closing issue #188 has a row of {issue: 188,
+    // dispatchNumber: 213} and TaskList reports 'review #213' — keying on
+    // `issue` looked for 'review #188', missed, and closed the row as `lost`
+    // on the first sweep after dispatch while the agent was still running.
+    // That is a systematic under-count on half the stages.
+    const prRow = () => [{ issue: 188, dispatchNumber: 213, stage: 'review', model: 'sonnet', startedAt }];
+    const liveByPr = closeRows(prRow(), ['review #213'], Date.now());
+    if (liveByPr.stillOpen.length !== 1 || liveByPr.closed.length !== 0) {
+      fail('budget-close', `closeRows must keep a row live by its dispatch number, not its ticket: ${JSON.stringify(liveByPr)}`);
+    } else {
+      ok();
+    }
+    // The ticket number must not match: it is not what the cockpit dispatched.
+    const liveByIssue = closeRows(prRow(), ['review #188'], Date.now());
+    if (liveByIssue.closed.length !== 1) {
+      fail('budget-close', `closeRows must not correlate a pull-request dispatch by its ticket number: ${JSON.stringify(liveByIssue)}`);
+    } else {
+      ok();
+    }
+    const donePr = closeRows(prRow(), [], Date.now(), ['review #213']);
+    if (donePr.closed.length !== 1 || donePr.closed[0].outcome !== 'completed' || donePr.closed[0].issue !== 188) {
+      fail('budget-close', `closeRows must match --completed by dispatch number while keeping the row on its ticket: ${JSON.stringify(donePr.closed)}`);
+    } else {
+      ok();
+    }
   }
 
   // --- The session log round-trips, and its aggregate needs no ledger --------
@@ -235,9 +275,12 @@ export default async function ({ fail, ok }) {
   // emitted and that was not derivable after the fact, because a closed
   // dispatch used to leave the session log entirely.
   {
+    // #188 (R2-M1): dispatchNumber round-trips too — it is the correlation
+    // key, so losing it across a sweep's read/write reintroduces the
+    // ticket-keyed miss on every pull-request stage.
     const rows = [
-      { issue: 7, stage: 'plan', model: 'opus', startedAt: '2026-09-07T14:02:31Z', state: 'closed', seconds: 401, outcome: 'completed' },
-      { issue: 7, stage: 'impl', model: 'sonnet', startedAt: '2026-09-07T14:19:08Z', state: 'pending', seconds: 1448, outcome: 'lost' },
+      { issue: 7, dispatchNumber: 7, stage: 'plan', model: 'opus', startedAt: '2026-09-07T14:02:31Z', state: 'closed', seconds: 401, outcome: 'completed' },
+      { issue: 7, dispatchNumber: 118, stage: 'review', model: 'sonnet', startedAt: '2026-09-07T14:19:08Z', state: 'pending', seconds: 1448, outcome: 'lost' },
     ];
     const parsed = parseSessionLog(renderSessionLog(rows));
     if (JSON.stringify(parsed) !== JSON.stringify(rows)) {
@@ -245,11 +288,18 @@ export default async function ({ fail, ok }) {
     } else {
       ok();
     }
+    if (parsed[1]?.dispatchNumber !== 118 || parsed[1]?.issue !== 7) {
+      fail('budget-session', `the session log must keep a pull-request dispatch's number distinct from its ticket: ${JSON.stringify(parsed[1])}`);
+    } else {
+      ok();
+    }
     // A legacy four-field line still parses, so a session in flight survives
-    // an upgrade of the script rather than losing its open rows.
+    // an upgrade of the script rather than losing its open rows; an absent
+    // dispatchNumber falls back to the ticket, which is correct for the
+    // issue-keyed stages that were the only ones it could have recorded.
     const legacy = parseSessionLog('7\tplan\topus\t2026-09-07T14:02:31Z\n');
-    if (legacy.length !== 1 || legacy[0].state !== 'open' || legacy[0].seconds !== 0) {
-      fail('budget-session', `a legacy four-field session line must read as an open row: ${JSON.stringify(legacy)}`);
+    if (legacy.length !== 1 || legacy[0].state !== 'open' || legacy[0].seconds !== 0 || legacy[0].dispatchNumber !== 7) {
+      fail('budget-session', `a legacy four-field session line must read as an open row keyed on its ticket: ${JSON.stringify(legacy)}`);
     } else {
       ok();
     }
@@ -349,6 +399,27 @@ export default async function ({ fail, ok }) {
     }
     if (!skillText.includes('skip silently, say nothing')) {
       fail('budget-docs', `${skillRel} does not state commands.budget's null-means-skip-silently rule`);
+    } else {
+      ok();
+    }
+
+    // #188 (R2-L1): `--completed` used to be sourced from "every description
+    // TaskList reports finished", which no other contract in this repository
+    // says it returns — every one of them infers termination from *absence*.
+    // If that were the source, `completed` would be unreachable and the
+    // Outcome column would be back to one value (the R1-L3 regression).
+    if (/--completed "<every description TaskList/.test(skillText)) {
+      fail('budget-docs', `${skillRel} sources --completed from TaskList, which reports live agents only — a finished agent is absent from it, so 'completed' would be unreachable`);
+    } else {
+      ok();
+    }
+    if (!skillText.includes('**`--completed` never comes from `TaskList`**')) {
+      fail('budget-docs', `${skillRel} must state that --completed comes from the relay loop's classification, not TaskList`);
+    } else {
+      ok();
+    }
+    if (!/`TaskList` reports live agents only:/.test(skillText)) {
+      fail('budget-docs', `${skillRel}'s liveness cross-check must state that TaskList reports live agents only, since every class there infers termination from absence`);
     } else {
       ok();
     }
