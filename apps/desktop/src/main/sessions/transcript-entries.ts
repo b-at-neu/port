@@ -50,26 +50,35 @@ export function sanitize(text: string): string {
   return out
 }
 
-/** Slack sanitized past `cap` before falling back to an approximate count --
- *  covers a prefix that happens to hold a few stripped control/bidi
- *  characters without still needing the full O(n) pass below. */
+/** How far past the characters still needed each sanitize slice reaches, so
+ *  a slice holding a few stripped control/bidi characters still fills `cap`
+ *  in one pass instead of immediately needing another. */
 const CAP_SLACK = 256
 
 export function capPayload(text: string, cap: number = MAX_PAYLOAD_CHARS): Payload {
-  if (text.length <= cap) {
-    const sanitized = sanitize(text)
-    return sanitized.length <= cap ? { text: sanitized, omittedChars: 0 } : { text: sanitized.slice(0, cap), omittedChars: sanitized.length - cap }
+  // Sanitizing advances in bounded slices rather than over the whole string,
+  // so a large tool result (the ticket anticipates "tens of KB", e.g. a big
+  // `git log`) never pays the full pass for content that is discarded past
+  // `cap` anyway. Reading has to continue while the kept text is still short
+  // of `cap`: sanitizing can strip an arbitrary amount of any one slice --
+  // control-heavy output is exactly what it defends against -- and stopping
+  // after a fixed prefix would return fewer than `cap` characters while real
+  // content still followed. Each slice ends at least `CAP_SLACK` past the
+  // last, so the loop advances and the total work stays linear in what is
+  // actually read.
+  let read = 0
+  let sanitized = ''
+  while (sanitized.length <= cap && read < text.length) {
+    const next = Math.min(text.length, read + (cap - sanitized.length) + CAP_SLACK)
+    sanitized += sanitize(text.slice(read, next))
+    read = next
   }
 
-  // Everything past `cap` is discarded either way, so a large tool result
-  // (the ticket anticipates "tens of KB", e.g. a big `git log`) never pays
-  // the full sanitize pass for content that is mostly thrown away -- only a
-  // bounded prefix is sanitized. `omittedChars` for the untouched remainder
-  // is then the raw (unsanitized) count, a correct lower bound rather than
-  // an exact one.
-  const prefix = text.slice(0, cap + CAP_SLACK)
-  const sanitized = sanitize(prefix)
-  const rawRemainder = text.length - prefix.length
+  // The never-read remainder is counted raw, so `omittedChars` can slightly
+  // over-count when that tail holds characters sanitizing would have
+  // stripped -- an approximate count of unread input, deliberately, rather
+  // than an exact one bought with the full O(n) pass this avoids.
+  const rawRemainder = text.length - read
   if (sanitized.length > cap) return { text: sanitized.slice(0, cap), omittedChars: rawRemainder + (sanitized.length - cap) }
   return { text: sanitized, omittedChars: rawRemainder }
 }

@@ -140,6 +140,19 @@ describe('deriveEntries', () => {
     expect(result.omittedChars).toBe(big.length - 100)
   })
 
+  it('still fills the cap when sanitizing strips more than the slack out of the prefix', () => {
+    // #83: the bounded-prefix optimization read only `cap + CAP_SLACK`
+    // characters, so control-heavy output -- exactly what the sanitizer
+    // exists to defend against -- came back short of `cap` while unread
+    // content still followed. Nine stripped bytes per kept character puts
+    // the ratio far past the slack.
+    const esc = String.fromCharCode(27)
+    const noisy = `x${esc.repeat(9)}`.repeat(500)
+    const result = capPayload(noisy, 100)
+    expect(result.text).toBe('x'.repeat(100))
+    expect(result.omittedChars).toBeGreaterThan(0)
+  })
+
   it('skips a record with no recognizable shape rather than throwing', () => {
     const entries = deriveEntries([null, 42, 'a string', {}, { uuid: 'u1' }])
     expect(entries).toEqual([])
