@@ -1,0 +1,10 @@
+{
+  "$comment": "Authoritative decision-case table for scripts/port-tick/liveness.mjs's classifyUnmatched. Per plugins/port/docs/PIPELINE.md → 'Liveness': at most one automatic reset per item per session, and only when this session's own dispatch log records the item.",
+  "function": "classifyUnmatched",
+  "cases": [
+    { "name": "no dispatch-log row at all — report-only forever", "input": null, "expected": { "class": "no-record" } },
+    { "name": "first unmatched tick after a fresh dispatch — debounce to suspect", "input": { "stage": "impl", "state": "dispatched", "resets": 0 }, "expected": { "class": "suspect", "nextState": "suspect", "nextResets": 0 } },
+    { "name": "still unmatched after suspect, never reset — safe to reset", "input": { "stage": "impl", "state": "suspect", "resets": 0 }, "expected": { "class": "reset", "nextState": "reset", "nextResets": 1 } },
+    { "name": "already reset once and stalled again — capped, never reset twice", "input": { "stage": "impl", "state": "reset", "resets": 1 }, "expected": { "class": "capped" } }
+  ]
+}

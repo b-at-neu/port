@@ -1,0 +1,28 @@
+{
+  "$comment": "Authoritative decision-case table for scripts/port-tick/gates.mjs. Per plugins/port/skills/pipeline/SKILL.md's Mergeability gate, Refresh sweep, Zero-diff review gate, Cycle cap, and Approved pull requests sections.",
+  "cases": [
+    { "function": "mergeabilityRoute", "name": "MERGEABLE dispatches", "input": ["MERGEABLE", 0], "expected": { "action": "dispatch", "unknownStreak": 0 } },
+    { "function": "mergeabilityRoute", "name": "CONFLICTING routes to refresh", "input": ["CONFLICTING", 0], "expected": { "action": "refresh", "unknownStreak": 0 } },
+    { "function": "mergeabilityRoute", "name": "UNKNOWN holds one tick", "input": ["UNKNOWN", 0], "expected": { "action": "hold", "unknownStreak": 1 } },
+    { "function": "mergeabilityRoute", "name": "UNKNOWN a second consecutive tick dispatches anyway", "input": ["UNKNOWN", 1], "expected": { "action": "dispatch", "unknownStreak": 0 } },
+
+    { "function": "refreshDecision", "name": "same-SHA guard escalates instead of refreshing again", "input": [{ "sha": "abc123", "count": 1 }, "abc123"], "expected": { "action": "escalate", "reason": "same-sha", "count": 1 } },
+    { "function": "refreshDecision", "name": "first refresh, no prior entry", "input": [null, "abc123"], "expected": { "action": "refresh", "count": 1 } },
+    { "function": "refreshDecision", "name": "a fourth consecutive refresh escalates instead", "input": [{ "sha": "old", "count": 3 }, "newsha"], "expected": { "action": "escalate", "reason": "consecutive-cap", "count": 4 } },
+
+    { "function": "capRefreshes", "name": "caps at 5, oldest first, remainder deferred", "input": [[{ "number": 20 }, { "number": 5 }, { "number": 30 }, { "number": 1 }, { "number": 40 }, { "number": 2 }], 5], "expected": { "toRefreshNumbers": [1, 2, 5, 20, 30], "deferredNumbers": [40] } },
+
+    { "function": "zeroDiffGate", "name": "no prior Code Review — dispatch", "input": { "reviews": [], "comments": [], "headRefOid": "sha1" }, "expected": { "action": "dispatch" } },
+    { "function": "zeroDiffGate", "name": "head moved since the review — dispatch", "input": { "reviews": [{ "body": "## Code Review — Cycle 1 · needs revision", "submittedAt": "2026-01-01T00:00:00Z", "commit": { "oid": "old-sha" } }], "comments": [], "headRefOid": "new-sha" }, "expected": { "action": "dispatch" } },
+    { "function": "zeroDiffGate", "name": "same head, no Gate cleared since — escalate", "input": { "reviews": [{ "body": "## Code Review — Cycle 1 · needs revision", "submittedAt": "2026-01-01T00:00:00Z", "commit": { "oid": "sha1" } }], "comments": [], "headRefOid": "sha1" }, "expected": { "action": "escalate" } },
+    { "function": "zeroDiffGate", "name": "same head, Gate cleared authorises one more review", "input": { "reviews": [{ "body": "## Code Review — Cycle 1 · needs revision", "submittedAt": "2026-01-01T00:00:00Z", "commit": { "oid": "sha1" } }], "comments": [{ "body": "## Gate cleared", "createdAt": "2026-01-02T00:00:00Z" }], "headRefOid": "sha1" }, "expected": { "action": "dispatch-once" } },
+
+    { "function": "cycleCapExceeded", "name": "below the cap", "input": [[{ "body": "## Code Review — Cycle 1 · needs revision" }, { "body": "## Code Review — Cycle 2 · needs revision" }], 5], "expected": false },
+    { "function": "cycleCapExceeded", "name": "at the cap — unconditional, even with a clean latest review", "input": [[{ "body": "## Code Review — Cycle 1 · needs revision" }, { "body": "## Code Review — Cycle 2 · approved" }, { "body": "## Code Review — Cycle 3 · approved" }, { "body": "## Code Review — Cycle 4 · approved" }, { "body": "## Code Review — Cycle 5 · approved" }], 5], "expected": true },
+
+    { "function": "approvedReverify", "name": "a red check withdraws approval", "input": { "verdict": { "pending": false, "red": [{ "name": "build", "conclusion": "FAILURE" }], "green": [] }, "mergeable": "MERGEABLE" }, "expected": { "action": "withdraw", "red": [{ "name": "build", "conclusion": "FAILURE" }] } },
+    { "function": "approvedReverify", "name": "CONFLICTING refreshes in place, approval stands", "input": { "verdict": { "pending": false, "red": [], "green": ["build"] }, "mergeable": "CONFLICTING" }, "expected": { "action": "refresh-in-place" } },
+    { "function": "approvedReverify", "name": "all green and mergeable — announce ready", "input": { "verdict": { "pending": false, "red": [], "green": ["build"] }, "mergeable": "MERGEABLE" }, "expected": { "action": "announce-ready", "green": ["build"] } },
+    { "function": "approvedReverify", "name": "still pending — wait", "input": { "verdict": { "pending": true, "red": [], "green": [] }, "mergeable": "MERGEABLE" }, "expected": { "action": "wait" } }
+  ]
+}
