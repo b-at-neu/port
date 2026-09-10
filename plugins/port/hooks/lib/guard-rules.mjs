@@ -40,9 +40,9 @@ export function bashPatternMatches(pattern, command) {
 
 /** Rewrites an in-repo absolute invocation back to its repo-relative form
  *  (#205) — a worktree agent's `configRoot` is its worktree, so `node
- *  <root>/scripts/checks.mjs` is the identical command to the allowlisted
- *  `node scripts/checks.mjs`, just spelled with the harness's requested
- *  absolute path. A quoted absolute argument (`"<root>/x" check "<root>/y"`)
+ *  <root>/<script>` is the identical command to the allowlisted `node
+ *  <script>`, just spelled with the harness's requested absolute path.
+ *  A quoted absolute argument (`"<root>/x" check "<root>/y"`)
  *  has its surrounding quotes dropped along with the root prefix, since an
  *  unquoted relative path is the form the allowlist actually matches — any
  *  *other* quoted span is left untouched. Fails closed **byte-for-byte**: a

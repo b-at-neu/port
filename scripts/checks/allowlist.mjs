@@ -292,5 +292,51 @@ export default async function ({ fail, note, ok }) {
     }
   }
 
-  note('allowlist: commands.* coverage, normalization cases, repoRelative cases, and phrase pins (#205)');
+  // --- Check F — what actually bounds the wildcard ------------------------------
+  // #212: both prose copies used to rest the trailing wildcard's
+  // fail-toward-availability argument on "the deny list stays the real safety
+  // surface for whatever gets chained after it", which is false — allow and deny
+  // matching both key off a command's leading tokens, so no deny pattern can fire
+  // on a call chained after a matched prefix. What makes the widening bounded is
+  // that the guard hook is **deny-only**: it can add a denial but never grant one,
+  // so a wildcard entry widens only what the hook declines to object to. That is a
+  // property of the shipped hook, so it is asserted against the hook itself rather
+  // than trusted as prose, and the two prose copies are pinned to state it.
+  {
+    const hookRel = 'plugins/port/hooks/agent-guard.mjs';
+    const hookText = readFileSync(join(root, hookRel), 'utf8');
+    const emitted = [...hookText.matchAll(/permissionDecision:\s*['"]([^'"]*)['"]/g)].map((m) => m[1]);
+    if (emitted.length === 0) {
+      fail('allowlist-deny-only', `${hookRel} emits no permissionDecision at all — the deny-only property is unverifiable`);
+    } else {
+      ok();
+    }
+    for (const value of emitted) {
+      if (value !== 'deny') {
+        fail(
+          'allowlist-deny-only',
+          `${hookRel} emits permissionDecision '${value}' — the hook must stay deny-only, or the trailing wildcard (#205) starts granting rather than merely not objecting`,
+        );
+      } else {
+        ok();
+      }
+    }
+
+    const copies = [
+      ['plugins/port/docs/PIPELINE.md', ['the guard hook is deny-only', 'it is not the deny list that bounds it', 'residual gap, stated plainly']],
+      ['plugins/port/templates/permissions.base.json', ['The guard hook is deny-only', 'What bounds it is NOT the deny list', 'Residual gap, stated']],
+    ];
+    for (const [rel, phrases] of copies) {
+      const text = readFileSync(join(root, rel), 'utf8');
+      for (const phrase of phrases) {
+        if (!text.includes(phrase)) {
+          fail('allowlist-deny-only', `${rel} no longer says "${phrase}" — #212's correction to what bounds the wildcard was reverted`);
+        } else {
+          ok();
+        }
+      }
+    }
+  }
+
+  note('allowlist: commands.* coverage, normalization cases, repoRelative cases, phrase pins (#205), and the deny-only bound (#212)');
 }
