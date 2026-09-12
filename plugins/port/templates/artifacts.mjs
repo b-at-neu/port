@@ -5,9 +5,9 @@
 //
 //   check <kind> <file> [--issue N] [--cycle N]
 //     Validate a single artifact file offline — no `gh`, no network, no
-//     config read. Kinds: commit, pr-body, review, revision. Run by the
-//     stage agents on the file they just wrote, so a malformed one fails in
-//     the worktree seconds after it is written instead of after `approved`.
+//     config read. Kinds are this module's own `CHECKS` registry keys, so
+//     this can't drift. Run by the stage agents on the file they just
+//     wrote, so a malformed one fails in the worktree, not after `approved`.
 //
 //   audit [<pr>...] [--limit <n>]
 //     Today's `gh`-driven pass over finished pull requests. Asserts the same
@@ -243,13 +243,47 @@ function checkRevision(text, { cycle } = {}) {
   return ok();
 }
 
-const CHECKS = { commit: checkCommit, 'pr-body': checkPrBody, review: checkReview, revision: checkRevision };
+/** Shared by `withdrawn` and `rebase-required`: heading on line 1, a 7-40
+ *  character hex SHA below it, and a backtick-quoted fact beside the SHA
+ *  (`missingNoun` names it — check or base branch). Line 1 is new here;
+ *  `audit` already filters comments on that equality before calling. */
+function checkShaAnnotated(heading, missingNoun) {
+  return (text) => {
+    const ls = lines(text);
+    const first = (ls[0] ?? '').trim();
+    if (first !== heading) {
+      return fail(`line 1 must be exactly '${heading}', got ${JSON.stringify(first)}`, `'${heading}'`);
+    }
+    const rest = ls.slice(1).join('\n');
+    if (!SHA_RE.test(rest)) {
+      return fail(`'${heading}' carries no 7-40 character hex SHA`, `'${heading}' followed by a 7-40 character hex SHA`);
+    }
+    const FULL_SHA = /^[0-9a-f]{7,40}$/;
+    const backticked = [...rest.matchAll(/`([^`]+)`/g)].map((m) => m[1]);
+    if (!backticked.some((b) => !FULL_SHA.test(b))) {
+      return fail(`'${heading}' names no ${missingNoun} — only a SHA`, `a backtick-quoted ${missingNoun} alongside the SHA`);
+    }
+    return ok();
+  };
+}
+
+// One registry for both modes — kind -> { run, heading }, `heading` the
+// exported constant itself so the layer 1 pin can assert identity; `null`
+// marks the two kinds `audit` matches by shape, not heading (#204).
+export const CHECKS = {
+  commit: { run: checkCommit, heading: null },
+  'pr-body': { run: checkPrBody, heading: null },
+  review: { run: checkReview, heading: REVIEW_HEADING },
+  revision: { run: checkRevision, heading: REVISION_HEADING },
+  withdrawn: { run: checkShaAnnotated(APPROVAL_WITHDRAWN_HEADING, 'check'), heading: APPROVAL_WITHDRAWN_HEADING },
+  'rebase-required': { run: checkShaAnnotated(REBASE_REQUIRED_HEADING, 'base branch'), heading: REBASE_REQUIRED_HEADING },
+};
 
 function runCheck(argv) {
-  const usage = 'usage: node artifacts.mjs check <commit|pr-body|review|revision> <file> [--issue N] [--cycle N]';
+  const usage = `usage: node artifacts.mjs check <${Object.keys(CHECKS).join('|')}> <file> [--issue N] [--cycle N]`;
   const kind = argv[0];
   const file = argv[1];
-  if (!kind || !CHECKS[kind]) die(`check needs one of 'commit', 'pr-body', 'review', 'revision'. ${usage}`);
+  if (!kind || !CHECKS[kind]) die(`check does not recognize kind '${kind}'. ${usage}`);
   if (!file) die(`check needs a file. ${usage}`);
 
   const opts = {};
@@ -274,7 +308,7 @@ function runCheck(argv) {
     process.exit(1);
   }
 
-  const result = CHECKS[kind](text, opts);
+  const result = CHECKS[kind].run(text, opts);
   if (result.ok) {
     console.log(`ok    ${kind} ${file}`);
     process.exit(0);
@@ -461,50 +495,16 @@ function runAudit(argv) {
       }
     }
 
-    // --- Approval withdrawn ---
-    // The cockpit's carve-out to the `<labels.approved>` never-touch rail: a
-    // comment naming the check, its conclusion, its link, and the head SHA the
-    // conclusion belongs to — the four facts that authorise the removal.
+    // --- Approval withdrawn / Rebase required ---
+    // Both are a fixed heading on line 1, a SHA below it, and a backtick-
+    // quoted fact beside the SHA (a check name, or a base branch) — one loop
+    // over the registry's string headings checks both, replacing the two
+    // near-identical blocks that only differed in which constant they named (#204).
+    const shaAnnotated = Object.entries(CHECKS).filter(([, e]) => typeof e.heading === 'string');
     for (const c of pr.comments) {
-      const cl = lines(c.body);
-      const first = (cl[0] ?? '').trim();
-      if (first !== APPROVAL_WITHDRAWN_HEADING) continue;
-      const rest = cl.slice(1).join('\n');
-      if (!SHA_RE.test(rest)) {
-        auditFail(at('approval-withdrawn'), `'${APPROVAL_WITHDRAWN_HEADING}' carries no 7-40 character hex SHA`);
-        continue;
-      }
-      // At least one other backtick-quoted token beside the SHA itself — the
-      // check name.
-      const FULL_SHA = /^[0-9a-f]{7,40}$/;
-      const backticked = [...rest.matchAll(/`([^`]+)`/g)].map((mm) => mm[1]);
-      if (!backticked.some((b) => !FULL_SHA.test(b))) {
-        auditFail(at('approval-withdrawn'), `'${APPROVAL_WITHDRAWN_HEADING}' names no check — only a SHA`);
-      } else {
-        auditOk();
-      }
-    }
-
-    // --- Rebase required ---
-    // Posted by the cockpit (dispatch gate, approved re-verify) or review-agent
-    // (its own mergeability exit) whenever GitHub reports a pull request
-    // conflicting with its base: names the base branch and the head SHA the
-    // conflict was read against, mirroring the approval-withdrawn assertion.
-    for (const c of pr.comments) {
-      const cl = lines(c.body);
-      const first = (cl[0] ?? '').trim();
-      if (first !== REBASE_REQUIRED_HEADING) continue;
-      const rest = cl.slice(1).join('\n');
-      if (!SHA_RE.test(rest)) {
-        auditFail(at('rebase-required'), `'${REBASE_REQUIRED_HEADING}' carries no 7-40 character hex SHA`);
-        continue;
-      }
-      const FULL_SHA = /^[0-9a-f]{7,40}$/;
-      const backticked = [...rest.matchAll(/`([^`]+)`/g)].map((mm) => mm[1]);
-      if (!backticked.some((b) => !FULL_SHA.test(b))) {
-        auditFail(at('rebase-required'), `'${REBASE_REQUIRED_HEADING}' names no base branch — only a SHA`);
-      } else {
-        auditOk();
+      const first = (lines(c.body)[0] ?? '').trim();
+      for (const [kind, entry] of shaAnnotated) {
+        if (first === entry.heading) fold(at(kind), entry.run(c.body));
       }
     }
 

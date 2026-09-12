@@ -21,7 +21,7 @@ You are the Review agent (Stage 3) of the pipeline in `${CLAUDE_PLUGIN_ROOT}/doc
 | --- | --- | --- |
 | `<repo>` | `repo` | required — stop |
 | `<labels.X>` | `labels.X` | the standard name in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Label lifecycle" |
-| `<artifacts>` | `commands.artifacts` | not set — skip the `check` call below entirely |
+| `<artifacts>` | `commands.artifacts` | not set — skip the `check` calls below entirely |
 
 **Label names are configuration, not constants.** Never type a label name you did not read from config or the standard vocabulary.
 
@@ -93,7 +93,7 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.readyForReview>" --
 
    `gh pr checks` exposes status in the **`bucket`** field (pass/fail/pending). There is **no** `status` or `conclusion` field on `gh pr checks` — a detail worth remembering rather than rediscovering. **This early read is for diagnosis only** — it is what any Critical-finding log lookup works from. It is never the verdict's evidence: step 3 re-reads the rollup right before posting, because a check can conclude, or a red one turn green, in the time spent reviewing the diff.
 
-   **Mergeability exit — check before doing any of the work below.** If `mergeable` reads `CONFLICTING`, **no verdict is formed on a pull request that cannot be merged**: GitHub cannot build a merge ref, so no check has ever run on this diff. Write `.temp/rebase-required-<pr-number>.md` (`## Rebase required`, naming `baseRefName` and `headRefOid` — format in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Rebase required"), `gh pr comment <pr-number> --repo <repo> --body-file .temp/rebase-required-<pr-number>.md`, then `gh pr edit <pr-number> --repo <repo> --remove-label "<labels.reviewing>" --add-label "<labels.readyForReview>,<labels.refreshBranch>"`. Post **no** review — no cycle is consumed, exactly like step 3's head-moved exit — and report that the pull request conflicts with its base and a refresh will rebase it this tick, returning to review automatically once it clears. `UNKNOWN` never blocks this exit: proceed as normal, since GitHub has not computed mergeability yet and the read above is what triggers it.
+   **Mergeability exit — check before doing any of the work below.** If `mergeable` reads `CONFLICTING`, **no verdict is formed on a pull request that cannot be merged**: GitHub cannot build a merge ref, so no check has ever run on this diff. Write `.temp/rebase-required-<pr-number>.md` (`## Rebase required`, naming `baseRefName` and `headRefOid` — format in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Rebase required"). **When `commands.artifacts` is set**, run `<artifacts> check rebase-required .temp/rebase-required-<pr-number>.md` first — a non-zero exit means rewrite the file and re-run it, never comment past a failing check; skip when null. Then `gh pr comment <pr-number> --repo <repo> --body-file .temp/rebase-required-<pr-number>.md`, then `gh pr edit <pr-number> --repo <repo> --remove-label "<labels.reviewing>" --add-label "<labels.readyForReview>,<labels.refreshBranch>"`. Post **no** review — no cycle is consumed, exactly like step 3's head-moved exit — and report that the pull request conflicts with its base and a refresh will rebase it this tick, returning to review automatically once it clears. `UNKNOWN` never blocks this exit: proceed as normal, since GitHub has not computed mergeability yet and the read above is what triggers it.
 
    When `docs.engineering` is set, read it — it is a review dimension and you may cite it in findings.
 

@@ -44,13 +44,54 @@ export default async function ({ fail, ok }) {
     ok();
   }
 
+  // --- Artifact registry claims every heading constant, both directions -------
+  // A seventh `*_HEADING` export with no matching `CHECKS` entry is validated
+  // by `audit` alone and unreachable from `check` — exactly #204's bug. Two
+  // entries sharing one heading is that bug mirrored: one artifact would carry
+  // two kind names, and `audit`'s registry loop would `fold` twice on the same
+  // comment — so the pin is *exactly* one claim, never merely at least one.
+  // The reverse direction catches a registry `heading` retyped as a *diverging*
+  // literal: `===` on the two string-typed headings compares by value, so an
+  // identically retyped literal passes, and identity only bites for the
+  // regex-typed `review` / `revision` entries.
+  {
+    const mod = await import(pathToFileURL(join(root, 'plugins/port/templates/artifacts.mjs')).href);
+    const headingExports = Object.keys(mod).filter((k) => /_HEADING$/.test(k));
+    const registryHeadings = Object.values(mod.CHECKS).map((e) => e.heading).filter((h) => h != null);
+    for (const name of headingExports) {
+      const claimed = registryHeadings.filter((h) => h === mod[name]);
+      if (claimed.length === 0) {
+        fail('artifacts-registry', `${name} is exported but claimed by no CHECKS entry`);
+      } else if (claimed.length > 1) {
+        fail(
+          'artifacts-registry',
+          `${name} is claimed by ${claimed.length} CHECKS entries — one artifact must have exactly one kind name`,
+        );
+      } else {
+        ok();
+      }
+    }
+    for (const [kind, entry] of Object.entries(mod.CHECKS)) {
+      if (entry.heading != null && !headingExports.some((name) => mod[name] === entry.heading)) {
+        fail('artifacts-registry', `CHECKS.${kind}'s heading is not one of artifacts.mjs's own *_HEADING exports`);
+      } else {
+        ok();
+      }
+      if (typeof entry.run !== 'function') {
+        fail('artifacts-registry', `CHECKS.${kind}.run is not a function — an entry cannot be half-wired`);
+      } else {
+        ok();
+      }
+    }
+  }
+
   // --- Artifact validator's patterns accept a good example, reject a bad one --
   // A check that cannot be made to fail is not a check. The commit case uses the
   // real historical failure: a 378-character paragraph with no '#N ' prefix,
   // standing in for the explanatory-text subject that recurred four times in one
   // pipeline run before this validator existed.
   {
-    const { COMMIT_SUBJECT, REVIEW_HEADING, REVISION_HEADING, REVISION_OPENS, REVISION_DETAIL, OPERATOR_ONLY_STEP } =
+    const { COMMIT_SUBJECT, REVIEW_HEADING, REVISION_HEADING, REVISION_OPENS, REVISION_DETAIL, OPERATOR_ONLY_STEP, CHECKS } =
       await import(pathToFileURL(join(root, 'plugins/port/templates/artifacts.mjs')).href);
 
     const cases = [
@@ -78,6 +119,32 @@ export default async function ({ fail, ok }) {
       fail('artifacts-patterns', `REVISION_DETAIL accepts its bad example ${JSON.stringify(badDetail)}`);
     } else {
       ok();
+    }
+
+    // withdrawn / rebase-required return { ok } from a closure, not a regex,
+    // so they're exercised against PIPELINE.md's canonical bodies (good), the
+    // same body with only the SHA backticked (bad: names no fact), and the
+    // same body under a renamed heading (bad: wrong line 1) (#204).
+    const shaCases = [
+      [
+        'withdrawn',
+        '## Approval withdrawn\n`ci/build` went **FAILURE** on `abc1234def` after approval. https://example.com/1',
+        '## Approval withdrawn\nWent **FAILURE** on `abc1234def` after approval.',
+        '## Approval revoked\n`ci/build` went **FAILURE** on `abc1234def` after approval.',
+      ],
+      [
+        'rebase-required',
+        '## Rebase required\nConflicts with `main` at `abc1234def` — GitHub can\'t build a merge ref, so no checks ran on this diff.',
+        '## Rebase required\nConflicts with a branch at `abc1234def` — GitHub can\'t build a merge ref.',
+        '## Rebase pending\nConflicts with `main` at `abc1234def` — GitHub can\'t build a merge ref.',
+      ],
+    ];
+    for (const [kind, good, badFact, badHeading] of shaCases) {
+      const run = CHECKS[kind].run;
+      if (!run(good).ok) fail('artifacts-patterns', `${kind} rejects its own good example`);
+      else if (run(badFact).ok) fail('artifacts-patterns', `${kind} accepts a body naming only a SHA`);
+      else if (run(badHeading).ok) fail('artifacts-patterns', `${kind} accepts a renamed heading`);
+      else ok();
     }
   }
 }
