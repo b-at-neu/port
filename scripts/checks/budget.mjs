@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, readJson } from '../lib/files.mjs';
+import { root, readJson, pipelineTickText } from '../lib/files.mjs';
 
 // #188: per-ticket dispatch cost accounting. A new topic module rather than
 // growing scripts/checks/cockpit.mjs (already at its recorded 610-line cap) —
@@ -418,7 +418,10 @@ export default async function ({ fail, ok }) {
     } else {
       ok();
     }
-    if (!/`TaskList` reports live agents only:/.test(skillText)) {
+    // #203 moved the liveness cross-check itself into TICK-PROSE.md (followed
+    // when commands.tick is null) — this phrase now lives there, not in
+    // SKILL.md, so the union is what this assertion must read.
+    if (!/`TaskList` reports live agents only:/.test(pipelineTickText())) {
       fail('budget-docs', `${skillRel}'s liveness cross-check must state that TaskList reports live agents only, since every class there infers termination from absence`);
     } else {
       ok();
