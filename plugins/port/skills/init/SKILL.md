@@ -211,6 +211,18 @@ node --version
 - Set `commands.worktrees` to `"node scripts/port-worktrees.mjs"` in `.claude/port.config.json`.
 - Add `Bash(node scripts/port-worktrees.mjs *)` to **both** `.claude/settings.json`'s `permissions.allow` and `.claude/port.config.json`'s `extraAllow`, so a later reconcile keeps it.
 
+## 7.6. Install the budget script
+
+`commands.budget` gives the cockpit a per-ticket dispatch ceiling (`budget.wallClockMinutes`) and cost reporting, instead of no visibility into what a ticket costs at all. Installing it needs Node, under the **same gate** as step 7 — do not ask about Node twice; reuse the answer from that step.
+
+**No Node, or the operator declined step 7** → leave `commands.budget` null, install nothing, and say plainly in step 10's report that nothing measures or bounds ticket cost — `reviewCycleCap` still bounds review loops only.
+
+**Node present and the operator accepts:**
+
+- Copy `${CLAUDE_PLUGIN_ROOT}/templates/budget.mjs` to `scripts/port-budget.mjs`. If it already exists, diff it rather than overwriting, and ask.
+- Set `commands.budget` to `"node scripts/port-budget.mjs"` in `.claude/port.config.json`.
+- Add `Bash(node scripts/port-budget.mjs *)` to **both** `.claude/settings.json`'s `permissions.allow` and `.claude/port.config.json`'s `extraAllow`, so a later reconcile keeps it.
+
 ## 8. Bootstrap ignores
 
 Ensure `.gitignore` covers `.agents/`, `.temp/`, and the worktree root `.claude/worktrees/`. Append only what is missing.
@@ -241,6 +253,8 @@ Never let the operator walk away believing they have a merge gate they do not ha
 **If `commands.artifacts` was left null** — no Node, or the operator declined — say so here too: the stage agents will still produce the strict commit/pull-request/review/revision format, but nothing validates it locally, and a malformed one surfaces only in the layer 2 audit at `<labels.approved>`, or not at all if that workflow was never installed either.
 
 **If `commands.worktrees` was left null** — say so here too: the pipeline creates a worktree per ticket regardless, and with no reclamation script installed they will accumulate under `.claude/worktrees/` with no automatic cleanup; `/port:worktree-clean` is manual-only without it.
+
+**If `commands.budget` was left null** — say so here too: nothing measures or bounds ticket cost, and `reviewCycleCap` still bounds review loops only.
 
 **In single-branch mode**, say instead of the warning below about the default branch differing from the integration branch (it is unreachable when there is only one branch, since single-branch mode sets `integration` to the default branch by construction): "Single-branch mode: `<default>` is both the integration branch and the default branch, so this config reaches dispatched agents on the merge that lands it. `/port:release` is unavailable. If you enabled the approval gate, it covers every pipeline pull request — there is no release pull request to exempt."
 

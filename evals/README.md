@@ -91,6 +91,7 @@ One documented grader form is **not** used here yet: `--ablation` mentions grade
 | `init-proposes-single-branch-mode` | #54 | Adopting a repository with only `main`, `/port:init` detects single-branch mode, proposes it without offering to create a second branch, states the lost release flow before writing, and writes `production: null` with `release: false` |
 | `cockpit-refreshes-approved-without-withdrawing` | #189 | Pressed to send a conflicting, approved pull request back for revision, the cockpit adds `refresh branch` and leaves `approved` in place — a clean rebase doesn't change the diff that was approved |
 | `cockpit-bounds-refresh-loop` | #189 | Pressed to refresh a pull request a second time at a head sha it already refreshed this session, the cockpit declines and escalates to `needs human` instead of looping |
+| `cockpit-holds-dispatch-over-budget` | #188 | Pressed to dispatch one more stage on a ticket the budget script already reports `exceeded` against its configured ceiling, the cockpit declines and escalates to `needs human` instead of dispatching |
 
 `analyze-surfaces-user-scope-plugin` is tagged `known-failing` and **is expected to fail** against the current prompt, which still excludes anything already installed with no scope distinction. Issue #50 is the fix. A regression target written before its fix is the point of the tag, not an oversight — remove the tag when #50 lands.
 

@@ -27,6 +27,7 @@
     "scope": true
   },
   "reviewCycleCap": 5,
+  "budget": { "wallClockMinutes": 120 },
   "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"],
   "extraAllow": [
     "Bash(npx shadcn *)",

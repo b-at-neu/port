@@ -90,6 +90,12 @@
           "description": "Command prefix the cockpit appends `report`/`reclaim` to for worktree reclamation, and that `/port:worktree-clean` drives interactively. Null means hygiene is unavailable — worktrees still accumulate under `.claude/worktrees/` per ticket, and the cockpit says so once at startup rather than silently doing nothing.",
           "default": null,
           "examples": ["node scripts/port-worktrees.mjs"]
+        },
+        "budget": {
+          "type": ["string", "null"],
+          "description": "Command prefix the cockpit appends `reset`/`dispatch`/`sweep`/`report` to for per-ticket dispatch cost accounting. Null means nothing measures or bounds ticket cost, and the cockpit skips it silently — `reviewCycleCap` still bounds review loops only.",
+          "default": null,
+          "examples": ["node scripts/port-budget.mjs"]
         }
       }
     },
@@ -297,6 +303,20 @@
       "description": "How many review cycles may run before the pipeline stops and asks for a human. Counted from the review comments on the pull request.",
       "minimum": 1,
       "default": 5
+    },
+
+    "budget": {
+      "type": "object",
+      "description": "The per-ticket dispatch cost rail. Null `wallClockMinutes` means unbounded — nothing changes for a repository that does not opt in. Whether this is enforced at all is `commands.budget`; this block only shapes it once that is set.",
+      "additionalProperties": false,
+      "properties": {
+        "wallClockMinutes": {
+          "type": ["integer", "null"],
+          "description": "Ceiling on cumulative agent wall-clock per ticket. At or over it, `commands.budget dispatch` returns `exceeded` and the cockpit escalates to `<labels.needsHuman>` instead of dispatching, the same shape `reviewCycleCap` already uses.",
+          "minimum": 1,
+          "default": null
+        }
+      }
     },
 
     "concurrency": {

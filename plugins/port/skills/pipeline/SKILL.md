@@ -179,6 +179,7 @@ Worktrees reported:
 Uncorrelatable announced:
 Plugin staleness: <not computable | N>
 Refreshed:
+Budget holds:
 ```
 
 Baseline `Denials consumed` with one call, and report nothing from the log on this first tick — a fresh session has no prior offset to diff against, so there is nothing new to report, not zero:
@@ -187,7 +188,9 @@ Baseline `Denials consumed` with one call, and report nothing from the log on th
 wc -l ".agents/denials.log"
 ```
 
-If the file does not exist, baseline at `0`. Every field after this step is written and read exactly where its own procedure names it — the ladder in Pacing, the resume line and denial offset at the top of the Tick procedure, the three change-only reports in Housekeeping, and `Refreshed:` in the Refresh sweep.
+If the file does not exist, baseline at `0`. Every field after this step is written and read exactly where its own procedure names it — the ladder in Pacing, the resume line and denial offset at the top of the Tick procedure, the three change-only reports in Housekeeping, `Refreshed:` in the Refresh sweep, and `Budget holds:` in the Budget gate.
+
+**Step 9 — budget reset.** Read `commands.budget` (a `string | null` field — the full command prefix, e.g. `node scripts/port-budget.mjs`); **absent or `null` → skip silently, say nothing** for the rest of the session — no dispatch ceiling and no cost reporting, matching `commands.artifacts`. **Set** → run `<commands.budget> reset` once, before the first tick, closing any open dispatch a crashed prior session left running (flushed to its ticket's ledger as `lost`); echo its output only if it closed anything.
 
 ## UX states (startup preflight)
 
@@ -311,6 +314,7 @@ Exact copy, one message per state, `<…>` substituted. These fire from inside t
 | `<owner>` / `<name>` | `repo`, split on `/` | required — stop |
 | `<labels.X>` | `labels.X` | the standard name in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Label lifecycle" |
 | `<commands.worktrees>` | `commands.worktrees` | hygiene unavailable — see Startup preflight step 6 |
+| `<commands.budget>` | `commands.budget` | absent or `null` → skip silently, say nothing — no dispatch ceiling and no cost reporting |
 
 **`<labels.X>` names a slot, never a literal.** The value that belongs on a command line is the resolved **Name** for that key — `labels[key] ?? default` — read from the label vocabulary you resolve below, never the bare key itself and never retyped from memory. `<labels.planApproved>` resolves to `plan approved` in a repository with no override; it must never appear on a command line as `planApproved`. `gh issue list --label <unknown>` returns `[]` with exit code 0, so a wrong string here is never an error — it is silence, indistinguishable from a genuinely empty queue.
 
@@ -356,9 +360,7 @@ using a `<kind>` naming what the artifact is (e.g. `escalation`, `gate-cleared`,
 
 ## Ownership (multi-operator invariant)
 
-Labels say **what stage** an item is in; the GitHub **assignee** says **whose cockpit owns it** — so every query below is filtered to `--assignee "@me"`, and this cockpit acts only on its own operator's work. Two rules bind you: **act only on items assigned to you**, and **leave exactly one assignee** on an item you claim.
-
-Unassigned items are invisible to every cockpit by design — the **unowned sweep** is what keeps them diagnosable, and `work on #N` is what claims one. Full rationale: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Multi-operator partitioning".
+Labels say **what stage** an item is in; the GitHub **assignee** says **whose cockpit owns it** — so every query below is filtered to `--assignee "@me"`, and this cockpit acts only on its own operator's work. Two rules bind you: **act only on items assigned to you**, and **leave exactly one assignee** on an item you claim. Unassigned items are invisible to every cockpit by design — the **unowned sweep** is what keeps them diagnosable, and `work on #N` is what claims one. Full rationale: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Multi-operator partitioning".
 
 ## Tick procedure
 
@@ -410,7 +412,7 @@ Then, in this order. Steps 7 and 8 are split apart deliberately — they are the
 5. **Liveness cross-check** — call `TaskList` **first, unconditionally**, before anything else in this step (an empty in-flight set is not a reason to skip it — it is the case a stall is invisible in), then correlate the in-flight sets against its result and this session's own dispatch log (`.temp/dispatch-log.md`); auto-reset a dispatch this session provably lost, report every other case, and handle a usage-limit condition (see "Liveness" and "Agent questions and blockers" below).
 6. **Housekeeping** — run worktree hygiene, then the denial, unowned, ungated, and plugin-staleness reports (only the ones whose sets changed since `.temp/tick-state.md`'s remembered sets).
 7. **Call `ScheduleWakeup`**, skipped only while draining. **A non-draining tick that ends without this call has failed**, no matter how much of the above happened.
-8. **Write `.temp/tick-state.md` fresh** (Write tool) — `Last tick` and `Scheduled` from this tick's `Date:` header and the delay actually passed to `ScheduleWakeup`, plus the updated `Cadence step`, `No-change ticks`, `Denials consumed`, `Plugin staleness`, `Refreshed`, and the three remembered report sets.
+8. **Write `.temp/tick-state.md` fresh** (Write tool) — `Last tick` and `Scheduled` from this tick's `Date:` header and the delay actually passed to `ScheduleWakeup`, plus the updated `Cadence step`, `No-change ticks`, `Denials consumed`, `Plugin staleness`, `Refreshed`, `Budget holds`, and the three remembered report sets.
 9. **Only then, write the tick report.** Its closing "next tick" line is not a fresh decision — it is the record of step 7: state the delay you actually passed to `ScheduleWakeup`, or that you are draining and skipped the call. Never write this line before step 7 runs. **Every report carries a Liveness clause** naming the live agent count and each live agent's `description` (see UX states) — the number cannot be written without step 5's `TaskList` call, so its absence is what makes a skipped call visible to the operator, not just to this session.
 
 **Never busy-wait inside a tool call.** The next tick is how this cockpit waits — never `sleep`, never `gh pr checks --watch`, never any chained wait. A check unconcluded this tick is re-read next tick, exactly as the approved re-verify already does; a wait burns the turn and the wall clock for a completion that arrives on its own anyway, since background-agent completions wake this session between scheduled ticks regardless.
@@ -482,7 +484,7 @@ An entry is dropped from `Refreshed:` once its pull request reads `MERGEABLE`, s
 
 **While draining, this gate computes nothing and reports nothing** — there is no dispatch to gate, so nothing is held.
 
-**Liveness cross-check (each tick, step 5).** An in-flight label is a claim, never a heartbeat, and neither is its absence — a label is not evidence of liveness or of non-liveness. Call `TaskList` first, before reading anything else in this step, whether or not any set below is non-empty: the zero-agent case is exactly where a stall goes unnoticed, and it is the case a 96-tick session once sat in without ever making this call. Take the results of the five in-flight aliases above and match each item against that `TaskList` result by the dispatch `description`, which the harness records verbatim (`"<stage> #<n>"`). Before classifying, Read `.temp/dispatch-log.md` — the precondition for every reset below is **"reset only an item this session's own dispatch log records"**, never an item this session never dispatched.
+**Liveness cross-check (each tick, step 5).** An in-flight label is a claim, never a heartbeat, and neither is its absence — a label is not evidence of liveness or of non-liveness. Call `TaskList` first, before reading anything else in this step, whether or not any set below is non-empty: the zero-agent case is exactly where a stall goes unnoticed, and it is the case a 96-tick session once sat in without ever making this call. Take the results of the five in-flight aliases above and match each item against that `TaskList` result by the dispatch `description`, which the harness records verbatim (`"<stage> #<n>"`, where `<n>` is the item's own number — a pull request for `review`/`revise`). **`TaskList` reports live agents only:** a finished agent is absent from it, never present with a finished state, which is why every class below infers termination from absence and why the budget sweep takes `--completed` from the relay loop instead. Before classifying, Read `.temp/dispatch-log.md` — the precondition for every reset below is **"reset only an item this session's own dispatch log records"**, never an item this session never dispatched.
 
 **The tick report's Liveness clause is what makes the call checkable, not the sentence.** State the live agent count and each live agent's `description` — the same shape worktree hygiene already requires ("an adjective like *pruned* is never a sufficient report"). **A tick that reports on liveness without a `TaskList` call this tick has failed**, and an empty count is written as `**Liveness:** 0 agents live · no in-flight items` (see UX states), never omitted.
 
@@ -515,9 +517,7 @@ An entry is dropped from `Refreshed:` once its pull request reads `MERGEABLE`, s
 
 Full background: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Liveness".
 
-**Worktree hygiene (each tick, step 6).** `commands.worktrees` collapses everything this section used to do by hand — enumeration, correlation, gh resolution, and removal — into one deterministic call whose stdout *is* the report; see `${CLAUDE_PLUGIN_ROOT}/templates/worktrees.mjs`. This cockpit no longer runs `git worktree` itself at all.
-
-**Not configured** (`commands.worktrees` is null) — skip this step; the Startup preflight already said so once, and the closing line carries `not configured` every tick instead of a hygiene line.
+**Worktree hygiene (each tick, step 6).** `commands.worktrees` collapses everything this section used to do by hand — enumeration, correlation, gh resolution, and removal — into one deterministic call whose stdout *is* the report; see `${CLAUDE_PLUGIN_ROOT}/templates/worktrees.mjs`. This cockpit no longer runs `git worktree` itself at all. **Not configured** (`commands.worktrees` is null) — skip this step; the Startup preflight already said so once, and the closing line carries `not configured` every tick instead of a hygiene line.
 
 **Configured** — one call, one `--protect` per live agent worktree `TaskList` reports (belt and braces on top of the script's own `OPEN` check):
 
@@ -550,11 +550,9 @@ Parse its JSON `summary` and `candidates` — never re-derive them by hand. The 
 
   > **Worktrees:** skipped this tick — `<commands.worktrees> reclaim` exited 1 (`<first line of stderr>`); nothing removed, and I'm not calling this clear.
 
-- A removal itself failed (script exit `2` — the Windows dependency-tree case):
+- A removal itself failed (script exit `2` — a populated dependency tree defeating even `--force`, common on Windows):
 
   > `failed` `.claude/worktrees/agent-a9fccca6…` — `git worktree remove` refused (`Invalid argument`). A later prune will **not** clear this; run `/port:worktree-clean`.
-
-On Windows especially, a populated dependency tree can defeat even `--force`, and the failure above is exactly that case — never claim "prune will fix it next tick." Report the failure and tell the human to run `/port:worktree-clean`.
 
 **Tie removal to the merge, in step 1.** For every number this tick confirmed merged or closed (see "Merged-pull-request reconciliation" above), run `<commands.worktrees> reclaim --issue <n> --json` and report the line it printed — this is the acceptance criterion "removed when its pull request merges or closes," with an exact known number rather than a correlation guess:
 
@@ -562,15 +560,13 @@ On Windows especially, a populated dependency tree can defeat even `--force`, an
 
 **Denial report (each tick).** The guard hook logs every `deny`, `miss`, and `gate-clear` decision it makes to **`.agents/denials.log`**, one four-field tab-separated line each (format in `PIPELINE.md` → "Denial visibility"), append-only. **Read from an offset, never the whole file:** `.temp/tick-state.md`'s `Denials consumed` holds the line count already accounted for — Read `.agents/denials.log` with `offset` set to that count **plus one**, since the Read tool's `offset` is a 1-indexed, inclusive start line and the count-th line was already consumed last tick; an empty result means no new lines, never re-scan from the top. Count only new lines whose decision field is `deny` — those are the guard hook actually denying something. A `miss` line is **not a denial**: it is this session's own (or another non-subagent session's) allowlist miss, already surfaced to a human as a normal prompt, and never worth reporting here. A `gate-clear` line is **never a denial either** — it is the audit record of an authorised `<labels.needsHuman>` removal; never report it here, and never mistake it for one. After reading, update `Denials consumed` to the new total line count (write it as part of step 8).
 
-The guard hook is no longer subagent-only: a `deny` line can now carry a `session:` actor, which means **this session's own** rails firing — a loop it tried, or an unauthorised gate clear it attempted — not a stage agent's allowlist miss. Break these out separately, since they mean something different: they are the guard working as intended against this session, not a permission gap to fix.
-
-If the new qualifying `deny` lines **cluster** — three or more new, or the same command repeated — report it once, e.g. *"⚠️ 4 stage-agent commands denied this tick (e.g. `printf … >` ×2) — the pipeline likely needs a permission or instruction change."* Report a `session:` deny separately even as a single occurrence, e.g. *"⚠️ 1 command denied this tick from me (a `gh` loop) — the rail working, nothing to fix."* Do not act on either automatically; this is visibility so the human knows when to harden the configuration. A few isolated stage-agent denials are normal and need no report. **A fresh session baselines silently** (Startup preflight step 8) instead of reporting the whole pre-existing history.
+If the new qualifying `deny` lines **cluster** — three or more new, or the same command repeated — report it once, e.g. *"⚠️ 4 stage-agent commands denied this tick (e.g. `printf … >` ×2) — the pipeline likely needs a permission or instruction change."* A `deny` line carrying a `session:` actor is **this session's own** rails firing — a loop it tried, or an unauthorised gate clear it attempted, not a stage agent's allowlist miss — so report it separately even as a single occurrence, e.g. *"⚠️ 1 command denied this tick from me (a `gh` loop) — the rail working, nothing to fix."* Do not act on either automatically; this is visibility so the human knows when to harden the configuration. A few isolated stage-agent denials are normal and need no report. **A fresh session baselines silently** (Startup preflight step 8) instead of reporting the whole pre-existing history.
 
 **Unowned report (each tick).** Report **only when the set changes since `.temp/tick-state.md`'s `Unowned reported`**, in one line, and **never act on it** — then write the new set back to that field:
 
 > ⚠️ Unowned pipeline items (no assignee — no cockpit will act on them): #412 (ready), #388 (plan review). Say "work on #412" to claim one.
 
-An **empty** sweep result is only meaningful when step 0's verdict is `verified` — that already confirms the label strings the `--jq` filter compares against are real labels in this repository, so no separate ad-hoc check is needed here.
+An **empty** result here is only meaningful once step 0's verdict is `verified`, which is what confirms the label strings are real in this repository.
 
 **Ungated report (each tick).** *(`modules.approvalGate`)* A pipeline pull request that lost the resolved `<labels.marker>` name merges with no gate at all, and CI cannot tell it from a human pull request. Report **only when the set changes since `.temp/tick-state.md`'s `Ungated reported`**, and **never add the label automatically** — then write the new set back to that field:
 
@@ -578,6 +574,7 @@ An **empty** sweep result is only meaningful when step 0's verdict is `verified`
 
 **Plugin staleness (each tick).** When Startup preflight step 4 resolved a comparison target, this tick's `pluginRepo` alias carries a fresh `behindBy`. **Report change-only**: announce once at the `0 → non-zero` crossing (see UX states, "The running copy just went stale"), compared against `.temp/tick-state.md`'s `Plugin staleness` field, then carry a one-clause reminder on every later tick's closing line for the rest of the session instead of repeating the full announcement — `behindBy` is monotonic within a session (the installed sha is fixed; only the target ref moves), so a single crossing plus a persistent clause is the whole report. Write the new count back to `Plugin staleness` every tick regardless of whether it changed. No computable target → this report is silently absent, exactly as step 4 already said once at startup.
 
+**Budget sweep (each tick, step 5, right after `TaskList`, when `commands.budget` is set).** Run `<commands.budget> sweep --live "<every live TaskList description, comma-separated>" --completed "<the descriptions of the agents whose completion notices woke this tick and read as a completed stage>"`. **`--completed` never comes from `TaskList`**, which reports live agents only — a finished agent is absent from it, never listed as finished — so its source is the relay loop's own classification of the completions this tick woke on (see "Agent questions and blockers"). A completion this tick did not see closes `lost`, the deliberate over-count. It closes any open dispatch that fell out of `--live`, marking the ones named in `--completed` as `completed` and every other as `lost`, and flushes each to its ticket's ledger. Echo its `closed …` lines only when it closed something, but **fold its `**Budget:**` line into the tick's closing line every tick** — `**Budget:** session 4 dispatches · 41m 12s agent wall-clock · #158 at 34m 01s of its 120m ceiling (28%)`. That line's session half is computed from the local log alone, so it is produced on a tick that closed nothing too; only its per-ticket clause depends on a ledger this sweep actually read.
 
 ## Dispatching
 
@@ -593,7 +590,7 @@ Agent({
 })
 ```
 
-**`model` is the one field you set beyond the stage.** Agent frontmatter is static, so an agent file cannot read `models` from config; passing it here is what honours the configuration, and it takes precedence over the frontmatter default. Everything else — tool scope, permission mode, `maxTurns`, worktree isolation — comes from the agent definition.
+**`model` is the one field you set beyond the stage.** Agent frontmatter is static, so an agent file cannot read `models` from config; passing it here is what honours the configuration, and it takes precedence over the frontmatter default. Everything else — tool scope, permission mode, `maxTurns`, worktree isolation — comes from the agent definition. For a refresh, say so in the `prompt` so the agent takes its refresh path: `Run your pipeline stage for PR #<n> in refresh mode.`
 
 **Every dispatch updates `.temp/dispatch-log.md`** (Write tool, rewriting the whole file) — add or update the item's row with `State: dispatched` and `Resets` left at whatever it already was (`0` on a first dispatch). This is what lets the liveness cross-check later tell "this session's own dispatch, now dead" apart from "an in-flight label this session never touched."
 
@@ -601,16 +598,18 @@ Stage mapping:
 
 | Trigger | `subagent_type` | Model |
 | --- | --- | --- |
-| Issue at `<labels.ready>` | `plan-agent` (fresh plan) | `models.plan` |
-| Issue at `<labels.planChangesRequested>` | `plan-agent` (revision) | `models.plan` |
-| Issue at `<labels.planApproved>` | `impl-agent` — **unless `SESSION REQUIRED` at its slot: announce, never dispatch** | `models.impl` |
-| Pull request at `<labels.readyForReview>` | `review-agent` — **unless `mergeable` is `CONFLICTING`: refresh instead, see "Refresh sweep"; or the newest review already covers the current head with no `## Gate cleared` since: escalate instead, see "Zero-diff review gate"; or it also carries `<labels.refreshBranch>`/`<labels.refreshing>`: refresh wins, never dispatch review this tick** | `models.review` |
-| Pull request at `<labels.needsRevision>` | `revise-agent` — **after the cycle-cap check**; **unless `SESSION REQUIRED` at its slot: announce, never dispatch**; **or it also carries `<labels.refreshBranch>`/`<labels.refreshing>`: refresh wins, never dispatch revision this tick** | `models.revise` |
-| Pull request at `<labels.refreshBranch>` | `revise-agent` in **refresh mode** | `models.revise` |
+| Issue at `<labels.ready>` | `plan-agent` (fresh plan) — **after the budget gate** | `models.plan` |
+| Issue at `<labels.planChangesRequested>` | `plan-agent` (revision) — **after the budget gate** | `models.plan` |
+| Issue at `<labels.planApproved>` | `impl-agent` — **unless `SESSION REQUIRED` at its slot: announce, never dispatch**; otherwise **after the budget gate** | `models.impl` |
+| Pull request at `<labels.readyForReview>` | `review-agent` — **unless `mergeable` is `CONFLICTING`: refresh instead, see "Refresh sweep"; or the newest review already covers the current head with no `## Gate cleared` since: escalate instead, see "Zero-diff review gate"; or it also carries `<labels.refreshBranch>`/`<labels.refreshing>`: refresh wins, never dispatch review this tick**; otherwise **after the budget gate** | `models.review` |
+| Pull request at `<labels.needsRevision>` | `revise-agent` — **after the cycle-cap check**; **unless `SESSION REQUIRED` at its slot: announce, never dispatch**; **or it also carries `<labels.refreshBranch>`/`<labels.refreshing>`: refresh wins, never dispatch revision this tick**; otherwise **after the budget gate** | `models.revise` |
+| Pull request at `<labels.refreshBranch>` | `revise-agent` in **refresh mode** — **after the budget gate** | `models.revise` |
 
 **Session-required items never dispatch.** Before dispatching impl or revise, read that item's `body` (already in the trigger query's result — both request `body` — so this costs no extra call) at its **marker slot** — the first non-empty line of the plan block, directly under `## Implementation Plan`, for an issue; the first non-empty line after `Closes #N`, for a pull request. Slot holds `> **SESSION REQUIRED:** <reason>` → announce, do not dispatch. Anything else at the slot, or no slot at all → dispatch normally. **Never search the rest of the body for the literal string** — a ticket that mentions `SESSION REQUIRED` in prose (explaining the mechanism, or why a step is or is not session-required) or inline code is not marked; read the one line at the slot, never a substring anywhere in the body. Full rule: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Session-required tickets" → "Detection".
 
-For a refresh, say so in the prompt so the agent takes its refresh path: `Run your pipeline stage for PR #<n> in refresh mode.`
+### Budget gate (the last check before every dispatch, when `commands.budget` is set)
+
+**It runs after every other pre-dispatch veto on this item's row above — `SESSION REQUIRED`, `CONFLICTING`, refresh-wins, the zero-diff gate, the cycle cap — and immediately before the `Agent` call**, because an `allow` starts that dispatch's clock: a veto evaluated afterwards charges a whole sweep interval to a ticket that never dispatched, biasing a rail whose job is escalation accuracy toward a false `exceeded`. **Name the flag per row, matching the number the `Agent` call's own `description` uses** — `--issue N` for the three issue-triggered rows (`ready`, `planChangesRequested`, `planApproved`), `--pr N` for the three pull-request-triggered rows (`readyForReview`, `needsRevision`, `refreshBranch`) — since the script keys `dispatchNumber`, and the sweep's `--live`/`--completed` correlation, on whichever number this call used; the ticket number on a pull-request row reintroduces the R2-M1 miss (`review`/`revise` closed `lost` on the first sweep while still running). `<commands.budget> dispatch (--issue N | --pr N) --stage <stage> --model <model>` checks the ticket's `budget.wallClockMinutes` ceiling — its first stdout line is the verdict, its second a human line to echo. **`allow`** → dispatch as above, dropping this item's entry from `.temp/tick-state.md`'s `Budget holds:` if present — the ledger read succeeded, so the hold streak resets. **`exceeded`** → do not dispatch; write `.temp/escalation-<n>.md` (`## Pipeline Escalation`, naming the ceiling and the consumed wall-clock — the human line above already has both), swap the item's trigger label to `<labels.needsHuman>`, comment, and notify, the same shape the cycle cap uses; drop its `Budget holds:` entry too. **`hold`** → an unreadable ledger. Check `Budget holds:` for this item's `#<n>×<count>` entry (same shape as the Refresh sweep's `Refreshed:`): **absent** (first hold) → do not dispatch this tick, write `#<n>×1` into `Budget holds:`, and report *"⏳ Couldn't read #158's cost ledger (`<reason>`) — holding its dispatch one tick rather than dispatching blind."* **present** (second or later consecutive hold) → dispatch anyway (the ceiling isn't enforceable on this one until a read succeeds), drop the entry, and report *"⚠️ Still can't read #158's cost ledger after two ticks — dispatching anyway; the ceiling isn't enforceable on this one until a read succeeds."* — same shape as the `UNKNOWN`-mergeability carve-out above. Any later non-`hold` verdict also drops the entry, so a recovered ledger never carries a stale count forward.
 
 ### Cycle cap (before every revise dispatch)
 
@@ -666,9 +665,7 @@ The gate applies **no special label** for a session-required plan; the marker is
 
 ### Session-required items
 
-**Surfacing these is your job, and nothing else will do it.** An item whose body carries the marker keeps its trigger label and is **never** dispatched. No agent will pick it up, so if you do not tell the human it sits there indefinitely — silently, because a trigger label normally means something is already moving. Announce it **once per session per item**, then take no other action.
-
-**Say "separate session", and mean it.** This cockpit has no `Edit` in its tool scope, so it cannot do the work regardless of which model it is running on; and it must stay free to keep ticking, since a long implementation here would stall every other item. Hand over the launch command with the name pre-filled, derived from the **issue** title.
+**Surfacing these is your job, and nothing else will do it.** An item whose body carries the marker keeps its trigger label and is **never** dispatched. No agent will pick it up, so if you do not tell the human it sits there indefinitely — silently, because a trigger label normally means something is already moving. Announce it **once per session per item**, then take no other action. **Say "separate session", and mean it.** This cockpit has no `Edit` in its tool scope, so it cannot do the work regardless of which model it is running on; and it must stay free to keep ticking, since a long implementation here would stall every other item. Hand over the launch command with the name pre-filled, derived from the **issue** title.
 
 - **Issue at `<labels.planApproved>` with the marker:**
 
@@ -690,9 +687,7 @@ The gate applies **no special label** for a session-required plan; the marker is
   - **A red check, excluding the excused carve-out** → write `.temp/withdrawn-<n>.md` (`## Approval withdrawn`, naming the check, its conclusion, its link, and the head SHA), `gh pr comment <n> --repo <repo> --body-file .temp/withdrawn-<n>.md`, then `gh pr edit <n> --repo <repo> --remove-label "<labels.approved>" --add-label "<labels.needsRevision>"`, then drop it from the announced set so a later re-approval announces again. Revision dispatches on the same tick under the existing rules — the cycle cap and `SESSION REQUIRED` check both still apply, unchanged.
   - **`mergeable: CONFLICTING`** → handled by the **Refresh sweep** above, not restated here — it adds `<labels.refreshBranch>` and **leaves `<labels.approved>` in place**, since a clean rebase does not change the diff that was approved.
 
-Announce each newly approved pull request once with a one-line summary, its URL, and the check conclusions the claim rests on; the human merges on GitHub. Track which you have announced in-session; re-announce only on request. When one is merged, the next tick's reconciliation drops it and announces the merge — **never keep listing a merged pull request as awaiting merge.**
-
-**Pressed to "move it along" with nothing red** — decline, and point at the merge: an approved, all-green pull request is not touched just because it is sitting there. See "Safety rails".
+Announce each newly approved pull request once with a one-line summary, its URL, and the check conclusions the claim rests on; the human merges on GitHub. Track which you have announced in-session; re-announce only on request. When one is merged, the next tick's reconciliation drops it and announces the merge — **never keep listing a merged pull request as awaiting merge.** **Pressed to "move it along" with nothing red** — decline, and point at the merge: an approved, all-green pull request is not touched just because it is sitting there. See "Safety rails".
 
 ### Agent questions and blockers (relay loop)
 
@@ -705,7 +700,7 @@ When a background subagent completes, read its final message:
   > ⛔ Usage limit — all 4 dispatched agents failed with *"You've hit your session limit · resets 4:10pm (America/New_York)"*. Parked #63, #67, #71 and PR #117 back at their trigger labels; nothing redispatches before the reset, and I have not changed any model. **Next tick:** ~2400s (just after 4:10pm).
 
   Call `ScheduleWakeup` for just after the reported reset time — a small buffer past it, or the idle delay with a note if the time cannot be parsed.
-- Anything else → a completed stage; the labels it set drive the next tick.
+- Anything else → a completed stage; the labels it set drive the next tick, and its `description` is what this tick's budget sweep passes as `--completed` (see "Budget sweep") — the only source for a graceful finish, since `TaskList` lists live agents only.
 
 ## Conversational commands
 
@@ -752,9 +747,7 @@ While draining, a tick still reports gates and relays completions, but dispatche
 - **Yes** — an agent in flight, or an item at a trigger label about to dispatch → **floor, ~270 seconds, no backoff ever.** Reset `Cadence step` and `No-change ticks` to `0`.
 - **No** — everything outstanding is `<labels.approved>` awaiting merge, a plan-review gate, `<labels.blocked>`, `<labels.needsHuman>`, a held item, a `SESSION REQUIRED` item, or nothing at all → **advance the ladder one rung per consecutive no-change tick**, capped: `270 → 540 → 1080 → 1800`. Increment `No-change ticks` and `Cadence step` in `.temp/tick-state.md`.
 
-**Reset to the floor immediately on any observed change** — a new trigger label, a merge, a completion, a gate answered, or the resumed-after-a-gap condition (Tick procedure, step 0.5). The reset is unconditional: even a tick that is otherwise "no-change" resets the ladder if anything changed since the last one.
-
-**Never stop — a stopped cockpit is the only dispatcher, and a `ready` label applied while it is silent would never be picked up.** An hour-of-quiet shutoff was considered and rejected for exactly this reason: draining is the operator's own off-switch (see Stop controls), and nothing else should mimic it. The usage-limit carve-out (wake just after the reported reset time) is unchanged and overrides the ladder when it fires.
+**Reset to the floor immediately on any observed change** — a new trigger label, a merge, a completion, a gate answered, or the resumed-after-a-gap condition (Tick procedure, step 0.5). The reset is unconditional: even a tick that is otherwise "no-change" resets the ladder if anything changed since the last one. **Never stop — a stopped cockpit is the only dispatcher, and a `ready` label applied while it is silent would never be picked up.** An hour-of-quiet shutoff was considered and rejected for exactly this reason: draining is the operator's own off-switch (see Stop controls), and nothing else should mimic it. The usage-limit carve-out (wake just after the reported reset time) is unchanged and overrides the ladder when it fires.
 
 **The idle path is where the `ScheduleWakeup` call gets skipped, and it is the path that matters most.** With nothing in flight there are no agent completions to wake the session, so the scheduled wakeup is the *only* thing that catches a human applying a label on GitHub. An idle tick that ends in prose instead of the `ScheduleWakeup` call never ticks again — silently, and after telling the human it would.
 
@@ -762,9 +755,7 @@ While draining, a tick still reports gates and relays completions, but dispatche
 
 Close every non-draining tick's report with the delay you actually scheduled: `**Next tick:** ~1800s (scheduled)` or `**Next tick:** ~270s (scheduled)`, and the first tick each rung is newly reached, append the **Backing off** UX state's clause naming what is still outstanding. While draining, step 7 is skipped entirely (see Stop controls) and the closing line reads `**Next tick:** none — draining. Say "resume" to restart ticking.`
 
-Background-agent completions wake this session automatically in between ticks; the scheduled wakeup is only the fallback that catches everything else. On every wakeup, run the tick procedure again.
-
-**Worst-case pickup latency for a human label change rises from 4.5 to 30 minutes** in the fully-idle, fully-backed-off state, and only there — nothing can move without you at that point, and the moment you say anything or apply the label that unblocks it, the next tick resets to the floor. Not a stall.
+Background-agent completions wake this session automatically in between ticks; the scheduled wakeup is only the fallback that catches everything else. On every wakeup, run the tick procedure again. **Worst-case pickup latency for a human label change rises from 4.5 to 30 minutes** in the fully-idle, fully-backed-off state, and only there — nothing can move without you at that point, and the moment you say anything or apply the label that unblocks it, the next tick resets to the floor. Not a stall.
 
 ## Manual and recovery
 
