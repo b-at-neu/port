@@ -74,6 +74,38 @@ export default async function ({ fail, note, ok }) {
     }
   }
 
+  // --- Check A' — a preexisting bare entry is never replaced by its wildcard --
+  // A wildcard entry alone already satisfies Check A's functional bare/suffix
+  // match above, so it cannot by itself catch a bare entry silently dropped
+  // when the wildcard was added alongside it — exactly what happened once: the
+  // #205 fix removed `Bash(node scripts/checks.mjs)` instead of keeping it
+  // (R3-M1, #212). `init/SKILL.md`'s reconcile rule says the wildcard form is
+  // "added alongside it — never removed", matching the paired bare/wildcard
+  // convention every other bare-invocable command in permissions.base.json
+  // already follows. Asserted as literal string presence, not functional
+  // matching, since functional matching is exactly what cannot distinguish
+  // the two states here.
+  {
+    const checkCommand = readJson('.claude/port.config.json').commands?.checks?.[0]?.run;
+    if (typeof checkCommand === 'string') {
+      const bareEntry = `"Bash(${checkCommand})"`;
+      const wildcardEntry = `"Bash(${checkCommand} *)"`;
+      for (const rel of ['.claude/settings.json', '.claude/port.config.json']) {
+        const text = readFileSync(join(root, rel), 'utf8');
+        if (!text.includes(bareEntry)) {
+          fail('allowlist-paired-entry', `${rel} is missing the bare entry ${bareEntry} — the wildcard must never replace it (#212)`);
+        } else {
+          ok();
+        }
+        if (!text.includes(wildcardEntry)) {
+          fail('allowlist-paired-entry', `${rel} is missing the wildcard entry ${wildcardEntry}`);
+        } else {
+          ok();
+        }
+      }
+    }
+  }
+
   // --- Check B — classifier cases for normalization ---------------------------
   // Each case names the failure it catches, mirroring hooks.mjs's own
   // "Guard hook classifier" style.
