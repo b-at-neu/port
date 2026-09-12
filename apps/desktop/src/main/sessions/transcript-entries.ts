@@ -162,7 +162,13 @@ export function headlineFor(name: string, input: unknown, cwd: string | null): s
     }
   }
 
-  return headline.length > HEADLINE_MAX ? headline.slice(0, HEADLINE_MAX) : headline
+  // Sanitized after the tool-specific extraction, same as every other
+  // rendered field -- the headline is the one line that is always visible
+  // without expanding a `<details>`, so it is the sink a bidi override or
+  // control character would reach first (R4-M1). `sanitize` can only
+  // shrink the string, so the length cap still applies after.
+  const sanitized = sanitize(headline)
+  return sanitized.length > HEADLINE_MAX ? sanitized.slice(0, HEADLINE_MAX) : sanitized
 }
 
 function imagePlaceholder(block: Record<string, unknown>): string {

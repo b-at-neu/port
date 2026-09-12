@@ -209,4 +209,8 @@ describe('headlineFor', () => {
   it('falls back to the tool name when no string field exists', () => {
     expect(headlineFor('SomeNewTool', { foo: 42 }, null)).toBe('SomeNewTool')
   })
+
+  it('strips a bidi override from the extracted headline (R4-M1)', () => {
+    expect(headlineFor('Bash', { command: '‮evil' }, null)).toBe('evil')
+  })
 })
