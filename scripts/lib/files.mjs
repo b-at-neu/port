@@ -22,6 +22,16 @@ export const walk = (dir) =>
  *  names the same path on Windows as on macOS/Linux. */
 export const relOf = (f) => f.slice(root.length + 1).split('\\').join('/');
 
+/** `SKILL.md` plus `TICK-PROSE.md`, concatenated — #203 moved the tick
+ *  procedure, refresh sweep, contention gate, zero-diff gate, liveness
+ *  cross-check, cycle cap, and pacing prose into the latter, followed only
+ *  when `commands.tick` is null. A phrase check that used to grep `SKILL.md`
+ *  alone for one of those sections now reads both, so it keeps meaning what
+ *  it did before the move rather than passing vacuously against a file that
+ *  no longer holds the phrase. */
+export const pipelineTickText = () =>
+  `${readFileSync(join(root, 'plugins/port/skills/pipeline/SKILL.md'), 'utf8')}\n${readFileSync(join(root, 'plugins/port/skills/pipeline/TICK-PROSE.md'), 'utf8')}`;
+
 /** Frontmatter key/value pairs. Deliberately not a YAML parser — presence and
  *  scalar shape is all these checks need, and a dependency is not worth it. */
 export function frontmatter(file) {

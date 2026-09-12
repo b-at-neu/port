@@ -1,0 +1,23 @@
+{
+  "$comment": "Authoritative decision-case table for scripts/port-tick/classify.mjs's partitionOwnership. Per plugins/port/docs/PIPELINE.md → 'Multi-operator partitioning': an item whose assignees do not include the viewer is never acted on, only reported.",
+  "function": "partitionOwnership",
+  "cases": [
+    {
+      "name": "mine, others, and unowned split correctly",
+      "input": {
+        "nodes": [
+          { "number": 1, "assignees": { "nodes": [{ "login": "me" }] } },
+          { "number": 2, "assignees": { "nodes": [{ "login": "someone-else" }] } },
+          { "number": 3, "assignees": { "nodes": [] } }
+        ],
+        "viewerLogin": "me"
+      },
+      "expected": { "mine": [1], "others": [2], "unowned": [3] }
+    },
+    {
+      "name": "empty node list",
+      "input": { "nodes": [], "viewerLogin": "me" },
+      "expected": { "mine": [], "others": [], "unowned": [] }
+    }
+  ]
+}

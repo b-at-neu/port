@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, readJson } from '../lib/files.mjs';
+import { root, readJson, pipelineTickText } from '../lib/files.mjs';
 
 export default async function ({ fail, ok }) {
   // --- Worktree reclamation template is self-contained and cross-platform ----
@@ -247,8 +247,8 @@ export default async function ({ fail, ok }) {
   // This checks that the split, its proof artifact, and its one-reset cap are
   // all still named, not quietly reverted to the old single-branch prose.
   {
-    const rel = 'plugins/port/skills/pipeline/SKILL.md';
-    const text = readFileSync(join(root, rel), 'utf8');
+    const rel = 'SKILL.md/TICK-PROSE.md';
+    const text = pipelineTickText();
 
     if (!text.includes('.temp/dispatch-log.md')) {
       fail('liveness-reset', `${rel} never names the '.temp/dispatch-log.md' artifact`);
@@ -292,8 +292,8 @@ export default async function ({ fail, ok }) {
   // `gh issue list --label <unknown>` (explaining why a wrong string is silent,
   // not the tick's own polling call) is correctly exempt.
   {
-    const rel = 'plugins/port/skills/pipeline/SKILL.md';
-    const text = readFileSync(join(root, rel), 'utf8');
+    const rel = 'SKILL.md/TICK-PROSE.md';
+    const text = pipelineTickText();
 
     for (const phrase of ['gh api graphql', '--include', '.temp/tick-state.md']) {
       if (!text.includes(phrase)) {
@@ -303,22 +303,20 @@ export default async function ({ fail, ok }) {
       }
     }
 
-    const tickStart = text.indexOf('## Tick procedure');
-    if (tickStart === -1) {
-      fail('tick-query', `${rel} has no '## Tick procedure' heading`);
+    // Scans the whole union rather than one heading-scoped section — #203
+    // split the Tick procedure across two files, and a per-label poll
+    // creeping back into either is equally a regression. The Configuration
+    // section's own illustrative `--label <unknown>` (explaining why a wrong
+    // string is silent, not a real polling call) is exempt.
+    const pollRe = /gh (?:issue|pr) list[^\n]*--label(?!\s*<unknown>)/g;
+    const hits = [...text.matchAll(pollRe)];
+    if (hits.length > 0) {
+      fail(
+        'tick-query',
+        `${rel}'s tick procedure still issues a per-label poll (${JSON.stringify(hits[0][0])}) — the collapse must fold it into the one query`,
+      );
     } else {
-      const tickEnd = text.indexOf('\n## ', tickStart + 1);
-      const tickSection = tickEnd === -1 ? text.slice(tickStart) : text.slice(tickStart, tickEnd);
-      const pollRe = /gh (?:issue|pr) list[^\n]*--label/g;
-      const hits = [...tickSection.matchAll(pollRe)];
-      if (hits.length > 0) {
-        fail(
-          'tick-query',
-          `${rel}'s Tick procedure still issues a per-label poll (${JSON.stringify(hits[0][0])}) — the collapse must fold it into the one query`,
-        );
-      } else {
-        ok();
-      }
+      ok();
     }
   }
 
@@ -329,8 +327,8 @@ export default async function ({ fail, ok }) {
   // human". This checks the ladder's constants and its two load-bearing
   // preconditions are still literal, checkable phrases.
   {
-    const rel = 'plugins/port/skills/pipeline/SKILL.md';
-    const text = readFileSync(join(root, rel), 'utf8');
+    const rel = 'SKILL.md/TICK-PROSE.md';
+    const text = pipelineTickText();
 
     for (const n of ['270', '540', '1080', '1800']) {
       if (!text.includes(n)) {
@@ -364,8 +362,8 @@ export default async function ({ fail, ok }) {
   // tool calls, busy-waiting on CI instead of letting the next scheduled tick
   // (or an event-driven completion) do the waiting.
   {
-    const rel = 'plugins/port/skills/pipeline/SKILL.md';
-    const text = readFileSync(join(root, rel), 'utf8');
+    const rel = 'SKILL.md/TICK-PROSE.md';
+    const text = pipelineTickText();
     if (/\bsleep\s+\d/.test(text)) {
       fail('no-busy-wait', `${rel} contains a 'sleep <n>'-shaped busy-wait — the next tick is how this cockpit waits`);
     } else {
@@ -379,8 +377,8 @@ export default async function ({ fail, ok }) {
   // the ownership rail itself, and a failed collapsed query must never be
   // mistaken for an empty, all-clear tick.
   {
-    const rel = 'plugins/port/skills/pipeline/SKILL.md';
-    const text = readFileSync(join(root, rel), 'utf8');
+    const rel = 'SKILL.md/TICK-PROSE.md';
+    const text = pipelineTickText();
 
     if (!text.includes('never acted on, only reported')) {
       fail(
@@ -438,15 +436,16 @@ export default async function ({ fail, ok }) {
       }
     }
 
-    const zeroDiffStart = skillText.indexOf('Zero-diff review gate');
+    const combinedText = pipelineTickText();
+    const zeroDiffStart = combinedText.indexOf('Zero-diff review gate');
     if (zeroDiffStart === -1) {
-      fail('zero-diff-review', `${skillRel} never declares a 'Zero-diff review gate'`);
+      fail('zero-diff-review', `SKILL.md/TICK-PROSE.md never declares a 'Zero-diff review gate'`);
     } else {
-      const zeroDiffEnd = skillText.indexOf('\n**File contention gate', zeroDiffStart);
-      const zeroDiffSection = zeroDiffEnd === -1 ? skillText.slice(zeroDiffStart) : skillText.slice(zeroDiffStart, zeroDiffEnd);
+      const zeroDiffEnd = combinedText.indexOf('\n**File contention gate', zeroDiffStart);
+      const zeroDiffSection = zeroDiffEnd === -1 ? combinedText.slice(zeroDiffStart) : combinedText.slice(zeroDiffStart, zeroDiffEnd);
       for (const phrase of ['commit.oid', 'headRefOid', '## Gate cleared']) {
         if (!zeroDiffSection.includes(phrase)) {
-          fail('zero-diff-review', `${skillRel}'s zero-diff review gate never names '${phrase}'`);
+          fail('zero-diff-review', `SKILL.md/TICK-PROSE.md's zero-diff review gate never names '${phrase}'`);
         } else {
           ok();
         }
@@ -475,8 +474,8 @@ export default async function ({ fail, ok }) {
   // recipe's three prohibitions, and that both stop paths name TaskList and
   // TaskStop.
   {
-    const rel = 'plugins/port/skills/pipeline/SKILL.md';
-    const text = readFileSync(join(root, rel), 'utf8');
+    const rel = 'SKILL.md/TICK-PROSE.md';
+    const text = pipelineTickText();
 
     if (!/a tick that reports on liveness without a `?TaskList`? call this tick has failed/i.test(text)) {
       fail(

@@ -1,0 +1,64 @@
+{
+  "$comment": "Authoritative decision-case table for scripts/port-tick/contention.mjs. Per plugins/port/docs/PIPELINE.md → 'File contention': held only at or above concurrency.overlapThreshold against one in-flight item's non-shared claims, counted per in-flight item, never pooled; fewest-conflicts-first ordering among survivors.",
+  "cases": [
+    {
+      "function": "parseFilesBlock",
+      "name": "no files fence at all — unstructured plan",
+      "input": "## Changes\nNo fence here.",
+      "expected": null
+    },
+    {
+      "function": "parseFilesBlock",
+      "name": "one path per line, reason text discarded",
+      "input": "```files\nsrc/lib/auth.ts — adds the session check\nsrc/lib/session.ts — new file\n```",
+      "expected": ["src/lib/auth.ts", "src/lib/session.ts"]
+    },
+    {
+      "function": "gateCandidates",
+      "name": "below threshold — dispatches freely",
+      "input": {
+        "candidates": [{ "item": 52, "paths": ["src/lib/session.ts"] }],
+        "occupiedSet": [{ "item": 67, "label": "pr opened", "paths": ["src/lib/auth.ts", "src/lib/session.ts"] }],
+        "sharedFiles": [],
+        "threshold": 2
+      },
+      "expected": { "dispatch": [52], "heldItems": [] }
+    },
+    {
+      "function": "gateCandidates",
+      "name": "at threshold — held against the one in-flight item",
+      "input": {
+        "candidates": [{ "item": 52, "paths": ["src/lib/auth.ts", "src/lib/session.ts"] }],
+        "occupiedSet": [{ "item": 67, "label": "pr opened", "paths": ["src/lib/auth.ts", "src/lib/session.ts"] }],
+        "sharedFiles": [],
+        "threshold": 2
+      },
+      "expected": { "dispatch": [], "heldItems": [52] }
+    },
+    {
+      "function": "gateCandidates",
+      "name": "a sharedFiles path never contributes to a hold",
+      "input": {
+        "candidates": [{ "item": 52, "paths": ["src/lib/registry.ts"] }],
+        "occupiedSet": [{ "item": 67, "label": "pr opened", "paths": ["src/lib/registry.ts"] }],
+        "sharedFiles": ["src/lib/registry.ts"],
+        "threshold": 1
+      },
+      "expected": { "dispatch": [52], "heldItems": [] }
+    },
+    {
+      "function": "gateCandidates",
+      "name": "fewest-conflicts-first: a later survivor is held once an earlier one dispatches",
+      "input": {
+        "candidates": [
+          { "item": 10, "paths": ["a.ts"] },
+          { "item": 11, "paths": ["a.ts", "b.ts"] }
+        ],
+        "occupiedSet": [],
+        "sharedFiles": [],
+        "threshold": 1
+      },
+      "expected": { "dispatch": [10], "heldItems": [11] }
+    }
+  ]
+}

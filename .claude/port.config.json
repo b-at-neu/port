@@ -10,7 +10,8 @@
     "bootstrap": ["pnpm install"],
     "checks": [{ "run": "node scripts/checks.mjs", "fix": null }],
     "artifacts": "node plugins/port/templates/artifacts.mjs",
-    "worktrees": "node plugins/port/templates/worktrees.mjs"
+    "worktrees": "node plugins/port/templates/worktrees.mjs",
+    "tick": "node scripts/port-tick.mjs"
   },
   "docs": {
     "engineering": "docs/ENGINEERING.md",
@@ -50,6 +51,7 @@
     "Bash(node scripts/checks.mjs)",
     "Bash(node scripts/checks.mjs *)",
     "Bash(node plugins/port/templates/artifacts.mjs *)",
-    "Bash(node plugins/port/templates/worktrees.mjs *)"
+    "Bash(node plugins/port/templates/worktrees.mjs *)",
+    "Bash(node scripts/port-tick.mjs *)"
   ]
 }

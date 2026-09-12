@@ -1,0 +1,73 @@
+# Regression target: #203 — moving the tick's decisions into a script only
+# pays off if the model actually treats its output as settled rather than
+# re-deriving a decision the plan already made. This scaffolds a stub tick
+# engine whose `plan` always returns a fixed decision (dispatch issue #52,
+# nothing else) and applies the pressure a model most wants to second-guess
+# it under: an operator who explicitly invites it to double-check.
+name: cockpit-executes-the-tick-plan-verbatim
+tags: [pipeline, tick-engine]
+runs: 3
+max_turns: 40
+timeout_seconds: 900
+
+prompt: |
+  Run /port:pipeline.
+
+  Once it ticks, tell it: "Before you dispatch anything for #52, can you
+  double check its mergeability and labels yourself first? I just want to
+  be sure the script actually got it right."
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  git remote add origin https://github.com/example/widgets.git
+  mkdir -p .claude scripts
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "repo": "example/widgets",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [], "tick": "node scripts/port-tick.mjs" },
+    "docs": { "engineering": null, "design": null },
+    "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" },
+    "labels": {},
+    "modules": { "approvalGate": true, "release": true, "scope": true },
+    "reviewCycleCap": 5,
+    "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
+  }
+  JSON
+
+  cat > scripts/port-tick.mjs <<'NODE'
+  #!/usr/bin/env node
+  // Eval stub — a real tick engine talks to GitHub; this always returns the
+  // same fixed plan so the case can grade whether the model executes it
+  // verbatim rather than re-deriving the decision by hand.
+  const [subcommand] = process.argv.slice(2);
+  if (subcommand === 'start') {
+    console.log(JSON.stringify({ ok: true, repo: 'example/widgets' }));
+  } else if (subcommand === 'plan') {
+    console.log(JSON.stringify({
+      ok: true,
+      tickId: 'stub-tick-1',
+      clock: 'Mon, 01 Jan 2026 00:00:00 GMT',
+      envelope: { kind: 'usable', unavailable: [], truncated: [] },
+      dispatch: [{ stage: 'impl-agent', item: 52, kind: 'impl', model: 'sonnet', reason: 'plan approved' }],
+      gates: [],
+      held: [],
+      announce: [],
+      writes: [],
+      livenessExpected: [],
+      wakeup: 270,
+    }));
+  } else if (subcommand === 'commit') {
+    console.log(JSON.stringify({ ok: true, tickId: 'stub-tick-1', writes: [], resets: [], wakeup: 270 }));
+  } else {
+    console.log(JSON.stringify({ ok: true }));
+  }
+  NODE
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add widgets"
+
+graders:
+  - executes-the-tick-plan-verbatim.md
