@@ -143,19 +143,43 @@ function cmdPlan(root, cfg) {
     dispatch.push({ stage: 'revise-agent', item: item.number, kind: 'refresh', model: cfg.models.revise, reason: 'refresh branch' });
   }
 
+  // --- Refresh sweep state: readyForReview ∪ approved reading CONFLICTING ---
+  // Collected here and resolved together below via gates.mjs's
+  // mergeabilityRoute/refreshDecision/capRefreshes — an automatic rebase +
+  // force-push, never a human gate. `refreshedUpdates`/`unknownStreakUpdates`
+  // are applied to tickState by `commit`, since `plan` itself never persists.
+  const refreshedState = tickState.refreshed ?? {};
+  const unknownStreakState = tickState.unknownStreak ?? {};
+  const refreshedUpdates = [];
+  const unknownStreakUpdates = [];
+  const refreshCandidates = [];
+
   // readyForReview: mergeability routing, zero-diff gate, then dispatch
   for (const item of partitions.readyForReview.mine) {
     if (item.mergeable === 'CONFLICTING') {
-      gates.push({ kind: 'refresh-required', item: item.number, facts: { headRefOid: item.headRefOid } });
+      refreshCandidates.push({ number: item.number, headRefOid: item.headRefOid, wasApproved: false });
       continue;
     }
+
     if (item.mergeable === 'UNKNOWN') {
-      gates.push({ kind: 'mergeability-unknown', item: item.number, facts: {} });
-      continue;
+      const route = mergeabilityRoute('UNKNOWN', unknownStreakState[item.number] ?? 0);
+      if (route.action === 'hold') {
+        announce.push({ kind: 'mergeability-unknown', item: item.number, facts: {} });
+        unknownStreakUpdates.push({ item: item.number, streak: route.unknownStreak });
+        continue;
+      }
+      unknownStreakUpdates.push({ item: item.number, remove: true });
+    } else if (unknownStreakState[item.number] != null) {
+      unknownStreakUpdates.push({ item: item.number, remove: true });
     }
+
     const zd = zeroDiffGate({ reviews: item.reviews?.nodes, comments: item.comments?.nodes, headRefOid: item.headRefOid });
     if (zd.action === 'escalate') {
-      gates.push({ kind: 'zero-diff', item: item.number, facts: {} });
+      writes.push({
+        command: `gh pr edit ${item.number} --repo ${cfg.repo} --remove-label "${cfg.labels.readyForReview}" --add-label "${cfg.labels.needsHuman}"`,
+        why: 'zero-diff review gate',
+      });
+      announce.push({ kind: 'zero-diff', item: item.number, facts: {} });
       continue;
     }
     dispatch.push({ stage: 'review-agent', item: item.number, kind: 'review', model: cfg.models.review, reason: 'ready for review' });
@@ -169,7 +193,11 @@ function cmdPlan(root, cfg) {
       continue;
     }
     if (cycleCapExceeded(item.reviews?.nodes, cfg.reviewCycleCap)) {
-      gates.push({ kind: 'cycle-cap', item: item.number, facts: { cap: cfg.reviewCycleCap } });
+      writes.push({
+        command: `gh pr edit ${item.number} --repo ${cfg.repo} --remove-label "${cfg.labels.needsRevision}" --add-label "${cfg.labels.needsHuman}"`,
+        why: 'cycle cap reached',
+      });
+      announce.push({ kind: 'cycle-cap', item: item.number, facts: { cap: cfg.reviewCycleCap } });
       continue;
     }
     dispatch.push({ stage: 'revise-agent', item: item.number, kind: 'revise', model: cfg.models.revise, reason: 'needs revision' });
@@ -181,9 +209,61 @@ function cmdPlan(root, cfg) {
     const rollup = item.commits?.nodes?.[0]?.commit?.statusCheckRollup;
     const verdict = rollupVerdict(rollup, excusedCheckName);
     const result = approvedReverify({ verdict, mergeable: item.mergeable });
-    if (result.action === 'withdraw') gates.push({ kind: 'approval-withdrawn', item: item.number, facts: { red: result.red } });
-    else if (result.action === 'refresh-in-place') gates.push({ kind: 'refresh-required', item: item.number, facts: { headRefOid: item.headRefOid } });
-    else if (result.action === 'announce-ready') announce.push({ kind: 'approved-ready', item: item.number, facts: { green: result.green } });
+    if (result.action === 'withdraw') {
+      writes.push({
+        command: `gh pr edit ${item.number} --repo ${cfg.repo} --remove-label "${cfg.labels.approved}" --add-label "${cfg.labels.needsRevision}"`,
+        why: 'approval withdrawn: red check',
+      });
+      announce.push({ kind: 'approval-withdrawn', item: item.number, facts: { red: result.red } });
+    } else if (result.action === 'refresh-in-place') {
+      refreshCandidates.push({ number: item.number, headRefOid: item.headRefOid, wasApproved: true });
+    } else if (result.action === 'announce-ready') {
+      announce.push({ kind: 'approved-ready', item: item.number, facts: { green: result.green } });
+    }
+  }
+
+  // Bound to 5 per tick, oldest first — deferred candidates stay CONFLICTING
+  // and are reconsidered next tick with no state lost meanwhile.
+  const { toRefresh, deferred } = capRefreshes(refreshCandidates, 5);
+  for (const c of deferred) {
+    announce.push({ kind: 'refresh-deferred', item: c.number, facts: {} });
+  }
+  for (const c of toRefresh) {
+    const decision = refreshDecision(refreshedState[c.number], c.headRefOid);
+    if (decision.action === 'escalate') {
+      const removePart = c.wasApproved ? ` --remove-label "${cfg.labels.approved}"` : '';
+      writes.push({
+        command: `gh pr edit ${c.number} --repo ${cfg.repo}${removePart} --add-label "${cfg.labels.needsHuman}"`,
+        why: `refresh sweep: ${decision.reason}`,
+      });
+      announce.push({ kind: 'refresh-stuck', item: c.number, facts: { reason: decision.reason, headRefOid: c.headRefOid } });
+      refreshedUpdates.push({ item: c.number, remove: true });
+      continue;
+    }
+    writes.push({
+      command: `gh pr edit ${c.number} --repo ${cfg.repo} --add-label "${cfg.labels.refreshBranch}"`,
+      why: 'refresh sweep: rebase + force-push, no code changes',
+    });
+    dispatch.push({ stage: 'revise-agent', item: c.number, kind: 'refresh', model: cfg.models.revise, reason: 'refresh sweep' });
+    announce.push({ kind: 'rebase-required', item: c.number, facts: { headRefOid: c.headRefOid, base: cfg.integration, approvalStands: c.wasApproved } });
+    refreshedUpdates.push({ item: c.number, sha: c.headRefOid, count: decision.count });
+  }
+
+  // plan review / blocked / needs-human — the only three partitions the
+  // engine had computed and then silently never surfaced (R1-C1). Only
+  // plan-review and needs-human are real human gates (resolve --decision
+  // already has both pairs of decisions); blocked resolves by relaying the
+  // issue's own blocker comment and resuming the *same* dispatched agent via
+  // SendMessage — a conversation the tick engine has no handle for, so it is
+  // report-only here rather than a fabricated resolve path.
+  for (const item of partitions.planReview.mine) {
+    gates.push({ kind: 'plan-review', item: item.number, facts: {} });
+  }
+  for (const item of partitions.needsHuman.mine) {
+    gates.push({ kind: 'needs-human', item: item.number, facts: {} });
+  }
+  for (const item of partitions.blocked.mine) {
+    announce.push({ kind: 'blocked', item: item.number, facts: {} });
   }
 
   const items = {
@@ -208,19 +288,25 @@ function cmdPlan(root, cfg) {
     announce,
     writes,
     artifacts: [],
+    // `label` is resolved through `cfg.labels`, never the default string
+    // literal — a repository that overrides e.g. `labels.inProgress` must
+    // still match here, since `commit`'s liveness reset writes `--remove-label
+    // "${expected.label}"` verbatim.
     livenessExpected: [
-      ...partitions.planning.mine.map((n) => ({ item: n.number, label: 'planning', stage: 'plan-agent' })),
-      ...partitions.inProgress.mine.map((n) => ({ item: n.number, label: 'in progress', stage: 'impl-agent' })),
-      ...partitions.reviewing.mine.map((n) => ({ item: n.number, label: 'reviewing', stage: 'review-agent' })),
-      ...partitions.revising.mine.map((n) => ({ item: n.number, label: 'revising', stage: 'revise-agent' })),
-      ...partitions.refreshing.mine.map((n) => ({ item: n.number, label: 'refreshing', stage: 'revise-agent' })),
+      ...partitions.planning.mine.map((n) => ({ item: n.number, labelKey: 'planning', label: cfg.labels.planning, stage: 'plan-agent' })),
+      ...partitions.inProgress.mine.map((n) => ({ item: n.number, labelKey: 'inProgress', label: cfg.labels.inProgress, stage: 'impl-agent' })),
+      ...partitions.reviewing.mine.map((n) => ({ item: n.number, labelKey: 'reviewing', label: cfg.labels.reviewing, stage: 'review-agent' })),
+      ...partitions.revising.mine.map((n) => ({ item: n.number, labelKey: 'revising', label: cfg.labels.revising, stage: 'revise-agent' })),
+      ...partitions.refreshing.mine.map((n) => ({ item: n.number, labelKey: 'refreshing', label: cfg.labels.refreshing, stage: 'revise-agent' })),
     ],
+    refreshedUpdates,
+    unknownStreakUpdates,
     wakeup,
     rateLimit: res.body.data.rateLimit ?? null,
   };
 
   writeState(root, TICK_PLAN_CACHE_PATH, { repo: cfg.repo, ...plan, dispatchLog });
-  emit(plan, envelope.kind === 'partial' ? 0 : 0);
+  emit(plan, 0);
 }
 
 // --- commit -----------------------------------------------------------------
@@ -257,7 +343,10 @@ function cmdCommit(root, cfg, args) {
     const result = classifyUnmatched(row);
     if (result.class === 'reset') {
       dispatchLog.items[expected.item] = { stage: row.stage, state: 'reset', resets: result.nextResets };
-      const trigger = RETRY_TRIGGER[Object.keys(RETRY_TRIGGER).find((k) => cfg.labels[k] === expected.label) ?? ''] ?? null;
+      // Resolved from the labelKey the plan recorded, never by matching the
+      // resolved name back against cfg.labels — a repository overriding a
+      // label name must still hit the right trigger.
+      const trigger = RETRY_TRIGGER[expected.labelKey] ?? null;
       resets.push({ item: expected.item, from: expected.label, toKey: trigger });
     } else if (result.class === 'suspect') {
       dispatchLog.items[expected.item] = { stage: row?.stage ?? expected.stage, state: 'suspect', resets: result.nextResets };
@@ -272,6 +361,19 @@ function cmdCommit(root, cfg, args) {
       command: `gh issue edit ${r.item} --repo ${cfg.repo} --remove-label "${r.from}" --add-label "${triggerName}"`,
       why: `liveness reset: ${r.from} → ${triggerName}`,
     });
+  }
+
+  // Apply the refresh sweep's and the mergeability-UNKNOWN carve-out's
+  // per-item state — `plan` only computed these, since it never persists.
+  tickState.refreshed = tickState.refreshed ?? {};
+  for (const u of cache.refreshedUpdates ?? []) {
+    if (u.remove) delete tickState.refreshed[u.item];
+    else tickState.refreshed[u.item] = { sha: u.sha, count: u.count };
+  }
+  tickState.unknownStreak = tickState.unknownStreak ?? {};
+  for (const u of cache.unknownStreakUpdates ?? []) {
+    if (u.remove) delete tickState.unknownStreak[u.item];
+    else tickState.unknownStreak[u.item] = u.streak;
   }
 
   const willMoveWithoutHuman = (cache.dispatch ?? []).length > 0 || liveDescriptions.length > 0;

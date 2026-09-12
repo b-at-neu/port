@@ -51,6 +51,7 @@ export function freshTickState(repo) {
     uncorrelatableAnnounced: false,
     pluginStaleness: null,
     refreshed: {},
+    unknownStreak: {},
   };
 }
 
