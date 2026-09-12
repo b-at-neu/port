@@ -102,6 +102,28 @@ export default async function ({ fail, ok }) {
     }
     if (!found) ok();
   }
+
+  // --- getSubagentMessages/getSessionMessages stay unreferenced (#83) ---------
+  // Decision 3's "the reader parses the .jsonl itself, and getSubagentMessages
+  // stays unused" (#83, deciding against the SDK's own message-read APIs,
+  // whose SessionMessage drops toolUseResult) — a later "simplification" onto
+  // either API would silently drop every diff and the file-contention
+  // guarantee this rail exists to prevent.
+  {
+    let found = false;
+    for (const f of allFiles) {
+      const rel = relOf(f);
+      if (rel.endsWith('.test.ts')) continue;
+      const code = stripComments(readFileSync(f, 'utf8'));
+      for (const name of ['getSubagentMessages', 'getSessionMessages']) {
+        if (code.includes(name)) {
+          found = true;
+          fail('desktop-sessions', `${rel} references '${name}' outside a comment — the transcript reader parses the .jsonl itself (Decision 3), never this SDK API`);
+        }
+      }
+    }
+    if (!found) ok();
+  }
 }
 
 function stripComments(text) {

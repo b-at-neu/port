@@ -7,6 +7,9 @@ export { readSessionState } from './adapter'
 export type { RepoRef } from './classify'
 export { PORT_STAGE_AGENTS } from './classify'
 
+export type { ReadTranscriptParams } from './transcript'
+export { readTranscript } from './transcript'
+
 export type {
   Activity,
   AgentRecord,
@@ -21,3 +24,22 @@ export type {
   SessionScan,
 } from '../../shared/sessions/types'
 export { ACTIVE_WITHIN_MS, IDLE_WITHIN_MS } from '../../shared/sessions/types'
+
+export type {
+  AssistantTextEntry,
+  DiffHunk,
+  DiffLine,
+  DiffSign,
+  FileDiff,
+  MetaEntry,
+  Payload,
+  ThinkingEntry,
+  ToolCallEntry,
+  ToolResult,
+  TranscriptEntry,
+  TranscriptFailureKind,
+  TranscriptRead,
+  TranscriptSource,
+  UserTextEntry,
+} from '../../shared/sessions/transcript'
+export { MAX_PAYLOAD_CHARS } from '../../shared/sessions/transcript'
