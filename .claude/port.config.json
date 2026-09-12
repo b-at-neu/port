@@ -48,6 +48,7 @@
   "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"],
   "extraAllow": [
     "Bash(node scripts/checks.mjs)",
+    "Bash(node scripts/checks.mjs *)",
     "Bash(node plugins/port/templates/artifacts.mjs *)",
     "Bash(node plugins/port/templates/worktrees.mjs *)"
   ]

@@ -30,12 +30,38 @@ export function globToRegExp(glob) {
  *  match the whole command exactly. This mirrors the shape of every entry in
  *  `templates/permissions.base.json` — it does not attempt to parse full
  *  shell-glob semantics beyond that. */
-function bashPatternMatches(pattern, command) {
+export function bashPatternMatches(pattern, command) {
   if (pattern.endsWith(' *')) {
     const prefix = pattern.slice(0, -2);
     return command === prefix || command.startsWith(`${prefix} `);
   }
   return command === pattern;
+}
+
+/** Rewrites an in-repo absolute invocation back to its repo-relative form
+ *  (#205) — a worktree agent's `configRoot` is its worktree, so `node
+ *  <root>/<script>` is the identical command to the allowlisted `node
+ *  <script>`, just spelled with the harness's requested absolute path.
+ *  A quoted absolute argument (`"<root>/x" check "<root>/y"`)
+ *  has its surrounding quotes dropped along with the root prefix, since an
+ *  unquoted relative path is the form the allowlist actually matches — any
+ *  *other* quoted span is left untouched. Fails closed **byte-for-byte**: a
+ *  command with no occurrence of `root` (elsewhere on disk, or a relative `..`
+ *  escape) is returned exactly as it came in — not separator-normalized —
+ *  because normalizing it would be a second, silent effect of a
+ *  security-relevant classifier: a backslash-spelled command outside the root
+ *  would get reshaped into the POSIX form the allow patterns are written in,
+ *  widening the match for a path this function deliberately declines to
+ *  resolve. Normalization is therefore only ever a by-product of an actual
+ *  strip. */
+export function repoRelative(command, root) {
+  const posixRoot = toPosix(root);
+  const posixCommand = toPosix(command);
+  if (typeof posixRoot !== 'string' || typeof posixCommand !== 'string') return command;
+  const escapedRoot = posixRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const quotedRoot = new RegExp(`(['"])${escapedRoot}/([^'"]*)\\1`, 'g');
+  const stripped = posixCommand.replace(quotedRoot, '$2').split(`${posixRoot}/`).join('');
+  return stripped === posixCommand ? command : stripped;
 }
 
 /** Reads `permissions.allow` out of each settings file that exists (missing
@@ -420,7 +446,12 @@ export function decide({ payload, matchers, sessionRequiredPaths, root, needsHum
     if (matchers === null) {
       return { decision: 'allow', who, subject: command };
     }
-    const matched = matchers.some((m) => m.test(command));
+    // #205: an absolute in-repo invocation (worktree or base checkout) is the
+    // same command as its repo-relative allowlisted form — resolved here, at
+    // the miss, so a logged deny/miss still shows what the agent actually
+    // typed rather than a rewritten stand-in.
+    const matched =
+      matchers.some((m) => m.test(command)) || matchers.some((m) => m.test(repoRelative(command, root)));
     if (matched) return { decision: 'allow', who, subject: command };
     return {
       decision: who.isSubagent ? 'deny' : 'miss',

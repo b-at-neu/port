@@ -177,7 +177,7 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.readyForReview>" --
    <artifacts> check review .temp/review-<pr>.json --cycle <n>
    ```
 
-   A non-zero exit means rewrite the payload and re-run it — never submit past a failing check; this catches a 422-bound payload before GitHub rejects it. Skip when `commands.artifacts` is null. Then submit:
+   A non-zero exit means rewrite the payload and re-run it — never submit past a failing check; this catches a 422-bound payload before GitHub rejects it. Skip when `commands.artifacts` is null. Run this exactly as configured — no `2>&1`, no pipe into `tail`/`head`/`grep`, and no expansion to an absolute path (#205 — the harness preamble's "use absolute file paths" is wrong here specifically, since the allowlist entry is the repo-relative string). Then submit:
 
    ```bash
    gh api repos/<repo>/pulls/<pr-number>/reviews --input .temp/review-<pr>.json

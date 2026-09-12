@@ -158,12 +158,16 @@ You write the config and the allowlist in the same run, so you are the only thin
 
 A command matches only if it **starts with an allowlisted binary**. `Bash(npm *)` does not cover `npx` — they are different binaries, and this exact pair has already shipped a repository whose every check prompted on every run. In `default` mode the operator approves them forever; for a dispatched agent the guard hook **denies** them outright, so the agent can never reach a green check and never pushes.
 
+**Every allow entry you add for a `commands.*` command carries a trailing ` *`, never the bare form (#205).** The trailing wildcard matches both the bare command and the command with any suffix; the bare form matches only itself. This has already shipped wrong once: `Bash(node <check-script>)` with no wildcard matched the configured check and nothing else, so every `2>&1 | tail -N` an agent appended to limit output was denied outright. §7 and §7.5 below are instances of this same rule — they already write `Bash(node scripts/port-artifacts.mjs *)` and `Bash(node scripts/port-worktrees.mjs *)` with the wildcard.
+
 **An unmatched command is a hard stop**, resolved one of two ways:
 
 - **Pick a command that is already covered** — usually the repository's own script, which is the better answer anyway.
-- **Add a narrow allow entry for that specific tool**, such as `Bash(npx tsc *)`, and record it in `extraAllow` so a later reconcile keeps it.
+- **Add an allow entry for that specific tool**, such as `Bash(npx tsc *)`, and record it in `extraAllow` so a later reconcile keeps it.
 
-**Never widen to bare `Bash(npx *)`.** That is not a permission for one tool; it is a general package-execution primitive handed to every agent, which is exactly why the base list omits it.
+**Never widen to bare `Bash(npx *)`.** That is not a permission for one tool; it is a general package-execution primitive handed to every agent, which is exactly why the base list omits it. A trailing ` *` after the full command (`Bash(npx tsc *)`) is a wildcard on that command's own arguments and output redirection, not on the binary — the two are not the same kind of broadening.
+
+**On a reconcile, an existing narrow entry shadowing a `commands.*` command gets its wildcard form added alongside it — never removed.** Step 4's existing rules already make this safe with no special case: "Union with what is already there. Never drop an existing entry" keeps the narrow form in place, and "Deduplicate exact repeats" keeps a second reconcile from doubling the wildcard form once it exists.
 
 ## 5. Create the labels
 

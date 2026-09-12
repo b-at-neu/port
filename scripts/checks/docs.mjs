@@ -60,6 +60,15 @@ export default async function ({ fail, note, ok }) {
   // (skips) on a token that resolves nowhere at all, because an adopter-only
   // install target (`scripts/port-artifacts.mjs`) and a genuine typo are
   // indistinguishable from files alone.
+  //
+  // Widened for #212: a token can *contain* a repository-only path rather than
+  // be one. `Bash(node scripts/checks.mjs)`, `node scripts/checks.mjs`, and
+  // `node <root>/scripts/checks.mjs` all resolve nowhere as whole tokens — the
+  // first two carry a command prefix, the third an angle-bracketed placeholder
+  // that used to short-circuit the classifier to 'skip' — so three fresh
+  // references to `scripts/checks.mjs` landed under plugins/port/ with this
+  // scan silent. `expandCandidates` decomposes each raw token before
+  // classifying, so the inner path is seen.
   {
     const EXTENSIONS = ['md', 'mjs', 'js', 'ts', 'json', 'yml', 'yaml', 'log', 'graphql', 'txt'];
     const EXT_RE = new RegExp(`\\.(${EXTENSIONS.join('|')})$`);
@@ -77,6 +86,34 @@ export default async function ({ fail, note, ok }) {
         .map((t) => t.replace(/^["'(\[]+/, '').replace(/[.,;:!?"')\]]+$/, ''))
         .filter(Boolean);
       return [...backticked, ...bare].filter((t) => t.includes('/') || EXT_RE.test(t));
+    }
+
+    /** Decomposes one raw token into every path-shaped sub-token worth
+     *  classifying (#212), because a token can carry a repository-only path
+     *  rather than be one. Yields, in addition to the token itself: the inside
+     *  of a `Tool(...)` wrapper, each word once split on whitespace and shell
+     *  command separators, and — for a word carrying whole angle-bracketed
+     *  segments — the remainder with those segments dropped, since
+     *  `<root>/scripts/checks.mjs` has to resolve as `scripts/checks.mjs` to be
+     *  a legitimate shipped reference. Conservative on both ends: a word whose
+     *  placeholder is only *part* of a segment (`checks-<n>.mjs`) is genuinely
+     *  templated and yields nothing, and `${...}` spans are left for the
+     *  classifier, which already understands `${CLAUDE_PLUGIN_ROOT}/`. */
+    function expandCandidates(token) {
+      const out = [token];
+      const wrapper = /^[A-Za-z][A-Za-z0-9_]*\((.*)\)$/.exec(token);
+      const body = wrapper ? wrapper[1] : token;
+      if (wrapper) out.push(body);
+      for (const raw of body.split(/[\s;|&]+/)) {
+        const word = raw.replace(/^["'(\[]+/, '').replace(/[.,;:!?"')\]]+$/, '');
+        if (!word) continue;
+        out.push(word);
+        if (!word.includes('<')) continue;
+        const kept = word.split('/').filter((seg) => !/^<[^<>]*>$/.test(seg));
+        if (kept.length === 0 || kept.some((seg) => /[<>*]/.test(seg))) continue;
+        out.push(kept.join('/'));
+      }
+      return [...new Set(out)].filter((t) => t.includes('/') || EXT_RE.test(t));
     }
 
     /** Pure classifier — the two `existsSync` calls are the only I/O, both
@@ -123,6 +160,38 @@ export default async function ({ fail, note, ok }) {
       }
     }
 
+    // #212's own three forms, each of which classified 'skip' as a whole token
+    // and so shipped a `scripts/checks.mjs` reference past this scan. The
+    // worst verdict across a token's expansion is what the scan acts on, so
+    // these assert that worst verdict, not the bare token's.
+    const worstOf = (token) => {
+      const verdicts = expandCandidates(token).map((t) =>
+        classifyShippedReference(t, { pluginRoot, repoRoot: root, containingDir: null }),
+      );
+      return verdicts.includes('fail') ? 'fail' : verdicts.includes('pass') ? 'pass' : 'skip';
+    };
+    const expansionCases = [
+      ['Bash(node scripts/checks.mjs)', 'fail'],
+      ['node scripts/checks.mjs', 'fail'],
+      ['node <root>/scripts/checks.mjs', 'fail'],
+      ['node scripts/checks.mjs; <anything>', 'fail'],
+      // Still-legitimate forms the widening must not start failing: a shipped
+      // path behind a command prefix, an adopter-only install target, and a
+      // templated path whose placeholder is only part of a segment.
+      ['node templates/artifacts.mjs check commit .temp/m.txt', 'pass'],
+      ['Bash(node scripts/port-artifacts.mjs *)', 'skip'],
+      ['repos/<repo>/pulls/<pr-number>/comments', 'skip'],
+      ['scripts/checks-<topic>.mjs', 'skip'],
+    ];
+    for (const [token, expected] of expansionCases) {
+      const got = worstOf(token);
+      if (got !== expected) {
+        fail('shipped-reference-selftest', `expansion of ${JSON.stringify(token)} = ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`);
+      } else {
+        ok();
+      }
+    }
+
     // The real scan — every shipped file, not just markdown, since a stray
     // comment in a `.mjs` template is exactly how #169 happened.
     const files = walk(pluginRoot).filter((f) => EXT_RE.test(f));
@@ -132,13 +201,15 @@ export default async function ({ fail, note, ok }) {
       const containingDir = dirname(f);
       const fileLines = readFileSync(f, 'utf8').split('\n');
       for (let i = 0; i < fileLines.length; i++) {
-        for (const token of candidateTokens(fileLines[i])) {
-          const verdict = classifyShippedReference(token, { pluginRoot, repoRoot: root, containingDir });
-          if (verdict === 'fail') {
-            fail('shipped-reference', `${rel}:${i + 1}: references \`${token}\`, which exists only outside plugins/port/ — it dangles in an adopter's plugin cache`);
-          } else if (verdict === 'pass') {
-            ok();
-            confirmedShipped++;
+        for (const raw of candidateTokens(fileLines[i])) {
+          for (const token of expandCandidates(raw)) {
+            const verdict = classifyShippedReference(token, { pluginRoot, repoRoot: root, containingDir });
+            if (verdict === 'fail') {
+              fail('shipped-reference', `${rel}:${i + 1}: references \`${token}\`, which exists only outside plugins/port/ — it dangles in an adopter's plugin cache`);
+            } else if (verdict === 'pass') {
+              ok();
+              confirmedShipped++;
+            }
           }
         }
       }

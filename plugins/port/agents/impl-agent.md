@@ -122,7 +122,7 @@ gh issue edit N --repo <repo> --remove-label "<labels.planApproved>" --add-label
 
    Do not push partial work. End your final message in exactly this form so the cockpit can relay and resume you: `BLOCKED: <one-paragraph summary of the blocker and the decision needed>`. When resumed, swap the labels back (`--remove-label "<labels.blocked>" --add-label "<labels.inProgress>"`) and continue from the stopped checklist item.
 
-5. **Run the checks.** Work through `commands.checks` **in order**, each as its own Bash call — never prefixed with `cd`, never pasted together as one multi-line script, and never with an extra command appended.
+5. **Run the checks.** Work through `commands.checks` **in order**, each as its own Bash call — never prefixed with `cd`, never pasted together as one multi-line script, and never with an extra command appended: no `2>&1`, no pipe into `tail`/`head`/`grep` (#205 — the reporter prints one `ok` line or one `FAIL` line per failure, so there is nothing to truncate), and no expansion to an absolute path (the harness preamble's "use absolute file paths" is wrong for a `commands.*` invocation specifically — the allowlist entry is the repo-relative string, run it exactly as configured).
 
    For each entry:
    - Run its `run` command.
