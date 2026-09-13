@@ -2,8 +2,10 @@
 // the header, empty state, cards, banners, diagnostics, and footer. Every
 // node is built with `document.createElement`/`textContent`, never
 // `innerHTML` with an interpolated config value — a repository's config
-// arrives verbatim from a file on disk. #80 picks a UI framework and this
-// ~200-line screen is what it replaces; until then it stays plain DOM.
+// arrives verbatim from a file on disk. #80 answered the UI framework
+// question this header used to defer: none, deliberately — see
+// CONTRIBUTING.md → "Working on the desktop app". This screen keeps its own
+// current behaviour, unchanged, beside the new Board view.
 import type { AppInfo } from '../../shared/ipc'
 import type { RepoDiagnostic, RepoId, RepoProblem, RepositoryEntry, ResolvedRepoConfig } from '../../shared/repos'
 import { buildWorktreesSection } from './worktrees'
