@@ -52,6 +52,7 @@ This is **this repository's own** standards document, not a template — `plugin
 | `templates/worktrees.mjs`'s `correlate` ↔ the desktop `correlate` (`apps/desktop/src/main/local/correlate.ts`) | the shared case table, `main/local/correlation.cases.json` |
 | `templates/worktrees.mjs`'s state vocabulary (`describeReason`'s cases, and which states `classifyCandidate` returns `removable: true` for) ↔ `shared/reclaimer/types.ts`'s `WORKTREE_STATES`/`RECLAIMABLE_STATES` | `desktop-reclaimer` |
 | `templates/worktrees.mjs`'s two diagnostic literals (`die()`'s `FAIL` prefix, `gh issueOrPullRequest resolution failed`) ↔ `main/reclaimer/report.ts`'s pinned copies | `desktop-reclaimer` |
+| The `label-cas` block ↔ its copies in the four agent files — a fallback compared pairwise, since the #177 ratchet forbids a `PIPELINE.md` canonical copy until #220 moves it there once #181 frees the headroom | "Label transitions are compare-and-swap" |
 
 **If a change introduces a further copy of anything, it introduces its pin in the same commit.** A comment asking a future reader to remember is not a pin.
 

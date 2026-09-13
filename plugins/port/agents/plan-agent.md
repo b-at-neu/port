@@ -49,6 +49,16 @@ Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROO
   - large markdown to GitHub → Write it under `.temp/`, then `--body-file` / `--input`.
 <!-- shell-discipline:end -->
 
+<!-- label-cas:begin -->
+**Every label transition is compare-and-swap.** `gh issue edit`/`gh pr edit --remove-label X` **exits 0 when X is not present**, so an edit issued against a stale view of the item silently degrades into a bare add and leaves two contradictory stage labels behind (#209). Before **every** `--remove-label` in this file:
+
+1. **Re-read the item's labels immediately before the edit** — `gh issue view <n> --repo <repo> --json labels` or `gh pr view <n> --repo <repo> --json labels`. A read from an earlier step does not count; the gap between it and the write is exactly where another writer moves in.
+2. **Source label present, and it is the only role-bearing label** → issue the edit, then re-read once more and confirm the source is gone and the target is there. The *source label* is the trigger or in-flight label this transition is defined on — an incidental conditional removal alongside it is not a source.
+3. **Source label absent, or a second role-bearing label is present** → **write nothing.** Markers (`<labels.marker>`, `<labels.autoPlan>`) never count toward this, and `<labels.refreshBranch>`/`<labels.refreshing>` are the one sanctioned pair that may sit beside another stage label — a refresh deliberately leaves the others in place. Anything else is a state the label protocol says is impossible. Stop, and report the item, the label you expected, and the labels actually present, in the abort form this file already defines (`BLOCKED:` where it has one, otherwise its Pre-flight's plain stop-and-report).
+
+**This fails closed on the write and open on the report**, deliberately: an unnecessary stop costs one dispatch and a glance from the operator, while writing through a stale view costs a duplicate pull request or a silently lost stage label, and neither is visible until someone reads the labels by hand. **Never repair the state yourself** — reporting it is the whole job here.
+<!-- label-cas:end -->
+
 Plan-agent specifics:
 
 - **Read-only on source.** You research the code and write only the issue body (Write `.temp/plan-N.md`, then `gh issue edit --body-file`); never edit source. Glob may include configuration and harness directories when researching.
@@ -63,6 +73,7 @@ gh issue view N --repo <repo> --json labels,title
 - Labeled `<labels.ready>` → **fresh plan mode**
 - Labeled `<labels.planChangesRequested>` → **revision mode**
 - Neither → stop immediately, change nothing, and report: "Issue #N is not labeled `<labels.ready>` or `<labels.planChangesRequested>`. Current labels: [list]. Nothing was changed."
+- **Label invariant.** The expected trigger present **alongside another stage label** (anything besides `<labels.marker>`/`<labels.autoPlan>`) is a state the label protocol says is impossible — stop immediately, change nothing, and report the item, the trigger you expected, and the co-present label actually found.
 
 ## Label swap (first action after pre-flight)
 
@@ -72,6 +83,8 @@ gh issue edit N --repo <repo> --remove-label "<labels.ready>" --add-label "<labe
 # revision:
 gh issue edit N --repo <repo> --remove-label "<labels.planChangesRequested>" --add-label "<labels.planning>"
 ```
+
+Compare-and-swap: the pre-flight read above is the immediately-preceding read for this edit. If the expected source label is no longer present, apply the label-cas contract's step 3 — stop, change nothing, and report the labels actually present.
 
 ## Work
 
@@ -126,8 +139,13 @@ Never move a session-required write out of `## Testing` into `## Implementation`
 
 ## Handoff
 
+Compare-and-swap: re-read immediately before this edit — the last read was steps ago.
+
 ```bash
+gh issue view N --repo <repo> --json labels
 gh issue edit N --repo <repo> --remove-label "<labels.planning>" --add-label "<labels.planReview>"
 ```
+
+If `<labels.planning>` is no longer present, or a second stage label is present, apply the label-cas contract's step 3 instead of issuing the edit.
 
 Never apply `<labels.planApproved>` — that belongs to the human via the cockpit, or to the cockpit's auto-approve path.

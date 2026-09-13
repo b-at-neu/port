@@ -58,6 +58,16 @@ Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROO
   - large markdown to GitHub → Write it under `.temp/`, then `--body-file` / `--input`.
 <!-- shell-discipline:end -->
 
+<!-- label-cas:begin -->
+**Every label transition is compare-and-swap.** `gh issue edit`/`gh pr edit --remove-label X` **exits 0 when X is not present**, so an edit issued against a stale view of the item silently degrades into a bare add and leaves two contradictory stage labels behind (#209). Before **every** `--remove-label` in this file:
+
+1. **Re-read the item's labels immediately before the edit** — `gh issue view <n> --repo <repo> --json labels` or `gh pr view <n> --repo <repo> --json labels`. A read from an earlier step does not count; the gap between it and the write is exactly where another writer moves in.
+2. **Source label present, and it is the only role-bearing label** → issue the edit, then re-read once more and confirm the source is gone and the target is there. The *source label* is the trigger or in-flight label this transition is defined on — an incidental conditional removal alongside it is not a source.
+3. **Source label absent, or a second role-bearing label is present** → **write nothing.** Markers (`<labels.marker>`, `<labels.autoPlan>`) never count toward this, and `<labels.refreshBranch>`/`<labels.refreshing>` are the one sanctioned pair that may sit beside another stage label — a refresh deliberately leaves the others in place. Anything else is a state the label protocol says is impossible. Stop, and report the item, the label you expected, and the labels actually present, in the abort form this file already defines (`BLOCKED:` where it has one, otherwise its Pre-flight's plain stop-and-report).
+
+**This fails closed on the write and open on the report**, deliberately: an unnecessary stop costs one dispatch and a glance from the operator, while writing through a stale view costs a duplicate pull request or a silently lost stage label, and neither is visible until someone reads the labels by hand. **Never repair the state yourself** — reporting it is the whole job here.
+<!-- label-cas:end -->
+
 Revise-agent specifics, identical in intent to `impl-agent`:
 
 - **Stay in your worktree.** Do all work in place. **Never** `cd` out of it, use `git -C`, run `git worktree list`/`add`/`remove`/`prune`, use `--ignore-other-worktrees`, or force anything. If a branch is locked to another worktree, **stop and emit `BLOCKED:`**.
@@ -76,11 +86,15 @@ If that fails it is an issue number: `gh pr list --repo <repo> --search "closes 
 
 Confirm the pull request is labeled `<labels.needsRevision>`. If instead it carries **`<labels.refreshBranch>`** — the cockpit's prompt will say "refresh mode" — skip everything below and follow **Refresh mode** at the end of this file. If neither is present, stop, report the current labels, and change nothing.
 
+**Label invariant.** `<labels.needsRevision>` present **alongside another stage label** — other than the sanctioned `<labels.refreshBranch>`/`<labels.refreshing>` pair, which refresh mode expects, not a violation — is a state the label protocol says is impossible. Stop, report the item, `<labels.needsRevision>`, and the co-present label found, and change nothing.
+
 ## Label swap (first action after pre-flight)
 
 ```bash
 gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --add-label "<labels.revising>"
 ```
+
+Compare-and-swap: the pre-flight read above is the immediately-preceding read for this edit. If `<labels.needsRevision>` is no longer present, apply the label-cas contract's step 3 instead of issuing the edit.
 
 ## Work
 
@@ -130,10 +144,11 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --a
 
      ```bash
      gh pr comment <pr-number> --repo <repo> --body-file .temp/conflict-<pr>.md
+     gh pr view <pr-number> --repo <repo> --json labels
      gh pr edit <pr-number> --repo <repo> --remove-label "<labels.revising>" --add-label "<labels.needsHuman>"
      ```
 
-     End with: `BLOCKED: rebase of <branch> onto origin/<base> needs <b> decision(s) — see the escalation comment.`
+     If `<labels.revising>` is no longer present on the re-read, apply the label-cas contract's step 3 instead of issuing that edit. End with: `BLOCKED: rebase of <branch> onto origin/<base> needs <b> decision(s) — see the escalation comment.`
 
 3. **Apply fixes** per the review's findings — **skip this step entirely in check-fix mode**, where step 1 already named the one thing to fix (a check). Fix **every finding flagged at this cycle's bar** — the review uses an escalating bar, so an early cycle includes Low and Nit; fix them rather than deferring. All should be issues **introduced in this pull request**. Skip a flagged item only if it is genuinely not an issue, and explain the skip. **Preexisting** findings of any severity: do not fix, but note them as suggested follow-up tickets. No scope creep beyond the review.
 
@@ -184,9 +199,14 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.needsRevision>" --a
 
 ## Handoff
 
+Compare-and-swap: re-read immediately before this edit — the last read was steps ago.
+
 ```bash
+gh pr view <pr-number> --repo <repo> --json labels
 gh pr edit <pr-number> --repo <repo> --remove-label "<labels.revising>" --add-label "<labels.readyForReview>"
 ```
+
+If `<labels.revising>` is no longer present, apply the label-cas contract's step 3 instead of issuing the edit.
 
 The label swap above is unchanged **regardless of whether this cycle produced a new commit** — enforcement of "did this actually move anything" stays in one place, the cockpit's own zero-diff review gate, not duplicated here. But when the cycle ended with no new commit — a findings cycle where every flagged item was skipped as not-an-issue and nothing was pushed — say so plainly in the final report (e.g. "no new commit — head remains `<sha>`"), since the cockpit's zero-diff gate will decline to open a new review cycle against this head rather than dispatching one.
 
@@ -194,8 +214,8 @@ The label swap above is unchanged **regardless of whether this cycle produced a 
 
 Entered **instead of** the Work steps above when the pull request carries `<labels.refreshBranch>`. The branch is stale — the job is to rebase it onto its base and force-push it, **no review reading, no bootstrap, no code edits, no new commits**. Freeing a preview-deployment slot by triggering a fresh redeploy is one reason a human might request this; a branch that has simply gone stale behind its base is another, and the automatic route below (mergeability read as `CONFLICTING`) is the common case.
 
-1. **Pre-flight.** `gh pr view <pr-number> --repo <repo> --json labels,headRefName,baseRefName,headRefOid` — confirm the label is present and **record `headRefOid`**. If absent, stop and report the labels; change nothing.
-2. **Label swap.** `gh pr edit <pr-number> --repo <repo> --remove-label "<labels.refreshBranch>" --add-label "<labels.refreshing>"`. **Leave every other label untouched** — an approved pull request stays approved.
+1. **Pre-flight.** `gh pr view <pr-number> --repo <repo> --json labels,headRefName,baseRefName,headRefOid` — confirm the label is present and **record `headRefOid`**. If absent, stop and report the labels; change nothing. `<labels.refreshBranch>` beside `<labels.approved>` is the sanctioned pair, not a violation; any other second stage label is — stop and report it instead of continuing.
+2. **Label swap.** Compare-and-swap: the pre-flight read above is the immediately-preceding read for this edit. `gh pr edit <pr-number> --repo <repo> --remove-label "<labels.refreshBranch>" --add-label "<labels.refreshing>"`. **Leave every other label untouched** — an approved pull request stays approved. If `<labels.refreshBranch>` is no longer present, apply the label-cas contract's step 3 instead of issuing the edit.
 3. **Rebase.** Each as its own Bash call:
 
    ```bash
@@ -207,4 +227,4 @@ Entered **instead of** the Work steps above when the pull request carries `<labe
 4. **Conflicts** → the **Rebase conflict protocol** in step 2, unchanged: auto-resolve the structurally unambiguous, otherwise abort, comment `## Pipeline Escalation`, and emit `BLOCKED:`. On escalation remove **both** `<labels.refreshing>` **and** `<labels.approved>` and add `<labels.needsHuman>` — the pull request is no longer merge-ready. **Record whether any conflict was auto-resolved** (as opposed to a clean, conflict-free rebase) — step 7's approval rule reads it.
 5. **No-op check.** If `git rev-parse HEAD` equals the recorded `headRefOid`, the rebase changed nothing: **skip the push**, remove `<labels.refreshing>`, and report `refresh: no-op (already current)`. **Never** fabricate an empty commit to force a deployment.
 6. **Push.** `git push --force-with-lease origin HEAD:<headRefName>`.
-7. **Handoff.** `gh pr edit <pr-number> --repo <repo> --remove-label "<labels.refreshing>"`. **If step 4 auto-resolved any conflict**, the merged diff is no longer the diff that was approved: also `--remove-label "<labels.approved>" --add-label "<labels.readyForReview>"` in the same call, so the pull request returns to review with real checks on the new diff. **A clean rebase (no conflicts) adds nothing else** — never `<labels.readyForReview>`, and `<labels.approved>` stays exactly where it was. Report the new SHA. **No pull request comment.**
+7. **Handoff.** Compare-and-swap: re-read labels (`gh pr view <pr-number> --repo <repo> --json labels`) immediately before this edit — the last read was steps ago. `gh pr edit <pr-number> --repo <repo> --remove-label "<labels.refreshing>"`. **If step 4 auto-resolved any conflict**, the merged diff is no longer the diff that was approved: also `--remove-label "<labels.approved>" --add-label "<labels.readyForReview>"` in the same call, so the pull request returns to review with real checks on the new diff. **A clean rebase (no conflicts) adds nothing else** — never `<labels.readyForReview>`, and `<labels.approved>` stays exactly where it was. If `<labels.refreshing>` is no longer present on the re-read, apply the label-cas contract's step 3 instead. Report the new SHA. **No pull request comment.**
