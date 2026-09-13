@@ -14,6 +14,7 @@ import { createReporter } from './lib/report.mjs';
 
 import components from './checks/components.mjs';
 import shellDiscipline from './checks/shell-discipline.mjs';
+import labelProtocol from './checks/label-protocol.mjs';
 import hooks from './checks/hooks.mjs';
 import allowlist from './checks/allowlist.mjs';
 import config from './checks/config.mjs';
@@ -41,6 +42,7 @@ const reporter = createReporter();
 for (const module of [
   components,
   shellDiscipline,
+  labelProtocol,
   hooks,
   allowlist,
   config,

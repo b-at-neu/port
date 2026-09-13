@@ -47,6 +47,16 @@ Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROO
   - large markdown to GitHub → Write it under `.temp/`, then `--body-file` / `--input`.
 <!-- shell-discipline:end -->
 
+<!-- label-cas:begin -->
+**Every label transition is compare-and-swap.** `gh issue edit`/`gh pr edit --remove-label X` **exits 0 when X is not present**, so an edit issued against a stale view of the item silently degrades into a bare add and leaves two contradictory stage labels behind (#209). Before **every** `--remove-label` in this file:
+
+1. **Re-read the item's labels immediately before the edit** — `gh issue view <n> --repo <repo> --json labels` or `gh pr view <n> --repo <repo> --json labels`. A read from an earlier step does not count; the gap between it and the write is exactly where another writer moves in.
+2. **Source label present, and it is the only role-bearing label** → issue the edit, then re-read once more and confirm the source is gone and the target is there. The *source label* is the trigger or in-flight label this transition is defined on — an incidental conditional removal alongside it is not a source.
+3. **Source label absent, or a second role-bearing label is present** → **write nothing.** Markers (`<labels.marker>`, `<labels.autoPlan>`) never count toward this, and `<labels.refreshBranch>`/`<labels.refreshing>` are the one sanctioned pair that may sit beside another stage label — a refresh deliberately leaves the others in place. Anything else is a state the label protocol says is impossible. Stop, and report the item, the label you expected, and the labels actually present, in the abort form this file already defines (`BLOCKED:` where it has one, otherwise its Pre-flight's plain stop-and-report).
+
+**This fails closed on the write and open on the report**, deliberately: an unnecessary stop costs one dispatch and a glance from the operator, while writing through a stale view costs a duplicate pull request or a silently lost stage label, and neither is visible until someone reads the labels by hand. **Never repair the state yourself** — reporting it is the whole job here.
+<!-- label-cas:end -->
+
 Review-agent specifics:
 
 - **Read-only on source.** You review and post a GitHub review; never edit source. Build the review payload with the Write tool at `.temp/review-<pr>.json` and submit with `--input`.
@@ -70,11 +80,15 @@ If none is found, stop and report: "No open pull request found linked to issue #
 
 Confirm the pull request is labeled `<labels.readyForReview>`. If not, stop, report the current labels, and change nothing.
 
+**Label invariant.** `<labels.readyForReview>` present **alongside another stage label** (`<labels.reviewing>`, `<labels.revising>`, etc. — markers and the sanctioned `<labels.refreshBranch>`/`<labels.refreshing>` pair never count) is a state the label protocol says is impossible. Stop, report the item, `<labels.readyForReview>`, and the co-present label found, and change nothing.
+
 ## Label swap (first action after pre-flight)
 
 ```bash
 gh pr edit <pr-number> --repo <repo> --remove-label "<labels.readyForReview>" --add-label "<labels.reviewing>"
 ```
+
+Compare-and-swap: the pre-flight read above is the immediately-preceding read for this edit. If `<labels.readyForReview>` is no longer present, apply the label-cas contract's step 3 instead of issuing the edit.
 
 ## Work
 
@@ -93,7 +107,7 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.readyForReview>" --
 
    `gh pr checks` exposes status in the **`bucket`** field (pass/fail/pending). There is **no** `status` or `conclusion` field on `gh pr checks` — a detail worth remembering rather than rediscovering. **This early read is for diagnosis only** — it is what any Critical-finding log lookup works from. It is never the verdict's evidence: step 3 re-reads the rollup right before posting, because a check can conclude, or a red one turn green, in the time spent reviewing the diff.
 
-   **Mergeability exit — check before doing any of the work below.** If `mergeable` reads `CONFLICTING`, **no verdict is formed on a pull request that cannot be merged**: GitHub cannot build a merge ref, so no check has ever run on this diff. Write `.temp/rebase-required-<pr-number>.md` (`## Rebase required`, naming `baseRefName` and `headRefOid` — format in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Rebase required"). **When `commands.artifacts` is set**, run `<artifacts> check rebase-required .temp/rebase-required-<pr-number>.md` first — a non-zero exit means rewrite the file and re-run it, never comment past a failing check; skip when null. Then `gh pr comment <pr-number> --repo <repo> --body-file .temp/rebase-required-<pr-number>.md`, then `gh pr edit <pr-number> --repo <repo> --remove-label "<labels.reviewing>" --add-label "<labels.readyForReview>,<labels.refreshBranch>"`. Post **no** review — no cycle is consumed, exactly like step 3's head-moved exit — and report that the pull request conflicts with its base and a refresh will rebase it this tick, returning to review automatically once it clears. `UNKNOWN` never blocks this exit: proceed as normal, since GitHub has not computed mergeability yet and the read above is what triggers it.
+   **Mergeability exit — check before doing any of the work below.** If `mergeable` reads `CONFLICTING`, **no verdict is formed on a pull request that cannot be merged**: GitHub cannot build a merge ref, so no check has ever run on this diff. Write `.temp/rebase-required-<pr-number>.md` (`## Rebase required`, naming `baseRefName` and `headRefOid` — format in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Rebase required"). **When `commands.artifacts` is set**, run `<artifacts> check rebase-required .temp/rebase-required-<pr-number>.md` first — a non-zero exit means rewrite the file and re-run it, never comment past a failing check; skip when null. Then `gh pr comment <pr-number> --repo <repo> --body-file .temp/rebase-required-<pr-number>.md`, then re-read labels (compare-and-swap — `gh pr view <pr-number> --repo <repo> --json labels`; if `<labels.reviewing>` is no longer present, apply the label-cas contract's step 3 instead) and `gh pr edit <pr-number> --repo <repo> --remove-label "<labels.reviewing>" --add-label "<labels.readyForReview>,<labels.refreshBranch>"`. Post **no** review — no cycle is consumed, exactly like step 3's head-moved exit — and report that the pull request conflicts with its base and a refresh will rebase it this tick, returning to review automatically once it clears. `UNKNOWN` never blocks this exit: proceed as normal, since GitHub has not computed mergeability yet and the read above is what triggers it.
 
    When `docs.engineering` is set, read it — it is a review dimension and you may cite it in findings.
 
@@ -131,7 +145,7 @@ gh pr edit <pr-number> --repo <repo> --remove-label "<labels.readyForReview>" --
    - **Resolve the carve-out.** When `modules.approvalGate` is true, read the workflow file with the sanctioned ref recipe — `gh api "repos/<repo>/contents/.github/workflows/approval-check.yml?ref=<headRefOid>" -H "Accept: application/vnd.github.raw"` — and take its single `jobs:` key as the excused check name, never a checked-out copy that may be on a different ref than this review. When the module is false, resolve nothing and excuse nothing — every red check blocks.
    - **Wait while unconcluded.** `gh pr checks <pr-number> --repo <repo> --watch --interval 30`, each call under a Bash timeout of `600000` ms, at most 3 times. Never read its exit code as the answer. After each wait, re-read `statusCheckRollup` directly — never parse `--watch` output.
    - **A red check that is not the excused one is a Critical finding**, named, with its cause read from `gh run view <databaseId> --repo <repo> --log-failed` (via `gh run list --repo <repo> --branch <headRefName> --json databaseId,name,conclusion,workflowName`). Critical blocks at every cycle's bar — never downgraded to fit a later cycle.
-   - **Timeout exit** (still unconcluded after 3 waits): post the review anyway, verdict `blocked — checks pending`, body naming each pending check and the SHA. Then comment `## Pipeline Escalation` with the same, `gh pr edit <pr-number> --repo <repo> --remove-label "<labels.reviewing>" --add-label "<labels.needsHuman>"`, and end with `BLOCKED: checks on <sha> did not conclude — no verdict formed.` The findings from step 2 are preserved on the posted review; the gate has a real exit (`unblock #N`), and a pass is never one of the outcomes.
+   - **Timeout exit** (still unconcluded after 3 waits): post the review anyway, verdict `blocked — checks pending`, body naming each pending check and the SHA. Then comment `## Pipeline Escalation` with the same, re-read labels (compare-and-swap — `gh pr view <pr-number> --repo <repo> --json labels`; if `<labels.reviewing>` is no longer present, apply the label-cas contract's step 3 instead), `gh pr edit <pr-number> --repo <repo> --remove-label "<labels.reviewing>" --add-label "<labels.needsHuman>"`, and end with `BLOCKED: checks on <sha> did not conclude — no verdict formed.` The findings from step 2 are preserved on the posted review; the gate has a real exit (`unblock #N`), and a pass is never one of the outcomes.
    - **Head-moved exit**: if the re-read `headRefOid` differs from the one recorded before the wait, the evidence belongs to a diff that no longer exists. Post **nothing**, swap `<labels.reviewing>` → `<labels.readyForReview>`, and report that the head advanced mid-review so the next tick reviews the new diff. No review comment, so no cycle is consumed on a stale diff.
 
    Only once every non-excused check is concluded and green does the verdict proceed to step 4's `<labels.approved>` row.
@@ -199,9 +213,14 @@ A third outcome sits outside this table: **`blocked — checks pending`** (step 
 
 The cycle cap is the cockpit's job: it escalates to `<labels.needsHuman>` at `reviewCycleCap` cycles, unconditionally — whatever the latest verdict said.
 
+Compare-and-swap: re-read immediately before whichever edit below applies — the last read was steps ago.
+
 ```bash
+gh pr view <pr-number> --repo <repo> --json labels
 # Findings at or above this cycle's bar → revise:
 gh pr edit <pr-number> --repo <repo> --remove-label "<labels.reviewing>" --add-label "<labels.needsRevision>"
 # At or under the bar, or clean, and step 3 confirmed every check green → approve:
 gh pr edit <pr-number> --repo <repo> --remove-label "<labels.reviewing>" --add-label "<labels.approved>"
 ```
+
+If `<labels.reviewing>` is no longer present, apply the label-cas contract's step 3 instead of issuing either edit.

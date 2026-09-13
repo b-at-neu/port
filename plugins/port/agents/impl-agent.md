@@ -60,6 +60,16 @@ Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROO
   - large markdown to GitHub → Write it under `.temp/`, then `--body-file` / `--input`.
 <!-- shell-discipline:end -->
 
+<!-- label-cas:begin -->
+**Every label transition is compare-and-swap.** `gh issue edit`/`gh pr edit --remove-label X` **exits 0 when X is not present**, so an edit issued against a stale view of the item silently degrades into a bare add and leaves two contradictory stage labels behind (#209). Before **every** `--remove-label` in this file:
+
+1. **Re-read the item's labels immediately before the edit** — `gh issue view <n> --repo <repo> --json labels` or `gh pr view <n> --repo <repo> --json labels`. A read from an earlier step does not count; the gap between it and the write is exactly where another writer moves in.
+2. **Source label present, and it is the only role-bearing label** → issue the edit, then re-read once more and confirm the source is gone and the target is there. The *source label* is the trigger or in-flight label this transition is defined on — an incidental conditional removal alongside it is not a source.
+3. **Source label absent, or a second role-bearing label is present** → **write nothing.** Markers (`<labels.marker>`, `<labels.autoPlan>`) never count toward this, and `<labels.refreshBranch>`/`<labels.refreshing>` are the one sanctioned pair that may sit beside another stage label — a refresh deliberately leaves the others in place. Anything else is a state the label protocol says is impossible. Stop, and report the item, the label you expected, and the labels actually present, in the abort form this file already defines (`BLOCKED:` where it has one, otherwise its Pre-flight's plain stop-and-report).
+
+**This fails closed on the write and open on the report**, deliberately: an unnecessary stop costs one dispatch and a glance from the operator, while writing through a stale view costs a duplicate pull request or a silently lost stage label, and neither is visible until someone reads the labels by hand. **Never repair the state yourself** — reporting it is the whole job here.
+<!-- label-cas:end -->
+
 Impl-agent specifics:
 
 - **You are already in your own isolated git worktree (your cwd).** Do **all** work in place with **cwd-relative paths**. **Never** `cd` out of it (including to the base repository), use `git -C`, run `git worktree list`/`add`/`remove`/`prune`, use `--ignore-other-worktrees`, or force anything.
@@ -75,13 +85,25 @@ gh issue view N --repo <repo> --json labels,title,assignees
 
 If not labeled `<labels.planApproved>`, stop immediately, change nothing, and report: "Issue #N is not labeled `<labels.planApproved>`. Current labels: [list]. Nothing was changed."
 
+**Label invariant.** A co-present `<labels.inProgress>` or `<labels.prOpened>` alongside `<labels.planApproved>` is the state Route 2 of #209 produces — an aborted implementation that left the trigger label behind. Markers (`<labels.marker>`, `<labels.autoPlan>`) never count toward this. Stop immediately, change nothing, and report the item, `<labels.planApproved>`, and the co-present label actually found.
+
 **Record the issue's assignee login** from `assignees` — an in-flight pipeline item carries exactly one, by the invariant in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Multi-operator partitioning". You use it when opening the pull request so it lands in that operator's cockpit queue. If the issue has **no** assignee, use `@me`.
+
+**Existing-work lookup.** Before the label swap, confirm no open pull request already exists for this issue — Route 1 of #209, a second implementation over work that already landed:
+
+```bash
+gh pr list --repo <repo> --state open --json number,url,headRefName,body --jq '[.[] | select(((.body // "") | test("(?i)\\bcloses #N\\b")) or (.headRefName | startswith("N-"))) | {number, url, headRefName}]'
+```
+
+Non-empty → stop, change nothing, and end with `BLOCKED: #N already has an open pull request (#<pr>, branch <head>) — I would be re-implementing work that exists. Nothing was changed.`
 
 ## Label swap (first action after pre-flight)
 
 ```bash
 gh issue edit N --repo <repo> --remove-label "<labels.planApproved>" --add-label "<labels.inProgress>"
 ```
+
+Compare-and-swap: the pre-flight read above is the immediately-preceding read for this edit — the existing-work lookup does not touch issue labels. If `<labels.planApproved>` is no longer the only role-bearing label present, apply the label-cas contract's step 3 instead of issuing the edit.
 
 ## Work
 
@@ -113,14 +135,15 @@ gh issue edit N --repo <repo> --remove-label "<labels.planApproved>" --add-label
 
    **When `commands.artifacts` is set**, run the `check commit` command above before every commit. A non-zero exit means rewrite `.temp/commit-msg.txt` and re-run it — never `git commit` past a failing check. Skip this when `commands.artifacts` is null.
 
-4. **Blockers — report back, stay resumable.** If something the plan did not cover blocks you and you cannot resolve it within the plan's intent: write the blocker text to `.temp/blocker-N.md` (the Write tool creates `.temp/`), then
+4. **Blockers — report back, stay resumable.** If something the plan did not cover blocks you and you cannot resolve it within the plan's intent: write the blocker text to `.temp/blocker-N.md` (the Write tool creates `.temp/`), then re-read labels (compare-and-swap — the last read was steps ago) and swap:
 
    ```bash
+   gh issue view N --repo <repo> --json labels
    gh issue comment N --repo <repo> --body-file .temp/blocker-N.md
    gh issue edit N --repo <repo> --remove-label "<labels.inProgress>" --add-label "<labels.blocked>"
    ```
 
-   Do not push partial work. End your final message in exactly this form so the cockpit can relay and resume you: `BLOCKED: <one-paragraph summary of the blocker and the decision needed>`. When resumed, swap the labels back (`--remove-label "<labels.blocked>" --add-label "<labels.inProgress>"`) and continue from the stopped checklist item.
+   If `<labels.inProgress>` is no longer present, apply the label-cas contract's step 3 instead of issuing the edit. Do not push partial work. End your final message in exactly this form so the cockpit can relay and resume you: `BLOCKED: <one-paragraph summary of the blocker and the decision needed>`. When resumed, re-read labels, then swap them back (`--remove-label "<labels.blocked>" --add-label "<labels.inProgress>"`) and continue from the stopped checklist item.
 
 5. **Run the checks.** Work through `commands.checks` **in order**, each as its own Bash call — never prefixed with `cd`, never pasted together as one multi-line script, and never with an extra command appended: no `2>&1`, no pipe into `tail`/`head`/`grep` (#205 — the reporter prints one `ok` line or one `FAIL` line per failure, so there is nothing to truncate), and no expansion to an absolute path (the harness preamble's "use absolute file paths" is wrong for a `commands.*` invocation specifically — the allowlist entry is the repo-relative string, run it exactly as configured).
 
@@ -171,7 +194,12 @@ gh issue edit N --repo <repo> --remove-label "<labels.planApproved>" --add-label
 
 ## Handoff
 
+Compare-and-swap: re-read immediately before the first edit below — the last read was steps ago.
+
 ```bash
+gh issue view N --repo <repo> --json labels
 gh issue edit N --repo <repo> --remove-label "<labels.inProgress>" --add-label "<labels.prOpened>"
 gh pr edit <pr-number> --repo <repo> --add-label "<labels.readyForReview>"
 ```
+
+If `<labels.inProgress>` is no longer present, apply the label-cas contract's step 3 instead of issuing that edit.
