@@ -283,6 +283,19 @@ export default async function ({ fail, ok }) {
     if (switchesBranch('gh pr checkout 5')) fail('branch-rule-classifier', 'switchesBranch: expected false — this is gh, not git');
     else ok();
 
+    // R1-M1: a chained command carrying an earlier, unrelated `git`
+    // invocation ahead of the checkout must still be caught — every
+    // command-position `git` occurrence is scanned, not just the first.
+    if (!switchesBranch('git branch --sort=-committerdate ; git checkout evil-branch')) {
+      fail('branch-rule-classifier', 'switchesBranch: expected true for a chained command with an earlier git invocation (spaced separator)');
+    } else ok();
+    if (!switchesBranch('git branch --sort=-committerdate;git checkout evil-branch')) {
+      fail('branch-rule-classifier', 'switchesBranch: expected true for a chained command with an earlier git invocation (unspaced separator)');
+    } else ok();
+    if (!switchesBranch('git status && git checkout evil-branch')) {
+      fail('branch-rule-classifier', 'switchesBranch: expected true for a chained command joined with &&');
+    } else ok();
+
     // --- invokedCockpitSkill ---------------------------------------------------
     // The wrapper element is the whole tell — a bare mention of the skill
     // name in prose (SKILL.md's own pacing section names it) must not trip it.

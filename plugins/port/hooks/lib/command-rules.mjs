@@ -98,17 +98,28 @@ export function pluginInstallMutation(command) {
  *  is exactly the escape this rule exists to close. */
 export function switchesBranch(command) {
   const stripped = stripQuoted(command);
-  if (!atCommandPosition(stripped, 'git')) return false;
-  const tokens = tokenize(stripped);
-  const gitIdx = tokens.indexOf('git');
-  if (gitIdx === -1) return false;
-  for (let i = gitIdx + 1; i < tokens.length; i++) {
-    if (tokens[i] === '-C') {
-      i++; // skip the path argument
-      continue;
+  // Every command-position `git` occurrence, not just the first — the same
+  // shape `usesShellLoop`/`targetsGhOrGit` scan for their own keywords, since
+  // a chained command can carry an earlier, unrelated `git` invocation ahead
+  // of the checkout (e.g. `git branch --sort=... ; git checkout evil-branch`).
+  // Uses the same raw-text command-position regex `atCommandPosition` tests
+  // with, run with `g` so every occurrence is visited, since token-splitting
+  // alone would miss a separator glued to `git` with no surrounding space
+  // (`...;git checkout`).
+  const gitAtCommandPosition = /(?:^|[\s;&|(])git(?=[\s;&|)]|$)/g;
+  let match;
+  while ((match = gitAtCommandPosition.exec(stripped))) {
+    const rest = stripped.slice(match.index + match[0].length);
+    const tokens = tokenize(rest);
+    for (let i = 0; i < tokens.length; i++) {
+      if (tokens[i] === '-C') {
+        i++; // skip the path argument
+        continue;
+      }
+      if (tokens[i].startsWith('-')) continue; // any other git-level flag
+      if (tokens[i] === 'checkout' || tokens[i] === 'switch') return true;
+      break;
     }
-    if (tokens[i].startsWith('-')) continue; // any other git-level flag
-    return tokens[i] === 'checkout' || tokens[i] === 'switch';
   }
   return false;
 }
