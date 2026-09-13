@@ -92,7 +92,7 @@ If not labeled `<labels.planApproved>`, stop immediately, change nothing, and re
 **Existing-work lookup.** Before the label swap, confirm no open pull request already exists for this issue — Route 1 of #209, a second implementation over work that already landed:
 
 ```bash
-gh pr list --repo <repo> --state open --json number,url,headRefName,body --jq '[.[] | select((.body | test("(?i)\\bcloses #N\\b")) or (.headRefName | startswith("N-"))) | {number, url, headRefName}]'
+gh pr list --repo <repo> --state open --json number,url,headRefName,body --jq '[.[] | select(((.body // "") | test("(?i)\\bcloses #N\\b")) or (.headRefName | startswith("N-"))) | {number, url, headRefName}]'
 ```
 
 Non-empty → stop, change nothing, and end with `BLOCKED: #N already has an open pull request (#<pr>, branch <head>) — I would be re-implementing work that exists. Nothing was changed.`
