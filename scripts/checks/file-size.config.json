@@ -6,7 +6,7 @@
     { "glob": "schema/fixtures/**", "why": "fixtures — the document being validated is the point, not its length" }
   ],
   "allowlist": [
-    { "path": "scripts/checks/hooks.mjs", "lines": 763, "issue": 182 },
+    { "path": "scripts/checks/hooks.mjs", "lines": 757, "issue": 182 },
     { "path": "plugins/port/templates/artifacts.mjs", "lines": 663, "issue": 183 },
     { "path": "scripts/checks/cockpit.mjs", "lines": 609, "issue": 182 },
     { "path": "plugins/port/skills/pipeline/SKILL.md", "lines": 612, "issue": 181 },

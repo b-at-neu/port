@@ -61,16 +61,10 @@ export default async function ({ fail, ok }) {
   // plumbing. Each case is the regression a real incident or the ticket's own
   // acceptance criteria named.
   {
-    const {
-      allowMatchers,
-      decide,
-      callerKind,
-      globToRegExp,
-      gateClearAttempt,
-      recentOperatorMessages,
-      operatorNamed,
-      pluginInstallMutation,
-    } = await import(pathToFileURL(join(root, 'plugins/port/hooks/lib/guard-rules.mjs')).href);
+    const { allowMatchers, decide, callerKind, globToRegExp, recentOperatorMessages, operatorNamed, invokedCockpitSkill } =
+      await import(pathToFileURL(join(root, 'plugins/port/hooks/lib/guard-rules.mjs')).href);
+    const { gateClearAttempt, pluginInstallMutation, switchesBranch } =
+      await import(pathToFileURL(join(root, 'plugins/port/hooks/lib/command-rules.mjs')).href);
 
     const settingsFile = join(root, '.claude/settings.json');
     const matchers = allowMatchers([settingsFile]);

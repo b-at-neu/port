@@ -10,16 +10,18 @@
 // `permissionMode: dontAsk` on the stage agents is a second line of defence,
 // not the mechanism this relies on.
 //
-// Three more rules apply to *any* caller, cockpit included: a `gh`/`git`
+// Four more rules apply to *any* caller, cockpit included: a `gh`/`git`
 // call wrapped in a shell loop (#120), an unauthorised removal of the
-// `needsHuman` gate label (#138), and a `claude plugin` install/uninstall/
-// marketplace mutation run from inside any `.claude/worktrees/` cwd (#144).
-// The first two exempt an `/port:implement` operator worktree; the install
-// rule deliberately does not, since every install scope shares one
-// `installPath` regardless of who is typing the command. The gate rule is
-// the one call path that does extra I/O — reading the calling session's
-// transcript tail — and only when the command is actually an attempt to
-// remove that label, from a non-subagent.
+// `needsHuman` gate label (#138), a `claude plugin` install/uninstall/
+// marketplace mutation run from inside any `.claude/worktrees/` cwd (#144),
+// and a cockpit session `git checkout`/`git switch`ing branches out from
+// under its own startup refusal (#216). The first, second, and fourth exempt
+// an `/port:implement` operator worktree; the install rule deliberately does
+// not, since every install scope shares one `installPath` regardless of who
+// is typing the command. The gate and branch rules are the two call paths
+// that do extra I/O — reading the calling session's transcript — and only
+// when the command actually matches what each rule guards, from a
+// non-subagent, non-operator-worktree caller.
 //
 // Every decision — deny, a same-shape miss from a non-subagent session, an
 // allowed gate clear, or an internal failure — is logged to a gitignored
@@ -35,7 +37,8 @@
 import { execSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { allowMatchers, decide, gateClearAttempt, callerKind, recentOperatorMessages } from './lib/guard-rules.mjs';
+import { allowMatchers, decide, callerKind, recentOperatorMessages, invokedCockpitSkill } from './lib/guard-rules.mjs';
+import { gateClearAttempt, switchesBranch } from './lib/command-rules.mjs';
 
 /** Nearest ancestor of `from` containing `rel`, or null. */
 function findUp(from, rel) {
@@ -98,30 +101,43 @@ if (configRoot) {
       join(configRoot, '.claude', 'settings.local.json'),
     ]);
 
-    // The gate rule is the one path that needs extra I/O — the calling
-    // session's transcript tail — so it only runs when the command is
-    // actually an attempt to remove the needsHuman label, and only for a
-    // caller `decide` will not already deny outright (a subagent) or
-    // exempt outright (an operator worktree). A missing path, an unreadable
-    // file, or a parse failure all yield `null` (unverifiable), never a
-    // throw — `recentOperatorMessages` handles the parse failures, this
-    // catches the read itself.
+    // The gate and branch rules are the two paths that need extra I/O — the
+    // calling session's transcript — so the read only happens when either
+    // rule's own command test says it might apply, and only for a caller
+    // `decide` will not already deny outright (a subagent) or exempt
+    // outright (an operator worktree). One read serves both rules. A
+    // missing path, an unreadable file, or a parse failure all yield `null`
+    // (unverifiable) for both, never a throw.
     let operatorMessages = null;
+    let isCockpitSession = null;
     if (payload?.tool_name === 'Bash' && typeof payload?.tool_input?.command === 'string') {
       const who = callerKind(payload);
       if (!who.isSubagent && !who.isOperatorWorktree) {
-        const gate = gateClearAttempt(payload.tool_input.command, needsHumanLabel);
-        if (gate.isAttempt && typeof payload?.transcript_path === 'string') {
+        const command = payload.tool_input.command;
+        const gate = gateClearAttempt(command, needsHumanLabel);
+        const needsTranscript = gate.isAttempt || switchesBranch(command);
+        if (needsTranscript && typeof payload?.transcript_path === 'string') {
           try {
-            operatorMessages = recentOperatorMessages(readFileSync(payload.transcript_path, 'utf8'));
+            const transcript = readFileSync(payload.transcript_path, 'utf8');
+            if (gate.isAttempt) operatorMessages = recentOperatorMessages(transcript);
+            isCockpitSession = invokedCockpitSkill(transcript);
           } catch {
             operatorMessages = null;
+            isCockpitSession = null;
           }
         }
       }
     }
 
-    const result = decide({ payload, matchers, sessionRequiredPaths, root: configRoot, needsHumanLabel, operatorMessages });
+    const result = decide({
+      payload,
+      matchers,
+      sessionRequiredPaths,
+      root: configRoot,
+      needsHumanLabel,
+      operatorMessages,
+      isCockpitSession,
+    });
     const logDir = join(baseRepoRoot(cwd), '.agents');
     const actor = actorOf(result.who) ?? `session:${field(payload?.session_id, 40) || 'unknown'}`;
 
