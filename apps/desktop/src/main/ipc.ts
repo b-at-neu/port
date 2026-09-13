@@ -1,10 +1,12 @@
-import { app, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { IPC_CHANNELS, type IpcChannel, type IpcMap } from '../shared/ipc'
 import type { WorktreesReport } from '../shared/reclaimer/types'
 import type { RepositoryEntry } from '../shared/repos'
 import type { SessionScan } from '../shared/sessions/types'
 import type { TranscriptRead } from '../shared/sessions/transcript'
+import { SOURCE_KINDS } from '../shared/board/types'
+import type { BoardSnapshot } from '../shared/board/types'
 import { chooseDirectory } from './dialogs'
 import { git } from './platform'
 import { readWorktreeReport } from './reclaimer'
@@ -13,6 +15,8 @@ import { addRepository, listRepositories, removeRepository } from './registry'
 import type { RegistryDeps } from './registry'
 import { readSessionState, readTranscript } from './sessions'
 import type { ReadSessionStateParams, ReadTranscriptParams, RepoRef } from './sessions'
+import { createPipelineWatcher } from './state'
+import type { PipelineWatcher } from './state'
 
 type AppInfo = IpcMap['app:info']['response']
 
@@ -119,7 +123,40 @@ export async function resolveTranscriptRead(
   return deps.readTranscript({ sessionId: request.sessionId, agentId: request.agentId })
 }
 
-export function registerIpc(): void {
+/** The two calls `'board:refresh'` composes — the same injectable seam
+ *  `WorktreesReportDeps` gives `resolveWorktreesReport`, so the id/source
+ *  validation below is testable without Electron or a real watcher. */
+export interface BoardRefreshDeps {
+  readonly listRepositories: typeof listRepositories
+  readonly refresh: (request: IpcMap['board:refresh']['request']) => Promise<BoardSnapshot>
+}
+
+/** `repoId`, when present, must name a currently registered repository —
+ *  the same rail `resolveWorktreesReport` already applies — and `source`
+ *  must be one of `SOURCE_KINDS`; anything else throws rather than silently
+ *  forcing nothing. */
+export async function resolveBoardRefresh(
+  registryDeps: RegistryDeps,
+  request: IpcMap['board:refresh']['request'],
+  deps: BoardRefreshDeps,
+): Promise<BoardSnapshot> {
+  if (request?.repoId !== undefined) {
+    if (typeof request.repoId !== 'string' || request.repoId === '') {
+      throw new Error("'board:refresh' repoId must be a non-empty string when present")
+    }
+    const list = await deps.listRepositories(registryDeps)
+    if (!list.ok) throw new Error(`'board:refresh' could not list repositories: ${list.message}`)
+    if (!list.repositories.some((repository) => repository.id === request.repoId)) {
+      throw new Error(`'board:refresh' found no repository registered with id '${request.repoId}'`)
+    }
+  }
+  if (request?.source !== undefined && !(SOURCE_KINDS as readonly string[]).includes(request.source)) {
+    throw new Error(`'board:refresh' source must be one of ${SOURCE_KINDS.join(', ')}`)
+  }
+  return deps.refresh(request)
+}
+
+export function registerIpc(): PipelineWatcher {
   // The one place a real `git` invocation and the real userData directory
   // reach the registry — every registry function itself takes these as
   // injected dependencies, so its own tests need neither Electron nor a
@@ -169,9 +206,37 @@ export function registerIpc(): void {
 
   handle('transcript:read', (_event, request) => resolveTranscriptRead(request))
 
+  // The board's own clock (#80) — one watcher for the process lifetime,
+  // pushing every snapshot to every open window over `board:update`. The
+  // registry is re-listed through the same `listRepositories` every other
+  // channel reads, never a second config path.
+  const watcher = createPipelineWatcher({
+    repositories: async () => {
+      const list = await listRepositories(registryDeps)
+      return list.ok ? list.repositories : []
+    },
+    git: (args, cwd) => git(args, { cwd }),
+    onSnapshot: (snapshot) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) window.webContents.send('board:update', snapshot)
+      }
+    },
+  })
+
+  handle('board:snapshot', (_event, request) => {
+    if (request !== undefined) {
+      throw new Error("'board:snapshot' takes no payload")
+    }
+    return watcher.snapshot()
+  })
+
+  handle('board:refresh', (_event, request) => resolveBoardRefresh(registryDeps, request, { listRepositories, refresh: watcher.refresh }))
+
   for (const channel of IPC_CHANNELS) {
     if (!registered.has(channel)) {
       throw new Error(`IPC channel '${channel}' is declared but has no handler`)
     }
   }
+
+  return watcher
 }

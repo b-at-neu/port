@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import { registerIpc } from './ipc'
+import type { PipelineWatcher } from './state'
 import { applyNavigationGuards } from './navigation'
 
 const gotLock = app.requestSingleInstanceLock()
@@ -9,6 +10,7 @@ if (!gotLock) {
   app.quit()
 } else {
   let mainWindow: BrowserWindow | null = null
+  let watcher: PipelineWatcher | null = null
 
   app.on('second-instance', () => {
     if (!mainWindow) return
@@ -53,7 +55,7 @@ if (!gotLock) {
   }
 
   void app.whenReady().then(() => {
-    registerIpc()
+    watcher = registerIpc()
     createWindow()
 
     app.on('activate', () => {
@@ -63,5 +65,12 @@ if (!gotLock) {
 
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()
+  })
+
+  // Stop the watcher's timer on quit so a closing app leaves no `gh`/`git`
+  // spawn behind (#80) — `before-quit` fires on every platform, unlike
+  // `window-all-closed`, which macOS's dock-icon convention skips.
+  app.on('before-quit', () => {
+    watcher?.stop()
   })
 }
