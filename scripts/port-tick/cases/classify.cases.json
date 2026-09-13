@@ -1,0 +1,35 @@
+{
+  "$comment": "Authoritative decision-case table for scripts/port-tick/classify.mjs's session-required marker-slot readers. Per plugins/port/docs/PIPELINE.md → 'Session-required tickets' → 'Detection': slot plus form, never a body-wide substring search — the words appearing elsewhere are not a marker.",
+  "cases": [
+    {
+      "function": "issueSessionRequiredReason",
+      "name": "marker at the slot, directly under the heading",
+      "input": "Some ticket text.\n\n---\n## Implementation Plan\n> **SESSION REQUIRED:** touches `.claude/**`\n\n## Overview\n...",
+      "expected": "touches `.claude/**`"
+    },
+    {
+      "function": "issueSessionRequiredReason",
+      "name": "no marker at the slot — normal overview line instead",
+      "input": "## Implementation Plan\n## Overview\nJust a normal plan.",
+      "expected": null
+    },
+    {
+      "function": "issueSessionRequiredReason",
+      "name": "the words appear later in prose, not at the slot — not a marker",
+      "input": "## Implementation Plan\n## Overview\nThis plan discusses SESSION REQUIRED tickets in general.",
+      "expected": null
+    },
+    {
+      "function": "prSessionRequiredReason",
+      "name": "marker directly after Closes #N",
+      "input": "Closes #503\n\n> **SESSION REQUIRED:** touches `.claude/settings.json`\n\n## Summary\n...",
+      "expected": "touches `.claude/settings.json`"
+    },
+    {
+      "function": "prSessionRequiredReason",
+      "name": "no Closes line at all",
+      "input": "## Summary\nNo closes line here.",
+      "expected": null
+    }
+  ]
+}

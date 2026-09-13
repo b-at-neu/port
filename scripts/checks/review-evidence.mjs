@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, walk, relOf, readJson } from '../lib/files.mjs';
+import { root, walk, relOf, readJson, pipelineTickText } from '../lib/files.mjs';
 
 export default async function ({ fail, ok }) {
   // --- Review evidence gate — verdicts wait for concluded checks --------------
@@ -180,9 +180,9 @@ export default async function ({ fail, ok }) {
     }
 
     const pipelineRel = 'plugins/port/docs/PIPELINE.md';
-    const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
+    const skillRel = 'SKILL.md/TICK-PROSE.md';
     const pipelineText = readFileSync(join(root, pipelineRel), 'utf8');
-    const skillText = readFileSync(join(root, skillRel), 'utf8');
+    const skillText = pipelineTickText();
 
     for (const [rel, text] of [[pipelineRel, pipelineText], [skillRel, skillText]]) {
       if (!text.includes('a refresh consumes no review cycle')) {
@@ -228,13 +228,13 @@ export default async function ({ fail, ok }) {
   {
     const pipelineRel = 'plugins/port/docs/PIPELINE.md';
     const planAgentRel = 'plugins/port/agents/plan-agent.md';
-    const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
+    const skillRel = 'SKILL.md/TICK-PROSE.md';
     const schemaRel = 'schema/port.config.schema.json';
     const templateRel = 'plugins/port/templates/port.config.json';
 
     const pipelineText = readFileSync(join(root, pipelineRel), 'utf8');
     const planAgentText = readFileSync(join(root, planAgentRel), 'utf8');
-    const skillText = readFileSync(join(root, skillRel), 'utf8');
+    const skillText = pipelineTickText();
     const schemaText = readFileSync(join(root, schemaRel), 'utf8');
     const templateText = readFileSync(join(root, templateRel), 'utf8');
 

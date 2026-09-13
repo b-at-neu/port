@@ -96,6 +96,12 @@
           "description": "Command prefix the cockpit appends `reset`/`dispatch`/`sweep`/`report` to for per-ticket dispatch cost accounting. Null means nothing measures or bounds ticket cost, and the cockpit skips it silently — `reviewCycleCap` still bounds review loops only.",
           "default": null,
           "examples": ["node scripts/port-budget.mjs"]
+        },
+        "tick": {
+          "type": ["string", "null"],
+          "description": "Command prefix the cockpit appends `start`/`plan`/`commit`/`resolve` to for the tick engine, which moves the tick's decisions (query build, envelope classification, ownership partition, label classification, mergeability/contention/cycle-cap/liveness routing, and the pacing ladder) out of prose and into a deterministic script. Null means the cockpit follows the prose tick procedure in `TICK-PROSE.md` instead.",
+          "default": null,
+          "examples": ["node scripts/port-tick.mjs"]
         }
       }
     },
