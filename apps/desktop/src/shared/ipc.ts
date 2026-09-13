@@ -1,6 +1,8 @@
 import type { AssertEqual } from './assert-type'
 import type { RepoId, RepositoryEntry } from './repos'
 import type { WorktreesReport } from './reclaimer/types'
+import type { SessionScan } from './sessions/types'
+import type { TranscriptRead } from './sessions/transcript'
 
 export interface AppInfo {
   app: string
@@ -49,9 +51,17 @@ export interface IpcMap {
     request: { id: RepoId }
     response: WorktreesReport
   }
+  'sessions:scan': {
+    request: void
+    response: SessionScan
+  }
+  'transcript:read': {
+    request: { sessionId: string; agentId: string | null }
+    response: TranscriptRead
+  }
 }
 
-export const IPC_CHANNELS = ['app:info', 'repos:list', 'repos:add', 'repos:remove', 'worktrees:report'] as const
+export const IPC_CHANNELS = ['app:info', 'repos:list', 'repos:add', 'repos:remove', 'worktrees:report', 'sessions:scan', 'transcript:read'] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]
 

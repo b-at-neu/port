@@ -10,7 +10,16 @@
 import { listDirectory, pathOps } from '../platform'
 import type { SessionFailureKind } from '../../shared/sessions/types'
 
-const SESSION_ID_PATTERN = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i
+/** The unanchored UUID shape shared by the two regexes below, so the bare-id
+ *  validator (`SESSION_ID_RE`) and the filename matcher can never drift
+ *  apart — each applies its own anchors around this same core. */
+const SESSION_ID_CORE = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+
+/** The bare id shape, shared with `transcript.ts`'s request validation so
+ *  the two never drift apart — a session id is always a UUID. */
+export const SESSION_ID_RE = new RegExp(`^${SESSION_ID_CORE}$`, 'i')
+
+const SESSION_ID_FILENAME = new RegExp(`^(${SESSION_ID_CORE})\\.jsonl$`, 'i')
 
 export type ProjectIndex = ReadonlyMap<string, string>
 
@@ -43,7 +52,7 @@ export async function buildProjectIndex(claudeHome: string): Promise<BuildProjec
     scannedProjects += 1
     if (!listing.ok) continue
     for (const child of listing.value) {
-      const match = SESSION_ID_PATTERN.exec(child.name)
+      const match = SESSION_ID_FILENAME.exec(child.name)
       const sessionId = match?.[1]
       if (sessionId !== undefined && !index.has(sessionId)) {
         index.set(sessionId, projectDir)
@@ -63,4 +72,44 @@ export function resolveSessionDir(sessionId: string, index: ProjectIndex): strin
   const projectDir = index.get(sessionId)
   if (projectDir === undefined) return undefined
   return pathOps.join(projectDir, sessionId)
+}
+
+/** The one place `CLAUDE_CONFIG_DIR` is read — moved out of `adapter.ts` so
+ *  the rule has a single copy rather than two (#83). */
+export function defaultClaudeHome(): string {
+  const fromEnv = process.env['CLAUDE_CONFIG_DIR']
+  if (typeof fromEnv === 'string' && fromEnv !== '') return fromEnv
+  return pathOps.expandHome('~/.claude')
+}
+
+export type ResolveTranscriptPathResult =
+  | { readonly ok: true; readonly path: string }
+  | { readonly ok: false; readonly kind: 'session-unresolved' | 'invalid-id' }
+
+/** Builds a transcript path from the project index only — never a path the
+ *  caller hands in — for a session (`<projectDir>/<sessionId>.jsonl`) or a
+ *  subagent (`<projectDir>/<sessionId>/subagents/agent-<agentId>.jsonl`),
+ *  then asserts the result still sits under that session's own directory.
+ *  The IPC layer's id-pattern check is the real gate; this `contains`
+ *  assertion is what proves the gate held. The boundary is deliberately the
+ *  session's own directory, never the wider `<claudeHome>/projects` root —
+ *  a traversal-shaped `agentId` that reached this far (defense in depth,
+ *  not the expected path) can climb into a *sibling* project directory
+ *  without ever leaving `projects/`, which a looser check would wrongly
+ *  call safe. */
+export function resolveTranscriptPath(sessionId: string, agentId: string | null, index: ProjectIndex): ResolveTranscriptPathResult {
+  const projectDir = index.get(sessionId)
+  if (projectDir === undefined) return { ok: false, kind: 'session-unresolved' }
+
+  // A session's own transcript sits flat in projectDir (sibling of the
+  // sessionId-named directory, per the real layout buildProjectIndex's own
+  // listing reads); only a subagent's transcript nests inside that
+  // directory's subagents/.
+  const sessionDir = pathOps.join(projectDir, sessionId)
+  const candidate = agentId === null ? pathOps.join(projectDir, `${sessionId}.jsonl`) : pathOps.join(sessionDir, 'subagents', `agent-${agentId}.jsonl`)
+
+  if (agentId !== null && !pathOps.contains(sessionDir, candidate)) {
+    return { ok: false, kind: 'invalid-id' }
+  }
+  return { ok: true, path: candidate }
 }

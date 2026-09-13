@@ -8,7 +8,7 @@ import { listDirectory, pathOps, readJsonFile, statPath } from '../platform'
 import type { AgentRecord, MetaProblem, SessionRecord, SessionRef, SessionScan } from '../../shared/sessions/types'
 import { activityOf, attributeSession, itemNumberOf, parseAgentMeta, sessionRole, stageOf } from './classify'
 import type { RepoRef } from './classify'
-import { buildProjectIndex, resolveSessionDir } from './locate'
+import { buildProjectIndex, defaultClaudeHome, resolveSessionDir } from './locate'
 import { createSdkSessionReader } from './sdk'
 import type { SessionReader } from './sdk'
 
@@ -21,12 +21,6 @@ export interface ReadSessionStateParams {
 
 const AGENT_META_SUFFIX = '.meta.json'
 const AGENT_ID_PREFIX = /^agent-/
-
-function defaultClaudeHome(): string {
-  const fromEnv = process.env['CLAUDE_CONFIG_DIR']
-  if (typeof fromEnv === 'string' && fromEnv !== '') return fromEnv
-  return pathOps.expandHome('~/.claude')
-}
 
 /** Reads every `*.meta.json` under `subagentsDir`, pairing each with its
  *  sibling `.jsonl`'s mtime for `lastActivityAt`. Never throws on a

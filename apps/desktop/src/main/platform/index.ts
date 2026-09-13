@@ -22,5 +22,5 @@ export { classifyGhExit, gh, ghAuthStatus, ghJson } from './gh'
 export type { NodeOptions } from './node'
 export { node } from './node'
 
-export type { DirEntry, DirEntryKind, FileFailureKind, FileResult, StatInfo } from './files'
-export { ensureDirectory, listDirectory, readJsonFile, readTextFile, statPath, writeJsonFileAtomic } from './files'
+export type { DirEntry, DirEntryKind, FileFailureKind, FileResult, ReadLinesOptions, ReadLinesResult, StatInfo } from './files'
+export { ensureDirectory, listDirectory, readJsonFile, readLines, readTextFile, statPath, writeJsonFileAtomic } from './files'

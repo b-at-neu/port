@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { buildProjectIndex, resolveSessionDir } from './locate'
+import { buildProjectIndex, resolveSessionDir, resolveTranscriptPath } from './locate'
 
 async function makeClaudeHome(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'port-sessions-locate-'))
@@ -64,5 +64,47 @@ describe('buildProjectIndex', () => {
     if (result.ok) throw new Error('unreachable')
     expect(result.kind).toBe('claude-home-missing')
     expect(result.message).toContain('does not exist')
+  })
+})
+
+describe('resolveTranscriptPath', () => {
+  it('resolves a session transcript path under the project directory', async () => {
+    const claudeHome = await makeClaudeHome()
+    const projectDir = await makeProjectDir(claudeHome, 'project-a', [SESSION_A])
+    const indexResult = await buildProjectIndex(claudeHome)
+    if (!indexResult.ok) throw new Error('unreachable')
+
+    const result = resolveTranscriptPath(SESSION_A, null, indexResult.index)
+    expect(result).toEqual({ ok: true, path: join(projectDir, `${SESSION_A}.jsonl`) })
+  })
+
+  it('resolves a subagent transcript path beneath subagents/', async () => {
+    const claudeHome = await makeClaudeHome()
+    const projectDir = await makeProjectDir(claudeHome, 'project-a', [SESSION_A])
+    const indexResult = await buildProjectIndex(claudeHome)
+    if (!indexResult.ok) throw new Error('unreachable')
+
+    const result = resolveTranscriptPath(SESSION_A, 'a1b2c3', indexResult.index)
+    expect(result).toEqual({ ok: true, path: join(projectDir, SESSION_A, 'subagents', 'agent-a1b2c3.jsonl') })
+  })
+
+  it('reports session-unresolved for a session absent from the index', async () => {
+    const claudeHome = await makeClaudeHome()
+    await makeProjectDir(claudeHome, 'project-a', [SESSION_A])
+    const indexResult = await buildProjectIndex(claudeHome)
+    if (!indexResult.ok) throw new Error('unreachable')
+
+    const result = resolveTranscriptPath(SESSION_B, null, indexResult.index)
+    expect(result).toEqual({ ok: false, kind: 'session-unresolved' })
+  })
+
+  it('reports invalid-id for a traversal-shaped agentId that would escape the claimed directory', async () => {
+    const claudeHome = await makeClaudeHome()
+    await makeProjectDir(claudeHome, 'project-a', [SESSION_A])
+    const indexResult = await buildProjectIndex(claudeHome)
+    if (!indexResult.ok) throw new Error('unreachable')
+
+    const result = resolveTranscriptPath(SESSION_A, '../../../../etc/passwd', indexResult.index)
+    expect(result).toEqual({ ok: false, kind: 'invalid-id' })
   })
 })

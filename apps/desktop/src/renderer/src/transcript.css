@@ -1,0 +1,307 @@
+/* Sessions picker and transcript view (#83) — split out of index.css to
+   stay under the repository's file-size limit (ENGINEERING §7); imported
+   alongside it from main.ts, never merged back into one file. */
+
+.sessions-header,
+.transcript-header__top {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.sessions-header__back,
+.sessions-header__rescan,
+.transcript-header__back,
+.transcript-header__reload {
+  font-family: inherit;
+  font-size: 0.8rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #2a2a2a;
+  color: inherit;
+  cursor: pointer;
+}
+
+.sessions-header__title,
+.transcript-header__title {
+  font-size: 1rem;
+  font-weight: 600;
+  flex: 1;
+}
+
+.sessions-status,
+.transcript-status {
+  margin-top: 1rem;
+  opacity: 0.8;
+}
+
+.sessions-status--error,
+.transcript-status--error {
+  color: #ff6b6b;
+}
+
+.sessions-empty {
+  text-align: center;
+  margin: auto;
+  opacity: 0.8;
+}
+
+.sessions-empty__title {
+  font-size: 1rem;
+  margin: 0 0 0.25rem;
+}
+
+.sessions-empty__hint {
+  margin: 0;
+  opacity: 0.7;
+}
+
+.sessions-list {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  overflow-y: auto;
+}
+
+.session-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.session-row {
+  font-family: inherit;
+  text-align: left;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  background: #262626;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.session-row--agent {
+  margin: 0.2rem 0 0 1.25rem;
+  padding: 0.35rem 0.6rem;
+  background: #202020;
+  font-size: 0.8rem;
+}
+
+.session-row__title {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.session-row__meta {
+  font-size: 0.75rem;
+  opacity: 0.65;
+}
+
+.session-agents {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.sessions-footnote {
+  margin-top: 0.6rem;
+  font-size: 0.72rem;
+  opacity: 0.55;
+}
+
+/* Transcript view */
+
+.transcript-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex-shrink: 0;
+  margin-bottom: 0.75rem;
+}
+
+.transcript-header__subtitle {
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+.transcript-note {
+  font-size: 0.75rem;
+  opacity: 0.6;
+  margin: 0 0 0.5rem;
+}
+
+.transcript-empty {
+  margin-top: 1rem;
+  opacity: 0.7;
+}
+
+.transcript-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.entry {
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.82rem;
+}
+
+.entry--assistant {
+  background: #202632;
+}
+
+.entry--meta {
+  opacity: 0.55;
+  border: none;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.75rem;
+}
+
+.entry__label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  opacity: 0.6;
+  margin-bottom: 0.2rem;
+  display: block;
+}
+
+.entry__payload {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  font-family: inherit;
+}
+
+.entry__truncated {
+  margin: 0.3rem 0 0;
+  font-size: 0.72rem;
+  opacity: 0.6;
+}
+
+.entry__prompt {
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.82rem;
+}
+
+.entry__prompt-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  opacity: 0.6;
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.entry__show-all {
+  font-family: inherit;
+  font-size: 0.72rem;
+  padding: 0.15rem 0.5rem;
+  margin-top: 0.3rem;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.entry--tool-call .entry__summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.entry__tool-name {
+  font-weight: 600;
+}
+
+.entry__headline {
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.entry__chip {
+  font-size: 0.68rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 3px;
+  background: #333;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.entry__chip--ok {
+  background: #2a5d34;
+}
+
+.entry__chip--error {
+  background: #6b2a2a;
+}
+
+.entry__chip--none {
+  background: #444;
+}
+
+.entry__body {
+  margin-top: 0.4rem;
+}
+
+.entry__body--dim {
+  opacity: 0.7;
+}
+
+.diff {
+  margin-top: 0.4rem;
+}
+
+.diff__summary {
+  font-size: 0.78rem;
+  opacity: 0.75;
+  margin-bottom: 0.3rem;
+}
+
+.diff-hunk {
+  margin-bottom: 0.4rem;
+}
+
+.diff-hunk__header {
+  font-size: 0.72rem;
+  opacity: 0.55;
+}
+
+.diff-hunk__lines {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+}
+
+.diff-line {
+  padding: 0 0.2rem;
+}
+
+.diff-line--add {
+  background: rgba(46, 160, 67, 0.2);
+  color: #6fdc8c;
+}
+
+.diff-line--del {
+  background: rgba(248, 81, 73, 0.2);
+  color: #ff9d94;
+}
+
+.diff-line--context {
+  opacity: 0.7;
+}
