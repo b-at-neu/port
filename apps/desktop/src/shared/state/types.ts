@@ -166,6 +166,20 @@ export interface RepositoryFreshness {
   readonly denials: FreshnessEntry
 }
 
+/** The board's one addition to #79's own shape (#80 Decision 6) — a
+ *  worktree correlated to a number the open sweep never returned attaches to
+ *  no `ReconciledItem` and would otherwise vanish entirely: present in
+ *  `orphans` as a bare number, absent from every count. `registered` is
+ *  every entry `readWorktrees` returned; `attached` is the sum of
+ *  `ReconciledItem.worktrees.length` across every item; `uncorrelated` is
+ *  `uncorrelatedWorktrees.length`. `null`, never `0`, when the worktree
+ *  source itself failed — an unread source is not an empty one. */
+export interface WorktreeTotals {
+  readonly registered: number
+  readonly attached: number
+  readonly uncorrelated: number
+}
+
 /**
  * One repository's reconciled view. A non-`ready` entry is a `RepositoryState`
  * too, never a dropped row — it carries #74's own `RepoProblem` verbatim,
@@ -191,6 +205,7 @@ export type RepositoryState =
       readonly truncated: readonly TruncatedSet[]
       readonly rateLimit: RateLimitInfo
       readonly freshness: RepositoryFreshness
+      readonly worktreeTotals: WorktreeTotals | null
     }
   | {
       readonly ok: false
