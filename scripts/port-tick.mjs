@@ -266,6 +266,27 @@ function cmdPlan(root, cfg) {
     announce.push({ kind: 'blocked', item: item.number, facts: {} });
   }
 
+  // Ungated sweep (module-gated, never assignee-filtered — a worktree
+  // belongs to the checkout regardless of who owns the item): the raw set,
+  // exposed the same way `items.unowned` already is, so Housekeeping's
+  // existing change-only dedup/report prose (SKILL.md, unaffected by
+  // commands.tick) has data to report from instead of running its own
+  // second query for it.
+  let ungated = [];
+  if (cfg.modules.approvalGate && repository.allOpenPRs) {
+    const stageLabelNames = new Set([
+      cfg.labels.readyForReview, cfg.labels.reviewing, cfg.labels.needsRevision,
+      cfg.labels.revising, cfg.labels.approved, cfg.labels.needsHuman,
+      cfg.labels.refreshBranch, cfg.labels.refreshing,
+    ]);
+    ungated = repository.allOpenPRs.nodes
+      .filter((pr) => {
+        const names = (pr.labels?.nodes ?? []).map((l) => l.name);
+        return names.some((n) => stageLabelNames.has(n)) && !names.includes(cfg.labels.marker);
+      })
+      .map((pr) => pr.number);
+  }
+
   const items = {
     mine: Object.fromEntries(aliasSpecs.map(([a]) => [a, partitions[a].mine.map((n) => n.number)])),
     others: Object.fromEntries(aliasSpecs.map(([a]) => [a, partitions[a].others.map((n) => n.number)])),
@@ -282,6 +303,7 @@ function cmdPlan(root, cfg) {
     clock,
     envelope: { ...envelope, truncated },
     items,
+    ungated,
     dispatch,
     gates,
     held,
@@ -333,14 +355,21 @@ function cmdCommit(root, cfg, args) {
     }
   }
 
-  // Liveness diff for every in-flight item the plan expected.
+  // Liveness diff for every in-flight item the plan expected. `liveness`
+  // names every unmatched item's classification (matched items are simply
+  // absent) — not just the ones that got reset — since the model needs it to
+  // render the required per-tick UX state for each of the four outcomes
+  // ("confirming next tick", "in flight with no dispatch record", "stalled
+  // again after I reset it once"), not only the completed-reset case.
   const writes = [];
   const resets = [];
+  const liveness = [];
   for (const expected of cache.livenessExpected ?? []) {
     const description = descriptionOf(expected.stage.replace('-agent', ''), expected.item);
     if (liveDescriptions.includes(description)) continue; // matched, running
     const row = dispatchLog.items[expected.item];
     const result = classifyUnmatched(row);
+    liveness.push({ item: expected.item, class: result.class });
     if (result.class === 'reset') {
       dispatchLog.items[expected.item] = { stage: row.stage, state: 'reset', resets: result.nextResets };
       // Resolved from the labelKey the plan recorded, never by matching the
@@ -351,7 +380,8 @@ function cmdCommit(root, cfg, args) {
     } else if (result.class === 'suspect') {
       dispatchLog.items[expected.item] = { stage: row?.stage ?? expected.stage, state: 'suspect', resets: result.nextResets };
     }
-    // 'no-record' and 'capped' — report-only, no state change.
+    // 'no-record' and 'capped' — report-only, no dispatchLog change, but
+    // still named in `liveness` above so the model can render them.
   }
 
   for (const r of resets) {
@@ -387,7 +417,7 @@ function cmdCommit(root, cfg, args) {
   writeState(root, TICK_STATE_PATH, tickState);
   writeState(root, DISPATCH_LOG_PATH, dispatchLog);
 
-  emit({ ok: true, tickId, writes, resets, wakeup: pacing.delay });
+  emit({ ok: true, tickId, writes, resets, liveness, wakeup: pacing.delay });
 }
 
 // --- resolve ------------------------------------------------------------

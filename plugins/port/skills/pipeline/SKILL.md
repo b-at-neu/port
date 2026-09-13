@@ -379,7 +379,7 @@ On start and on every wakeup, run one polling pass.
    - Every entry in `announce` is a report-only fact (a session-required item, an approved-and-ready pull request, a merged reconciliation, a rebase just dispatched, an item blocked and awaiting the operator's answer to relay back to its own agent via `SendMessage`) — say it, touch nothing beyond what its paired `writes` entry (if any) already did.
    - Every entry in `held` is reported exactly as the File contention gate's UX states describe (see `PIPELINE.md` → "Tick engine") — never silently skipped.
    - Run Housekeeping (below) exactly as always — the engine does not compute it this slice.
-4. **`<commands.tick> commit --tick <id> --live <TaskList descriptions> --dispatched <items just dispatched>`** — the only writer of durable tick state. Its JSON carries the liveness diff's own `writes` (run them exactly as returned) and the final `wakeup`. A `--tick` that does not match the plan this session just ran is rejected (exit 1) — that mismatch is what makes "the model actually ran the script this tick" checkable rather than claimed.
+4. **`<commands.tick> commit --tick <id> --live <TaskList descriptions> --dispatched <items just dispatched>`** — the only writer of durable tick state. Its JSON carries the liveness diff's own `writes` (run them exactly as returned), a `liveness` entry per unmatched in-flight item (`{item, class}` — `suspect`/`reset`/`no-record`/`capped`, matched items simply absent) for rendering the matching UX state below even when nothing was reset, and the final `wakeup`. A `--tick` that does not match the plan this session just ran is rejected (exit 1) — that mismatch is what makes "the model actually ran the script this tick" checkable rather than claimed.
 5. **`ScheduleWakeup(wakeup)`**, skipped only while draining.
 6. **Write the tick report**, carrying `tickId` — a report with no `tickId` means a tick that never ran the script, which is itself worth flagging.
 
@@ -438,7 +438,7 @@ If the new qualifying `deny` lines **cluster** — three or more new, or the sam
 
 An **empty** result here is only meaningful once step 0's verdict is `verified`, which is what confirms the label strings are real in this repository.
 
-**Ungated report (each tick).** *(`modules.approvalGate`)* A pipeline pull request that lost the resolved `<labels.marker>` name merges with no gate at all, and CI cannot tell it from a human pull request. Report **only when the set changes since `.temp/tick-state.md`'s `Ungated reported`**, and **never add the label automatically** — then write the new set back to that field:
+**Ungated report (each tick).** *(`modules.approvalGate`)* A pipeline pull request that lost the resolved `<labels.marker>` name merges with no gate at all, and CI cannot tell it from a human pull request. **`commands.tick` set** — the set is the plan's own `ungated` field (already filtered client-side to pipeline-labelled, non-marker pull requests, unaffected by ownership); never re-derive it with a separate query. Report **only when the set changes since `.temp/tick-state.md`'s `Ungated reported`**, and **never add the label automatically** — then write the new set back to that field:
 
 > ⚠️ Pipeline pull requests without the `claude` label (approval gate inactive): #501. Say "gate #501" or add the label on GitHub.
 
