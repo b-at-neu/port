@@ -108,6 +108,8 @@ Run this on a strong model. It is the highest-leverage thinking in the pipeline,
 
 This matters more than it looks. `docs.engineering` is what implementation builds toward and what review cites — a repository without it gets a pipeline working from the plan and the surrounding code alone.
 
+A repository's own `CLAUDE.md`, if it has one, is read by every stage and outranks `docs.engineering` on conventions — the more specific, human-authored document wins. It cannot change `commands.*` or any other pipeline mechanic; those stay config-only, exactly as before.
+
 It also **files findings as tickets rather than fixing them**, which is the point: a ticket gets a plan, a review, and a pull request. The analysis identifies work; the pipeline does it.
 
 Re-run it as the codebase evolves. It diffs against the existing document rather than regenerating, so decisions you already made survive.

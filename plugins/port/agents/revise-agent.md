@@ -68,6 +68,15 @@ Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROO
 **This fails closed on the write and open on the report**, deliberately: an unnecessary stop costs one dispatch and a glance from the operator, while writing through a stale view costs a duplicate pull request or a silently lost stage label, and neither is visible until someone reads the labels by hand. **Never repair the state yourself** — reporting it is the whole job here.
 <!-- label-cas:end -->
 
+<!-- standards-precedence:begin -->
+**Three sources describe how code should be written, in a fixed order.** Conventions come from the repository's `CLAUDE.md` first, then `docs.engineering`, then the style visible in the surrounding code. The more specific and more human-authored source wins: a repository that stated a rule in `CLAUDE.md` has already said what it wants.
+
+- **Read it explicitly, at a named ref — never rely on it being in context.** What the harness injects depends on scope and cwd, so a worktree agent may receive a different file than the one its work lands against, or none, and nothing distinguishes the two cases from inside the run. An implicit read is not a contract.
+- **It never overrides mechanics.** `commands.*`, `labels`, `branches`, and `sessionRequiredPaths` come from `.claude/port.config.json` alone — they are schema-validated and gate the allowlist, and a command sourced from free-form prose could be neither validated nor permitted in advance. The rails in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` are not overridable either. `CLAUDE.md` decides how code is written, never what the pipeline does.
+- **Code that follows `CLAUDE.md` is never a finding**, at any severity, however plainly `docs.engineering` or the surrounding style says otherwise — that inversion is the whole reason this contract exists. Where the two documents genuinely disagree, name the conflict once in your own output and leave the code alone; it is a documentation defect for the human, not a change to request.
+- **Absent is normal.** No `CLAUDE.md` → the order is simply `docs.engineering`, then ambient style. Nothing degrades and nothing is reported.
+<!-- standards-precedence:end -->
+
 Revise-agent specifics, identical in intent to `impl-agent`:
 
 - **Stay in your worktree.** Do all work in place. **Never** `cd` out of it, use `git -C`, run `git worktree list`/`add`/`remove`/`prune`, use `--ignore-other-worktrees`, or force anything. If a branch is locked to another worktree, **stop and emit `BLOCKED:`**.
@@ -116,7 +125,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
    Read the failing check's log, fix the underlying cause, and push (step 4 onward) — there are no review threads to resolve. The revision note's detail line is `check <name> · <sha>` (step 7). **Never "fix" the excused approval-gate check** — its conclusion is a function of the pipeline's own labels, exactly as a quota-red deployment is infrastructure never to be chased.
 
-   **Otherwise**, the latest review, titled `## Code Review — Cycle <n>`, is what you address — note its cycle. When `docs.engineering` is set, read it too.
+   **Otherwise**, the latest review, titled `## Code Review — Cycle <n>`, is what you address — note its cycle.
 
 1b. **Read any recorded rebase decisions**, before the rebase. Find the newest `## Gate cleared` comment that is newer than the newest `## Pipeline Escalation`, and parse its `### Rebase decisions` lines (`` - D<n> `path` — **<letter> <label>** ``) into `(D<n>, path, letter)`. Apply each to its matching hunk during step 2's rebase. A recorded decision whose hunk no longer exists (the base moved again) is **dropped and noted** in the revision comment; a **new** ambiguous hunk with no recorded decision escalates again with fresh `D1..Dn` IDs. Never guess a decision from a stale one, and never apply one to a hunk it was not written for.
 
@@ -149,6 +158,8 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
      ```
 
      If `<labels.revising>` is no longer present on the re-read, apply the label-cas contract's step 3 instead of issuing that edit. End with: `BLOCKED: rebase of <branch> onto origin/<base> needs <b> decision(s) — see the escalation comment.`
+
+   **Only now read standards** — before the rebase the checkout was not evidence of anything. When `docs.engineering` is set, read it. Read the worktree's `CLAUDE.md` if one is present, at the precedence this file's "standards-precedence" block states. **In both modes** — check-fix mode skips step 3 below entirely, but it still edits code, so it needs the same read.
 
 3. **Apply fixes** per the review's findings — **skip this step entirely in check-fix mode**, where step 1 already named the one thing to fix (a check). Fix **every finding flagged at this cycle's bar** — the review uses an escalating bar, so an early cycle includes Low and Nit; fix them rather than deferring. All should be issues **introduced in this pull request**. Skip a flagged item only if it is genuinely not an issue, and explain the skip. **Preexisting** findings of any severity: do not fix, but note them as suggested follow-up tickets. No scope creep beyond the review.
 

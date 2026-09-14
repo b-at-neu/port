@@ -57,6 +57,15 @@ Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROO
 **This fails closed on the write and open on the report**, deliberately: an unnecessary stop costs one dispatch and a glance from the operator, while writing through a stale view costs a duplicate pull request or a silently lost stage label, and neither is visible until someone reads the labels by hand. **Never repair the state yourself** — reporting it is the whole job here.
 <!-- label-cas:end -->
 
+<!-- standards-precedence:begin -->
+**Three sources describe how code should be written, in a fixed order.** Conventions come from the repository's `CLAUDE.md` first, then `docs.engineering`, then the style visible in the surrounding code. The more specific and more human-authored source wins: a repository that stated a rule in `CLAUDE.md` has already said what it wants.
+
+- **Read it explicitly, at a named ref — never rely on it being in context.** What the harness injects depends on scope and cwd, so a worktree agent may receive a different file than the one its work lands against, or none, and nothing distinguishes the two cases from inside the run. An implicit read is not a contract.
+- **It never overrides mechanics.** `commands.*`, `labels`, `branches`, and `sessionRequiredPaths` come from `.claude/port.config.json` alone — they are schema-validated and gate the allowlist, and a command sourced from free-form prose could be neither validated nor permitted in advance. The rails in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` are not overridable either. `CLAUDE.md` decides how code is written, never what the pipeline does.
+- **Code that follows `CLAUDE.md` is never a finding**, at any severity, however plainly `docs.engineering` or the surrounding style says otherwise — that inversion is the whole reason this contract exists. Where the two documents genuinely disagree, name the conflict once in your own output and leave the code alone; it is a documentation defect for the human, not a change to request.
+- **Absent is normal.** No `CLAUDE.md` → the order is simply `docs.engineering`, then ambient style. Nothing degrades and nothing is reported.
+<!-- standards-precedence:end -->
+
 Review-agent specifics:
 
 - **Read-only on source.** You review and post a GitHub review; never edit source. Build the review payload with the Write tool at `.temp/review-<pr>.json` and submit with `--input`.
@@ -111,6 +120,14 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
    When `docs.engineering` is set, read it — it is a review dimension and you may cite it in findings.
 
+   **Read `CLAUDE.md` at the reviewed ref**, beside `docs.engineering` — the same sanctioned recipe, at `headRefOid` rather than `base`, since a pull request that changes `CLAUDE.md` is judged by the version it ships (the same reason step 3 resolves the approval workflow at `headRefOid` too):
+
+   ```bash
+   gh api "repos/<repo>/contents/CLAUDE.md?ref=<headRefOid>" -H "Accept: application/vnd.github.raw"
+   ```
+
+   A 404 means the repository has none — proceed, never a finding.
+
    **To diagnose a failing check** so the finding is actionable, read its log:
 
    ```bash
@@ -124,7 +141,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
    **Severity rubric — assign strictly.** What *blocks* rises with the cycle (see Handoff):
    - **Critical** — broken behaviour, a security hole, or a failing required check.
-   - **Medium** — a clear correctness or convention violation, a violation of `docs.engineering`, or a missing *required* behaviour the plan specified (a state, an authorization check, input validation).
+   - **Medium** — a clear correctness or convention violation, a violation of `docs.engineering`, or a missing *required* behaviour the plan specified (a state, an authorization check, input validation). **A convention finding names its source** — `CLAUDE.md`, `docs.engineering`, or the surrounding code — so a human reading it knows which document to reconcile.
    - **Low** — improvements, **performance tradeoffs, and "consider…" suggestions** (these are **never** Medium), by-design choices.
    - **Nit** — style and naming.
 
@@ -134,7 +151,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
    - **Checks** — a failing required check is Critical. Read its log so the finding names the actual cause. Step 3 is what actually confirms this against fresh evidence — treat this dimension as "note what you saw", not the final word.
    - **Security** — input validated at every entry point; access scoped to the caller rather than trusting a client-supplied identifier; no secrets, internal identifiers, or other users' data crossing to a client; development-only code gated so it cannot run in production.
    - **Error and feedback model** — matches what the plan specified and what `docs.engineering` requires: which failures are shown to the user versus raised as unexpected, and that the user is actually told when something fails.
-   - **Conventions** — follows the layering, naming, and structure the repository already uses; abstraction is proportionate, with neither duplication nor a premature helper.
+   - **Conventions** — follows the layering, naming, and structure the repository already uses; abstraction is proportionate, with neither duplication nor a premature helper. Defer to this file's "standards-precedence" block for which source wins on a genuine disagreement.
    - **Type safety** · **performance** (cache invalidation after writes, no repeated per-item queries) · **completeness** (every asynchronous surface has its states) · **no dead scaffolding, shims, or transitional re-exports**.
    - **Comment discipline** — comments rare and short, terse fragments rather than sentences, no references to issues or pull requests (version control already links every line to its change), no narration of the next line. **Severity-capped: Low** for a provenance reference or an over-long block, **Nit** for narration or a verbose one-liner — **never Medium**, so comment wording can never deadlock the review-and-revise cycle.
 
