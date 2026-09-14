@@ -32,7 +32,8 @@
   "release": {
     "versionSource": "package",
     "versionFiles": ["plugins/port/.claude-plugin/plugin.json"],
-    "versionCommand": null
+    "versionCommand": null,
+    "postPublishHook": "node scripts/dev-window.mjs"
   },
   "reviewCycleCap": 5,
   "concurrency": {
@@ -52,6 +53,8 @@
     "Bash(node scripts/checks.mjs *)",
     "Bash(node plugins/port/templates/artifacts.mjs *)",
     "Bash(node plugins/port/templates/worktrees.mjs *)",
-    "Bash(node scripts/port-tick.mjs *)"
+    "Bash(node scripts/port-tick.mjs *)",
+    "Bash(node scripts/dev-window.mjs)",
+    "Bash(node scripts/dev-window.mjs *)"
   ]
 }

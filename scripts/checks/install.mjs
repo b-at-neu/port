@@ -28,6 +28,21 @@ export default async function ({ fail, ok }) {
     ok();
   }
 
+  // --- CONTRIBUTING's cache path names no hard-coded version (#224) -----------
+  // The observed failure: the three-way ground-truth recipe still named
+  // '0.1.0' two releases later, which by then pointed at the wrong directory
+  // entirely rather than merely a stale one.
+  {
+    const readme = readFileSync(join(root, 'CONTRIBUTING.md'), 'utf8');
+    for (const m of readme.matchAll(/cache\/port\/port\/(\S+?)[\s/`]/g)) {
+      if (m[1] !== '<version>') {
+        fail('install-cache-path', `CONTRIBUTING.md's cache path names a literal version ('${m[1]}') instead of '<version>' — it will read wrong the moment this repository releases again`);
+      } else {
+        ok();
+      }
+    }
+  }
+
   // --- README's documented install source stays pinned ------------------------
   // The command adopters copy-paste. A docs edit that drops the `@main` pin
   // looks like a harmless simplification but silently reinstates default-branch

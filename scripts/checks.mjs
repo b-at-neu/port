@@ -20,6 +20,7 @@ import hooks from './checks/hooks.mjs';
 import allowlist from './checks/allowlist.mjs';
 import config from './checks/config.mjs';
 import install from './checks/install.mjs';
+import release from './checks/release.mjs';
 import labels from './checks/labels.mjs';
 import artifacts from './checks/artifacts.mjs';
 import docs from './checks/docs.mjs';
@@ -53,6 +54,7 @@ for (const module of [
   allowlist,
   config,
   install,
+  release,
   labels,
   artifacts,
   docs,

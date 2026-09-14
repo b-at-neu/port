@@ -51,6 +51,7 @@ export default async function ({ fail, note, ok }) {
         ...(cfg.commands?.checks ?? []).map((e) => e.fix).filter((f) => typeof f === 'string'),
         cfg.commands?.artifacts,
         cfg.commands?.worktrees,
+        cfg.release?.postPublishHook,
       ].filter((c) => typeof c === 'string' && c.length > 0);
 
       const probe = '2>&1 | tail -100';
