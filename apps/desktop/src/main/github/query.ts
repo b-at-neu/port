@@ -114,7 +114,10 @@ export interface ItemsByNumberQuery {
  * by the caller as `unavailable`, never inferred. Numbers are embedded as
  * literals exactly as `buildItemStatesQuery` already does, for the same
  * reason: every number here is caller-supplied (already a JS `number`),
- * never untrusted string input requiring escaping.
+ * never untrusted string input requiring escaping. `assignees` is requested
+ * in both inline fragments (#90) — one read covers both the labels #79's
+ * reconciler needs and the assignees #90's write chokepoint verifies a
+ * precondition against, rather than a second round trip for the same item.
  */
 export function buildItemsByNumberQuery(numbers: readonly number[]): ItemsByNumberQuery {
   const aliases: ItemsByNumberAlias[] = []
@@ -123,8 +126,9 @@ export function buildItemsByNumberQuery(numbers: readonly number[]): ItemsByNumb
   numbers.forEach((number, idx) => {
     const alias = `n${idx}`
     const labelsField = `labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }`
+    const assigneesField = `assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } }`
     fields.push(
-      `  ${alias}: issueOrPullRequest(number: ${number}) { __typename ... on Issue { number title url state closedAt ${labelsField} } ... on PullRequest { number title url state mergedAt closedAt ${labelsField} } }`,
+      `  ${alias}: issueOrPullRequest(number: ${number}) { __typename ... on Issue { number title url state closedAt ${assigneesField} ${labelsField} } ... on PullRequest { number title url state mergedAt closedAt ${assigneesField} ${labelsField} } }`,
     )
     aliases.push({ alias, number })
   })

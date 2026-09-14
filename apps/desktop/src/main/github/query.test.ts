@@ -110,6 +110,26 @@ describe('buildItemStatesQuery', () => {
   })
 })
 
+/** Extracts the balanced-brace body of `... on <typeName> { ... }` — the
+ *  naive `/\{([^}]*)\}/` regex `mergedAt`/`labels` used to check against
+ *  stops at the *first* nested `}`, which now falls inside `assignees`'s own
+ *  `{ nodes { login } }` before the fragment's real close. */
+function extractFragment(document: string, typeName: string): string {
+  const start = document.indexOf(`... on ${typeName} {`)
+  if (start === -1) return ''
+  let depth = 0
+  let i = document.indexOf('{', start)
+  const bodyStart = i + 1
+  for (; i < document.length; i++) {
+    if (document[i] === '{') depth++
+    else if (document[i] === '}') {
+      depth--
+      if (depth === 0) return document.slice(bodyStart, i)
+    }
+  }
+  return document.slice(bodyStart)
+}
+
 describe('buildItemsByNumberQuery', () => {
   it('emits one issueOrPullRequest alias per number', () => {
     const { aliases } = buildItemsByNumberQuery([79, 184])
@@ -123,8 +143,8 @@ describe('buildItemsByNumberQuery', () => {
     const { document } = buildItemsByNumberQuery([1])
     expect(document).toContain('n0: issueOrPullRequest(number: 1)')
     expect(document).toContain('__typename')
-    const issueFragment = /\.\.\. on Issue \{([^}]*)\}/.exec(document)?.[1] ?? ''
-    const prFragment = /\.\.\. on PullRequest \{([^}]*)\}/.exec(document)?.[1] ?? ''
+    const issueFragment = extractFragment(document, 'Issue')
+    const prFragment = extractFragment(document, 'PullRequest')
     expect(issueFragment).not.toContain('mergedAt')
     expect(prFragment).toContain('mergedAt')
   })
@@ -142,9 +162,19 @@ describe('buildItemsByNumberQuery', () => {
 
   it('selects labels inside both the Issue and the PullRequest fragment', () => {
     const { document } = buildItemsByNumberQuery([1])
-    const issueFragment = /\.\.\. on Issue \{([^}]*)\}/.exec(document)?.[1] ?? ''
-    const prFragment = /\.\.\. on PullRequest \{([^}]*)\}/.exec(document)?.[1] ?? ''
+    const issueFragment = extractFragment(document, 'Issue')
+    const prFragment = extractFragment(document, 'PullRequest')
     expect(issueFragment).toContain('labels(first:')
     expect(prFragment).toContain('labels(first:')
+  })
+
+  // #90: the write chokepoint's authoritative read needs assignees beside
+  // labels — one round trip, not a second query.
+  it('selects assignees inside both the Issue and the PullRequest fragment', () => {
+    const { document } = buildItemsByNumberQuery([1])
+    const issueFragment = extractFragment(document, 'Issue')
+    const prFragment = extractFragment(document, 'PullRequest')
+    expect(issueFragment).toContain('assignees(first:')
+    expect(prFragment).toContain('assignees(first:')
   })
 })

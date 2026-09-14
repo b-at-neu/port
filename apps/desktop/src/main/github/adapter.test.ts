@@ -182,7 +182,16 @@ describe('fetchItemsByNumber', () => {
     const stdout = JSON.stringify({
       data: {
         repository: {
-          n0: { __typename: 'Issue', number: 79, title: 'issue', url: 'u1', state: 'OPEN', closedAt: null, labels: { nodes: [{ name: 'ready' }] } },
+          n0: {
+            __typename: 'Issue',
+            number: 79,
+            title: 'issue',
+            url: 'u1',
+            state: 'OPEN',
+            closedAt: null,
+            assignees: { nodes: [{ login: 'alice' }] },
+            labels: { nodes: [{ name: 'ready' }] },
+          },
           n1: {
             __typename: 'PullRequest',
             number: 196,
@@ -191,6 +200,7 @@ describe('fetchItemsByNumber', () => {
             state: 'MERGED',
             mergedAt: '2026-01-01T00:00:00Z',
             closedAt: '2026-01-01T00:00:00Z',
+            assignees: { nodes: [] },
             labels: { nodes: [{ name: 'claude' }, { name: 'approved' }] },
           },
         },
@@ -204,8 +214,18 @@ describe('fetchItemsByNumber', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.resolved).toEqual([
-      { number: 79, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 'issue', url: 'u1', labels: ['ready'] },
-      { number: 196, kind: 'pull-request', state: 'MERGED', mergedAt: '2026-01-01T00:00:00Z', closedAt: '2026-01-01T00:00:00Z', title: 'pr', url: 'u2', labels: ['claude', 'approved'] },
+      { number: 79, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 'issue', url: 'u1', labels: ['ready'], assignees: ['alice'] },
+      {
+        number: 196,
+        kind: 'pull-request',
+        state: 'MERGED',
+        mergedAt: '2026-01-01T00:00:00Z',
+        closedAt: '2026-01-01T00:00:00Z',
+        title: 'pr',
+        url: 'u2',
+        labels: ['claude', 'approved'],
+        assignees: [],
+      },
     ])
     expect(result.unavailable).toEqual([])
   })

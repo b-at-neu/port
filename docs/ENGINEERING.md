@@ -32,6 +32,8 @@ This is **this repository's own** standards document, not a template — `plugin
 
 **A port config's shape and defaults are read from `schema/port.config.schema.json` at runtime, never transcribed into TypeScript.** `apps/desktop/src/main/registry/schema.ts` is the desktop app's single point of contact with the config contract — it compiles the shipped schema with ajv and reads every default off that same imported object — and the `desktop-registry` check in `scripts/checks.mjs` pins both the single import and the absence of a hand-retyped default.
 
+**`apps/desktop/src/main/writes/` is the app's only GitHub *writer*, the mirror of `main/github/`'s own reader rail.** Every request is expressed in `LabelKey` values and a stated precondition — `main/writes/command.ts` is the only file allowed to name `--add-label`/`--remove-label`, resolving every key through `labelName` — and the observed state a precondition is checked against comes only from `main/github/`'s `fetchItemsByNumber`, never a second query built inside `main/writes/`. `merge`, `close`, `--delete-branch`, and `ready` never appear as a `gh` subcommand argument here — merging and closing stay human actions on GitHub. The `plan-gate` claim (`docs/COORDINATION.md` → "The claim contract") lives at `<base repository root>/.agents/gate-claim.json`, read and written only through `main/writes/claim.ts`, and the audit log (`writes.jsonl`) is appended only through `main/writes/audit.ts`'s own call to `appendTextFile` — no second path may write an entry that skipped the chokepoint. All eight of these decisions are pinned mechanically by the `desktop-writes` layer 1 check.
+
 **Anything shipped may only reference other shipped paths.** A reference from a file under `plugins/port/` to a repository-only doc or script — `docs/USAGE.md`, `CONTRIBUTING.md`, `scripts/checks.mjs` — dangles in every adopter's plugin cache, which carries only `plugins/port/` (`scripts/checks.mjs` → "Shipped references stay inside plugins/port/").
 
 ## 2. Data and integrity
@@ -56,6 +58,8 @@ This is **this repository's own** standards document, not a template — `plugin
 | `templates/worktrees.mjs`'s two diagnostic literals (`die()`'s `FAIL` prefix, `gh issueOrPullRequest resolution failed`) ↔ `main/reclaimer/report.ts`'s pinned copies | `desktop-reclaimer` |
 | The `label-cas` block ↔ its copies in the four agent files — a fallback compared pairwise, since the #177 ratchet forbids a `PIPELINE.md` canonical copy until #220 moves it there once #181 frees the headroom | "Label transitions are compare-and-swap" |
 | The `standards-precedence` block ↔ its copies in the four agent files — compared pairwise, same "no `PIPELINE.md` canonical copy until #181 frees the headroom" carve-out as `label-cas` | `standards` (`scripts/checks/standards.mjs`) |
+| `shared/writes/types.ts`'s `Conflict` union ↔ `docs/COORDINATION.md`'s fenced `type Conflict` block — kind literals and field-name sets, both directions, not byte-identity (the doc's fence omits the `readonly` modifiers this app's style requires) | `desktop-writes` |
+| `main/writes/scope.ts`'s `PLAN_GATE_KEYS` ↔ `docs/COORDINATION.md`'s claim-contract keys, both directions | `desktop-writes` |
 
 **If a change introduces a further copy of anything, it introduces its pin in the same commit.** A comment asking a future reader to remember is not a pin.
 

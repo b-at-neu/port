@@ -118,6 +118,14 @@ No dependencies, no plugin install, no model calls. Runs in seconds, in an agent
 | The pacing ladder's constants (`270`, `540`, `1080`, `1800`) are literal in `pacing.mjs`, and `nextDelay` never returns a non-numeric delay | A non-draining tick reaching `ScheduleWakeup` with nothing to pass (#203) |
 | `SKILL.md`/`TICK-PROSE.md` name `tickId`, `TICK-PROSE.md`, `commands.tick`, and a verbatim-execution rail | The model re-deriving a decision the plan already settled, with nothing checking that it ran the script at all (#203) |
 | The `standards-precedence` block exists in every agent granting Bash and is byte-identical across all four (compared pairwise — no `PIPELINE.md` canonical copy yet), every agent naming `docs.engineering` also names `CLAUDE.md` and vice versa, and within the block `CLAUDE.md`'s index precedes `docs.engineering`'s, the literal phrase "never a finding" is present, and the commands carve-out names both `commands.*` and `.claude/port.config.json` | `CLAUDE.md` honored by `impl-agent` alone, so `review-agent`/`revise-agent` silently "fixed" code away from a convention the repository itself stated (#192) |
+| `'../platform/gh'` is imported under `apps/desktop/src/` only from `main/github/` and `main/writes/`, and both do import it | A second GitHub writer bypassing the chokepoint, or the chokepoint itself losing its only caller (#90) |
+| No file under `main/writes/` contains `graphql` | The observed state coming from anywhere but `fetchItemsByNumber`, re-implementing a second query builder (#90) |
+| No file under `main/writes/` passes `merge`, `close`, `--delete-branch`, or `ready` as a `gh` subcommand argument | Merging or closing a pull request stopping being a human-only action (#90) |
+| `--add-label`/`--remove-label` appear under `apps/desktop/src/` only in `main/writes/command.ts`, which imports `labelName` | A label name reaching `gh` without resolving through the vocabulary (#90) |
+| `main/writes/scope.ts`'s `PLAN_GATE_KEYS` matches `docs/COORDINATION.md`'s claim-contract keys, both directions | The claim gating a different set of labels than the doc that defines it (#90) |
+| `shared/writes/types.ts`'s `Conflict` union matches `docs/COORDINATION.md`'s fenced block, both directions, by kind literal and field-name set | The app's conflict shape drifting from the copy decided in COORDINATION.md (#90) |
+| `.agents/gate-claim.json` appears in both `main/writes/claim.ts` and `docs/COORDINATION.md` | The claim file's path silently diverging between the code and its own contract doc (#90) |
+| `appendTextFile(` is called under `apps/desktop/src/` only from `main/writes/audit.ts` | A second path writing an audit entry that skipped the chokepoint (#90) |
 
 Each rule is worth testing by breaking it deliberately. If a check cannot be made to fail, it is not a check.
 
