@@ -42,6 +42,7 @@ import desktopWrites from './checks/desktop-writes.mjs';
 import desktopBoard from './checks/desktop-board.mjs';
 import fileSize from './checks/file-size.mjs';
 import tick from './checks/tick.mjs';
+import analyze from './checks/analyze.mjs';
 
 const reporter = createReporter();
 
@@ -76,6 +77,7 @@ for (const module of [
   desktopBoard,
   fileSize,
   tick,
+  analyze,
 ]) {
   await module(reporter);
 }
