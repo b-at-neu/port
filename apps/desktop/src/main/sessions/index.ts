@@ -7,8 +7,8 @@ export { readSessionState } from './adapter'
 export type { RepoRef } from './classify'
 export { PORT_STAGE_AGENTS } from './classify'
 
-export type { ReadTranscriptParams } from './transcript'
-export { readTranscript } from './transcript'
+export type { CloseTailParams, OpenTailParams, PollTailParams, TailStore, TailStoreDeps } from './tail'
+export { createTailStore, tailStore } from './tail'
 
 export type {
   Activity,
@@ -30,6 +30,7 @@ export type {
   DiffHunk,
   DiffLine,
   DiffSign,
+  EntryPatch,
   FileDiff,
   MetaEntry,
   Payload,
@@ -40,6 +41,9 @@ export type {
   TranscriptFailureKind,
   TranscriptRead,
   TranscriptSource,
+  TranscriptTailFailureKind,
+  TranscriptTailOpen,
+  TranscriptTailPoll,
   UserTextEntry,
 } from '../../shared/sessions/transcript'
 export { MAX_PAYLOAD_CHARS } from '../../shared/sessions/transcript'

@@ -1,8 +1,9 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { readTranscript } from './transcript'
+import { advanceTranscript, openTranscript } from './transcript'
+import type { TranscriptCursor } from './transcript'
 
 async function makeClaudeHome(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'port-sessions-transcript-'))
@@ -15,7 +16,16 @@ function jsonl(records: readonly unknown[]): string {
   return records.map((record) => JSON.stringify(record)).join('\n') + '\n'
 }
 
-describe('readTranscript', () => {
+function record(uuid: string, timestamp: string, text: string): unknown {
+  return { uuid, timestamp, type: 'user', message: { role: 'user', content: text } }
+}
+
+function requireCursor(cursor: TranscriptCursor | null): TranscriptCursor {
+  if (cursor === null) throw new Error('unreachable: expected a cursor')
+  return cursor
+}
+
+describe('openTranscript', () => {
   it('reads a session transcript, deriving entries from its records', async () => {
     const claudeHome = await makeClaudeHome()
     const projectDir = join(claudeHome, 'projects', 'project-a')
@@ -37,16 +47,18 @@ describe('readTranscript', () => {
     ]
     await writeFile(join(projectDir, `${SESSION_ID}.jsonl`), jsonl(records))
 
-    const result = await readTranscript({ sessionId: SESSION_ID, agentId: null, claudeHome })
-    expect(result.ok).toBe(true)
-    if (!result.ok) throw new Error('unreachable')
-    expect(result.source.sessionId).toBe(SESSION_ID)
-    expect(result.source.agentId).toBeNull()
-    expect(result.source.recordCount).toBe(3)
-    expect(result.source.malformedLines).toBe(0)
-    expect(result.entries).toHaveLength(2)
-    expect(result.entries[0]).toMatchObject({ type: 'user-text', text: { text: 'hello' } })
-    expect(result.entries[1]).toMatchObject({ type: 'tool-call', name: 'Bash' })
+    const { read, cursor } = await openTranscript({ sessionId: SESSION_ID, agentId: null, claudeHome })
+    expect(read.ok).toBe(true)
+    if (!read.ok) throw new Error('unreachable')
+    expect(read.source.sessionId).toBe(SESSION_ID)
+    expect(read.source.agentId).toBeNull()
+    expect(read.source.recordCount).toBe(3)
+    expect(read.source.malformedLines).toBe(0)
+    expect(read.entries).toHaveLength(2)
+    expect(read.entries[0]).toMatchObject({ type: 'user-text', text: { text: 'hello' } })
+    expect(read.entries[1]).toMatchObject({ type: 'tool-call', name: 'Bash' })
+    expect(cursor).not.toBeNull()
+    expect(requireCursor(cursor).nextIndex).toBe(2)
   })
 
   it('reads a subagent transcript beneath subagents/', async () => {
@@ -59,29 +71,30 @@ describe('readTranscript', () => {
     const records = [{ uuid: 'u1', timestamp: '2026-01-01T00:00:00.000Z', type: 'user', message: { role: 'user', content: 'subagent prompt' } }]
     await writeFile(join(subagentsDir, `agent-${AGENT_ID}.jsonl`), jsonl(records))
 
-    const result = await readTranscript({ sessionId: SESSION_ID, agentId: AGENT_ID, claudeHome })
-    expect(result.ok).toBe(true)
-    if (!result.ok) throw new Error('unreachable')
-    expect(result.source.agentId).toBe(AGENT_ID)
-    expect(result.entries).toHaveLength(1)
+    const { read } = await openTranscript({ sessionId: SESSION_ID, agentId: AGENT_ID, claudeHome })
+    expect(read.ok).toBe(true)
+    if (!read.ok) throw new Error('unreachable')
+    expect(read.source.agentId).toBe(AGENT_ID)
+    expect(read.entries).toHaveLength(1)
   })
 
   it('reports invalid-id before touching the filesystem', async () => {
     const claudeHome = await makeClaudeHome()
-    const result = await readTranscript({ sessionId: 'not-a-uuid', agentId: null, claudeHome })
-    expect(result.ok).toBe(false)
-    if (result.ok) throw new Error('unreachable')
-    expect(result.kind).toBe('invalid-id')
-    expect(result.path).toBeNull()
-    expect(typeof result.message).toBe('string')
+    const { read, cursor } = await openTranscript({ sessionId: 'not-a-uuid', agentId: null, claudeHome })
+    expect(read.ok).toBe(false)
+    if (read.ok) throw new Error('unreachable')
+    expect(read.kind).toBe('invalid-id')
+    expect(read.path).toBeNull()
+    expect(typeof read.message).toBe('string')
+    expect(cursor).toBeNull()
   })
 
   it('reports session-unresolved when no project directory carries the session', async () => {
     const claudeHome = await makeClaudeHome()
-    const result = await readTranscript({ sessionId: SESSION_ID, agentId: null, claudeHome })
-    expect(result.ok).toBe(false)
-    if (result.ok) throw new Error('unreachable')
-    expect(result.kind).toBe('session-unresolved')
+    const { read } = await openTranscript({ sessionId: SESSION_ID, agentId: null, claudeHome })
+    expect(read.ok).toBe(false)
+    if (read.ok) throw new Error('unreachable')
+    expect(read.kind).toBe('session-unresolved')
   })
 
   it('reports not-found when the session resolves but the specific file is missing', async () => {
@@ -92,11 +105,11 @@ describe('readTranscript', () => {
     // The session's own file exists (so the locate ladder resolves it), but
     // no subagent transcript was ever written for this agent id.
 
-    const result = await readTranscript({ sessionId: SESSION_ID, agentId: AGENT_ID, claudeHome })
-    expect(result.ok).toBe(false)
-    if (result.ok) throw new Error('unreachable')
-    expect(result.kind).toBe('not-found')
-    expect(result.path).toContain(`agent-${AGENT_ID}.jsonl`)
+    const { read } = await openTranscript({ sessionId: SESSION_ID, agentId: AGENT_ID, claudeHome })
+    expect(read.ok).toBe(false)
+    if (read.ok) throw new Error('unreachable')
+    expect(read.kind).toBe('not-found')
+    expect(read.path).toContain(`agent-${AGENT_ID}.jsonl`)
   })
 
   it('counts malformed lines without failing the whole read', async () => {
@@ -107,12 +120,12 @@ describe('readTranscript', () => {
     const good2 = JSON.stringify({ uuid: 'u2', timestamp: '2026-01-01T00:00:01.000Z', type: 'user', message: { role: 'user', content: 'b' } })
     await writeFile(join(projectDir, `${SESSION_ID}.jsonl`), `${good1}\n{not valid json\n${good2}\n`)
 
-    const result = await readTranscript({ sessionId: SESSION_ID, agentId: null, claudeHome })
-    expect(result.ok).toBe(true)
-    if (!result.ok) throw new Error('unreachable')
-    expect(result.source.malformedLines).toBe(1)
-    expect(result.source.recordCount).toBe(2)
-    expect(result.entries).toHaveLength(2)
+    const { read } = await openTranscript({ sessionId: SESSION_ID, agentId: null, claudeHome })
+    expect(read.ok).toBe(true)
+    if (!read.ok) throw new Error('unreachable')
+    expect(read.source.malformedLines).toBe(1)
+    expect(read.source.recordCount).toBe(2)
+    expect(read.entries).toHaveLength(2)
   })
 
   it('aborts with too-large past the byte cap', async () => {
@@ -121,9 +134,117 @@ describe('readTranscript', () => {
     await mkdir(projectDir, { recursive: true })
     await writeFile(join(projectDir, `${SESSION_ID}.jsonl`), 'x'.repeat(65 * 1024 * 1024))
 
-    const result = await readTranscript({ sessionId: SESSION_ID, agentId: null, claudeHome })
-    expect(result.ok).toBe(false)
-    if (result.ok) throw new Error('unreachable')
-    expect(result.kind).toBe('too-large')
+    const { read } = await openTranscript({ sessionId: SESSION_ID, agentId: null, claudeHome })
+    expect(read.ok).toBe(false)
+    if (read.ok) throw new Error('unreachable')
+    expect(read.kind).toBe('too-large')
   }, 20_000)
+})
+
+describe('advanceTranscript', () => {
+  async function openAt(claudeHome: string): Promise<{ path: string; cursor: TranscriptCursor }> {
+    const projectDir = join(claudeHome, 'projects', 'project-a')
+    await mkdir(projectDir, { recursive: true })
+    const path = join(projectDir, `${SESSION_ID}.jsonl`)
+    await writeFile(path, jsonl([record('u1', '2026-01-01T00:00:00.000Z', 'hello')]))
+    const { cursor } = await openTranscript({ sessionId: SESSION_ID, agentId: null, claudeHome })
+    return { path, cursor: requireCursor(cursor) }
+  }
+
+  it('reports nothing new when no bytes were appended', async () => {
+    const claudeHome = await makeClaudeHome()
+    const { cursor } = await openAt(claudeHome)
+
+    const advanced = await advanceTranscript(cursor)
+    expect(advanced.ok).toBe(true)
+    if (!advanced.ok) throw new Error('unreachable')
+    expect(advanced.appended).toHaveLength(0)
+    expect(advanced.patched).toHaveLength(0)
+    expect(advanced.hasMore).toBe(false)
+    expect(advanced.cursor.offset).toBe(cursor.offset)
+  })
+
+  it('derives the newly appended record on the next advance', async () => {
+    const claudeHome = await makeClaudeHome()
+    const { path, cursor } = await openAt(claudeHome)
+
+    await appendFile(path, jsonl([record('u2', '2026-01-01T00:00:01.000Z', 'world')]))
+    const advanced = await advanceTranscript(cursor)
+    expect(advanced.ok).toBe(true)
+    if (!advanced.ok) throw new Error('unreachable')
+    expect(advanced.appended).toHaveLength(1)
+    expect(advanced.appended[0]).toMatchObject({ type: 'user-text', text: { text: 'world' } })
+    expect(advanced.source.recordCount).toBe(2)
+    expect(advanced.cursor.nextIndex).toBe(2)
+  })
+
+  it('leaves a partial trailing line for the next advance, yielding exactly one entry once it completes', async () => {
+    const claudeHome = await makeClaudeHome()
+    const { path, cursor } = await openAt(claudeHome)
+
+    const wholeLine = JSON.stringify(record('u2', '2026-01-01T00:00:01.000Z', 'partial'))
+    await appendFile(path, wholeLine) // no trailing newline yet
+    const firstAdvance = await advanceTranscript(cursor)
+    expect(firstAdvance.ok).toBe(true)
+    if (!firstAdvance.ok) throw new Error('unreachable')
+    expect(firstAdvance.appended).toHaveLength(0)
+
+    await appendFile(path, '\n')
+    const secondAdvance = await advanceTranscript(firstAdvance.cursor)
+    expect(secondAdvance.ok).toBe(true)
+    if (!secondAdvance.ok) throw new Error('unreachable')
+    expect(secondAdvance.appended).toHaveLength(1)
+    expect(secondAdvance.appended[0]).toMatchObject({ type: 'user-text', text: { text: 'partial' } })
+  })
+
+  it('reports truncated when the file on disk is now smaller than the cursor offset', async () => {
+    const claudeHome = await makeClaudeHome()
+    const { path, cursor } = await openAt(claudeHome)
+
+    await writeFile(path, '')
+    const advanced = await advanceTranscript(cursor)
+    expect(advanced.ok).toBe(false)
+    if (advanced.ok) throw new Error('unreachable')
+    expect(advanced.kind).toBe('truncated')
+    expect(advanced.path).toBe(path)
+  })
+
+  it('pairs a tool_use in one chunk with a tool_result appended after it', async () => {
+    const claudeHome = await makeClaudeHome()
+    const { path, cursor } = await openAt(claudeHome)
+
+    await appendFile(
+      path,
+      jsonl([
+        {
+          uuid: 'u2',
+          timestamp: '2026-01-01T00:00:01.000Z',
+          type: 'assistant',
+          message: { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'echo hi' } }] },
+        },
+      ]),
+    )
+    const afterUse = await advanceTranscript(cursor)
+    expect(afterUse.ok).toBe(true)
+    if (!afterUse.ok) throw new Error('unreachable')
+    expect(afterUse.appended[0]).toMatchObject({ type: 'tool-call', result: null })
+
+    await appendFile(
+      path,
+      jsonl([
+        {
+          uuid: 'u3',
+          timestamp: '2026-01-01T00:00:02.000Z',
+          type: 'user',
+          message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'hi', is_error: false }] },
+        },
+      ]),
+    )
+    const afterResult = await advanceTranscript(afterUse.cursor)
+    expect(afterResult.ok).toBe(true)
+    if (!afterResult.ok) throw new Error('unreachable')
+    expect(afterResult.appended).toHaveLength(0)
+    expect(afterResult.patched).toHaveLength(1)
+    expect(afterResult.patched[0]).toMatchObject({ index: 1, entry: { type: 'tool-call', result: { isError: false } } })
+  })
 })
