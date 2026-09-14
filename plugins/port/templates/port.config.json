@@ -30,6 +30,7 @@
     "release": true,
     "scope": true
   },
+  "release": { "postPublishHook": null },
   "reviewCycleCap": 5,
   "budget": { "wallClockMinutes": null },
   "concurrency": { "sharedFiles": [], "overlapThreshold": 2 },

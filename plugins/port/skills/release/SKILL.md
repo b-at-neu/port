@@ -2,7 +2,7 @@
 name: release
 description: Cut a release end to end — work out the next version from what has merged since the last release and confirm it with the operator, open the release pull request with a ticket-led changelog, then watch for it to merge (the moment the release actually ships) and draft a GitHub release and tag as changelog and provenance, with short user-facing notes, approval-gated. Manual only. Usage: /port:release
 disable-model-invocation: true
-allowed-tools: Read, Edit, Write, AskUserQuestion, ScheduleWakeup, Bash(git *), Bash(gh *)
+allowed-tools: Read, Edit, Write, AskUserQuestion, ScheduleWakeup, Bash(git *), Bash(gh *), Bash(node *)
 ---
 
 # Release — cut a version
@@ -71,10 +71,10 @@ Both branches must exist. Record the working tree's entry ref, **`<entry-ref>`**
 
    Parse `Release v<X.Y.Z>` from the title. If it was renamed and does not parse, fall back to the version carried on `origin/<integration>`.
 3. **A merged release, not yet published** — if the version on `origin/<production>` has no corresponding `gh release view v<version>`, that is the version → Phase B.
-4. **A bump already merged into the integration branch** *(`package` only)* — if `origin/<integration>`'s version differs from `origin/<production>`'s, the integration branch carries a bump whose branch is gone and whose release pull request was never opened: a run that died between the two parts. Adopt that version → Phase A, skipping Part 1. **Without this case a fresh cycle would prompt for a version that can diverge from the one already committed.**
+4. **A bump already merged into the integration branch** *(`package` only)* — if `origin/<integration>`'s version differs from `origin/<production>`'s **and carries no prerelease suffix**, the integration branch carries a bump whose branch is gone and whose release pull request was never opened: a run that died between the two parts. Adopt that version → Phase A, skipping Part 1. **Without this case a fresh cycle would prompt for a version that can diverge from the one already committed.**
 5. **None of the above** → a fresh cycle. Go to "Fresh cycle"; that is the only place a version is ever asked for.
 
-Reading the current version depends on `versionSource`: for `package`, `git show origin/<branch>:<first versionFiles entry>`; for `tags`, the latest release tag with its `v` stripped.
+Reading the current version depends on `versionSource`: for `package`, `git show origin/<branch>:<first versionFiles entry>`; for `tags`, the latest release tag with its `v` stripped. **A prerelease suffix on `<integration>`'s version marks an open dev window, not a version in flight** — strip it before the value is used as "the current version" anywhere in this skill.
 
 Wake-ups always land in cases 1–4, so they never re-prompt.
 
@@ -85,7 +85,7 @@ gh release view v<version> --repo <repo>
 gh pr list --repo <repo> --base <production> --head <integration> --state all --json number,state,title
 ```
 
-- Release `v<version>` **already exists** → **Done.** Report the URL and stop.
+- Release `v<version>` **already exists** → **Done.** Run `release.postPublishHook` per the contract in Phase B's new step, then report the URL and stop.
 - `<production>` is at `<version>`, or the release pull request is **MERGED**, and no release exists → **Phase B (publish).**
 - A release pull request is **OPEN** → **Wait.** Skip Phase A, go straight to "Watch for the merge".
 - The release pull request was **CLOSED unmerged** → **stop and report**; the release was abandoned.
@@ -128,7 +128,7 @@ The version recommendation and the changelog are built from this **one** list. R
 Only when 0.5 reached case 5.
 
 1. **Gather merged work** — this both feeds the recommendation and short-circuits on an empty release.
-2. **Current version** — the latest release tag with `v` stripped; with no releases, whatever `versionSource` says.
+2. **Current version** — the latest release tag with `v` stripped; with no releases, whatever `versionSource` says. **With no published release and a prerelease-suffixed integration version, the stripped value is itself the recommended candidate** — it is what the integration branch has been building toward.
 3. **Compute the three candidates** — at `1.4.3`: major `2.0.0`, minor `1.5.0`, patch `1.4.4`.
 4. **Pick a recommendation** from the labels already gathered:
 
@@ -154,7 +154,7 @@ Guard: only run Phase A if the working tree is clean (`git status --porcelain` e
 
 > **Only when `versionSource` is `package`.** With `tags` there is no version file, so skip straight to Part 2.
 
-**Skip entirely** if `origin/<integration>` is already at `<version>` — the bump has merged. **If `bump/v<version>` already exists on origin**, do not recreate or re-commit it: open its pull request if it lacks one, then continue to Part 2.
+**Skip entirely** if `origin/<integration>` is already at `<version>` — the bump has merged. **If `bump/v<version>` already exists on origin**, do not recreate or re-commit it: open its pull request if it lacks one, then continue to Part 2. A prerelease-suffixed version never equals `<version>`, so this skip cannot fire while a dev window is open — writing `<version>` in step 2 below is itself what closes it; there is no separate strip step.
 
 **Invariant: `/port:release` leaves the working tree on `<entry-ref>` — restore before anything else runs, and assert rather than assume.**
 
@@ -250,7 +250,8 @@ Runs once the production branch is at `<version>`. These notes are **shorter tha
    ```
 
    Read the SHA with `git rev-parse origin/<production>` as its own command and substitute the literal value — **never `$(...)` command substitution**, which is not allowlisted and would silently produce an empty argument.
-7. **Handoff:** report the release URL.
+7. **Run `release.postPublishHook`**, when set. Invoke it **verbatim, once, with no appended arguments** — it resolves everything it needs from the repository itself. Null or absent → skip silently, say nothing. Success → print the release URL, then the hook's stdout verbatim beneath it. A non-zero exit → print the release URL, then `Post-publish hook failed (exit <n>). The release is published and unaffected — this needs a look:` followed by the hook's stderr verbatim. Never retry a failed hook — the release has already shipped.
+8. **Handoff:** report the release URL (already printed above when the hook ran).
 
 ## Guardrails
 

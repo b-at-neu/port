@@ -27,5 +27,6 @@ Any draft 2020-12 validator works; the fixtures carry no tool-specific content. 
 | `invalid.check-missing-run.json` | A check without a command is an error |
 | `invalid.release-with-null-production.json` | A null `production` alongside `modules.release: true` is rejected |
 | `invalid.null-production-default-release.json` | A null `production` with `modules` omitted is rejected — `release` defaults to true |
+| `invalid.bad-post-publish-hook.json` | `release.postPublishHook` must be a string or null, not a number |
 
 **What the schema cannot express.** Draft 2020-12 has no way to compare two sibling values, so "`production` must differ from `integration`" is not a schema rule — `/port:init`'s pre-write validation and layer 1's coherence check (`scripts/checks/config.mjs`), which compare resolved defaults, enforce it instead.

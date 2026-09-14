@@ -1,0 +1,6 @@
+{
+  "repo": "b-at-neu/port",
+  "release": {
+    "postPublishHook": 42
+  }
+}

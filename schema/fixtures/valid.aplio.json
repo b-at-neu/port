@@ -26,6 +26,7 @@
     "release": true,
     "scope": true
   },
+  "release": { "postPublishHook": "node scripts/port-release-hook.mjs" },
   "reviewCycleCap": 5,
   "budget": { "wallClockMinutes": 120 },
   "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"],

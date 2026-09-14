@@ -300,6 +300,12 @@
           "description": "Command that writes the new version into `versionFiles` without committing or tagging, with `{{version}}` substituted. Null means edit the files directly instead. Ignored for `tags`.",
           "default": null,
           "examples": ["npm version {{version}} --no-git-tag-version --allow-same-version"]
+        },
+        "postPublishHook": {
+          "type": ["string", "null"],
+          "description": "A `node` invocation run verbatim, once, with no appended arguments, immediately after `/port:release` publishes the tag and GitHub release — the same command-prefix convention `commands.artifacts`/`worktrees`/`budget`/`tick` already follow. It resolves everything it needs from the repository itself. Must be idempotent: both Phase B's own step and the 'Done' exit run it, so a run that died after `gh release create` still completes. A non-zero exit is reported and never retried — the release has already shipped by the time the hook runs. Null means skip silently.",
+          "default": null,
+          "examples": ["node scripts/port-release-hook.mjs"]
         }
       }
     },
