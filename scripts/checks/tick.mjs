@@ -10,7 +10,7 @@ async function importEngine(rel) {
 }
 
 export default async function ({ fail, note, ok }) {
-  // --- Every decision case resolves, and the table covers all seven families
+  // --- Every decision case resolves, and the table covers all eight families
   {
     const families = {
       'envelope.cases.json': 'envelope.mjs',
@@ -20,11 +20,12 @@ export default async function ({ fail, note, ok }) {
       'gates.cases.json': 'gates.mjs',
       'liveness.cases.json': 'liveness.mjs',
       'pacing.cases.json': 'pacing.mjs',
+      'writes.cases.json': 'writes.mjs',
     };
     const casesDir = join(root, TICK_DIR, 'cases');
     const present = walk(casesDir).map((f) => relOf(f).split('/').pop());
     for (const file of Object.keys(families)) {
-      if (!present.includes(file)) fail('tick-cases', `${TICK_DIR}/cases/${file} is missing — the seven decision families must all have a case table`);
+      if (!present.includes(file)) fail('tick-cases', `${TICK_DIR}/cases/${file} is missing — the eight decision families must all have a case table`);
       else ok();
     }
 
@@ -46,8 +47,15 @@ export default async function ({ fail, note, ok }) {
       zeroDiffGate: modules['gates.mjs'].zeroDiffGate,
       cycleCapExceeded: modules['gates.mjs'].cycleCapExceeded,
       approvedReverify: modules['gates.mjs'].approvedReverify,
+      refreshWins: modules['gates.mjs'].refreshWins,
       classifyUnmatched: modules['liveness.mjs'].classifyUnmatched,
       nextDelay: modules['pacing.mjs'].nextDelay,
+      refreshSweepWrite: modules['writes.mjs'].refreshSweepWrite,
+      zeroDiffWrite: modules['writes.mjs'].zeroDiffWrite,
+      cycleCapWrite: modules['writes.mjs'].cycleCapWrite,
+      approvalWithdrawnWrite: modules['writes.mjs'].approvalWithdrawnWrite,
+      livenessResetWrite: modules['writes.mjs'].livenessResetWrite,
+      gateResolveWrite: modules['writes.mjs'].gateResolveWrite,
     };
 
     for (const [file] of Object.entries(families)) {
@@ -167,6 +175,30 @@ export default async function ({ fail, note, ok }) {
     }
   }
 
+  // --- Write composition lives only in writes.mjs (#225) ----------------------
+  // The additive-vs-swap bug this ticket fixes lived in port-tick.mjs's own
+  // inline `gh ... --add-label`/`--remove-label` template literals — the one
+  // layer with no case table. This keeps every future label write inside the
+  // module the eighth family actually tests, instead of drifting back into
+  // the orchestrator the way this one did.
+  {
+    const writesPath = join(root, TICK_DIR, 'writes.mjs');
+    const files = [join(root, 'scripts/port-tick.mjs'), ...walk(join(root, TICK_DIR)).filter((f) => f.endsWith('.mjs') && f !== writesPath)];
+    for (const f of files) {
+      const rel = relOf(f);
+      const text = readFileSync(f, 'utf8')
+        .split('\n')
+        .filter((l) => !/^\s*(\/\/|\*)/.test(l))
+        .join('\n');
+      if (/--add-label\b/.test(text)) fail('tick-writes', `${rel} composes '--add-label' inline — every gh label write must go through writes.mjs's exported functions`);
+      else ok();
+      if (/--remove-label\b/.test(text)) fail('tick-writes', `${rel} composes '--remove-label' inline — every gh label write must go through writes.mjs's exported functions`);
+      else ok();
+      if (/\bgh (issue|pr) edit\b/.test(text)) fail('tick-writes', `${rel} spells out a 'gh issue/pr edit' command literal — that composition belongs in writes.mjs alone`);
+      else ok();
+    }
+  }
+
   // --- SKILL.md names tickId, the verbatim rail, and the TICK-PROSE.md fallback
   {
     const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
@@ -215,10 +247,19 @@ function runCase(fn, impl, input) {
       return impl(...input);
     case 'approvedReverify':
       return impl(input);
+    case 'refreshWins':
+      return impl(input);
     case 'classifyUnmatched':
       return impl(input);
     case 'nextDelay':
       return impl(...input);
+    case 'refreshSweepWrite':
+    case 'zeroDiffWrite':
+    case 'cycleCapWrite':
+    case 'approvalWithdrawnWrite':
+    case 'livenessResetWrite':
+    case 'gateResolveWrite':
+      return impl(input);
     default:
       throw new Error(`no case runner wired for function '${fn}'`);
   }

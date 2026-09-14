@@ -73,6 +73,21 @@ export function cycleCapExceeded(reviews, cap) {
   return count >= cap;
 }
 
+/** The missing veto #225 found: a pull request already claimed by a refresh
+ *  (`<labels.refreshBranch>`) or mid-refresh (`<labels.refreshing>`) must
+ *  never also be dispatched to review or revision in the same tick, or it
+ *  ends up carrying two trigger labels at once — the additive refresh write
+ *  alone cannot prevent that, since the veto, not a removal, is what stops
+ *  the second dispatch. `refreshBranch`/`refreshing` are the full,
+ *  all-owners arrays of item numbers currently carrying each label —
+ *  carrying the label is an ownership-independent fact, so this is never
+ *  narrowed to the viewer's own items. */
+export function refreshWins({ number, refreshBranch, refreshing }) {
+  if (refreshBranch.includes(number)) return { action: 'veto', label: 'refreshBranch' };
+  if (refreshing.includes(number)) return { action: 'veto', label: 'refreshing' };
+  return { action: 'proceed' };
+}
+
 /** The `<labels.approved>` never-touch rail's exactly two authorising facts,
  *  read from `verdict` (checks.mjs's `rollupVerdict`, already excluding the
  *  approval-gate carve-out) and `mergeable`. A red check withdraws approval;
