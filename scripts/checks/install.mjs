@@ -29,9 +29,10 @@ export default async function ({ fail, ok }) {
   }
 
   // --- CONTRIBUTING's cache path names no hard-coded version (#224) -----------
-  // The observed failure: the three-way ground-truth recipe still named
-  // '0.1.0' two releases later, which by then pointed at the wrong directory
-  // entirely rather than merely a stale one.
+  // guard(#224): the three-way ground-truth recipe naming a literal released
+  // version instead of '<version>' — the observed failure was the recipe
+  // still reading '0.1.0' two releases later, which by then pointed at the
+  // wrong directory entirely rather than merely a stale one.
   {
     const readme = readFileSync(join(root, 'CONTRIBUTING.md'), 'utf8');
     for (const m of readme.matchAll(/cache\/port\/port\/(\S+?)[\s/`]/g)) {

@@ -19,18 +19,25 @@ const ISSUE_LIST_RE = /^#\d+(?:,\s*#\d+)*$/;
  *  source. A marker attaches to the nearest preceding `// --- <title> ---`
  *  header, taking that header's title with trailing dashes already trimmed
  *  by the regex above; a marker with no preceding header attaches to the
- *  module itself, titled `moduleName`. Returns entries in source order, each
- *  `{ module, title, issues, issuesRaw, description }` — `issues` is an
- *  array of numbers, or `null` when the parenthesized list does not parse as
- *  `#N[, #N...]`; `issuesRaw` is the untouched parenthetical content for a
- *  malformed list, or `null` when the marker declared no parentheses at all
- *  (the `guard: <description>` form); `description` is the trimmed rest of
- *  the line, empty when the marker states none. */
+ *  module itself, titled `moduleName`. A marker's description is not just
+ *  its own physical line — this codebase's normal prose style wraps a
+ *  marker's description across several `//` lines, so parsing continues
+ *  onto each subsequent `//` line, joined with a single space, until a
+ *  blank line, a `// --- title ---` header, the next `guard(...)`/`guard:`
+ *  marker, or a non-comment line ends the block. Returns entries in source
+ *  order, each `{ module, title, issues, issuesRaw, description }` —
+ *  `issues` is an array of numbers, or `null` when the parenthesized list
+ *  does not parse as `#N[, #N...]`; `issuesRaw` is the untouched
+ *  parenthetical content for a malformed list, or `null` when the marker
+ *  declared no parentheses at all (the `guard: <description>` form);
+ *  `description` is the trimmed, joined rest of the block, empty when the
+ *  marker states none. */
 export function parseModule(text, moduleName) {
   const entries = [];
   let title = moduleName;
-  for (const rawLine of text.split('\n')) {
-    const line = rawLine.trim();
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
     const header = HEADER_RE.exec(line);
     if (header) {
       title = header[1];
@@ -39,7 +46,17 @@ export function parseModule(text, moduleName) {
     const guard = GUARD_RE.exec(line);
     if (!guard) continue;
     const [, parenRaw, descriptionRaw] = guard;
-    const description = descriptionRaw.trim();
+    const descriptionParts = [descriptionRaw.trim()];
+    let next = i + 1;
+    for (; next < lines.length; next++) {
+      const continuation = lines[next].trim();
+      if (continuation === '' || HEADER_RE.test(continuation) || GUARD_RE.test(continuation)) break;
+      const commentMatch = /^\/\/\s?(.*)$/.exec(continuation);
+      if (!commentMatch) break;
+      descriptionParts.push(commentMatch[1].trim());
+    }
+    i = next - 1;
+    const description = descriptionParts.join(' ').trim();
     let issues = [];
     let issuesRaw = null;
     if (parenRaw !== undefined) {
