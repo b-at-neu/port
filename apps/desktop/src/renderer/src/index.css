@@ -16,6 +16,10 @@ body {
   height: 100vh;
   box-sizing: border-box;
   padding: 1.5rem 2rem;
+  /* The anchor for the transcript view's floating jump-to-latest button
+     (#84) — every other screen ignores this, since none of them position
+     a descendant absolutely. */
+  position: relative;
 }
 
 h1 {
