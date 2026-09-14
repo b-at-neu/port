@@ -157,7 +157,14 @@ function openDevWindow({ root, cfg, next, branch }) {
     // in-flight release.
     git(['push', 'origin', `HEAD:refs/heads/${branch}`]);
   } catch (e) {
-    restore();
+    try {
+      restore();
+    } catch (restoreErr) {
+      // Never let a failed restore erase the original failure — that would
+      // hide why the checkout/commit/push actually broke behind an unrelated
+      // restore-mismatch message.
+      throw new Error(`FAIL: ${e.message}\n(restore() also failed: ${restoreErr.message})`, { cause: e });
+    }
     throw e;
   }
 
