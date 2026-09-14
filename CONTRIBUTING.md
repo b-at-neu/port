@@ -20,11 +20,19 @@ Edits under `plugins/port/` take effect immediately — there is no build step a
 **The ground-truth test is three-way, not `diff -rq` alone.** Measured 2026-08-31: `diff -rq` returned silence while both the cache and this checkout sat 42 commits behind `origin/dev`, so three days of merged fixes were absent and the documented verification reported no problem — a check that cannot distinguish the state it exists to detect. Both halves are required, because either alone passes while the running plugin is stale:
 
 ```bash
-git rev-list --count HEAD..origin/dev                                   # must be 0 — this checkout is current
-diff -rq ~/.claude/plugins/cache/port/port/0.1.0 plugins/port           # must be silent — the cache matches this checkout
+git rev-list --count HEAD..origin/dev                                          # must be 0 — this checkout is current
+diff -rq ~/.claude/plugins/cache/port/port/<version> plugins/port              # must be silent — the cache matches this checkout
 ```
 
+`<version>` is `plugins/port/.claude-plugin/plugin.json`'s own `version` field — read it there rather than typing a literal, which would read wrong the moment this repository releases again.
+
 `git rev-list --count` alone misses uncommitted working-tree edits — under a directory source those are absent from the cache while the count still reads `0`. `diff -rq` alone misses this checkout itself being behind the remote, which is exactly what the 42-commit case above measured.
+
+### The integration branch stays on a prerelease version
+
+`dev`'s `plugins/port/.claude-plugin/plugin.json` carries a version like `0.2.1-dev` at rest, never a clean `0.2.1`. Reason: the cache directory above is keyed by marketplace, plugin, **and** version — a dev-loop install from this checkout and a consumer's released install both resolve to `cache/port/port/<version>/` for as long as `dev` and a shipped release share the same version string, and reinstalling either one silently overwrites the other with whichever ran last.
+
+`/port:release`'s bump pull request strips the suffix as part of the bump it already performs, and `release.postPublishHook` → `scripts/dev-window.mjs` restores it immediately after publishing, by opening a `devwindow/v<next>` pull request against `dev`. **Merge that pull request before doing anything else with the dev loop** — between the bump merging and the dev-window pull request merging, `dev` does carry a releasable version, and reinstalling the local-scope dev loop during that window reproduces the exact collision this convention exists to prevent.
 
 ### Never install from inside a managed worktree
 
@@ -34,7 +42,7 @@ Every install scope — `user`, `project`, `local` — resolves to the **same** 
 
 An install from a `github` marketplace source — the consumer path, and this repository's own committed entry — advances only when all three of these line up. Any one wrong, and the running copy silently never changes:
 
-- **`version`** in `plugins/port/.claude-plugin/plugin.json` — the release signal. The plugin's on-disk cache directory is keyed by this string (`~/.claude/plugins/cache/port/port/<version>/`), so `claude plugin marketplace update port` refreshes the marketplace's own clone but **cannot advance a pinned install** whose version has not moved.
+- **`version`** in `plugins/port/.claude-plugin/plugin.json` — the release signal. The plugin's on-disk cache directory is keyed by marketplace, plugin, **and** this version string (`~/.claude/plugins/cache/port/port/<version>/`), so `claude plugin marketplace update port` refreshes the marketplace's own clone but **cannot advance a pinned install** whose version has not moved.
 - **`ref`** — defaults to the marketplace repository's *default* branch when unset, which tracks whatever merges there rather than a release. `/port:init` pins a consumer's `ref` to `b-at-neu/port`'s newest published release tag (`v<semver>`), or `main` — this repository's release branch — if none has shipped yet; either is a deliberate pin, but an immutable tag never advances on its own, so a consumer moves forward only by re-running `/port:init`. This repository's own committed entry stays pinned to `main` for now, as the contributor-facing form (see above).
 - **`autoUpdate`** — off by default for third-party marketplaces, so even a real version bump sits unfetched until this is `true` or someone updates manually.
 
