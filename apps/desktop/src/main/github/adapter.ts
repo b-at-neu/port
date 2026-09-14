@@ -301,6 +301,7 @@ export async function fetchItemsByNumber(params: FetchItemsByNumberParams): Prom
       title: typeof raw.title === 'string' ? raw.title : '',
       url: typeof raw.url === 'string' ? raw.url : '',
       labels: fieldListOf(raw.labels, 'name'),
+      assignees: fieldListOf(raw.assignees, 'login'),
     })
   }
 

@@ -133,7 +133,9 @@ export type PipelineFetch =
 
 /** `fetchItemsByNumber`'s per-number result (#79 Decision 4) — `kind` comes
  *  from the response's own `__typename`, never assumed, since a worktree or
- *  an agent record names a bare number with no kind attached. */
+ *  an agent record names a bare number with no kind attached. `assignees`
+ *  (#90) is the second fact the write chokepoint's authoritative read needs
+ *  beside `labels` — one round trip covers both. */
 export interface ResolvedItem {
   readonly number: number
   readonly kind: PipelineItemKind
@@ -143,6 +145,7 @@ export interface ResolvedItem {
   readonly title: string
   readonly url: string
   readonly labels: readonly string[]
+  readonly assignees: readonly string[]
 }
 
 /** `fetchItemsByNumber`'s result — a number resolving to neither an issue
