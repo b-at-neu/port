@@ -32,19 +32,30 @@ describe('evaluate', () => {
     expect(evaluate(base, observed)).toEqual({ satisfied: true })
   })
 
-  it('reports a violation when an expected-present label is missing', () => {
-    const observed = { labels: ['plan approved'], assignees: [], readAt: '2026-01-01T00:00:00Z' }
+  it('reports a violation when an expected-present label is missing, and only that', () => {
+    const observed = { labels: [], assignees: [], readAt: '2026-01-01T00:00:00Z' }
     const verdict = evaluate(base, observed)
     expect(verdict.satisfied).toBe(false)
     if (verdict.satisfied) throw new Error('unreachable')
     expect(verdict.expected).toEqual(['plan review'])
-    expect(verdict.observed).toEqual(['plan approved'])
+    expect(verdict.observed).toEqual([])
   })
 
-  it('reports a violation when an expected-absent label is present', () => {
+  it('reports a violation when an expected-absent label is present, naming it in `expected`', () => {
     const observed = { labels: ['plan review', 'plan approved'], assignees: [], readAt: '2026-01-01T00:00:00Z' }
     const verdict = evaluate(base, observed)
     expect(verdict.satisfied).toBe(false)
+    if (verdict.satisfied) throw new Error('unreachable')
+    expect(verdict.expected).toEqual(['plan review', 'not plan approved'])
+  })
+
+  it('folds both violations into `expected` when a label is missing and a different one is unexpectedly present', () => {
+    const observed = { labels: ['plan approved'], assignees: [], readAt: '2026-01-01T00:00:00Z' }
+    const verdict = evaluate(base, observed)
+    expect(verdict.satisfied).toBe(false)
+    if (verdict.satisfied) throw new Error('unreachable')
+    expect(verdict.expected).toEqual(['plan review', 'not plan approved'])
+    expect(verdict.observed).toEqual(['plan approved'])
   })
 
   it('honours an exactly assignee expectation', () => {
@@ -55,10 +66,13 @@ describe('evaluate', () => {
     expect(violated.satisfied).toBe(false)
   })
 
-  it('honours an unassigned assignee expectation', () => {
+  it('honours an unassigned assignee expectation, naming it in `expected` when violated', () => {
     const precondition = { presentNames: [], absentNames: [], assignees: { kind: 'unassigned' as const } }
     expect(evaluate(precondition, { labels: [], assignees: [], readAt: '2026-01-01T00:00:00Z' })).toEqual({ satisfied: true })
-    expect(evaluate(precondition, { labels: [], assignees: ['alice'], readAt: '2026-01-01T00:00:00Z' }).satisfied).toBe(false)
+    const violated = evaluate(precondition, { labels: [], assignees: ['alice'], readAt: '2026-01-01T00:00:00Z' })
+    expect(violated.satisfied).toBe(false)
+    if (violated.satisfied) throw new Error('unreachable')
+    expect(violated.expected).toEqual(['unassigned'])
   })
 })
 

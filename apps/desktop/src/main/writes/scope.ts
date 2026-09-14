@@ -42,10 +42,17 @@ function assigneeExpectationNames(expectation: AssigneeExpectation): readonly st
     case 'any':
       return []
     case 'unassigned':
-      return []
+      return ['unassigned']
     case 'exactly':
       return expectation.logins
   }
+}
+
+/** Display form for an `absentNames` entry — distinguishes "expected
+ *  present" from "expected absent" in the flattened `expected` list, since
+ *  both share the same `string[]` shape. */
+function absentLabelName(name: string): string {
+  return `not ${name}`
 }
 
 /** Evaluates an already name-resolved precondition against `observed`.
@@ -53,7 +60,12 @@ function assigneeExpectationNames(expectation: AssigneeExpectation): readonly st
  *  `expect.absent` keys, already resolved through `labelName` — this
  *  function never resolves a key itself, so it stays pure and label-key
  *  agnostic. `expected`/`observed` in the failing case are display names,
- *  exactly what the `Conflict` payload needs. */
+ *  exactly what the `Conflict` payload needs — `expected` always carries
+ *  `presentNames` in full (the positive half of the expectation), plus
+ *  whichever `absentNames` entries actually turned up (rendered
+ *  `not <name>`) and the assignee expectation when *that* is what
+ *  violated (including the `unassigned` case), so an absent-label or
+ *  assignee violation is never silently missing from the payload. */
 export function evaluate(
   precondition: { readonly presentNames: readonly string[]; readonly absentNames: readonly string[]; readonly assignees: AssigneeExpectation },
   observed: ObservedItem,
@@ -67,7 +79,11 @@ export function evaluate(
     return { satisfied: true }
   }
 
-  const expected = [...precondition.presentNames, ...assigneeExpectationNames(precondition.assignees)]
+  const expected = [
+    ...precondition.presentNames,
+    ...unexpectedlyPresent.map(absentLabelName),
+    ...(assigneesOk ? [] : assigneeExpectationNames(precondition.assignees)),
+  ]
   const observedNames = [...observed.labels, ...observed.assignees]
   return { satisfied: false, expected, observed: observedNames }
 }

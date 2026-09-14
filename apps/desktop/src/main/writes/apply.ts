@@ -10,12 +10,11 @@ import { pathOps as defaultPathOps, removeFile, writeTextFile } from '../platfor
 import type { PathOps } from '../platform'
 import { fetchItemsByNumber } from '../github'
 import type { FetchItemsByNumberParams, ItemsByNumberFetch, RepoRef } from '../github'
-import { labelName } from '../../shared/labels/vocabulary'
-import type { LabelKey, LabelVocabulary } from '../../shared/labels/vocabulary'
+import type { LabelKey } from '../../shared/labels/vocabulary'
 import type { AssertEqual } from '../../shared/assert-type'
 import type { AuditEntry, ClaimScope, CommentRequest, GhWriteFailureKind, LabelWriteRequest, ObservedItem, WriteOutcome } from '../../shared/writes/types'
 import { appendAudit } from './audit'
-import { buildCommand } from './command'
+import { buildCommand, resolveKeys } from './command'
 import type { GitRunner as ClaimGitRunner } from './claim'
 import { readGateClaim } from './claim'
 import { evaluate, scopeFor, wouldChangeNothing } from './scope'
@@ -36,17 +35,6 @@ function splitRepo(repo: string): RepoRef {
   const slash = repo.indexOf('/')
   if (slash === -1) return { owner: repo, name: '' }
   return { owner: repo.slice(0, slash), name: repo.slice(slash + 1) }
-}
-
-function resolveNames(vocabulary: LabelVocabulary, keys: readonly LabelKey[]): { names: string[]; unresolved: LabelKey[] } {
-  const names: string[] = []
-  const unresolved: LabelKey[] = []
-  for (const key of keys) {
-    const name = labelName(vocabulary, key)
-    if (name === undefined) unresolved.push(key)
-    else names.push(name)
-  }
-  return { names, unresolved }
 }
 
 function dedupeKeys(keys: readonly LabelKey[]): readonly LabelKey[] {
@@ -131,8 +119,8 @@ export async function applyLabels(params: ApplyLabelsParams): Promise<WriteOutco
 
   // --- Resolve every LabelKey the request carries -----------------------
   const command = buildCommand(request)
-  const expectPresent = resolveNames(request.vocabulary, request.expect.present)
-  const expectAbsent = resolveNames(request.vocabulary, request.expect.absent)
+  const expectPresent = resolveKeys(request.vocabulary, request.expect.present)
+  const expectAbsent = resolveKeys(request.vocabulary, request.expect.absent)
   const unresolved = dedupeKeys([...(command.ok ? [] : command.unresolved), ...expectPresent.unresolved, ...expectAbsent.unresolved])
 
   const baseCtx: AuditContext = { request, scope: null, claim: 'not-required', precondition: null, observed: null, call: null }
