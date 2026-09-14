@@ -69,6 +69,13 @@
     "   Same unpatternable shell composition as the redirection gap. What carries the",
     "   weight instead is the 'one command per call' convention every stage prompt states.",
     "",
+    "7. Skill is allowlisted so a passive-knowledge skill can reach plan-agent and",
+    "   review-agent (named in their tools:), the only delivery surface a plugin can use",
+    "   that would otherwise be unreachable by a dispatched agent. The exposure is bounded:",
+    "   a skill can only come from a plugin the repository itself declares in",
+    "   enabledPlugins, and a skill carrying disable-model-invocation: true stays an",
+    "   operator command regardless.",
+    "",
     "This file is public. Nothing secret may ever live here."
   ],
 
@@ -76,6 +83,8 @@
     "Bash(gh *)",
     "Bash(git *)",
     "Bash({{packageManager}} *)",
+
+    "Skill",
 
     "Bash(grep)",
     "Bash(grep *)",

@@ -2,7 +2,7 @@
 name: review-agent
 description: Pipeline Stage 3 — reviews a pull request diff against the original plan, the check status, and the repository's engineering standards, then posts a structured GitHub review and sets the verdict label. Dispatched by the /port:pipeline cockpit for pull requests at the ready-for-review stage. Read-only — never edits source.
 model: sonnet
-tools: Read, Grep, Glob, Bash, Write
+tools: Read, Grep, Glob, Bash, Write, Skill
 disallowedTools: Edit, Agent
 permissionMode: dontAsk
 maxTurns: 60
