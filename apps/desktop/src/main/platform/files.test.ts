@@ -3,7 +3,19 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { platform } from 'node:process'
 import { describe, expect, it } from 'vitest'
-import { ensureDirectory, listDirectory, readJsonFile, readLines, readTextFile, statPath, writeJsonFileAtomic } from './files'
+import {
+  appendTextFile,
+  ensureDirectory,
+  listDirectory,
+  readJsonFile,
+  readLines,
+  readTextFile,
+  removeFile,
+  renamePath,
+  statPath,
+  writeJsonFileAtomic,
+  writeTextFile,
+} from './files'
 
 // Vitest runs each test's temp directory through the OS's own tmpdir
 // cleanup; nothing here needs a teardown step.
@@ -230,6 +242,108 @@ describe('readLines', () => {
     if (result.ok) throw new Error('unreachable')
     expect(result.kind).toBe('too-large')
     expect(lines.length).toBeLessThan(20_000)
+  })
+})
+
+describe('writeTextFile', () => {
+  it('creates a new file', async () => {
+    const dir = await makeTempDir()
+    const file = join(dir, 'a.txt')
+    const result = await writeTextFile(file, 'hello')
+    expect(result).toEqual({ ok: true, value: undefined })
+    expect(await readFile(file, 'utf8')).toBe('hello')
+  })
+
+  it('overwrites an existing file whole', async () => {
+    const dir = await makeTempDir()
+    const file = join(dir, 'a.txt')
+    await writeFile(file, 'first and longer')
+    await writeTextFile(file, 'second')
+    expect(await readFile(file, 'utf8')).toBe('second')
+  })
+
+  it('reports not-found when the parent directory is missing', async () => {
+    const dir = await makeTempDir()
+    const result = await writeTextFile(join(dir, 'missing', 'a.txt'), 'x')
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('unreachable')
+    expect(result.kind).toBe('not-found')
+  })
+})
+
+describe('appendTextFile', () => {
+  it('creates a file that does not exist yet', async () => {
+    const dir = await makeTempDir()
+    const file = join(dir, 'a.jsonl')
+    const result = await appendTextFile(file, 'one\n')
+    expect(result).toEqual({ ok: true, value: undefined })
+    expect(await readFile(file, 'utf8')).toBe('one\n')
+  })
+
+  it('appends to an existing file rather than overwriting it', async () => {
+    const dir = await makeTempDir()
+    const file = join(dir, 'a.jsonl')
+    await appendTextFile(file, 'one\n')
+    await appendTextFile(file, 'two\n')
+    expect(await readFile(file, 'utf8')).toBe('one\ntwo\n')
+  })
+
+  it('reports not-found when the parent directory is missing', async () => {
+    const dir = await makeTempDir()
+    const result = await appendTextFile(join(dir, 'missing', 'a.jsonl'), 'x')
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('unreachable')
+    expect(result.kind).toBe('not-found')
+  })
+})
+
+describe('removeFile', () => {
+  it('deletes an existing file', async () => {
+    const dir = await makeTempDir()
+    const file = join(dir, 'a.txt')
+    await writeFile(file, 'x')
+    const result = await removeFile(file)
+    expect(result).toEqual({ ok: true, value: undefined })
+    const entries = await readdir(dir)
+    expect(entries).toEqual([])
+  })
+
+  it('reports not-found for a file that does not exist, never throwing', async () => {
+    const dir = await makeTempDir()
+    const result = await removeFile(join(dir, 'missing.txt'))
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('unreachable')
+    expect(result.kind).toBe('not-found')
+  })
+})
+
+describe('renamePath', () => {
+  it('renames a file to a new path', async () => {
+    const dir = await makeTempDir()
+    const from = join(dir, 'a.txt')
+    const to = join(dir, 'b.txt')
+    await writeFile(from, 'hello')
+    const result = await renamePath(from, to)
+    expect(result).toEqual({ ok: true, value: undefined })
+    expect(await readFile(to, 'utf8')).toBe('hello')
+  })
+
+  it('replaces an existing file at the destination', async () => {
+    const dir = await makeTempDir()
+    const from = join(dir, 'a.txt')
+    const to = join(dir, 'b.txt')
+    await writeFile(from, 'new')
+    await writeFile(to, 'old')
+    await renamePath(from, to)
+    expect(await readFile(to, 'utf8')).toBe('new')
+  })
+
+  it('reports not-found when the source does not exist', async () => {
+    const dir = await makeTempDir()
+    const result = await renamePath(join(dir, 'missing.txt'), join(dir, 'b.txt'))
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('unreachable')
+    expect(result.kind).toBe('not-found')
   })
 })
 

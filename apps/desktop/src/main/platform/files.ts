@@ -1,7 +1,7 @@
 import type { Dirent } from 'node:fs'
 import { createReadStream } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { createInterface } from 'node:readline'
 
@@ -181,6 +181,58 @@ export async function readLines(path: string, onLine: (line: string) => void, op
       finish({ ok: true })
     })
   })
+}
+
+/** Writes `text` to `path`, creating it if absent and overwriting it whole
+ *  otherwise — the plain (non-atomic) counterpart to `writeJsonFileAtomic`,
+ *  for a caller (`main/writes/claim.ts`'s scratch comment file) that already
+ *  owns the whole write and deletes the file itself in a `finally`. */
+export async function writeTextFile(path: string, text: string): Promise<FileResult<void>> {
+  try {
+    await writeFile(path, text, 'utf8')
+    return { ok: true, value: undefined }
+  } catch (error) {
+    return { ok: false, ...classifyFsError(error) }
+  }
+}
+
+/** Appends `text` to `path`, creating it if absent — the only way anything
+ *  under `src/` may grow a file line by line. `main/writes/audit.ts` is this
+ *  helper's one caller, so no second path can write an audit entry that
+ *  skipped the chokepoint. */
+export async function appendTextFile(path: string, text: string): Promise<FileResult<void>> {
+  try {
+    await appendFile(path, text, 'utf8')
+    return { ok: true, value: undefined }
+  } catch (error) {
+    return { ok: false, ...classifyFsError(error) }
+  }
+}
+
+/** Deletes `path`, reporting `not-found` rather than throwing when it is
+ *  already gone — `main/writes/claim.ts`'s `releaseGateClaim` treats that as
+ *  success, since the caller's intent ("the claim should not exist") is
+ *  already satisfied. */
+export async function removeFile(path: string): Promise<FileResult<void>> {
+  try {
+    await unlink(path)
+    return { ok: true, value: undefined }
+  } catch (error) {
+    return { ok: false, ...classifyFsError(error) }
+  }
+}
+
+/** Renames `from` to `to`, replacing an existing file at `to` atomically on
+ *  POSIX and on Windows alike — `main/writes/audit.ts`'s log-rotation step
+ *  (`writes.jsonl` → `writes.prev.jsonl`) is the one caller that needs this
+ *  outside `writeJsonFileAtomic`'s own internal use. */
+export async function renamePath(from: string, to: string): Promise<FileResult<void>> {
+  try {
+    await rename(from, to)
+    return { ok: true, value: undefined }
+  } catch (error) {
+    return { ok: false, ...classifyFsError(error) }
+  }
 }
 
 /** Writes `value` as JSON to `path` without ever leaving a half-written file
