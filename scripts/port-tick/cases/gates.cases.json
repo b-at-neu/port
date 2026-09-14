@@ -23,6 +23,10 @@
     { "function": "approvedReverify", "name": "a red check withdraws approval", "input": { "verdict": { "pending": false, "red": [{ "name": "build", "conclusion": "FAILURE" }], "green": [] }, "mergeable": "MERGEABLE" }, "expected": { "action": "withdraw", "red": [{ "name": "build", "conclusion": "FAILURE" }] } },
     { "function": "approvedReverify", "name": "CONFLICTING refreshes in place, approval stands", "input": { "verdict": { "pending": false, "red": [], "green": ["build"] }, "mergeable": "CONFLICTING" }, "expected": { "action": "refresh-in-place" } },
     { "function": "approvedReverify", "name": "all green and mergeable — announce ready", "input": { "verdict": { "pending": false, "red": [], "green": ["build"] }, "mergeable": "MERGEABLE" }, "expected": { "action": "announce-ready", "green": ["build"] } },
-    { "function": "approvedReverify", "name": "still pending — wait", "input": { "verdict": { "pending": true, "red": [], "green": [] }, "mergeable": "MERGEABLE" }, "expected": { "action": "wait" } }
+    { "function": "approvedReverify", "name": "still pending — wait", "input": { "verdict": { "pending": true, "red": [], "green": [] }, "mergeable": "MERGEABLE" }, "expected": { "action": "wait" } },
+
+    { "function": "refreshWins", "name": "vetoed when the item carries refreshBranch", "input": { "number": 7, "refreshBranch": [7, 9], "refreshing": [] }, "expected": { "action": "veto", "label": "refreshBranch" } },
+    { "function": "refreshWins", "name": "vetoed when the item carries refreshing", "input": { "number": 7, "refreshBranch": [], "refreshing": [7] }, "expected": { "action": "veto", "label": "refreshing" } },
+    { "function": "refreshWins", "name": "proceeds when the item carries neither", "input": { "number": 7, "refreshBranch": [9], "refreshing": [3] }, "expected": { "action": "proceed" } }
   ]
 }
