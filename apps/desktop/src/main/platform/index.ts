@@ -22,13 +22,13 @@ export { classifyGhExit, gh, ghAuthStatus, ghJson } from './gh'
 export type { NodeOptions } from './node'
 export { node } from './node'
 
-export type { DirEntry, DirEntryKind, FileFailureKind, FileResult, ReadLinesOptions, ReadLinesResult, StatInfo } from './files'
+export type { DirEntry, DirEntryKind, FileFailureKind, FileResult, ReadLinesFromOptions, ReadLinesFromResult, ReadLinesFromValue, StatInfo } from './files'
 export {
   appendTextFile,
   ensureDirectory,
   listDirectory,
   readJsonFile,
-  readLines,
+  readLinesFrom,
   readTextFile,
   removeFile,
   renamePath,

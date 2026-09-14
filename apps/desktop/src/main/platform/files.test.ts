@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, readdir, readFile, symlink, writeFile } from 'node:fs/promises'
+import { appendFile, chmod, mkdir, mkdtemp, readdir, readFile, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { platform } from 'node:process'
@@ -8,7 +8,7 @@ import {
   ensureDirectory,
   listDirectory,
   readJsonFile,
-  readLines,
+  readLinesFrom,
   readTextFile,
   removeFile,
   renamePath,
@@ -186,62 +186,102 @@ describe('writeJsonFileAtomic', () => {
   })
 })
 
-describe('readLines', () => {
-  it('yields every line of a normal LF file', async () => {
+describe('readLinesFrom', () => {
+  it('yields every line of a normal LF file from offset 0', async () => {
     const dir = await makeTempDir()
     const file = join(dir, 'a.jsonl')
     await writeFile(file, 'one\ntwo\nthree\n')
-    const lines: string[] = []
-    const result = await readLines(file, (line) => lines.push(line), { maxBytes: 1024 })
-    expect(result).toEqual({ ok: true })
-    expect(lines).toEqual(['one', 'two', 'three'])
+    const result = await readLinesFrom(file, 0, { maxBytes: 1024 })
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.value.lines).toEqual(['one', 'two', 'three'])
+    expect(result.value.bytesConsumed).toBe('one\ntwo\nthree\n'.length)
+    expect(result.value.filledBudget).toBe(false)
   })
 
   it('yields the same lines for a CRLF file as for the LF equivalent', async () => {
     const dir = await makeTempDir()
     const file = join(dir, 'crlf.jsonl')
     await writeFile(file, 'one\r\ntwo\r\nthree\r\n')
-    const lines: string[] = []
-    const result = await readLines(file, (line) => lines.push(line), { maxBytes: 1024 })
-    expect(result).toEqual({ ok: true })
-    expect(lines).toEqual(['one', 'two', 'three'])
+    const result = await readLinesFrom(file, 0, { maxBytes: 1024 })
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.value.lines).toEqual(['one', 'two', 'three'])
   })
 
   it('yields no lines for an empty file', async () => {
     const dir = await makeTempDir()
     const file = join(dir, 'empty.jsonl')
     await writeFile(file, '')
-    const lines: string[] = []
-    const result = await readLines(file, (line) => lines.push(line), { maxBytes: 1024 })
-    expect(result).toEqual({ ok: true })
-    expect(lines).toEqual([])
+    const result = await readLinesFrom(file, 0, { maxBytes: 1024 })
+    expect(result).toEqual({ ok: true, value: { lines: [], bytesConsumed: 0, filledBudget: false } })
+  })
+
+  it('leaves a partial trailing line unconsumed and uncounted', async () => {
+    const dir = await makeTempDir()
+    const file = join(dir, 'partial.jsonl')
+    await writeFile(file, 'one\ntwo\nunterminated')
+    const result = await readLinesFrom(file, 0, { maxBytes: 1024 })
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.value.lines).toEqual(['one', 'two'])
+    expect(result.value.bytesConsumed).toBe('one\ntwo\n'.length)
+  })
+
+  it('resumes a read from the previous call\'s bytesConsumed', async () => {
+    const dir = await makeTempDir()
+    const file = join(dir, 'resume.jsonl')
+    await writeFile(file, 'one\ntwo\n')
+    const first = await readLinesFrom(file, 0, { maxBytes: 1024 })
+    expect(first.ok).toBe(true)
+    if (!first.ok) throw new Error('unreachable')
+    expect(first.value.lines).toEqual(['one', 'two'])
+
+    await appendFile(file, 'three\n')
+    const second = await readLinesFrom(file, first.value.bytesConsumed, { maxBytes: 1024 })
+    expect(second.ok).toBe(true)
+    if (!second.ok) throw new Error('unreachable')
+    expect(second.value.lines).toEqual(['three'])
   })
 
   it('reports not-found for a missing file, never throwing', async () => {
     const dir = await makeTempDir()
-    const lines: string[] = []
-    const result = await readLines(join(dir, 'missing.jsonl'), (line) => lines.push(line), { maxBytes: 1024 })
+    const result = await readLinesFrom(join(dir, 'missing.jsonl'), 0, { maxBytes: 1024 })
     expect(result.ok).toBe(false)
     if (result.ok) throw new Error('unreachable')
     expect(result.kind).toBe('not-found')
-    expect(lines).toEqual([])
   })
 
-  it('aborts with too-large once the byte cap is passed, without buffering the whole file', async () => {
+  it('reads nothing past EOF — a value, not an error', async () => {
+    const dir = await makeTempDir()
+    const file = join(dir, 'short.jsonl')
+    await writeFile(file, 'one\n')
+    const result = await readLinesFrom(file, 100, { maxBytes: 1024 })
+    expect(result).toEqual({ ok: true, value: { lines: [], bytesConsumed: 0, filledBudget: false } })
+  })
+
+  it('sets filledBudget when the window is exactly filled, so the caller knows to read again', async () => {
+    const dir = await makeTempDir()
+    const file = join(dir, 'chunked.jsonl')
+    await writeFile(file, 'one\ntwo\nthree\nfour\n')
+    const result = await readLinesFrom(file, 0, { maxBytes: 8 })
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.value.filledBudget).toBe(true)
+  })
+
+  it('reports too-large on a stuck line — one line longer than the whole budget, never spinning', async () => {
     // Large enough to arrive across many stream chunks (a small file can
     // arrive in one chunk, which would make an abort-mid-stream assertion
     // meaningless) — the same order-of-magnitude the readTextFile too-large
     // test above already uses for its own cap.
     const dir = await makeTempDir()
     const file = join(dir, 'big.jsonl')
-    const oneLine = `${'x'.repeat(200)}\n`
-    await writeFile(file, oneLine.repeat(20_000)) // ~4 MB
-    const lines: string[] = []
-    const result = await readLines(file, (line) => lines.push(line), { maxBytes: 1024 * 1024 })
+    await writeFile(file, 'x'.repeat(4 * 1024 * 1024)) // one line, no newline at all
+    const result = await readLinesFrom(file, 0, { maxBytes: 1024 * 1024 })
     expect(result.ok).toBe(false)
     if (result.ok) throw new Error('unreachable')
     expect(result.kind).toBe('too-large')
-    expect(lines.length).toBeLessThan(20_000)
   })
 })
 
