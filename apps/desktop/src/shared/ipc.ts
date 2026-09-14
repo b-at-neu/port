@@ -2,7 +2,7 @@ import type { AssertEqual } from './assert-type'
 import type { RepoId, RepositoryEntry } from './repos'
 import type { WorktreesReport } from './reclaimer/types'
 import type { SessionScan } from './sessions/types'
-import type { TranscriptRead } from './sessions/transcript'
+import type { TranscriptRead, TranscriptTailOpen, TranscriptTailPoll } from './sessions/transcript'
 import type { BoardSnapshot, SourceKind } from './board/types'
 
 export interface AppInfo {
@@ -60,6 +60,18 @@ export interface IpcMap {
     request: { sessionId: string; agentId: string | null }
     response: TranscriptRead
   }
+  'transcript:tail:open': {
+    request: { sessionId: string; agentId: string | null }
+    response: TranscriptTailOpen
+  }
+  'transcript:tail:poll': {
+    request: { tailId: string }
+    response: TranscriptTailPoll
+  }
+  'transcript:tail:close': {
+    request: { tailId: string }
+    response: void
+  }
   /** The board's initial paint — one invoke, no polling of its own; every
    *  later update arrives over the `board:update` event instead (#80). */
   'board:snapshot': {
@@ -75,7 +87,20 @@ export interface IpcMap {
   }
 }
 
-export const IPC_CHANNELS = ['app:info', 'repos:list', 'repos:add', 'repos:remove', 'worktrees:report', 'sessions:scan', 'transcript:read', 'board:snapshot', 'board:refresh'] as const
+export const IPC_CHANNELS = [
+  'app:info',
+  'repos:list',
+  'repos:add',
+  'repos:remove',
+  'worktrees:report',
+  'sessions:scan',
+  'transcript:read',
+  'transcript:tail:open',
+  'transcript:tail:poll',
+  'transcript:tail:close',
+  'board:snapshot',
+  'board:refresh',
+] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]
 

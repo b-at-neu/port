@@ -10,6 +10,9 @@ export { PORT_STAGE_AGENTS } from './classify'
 export type { CloseTailParams, OpenTailParams, PollTailParams, TailStore, TailStoreDeps } from './tail'
 export { createTailStore, tailStore } from './tail'
 
+export type { OpenTranscriptParams, OpenTranscriptResult, TranscriptCursor } from './transcript'
+export { openTranscript } from './transcript'
+
 export type {
   Activity,
   AgentRecord,
