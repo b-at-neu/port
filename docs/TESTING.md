@@ -115,6 +115,7 @@ No dependencies, no plugin install, no model calls. Runs in seconds, in an agent
 | `scripts/port-tick/config.mjs`'s `LABEL_DEFAULTS`/`LABEL_ROLES` match `templates/labels.json`, both directions | The engine's label vocabulary drifting from the template it must resolve against (#203) |
 | The pacing ladder's constants (`270`, `540`, `1080`, `1800`) are literal in `pacing.mjs`, and `nextDelay` never returns a non-numeric delay | A non-draining tick reaching `ScheduleWakeup` with nothing to pass (#203) |
 | `SKILL.md`/`TICK-PROSE.md` name `tickId`, `TICK-PROSE.md`, `commands.tick`, and a verbatim-execution rail | The model re-deriving a decision the plan already settled, with nothing checking that it ran the script at all (#203) |
+| The `standards-precedence` block exists in every agent granting Bash and is byte-identical across all four (compared pairwise — no `PIPELINE.md` canonical copy yet), every agent naming `docs.engineering` also names `CLAUDE.md` and vice versa, and within the block `CLAUDE.md`'s index precedes `docs.engineering`'s, the literal phrase "never a finding" is present, and the commands carve-out names both `commands.*` and `.claude/port.config.json` | `CLAUDE.md` honored by `impl-agent` alone, so `review-agent`/`revise-agent` silently "fixed" code away from a convention the repository itself stated (#192) |
 
 Each rule is worth testing by breaking it deliberately. If a check cannot be made to fail, it is not a check.
 
