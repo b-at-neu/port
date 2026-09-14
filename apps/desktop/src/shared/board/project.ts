@@ -7,7 +7,7 @@ import { inspectDenials } from '../local/inspect'
 import type { RepoId } from '../repos'
 import type { RepositoryFreshness, RepositoryState, StageLabel } from '../state/types'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from './types'
-import type { BoardGroup, BoardItemRow, BoardProjection, BoardRepositorySummary, BoardSnapshot, DisplayStatus, GroupBy, RepositoryHealth } from './types'
+import type { BoardGroup, BoardItemRow, BoardProjection, BoardRepositorySummary, BoardSnapshot, DisplayStatus, GroupBy, RepositoryHealth, SourceHealth, SourceKind } from './types'
 
 /**
  * Decision 5 — the eventual-consistency suppression. `item.status` is never
@@ -43,6 +43,29 @@ export function displayStatus(item: { readonly status: string }, repoHealth: Rep
 export function stageLabelOf(item: { readonly stage: string | null; readonly stages: readonly StageLabel[] }): StageLabel | null {
   if (item.stage === null) return null
   return item.stages.find((label) => label.role === item.stage) ?? null
+}
+
+/** `a` is strictly worse than `b`: more consecutive failures first, then
+ *  (same failure count) the older — or never-succeeded — last read. Used to
+ *  pick one representative `SourceHealth` per kind across every repository
+ *  for the header's freshness strip, so a slow or failing repo other than
+ *  the first is never invisible there (#80 R2-L1). */
+function isWorseHealth(a: SourceHealth, b: SourceHealth): boolean {
+  if (a.consecutiveFailures !== b.consecutiveFailures) return a.consecutiveFailures > b.consecutiveFailures
+  const aAt = a.lastSuccessAt === null ? -Infinity : Date.parse(a.lastSuccessAt)
+  const bAt = b.lastSuccessAt === null ? -Infinity : Date.parse(b.lastSuccessAt)
+  return aAt < bAt
+}
+
+/** The worst `kind` health across every repository, `null` when there are
+ *  none — aggregate rather than an arbitrary first entry (#80 R2-L1). */
+export function worstHealth(healths: readonly RepositoryHealth[], kind: SourceKind): SourceHealth | null {
+  let worst: SourceHealth | null = null
+  for (const h of healths) {
+    const candidate = h[kind]
+    if (worst === null || isWorseHealth(candidate, worst)) worst = candidate
+  }
+  return worst
 }
 
 function repoDisplayName(repo: Extract<RepositoryState, { readonly ok: true }>): string {

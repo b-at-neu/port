@@ -11,7 +11,7 @@ import type { RepositoryEntry } from '../../shared/repos'
 import { DEFAULT_POLL_POLICY, SOURCE_KINDS, initialHealth } from '../../shared/board/types'
 import type { BoardSnapshot, RepositoryHealth, SourceHealth, SourceKind } from '../../shared/board/types'
 import { isReady, projectFromCache } from './read'
-import { afterFailure, afterSuccess, deferredUntil, nextDueAt } from './schedule'
+import { afterFailure, afterSuccess, deferredUntil, dueSources, nextDueAt } from './schedule'
 import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from './sources'
 import type { RefreshOutcome, SourceCache } from './sources'
 
@@ -180,11 +180,17 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     }
 
     for (const entry of readyEntries) {
+      // `dueSources` sorts github last, so a cheap local read due the same
+      // tick as a GitHub call never waits behind it (#80 R2-M1) — forced
+      // sources join the same ordered run, not a separate unordered pass.
+      const entryHealth = ensureHealth(entry.id)
+      const toRun = new Set<SourceKind>(dueSources(entryHealth, now()))
       for (const kind of SOURCE_KINDS) {
-        if (kind === 'sessions') continue
-        if (isDue(kind, entry.id) || isForced(request, kind, entry.id)) {
-          await runRepoSource(entry, kind)
-        }
+        if (kind !== 'sessions' && isForced(request, kind, entry.id)) toRun.add(kind)
+      }
+      const ordered = [...toRun].filter((kind) => kind !== 'sessions').sort((a, b) => (a === 'github' ? 1 : b === 'github' ? -1 : 0))
+      for (const kind of ordered) {
+        await runRepoSource(entry, kind)
       }
     }
   }

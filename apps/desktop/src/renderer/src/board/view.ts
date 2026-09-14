@@ -3,7 +3,7 @@
 // container whose `scrollTop` survives a rebuild, and a rebuild skipped
 // entirely when `boardSignature` is unchanged (Decision 1) — the two things
 // a UI framework would otherwise buy here, at no dependency cost.
-import { boardSignature, projectBoard } from '../../../shared/board/project'
+import { boardSignature, projectBoard, worstHealth } from '../../../shared/board/project'
 import type { BoardSnapshot, GroupBy } from '../../../shared/board/types'
 import type { RepositoryState } from '../../../shared/state/types'
 import type { RepoId } from '../../../shared/repos'
@@ -52,11 +52,16 @@ function buildHeader(state: BoardViewState): HTMLElement {
   top.appendChild(actions)
   header.appendChild(top)
 
-  const firstRepoHealth = state.snapshot?.health[0]
-  if (state.snapshot !== null && firstRepoHealth !== undefined) {
+  const health = state.snapshot?.health ?? []
+  if (state.snapshot !== null && health.length > 0) {
     const strip = document.createElement('div')
     strip.className = 'board-header__freshness'
-    const parts = (['github', 'sessions', 'worktrees', 'denials'] as const).map((kind) => sourceHealthCopy(kind, firstRepoHealth[kind], state.now))
+    // The worst repo per source, not an arbitrary first entry — a slow or
+    // failing repo other than the first must still surface here (#80 R2-L1).
+    const parts = (['github', 'sessions', 'worktrees', 'denials'] as const).map((kind) => {
+      const worst = worstHealth(health, kind)
+      return worst !== null ? sourceHealthCopy(kind, worst, state.now) : null
+    })
     const rateLimit = state.snapshot.state.repositories.find((r): r is Extract<RepositoryState, { ok: true }> => r.ok)?.rateLimit ?? null
     const rateLimitText = rateLimit !== null ? rateLimitCopy(null, rateLimit.remaining, rateLimit.resetAt) : null
     strip.textContent = [...parts, rateLimitText].filter((p): p is string => p !== null).join(' · ')
