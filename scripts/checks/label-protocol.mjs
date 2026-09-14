@@ -141,14 +141,13 @@ export default async function ({ fail, note, ok }) {
     }
   }
 
-  // revise-agent's refresh escalation removes the surviving trigger too
-  // (#225): the additive-only refresh write left a ready-for-review pull
-  // request carrying `ready for review` + `refresh branch` + `needs human`
-  // once escalated — three role-bearing labels at once. Refresh mode's own
+  // --- Refresh escalation removes the surviving trigger too -------------------
+  // guard(#225): a refresh escalation leaving needs human beside a live
+  // trigger — three role-bearing labels at once. The additive-only refresh
+  // write left a ready-for-review pull request carrying `ready for review` +
+  // `refresh branch` + `needs human` once escalated. Refresh mode's own
   // escalation step must name removing <labels.readyForReview> alongside the
   // <labels.refreshing>/<labels.approved> pair it already named.
-  // guard(#225): a refresh escalation leaving `needs human` beside a live
-  // trigger — three role-bearing labels at once.
   {
     const rel = 'plugins/port/agents/revise-agent.md';
     const text = readFileSync(join(root, rel), 'utf8');

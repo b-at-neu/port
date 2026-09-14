@@ -310,11 +310,11 @@ export default async function ({ fail, ok }) {
       fail('branch-rule-classifier', 'switchesBranch: expected true for a chained command joined with &&');
     } else ok();
 
-    // guard(#222): a value-taking global flag like `-c` must not be mistaken
-    // for the git subcommand itself (R3-M1) — this repo's own
-    // shell-discipline block prescribes exactly this idiom (`git -c
-    // core.editor=true rebase --continue`), so a miss here would let a
-    // cockpit session slip a checkout past the rule this ticket adds.
+    // A value-taking global flag like `-c` must not be mistaken for the git
+    // subcommand itself — this repo's own shell-discipline block prescribes
+    // exactly this idiom (`git -c core.editor=true rebase --continue`), so a
+    // miss here would let a cockpit session slip a checkout past the rule
+    // this ticket exists to add (issue 222, R3-M1).
     if (!switchesBranch('git -c core.editor=true checkout evil-branch')) {
       fail('branch-rule-classifier', 'switchesBranch: expected true for "git -c core.editor=true checkout evil-branch"');
     } else ok();
