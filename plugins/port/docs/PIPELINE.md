@@ -238,7 +238,7 @@ Rule: **every stage agent's first action is swapping its trigger label for its i
 | 3. Review | `agents/review-agent.md` | `models.review` | Must catch real problems reliably |
 | 4. Revise | `agents/revise-agent.md` | `models.revise` | Targeted fixes from a structured list |
 
-When `docs.engineering` is set, all four workers read it before working, and `review-agent` treats it as a review dimension. When it is null they work from the plan, the ticket, and the surrounding code.
+When `docs.engineering` is set, all four workers read it before working, and `review-agent` treats it as a review dimension; when `docs.design` is set, the same four read it for interface work and `review-agent` treats it as a review dimension too, with `docs.engineering` winning any genuine overlap (accessibility lives there). When either is null they work from the plan, the ticket, and the surrounding code.
 
 **Stages 2 and 4 have an operator variant.** Some tickets cannot be implemented by a dispatched agent at all, because the harness denies its edits under `sessionRequiredPaths`. Those two stages then run in the operator's own session via `/port:implement` — see "Session-required tickets".
 

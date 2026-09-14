@@ -1,6 +1,6 @@
 ---
 name: analyze
-description: Read this repository and produce a real ENGINEERING.md — conventions inferred from the code, inconsistencies surfaced as decisions, improvements proposed for approval — then recommend stack-relevant plugins from the local, org, and public catalogs. Files findings as tickets rather than fixing them. Sets docs.engineering. Re-runnable as the codebase evolves. Manual only. Usage: /port:analyze
+description: Read this repository and produce a real ENGINEERING.md — conventions inferred from the code, inconsistencies surfaced as decisions, improvements proposed for approval — and a DESIGN.md when the repository has a real interface, then recommend stack-relevant plugins from the local, org, and public catalogs. Files findings as tickets rather than fixing them. Sets docs.engineering and docs.design. Re-runnable as the codebase evolves. Manual only. Usage: /port:analyze
 disable-model-invocation: true
 allowed-tools: Read, Grep, Glob, Write, Edit, AskUserQuestion, WebSearch, WebFetch, SearchPlugins, Bash(git log *) Bash(git ls-files *) Bash(git diff *) Bash(git rev-parse *) Bash(gh issue create *) Bash(claude plugin list *) Bash(claude plugin install *) Bash(claude plugin marketplace list *) Bash(claude plugin marketplace add *) Bash(claude plugin marketplace update *)
 ---
@@ -15,17 +15,17 @@ allowed-tools: Read, Grep, Glob, Write, Edit, AskUserQuestion, WebSearch, WebFet
 
 ## You do not change code. Ever.
 
-**The only two files you may write are the engineering document and `.claude/port.config.json`.** Everything else in the repository is read-only to you, however obvious a fix looks and however small.
+**The only three files you may write are the engineering document, the design document, and `.claude/port.config.json`.** Everything else in the repository is read-only to you, however obvious a fix looks and however small.
 
 This is not merely scope. A fix made here has no plan, no review, no pull request, and no approval gate — it bypasses the entire mechanism the pipeline exists to provide. This skill is the one part of the system that runs *outside* the pipeline, which makes it exactly the wrong place to change code. When you find something worth fixing, it becomes a ticket in step 7, and the pipeline does it properly.
 
-You hold `Write` and `Edit` because the two files above need them. That means this restriction is an **instruction, not an enforcement** — the tools cannot be scoped to a path that is itself configurable. Follow it as a rule, the same way the stage agents follow "write files with the tools" as a convention rather than a guarantee.
+You hold `Write` and `Edit` because the three files above need them. That means this restriction is an **instruction, not an enforcement** — the tools cannot be scoped to a path that is itself configurable. Follow it as a rule, the same way the stage agents follow "write files with the tools" as a convention rather than a guarantee.
 
 ## Read the configuration first
 
-Read `.claude/port.config.json` for `repo`, `docs.engineering`, `branches.integration`, and `commands`. If it is missing, stop — this repository is not port-managed, and `/port:init` comes first.
+Read `.claude/port.config.json` for `repo`, `docs.engineering`, `docs.design`, `branches.integration`, and `commands`. If it is missing, stop — this repository is not port-managed, and `/port:init` comes first.
 
-If `docs.engineering` is already set and that file exists, this is a **re-run**: see "Re-running" at the end before doing anything else.
+If `docs.engineering` or `docs.design` is already set and that file exists, this is a **re-run**: see "Re-running" at the end before doing anything else.
 
 **Also note the current branch** (`git rev-parse --abbrev-ref HEAD`) against `branches.integration` — step 6 reuses it to caveat a project-scope install made off that branch.
 
@@ -38,6 +38,7 @@ Reading everything does not scale and is not necessary. Sample for *structure an
 - **Data access and schema**, wherever persistence is defined.
 - **The authorization boundary** — where a request is authenticated and how access is scoped.
 - **Configuration that already encodes rules** — linter, formatter, type-checker, and build config. A rule enforced by tooling is already settled; do not re-litigate it, but *do* record it.
+- **Interface evidence** — the manifest's UI framework or renderer dependency, component/template/view files, stylesheets, and any **declared token source** (a Tailwind config, a theme file, token JSON, CSS custom properties, a component library's theme). Same scoped-Grep-and-Glob rule; never descend build output.
 - **Tests**, to infer what is actually tested and at what level.
 - **History** — `git log --oneline -100` and the files that churn most. What keeps being changed is what keeps being got wrong.
 
@@ -45,11 +46,36 @@ Use Grep and Glob scoped to source directories. **Never descend dependency or bu
 
 Where `commands.checks` is non-empty, read what those commands enforce. A standard already checked by CI belongs in the document as an observed rule, not a proposal.
 
+**Classify the interface — three ways, never as a boolean** — `none`, `thin`, or `real` — from the evidence just gathered, and **report the evidence with the classification** so the operator can overrule it:
+
+- **`none`** — no UI framework in the manifest, no component or template files, no stylesheets. Report it, no question asked, and move on: no design document, and `docs.design` stays null — one for a library or a CLI would be padding, and review would cite it anyway.
+
+  > No user interface here: no UI framework in the manifest, no component or template files, no stylesheets. So no design document, and `docs.design` stays null — one for a library or a CLI would be padding, and review would cite it anyway.
+
+- **`thin`** — some interface, but real rules would be sparse (a handful of component files, little or no stylesheet, no declared token source). Present the evidence with an honest recommendation to skip, then ask via `AskUserQuestion` (header `Design document`):
+
+  > Some interface, but thin: `<n>` component files, `<n>` lines of stylesheet, no declared token source. I could write a design document, but I have three or four real rules and would be padding the rest — and review cites every heading in it.
+
+  - `Skip it` *(recommended)* — "`docs.design` stays null. Run `/port:analyze` again when the interface grows."
+  - `Write it anyway` — "Only what is real goes in; expect a short document with sections omitted."
+
+  Declining follows the same path as `none`.
+
+- **`real`** — a genuine interface with enough surface to document. Proceed to the design phase (step 5.5) alongside the engineering phase, reading the token sources as values rather than inferring them.
+
+  > Real interface: `<framework>`, `<n>` component files, tokens declared in `<path>`. I will read the token sources as values rather than infer them, and put anything inconsistent to you as a decision.
+
+  An **undeclared-but-consistent palette or scale** is flagged the same way any inconsistency is, in step 3 — for example:
+
+  > `<value>`, `<value>`, and `<value>` recur across `<file>` and `<file>`, and no custom property declares any of them. I can record them as **observed** — those are the values, cited to those files. Giving them names is a **proposal**, and only goes in if you approve it.
+
 ## 2. Build the rule set — three tiers, always visible
 
 Every candidate rule is exactly one of these, and the tier determines what happens to it:
 
 **Observed** — the code does this consistently. State it as the rule and **cite the files it was inferred from**. Evidence is what makes the document reviewable; an uncited assertion cannot be checked, and a reader has to take your word that the codebase does what you claim.
+
+For design rules specifically, "observed" has **two shapes**, and both are cited to a file rather than inferred: a **declared** token — quote the value and cite the file that declares it (a Tailwind config, a theme file, a CSS custom property) — and an **undeclared but consistent** value — a literal that recurs across files with nothing naming it, quoted and cited to every file it recurs in, **without inventing a name for it**. "Introduce a token layer so these have names" is a **proposed** rule, approved individually like any other — design tokens are not always declared, and the undeclared-but-consistent shape is not an edge case.
 
 **Flagged** — the code does this *inconsistently*. **Never pick silently.** Record both patterns with their prevalence, and put the choice to the operator in step 3. An inconsistency resolved by coin-flip becomes a rule that review then enforces against half the codebase.
 
@@ -90,6 +116,20 @@ Write it for the reader it actually has: a stage agent about to make a change, a
 **Section 8, the pre-pull-request self-check, is the highest-value part of the document.** It is what implementation builds toward, what revision must not reintroduce, and what review uses as its dimensions. It must be derived from what actually recurs in *this* repository — the churn from step 1, what the linter keeps catching, what the existing document already warns about. **A generic checklist here is the main way this skill fails while appearing to succeed:** the document looks complete, and adds nothing.
 
 Then set `docs.engineering` in `.claude/port.config.json` to the written path.
+
+## 5.5. Write the design document — a separate phase, not folded into step 5
+
+**Only when step 1 classified the interface `real`, or `thin` and the operator chose "Write it anyway."** Skip this step entirely on `none`, or a declined `thin` — no design document, `docs.design` stays null, and step 8's report says so plainly. Keeping this its own phase, after the engineering document is already written, means abandoning here leaves the approved engineering document untouched:
+
+> Nothing written, `docs.design` still null. The engineering document you approved earlier is untouched.
+
+Build the design rule set the same way step 2 and step 3 built the engineering one — three tiers, an existing document integrated if one exists, open questions (including any undeclared-but-consistent palette or scale) put to the operator via `AskUserQuestion`. Then, mirroring step 4's guarantee, **present the whole design document for approval before writing anything**:
+
+> Here is the complete design document, before anything is written. Every rule is tagged observed / flagged-and-decided / proposed-and-approved, and every observed value quotes its literal and cites the file it came from. `docs.design` is still null, and stays null unless you approve this.
+
+Only once approved, write it — follow the section structure in `${CLAUDE_PLUGIN_ROOT}/templates/DESIGN.template.md`, the same "omit sections you have nothing true to say about" rule as step 5. **Section 7, the agent quick reference, is required, not optional** — the same reason `ENGINEERING.template.md`'s own §8 is required: it is what `plan-agent` reads to design a state and what `review-agent` cites, and a generic one is the main way this phase fails while looking complete.
+
+Then set `docs.design` in `.claude/port.config.json` to the written path.
 
 ## 6. Recommend plugins for this stack
 
@@ -162,18 +202,21 @@ gh issue create --repo <repo> --title "<title>" --body-file .temp/finding-<n>.md
 ## 8. Report
 
 - The document written, and which sections were omitted for lack of anything true to say.
-- Counts by tier: observed, flagged-and-decided, proposals accepted and dropped.
+- Counts by tier: observed, flagged-and-decided, proposals accepted and dropped — for the engineering document, and separately for the design document when one was written.
 - Existing rules carried forward, and any replaced with what and why.
 - Roughly what was sampled, so coverage is judgeable.
+- The interface classification (`none` / `thin` / `real`) and its evidence, and whether `docs.design` was set or deliberately left null — the skip is reported, never silent.
 - Plugins installed and skipped, the scope each landed at, the **cumulative always-on token cost** of the set (from `claude plugin details`), and that a project-scope install is a **committed** change to `.claude/settings.json` that teammates inherit.
-- `docs.engineering` now set — and that review will cite this document from the next cycle onward.
+- `docs.engineering` now set — and that review will cite this document from the next cycle onward. Same for `docs.design`, when set: `docs.design` set to `<path>` — from the next cycle onward, plan designs interface work against it, implement builds to it, and review cites it as a dimension.
 
-If the operator abandons the run, **write nothing and leave `docs.engineering` as it was.** A half-approved document is worse than none, because the unapproved half is indistinguishable from the approved half once written.
+If the operator abandons the run, **write nothing and leave `docs.engineering` and `docs.design` as they were.** A half-approved document is worse than none, because the unapproved half is indistinguishable from the approved half once written.
 
 ## Re-running
 
 The codebase evolves, so this is not one-shot. On a re-run:
 
-**Diff against the existing document; do not regenerate from scratch.** Every rule in it was either observed or explicitly approved, and a regenerate-every-time skill silently discards decisions the operator already made — the exact failure the approval step exists to prevent.
+**Diff against the existing document; do not regenerate from scratch.** Every rule in it was either observed or explicitly approved, and a regenerate-every-time skill silently discards decisions the operator already made — the exact failure the approval step exists to prevent. **A design document, if one exists, is diffed the same way** — re-derive it from scratch and every approved decision is lost.
 
 Present only what changed: rules the code no longer follows, new conventions that have emerged, and proposals now worth revisiting. Leave everything else untouched, including wording.
+
+**Re-classify the interface on every re-run**, even when `docs.design` is null. A repository that has grown a real interface since the last run — or the last decline — is offered the design document it previously skipped, using the same `none`/`thin`/`real` decision as step 1.

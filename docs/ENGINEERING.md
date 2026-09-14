@@ -60,6 +60,8 @@ This is **this repository's own** standards document, not a template — `plugin
 | The `standards-precedence` block ↔ its copies in the four agent files — compared pairwise, same "no `PIPELINE.md` canonical copy until #181 frees the headroom" carve-out as `label-cas` | `standards` (`scripts/checks/standards.mjs`) |
 | `shared/writes/types.ts`'s `Conflict` union ↔ `docs/COORDINATION.md`'s fenced `type Conflict` block — kind literals and field-name sets, both directions, not byte-identity (the doc's fence omits the `readonly` modifiers this app's style requires) | `desktop-writes` |
 | `main/writes/scope.ts`'s `PLAN_GATE_KEYS` ↔ `docs/COORDINATION.md`'s claim-contract keys, both directions | `desktop-writes` |
+| The `ENGINEERING.md`/`DESIGN.md` boundary statement (accessibility's single home) ↔ its copy in `templates/ENGINEERING.template.md` and `templates/DESIGN.template.md` — both directions, plus `DESIGN.template.md` carrying no Accessibility heading of its own | `standards` (`scripts/checks/standards.mjs`) |
+| `docs.design`'s presence in the `standards-precedence` block ↔ its copies in the four agent files, and every agent naming `docs.engineering` also naming `docs.design` (and vice versa) | `standards` (`scripts/checks/standards.mjs`) |
 
 **If a change introduces a further copy of anything, it introduces its pin in the same commit.** A comment asking a future reader to remember is not a pin.
 

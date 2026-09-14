@@ -96,7 +96,7 @@ Write the message to a file and `git commit -F <file>` rather than using inline 
 
 Read §8, the pre-pull-request self-check, before opening one. The short version, unchanged from what this section said before the document existed: small focused files, no dead scaffolding or transitional shims, comments only where a fluent reader would still get it wrong, and no placeholder content committed in anticipation of a later ticket.
 
-It is deliberately **not** shipped — it is this repository's own bar, not the plugin's. `plugins/port/templates/ENGINEERING.template.md` is the skeleton `/port:init` installs into an adopting repository, and `/port:analyze` is what fills one in from a codebase.
+It is deliberately **not** shipped — it is this repository's own bar, not the plugin's. `plugins/port/templates/ENGINEERING.template.md` is the skeleton `/port:init` installs into an adopting repository, alongside `plugins/port/templates/DESIGN.template.md` for a repository with a real interface, and `/port:analyze` is what fills either in from a codebase.
 
 ## Working on the desktop app
 

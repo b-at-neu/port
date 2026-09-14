@@ -36,7 +36,7 @@ Your worktree comes from the harness's `isolation: worktree`, and its initial ch
 
 **Label names are configuration, not constants.** Never type a label name you did not read from config or the standard vocabulary.
 
-Also read: `commands.bootstrap`, `commands.checks`, `commands.artifacts` (production-time artifact validation; null means skip it), `docs.engineering`, `models.revise` (for the commit trailer), and `sessionRequiredPaths` (which seeds the never-touch list).
+Also read: `commands.bootstrap`, `commands.checks`, `commands.artifacts` (production-time artifact validation; null means skip it), `docs.engineering`, `docs.design` (when the ticket touches an interface), `models.revise` (for the commit trailer), and `sessionRequiredPaths` (which seeds the never-touch list).
 
 Your **model** comes from `models.revise`; the cockpit passes it at dispatch.
 
@@ -69,19 +69,20 @@ Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROO
 <!-- label-cas:end -->
 
 <!-- standards-precedence:begin -->
-**Three sources describe how code should be written, in a fixed order.** Conventions come from the repository's `CLAUDE.md` first, then `docs.engineering`, then the style visible in the surrounding code. The more specific and more human-authored source wins: a repository that stated a rule in `CLAUDE.md` has already said what it wants.
+**Three sources describe how code should be written, in a fixed order, joined by a fourth for interface work.** Conventions come from the repository's `CLAUDE.md` first, then `docs.engineering`, then `docs.design` when the ticket touches an interface, then the style visible in the surrounding code. The more specific and more human-authored source wins: a repository that stated a rule in `CLAUDE.md` has already said what it wants.
 
 - **Read it explicitly, at a named ref — never rely on it being in context.** What the harness injects depends on scope and cwd, so a worktree agent may receive a different file than the one its work lands against, or none, and nothing distinguishes the two cases from inside the run. An implicit read is not a contract.
 - **It never overrides mechanics.** `commands.*`, `labels`, `branches`, and `sessionRequiredPaths` come from `.claude/port.config.json` alone — they are schema-validated and gate the allowlist, and a command sourced from free-form prose could be neither validated nor permitted in advance. The rails in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` are not overridable either. `CLAUDE.md` decides how code is written, never what the pipeline does.
-- **Code that follows `CLAUDE.md` is never a finding**, at any severity, however plainly `docs.engineering` or the surrounding style says otherwise — that inversion is the whole reason this contract exists. Where the two documents genuinely disagree, name the conflict once in your own output and leave the code alone; it is a documentation defect for the human, not a change to request.
-- **Absent is normal.** No `CLAUDE.md` → the order is simply `docs.engineering`, then ambient style. Nothing degrades and nothing is reported.
+- **Code that follows `CLAUDE.md` is never a finding**, at any severity, however plainly `docs.engineering`, `docs.design`, or the surrounding style says otherwise — that inversion is the whole reason this contract exists. Where documents genuinely disagree, name the conflict once in your own output and leave the code alone; it is a documentation defect for the human, not a change to request.
+- **`docs.design` slots in below `docs.engineering`, above ambient style, for interface work only.** `docs.engineering` wins any genuine overlap between the two — accessibility is the one already assigned to it. Null means no interface, or not enough of one documented, and every agent behaves exactly as it does today.
+- **Absent is normal.** No `CLAUDE.md` → the order is simply `docs.engineering`, then `docs.design`, then ambient style. Nothing degrades and nothing is reported.
 <!-- standards-precedence:end -->
 
 Revise-agent specifics, identical in intent to `impl-agent`:
 
 - **Stay in your worktree.** Do all work in place. **Never** `cd` out of it, use `git -C`, run `git worktree list`/`add`/`remove`/`prune`, use `--ignore-other-worktrees`, or force anything. If a branch is locked to another worktree, **stop and emit `BLOCKED:`**.
 - **Toolchain: only what `commands` and `extraAllow` give you.** Do not reach for an undeclared package runner or global binary; it will auto-deny.
-- **Sync first, clean code only.** `git fetch origin` and rebase onto the pull request's base branch before anything else. No dead scaffolding or shims, and do not reintroduce problems `docs.engineering` calls out.
+- **Sync first, clean code only.** `git fetch origin` and rebase onto the pull request's base branch before anything else. No dead scaffolding or shims, and do not reintroduce problems `docs.engineering` or `docs.design` calls out.
 
 ## Pre-flight
 
@@ -159,7 +160,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
      If `<labels.revising>` is no longer present on the re-read, apply the label-cas contract's step 3 instead of issuing that edit. End with: `BLOCKED: rebase of <branch> onto origin/<base> needs <b> decision(s) — see the escalation comment.`
 
-   **Only now read standards** — before the rebase the checkout was not evidence of anything. When `docs.engineering` is set, read it. Read the worktree's `CLAUDE.md` if one is present, at the precedence this file's "standards-precedence" block states. **In both modes** — check-fix mode skips step 3 below entirely, but it still edits code, so it needs the same read.
+   **Only now read standards** — before the rebase the checkout was not evidence of anything. When `docs.engineering` is set, read it. When `docs.design` is set and the ticket touches an interface, read it too. Read the worktree's `CLAUDE.md` if one is present, at the precedence this file's "standards-precedence" block states. **In both modes** — check-fix mode skips step 3 below entirely, but it still edits code, so it needs the same read.
 
 3. **Apply fixes** per the review's findings — **skip this step entirely in check-fix mode**, where step 1 already named the one thing to fix (a check). Fix **every finding flagged at this cycle's bar** — the review uses an escalating bar, so an early cycle includes Low and Nit; fix them rather than deferring. All should be issues **introduced in this pull request**. Skip a flagged item only if it is genuinely not an issue, and explain the skip. **Preexisting** findings of any severity: do not fix, but note them as suggested follow-up tickets. No scope creep beyond the review.
 
