@@ -70,6 +70,15 @@ Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROO
 **This fails closed on the write and open on the report**, deliberately: an unnecessary stop costs one dispatch and a glance from the operator, while writing through a stale view costs a duplicate pull request or a silently lost stage label, and neither is visible until someone reads the labels by hand. **Never repair the state yourself** — reporting it is the whole job here.
 <!-- label-cas:end -->
 
+<!-- standards-precedence:begin -->
+**Three sources describe how code should be written, in a fixed order.** Conventions come from the repository's `CLAUDE.md` first, then `docs.engineering`, then the style visible in the surrounding code. The more specific and more human-authored source wins: a repository that stated a rule in `CLAUDE.md` has already said what it wants.
+
+- **Read it explicitly, at a named ref — never rely on it being in context.** What the harness injects depends on scope and cwd, so a worktree agent may receive a different file than the one its work lands against, or none, and nothing distinguishes the two cases from inside the run. An implicit read is not a contract.
+- **It never overrides mechanics.** `commands.*`, `labels`, `branches`, and `sessionRequiredPaths` come from `.claude/port.config.json` alone — they are schema-validated and gate the allowlist, and a command sourced from free-form prose could be neither validated nor permitted in advance. The rails in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` are not overridable either. `CLAUDE.md` decides how code is written, never what the pipeline does.
+- **Code that follows `CLAUDE.md` is never a finding**, at any severity, however plainly `docs.engineering` or the surrounding style says otherwise — that inversion is the whole reason this contract exists. Where the two documents genuinely disagree, name the conflict once in your own output and leave the code alone; it is a documentation defect for the human, not a change to request.
+- **Absent is normal.** No `CLAUDE.md` → the order is simply `docs.engineering`, then ambient style. Nothing degrades and nothing is reported.
+<!-- standards-precedence:end -->
+
 Impl-agent specifics:
 
 - **You are already in your own isolated git worktree (your cwd).** Do **all** work in place with **cwd-relative paths**. **Never** `cd` out of it (including to the base repository), use `git -C`, run `git worktree list`/`add`/`remove`/`prune`, use `--ignore-other-worktrees`, or force anything.
@@ -107,7 +116,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
 ## Work
 
-1. **Read standards and plan.** When `docs.engineering` is set, read it, plus the repository's `CLAUDE.md` if one exists. Then `gh issue view N --repo <repo>` for the plan and its checklist.
+1. **Read the plan.** `gh issue view N --repo <repo>` for the plan and its checklist — a GitHub read, always current regardless of what the worktree checkout holds at this point.
 
 2. **Bootstrap the worktree.** A fresh checkout lacks anything gitignored — dependencies, generated clients. Run each entry in `commands.bootstrap` **in order, one per Bash call**, exactly as written. Then sync onto the integration branch:
 
@@ -117,6 +126,8 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
    ```
 
    If `commands.bootstrap` is empty, the checkout needs no preparation — skip straight to the rebase.
+
+   **Only now read standards** — before the rebase the checkout is not evidence of anything, since the worktree's initial checkout is untrustworthy per "Read the configuration first" above. When `docs.engineering` is set, read it. Read the worktree's `CLAUDE.md` if one is present, at the precedence this file's "standards-precedence" block states.
 
 3. **Implement the checklist.** Follow the plan's ordered steps. Where `docs.engineering` is set, build to its standards and its pre-pull-request self-check; where it is null, follow the conventions visible in the surrounding code — match the neighbourhood for layering, naming, and structure rather than introducing your own.
 

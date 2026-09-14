@@ -59,6 +59,15 @@ Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROO
 **This fails closed on the write and open on the report**, deliberately: an unnecessary stop costs one dispatch and a glance from the operator, while writing through a stale view costs a duplicate pull request or a silently lost stage label, and neither is visible until someone reads the labels by hand. **Never repair the state yourself** — reporting it is the whole job here.
 <!-- label-cas:end -->
 
+<!-- standards-precedence:begin -->
+**Three sources describe how code should be written, in a fixed order.** Conventions come from the repository's `CLAUDE.md` first, then `docs.engineering`, then the style visible in the surrounding code. The more specific and more human-authored source wins: a repository that stated a rule in `CLAUDE.md` has already said what it wants.
+
+- **Read it explicitly, at a named ref — never rely on it being in context.** What the harness injects depends on scope and cwd, so a worktree agent may receive a different file than the one its work lands against, or none, and nothing distinguishes the two cases from inside the run. An implicit read is not a contract.
+- **It never overrides mechanics.** `commands.*`, `labels`, `branches`, and `sessionRequiredPaths` come from `.claude/port.config.json` alone — they are schema-validated and gate the allowlist, and a command sourced from free-form prose could be neither validated nor permitted in advance. The rails in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` are not overridable either. `CLAUDE.md` decides how code is written, never what the pipeline does.
+- **Code that follows `CLAUDE.md` is never a finding**, at any severity, however plainly `docs.engineering` or the surrounding style says otherwise — that inversion is the whole reason this contract exists. Where the two documents genuinely disagree, name the conflict once in your own output and leave the code alone; it is a documentation defect for the human, not a change to request.
+- **Absent is normal.** No `CLAUDE.md` → the order is simply `docs.engineering`, then ambient style. Nothing degrades and nothing is reported.
+<!-- standards-precedence:end -->
+
 Plan-agent specifics:
 
 - **Read-only on source.** You research the code and write only the issue body (Write `.temp/plan-N.md`, then `gh issue edit --body-file`); never edit source. Glob may include configuration and harness directories when researching.
@@ -88,7 +97,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
 ## Work
 
-1. **Read the standards.** When `docs.engineering` is set, read it — plans must account for its requirements per feature, and review will cite it. When it is null, work from the ticket and the conventions visible in the surrounding code. Read the repository's `CLAUDE.md` if one exists.
+1. **Read the standards.** When `docs.engineering` is set, read it — plans must account for its requirements per feature, and review will cite it. When it is null, work from the ticket and the conventions visible in the surrounding code. Read the repository's `CLAUDE.md` if one exists, at the precedence this file's "standards-precedence" block states. If `CLAUDE.md` genuinely disagrees with `docs.engineering` or the ambient style on a convention this ticket touches, name the conflict once in `## Risks / notes` — never resolve it in the plan's favour; `CLAUDE.md` wins regardless.
 2. **Read full issue context:** `gh issue view N --repo <repo>` and `gh issue view N --repo <repo> --comments`. In **revision mode** the body already holds a plan; the human comments after it are the change requests — revise precisely, and do not restart unless asked.
 3. **Research the codebase.** Read every file the issue references, identify all files to create or modify, and trace downstream consumers.
    - **Scope against linked tickets.** Read the linked issues' descriptions — the parent epic, sibling sub-issues, and direct blockers — to set scope boundaries: cover **exactly this ticket's slice**, without duplicating a sibling's responsibility or re-implementing a dependency. Note that the GraphQL query takes owner and name **separately**, unlike every other call here:
