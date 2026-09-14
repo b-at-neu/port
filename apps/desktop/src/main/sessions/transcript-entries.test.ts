@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { capPayload, deriveEntries, headlineFor, sanitize } from './transcript-entries'
+import { capPayload, createDeriver, deriveEntries, headlineFor, sanitize } from './transcript-entries'
 
 function toolUseRecord(uuid: string, id: string, name: string, input: unknown): unknown {
   return {
@@ -156,6 +156,53 @@ describe('deriveEntries', () => {
   it('skips a record with no recognizable shape rather than throwing', () => {
     const entries = deriveEntries([null, 42, 'a string', {}, { uuid: 'u1' }])
     expect(entries).toEqual([])
+  })
+})
+
+describe('createDeriver', () => {
+  it('pairs a tool_use from one push with a tool_result from a later push', () => {
+    const deriver = createDeriver()
+    const first = deriver.push([toolUseRecord('u1', 'toolu_1', 'Bash', { command: 'echo hi' })])
+    expect(first.appended).toHaveLength(1)
+    expect(first.patched).toHaveLength(0)
+    expect(first.appended[0]).toMatchObject({ type: 'tool-call', result: null })
+
+    const second = deriver.push([toolResultRecord('u2', 'toolu_1', 'hi', false)])
+    expect(second.appended).toHaveLength(0)
+    expect(second.patched).toHaveLength(1)
+    expect(second.patched[0]?.index).toBe(0)
+    expect(second.patched[0]?.entry).toMatchObject({ type: 'tool-call', result: { isError: false, payload: { text: 'hi', omittedChars: 0 } } })
+  })
+
+  it('reports the absolute index across pushes, not one relative to the patching chunk', () => {
+    const deriver = createDeriver()
+    deriver.push([
+      { uuid: 'u0', timestamp: '2026-01-01T00:00:00.000Z', type: 'user', message: { role: 'user', content: 'preamble' } },
+      toolUseRecord('u1', 'toolu_1', 'Bash', { command: 'echo hi' }),
+    ])
+    const patch = deriver.push([toolResultRecord('u2', 'toolu_1', 'hi', false)])
+    expect(patch.patched[0]?.index).toBe(1)
+  })
+
+  it('pairs a tool call once -- a duplicate tool_result is a no-op, never overwriting the real diff', () => {
+    const deriver = createDeriver()
+    deriver.push([toolUseRecord('u1', 'toolu_1', 'Bash', { command: 'echo hi' })])
+    const first = deriver.push([toolResultRecord('u2', 'toolu_1', 'hi', false)])
+    expect(first.patched).toHaveLength(1)
+
+    const duplicate = deriver.push([toolResultRecord('u3', 'toolu_1', 'hi again', true)])
+    expect(duplicate.appended).toHaveLength(0)
+    expect(duplicate.patched).toHaveLength(0)
+  })
+
+  it('still pairs a tool_use and tool_result delivered in the same push, matching deriveEntries', () => {
+    const records = [toolUseRecord('u1', 'toolu_1', 'Bash', { command: 'echo hi' }), toolResultRecord('u2', 'toolu_1', 'hi', false)]
+    const deriver = createDeriver()
+    const chunk = deriver.push(records)
+    expect(chunk.appended).toHaveLength(1)
+    expect(chunk.patched).toHaveLength(1)
+    expect(chunk.patched[0]?.index).toBe(0)
+    expect(deriveEntries(records)).toHaveLength(1)
   })
 })
 
