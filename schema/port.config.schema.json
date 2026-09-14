@@ -119,7 +119,7 @@
         },
         "design": {
           "type": ["string", "null"],
-          "description": "Path to the design standards plan-agent, impl-agent, and review-agent read for interface work, with review treating it as a review dimension. Null means the repository has no interface, or not enough of one to document — the agents fall back to the plan and the surrounding code.",
+          "description": "Path to the design standards plan-agent, impl-agent, review-agent, and revise-agent read for interface work, with review treating it as a review dimension. Null means the repository has no interface, or not enough of one to document — the agents fall back to the plan and the surrounding code.",
           "default": null,
           "examples": [".claude/docs/DESIGN.md"]
         }
