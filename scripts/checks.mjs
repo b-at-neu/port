@@ -36,6 +36,7 @@ import desktopRenderer from './checks/desktop-renderer.mjs';
 import desktopLocal from './checks/desktop-local.mjs';
 import desktopReclaimer from './checks/desktop-reclaimer.mjs';
 import desktopState from './checks/desktop-state.mjs';
+import desktopWrites from './checks/desktop-writes.mjs';
 import fileSize from './checks/file-size.mjs';
 import tick from './checks/tick.mjs';
 
@@ -66,6 +67,7 @@ for (const module of [
   desktopLocal,
   desktopReclaimer,
   desktopState,
+  desktopWrites,
   fileSize,
   tick,
 ]) {
