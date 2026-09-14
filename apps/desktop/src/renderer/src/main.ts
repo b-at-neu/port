@@ -1,5 +1,6 @@
 import './index.css'
 import './transcript.css'
+import './board.css'
 import type { AppInfo } from '../../shared/ipc'
 import type { RepoId, RepositoryEntry } from '../../shared/repos'
 import type { BoardSnapshot, GroupBy } from '../../shared/board/types'
