@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { resolveVocabulary } from '../../shared/labels/vocabulary'
 import type { PipelineFetch, PipelineItem } from '../../shared/github/types'
 import type { RepositoryEntry } from '../../shared/repos'
-import type { WorktreesRead } from '../../shared/local/types'
+import type { WorktreeEntry, WorktreesRead } from '../../shared/local/types'
 import type { AgentRecord, SessionRecord } from '../../shared/sessions/types'
 import { reconcileRepository, type RepoSessionSlice } from './reconcile'
 
@@ -60,8 +60,28 @@ function fetchOf(items: readonly PipelineItem[]): PipelineFetch {
   }
 }
 
-function worktreesOf(): WorktreesRead {
-  return { ok: true, mainPath: '/repo', entries: [], subjectsAvailable: true, readAt: '2026-01-01T00:00:00Z' }
+function worktreesOf(entries: readonly WorktreeEntry[] = []): WorktreesRead {
+  return { ok: true, mainPath: '/repo', entries, subjectsAvailable: true, readAt: '2026-01-01T00:00:00Z' }
+}
+
+function worktreeEntry(overrides: Partial<WorktreeEntry> = {}): WorktreeEntry {
+  return {
+    path: '/repo/.claude/worktrees/agent-1',
+    isMain: false,
+    branch: '79-a-ticket',
+    head: 'abc123',
+    detached: false,
+    bare: false,
+    locked: false,
+    lockReason: null,
+    prunable: false,
+    prunableReason: null,
+    producer: 'dispatched',
+    insideMain: true,
+    correlation: { number: 79, rung: 'branch-name' },
+    unresolved: null,
+    ...overrides,
+  }
 }
 
 function denialsOf() {
@@ -251,6 +271,26 @@ describe('reconcileRepository — pass-through fields', () => {
     })
     if (!state.ok) throw new Error('unreachable')
     expect(state.vocabulary).toEqual(report)
+  })
+})
+
+describe('reconcileRepository — worktreeTotals (#80 Decision 6)', () => {
+  it('null, never 0, when the worktree read itself failed', () => {
+    const state = reconcile([item()], { worktrees: { ok: false, kind: 'not-found', message: 'no git', readAt: '2026-01-01T00:00:00Z' } })
+    if (!state.ok) throw new Error('unreachable')
+    expect(state.worktreeTotals).toBeNull()
+  })
+
+  it('registered counts every entry, attached counts what reached an item, uncorrelated counts the unresolved rung', () => {
+    const state = reconcile([item({ number: 79 })], {
+      worktrees: worktreesOf([
+        worktreeEntry({ path: '/w/1', correlation: { number: 79, rung: 'branch-name' } }),
+        worktreeEntry({ path: '/w/2', correlation: { number: 999, rung: 'branch-name' } }), // correlates to an orphan, not this item
+        worktreeEntry({ path: '/w/3', correlation: null, unresolved: 'no-rung-matched' }),
+      ]),
+    })
+    if (!state.ok) throw new Error('unreachable')
+    expect(state.worktreeTotals).toEqual({ registered: 3, attached: 1, uncorrelated: 1 })
   })
 })
 

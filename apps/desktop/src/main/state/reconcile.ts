@@ -200,6 +200,14 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     .filter((w): w is WorktreeEntry & { unresolved: UnresolvedReason } => w.unresolved !== null)
     .map((w) => ({ path: w.path, reason: w.unresolved }))
 
+  // #80 Decision 6 — null, never 0, when the read itself failed; otherwise
+  // registered is every entry, attached is what actually reached an item
+  // (never the correlated-to-an-orphan residue, which is exactly the gap
+  // this field exists to surface), uncorrelated is the unresolved rung.
+  const worktreeTotals = worktrees.ok
+    ? { registered: worktreeEntries.length, attached: items.reduce((sum, item) => sum + item.worktrees.length, 0), uncorrelated: uncorrelatedWorktrees.length }
+    : null
+
   return {
     ok: true,
     repoId,
@@ -221,5 +229,6 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
       worktrees: worktreesFreshness(worktrees),
       denials: denialsFreshness(denials),
     },
+    worktreeTotals,
   }
 }

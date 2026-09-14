@@ -3,6 +3,7 @@ import type { RepoId, RepositoryEntry } from './repos'
 import type { WorktreesReport } from './reclaimer/types'
 import type { SessionScan } from './sessions/types'
 import type { TranscriptRead } from './sessions/transcript'
+import type { BoardSnapshot, SourceKind } from './board/types'
 
 export interface AppInfo {
   app: string
@@ -59,11 +60,42 @@ export interface IpcMap {
     request: { sessionId: string; agentId: string | null }
     response: TranscriptRead
   }
+  /** The board's initial paint — one invoke, no polling of its own; every
+   *  later update arrives over the `board:update` event instead (#80). */
+  'board:snapshot': {
+    request: void
+    response: BoardSnapshot
+  }
+  /** `repoId`/`source` both optional — omitting either widens the force to
+   *  every repository or every source; the watcher's own in-flight guard is
+   *  what stops a held button from stacking round trips. */
+  'board:refresh': {
+    request: { repoId?: RepoId; source?: SourceKind }
+    response: BoardSnapshot
+  }
 }
 
-export const IPC_CHANNELS = ['app:info', 'repos:list', 'repos:add', 'repos:remove', 'worktrees:report', 'sessions:scan', 'transcript:read'] as const
+export const IPC_CHANNELS = ['app:info', 'repos:list', 'repos:add', 'repos:remove', 'worktrees:report', 'sessions:scan', 'transcript:read', 'board:snapshot', 'board:refresh'] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]
 
 // Fails to compile if IPC_CHANNELS and IpcMap's keys drift apart.
 export const _channelsMatchIpcMap: AssertEqual<IpcChannel, keyof IpcMap> = true
+
+/**
+ * The main → renderer push direction — a second `as const` list with its own
+ * `IpcEventMap` and its own `AssertEqual` pin, beside `IPC_CHANNELS` above,
+ * exactly the compile-time contract that list already carries: an event
+ * added to one and not the other fails `pnpm typecheck` (#80). The listener
+ * receives the payload only, never the Electron event object, which would
+ * hand `sender` to a sandboxed renderer.
+ */
+export interface IpcEventMap {
+  'board:update': BoardSnapshot
+}
+
+export const IPC_EVENTS = ['board:update'] as const
+
+export type IpcEvent = (typeof IPC_EVENTS)[number]
+
+export const _eventsMatchIpcEventMap: AssertEqual<IpcEvent, keyof IpcEventMap> = true

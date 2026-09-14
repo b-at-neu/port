@@ -1,19 +1,19 @@
-// readPipelineState — the cross-repo I/O orchestrator (#79). It composes
-// #74's registry, #76's GitHub reader, #77's local reader, and #78's session
-// reader, and adds nothing they already own: no config read, no second `gh`
-// caller, no worktree enumeration, no transcript parsing. Every seam is
-// injectable, so `read.test.ts` needs no `gh`, no `git`, and no Agent SDK.
-import { fetchItemsByNumber, fetchPipelineItems } from '../github'
+// readPipelineState — the cross-repo I/O orchestrator (#79), re-expressed
+// over #80's per-source cache (Decision 3): refresh every source once into a
+// fresh `SourceCache`, then `projectFromCache` builds the same
+// `PipelineState` it always has. There stays exactly one orchestrator —
+// `watcher.ts` calls the same two primitives (`refreshGithub` and friends,
+// `projectFromCache`) on its own cadence rather than a second copy of this
+// composition.
 import type { GhRunner } from '../github'
-import { readDenials, readWorktrees } from '../local'
-import type { WorktreesGitRunner as GitRunner } from '../local'
 import { readSessionState } from '../sessions'
+import type { WorktreesGitRunner as GitRunner } from '../local'
 import type { RepositoryEntry } from '../../shared/repos'
-import type { ItemsByNumberFetch } from '../../shared/github/types'
 import type { FreshnessEntry, PipelineState, RepositoryState } from '../../shared/state/types'
-import { collectOrphanNumbers } from './attach'
 import { reconcileRepository } from './reconcile'
 import type { RepoSessionSlice } from './reconcile'
+import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from './sources'
+import type { SourceCache } from './sources'
 
 export interface ReadPipelineStateParams {
   readonly repositories: readonly RepositoryEntry[]
@@ -28,7 +28,7 @@ export interface ReadPipelineStateParams {
   readonly now?: () => Date
 }
 
-function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { status: 'ready' }> {
+export function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { status: 'ready' }> {
   return 'status' in entry && entry.status === 'ready'
 }
 
@@ -38,53 +38,64 @@ function splitRepo(repo: string): { readonly owner: string; readonly name: strin
 }
 
 /**
- * One `readSessionState` call for the whole machine first (#78's own
- * Decision 1), then per `ready` repository: `fetchPipelineItems`,
- * `collectOrphanNumbers`, one conditional `fetchItemsByNumber`,
- * `readWorktrees`, `readDenials` — then `reconcileRepository` with that
- * repository's own session slice. A non-`ready` entry becomes its
- * `reason: 'not-ready'` state without any read at all.
+ * Builds one `PipelineState` from whatever a `SourceCache` currently holds —
+ * no I/O of its own. Shared by `readPipelineState` (a fresh cache, one-shot)
+ * and `watcher.ts` (a long-lived cache, refreshed on its own cadence), so
+ * the join logic exists exactly once.
  */
-export async function readPipelineState(params: ReadPipelineStateParams): Promise<PipelineState> {
-  const now = params.now ?? (() => new Date())
+export function projectFromCache(cache: SourceCache, repositories: readonly RepositoryEntry[], now: () => Date = () => new Date()): PipelineState {
   const readAt = now().toISOString()
-
-  const readyEntries = params.repositories.filter(isReady)
-  const sessionScan = await readSessionState({
-    repos: readyEntries.map((entry) => ({ id: entry.id, root: entry.path })),
-    reader: params.sessionReader,
-    claudeHome: params.claudeHome,
-    now,
-  })
+  const sessionScan = cache.sessions ?? { ok: false as const, kind: 'sdk-unavailable' as const, message: 'sessions have not been scanned yet', scannedAt: readAt }
   const sessionsFreshness: FreshnessEntry = sessionScan.ok ? { at: sessionScan.scannedAt } : { unavailable: sessionScan.message }
 
-  const repositories: RepositoryState[] = []
-  for (const entry of params.repositories) {
+  const repositoriesOut: RepositoryState[] = []
+  for (const entry of repositories) {
     if (!isReady(entry)) {
-      repositories.push({ ok: false, repoId: entry.id, displayName: entry.displayName, reason: 'not-ready', problem: entry.problem })
+      repositoriesOut.push({ ok: false, repoId: entry.id, displayName: entry.displayName, reason: 'not-ready', problem: entry.problem })
       continue
     }
 
-    const repo = splitRepo(entry.config.repo)
-    const pipelineFetch = await fetchPipelineItems({ repo, vocabulary: entry.config.vocabulary, gh: params.gh, now })
-    const worktrees = await readWorktrees({ repoRoot: entry.path, git: params.git, now })
-    const denials = await readDenials({ repoRoot: entry.path, git: params.git, now })
+    const pipelineFetch = cache.github.get(entry.id) ?? { ok: false as const, kind: 'no-data' as const, message: 'not read yet', fetchedAt: readAt }
+    const worktrees = cache.worktrees.get(entry.id) ?? { ok: false as const, kind: 'not-found' as const, message: 'not read yet', readAt }
+    const denials = cache.denials.get(entry.id) ?? { ok: false as const, kind: 'io' as const, message: 'not read yet', path: '', readAt }
+    const itemsByNumberFetch = cache.itemStates.get(entry.id) ?? null
 
     const repoAgents = sessionScan.ok ? sessionScan.agents.filter((a) => a.repoId === entry.id) : []
     const repoSessionRecords = sessionScan.ok ? sessionScan.sessions.filter((s) => s.repoId === entry.id) : []
     const repoSessions: RepoSessionSlice = { agents: repoAgents, sessions: repoSessionRecords, available: sessionScan.ok, freshness: sessionsFreshness }
 
-    let itemsByNumberFetch: ItemsByNumberFetch | null = null
-    if (pipelineFetch.ok) {
-      const worktreeEntries = worktrees.ok ? worktrees.entries : []
-      const orphanNumbers = collectOrphanNumbers(pipelineFetch.items, worktreeEntries, repoAgents)
-      if (orphanNumbers.length > 0) {
-        itemsByNumberFetch = await fetchItemsByNumber({ repo, numbers: orphanNumbers, gh: params.gh, now })
-      }
-    }
-
-    repositories.push(reconcileRepository({ entry, pipelineFetch, itemsByNumberFetch, repoSessions, worktrees, denials }))
+    repositoriesOut.push(reconcileRepository({ entry, pipelineFetch, itemsByNumberFetch, repoSessions, worktrees, denials }))
   }
 
-  return { repositories, sessions: sessionScan, readAt }
+  return { repositories: repositoriesOut, sessions: sessionScan, readAt }
+}
+
+/**
+ * One `readSessionState` call for the whole machine first (#78's own
+ * Decision 1), then per `ready` repository: `refreshWorktrees`,
+ * `refreshDenials`, `refreshGithub` (which owns its own conditional
+ * `fetchItemsByNumber` re-check) — into a fresh, one-shot `SourceCache` —
+ * then `projectFromCache`. A non-`ready` entry becomes its
+ * `reason: 'not-ready'` state without any read at all.
+ */
+export async function readPipelineState(params: ReadPipelineStateParams): Promise<PipelineState> {
+  const now = params.now ?? (() => new Date())
+  const cache = createSourceCache()
+  const readyEntries = params.repositories.filter(isReady)
+
+  await refreshSessions(cache, { repos: readyEntries.map((entry) => ({ id: entry.id, root: entry.path })), reader: params.sessionReader, claudeHome: params.claudeHome, now })
+
+  for (const entry of readyEntries) {
+    await refreshWorktrees(cache, { repoId: entry.id, repoRoot: entry.path, git: params.git, now })
+    await refreshDenials(cache, { repoId: entry.id, repoRoot: entry.path, git: params.git, now })
+
+    const worktrees = cache.worktrees.get(entry.id)
+    const worktreeEntries = worktrees?.ok ? worktrees.entries : []
+    const sessions = cache.sessions
+    const agents = sessions?.ok ? sessions.agents.filter((a) => a.repoId === entry.id) : []
+    const repo = splitRepo(entry.config.repo)
+    await refreshGithub(cache, { repoId: entry.id, repo, vocabulary: entry.config.vocabulary, worktreeEntries, agents, gh: params.gh, now })
+  }
+
+  return projectFromCache(cache, params.repositories, now)
 }

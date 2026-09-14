@@ -2,11 +2,19 @@
 // `../sessions` directly. This directory composes those three adapters plus
 // the registry's own `RepositoryEntry`; a second reader reaching around it
 // is exactly the drift this module exists to prevent (ENGINEERING §1).
-export { readPipelineState } from './read'
+export { isReady, projectFromCache, readPipelineState } from './read'
 export type { ReadPipelineStateParams } from './read'
 
 export { reconcileRepository } from './reconcile'
 export type { ReconcileRepositoryInput, RepoSessionSlice } from './reconcile'
+
+export { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from './sources'
+export type { RefreshOutcome, SourceCache } from './sources'
+
+export { afterFailure, afterSuccess, deferredUntil, dueSources, nextDueAt } from './schedule'
+
+export { createPipelineWatcher } from './watcher'
+export type { CreatePipelineWatcherParams, PipelineWatcher, RefreshRequest, TimerFactory, TimerHandle } from './watcher'
 
 export { stageOf, STAGE_PRECEDENCE } from './stage'
 export { closingReference, sessionRequiredAt, SESSION_REQUIRED_PREFIX } from './link'
