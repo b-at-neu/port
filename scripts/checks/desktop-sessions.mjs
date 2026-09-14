@@ -103,6 +103,37 @@ export default async function ({ fail, ok }) {
     if (!found) ok();
   }
 
+  // --- transcript:tail:poll's response is a delta, never a full entries list ---
+  // #84: the tail-poll response (TranscriptTailPoll) must carry `appended`
+  // and `patched` on its ok branch and never an `entries` field -- a poll
+  // that returned the whole transcript every second would defeat the byte
+  // cursor's whole point, and the renderer's own no-full-re-render contract
+  // depends on this staying a delta.
+  {
+    const file = allFiles.find((f) => relOf(f) === `${sharedSessionsDir}/transcript.ts`);
+    if (!file) {
+      fail('desktop-sessions', `${sharedSessionsDir}/transcript.ts does not exist`);
+    } else {
+      const text = readFileSync(file, 'utf8');
+      const m = /export type TranscriptTailPoll =\s*([\s\S]*?)\n(?:export|$)/.exec(text);
+      if (!m) {
+        fail('desktop-sessions', `${sharedSessionsDir}/transcript.ts has no 'export type TranscriptTailPoll' declaration`);
+      } else {
+        const block = m[1];
+        const hasAppended = /\bappended\s*:/.test(block);
+        const hasPatched = /\bpatched\s*:/.test(block);
+        const hasEntries = /\bentries\s*:/.test(block);
+        if (!hasAppended || !hasPatched) {
+          fail('desktop-sessions', "TranscriptTailPoll's ok branch must carry both 'appended' and 'patched' -- a poll response is a delta, never a full list (#84)");
+        } else if (hasEntries) {
+          fail('desktop-sessions', "TranscriptTailPoll carries an 'entries' field -- a poll response must stay a delta (appended/patched), never the whole transcript (#84)");
+        } else {
+          ok();
+        }
+      }
+    }
+  }
+
   // --- getSubagentMessages/getSessionMessages stay unreferenced (#83) ---------
   // Decision 3's "the reader parses the .jsonl itself, and getSubagentMessages
   // stays unused" (#83, deciding against the SDK's own message-read APIs,

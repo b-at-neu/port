@@ -8,7 +8,7 @@ import type { TranscriptTailOpen, TranscriptTailPoll } from '../../shared/sessio
 import { advanceTranscript, openTranscript } from './transcript'
 import type { OpenTranscriptParams, TranscriptCursor } from './transcript'
 
-/** Swept lazily at the head of every `open` and `poll` -- no `setInterval`
+/** Swept lazily at the head of every `open` and `poll` -- no periodic timer
  *  and no `webContents` bookkeeping. A renderer reload or a closed window
  *  therefore leaks at most `MAX_OPEN_TAILS` small cursors for at most this
  *  long. */
