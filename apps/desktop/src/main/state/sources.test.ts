@@ -109,6 +109,9 @@ describe('refreshWorktrees / refreshDenials — Decision 4', () => {
 
 describe('refreshSessions', () => {
   it('exactly one readSessionState call regardless of repository count, keeping the last good scan on failure', async () => {
+    const claudeHome = await mkdtemp(join(tmpdir(), 'port-sources-sessions-'))
+    await mkdir(join(claudeHome, 'projects'), { recursive: true })
+
     const cache = createSourceCache()
     let calls = 0
     await refreshSessions(cache, {
@@ -116,6 +119,7 @@ describe('refreshSessions', () => {
         { id: REPO_1, root: '/repo-1' },
         { id: REPO_2, root: '/repo-2' },
       ],
+      claudeHome,
       reader: () => {
         calls += 1
         return Promise.resolve({ ok: true, sessions: [] })
@@ -126,6 +130,7 @@ describe('refreshSessions', () => {
 
     const outcome = await refreshSessions(cache, {
       repos: [{ id: REPO_1, root: '/repo-1' }],
+      claudeHome,
       reader: () => Promise.resolve({ ok: false, kind: 'sdk-failed', message: 'boom' }),
     })
     expect(outcome.ok).toBe(false)
