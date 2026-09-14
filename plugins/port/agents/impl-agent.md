@@ -38,7 +38,7 @@ Everything repository-specific comes from it. Placeholders in this file are **no
 
 **Label names are configuration, not constants.** `<labels.inProgress>` means the string this repository calls that label — usually `in progress`, but a repository may rename any of them. Never type a label name you did not read from config or the standard vocabulary; a wrong label string silently does nothing, or worse, creates a new label.
 
-Also read from config: `commands.bootstrap`, `commands.checks`, `commands.artifacts` (production-time artifact validation; null means skip it), `docs.engineering`, `models.impl` (for the commit trailer), and `modules.approvalGate`.
+Also read from config: `commands.bootstrap`, `commands.checks`, `commands.artifacts` (production-time artifact validation; null means skip it), `docs.engineering`, `docs.design` (when the ticket touches an interface), `models.impl` (for the commit trailer), and `modules.approvalGate`.
 
 Your **model** comes from `models.impl`; the cockpit passes it at dispatch, overriding this file's frontmatter default.
 
@@ -71,12 +71,13 @@ Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROO
 <!-- label-cas:end -->
 
 <!-- standards-precedence:begin -->
-**Three sources describe how code should be written, in a fixed order.** Conventions come from the repository's `CLAUDE.md` first, then `docs.engineering`, then the style visible in the surrounding code. The more specific and more human-authored source wins: a repository that stated a rule in `CLAUDE.md` has already said what it wants.
+**Three sources describe how code should be written, in a fixed order, joined by a fourth for interface work.** Conventions come from the repository's `CLAUDE.md` first, then `docs.engineering`, then `docs.design` when the ticket touches an interface, then the style visible in the surrounding code. The more specific and more human-authored source wins: a repository that stated a rule in `CLAUDE.md` has already said what it wants.
 
 - **Read it explicitly, at a named ref — never rely on it being in context.** What the harness injects depends on scope and cwd, so a worktree agent may receive a different file than the one its work lands against, or none, and nothing distinguishes the two cases from inside the run. An implicit read is not a contract.
 - **It never overrides mechanics.** `commands.*`, `labels`, `branches`, and `sessionRequiredPaths` come from `.claude/port.config.json` alone — they are schema-validated and gate the allowlist, and a command sourced from free-form prose could be neither validated nor permitted in advance. The rails in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` are not overridable either. `CLAUDE.md` decides how code is written, never what the pipeline does.
-- **Code that follows `CLAUDE.md` is never a finding**, at any severity, however plainly `docs.engineering` or the surrounding style says otherwise — that inversion is the whole reason this contract exists. Where the two documents genuinely disagree, name the conflict once in your own output and leave the code alone; it is a documentation defect for the human, not a change to request.
-- **Absent is normal.** No `CLAUDE.md` → the order is simply `docs.engineering`, then ambient style. Nothing degrades and nothing is reported.
+- **Code that follows `CLAUDE.md` is never a finding**, at any severity, however plainly `docs.engineering`, `docs.design`, or the surrounding style says otherwise — that inversion is the whole reason this contract exists. Where documents genuinely disagree, name the conflict once in your own output and leave the code alone; it is a documentation defect for the human, not a change to request.
+- **`docs.design` slots in below `docs.engineering`, above ambient style, for interface work only.** `docs.engineering` wins any genuine overlap between the two — accessibility is the one already assigned to it. Null means no interface, or not enough of one documented, and every agent behaves exactly as it does today.
+- **Absent is normal.** No `CLAUDE.md` → the order is simply `docs.engineering`, then `docs.design`, then ambient style. Nothing degrades and nothing is reported.
 <!-- standards-precedence:end -->
 
 Impl-agent specifics:
@@ -127,9 +128,9 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
    If `commands.bootstrap` is empty, the checkout needs no preparation — skip straight to the rebase.
 
-   **Only now read standards** — before the rebase the checkout is not evidence of anything, since the worktree's initial checkout is untrustworthy per "Read the configuration first" above. When `docs.engineering` is set, read it. Read the worktree's `CLAUDE.md` if one is present, at the precedence this file's "standards-precedence" block states.
+   **Only now read standards** — before the rebase the checkout is not evidence of anything, since the worktree's initial checkout is untrustworthy per "Read the configuration first" above. When `docs.engineering` is set, read it. When `docs.design` is set and the ticket touches an interface, read it too. Read the worktree's `CLAUDE.md` if one is present, at the precedence this file's "standards-precedence" block states.
 
-3. **Implement the checklist.** Follow the plan's ordered steps. Where `docs.engineering` is set, build to its standards and its pre-pull-request self-check; where it is null, follow the conventions visible in the surrounding code — match the neighbourhood for layering, naming, and structure rather than introducing your own.
+3. **Implement the checklist.** Follow the plan's ordered steps. Where `docs.engineering` is set, build to its standards and its pre-pull-request self-check; where `docs.design` is set and the ticket touches an interface, build to its tokens and copy tone too; where either is null, follow the conventions visible in the surrounding code — match the neighbourhood for layering, naming, and structure rather than introducing your own.
 
    The plan's **## Testing** section is the human's pre-merge checklist, not your build steps — your verification is `commands.checks`. **Never** execute a step carrying the `**operator-only**` prefix, and never attempt a write under `sessionRequiredPaths` even if a testing step asks for it: a permission prompt there kills your run, and the step exists precisely because it is the operator's to run, not yours.
 

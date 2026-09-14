@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { root, walk, relOf, frontmatter } from '../lib/files.mjs';
 
@@ -68,12 +68,15 @@ export default async function ({ fail, note, ok }) {
   // Both directions on the reference: every agent file naming
   // docs.engineering also names CLAUDE.md, and every agent file naming
   // CLAUDE.md carries the block. A fifth agent added later with only one of
-  // the two fails here.
+  // the two fails here. #49 extends the same both-directions shape to
+  // docs.design: every agent naming docs.engineering also names docs.design,
+  // and vice versa, mirroring the CLAUDE.md pair exactly.
   const blockRels = new Set(withBlock.map((b) => b.rel));
   for (const f of agentFiles) {
     const rel = relOf(f);
     const text = readFileSync(f, 'utf8');
     const namesEngineering = text.includes('docs.engineering');
+    const namesDesign = text.includes('docs.design');
     const namesClaudeMd = text.includes('CLAUDE.md');
     if (namesEngineering && !namesClaudeMd) {
       fail('standards', `${rel} names docs.engineering but never CLAUDE.md`);
@@ -85,20 +88,34 @@ export default async function ({ fail, note, ok }) {
     } else {
       ok();
     }
+    if (namesEngineering && !namesDesign) {
+      fail('standards', `${rel} names docs.engineering but never docs.design`);
+    } else {
+      ok();
+    }
+    if (namesDesign && !namesEngineering) {
+      fail('standards', `${rel} names docs.design but never docs.engineering`);
+    } else {
+      ok();
+    }
   }
 
   // The load-bearing literals survive paraphrase: CLAUDE.md's index precedes
-  // docs.engineering's in the ordering sentence, the phrase "never a
-  // finding" is present, and the commands carve-out names both commands.*
-  // and .claude/port.config.json. Pulled out as a function so the self-test
-  // below can prove it actually rejects a broken block before it is trusted
-  // to pass the real one.
+  // docs.engineering's, which in turn precedes docs.design's, in the
+  // ordering sentence; the phrase "never a finding" is present; and the
+  // commands carve-out names both commands.* and .claude/port.config.json.
+  // Pulled out as a function so the self-test below can prove it actually
+  // rejects a broken block before it is trusted to pass the real one.
   const literalProblems = (block) => {
     const problems = [];
     const claudeIdx = block.indexOf('CLAUDE.md');
     const engIdx = block.indexOf('docs.engineering');
+    const designIdx = block.indexOf('docs.design');
     if (claudeIdx === -1 || engIdx === -1 || claudeIdx > engIdx) {
       problems.push('CLAUDE.md does not precede docs.engineering in the ordering sentence');
+    }
+    if (engIdx === -1 || designIdx === -1 || engIdx > designIdx) {
+      problems.push('docs.engineering does not precede docs.design in the ordering sentence');
     }
     if (!block.includes('never a finding')) {
       problems.push('missing the literal phrase "never a finding"');
@@ -122,12 +139,13 @@ export default async function ({ fail, note, ok }) {
   }
 
   // Self-test: a check that cannot be made to fail is not a check (#177,
-  // ENGINEERING.md §7). Three literal mutations of a known-good block, each
-  // must still be rejected — order reversed, the carve-out deleted, and
-  // "never a finding" reworded — proving literalProblems can catch something
-  // before the real block is trusted to pass it.
+  // ENGINEERING.md §7). Four literal mutations of a known-good block, each
+  // must still be rejected — CLAUDE.md/docs.engineering order reversed, the
+  // carve-out deleted, "never a finding" reworded, and (#49)
+  // docs.engineering/docs.design order reversed — proving literalProblems
+  // can catch something before the real block is trusted to pass it.
   const GOOD =
-    "Conventions come from the repository's CLAUDE.md first, then docs.engineering, then ambient style. " +
+    "Conventions come from the repository's CLAUDE.md first, then docs.engineering, then docs.design, then ambient style. " +
     'commands.* and .claude/port.config.json alone decide the rest. ' +
     'Code that follows CLAUDE.md is never a finding, at any severity.';
   if (literalProblems(GOOD).length !== 0) {
@@ -159,6 +177,77 @@ export default async function ({ fail, note, ok }) {
   const reworded = GOOD.replace('is never a finding, at any severity', 'is not a blocking finding, at any severity');
   if (literalProblems(reworded).length === 0) {
     fail('standards', 'self-test: literalProblems accepted a block with "never a finding" reworded');
+  } else {
+    ok();
+  }
+
+  const designOrderReversed = GOOD.replace(
+    'docs.engineering, then docs.design,',
+    'docs.design, then docs.engineering,',
+  );
+  if (literalProblems(designOrderReversed).length === 0) {
+    fail('standards', 'self-test: literalProblems accepted a block with the docs.engineering/docs.design order reversed');
+  } else {
+    ok();
+  }
+
+  // --- Design document wiring (#49) -------------------------------------------
+  // A dangling ${CLAUDE_PLUGIN_ROOT}/templates/... reference in analyze/SKILL.md
+  // is silent at runtime — the skill just cannot find the file, with nothing
+  // static to catch it. Pins the two template paths the skill references as
+  // existing on disk, that its writable-set sentence still names all three
+  // files, and that it still states the docs.design skip rule.
+  const skillPath = join(root, 'plugins/port/skills/analyze/SKILL.md');
+  const skillText = readFileSync(skillPath, 'utf8');
+
+  for (const ref of ['templates/ENGINEERING.template.md', 'templates/DESIGN.template.md']) {
+    if (!skillText.includes(ref)) {
+      fail('standards', `analyze/SKILL.md no longer references ${ref}`);
+    } else if (!existsSync(join(root, 'plugins/port', ref))) {
+      fail('standards', `analyze/SKILL.md references ${ref}, which does not exist on disk`);
+    } else {
+      ok();
+    }
+  }
+
+  if (!skillText.includes('the engineering document, the design document, and')) {
+    fail('standards', "analyze/SKILL.md's writable-set sentence no longer names all three files");
+  } else {
+    ok();
+  }
+
+  if (!skillText.includes('docs.design` stays null')) {
+    fail('standards', 'analyze/SKILL.md no longer states the docs.design skip rule');
+  } else {
+    ok();
+  }
+
+  // --- Accessibility's single home (#49) --------------------------------------
+  // ENGINEERING.md and DESIGN.md would overlap and drift on accessibility
+  // without a pinned single home. Pins both directions: ENGINEERING.template.md
+  // carries the accessibility heading, DESIGN.template.md carries none, and
+  // DESIGN.template.md cross-references the engineering document instead of
+  // restating it.
+  const engineeringTemplate = readFileSync(
+    join(root, 'plugins/port/templates/ENGINEERING.template.md'),
+    'utf8',
+  );
+  const designTemplate = readFileSync(join(root, 'plugins/port/templates/DESIGN.template.md'), 'utf8');
+
+  if (!/^## \d+\. Accessibility/m.test(engineeringTemplate)) {
+    fail('standards', 'ENGINEERING.template.md no longer carries an Accessibility heading');
+  } else {
+    ok();
+  }
+
+  if (/^## \d+\. Accessibility/m.test(designTemplate)) {
+    fail('standards', 'DESIGN.template.md carries its own Accessibility heading — that section has exactly one home');
+  } else {
+    ok();
+  }
+
+  if (!designTemplate.includes('ENGINEERING.md')) {
+    fail('standards', 'DESIGN.template.md no longer cross-references ENGINEERING.md');
   } else {
     ok();
   }

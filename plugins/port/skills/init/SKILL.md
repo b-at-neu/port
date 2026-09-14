@@ -77,7 +77,7 @@ git check-ignore -v .claude/port.config.json
 
 If it is ignored, **stop and explain** rather than writing it. The config has to be committed: it travels into dispatched agents' worktrees, and an ignored one means every agent reports the repository as unmanaged and halts. Tell the operator which `.gitignore` rule is responsible — `check-ignore -v` names the file and line — so they can narrow it. A repository that ignores all of `.claude/` usually wants to ignore `settings.local.json` and the worktree root, not this.
 
-Set `docs.engineering` to a path only if that file **exists and says something real**. Leave it null otherwise — pointing it at an empty skeleton makes review cite a document with no content. Step 8 offers to fill it properly, and sets the field itself if the operator accepts.
+Set `docs.engineering` to a path only if that file **exists and says something real**; the same condition applies to `docs.design`. Leave either null otherwise — pointing it at an empty skeleton makes review cite a document with no content. Step 9 offers to fill both in properly, and sets each field itself if the operator accepts.
 
 **Validation is mandatory, not conditional. Never write a config that does not validate.** Check it against the schema at the `$schema` URL the config template carries, with a validator if one is available; if none is, walk the schema by hand and confirm every field's type and shape. A config that fails validation is a config every consumer misreads.
 
@@ -235,12 +235,12 @@ Ensure `.gitignore` covers `.agents/`, `.temp/`, and the worktree root `.claude/
 
 The repository is usable at this point, so this is the last thing asked and the only optional one.
 
-`docs.engineering` is the highest-leverage field in the configuration: all four stage agents read it and `review-agent` cites it as a review dimension. `/port:analyze` fills it by reading the codebase and proposing standards — conventions inferred from the code, inconsistencies put to you as decisions, improvements approved individually. It also recommends plugins that suit the stack.
+`docs.engineering` is the highest-leverage field in the configuration: all four stage agents read it and `review-agent` cites it as a review dimension. `/port:analyze` fills it by reading the codebase and proposing standards — conventions inferred from the code, inconsistencies put to you as decisions, improvements approved individually. **When the repository has a real interface, it also produces a design document and sets `docs.design`** the same way — a repository with no interface, or barely any, gets neither, stated plainly rather than silently skipped. It also recommends plugins that suit the stack.
 
 Ask whether to run it now.
 
-- **Accepted** → read `${CLAUDE_PLUGIN_ROOT}/skills/analyze/SKILL.md` and follow it end to end. It writes the document and sets `docs.engineering` itself, so do not write either here. **Pass on what detection already found** in step 1 rather than making it re-derive the stack.
-- **Declined** → leave `docs.engineering` null and **say what that means**: the stage agents will work from the plan and the surrounding code, and review will have no standards document to cite. Then note that `/port:analyze` can be run at any time.
+- **Accepted** → read `${CLAUDE_PLUGIN_ROOT}/skills/analyze/SKILL.md` and follow it end to end. It writes both documents and sets `docs.engineering`/`docs.design` itself, so do not write either here. **Pass on what detection already found** in step 1 rather than making it re-derive the stack.
+- **Declined** → leave `docs.engineering` and `docs.design` null and **say what that means**: the stage agents will work from the plan and the surrounding code, and review will have no standards document to cite. Then note that `/port:analyze` can be run at any time.
 
 **Declining is a genuinely supported path.** The analysis is slow and asks real questions, and an operator who just wants the pipeline running would rush exactly the decisions that matter most. State the consequence once and move on — do not press it.
 
