@@ -1,7 +1,7 @@
 ---
 name: pipeline
 description: Interactive pipeline cockpit — polls GitHub labels, dispatches background stage subagents, relays their questions, and runs the human gates conversationally. Haiku is recommended for the session — ticks are mechanical — but a skill cannot set the session model, so the operator's own choice stands; run in default permission mode. Usage: /port:pipeline
-allowed-tools: Bash(gh issue list *) Bash(gh issue view *) Bash(gh issue edit *) Bash(gh issue comment *) Bash(gh pr list *) Bash(gh pr view *) Bash(gh pr edit *) Bash(gh pr comment *) Bash(gh label list *) Bash(gh api graphql *) Bash(git rev-parse *) Bash(git rev-list *) Bash(git branch *) Bash(wc *) Bash(node *) Read Write Agent AskUserQuestion ScheduleWakeup SendMessage TaskList TaskStop
+allowed-tools: Bash(gh issue list *) Bash(gh issue view *) Bash(gh issue edit *) Bash(gh issue comment *) Bash(gh pr list *) Bash(gh pr view *) Bash(gh pr edit *) Bash(gh pr comment *) Bash(gh label list *) Bash(gh api graphql *) Bash(git rev-parse *) Bash(git branch *) Bash(git cat-file *) Bash(wc *) Bash(node *) Read Write Agent AskUserQuestion ScheduleWakeup SendMessage TaskList TaskStop
 ---
 
 # Pipeline Cockpit
@@ -14,19 +14,19 @@ You are the orchestrator of the agent pipeline in `${CLAUDE_PLUGIN_ROOT}/docs/PI
 
 ## Startup preflight (before the first tick)
 
-Run once, before the first tick — never on a wakeup, never acted on beyond what each step says. A refused or stopped preflight schedules no wakeup (see Pacing).
+Run once, before the first tick — never on a wakeup, never acted on beyond what each step says. A refused or stopped preflight schedules no wakeup (see Pacing). **Step 0 — resolve the root, once, before any Read.** `git rev-parse --show-toplevel`, bound to `<root>`. Non-zero exit → not a git repository at all: emit the "nothing carries it" **UX states** message below with `<branch>` rendered as "no git repository here" and stop. **Every Read and Write this skill performs resolves against `<root>`, never against the session's transcript or project directory** — `.temp/` and `.agents/` paths are the one exception, touched only after `<root>` is established.
 
-**Step 1 — config.** Read `.claude/port.config.json`. Present and parses as JSON → continue to step 2. Absent, or present but unparseable → treat a parse failure identically to absent, with the same hard-stop messages:
+**Step 1 — config.** Read `<root>/.claude/port.config.json`. Present and parses as JSON → continue to step 2. Absent, or present but unparseable → treat a parse failure identically to absent, with the same hard-stop messages:
 
 ```bash
 git rev-parse --abbrev-ref HEAD
-git rev-list --all --max-count=1 -- .claude/port.config.json
-git branch -a --contains <sha> --format='%(refname:short)'
+git branch --sort=-committerdate --format='%(refname:short)'
+git cat-file -e <ref>:.claude/port.config.json
 ```
 
-A literal `HEAD` from the first command means detached — report the short sha instead. Run the second; if it yields a sha, run the third to name the refs that do carry the config. Emit the matching **UX states** message and **stop — no tick, no dispatch, no `ScheduleWakeup`.** This is a hard refusal with no override: the config has exactly one valid location.
+A literal `HEAD` from the first command means detached — report the short sha instead. Take the **first 10** refs from the second command and test each directly with the third — one command per call, never a shell loop — rather than asking where the file was last *edited*, which answers a different question and breaks across a rebase. Emit the matching **UX states** message, naming the actual bound checked (`none of the <n> local branches I checked`, never "every ref I can see"), and **stop — no tick, no dispatch, no `ScheduleWakeup`,** with the checked-out branch unchanged: the guard hook denies `git checkout`/`git switch` from this session (see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Cockpit rules"), so switching branches is never a route out — the only exits are checking out a branch that carries the config, or `/port:init`.
 
-**Step 2 — permissions.** Read `.claude/settings.json`. Missing, unparseable, or `permissions.allow` absent or empty → warn with the matching **UX states** message and ask (`AskUserQuestion`): **Stop (recommended)** / **Start anyway**. Stop → end the session with no wakeup. Start anyway → continue, and never re-ask this session. The override exists because permissions can legitimately be granted at user scope, in `~/.claude/settings.json`, which this session cannot read — a hard stop would strand a valid setup on evidence it cannot gather.
+**Step 2 — permissions.** Read `<root>/.claude/settings.json`. Missing, unparseable, or `permissions.allow` absent or empty → warn with the matching **UX states** message and ask (`AskUserQuestion`): **Stop (recommended)** / **Start anyway**. Stop → end the session with no wakeup. Start anyway → continue, and never re-ask this session. The override exists because permissions can legitimately be granted at user scope, in `~/.claude/settings.json`, which this session cannot read — a hard stop would strand a valid setup on evidence it cannot gather.
 
 Read `permissions.defaultMode` from the same file, for step 3's report. **Warn only when it is `acceptEdits`, `bypassPermissions`, or `auto`** — see the matching **UX states** message — and say in the same clause that a launch flag overrides this setting and cannot be read from inside the session. `default`, or the key absent (the harness's own default is `default`), needs no warning.
 
@@ -36,7 +36,7 @@ Read `permissions.defaultMode` from the same file, for step 3's report. **Warn o
 2. **Derive `<marketplace>`, `<plugin>` and `<version>`** from `${CLAUDE_PLUGIN_ROOT}`'s trailing path segments (`…/cache/<marketplace>/<plugin>/<version>`) — never hard-coded, and the whole basis of the generality that step 4's staleness lookup and its `known_marketplaces.json` key depend on. Read the plugin registry, `installed_plugins.json` — it sits **four directory levels above `${CLAUDE_PLUGIN_ROOT}`** when the running copy is a cache install, derived by trimming those four path segments — never a hard-coded `~/.claude/`. **Registry unreadable, or no record's `installPath` equals `${CLAUDE_PLUGIN_ROOT}`** → say so in one clause and fall back to the version-only line (see **UX states**); never print a path-only line that looks like an answer.
 3. **Resolve the applicable record.** Among records whose `installPath` equals `${CLAUDE_PLUGIN_ROOT}`, apply **local > project > user** scope precedence; within a scope, prefer the record whose `projectPath` is this session's cwd or an ancestor of it.
 
-Open with one line naming the resolved short commit sha, scope, `projectPath`, the session's own model, and the mode read in step 2 — **no warning glyph on the model, ever**; it is information, not a check. Append step 4's staleness verdict, once it has run, in place of the plain scope clause — `current with <marketplace>@<target-ref>` when `behindBy` is `0`, or the **stale** UX state's warning form when it is not, or `staleness not computable — <reason>` when no target resolved:
+**The sha about to be printed is the resolved record's `gitCommitSha` and nothing else** — never `git log`, never a commit that merely touches some repository file, never a path. If the sha about to be printed is not a prefix of the resolved record's `gitCommitSha`, print the **Registry unreadable** line instead of a sha. Open with one line naming the resolved short commit sha, scope, `projectPath`, the session's own model, and the mode read in step 2 — **no warning glyph on the model, ever**; it is information, not a check. Append step 4's staleness verdict, once it has run, in place of the plain scope clause — `current with <marketplace>@<target-ref>` when `behindBy` is `0`, or the **stale** UX state's warning form when it is not, or `staleness not computable — <reason>` when no target resolved:
 
 > `port` v0.1.0 · `1a12608` (local scope, installed 2026-08-31) · current with `b-at-neu/port@dev` · model `claude-sonnet-5` · mode `default` (as configured — a launch flag overrides this and I can't read it from here)
 
@@ -51,14 +51,14 @@ When step 2 found a non-`default` `defaultMode`, replace the mode clause with th
 
 **Also warn when this session's own cwd is inside a managed worktree** (the same `/.claude/worktrees/` test), in this same preflight step, with the policy stated inline: never install or reinstall the plugin from here — the guard hook denies it (see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Why background dispatch needs care"), because every install scope shares one `installPath` and the change would outlive this worktree.
 
-Then check for self-host drift. Read `.claude-plugin/marketplace.json` at the repository root:
+Then check for self-host drift. Read `<root>/.claude-plugin/marketplace.json`:
 
 - **Absent** — the normal case for a managed repository. Say nothing further.
 - **Present and it declares a plugin whose `name` matches the running plugin** — this repository is the *source* of that plugin. If `${CLAUDE_PLUGIN_ROOT}` does not resolve to a path inside this working tree, warn once with the matching **UX states** message.
 
 **Step 4 — integration drift, and plugin staleness relative to the remote.** Two purposes, one call, report-only, never acted on. Add `--include` so the response also carries the `Date:` header this step's cache-age rendering needs — the same header the Tick procedure already reads for its own clock:
 
-**Resolve the staleness comparison target first**, from `~/.claude/plugins/known_marketplaces.json`, keyed by the `<marketplace>` segment step 3 already derived from `${CLAUDE_PLUGIN_ROOT}` — never from `repo`/`branches.integration`, which describe the *managed* repository and are only incidentally the same one here:
+**Resolve the staleness comparison target first**, from `~/.claude/plugins/known_marketplaces.json`, keyed by the `<marketplace>` segment step 3 already derived from `${CLAUDE_PLUGIN_ROOT}` — never from `repo`/`branches.integration`, which describe the *managed* repository and are only incidentally the same one here. **The ref about to be named is this resolved `<target-ref>` and nothing else** — never `branches.production`, never the plugin repository's own default branch guessed some other way; if the ref about to be named is not this one, render `staleness not computable` instead of a number:
 
 - `source.source == "github"` → `<po>`/`<pn>` from `source.repo`; `<target-ref>` is `source.ref`, or that repository's default branch when unset.
 - `source.source == "directory"` whose `path` is this working tree (the self-hosting case) → `<po>`/`<pn>` is `<owner>`/`<name>`; `<target-ref>` is `<integration>`.
@@ -198,11 +198,11 @@ Exact copy, one message per state, `<…>` substituted:
 
 - **Config absent or unparseable, other refs carry it** (hard stop):
 
-  > ⛔ Not port-managed on this branch. `<.claude/port.config.json is absent | .claude/port.config.json fails to parse as JSON>` on `<branch>`, but it exists on `<refs>`. Check one of those out and start me again — I'm not ticking until then.
+  > ⛔ Not port-managed on this branch. `<.claude/port.config.json is absent | .claude/port.config.json fails to parse as JSON>` on `<branch>`, but it exists on `<refs>` (of the `<n>` local branches I checked). Check one of those out and start me again — I'm not ticking until then.
 
-- **Config absent or unparseable, nothing carries it** (hard stop):
+- **Config absent or unparseable, nothing carries it** (hard stop; also covers "no git repository here", with `<n>` at `0`):
 
-  > ⛔ Not port-managed. `<.claude/port.config.json is absent | .claude/port.config.json fails to parse as JSON>` on `<branch>` and on every ref I can see. Run `/port:init` to adopt the pipeline here. Not ticking.
+  > ⛔ Not port-managed. `<.claude/port.config.json is absent | .claude/port.config.json fails to parse as JSON>` on `<branch>` and on none of the `<n>` local branches I checked. Run `/port:init` to adopt the pipeline here. Not ticking.
 
 - **Permissions missing or empty** (warn, then Stop / Start anyway):
 
@@ -540,7 +540,7 @@ The gate applies **no special label** for a session-required plan; the marker is
 
 ### Approved pull requests
 
-**Re-verify before announcing, every tick.** The `approved` alias in the same tick query already carries `headRefOid`, `statusCheckRollup`, and `mergeable` for every pull request in the set (the approved set is small, so this was always bounded) — no follow-up `gh pr view`. Reduce per `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Check evidence" — resolve the excused check name from `.github/workflows/approval-check.yml` with the **Read** tool, the same as `.claude/port.config.json` and `.claude/settings.json` are already read: it is the repository's own workflow file, not tied to any one pull request's head, so the main checkout's copy is the right one to read (same one-merge-lag caveat as those two). Then branch:
+**Re-verify before announcing, every tick.** The `approved` alias in the same tick query already carries `headRefOid`, `statusCheckRollup`, and `mergeable` for every pull request in the set (the approved set is small, so this was always bounded) — no follow-up `gh pr view`. Reduce per `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Check evidence" — resolve the excused check name from `<root>/.github/workflows/approval-check.yml` with the **Read** tool, the same as `<root>/.claude/port.config.json` and `<root>/.claude/settings.json` are already read: it is the repository's own workflow file, not tied to any one pull request's head, so the main checkout's copy is the right one to read (same one-merge-lag caveat as those two). Then branch:
 
 - **All checks concluded green** (the carve-out check excluded from the read but still listed) **and `mergeable` is `MERGEABLE`** → announce once, listing every check and its conclusion — never merge-ready without naming what that claim rests on.
 - **Anything unconcluded** — a check still pending, or `mergeable` still `UNKNOWN` — → say so and do **not** call it merge-ready; re-check next tick.

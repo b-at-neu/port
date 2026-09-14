@@ -25,6 +25,7 @@ import artifacts from './checks/artifacts.mjs';
 import docs from './checks/docs.mjs';
 import evals from './checks/evals.mjs';
 import cockpit from './checks/cockpit.mjs';
+import preflight from './checks/preflight.mjs';
 import budget from './checks/budget.mjs';
 import reviewEvidence from './checks/review-evidence.mjs';
 import harness from './checks/harness.mjs';
@@ -56,6 +57,7 @@ for (const module of [
   docs,
   evals,
   cockpit,
+  preflight,
   budget,
   reviewEvidence,
   harness,

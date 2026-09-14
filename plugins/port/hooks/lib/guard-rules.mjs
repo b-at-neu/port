@@ -3,8 +3,20 @@
 // Kept separate from agent-guard.mjs (which owns stdin/stdout/exit-code
 // plumbing) so the port repository's own layer 1 checks can unit-test the
 // decision logic directly — no stdin, no plugin install, no model call.
+//
+// The pure command-syntax predicates (#216) live in the sibling
+// command-rules.mjs — this file was at 483/500 lines, and the branch rule
+// below needed room the ceiling did not have. This file keeps caller
+// identity, settings/transcript I/O, and `decide` itself.
 import { readFileSync, existsSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
+import {
+  gateClearAttempt,
+  pluginInstallMutation,
+  switchesBranch,
+  targetsGhOrGit,
+  usesShellLoop,
+} from './command-rules.mjs';
 
 /** Compiles a glob (`**` → any depth, `*` → one path segment, everything else
  *  escaped) into an anchored RegExp. Used for `sessionRequiredPaths` globs
@@ -136,133 +148,26 @@ export function callerKind(payload) {
   return { isSubagent: false, isOperatorWorktree, isManagedWorktree, agent: null, signal: null };
 }
 
-/** True when `command` (already quote-stripped by the caller) invokes a
- *  `claude plugin` mutation that changes what a shared `installPath`
- *  resolves to: `install`, `uninstall`, `marketplace add`, or `marketplace
- *  remove`. Read-only subcommands (`list`, `details`, ...) are deliberately
- *  not matched. */
-export function pluginInstallMutation(command) {
-  const stripped = stripQuoted(command);
-  if (!atCommandPosition(stripped, 'claude')) return false;
-  const tokens = tokenize(stripped);
-  const claudeIdx = tokens.indexOf('claude');
-  if (claudeIdx === -1 || tokens[claudeIdx + 1] !== 'plugin') return false;
-  const sub = tokens[claudeIdx + 2];
-  if (sub === 'install' || sub === 'uninstall') return true;
-  if (sub === 'marketplace' && (tokens[claudeIdx + 3] === 'add' || tokens[claudeIdx + 3] === 'remove')) return true;
-  return false;
-}
-
-/** Tokenizes a shell command, respecting single/double quotes — a quoted
- *  span's contents (spaces included) become one token, so a flag value like
- *  `"needs human"` is not split in two. */
-function tokenize(command) {
-  const tokens = [];
-  let i = 0;
-  while (i < command.length) {
-    while (i < command.length && /\s/.test(command[i])) i++;
-    if (i >= command.length) break;
-    let token = '';
-    while (i < command.length && !/\s/.test(command[i])) {
-      const c = command[i];
-      if (c === '"' || c === "'") {
-        const quote = c;
-        i++;
-        while (i < command.length && command[i] !== quote) {
-          token += command[i];
-          i++;
-        }
-        i++; // skip the closing quote, if any
-      } else {
-        token += c;
-        i++;
-      }
-    }
-    tokens.push(token);
-  }
-  return tokens;
-}
-
-/** True if `text` carries `keyword` at a shell command position — the start
- *  of the string, or preceded by whitespace, `;`, `&`, `|`, or `(` — and
- *  followed by a word boundary. This is what keeps `github` from matching
- *  `gh` and a `for` inside a longer identifier from matching the loop
- *  keyword. */
-function atCommandPosition(text, keyword) {
-  const re = new RegExp(`(?:^|[\\s;&|(])${keyword}(?=[\\s;&|)]|$)`);
-  return re.test(text);
-}
-
-/** Replaces every quoted span's *contents* with nothing, so every syntactic
- *  test below runs on the command's shell structure, never on the contents
- *  of a `-b`/`-m`/`--jq` argument. This is what keeps
- *  `gh issue comment -b "a loop for each item to do"` out of the loop rule. */
-export function stripQuoted(command) {
-  return command.replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""');
-}
-
-/** A `for`/`while`/`until` keyword **and** a `do` keyword, each at a command
- *  position, on the quote-stripped command — the exact shape #120 froze the
- *  pipeline with. */
-export function usesShellLoop(command) {
-  const stripped = stripQuoted(command);
-  const hasLoopKeyword = ['for', 'while', 'until'].some((kw) => atCommandPosition(stripped, kw));
-  return hasLoopKeyword && atCommandPosition(stripped, 'do');
-}
-
-/** `gh` or `git`, at a command position, on the quote-stripped command — so a
- *  loop over an unrelated binary is never denied. */
-export function targetsGhOrGit(command) {
-  const stripped = stripQuoted(command);
-  return atCommandPosition(stripped, 'gh') || atCommandPosition(stripped, 'git');
-}
-
-/** Detects a `gh pr edit`/`gh issue edit` call that removes `label`, and the
- *  item numbers it targets — a bare positional digit, or the trailing digits
- *  of a `github.com/**\/(issues|pull)/<n>` URL. Quote-aware, so a label name
- *  with spaces (`"needs human"`) is read correctly. `numbers` is always
- *  collected, even when `isAttempt` is false, so a caller never re-tokenizes.
- *  `hasNumbers` is `false` whenever `gh` was given no digit and no
- *  `issues|pull` URL to key off — e.g. `gh pr edit <branch-name> ...` or
- *  `gh pr edit --remove-label ...` with no identifier at all, which `gh`
- *  accepts as "the current branch's PR". A caller must not treat an empty
- *  `numbers` array as "nothing to verify": `[].every(...)` is vacuously
- *  `true`, so skipping this check would let an unidentified item's gate
- *  clear through with nothing for the operator to have named. */
-export function gateClearAttempt(command, label) {
-  const tokens = tokenize(command);
-  const isEdit =
-    tokens[0] === 'gh' &&
-    ((tokens[1] === 'pr' && tokens[2] === 'edit') || (tokens[1] === 'issue' && tokens[2] === 'edit'));
-
-  const numbers = [];
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i];
-    const prev = tokens[i - 1] ?? '';
-    if (prev.startsWith('-')) continue; // a flag's value, not a positional item number
-    if (/^\d+$/.test(t)) {
-      numbers.push(Number(t));
-      continue;
-    }
-    const m = /\/(?:issues|pull)\/(\d+)(?:[/?#].*)?$/.exec(t);
-    if (m) numbers.push(Number(m[1]));
-  }
-  const hasNumbers = numbers.length > 0;
-
-  if (!isEdit) return { isAttempt: false, numbers, hasNumbers };
-
-  const target = label.trim().toLowerCase();
-  let isAttempt = false;
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i];
-    let value = null;
-    if (t === '--remove-label') value = tokens[i + 1] ?? '';
-    else if (t.startsWith('--remove-label=')) value = t.slice('--remove-label='.length);
-    if (value === null) continue;
-    if (value.split(',').map((v) => v.trim().toLowerCase()).includes(target)) isAttempt = true;
-  }
-
-  return { isAttempt, numbers, hasNumbers };
+/** True when `jsonlText` (a session transcript's raw JSONL) carries the
+ *  harness's slash-command expansion wrapper element around `pipeline`, with
+ *  an optional leading `/` and an optional `<ns>:` namespace prefix — the
+ *  tell that this session has invoked the cockpit skill at some point in its
+ *  life, never undone (#216). **The wrapper element is the whole tell**:
+ *  matching a bare `/port:pipeline` substring would also fire on any session
+ *  that merely *read* `SKILL.md`, which names that string in its own pacing
+ *  section, so this only matches the harness's own expansion wrapper form.
+ *  The wrapper's tag name is assembled at runtime rather than written as a
+ *  contiguous literal anywhere in this file — a shipped file naming it
+ *  directly would itself make any session that merely reads that file look
+ *  like a cockpit invocation (see the `preflight-tell-guard` layer 1 check).
+ *  Returns `false`, never `null`, for unreadable or empty text — callers
+ *  that need "unreadable" distinguished pass that through separately, the
+ *  same shape `recentOperatorMessages` uses. */
+export function invokedCockpitSkill(jsonlText) {
+  if (typeof jsonlText !== 'string' || jsonlText.length === 0) return false;
+  const tag = ['command', 'name'].join('-');
+  const wrapper = new RegExp(`<${tag}>/?(?:[a-z0-9_-]+:)?pipeline<\\/${tag}>`);
+  return wrapper.test(jsonlText);
 }
 
 /** The last `limit` operator (human) messages found in a session transcript's
@@ -339,21 +244,34 @@ export function operatorNamed(numbers, messages) {
  *                     (operator-named, or unverifiable). Not a denial;
  *                     logged as the audit record for the clear.
  *
- *  Rule order for a Bash call: gate → install → loop → allowlist. Each of
- *  the first three returns its own specific reason instead of falling
- *  through to the generic allowlist miss/deny. Gate and loop are inert —
- *  `allow` immediately — for `who.isOperatorWorktree`, an `/port:implement`
- *  session that must stay unguarded by the cockpit rules. **Install is the
- *  one rule that is not**: an install performed from an `impl-<n>` operator
- *  worktree repoints every session on the machine exactly as one from a
- *  dispatched agent's worktree would, so it is never exempt.
+ *  Rule order for a Bash call: gate → install → branch → loop → allowlist.
+ *  Each of the first four returns its own specific reason instead of falling
+ *  through to the generic allowlist miss/deny. Gate, branch, and loop are
+ *  inert — `allow` immediately — for `who.isOperatorWorktree`, an
+ *  `/port:implement` session that must stay unguarded by the cockpit rules.
+ *  **Install is the one rule that is not**: an install performed from an
+ *  `impl-<n>` operator worktree repoints every session on the machine
+ *  exactly as one from a dispatched agent's worktree would, so it is never
+ *  exempt.
  *
  *  `needsHumanLabel` and `operatorMessages` are optional: omitting
  *  `needsHumanLabel` skips the gate rule entirely (used by callers with no
  *  gate to guard), and `operatorMessages` is the caller's *already-read*
  *  transcript tail (`recentOperatorMessages`) — `decide` never does I/O
- *  itself. */
-export function decide({ payload, matchers, sessionRequiredPaths, root, needsHumanLabel, operatorMessages }) {
+ *  itself. `isCockpitSession` is the same shape (`true`/`false`/`null` —
+ *  the caller's already-read `invokedCockpitSkill` result, `null` when the
+ *  transcript was unreadable): omitting it skips the branch rule entirely,
+ *  matching `needsHumanLabel`'s pattern for a caller with no cockpit rule to
+ *  guard. */
+export function decide({
+  payload,
+  matchers,
+  sessionRequiredPaths,
+  root,
+  needsHumanLabel,
+  operatorMessages,
+  isCockpitSession,
+}) {
   const who = callerKind(payload);
   const toolName = payload?.tool_name;
 
@@ -429,6 +347,21 @@ export function decide({ payload, matchers, sessionRequiredPaths, root, needsHum
         subject: command,
         reason:
           'port: installing, uninstalling, or changing a plugin marketplace from inside a managed worktree is denied — every install scope shares one installPath, so this would silently repoint every session on the machine and keep doing so after this worktree is gone. Run it from the main checkout instead.',
+      };
+    }
+
+    // Branch rule (#216) — a cockpit session `git checkout`/`git switch`ing
+    // out from under its own startup refusal ("check one of those out and
+    // start me again" is not an instruction to change branches itself).
+    // `isCockpitSession === null` (transcript unreadable) allows, matching
+    // the gate rule: an unknowable identity is not an established cockpit.
+    if (!who.isOperatorWorktree && !who.isSubagent && isCockpitSession && switchesBranch(command)) {
+      return {
+        decision: 'deny',
+        who,
+        subject: command,
+        reason:
+          'port: switching branches from a cockpit session is denied (#216) — the startup preflight\'s hard stop names the carrying branch or /port:init; it is never escaped by checking one out from here. Stop and emit the preflight\'s hard-stop message rather than changing the operator\'s branch.',
       };
     }
 
