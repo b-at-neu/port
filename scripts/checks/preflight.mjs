@@ -6,7 +6,7 @@
 // This ticket's own guards get their own topic module rather than landing in
 // scripts/checks/cockpit.mjs or scripts/checks/hooks.mjs: both are already at
 // the file-size ratchet (scripts/checks/file-size.config.json), so neither
-// can take a new check until #182 splits them.
+// can take a new check until issue 182 splits them.
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -314,7 +314,7 @@ export default async function ({ fail, ok }) {
     // subcommand itself — this repo's own shell-discipline block prescribes
     // exactly this idiom (`git -c core.editor=true rebase --continue`), so a
     // miss here would let a cockpit session slip a checkout past the rule
-    // this ticket exists to add (#222, R3-M1).
+    // this ticket exists to add (issue 222, R3-M1).
     if (!switchesBranch('git -c core.editor=true checkout evil-branch')) {
       fail('branch-rule-classifier', 'switchesBranch: expected true for "git -c core.editor=true checkout evil-branch"');
     } else ok();

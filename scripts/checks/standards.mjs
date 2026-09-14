@@ -14,8 +14,8 @@ import { root, walk, relOf, frontmatter } from '../lib/files.mjs';
 // Every agent granting Bash must carry the byte-identical
 // `standards-precedence` block establishing CLAUDE.md > docs.engineering >
 // ambient style and the commands.*/PIPELINE.md carve-out. There is no
-// PIPELINE.md canonical copy — the #177 file-size ratchet forbids that file
-// growing until #181 frees the headroom — so the four agent copies are
+// PIPELINE.md canonical copy — the issue 177 file-size ratchet forbids that
+// file growing until issue 181 frees the headroom — so the four agent copies are
 // compared pairwise against each other instead of against one source, the
 // same resolution docs/ENGINEERING.md §2 records for the label-cas block.
 export default async function ({ fail, note, ok }) {
@@ -144,7 +144,7 @@ export default async function ({ fail, note, ok }) {
     note('standards: no standards-precedence block found anywhere — skipped the literal checks');
   }
 
-  // Self-test: a check that cannot be made to fail is not a check (#177,
+  // Self-test: a check that cannot be made to fail is not a check (issue 177,
   // ENGINEERING.md §7). Four literal mutations of a known-good block, each
   // must still be rejected — CLAUDE.md/docs.engineering order reversed, the
   // carve-out deleted, "never a finding" reworded, and (#49)
