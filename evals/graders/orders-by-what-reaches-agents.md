@@ -18,7 +18,7 @@ Any of:
 - `scaffold-cli` is presented ahead of, or without distinction from, `db-lens`/`test-patterns`.
 - `scaffold-cli` is described as benefiting the pipeline, the dispatched agents, or "the analysis" without the operator-facing caveat.
 - The three are listed with no ordering or grouping logic tied to delivery surface at all (e.g., alphabetical, or in the order given in the prompt with no comment on why).
-- `test-patterns` is treated as not reaching the agents (e.g., dismissed because it's "just a skill") — the ticket this eval regresses against exists precisely because a passive skill dolist does reach `plan-agent`/`review-agent` once `Skill` is allowlisted.
+- `test-patterns` is treated as not reaching the agents (e.g., dismissed because it's "just a skill") — the ticket this eval regresses against exists precisely because a passive skill does reach `plan-agent`/`review-agent` once `Skill` is allowlisted.
 
 ## Notes for the judge
 
