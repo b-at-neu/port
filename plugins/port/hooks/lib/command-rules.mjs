@@ -88,6 +88,14 @@ export function pluginInstallMutation(command) {
   return false;
 }
 
+// `git` global options that consume the *next* token as a separate value —
+// `-c core.editor=true`, `-C /path`, `--git-dir <path>`, and so on — as
+// opposed to a boolean flag or one whose value is glued on with `=`. Missing
+// one of these means the loop below treats that value token as the git
+// subcommand itself and gives up right there, never reaching the real
+// subcommand a few tokens later (#222, R3-M1).
+const GIT_VALUE_FLAGS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--super-prefix']);
+
 /** True when `command` (quote-stripped internally) invokes `git
  *  checkout`/`git switch`, plain or via `git -C <path> checkout` — the
  *  escape #216 recorded a cockpit session taking to get around its own
@@ -112,8 +120,8 @@ export function switchesBranch(command) {
     const rest = stripped.slice(match.index + match[0].length);
     const tokens = tokenize(rest);
     for (let i = 0; i < tokens.length; i++) {
-      if (tokens[i] === '-C') {
-        i++; // skip the path argument
+      if (GIT_VALUE_FLAGS.has(tokens[i])) {
+        i++; // skip the flag's own separate value argument
         continue;
       }
       if (tokens[i].startsWith('-')) continue; // any other git-level flag

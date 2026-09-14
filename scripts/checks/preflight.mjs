@@ -283,9 +283,9 @@ export default async function ({ fail, ok }) {
     if (switchesBranch('gh pr checkout 5')) fail('branch-rule-classifier', 'switchesBranch: expected false — this is gh, not git');
     else ok();
 
-    // R1-M1: a chained command carrying an earlier, unrelated `git`
-    // invocation ahead of the checkout must still be caught — every
-    // command-position `git` occurrence is scanned, not just the first.
+    // A chained command carrying an earlier, unrelated `git` invocation
+    // ahead of the checkout must still be caught — every command-position
+    // `git` occurrence is scanned, not just the first.
     if (!switchesBranch('git branch --sort=-committerdate ; git checkout evil-branch')) {
       fail('branch-rule-classifier', 'switchesBranch: expected true for a chained command with an earlier git invocation (spaced separator)');
     } else ok();
@@ -294,6 +294,18 @@ export default async function ({ fail, ok }) {
     } else ok();
     if (!switchesBranch('git status && git checkout evil-branch')) {
       fail('branch-rule-classifier', 'switchesBranch: expected true for a chained command joined with &&');
+    } else ok();
+
+    // A value-taking global flag like `-c` must not be mistaken for the git
+    // subcommand itself — this repo's own shell-discipline block prescribes
+    // exactly this idiom (`git -c core.editor=true rebase --continue`), so a
+    // miss here would let a cockpit session slip a checkout past the rule
+    // this ticket exists to add (#222, R3-M1).
+    if (!switchesBranch('git -c core.editor=true checkout evil-branch')) {
+      fail('branch-rule-classifier', 'switchesBranch: expected true for "git -c core.editor=true checkout evil-branch"');
+    } else ok();
+    if (switchesBranch('git -c core.editor=true rebase --continue')) {
+      fail('branch-rule-classifier', 'switchesBranch: expected false for "git -c core.editor=true rebase --continue"');
     } else ok();
 
     // --- invokedCockpitSkill ---------------------------------------------------

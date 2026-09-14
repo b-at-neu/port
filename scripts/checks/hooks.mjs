@@ -63,7 +63,7 @@ export default async function ({ fail, ok }) {
   {
     const { allowMatchers, decide, callerKind, globToRegExp, recentOperatorMessages, operatorNamed, invokedCockpitSkill } =
       await import(pathToFileURL(join(root, 'plugins/port/hooks/lib/guard-rules.mjs')).href);
-    const { gateClearAttempt, pluginInstallMutation, switchesBranch } =
+    const { gateClearAttempt, pluginInstallMutation } =
       await import(pathToFileURL(join(root, 'plugins/port/hooks/lib/command-rules.mjs')).href);
 
     const settingsFile = join(root, '.claude/settings.json');
