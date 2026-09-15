@@ -75,7 +75,8 @@ export function normalizeYaml(text) {
 
 export default async function ({ fail, note, ok }) {
   // --- Label vocabulary matches the schema -----------------------------------
-  // Two files independently list the same label keys. They have drifted before.
+  // guard: two files listing the same vocabulary and drifting. Two files
+  // independently list the same label keys. They have drifted before.
   {
     const templateKeys = new Set(readJson('plugins/port/templates/labels.json').labels.map((l) => l.key));
     const schemaKeys = new Set(
@@ -91,13 +92,15 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Cockpit's inline label-vocabulary table matches labels.json ------------
-  // Regression guard for #61: the cockpit resolves `labels[key] ?? default` from
-  // an inline copy of the vocabulary rather than reading labels.json directly,
-  // so the two tables must name the same keys and the same default name per key
-  // or the resolution the cockpit performs at startup silently drifts from the
-  // source of truth. Extended for #170: the table's Role column is what the
-  // workflow-render check below derives `{{blockingLabels}}` from, so it is
-  // pinned against `labels.json`'s own `role` field too, both directions.
+  // guard(#61, #170): the cockpit resolving a config key it cannot map to a
+  // real label name, and the role field the blocking-label derivation reads
+  // from drifting from the table it was copied from. The cockpit resolves
+  // `labels[key] ?? default` from an inline copy of the vocabulary rather
+  // than reading labels.json directly, so the two tables must name the same
+  // keys and the same default name per key. Extended for the role column:
+  // it is what the workflow-render check below derives `{{blockingLabels}}`
+  // from, so it is pinned against `labels.json`'s own `role` field too, both
+  // directions.
   {
     const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
     const skillText = readFileSync(join(root, skillRel), 'utf8');
@@ -142,15 +145,17 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- No config key appears as a literal --label argument --------------------
-  // Regression guard for #61: `gh ... --label <unknown>` exits 0 with an empty
-  // result, so a config key (e.g. `planApproved`) typed directly into a
-  // `--label`/`--add-label`/`--remove-label` argument silently matches no real
-  // label instead of erroring. `<labels.planApproved>` is the placeholder and
-  // must not match; the bare string `planApproved` must. Extended for #148: the
-  // collapsed tick query expresses the same thing as a GraphQL `labels: [...]`
-  // list, which the original regex — keyed on `--label` flags only — would
-  // silently miss, letting the collapse reintroduce #61's exact failure mode
-  // one syntax over.
+  // guard(#61, #148): a key typed where a resolved label name belongs,
+  // matching nothing silently, and a config key surviving the tick's
+  // collapse into a GraphQL query and matching nothing silently — the exact
+  // same failure mode one syntax over. `gh ... --label <unknown>` exits 0
+  // with an empty result, so a config key (e.g. `planApproved`) typed
+  // directly into a `--label`/`--add-label`/`--remove-label` argument
+  // silently matches no real label instead of erroring. `<labels.planApproved>`
+  // is the placeholder and must not match; the bare string `planApproved`
+  // must. Extended for the collapsed tick query, which expresses the same
+  // thing as a GraphQL `labels: [...]` list, which the original regex —
+  // keyed on `--label` flags only — would silently miss.
   {
     const mismatched = readJson('plugins/port/templates/labels.json')
       .labels.filter((l) => l.key !== l.name)
@@ -189,10 +194,11 @@ export default async function ({ fail, note, ok }) {
     ok();
   }
 
-  // --- Desktop app's LABEL_ROLES matches labels.json's role field, both directions (#79) ---
-  // #79 Decision 1: the stage ladder reads `role` off `LABEL_DEFAULTS` rather
-  // than a hand-transcribed key→stage table. `LabelRole` itself can't be
-  // derived from the template import (TypeScript widens JSON strings to
+  // --- Desktop app's LABEL_ROLES matches labels.json's role field, both directions ---
+  // guard(#79): the stage ladder's role union drifting from the template it
+  // must read. Decision 1: the stage ladder reads `role` off `LABEL_DEFAULTS`
+  // rather than a hand-transcribed key→stage table. `LabelRole` itself can't
+  // be derived from the template import (TypeScript widens JSON strings to
   // `string`), so it is hand-maintained in shared/labels/defaults.ts and must
   // agree with every distinct role labels.json actually uses, both ways.
   {
@@ -215,8 +221,9 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Label colours are well-formed and distinct -----------------------------
-  // Every label's position within its role ramp depends on a unique hex; a
-  // duplicate collapses two labels back to pixel-identical, silently.
+  // guard: a role's ramp collapsing back to one repeated hex. Every label's
+  // position within its role ramp depends on a unique hex; a duplicate
+  // collapses two labels back to pixel-identical, silently.
   {
     const labels = readJson('plugins/port/templates/labels.json').labels;
     const seen = new Map();
@@ -234,12 +241,12 @@ export default async function ({ fail, note, ok }) {
     ok();
   }
 
-  // --- Workflow copies stay rendered from their templates (#170) --------------
+  // --- Workflow copies stay rendered from their templates ---------------------
+  // guard(#170): the live workflow that actually gates merges drifting
+  // silently from the template every adopter installs, or vice versa.
   // `.github/workflows/approval-check.yml` and `artifacts.yml` are rendered
   // copies of `plugins/port/templates/*.yml` with the substitutions applied.
-  // Nothing pinned them together, so a fix applied to the live workflow — the
-  // copy that actually gates this repository's merges — could drift silently
-  // from the template every adopter installs, and vice versa.
+  // Nothing pinned them together.
   {
     // Self-test both helpers first — a check that cannot be made to fail is not
     // a check.
@@ -361,12 +368,13 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Desktop app's LABEL_KEYS matches labels.json, both directions ---------
-  // #75: apps/desktop imports the shipped template directly (it can — same
-  // repository, bundled at build time), so there is no second transcription to
-  // drift. But LABEL_KEYS itself can't be derived from that import (TypeScript
-  // widens JSON string values to `string`), so it is hand-maintained in
-  // vocabulary.ts and must be diffed against the template here, the same shape
-  // as the cockpit-table and artifacts-labels guards above.
+  // guard(#75): the one literal union that can't be derived from the JSON
+  // import (TypeScript widens JSON strings to `string`) drifting from the
+  // template it must mirror. apps/desktop imports the shipped template
+  // directly (it can — same repository, bundled at build time), so there is
+  // no second transcription to drift there, but LABEL_KEYS itself must be
+  // diffed against the template here, the same shape as the cockpit-table
+  // and artifacts-labels guards above.
   {
     const rel = 'apps/desktop/src/shared/labels/vocabulary.ts';
     const text = readFileSync(join(root, rel), 'utf8');
@@ -387,14 +395,16 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Desktop app never retypes a resolved label name it should import ------
-  // #75: the strings where `key !== name` (`plan approved`, `ready for review`,
-  // …) must come from the LABEL_DEFAULTS import, never be hand-typed again —
-  // that is exactly the second-transcription drift this ticket exists to
-  // prevent. Single-word names where `key === name` are excluded, since
-  // LABEL_KEYS legitimately contains them as literals. Widened for #74 from
-  // shared/labels/ to all of apps/desktop/src/: the registry and the
-  // renderer are consumers now too, not just the one directory that had a
-  // consumer when this guard was written.
+  // guard(#75, #74): the app retyping a resolved label name by hand instead
+  // of reading it from the LABEL_DEFAULTS import — the same
+  // second-transcription drift this rail exists to prevent — and the
+  // registry or the renderer retyping a resolved label name instead of
+  // importing it, now that both are consumers. The strings where
+  // `key !== name` (`plan approved`, `ready for review`, …) must come from
+  // the LABEL_DEFAULTS import, never be hand-typed again. Single-word names
+  // where `key === name` are excluded, since LABEL_KEYS legitimately
+  // contains them as literals. Widened from shared/labels/ to all of
+  // apps/desktop/src/.
   {
     const mismatched = readJson('plugins/port/templates/labels.json')
       .labels.filter((l) => l.key !== l.name)

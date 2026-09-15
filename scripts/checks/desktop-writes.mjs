@@ -28,6 +28,8 @@ export default async function ({ fail, ok }) {
   }
 
   // --- '../platform/gh' is imported under apps/desktop/src/ only from -------
+  // guard(#90): a second GitHub writer bypassing the chokepoint, or the
+  // chokepoint itself losing its only caller.
   // main/github/ and main/writes/, and both do import it. `gh`/`ghJson` are
   // always called through an injected seam (`params.gh ?? defaultGh`), never
   // as a bare literal call at every call site, so the import path — not a
@@ -54,6 +56,8 @@ export default async function ({ fail, ok }) {
   }
 
   // --- No file under main/writes/ contains 'graphql' or builds a query ------
+  // guard(#90): the observed state coming from anywhere but
+  // fetchItemsByNumber, re-implementing a second query builder.
   // The observed state comes only from fetchItemsByNumber (../github) —
   // never a second GraphQL caller.
   {
@@ -69,6 +73,8 @@ export default async function ({ fail, ok }) {
   }
 
   // --- No file under main/writes/ passes merge/close/--delete-branch/ready --
+  // guard(#90): merging or closing a pull request stopping being a
+  // human-only action.
   // as a gh subcommand argument — merging and closing stay human actions.
   {
     let found = false;
@@ -85,6 +91,8 @@ export default async function ({ fail, ok }) {
   }
 
   // --- --add-label/--remove-label appear only in main/writes/command.ts -----
+  // guard(#90): a label name reaching gh without resolving through the
+  // vocabulary.
   {
     let found = false;
     for (const f of allFiles) {
@@ -110,6 +118,8 @@ export default async function ({ fail, ok }) {
   }
 
   // --- PLAN_GATE_KEYS matches docs/COORDINATION.md's claim contract, both ---
+  // guard(#90): the claim gating a different set of labels than the doc
+  // that defines it.
   // directions.
   {
     const scopeText = readFileSync(join(root, scopeFile), 'utf8');
@@ -140,6 +150,8 @@ export default async function ({ fail, ok }) {
   }
 
   // --- The Conflict union matches COORDINATION.md's fenced block, both ------
+  // guard(#90): the app's conflict shape drifting from the copy decided in
+  // COORDINATION.md.
   // directions — by literal kind and field-name set, not byte-identity (the
   // doc's fence omits the `readonly` modifiers this app's style requires).
   {
@@ -165,6 +177,8 @@ export default async function ({ fail, ok }) {
   }
 
   // --- .agents/gate-claim.json appears in both claim.ts and COORDINATION.md -
+  // guard(#90): the claim file's path silently diverging between the code
+  // and its own contract doc.
   {
     const claimText = readFileSync(join(root, claimFile), 'utf8');
     const coordinationText = readFileSync(join(root, coordinationFile), 'utf8');
@@ -178,6 +192,8 @@ export default async function ({ fail, ok }) {
   }
 
   // --- appendTextFile( is called under apps/desktop/src/ only from ----------
+  // guard(#90): a second path writing an audit entry that skipped the
+  // chokepoint.
   // main/writes/audit.ts — one appender, so no second path can write an
   // entry that skipped the chokepoint.
   {

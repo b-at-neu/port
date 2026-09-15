@@ -3,21 +3,23 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { root, readJson } from '../lib/files.mjs';
 
-// Regression guard for #205: 121 denials recorded against stage agents
-// running their own configured commands.checks — 18 of them because the
-// repository's own extraAllow entry for `node scripts/checks.mjs` carried no
-// trailing wildcard, so an agent limiting output (`2>&1 | tail -100`) missed
-// the allowlist outright. This module makes that coverage mechanically
-// checkable instead of a convention nobody re-verifies.
+// Issue 205: 121 denials recorded against stage agents running their own
+// configured commands.checks — 18 of them because the repository's own
+// extraAllow entry for `node scripts/checks.mjs` carried no trailing
+// wildcard, so an agent limiting output (`2>&1 | tail -100`) missed the
+// allowlist outright. This module makes that coverage mechanically checkable
+// instead of a convention nobody re-verifies.
 export default async function ({ fail, note, ok }) {
   const { allowMatchers, decide, bashPatternMatches, repoRelative } = await import(
     pathToFileURL(join(root, 'plugins/port/hooks/lib/guard-rules.mjs')).href
   );
 
   // --- Check A self-test — make it fail first ---------------------------------
-  // The real historical failure, per ENGINEERING §7: a check that cannot be
-  // made to fail is not a check. `bashPatternMatches` is called directly —
-  // Check A's own matcher-wrapper shape is `allowMatchers`'s job to build, and
+  // guard(#205): an extraAllow entry generated without a trailing ` *`,
+  // denying every dispatched agent that limits a check's output. The real
+  // historical failure, per ENGINEERING §7: a check that cannot be made to
+  // fail is not a check. `bashPatternMatches` is called directly — Check A's
+  // own matcher-wrapper shape is `allowMatchers`'s job to build, and
   // rebuilding it here would only re-derive fields nothing reads.
   {
     const narrowPattern = 'node scripts/checks.mjs';
@@ -76,11 +78,14 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Check A' — a preexisting bare entry is never replaced by its wildcard --
+  // guard(#212): a wildcard silently replacing a preexisting bare entry
+  // instead of joining it — functional matching alone can't tell the two
+  // states apart, since a wildcard-only entry already satisfies both (R3-M1).
   // A wildcard entry alone already satisfies Check A's functional bare/suffix
   // match above, so it cannot by itself catch a bare entry silently dropped
-  // when the wildcard was added alongside it — exactly what happened once: the
-  // #205 fix removed `Bash(node scripts/checks.mjs)` instead of keeping it
-  // (R3-M1, #212). `init/SKILL.md`'s reconcile rule says the wildcard form is
+  // when the wildcard was added alongside it — exactly what happened once:
+  // issue 205's fix removed `Bash(node scripts/checks.mjs)` instead of
+  // keeping it. `init/SKILL.md`'s reconcile rule says the wildcard form is
   // "added alongside it — never removed", matching the paired bare/wildcard
   // convention every other bare-invocable command in permissions.base.json
   // already follows. Asserted as literal string presence, not functional
@@ -108,8 +113,10 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Check B — classifier cases for normalization ---------------------------
-  // Each case names the failure it catches, mirroring hooks.mjs's own
-  // "Guard hook classifier" style.
+  // guard(#205): the guard denying an agent's own configured command merely
+  // because the harness expanded it to an absolute path. Each case names the
+  // failure it catches, mirroring hooks.mjs's own "Guard hook classifier"
+  // style.
   {
     const settingsFile = join(root, '.claude/settings.json');
     const matchers = allowMatchers([settingsFile]);
@@ -196,11 +203,12 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Check C — repoRelative, called directly --------------------------------
+  // guard(#205): the fail-closed arm silently reshaping a declined path into
+  // the POSIX form the allow patterns are written in, widening the match.
   // Check B reaches this function only through `decide`, which can only ever
-  // observe the allow/deny it feeds into. These cases assert the rewrite's own
-  // documented contract — including the fail-closed arm, whose whole point is
-  // that a declined path comes back byte-identical rather than reshaped into
-  // the POSIX form the allow patterns are written in.
+  // observe the allow/deny it feeds into. These cases assert the rewrite's
+  // own documented contract, including the fail-closed arm, whose whole
+  // point is that a declined path comes back byte-identical.
   {
     const rel = (label, command, configRoot, expected) => {
       const actual = repoRelative(command, configRoot);
@@ -259,8 +267,10 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Check D — phrase pins ---------------------------------------------------
-  // A future prose edit that quietly reverts either rule fails here rather
-  // than in a live pipeline run.
+  // guard(#205): the prompt arm of the fix being reverted in one file with
+  // CI silent — PIPELINE.md must still name which direction the trailing
+  // wildcard fails toward. A future prose edit that quietly reverts either
+  // rule fails here rather than in a live pipeline run.
   {
     const skillRel = 'plugins/port/skills/init/SKILL.md';
     const skillText = readFileSync(join(root, skillRel), 'utf8');
@@ -290,12 +300,13 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Check E — the prompt arm's own copies ------------------------------------
-  // The prose #205 records as having lost this argument 18 times lives in three
-  // stage prompts, so §2 needs it pinned: without this, the fix can be reverted
-  // in one file with CI silent. The long clause is byte-identical between
-  // impl-agent and revise-agent (both describe running commands.checks); the
-  // review-agent variant says the same thing about commands.artifacts in its own
-  // words, so only the two operative phrases are pinned across all three.
+  // guard(#205): the prompt arm of the fix being reverted in one file with
+  // CI silent. The prose issue 205 records as having lost this argument 18
+  // times lives in three stage prompts, so §2 needs it pinned. The long
+  // clause is byte-identical between impl-agent and revise-agent (both
+  // describe running commands.checks); the review-agent variant says the
+  // same thing about commands.artifacts in its own words, so only the two
+  // operative phrases are pinned across all three.
   {
     const runners = ['plugins/port/agents/impl-agent.md', 'plugins/port/agents/revise-agent.md'];
     const allThree = [...runners, 'plugins/port/agents/review-agent.md'];
@@ -326,15 +337,16 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Check F — what actually bounds the wildcard ------------------------------
-  // #212: both prose copies used to rest the trailing wildcard's
-  // fail-toward-availability argument on "the deny list stays the real safety
-  // surface for whatever gets chained after it", which is false — allow and deny
-  // matching both key off a command's leading tokens, so no deny pattern can fire
-  // on a call chained after a matched prefix. What makes the widening bounded is
-  // that the guard hook is **deny-only**: it can add a denial but never grant one,
-  // so a wildcard entry widens only what the hook declines to object to. That is a
-  // property of the shipped hook, so it is asserted against the hook itself rather
-  // than trusted as prose, and the two prose copies are pinned to state it.
+  // guard(#212): the trailing wildcard's fail-toward-availability argument
+  // resting on the deny list, which keys off a command's leading tokens and
+  // so cannot fire on anything chained after a matched prefix. Both prose
+  // copies used to rest the argument on "the deny list stays the real safety
+  // surface for whatever gets chained after it", which is false. What makes
+  // the widening bounded is that the guard hook is **deny-only**: it can add
+  // a denial but never grant one, so a wildcard entry widens only what the
+  // hook declines to object to. That is a property of the shipped hook, so
+  // it is asserted against the hook itself rather than trusted as prose, and
+  // the two prose copies are pinned to state it.
   {
     const hookRel = 'plugins/port/hooks/agent-guard.mjs';
     const hookText = readFileSync(join(root, hookRel), 'utf8');
@@ -385,12 +397,12 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Check G — the Skill delivery path, both directions ---------------------
-  // #50: a skill-only plugin could not reach a dispatched agent because Skill
-  // was absent from the template, this repository's own settings, and the
-  // two read-only agents' tools: — recommending a capability the pipeline
-  // could not deliver. Same shape as Check A': asserted in both directions,
-  // since three of four carrying it is the half-live state that recommends a
-  // benefit the agents do not actually have.
+  // guard(#50): a skill-only plugin could not reach a dispatched agent because
+  // Skill was absent from the template, this repository's own settings, and
+  // the two read-only agents' tools: — recommending a capability the
+  // pipeline could not deliver. Same shape as Check A': asserted in both
+  // directions, since three of four carrying it is the half-live state that
+  // recommends a benefit the agents do not actually have.
   {
     const carriers = [
       ['plugins/port/templates/permissions.base.json', (text) => text.includes('"Skill"')],

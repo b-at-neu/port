@@ -6,7 +6,7 @@
 // This ticket's own guards get their own topic module rather than landing in
 // scripts/checks/cockpit.mjs or scripts/checks/hooks.mjs: both are already at
 // the file-size ratchet (scripts/checks/file-size.config.json), so neither
-// can take a new check until #182 splits them.
+// can take a new check until issue 182 splits them.
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -41,6 +41,9 @@ export default async function ({ fail, ok }) {
   // Regression guard: the cockpit's config Read resolved against the session's
   // transcript directory rather than the repository, because SKILL.md named a
   // bare relative path with no repo anchor at all.
+  // guard(#216): the startup preflight's config Read resolving against the
+  // session's transcript directory instead of the repository, reporting a
+  // false "not port-managed".
   {
     if (!skillText.includes('git rev-parse --show-toplevel')) {
       fail('preflight-anchoring', `${skillRel} no longer resolves a repository root with 'git rev-parse --show-toplevel'`);
@@ -65,6 +68,8 @@ export default async function ({ fail, ok }) {
   // Regression guard: 'git rev-list --all' + 'git branch --contains' finds the
   // newest commit touching the file, not where the file exists — a question a
   // rebase invalidates on its own.
+  // guard(#216): a diagnostic that finds the newest commit touching the file
+  // rather than where it exists, and that a rebase invalidates on its own.
   {
     if (!skillText.includes('git cat-file -e')) {
       fail('preflight-config-diagnostic', `${skillRel} no longer tests config existence with 'git cat-file -e'`);
@@ -87,6 +92,8 @@ export default async function ({ fail, ok }) {
   // --- Refusal rail is a checkable precondition, not bare prose (#216 defect 3)
   // Regression guard: "hard refusal with no override" was itself overridden —
   // the cockpit checked out another branch to escape its own stated refusal.
+  // guard(#216): an unenforced prose "hard refusal" being escaped by the very
+  // session it was meant to stop.
   {
     if (skillText.includes('hard refusal with no override')) {
       fail('preflight-refusal-rail', `${skillRel} still states the unenforced "hard refusal with no override" prose`);
@@ -102,6 +109,8 @@ export default async function ({ fail, ok }) {
 
   // --- Identity line's two inputs are pinned, not printed from a guess
   // (#216 defect 4) -------------------------------------------------------------
+  // guard(#216): an identity line printing a sha or a comparison ref from the
+  // wrong source.
   {
     if (!skillText.includes('not a prefix of the resolved record\'s `gitCommitSha`')) {
       fail('preflight-identity', `${skillRel} never states the sha-prefix precondition for the identity line's commit`);
@@ -117,6 +126,8 @@ export default async function ({ fail, ok }) {
 
   // --- Guard against the generality mistake this ticket's own fixes could
   // introduce: no repository-specific literal in the new prose above. -------
+  // guard(#216): this ticket's own fixes reintroducing the generality mistake
+  // they were meant to close, pinning the prose to one repository.
   {
     const start = skillText.indexOf('## Startup preflight');
     const end = skillText.indexOf('## UX states (startup preflight)');
@@ -137,6 +148,9 @@ export default async function ({ fail, ok }) {
   // --- Branch-rule classifier (#216 defect 3) ---------------------------------
   // Unit-tests switchesBranch and the decide() branch rule directly, proving
   // the rule can both fire and stay out of the way before trusting it.
+  // guard(#216): a cockpit session escaping its own startup refusal by
+  // switching branches, and a rule that fires on any session that merely
+  // reads SKILL.md's own prose naming the skill.
   {
     const { decide, invokedCockpitSkill, allowMatchers } = await import(
       pathToFileURL(join(root, 'plugins/port/hooks/lib/guard-rules.mjs')).href
@@ -296,11 +310,11 @@ export default async function ({ fail, ok }) {
       fail('branch-rule-classifier', 'switchesBranch: expected true for a chained command joined with &&');
     } else ok();
 
-    // A value-taking global flag like `-c` must not be mistaken for the git
-    // subcommand itself — this repo's own shell-discipline block prescribes
-    // exactly this idiom (`git -c core.editor=true rebase --continue`), so a
-    // miss here would let a cockpit session slip a checkout past the rule
-    // this ticket exists to add (#222, R3-M1).
+    // guard(#222): a value-taking global flag like `-c` must not be mistaken
+    // for the git subcommand itself (R3-M1) — this repo's own
+    // shell-discipline block prescribes exactly this idiom (`git -c
+    // core.editor=true rebase --continue`), so a miss here would let a
+    // cockpit session slip a checkout past the rule this ticket adds.
     if (!switchesBranch('git -c core.editor=true checkout evil-branch')) {
       fail('branch-rule-classifier', 'switchesBranch: expected true for "git -c core.editor=true checkout evil-branch"');
     } else ok();
@@ -336,6 +350,8 @@ export default async function ({ fail, ok }) {
   // The classifier's own tests import guard-rules.mjs directly and cannot see
   // agent-guard.mjs's transcript read; this proves the wiring, not just the
   // decision logic.
+  // guard(#216): the classifier's own tests importing guard-rules.mjs
+  // directly, which cannot see agent-guard.mjs's own transcript read.
   {
     const hookPath = join(root, 'plugins/port/hooks/agent-guard.mjs');
     const fixture = mkdtempSync(join(tmpdir(), 'port-guard-branch-hook-'));
@@ -408,6 +424,9 @@ export default async function ({ fail, ok }) {
   // --- The tell cannot be neutered by a shipped file naming it (#216) ---------
   // If any file under plugins/port/ carries the literal `<command-name>`
   // string, a session that merely reads that file would look like a cockpit.
+  // guard(#216): a shipped file naming the cockpit-invocation tell directly,
+  // which would make any session that merely reads that file look like a
+  // cockpit.
   {
     const shipped = walk(join(root, 'plugins/port')).filter((f) => f.endsWith('.md') || f.endsWith('.mjs'));
     for (const f of shipped) {

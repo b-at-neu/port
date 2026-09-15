@@ -2,9 +2,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { root } from '../lib/files.mjs';
 
-// Regression guard for #50: /port:analyze's step 6 recommended plugins on
-// three bad criteria — "already installed" measured against the operator's
-// own machine rather than this repository's declarations, tier 3 skipped on
+// guard(#50): /port:analyze's step 6 recommended plugins on three bad
+// criteria — "already installed" measured against the operator's own
+// machine rather than this repository's declarations, tier 3 skipped on
 // "small, simple stack", and no distinction between a plugin that reaches a
 // dispatched agent and one that only helps the operator's own session. Each
 // pin below is the literal phrase (or absent phrase) that constitutes the

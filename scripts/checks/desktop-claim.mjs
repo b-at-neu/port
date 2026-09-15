@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { root, walk, relOf } from '../lib/files.mjs';
 
-// #93: the claim dialog's ("work on #N" from the UI) five mechanical rails —
+// The claim dialog's ("work on #N" from the UI) five mechanical rails —
 // dependency-free and regex-based, in the shape of desktop-writes.mjs's and
 // desktop-github.mjs's own guards. Reading directories by explicit path
 // (never walk('apps/'), which descends into node_modules).
@@ -22,10 +22,12 @@ export default async function ({ fail, ok }) {
   }
 
   // --- 'blockedBy(' — a GraphQL field selection, not a JS property access —
-  // appears under apps/desktop/src/ only in main/github/query.ts. adapter.ts
-  // reads the resolved field back off the parsed JSON (`raw.blockedBy`,
-  // `path[2] === 'blockedBy'`), which this pattern deliberately does not
-  // match, since that is a reader, never a second query builder.
+  // guard(#93): a second GraphQL query builder for the claim dialog's
+  // preflight read. 'blockedBy(' appears under apps/desktop/src/ only in
+  // main/github/query.ts. adapter.ts reads the resolved field back off the
+  // parsed JSON (`raw.blockedBy`, `path[2] === 'blockedBy'`), which this
+  // pattern deliberately does not match, since that is a reader, never a
+  // second query builder.
   {
     let found = false;
     let sawQueryFile = false;
@@ -46,8 +48,9 @@ export default async function ({ fail, ok }) {
   }
 
   // --- 'viewer {' (a GraphQL selection) and 'viewerLogin' (the resolved ----
-  // login) appear under apps/desktop/src/ only inside main/github/ — the
-  // renderer never asserts who the app is signed in as.
+  // guard(#93): the renderer asserting who the app is signed in as, instead
+  // of only displaying what main resolved. 'viewer {' and 'viewerLogin'
+  // appear under apps/desktop/src/ only inside main/github/.
   {
     let found = false;
     let sawSelection = false;
@@ -72,8 +75,9 @@ export default async function ({ fail, ok }) {
   }
 
   // --- No file under apps/desktop/src/ contains the literal '@me' — the -----
-  // signed-in login is resolved and recorded, never a sentinel the audit log
-  // cannot attribute.
+  // guard(#93): the signed-in login reaching the audit log as an
+  // unattributable sentinel instead of a resolved value. The login must be
+  // resolved and recorded, never a sentinel.
   {
     let found = false;
     for (const f of allFiles) {
@@ -87,6 +91,8 @@ export default async function ({ fail, ok }) {
   }
 
   // --- buildClaimRequest's expect.absent names 'marker' ---------------------
+  // guard(#93): the two-stage-label guard against claiming an already
+  // in-pipeline issue being quietly dropped.
   {
     const text = readFileSync(join(root, classifyFile), 'utf8');
     if (!/absent:\s*\['marker'\]/.test(text)) {
@@ -97,7 +103,8 @@ export default async function ({ fail, ok }) {
   }
 
   // --- shared/claim/'s opt-in key set matches SKILL.md's opt-in paragraph, -
-  // both directions.
+  // guard(#93): the claim dialog's opt-in write drifting from the cockpit's
+  // own opt-in labels. Checked both directions.
   {
     const text = readFileSync(join(root, classifyFile), 'utf8');
     const claimKeysMatch = /CLAIM_LABEL_KEYS[^=]*=\s*\[([^\]]*)\]/.exec(text);

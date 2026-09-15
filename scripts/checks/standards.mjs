@@ -3,6 +3,9 @@ import { join } from 'node:path';
 import { root, walk, relOf, frontmatter } from '../lib/files.mjs';
 
 // --- Standards precedence ----------------------------------------------------
+// guard(#192): CLAUDE.md honored by impl-agent alone, so review-agent and
+// revise-agent silently "fixed" code away from a convention the repository
+// itself stated.
 // Regression guard for #192: CLAUDE.md was read by impl-agent alone, so
 // review-agent and revise-agent judged code against docs.engineering and
 // ambient style with no visibility into a repository's own stated
@@ -11,8 +14,8 @@ import { root, walk, relOf, frontmatter } from '../lib/files.mjs';
 // Every agent granting Bash must carry the byte-identical
 // `standards-precedence` block establishing CLAUDE.md > docs.engineering >
 // ambient style and the commands.*/PIPELINE.md carve-out. There is no
-// PIPELINE.md canonical copy — the #177 file-size ratchet forbids that file
-// growing until #181 frees the headroom — so the four agent copies are
+// PIPELINE.md canonical copy — the issue 177 file-size ratchet forbids that
+// file growing until issue 181 frees the headroom — so the four agent copies are
 // compared pairwise against each other instead of against one source, the
 // same resolution docs/ENGINEERING.md §2 records for the label-cas block.
 export default async function ({ fail, note, ok }) {
@@ -65,6 +68,9 @@ export default async function ({ fail, note, ok }) {
     }
   }
 
+  // guard(#49): docs.design staying a dead field wired into only some of
+  // the four agents, silently inverting precedence between the two
+  // standards documents.
   // Both directions on the reference: every agent file naming
   // docs.engineering also names CLAUDE.md, and every agent file naming
   // CLAUDE.md carries the block. A fifth agent added later with only one of
@@ -138,7 +144,7 @@ export default async function ({ fail, note, ok }) {
     note('standards: no standards-precedence block found anywhere — skipped the literal checks');
   }
 
-  // Self-test: a check that cannot be made to fail is not a check (#177,
+  // Self-test: a check that cannot be made to fail is not a check (issue 177,
   // ENGINEERING.md §7). Four literal mutations of a known-good block, each
   // must still be rejected — CLAUDE.md/docs.engineering order reversed, the
   // carve-out deleted, "never a finding" reworded, and (#49)
@@ -192,6 +198,8 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Design document wiring (#49) -------------------------------------------
+  // guard(#49): a dangling template reference or a silently narrowed
+  // writable set failing only at runtime, with nothing static to catch it.
   // A dangling ${CLAUDE_PLUGIN_ROOT}/templates/... reference in analyze/SKILL.md
   // is silent at runtime — the skill just cannot find the file, with nothing
   // static to catch it. Pins the two template paths the skill references as
@@ -223,6 +231,8 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Accessibility's single home (#49) --------------------------------------
+  // guard(#49): the two templates drifting into restating accessibility in
+  // both places instead of the one stated home.
   // ENGINEERING.md and DESIGN.md would overlap and drift on accessibility
   // without a pinned single home. Pins both directions: ENGINEERING.template.md
   // carries the accessibility heading, DESIGN.template.md carries none, and

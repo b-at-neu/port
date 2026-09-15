@@ -56,7 +56,10 @@ Every pipeline agent reads this document before working. It defines the quality 
 
 <!-- Type strictness, exhaustiveness, naming, and comment discipline: when a comment
      earns its place and how long it may be — and the maximum length of a source
-     file, if you set one. -->
+     file, if you set one. A per-fix regression guard belongs beside the check
+     that pins it, not gathered into one shared registry file every fix has to
+     touch — that single-file shape is what turns "every fix leaves a guard"
+     into constant rebases as concurrency scales up. -->
 
 ## 8. Pre-pull-request self-check
 

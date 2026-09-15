@@ -1,11 +1,12 @@
-// Regression guard for #177: the operator's stated 500-line-per-file maximum
-// existed nowhere — not in docs/ENGINEERING.md, not as a check — so nothing
-// ever enforced it and three (later six) shipped files grew past it
-// unnoticed. This enforces the limit as a shrinking ratchet: every over-limit
-// file is enumerated here with its exact, current line count, and any
-// deviation from that count — up *or* down — fails, so the debt list can
-// only ever move toward zero and never quietly drift out of sync with the
-// tree it describes.
+// guard(#177): a file growing past the bar with nothing to object, and the
+// debt list going stale in either direction. The operator's stated
+// 500-line-per-file maximum existed nowhere — not in docs/ENGINEERING.md,
+// not as a check — so nothing ever enforced it and three (later six)
+// shipped files grew past it unnoticed. This enforces the limit as a
+// shrinking ratchet: every over-limit file is enumerated here with its
+// exact, current line count, and any deviation from that count — up *or*
+// down — fails, so the debt list can only ever move toward zero and never
+// quietly drift out of sync with the tree it describes.
 import { readFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';

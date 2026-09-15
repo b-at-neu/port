@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { root, walk, relOf } from '../lib/files.mjs';
 
-// #78: apps/desktop/src/main/sessions/ is the app's only reader of local
+// Issue 78: apps/desktop/src/main/sessions/ is the app's only reader of local
 // Claude transcripts. Three assertions pin its plan's decisions mechanically,
 // dependency-free and regex-based, in the shape of desktop-registry.mjs's own
 // guards — reading these directories by explicit path (never walk('apps/'),
@@ -15,6 +15,8 @@ export default async function ({ fail, ok }) {
   const allFiles = walk(srcDir).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
 
   // --- The Agent SDK is referenced under apps/desktop/src/ only in sdk.ts, and sdk.ts does reference it ---
+  // guard(#78): a second reader spawning the SDK directly instead of going
+  // through the one lazy-imported seam.
   {
     let sdkHasIt = false;
     let extraReferences = false;
@@ -37,6 +39,8 @@ export default async function ({ fail, ok }) {
   }
 
   // --- PORT_STAGE_AGENTS matches plugins/port/agents/'s basenames, both directions ---
+  // guard(#78): the stage union or the role ladder's first-prompt rung
+  // drifting from the real agents and skills it names.
   {
     const classifyFile = allFiles.find((f) => relOf(f) === `${sessionsDir}/classify.ts`);
     if (!classifyFile) {
@@ -80,9 +84,11 @@ export default async function ({ fail, ok }) {
   }
 
   // --- No `running`/`alive`/`isLive` identifier or string literal in production code ---
-  // Comments are stripped first — a doc comment is allowed to *discuss* the
-  // rail (as this very file's plan does, in backticks), only real code
-  // (identifiers, string literals) is checked.
+  // guard(#78): a local transcript's recency being reported as liveness, the
+  // exact distinction Decision 4 exists to hold. Comments are stripped first
+  // — a doc comment is allowed to *discuss* the rail (as this very file's
+  // plan does, in backticks), only real code (identifiers, string literals)
+  // is checked.
   {
     const dirs = [join(root, sessionsDir), join(root, sharedSessionsDir)];
     const forbidden = ['running', 'alive', 'isLive'];
@@ -104,11 +110,11 @@ export default async function ({ fail, ok }) {
   }
 
   // --- transcript:tail:poll's response is a delta, never a full entries list ---
-  // #84: the tail-poll response (TranscriptTailPoll) must carry `appended`
-  // and `patched` on its ok branch and never an `entries` field -- a poll
-  // that returned the whole transcript every second would defeat the byte
-  // cursor's whole point, and the renderer's own no-full-re-render contract
-  // depends on this staying a delta.
+  // guard(#84): the tail-poll response (TranscriptTailPoll) must carry
+  // `appended` and `patched` on its ok branch and never an `entries` field --
+  // a poll that returned the whole transcript every second would defeat the
+  // byte cursor's whole point, and the renderer's own no-full-re-render
+  // contract depends on this staying a delta.
   {
     const file = allFiles.find((f) => relOf(f) === `${sharedSessionsDir}/transcript.ts`);
     if (!file) {
@@ -134,12 +140,12 @@ export default async function ({ fail, ok }) {
     }
   }
 
-  // --- getSubagentMessages/getSessionMessages stay unreferenced (#83) ---------
-  // Decision 3's "the reader parses the .jsonl itself, and getSubagentMessages
-  // stays unused" (#83, deciding against the SDK's own message-read APIs,
-  // whose SessionMessage drops toolUseResult) — a later "simplification" onto
-  // either API would silently drop every diff and the file-contention
-  // guarantee this rail exists to prevent.
+  // --- getSubagentMessages/getSessionMessages stay unreferenced ---------------
+  // guard(#83): a later "simplification" onto the SDK's own message-read API
+  // silently dropping every diff, since its SessionMessage carries no
+  // toolUseResult. Decision 3 is "the reader parses the .jsonl itself, and
+  // getSubagentMessages stays unused" — deciding against the SDK's own
+  // message-read APIs.
   {
     let found = false;
     for (const f of allFiles) {
