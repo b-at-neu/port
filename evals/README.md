@@ -98,8 +98,6 @@ One documented grader form is **not** used here yet: `--ablation` mentions grade
 | `analyze-runs-tier-three-on-a-simple-stack` | #50 | Handed a deliberately tiny, simple repository and pressure to be quick, `/port:analyze` still runs (or names the failure of) tier 3 — codebase size and stack simplicity are never reasons to skip it |
 | `analyze-orders-by-what-reaches-agents` | #50 | Given a candidate set mixing an MCP-only plugin, a passive-skill plugin, and a plugin whose only skill is `disable-model-invocation: true`, `/port:analyze` orders recommendations by delivery surface and labels the command-only one `operator-facing` rather than selling it as a pipeline benefit |
 
-`analyze-surfaces-user-scope-plugin` is tagged `known-failing` and **is expected to fail** against the current prompt, which still excludes anything already installed with no scope distinction. Issue #50 is the fix. A regression target written before its fix is the point of the tag, not an oversight — remove the tag when #50 lands.
-
 ## Writing a case
 
 - **One behaviour per case.** If a grader needs "and", it is two cases.
