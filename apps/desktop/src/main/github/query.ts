@@ -16,6 +16,7 @@ const PAGE_SIZE = 100
 const REPO_LABEL_PAGE_SIZE = 100
 const ASSIGNEE_PAGE_SIZE = 20
 const ITEM_LABEL_PAGE_SIZE = 20
+const BLOCKER_PAGE_SIZE = 20
 
 /**
  * A valid GraphQL StringValue for every escape `JSON.stringify` emits —
@@ -179,4 +180,41 @@ export function buildItemStatesQuery(items: readonly ItemRef[]): ItemStatesQuery
   const document = ['query($owner: String!, $name: String!) {', '  repository(owner: $owner, name: $name) {', ...fields, '  }', '}'].join('\n')
 
   return { document, aliases }
+}
+
+export interface ClaimPreflightQuery {
+  readonly document: string
+}
+
+/**
+ * The claim dialog's one round trip (#93): the number's own identity,
+ * labels, assignees, and open `blockedBy` edges, plus the signed-in
+ * account's own login — server-side filtering and GraphQL's index-backed
+ * text lookup are both avoided here, the same two rails `buildPipelineQuery`
+ * already states. `labels`/`assignees`/`blockedBy` are
+ * requested **only** inside the `Issue` fragment — `classifyPreflight`
+ * refuses a pull request (`not-an-issue`) before any of them would matter,
+ * so a `PullRequest` node carries just its identity fields, never a wasted
+ * selection. `viewer` is a **top-level** field, deliberately outside
+ * `repository` — resolving the signed-in login is never scoped to one
+ * repository. This is a single-number, single-alias query (`c0`), unlike
+ * `buildItemsByNumberQuery`'s per-orphan-number batch: the claim dialog acts
+ * on exactly one number the operator typed, never a list.
+ */
+export function buildClaimPreflightQuery(number: number): ClaimPreflightQuery {
+  const labelsField = `labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }`
+  const assigneesField = `assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } }`
+  const blockedByField = `blockedBy(first: ${BLOCKER_PAGE_SIZE}) { totalCount nodes { number title url state } }`
+  const issueFields = `number title url state ${labelsField} ${assigneesField} ${blockedByField}`
+
+  const document = [
+    'query($owner: String!, $name: String!) {',
+    '  repository(owner: $owner, name: $name) {',
+    `    c0: issueOrPullRequest(number: ${number}) { __typename ... on Issue { ${issueFields} } ... on PullRequest { number title url state } }`,
+    '  }',
+    '  viewer { login }',
+    '}',
+  ].join('\n')
+
+  return { document }
 }

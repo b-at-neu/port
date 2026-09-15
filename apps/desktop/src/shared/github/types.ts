@@ -180,3 +180,48 @@ export type ItemStatesFetch =
       readonly message: string
       readonly fetchedAt: string
     }
+
+/** One open-or-closed node off a `blockedBy` connection (#93) — the claim
+ *  dialog reports every one it fetched, and `classifyPreflight` filters to
+ *  the open ones itself, so `main/github/adapter.ts` never decides what
+ *  counts as "still blocking". */
+export interface ClaimBlocker {
+  readonly number: number
+  readonly title: string
+  readonly url: string
+  readonly state: string
+}
+
+/** A `blockedBy` read that failed is a distinct value, never an empty list —
+ *  "no blockers" and "couldn't tell" must not collapse into one state
+ *  (ENGINEERING §4: an absent signal is never read as a passing one).
+ *  `shown`/`total` differing is the connection's own truncation signal, the
+ *  same shape `TruncatedSet` already uses elsewhere in this file. */
+export type BlockerRead =
+  | { readonly ok: true; readonly open: readonly ClaimBlocker[]; readonly shown: number; readonly total: number }
+  | { readonly ok: false; readonly reason: string }
+
+/** `fetchClaimPreflight`'s resolved node — a pull request carries only its
+ *  identity fields, since `classifyPreflight` refuses it (`not-an-issue`)
+ *  before `labels`/`assignees`/`blockers` would ever matter, and the query
+ *  never requests them on that branch (#93 Decision, `query.ts`). */
+export interface ClaimPreflightItem {
+  readonly kind: PipelineItemKind
+  readonly number: number
+  readonly title: string
+  readonly url: string
+  readonly state: string
+  readonly labels: readonly string[]
+  readonly assignees: readonly string[]
+  readonly blockers: BlockerRead
+}
+
+/** `fetchClaimPreflight`'s result. `item: null` covers both "the number does
+ *  not exist" and "the alias itself errored" — neither is a failure, since a
+ *  typo'd number is an ordinary outcome of the operator typing one in. An
+ *  unresolvable `viewer.login` is the one thing that *does* fail the whole
+ *  preflight (`ok: false`, kind `no-data`): the take-over decision cannot be
+ *  made without knowing who "me" is. */
+export type ClaimPreflightFetch =
+  | { readonly ok: true; readonly item: ClaimPreflightItem | null; readonly viewer: string; readonly fetchedAt: string }
+  | { readonly ok: false; readonly kind: PipelineFailureKind; readonly message: string; readonly fetchedAt: string }
