@@ -139,6 +139,28 @@ describe('openTranscript', () => {
     if (read.ok) throw new Error('unreachable')
     expect(read.kind).toBe('too-large')
   }, 20_000)
+
+  it('retries a stuck line past MAX_CHUNK_BYTES rather than failing the whole read', async () => {
+    const claudeHome = await makeClaudeHome()
+    const projectDir = join(claudeHome, 'projects', 'project-a')
+    await mkdir(projectDir, { recursive: true })
+    // A single record's JSONL line runs well past the 8 MB chunk window but
+    // stays comfortably under the 64 MB transcript-level cap.
+    const bigContent = 'x'.repeat(20 * 1024 * 1024)
+    const records = [
+      { uuid: 'u1', timestamp: '2026-01-01T00:00:00.000Z', cwd: '/repo', type: 'user', message: { role: 'user', content: bigContent } },
+      { uuid: 'u2', timestamp: '2026-01-01T00:00:01.000Z', type: 'user', message: { role: 'user', content: 'after the big one' } },
+    ]
+    await writeFile(join(projectDir, `${SESSION_ID}.jsonl`), jsonl(records))
+
+    const { read } = await openTranscript({ sessionId: SESSION_ID, agentId: null, claudeHome })
+    expect(read.ok).toBe(true)
+    if (!read.ok) throw new Error('unreachable')
+    expect(read.source.recordCount).toBe(2)
+    expect(read.source.malformedLines).toBe(0)
+    expect(read.entries).toHaveLength(2)
+    expect(read.entries[1]).toMatchObject({ type: 'user-text', text: { text: 'after the big one' } })
+  }, 20_000)
 })
 
 describe('advanceTranscript', () => {
@@ -247,4 +269,23 @@ describe('advanceTranscript', () => {
     expect(afterResult.patched).toHaveLength(1)
     expect(afterResult.patched[0]).toMatchObject({ index: 1, entry: { type: 'tool-call', result: { isError: false } } })
   })
+
+  it('retries a poll stuck on a line past MAX_CHUNK_BYTES rather than failing it', async () => {
+    const claudeHome = await makeClaudeHome()
+    const { path, cursor } = await openAt(claudeHome)
+
+    // The deriver caps rendered payload text at MAX_PAYLOAD_CHARS regardless
+    // of the underlying record's size, so assert on a leading marker rather
+    // than the whole (deliberately oversized) content.
+    const bigContent = 'START-MARKER-' + 'x'.repeat(20 * 1024 * 1024)
+    await appendFile(path, jsonl([record('u2', '2026-01-01T00:00:01.000Z', bigContent)]))
+    const advanced = await advanceTranscript(cursor)
+    expect(advanced.ok).toBe(true)
+    if (!advanced.ok) throw new Error('unreachable')
+    expect(advanced.appended).toHaveLength(1)
+    const entry = advanced.appended[0]
+    if (entry === undefined) throw new Error('unreachable')
+    expect(entry.type).toBe('user-text')
+    expect((entry as { text: { text: string } }).text.text.startsWith('START-MARKER-')).toBe(true)
+  }, 20_000)
 })

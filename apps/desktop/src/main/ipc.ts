@@ -109,7 +109,12 @@ export async function resolveSessionsScan(registryDeps: RegistryDeps, deps: Sess
  *  EOF, then discard the cursor, since a one-shot caller never advances it.
  *  Same validation order and return shape #83's now-deleted `readTranscript`
  *  gave this channel; no second parallel line-reading code path lives beside
- *  the tail channels' `TailStore`. */
+ *  the tail channels' `TailStore`.
+ *
+ *  Preserved but currently unused: no renderer code calls `'transcript:read'`
+ *  any more — `main.ts`'s `handleOpenTranscript` goes exclusively through
+ *  `transcriptTailOpen`. Kept per the rebase's own D1/D2 decision rather than
+ *  removed, in case a one-shot caller returns. */
 export interface TranscriptReadDeps {
   readonly openTranscript: (params: OpenTranscriptParams) => Promise<OpenTranscriptResult>
 }

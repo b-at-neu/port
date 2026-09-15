@@ -9,6 +9,7 @@
 // tool_use at the end of one chunk still pairs with its tool_result at the
 // start of the next.
 import { readLinesFrom, statPath } from '../platform'
+import type { ReadLinesFromResult } from '../platform'
 import type { EntryPatch, TranscriptEntry, TranscriptRead, TranscriptSource } from '../../shared/sessions/transcript'
 import { buildProjectIndex, defaultClaudeHome, resolveTranscriptPath, SESSION_ID_RE } from './locate'
 import { createDeriver } from './transcript-entries'
@@ -32,11 +33,32 @@ const AGENT_ID_RE = /^[0-9a-f]{6,64}$/i
  *  the main process's memory unbounded. */
 const MAX_TRANSCRIPT_BYTES = 64 * 1024 * 1024
 
-/** Bounds one open-loop iteration's or one poll's buffer -- the largest
- *  transcript observed opens in two chunks at this size. */
+/** Starting window for one open-loop iteration's or one poll's buffer -- the
+ *  largest transcript observed opens in two chunks at this size. Not a hard
+ *  ceiling: `readChunkWithRetry` doubles past it, up to what remains of
+ *  `MAX_TRANSCRIPT_BYTES`, when a single line doesn't fit. */
 const MAX_CHUNK_BYTES = 8 * 1024 * 1024
 
 const INVALID_ID_MESSAGE = "That session or agent id isn't a valid identifier."
+
+/** `readLinesFrom` reports `too-large` when no newline falls inside the
+ *  window it was given -- a single JSONL record (e.g. a `Write` tool call
+ *  embedding a large file) can easily outrun `MAX_CHUNK_BYTES` while the
+ *  transcript as a whole stays well under `MAX_TRANSCRIPT_BYTES`. Rather than
+ *  hard-failing the whole read on that one stuck line, retry the same
+ *  offset with a doubled window, capped at `remainingBudget` (what is left
+ *  of the transcript-level cap from this offset) -- so a record between
+ *  `MAX_CHUNK_BYTES` and `MAX_TRANSCRIPT_BYTES` still reads, and only a
+ *  line that would blow the transcript's own budget still reports
+ *  `too-large`. */
+async function readChunkWithRetry(path: string, offset: number, remainingBudget: number): Promise<ReadLinesFromResult> {
+  let windowBytes = Math.min(MAX_CHUNK_BYTES, remainingBudget)
+  while (true) {
+    const chunk = await readLinesFrom(path, offset, { maxBytes: windowBytes })
+    if (chunk.ok || chunk.kind !== 'too-large' || windowBytes >= remainingBudget) return chunk
+    windowBytes = Math.min(windowBytes * 2, remainingBudget)
+  }
+}
 
 function firstCwdOf(records: readonly unknown[]): string | null {
   for (const raw of records) {
@@ -85,13 +107,14 @@ export interface OpenTranscriptResult {
 }
 
 /** Validates ids, resolves the path through the project index, then loops
- *  `readLinesFrom` from `0` to EOF (or `MAX_CHUNK_BYTES` at a time) rather
- *  than the old single streamed read -- what yields both the entries this
- *  first render needs and the cursor a later `advanceTranscript` resumes
- *  from. `cwd` is resolved from the accumulated raw records *before* the
- *  deriver is constructed, and never adopted again after -- a later record
- *  carrying a different `cwd` (which should not happen, but this is
- *  untrusted input) never re-bases an in-flight headline. */
+ *  `readChunkWithRetry` from `0` to EOF (`MAX_CHUNK_BYTES` at a time, widening
+ *  only when a stuck line demands it) rather than the old single streamed
+ *  read -- what yields both the entries this first render needs and the
+ *  cursor a later `advanceTranscript` resumes from. `cwd` is resolved from
+ *  the accumulated raw records *before* the deriver is constructed, and
+ *  never adopted again after -- a later record carrying a different `cwd`
+ *  (which should not happen, but this is untrusted input) never re-bases an
+ *  in-flight headline. */
 export async function openTranscript(params: OpenTranscriptParams): Promise<OpenTranscriptResult> {
   const { sessionId, agentId } = params
 
@@ -124,7 +147,7 @@ export async function openTranscript(params: OpenTranscriptParams): Promise<Open
   let offset = 0
 
   while (true) {
-    const chunk = await readLinesFrom(path, offset, { maxBytes: MAX_CHUNK_BYTES })
+    const chunk = await readChunkWithRetry(path, offset, MAX_TRANSCRIPT_BYTES - offset)
     if (!chunk.ok) {
       if (chunk.kind === 'too-large') return { read: { ok: false, kind: 'too-large', message: chunk.message, path }, cursor: null }
       if (chunk.kind === 'not-found') return { read: { ok: false, kind: 'not-found', message: `No transcript file at ${path}.`, path }, cursor: null }
@@ -175,11 +198,13 @@ export type AdvanceTranscriptResult =
     }
   | { readonly ok: false; readonly kind: 'not-found' | 'unreadable' | 'too-large' | 'truncated'; readonly message: string; readonly path: string }
 
-/** Reads at most one `MAX_CHUNK_BYTES` chunk starting at `cursor.offset` and
- *  pushes it through the cursor's own `Deriver`. `hasMore` is `true` only
- *  when this chunk filled the whole budget -- the caller's signal to poll
- *  again on the next macrotask rather than waiting the full interval, so a
- *  big catch-up drains fast without blocking paint.
+/** Reads at most one chunk (via `readChunkWithRetry`, starting at
+ *  `MAX_CHUNK_BYTES` and widening only when a stuck line demands it) starting
+ *  at `cursor.offset` and pushes it through the cursor's own `Deriver`.
+ *  `hasMore` is `true` only when this chunk filled the whole (possibly
+ *  widened) window -- the caller's signal to poll again on the next
+ *  macrotask rather than waiting the full interval, so a big catch-up drains
+ *  fast without blocking paint.
  *
  *  Direction of failure -- a stale cursor re-opens, it never goes quiet.
  *  `size < cursor.offset` (the file was rewritten or compacted) reports
@@ -201,7 +226,7 @@ export async function advanceTranscript(cursor: TranscriptCursor): Promise<Advan
     return { ok: false, kind: 'too-large', message: `${cursor.path} exceeds the ${MAX_TRANSCRIPT_BYTES}-byte cap`, path: cursor.path }
   }
 
-  const chunk = await readLinesFrom(cursor.path, cursor.offset, { maxBytes: MAX_CHUNK_BYTES })
+  const chunk = await readChunkWithRetry(cursor.path, cursor.offset, MAX_TRANSCRIPT_BYTES - cursor.offset)
   if (!chunk.ok) {
     if (chunk.kind === 'not-found') return { ok: false, kind: 'not-found', message: `No transcript file at ${cursor.path}.`, path: cursor.path }
     if (chunk.kind === 'too-large') return { ok: false, kind: 'too-large', message: chunk.message, path: cursor.path }
