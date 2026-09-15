@@ -38,6 +38,9 @@ export default async function ({ fail, ok }) {
   const schemaImportPattern = /['"](?:\.\.\/)+schema\/port\.config\.schema\.json['"]/;
 
   // --- The shipped schema is imported by exactly one file, and it is imported ---
+  // guard(#74): the registry silently re-deriving the config contract
+  // instead of reading the shipped schema, or the guard passing vacuously
+  // once the importer is deleted.
   {
     const importers = files.filter((f) => schemaImportPattern.test(readFileSync(f, 'utf8')));
     if (importers.length === 0) {
@@ -53,6 +56,8 @@ export default async function ({ fail, ok }) {
   }
 
   // --- No file under main/registry/ retypes a string default as a literal ---
+  // guard(#74): a schema default retyped by hand instead of read off the
+  // CONFIG_DEFAULTS import, drifting the moment the schema changes.
   {
     const schema = readJson('schema/port.config.schema.json');
     const stringDefaults = collectStringDefaults(schema);

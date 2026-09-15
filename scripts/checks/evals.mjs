@@ -4,9 +4,11 @@ import { root, readJson, walk, relOf } from '../lib/files.mjs';
 
 export default async function ({ fail, ok }) {
   // --- Eval cases are structurally sound --------------------------------------
-  // Everything statically knowable about a layer 3 case is checked here, for free,
-  // so a broken case is caught without an API key or early access. Presence and
-  // shape only, by regex — same reasoning as the frontmatter reader above.
+  // guard: a layer 3 case broken by a rename, invisible while the evals
+  // cannot run. Everything statically knowable about a case is checked here,
+  // for free, so a broken case is caught without an API key or early access.
+  // Presence and shape only, by regex — same reasoning as the frontmatter
+  // reader above.
   {
     const caseFiles = walk(join(root, 'evals')).filter((f) => basename(f) === 'case.yaml');
     if (caseFiles.length === 0) {
@@ -46,9 +48,11 @@ export default async function ({ fail, ok }) {
   }
 
   // --- Behavioural evals never enter commands.checks --------------------------
-  // The mechanical form of the ticket's own last rule. `commands.checks` is what
-  // impl-agent runs before pushing, so an eval or an audit there means every
-  // dispatched agent spawning model runs, or shelling out to `gh` it cannot reach.
+  // guard: every dispatched agent spawning its own model run before it can
+  // push. The mechanical form of the ticket's own last rule — `commands.checks`
+  // is what impl-agent runs before pushing, so an eval or an audit there means
+  // every dispatched agent spawning a model run, or shelling out to `gh` it
+  // cannot reach.
   {
     const banned = [
       [/plugin\s+eval/, 'a behavioural eval'],

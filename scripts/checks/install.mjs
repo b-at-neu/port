@@ -12,9 +12,9 @@ const MARKETPLACE_REF_PATTERN = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 
 export default async function ({ fail, ok }) {
   // --- Self-hosted marketplace entry stays pinned -----------------------------
-  // A bare `claude plugin marketplace add` rewrites this entry back to its
-  // unpinned form, which tracks the default branch instead of a release and
-  // silently reintroduces the drift #119 fixed.
+  // guard(#146): a bare `claude plugin marketplace add` rewriting the entry
+  // back to its unpinned form, silently tracking the default branch instead
+  // of a release.
   {
     const settings = readJson('.claude/settings.json');
     const port = settings.extraKnownMarketplaces?.port;
@@ -29,9 +29,10 @@ export default async function ({ fail, ok }) {
   }
 
   // --- CONTRIBUTING's cache path names no hard-coded version (#224) -----------
-  // The observed failure: the three-way ground-truth recipe still named
-  // '0.1.0' two releases later, which by then pointed at the wrong directory
-  // entirely rather than merely a stale one.
+  // guard(#224): the three-way ground-truth recipe naming a literal released
+  // version instead of '<version>' — the observed failure was the recipe
+  // still reading '0.1.0' two releases later, which by then pointed at the
+  // wrong directory entirely rather than merely a stale one.
   {
     const readme = readFileSync(join(root, 'CONTRIBUTING.md'), 'utf8');
     for (const m of readme.matchAll(/cache\/port\/port\/(\S+?)[\s/`]/g)) {
@@ -44,10 +45,9 @@ export default async function ({ fail, ok }) {
   }
 
   // --- README's documented install source stays pinned ------------------------
-  // The command adopters copy-paste. A docs edit that drops the `@main` pin
-  // looks like a harmless simplification but silently reinstates default-branch
-  // tracking -- the exact drift #146 fixed. `owner/repo@ref` and `owner/repo#ref`
-  // both parse; only a bare, ref-less source is disallowed here.
+  // guard(#146): a docs edit quietly restoring default-branch tracking on
+  // the very command adopters copy-paste. `owner/repo@ref` and
+  // `owner/repo#ref` both parse; only a bare, ref-less source is disallowed.
   {
     const readme = readFileSync(join(root, 'README.md'), 'utf8');
     for (const line of readme.split('\n')) {

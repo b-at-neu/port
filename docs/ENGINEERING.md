@@ -135,7 +135,7 @@ Narrow but real, because the pipeline's whole visible state is a set of GitHub l
 
 **A check must be able to distinguish the state it exists to detect.** `diff -rq` returned silence while both the cache and the checkout sat 42 commits behind `origin/dev` — a verification that passes in exactly the situation it was written to catch is worse than none, because it converts an unknown into a false assurance. Prefer a check whose failure mode you have observed.
 
-**Every fixed regression leaves a mechanical guard behind, tagged with its issue number.** Layer 1 pins the literal phrase or contract that constituted the fix, so a future edit quietly reverting the reasoning fails in CI rather than in a live pipeline run. A prose-only fix to a prompt is incomplete; `docs/TESTING.md`'s table is the running record.
+**Every fixed regression leaves a mechanical guard behind, tagged with its issue number.** Layer 1 pins the literal phrase or contract that constituted the fix, so a future edit quietly reverting the reasoning fails in CI rather than in a live pipeline run. A prose-only fix to a prompt is incomplete; a `guard(#N): <one line>` marker declared on the check block that pins it — colocated, never a shared registry file — is the running record, rendered on demand with `node scripts/checks.mjs --guards`.
 
 **Rails are checkable preconditions, not bare prohibitions.** "Never do X" prose was violated twice under throughput pressure. A rail is instead shaped as something testable — `unblock #N` before a gate clears, "only when a check on it has gone red" before `approved` is removed — and layer 1 fails if either reverts to prose with nothing to check ("Cockpit rails stay checkable preconditions, not bare prohibitions").
 
@@ -156,7 +156,7 @@ Narrow but real, because the pipeline's whole visible state is a set of GitHub l
 - [ ] If a pinned file changed, its counterpart still agrees — and layer 1 says so, in both directions.
 - [ ] Every new check was made to fail once before being trusted to pass, and can distinguish the state it exists to detect.
 - [ ] A new layer 1 check lives in its topic module under `scripts/checks/`, never in the runner.
-- [ ] A fixed regression leaves a layer 1 guard behind, and `docs/TESTING.md` has its row.
+- [ ] A fixed regression leaves a layer 1 guard behind, declared as a `guard(#N)` marker on the check that pins it.
 - [ ] A new rail is a checkable precondition, not "never do X" prose.
 - [ ] Any new failure mode states which direction it fails toward, and why.
 - [ ] An absent signal is not treated as a passing one — no empty rollup, missing conclusion, or exit code read as success.
