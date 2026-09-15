@@ -8,9 +8,16 @@ import type { WriteOutcome } from '../../../shared/writes/types'
 export function blockersCopy(verdict: Extract<ClaimVerdict, { kind: 'claimable' }>): { readonly line: string; readonly note: string } | null {
   const { blockers } = verdict
   if (!blockers.ok) return { line: "Couldn't read this issue's blockers.", note: `${blockers.reason}. Claiming is still allowed.` }
-  if (blockers.open.length === 0) return null
+  const truncated = blockers.total > blockers.shown
+  if (blockers.open.length === 0) {
+    // No *fetched* blocker is open, but a truncated fetch may still be
+    // hiding one — the plan's UX States lists "Truncated" as its own case,
+    // distinct from "None", so this must never fall through to `null`.
+    if (!truncated) return null
+    return { line: `Showing ${String(blockers.shown)} of ${String(blockers.total)}.`, note: 'The pipeline will plan and implement this anyway — the dependency is advisory.' }
+  }
   const names = blockers.open.map((b) => `#${String(b.number)}`).join(', ')
-  const truncation = blockers.total > blockers.shown ? ` Showing ${String(blockers.shown)} of ${String(blockers.total)}.` : ''
+  const truncation = truncated ? ` Showing ${String(blockers.shown)} of ${String(blockers.total)}.` : ''
   return { line: `Blocked by ${names}.${truncation}`, note: 'The pipeline will plan and implement this anyway — the dependency is advisory.' }
 }
 

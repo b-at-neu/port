@@ -30,7 +30,7 @@ export type ClaimState =
   | { readonly step: 'applying'; readonly number: number }
   | { readonly step: 'moved'; readonly repoId: RepoId; readonly repo: string; readonly number: number; readonly current: readonly string[]; readonly readAt: string }
   | { readonly step: 'refused-at-apply'; readonly repo: string; readonly number: number; readonly verdict: ClaimVerdict }
-  | { readonly step: 'write-result'; readonly number: number; readonly outcome: WriteOutcome }
+  | { readonly step: 'write-result'; readonly repoId: RepoId; readonly repo: string; readonly number: number; readonly outcome: WriteOutcome }
 
 let state: ClaimState = { step: 'closed' }
 let dialog: HTMLDialogElement | null = null
@@ -69,7 +69,8 @@ export function openClaimDialog(): void {
   setState({ step: 'picking', repos: [], repoId: null, number: '', error: null })
   void loadRepos().then((repos) => {
     if (state.step !== 'picking') return
-    setState({ ...state, repos, repoId: state.repoId ?? repos[0]?.id ?? null })
+    const onlyRepo = repos.length === 1 ? repos[0] : undefined
+    setState({ ...state, repos, repoId: state.repoId ?? onlyRepo?.id ?? null })
   })
 }
 
@@ -148,7 +149,7 @@ async function confirmClaim(): Promise<void> {
       setState({ step: 'preflight-failed', repoId, repo, number: preflight.number, message: response.message })
       return
     }
-    setState({ step: 'write-result', number: preflight.number, outcome: response.outcome })
+    setState({ step: 'write-result', repoId, repo, number: preflight.number, outcome: response.outcome })
     if (response.outcome.kind === 'applied' || response.outcome.kind === 'no-op') {
       void window.port.boardRefresh({ repoId, source: 'github' })
     }
@@ -158,11 +159,21 @@ async function confirmClaim(): Promise<void> {
   }
 }
 
+/** Re-runs the preflight in place, for both result shapes the plan groups
+ *  under the same retry affordance: `moved` (the IPC-level race) and a
+ *  `write-result` carrying `precondition-failed` (the write-level race). */
 function retryPreflight(): void {
-  if (state.step !== 'moved') return
-  const { repoId, number } = state
-  setState({ step: 'picking', repos: [], repoId, number: String(number), error: null })
-  void submitPick()
+  if (state.step === 'moved') {
+    const { repoId, number } = state
+    setState({ step: 'picking', repos: [], repoId, number: String(number), error: null })
+    void submitPick()
+    return
+  }
+  if (state.step === 'write-result' && state.outcome.kind === 'precondition-failed') {
+    const { repoId, number } = state
+    setState({ step: 'picking', repos: [], repoId, number: String(number), error: null })
+    void submitPick()
+  }
 }
 
 function setField(target: HTMLElement): void {

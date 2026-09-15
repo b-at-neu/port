@@ -228,7 +228,7 @@ export function renderClaimDialog(dialog: HTMLDialogElement, state: ClaimState):
     }
     case 'write-result': {
       const copy = writeOutcomeCopy(state.number, state.outcome)
-      body.appendChild(buildResultStep(copy.line, copy.note, false))
+      body.appendChild(buildResultStep(copy.line, copy.note, state.outcome.kind === 'precondition-failed'))
       break
     }
   }
