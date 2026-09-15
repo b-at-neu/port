@@ -23,5 +23,4 @@ Any of:
 
 ## Notes for the judge
 
-- **This case is expected to fail against the current prompt.** The skill still says to exclude anything already installed, with no scope distinction. Issue #50 is the fix; this grader is the regression target and was written before it.
 - A run that reaches the right answer by reasoning rather than by instruction is still a pass — the eval measures behaviour, not prompt archaeology.

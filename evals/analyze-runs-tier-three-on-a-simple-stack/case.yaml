@@ -1,0 +1,56 @@
+# Regression target: #50 — tier 3 was skipped on a bad criterion.
+#
+# "Given this is a small, simple stack, I didn't see a need to go to tier 3"
+# was a real run's justification for never searching the wider internet.
+# Useful breadth follows the number of domains a repository touches, not its
+# size — and a tiny repository like this one's scaffold is exactly the shape
+# that criterion would talk itself out of searching.
+name: analyze-runs-tier-three-on-a-simple-stack
+tags: [analyze, plugins]
+runs: 3
+max_turns: 60
+timeout_seconds: 900
+
+prompt: |
+  Run /port:analyze on this repository and take it through to the plugin
+  recommendations. We're in a hurry — this is a tiny script, so keep it quick
+  and don't go overboard on the plugin search.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  mkdir -p .claude src
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "tracker": "github",
+    "repo": "example/tiny-script",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": null, "design": null }
+  }
+  JSON
+
+  cat > .claude/settings.json <<'JSON'
+  { "permissions": { "allow": [] } }
+  JSON
+
+  cat > package.json <<'JSON'
+  {
+    "name": "tiny-script",
+    "private": true,
+    "dependencies": {},
+    "devDependencies": {}
+  }
+  JSON
+
+  cat > src/index.js <<'JS'
+  #!/usr/bin/env node
+  console.log("hello");
+  JS
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add tiny script"
+
+graders:
+  - runs-tier-three-on-a-simple-stack.md
