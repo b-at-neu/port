@@ -8,7 +8,7 @@
 // here under `apps/desktop/src/` — one appender, so no second path can write
 // an entry that skipped the chokepoint (`scripts/checks/desktop-writes.mjs`
 // pins this).
-import { appendTextFile, pathOps as defaultPathOps, readLines, renamePath, statPath } from '../platform'
+import { appendTextFile, pathOps as defaultPathOps, readLinesFrom, renamePath, statPath } from '../platform'
 import type { FileFailureKind, PathOps } from '../platform'
 import type { AuditEntry, AuditRead, AuditReadFailureKind, ReadAuditLogParams } from '../../shared/writes/types'
 
@@ -49,7 +49,7 @@ export async function appendAudit(dir: string, entry: AuditEntry, pathOps: PathO
 
 /** Collapses a platform-layer failure kind this reader cannot otherwise
  *  produce (`not-a-file`, reading a directory; `unparseable`, which
- *  `readLines`'s streaming reader never returns) into `io` — a narrowing
+ *  `readLinesFrom`'s streaming reader never returns) into `io` — a narrowing
  *  map, not a 1:1 pin, since `AuditReadFailureKind` is deliberately smaller
  *  than `FileFailureKind`. */
 function toAuditReadFailureKind(kind: FileFailureKind): AuditReadFailureKind {
@@ -60,7 +60,10 @@ function toAuditReadFailureKind(kind: FileFailureKind): AuditReadFailureKind {
 /** Filters by `repo`/`number` and caps at `limit` (newest first is the
  *  reader's presentation choice, not this function's — entries are returned
  *  oldest-first, matching the file's own append order). A malformed line is
- *  counted, never silently dropped. */
+ *  counted, never silently dropped. The size cap is now an explicit
+ *  pre-check against `statPath` rather than a streamed abort — `readLinesFrom`
+ *  reads one bounded window rather than the whole file, so an oversized log
+ *  must be caught before the read, not during it. */
 export async function readAuditLog(
   dir: string,
   params: ReadAuditLogParams = {},
@@ -70,14 +73,21 @@ export async function readAuditLog(
   const readAt = now().toISOString()
   const path = logPath(dir, pathOps)
 
-  const rawLines: string[] = []
-  const result = await readLines(path, (line) => {
-    if (line.trim() !== '') rawLines.push(line)
-  }, { maxBytes: MAX_READ_BYTES })
-
   const prevStat = await statPath(prevLogPath(dir, pathOps))
   const previousPath = prevStat.ok ? prevLogPath(dir, pathOps) : null
 
+  const size = await statPath(path)
+  if (!size.ok) {
+    if (size.kind === 'not-found') {
+      return { ok: true, entries: [], malformed: 0, previousPath, readAt }
+    }
+    return { ok: false, kind: toAuditReadFailureKind(size.kind), message: size.message, readAt }
+  }
+  if (size.value.size > MAX_READ_BYTES) {
+    return { ok: false, kind: 'too-large', message: `${path} exceeds the ${MAX_READ_BYTES}-byte cap`, readAt }
+  }
+
+  const result = await readLinesFrom(path, 0, { maxBytes: MAX_READ_BYTES })
   if (!result.ok) {
     if (result.kind === 'not-found') {
       return { ok: true, entries: [], malformed: 0, previousPath, readAt }
@@ -87,7 +97,8 @@ export async function readAuditLog(
 
   let malformed = 0
   const entries: AuditEntry[] = []
-  for (const line of rawLines) {
+  for (const line of result.value.lines) {
+    if (line.trim() === '') continue
     try {
       entries.push(JSON.parse(line) as AuditEntry)
     } catch {

@@ -4,7 +4,7 @@
 // `tool_result` block that later carries its id collapse into one entry;
 // an unpaired call (the result never arrived within the read window) keeps
 // `result: null` rather than being dropped.
-import type { DiffHunk, DiffLine, DiffSign, FileDiff, MetaEntry, Payload, ToolCallEntry, TranscriptEntry } from '../../shared/sessions/transcript'
+import type { DiffHunk, DiffLine, DiffSign, EntryPatch, FileDiff, MetaEntry, Payload, ToolCallEntry, TranscriptEntry } from '../../shared/sessions/transcript'
 import { MAX_PAYLOAD_CHARS } from '../../shared/sessions/transcript'
 
 export interface DeriveEntriesOptions {
@@ -272,88 +272,148 @@ function attachmentLabel(attachment: unknown): string {
   return 'attachment'
 }
 
-/** Walks already-parsed `.jsonl` records in order, pairing each `tool_use`
- *  with the `tool_result` that later carries its `tool_use_id` by id, never
- *  by position -- a record this module cannot recognize (missing `uuid`,
- *  an unknown `type`) is skipped rather than thrown on, since a transcript
- *  is untrusted input from disk. */
-export function deriveEntries(records: readonly unknown[], options: DeriveEntriesOptions = DEFAULT_OPTIONS): TranscriptEntry[] {
-  const entries: TranscriptEntry[] = []
-  const pendingIndexById = new Map<string, number>()
+export interface DerivedChunk {
+  readonly appended: readonly TranscriptEntry[]
+  readonly patched: readonly EntryPatch[]
+}
+
+export interface Deriver {
+  /** Walks one more batch of already-parsed `.jsonl` records, in order,
+   *  continuing the pairing state from every previous `push` on this same
+   *  deriver. Returns only this batch's delta -- new rows plus in-place
+   *  patches to rows a previous `push` already returned -- never the whole
+   *  transcript, so a caller can apply it directly onto a list it is already
+   *  holding. */
+  push(records: readonly unknown[]): DerivedChunk
+}
+
+/** Pairs a `tool_use` with the `tool_result` that later carries its id, by
+ *  id, never by position -- even across two separate `push` calls, which is
+ *  exactly what following a growing transcript needs (a `tool_use` at the
+ *  end of one poll's chunk, its `tool_result` at the start of the next). A
+ *  record this module cannot recognize (missing `uuid`, an unknown `type`)
+ *  is skipped rather than thrown on, since a transcript is untrusted input
+ *  from disk.
+ *
+ *  `EntryPatch.index` is the absolute index of the patched entry across the
+ *  whole transcript this deriver has walked -- exactly the row index a
+ *  renderer holding every `appended` entry in order needs, with no
+ *  translation.
+ *
+ *  A tool call pairs **once** -- the pending entry for its id is removed the
+ *  moment a `tool_result` claims it, before the patch is even built, so a
+ *  duplicate `tool_result` for the same id (observed on real transcripts)
+ *  can never overwrite a real diff with a `null` one. `rawInputById` is
+ *  pruned at the same moment, for the same reason `capPayload` exists: a
+ *  `Write` create's `tool_use.input.content` is the whole new file, and
+ *  holding it beyond the one diff it is needed for would grow unboundedly
+ *  over a long-followed transcript. */
+export function createDeriver(options: DeriveEntriesOptions = DEFAULT_OPTIONS): Deriver {
+  let nextIndex = 0
+  const pendingById = new Map<string, { readonly index: number; readonly entry: ToolCallEntry }>()
   const rawInputById = new Map<string, unknown>()
 
-  for (const raw of records) {
-    if (!isRecord(raw)) continue
-    const uuid = raw['uuid']
-    const timestamp = raw['timestamp']
-    if (typeof uuid !== 'string' || typeof timestamp !== 'string') continue
+  function push(records: readonly unknown[]): DerivedChunk {
+    const appended: TranscriptEntry[] = []
+    const patched: EntryPatch[] = []
 
-    if (raw['type'] === 'attachment') {
-      const entry: MetaEntry = { type: 'meta', uuid, timestamp, label: attachmentLabel(raw['attachment']) }
-      entries.push(entry)
-      continue
+    function emit(entry: TranscriptEntry): void {
+      appended.push(entry)
+      nextIndex += 1
     }
 
-    const message = raw['message']
-    if (!isRecord(message)) continue
-    const role = message['role']
-    const content = message['content']
+    for (const raw of records) {
+      if (!isRecord(raw)) continue
+      const uuid = raw['uuid']
+      const timestamp = raw['timestamp']
+      if (typeof uuid !== 'string' || typeof timestamp !== 'string') continue
 
-    if (typeof content === 'string') {
-      if (role === 'user') entries.push({ type: 'user-text', uuid, timestamp, text: capPayload(content) })
-      else if (role === 'assistant') entries.push({ type: 'assistant-text', uuid, timestamp, text: capPayload(content) })
-      continue
-    }
-
-    if (!Array.isArray(content)) continue
-
-    for (const block of content) {
-      if (!isRecord(block)) continue
-      const blockType = block['type']
-
-      if (blockType === 'text' && typeof block['text'] === 'string') {
-        entries.push({ type: role === 'user' ? 'user-text' : 'assistant-text', uuid, timestamp, text: capPayload(block['text']) })
+      if (raw['type'] === 'attachment') {
+        const entry: MetaEntry = { type: 'meta', uuid, timestamp, label: attachmentLabel(raw['attachment']) }
+        emit(entry)
         continue
       }
 
-      if (blockType === 'thinking' && typeof block['thinking'] === 'string') {
-        entries.push({ type: 'thinking', uuid, timestamp, text: capPayload(block['thinking']) })
+      const message = raw['message']
+      if (!isRecord(message)) continue
+      const role = message['role']
+      const content = message['content']
+
+      if (typeof content === 'string') {
+        if (role === 'user') emit({ type: 'user-text', uuid, timestamp, text: capPayload(content) })
+        else if (role === 'assistant') emit({ type: 'assistant-text', uuid, timestamp, text: capPayload(content) })
         continue
       }
 
-      if (blockType === 'tool_use' && typeof block['id'] === 'string' && typeof block['name'] === 'string') {
-        const name = block['name']
-        const input = block['input']
-        const entry: ToolCallEntry = {
-          type: 'tool-call',
-          uuid,
-          timestamp,
-          name,
-          headline: headlineFor(name, input, options.cwd),
-          input: capPayload(safeStringify(input)),
-          result: null,
-          diff: null,
+      if (!Array.isArray(content)) continue
+
+      for (const block of content) {
+        if (!isRecord(block)) continue
+        const blockType = block['type']
+
+        if (blockType === 'text' && typeof block['text'] === 'string') {
+          emit({ type: role === 'user' ? 'user-text' : 'assistant-text', uuid, timestamp, text: capPayload(block['text']) })
+          continue
         }
-        pendingIndexById.set(block['id'], entries.length)
-        rawInputById.set(block['id'], input)
-        entries.push(entry)
-        continue
-      }
 
-      if (blockType === 'tool_result' && typeof block['tool_use_id'] === 'string') {
-        const idx = pendingIndexById.get(block['tool_use_id'])
-        if (idx === undefined) continue
-        const existing = entries[idx]
-        if (existing === undefined || existing.type !== 'tool-call') continue
+        if (blockType === 'thinking' && typeof block['thinking'] === 'string') {
+          emit({ type: 'thinking', uuid, timestamp, text: capPayload(block['thinking']) })
+          continue
+        }
 
-        const isError = block['is_error'] === true
-        const payload = capPayload(resultTextOf(block['content']))
-        const diff = diffFromToolUseResult(raw['toolUseResult'], rawInputById.get(block['tool_use_id']))
+        if (blockType === 'tool_use' && typeof block['id'] === 'string' && typeof block['name'] === 'string') {
+          const id = block['id']
+          const name = block['name']
+          const input = block['input']
+          const entry: ToolCallEntry = {
+            type: 'tool-call',
+            uuid,
+            timestamp,
+            name,
+            headline: headlineFor(name, input, options.cwd),
+            input: capPayload(safeStringify(input)),
+            result: null,
+            diff: null,
+          }
+          pendingById.set(id, { index: nextIndex, entry })
+          rawInputById.set(id, input)
+          emit(entry)
+          continue
+        }
 
-        entries[idx] = { ...existing, result: { isError, payload }, diff }
+        if (blockType === 'tool_result' && typeof block['tool_use_id'] === 'string') {
+          const id = block['tool_use_id']
+          const pending = pendingById.get(id)
+          if (pending === undefined) continue
+          // First result wins -- removed before the patch is built, so a
+          // duplicate tool_result for the same id is a no-op rather than a
+          // second, overwriting patch.
+          pendingById.delete(id)
+          const rawInput = rawInputById.get(id)
+          rawInputById.delete(id)
+
+          const isError = block['is_error'] === true
+          const payload = capPayload(resultTextOf(block['content']))
+          const diff = diffFromToolUseResult(raw['toolUseResult'], rawInput)
+          patched.push({ index: pending.index, entry: { ...pending.entry, result: { isError, payload }, diff } })
+        }
       }
     }
+
+    return { appended, patched }
   }
 
+  return { push }
+}
+
+/** Behaviourally identical to the pre-#84 walker: creates a deriver, pushes
+ *  the whole record set once, and applies the patches into the returned
+ *  array -- a `tool_use` and its `tool_result` are always in the same call
+ *  here, so every patch lands on a row `appended` just produced. */
+export function deriveEntries(records: readonly unknown[], options: DeriveEntriesOptions = DEFAULT_OPTIONS): TranscriptEntry[] {
+  const deriver = createDeriver(options)
+  const { appended, patched } = deriver.push(records)
+  const entries = appended.slice()
+  for (const patch of patched) entries[patch.index] = patch.entry
   return entries
 }

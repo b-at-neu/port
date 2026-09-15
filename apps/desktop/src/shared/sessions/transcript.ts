@@ -91,6 +91,16 @@ export interface MetaEntry extends TranscriptEntryBase {
 
 export type TranscriptEntry = UserTextEntry | AssistantTextEntry | ThinkingEntry | ToolCallEntry | MetaEntry
 
+/** A prior `appended` entry whose `tool-call` result arrived later —
+ *  `index` is that entry's absolute position across the whole transcript,
+ *  the same numbering `appended` itself is in. Only a `ToolCallEntry` is
+ *  ever patched: every other entry kind is complete the moment it is
+ *  derived. */
+export interface EntryPatch {
+  readonly index: number
+  readonly entry: ToolCallEntry
+}
+
 export interface TranscriptSource {
   readonly sessionId: string
   readonly agentId: string | null
@@ -116,3 +126,34 @@ export type TranscriptFailureKind = 'invalid-id' | 'session-unresolved' | 'not-f
 export type TranscriptRead =
   | { readonly ok: true; readonly source: TranscriptSource; readonly entries: readonly TranscriptEntry[] }
   | { readonly ok: false; readonly kind: TranscriptFailureKind; readonly message: string; readonly path: string | null }
+
+/** `transcript:tail:open`'s response. `tailId` is an opaque token minted by
+ *  `main/sessions/tail.ts` — the renderer never constructs or parses one,
+ *  only holds it and hands it back to `poll`/`close`. */
+export type TranscriptTailOpen =
+  | { readonly ok: true; readonly tailId: string; readonly source: TranscriptSource; readonly entries: readonly TranscriptEntry[] }
+  | { readonly ok: false; readonly kind: TranscriptFailureKind; readonly message: string; readonly path: string | null }
+
+/** `unknown-tail` — the id is not (or no longer) open, an expected answer
+ *  after `TAIL_IDLE_MS` of inactivity, not a bug. `truncated` — the file on
+ *  disk is smaller than the cursor's own offset (rewritten or compacted).
+ *  Both direct the renderer to re-open from the start; neither is ever
+ *  reported as "no new messages", which an operator would misread as the
+ *  agent having stopped. */
+export type TranscriptTailFailureKind = TranscriptFailureKind | 'unknown-tail' | 'truncated'
+
+/** `transcript:tail:poll`'s response. A poll with nothing new returns empty
+ *  `appended`/`patched` and asserts nothing else — idle is never reported as
+ *  finished, since nothing readable from a file on disk proves a process
+ *  ended. `hasMore` is the streamed catch-up signal: true means this poll's
+ *  chunk hit `MAX_CHUNK_BYTES`, so the caller should poll again on the next
+ *  macrotask rather than waiting the full interval. */
+export type TranscriptTailPoll =
+  | {
+      readonly ok: true
+      readonly source: TranscriptSource
+      readonly appended: readonly TranscriptEntry[]
+      readonly patched: readonly EntryPatch[]
+      readonly hasMore: boolean
+    }
+  | { readonly ok: false; readonly kind: TranscriptTailFailureKind; readonly message: string; readonly path: string | null }

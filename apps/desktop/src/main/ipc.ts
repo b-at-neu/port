@@ -4,7 +4,7 @@ import { IPC_CHANNELS, type IpcChannel, type IpcMap } from '../shared/ipc'
 import type { WorktreesReport } from '../shared/reclaimer/types'
 import type { RepositoryEntry } from '../shared/repos'
 import type { SessionScan } from '../shared/sessions/types'
-import type { TranscriptRead } from '../shared/sessions/transcript'
+import type { TranscriptRead, TranscriptTailOpen, TranscriptTailPoll } from '../shared/sessions/transcript'
 import { SOURCE_KINDS } from '../shared/board/types'
 import type { BoardSnapshot } from '../shared/board/types'
 import { chooseDirectory } from './dialogs'
@@ -13,8 +13,8 @@ import { readWorktreeReport } from './reclaimer'
 import type { ReadWorktreeReportParams } from './reclaimer'
 import { addRepository, listRepositories, removeRepository } from './registry'
 import type { RegistryDeps } from './registry'
-import { readSessionState, readTranscript } from './sessions'
-import type { ReadSessionStateParams, ReadTranscriptParams, RepoRef } from './sessions'
+import { openTranscript, readSessionState, tailStore } from './sessions'
+import type { OpenTranscriptParams, OpenTranscriptResult, ReadSessionStateParams, RepoRef, TailStore } from './sessions'
 import { createPipelineWatcher } from './state'
 import type { PipelineWatcher } from './state'
 
@@ -104,11 +104,22 @@ export async function resolveSessionsScan(registryDeps: RegistryDeps, deps: Sess
   return deps.readSessionState({ repos })
 }
 
+/** `'transcript:read'`'s only composition (#83, kept behind #84's byte-cursor
+ *  primitive): a thin shim over `openTranscript` — open, read once through to
+ *  EOF, then discard the cursor, since a one-shot caller never advances it.
+ *  Same validation order and return shape #83's now-deleted `readTranscript`
+ *  gave this channel; no second parallel line-reading code path lives beside
+ *  the tail channels' `TailStore`.
+ *
+ *  Preserved but currently unused: no renderer code calls `'transcript:read'`
+ *  any more — `main.ts`'s `handleOpenTranscript` goes exclusively through
+ *  `transcriptTailOpen`. Kept per the rebase's own D1/D2 decision rather than
+ *  removed, in case a one-shot caller returns. */
 export interface TranscriptReadDeps {
-  readonly readTranscript: (params: ReadTranscriptParams) => Promise<TranscriptRead>
+  readonly openTranscript: (params: OpenTranscriptParams) => Promise<OpenTranscriptResult>
 }
 
-const defaultTranscriptReadDeps: TranscriptReadDeps = { readTranscript }
+const defaultTranscriptReadDeps: TranscriptReadDeps = { openTranscript }
 
 export async function resolveTranscriptRead(
   request: IpcMap['transcript:read']['request'],
@@ -120,7 +131,57 @@ export async function resolveTranscriptRead(
   if (request.agentId !== null && typeof request.agentId !== 'string') {
     throw new Error("'transcript:read' requires 'agentId' to be a string or null")
   }
-  return deps.readTranscript({ sessionId: request.sessionId, agentId: request.agentId })
+  const { read } = await deps.openTranscript({ sessionId: request.sessionId, agentId: request.agentId })
+  return read
+}
+
+/** The three tail channels' only composition: each request's own validation,
+ *  then a direct call into the one running `TailStore` (`tailStore`) —
+ *  injected here so a test exercises the validation branching without a real
+ *  transcript on disk, the same seam every other channel's `*Deps` gives. */
+export interface TranscriptTailDeps {
+  readonly openTail: TailStore['openTail']
+  readonly pollTail: TailStore['pollTail']
+  readonly closeTail: TailStore['closeTail']
+}
+
+const defaultTranscriptTailDeps: TranscriptTailDeps = {
+  openTail: (params) => tailStore.openTail(params),
+  pollTail: (params) => tailStore.pollTail(params),
+  closeTail: (params) => tailStore.closeTail(params),
+}
+
+export async function resolveTranscriptTailOpen(
+  request: IpcMap['transcript:tail:open']['request'],
+  deps: TranscriptTailDeps = defaultTranscriptTailDeps,
+): Promise<TranscriptTailOpen> {
+  if (typeof request?.sessionId !== 'string' || request.sessionId === '') {
+    throw new Error("'transcript:tail:open' requires a non-empty 'sessionId'")
+  }
+  if (request.agentId !== null && typeof request.agentId !== 'string') {
+    throw new Error("'transcript:tail:open' requires 'agentId' to be a string or null")
+  }
+  return deps.openTail({ sessionId: request.sessionId, agentId: request.agentId })
+}
+
+export async function resolveTranscriptTailPoll(
+  request: IpcMap['transcript:tail:poll']['request'],
+  deps: TranscriptTailDeps = defaultTranscriptTailDeps,
+): Promise<TranscriptTailPoll> {
+  if (typeof request?.tailId !== 'string' || request.tailId === '') {
+    throw new Error("'transcript:tail:poll' requires a non-empty 'tailId'")
+  }
+  return deps.pollTail({ tailId: request.tailId })
+}
+
+export function resolveTranscriptTailClose(
+  request: IpcMap['transcript:tail:close']['request'],
+  deps: TranscriptTailDeps = defaultTranscriptTailDeps,
+): void {
+  if (typeof request?.tailId !== 'string' || request.tailId === '') {
+    throw new Error("'transcript:tail:close' requires a non-empty 'tailId'")
+  }
+  deps.closeTail({ tailId: request.tailId })
 }
 
 /** The two calls `'board:refresh'` composes — the same injectable seam
@@ -205,6 +266,12 @@ export function registerIpc(): PipelineWatcher {
   })
 
   handle('transcript:read', (_event, request) => resolveTranscriptRead(request))
+
+  handle('transcript:tail:open', (_event, request) => resolveTranscriptTailOpen(request))
+
+  handle('transcript:tail:poll', (_event, request) => resolveTranscriptTailPoll(request))
+
+  handle('transcript:tail:close', (_event, request) => resolveTranscriptTailClose(request))
 
   // The board's own clock (#80) — one watcher for the process lifetime,
   // pushing every snapshot to every open window over `board:update`. The

@@ -3,7 +3,6 @@ import { createReadStream } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { appendFile, mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { createInterface } from 'node:readline'
 
 /** ENOENT is a value, never an exception — `.agents/denials.log` legitimately
  *  does not exist, and callers must distinguish "no config" from "unreadable
@@ -127,58 +126,79 @@ export async function ensureDirectory(path: string): Promise<FileResult<void>> {
   }
 }
 
-export interface ReadLinesOptions {
+export interface ReadLinesFromOptions {
   readonly maxBytes: number
 }
 
-export type ReadLinesResult = { readonly ok: true } | { readonly ok: false; readonly kind: FileFailureKind; readonly message: string }
+export interface ReadLinesFromValue {
+  readonly lines: readonly string[]
+  /** Exactly the bytes (starting at `start`) that produced a complete line —
+   *  the caller's next `start`. A partial trailing line (no terminating
+   *  `\n` yet, e.g. a `.jsonl` mid-append) is never counted here and never
+   *  appears in `lines`, so a resumed read picks it back up whole. */
+  readonly bytesConsumed: number
+  /** `bytesRead === maxBytes` — the only honest "there may be more past this
+   *  window" signal. A caller must not read `nextOffset < size` as that
+   *  signal: a partial trailing line makes it permanently true and would
+   *  spin a poller. */
+  readonly filledBudget: boolean
+}
 
-/** Streams `path` line by line — `crlfDelay: Infinity` so a CRLF transcript
- *  written on Windows yields the same lines a LF one would — calling
- *  `onLine` for each, and aborts with `too-large` the moment the raw byte
- *  count (measured off the stream's own chunks, never the line-split text)
- *  passes `maxBytes`. Streaming rather than a pre-`stat` because a live
- *  agent's transcript can grow between the stat and the read; the caller
- *  still wants the file's current size separately (`statPath`), not derived
- *  from this count. */
-export async function readLines(path: string, onLine: (line: string) => void, options: ReadLinesOptions): Promise<ReadLinesResult> {
+export type ReadLinesFromResult = FileResult<ReadLinesFromValue>
+
+/** Streams raw `Buffer` chunks from `path` starting at byte offset `start`
+ *  (no `encoding`, so this stays exact — a `readline`-split, already
+ *  `\r`-stripped string cannot be turned back into byte arithmetic), through
+ *  at most `maxBytes`. Finds the **last** `0x0A` in the accumulated buffer,
+ *  decodes only the bytes before it as UTF-8 (a range ending on a newline
+ *  byte can never split a multi-byte sequence, so this needs no
+ *  `StringDecoder` carry-over), and splits on `\n` with one trailing `\r`
+ *  stripped per line — the CRLF-safe equivalent of `readline`'s own
+ *  `crlfDelay: Infinity`. No newline anywhere in the window yields
+ *  `bytesConsumed: 0, lines: []`; `bytesConsumed === 0` while the read
+ *  filled `maxBytes` means one line longer than the whole budget, which
+ *  would never advance the caller's offset, so that case reports
+ *  `too-large` instead of spinning. `start` past EOF is a value, not an
+ *  error — an empty read, zero bytes. */
+export async function readLinesFrom(path: string, start: number, options: ReadLinesFromOptions): Promise<ReadLinesFromResult> {
   return new Promise((resolve) => {
     let settled = false
-    let bytes = 0
+    const chunks: Buffer[] = []
+    let bytesRead = 0
 
-    const stream = createReadStream(path, { encoding: 'utf8' })
-    const rl = createInterface({ input: stream, crlfDelay: Infinity })
+    const stream = createReadStream(path, { start, end: start + options.maxBytes - 1 })
 
-    function finish(result: ReadLinesResult): void {
+    function finish(result: ReadLinesFromResult): void {
       if (settled) return
       settled = true
-      rl.close()
       if (!stream.destroyed) stream.destroy()
       resolve(result)
     }
 
-    stream.on('data', (chunk: string) => {
-      bytes += Buffer.byteLength(chunk, 'utf8')
-      if (bytes > options.maxBytes) {
-        finish({ ok: false, kind: 'too-large', message: `${path} exceeds the ${options.maxBytes}-byte cap` })
-      }
+    stream.on('data', (chunk: Buffer) => {
+      chunks.push(chunk)
+      bytesRead += chunk.length
     })
     stream.on('error', (error) => {
       finish({ ok: false, ...classifyFsError(error) })
     })
-    // `readline.Interface` re-emits its input stream's `error` as its own —
-    // an `error` event with no listener throws, so without this, the stream
-    // listener above still runs (settling the promise correctly) but the
-    // interface's own unheard `error` event crashes the process right after.
-    rl.on('error', (error) => {
-      finish({ ok: false, ...classifyFsError(error) })
-    })
-    rl.on('line', (line) => {
-      if (settled) return
-      onLine(line)
-    })
-    rl.on('close', () => {
-      finish({ ok: true })
+    stream.on('end', () => {
+      const buffer = Buffer.concat(chunks)
+      const lastNewline = buffer.lastIndexOf(0x0a)
+      const filledBudget = bytesRead === options.maxBytes
+
+      if (lastNewline === -1) {
+        if (filledBudget) {
+          finish({ ok: false, kind: 'too-large', message: `${path} has no newline within ${options.maxBytes} bytes of offset ${start}` })
+          return
+        }
+        finish({ ok: true, value: { lines: [], bytesConsumed: 0, filledBudget } })
+        return
+      }
+
+      const text = buffer.subarray(0, lastNewline).toString('utf8')
+      const lines = text.split('\n').map((line) => (line.endsWith('\r') ? line.slice(0, -1) : line))
+      finish({ ok: true, value: { lines, bytesConsumed: lastNewline + 1, filledBudget } })
     })
   })
 }

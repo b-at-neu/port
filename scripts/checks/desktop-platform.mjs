@@ -125,4 +125,28 @@ export default async function ({ fail, ok }) {
     }
     ok();
   }
+
+  // --- No fs.watch/watchFile/FSWatcher/chokidar anywhere under apps/desktop/src/ ---
+  // #84: the decision against a filesystem watcher (Windows' ReadDirectoryChangesW
+  // defers a last-write-time update while the writer holds the handle open, so a
+  // watch cannot be the correctness mechanism there) is recorded, not merely
+  // followed — a later "optimization" reaching for one regresses silently
+  // otherwise. platform/ is included: the ban is on the mechanism everywhere,
+  // not a layering boundary readLinesFrom/statPath already cover.
+  {
+    const forbidden = ['fs.watch', 'watchFile', 'FSWatcher', 'chokidar'];
+    let found = false;
+    for (const f of files) {
+      const rel = relOf(f);
+      if (rel.endsWith('.test.ts')) continue;
+      const text = readFileSync(f, 'utf8');
+      for (const word of forbidden) {
+        if (text.includes(word)) {
+          found = true;
+          fail('desktop-platform-layer', `${rel} references '${word}' — a filesystem watcher is never the follow mechanism, only a poll floor (#84)`);
+        }
+      }
+    }
+    if (!found) ok();
+  }
 }

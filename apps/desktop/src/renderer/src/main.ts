@@ -4,13 +4,14 @@ import './board.css'
 import type { AppInfo } from '../../shared/ipc'
 import type { RepoId, RepositoryEntry } from '../../shared/repos'
 import type { BoardSnapshot, GroupBy } from '../../shared/board/types'
+import type { TranscriptTailFailureKind } from '../../shared/sessions/transcript'
 import { render } from './repositories'
 import type { RegistryBanner, RendererState } from './repositories'
 import type { WorktreeSectionState } from './worktrees'
 import { renderSessionsPicker, titleOf } from './sessions'
 import type { SessionsPickerState } from './sessions'
-import { renderTranscript } from './transcript'
-import type { TranscriptViewState } from './transcript'
+import { applyTailDelta, clearTailBanner, jumpToLatest, renderTranscript, setFollowingIndicator, showTailBanner, showTruncatedNote } from './transcript'
+import type { TailBannerKind, TranscriptViewState } from './transcript'
 import { render as renderBoard } from './board/view'
 import type { BoardViewState } from './board/view'
 
@@ -263,6 +264,137 @@ function handleBackToRepos(): void {
   draw()
 }
 
+/** Following polls at a floor of one second — a local `fs.stat`, never a
+ *  network call, so there is no pacing ladder here (`ENGINEERING §6`'s
+ *  ladder is about the cockpit's GitHub tick): backing off would only add
+ *  latency exactly when an idle agent wakes back up. */
+const TAIL_INTERVAL_MS = 1000
+
+/** The live follow session for whichever transcript is on screen — `null`
+ *  outside the transcript view. Closed on every navigation away and
+ *  replaced (never merged) on every re-open, so a superseded poll's
+ *  response is dropped by the `tailId` check in `pollTranscriptTail`. */
+interface TailSession {
+  readonly tailId: string
+  following: boolean
+  timer: ReturnType<typeof setTimeout> | null
+}
+
+let tailSession: TailSession | null = null
+
+function stopTailTimer(): void {
+  if (tailSession?.timer != null) {
+    clearTimeout(tailSession.timer)
+    tailSession.timer = null
+  }
+}
+
+function scheduleNextPoll(delayMs: number): void {
+  if (tailSession === null || !tailSession.following || document.hidden) return
+  const session = tailSession
+  session.timer = setTimeout(() => void pollTranscriptTail(session.tailId), delayMs)
+}
+
+function closeTranscriptTail(): void {
+  stopTailTimer()
+  if (tailSession === null) return
+  const { tailId } = tailSession
+  tailSession = null
+  window.port.transcriptTailClose({ tailId }).catch((error: unknown) => {
+    console.error('Failed to close a transcript tail', error)
+  })
+}
+
+/** `invalid-id`/`session-unresolved` cannot occur once a tail has already
+ *  opened successfully once — the id never changes underneath a follow
+ *  session — so they fold into `unreadable` defensively rather than adding
+ *  a banner copy no real poll ever produces. */
+function toBannerKind(kind: TranscriptTailFailureKind): TailBannerKind {
+  if (kind === 'not-found' || kind === 'unreadable' || kind === 'too-large') return kind
+  return 'unreadable'
+}
+
+async function openTranscriptTail(sessionId: string, agentId: string | null, title: string): Promise<void> {
+  transcriptState = { status: 'loading' }
+  draw()
+  try {
+    const opened = await window.port.transcriptTailOpen({ sessionId, agentId })
+    if (!opened.ok) {
+      transcriptState = { status: 'error', kind: opened.kind, message: opened.message, path: opened.path }
+      tailSession = null
+      draw()
+      return
+    }
+    transcriptState = { status: 'ready', source: opened.source, entries: opened.entries, title }
+    draw()
+    tailSession = { tailId: opened.tailId, following: true, timer: null }
+    scheduleNextPoll(TAIL_INTERVAL_MS)
+  } catch (error) {
+    console.error('Failed to open a transcript tail', error)
+    tailSession = null
+    transcriptState = { status: 'unreachable' }
+    draw()
+  }
+}
+
+/** `truncated`/`unknown-tail` both mean "the cursor no longer applies" —
+ *  re-open from the start rather than reporting either as a banner, which
+ *  an operator would misread as the agent having stopped. Only `truncated`
+ *  leaves a trace: one dim note once the fresh render lands. */
+async function reopenTranscriptTail(noteTruncation: boolean): Promise<void> {
+  if (view.screen !== 'transcript') return
+  await openTranscriptTail(view.sessionId, view.agentId, view.title)
+  if (noteTruncation) showTruncatedNote()
+}
+
+function pauseFollowing(): void {
+  if (tailSession === null) return
+  tailSession.following = false
+  stopTailTimer()
+  setFollowingIndicator(false)
+}
+
+/** Shared by the follow toggle's resume and the error banner's `Retry` —
+ *  both mean "poll again right now", which is also the manual-refresh
+ *  affordance `Reload` used to be. */
+function resumeFollowing(): void {
+  if (tailSession === null) return
+  tailSession.following = true
+  setFollowingIndicator(true)
+  clearTailBanner()
+  void pollTranscriptTail(tailSession.tailId)
+}
+
+async function pollTranscriptTail(tailId: string): Promise<void> {
+  if (tailSession === null || tailSession.tailId !== tailId) return // superseded by a navigation or a re-open
+  try {
+    const polled = await window.port.transcriptTailPoll({ tailId })
+    if (tailSession === null || tailSession.tailId !== tailId) return
+
+    if (!polled.ok) {
+      if (polled.kind === 'unknown-tail') {
+        await reopenTranscriptTail(false)
+        return
+      }
+      if (polled.kind === 'truncated') {
+        await reopenTranscriptTail(true)
+        return
+      }
+      pauseFollowing()
+      showTailBanner(toBannerKind(polled.kind), polled.message, polled.path)
+      return
+    }
+
+    clearTailBanner()
+    applyTailDelta({ appended: polled.appended, patched: polled.patched, source: polled.source })
+    scheduleNextPoll(polled.hasMore ? 0 : TAIL_INTERVAL_MS)
+  } catch (error) {
+    console.error('Failed to poll a transcript tail', error)
+    pauseFollowing()
+    showTailBanner('unreachable', 'Lost contact with the main process.', null)
+  }
+}
+
 /** #83's UX spec: "stage plus #N, else the session title" — resolved from
  *  the already-loaded `sessionsState` (`SessionRecord`/`AgentRecord`), never
  *  the raw id, so the transcript header and the back-to-sessions flow show
@@ -280,28 +412,17 @@ function titleFor(sessionId: string, agentId: string | null): string {
   return session !== undefined ? titleOf(session) : sessionId
 }
 
-async function loadTranscript(sessionId: string, agentId: string | null): Promise<void> {
-  transcriptState = { status: 'loading' }
-  draw()
-  try {
-    const read = await window.port.transcriptRead({ sessionId, agentId })
-    transcriptState = read.ok ? { status: 'ready', read, title: titleFor(sessionId, agentId) } : { status: 'error', kind: read.kind, message: read.message, path: read.path }
-  } catch (error) {
-    console.error('Failed to read a transcript', error)
-    transcriptState = { status: 'unreachable' }
-  }
-  draw()
-}
-
 function handleOpenTranscript(sessionId: string, agentId: string): void {
   const normalizedAgentId = agentId === '' ? null : agentId
-  view = { screen: 'transcript', sessionId, agentId: normalizedAgentId, title: titleFor(sessionId, normalizedAgentId) }
-  void loadTranscript(sessionId, normalizedAgentId)
+  const title = titleFor(sessionId, normalizedAgentId)
+  view = { screen: 'transcript', sessionId, agentId: normalizedAgentId, title }
+  void openTranscriptTail(sessionId, normalizedAgentId, title)
 }
 
 function handleBackToSessions(): void {
   if (view.screen !== 'transcript') return
   const { sessionId } = view
+  closeTranscriptTail()
   // The picker's own state is still in memory from the last scan — reopen
   // it without a fresh round trip; `rescan-sessions` covers a deliberate
   // refresh.
@@ -310,10 +431,24 @@ function handleBackToSessions(): void {
   draw()
 }
 
-function handleReloadTranscript(): void {
-  if (view.screen !== 'transcript') return
-  void loadTranscript(view.sessionId, view.agentId)
+function handleToggleFollow(): void {
+  if (tailSession === null) return
+  if (tailSession.following) pauseFollowing()
+  else resumeFollowing()
 }
+
+function handleRetryTranscript(): void {
+  resumeFollowing()
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (view.screen !== 'transcript' || tailSession === null) return
+  if (document.hidden) {
+    stopTailTimer()
+  } else if (tailSession.following) {
+    void pollTranscriptTail(tailSession.tailId) // poll once immediately on return
+  }
+})
 
 app?.addEventListener('click', (event) => {
   const target = event.target
@@ -332,9 +467,11 @@ app?.addEventListener('click', (event) => {
   else if (action === 'rescan-sessions') void loadSessions()
   else if (action === 'open-transcript' && target.dataset.sessionId !== undefined) handleOpenTranscript(target.dataset.sessionId, target.dataset.agentId ?? '')
   else if (action === 'back-to-sessions') handleBackToSessions()
-  else if (action === 'reload-transcript') handleReloadTranscript()
   else if (action === 'board-refresh') void handleBoardRefresh()
   else if (action === 'board-group-toggle') toggleGroupBy()
+  else if (action === 'toggle-follow') handleToggleFollow()
+  else if (action === 'jump-to-latest') jumpToLatest()
+  else if (action === 'retry-transcript') handleRetryTranscript()
   else {
     const row = target.closest<HTMLElement>('.board-row')
     if (row?.dataset.url) window.open(row.dataset.url, '_blank')
