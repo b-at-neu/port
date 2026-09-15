@@ -135,7 +135,7 @@ export default async function ({ fail, ok }) {
   }
 
   // --- No fs.watch/watchFile/FSWatcher/chokidar anywhere under apps/desktop/src/ ---
-  // #84: the decision against a filesystem watcher (Windows' ReadDirectoryChangesW
+  // guard(#84): the decision against a filesystem watcher (Windows' ReadDirectoryChangesW
   // defers a last-write-time update while the writer holds the handle open, so a
   // watch cannot be the correctness mechanism there) is recorded, not merely
   // followed — a later "optimization" reaching for one regresses silently
