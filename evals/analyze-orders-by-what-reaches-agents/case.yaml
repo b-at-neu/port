@@ -1,0 +1,73 @@
+# Regression target: #50 — no distinction between a plugin that reaches a
+# dispatched agent and one that only helps the operator's own session.
+#
+# Stage agents run autonomously; nobody types a command at them. A plugin
+# whose only value is a slash command does nothing for the pipeline, however
+# useful it is to the human running it — and a recommendation list that never
+# says so sells that plugin as a pipeline benefit it cannot deliver.
+name: analyze-orders-by-what-reaches-agents
+tags: [analyze, plugins]
+runs: 3
+max_turns: 60
+timeout_seconds: 900
+
+prompt: |
+  Run /port:analyze on this repository. Tiers 1 and 2 of the plugin search
+  (configured marketplaces and the claude.ai catalog) have already been done
+  for you and turned up exactly these three candidates — skip straight to
+  step 6's classification, ordering, and recommendation for this set (tier 3
+  is still yours to run):
+
+  - `db-lens` — an MCP server that connects to the project's Postgres
+    database for live schema introspection. Ships 1 MCP server, 0 skills, 0
+    commands.
+  - `test-patterns` — a single skill, no `disable-model-invocation` flag, that
+    triggers automatically when writing or reviewing test files and applies
+    this stack's testing conventions. Ships 0 MCP servers, 1 skill, 0
+    commands.
+  - `scaffold-cli` — a single skill carrying `disable-model-invocation: true`,
+    invoked manually as `/scaffold-cli:new` to generate a new route
+    boilerplate. Ships 0 MCP servers, 1 skill, 1 command.
+
+  This repository's stack (see package.json) makes all three plausibly
+  relevant. Present the final ordered recommendation.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  mkdir -p .claude src
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "tracker": "github",
+    "repo": "example/widgets",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": null, "design": null }
+  }
+  JSON
+
+  cat > .claude/settings.json <<'JSON'
+  { "permissions": { "allow": [] } }
+  JSON
+
+  cat > package.json <<'JSON'
+  {
+    "name": "widgets",
+    "private": true,
+    "dependencies": { "next": "15.0.0", "react": "19.0.0", "pg": "8.12.0" },
+    "devDependencies": { "typescript": "5.6.0", "vitest": "2.1.0" }
+  }
+  JSON
+
+  cat > src/page.tsx <<'TSX'
+  export default function Page() {
+    return <main>widgets</main>;
+  }
+  TSX
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add app"
+
+graders:
+  - orders-by-what-reaches-agents.md

@@ -2,7 +2,7 @@
 name: analyze
 description: Read this repository and produce a real ENGINEERING.md — conventions inferred from the code, inconsistencies surfaced as decisions, improvements proposed for approval — and a DESIGN.md when the repository has a real interface, then recommend stack-relevant plugins from the local, org, and public catalogs. Files findings as tickets rather than fixing them. Sets docs.engineering and docs.design. Re-runnable as the codebase evolves. Manual only. Usage: /port:analyze
 disable-model-invocation: true
-allowed-tools: Read, Grep, Glob, Write, Edit, AskUserQuestion, WebSearch, WebFetch, SearchPlugins, Bash(git log *) Bash(git ls-files *) Bash(git diff *) Bash(git rev-parse *) Bash(gh issue create *) Bash(claude plugin list *) Bash(claude plugin install *) Bash(claude plugin marketplace list *) Bash(claude plugin marketplace add *) Bash(claude plugin marketplace update *)
+allowed-tools: Read, Grep, Glob, Write, Edit, AskUserQuestion, WebSearch, WebFetch, SearchPlugins, Bash(git log *) Bash(git ls-files *) Bash(git diff *) Bash(git rev-parse *) Bash(gh issue create *) Bash(claude plugin list *) Bash(claude plugin details *) Bash(claude plugin install *) Bash(claude plugin marketplace list *) Bash(claude plugin marketplace add *) Bash(claude plugin marketplace update *)
 ---
 
 # Analyze — generate this repository's engineering standards
@@ -139,36 +139,65 @@ Aim for **coverage across the stack's domains**, not a fixed count: language and
 
 There is deliberately **no cap**. Most plugins cost almost nothing to have installed — measured across a real set, `context7` is ~0 tokens always-on, `code-simplifier` ~64, and only skill-heavy plugins like `superpowers` (~688) or this one (~1,195) are meaningful. Breadth is cheap; irrelevance is not. So the filter is relevance, and it is this: **if you cannot justify a recommendation in one sentence referencing what the analysis found, drop it.**
 
-### Where to search — three tiers, in order
+### What counts as already covered
+
+Exclusion means **already declared at project scope in this repository** — read `enabledPlugins` from `.claude/settings.json`, and from `.claude/settings.local.json` too (report anything found only there as local-only and invisible to worktrees). Nothing else counts. `claude plugin list` answers a different question — installed on this machine, not declared in this repository — and is never the exclusion source.
+
+A plugin `claude plugin list` reports as installed, that `enabledPlugins` does not declare, is not excluded. It is a **declare-here candidate**, folded into the ordered list in "What to recommend" below and phrased as who else gets it once declared — a clone, and every dispatched agent's worktree, currently get none of it — never as "you already have this."
+
+### Where to search — three tiers, all three every time
 
 1. **Configured marketplaces.** **Refresh first** — `claude plugin marketplace update` — or you are searching however stale the last sync was. Then **Grep** the catalogs at `~/.claude/plugins/marketplaces/*/.claude-plugin/marketplace.json`, using context to pull each entry's neighbouring fields. **Never read a catalog whole** (the official one is ~4,000 lines) and **never shell out to an interpreter or `jq` to filter it** — same rule the stage agents follow, for the same reasons.
 2. **The claude.ai catalog**, via the `SearchPlugins` tool. It does **not** cover locally-configured marketplaces, so it is a genuinely separate source rather than a duplicate of tier 1. An empty result means this account has no organisation catalog — not that nothing exists.
 3. **The wider internet**, via web search. Plugins and marketplaces not configured locally at all: search the detected stack terms alongside "Claude Code plugin" or "marketplace". Adding one is `claude plugin marketplace add <source> --scope project`, then installing from it.
 
+**Tier 3 runs every time.** Codebase size and stack simplicity are never reasons to skip it — useful breadth follows the number of domains a repository touches, not how large it is, and tiers 1 and 2 systematically miss anything published outside the official catalog. The only acceptable non-run is a tool failure, reported as one (`tier 3: web search unavailable — <reason>`), never as "not needed." An empty result is one line: `tier 3: no relevant third-party marketplaces found.`
+
 **Match with judgment, not substrings.** Searching the official catalog for `next` returns an endpoint-security plugin and a courseware plugin, neither relevant.
 
-**Exclude anything already installed** (`claude plugin list`) — recommending what the operator has reads as noise.
+### What to recommend — does it reach a dispatched agent?
+
+**Stage agents run autonomously. Nobody types a command at them.** A plugin whose value is a slash command an operator invokes helps the human in their own session — a different goal from helping the pipeline, worth recommending on its own merits but never sold as the same benefit.
+
+| Component | Reaches a dispatched agent? |
+| --- | --- |
+| MCP server | Yes — appears as tools |
+| LSP server | Yes — diagnostics surface while reading and editing |
+| Hooks | Yes — run at the harness level |
+| Skills | Yes — `Skill` is allowlisted for `plan-agent`/`review-agent`, and `impl-agent`/`revise-agent` declare no `tools:` restriction of their own, so the same allowlist entry reaches them too. A skill carrying `disable-model-invocation: true` never counts here, however it is packaged — it is an operator command. |
+| Slash commands | No |
+
+Order the recommendation list by this table — MCP and LSP first, passive skills second, operator-facing commands last, labelled `operator-facing` with a one-line statement that it helps the operator rather than the pipeline. To tell the groups apart: `claude plugin details <name>` reports a candidate's component counts, and a skill carrying `disable-model-invocation: true` is operator-facing regardless of what else the plugin ships. Fold each declare-here candidate from "What counts as already covered" into this same ordered list — it groups by delivery surface exactly like a fresh install.
+
+Keep the one-sentence-justification filter and the no-cap rule: **if you cannot justify a recommendation in one sentence referencing what the analysis found, drop it** — breadth is cheap, irrelevance is not.
 
 ### Risk differs by tier, and you must say so
 
 A plugin from the official directory has a known publisher. One from an arbitrary repository found by web search is **unvetted third-party code that will load in every session** — and because installs are project-scoped and committed, for everyone who clones the repository too.
 
 So for tier 3, present the **provenance**: the repository, its owner, whether it looks maintained. Make the confirmation informed rather than a formality. **If provenance cannot be established, say so and recommend against it.**
-5. Ask which to install. **Install only explicitly-picked plugins, one confirmation each, at project scope:**
 
-   ```bash
-   claude plugin install <name>@<marketplace> --scope project
-   ```
+### Installing
 
-   If that marketplace is not already declared at project scope, declare it too, or a fresh clone will have an `enabledPlugins` entry it cannot resolve:
+Ask which to install. **Install only explicitly-picked plugins, one confirmation each, at project scope:**
 
-   ```bash
-   claude plugin marketplace add <source> --scope project
-   ```
+```bash
+claude plugin install <name>@<marketplace> --scope project
+```
 
-6. Report what was installed and where it landed — and that a newly installed plugin is not available in this session until a new one is started, with unresolving skills or commands as the symptom. **If any install landed at project scope and this checkout is not on the integration branch**, add:
+If that marketplace is not already declared at project scope, declare it too, or a fresh clone will have an `enabledPlugins` entry it cannot resolve:
 
-   > ⚠️ Installed at project scope on `<branch>`, not `<integration>`. A project-scope install is a committed change: it reaches dispatched agents only after it merges to `<integration>`, and only on a machine that already has the plugin cached. Merge it on its own ticket, and mark tickets that depend on it as blocked by it.
+```bash
+claude plugin marketplace add <source> --scope project
+```
+
+**A declare-here install verifies its own delta.** After installing one, re-read `enabledPlugins` and report whether the entry appeared: `` `context7` now in enabledPlugins `` or `` `enabledPlugins` unchanged — the install was a no-op at project scope; declare it by hand ``.
+
+### Reporting
+
+Report what was installed and where it landed — and that a newly installed plugin is not available in this session until a new one is started, with unresolving skills or commands as the symptom. **If any install landed at project scope and this checkout is not on the integration branch**, add:
+
+> ⚠️ Installed at project scope on `<branch>`, not `<integration>`. A project-scope install is a committed change: it reaches dispatched agents only after it merges to `<integration>`, and only on a machine that already has the plugin cached. Merge it on its own ticket, and mark tickets that depend on it as blocked by it.
 
 ### Why project scope, not user
 

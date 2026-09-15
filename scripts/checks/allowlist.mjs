@@ -384,5 +384,55 @@ export default async function ({ fail, note, ok }) {
     }
   }
 
-  note('allowlist: commands.* coverage, normalization cases, repoRelative cases, phrase pins (#205), and the deny-only bound (#212)');
+  // --- Check G — the Skill delivery path, both directions ---------------------
+  // #50: a skill-only plugin could not reach a dispatched agent because Skill
+  // was absent from the template, this repository's own settings, and the
+  // two read-only agents' tools: — recommending a capability the pipeline
+  // could not deliver. Same shape as Check A': asserted in both directions,
+  // since three of four carrying it is the half-live state that recommends a
+  // benefit the agents do not actually have.
+  {
+    const carriers = [
+      ['plugins/port/templates/permissions.base.json', (text) => text.includes('"Skill"')],
+      ['.claude/settings.json', (text) => text.includes('"Skill"')],
+      ['plugins/port/agents/plan-agent.md', (text) => (frontmatterOf(text)?.tools ?? '').split(',').map((t) => t.trim()).includes('Skill')],
+      ['plugins/port/agents/review-agent.md', (text) => (frontmatterOf(text)?.tools ?? '').split(',').map((t) => t.trim()).includes('Skill')],
+    ];
+
+    function frontmatterOf(text) {
+      const m = /^---\n([\s\S]*?)\n---/.exec(text);
+      if (!m) return null;
+      const out = {};
+      for (const line of m[1].split('\n')) {
+        const kv = /^([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$/.exec(line);
+        if (kv) out[kv[1]] = kv[2].trim();
+      }
+      return out;
+    }
+
+    const results = carriers.map(([rel, test]) => [rel, test(readFileSync(join(root, rel), 'utf8'))]);
+    const present = results.filter(([, has]) => has);
+    const missing = results.filter(([, has]) => !has);
+
+    if (present.length > 0 && missing.length > 0) {
+      for (const [rel] of missing) {
+        fail(
+          'allowlist-skill-delivery',
+          `${rel} is missing the Skill grant while ${present.map(([r]) => r).join(', ')} carr${present.length === 1 ? 'ies' : 'y'} it — the delivery path is half-live`,
+        );
+      }
+    } else {
+      ok();
+    }
+
+    const pipelineRel = 'plugins/port/docs/PIPELINE.md';
+    const pipelineText = readFileSync(join(root, pipelineRel), 'utf8');
+    if (!pipelineText.includes('the repository itself declares')) {
+      fail('allowlist-skill-delivery', `${pipelineRel} no longer states the Skill grant's bound ("...the repository itself declares")`);
+    } else {
+      ok();
+    }
+  }
+
+  note('allowlist: commands.* coverage, normalization cases, repoRelative cases, phrase pins (#205), the deny-only bound (#212), and the Skill delivery path (#50)');
 }

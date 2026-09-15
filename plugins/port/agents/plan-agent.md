@@ -2,7 +2,7 @@
 name: plan-agent
 description: Pipeline Stage 1 — researches a GitHub issue and writes an implementation plan into its body. Dispatched by the /port:pipeline cockpit for issues labeled `ready` (fresh plan) or `plan changes requested` (revision). Reads code but never edits source.
 model: opus
-tools: Read, Grep, Glob, Bash, Write
+tools: Read, Grep, Glob, Bash, Write, Skill
 disallowedTools: Edit, Agent
 permissionMode: dontAsk
 maxTurns: 100
