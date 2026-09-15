@@ -1,6 +1,7 @@
 import './index.css'
 import './transcript.css'
 import './board.css'
+import './claim.css'
 import type { AppInfo } from '../../shared/ipc'
 import type { RepoId, RepositoryEntry } from '../../shared/repos'
 import type { BoardSnapshot, GroupBy } from '../../shared/board/types'
@@ -14,6 +15,7 @@ import { applyTailDelta, clearTailBanner, jumpToLatest, renderTranscript, setFol
 import type { TailBannerKind, TranscriptViewState } from './transcript'
 import { render as renderBoard } from './board/view'
 import type { BoardViewState } from './board/view'
+import { initClaim, openClaimDialog } from './claim/controller'
 
 const app = document.querySelector<HTMLDivElement>('#app')
 const nav = document.querySelector<HTMLDivElement>('#nav')
@@ -472,6 +474,7 @@ app?.addEventListener('click', (event) => {
   else if (action === 'toggle-follow') handleToggleFollow()
   else if (action === 'jump-to-latest') jumpToLatest()
   else if (action === 'retry-transcript') handleRetryTranscript()
+  else if (action === 'claim-open') openClaimDialog()
   else {
     const row = target.closest<HTMLElement>('.board-row')
     if (row?.dataset.url) window.open(row.dataset.url, '_blank')
@@ -481,3 +484,4 @@ app?.addEventListener('click', (event) => {
 draw()
 void refreshRepositories()
 void initBoard()
+if (app) initClaim(app)

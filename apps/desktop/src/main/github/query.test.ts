@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { resolveVocabulary, type LabelVocabulary } from '../../shared/labels/vocabulary'
-import { buildItemStatesQuery, buildItemsByNumberQuery, buildPipelineQuery, graphqlStringLiteral } from './query'
+import { buildClaimPreflightQuery, buildItemStatesQuery, buildItemsByNumberQuery, buildPipelineQuery, graphqlStringLiteral } from './query'
 
 describe('graphqlStringLiteral', () => {
   it('round-trips a name containing a double quote, a backslash, and a newline', () => {
@@ -176,5 +176,46 @@ describe('buildItemsByNumberQuery', () => {
     const prFragment = extractFragment(document, 'PullRequest')
     expect(issueFragment).toContain('assignees(first:')
     expect(prFragment).toContain('assignees(first:')
+  })
+})
+
+describe('buildClaimPreflightQuery', () => {
+  it('aliases the number as c0 and embeds it as a literal', () => {
+    const { document } = buildClaimPreflightQuery(93)
+    expect(document).toContain('c0: issueOrPullRequest(number: 93)')
+  })
+
+  it('requests labels, assignees, and blockedBy inside the Issue fragment only — never the PullRequest one', () => {
+    const { document } = buildClaimPreflightQuery(1)
+    const issueFragment = extractFragment(document, 'Issue')
+    const prFragment = extractFragment(document, 'PullRequest')
+    expect(issueFragment).toContain('labels(first:')
+    expect(issueFragment).toContain('assignees(first:')
+    expect(issueFragment).toContain('blockedBy(first:')
+    expect(prFragment).not.toContain('labels(first:')
+    expect(prFragment).not.toContain('assignees(first:')
+    expect(prFragment).not.toContain('blockedBy(first:')
+  })
+
+  it('blockedBy requests totalCount beside its nodes, for truncation reporting', () => {
+    const { document } = buildClaimPreflightQuery(1)
+    const issueFragment = extractFragment(document, 'Issue')
+    expect(issueFragment).toMatch(/blockedBy\(first: \d+\) \{ totalCount nodes/)
+  })
+
+  it('requests viewer as a top-level field, outside repository', () => {
+    const { document } = buildClaimPreflightQuery(1)
+    const repositoryStart = document.indexOf('repository(owner:')
+    const viewerIndex = document.indexOf('viewer { login }')
+    expect(viewerIndex).toBeGreaterThan(-1)
+    // The repository block closes with a lone '  }' before viewer appears —
+    // asserting viewer is not nested inside it rather than merely present.
+    const closeIndex = document.indexOf('\n  }\n', repositoryStart)
+    expect(viewerIndex).toBeGreaterThan(closeIndex)
+  })
+
+  it('never uses GraphQL search', () => {
+    const { document } = buildClaimPreflightQuery(1)
+    expect(document).not.toContain('search(')
   })
 })

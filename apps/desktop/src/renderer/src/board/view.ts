@@ -36,6 +36,12 @@ function buildHeader(state: BoardViewState): HTMLElement {
   const actions = document.createElement('div')
   actions.className = 'board-header__actions'
 
+  const claimButton = document.createElement('button')
+  claimButton.className = 'board-header__claim'
+  claimButton.dataset.action = 'claim-open'
+  claimButton.textContent = 'Work on…'
+  actions.appendChild(claimButton)
+
   const groupToggle = document.createElement('button')
   groupToggle.className = 'board-header__toggle'
   groupToggle.dataset.action = 'board-group-toggle'

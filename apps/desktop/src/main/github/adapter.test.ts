@@ -3,7 +3,7 @@ import { resolveVocabulary } from '../../shared/labels/vocabulary'
 import type { LabelVocabulary } from '../../shared/labels/vocabulary'
 import { ghAuthStatus, ghJson } from '../platform/gh'
 import type { GhResult } from '../platform/gh'
-import { fetchItemsByNumber, fetchItemStates, fetchPipelineItems } from './adapter'
+import { fetchClaimPreflight, fetchItemsByNumber, fetchItemStates, fetchPipelineItems } from './adapter'
 import type { GhRunner } from './adapter'
 
 const VOCABULARY: LabelVocabulary = {
@@ -263,6 +263,143 @@ describe('fetchItemsByNumber', () => {
     if (!result.ok) return
     expect(result.resolved).toHaveLength(1)
     expect(result.unavailable).toEqual([2])
+  })
+})
+
+describe('fetchClaimPreflight', () => {
+  it('resolves an Issue node with its labels, assignees, viewer, and open blockers', async () => {
+    const stdout = JSON.stringify({
+      data: {
+        repository: {
+          c0: {
+            __typename: 'Issue',
+            number: 93,
+            title: 'Claim a ticket',
+            url: 'u',
+            state: 'OPEN',
+            labels: { nodes: [{ name: 'enhancement' }] },
+            assignees: { nodes: [{ login: 'alice' }] },
+            blockedBy: { totalCount: 1, nodes: [{ number: 90, title: 'blocker', url: 'u2', state: 'OPEN' }] },
+          },
+        },
+        viewer: { login: 'alice' },
+      },
+    })
+    const result = await fetchClaimPreflight({ repo: { owner: 'o', name: 'r' }, number: 93, gh: fakeRunner({ ok: true, stdout, stderr: '' }) })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.viewer).toBe('alice')
+    expect(result.item).toEqual({
+      kind: 'issue',
+      number: 93,
+      title: 'Claim a ticket',
+      url: 'u',
+      state: 'OPEN',
+      labels: ['enhancement'],
+      assignees: ['alice'],
+      blockers: { ok: true, open: [{ number: 90, title: 'blocker', url: 'u2', state: 'OPEN' }], shown: 1, total: 1 },
+    })
+  })
+
+  it('filters closed blockers out of open, but keeps them in shown/total', async () => {
+    const stdout = JSON.stringify({
+      data: {
+        repository: {
+          c0: {
+            __typename: 'Issue',
+            number: 1,
+            title: 't',
+            url: 'u',
+            state: 'OPEN',
+            labels: { nodes: [] },
+            assignees: { nodes: [] },
+            blockedBy: {
+              totalCount: 24,
+              nodes: [
+                { number: 1, title: 'a', url: 'u', state: 'OPEN' },
+                { number: 2, title: 'b', url: 'u', state: 'CLOSED' },
+              ],
+            },
+          },
+        },
+        viewer: { login: 'alice' },
+      },
+    })
+    const result = await fetchClaimPreflight({ repo: { owner: 'o', name: 'r' }, number: 1, gh: fakeRunner({ ok: true, stdout, stderr: '' }) })
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.item === null) return
+    expect(result.item.blockers).toEqual({ ok: true, open: [{ number: 1, title: 'a', url: 'u', state: 'OPEN' }], shown: 2, total: 24 })
+  })
+
+  it("a PullRequest node carries only its identity fields — no labels/assignees/blockers were requested", async () => {
+    const stdout = JSON.stringify({
+      data: { repository: { c0: { __typename: 'PullRequest', number: 5, title: 'pr', url: 'u', state: 'OPEN' } }, viewer: { login: 'alice' } },
+    })
+    const result = await fetchClaimPreflight({ repo: { owner: 'o', name: 'r' }, number: 5, gh: fakeRunner({ ok: true, stdout, stderr: '' }) })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.item).toEqual({ kind: 'pull-request', number: 5, title: 'pr', url: 'u', state: 'OPEN', labels: [], assignees: [], blockers: { ok: true, open: [], shown: 0, total: 0 } })
+  })
+
+  it('a null c0 node resolves to item: null, never a failure', async () => {
+    const stdout = JSON.stringify({ data: { repository: { c0: null }, viewer: { login: 'alice' } } })
+    const result = await fetchClaimPreflight({ repo: { owner: 'o', name: 'r' }, number: 999999, gh: fakeRunner({ ok: true, stdout, stderr: '' }) })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.item).toBeNull()
+    expect(result.viewer).toBe('alice')
+  })
+
+  it('an item-level partial error (path length 2) resolves to item: null, never a failure', async () => {
+    const stdout = JSON.stringify({
+      data: { repository: { c0: null }, viewer: { login: 'alice' } },
+      errors: [{ type: 'NOT_FOUND', path: ['repository', 'c0'], message: 'boom' }],
+    })
+    const result = await fetchClaimPreflight({
+      repo: { owner: 'o', name: 'r' },
+      number: 999999,
+      gh: fakeRunner({ ok: false, kind: 'unknown', stdout, stderr: 'gh: some errors' }),
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.item).toBeNull()
+  })
+
+  it('a blockedBy-only partial error reports blockers unreadable, without dropping the rest of the item', async () => {
+    const stdout = JSON.stringify({
+      data: {
+        repository: { c0: { __typename: 'Issue', number: 1, title: 't', url: 'u', state: 'OPEN', labels: { nodes: [] }, assignees: { nodes: [] }, blockedBy: null } },
+        viewer: { login: 'alice' },
+      },
+      errors: [{ type: 'SOME_ERROR', path: ['repository', 'c0', 'blockedBy'], message: 'boom' }],
+    })
+    const result = await fetchClaimPreflight({
+      repo: { owner: 'o', name: 'r' },
+      number: 1,
+      gh: fakeRunner({ ok: false, kind: 'unknown', stdout, stderr: 'gh: some errors' }),
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.item === null) return
+    expect(result.item.title).toBe('t')
+    expect(result.item.blockers).toEqual({ ok: false, reason: "GitHub reported an error reading this issue's blockers" })
+  })
+
+  it('an unresolvable viewer login fails the whole preflight with kind: no-data', async () => {
+    const stdout = JSON.stringify({ data: { repository: { c0: null }, viewer: null } })
+    const result = await fetchClaimPreflight({ repo: { owner: 'o', name: 'r' }, number: 1, gh: fakeRunner({ ok: true, stdout, stderr: '' }) })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.kind).toBe('no-data')
+  })
+
+  it('a viewer-level partial error fails the whole preflight with kind: no-data', async () => {
+    const stdout = JSON.stringify({ data: { repository: { c0: null }, viewer: null }, errors: [{ type: 'SOME_ERROR', path: ['viewer'], message: 'boom' }] })
+    const result = await fetchClaimPreflight({
+      repo: { owner: 'o', name: 'r' },
+      number: 1,
+      gh: fakeRunner({ ok: false, kind: 'unknown', stdout, stderr: 'gh: some errors' }),
+    })
+    expect(result.ok).toBe(false)
   })
 })
 

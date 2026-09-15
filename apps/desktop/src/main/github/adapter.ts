@@ -8,6 +8,10 @@ import { verifyVocabulary } from '../../shared/labels/vocabulary'
 import type { LabelVocabulary, RepoLabels } from '../../shared/labels/vocabulary'
 import type { AssertEqual } from '../../shared/assert-type'
 import type {
+  BlockerRead,
+  ClaimBlocker,
+  ClaimPreflightFetch,
+  ClaimPreflightItem,
   ItemRef,
   ItemsByNumberFetch,
   ItemState,
@@ -21,7 +25,7 @@ import type {
 import { classifyFailure, collectTruncated, collectUnavailable, parseEnvelope } from './envelope'
 import type { AliasInfo, EnvelopeFailureKind, GraphQLErrorEntry } from './envelope'
 import { applyItemStates, fieldListOf, mapPipelineItems } from './map'
-import { buildItemStatesQuery, buildItemsByNumberQuery, buildPipelineQuery } from './query'
+import { buildClaimPreflightQuery, buildItemStatesQuery, buildItemsByNumberQuery, buildPipelineQuery } from './query'
 
 /** The injectable seam every call below takes instead of importing `gh`
  *  directly — the same idiom `Spawner` (`platform/run.ts`) and `resolve`
@@ -306,6 +310,113 @@ export async function fetchItemsByNumber(params: FetchItemsByNumberParams): Prom
   }
 
   return { ok: true, resolved, unavailable, fetchedAt }
+}
+
+export interface FetchClaimPreflightParams {
+  readonly repo: RepoRef
+  readonly number: number
+  readonly gh?: GhRunner
+  readonly now?: () => Date
+}
+
+/** Reads a `blockedBy` connection into a `BlockerRead` — `errored` is the
+ *  sub-selection's own error (never the item alias's own, see below), so an
+ *  unreadable connection is reported by name rather than folded into an
+ *  empty list (ENGINEERING §4: an absent signal is never read as passing).
+ *  `shown`/`total` count every node the connection returned, open or closed
+ *  — the truncation signal `open`'s own filtering must not distort. */
+function toBlockerRead(value: unknown, errored: boolean): BlockerRead {
+  if (errored) return { ok: false, reason: "GitHub reported an error reading this issue's blockers" }
+  if (typeof value !== 'object' || value === null) return { ok: false, reason: 'blockedBy is missing from the response' }
+  const connection = value as { totalCount?: unknown; nodes?: unknown }
+  if (typeof connection.totalCount !== 'number' || !Array.isArray(connection.nodes)) {
+    return { ok: false, reason: 'blockedBy is malformed' }
+  }
+  const open: ClaimBlocker[] = []
+  for (const node of connection.nodes) {
+    if (typeof node !== 'object' || node === null) continue
+    const raw = node as Record<string, unknown>
+    const state = typeof raw.state === 'string' ? raw.state : ''
+    if (state !== 'OPEN') continue
+    open.push({
+      number: typeof raw.number === 'number' ? raw.number : 0,
+      title: typeof raw.title === 'string' ? raw.title : '',
+      url: typeof raw.url === 'string' ? raw.url : '',
+      state,
+    })
+  }
+  return { ok: true, open, shown: connection.nodes.length, total: connection.totalCount }
+}
+
+/**
+ * The claim dialog's one round trip (#93): one item's identity, labels,
+ * assignees, and open blockers, plus the signed-in account's own login.
+ * `item: null` covers both "the number does not exist" and "the alias
+ * itself errored" — the plan's own rule that neither is a failure, since a
+ * mistyped number is an ordinary outcome of an operator typing one in. An
+ * unresolvable `viewer.login` is the one thing that fails the whole
+ * preflight (`kind: 'no-data'`): the take-over decision cannot be made
+ * without knowing who "me" is.
+ *
+ * A GraphQL error's `path` distinguishes an item-level failure
+ * (`["repository", "c0"]`, length 2) from a `blockedBy`-only failure
+ * (`["repository", "c0", "blockedBy", ...]`, longer and naming it) — the
+ * former discards the node entirely, the latter reports only the blockers
+ * as unreadable while the rest of the item still resolves.
+ */
+export async function fetchClaimPreflight(params: FetchClaimPreflightParams): Promise<ClaimPreflightFetch> {
+  const runner = params.gh ?? defaultGh
+  const now = params.now ?? (() => new Date())
+  const fetchedAt = now().toISOString()
+
+  const { document } = buildClaimPreflightQuery(params.number)
+  const ghResult = await runner(['api', 'graphql', '-f', `query=${document}`, '-f', `owner=${params.repo.owner}`, '-f', `name=${params.repo.name}`])
+
+  const stdout = stdoutOf(ghResult)
+  const parsed = stdout !== undefined ? parseEnvelope(stdout) : undefined
+  const verdict = classifyFailure(ghResult, parsed)
+
+  if (verdict.kind !== 'ok') {
+    return { ok: false, kind: verdict.kind, message: verdict.message, fetchedAt }
+  }
+  if (parsed === undefined || !parsed.ok) {
+    return { ok: false, kind: 'no-data', message: 'internal: an ok verdict without a parsed envelope', fetchedAt }
+  }
+  const body = parsed.value
+  if (body.data === undefined || body.data === null || body.data.repository === undefined || body.data.repository === null) {
+    return { ok: false, kind: 'no-data', message: 'internal: an ok verdict without usable repository data', fetchedAt }
+  }
+  const repository = body.data.repository as Readonly<Record<string, unknown>>
+  const errors = body.errors ?? []
+
+  const viewerErrored = errors.some((error) => error.path?.[0] === 'viewer')
+  const viewerNode = body.data.viewer
+  const viewerLogin = typeof viewerNode === 'object' && viewerNode !== null ? (viewerNode as Record<string, unknown>).login : undefined
+  if (viewerErrored || typeof viewerLogin !== 'string' || viewerLogin === '') {
+    return { ok: false, kind: 'no-data', message: "could not resolve the signed-in account's login", fetchedAt }
+  }
+
+  const itemErrored = errors.some((error) => error.path?.[1] === 'c0' && error.path.length === 2)
+  const node = repository.c0
+  const kind = itemErrored || typeof node !== 'object' || node === null ? undefined : kindOfTypename((node as Record<string, unknown>).__typename)
+  if (kind === undefined) {
+    return { ok: true, item: null, viewer: viewerLogin, fetchedAt }
+  }
+  const raw = node as Record<string, unknown>
+
+  const blockersErrored = errors.some((error) => error.path?.[1] === 'c0' && error.path[2] === 'blockedBy')
+  const item: ClaimPreflightItem = {
+    kind,
+    number: typeof raw.number === 'number' ? raw.number : params.number,
+    title: typeof raw.title === 'string' ? raw.title : '',
+    url: typeof raw.url === 'string' ? raw.url : '',
+    state: typeof raw.state === 'string' ? raw.state : '',
+    labels: kind === 'issue' ? fieldListOf(raw.labels, 'name') : [],
+    assignees: kind === 'issue' ? fieldListOf(raw.assignees, 'login') : [],
+    blockers: kind === 'issue' ? toBlockerRead(raw.blockedBy, blockersErrored) : { ok: true, open: [], shown: 0, total: 0 },
+  }
+
+  return { ok: true, item, viewer: viewerLogin, fetchedAt }
 }
 
 export { applyItemStates }
