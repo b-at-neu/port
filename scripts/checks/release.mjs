@@ -43,6 +43,9 @@ export default async function ({ fail, note, ok }) {
   const { parseVersion, nextDevWindow, decide } = await import(pathToFileURL(join(root, 'scripts/dev-window.mjs')).href);
 
   // --- Integration branch stays on a prerelease version (#224) ---------------
+  // guard(#224): a dev-loop install and a released consumer install both
+  // resolving to the same versioned plugin cache directory, so developing
+  // port silently overwrites what other repositories run.
   {
     const cfg = readJson('.claude/port.config.json');
     const production = cfg.branches?.production;
@@ -96,6 +99,8 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- release.postPublishHook: declared in all three places, in shape ------
+  // guard(#224): the three-way config contract drifting the way
+  // commands.worktrees already guards against.
   // The same three-way contract commands.worktrees already has: string|null
   // with default null in the schema, null in the shipped template, and a
   // non-empty string in this repository's own opted-in config.
@@ -125,6 +130,9 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- release/SKILL.md pin --------------------------------------------------
+  // guard(#224): a prose edit quietly dropping the dev-window contract or
+  // reintroducing a false "bump already merged" read while a dev window is
+  // open.
   // A future prose edit that quietly drops the contract fails here rather
   // than in a live release run.
   {
@@ -137,6 +145,9 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- scripts/dev-window.mjs's pure exports resolve their documented cases -
+  // guard(#224): the dev-window restore script computing the wrong next
+  // version, or silently defaulting instead of failing, on a malformed
+  // manifest.
   {
     if (nextDevWindow('0.2.0', 'dev') !== '0.2.1-dev') {
       fail('dev-window', "nextDevWindow('0.2.0', 'dev') must equal '0.2.1-dev'");

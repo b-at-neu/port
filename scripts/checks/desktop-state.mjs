@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { root, walk, relOf } from '../lib/files.mjs';
 
-// #79: apps/desktop/src/main/state/ is the app's spine — it composes
-// #74/#76/#77/#78's adapters into one reconciled view and reads nothing
+// Issue 79: apps/desktop/src/main/state/ is the app's spine — it composes
+// issue 74/76/77/78's adapters into one reconciled view and reads nothing
 // itself. Four assertions pin its plan's decisions mechanically,
 // dependency-free and regex-based, in the shape of desktop-github.mjs's own
 // guards — reading these directories by explicit path (never walk('apps/'),
@@ -14,6 +14,9 @@ export default async function ({ fail, ok }) {
   const files = walk(join(root, stateDir)).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
 
   // --- The directory has source files, so nothing below passes vacuously ---
+  // guard(#79): a fifth GitHub/local reader landing beside the four
+  // adapters this module composes, or this guard passing vacuously once the
+  // directory is deleted.
   if (files.length === 0) {
     fail('desktop-state', `${stateDir} has no source files — the guard cannot pass vacuously if the directory is deleted`);
     return;
@@ -44,9 +47,10 @@ export default async function ({ fail, ok }) {
   }
 
   // --- The SESSION REQUIRED rendering in link.ts matches PIPELINE.md's own ---
-  // The marker's canonical rendering is a byte-identical contract between the
-  // cockpit and this app (PIPELINE.md → "The marker") — a reworded copy here
-  // means the two silently disagree about what counts as session-required.
+  // guard(#79): the cockpit's and the desktop app's session-required
+  // detection silently disagreeing about what counts as the marker. The
+  // canonical rendering is a byte-identical contract between the cockpit and
+  // this app (PIPELINE.md → "The marker").
   {
     const linkRel = `${stateDir}/link.ts`;
     const linkFile = files.find((f) => relOf(f) === linkRel);
@@ -76,10 +80,10 @@ export default async function ({ fail, ok }) {
   }
 
   // --- No `running`/`alive`/`isLive` identifier or string literal in production code ---
-  // The same rail desktop-sessions.mjs pins for main/sessions/, extended to
-  // the module that consumes its `Activity` facts — a stall verdict here must
-  // stay a report derived from recency, never liveness (#78's Decision 4,
-  // restated for #79's own Decision 2).
+  // guard(#79): a reconciled stall verdict being reported as liveness rather
+  // than a report derived from recency. The same rail desktop-sessions.mjs
+  // pins for main/sessions/ (issue 78's Decision 4), extended to the module
+  // that consumes its `Activity` facts.
   {
     const dirs = [join(root, stateDir), join(root, sharedStateDir)];
     const forbidden = ['running', 'alive', 'isLive'];

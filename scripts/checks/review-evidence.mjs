@@ -4,13 +4,14 @@ import { root, walk, relOf, readJson, pipelineTickText } from '../lib/files.mjs'
 
 export default async function ({ fail, ok }) {
   // --- Review evidence gate — verdicts wait for concluded checks --------------
-  // Regression guard: review-agent could form a verdict before the head
-  // commit's own artifact check had concluded — a check with no conclusion is
-  // pending, not passing, but was read as passing. This checks that the agent
-  // definition actually says to
-  // wait, names the timeout verdict, and conditions the one carve-out on the
-  // module that installs it, rather than a literal check name that would break
-  // the moment a repository renamed its workflow job.
+  // guard(#143): a verdict formed before its evidence exists, and a carve-out
+  // hard-coded to one repository's check names. review-agent could form a
+  // verdict before the head commit's own artifact check had concluded — a
+  // check with no conclusion is pending, not passing, but was read as
+  // passing. This checks that the agent definition actually says to wait,
+  // names the timeout verdict, and conditions the one carve-out on the
+  // module that installs it, rather than a literal check name that would
+  // break the moment a repository renamed its workflow job.
   {
     const rel = 'plugins/port/agents/review-agent.md';
     const text = readFileSync(join(root, rel), 'utf8');
@@ -47,11 +48,12 @@ export default async function ({ fail, ok }) {
   }
 
   // --- Generality guard — no literal CI check name in a stage prompt ----------
-  // Regression guard: hard-coding a check name (rather than deriving the one
-  // excused check from approval-check.yml's own jobs: key) breaks the moment a
-  // repository renames its workflow job or runs a different CI setup.
-  // `skills/init/SKILL.md` is deliberately exempt — it tells the operator which
-  // check to mark required, which is the one legitimate literal.
+  // guard(#143): a carve-out hard-coded to one repository's check names.
+  // Hard-coding a check name (rather than deriving the one excused check
+  // from approval-check.yml's own jobs: key) breaks the moment a repository
+  // renames its workflow job or runs a different CI setup. `skills/init/
+  // SKILL.md` is deliberately exempt — it tells the operator which check to
+  // mark required, which is the one legitimate literal.
   {
     const bannedNames = ['run-approval-check', 'run-static-checks', 'audit-artifacts', 'run-behavioural-evals'];
     const scanDirs = [join(root, 'plugins/port/agents'), join(root, 'plugins/port/skills/pipeline')];
@@ -70,11 +72,13 @@ export default async function ({ fail, ok }) {
   }
 
   // --- Rebase protocol resolves-and-escalates, not fail-closed-and-narrate ----
-  // Regression guard: a protocol that aborts the whole rebase on any single
-  // ambiguous hunk discards the correct resolution of every other one, and
-  // escalating by dumping conflict markers at a human who was never going to
-  // open an editor is unhelpful. This checks that the widened auto-resolvable
-  // rows and the decision-request escalation format are both still present.
+  // guard(#143): the rebase protocol regressing to fail-closed-and-narrate
+  // instead of resolve-and-escalate-as-options. A protocol that aborts the
+  // whole rebase on any single ambiguous hunk discards the correct
+  // resolution of every other one, and escalating by dumping conflict
+  // markers at a human who was never going to open an editor is unhelpful.
+  // This checks that the widened auto-resolvable rows and the
+  // decision-request escalation format are both still present.
   {
     const rel = 'plugins/port/docs/PIPELINE.md';
     const text = readFileSync(join(root, rel), 'utf8');
@@ -109,15 +113,17 @@ export default async function ({ fail, ok }) {
   }
 
   // --- Mergeability — no review dispatched against a diff CI never validated --
-  // Regression guard for #150: PR #134 was reviewed while `mergeable:
-  // CONFLICTING`, so the findings were against a diff CI had never actually run
-  // on — the conflict surfaced one stage later, in revise-agent. This checks
-  // that review-agent reads mergeable at both points named in the plan and
-  // states the no-verdict rule literally, and that both revise-agent and
-  // PIPELINE.md carry the '## Rebase required' contract the fix routes through.
-  // #189 retargeted the route itself: a conflicting pull request is refreshed,
-  // never sent to needs-revision, so this now pins '<labels.refreshBranch>' at
-  // review-agent's mergeability exit rather than '<labels.needsRevision>'.
+  // guard(#150): a verdict formed, or a rebase scheduled speculatively,
+  // against a diff GitHub never actually validated. Pull request 134 was
+  // reviewed while `mergeable: CONFLICTING`, so the findings were against a
+  // diff CI had never actually run on — the conflict surfaced one stage
+  // later, in revise-agent. This checks that review-agent reads mergeable at
+  // both points named in the plan and states the no-verdict rule literally,
+  // and that both revise-agent and PIPELINE.md carry the '## Rebase required'
+  // contract the fix routes through. Issue 189 retargeted the route itself: a
+  // conflicting pull request is refreshed, never sent to needs-revision, so
+  // this now pins '<labels.refreshBranch>' at review-agent's mergeability
+  // exit rather than '<labels.needsRevision>'.
   {
     const reviewRel = 'plugins/port/agents/review-agent.md';
     const reviewText = readFileSync(join(root, reviewRel), 'utf8');
@@ -162,12 +168,14 @@ export default async function ({ fail, ok }) {
     }
   }
 
-  // --- Refresh is the bounded route for a stale branch (#189) -----------------
-  // Regression guard: deleting modules.previewDatabase promoted refresh mode
-  // from an off-by-default subsystem to the pipeline's only rebase route, so
-  // its bounds and its no-cycle-cost accounting must actually be documented,
-  // not merely implemented — an untested behaviour that is also undocumented
-  // is invisible to review and to a future edit that quietly narrows it.
+  // --- Refresh is the bounded route for a stale branch ------------------------
+  // guard(#189): refresh's bounds — the same-SHA guard, the per-tick and
+  // per-pull-request caps, and the review-cycle exemption — regressing to
+  // prose with nothing checking it, now that this issue made refresh the
+  // pipeline's only rebase route. Deleting modules.previewDatabase promoted
+  // refresh mode from an off-by-default subsystem to the pipeline's only
+  // rebase route, so its bounds and its no-cycle-cost accounting must
+  // actually be documented, not merely implemented.
   {
     const labels = readJson('plugins/port/templates/labels.json');
     for (const key of ['refreshBranch', 'refreshing']) {
@@ -213,12 +221,17 @@ export default async function ({ fail, ok }) {
   }
 
   // --- File contention — the cockpit holds overlapping dispatch, never races --
-  // Regression guard for #135: #67, #61 and #52 all claimed the same three
-  // files and were dispatched concurrently, so whichever pull request merged
-  // first invalidated the others' rebases. #190 narrowed the predicate from
-  // any shared path to enough shared, non-excused paths, via `concurrency`.
-  // This checks that the fenced `files` contract exists in both PIPELINE.md
-  // and plan-agent.md, that the schema and template carry both `concurrency`
+  // guard(#135, #190): two plans claiming the same file dispatched
+  // concurrently so whichever pull request merges first invalidates the
+  // other's rebase, and a gate that held on any shared path — including
+  // append-mostly registries and docs a rebase resolves as a union —
+  // serialized 23 of 27 overlapping pull request pairs that could have run
+  // in parallel. Issues 67, 61 and 52 all claimed the same three files and
+  // were dispatched concurrently, so whichever pull request merged first
+  // invalidated the others' rebases; #190 narrowed the predicate from any
+  // shared path to enough shared, non-excused paths, via `concurrency`. This
+  // checks that the fenced `files` contract exists in both PIPELINE.md and
+  // plan-agent.md, that the schema and template carry both `concurrency`
   // keys with their documented default and minimum, that PIPELINE.md and
   // SKILL.md each name both keys and record the decision never to express a
   // hold as a new label or GitHub's dependency graph, that PIPELINE.md states

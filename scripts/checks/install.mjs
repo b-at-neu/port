@@ -12,9 +12,9 @@ const MARKETPLACE_REF_PATTERN = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 
 export default async function ({ fail, ok }) {
   // --- Self-hosted marketplace entry stays pinned -----------------------------
-  // A bare `claude plugin marketplace add` rewrites this entry back to its
-  // unpinned form, which tracks the default branch instead of a release and
-  // silently reintroduces the drift #119 fixed.
+  // guard(#146): a bare `claude plugin marketplace add` rewriting the entry
+  // back to its unpinned form, silently tracking the default branch instead
+  // of a release.
   {
     const settings = readJson('.claude/settings.json');
     const port = settings.extraKnownMarketplaces?.port;
@@ -44,10 +44,9 @@ export default async function ({ fail, ok }) {
   }
 
   // --- README's documented install source stays pinned ------------------------
-  // The command adopters copy-paste. A docs edit that drops the `@main` pin
-  // looks like a harmless simplification but silently reinstates default-branch
-  // tracking -- the exact drift #146 fixed. `owner/repo@ref` and `owner/repo#ref`
-  // both parse; only a bare, ref-less source is disallowed here.
+  // guard(#146): a docs edit quietly restoring default-branch tracking on
+  // the very command adopters copy-paste. `owner/repo@ref` and
+  // `owner/repo#ref` both parse; only a bare, ref-less source is disallowed.
   {
     const readme = readFileSync(join(root, 'README.md'), 'utf8');
     for (const line of readme.split('\n')) {

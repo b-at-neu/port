@@ -2,12 +2,15 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { root, walk, relOf } from '../lib/files.mjs';
 
-// #83: apps/desktop/src/renderer/ never builds a node from a string it does
-// not fully control — a tool result or a diff line is untrusted text from
-// the network and from repositories. One assertion pins the absence of every
-// HTML-injection sink, in the shape of desktop-platform.mjs's own
-// shell/fs-primitive guards: broken deliberately once (a real `innerHTML`
-// assignment) before being trusted to pass.
+// --- No HTML-injection sink in the renderer ---------------------------------
+// guard(#83): a transcript's or a repository's untrusted text reaching the
+// DOM through an HTML-injection sink instead of createElement/textContent.
+// apps/desktop/src/renderer/ never builds a node from a string it does not
+// fully control — a tool result or a diff line is untrusted text from the
+// network and from repositories. One assertion pins the absence of every
+// sink, in the shape of desktop-platform.mjs's own shell/fs-primitive
+// guards: broken deliberately once (a real `innerHTML` assignment) before
+// being trusted to pass.
 const FORBIDDEN = [
   { pattern: /\.innerHTML\s*=/, label: '.innerHTML =' },
   { pattern: /\.outerHTML\s*=/, label: '.outerHTML =' },

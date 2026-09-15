@@ -17,6 +17,9 @@ export default async function ({ fail, ok }) {
   const boardFiles = walk(join(root, boardDir)).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
 
   // --- The directory has source files, so nothing below passes vacuously ---
+  // guard(#80): the board screen becoming a fifth reader instead of
+  // projecting an already-fetched BoardSnapshot, or this guard passing
+  // vacuously once the directory is deleted.
   if (boardFiles.length === 0) {
     fail('desktop-board', `${boardDir} has no source files — the guard cannot pass vacuously if the directory is deleted`);
     return;
@@ -54,6 +57,8 @@ export default async function ({ fail, ok }) {
   }
 
   // --- One clock: watcher.ts is the only non-test file under main/ naming a timer ---
+  // guard(#80): a second clock landing beside the watcher's own single
+  // rescheduled timer (Decision 2).
   {
     const timerWords = ['setTimeout', 'setInterval', 'setImmediate'];
     const offenders = [];
@@ -71,6 +76,9 @@ export default async function ({ fail, ok }) {
   }
 
   // --- SOURCE_KINDS and RepositoryFreshness's keys agree, itemStates excepted ---
+  // guard(#80): the board's four pollable sources drifting from the
+  // freshness shape issue 79 already established, or itemStates becoming
+  // independently schedulable.
   {
     const boardTypesFile = join(root, boardDir, 'types.ts');
     const boardTypesText = readFileSync(boardTypesFile, 'utf8');
@@ -102,6 +110,9 @@ export default async function ({ fail, ok }) {
   }
 
   // --- No running/alive/isLive identifier or string literal outside a comment ---
+  // guard(#80): a suppressed-stall verdict being reported as liveness rather
+  // than a report derived from recency, the same rail issue 78/issue 79
+  // already pin, extended to the surface that displays it.
   {
     const dirs = [join(root, boardDir), join(root, rendererBoardDir)];
     const forbidden = ['running', 'alive', 'isLive'];

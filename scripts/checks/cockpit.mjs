@@ -5,9 +5,9 @@ import { root, readJson, pipelineTickText } from '../lib/files.mjs';
 
 export default async function ({ fail, ok }) {
   // --- Worktree reclamation template is self-contained and cross-platform ----
-  // Mirrors the artifacts-template rule: an adopting repository copies
-  // worktrees.mjs alone, and the script must never shell out via a POSIX-only
-  // binary name or a shell string, or it breaks silently on Windows (#144).
+  // guard(#144): the one file an adopting repository copies alone breaking
+  // silently outside this checkout, or reaching outside its contract —
+  // never shell out via a POSIX-only binary name or a shell string.
   {
     const rel = 'plugins/port/templates/worktrees.mjs';
     const text = readFileSync(join(root, rel), 'utf8');
@@ -46,9 +46,9 @@ export default async function ({ fail, ok }) {
   }
 
   // --- Worktree reclamation classifier ----------------------------------------
-  // Unit-tests the pure functions in isolation from every git/gh call — each
-  // case is a rung of the correlation ladder, a precedence rule from the
-  // classification table, or an acceptance criterion the ticket named.
+  // guard(#144): the correlation ladder or the classification precedence
+  // silently drifting from what PIPELINE.md documents. Unit-tests the pure
+  // functions in isolation from every git/gh call.
   {
     const { parsePorcelain, correlate, classifyCandidate } =
       await import(pathToFileURL(join(root, 'plugins/port/templates/worktrees.mjs')).href);
@@ -141,9 +141,9 @@ export default async function ({ fail, ok }) {
   }
 
   // --- Cockpit hygiene invokes the worktree script, never bare git worktree --
-  // Regression guard against #144's own fix collapsing back into the prose
-  // #62 already tried once: the cockpit's hygiene section must call
-  // `commands.worktrees` and must not itself run `git worktree remove`.
+  // guard(#144): the cockpit's worktree hygiene collapsing back into the
+  // prose issue 62 already tried once. The cockpit's hygiene section must
+  // call `commands.worktrees` and must not itself run `git worktree remove`.
   {
     const rel = 'plugins/port/skills/pipeline/SKILL.md';
     const text = readFileSync(join(root, rel), 'utf8');
@@ -169,8 +169,8 @@ export default async function ({ fail, ok }) {
   }
 
   // --- Cockpit's config table carries commands.worktrees ----------------------
-  // The schema, the template, and self-hosting all name the same key — a
-  // mismatch here means the cockpit reads a placeholder nothing ever sets.
+  // guard(#144): the config key existing in only some of the places that
+  // must agree on it — the cockpit would read a placeholder nothing sets.
   {
     const schemaProps = readJson('schema/port.config.schema.json').properties.commands.properties;
     if (!schemaProps.worktrees) {
@@ -195,11 +195,11 @@ export default async function ({ fail, ok }) {
   }
 
   // --- Cockpit rails stay checkable preconditions, not bare prohibitions ------
-  // Regression guard for #120 / #138: both rails were plain "never do X"
-  // prose, and the cockpit did X anyway under a competing incentive. The fix
-  // re-shaped them into a batch recipe (shown inline at the multi-item
-  // commands) and a precondition (`unblock #N`) — this fails if a future edit
-  // quietly reverts either back to prose with nothing to check against.
+  // guard(#120, #138, #143): the cockpit looping gh and losing everything
+  // but the first iteration mid-loop, clearing its own needs-human gate
+  // unprompted under throughput pressure, or widening the terminal-state
+  // rail back into a general licence to revisit approved — each rail was
+  // "never do X" prose once, and the cockpit did X anyway.
   {
     const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
     const text = readFileSync(join(root, skillRel), 'utf8');
@@ -240,12 +240,12 @@ export default async function ({ fail, ok }) {
   }
 
   // --- Liveness reset — the cockpit resets only what it can prove it dispatched
-  // Regression guard for #150: every no-match used to be treated identically
-  // (report, never act), which left #66/#67 parked at `in progress` across a
-  // session boundary with no way to tell "this session's own dead dispatch"
-  // apart from "someone else's live agent" — recovery was a human noticing.
-  // This checks that the split, its proof artifact, and its one-reset cap are
-  // all still named, not quietly reverted to the old single-branch prose.
+  // guard(#150): a dead-agent reset firing on an item this session never
+  // dispatched, or firing more than once per crash loop — every no-match
+  // used to be treated identically (report, never act), leaving issues
+  // 66/67 parked at `in progress` with no way to tell a dead dispatch from
+  // someone else's live agent. This checks the split, its proof artifact,
+  // and its one-reset cap are all still named.
   {
     const rel = 'SKILL.md/TICK-PROSE.md';
     const text = pipelineTickText();
@@ -274,7 +274,7 @@ export default async function ({ fail, ok }) {
       ok();
     }
 
-    // #189: CONFLICTING no longer removes '<labels.approved>' — it adds
+    // Issue 189: CONFLICTING no longer removes '<labels.approved>' — it adds
     // '<labels.refreshBranch>' instead, leaving the approval in place.
     if (!text.includes('adding `<labels.refreshBranch>` to an approved pull request when `mergeable` reads `CONFLICTING` is permitted')) {
       fail('liveness-reset', `${rel}'s '<labels.approved>' carve-out never documents the refresh-without-withdrawal fact`);
@@ -284,13 +284,12 @@ export default async function ({ fail, ok }) {
   }
 
   // --- Collapsed tick query — one round trip, never a per-label poll ---------
-  // Regression guard for #148: a tick used to cost ~15 `gh issue list`/`gh pr
-  // list --label` round trips. This checks that the Tick procedure actually
-  // names the collapsed single-call contract, and that no per-label polling
-  // call has crept back in under that heading — scoped to the Tick procedure
-  // section itself, so the Configuration section's illustrative mention of
-  // `gh issue list --label <unknown>` (explaining why a wrong string is silent,
-  // not the tick's own polling call) is correctly exempt.
+  // guard(#148): a tick regressing from one collapsed round trip back to
+  // ~15 per-label `gh issue list`/`gh pr list --label` REST calls. This
+  // checks the Tick procedure names the collapsed single-call contract and
+  // that no per-label poll crept back in under that heading — scoped there,
+  // so the Configuration section's illustrative `--label <unknown>` mention
+  // is correctly exempt.
   {
     const rel = 'SKILL.md/TICK-PROSE.md';
     const text = pipelineTickText();
@@ -303,8 +302,8 @@ export default async function ({ fail, ok }) {
       }
     }
 
-    // Scans the whole union rather than one heading-scoped section — #203
-    // split the Tick procedure across two files, and a per-label poll
+    // Scans the whole union rather than one heading-scoped section — issue
+    // 203 split the Tick procedure across two files, and a per-label poll
     // creeping back into either is equally a regression. The Configuration
     // section's own illustrative `--label <unknown>` (explaining why a wrong
     // string is silent, not a real polling call) is exempt.
@@ -321,10 +320,10 @@ export default async function ({ fail, ok }) {
   }
 
   // --- Pacing ladder — reset-on-change and never-stop are checkable, not prose
-  // Regression guard for #148: the old pacing rule measured as one speed in
-  // practice (26 of 27 wakeups at the floor over a real 25-hour run) because it
-  // conflated "an agent is running" with "something will move without a
-  // human". This checks the ladder's constants and its two load-bearing
+  // guard(#148): the two-speed pacing rule — which measured as one speed in
+  // a real 25-hour run (26 of 27 wakeups at the floor) because it conflated
+  // "an agent is running" with "something will move without a human" —
+  // regressing back in. This checks the ladder's constants and its two
   // preconditions are still literal, checkable phrases.
   {
     const rel = 'SKILL.md/TICK-PROSE.md';
@@ -358,9 +357,9 @@ export default async function ({ fail, ok }) {
   }
 
   // --- No busy-waiting in the cockpit skill -----------------------------------
-  // Regression guard for #148: a real run issued 6 `sleep`-based waits inside
-  // tool calls, busy-waiting on CI instead of letting the next scheduled tick
-  // (or an event-driven completion) do the waiting.
+  // guard(#148): the cockpit blocking a turn on sleep/--watch instead of
+  // letting the next scheduled tick or completion do the waiting — a real
+  // run issued 6 `sleep`-based waits inside tool calls.
   {
     const rel = 'SKILL.md/TICK-PROSE.md';
     const text = pipelineTickText();
@@ -372,10 +371,10 @@ export default async function ({ fail, ok }) {
   }
 
   // --- Ownership enforced client-side, and the blind-tick contract -----------
-  // Regression guard for #148: dropping the per-alias assignee filter (what
-  // makes the unowned sweep derivable from one call) must not silently drop
-  // the ownership rail itself, and a failed collapsed query must never be
-  // mistaken for an empty, all-clear tick.
+  // guard(#148): dropping the per-alias assignee filter (what makes the
+  // unowned sweep derivable from one call) silently dropping the ownership
+  // rail with it, and a failed collapsed query being read as an empty,
+  // all-clear tick.
   {
     const rel = 'SKILL.md/TICK-PROSE.md';
     const text = pipelineTickText();
@@ -399,14 +398,14 @@ export default async function ({ fail, ok }) {
     }
   }
 
-  // --- Unconditional cycle cap and the zero-diff review gate (#162) ----------
-  // Regression guard for #162: PR #157 ran 7 review cycles because the cap
-  // only fired "at reviewCycleCap and the latest review still produced
-  // Critical or Medium findings" — a condition every CI-only bounce (a
-  // liveness reset, an approval withdrawal, a manual re-label) arrives at
-  // with a clean latest review, so it never fired. This checks the cap
-  // dropped that qualifier, and that the zero-diff gate it gained alongside
-  // names the fields and comment it reads.
+  // --- Unconditional cycle cap and the zero-diff review gate -----------------
+  // guard(#162): a review cycle cap that never fires on a clean-but-unmerged
+  // bounce, and a review dispatched twice against a diff it already graded.
+  // Pull request 157 ran 7 cycles because the cap only fired "and the latest
+  // review still produced Critical or Medium findings" — a condition every
+  // CI-only bounce arrives at clean, so it never fired. This checks the cap
+  // dropped that qualifier, and that the zero-diff gate names the fields
+  // and comment it reads.
   {
     const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
     const pipelineRel = 'plugins/port/docs/PIPELINE.md';
@@ -465,14 +464,14 @@ export default async function ({ fail, ok }) {
     }
   }
 
-  // --- Liveness is a TaskList call, never a label inference (#158) -----------
-  // Regression guard for #158: TaskList was granted and referenced but never
-  // actually called across 96 ticks and 62 dispatches, and when asked a direct
+  // --- Liveness is a TaskList call, never a label inference -------------------
+  // guard(#158): TaskList was granted and referenced but never actually
+  // called across 96 ticks and 62 dispatches, and when asked a direct
   // liveness question the cockpit answered from labels, then blamed the
   // operator's own observation on a stale UI element. This checks the
-  // unconditional-call contract, the inverse-sign rail, the liveness-question
-  // recipe's three prohibitions, and that both stop paths name TaskList and
-  // TaskStop.
+  // unconditional-call contract, the inverse-sign rail, the
+  // liveness-question recipe's three prohibitions, and that both stop paths
+  // name TaskList and TaskStop.
   {
     const rel = 'SKILL.md/TICK-PROSE.md';
     const text = pipelineTickText();
@@ -524,9 +523,9 @@ export default async function ({ fail, ok }) {
     }
   }
 
-  // --- Running-plugin staleness is resolved, not printed from a path (#158) --
-  // Regression guard for #158/#127: the startup line used to report only a
-  // path, identical for a current and a days-stale copy. This checks the
+  // --- Running-plugin staleness is resolved, not printed from a path ---------
+  // guard(#158, #127): the startup line used to report only a path,
+  // identical for a current and a days-stale copy. This checks the
   // resolution mechanism is named (the registry, the marketplace record, the
   // scope precedence), that the new tick-state field is written in both
   // places that must stay in sync, that CONTRIBUTING.md carries the three-way

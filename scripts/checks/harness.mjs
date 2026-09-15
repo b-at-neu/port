@@ -2,12 +2,12 @@ import { readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { root, walk } from '../lib/files.mjs';
 
-// Keeps the split (#168) honest, mechanically, so it cannot silently regress
-// back into one monolith: (a) the runner may only wire modules together and
-// call report() — no check logic of its own — and (b) every topic module
-// that exists on disk is actually imported and run. An unimported module is
-// exactly the silence layer 1 exists to catch: it runs nothing and reports
-// nothing.
+// --- Runner stays thin, every topic module stays wired ----------------------
+// guard(#168): a topic module present on disk but never imported by the
+// runner runs nothing and reports nothing — exactly the silence layer 1
+// exists to catch. Keeps the split honest, mechanically, so it cannot
+// silently regress back into one monolith: the runner may only wire modules
+// together and call report(), never fail/note/ok directly.
 export default async function ({ fail, ok }) {
   const runnerRel = 'scripts/checks.mjs';
   const runnerText = readFileSync(join(root, runnerRel), 'utf8');

@@ -2,11 +2,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { root, walk, relOf } from '../lib/files.mjs';
 
-// #76: apps/desktop/src/main/github/ is the app's only GitHub reader. Two
-// decisions from its plan are pinned mechanically, dependency-free and
-// regex-based, in the shape of desktop-platform.mjs's own guards — reading
-// this directory by explicit path (never walk('apps/'), which descends into
-// node_modules).
+// --- No GraphQL search(, no gh --jq under main/github/ ----------------------
+// guard(#76): the index-backed search field's ingestion lag reintroducing
+// silent staleness, or `gh` silently skipping its own `--jq` filter on a
+// partial-error response this adapter must read. apps/desktop/src/main/github/
+// is the app's only GitHub reader; two decisions from its plan are pinned
+// mechanically, dependency-free and regex-based, in the shape of
+// desktop-platform.mjs's own guards — reading this directory by explicit
+// path (never walk('apps/'), which descends into node_modules).
 //
 // - Decision 2: GraphQL `search` is rejected — it is index-backed with
 //   ingestion lag, so a label applied seconds ago would not be searchable

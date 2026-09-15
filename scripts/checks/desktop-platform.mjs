@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { root, walk, relOf } from '../lib/files.mjs';
 
-// #72: apps/desktop/src/main/platform/ is the only place under
+// Issue 72: apps/desktop/src/main/platform/ is the only place under
 // apps/desktop/src/ that may touch a child process, the filesystem, or a
 // path string. These four assertions make that a compile-time and layer 1
 // fact rather than a review comment — the same shape as the
@@ -14,6 +14,8 @@ export default async function ({ fail, ok }) {
   const files = walk(srcDir).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
 
   // --- child_process is confined to run.ts, and run.ts actually imports it ---
+  // guard(#72): a POSIX shell-out, or a synchronous/shell-spawning API,
+  // creeping into an adapter instead of staying behind the platform layer.
   {
     let runHasIt = false;
     for (const f of files) {
@@ -57,6 +59,8 @@ export default async function ({ fail, ok }) {
   }
 
   // --- KNOWN_COMMANDS contains no POSIX-only/shell utility --------------------
+  // guard(#72): a POSIX-only or shell-only executable becoming spawnable,
+  // which fails only on Windows at runtime instead of at compile time.
   {
     const runFile = files.find((f) => relOf(f) === runRel);
     const text = runFile ? readFileSync(runFile, 'utf8') : '';
@@ -76,6 +80,9 @@ export default async function ({ fail, ok }) {
   }
 
   // --- No shell:true, no execSync/spawnSync, no *Sync fs call, no stray fs ---
+  // guard(#72): the cross-platform command and path layer's own rail —
+  // shelling out or blocking the main process — regressing silently in a
+  // future adapter.
   {
     for (const f of files) {
       const rel = relOf(f);
@@ -99,7 +106,7 @@ export default async function ({ fail, ok }) {
         }
       }
 
-      // #74: a *.test.ts file is exempt — it verifies an adapter's behaviour
+      // Issue 74: a *.test.ts file is exempt — it verifies an adapter's behaviour
       // rather than being one, and setting up a realistic fixture (a real
       // mkdtemp directory, same as platform/'s own files.test.ts/paths.test.ts)
       // needs the real async fs API. Production code stays fully gated.
@@ -111,9 +118,10 @@ export default async function ({ fail, ok }) {
   }
 
   // --- runCommand( is called only from main/platform/ -------------------------
-  // #76: an adapter that spawns `gh` itself, or hand-rolls a second failure
-  // classifier, is exactly the drift this layer exists to prevent — #72's plan
-  // named it but left it unpinned until the first adapter (main/github/) landed.
+  // guard(#76): a second adapter spawning gh/git itself, or hand-rolling a
+  // second failure classifier, instead of going through the platform layer —
+  // issue 72's plan named it but left it unpinned until the first adapter
+  // (main/github/) landed.
   {
     for (const f of files) {
       const rel = relOf(f);
