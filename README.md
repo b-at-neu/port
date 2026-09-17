@@ -80,7 +80,7 @@ Full walkthrough: [docs/USAGE.md](docs/USAGE.md). Reference for the label lifecy
 | Skill | What it does |
 | --- | --- |
 | `/port:init` | Adopt a repository |
-| `/port:analyze` | Read the codebase, propose engineering standards, recommend plugins |
+| `/port:analyze` | Read the codebase, propose engineering standards, recommend plugins, generate repository-specific skills |
 | `/port:pipeline` | The cockpit — poll, dispatch, run the gates |
 | `/port:scope` | Break a feature into an epic with dependency-ordered sub-issues |
 | `/port:implement` | Run a stage yourself, for tickets an agent cannot be given |

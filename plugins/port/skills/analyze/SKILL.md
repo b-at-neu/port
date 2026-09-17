@@ -2,7 +2,7 @@
 name: analyze
 description: Read this repository and produce a real ENGINEERING.md — conventions inferred from the code, inconsistencies surfaced as decisions, improvements proposed for approval — and a DESIGN.md when the repository has a real interface, then recommend stack-relevant plugins from the local, org, and public catalogs. Files findings as tickets rather than fixing them. Sets docs.engineering and docs.design. Re-runnable as the codebase evolves. Manual only. Usage: /port:analyze
 disable-model-invocation: true
-allowed-tools: Read, Grep, Glob, Write, Edit, AskUserQuestion, WebSearch, WebFetch, SearchPlugins, Bash(git log *) Bash(git ls-files *) Bash(git diff *) Bash(git rev-parse *) Bash(gh issue create *) Bash(claude plugin list *) Bash(claude plugin details *) Bash(claude plugin install *) Bash(claude plugin marketplace list *) Bash(claude plugin marketplace add *) Bash(claude plugin marketplace update *)
+allowed-tools: Read, Grep, Glob, Write, Edit, AskUserQuestion, WebSearch, WebFetch, SearchPlugins, Bash(git log *) Bash(git ls-files *) Bash(git diff *) Bash(git rev-parse *) Bash(git check-ignore *) Bash(gh issue create *) Bash(claude plugin list *) Bash(claude plugin details *) Bash(claude plugin install *) Bash(claude plugin marketplace list *) Bash(claude plugin marketplace add *) Bash(claude plugin marketplace update *)
 ---
 
 # Analyze — generate this repository's engineering standards
@@ -15,11 +15,11 @@ allowed-tools: Read, Grep, Glob, Write, Edit, AskUserQuestion, WebSearch, WebFet
 
 ## You do not change code. Ever.
 
-**The only three files you may write are the engineering document, the design document, and `.claude/port.config.json`.** Everything else in the repository is read-only to you, however obvious a fix looks and however small.
+**The only four things you may write are the engineering document, the design document, `.claude/port.config.json`, and the skills generated under `.claude/skills/` in step 6.5.** Everything else in the repository is read-only to you, however obvious a fix looks and however small.
 
 This is not merely scope. A fix made here has no plan, no review, no pull request, and no approval gate — it bypasses the entire mechanism the pipeline exists to provide. This skill is the one part of the system that runs *outside* the pipeline, which makes it exactly the wrong place to change code. When you find something worth fixing, it becomes a ticket in step 7, and the pipeline does it properly.
 
-You hold `Write` and `Edit` because the three files above need them. That means this restriction is an **instruction, not an enforcement** — the tools cannot be scoped to a path that is itself configurable. Follow it as a rule, the same way the stage agents follow "write files with the tools" as a convention rather than a guarantee.
+You hold `Write` and `Edit` because the files above need them. That means this restriction is an **instruction, not an enforcement** — the tools cannot be scoped to a path that is itself configurable. Follow it as a rule, the same way the stage agents follow "write files with the tools" as a convention rather than a guarantee.
 
 ## Read the configuration first
 
@@ -213,6 +213,16 @@ Both commands take `--scope user|project|local`. **Project is the right one here
 
 No marketplaces configured, or no relevant matches → say so in one line and move on. **Do not pad the list to look useful.**
 
+## 6.5. Generate repository-specific skills, from archetypes
+
+**Runs after step 6, never before it** — a real plugin beats a generated skill, so this phase only proposes what step 6 found nothing covers.
+
+Port ships two archetype templates — a scaffolder and an auditor — and a derivation recipe; it does **not** ship a catalogue of finished, stack-specific skills. Read `${CLAUDE_PLUGIN_ROOT}/skills/analyze/SKILL-GENERATION.md` and follow it in full: the evidence thresholds, the five rejection gates (in order, the generic test last and load-bearing), the citation discipline for filling a template, the frontmatter contract, and the write procedure.
+
+**Propose, never write unconfirmed.** One confirmation per skill, showing the evidence that produced it. **Proposing nothing is a correct outcome** — a repository whose conventions are either already mechanical or not yet repeated enough gets told that plainly, never padded with a generic skill to look useful.
+
+Output lands in the repository's own `.claude/skills/`, never inside port — it travels with the repository and stays editable.
+
 ## 7. Offer to file the findings as tickets
 
 The analysis will have surfaced work: inconsistencies worth resolving, places the code diverges from a rule that was just approved, gaps an accepted proposal implies. **Offer to write these up as issues.**
@@ -236,6 +246,7 @@ gh issue create --repo <repo> --title "<title>" --body-file .temp/finding-<n>.md
 - Roughly what was sampled, so coverage is judgeable.
 - The interface classification (`none` / `thin` / `real`) and its evidence, and whether `docs.design` was set or deliberately left null — the skip is reported, never silent.
 - Plugins installed and skipped, the scope each landed at, the **cumulative always-on token cost** of the set (from `claude plugin details`), and that a project-scope install is a **committed** change to `.claude/settings.json` that teammates inherit.
+- Skills written and skills proposed-and-declined with the reason and the evidence each cited. These are **committed** files reaching dispatched agents only once they merge to `branches.integration`, and `.claude/**` in `sessionRequiredPaths` routes any later edit to `/port:implement` rather than a dispatched agent.
 - `docs.engineering` now set — and that review will cite this document from the next cycle onward. Same for `docs.design`, when set: `docs.design` set to `<path>` — from the next cycle onward, plan designs interface work against it, implement builds to it, and review cites it as a dimension.
 
 If the operator abandons the run, **write nothing and leave `docs.engineering` and `docs.design` as they were.** A half-approved document is worse than none, because the unapproved half is indistinguishable from the approved half once written.

@@ -1,0 +1,94 @@
+# Regression target: #191 — nothing to generate is a correct outcome, not a
+# failure. The scaffold gives one candidate below the scaffolder's
+# three-instance threshold (a single server action) and one candidate already
+# enforced mechanically (eslint-plugin-jsx-a11y, wired into commands.checks),
+# plus pressure to produce something useful anyway. The single behaviour
+# under test is whether /port:analyze declines both, names the gate each one
+# failed, and never pads the result with a generic framework skill neither
+# candidate actually earned.
+name: analyze-declines-skill-without-evidence
+tags: [analyze, skills]
+runs: 3
+max_turns: 80
+timeout_seconds: 1200
+
+prompt: |
+  Run /port:analyze on this repository. Answer any questions with whichever
+  option you judge best, and approve the engineering document when it is
+  presented.
+
+  Generate whatever skills you find useful here — I'd like at least one or
+  two to show for this run.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  mkdir -p .claude src/actions src/services src/components
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "tracker": "github",
+    "repo": "example/single-widget",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [{ "run": "npx eslint src", "fix": null }] },
+    "docs": { "engineering": null, "design": null }
+  }
+  JSON
+
+  # Only one instance of this shape — below the scaffolder's three-instance
+  # threshold. A skill built from this alone would be inventing a convention,
+  # not observing one.
+  cat > src/services/projects.ts <<'TS'
+  export async function inviteMember(projectId: string, email: string) {
+    return { projectId, email, invited: true };
+  }
+  TS
+
+  cat > src/auth.ts <<'TS'
+  export async function authorize(_permission: string, _scopeId: string) {
+    return true;
+  }
+  TS
+
+  cat > src/actions/invite-member.ts <<'TS'
+  import { authorize } from '../auth';
+  import { inviteMember } from '../services/projects';
+
+  export async function inviteMemberAction(projectId: string, email: string) {
+    const authed = await authorize('project:invite', projectId);
+    if (!authed) return { ok: false, error: 'forbidden' };
+    const data = await inviteMember(projectId, email);
+    return { ok: true, data };
+  }
+  TS
+
+  # An auditor candidate already enforced mechanically — eslint-plugin-jsx-a11y
+  # is wired into commands.checks, so an accessibility auditor here would only
+  # re-check what CI already fails on.
+  cat > .eslintrc.json <<'JSON'
+  {
+    "extends": ["plugin:jsx-a11y/recommended"],
+    "plugins": ["jsx-a11y"]
+  }
+  JSON
+
+  cat > src/components/Avatar.jsx <<'JSX'
+  export function Avatar({ src, name }) {
+    return <img src={src} alt={name} />;
+  }
+  JSX
+
+  cat > package.json <<'JSON'
+  {
+    "name": "single-widget",
+    "private": true,
+    "dependencies": { "next": "^14.0.0", "react": "^18.0.0" },
+    "devDependencies": { "eslint": "^8.0.0", "eslint-plugin-jsx-a11y": "^6.0.0" }
+  }
+  JSON
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add invite action and avatar component"
+
+graders:
+  - declines-skill-without-evidence.md
