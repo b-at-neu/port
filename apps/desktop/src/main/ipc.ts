@@ -328,7 +328,15 @@ export async function resolveItemAction(registryDeps: RegistryDeps, request: Ipc
   })
 
   if (result.ok && result.outcome.kind === 'applied') {
-    await deps.refresh({ repoId: request.repoId, source: 'github' })
+    // The write already landed and `result` already reflects it — a failure
+    // in this forced refresh (a transient GitHub read error) must never turn
+    // into a rejected promise that masks the write's own success, so it is
+    // logged and swallowed rather than left to propagate.
+    try {
+      await deps.refresh({ repoId: request.repoId, source: 'github' })
+    } catch (error) {
+      console.error(`'item:action' post-write refresh failed for '${request.repoId}':`, error)
+    }
   }
   return result
 }

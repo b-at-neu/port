@@ -6,6 +6,7 @@ import type { ItemStatus, LinkReason, RepositoryFreshness, RepositoryState, Stat
 import type { DisplayStatus, SourceHealth, SourceKind } from '../../../shared/board/types'
 import type { RepoProblem } from '../../../shared/repos'
 import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
+import type { LabelKey } from '../../../shared/labels/vocabulary'
 import type { ActionPlan, ActionRefusal, ItemActionResult, OperatorAction } from '../../../shared/actions/types'
 import type { Conflict } from '../../../shared/writes/types'
 
@@ -206,8 +207,13 @@ function preconditionFailedCopy(action: OperatorAction, number: number, conflict
 
 const ACTION_PAST_TENSE: Readonly<Record<OperatorAction, string>> = { pause: 'paused', resume: 'resumed', retry: 'retried', gate: 'gated' }
 
-function unclaimedScopeCopy(action: OperatorAction, number: number, claimPath: string, plan: ActionPlan | null): string {
-  const key = plan?.remove[0] ?? plan?.add[0]
+/** `outcome.keys` is the request `applyLabels` actually evaluated — built
+ *  server-side, after resume's own recovered trigger is known — so it names
+ *  the real touched label even when the row's own client-side `plan` cannot
+ *  (resume's `add` is a placeholder until the audit log is read). Falls back
+ *  to `plan` only if `outcome` somehow carried no keys at all. */
+function unclaimedScopeCopy(action: OperatorAction, number: number, claimPath: string, keys: readonly LabelKey[], plan: ActionPlan | null): string {
+  const key = keys[0] ?? plan?.remove[0] ?? plan?.add[0]
   const name = key !== undefined ? labelNameOf(key) : 'a plan-gate label'
   const n = String(number)
   return `#${n} wasn't ${ACTION_PAST_TENSE[action]}. That would touch "${name}", one of the plan gate's own labels, and the plan gate isn't claimed here (${claimPath}). Use ${action} #${n} in the cockpit.`
@@ -259,7 +265,7 @@ export function actionResultCopy(params: {
     case 'precondition-failed':
       return preconditionFailedCopy(action, number, outcome.conflict, now)
     case 'unclaimed-scope':
-      return unclaimedScopeCopy(action, number, outcome.claimPath, plan)
+      return unclaimedScopeCopy(action, number, outcome.claimPath, outcome.keys, plan)
     case 'claim-unreadable':
       return `${outcome.claimPath} can't be read — ${outcome.message}. Until it is valid or removed, this app and the cockpit both stand down from the plan gate — nothing will answer #${n}. Fix or delete the file.`
     case 'unresolvable-label':

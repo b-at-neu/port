@@ -15,7 +15,7 @@ import { applyTailDelta, clearTailBanner, jumpToLatest, renderTranscript, setFol
 import type { TailBannerKind, TranscriptViewState } from './transcript'
 import { render as renderBoard } from './board/view'
 import type { BoardViewState } from './board/view'
-import { handleItemAction } from './board/actions'
+import { handleItemAction, pruneItemActionStates } from './board/actions'
 import type { OperatorAction } from '../../shared/actions/types'
 import type { LabelKey } from '../../shared/labels/vocabulary'
 import { initClaim, openClaimDialog } from './claim/controller'
@@ -197,6 +197,7 @@ async function handleInspectWorktrees(id: RepoId): Promise<void> {
 }
 
 function applySnapshot(snapshot: BoardSnapshot): void {
+  pruneItemActionStates(snapshot)
   boardState = { ...boardState, status: 'ready', snapshot, refreshing: false }
   drawBoard()
 }

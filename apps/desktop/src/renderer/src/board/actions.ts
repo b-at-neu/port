@@ -6,6 +6,7 @@
 import type { RepoId } from '../../../shared/repos'
 import type { LabelKey } from '../../../shared/labels/vocabulary'
 import type { ItemActionResult, OperatorAction } from '../../../shared/actions/types'
+import type { BoardSnapshot } from '../../../shared/board/types'
 
 export type ItemActionState = { readonly kind: 'pending'; readonly action: OperatorAction } | { readonly kind: 'result'; readonly action: OperatorAction; readonly result: ItemActionResult }
 
@@ -27,6 +28,23 @@ export function itemActionState(repoId: RepoId, number: number): ItemActionState
  *  without this a result would never repaint. */
 export function actionsFingerprint(): string {
   return JSON.stringify([...states.entries()])
+}
+
+/** Evicts any per-item state whose item is absent from a fresh snapshot —
+ *  merged, closed, reassigned away, or otherwise dropped off the board —
+ *  since without this the map only ever grows for the renderer's whole life
+ *  (#94 review). Call this once per fresh snapshot (`main.ts`'s
+ *  `applySnapshot`), never per render: a snapshot is the only signal that
+ *  can tell "no longer on the board" apart from "just not in this frame". */
+export function pruneItemActionStates(snapshot: BoardSnapshot): void {
+  const live = new Set<string>()
+  for (const repo of snapshot.state.repositories) {
+    if (!repo.ok) continue
+    for (const item of repo.items) live.add(keyOf(repo.repoId, item.number))
+  }
+  for (const key of states.keys()) {
+    if (!live.has(key)) states.delete(key)
+  }
 }
 
 export interface HandleItemActionParams {
