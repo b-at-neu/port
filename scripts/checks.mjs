@@ -46,6 +46,7 @@ import desktopState from './checks/desktop-state.mjs';
 import desktopWrites from './checks/desktop-writes.mjs';
 import desktopBoard from './checks/desktop-board.mjs';
 import desktopClaim from './checks/desktop-claim.mjs';
+import desktopActions from './checks/desktop-actions.mjs';
 import fileSize from './checks/file-size.mjs';
 import tick from './checks/tick.mjs';
 import analyze from './checks/analyze.mjs';
@@ -111,6 +112,7 @@ if (argv.includes('--guards')) {
     desktopWrites,
     desktopBoard,
     desktopClaim,
+    desktopActions,
     fileSize,
     tick,
     analyze,

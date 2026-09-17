@@ -8,9 +8,11 @@ import type { LabelKey, LabelSource, VocabularyReport } from '../labels/vocabula
 export type PipelineItemKind = 'issue' | 'pull-request'
 
 /** The field list is exactly the ticket's, plus `matchedKeys`. `mergeable`,
- *  `headRefOid`, `updatedAt`, and the viewer's login are deliberately absent
- *  — each belongs to a later ticket that has a use for it (ENGINEERING §7:
- *  no field shipped in anticipation). */
+ *  `headRefOid`, and `updatedAt` are deliberately absent — each belongs to a
+ *  later ticket that has a use for it (ENGINEERING §7: no field shipped in
+ *  anticipation). The viewer's own login is no longer absent: #94 needs it
+ *  at the repository level (see `PipelineFetch.viewer` below), one alias
+ *  reused for every item rather than a per-item field. */
 export interface PipelineItem {
   readonly repo: string
   readonly kind: PipelineItemKind
@@ -122,6 +124,13 @@ export type PipelineFetch =
       readonly unavailable: readonly UnavailableAlias[]
       readonly truncated: readonly TruncatedSet[]
       readonly rateLimit: RateLimitInfo
+      /** The signed-in account's own login (#94's ownership check) — `null`,
+       *  never a guess, when the top-level `viewer` alias is absent or a
+       *  partial response dropped it. Unlike `fetchClaimPreflight`, an
+       *  unresolvable viewer never fails this whole fetch: the board still
+       *  has every label fact to show, only the per-row action strip loses
+       *  its ownership answer. */
+      readonly viewer: string | null
       readonly fetchedAt: string
     }
   | {

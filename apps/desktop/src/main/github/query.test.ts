@@ -74,6 +74,16 @@ describe('buildPipelineQuery', () => {
     expect(document).not.toContain('search(')
   })
 
+  it('requests viewer as a top-level field, outside repository (#94)', () => {
+    const vocabulary = resolveVocabulary({})
+    const { document } = buildPipelineQuery(vocabulary)
+    const repositoryStart = document.indexOf('repository(owner:')
+    const viewerIndex = document.indexOf('viewer { login }')
+    expect(viewerIndex).toBeGreaterThan(-1)
+    const closeIndex = document.indexOf('\n  }\n', repositoryStart)
+    expect(viewerIndex).toBeGreaterThan(closeIndex)
+  })
+
   it('a label name containing a double quote round-trips through the built document', () => {
     const vocabulary = resolveVocabulary({ labels: { ready: 'weird "quoted" label' } })
     const { document } = buildPipelineQuery(vocabulary)

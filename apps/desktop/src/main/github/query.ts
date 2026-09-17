@@ -84,6 +84,10 @@ export function buildPipelineQuery(vocabulary: LabelVocabulary): PipelineQuery {
     `    repoLabels: labels(first: ${REPO_LABEL_PAGE_SIZE}) { totalCount nodes { name } }`,
     '  }',
     '  rateLimit { cost remaining resetAt }',
+    // Top-level, deliberately outside `repository` — the same placement
+    // `buildClaimPreflightQuery` already uses, since resolving the signed-in
+    // login is never scoped to one repository (#94's ownership check).
+    '  viewer { login }',
     '}',
     '',
     ISSUE_FRAGMENT,

@@ -51,6 +51,18 @@ function toRateLimit(value: unknown): RateLimitInfo {
   }
 }
 
+/** Narrows `body.data.viewer` the same way `toRateLimit` narrows
+ *  `body.data.rateLimit` — `null`, never a guess, when the alias is absent,
+ *  malformed, or named in a partial response's `errors[].path` (#94). Unlike
+ *  `fetchClaimPreflight`'s own `viewerLogin` read, an unresolvable viewer
+ *  here never fails the whole fetch. */
+function toViewer(value: unknown, errors: readonly GraphQLErrorEntry[] | undefined): string | null {
+  if ((errors ?? []).some((error) => error.path?.[0] === 'viewer')) return null
+  if (typeof value !== 'object' || value === null) return null
+  const login = (value as Record<string, unknown>).login
+  return typeof login === 'string' && login !== '' ? login : null
+}
+
 interface RepoLabelsConnection {
   readonly totalCount?: unknown
   readonly nodes?: unknown
@@ -151,6 +163,7 @@ export async function fetchPipelineItems(params: FetchPipelineItemsParams): Prom
   const items = mapPipelineItems(repository, aliases, repo)
   const vocabulary = verifyVocabulary(params.vocabulary, toRepoLabels(repository.repoLabels))
   const rateLimit = toRateLimit(body.data.rateLimit)
+  const viewer = toViewer(body.data.viewer, body.errors)
 
   return {
     ok: true,
@@ -161,6 +174,7 @@ export async function fetchPipelineItems(params: FetchPipelineItemsParams): Prom
     unavailable,
     truncated,
     rateLimit,
+    viewer,
     fetchedAt,
   }
 }

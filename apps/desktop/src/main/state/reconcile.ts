@@ -230,5 +230,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
       denials: denialsFreshness(denials),
     },
     worktreeTotals,
+    viewer: pipelineFetch.viewer,
+    approvalGate: entry.config.modules.approvalGate,
   }
 }

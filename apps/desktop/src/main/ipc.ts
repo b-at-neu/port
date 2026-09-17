@@ -8,9 +8,13 @@ import type { TranscriptRead, TranscriptTailOpen, TranscriptTailPoll } from '../
 import { SOURCE_KINDS } from '../shared/board/types'
 import type { BoardSnapshot } from '../shared/board/types'
 import { PLAN_GATE_CHOICES } from '../shared/claim/types'
+import { OPERATOR_ACTIONS } from '../shared/actions/types'
+import type { ItemActionResult } from '../shared/actions/types'
 import { chooseDirectory } from './dialogs'
 import { claimApply, claimPreflight, defaultClaimDeps } from './claim'
 import type { ClaimDeps } from './claim'
+import { applyItemAction } from './actions'
+import type { ApplyItemActionParams, ReadyEntry } from './actions'
 import { git } from './platform'
 import { readWorktreeReport } from './reclaimer'
 import type { ReadWorktreeReportParams } from './reclaimer'
@@ -267,6 +271,68 @@ export async function resolveClaimApply(
   )
 }
 
+/** The two calls `'item:action'` composes — the same injectable seam every
+ *  other channel's `*Deps` interface gives, so the validation and
+ *  registry-lookup branching below is testable without Electron, a real
+ *  registry, or a real watcher. `snapshot`/`refresh` are the live watcher's
+ *  own methods — never a second poll built here. */
+export interface ItemActionDeps {
+  readonly listRepositories: typeof listRepositories
+  readonly applyItemAction: (params: ApplyItemActionParams) => Promise<ItemActionResult>
+  readonly snapshot: () => BoardSnapshot
+  readonly refresh: (request: IpcMap['board:refresh']['request']) => Promise<BoardSnapshot>
+}
+
+function isReadyEntry(entry: RepositoryEntry): entry is ReadyEntry {
+  return 'config' in entry
+}
+
+/** `'item:action'`'s validation: `action` restricted to `OPERATOR_ACTIONS`,
+ *  `kind` to `'issue' | 'pull-request'`, `number` a positive integer,
+ *  `expectedStage` a string or `null`, and `repoId` the same
+ *  currently-registered-and-ready rail every other channel applies —
+ *  everything a stale renderer could get wrong is a thrown error here,
+ *  never a value `applyItemAction` has to defend against. `repository.issues`
+ *  is read-your-writes consistent (`query.ts` Decision 2), so an `applied`
+ *  outcome is followed by one forced refresh before the response returns —
+ *  the row updates immediately rather than after up to 60s. */
+export async function resolveItemAction(registryDeps: RegistryDeps, request: IpcMap['item:action']['request'], auditDir: string, deps: ItemActionDeps): Promise<ItemActionResult> {
+  if (typeof request?.repoId !== 'string' || request.repoId === '') {
+    throw new Error("'item:action' requires a non-empty 'repoId'")
+  }
+  if (request.kind !== 'issue' && request.kind !== 'pull-request') {
+    throw new Error("'item:action' requires 'kind' to be 'issue' or 'pull-request'")
+  }
+  if (!Number.isInteger(request.number) || request.number <= 0) {
+    throw new Error("'item:action' requires 'number' to be a positive integer")
+  }
+  if (!(OPERATOR_ACTIONS as readonly string[]).includes(request.action)) {
+    throw new Error(`'item:action' requires 'action' to be one of ${OPERATOR_ACTIONS.join(', ')}`)
+  }
+  const expectedStage: unknown = request.expectedStage
+  if (expectedStage !== null && (typeof expectedStage !== 'string' || expectedStage === '')) {
+    throw new Error("'item:action' requires 'expectedStage' to be a non-empty string or null")
+  }
+
+  const list = await deps.listRepositories(registryDeps)
+  if (!list.ok) throw new Error(`'item:action' could not list repositories: ${list.message}`)
+  const found = list.repositories.find((repository) => repository.id === request.repoId)
+  if (!found) throw new Error(`'item:action' found no repository registered with id '${request.repoId}'`)
+  if (!isReadyEntry(found)) throw new Error(`'item:action' requires a 'ready' repository, got '${found.problem.kind}'`)
+
+  const result = await deps.applyItemAction({
+    request: { repoId: request.repoId, kind: request.kind, number: request.number, action: request.action, expectedStage: request.expectedStage },
+    snapshot: deps.snapshot(),
+    entry: found,
+    auditDir,
+  })
+
+  if (result.ok && result.outcome.kind === 'applied') {
+    await deps.refresh({ repoId: request.repoId, source: 'github' })
+  }
+  return result
+}
+
 export function registerIpc(): PipelineWatcher {
   // The one place a real `git` invocation and the real userData directory
   // reach the registry — every registry function itself takes these as
@@ -352,6 +418,10 @@ export function registerIpc(): PipelineWatcher {
   handle('claim:preflight', (_event, request) => resolveClaimPreflight(registryDeps, request))
 
   handle('claim:apply', (_event, request) => resolveClaimApply(registryDeps, request, app.getPath('userData')))
+
+  handle('item:action', (_event, request) =>
+    resolveItemAction(registryDeps, request, app.getPath('userData'), { listRepositories, applyItemAction, snapshot: watcher.snapshot, refresh: watcher.refresh }),
+  )
 
   for (const channel of IPC_CHANNELS) {
     if (!registered.has(channel)) {

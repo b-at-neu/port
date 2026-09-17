@@ -62,6 +62,8 @@ function readyRepo(overrides: Partial<Extract<RepositoryState, { ok: true }>> = 
       denials: { at: NOW.toISOString() },
     },
     worktreeTotals: { registered: 0, attached: 0, uncorrelated: 0 },
+    viewer: 'op',
+    approvalGate: true,
     ...overrides,
   }
 }
