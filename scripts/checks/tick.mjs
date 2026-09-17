@@ -165,16 +165,15 @@ export default async function ({ fail, note, ok }) {
       }
       if (value === 'both') bothKeys.push(key);
     }
-    const expectedBoth = new Set(['marker', 'autoPlan']);
+    const expectedBoth = new Set(['marker']);
     if (bothKeys.length !== expectedBoth.size || !bothKeys.every((k) => expectedBoth.has(k))) {
-      fail('tick-labels', `config.mjs's LABEL_SURFACE 'both' entries are [${bothKeys.join(', ')}], expected exactly [marker, autoPlan]`);
+      fail('tick-labels', `config.mjs's LABEL_SURFACE 'both' entries are [${bothKeys.join(', ')}], expected exactly [marker]`);
     } else {
       ok();
     }
   }
 
-  // --- LABEL_SURFACE pinned against query.mjs's issueSet/prSet call sites,
-  // and the cross-surface/no-target-literal rails (#236) ----------------------
+  // --- LABEL_SURFACE pinned against query.mjs's issueSet/prSet call sites, and the cross-surface/no-target-literal rails (#236) ---
   {
     const { LABEL_SURFACE } = await importEngine(`${TICK_DIR}/config.mjs`);
     const { RETRY_TRIGGER } = await importEngine(`${TICK_DIR}/liveness.mjs`);

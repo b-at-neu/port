@@ -77,7 +77,7 @@ export const LABEL_SURFACE = {
   needsHuman: 'pr',
   approved: 'pr',
   marker: 'both',
-  autoPlan: 'both',
+  autoPlan: 'issue',
 };
 
 /** `labels[key] ?? default` — the repository's override when `labels` sets
