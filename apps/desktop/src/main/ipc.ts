@@ -5,6 +5,7 @@ import type { WorktreesReport } from '../shared/reclaimer/types'
 import type { RepositoryEntry } from '../shared/repos'
 import type { SessionScan } from '../shared/sessions/types'
 import type { TranscriptRead, TranscriptTailOpen, TranscriptTailPoll } from '../shared/sessions/transcript'
+import type { SearchResult, SearchScope } from '../shared/search/types'
 import { SOURCE_KINDS } from '../shared/board/types'
 import type { BoardSnapshot } from '../shared/board/types'
 import { PLAN_GATE_CHOICES } from '../shared/claim/types'
@@ -22,6 +23,8 @@ import { addRepository, listRepositories, removeRepository } from './registry'
 import type { RegistryDeps } from './registry'
 import { openTranscript, readSessionState, tailStore } from './sessions'
 import type { OpenTranscriptParams, OpenTranscriptResult, ReadSessionStateParams, RepoRef, TailStore } from './sessions'
+import { runSearch } from './search'
+import type { RunSearchParams } from './search'
 import { createPipelineWatcher } from './state'
 import type { PipelineWatcher } from './state'
 
@@ -189,6 +192,44 @@ export function resolveTranscriptTailClose(
     throw new Error("'transcript:tail:close' requires a non-empty 'tailId'")
   }
   deps.closeTail({ tailId: request.tailId })
+}
+
+/** `'search:query'`'s only composition: the same `resolveSessionsScan` every
+ *  `'sessions:scan'` request builds becomes `runSearch`'s `scan` -- never a
+ *  second scan builder -- so a repository this caller cannot read is the
+ *  same `sessions-unavailable` answer either channel would give. */
+export interface SearchQueryDeps {
+  readonly resolveSessionsScan: (registryDeps: RegistryDeps) => Promise<SessionScan>
+  readonly runSearch: (params: RunSearchParams) => Promise<SearchResult>
+}
+
+const defaultSearchQueryDeps: SearchQueryDeps = { resolveSessionsScan, runSearch }
+
+function isValidScope(scope: unknown): scope is SearchScope {
+  if (typeof scope !== 'object' || scope === null) return false
+  const value = scope as Record<string, unknown>
+  if (value['kind'] === 'all') return true
+  return value['kind'] === 'repo' && typeof value['repoId'] === 'string' && value['repoId'] !== ''
+}
+
+/** A malformed payload throws (a renderer bug, per every other channel's own
+ *  rule) -- a query that *parses* to zero usable terms is `runSearch`'s own
+ *  `invalid-query` answer, a value rather than a thrown error, since it is
+ *  still a well-formed request. */
+export async function resolveSearchQuery(
+  registryDeps: RegistryDeps,
+  request: IpcMap['search:query']['request'],
+  indexDir: string,
+  deps: SearchQueryDeps = defaultSearchQueryDeps,
+): Promise<SearchResult> {
+  if (typeof request?.query !== 'string' || request.query === '') {
+    throw new Error("'search:query' requires a non-empty 'query'")
+  }
+  if (!isValidScope(request.scope)) {
+    throw new Error("'search:query' requires 'scope' to be { kind: 'repo', repoId } or { kind: 'all' }")
+  }
+  const scan = await deps.resolveSessionsScan(registryDeps)
+  return deps.runSearch({ scan, indexDir, query: request.query, scope: request.scope })
 }
 
 /** The two calls `'board:refresh'` composes — the same injectable seam
@@ -396,6 +437,8 @@ export function registerIpc(): PipelineWatcher {
   handle('transcript:tail:poll', (_event, request) => resolveTranscriptTailPoll(request))
 
   handle('transcript:tail:close', (_event, request) => resolveTranscriptTailClose(request))
+
+  handle('search:query', (_event, request) => resolveSearchQuery(registryDeps, request, app.getPath('userData')))
 
   // The board's own clock (#80) — one watcher for the process lifetime,
   // pushing every snapshot to every open window over `board:update`. The
