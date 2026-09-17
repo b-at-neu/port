@@ -6,6 +6,7 @@
 // `repositories.ts`/`worktrees.ts` already hold.
 import type { RepoId } from '../../shared/repos'
 import type { AgentRecord, SessionFailureKind, SessionRecord, SessionScan } from '../../shared/sessions/types'
+import { sessionLabel } from '../../shared/sessions/label'
 
 export type SessionsPickerState =
   | { readonly status: 'loading' }
@@ -14,8 +15,6 @@ export type SessionsPickerState =
    *  above, which are answers `readSessionState` itself returned. */
   | { readonly status: 'unreachable' }
   | { readonly status: 'ready'; readonly scan: Extract<SessionScan, { ok: true }> }
-
-const TITLE_MAX = 80
 
 function text(tag: string, className: string, value: string): HTMLElement {
   const el = document.createElement(tag)
@@ -35,13 +34,6 @@ function failureCopy(kind: SessionFailureKind, message: string): string {
     case 'projects-unreadable':
       return `Couldn't read your Claude projects directory — ${message}`
   }
-}
-
-/** Exported for the transcript header (#83's UX spec: "the session title"
- *  for a session transcript) so main.ts never re-derives this from a raw id. */
-export function titleOf(session: SessionRecord): string {
-  const raw = session.customTitle ?? session.summary ?? session.firstPrompt ?? '(untitled session)'
-  return raw.length > TITLE_MAX ? `${raw.slice(0, TITLE_MAX)}…` : raw
 }
 
 function relativeTime(idleMs: number): string {
@@ -82,7 +74,7 @@ function buildSessionRow(session: SessionRecord, agentsById: ReadonlyMap<string,
   button.dataset.action = 'open-transcript'
   button.dataset.sessionId = session.sessionId
   button.dataset.agentId = ''
-  button.appendChild(text('span', 'session-row__title', titleOf(session)))
+  button.appendChild(text('span', 'session-row__title', sessionLabel(session)))
 
   const metaParts = [
     session.role !== 'other' ? session.role : null,
@@ -106,7 +98,7 @@ function buildSessionRow(session: SessionRecord, agentsById: ReadonlyMap<string,
   return wrapper
 }
 
-function buildHeader(repoLabel: string): HTMLElement {
+function buildHeader(repoId: RepoId, repoLabel: string): HTMLElement {
   const header = document.createElement('div')
   header.className = 'sessions-header'
 
@@ -117,6 +109,13 @@ function buildHeader(repoLabel: string): HTMLElement {
   header.appendChild(back)
 
   header.appendChild(text('span', 'sessions-header__title', repoLabel))
+
+  const search = document.createElement('button')
+  search.className = 'sessions-header__search'
+  search.textContent = 'Search'
+  search.dataset.action = 'open-search'
+  search.dataset.repoId = repoId
+  header.appendChild(search)
 
   const rescan = document.createElement('button')
   rescan.className = 'sessions-header__rescan'
@@ -129,7 +128,7 @@ function buildHeader(repoLabel: string): HTMLElement {
 
 export function renderSessionsPicker(container: HTMLElement, repoId: RepoId, repoLabel: string, state: SessionsPickerState): void {
   container.textContent = ''
-  container.appendChild(buildHeader(repoLabel))
+  container.appendChild(buildHeader(repoId, repoLabel))
 
   if (state.status === 'loading') {
     container.appendChild(text('p', 'sessions-status', 'Reading local sessions…'))
