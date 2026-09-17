@@ -1,0 +1,18 @@
+{
+  "$comment": "Authoritative decision-case table for scripts/port-tick/report.mjs. findGaps flags a tick-to-tick interval only when it materially overshoots the earlier tick's own proposed wakeup, mirroring SKILL.md's live resume-line test applied after the fact. deriveSpans pairs a tick-commit's dispatched entry with the first later tick where the item is absent from that tick's own liveItems; an item still live at the end of the stream is 'ongoing', never a guessed duration.",
+  "cases": [
+    { "function": "findGaps", "name": "on-schedule gap — not reported", "input": [[{ "ts": "2026-01-01T00:00:00Z", "wakeupProposed": 270 }, { "ts": "2026-01-01T00:04:30Z", "wakeupProposed": 270 }], 300], "expected": [] },
+    { "function": "findGaps", "name": "a large overshoot is reported as a dormancy gap", "input": [[{ "ts": "2026-09-08T03:11:00Z", "wakeupProposed": 540 }, { "ts": "2026-09-10T04:40:00Z", "wakeupProposed": 540 }], 300], "expected": [{ "from": "2026-09-08T03:11:00Z", "to": "2026-09-10T04:40:00Z", "durationSeconds": 178140, "scheduledSeconds": 540 }] },
+    { "function": "deriveSpans", "name": "a dispatch that later drops out of liveItems resolves to a closed span", "input": [[
+      { "kind": "tick", "tickId": "t1", "ts": "2026-01-01T00:00:00Z", "planned": { "dispatch": [{ "stage": "impl-agent", "item": "63", "model": "sonnet" }] }, "liveItems": [] },
+      { "kind": "tick-commit", "tickId": "t1", "ts": "2026-01-01T00:00:05Z", "dispatched": ["63"] },
+      { "kind": "tick", "tickId": "t2", "ts": "2026-01-01T00:04:30Z", "planned": { "dispatch": [] }, "liveItems": [{ "item": "63", "stage": "impl-agent" }] },
+      { "kind": "tick", "tickId": "t3", "ts": "2026-01-01T00:09:00Z", "planned": { "dispatch": [] }, "liveItems": [] }
+    ]], "expected": [{ "item": "63", "stage": "impl-agent", "model": "sonnet", "startTs": "2026-01-01T00:00:05Z", "endTs": "2026-01-01T00:09:00Z", "seconds": 535, "resolutionSeconds": 270, "ongoing": false }] },
+    { "function": "deriveSpans", "name": "a dispatch still live at the end of the stream is ongoing, never a guessed duration", "input": [[
+      { "kind": "tick", "tickId": "t1", "ts": "2026-01-01T00:00:00Z", "planned": { "dispatch": [{ "stage": "review-agent", "item": "70", "model": "sonnet" }] }, "liveItems": [] },
+      { "kind": "tick-commit", "tickId": "t1", "ts": "2026-01-01T00:00:05Z", "dispatched": ["70"] },
+      { "kind": "tick", "tickId": "t2", "ts": "2026-01-01T00:04:30Z", "planned": { "dispatch": [] }, "liveItems": [{ "item": "70", "stage": "review-agent" }] }
+    ]], "expected": [{ "item": "70", "stage": "review-agent", "model": "sonnet", "startTs": "2026-01-01T00:00:05Z", "endTs": null, "seconds": null, "resolutionSeconds": 270, "ongoing": true }] }
+  ]
+}

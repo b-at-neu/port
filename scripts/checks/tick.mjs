@@ -10,9 +10,11 @@ async function importEngine(rel) {
 }
 
 export default async function ({ fail, note, ok }) {
-  // --- Every decision case resolves, and the table covers all eight families
+  // --- Every decision case resolves, and the table covers all eleven families
   // guard(#203): a second implementation (apps/desktop's, when issue 105
   // converges) silently diverging from the engine's own recorded behaviour.
+  // #187 adds three families for the trajectory record: events, denials,
+  // report.
   {
     const families = {
       'envelope.cases.json': 'envelope.mjs',
@@ -23,11 +25,14 @@ export default async function ({ fail, note, ok }) {
       'liveness.cases.json': 'liveness.mjs',
       'pacing.cases.json': 'pacing.mjs',
       'writes.cases.json': 'writes.mjs',
+      'events.cases.json': 'events.mjs',
+      'denials.cases.json': 'denials.mjs',
+      'report.cases.json': 'report.mjs',
     };
     const casesDir = join(root, TICK_DIR, 'cases');
     const present = walk(casesDir).map((f) => relOf(f).split('/').pop());
     for (const file of Object.keys(families)) {
-      if (!present.includes(file)) fail('tick-cases', `${TICK_DIR}/cases/${file} is missing — the eight decision families must all have a case table`);
+      if (!present.includes(file)) fail('tick-cases', `${TICK_DIR}/cases/${file} is missing — the eleven decision families must all have a case table`);
       else ok();
     }
 
@@ -58,6 +63,12 @@ export default async function ({ fail, note, ok }) {
       approvalWithdrawnWrite: modules['writes.mjs'].approvalWithdrawnWrite,
       livenessResetWrite: modules['writes.mjs'].livenessResetWrite,
       gateResolveWrite: modules['writes.mjs'].gateResolveWrite,
+      formatEvent: modules['events.mjs'].formatEvent,
+      rotationDecision: modules['events.mjs'].rotationDecision,
+      parseDenialLine: modules['denials.mjs'].parseDenialLine,
+      summarizeDelta: modules['denials.mjs'].summarizeDelta,
+      findGaps: modules['report.mjs'].findGaps,
+      deriveSpans: modules['report.mjs'].deriveSpans,
     };
 
     for (const [file] of Object.entries(families)) {
@@ -316,13 +327,16 @@ export default async function ({ fail, note, ok }) {
     }
   }
 
-  // --- SKILL.md names tickId, the verbatim rail, and the TICK-PROSE.md fallback
-  // guard(#203): the model re-deriving a decision the plan already settled,
-  // with nothing checking that it ran the script at all.
+  // --- SKILL.md names tickId, the verbatim rail, the TICK-PROSE.md fallback,
+  // and the two defect fixes issue 187 found: `start` actually being called,
+  // and `--live` always passed explicitly.
+  // guard(#203, #187): the model re-deriving a decision the plan already
+  // settled, or skipping `start` so the engine's session-scoped state never
+  // resets.
   {
     const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
     const skillText = readFileSync(join(root, skillRel), 'utf8');
-    for (const phrase of ['tickId', 'TICK-PROSE.md', 'commands.tick']) {
+    for (const phrase of ['tickId', 'TICK-PROSE.md', 'commands.tick', '<commands.tick> start', '--live']) {
       if (!skillText.includes(phrase)) fail('tick-skill', `${skillRel} never names '${phrase}'`);
       else ok();
     }
@@ -331,6 +345,11 @@ export default async function ({ fail, note, ok }) {
     } else {
       ok();
     }
+
+    const proseRel = 'plugins/port/skills/pipeline/TICK-PROSE.md';
+    const proseText = readFileSync(join(root, proseRel), 'utf8');
+    if (!proseText.includes('Denials consumed')) fail('tick-skill', `${proseRel} never names 'Denials consumed' — the moved offset-read procedure`);
+    else ok();
   }
 }
 
@@ -378,7 +397,14 @@ function runCase(fn, impl, input) {
     case 'approvalWithdrawnWrite':
     case 'livenessResetWrite':
     case 'gateResolveWrite':
+    case 'parseDenialLine':
+    case 'summarizeDelta':
       return impl(input);
+    case 'formatEvent':
+    case 'rotationDecision':
+    case 'findGaps':
+    case 'deriveSpans':
+      return impl(...input);
     default:
       throw new Error(`no case runner wired for function '${fn}'`);
   }

@@ -92,3 +92,25 @@ It is currently **early-access gated**. Until access lands, cases are authored a
 **When they run:** manually while iterating on a prompt, and in CI only on pull requests touching `plugins/port/agents/**` or `plugins/port/skills/**` — so a prompt change cannot merge unevaluated while a docs or schema change stays instant.
 
 **Never in `commands.checks`.** That list is what `impl-agent` runs before pushing, so evals there would mean every dispatched agent spawning its own model runs — recursive, slow, and paid for on every ticket. Layer 1 enforces this mechanically, for both the evals and the layer 2 audit.
+
+## Trajectory record
+
+The pipeline's own two evaluation tiers — end-to-end (`evals/`) and component-level (`scripts/checks/`) — say nothing about what actually happened during a real run: how long a stage took, how often something got denied, which ticket looped, whether the cockpit was even ticking. That is the trajectory-level tier this section adds (#187), sitting between the two: not a static assertion and not a scored eval, but a machine-readable record of production runs, built on the tick engine (`commands.tick`) that already computes every tick decision deterministically.
+
+**Two local files, both gitignored (`.agents/` already is):**
+
+- `.agents/events.jsonl` — one JSON line per tick-engine event: `run-start` (from `start`), `tick` (from `plan`), `tick-commit` (from `commit`). Rotates only at `start`, never mid-tick, at an 8 MB cap — two generations, ~16 MB ceiling.
+- `.agents/denials.log` — unchanged, deliberately **not** widened or rotated (its format already has three readers — the guard hook, the cockpit, and the desktop app — and rotating it would silently truncate the desktop's history). The tick record instead consumes it as a source: each tick's delta folds into that `tick` event's own `denials` field.
+
+**The reader:** `node scripts/port-tick.mjs report [--since <iso>] [--run <id>]` — read-only, local-only, no `gh` call. Answers this ticket's four questions directly: stage duration by model (`dispatches.byStage`/`byStageMedianSeconds`), failures/denials/escalations (`ticks.incomplete`/`blind` + `denials` + `escalations`), cycles per ticket (`items[].reviewCycles`), and whether the cockpit was ticking (`cadence.gaps`). An absent `.agents/events.jsonl` reports "nothing recorded", never a zero-filled report or a crash — durations are always derived from tick boundaries (±270s), never a precise per-dispatch figure, which is what `commands.budget`'s own ledger (#188) is for.
+
+**Never in `commands.checks`.** It reads a gitignored path absent from a dispatched agent's worktree and from CI, the same placement layer 2's own `audit` establishes for operator-facing tooling that needs a real repository to run against.
+
+| Check | Source |
+| --- | --- |
+| `tick-cases` covers the three new decision families (`events`, `denials`, `report`), same as every other pure tick-engine module | `scripts/checks/tick.mjs` |
+| Write-only rail: nothing but `port-tick.mjs` and `report.mjs` itself imports `events.mjs`/`report.mjs`; `events.mjs` exports no `read`/`parse`-named function | `scripts/checks/tick-events.mjs` |
+| `formatEvent`'s envelope contract: parses as JSON, carries `v`/`ts`/`runId`/`repo`/`kind`, no raw newline, caps at 8 KB with `truncated: true` | `scripts/checks/tick-events.mjs` |
+| `DENIAL_DECISIONS` equals `agent-guard.mjs`'s own logged decisions and the desktop app's `CURRENT_DECISIONS`, both directions | `scripts/checks/tick-events.mjs` |
+| The 8 MB rotation cap is a literal | `scripts/checks/tick-events.mjs` |
+| `SKILL.md` names `<commands.tick> start` and `--live`; `TICK-PROSE.md` carries the moved "Denial report" section | `scripts/checks/tick.mjs` |

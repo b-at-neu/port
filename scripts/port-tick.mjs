@@ -1,21 +1,17 @@
 #!/usr/bin/env node
 // The tick engine's CLI entry: arg parse, subcommand dispatch, JSON to
 // stdout, exit codes. This file only wires — every decision is imported from
-// scripts/port-tick/, following the runner-plus-modules split
-// scripts/checks.mjs already establishes (docs/ENGINEERING.md §1).
+// scripts/port-tick/, the runner-plus-modules split scripts/checks.mjs
+// already establishes (docs/ENGINEERING.md §1). Five subcommands, each
+// emitting one JSON object on stdout and nothing else; exit 0 usable, 1 hard
+// failure, 2 blind tick — the model always reads the JSON, never the code.
 //
-// Four subcommands, each emitting one JSON object on stdout and nothing
-// else. Exit 0 on a usable result, 1 on a hard failure, 2 on a blind tick —
-// the model reads the JSON either way, never the exit code alone.
-//
-//   start                                   resolve config + labels, write both
-//                                            state files fresh
-//   plan                                    one GraphQL call → the tick plan
-//                                            (never persists)
-//   commit --tick <id> --live <d> --dispatched <d>
-//                                            liveness diff + pacing → both
-//                                            state files
-//   resolve --item <n> --decision <d>       the `writes` for a human gate answer
+//   start    config + labels, both state files fresh, emits `run-start`
+//   plan     one GraphQL call → the tick plan (never persists), emits `tick`
+//   commit --tick <id> --live <d> --dispatched <d>   liveness + pacing → both
+//            state files, emits `tick-commit`
+//   resolve --item <n> --decision <d>   the `writes` for a human gate answer
+//   report [--since <iso>] [--run <id>]   reads .agents/events.jsonl (#187)
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -31,8 +27,11 @@ import { mergeabilityRoute, refreshDecision, capRefreshes, zeroDiffGate, cycleCa
 import { parseFilesBlock, gateCandidates } from './port-tick/contention.mjs';
 import { classifyUnmatched, descriptionOf, RETRY_TRIGGER, isUsageLimitMessage } from './port-tick/liveness.mjs';
 import { nextDelay } from './port-tick/pacing.mjs';
-import { readState, writeState, freshTickState, freshDispatchLog, TICK_STATE_PATH, DISPATCH_LOG_PATH } from './port-tick/state.mjs';
+import { readState, writeState, freshTickState, freshDispatchLog, newRunId, TICK_STATE_PATH, DISPATCH_LOG_PATH } from './port-tick/state.mjs';
 import { refreshSweepWrite, zeroDiffWrite, cycleCapWrite, approvalWithdrawnWrite, livenessResetWrite, gateResolveWrite } from './port-tick/writes.mjs';
+import { formatEvent, appendEvent, rotateIfNeeded, envelopeFor, runStartPayload, tickEventPayload } from './port-tick/events.mjs';
+import { summarizeDelta } from './port-tick/denials.mjs';
+import { runReport } from './port-tick/report.mjs';
 
 const TICK_PLAN_CACHE_PATH = '.temp/tick-plan.json'; // ephemeral bridge, never durable ladder/dispatch-log state
 
@@ -55,9 +54,12 @@ function repoRoot() {
 
 // --- start --------------------------------------------------------------
 function cmdStart(root, cfg) {
-  writeState(root, TICK_STATE_PATH, freshTickState(cfg.repo));
+  rotateIfNeeded(root);
+  const tickState = freshTickState(cfg.repo);
+  writeState(root, TICK_STATE_PATH, tickState);
   writeState(root, DISPATCH_LOG_PATH, freshDispatchLog(cfg.repo));
-  emit({ ok: true, repo: cfg.repo, labels: cfg.labels, integration: cfg.integration });
+  appendEvent(root, formatEvent(envelopeFor('run-start', tickState.runId, cfg.repo), runStartPayload(cfg)));
+  emit({ ok: true, repo: cfg.repo, labels: cfg.labels, integration: cfg.integration, runId: tickState.runId });
 }
 
 // --- plan -----------------------------------------------------------------
@@ -76,11 +78,13 @@ function cmdPlan(root, cfg) {
   const clock = res.headers?.date ?? null;
 
   if (!res.ok) {
+    appendEvent(root, formatEvent(envelopeFor('tick', tickState.runId, cfg.repo, clock), tickEventPayload({ tickId: null, envelope: { kind: 'blind', unavailable: [] } })));
     return emit({ ok: false, tickId: null, clock, envelope: { kind: 'blind' }, error: res.error ?? 'gh api graphql failed', dispatch: [], writes: [], gates: [], held: [], announce: [], artifacts: [] }, 2);
   }
 
   const envelope = classifyEnvelope(res.body);
   if (envelope.kind === 'blind') {
+    appendEvent(root, formatEvent(envelopeFor('tick', tickState.runId, cfg.repo, clock), tickEventPayload({ tickId: `blind-${Date.now()}`, envelope })));
     return emit({ ok: true, tickId: `blind-${Date.now()}`, clock, envelope, dispatch: [], writes: [], gates: [], held: [], announce: [], artifacts: [], wakeup: 270 }, 2);
   }
 
@@ -304,6 +308,13 @@ function cmdPlan(root, cfg) {
     unowned: Object.fromEntries(aliasSpecs.map(([a]) => [a, partitions[a].unowned.map((n) => n.number)])),
   };
 
+  // Denial delta since tickState's own offset (PIPELINE.md → "Denial
+  // visibility") — the read stays here; denials.mjs only classifies it.
+  let denialAll = [];
+  try { denialAll = readFileSync(join(root, '.agents', 'denials.log'), 'utf8').split('\n'); } catch {}
+  if (denialAll.at(-1) === '') denialAll.pop();
+  const denialsDelta = summarizeDelta(denialAll.slice(tickState.denialsConsumed ?? 0));
+
   const tickId = `${clock ?? Date.now()}`;
   const willMoveWithoutHuman = dispatch.length > 0 || partitions.planning.mine.length + partitions.inProgress.mine.length + partitions.reviewing.mine.length + partitions.revising.mine.length + partitions.refreshing.mine.length > 0;
   const wakeup = willMoveWithoutHuman ? 270 : nextDelay(tickState.cadenceStep ?? 0, { willMoveWithoutHuman: false, observedChange: false }).delay;
@@ -336,7 +347,11 @@ function cmdPlan(root, cfg) {
     unknownStreakUpdates,
     wakeup,
     rateLimit: res.body.data.rateLimit ?? null,
+    denials: denialsDelta,
+    denialsConsumedAfter: (tickState.denialsConsumed ?? 0) + denialsDelta.newLines,
   };
+
+  appendEvent(root, formatEvent(envelopeFor('tick', tickState.runId, cfg.repo, clock), tickEventPayload({ tickId, envelope: plan.envelope, items, livenessExpected: plan.livenessExpected, dispatch, gates, held, announce, writes, wakeup, rateLimit: plan.rateLimit, denials: denialsDelta })));
 
   writeState(root, TICK_PLAN_CACHE_PATH, { repo: cfg.repo, ...plan, dispatchLog });
   emit(plan, 0);
@@ -353,7 +368,11 @@ function cmdCommit(root, cfg, args) {
     return die(`--tick '${tickId}' does not match the plan this session last ran ('${cache.tickId ?? 'none'}') — the model must run the script's own plan this tick before committing`, 1);
   }
 
-  const liveDescriptions = (args.live ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  // `--live`'s *presence* is the fact, never its value — `""` counts as
+  // present, a missing flag does not, and a value `parseFlags` mistook for
+  // the next flag's own name (starts with `--`) is treated as absent too.
+  const liveFlagPresent = args.live !== undefined && !String(args.live).startsWith('--');
+  const liveDescriptions = (liveFlagPresent ? args.live : '').split(',').map((s) => s.trim()).filter(Boolean);
   const dispatchedItems = (args.dispatched ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 
   const tickState = readState(root, TICK_STATE_PATH, cfg.repo) ?? freshTickState(cfg.repo);
@@ -420,9 +439,13 @@ function cmdCommit(root, cfg, args) {
   tickState.scheduled = pacing.delay;
   tickState.cadenceStep = pacing.cadenceStep;
   tickState.noChangeTicks = pacing.cadenceStep;
+  if (!tickState.runId) tickState.runId = newRunId(); // a session that skipped `start` still groups from here on
+  tickState.denialsConsumed = cache.denialsConsumedAfter ?? tickState.denialsConsumed ?? 0;
 
   writeState(root, TICK_STATE_PATH, tickState);
   writeState(root, DISPATCH_LOG_PATH, dispatchLog);
+
+  appendEvent(root, formatEvent(envelopeFor('tick-commit', tickState.runId, cfg.repo, tickState.lastTick), { tickId, taskList: liveFlagPresent ? 'run' : 'not-run', live: liveDescriptions.length, dispatched: dispatchedItems, liveness, resets: resets.length, wakeup: pacing.delay, cadenceStep: pacing.cadenceStep }));
 
   emit({ ok: true, tickId, writes, resets, liveness, wakeup: pacing.delay });
 }
@@ -436,6 +459,11 @@ function cmdResolve(root, cfg, args) {
   const write = gateResolveWrite({ repo: cfg.repo, labels: cfg.labels, item, decision });
   if (!write) return die(`unrecognized --decision '${decision}'`);
   emit({ ok: true, item, decision, writes: [write] });
+}
+
+// --- report -------------------------------------------------------------
+function cmdReport(root, cfg, args) {
+  emit(runReport(root, cfg, args));
 }
 
 // --- CLI --------------------------------------------------------------------
@@ -463,7 +491,8 @@ function main() {
   if (subcommand === 'plan') return cmdPlan(root, cfg);
   if (subcommand === 'commit') return cmdCommit(root, cfg, args);
   if (subcommand === 'resolve') return cmdResolve(root, cfg, args);
-  return die(`unrecognized subcommand '${subcommand ?? ''}'. usage: node port-tick.mjs <start|plan|commit|resolve> [flags]`);
+  if (subcommand === 'report') return cmdReport(root, cfg, args);
+  return die(`unrecognized subcommand '${subcommand ?? ''}'. usage: node port-tick.mjs <start|plan|commit|resolve|report> [flags]`);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

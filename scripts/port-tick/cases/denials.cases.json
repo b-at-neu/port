@@ -1,0 +1,13 @@
+{
+  "$comment": "Authoritative decision-case table for scripts/port-tick/denials.mjs. Per plugins/port/docs/PIPELINE.md → 'Denial visibility': a deny from a session: actor is a rail hold (railDeny), split off deny, never folded into it; miss/gate-clear/hook-error are never denials; a decision outside the closed set is unknown, never silently read as deny.",
+  "cases": [
+    { "function": "parseDenialLine", "name": "a stage-agent deny", "input": "2026-01-01T00:00:00Z\tdeny\tport:impl-agent\tsome command", "expected": { "malformed": false, "unknown": false, "timestamp": "2026-01-01T00:00:00Z", "decision": "deny", "actor": "port:impl-agent", "subject": "some command" } },
+    { "function": "parseDenialLine", "name": "a session-actor deny still parses as decision 'deny' — railDeny is summarizeDelta's split, not parseDenialLine's", "input": "2026-01-01T00:00:00Z\tdeny\tsession:abc123\tgit push", "expected": { "malformed": false, "unknown": false, "timestamp": "2026-01-01T00:00:00Z", "decision": "deny", "actor": "session:abc123", "subject": "git push" } },
+    { "function": "parseDenialLine", "name": "an unrecognized decision is unknown, never deny", "input": "2026-01-01T00:00:00Z\tsomething-new\tport:impl-agent\tx", "expected": { "malformed": false, "unknown": true, "timestamp": "2026-01-01T00:00:00Z", "decision": "something-new", "actor": "port:impl-agent", "subject": "x" } },
+    { "function": "parseDenialLine", "name": "fewer than two tab-separated fields is malformed", "input": "not-a-real-line", "expected": { "malformed": true } },
+    { "function": "summarizeDelta", "name": "a session-actor deny counts as railDeny, not deny", "input": ["2026-01-01T00:00:00Z\tdeny\tsession:abc\tgit push"], "expected": { "newLines": 1, "deny": 0, "railDeny": 1, "miss": 0, "gateClear": 0, "hookError": 0, "unknown": 0, "malformed": 0 } },
+    { "function": "summarizeDelta", "name": "a stage-agent deny counts as deny, not railDeny", "input": ["2026-01-01T00:00:00Z\tdeny\tport:impl-agent\tx"], "expected": { "newLines": 1, "deny": 1, "railDeny": 0, "miss": 0, "gateClear": 0, "hookError": 0, "unknown": 0, "malformed": 0 } },
+    { "function": "summarizeDelta", "name": "miss and gate-clear are never denials", "input": ["2026-01-01T00:00:00Z\tmiss\tsession:x\ty", "2026-01-01T00:00:00Z\tgate-clear\tsession:x\tz"], "expected": { "newLines": 2, "deny": 0, "railDeny": 0, "miss": 1, "gateClear": 1, "hookError": 0, "unknown": 0, "malformed": 0 } },
+    { "function": "summarizeDelta", "name": "blank lines are never counted as newLines", "input": ["", "2026-01-01T00:00:00Z\tdeny\tport:impl-agent\tx", ""], "expected": { "newLines": 1, "deny": 1, "railDeny": 0, "miss": 0, "gateClear": 0, "hookError": 0, "unknown": 0, "malformed": 0 } }
+  ]
+}
