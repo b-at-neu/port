@@ -3,7 +3,7 @@ import type { RepoId, RepositoryEntry } from './repos'
 import type { WorktreesReport } from './reclaimer/types'
 import type { SessionScan } from './sessions/types'
 import type { TranscriptRead, TranscriptTailOpen, TranscriptTailPoll } from './sessions/transcript'
-import type { SearchResult, SearchScope } from './search/types'
+import type { SearchQuery, SearchResult } from './search/types'
 import type { BoardSnapshot, SourceKind } from './board/types'
 import type { ClaimApplyResponse, ClaimPreflightResponse, PlanGateChoice } from './claim/types'
 import type { LabelKey } from './labels/vocabulary'
@@ -80,7 +80,7 @@ export interface IpcMap {
    *  sends the raw query string and an opaque scope, never a path or a
    *  parsed term list. */
   'search:query': {
-    request: { query: string; scope: SearchScope }
+    request: SearchQuery
     response: SearchResult
   }
   /** The board's initial paint — one invoke, no polling of its own; every

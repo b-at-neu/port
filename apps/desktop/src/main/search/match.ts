@@ -3,7 +3,7 @@
 // signature, nothing about scope or budget. `query.ts` is the only caller.
 import type { SearchField, SearchHit, SearchSnippet } from '../../shared/search/types'
 import type { FileDiff, TranscriptEntry } from '../../shared/sessions/transcript'
-import { foldCase } from './terms'
+import { foldCase, indexOfFolded } from './terms'
 
 /** Either side of a match, in the original (unfolded) text -- generous
  *  enough to show a path or an error in context without dumping a whole
@@ -79,7 +79,7 @@ export function hitsFor(entries: readonly TranscriptEntry[], terms: readonly str
     if (anchorTerm === undefined) continue
     const anchorField = folded.find((field) => field.folded.includes(anchorTerm))
     if (anchorField === undefined) continue // unreachable: the `every` above already found it
-    const matchStart = anchorField.folded.indexOf(anchorTerm)
+    const matchStart = indexOfFolded(anchorField.text, anchorTerm)
 
     hits.push({
       entryIndex: index,

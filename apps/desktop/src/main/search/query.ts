@@ -101,13 +101,13 @@ export async function runSearch(params: RunSearchParams): Promise<SearchResult> 
     const key = keyFor(candidate)
     const resolved = resolveTranscriptPath(candidate.sessionId, candidate.agentId, projectIndex)
     if (!resolved.ok) {
-      read += 1
+      unreached += 1
       continue
     }
 
     const stat = await statPath(resolved.path)
     if (!stat.ok) {
-      read += 1
+      unreached += 1
       continue
     }
 
@@ -126,8 +126,13 @@ export async function runSearch(params: RunSearchParams): Promise<SearchResult> 
       }
     }
 
+    // Both budgets gate *before* the open -- once either is exhausted, every
+    // remaining candidate is unreached, never opened just to discard its
+    // hits (that would spend the scan budget on results nobody sees).
     budgetExhausted ||= now().getTime() - start >= SCAN_BUDGET_MS
-    if (budgetExhausted) {
+    const hitsBudgetExhausted = totalHits >= MAX_TOTAL_HITS
+    if (budgetExhausted || hitsBudgetExhausted) {
+      if (hitsBudgetExhausted) hitsTruncated = true
       unreached += 1
       continue
     }
@@ -147,11 +152,9 @@ export async function runSearch(params: RunSearchParams): Promise<SearchResult> 
 
     if (capped.length === 0) continue
 
+    // `hitsBudgetExhausted` above guarantees `totalHits < MAX_TOTAL_HITS`
+    // here, so `remaining` is always positive.
     const remaining = MAX_TOTAL_HITS - totalHits
-    if (remaining <= 0) {
-      hitsTruncated = true
-      continue
-    }
     const included = capped.length > remaining ? capped.slice(0, remaining) : capped
     if (included.length < capped.length) hitsTruncated = true
     totalHits += included.length

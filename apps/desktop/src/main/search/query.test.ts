@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../../shared/repos'
 import type { SessionRecord, SessionScan } from '../../shared/sessions/types'
-import { SCAN_BUDGET_MS } from '../../shared/search/types'
+import { MAX_HITS_PER_TRANSCRIPT, MAX_TOTAL_HITS, SCAN_BUDGET_MS } from '../../shared/search/types'
 import type { SearchScope } from '../../shared/search/types'
 import { runSearch } from './query'
 
@@ -13,6 +13,10 @@ const REPO_B = 'repo-b' as RepoId
 
 const SESSION_A = '11111111-1111-1111-1111-111111111111'
 const SESSION_B = '22222222-2222-2222-2222-222222222222'
+
+function uuidFor(n: number): string {
+  return `${n.toString(16).padStart(8, '0')}-1111-1111-1111-111111111111`
+}
 
 async function makeClaudeHome(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'port-search-query-claude-home-'))
@@ -31,6 +35,21 @@ async function writeSessionTranscript(claudeHome: string, project: string, sessi
   await mkdir(dir, { recursive: true })
   const record = { uuid: 'u1', timestamp: '2026-01-01T00:00:00.000Z', cwd: '/repo', type: 'user', message: { role: 'user', content: text } }
   await writeFile(join(dir, `${sessionId}.jsonl`), jsonl([record]))
+}
+
+/** `entryCount` distinct entries, each its own matching hit -- lets a single
+ *  transcript be driven all the way up to (or past) `MAX_HITS_PER_TRANSCRIPT`. */
+async function writeManyEntryTranscript(claudeHome: string, project: string, sessionId: string, entryCount: number): Promise<void> {
+  const dir = join(claudeHome, 'projects', project)
+  await mkdir(dir, { recursive: true })
+  const records = Array.from({ length: entryCount }, (_, i) => ({
+    uuid: `u${i}`,
+    timestamp: '2026-01-01T00:00:00.000Z',
+    cwd: '/repo',
+    type: 'user',
+    message: { role: 'user', content: `needle-term entry ${i}` },
+  }))
+  await writeFile(join(dir, `${sessionId}.jsonl`), jsonl(records))
 }
 
 function session(overrides: Partial<SessionRecord> = {}): SessionRecord {
@@ -156,6 +175,49 @@ describe('runSearch', () => {
     if (!result.ok) throw new Error('unreachable')
     expect(result.read).toBe(1)
     expect(result.unreached).toBe(1)
+    expect(result.complete).toBe(false)
+  })
+
+  it('counts a candidate whose transcript path never resolves as unreached, never as read -- never a false complete: true', async () => {
+    const claudeHome = await makeClaudeHome()
+    // A decoy transcript populates `claudeHome/projects` so `buildProjectIndex`
+    // succeeds, but no file is ever written for SESSION_A itself, so
+    // `resolveTranscriptPath` fails to resolve it -- a candidate the scan
+    // knows about with nothing corresponding on disk.
+    await writeSessionTranscript(claudeHome, 'project-a', '99999999-9999-9999-9999-999999999999', 'unrelated text')
+    const scan = scanOf([session()])
+
+    const result = await runSearch({ scan, indexDir: await makeIndexDir(), query: 'needle-term', scope: REPO_SCOPE, claudeHome })
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.read).toBe(0)
+    expect(result.unreached).toBe(1)
+    expect(result.complete).toBe(false)
+  })
+
+  it('stops opening candidates once MAX_TOTAL_HITS is reached, marking the rest unreached rather than reading and discarding their hits', async () => {
+    const claudeHome = await makeClaudeHome()
+    // Each transcript maxes out at MAX_HITS_PER_TRANSCRIPT hits, so exactly
+    // enough of them saturate MAX_TOTAL_HITS -- one further candidate must
+    // then be skipped without ever being opened.
+    const transcriptsToFill = Math.ceil(MAX_TOTAL_HITS / MAX_HITS_PER_TRANSCRIPT)
+    const sessions: SessionRecord[] = []
+    for (let i = 0; i < transcriptsToFill; i++) {
+      const sessionId = uuidFor(i)
+      await writeManyEntryTranscript(claudeHome, 'project-a', sessionId, MAX_HITS_PER_TRANSCRIPT)
+      sessions.push(session({ sessionId, idleMs: i }))
+    }
+    const oneMoreId = uuidFor(transcriptsToFill)
+    await writeManyEntryTranscript(claudeHome, 'project-a', oneMoreId, 1)
+    sessions.push(session({ sessionId: oneMoreId, idleMs: transcriptsToFill }))
+
+    const scan = scanOf(sessions)
+    const result = await runSearch({ scan, indexDir: await makeIndexDir(), query: 'needle-term', scope: REPO_SCOPE, claudeHome })
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.read).toBe(transcriptsToFill)
+    expect(result.unreached).toBe(1)
+    expect(result.hitsTruncated).toBe(true)
     expect(result.complete).toBe(false)
   })
 })
