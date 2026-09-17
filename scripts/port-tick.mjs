@@ -387,7 +387,7 @@ function cmdCommit(root, cfg, args) {
       // resolved name back against cfg.labels — a repository overriding a
       // label name must still hit the right trigger.
       const trigger = RETRY_TRIGGER[expected.labelKey] ?? null;
-      resets.push({ item: expected.item, from: expected.label, toKey: trigger });
+      resets.push({ item: expected.item, from: expected.label, fromKey: expected.labelKey, toKey: trigger });
     } else if (result.class === 'suspect') {
       dispatchLog.items[expected.item] = { stage: row?.stage ?? expected.stage, state: 'suspect', resets: result.nextResets };
     }
@@ -397,8 +397,7 @@ function cmdCommit(root, cfg, args) {
 
   for (const r of resets) {
     if (!r.toKey) continue;
-    const triggerName = cfg.labels[r.toKey];
-    writes.push(livenessResetWrite({ repo: cfg.repo, item: r.item, from: r.from, to: triggerName }));
+    writes.push(livenessResetWrite({ repo: cfg.repo, labels: cfg.labels, item: r.item, fromKey: r.fromKey, toKey: r.toKey }));
   }
 
   // Apply the refresh sweep's and the mergeability-UNKNOWN carve-out's

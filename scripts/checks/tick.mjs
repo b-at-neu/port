@@ -120,7 +120,7 @@ export default async function ({ fail, note, ok }) {
   // it must resolve against.
   {
     const labelsJson = readJson('plugins/port/templates/labels.json');
-    const { LABEL_DEFAULTS, LABEL_ROLES } = await importEngine(`${TICK_DIR}/config.mjs`);
+    const { LABEL_DEFAULTS, LABEL_ROLES, LABEL_SURFACE } = await importEngine(`${TICK_DIR}/config.mjs`);
     const jsonKeys = new Set(labelsJson.labels.map((l) => l.key));
     const engineKeys = new Set(Object.keys(LABEL_DEFAULTS));
 
@@ -138,6 +138,111 @@ export default async function ({ fail, note, ok }) {
     }
     for (const key of engineKeys) {
       if (!jsonKeys.has(key)) fail('tick-labels', `config.mjs's LABEL_DEFAULTS names '${key}', which labels.json does not carry at all`);
+      else ok();
+    }
+
+    // --- LABEL_SURFACE covers exactly the same key set, both directions
+    // guard(#236): a label key silently missing a surface, so a write for
+    // it falls through to no target at all rather than a wrongly-guessed
+    // one — a key LABEL_DEFAULTS carries but LABEL_SURFACE omits is the
+    // exact shape of the original bug, so this pin makes a missing key a
+    // layer-1 failure instead of a runtime default.
+    const surfaceKeys = new Set(Object.keys(LABEL_SURFACE));
+    for (const key of engineKeys) {
+      if (!surfaceKeys.has(key)) fail('tick-labels', `config.mjs's LABEL_SURFACE is missing key '${key}', which LABEL_DEFAULTS carries`);
+      else ok();
+    }
+    for (const key of surfaceKeys) {
+      if (!engineKeys.has(key)) fail('tick-labels', `config.mjs's LABEL_SURFACE names '${key}', which LABEL_DEFAULTS does not carry`);
+      else ok();
+    }
+    const bothKeys = [];
+    for (const [key, value] of Object.entries(LABEL_SURFACE)) {
+      if (!['issue', 'pr', 'both'].includes(value)) {
+        fail('tick-labels', `config.mjs's LABEL_SURFACE.${key} is '${value}', must be 'issue', 'pr', or 'both'`);
+      } else {
+        ok();
+      }
+      if (value === 'both') bothKeys.push(key);
+    }
+    const expectedBoth = new Set(['marker']);
+    if (bothKeys.length !== expectedBoth.size || !bothKeys.every((k) => expectedBoth.has(k))) {
+      fail('tick-labels', `config.mjs's LABEL_SURFACE 'both' entries are [${bothKeys.join(', ')}], expected exactly [marker]`);
+    } else {
+      ok();
+    }
+  }
+
+  // --- LABEL_SURFACE pinned against query.mjs's issueSet/prSet call sites, and the cross-surface/no-target-literal rails (#236) ---
+  {
+    const { LABEL_SURFACE } = await importEngine(`${TICK_DIR}/config.mjs`);
+    const { RETRY_TRIGGER } = await importEngine(`${TICK_DIR}/liveness.mjs`);
+    const queryText = readFileSync(join(root, TICK_DIR, 'query.mjs'), 'utf8');
+
+    // query.mjs's own call sites are the other half of this pin — a key
+    // queried via issueSet must read 'issue' here, and prSet must read 'pr'.
+    // Fails if fewer than the 16 the query builds parse, so a rewritten
+    // query.mjs the pattern no longer reads cannot pass by matching nothing.
+    // Coverage is deliberately one-way: marker/autoPlan are never queried.
+    // guard(#236): query.mjs's own issue-vs-PR fact drifting from
+    // writes.mjs's, so a label queried as a pull request could still be
+    // written back to as an issue.
+    const callRe = /\b(issueSet|prSet)\(\s*'[^']*'\s*,\s*labels\.([A-Za-z]+)/g;
+    let match;
+    let callCount = 0;
+    while ((match = callRe.exec(queryText))) {
+      callCount += 1;
+      const [, fn, key] = match;
+      const expected = fn === 'issueSet' ? 'issue' : 'pr';
+      if (LABEL_SURFACE[key] !== expected) {
+        fail('tick-surface', `query.mjs calls ${fn}(..., labels.${key}), so LABEL_SURFACE.${key} must be '${expected}', but it is '${LABEL_SURFACE[key]}'`);
+      } else {
+        ok();
+      }
+    }
+    if (callCount < 16) {
+      fail('tick-surface', `query.mjs: only ${callCount} issueSet/prSet call sites parsed, expected at least 16 — the pattern may no longer match query.mjs's shape`);
+    } else {
+      ok();
+    }
+
+    // Every RETRY_TRIGGER pair maps to exactly one surface: a future trigger
+    // mapping that crosses surfaces (issue in-flight label resetting to a PR
+    // trigger, or vice versa) is a wrong write by construction.
+    // guard(#236): a liveness reset crossing surfaces, or a future write
+    // hardcoding the target the way livenessResetWrite did before this fix.
+    for (const [fromKey, toKey] of Object.entries(RETRY_TRIGGER)) {
+      if (LABEL_SURFACE[fromKey] !== LABEL_SURFACE[toKey]) {
+        fail('tick-surface', `RETRY_TRIGGER.${fromKey} → ${toKey} crosses surfaces: LABEL_SURFACE.${fromKey}='${LABEL_SURFACE[fromKey]}', LABEL_SURFACE.${toKey}='${LABEL_SURFACE[toKey]}'`);
+      } else {
+        ok();
+      }
+    }
+
+    // The #236 guard itself: no non-comment line of writes.mjs may contain an
+    // 'issue' or 'pr' string literal — every target must be derived through
+    // LABEL_SURFACE, never typed by a caller.
+    const writesText = readFileSync(join(root, TICK_DIR, 'writes.mjs'), 'utf8')
+      .split('\n')
+      .filter((l) => !/^\s*(\/\/|\*)/.test(l))
+      .join('\n');
+    if (/'issue'|"issue"|'pr'|"pr"/.test(writesText)) {
+      fail('tick-surface', `writes.mjs contains an 'issue'/'pr' string literal outside a comment — every target must derive from LABEL_SURFACE`);
+    } else {
+      ok();
+    }
+
+    // Every function writes.mjs exports is named by at least one case in
+    // writes.cases.json, so a future write with a wrong-surface key cannot
+    // ship with nothing exercising it.
+    // guard(#236): a new write shipping with nothing in the decision-case
+    // table exercising its target resolution.
+    const exportRe = /export function (\w+)\(/g;
+    const exported = [...writesText.matchAll(exportRe)].map((m) => m[1]);
+    const casesTable = readJson(`${TICK_DIR}/cases/writes.cases.json`);
+    const namedFns = new Set(casesTable.cases.map((c) => c.function));
+    for (const fn of exported) {
+      if (!namedFns.has(fn)) fail('tick-surface', `writes.mjs exports '${fn}', which no case in writes.cases.json names`);
       else ok();
     }
   }
