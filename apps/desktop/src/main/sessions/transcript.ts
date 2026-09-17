@@ -12,6 +12,7 @@ import { readLinesFrom, statPath } from '../platform'
 import type { ReadLinesFromResult } from '../platform'
 import type { EntryPatch, TranscriptEntry, TranscriptRead, TranscriptSource } from '../../shared/sessions/transcript'
 import { buildProjectIndex, defaultClaudeHome, resolveTranscriptPath, SESSION_ID_RE } from './locate'
+import type { ProjectIndex } from './locate'
 import { createDeriver } from './transcript-entries'
 import type { Deriver } from './transcript-entries'
 
@@ -19,6 +20,11 @@ export interface OpenTranscriptParams {
   readonly sessionId: string
   readonly agentId: string | null
   readonly claudeHome?: string
+  /** Skips this call's own `buildProjectIndex` when the caller already built
+   *  one -- `main/search/query.ts` builds a single index up front and passes
+   *  it into every `openTranscript` call in its scan, rather than re-listing
+   *  `<claudeHome>/projects/` once per transcript. */
+  readonly index?: ProjectIndex
 }
 
 /** `agent-<id>` basenames on this machine run 6-64 lowercase-hex characters
@@ -124,12 +130,18 @@ export async function openTranscript(params: OpenTranscriptParams): Promise<Open
 
   const claudeHome = params.claudeHome ?? defaultClaudeHome()
 
-  const indexResult = await buildProjectIndex(claudeHome)
-  if (!indexResult.ok) {
-    return { read: { ok: false, kind: 'session-unresolved', message: indexResult.message, path: null }, cursor: null }
+  let index: ProjectIndex
+  if (params.index !== undefined) {
+    index = params.index
+  } else {
+    const indexResult = await buildProjectIndex(claudeHome)
+    if (!indexResult.ok) {
+      return { read: { ok: false, kind: 'session-unresolved', message: indexResult.message, path: null }, cursor: null }
+    }
+    index = indexResult.index
   }
 
-  const resolved = resolveTranscriptPath(sessionId, agentId, indexResult.index)
+  const resolved = resolveTranscriptPath(sessionId, agentId, index)
   if (!resolved.ok) {
     if (resolved.kind === 'invalid-id') return { read: { ok: false, kind: 'invalid-id', message: INVALID_ID_MESSAGE, path: null }, cursor: null }
     return { read: { ok: false, kind: 'session-unresolved', message: `No project directory resolves session ${sessionId}`, path: null }, cursor: null }
