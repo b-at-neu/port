@@ -50,6 +50,36 @@ export const LABEL_ROLES = {
   approved: 'terminal',
 };
 
+// #236: livenessResetWrite (and every other writes.mjs export) hardcoded
+// `target: 'issue'`, wrong for the three in-flight labels that only ever
+// apply to a pull request. This map is what `writes.mjs`'s `labelEdit` reads
+// instead of assuming a surface — deliberately **no runtime default**:
+// defaulting to `'issue'` is the exact bug this map exists to prevent, and
+// the `tick-labels` coverage pin (scripts/checks/tick.mjs) is what makes a
+// key missing from this map unreachable rather than silently mis-targeted.
+// Pinned against query.mjs's `issueSet`/`prSet` call sites by `tick-surface`
+// (docs/ENGINEERING.md §2), so the two facts can never drift apart silently.
+export const LABEL_SURFACE = {
+  ready: 'issue',
+  planChangesRequested: 'issue',
+  planApproved: 'issue',
+  planning: 'issue',
+  inProgress: 'issue',
+  planReview: 'issue',
+  blocked: 'issue',
+  prOpened: 'issue',
+  readyForReview: 'pr',
+  needsRevision: 'pr',
+  refreshBranch: 'pr',
+  reviewing: 'pr',
+  revising: 'pr',
+  refreshing: 'pr',
+  needsHuman: 'pr',
+  approved: 'pr',
+  marker: 'both',
+  autoPlan: 'both',
+};
+
 /** `labels[key] ?? default` — the repository's override when `labels` sets
  *  one, otherwise the standard name. Pure, so it is directly unit-testable. */
 export function resolveLabels(cfg) {

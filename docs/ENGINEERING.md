@@ -68,6 +68,7 @@ This is **this repository's own** standards document, not a template — `plugin
 | `docs.design`'s presence in the `standards-precedence` block ↔ its copies in the four agent files, and every agent naming `docs.engineering` also naming `docs.design` (and vice versa) | `standards` (`scripts/checks/standards.mjs`) |
 | `shared/claim/classify.ts`'s opt-in key set (`CLAIM_LABEL_KEYS` + `AUTO_PLAN_KEY`) ↔ `plugins/port/skills/pipeline/SKILL.md`'s "work on #N" paragraph's `<labels.X>` keys, both directions | `desktop-claim` |
 | `shared/actions/plan.ts`'s `RETRY_TRIGGER` ↔ `scripts/port-tick/liveness.mjs`'s own `RETRY_TRIGGER`, both directions, keys and values | `desktop-actions` |
+| `scripts/port-tick/config.mjs`'s `LABEL_SURFACE` ↔ `query.mjs`'s `issueSet`/`prSet` call sites | `tick-surface` (`scripts/checks/tick.mjs`) |
 
 **If a change introduces a further copy of anything, it introduces its pin in the same commit.** A comment asking a future reader to remember is not a pin.
 
