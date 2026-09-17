@@ -84,11 +84,22 @@ export const OPERATOR_ONLY_STEP = /^\s*[-*]\s*\[[ xX]\]\s*\*\*operator-only\*\*/
 // must not read as marked.
 const SESSION_MARKER = /^>\s*\*\*SESSION REQUIRED:\*\*\s+\S/;
 
-/** Pull request stage labels, at most one of which may be present. The refresh
- *  pair is excluded on purpose: a refresh leaves the other labels in place. */
+/** Pull request stage labels; legality is pair-wise, checked by
+ *  `stageViolation` below, not by this list alone. */
 const PR_STAGE_KEYS = ['readyForReview', 'reviewing', 'needsRevision', 'revising', 'approved', 'needsHuman'];
+/** The refresh pair — sanctioned beside a stage label, never twice over. */
+const PR_REFRESH_KEYS = ['refreshBranch', 'refreshing'];
 const IN_FLIGHT_KEYS = ['planning', 'inProgress', 'reviewing', 'revising', 'refreshing'];
 const TRIGGER_KEYS = ['ready', 'planChangesRequested', 'planApproved', 'readyForReview', 'needsRevision', 'refreshBranch'];
+
+/** Pair-wise stage legality (#231): at most one stage label, beside at most
+ *  one refresh label — sanctioned by PIPELINE.md → "Branch refresh". `null`
+ *  means legal; both arguments are already-resolved label names. */
+export function stageViolation(stages, refresh) {
+  if (stages.length > 1) return `carries ${stages.length} stage labels at once: ${stages.join(', ')}`;
+  if (refresh.length > 1) return `carries both refresh labels at once: ${refresh.join(', ')}`;
+  return null;
+}
 
 // --- Small text helpers, shared by `check` and `audit` -----------------------
 const lines = (text) => (text ?? '').replace(/\r\n/g, '\n').split('\n');
@@ -452,11 +463,8 @@ function runAudit(argv) {
     if (cycles.length > 0) {
       const sorted = [...cycles].sort((a, b) => a - b);
       const expected = sorted.map((_, i) => i + 1);
-      if (sorted.join(',') !== expected.join(',')) {
-        auditFail(at('review'), `cycle numbers must run 1..${cycles.length} with no gaps or duplicates, got ${sorted.join(', ')}`);
-      } else {
-        auditOk();
-      }
+      if (sorted.join(',') !== expected.join(',')) auditFail(at('review'), `cycle numbers must run 1..${cycles.length} with no gaps or duplicates, got ${sorted.join(', ')}`);
+      else auditOk();
     }
 
     // --- Zero-diff review bounce (#162) ---
@@ -520,29 +528,20 @@ function runAudit(argv) {
     }
 
     // --- Labels ---
-    const present = (keys) => keys.filter((k) => labelEnabled(k) && names.includes(label(k)));
-    const stages = present(PR_STAGE_KEYS);
-    if (stages.length > 1) {
-      auditFail(at('labels'), `carries ${stages.length} stage labels at once: ${stages.map(label).join(', ')}`);
-    } else {
-      auditOk();
-    }
+    const present = (keys) => keys.filter((k) => labelEnabled(k) && names.includes(label(k))).map(label);
+    const violation = stageViolation(present(PR_STAGE_KEYS), present(PR_REFRESH_KEYS));
+    if (violation) auditFail(at('labels'), violation);
+    else auditOk();
     if (pr.state === 'MERGED') {
       const unfinished = [...new Set([...present(IN_FLIGHT_KEYS), ...present(TRIGGER_KEYS)])];
-      if (unfinished.length > 0) {
-        auditFail(at('labels'), `merged but still labelled ${unfinished.map(label).join(', ')} — a merged pull request is terminal`);
-      } else {
-        auditOk();
-      }
+      if (unfinished.length > 0) auditFail(at('labels'), `merged but still labelled ${unfinished.join(', ')} — a merged pull request is terminal`);
+      else auditOk();
     }
 
     // --- Files ---
     const scratch = pr.files.map((f) => f.path).filter((p) => SCRATCH_PATHS.test(p));
-    if (scratch.length > 0) {
-      auditFail(at('files'), `scratch paths in the diff, which must never be committed: ${scratch.join(', ')}`);
-    } else {
-      auditOk();
-    }
+    if (scratch.length > 0) auditFail(at('files'), `scratch paths in the diff, which must never be committed: ${scratch.join(', ')}`);
+    else auditOk();
 
     // --- Cross-surface: the issue this closes ---
     const body = lines(pr.body ?? '');

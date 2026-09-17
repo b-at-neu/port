@@ -7,7 +7,7 @@
   ],
   "allowlist": [
     { "path": "scripts/checks/hooks.mjs", "lines": 757, "issue": 182 },
-    { "path": "plugins/port/templates/artifacts.mjs", "lines": 663, "issue": 183 },
+    { "path": "plugins/port/templates/artifacts.mjs", "lines": 662, "issue": 183 },
     { "path": "scripts/checks/cockpit.mjs", "lines": 608, "issue": 182 },
     { "path": "plugins/port/skills/pipeline/SKILL.md", "lines": 612, "issue": 181 },
     { "path": "plugins/port/docs/PIPELINE.md", "lines": 578, "issue": 181 },

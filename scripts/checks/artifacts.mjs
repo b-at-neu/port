@@ -153,4 +153,87 @@ export default async function ({ fail, ok }) {
       else ok();
     }
   }
+
+  // --- stageViolation: pair-wise pull-request stage legality -------------------
+  // guard(#231): the layer 2 audit's stage rule only ever counted
+  // PR_STAGE_KEYS, never the refresh pair, so issue 225's `ready for review`
+  // + `refresh branch` state passed silently. Legal: at most one stage label,
+  // beside at most one refresh label — the refresh pair is the sanctioned
+  // co-presence (PIPELINE.md → "Branch refresh"). Both directions asserted,
+  // and a failing case's message must name the labels actually offending,
+  // not just a count.
+  {
+    const { stageViolation } = await import(pathToFileURL(join(root, 'plugins/port/templates/artifacts.mjs')).href);
+    const legal = [
+      [['ready for review'], ['refresh branch']],
+      [['approved'], ['refreshing']],
+      [['approved'], []],
+      [[], []],
+    ];
+    for (const [stages, refresh] of legal) {
+      if (stageViolation(stages, refresh) != null) {
+        fail('artifacts-stage-legality', `stageViolation(${JSON.stringify(stages)}, ${JSON.stringify(refresh)}) reported a violation for a legal state`);
+      } else {
+        ok();
+      }
+    }
+    const violating = [
+      { stages: ['ready for review', 'needs human'], refresh: ['refresh branch'], offending: ['ready for review', 'needs human'] },
+      { stages: ['approved'], refresh: ['refresh branch', 'refreshing'], offending: ['refresh branch', 'refreshing'] },
+    ];
+    for (const { stages, refresh, offending } of violating) {
+      const msg = stageViolation(stages, refresh);
+      if (msg == null) {
+        fail('artifacts-stage-legality', `stageViolation(${JSON.stringify(stages)}, ${JSON.stringify(refresh)}) reported no violation for an illegal state`);
+      } else if (!offending.every((name) => msg.includes(name))) {
+        fail('artifacts-stage-legality', `stageViolation's message ${JSON.stringify(msg)} does not name every offending label in ${JSON.stringify(offending)}`);
+      } else {
+        ok();
+      }
+    }
+  }
+
+  // --- Artifact workflow's trigger widened, narrowing moved to the step -------
+  // guard(#231): the layer 2 audit running only at `approved`, so a malformed
+  // commit subject or pull request body survived a full plan → implement →
+  // review cycle before anything objected (issue 222). Read off
+  // plugins/port/templates/artifacts.yml only — "Workflow copies stay
+  // rendered from their templates" already pins the live copy to it. Three
+  // rails: the widened trigger and the retired literal are what keep this
+  // reachable as a required check; the indentation arm is what keeps the job
+  // itself from being skippable, which is the one shape that can leave a
+  // required check unreported.
+  {
+    const rel = 'plugins/port/templates/artifacts.yml';
+    const text = readFileSync(join(root, rel), 'utf8');
+
+    const typesLine = /^\s*types:\s*\[([^\]]*)\]/m.exec(text);
+    const types = typesLine ? typesLine[1].split(',').map((t) => t.trim()) : [];
+    for (const t of ['labeled', 'opened', 'synchronize']) {
+      if (!types.includes(t)) fail('artifacts-trigger', `${rel}'s pull_request 'types:' is missing '${t}'`);
+      else ok();
+    }
+
+    const ifLines = [...text.matchAll(/^( *)if:/gm)];
+    // `runs-on:` is a job-level field guaranteed to sit at job-attribute
+    // indentation — the threshold `if:` must sit deeper than, since a step's
+    // fields nest one level inside the `steps:` list beyond that.
+    const jobAttrIndent = /^( *)runs-on:/m.exec(text)?.[1]?.length;
+    if (ifLines.length !== 1 || jobAttrIndent == null) {
+      fail('artifacts-trigger', `${rel} must carry exactly one 'if:' key and a 'runs-on:' job field`);
+    } else if (ifLines[0][1].length <= jobAttrIndent) {
+      fail('artifacts-trigger', `${rel}'s 'if:' sits at job indentation — it must be a step condition, or a 'labeled' event with no matching label leaves the whole job, and any required check on it, unreported`);
+    } else {
+      ok();
+    }
+
+    const retired = 'NEVER register this as a required status check';
+    for (const p of [rel, 'docs/TESTING.md']) {
+      if (readFileSync(join(root, p), 'utf8').includes(retired)) {
+        fail('artifacts-trigger', `${p} still carries the retired '${retired}' warning`);
+      } else {
+        ok();
+      }
+    }
+  }
 }

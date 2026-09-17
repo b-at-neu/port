@@ -23,6 +23,11 @@ Each rule is worth testing by breaking it deliberately. If a check cannot be mad
 
 The script reports full schema validation as **skipped**, because a draft 2020-12 validator is a dependency and the script must run where none is installed. CI does that part.
 
+Two guards specific to `plugins/port/templates/artifacts.mjs` (#231), both in `scripts/checks/artifacts.mjs`:
+
+- `stageViolation`'s pair-wise legality, asserted directly: every sanctioned pair (a stage label alone, a refresh label alone, one of each) passes, and both illegal shapes — two stage labels, or both refresh labels — fail with a message naming the offending labels.
+- The audit workflow's trigger, read off `plugins/port/templates/artifacts.yml`: `pull_request.types` names `labeled`, `opened`, and `synchronize`; the one `if:` key sits at step indentation, never job indentation; and neither it nor this document still carries the retired "never register this as a required status check" warning.
+
 ## Layer 2 — artifact assertions on real runs
 
 The output formats live in `PIPELINE.md` prose and, until now, were asserted nowhere. The one that matters most is the review heading — the cockpit **counts** occurrences of the literal `## Code Review` to derive the cycle number, so renaming it silently breaks the cycle cap and the escalating bar, with no error anywhere. That is why the literal prefix is asserted separately from the rest of the heading.
@@ -44,7 +49,7 @@ node plugins/port/templates/artifacts.mjs audit --limit 10
 
 **`check <kind> <file>` is the earlier net, not a second layer.** It is what `commands.artifacts` points the three stage agents at: each validates the file it just wrote — a commit message, a pull request body, a review payload, a revision note — before producing it, so a malformed one fails in the worktree seconds after it is written instead of after `<labels.approved>`. It is offline: no `gh`, no network, no config read, and it works in any worktree, including one with no `.claude/port.config.json`. A repository with no Node leaves `commands.artifacts` null and gets no production-time validation at all — `audit` below is then the only net.
 
-**`audit [<pr>...] [--limit <n>]`** is today's `gh`-driven pass over finished pull requests, unchanged in what it asserts. Needs `gh` and a login; no model calls. This repository's own pull requests are the fixtures — no sandbox repository to maintain, and no stubbed `gh` whose fidelity has to be trusted.
+**`audit [<pr>...] [--limit <n>]`** now runs on every push (`opened`/`synchronize`) as well as at `<labels.approved>`, unchanged in what it asserts either way. Needs `gh` and a login; no model calls. This repository's own pull requests are the fixtures — no sandbox repository to maintain, and no stubbed `gh` whose fidelity has to be trusted.
 
 | Assertion | Source |
 | --- | --- |
@@ -54,7 +59,7 @@ node plugins/port/templates/artifacts.mjs audit --limit 10
 | An `## Approval withdrawn` comment names both a check and a 7–40 character hex SHA | Check evidence — the `<labels.approved>` carve-out |
 | A `## Rebase required` comment names both a base branch and a 7–40 character hex SHA | Rebase required |
 | Commit subjects are `#N <imperative lowercase>`, under 80 characters, no trailing period, with a `Co-Authored-By:` trailer | Commit messages |
-| At most one stage label; a merged pull request keeps no trigger or in-flight label | Label lifecycle |
+| At most one stage label, beside at most one of the refresh pair — a refresh deliberately leaves the other labels in place, so that pair is the one sanctioned co-presence; a merged pull request keeps no trigger or in-flight label | Label lifecycle — "Branch refresh" |
 | Nothing under `.temp/` or `.agents/` in the diff | Operating rules |
 | The closing issue has an `## Implementation Plan`, and the marker is read at its slot — the plan block's first non-empty line and, on the pull request, the first non-empty line under `Closes #N` — matching on both surfaces or neither, with the canonical rendering never repeated outside either slot | Session-required tickets |
 | An operator-only testing step on the issue plan reaches the pull request's testing plan | Session-required tickets |
@@ -68,7 +73,7 @@ Each rule is worth testing by breaking it deliberately — change the expected r
 
 **When a format changes deliberately, this audit is the thing that must change with it.** It encodes `PIPELINE.md` prose, so the prose and the script are one edit, not two.
 
-**Never register the audit workflow as a required check.** It runs only on `labeled`, so requiring it leaves the check pending forever on every pull request that never reaches `approved` — and a pending required check explains nothing, which is worse than a failing one.
+**The audit workflow may now be registered as a required check.** It used to run only on `labeled`, so requiring it left the check pending forever on every pull request that never reached `approved` — a pending required check explains nothing, which is worse than a failing one. Widening the trigger to `opened`/`synchronize` alone would not have fixed that: the job-level `if:` still gated the whole job, and a job skipped by its own `if:` is the one shape that leaves a required check unreported. The narrowing moved to the one step that reads `labeled`, so every event this workflow subscribes to now concludes the job — layer 1 pins the widened trigger, the step-level (not job-level) `if:`, and the retired warning's absence.
 
 ## Layer 3 — behavioural evals
 
