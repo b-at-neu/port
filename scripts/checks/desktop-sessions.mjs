@@ -84,13 +84,15 @@ export default async function ({ fail, ok }) {
   }
 
   // --- No `running`/`alive`/`isLive` identifier or string literal in production code ---
-  // guard(#78): a local transcript's recency being reported as liveness, the
-  // exact distinction Decision 4 exists to hold. Comments are stripped first
-  // — a doc comment is allowed to *discuss* the rail (as this very file's
-  // plan does, in backticks), only real code (identifiers, string literals)
-  // is checked.
+  // guard(#78, #87): a local transcript's recency being reported as
+  // liveness, the exact distinction Decision 4 exists to hold -- extended to
+  // main/search/ and shared/search/ so a hit's own recency can't drift into
+  // the same "running" framing either. Comments are stripped first — a doc
+  // comment is allowed to *discuss* the rail (as this very file's plan
+  // does, in backticks), only real code (identifiers, string literals) is
+  // checked.
   {
-    const dirs = [join(root, sessionsDir), join(root, sharedSessionsDir)];
+    const dirs = [join(root, sessionsDir), join(root, sharedSessionsDir), join(root, 'apps/desktop/src/main/search'), join(root, 'apps/desktop/src/shared/search')];
     const forbidden = ['running', 'alive', 'isLive'];
     let found = false;
     for (const dir of dirs) {

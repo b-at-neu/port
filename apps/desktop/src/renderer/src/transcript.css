@@ -11,6 +11,7 @@
 }
 
 .sessions-header__back,
+.sessions-header__search,
 .sessions-header__rescan,
 .transcript-header__back,
 .transcript-header__follow {
@@ -169,6 +170,13 @@
   border: none;
   padding: 0.15rem 0.6rem;
   font-size: 0.75rem;
+}
+
+/* A row opened from a search hit (#87) -- background plus a border colour
+   change, never colour alone (ENGINEERING §5). */
+.entry--focused {
+  border-color: #e0a72e;
+  background: #332a12;
 }
 
 .entry__label {

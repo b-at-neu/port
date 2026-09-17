@@ -13,6 +13,12 @@ export { createTailStore, tailStore } from './tail'
 export type { OpenTranscriptParams, OpenTranscriptResult, TranscriptCursor } from './transcript'
 export { openTranscript } from './transcript'
 
+// `main/search/` imports the project index and path resolver through this
+// barrel only, never `./locate` directly (ENGINEERING §1) -- one seam for
+// both the sessions adapter and search to share.
+export type { ProjectIndex } from './locate'
+export { buildProjectIndex, defaultClaudeHome, resolveTranscriptPath } from './locate'
+
 export type {
   Activity,
   AgentRecord,
