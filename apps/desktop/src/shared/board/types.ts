@@ -5,6 +5,7 @@
 import type { RepoId } from '../repos'
 import type { ItemStatus, PipelineState, ReconciledItem, RepositoryState, StageLabel } from '../state/types'
 import type { ActionAvailability, OperatorAction } from '../actions/types'
+import type { TickReport } from '../tick/types'
 
 /**
  * The four sources the watcher polls independently. Deliberately not five:
@@ -101,6 +102,16 @@ export interface BoardSnapshot {
   readonly state: PipelineState
   readonly health: readonly RepositoryHealth[]
   readonly policy: PollPolicy
+  /** One `TickReport` per ready repository (#105) — computed inside
+   *  `buildSnapshot()` from the same `PipelineState` above, never a second
+   *  poll or a second cadence. */
+  readonly tick: readonly TickReport[]
+  /** The earliest instant the watcher's one timer (`main/state/watcher.ts`)
+   *  is next due to fire — `null` once `stop()` has run, the honest
+   *  rendering of "no wakeup scheduled" (#62). Shares the same expression
+   *  `scheduleNext()` uses for its own `setTimeout` delay, so the UI can
+   *  never announce a wakeup the watcher did not actually schedule. */
+  readonly nextWakeupAt: string | null
   readonly emittedAt: string
 }
 

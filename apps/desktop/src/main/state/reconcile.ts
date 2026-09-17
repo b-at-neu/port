@@ -232,5 +232,6 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     worktreeTotals,
     viewer: pipelineFetch.viewer,
     approvalGate: entry.config.modules.approvalGate,
+    disabled: pipelineFetch.disabled,
   }
 }

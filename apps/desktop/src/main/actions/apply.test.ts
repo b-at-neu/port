@@ -90,6 +90,7 @@ function repoState(items: readonly ReconciledItem[], overrides: Partial<Extract<
     worktreeTotals: { registered: 0, attached: 0, uncorrelated: 0 },
     viewer: 'op',
     approvalGate: true,
+    disabled: [],
     ...overrides,
   }
 }
@@ -99,6 +100,8 @@ function snapshotOf(repositories: readonly RepositoryState[]): BoardSnapshot {
     state: { repositories, sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: '2026-01-01T00:00:00Z' }, readAt: '2026-01-01T00:00:00Z' },
     health: [],
     policy: { baseIntervalMs: { github: 60_000, sessions: 15_000, worktrees: 15_000, denials: 15_000 }, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: 30_000 },
+    tick: [],
+    nextWakeupAt: null,
     emittedAt: '2026-01-01T00:00:00Z',
   }
 }

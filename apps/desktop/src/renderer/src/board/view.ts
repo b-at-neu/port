@@ -11,6 +11,7 @@ import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
 import { actionsFingerprint } from './actions'
 import { notReadyCopy, rateLimitCopy, sourceHealthCopy } from './copy'
 import { buildRow } from './rows'
+import { buildTickStrip } from './tick'
 
 export interface BoardViewState {
   readonly status: 'loading' | 'ready' | 'error'
@@ -74,6 +75,10 @@ function buildHeader(state: BoardViewState): HTMLElement {
     const rateLimitText = rateLimit !== null ? rateLimitCopy(null, rateLimit.remaining, rateLimit.resetAt) : null
     strip.textContent = [...parts, rateLimitText].filter((p): p is string => p !== null).join(' · ')
     header.appendChild(strip)
+
+    // Directly under the freshness strip (#105) — re-renders on every draw,
+    // same as the strip above, so the wakeup countdown stays live.
+    header.appendChild(buildTickStrip(state.snapshot, state.now))
   }
 
   return header

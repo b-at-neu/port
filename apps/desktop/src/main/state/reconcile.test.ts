@@ -304,6 +304,21 @@ describe('reconcileRepository — pass-through fields', () => {
     if (!state.ok) throw new Error('unreachable')
     expect(state.viewer).toBeNull()
   })
+
+  it('carries pipelineFetch.disabled onto RepositoryState (#105)', () => {
+    const fetch = fetchOf([])
+    if (!fetch.ok) throw new Error('unreachable')
+    const state = reconcileRepository({
+      entry: entry(),
+      pipelineFetch: { ...fetch, disabled: ['refreshBranch'] },
+      itemsByNumberFetch: null,
+      repoSessions: sessionsOf(),
+      worktrees: worktreesOf(),
+      denials: denialsOf(),
+    })
+    if (!state.ok) throw new Error('unreachable')
+    expect(state.disabled).toEqual(['refreshBranch'])
+  })
 })
 
 describe('reconcileRepository — worktreeTotals (#80 Decision 6)', () => {

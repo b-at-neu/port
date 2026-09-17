@@ -215,6 +215,12 @@ export type RepositoryState =
        *  `shared/actions/plan.ts`'s `actionsFor` never need a second config
        *  read to know whether the gate module is even on. */
       readonly approvalGate: boolean
+      /** `PipelineFetch.disabled`, carried straight off `LabelVocabulary`'s
+       *  own `disabled` list (#105's tick engine) — every module-gated
+       *  label key this repository currently has turned off, so `planTick`
+       *  never needs a second config read to report a gated stage as
+       *  absent rather than a stage rendered at zero. */
+      readonly disabled: readonly LabelKey[]
     }
   | {
       readonly ok: false
