@@ -2,17 +2,27 @@ import './index.css'
 import './transcript.css'
 import './board.css'
 import './claim.css'
+import './search.css'
 import type { AppInfo } from '../../shared/ipc'
 import type { RepoId, RepositoryEntry } from '../../shared/repos'
 import type { BoardSnapshot, GroupBy } from '../../shared/board/types'
-import type { TranscriptTailFailureKind } from '../../shared/sessions/transcript'
 import { render } from './repositories'
 import type { RegistryBanner, RendererState } from './repositories'
 import type { WorktreeSectionState } from './worktrees'
-import { renderSessionsPicker, titleOf } from './sessions'
+import { renderSessionsPicker } from './sessions'
 import type { SessionsPickerState } from './sessions'
-import { applyTailDelta, clearTailBanner, jumpToLatest, renderTranscript, setFollowingIndicator, showTailBanner, showTruncatedNote } from './transcript'
-import type { TailBannerKind, TranscriptViewState } from './transcript'
+import { jumpToLatest, renderTranscript } from './transcript'
+import {
+  closeTranscriptTail,
+  handleVisibilityChange,
+  openTranscriptTail,
+  registerTranscriptRedraw,
+  resumeFollowing,
+  toggleFollow,
+  transcriptScreenState,
+} from './transcript-tail'
+import { agentLabel, sessionLabel } from '../../shared/sessions/label'
+import { changeSearchScope, openSearch, registerSearchRedraw, renderSearch, searchScreenState, submitSearch } from './search'
 import { render as renderBoard } from './board/view'
 import type { BoardViewState } from './board/view'
 import { handleItemAction, pruneItemActionStates } from './board/actions'
@@ -33,7 +43,11 @@ type View =
   | { readonly screen: 'board' }
   | { readonly screen: 'repos' }
   | { readonly screen: 'sessions'; readonly repoId: RepoId; readonly repoLabel: string }
-  | { readonly screen: 'transcript'; readonly sessionId: string; readonly agentId: string | null; readonly title: string }
+  | { readonly screen: 'search'; readonly repoId: RepoId; readonly repoLabel: string }
+  /** `from` is where `‹ Back` returns to -- the sessions picker normally,
+   *  the search screen (already in memory, no requery) when a hit opened
+   *  this transcript. */
+  | { readonly screen: 'transcript'; readonly sessionId: string; readonly agentId: string | null; readonly title: string; readonly from: 'sessions' | 'search'; readonly focusIndex: number | null }
 
 /** Every screen except `board` lives under the 'Repositories' tab — drilling
  *  into a session or transcript never looks like it left that tab. */
@@ -46,7 +60,6 @@ let worktreeSections = new Map<RepoId, WorktreeSectionState>()
 let view: View = { screen: 'board' }
 let boardState: BoardViewState = { status: 'loading', snapshot: null, groupBy: 'stage', refreshing: false, now: new Date() }
 let sessionsState: SessionsPickerState = { status: 'loading' }
-let transcriptState: TranscriptViewState = { status: 'loading' }
 
 function drawNav(): void {
   if (!nav) return
@@ -74,8 +87,10 @@ function drawRepositories(): void {
     render(reposContainer, { ...state, worktreeSections })
   } else if (view.screen === 'sessions') {
     renderSessionsPicker(reposContainer, view.repoId, view.repoLabel, sessionsState)
+  } else if (view.screen === 'search') {
+    renderSearch(reposContainer, searchScreenState())
   } else if (view.screen === 'transcript') {
-    renderTranscript(reposContainer, transcriptState)
+    renderTranscript(reposContainer, transcriptScreenState())
   }
 }
 
@@ -278,137 +293,6 @@ function handleBackToRepos(): void {
   draw()
 }
 
-/** Following polls at a floor of one second — a local `fs.stat`, never a
- *  network call, so there is no pacing ladder here (`ENGINEERING §6`'s
- *  ladder is about the cockpit's GitHub tick): backing off would only add
- *  latency exactly when an idle agent wakes back up. */
-const TAIL_INTERVAL_MS = 1000
-
-/** The live follow session for whichever transcript is on screen — `null`
- *  outside the transcript view. Closed on every navigation away and
- *  replaced (never merged) on every re-open, so a superseded poll's
- *  response is dropped by the `tailId` check in `pollTranscriptTail`. */
-interface TailSession {
-  readonly tailId: string
-  following: boolean
-  timer: ReturnType<typeof setTimeout> | null
-}
-
-let tailSession: TailSession | null = null
-
-function stopTailTimer(): void {
-  if (tailSession?.timer != null) {
-    clearTimeout(tailSession.timer)
-    tailSession.timer = null
-  }
-}
-
-function scheduleNextPoll(delayMs: number): void {
-  if (tailSession === null || !tailSession.following || document.hidden) return
-  const session = tailSession
-  session.timer = setTimeout(() => void pollTranscriptTail(session.tailId), delayMs)
-}
-
-function closeTranscriptTail(): void {
-  stopTailTimer()
-  if (tailSession === null) return
-  const { tailId } = tailSession
-  tailSession = null
-  window.port.transcriptTailClose({ tailId }).catch((error: unknown) => {
-    console.error('Failed to close a transcript tail', error)
-  })
-}
-
-/** `invalid-id`/`session-unresolved` cannot occur once a tail has already
- *  opened successfully once — the id never changes underneath a follow
- *  session — so they fold into `unreadable` defensively rather than adding
- *  a banner copy no real poll ever produces. */
-function toBannerKind(kind: TranscriptTailFailureKind): TailBannerKind {
-  if (kind === 'not-found' || kind === 'unreadable' || kind === 'too-large') return kind
-  return 'unreadable'
-}
-
-async function openTranscriptTail(sessionId: string, agentId: string | null, title: string): Promise<void> {
-  transcriptState = { status: 'loading' }
-  draw()
-  try {
-    const opened = await window.port.transcriptTailOpen({ sessionId, agentId })
-    if (!opened.ok) {
-      transcriptState = { status: 'error', kind: opened.kind, message: opened.message, path: opened.path }
-      tailSession = null
-      draw()
-      return
-    }
-    transcriptState = { status: 'ready', source: opened.source, entries: opened.entries, title }
-    draw()
-    tailSession = { tailId: opened.tailId, following: true, timer: null }
-    scheduleNextPoll(TAIL_INTERVAL_MS)
-  } catch (error) {
-    console.error('Failed to open a transcript tail', error)
-    tailSession = null
-    transcriptState = { status: 'unreachable' }
-    draw()
-  }
-}
-
-/** `truncated`/`unknown-tail` both mean "the cursor no longer applies" —
- *  re-open from the start rather than reporting either as a banner, which
- *  an operator would misread as the agent having stopped. Only `truncated`
- *  leaves a trace: one dim note once the fresh render lands. */
-async function reopenTranscriptTail(noteTruncation: boolean): Promise<void> {
-  if (view.screen !== 'transcript') return
-  await openTranscriptTail(view.sessionId, view.agentId, view.title)
-  if (noteTruncation) showTruncatedNote()
-}
-
-function pauseFollowing(): void {
-  if (tailSession === null) return
-  tailSession.following = false
-  stopTailTimer()
-  setFollowingIndicator(false)
-}
-
-/** Shared by the follow toggle's resume and the error banner's `Retry` —
- *  both mean "poll again right now", which is also the manual-refresh
- *  affordance `Reload` used to be. */
-function resumeFollowing(): void {
-  if (tailSession === null) return
-  tailSession.following = true
-  setFollowingIndicator(true)
-  clearTailBanner()
-  void pollTranscriptTail(tailSession.tailId)
-}
-
-async function pollTranscriptTail(tailId: string): Promise<void> {
-  if (tailSession === null || tailSession.tailId !== tailId) return // superseded by a navigation or a re-open
-  try {
-    const polled = await window.port.transcriptTailPoll({ tailId })
-    if (tailSession === null || tailSession.tailId !== tailId) return
-
-    if (!polled.ok) {
-      if (polled.kind === 'unknown-tail') {
-        await reopenTranscriptTail(false)
-        return
-      }
-      if (polled.kind === 'truncated') {
-        await reopenTranscriptTail(true)
-        return
-      }
-      pauseFollowing()
-      showTailBanner(toBannerKind(polled.kind), polled.message, polled.path)
-      return
-    }
-
-    clearTailBanner()
-    applyTailDelta({ appended: polled.appended, patched: polled.patched, source: polled.source })
-    scheduleNextPoll(polled.hasMore ? 0 : TAIL_INTERVAL_MS)
-  } catch (error) {
-    console.error('Failed to poll a transcript tail', error)
-    pauseFollowing()
-    showTailBanner('unreachable', 'Lost contact with the main process.', null)
-  }
-}
-
 /** #83's UX spec: "stage plus #N, else the session title" — resolved from
  *  the already-loaded `sessionsState` (`SessionRecord`/`AgentRecord`), never
  *  the raw id, so the transcript header and the back-to-sessions flow show
@@ -418,25 +302,40 @@ function titleFor(sessionId: string, agentId: string | null): string {
   const scan = sessionsState.status === 'ready' ? sessionsState.scan : null
   if (agentId !== null) {
     const agent = scan?.agents.find((a) => a.agentId === agentId)
-    if (agent === undefined) return `agent-${agentId}`
-    const stage = agent.stage ?? agent.agentType
-    return agent.itemNumber !== null ? `${stage} #${agent.itemNumber}` : stage
+    return agent !== undefined ? agentLabel(agent) : `agent-${agentId}`
   }
   const session = scan?.sessions.find((s) => s.sessionId === sessionId)
-  return session !== undefined ? titleOf(session) : sessionId
+  return session !== undefined ? sessionLabel(session) : sessionId
 }
 
 function handleOpenTranscript(sessionId: string, agentId: string): void {
   const normalizedAgentId = agentId === '' ? null : agentId
   const title = titleFor(sessionId, normalizedAgentId)
-  view = { screen: 'transcript', sessionId, agentId: normalizedAgentId, title }
-  void openTranscriptTail(sessionId, normalizedAgentId, title)
+  view = { screen: 'transcript', sessionId, agentId: normalizedAgentId, title, from: 'sessions', focusIndex: null }
+  void openTranscriptTail(sessionId, normalizedAgentId, title, null)
+}
+
+/** A search hit's own open route — `label` is the group's already-resolved
+ *  `sessionLabel`/`agentLabel`, so this never re-derives a title the way
+ *  `handleOpenTranscript` does from the (possibly stale) sessions picker. */
+function handleOpenSearchHit(sessionId: string, agentId: string, entryIndex: number, label: string): void {
+  const normalizedAgentId = agentId === '' ? null : agentId
+  view = { screen: 'transcript', sessionId, agentId: normalizedAgentId, title: label, from: 'search', focusIndex: entryIndex }
+  void openTranscriptTail(sessionId, normalizedAgentId, label, entryIndex)
 }
 
 function handleBackToSessions(): void {
   if (view.screen !== 'transcript') return
-  const { sessionId } = view
+  const { sessionId, from } = view
   closeTranscriptTail()
+
+  if (from === 'search') {
+    const search = searchScreenState()
+    view = { screen: 'search', repoId: search.repoId, repoLabel: search.repoLabel }
+    draw()
+    return
+  }
+
   // The picker's own state is still in memory from the last scan — reopen
   // it without a fresh round trip; `rescan-sessions` covers a deliberate
   // refresh.
@@ -445,24 +344,23 @@ function handleBackToSessions(): void {
   draw()
 }
 
-function handleToggleFollow(): void {
-  if (tailSession === null) return
-  if (tailSession.following) pauseFollowing()
-  else resumeFollowing()
+function handleOpenSearch(repoId: RepoId): void {
+  view = { screen: 'search', repoId, repoLabel: repoLabelFor(repoId) }
+  openSearch(repoId, repoLabelFor(repoId))
 }
 
-function handleRetryTranscript(): void {
-  resumeFollowing()
+function handleBackFromSearch(): void {
+  if (view.screen !== 'search') return
+  view = { screen: 'sessions', repoId: view.repoId, repoLabel: view.repoLabel }
+  draw()
 }
 
-document.addEventListener('visibilitychange', () => {
-  if (view.screen !== 'transcript' || tailSession === null) return
-  if (document.hidden) {
-    stopTailTimer()
-  } else if (tailSession.following) {
-    void pollTranscriptTail(tailSession.tailId) // poll once immediately on return
-  }
-})
+function handleSearchScopeChange(value: string): void {
+  const search = searchScreenState()
+  changeSearchScope(value === 'all' ? { kind: 'all' } : { kind: 'repo', repoId: search.repoId })
+}
+
+document.addEventListener('visibilitychange', handleVisibilityChange)
 
 app?.addEventListener('click', (event) => {
   const target = event.target
@@ -481,11 +379,16 @@ app?.addEventListener('click', (event) => {
   else if (action === 'rescan-sessions') void loadSessions()
   else if (action === 'open-transcript' && target.dataset.sessionId !== undefined) handleOpenTranscript(target.dataset.sessionId, target.dataset.agentId ?? '')
   else if (action === 'back-to-sessions') handleBackToSessions()
+  else if (action === 'open-search' && target.dataset.repoId) handleOpenSearch(target.dataset.repoId as RepoId)
+  else if (action === 'search-back') handleBackFromSearch()
+  else if (action === 'search-hit' && target.dataset.sessionId !== undefined) {
+    handleOpenSearchHit(target.dataset.sessionId, target.dataset.agentId ?? '', Number(target.dataset.entryIndex ?? '0'), target.dataset.label ?? '')
+  }
   else if (action === 'board-refresh') void handleBoardRefresh()
   else if (action === 'board-group-toggle') toggleGroupBy()
-  else if (action === 'toggle-follow') handleToggleFollow()
+  else if (action === 'toggle-follow') toggleFollow()
   else if (action === 'jump-to-latest') jumpToLatest()
-  else if (action === 'retry-transcript') handleRetryTranscript()
+  else if (action === 'retry-transcript') resumeFollowing()
   else if (action === 'claim-open') openClaimDialog()
   else if (action?.startsWith('item-')) handleItemActionClick(target)
   else {
@@ -494,6 +397,21 @@ app?.addEventListener('click', (event) => {
   }
 })
 
+app?.addEventListener('change', (event) => {
+  const target = event.target
+  if (target instanceof HTMLSelectElement && target.dataset.field === 'search-scope') handleSearchScopeChange(target.value)
+})
+
+app?.addEventListener('submit', (event) => {
+  const target = event.target
+  if (!(target instanceof HTMLFormElement) || target.dataset.action !== 'search-submit') return
+  event.preventDefault()
+  const input = target.querySelector<HTMLInputElement>('[data-field="search-query"]')
+  void submitSearch(input?.value ?? '')
+})
+
+registerSearchRedraw(draw)
+registerTranscriptRedraw(draw)
 draw()
 void refreshRepositories()
 void initBoard()

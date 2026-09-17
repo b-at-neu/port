@@ -16,7 +16,11 @@ export type TranscriptViewState =
   /** The IPC round trip itself failed — distinct from every `TranscriptFailureKind`
    *  above, which are answers the main process itself returned. */
   | { readonly status: 'unreachable' }
-  | { readonly status: 'ready'; readonly source: TranscriptSource; readonly entries: readonly TranscriptEntry[]; readonly title: string }
+  /** `focusIndex` is the entry ordinal to scroll to, highlight, and expand
+   *  on open -- set when a search hit opened this transcript, `null` from
+   *  the sessions picker. Read once, on the first `renderTranscript` call;
+   *  a later poll never re-focuses anything. */
+  | { readonly status: 'ready'; readonly source: TranscriptSource; readonly entries: readonly TranscriptEntry[]; readonly title: string; readonly focusIndex: number | null }
 
 /** Above this many entries, the list is appended in slices across
  *  `requestAnimationFrame` calls rather than in one synchronous pass — the
@@ -30,7 +34,7 @@ const PROMPT_CLAMP_LINES = 12
  *  pin-to-bottom behaviour. */
 const NEAR_BOTTOM_PX = 64
 
-function text(tag: string, className: string, value: string): HTMLElement {
+export function text(tag: string, className: string, value: string): HTMLElement {
   const el = document.createElement(tag)
   el.className = className
   el.textContent = value
@@ -250,6 +254,7 @@ interface LiveModel {
   readonly followToggle: HTMLButtonElement
   readonly jumpButton: HTMLButtonElement
   readonly bannerHost: HTMLElement
+  readonly focusIndex: number | null
   emptyEl: HTMLElement | null
   pendingBelow: number
 }
@@ -261,8 +266,15 @@ function buildAndAppendRow(index: number): void {
   const entry = live.entries[index]
   if (entry === undefined) return
   const row = buildRow(entry)
+  row.dataset.entryIndex = String(index)
   live.rows[index] = row
   live.list.appendChild(row)
+
+  if (index === live.focusIndex) {
+    if (row instanceof HTMLDetailsElement) row.open = true
+    row.classList.add('entry--focused')
+    row.scrollIntoView({ block: 'center' })
+  }
 }
 
 function appendRange(start: number, end: number, generation: number): void {
@@ -333,7 +345,7 @@ export function renderTranscript(container: HTMLElement, state: TranscriptViewSt
     return
   }
 
-  const { source, entries, title } = state
+  const { source, entries, title, focusIndex } = state
   const { header, subtitle, followToggle } = buildHeader(title, true)
   container.appendChild(header)
   subtitle.textContent = subtitleFor(source, entries.length)
@@ -377,6 +389,7 @@ export function renderTranscript(container: HTMLElement, state: TranscriptViewSt
     followToggle,
     jumpButton,
     bannerHost,
+    focusIndex,
     emptyEl,
     pendingBelow: 0,
   }
@@ -446,52 +459,9 @@ export function setFollowingIndicator(following: boolean): void {
   setFollowToggleState(live.followToggle, following)
 }
 
-export type TailBannerKind = 'not-found' | 'unreadable' | 'too-large' | 'unreachable'
-
-function bannerCopy(kind: TailBannerKind, message: string, path: string | null): string {
-  const p = path ?? ''
-  switch (kind) {
-    case 'not-found':
-      return `The transcript file is gone — it may have been deleted. ${p}`
-    case 'unreadable':
-      return `Couldn't read ${p} — ${message}`
-    case 'too-large':
-      return `This transcript has grown past the 64 MB Port will read. Open it directly: ${p}`
-    case 'unreachable':
-      return 'Lost contact with the main process.'
-  }
-}
-
-/** Shows an error banner above the rows already on screen -- nothing is
- *  ever wiped, since losing the transcript the operator is mid-read is
- *  worse than the error. `too-large` carries no `Retry`, since retrying
- *  cannot help. */
-export function showTailBanner(kind: TailBannerKind, message: string, path: string | null): void {
-  if (live === null) return
-  live.bannerHost.textContent = ''
-  const banner = document.createElement('div')
-  banner.className = 'transcript-banner'
-  banner.appendChild(text('p', 'transcript-banner__message', bannerCopy(kind, message, path)))
-  if (kind !== 'too-large') {
-    const retry = document.createElement('button')
-    retry.className = 'transcript-banner__retry'
-    retry.textContent = 'Retry'
-    retry.dataset.action = 'retry-transcript'
-    banner.appendChild(retry)
-  }
-  live.bannerHost.appendChild(banner)
-}
-
-export function clearTailBanner(): void {
-  if (live === null) return
-  live.bannerHost.textContent = ''
-}
-
-/** `truncated` carries no banner -- the caller re-opens (a fresh
- *  `renderTranscript` call) and then calls this once, so the dim note
- *  survives that reset. */
-export function showTruncatedNote(): void {
-  if (live === null) return
-  live.bannerHost.textContent = ''
-  live.bannerHost.appendChild(text('p', 'transcript-note transcript-note--dim', 'This transcript was rewritten — reloaded from the start.'))
+/** `transcript-banner.ts`'s one seam into this module's private `live`
+ *  model -- split out once the banner functions plus the search screen's
+ *  own wiring pushed this file past ENGINEERING §7's 500-line limit. */
+export function getBannerHost(): HTMLElement | null {
+  return live?.bannerHost ?? null
 }
