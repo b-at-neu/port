@@ -10,6 +10,7 @@ import type { ReconciledItem, RepositoryState } from '../../shared/state/types'
 import type { TickActionable, TickBlind, TickClaim, TickHeld, TickReport } from '../../shared/tick/types'
 import type { DispatchLedger } from './ledger'
 import { classifyUnmatched, RETRY_TRIGGER } from './liveness'
+import { partitionOwnership } from './ownership'
 import { AGENT_FOR_TRIGGER } from './routing'
 
 export interface PlanTickParams {
@@ -41,10 +42,14 @@ function stageKeyOf(item: Pick<ReconciledItem, 'stage' | 'stages'>): LabelKey | 
 /** Held reasons, first hit wins: unowned before other-operator before
  *  session-required — the ladder `ReconciledItem.waitingOn` already uses,
  *  with an ownership check inserted ahead of the session-required one,
- *  since a tick (unlike `waitingOn`) knows the viewer. */
-function heldReasonOf(item: ReconciledItem, viewer: string): TickHeld['reason'] | null {
-  if (item.assignees.length === 0) return 'unowned'
-  if (!item.assignees.includes(viewer)) return 'other-operator'
+ *  since a tick (unlike `waitingOn`) knows the viewer. The unowned/
+ *  other-operator split itself is never re-derived by hand here — it comes
+ *  from `partitionOwnership`, the same ported-and-pinned primitive
+ *  `ownership.test.ts` asserts against the shared case table, so a future
+ *  change to `classify.mjs`'s rule can't silently diverge from this caller. */
+function heldReasonOf(item: ReconciledItem, unowned: ReadonlySet<number>, others: ReadonlySet<number>): TickHeld['reason'] | null {
+  if (unowned.has(item.number)) return 'unowned'
+  if (others.has(item.number)) return 'other-operator'
   if (item.sessionRequired) return 'session-required'
   return null
 }
@@ -52,17 +57,25 @@ function heldReasonOf(item: ReconciledItem, viewer: string): TickHeld['reason'] 
 function actionableAndHeld(items: readonly ReconciledItem[], viewer: string): { readonly actionable: readonly TickActionable[]; readonly held: readonly TickHeld[] } {
   const actionable: TickActionable[] = []
   const held: TickHeld[] = []
-  for (const item of items) {
-    if (item.stage !== 'trigger') continue
-    // Defensive: `STAGE_PRECEDENCE` already ranks `in-flight` above
-    // `trigger`, so a `trigger`-staged item can never carry an in-flight
-    // label too — checked anyway, since this module never assumes another
-    // module's ranking stays exactly as ordered today.
-    if (item.stages.some((label) => label.role === 'in-flight')) continue
+
+  const triggerItems = items.filter(
+    (item) =>
+      item.stage === 'trigger' &&
+      // Defensive: `STAGE_PRECEDENCE` already ranks `in-flight` above
+      // `trigger`, so a `trigger`-staged item can never carry an in-flight
+      // label too — checked anyway, since this module never assumes another
+      // module's ranking stays exactly as ordered today.
+      !item.stages.some((label) => label.role === 'in-flight'),
+  )
+  const { unowned, others } = partitionOwnership(triggerItems, viewer)
+  const unownedNumbers = new Set(unowned.map((i) => i.number))
+  const othersNumbers = new Set(others.map((i) => i.number))
+
+  for (const item of triggerItems) {
     const trigger = stageKeyOf(item)
     if (trigger === null) continue
 
-    const reason = heldReasonOf(item, viewer)
+    const reason = heldReasonOf(item, unownedNumbers, othersNumbers)
     if (reason !== null) {
       held.push({ number: item.number, kind: item.kind, trigger, reason })
       continue
