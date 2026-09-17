@@ -7,8 +7,8 @@ import { root, readJson } from '../lib/files.mjs';
 
 export default async function ({ fail, ok }) {
   // --- hooks.json command shape ----------------------------------------------
-  // Regression test for the argv-array form, which loaded as Hooks (0): no
-  // error, no warning, the hook simply absent.
+  // guard: the hook loading as Hooks (0) — no error, just absent. Regression
+  // test for the argv-array form.
   {
     const hooks = readJson('plugins/port/hooks/hooks.json');
     const entries = Object.values(hooks.hooks ?? {}).flat();
@@ -27,9 +27,9 @@ export default async function ({ fail, ok }) {
   }
 
   // --- Guard hook is wired on PreToolUse for Bash and the write tools --------
-  // Regression guard for #67: the deny is a hook decision now, not a
-  // prediction from `dontAsk`. A renamed hook file or a dropped matcher is
-  // otherwise silently absent — nothing errors, the guard simply never fires.
+  // guard(#67): the guard hook silently absent after a rename or a dropped
+  // matcher — nothing errors, it simply never fires. The deny is a hook
+  // decision now, not a prediction from `dontAsk`.
   {
     const hooksJson = readJson('plugins/port/hooks/hooks.json');
     const entries = Object.entries(hooksJson.hooks ?? {});
@@ -57,9 +57,9 @@ export default async function ({ fail, ok }) {
   }
 
   // --- Guard hook classifier ---------------------------------------------------
-  // Unit-tests the pure decision logic in isolation from stdin/stdout/exit-code
-  // plumbing. Each case is the regression a real incident or the ticket's own
-  // acceptance criteria named.
+  // guard(#67): the mechanism that actually denies, independent of
+  // parent-session mode. Unit-tests the pure decision logic in isolation
+  // from stdin/stdout/exit-code plumbing.
   {
     const { allowMatchers, decide, callerKind, globToRegExp, recentOperatorMessages, operatorNamed, invokedCockpitSkill } =
       await import(pathToFileURL(join(root, 'plugins/port/hooks/lib/guard-rules.mjs')).href);
@@ -215,7 +215,8 @@ export default async function ({ fail, ok }) {
     }
     ok();
 
-    // --- Cockpit rules: loop rule (#120) ---------------------------------------
+    // --- Cockpit rules: loop rule ------------------------------------------------
+    // guard(#120): the cockpit losing everything but the first loop iteration when the turn dies mid-loop.
     const plainPayload = (overrides = {}) => ({
       cwd: '/home/operator/some-other-project',
       session_id: 'sess-plain',
@@ -317,18 +318,17 @@ export default async function ({ fail, ok }) {
       'allow',
     );
 
-    // --- Cockpit rules: install rule (#144) -------------------------------------
-    // Every install scope shares one `installPath`, so a plugin install run
-    // from inside a managed worktree silently repoints every session on the
-    // machine and keeps doing so after that worktree is gone. Unlike the loop
-    // and gate rules, this one does **not** exempt `impl-<n>` — the blast
-    // radius is identical whether an operator or a dispatched agent typed it.
-    // Deliberately neither an `agent-` nor an `impl-` name — a worktree naming
-    // scheme this repository's own harness doesn't happen to use, so this
-    // isolates `isManagedWorktree` (any `.claude/worktrees/` path) from the two
-    // *other* signals (`isSubagent` via the `agent-` pattern, `isOperatorWorktree`
-    // via `impl-`) that would otherwise make these cases pass for a different
-    // reason than the one being tested.
+    // --- Cockpit rules: install rule ---------------------------------------------
+    // guard(#144): an install from inside any managed worktree silently
+    // repointing every session on the machine via the shared `installPath`,
+    // and keeping doing so after that worktree is gone. Unlike the loop and
+    // gate rules, this one does **not** exempt `impl-<n>` — the blast radius
+    // is identical whether an operator or a dispatched agent typed it.
+    // Deliberately neither an `agent-` nor an `impl-` name — a naming scheme
+    // this repository's harness doesn't use, so this isolates
+    // `isManagedWorktree` (any `.claude/worktrees/` path) from the two
+    // *other* signals (`isSubagent` via `agent-`, `isOperatorWorktree` via
+    // `impl-`) that would otherwise make these cases pass for the wrong reason.
     const managedWorktreePayload = (overrides = {}) => ({
       cwd: '/home/operator/some-other-project/.claude/worktrees/other-9',
       session_id: 'sess-worktree',
@@ -432,7 +432,8 @@ export default async function ({ fail, ok }) {
       }
     }
 
-    // --- Cockpit rules: gate rule (#138) ----------------------------------------
+    // --- Cockpit rules: gate rule ------------------------------------------------
+    // guard(#138, #142): the cockpit clearing its own needs-human gate under throughput pressure, unverified.
     const needsHumanLabel = 'needs human';
 
     // A gate-clear attempt with operator messages naming a different item →
@@ -452,8 +453,8 @@ export default async function ({ fail, ok }) {
       'deny',
     );
 
-    // Same command, with an operator message naming #134 → gate-clear (allowed
-    // and logged as the audit record, never a plain 'allow').
+    // Same command, with a message naming pull request 134 → gate-clear
+    // (allowed and logged as the audit record, never a plain 'allow').
     check(
       '#138 gate clear allowed — operator named the item',
       decide({
@@ -594,6 +595,7 @@ export default async function ({ fail, ok }) {
     }
 
     // --- recentOperatorMessages / operatorNamed --------------------------------
+    // guard(#138, #142): the gate-clear rail's own transcript-reading and naming primitives drifting from the gate rule above.
     {
       const jsonl = [
         JSON.stringify({ type: 'user', isMeta: true, message: { content: 'session start meta, ignore' } }),
@@ -650,11 +652,9 @@ export default async function ({ fail, ok }) {
   }
 
   // --- Guard hook end-to-end wiring -------------------------------------------
-  // Spawns the real hook script, so a stdin/stdout/exit-code mistake the
-  // classifier's direct import cannot see still surfaces. The fixture directory
-  // must sit outside any git repository, or `git rev-parse --git-common-dir`
-  // resolves to this checkout and the fixture appends to the operator's own
-  // `.agents/denials.log`.
+  // guard(#67): stdin/stdout/exit-code wiring the classifier's direct import
+  // cannot see. The fixture directory must sit outside any git repository,
+  // or `git rev-parse --git-common-dir` resolves to this checkout.
   {
     const hookPath = join(root, 'plugins/port/hooks/agent-guard.mjs');
     const fixture = mkdtempSync(join(tmpdir(), 'port-guard-hook-'));

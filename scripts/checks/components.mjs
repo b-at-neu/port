@@ -2,8 +2,8 @@ import { basename, dirname, join } from 'node:path';
 import { root, walk, relOf, frontmatter } from '../lib/files.mjs';
 
 // --- Components parse and declare what they must ---------------------------
-// A skill or agent whose frontmatter is malformed is silently missing from the
-// component inventory. Nothing errors; it simply is not there.
+// guard: a skill or agent whose frontmatter is malformed is silently missing
+// from the component inventory. Nothing errors; it simply is not there.
 export default async function ({ fail, ok }) {
   for (const [dir, kind] of [
     ['plugins/port/agents', 'agent'],

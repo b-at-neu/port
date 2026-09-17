@@ -27,8 +27,11 @@ export function branchModelError(cfg) {
 }
 
 export default async function ({ fail, note, ok }) {
-  // --- Branch model coherence rail (#54) --------------------------------------
-  // A check that cannot be made to fail is not a check: self-test branchModelError
+  // --- Branch model coherence rail ---------------------------------------------
+  // guard(#54): a single-branch repository (null production) silently
+  // asking for both no release flow and a release flow, or a dropped
+  // placeholder left unsubstituted for an adopter with one branch. A check
+  // that cannot be made to fail is not a check: self-test branchModelError
   // against a passing and a failing example of each rule before trusting it.
   {
     const cases = [
@@ -156,6 +159,8 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Templates are valid JSON ----------------------------------------------
+  // guard: anything downstream reading `undefined` off a template or manifest
+  // that fails to parse.
   for (const t of [
     'plugins/port/templates/permissions.base.json',
     'plugins/port/templates/labels.json',
@@ -173,11 +178,11 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- This repository's own permissions are non-empty -----------------------
-  // This is the exact condition the cockpit's startup preflight checks at
-  // runtime: a repository with `.claude/settings.json` present but
-  // `permissions.allow` missing or empty left the pilot repository with no
-  // permission rules at all, fully silently — stage agents run `dontAsk` and
-  // auto-deny anything not allowlisted.
+  // guard: a repository with `.claude/settings.json` present but
+  // `permissions.allow` missing or empty, leaving no permission rules at all,
+  // fully silently — stage agents run `dontAsk` and auto-deny anything not
+  // allowlisted. This is the exact condition the cockpit's startup preflight
+  // checks at runtime.
   {
     const settings = readJson('.claude/settings.json');
     const allow = settings.permissions?.allow;
@@ -189,8 +194,8 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- The config template matches its own schema's shape --------------------
-  // Regression test for checks written as bare strings: still valid JSON, still
-  // plausible-looking, and every consumer reading `entry.run` gets undefined.
+  // guard: bare strings, which parse fine and read plausibly while every
+  // consumer reading `entry.run` gets undefined.
   {
     const cfg = readJson('plugins/port/templates/port.config.json');
     for (const entry of cfg.commands?.checks ?? []) {
@@ -207,8 +212,10 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Schema fixtures still discriminate ------------------------------------
-  // Needs a real validator. Reported as skipped rather than silently passing,
-  // because a check that quietly does nothing is worse than one that is absent.
+  // guard: a fixture set that only proves acceptance proves nothing — both
+  // directions must be asserted. Needs a real validator; reported as skipped
+  // rather than silently passing, because a check that quietly does nothing
+  // is worse than one that is absent.
   {
     const fixtures = walk(join(root, 'schema/fixtures')).filter((f) => f.endsWith('.json'));
     const valid = fixtures.filter((f) => basename(f).startsWith('valid.'));
@@ -229,11 +236,13 @@ export default async function ({ fail, note, ok }) {
     ok();
   }
 
-  // --- No previewDatabase survives (#189) -------------------------------------
-  // Regression guard: #189 deleted modules.previewDatabase and promoted refresh
-  // mode to the pipeline's only rebase route. The flag's own literal is the one
-  // place it may still appear — this check's message and this comment — so the
-  // walk deliberately excludes scripts/, never the repository root.
+  // --- No previewDatabase survives ---------------------------------------------
+  // guard(#189): a deleted config flag's name surviving as dead scaffolding
+  // somewhere it was never swept. This issue deleted modules.previewDatabase
+  // and promoted refresh mode to the pipeline's only rebase route. The
+  // flag's own literal is the one place it may still appear — this check's
+  // message and this comment — so the walk deliberately excludes scripts/,
+  // never the repository root.
   {
     const scanDirs = ['plugins', 'schema', 'apps/desktop/src', 'evals', '.github'];
     const hits = [];
@@ -253,9 +262,9 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- CI workflow names every platform in its matrix -------------------------
-  // Regression guard: quietly dropping `windows-latest` after a red run would
-  // look like a tidy-up in review, and nothing else would notice the platform
-  // stopped being tested.
+  // guard(#73): quietly dropping a platform after a red run, which would
+  // look like a tidy-up in review, and nothing else would notice the
+  // platform stopped being tested.
   {
     const rel = '.github/workflows/checks.yml';
     const text = readFileSync(join(root, rel), 'utf8');

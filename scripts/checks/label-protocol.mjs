@@ -3,14 +3,14 @@ import { join } from 'node:path';
 import { root, readJson, walk, relOf, frontmatter } from '../lib/files.mjs';
 
 // --- Label transitions are compare-and-swap ---------------------------------
-// Regression guard for #209: `gh issue edit`/`gh pr edit --remove-label X`
-// exits 0 when X is not present, so a transition issued against a stale view
-// of an item's labels silently degrades into a bare add and leaves two
-// contradictory stage labels behind (#209's Route 2 and Route 3). Every agent
-// granting Bash must carry the byte-identical `label-cas` block that turns
-// every `--remove-label` into a checked precondition. There is no PIPELINE.md
-// canonical copy today — the #177 file-size ratchet forbids that file
-// growing until #181 frees the headroom — so the four agent copies are
+// guard(#209): `gh issue edit`/`gh pr edit --remove-label X` exits 0 when X
+// is not present, so a transition issued against a stale view of an item's
+// labels silently degrades into a bare add and leaves two contradictory
+// stage labels behind (Route 2 and Route 3). Every agent granting Bash must
+// carry the byte-identical `label-cas` block that turns every
+// `--remove-label` into a checked precondition. There is no PIPELINE.md
+// canonical copy today — issue 177's file-size ratchet forbids that file
+// growing until issue 181 frees the headroom — so the four agent copies are
 // compared pairwise against each other instead of against one source.
 export default async function ({ fail, note, ok }) {
   const BEGIN = '<!-- label-cas:begin -->';
@@ -76,10 +76,14 @@ export default async function ({ fail, note, ok }) {
     }
   }
 
-  // The block's carve-outs agree with templates/labels.json, both directions:
-  // every marker-role label must be named, and the sanctioned co-presence
-  // pair is exactly refreshBranch/refreshing — so a new marker label fails
-  // this check until the block is updated to name it.
+  // --- Label-cas carve-outs and existing-work pre-flight ---------------------
+  // guard(#209): the block's carve-outs agree with templates/labels.json,
+  // both directions — every marker-role label must be named, and the
+  // sanctioned co-presence pair is exactly refreshBranch/refreshing — so a
+  // new marker label fails this check until the block is updated to name it,
+  // and impl-agent.md's Pre-flight still runs the existing-work lookup that
+  // stops a second implementation duplicating a pull request that already
+  // covers the same issue.
   if (withBlock.length > 0) {
     const canonical = withBlock[0].block;
     const markerKeys = readJson('plugins/port/templates/labels.json')
@@ -137,10 +141,11 @@ export default async function ({ fail, note, ok }) {
     }
   }
 
-  // revise-agent's refresh escalation removes the surviving trigger too
-  // (#225): the additive-only refresh write left a ready-for-review pull
-  // request carrying `ready for review` + `refresh branch` + `needs human`
-  // once escalated — three role-bearing labels at once. Refresh mode's own
+  // --- Refresh escalation removes the surviving trigger too -------------------
+  // guard(#225): a refresh escalation leaving needs human beside a live
+  // trigger — three role-bearing labels at once. The additive-only refresh
+  // write left a ready-for-review pull request carrying `ready for review` +
+  // `refresh branch` + `needs human` once escalated. Refresh mode's own
   // escalation step must name removing <labels.readyForReview> alongside the
   // <labels.refreshing>/<labels.approved> pair it already named.
   {

@@ -11,6 +11,8 @@ async function importEngine(rel) {
 
 export default async function ({ fail, note, ok }) {
   // --- Every decision case resolves, and the table covers all eight families
+  // guard(#203): a second implementation (apps/desktop's, when issue 105
+  // converges) silently diverging from the engine's own recorded behaviour.
   {
     const families = {
       'envelope.cases.json': 'envelope.mjs',
@@ -80,10 +82,12 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- No mutating gh (or git) subcommand under the engine --------------------
-  // The engine is read-only against GitHub, enforced mechanically: gh.mjs's
-  // one call is `gh api graphql`, and nothing under scripts/port-tick/ (nor
-  // scripts/port-tick.mjs itself) may spawn a mutating gh/git call — every
-  // write is emitted as a `writes` string for the model to run.
+  // guard(#203): the tick engine silently gaining a write path the model
+  // can no longer audit. The engine is read-only against GitHub, enforced
+  // mechanically: gh.mjs's one call is `gh api graphql`, and nothing under
+  // scripts/port-tick/ (nor scripts/port-tick.mjs itself) may spawn a
+  // mutating gh/git call — every write is emitted as a `writes` string for
+  // the model to run.
   {
     // Read-only against GitHub: only gh.mjs may spawn 'gh' at all (git is
     // fine anywhere — port-tick.mjs's own repoRoot() reads it — the rail is
@@ -112,6 +116,8 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Defaults table matches labels.json, both directions --------------------
+  // guard(#203): the engine's label vocabulary drifting from the template
+  // it must resolve against.
   {
     const labelsJson = readJson('plugins/port/templates/labels.json');
     const { LABEL_DEFAULTS, LABEL_ROLES } = await importEngine(`${TICK_DIR}/config.mjs`);
@@ -137,8 +143,9 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Ladder constants are literal, and wakeup is never null on a non-draining
-  // tick — the model reads plan/commit's 'wakeup' field directly, so a null
-  // here would leave ScheduleWakeup with nothing to pass.
+  // guard(#203): a non-draining tick reaching ScheduleWakeup with nothing to
+  // pass — the model reads plan/commit's 'wakeup' field directly, so a null
+  // here would leave it with nothing.
   {
     const text = readFileSync(join(root, TICK_DIR, 'pacing.mjs'), 'utf8');
     for (const n of ['270', '540', '1080', '1800']) {
@@ -154,6 +161,8 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- No --jq, no search, no shell:true, no execSync under the engine -------
+  // guard(#203): the tick engine silently gaining a filtered or degraded
+  // read the model can no longer audit.
   {
     const files = [join(root, 'scripts/port-tick.mjs'), ...walk(join(root, TICK_DIR)).filter((f) => f.endsWith('.mjs'))];
     for (const f of files) {
@@ -176,6 +185,9 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Write composition lives only in writes.mjs (#225) ----------------------
+  // guard(#225): the write-composition layer drifting back into the
+  // orchestrator, which is exactly where the additive-vs-swap refresh-write
+  // bug lived with nothing to catch it.
   // The additive-vs-swap bug this ticket fixes lived in port-tick.mjs's own
   // inline `gh ... --add-label`/`--remove-label` template literals — the one
   // layer with no case table. This keeps every future label write inside the
@@ -200,6 +212,8 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- SKILL.md names tickId, the verbatim rail, and the TICK-PROSE.md fallback
+  // guard(#203): the model re-deriving a decision the plan already settled,
+  // with nothing checking that it ran the script at all.
   {
     const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
     const skillText = readFileSync(join(root, skillRel), 'utf8');

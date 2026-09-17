@@ -11,7 +11,8 @@ const SESSION_MARKER_LINE = /^>\s*\*\*SESSION REQUIRED:\*\*\s+\S/;
 
 export default async function ({ fail, note, ok }) {
   // --- Stale references -------------------------------------------------------
-  // Each of these named something real that was renamed or moved.
+  // guard: docs naming things that were renamed or moved. Each of these named
+  // something real that was renamed or moved.
   {
     const docs = [
       ...walk(join(root, 'plugins')),
@@ -49,7 +50,12 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Shipped references stay inside plugins/port/ --------------------------
-  // Regression guard for #169: PIPELINE.md and SKILL.md pointed an operator at
+  // guard(#169, #212): a shipped file referencing a repository-only doc or
+  // script, which dangles in every adopter's plugin cache, and a
+  // repository-only path riding inside a command or placeholder token, which
+  // classified `skip` as a whole token and let three fresh
+  // `scripts/checks.mjs` references ship. PIPELINE.md and SKILL.md pointed an
+  // operator at
   // `docs/USAGE.md` for the one explanation the reference was promising, but
   // that file ships nowhere — an adopter's plugin cache carries only
   // `plugins/port/`, so the reference resolved to nothing everywhere but this
@@ -219,13 +225,14 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- SESSION REQUIRED never rendered as a bare, uncoded marker line --------
-  // Regression guard for #156: the cockpit's consumer check used to be a bare
-  // substring search over the whole body, so any prompt file merely
-  // *discussing* the marker in prose false-positived. This is the producer-side
-  // mechanical half: every `SESSION REQUIRED` mention across the same doc set
-  // "Stale references" scans is either inside backticks or is the canonical
-  // `> **SESSION REQUIRED:** <reason>` rendering at line start — a reworded or
-  // unrendered marker fails here, in CI, rather than silently at dispatch time.
+  // guard(#156): a reworded marker that no consumer recognizes,
+  // false-positiving on a ticket that only discusses the mechanism. The
+  // cockpit's consumer check used to be a bare substring search over the
+  // whole body, so any prompt file merely *discussing* the marker in prose
+  // false-positived. This is the producer-side mechanical half: every
+  // `SESSION REQUIRED` mention across the same doc set "Stale references"
+  // scans is either inside backticks or is the canonical
+  // `> **SESSION REQUIRED:** <reason>` rendering at line start.
   {
     const docs = [
       ...walk(join(root, 'plugins')),
@@ -291,10 +298,12 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Session-required determination reads the whole plan, not just changes -
-  // Regression guard for #118: the determination looked only at the changed-file
-  // list, so a plan whose testing steps needed a sessionRequiredPaths write (but
-  // whose deliverables did not) was declared plainly dispatchable, and the
-  // dispatched agent died on the permission prompt.
+  // guard(#118): the session-required determination still names the testing
+  // steps, and the operator-only literal exists in both agent files. The
+  // determination looked only at the changed-file list, so a plan whose
+  // testing steps needed a sessionRequiredPaths write (but whose deliverables
+  // did not) was declared plainly dispatchable, and the dispatched agent died
+  // on the permission prompt.
   {
     const planAgent = readFileSync(join(root, 'plugins/port/agents/plan-agent.md'), 'utf8');
     const implAgent = readFileSync(join(root, 'plugins/port/agents/impl-agent.md'), 'utf8');
@@ -333,8 +342,10 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Repository map covers the real tree, both directions ------------------
-  // ARCHITECTURE.md (#167) is prose that goes stale silently, so it is pinned
-  // to the real tree in both directions: every path it names must still exist,
+  // guard(#167): the repository map going stale in either direction — a
+  // moved or renamed path, or a new top-level directory with no row.
+  // ARCHITECTURE.md is prose that goes stale silently, so it is pinned to
+  // the real tree in both directions: every path it names must still exist,
   // and every tracked top-level directory must be named by at least one row.
   // Root-level *files* are deliberately outside this mechanical set — they are
   // covered by the "Placements that cannot move" prose instead, not by a row —
@@ -345,8 +356,8 @@ export default async function ({ fail, note, ok }) {
     const lines = text.split('\n');
 
     // Locate the table under its fixed heading, never by line number — the
-    // map will grow rows (#171 splits templates/) and a positional parser
-    // would break on the first edit.
+    // map will grow rows (issue 171 splits templates/) and a positional
+    // parser would break on the first edit.
     const headingIdx = lines.findIndex((l) => l.trim() === '## Map');
     const rows = [];
     if (headingIdx === -1) {
