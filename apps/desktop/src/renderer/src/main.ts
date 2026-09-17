@@ -15,6 +15,9 @@ import { applyTailDelta, clearTailBanner, jumpToLatest, renderTranscript, setFol
 import type { TailBannerKind, TranscriptViewState } from './transcript'
 import { render as renderBoard } from './board/view'
 import type { BoardViewState } from './board/view'
+import { handleItemAction, pruneItemActionStates } from './board/actions'
+import type { OperatorAction } from '../../shared/actions/types'
+import type { LabelKey } from '../../shared/labels/vocabulary'
 import { initClaim, openClaimDialog } from './claim/controller'
 
 const app = document.querySelector<HTMLDivElement>('#app')
@@ -194,6 +197,7 @@ async function handleInspectWorktrees(id: RepoId): Promise<void> {
 }
 
 function applySnapshot(snapshot: BoardSnapshot): void {
+  pruneItemActionStates(snapshot)
   boardState = { ...boardState, status: 'ready', snapshot, refreshing: false }
   drawBoard()
 }
@@ -221,6 +225,14 @@ async function handleBoardRefresh(): Promise<void> {
     boardState = { ...boardState, refreshing: false }
     drawBoard()
   }
+}
+
+/** The action controller's own click entry point — dataset carries `repoId`/`kind`/`number`/`stage` verbatim from `rows.ts`'s own buttons. */
+function handleItemActionClick(target: HTMLElement): void {
+  const action = target.dataset.action?.slice('item-'.length) as OperatorAction | undefined
+  const { repoId, number, kind, stage } = target.dataset
+  if (!action || !repoId || !number || !kind) return
+  void handleItemAction({ repoId: repoId as RepoId, kind: kind as 'issue' | 'pull-request', number: Number(number), action, expectedStage: (stage || null) as LabelKey | null, redraw: drawBoard })
 }
 
 function toggleGroupBy(): void {
@@ -475,6 +487,7 @@ app?.addEventListener('click', (event) => {
   else if (action === 'jump-to-latest') jumpToLatest()
   else if (action === 'retry-transcript') handleRetryTranscript()
   else if (action === 'claim-open') openClaimDialog()
+  else if (action?.startsWith('item-')) handleItemActionClick(target)
   else {
     const row = target.closest<HTMLElement>('.board-row')
     if (row?.dataset.url) window.open(row.dataset.url, '_blank')

@@ -4,6 +4,7 @@
 // `typecheck:web` exactly like the other `shared/` adapters it draws from.
 import type { RepoId } from '../repos'
 import type { ItemStatus, PipelineState, ReconciledItem, RepositoryState, StageLabel } from '../state/types'
+import type { ActionAvailability, OperatorAction } from '../actions/types'
 
 /**
  * The four sources the watcher polls independently. Deliberately not five:
@@ -119,6 +120,10 @@ export interface BoardItemRow {
   readonly item: ReconciledItem
   readonly displayStatus: DisplayStatus
   readonly stageLabel: StageLabel | null
+  /** `actionsFor`'s own result for this item (#94) — every action, available
+   *  or not, so the row can render its strip and its refusal note from one
+   *  already-computed value, never a second derivation client-side. */
+  readonly actions: Readonly<Record<OperatorAction, ActionAvailability>>
 }
 
 export interface BoardGroup {
@@ -151,6 +156,12 @@ export interface BoardProjection {
   readonly notReady: readonly Extract<RepositoryState, { readonly ok: false }>[]
   readonly repositorySummaries: readonly BoardRepositorySummary[]
   readonly totalItems: number
+  /** Every row whose `gate` action is available, from a repository whose
+   *  `approvalGate` module is on (#94) — a pipeline pull request carrying a
+   *  stage label but not the marker, so CI cannot tell it from a human pull
+   *  request. Never populated when the module is off: there is no gate to
+   *  restore, so the section is absent entirely, not disabled. */
+  readonly ungated: readonly BoardItemRow[]
   readonly emittedAt: string
   /** The Decision 1 no-op guard — a compact string over every rendered
    *  field, deliberately excluding `emittedAt` itself, so a poll that

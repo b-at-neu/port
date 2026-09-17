@@ -135,7 +135,11 @@ export type WriteOutcome =
   | { readonly kind: 'applied'; readonly argv: readonly string[] }
   | { readonly kind: 'no-op' }
   | { readonly kind: 'precondition-failed'; readonly conflict: Conflict }
-  | { readonly kind: 'unclaimed-scope'; readonly scope: ClaimScope; readonly claimPath: string }
+  /** `keys` is the request's own `[...remove, ...add]` (first hit wins), so a
+   *  caller whose real label — resume's recovered trigger — is only known
+   *  server-side, after the request was built, can still name it exactly
+   *  rather than falling back to generic copy (#94 review). */
+  | { readonly kind: 'unclaimed-scope'; readonly scope: ClaimScope; readonly claimPath: string; readonly keys: readonly LabelKey[] }
   | { readonly kind: 'claim-unreadable'; readonly scope: ClaimScope; readonly claimPath: string; readonly message: string }
   | { readonly kind: 'unresolvable-label'; readonly keys: readonly LabelKey[] }
   | { readonly kind: 'item-unavailable' }

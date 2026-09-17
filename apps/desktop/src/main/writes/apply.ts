@@ -147,7 +147,7 @@ export async function applyLabels(params: ApplyLabelsParams): Promise<WriteOutco
     const held = claimRead.state === 'held' && claimRead.scopes.includes(scope)
     claimStatus = claimRead.state
     if (!held) {
-      const outcome: WriteOutcome = { kind: 'unclaimed-scope', scope, claimPath: claimRead.path }
+      const outcome: WriteOutcome = { kind: 'unclaimed-scope', scope, claimPath: claimRead.path, keys: [...request.remove, ...request.add] }
       await recordLabelAudit(auditDir, { ...baseCtx, scope, claim: claimStatus, precondition }, outcome, now)
       return outcome
     }

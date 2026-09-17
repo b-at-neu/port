@@ -206,6 +206,15 @@ export type RepositoryState =
       readonly rateLimit: RateLimitInfo
       readonly freshness: RepositoryFreshness
       readonly worktreeTotals: WorktreeTotals | null
+      /** The signed-in account's own login (#94's ownership check), carried
+       *  straight off `PipelineFetch.viewer` — `null`, never a guess, when
+       *  the fetch itself could not resolve it. */
+      readonly viewer: string | null
+      /** `entry.config.modules.approvalGate`, copied onto every item read so
+       *  `shared/board/project.ts`'s ungated selection and
+       *  `shared/actions/plan.ts`'s `actionsFor` never need a second config
+       *  read to know whether the gate module is even on. */
+      readonly approvalGate: boolean
     }
   | {
       readonly ok: false

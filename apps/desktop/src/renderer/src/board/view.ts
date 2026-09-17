@@ -7,6 +7,8 @@ import { boardSignature, projectBoard, worstHealth } from '../../../shared/board
 import type { BoardSnapshot, GroupBy } from '../../../shared/board/types'
 import type { RepositoryState } from '../../../shared/state/types'
 import type { RepoId } from '../../../shared/repos'
+import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
+import { actionsFingerprint } from './actions'
 import { notReadyCopy, rateLimitCopy, sourceHealthCopy } from './copy'
 import { buildRow } from './rows'
 
@@ -89,6 +91,29 @@ function buildGroupSection(name: string, count: number, rows: readonly ReturnTyp
   return section
 }
 
+/** Above the groups, beside "Not reading" (#94) — rendered only when
+ *  non-empty, since the module gate already keeps this at zero when
+ *  `approvalGate` is off (`projectBoard`'s own `ungated` selection). Each
+ *  entry is an ordinary row with its own `Add gate label` button — never
+ *  applied automatically, the count is the point. */
+function buildUngatedSection(rows: readonly ReturnType<typeof buildRow>[]): HTMLElement | null {
+  if (rows.length === 0) return null
+  // The marker's own resolved name — never retyped as a literal, since a
+  // repository may rename it (`scripts/checks/labels.mjs`'s own rail).
+  const markerName = LABEL_DEFAULTS.find((def) => def.key === 'marker')?.name ?? 'marker'
+  const section = document.createElement('div')
+  section.className = 'board-ungated'
+  section.appendChild(text('div', 'board-ungated__heading', `Ungated pull requests · ${String(rows.length)}`))
+  section.appendChild(
+    text('div', 'board-ungated__note', `These carry a pipeline label but not "${markerName}", so CI can't tell them from a human pull request and the merge gate is inactive.`),
+  )
+  const rowsContainer = document.createElement('div')
+  rowsContainer.className = 'board-ungated__rows'
+  for (const row of rows) rowsContainer.appendChild(row)
+  section.appendChild(rowsContainer)
+  return section
+}
+
 function buildNotReadySection(states: readonly Extract<RepositoryState, { readonly ok: false }>[]): HTMLElement | null {
   if (states.length === 0) return null
   const section = document.createElement('div')
@@ -104,6 +129,14 @@ function buildNotReadySection(states: readonly Extract<RepositoryState, { readon
   return section
 }
 
+/** `projection.signature` plus a fingerprint of the action controller's own
+ *  per-item state (#94) — the projection alone is unchanged by definition
+ *  until GitHub is re-read, so an action's `pending`/`result` transition
+ *  would never repaint without this second half. */
+function signatureOf(projection: ReturnType<typeof projectBoard>): string {
+  return `${projection.signature}|${actionsFingerprint()}`
+}
+
 function buildList(state: BoardViewState): HTMLElement {
   const list = document.createElement('div')
   list.className = 'board-list'
@@ -114,10 +147,13 @@ function buildList(state: BoardViewState): HTMLElement {
   }
 
   const projection = projectBoard({ snapshot: state.snapshot, groupBy: state.groupBy, now: state.now })
-  list.dataset.signature = projection.signature
+  list.dataset.signature = signatureOf(projection)
 
   const notReadySection = buildNotReadySection(projection.notReady)
   if (notReadySection !== null) list.appendChild(notReadySection)
+
+  const ungatedSection = buildUngatedSection(projection.ungated.map(buildRow))
+  if (ungatedSection !== null) list.appendChild(ungatedSection)
 
   if (projection.groups.length === 0 && projection.notReady.length === 0) {
     if (state.snapshot.state.repositories.length === 0) {
@@ -153,7 +189,7 @@ export function render(container: HTMLElement, state: BoardViewState): void {
 
   const existingList = container.querySelector<HTMLElement>('.board-list')
   const projection = state.snapshot !== null ? projectBoard({ snapshot: state.snapshot, groupBy: state.groupBy, now: state.now }) : null
-  const unchanged = existingList !== null && projection !== null && existingList.dataset.signature === projection.signature
+  const unchanged = existingList !== null && projection !== null && existingList.dataset.signature === signatureOf(projection)
 
   const header = buildHeader(state)
   const existingHeader = container.querySelector('.board-header')

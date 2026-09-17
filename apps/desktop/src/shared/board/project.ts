@@ -4,6 +4,7 @@
 // or `src/main/`.
 import { LABEL_DEFAULTS } from '../labels/defaults'
 import { inspectDenials } from '../local/inspect'
+import { actionsFor } from '../actions/plan'
 import type { RepoId } from '../repos'
 import type { RepositoryFreshness, RepositoryState, StageLabel } from '../state/types'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from './types'
@@ -109,10 +110,12 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
   for (const repo of readyRepos) {
     const health = healthByRepo.get(repo.repoId)
     for (const item of repo.items) {
-      rows.push({ item, displayStatus: displayStatus(item, health, repo.freshness, now), stageLabel: stageLabelOf(item) })
+      const actions = actionsFor({ item, viewer: repo.viewer, approvalGate: repo.approvalGate })
+      rows.push({ item, displayStatus: displayStatus(item, health, repo.freshness, now), stageLabel: stageLabelOf(item), actions })
     }
   }
   rows.sort((a, b) => compareRows(a, b, displayNameOf))
+  const ungated = rows.filter((row) => row.actions.gate.available)
 
   const groups: BoardGroup[] =
     groupBy === 'repo'
@@ -136,7 +139,7 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
     }
   })
 
-  const base = { groupBy, groups, notReady, repositorySummaries, totalItems: rows.length }
+  const base = { groupBy, groups, notReady, repositorySummaries, totalItems: rows.length, ungated }
   return { ...base, emittedAt: snapshot.emittedAt, signature: JSON.stringify(base) }
 }
 
@@ -151,5 +154,6 @@ export function boardSignature(projection: BoardProjection): string {
     notReady: projection.notReady,
     repositorySummaries: projection.repositorySummaries,
     totalItems: projection.totalItems,
+    ungated: projection.ungated,
   })
 }

@@ -5,6 +5,8 @@ import type { SessionScan } from './sessions/types'
 import type { TranscriptRead, TranscriptTailOpen, TranscriptTailPoll } from './sessions/transcript'
 import type { BoardSnapshot, SourceKind } from './board/types'
 import type { ClaimApplyResponse, ClaimPreflightResponse, PlanGateChoice } from './claim/types'
+import type { LabelKey } from './labels/vocabulary'
+import type { ItemActionResult, OperatorAction } from './actions/types'
 
 export interface AppInfo {
   app: string
@@ -101,6 +103,14 @@ export interface IpcMap {
     request: { repoId: RepoId; number: number; planGate: PlanGateChoice; confirmedAssignees: readonly string[] }
     response: ClaimApplyResponse
   }
+  /** The board's single-label operator actions (#94) — pause/resume/retry/
+   *  gate. The renderer sends an intent, never a label set: `expectedStage`
+   *  is the row's own `stageLabel?.key` at click time, used server-side
+   *  only to refuse a stale click, never to widen what gets written. */
+  'item:action': {
+    request: { repoId: RepoId; kind: 'issue' | 'pull-request'; number: number; action: OperatorAction; expectedStage: LabelKey | null }
+    response: ItemActionResult
+  }
 }
 
 export const IPC_CHANNELS = [
@@ -118,6 +128,7 @@ export const IPC_CHANNELS = [
   'board:refresh',
   'claim:preflight',
   'claim:apply',
+  'item:action',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]

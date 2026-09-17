@@ -56,6 +56,7 @@ function fetchOf(items: readonly PipelineItem[]): PipelineFetch {
     unavailable: [],
     truncated: [],
     rateLimit: { cost: 1, remaining: 4999, resetAt: '2026-01-01T00:00:00Z' },
+    viewer: 'op',
     fetchedAt: '2026-01-01T00:00:00Z',
   }
 }
@@ -271,6 +272,37 @@ describe('reconcileRepository — pass-through fields', () => {
     })
     if (!state.ok) throw new Error('unreachable')
     expect(state.vocabulary).toEqual(report)
+  })
+
+  it('carries pipelineFetch.viewer and entry.config.modules.approvalGate onto RepositoryState (#94)', () => {
+    const fetch = fetchOf([])
+    if (!fetch.ok) throw new Error('unreachable')
+    const state = reconcileRepository({
+      entry: { ...entry(), config: { ...entry().config, modules: { approvalGate: false, release: true, scope: true } } },
+      pipelineFetch: { ...fetch, viewer: 'op' },
+      itemsByNumberFetch: null,
+      repoSessions: sessionsOf(),
+      worktrees: worktreesOf(),
+      denials: denialsOf(),
+    })
+    if (!state.ok) throw new Error('unreachable')
+    expect(state.viewer).toBe('op')
+    expect(state.approvalGate).toBe(false)
+  })
+
+  it('carries a null viewer through unchanged, never a guess', () => {
+    const fetch = fetchOf([])
+    if (!fetch.ok) throw new Error('unreachable')
+    const state = reconcileRepository({
+      entry: entry(),
+      pipelineFetch: { ...fetch, viewer: null },
+      itemsByNumberFetch: null,
+      repoSessions: sessionsOf(),
+      worktrees: worktreesOf(),
+      denials: denialsOf(),
+    })
+    if (!state.ok) throw new Error('unreachable')
+    expect(state.viewer).toBeNull()
   })
 })
 

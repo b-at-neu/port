@@ -114,6 +114,24 @@ describe('fetchPipelineItems', () => {
     expect(result.vocabulary.verdict).toBe('unverified')
   })
 
+  // #94: viewer resolves when present, and is null (never a guess) when the
+  // alias is absent or a partial response drops it.
+  it.each([
+    ['present', { login: 'op' }, false, 'op'],
+    ['absent', undefined, false, null],
+    ['errored', null, true, null],
+  ] as const)('viewer: %s → %s', async (_label, viewer, erroredOut, expected) => {
+    const repository = { i0: { totalCount: 0, nodes: [] }, p0: { totalCount: 0, nodes: [] }, i1: { totalCount: 0, nodes: [] }, p1: { totalCount: 0, nodes: [] }, repoLabels: REPO_LABELS_OK }
+    const body: Record<string, unknown> = { data: { repository, rateLimit: RATE_LIMIT, ...(viewer !== undefined ? { viewer } : {}) } }
+    if (erroredOut) body.errors = [{ type: 'SOME_ERROR', path: ['viewer'], message: 'boom' }]
+    const stdout = JSON.stringify(body)
+    const ghResult: GhResult = erroredOut ? { ok: false, kind: 'unknown', stdout, stderr: 'gh: some errors' } : { ok: true, stdout, stderr: '' }
+    const result = await fetchPipelineItems({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, gh: fakeRunner(ghResult) })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.viewer).toBe(expected)
+  })
+
   it('names every enabled label in queried, even when items is empty', async () => {
     const stdout = JSON.stringify({
       data: {
