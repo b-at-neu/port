@@ -128,7 +128,7 @@ export default async function ({ fail, ok }) {
     }
 
     // withdrawn / rebase-required return { ok } from a closure, not a regex,
-    // so they're exercised against PIPELINE.md's canonical bodies (good), the
+    // so they're exercised against FORMATS.md's canonical bodies (good), the
     // same body with only the SHA backticked (bad: names no fact), and the
     // same body under a renamed heading (bad: wrong line 1) (#204).
     const shaCases = [

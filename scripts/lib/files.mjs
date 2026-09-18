@@ -22,15 +22,38 @@ export const walk = (dir) =>
  *  names the same path on Windows as on macOS/Linux. */
 export const relOf = (f) => f.slice(root.length + 1).split('\\').join('/');
 
-/** `SKILL.md` plus `TICK-PROSE.md`, concatenated — #203 moved the tick
- *  procedure, refresh sweep, contention gate, zero-diff gate, liveness
- *  cross-check, cycle cap, and pacing prose into the latter, followed only
- *  when `commands.tick` is null. A phrase check that used to grep `SKILL.md`
- *  alone for one of those sections now reads both, so it keeps meaning what
- *  it did before the move rather than passing vacuously against a file that
- *  no longer holds the phrase. */
-export const pipelineTickText = () =>
-  `${readFileSync(join(root, 'plugins/port/skills/pipeline/SKILL.md'), 'utf8')}\n${readFileSync(join(root, 'plugins/port/skills/pipeline/TICK-PROSE.md'), 'utf8')}`;
+/** Every `.md` file directly under `dir`, sorted by filename and joined with
+ *  `\n`. A union **fails open on location and closed on absence**: a pinned
+ *  phrase may live in any companion of the hub, so moving it between them
+ *  never breaks a check, while deleting it still fails. Right trade for a
+ *  phrase-presence pin ("the shipped docs still say X"); wrong one for a
+ *  structural pin (a heading slice, a table parse), which is why a check
+ *  reading one of those still names its file directly instead of calling
+ *  this. Directory-derived, never a hard-coded file list, so the next split
+ *  of either hub costs no check churn (#181). */
+const companionText = (dir) =>
+  readdirSync(join(root, dir))
+    .filter((f) => f.endsWith('.md'))
+    .sort()
+    .map((f) => readFileSync(join(root, dir, f), 'utf8'))
+    .join('\n');
+
+/** `SKILL.md` plus every sibling `.md` under `plugins/port/skills/pipeline/`
+ *  — `TICK-PROSE.md` (#203 moved the tick procedure, refresh sweep,
+ *  contention gate, zero-diff gate, liveness cross-check, cycle cap, and
+ *  pacing prose there, followed only when `commands.tick` is null) and
+ *  `PREFLIGHT.md` (#181 moved the startup preflight and its UX states
+ *  there). Sorted order keeps `PREFLIGHT.md` < `SKILL.md` < `TICK-PROSE.md`.
+ *  A phrase check that used to grep `SKILL.md` alone now reads the whole
+ *  union, so it keeps meaning what it did before a move rather than passing
+ *  vacuously against a file that no longer holds the phrase. */
+export const pipelineSkillText = () => companionText('plugins/port/skills/pipeline');
+
+/** `PIPELINE.md` plus every sibling `.md` under `plugins/port/docs/` —
+ *  `FORMATS.md` and `RECOVERY.md` (#181 moved Output formats and the
+ *  Escalation/Stopping/Recovery-runbook material there). Same trade as
+ *  `pipelineSkillText` above. */
+export const pipelineDocsText = () => companionText('plugins/port/docs');
 
 /** Frontmatter key/value pairs from already-read text. Deliberately not a
  *  YAML parser — presence and scalar shape is all these checks need, and a

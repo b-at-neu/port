@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, walk, relOf, readJson, pipelineTickText } from '../lib/files.mjs';
+import { root, walk, relOf, readJson, pipelineSkillText, pipelineDocsText } from '../lib/files.mjs';
 
 export default async function ({ fail, ok }) {
   // --- Review evidence gate — verdicts wait for concluded checks --------------
@@ -80,8 +80,10 @@ export default async function ({ fail, ok }) {
   // This checks that the widened auto-resolvable rows and the
   // decision-request escalation format are both still present.
   {
-    const rel = 'plugins/port/docs/PIPELINE.md';
-    const text = readFileSync(join(root, rel), 'utf8');
+    // issue 181: the rebase protocol moved from PIPELINE.md into RECOVERY.md — the
+    // docs union is what this assertion must read now.
+    const rel = 'plugins/port/docs/*.md';
+    const text = pipelineDocsText();
 
     for (const phrase of ['take the union', 'deterministic order', 'apply the addition inside the new structure']) {
       if (!text.includes(phrase)) {
@@ -188,9 +190,9 @@ export default async function ({ fail, ok }) {
     }
 
     const pipelineRel = 'plugins/port/docs/PIPELINE.md';
-    const skillRel = 'SKILL.md/TICK-PROSE.md';
+    const skillRel = 'plugins/port/skills/pipeline/*.md';
     const pipelineText = readFileSync(join(root, pipelineRel), 'utf8');
-    const skillText = pipelineTickText();
+    const skillText = pipelineSkillText();
 
     for (const [rel, text] of [[pipelineRel, pipelineText], [skillRel, skillText]]) {
       if (!text.includes('a refresh consumes no review cycle')) {
@@ -240,26 +242,30 @@ export default async function ({ fail, ok }) {
   // and the `dispatch #N anyway` override.
   {
     const pipelineRel = 'plugins/port/docs/PIPELINE.md';
+    const docsRel = 'plugins/port/docs/*.md';
     const planAgentRel = 'plugins/port/agents/plan-agent.md';
-    const skillRel = 'SKILL.md/TICK-PROSE.md';
+    const skillRel = 'plugins/port/skills/pipeline/*.md';
     const schemaRel = 'schema/port.config.schema.json';
     const templateRel = 'plugins/port/templates/port.config.json';
 
     const pipelineText = readFileSync(join(root, pipelineRel), 'utf8');
     const planAgentText = readFileSync(join(root, planAgentRel), 'utf8');
-    const skillText = pipelineTickText();
+    const skillText = pipelineSkillText();
     const schemaText = readFileSync(join(root, schemaRel), 'utf8');
     const templateText = readFileSync(join(root, templateRel), 'utf8');
 
-    for (const [rel, text] of [
-      [pipelineRel, pipelineText],
-      [planAgentRel, planAgentText],
-    ]) {
-      if (!text.includes('```files')) {
-        fail('file-contention', `${rel} never carries the '\`\`\`files' fence tag`);
-      } else {
-        ok();
-      }
+    // issue 181: the '## Changes' fence-tag example moved from PIPELINE.md into
+    // FORMATS.md — the docs union is what this half of the pin must read.
+    const docsText = pipelineDocsText();
+    if (!docsText.includes('```files')) {
+      fail('file-contention', `${docsRel} never carries the '\`\`\`files' fence tag`);
+    } else {
+      ok();
+    }
+    if (!planAgentText.includes('```files')) {
+      fail('file-contention', `${planAgentRel} never carries the '\`\`\`files' fence tag`);
+    } else {
+      ok();
     }
 
     if (!(schemaText.includes('"sharedFiles"') && schemaText.includes('"overlapThreshold"'))) {
