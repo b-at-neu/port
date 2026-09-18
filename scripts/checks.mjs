@@ -51,6 +51,7 @@ import desktopSearch from './checks/desktop-search.mjs';
 import desktopTick from './checks/desktop-tick.mjs';
 import fileSize from './checks/file-size.mjs';
 import tick from './checks/tick.mjs';
+import tickEvents from './checks/tick-events.mjs';
 import analyze from './checks/analyze.mjs';
 
 // `--guards` is a second mode, not a check: it reads every topic module's own
@@ -119,6 +120,7 @@ if (argv.includes('--guards')) {
     desktopTick,
     fileSize,
     tick,
+    tickEvents,
     analyze,
   ]) {
     await module(reporter);

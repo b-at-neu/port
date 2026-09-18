@@ -7,9 +7,17 @@
 // session scoping, no clock or session id needed.
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 export const TICK_STATE_PATH = '.temp/tick-state.json';
 export const DISPATCH_LOG_PATH = '.temp/dispatch-log.json';
+
+/** 12 hex characters — enough to make a `runId` collision a non-concern
+ *  across two `.agents/events.jsonl` generations (docs/ENGINEERING.md's own
+ *  risk note), never a claimed session identifier. */
+export function newRunId() {
+  return randomUUID().replace(/-/g, '').slice(0, 12);
+}
 
 /** Reads a JSON state file at `relPath` under `repoRoot`. Returns `null`
  *  when the file is absent, unparseable, or its `repo` field names a
@@ -39,6 +47,7 @@ export function writeState(repoRoot, relPath, data) {
 export function freshTickState(repo) {
   return {
     repo,
+    runId: newRunId(),
     lastTick: null,
     scheduled: null,
     cadenceStep: 0,

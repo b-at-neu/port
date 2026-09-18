@@ -141,6 +141,12 @@ export function loadConfig(repoRoot) {
     sessionRequiredPaths: cfg.sessionRequiredPaths ?? ['CLAUDE.md', '.claude/**'],
     commandsTick: cfg.commands?.tick ?? null,
     commandsWorktrees: cfg.commands?.worktrees ?? null,
+    // The `run-start` event's config facts (#187) — read from the *raw*
+    // parsed JSON, never the already-resolved `labels` above: only the keys
+    // the repository actually overrode are interesting, not every key's
+    // resolved name.
+    labelsOverridden: Object.keys(cfg.labels ?? {}),
+    budgetConfigured: Boolean(cfg.commands?.budget),
   };
 }
 
