@@ -144,7 +144,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
    If the rebase **conflicts**, follow the protocol below. **Atomicity and preservation are separate properties**: abort the whole rebase on any ambiguity and never push a half-rebased branch — but the classification itself is deterministic and must not be discarded, since it is re-derived identically (and reapplied) on the next attempt.
 
-   **Rebase conflict protocol.** The canonical classification matrix and escalation format live in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Rebase conflict protocol"; read it before classifying. **Bias toward resolving**: resolve when both sides are additive and no line's meaning changes; escalate when accepting one side would drop the other's logic.
+   **Rebase conflict protocol.** The canonical classification matrix and escalation format live in `${CLAUDE_PLUGIN_ROOT}/docs/RECOVERY.md` → "Rebase conflict protocol"; read it before classifying. **Bias toward resolving**: resolve when both sides are additive and no line's meaning changes; escalate when accepting one side would drop the other's logic.
 
    - **a. Never-touch short-circuit (check first).** List conflicted files with `git diff --name-only --diff-filter=U`. If **any** matches a glob in `sessionRequiredPaths`, is a database migration, or is environment or build configuration, **skip classification entirely and escalate** (step e). These are correctness- or policy-critical and never safe to auto-merge, however trivial the diff looks.
    - **b. Inspect.** Otherwise use **Grep** (for `<<<<<<<`) to find the markers and **Read** to inspect both sides of every hunk. Never `cat`, `sed`, or shell redirection.

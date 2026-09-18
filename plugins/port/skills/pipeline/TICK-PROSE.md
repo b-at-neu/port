@@ -106,7 +106,7 @@ An entry is dropped from `Refreshed:` once its pull request reads `MERGEABLE`, s
 
 **File contention gate (each tick, step 4, before dispatching `impl-agent`).** A `<labels.planApproved>` item dispatches only when no single in-flight item's plan claims `concurrency.overlapThreshold` or more of the same non-shared files — counted per in-flight item, never pooled. Full background: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "File contention".
 
-1. **Build the occupied set.** Union the `` ```files ``` `` block from every `<labels.inProgress>` issue's body and every open `<labels.prOpened>` issue's body (both aliases already carry `body` — no extra round trip), each path tagged with the item number and its label, excluding any path in `concurrency.sharedFiles` — a `sharedFiles` path is still claimed by its plan, only never contended. Parse per the grammar in `PIPELINE.md` → "Implementation plan": one path per non-blank line, the first whitespace-delimited token, a trailing `/` matching any path under it.
+1. **Build the occupied set.** Union the `` ```files ``` `` block from every `<labels.inProgress>` issue's body and every open `<labels.prOpened>` issue's body (both aliases already carry `body` — no extra round trip), each path tagged with the item number and its label, excluding any path in `concurrency.sharedFiles` — a `sharedFiles` path is still claimed by its plan, only never contended. Parse per the grammar in `FORMATS.md` → "Implementation plan": one path per non-blank line, the first whitespace-delimited token, a trailing `/` matching any path under it.
 2. **Skip `SESSION REQUIRED` candidates** — those never dispatch here regardless (see Safety rails); they are never held either, since holding implies "dispatches once released" and these never dispatch.
 3. **Plan carries no `## Changes` file block** — dispatch **unchecked**, once per item per session, since silently holding every unstructured plan (typically one written before this contract landed) would stall the pipeline harder than the collision this gate prevents. Warn:
 
@@ -155,7 +155,7 @@ An entry is dropped from `Refreshed:` once its pull request reads `MERGEABLE`, s
 - **Every in-flight item unmatched at once, and the most recent completion or error mentions a session limit** (a `"session limit"`/`"resets at"`-shaped message) — this is the **usage-limit** class, not ordinary stalling, and it takes precedence: when it fires, it has already reset everything and no per-item liveness reset above runs that tick. Reset each affected item's in-flight label back to its trigger label — group by (current label → trigger label) pair and issue one `gh issue edit` per group naming every number, pull requests one call each, then re-query to confirm — report the reset time verbatim from the message, and schedule the next wakeup for just after it — a small buffer past the reset, or the idle delay with a note if the time cannot be parsed. Never redispatch before it, and never substitute a different model to work around it.
 - **`TaskList` cannot be correlated to numbers at all** (e.g. no `description` field surfaced) — report the in-flight set alongside the running-agent count and say the correlation is uncertain, rather than guessing which is which.
 
-Full background: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Liveness".
+Full background: `${CLAUDE_PLUGIN_ROOT}/docs/RECOVERY.md` → "Liveness".
 
 ## Denial report
 
