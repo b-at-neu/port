@@ -12,12 +12,20 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, walk, relOf, frontmatter } from '../lib/files.mjs';
+import { root, walk, relOf, frontmatter, pipelineSkillText } from '../lib/files.mjs';
 
 export default async function ({ fail, ok }) {
   const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
   const skillPath = join(root, skillRel);
-  const skillText = readFileSync(skillPath, 'utf8');
+  // issue 181: the startup preflight and its UX states moved into PREFLIGHT.md —
+  // `<root>/.github/workflows/approval-check.yml` stays in SKILL.md's
+  // approved-announcement section while every other rooted path moved, so
+  // the phrase scans below read the skill union rather than either file
+  // alone. The frontmatter check stays on SKILL.md itself (structural).
+  const unionRel = 'plugins/port/skills/pipeline/*.md';
+  const skillText = pipelineSkillText();
+  const preflightRel = 'plugins/port/skills/pipeline/PREFLIGHT.md';
+  const preflightText = readFileSync(join(root, preflightRel), 'utf8');
 
   // Prose lines only — a blockquote (operator-facing UX copy) or a fenced
   // block (literal shell commands) is exempt from every phrase scan below,
@@ -46,7 +54,7 @@ export default async function ({ fail, ok }) {
   // false "not port-managed".
   {
     if (!skillText.includes('git rev-parse --show-toplevel')) {
-      fail('preflight-anchoring', `${skillRel} no longer resolves a repository root with 'git rev-parse --show-toplevel'`);
+      fail('preflight-anchoring', `${unionRel} no longer resolves a repository root with 'git rev-parse --show-toplevel'`);
     } else {
       ok();
     }
@@ -57,7 +65,7 @@ export default async function ({ fail, ok }) {
       '<root>/.github/workflows/approval-check.yml',
     ]) {
       if (!skillText.includes(rootedPath)) {
-        fail('preflight-anchoring', `${skillRel} never reads '${rootedPath}' — a repository-root file must be read as <root>/... , never a bare relative path`);
+        fail('preflight-anchoring', `${unionRel} never reads '${rootedPath}' — a repository-root file must be read as <root>/... , never a bare relative path`);
       } else {
         ok();
       }
@@ -72,12 +80,12 @@ export default async function ({ fail, ok }) {
   // rather than where it exists, and that a rebase invalidates on its own.
   {
     if (!skillText.includes('git cat-file -e')) {
-      fail('preflight-config-diagnostic', `${skillRel} no longer tests config existence with 'git cat-file -e'`);
+      fail('preflight-config-diagnostic', `${unionRel} no longer tests config existence with 'git cat-file -e'`);
     } else {
       ok();
     }
     if (skillText.includes('git branch -a --contains') || skillText.includes('git rev-list --all')) {
-      fail('preflight-config-diagnostic', `${skillRel} still carries the stale 'last commit touching the file' diagnostic`);
+      fail('preflight-config-diagnostic', `${unionRel} still carries the stale 'last commit touching the file' diagnostic`);
     } else {
       ok();
     }
@@ -96,12 +104,12 @@ export default async function ({ fail, ok }) {
   // session it was meant to stop.
   {
     if (skillText.includes('hard refusal with no override')) {
-      fail('preflight-refusal-rail', `${skillRel} still states the unenforced "hard refusal with no override" prose`);
+      fail('preflight-refusal-rail', `${unionRel} still states the unenforced "hard refusal with no override" prose`);
     } else {
       ok();
     }
     if (!skillText.includes('checked-out branch unchanged')) {
-      fail('preflight-refusal-rail', `${skillRel} is missing the checkable "stop with the checked-out branch unchanged" precondition`);
+      fail('preflight-refusal-rail', `${unionRel} is missing the checkable "stop with the checked-out branch unchanged" precondition`);
     } else {
       ok();
     }
@@ -113,12 +121,12 @@ export default async function ({ fail, ok }) {
   // wrong source.
   {
     if (!skillText.includes('not a prefix of the resolved record\'s `gitCommitSha`')) {
-      fail('preflight-identity', `${skillRel} never states the sha-prefix precondition for the identity line's commit`);
+      fail('preflight-identity', `${unionRel} never states the sha-prefix precondition for the identity line's commit`);
     } else {
       ok();
     }
     if (!skillText.includes('render `staleness not computable` instead of a number')) {
-      fail('preflight-identity', `${skillRel} never states the ref precondition for the identity line's comparison target`);
+      fail('preflight-identity', `${unionRel} never states the ref precondition for the identity line's comparison target`);
     } else {
       ok();
     }
@@ -127,17 +135,20 @@ export default async function ({ fail, ok }) {
   // --- Guard against the generality mistake this ticket's own fixes could
   // introduce: no repository-specific literal in the new prose above. -------
   // guard(#216): this ticket's own fixes reintroducing the generality mistake
-  // they were meant to close, pinning the prose to one repository.
+  // they were meant to close, pinning the prose to one repository. issue 181: the
+  // whole section moved into PREFLIGHT.md — a structural heading slice, so
+  // this reads that file directly rather than the union, which could also
+  // match SKILL.md's own pointer heading of the same name.
   {
-    const start = skillText.indexOf('## Startup preflight');
-    const end = skillText.indexOf('## UX states (startup preflight)');
+    const start = preflightText.indexOf('## Startup preflight');
+    const end = preflightText.indexOf('## UX states (startup preflight)');
     if (start === -1 || end === -1) {
-      fail('preflight-generality', `${skillRel} is missing the Startup preflight section`);
+      fail('preflight-generality', `${preflightRel} is missing the Startup preflight section`);
     } else {
-      const startupProse = proseOnly(skillText.slice(start, end));
+      const startupProse = proseOnly(preflightText.slice(start, end));
       for (const literal of ['b-at-neu/port', '`dev`']) {
         if (startupProse.includes(literal)) {
-          fail('preflight-generality', `${skillRel}'s Startup preflight section names the literal '${literal}' outside a UX-state example`);
+          fail('preflight-generality', `${preflightRel}'s Startup preflight section names the literal '${literal}' outside a UX-state example`);
         } else {
           ok();
         }

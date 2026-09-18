@@ -102,7 +102,10 @@ export default async function ({ fail, note, ok }) {
   // from, so it is pinned against `labels.json`'s own `role` field too, both
   // directions.
   {
-    const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
+    // issue 181: the inline vocabulary table is Startup preflight step 5, which
+    // moved into PREFLIGHT.md — a structural table parse, so this names one
+    // file directly rather than the skill union.
+    const skillRel = 'plugins/port/skills/pipeline/PREFLIGHT.md';
     const skillText = readFileSync(join(root, skillRel), 'utf8');
     const tableMatch =
       /\| Config key \| Default name \| Role \| Module \|\n[ \t]*\|[-\s|]+\|\n((?:[ \t]*\|.*\|\n?)+)/.exec(
