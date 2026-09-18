@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, readJson, walk, relOf } from '../lib/files.mjs';
+import { root, readJson, walk, relOf, pipelineSkillText } from '../lib/files.mjs';
 
 const TICK_DIR = 'scripts/port-tick';
 
@@ -334,10 +334,11 @@ export default async function ({ fail, note, ok }) {
   // and `--live` always passed explicitly.
   // guard(#203, #187): the model re-deriving a decision the plan already
   // settled, or skipping `start` so the engine's session-scoped state never
-  // resets.
+  // resets. Issue 181 moved `<commands.tick> start` (Startup preflight step 7)
+  // into PREFLIGHT.md, so this reads the skill union rather than SKILL.md alone.
   {
-    const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
-    const skillText = readFileSync(join(root, skillRel), 'utf8');
+    const skillRel = 'plugins/port/skills/pipeline/*.md';
+    const skillText = pipelineSkillText();
     for (const phrase of ['tickId', 'TICK-PROSE.md', 'commands.tick', '<commands.tick> start', '--live']) {
       if (!skillText.includes(phrase)) fail('tick-skill', `${skillRel} never names '${phrase}'`);
       else ok();
