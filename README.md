@@ -73,7 +73,7 @@ Then talk to it. `work on #142` opts a ticket in and starts planning. `status` r
 
 The plan gate comes back to you in the terminal: approve it, or give feedback and it revises. After that, implementation, review, and revision run on their own until the pull request is `approved` — then you merge on GitHub. The pipeline never merges.
 
-Full walkthrough: [docs/USAGE.md](docs/USAGE.md). Reference for the label lifecycle, permission model, and output formats: [plugins/port/docs/PIPELINE.md](plugins/port/docs/PIPELINE.md).
+Full walkthrough: [docs/USAGE.md](docs/USAGE.md). Reference for the label lifecycle and permission model: [plugins/port/docs/PIPELINE.md](plugins/port/docs/PIPELINE.md); for output formats: [FORMATS.md](plugins/port/docs/FORMATS.md).
 
 ## Skills
 

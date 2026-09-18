@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, readJson, pipelineTickText } from '../lib/files.mjs';
+import { root, readJson, pipelineSkillText, pipelineDocsText } from '../lib/files.mjs';
 
 // Issue 188: per-ticket dispatch cost accounting. A new topic module rather
 // than growing scripts/checks/cockpit.mjs (already at its recorded 610-line
@@ -405,19 +405,22 @@ export default async function ({ fail, ok }) {
   // the docs promise.
   {
     const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
-    const pipelineRel = 'plugins/port/docs/PIPELINE.md';
+    const docsRel = 'plugins/port/docs/*.md';
     const skillText = readFileSync(join(root, skillRel), 'utf8');
-    const pipelineText = readFileSync(join(root, pipelineRel), 'utf8');
+    // issue 181: commands.budget, budget.wallClockMinutes, and 'cumulative agent
+    // wall-clock' live in PIPELINE.md only inside the escalation bullet that
+    // moved to RECOVERY.md — the docs union is what this assertion must read.
+    const docsText = pipelineDocsText();
 
     for (const key of ['commands.budget', 'budget.wallClockMinutes']) {
       if (!skillText.includes(key)) fail('budget-docs', `${skillRel} never names '${key}'`);
       else ok();
-      if (!pipelineText.includes(key)) fail('budget-docs', `${pipelineRel} never names '${key}'`);
+      if (!docsText.includes(key)) fail('budget-docs', `${docsRel} never names '${key}'`);
       else ok();
     }
 
-    if (!pipelineText.includes('cumulative agent wall-clock')) {
-      fail('budget-docs', `${pipelineRel} does not state the ceiling is cumulative agent wall-clock per ticket`);
+    if (!docsText.includes('cumulative agent wall-clock')) {
+      fail('budget-docs', `${docsRel} does not state the ceiling is cumulative agent wall-clock per ticket`);
     } else {
       ok();
     }
@@ -444,8 +447,8 @@ export default async function ({ fail, ok }) {
     }
     // Issue 203 moved the liveness cross-check itself into TICK-PROSE.md
     // (followed when commands.tick is null) — this phrase now lives there,
-    // not in SKILL.md, so the union is what this assertion must read.
-    if (!/`TaskList` reports live agents only:/.test(pipelineTickText())) {
+    // not in SKILL.md, so the skill union is what this assertion must read.
+    if (!/`TaskList` reports live agents only:/.test(pipelineSkillText())) {
       fail('budget-docs', `${skillRel}'s liveness cross-check must state that TaskList reports live agents only, since every class there infers termination from absence`);
     } else {
       ok();
