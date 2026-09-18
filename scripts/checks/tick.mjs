@@ -69,6 +69,8 @@ export default async function ({ fail, note, ok }) {
       summarizeDelta: modules['denials.mjs'].summarizeDelta,
       findGaps: modules['report.mjs'].findGaps,
       deriveSpans: modules['report.mjs'].deriveSpans,
+      aggregate: modules['report.mjs'].aggregate,
+      renderText: modules['report.mjs'].renderText,
     };
 
     for (const [file] of Object.entries(families)) {
@@ -404,7 +406,10 @@ function runCase(fn, impl, input) {
     case 'rotationDecision':
     case 'findGaps':
     case 'deriveSpans':
+    case 'renderText':
       return impl(...input);
+    case 'aggregate':
+      return impl(input);
     default:
       throw new Error(`no case runner wired for function '${fn}'`);
   }

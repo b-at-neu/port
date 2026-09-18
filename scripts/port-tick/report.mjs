@@ -11,7 +11,7 @@ import { EVENTS_PATH, EVENTS_PREV_PATH } from './events.mjs';
 const RESOLUTION_SECONDS = 270;
 const DENIAL_LOG_WARN_BYTES = 4 * 1024 * 1024;
 const DEFAULT_GAP_GRACE_SECONDS = 300;
-const ESCALATION_KINDS = new Set(['cycle-cap', 'zero-diff', 'refresh-stuck', 'approval-withdrawn']);
+const ESCALATION_KINDS = new Set(['cycle-cap', 'zero-diff', 'refresh-stuck', 'approval-withdrawn', 'blocked']);
 
 /** Reads both generations, oldest first, tolerating either being absent or
  *  unreadable. Never throws — a missing file means "nothing recorded",
@@ -234,9 +234,10 @@ export function aggregate(events) {
   for (const t of ticks) {
     for (const h of t.planned?.held ?? []) {
       const key = `${h.item} ${h.blocker}`;
-      const row = holdRows.get(key) ?? { item: h.item, blocker: h.blocker, depth: h.depth, ticks: 0 };
+      const row = holdRows.get(key) ?? { item: h.item, blocker: h.blocker, depth: h.depth, ticks: 0, contendedPaths: new Set() };
       row.ticks += 1;
       row.depth = h.depth ?? row.depth;
+      for (const p of h.contendedPaths ?? []) row.contendedPaths.add(p);
       holdRows.set(key, row);
     }
   }
@@ -255,7 +256,7 @@ export function aggregate(events) {
     items: [...itemsMap.values()].sort((a, b) => b.dispatches - a.dispatches),
     denials,
     escalations,
-    holds: [...holdRows.values()],
+    holds: [...holdRows.values()].map((h) => ({ ...h, contendedPaths: [...h.contendedPaths] })),
   };
 }
 
@@ -301,7 +302,8 @@ export function renderText(report, { repo, skipped = { malformed: 0, unknownVers
 
   const cycleItems = report.items.filter((i) => i.reviewCycles > 0).slice(0, 5);
   if (cycleItems.length) {
-    lines.push(`Cycles       ${cycleItems.map((i) => `#${i.item} ${i.reviewCycles} review cycle${i.reviewCycles === 1 ? '' : 's'}`).join(' · ')}`);
+    const parts = cycleItems.map((i, idx) => (idx === 0 ? `#${i.item} ${i.reviewCycles} review cycle${i.reviewCycles === 1 ? '' : 's'}` : `#${i.item} ${i.reviewCycles}`));
+    lines.push(`Cycles       ${parts.join(' · ')}`);
   }
 
   const d = report.denials;
@@ -311,7 +313,11 @@ export function renderText(report, { repo, skipped = { malformed: 0, unknownVers
     lines.push(`Escalations  ${report.escalations.length} — ${report.escalations.map((e) => `#${e.item} ${escalationLabel(e.kind)}`).join(' · ')}`);
   }
   if (report.holds.length) {
-    lines.push(`Holds        ${report.holds.map((h) => `#${h.item} held ${h.ticks} tick${h.ticks === 1 ? '' : 's'} — blocked by #${h.blocker}`).join(' · ')}`);
+    lines.push(
+      `Holds        ${report.holds
+        .map((h) => `#${h.item} held ${h.ticks} tick${h.ticks === 1 ? '' : 's'}${h.contendedPaths.length ? ` on ${h.contendedPaths.join(', ')}` : ''} (blocker #${h.blocker})`)
+        .join(' · ')}`,
+    );
   }
 
   lines.push('', `Durations are derived from tick boundaries (±${report.dispatches.resolutionSeconds}s). Exact per-dispatch seconds live in each`, `issue's "Pipeline Cost" ledger when \`commands.budget\` is set.`);

@@ -50,8 +50,9 @@ export function formatEvent(envelope, payload = {}) {
 
   // Still over the cap with nothing left to shrink — drop every array-valued
   // field to empty rather than emit a line long enough to split under two
-  // cockpits' concurrent whole-line appends.
-  const minimal = { ...envelope, truncated: true };
+  // cockpits' concurrent whole-line appends. Non-array payload fields are
+  // kept as-is: only array-valued fields are ever capped.
+  const minimal = { ...envelope, ...payload, truncated: true };
   for (const k of arrayKeys) minimal[k] = [];
   return JSON.stringify(minimal);
 }
@@ -137,7 +138,7 @@ export function tickEventPayload({ tickId, envelope, items, livenessExpected, di
     planned: {
       dispatch: (dispatch ?? []).map((d) => ({ stage: d.stage, item: d.item, model: d.model })),
       gates: (gates ?? []).map((g) => ({ kind: g.kind, item: g.item })),
-      held: (held ?? []).map((h) => ({ item: h.item, blocker: h.blocker, depth: h.depth })),
+      held: (held ?? []).map((h) => ({ item: h.item, blocker: h.blocker, blockerLabel: h.blockerLabel, depth: h.depth, contendedPaths: h.contendedPaths ?? [] })),
       announce: (announce ?? []).map((a) => ({ kind: a.kind, item: a.item })),
       writes: (writes ?? []).length,
     },
