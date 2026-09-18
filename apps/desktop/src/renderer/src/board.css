@@ -52,6 +52,20 @@
   opacity: 0.65;
 }
 
+.board-header__tick {
+  margin-top: 0.3rem;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.board-header__tick-clock {
+  opacity: 0.65;
+}
+
+.board-header__tick-line {
+  margin-top: 0.1rem;
+}
+
 .board-list {
   flex: 1;
   overflow-y: auto;

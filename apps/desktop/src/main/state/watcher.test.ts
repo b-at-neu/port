@@ -6,10 +6,44 @@ import { resolveVocabulary } from '../../shared/labels/vocabulary'
 import type { RepositoryEntry } from '../../shared/repos'
 import type { CommandResult, GhResult } from '../platform'
 import type { BoardSnapshot } from '../../shared/board/types'
+import { buildPipelineQuery } from '../github/query'
 import { createPipelineWatcher } from './watcher'
 import type { TimerFactory, TimerHandle } from './watcher'
 
 const EMPTY_PIPELINE_STDOUT = JSON.stringify({ data: { repository: {}, rateLimit: { cost: 1, remaining: 4999, resetAt: '2026-01-01T00:00:00Z' } } })
+
+/** A real `fetchPipelineItems` reply carrying exactly one `ready`-labelled
+ *  issue node, every other alias empty — built off the same
+ *  `buildPipelineQuery` the adapter itself uses, so this fixture can never
+ *  drift from the alias layout a real response actually carries (#105). */
+function readyItemStdout(signedInLogin: string, assignees: readonly string[]): string {
+  const { aliases } = buildPipelineQuery(resolveVocabulary({}))
+  const repository: Record<string, unknown> = {}
+  for (const alias of aliases) {
+    const isReadyAlias = alias.key === 'ready'
+    repository[alias.issueAlias] = isReadyAlias
+      ? {
+          totalCount: 1,
+          nodes: [
+            {
+              number: 42,
+              title: 'a ticket',
+              url: 'https://github.com/o/a/issues/42',
+              body: '',
+              state: 'OPEN',
+              assignees: { nodes: assignees.map((login) => ({ login })) },
+              labels: { nodes: [{ name: 'ready' }] },
+            },
+          ],
+        }
+      : { totalCount: 0, nodes: [] }
+    repository[alias.prAlias] = { totalCount: 0, nodes: [] }
+  }
+  repository.repoLabels = { totalCount: 0, nodes: [] }
+  return JSON.stringify({
+    data: { repository, rateLimit: { cost: 1, remaining: 4999, resetAt: '2026-01-01T00:00:00Z' }, viewer: { login: signedInLogin } },
+  })
+}
 
 function readyEntry(id: string, path: string, repo: string): Extract<RepositoryEntry, { status: 'ready' }> {
   return {
@@ -253,5 +287,77 @@ describe('createPipelineWatcher — registry re-list', () => {
     const second = await p
 
     expect(second.state.repositories).toHaveLength(2)
+  })
+})
+
+describe('createPipelineWatcher — tick wiring (#105)', () => {
+  it('buildSnapshot().tick carries a real ready repository through to an actionable dispatch', async () => {
+    const now = () => new Date('2026-01-01T00:00:00.000Z')
+    const timer = makeFakeTimer()
+    const waiter = makeSnapshotWaiter()
+    const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
+
+    const watcher = createPipelineWatcher({
+      repositories: [readyEntry('repo-a', root, 'o/a')],
+      onSnapshot: waiter.onSnapshot,
+      now,
+      setTimer: timer.factory,
+      git: fakeGit({ worktreeList: 0 }),
+      gh: () => Promise.resolve({ ok: true, stdout: readyItemStdout('op', ['op']), stderr: '' } satisfies GhResult),
+      sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+    })
+
+    const snap = await watcher.refresh()
+    expect(snap.tick).toHaveLength(1)
+    expect(snap.tick[0]?.repoId).toBe('repo-a')
+    expect(snap.tick[0]?.blind).toBeNull()
+    expect(snap.tick[0]?.actionable).toEqual([{ number: 42, kind: 'issue', trigger: 'ready', agent: 'plan' }])
+    expect(snap.tick[0]?.held).toEqual([])
+  })
+
+  it('a ready item not assigned to the viewer is held, unowned, in the same TickReport', async () => {
+    const now = () => new Date('2026-01-01T00:00:00.000Z')
+    const timer = makeFakeTimer()
+    const waiter = makeSnapshotWaiter()
+    const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
+
+    const watcher = createPipelineWatcher({
+      repositories: [readyEntry('repo-a', root, 'o/a')],
+      onSnapshot: waiter.onSnapshot,
+      now,
+      setTimer: timer.factory,
+      git: fakeGit({ worktreeList: 0 }),
+      gh: () => Promise.resolve({ ok: true, stdout: readyItemStdout('op', []), stderr: '' } satisfies GhResult),
+      sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+    })
+
+    const snap = await watcher.refresh()
+    expect(snap.tick[0]?.actionable).toEqual([])
+    expect(snap.tick[0]?.held).toEqual([{ number: 42, kind: 'issue', trigger: 'ready', reason: 'unowned' }])
+  })
+})
+
+describe('createPipelineWatcher — stop() and nextWakeupAt', () => {
+  it('nextWakeupAt on the snapshot itself is null after stop(), not just the timer', async () => {
+    const now = () => new Date('2026-01-01T00:00:00.000Z')
+    const timer = makeFakeTimer()
+    const waiter = makeSnapshotWaiter()
+    const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
+
+    const watcher = createPipelineWatcher({
+      repositories: [readyEntry('repo-a', root, 'o/a')],
+      onSnapshot: waiter.onSnapshot,
+      now,
+      setTimer: timer.factory,
+      git: fakeGit({ worktreeList: 0 }),
+      gh: () => Promise.resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' } satisfies GhResult),
+      sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+    })
+
+    const before = await watcher.refresh()
+    expect(before.nextWakeupAt).not.toBeNull()
+
+    watcher.stop()
+    expect(watcher.snapshot().nextWakeupAt).toBeNull()
   })
 })

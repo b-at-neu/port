@@ -64,6 +64,7 @@ function readyRepo(overrides: Partial<Extract<RepositoryState, { ok: true }>> = 
     worktreeTotals: { registered: 0, attached: 0, uncorrelated: 0 },
     viewer: 'op',
     approvalGate: true,
+    disabled: [],
     ...overrides,
   }
 }
@@ -74,7 +75,14 @@ function health(overrides: Partial<RepositoryHealth> = {}): RepositoryHealth {
 
 function snapshotOf(repositories: readonly RepositoryState[], healths: readonly RepositoryHealth[] = []): BoardSnapshot {
   const state: PipelineState = { repositories, sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: NOW.toISOString() }, readAt: NOW.toISOString() }
-  return { state, health: healths, policy: { baseIntervalMs: SOURCE_BASE_INTERVAL_MS, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: STALE_GRACE_MS }, emittedAt: NOW.toISOString() }
+  return {
+    state,
+    health: healths,
+    policy: { baseIntervalMs: SOURCE_BASE_INTERVAL_MS, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: STALE_GRACE_MS },
+    tick: [],
+    nextWakeupAt: null,
+    emittedAt: NOW.toISOString(),
+  }
 }
 
 describe('displayStatus — Decision 5 suppression', () => {

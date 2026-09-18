@@ -10,6 +10,7 @@ import type { RepoId } from '../../shared/repos'
 import type { RepositoryEntry } from '../../shared/repos'
 import { DEFAULT_POLL_POLICY, SOURCE_KINDS, initialHealth } from '../../shared/board/types'
 import type { BoardSnapshot, RepositoryHealth, SourceHealth, SourceKind } from '../../shared/board/types'
+import { createDispatchLedger, planTick } from '../tick'
 import { isReady, projectFromCache } from './read'
 import { afterFailure, afterSuccess, deferredUntil, dueSources, nextDueAt } from './schedule'
 import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from './sources'
@@ -74,6 +75,10 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
   let hasListedRepositories = Array.isArray(params.repositories)
   let stopped = false
   let timer: TimerHandle | null = null
+  // One process-scoped ledger, this watcher's whole lifetime (#105) — a
+  // restarted app gets a fresh one, so every in-flight item reads
+  // `no-record` on the first tick after a restart, never a false reset.
+  const ledger = createDispatchLedger()
   let latest: BoardSnapshot = {
     state: {
       repositories: [],
@@ -82,6 +87,8 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     },
     health: [],
     policy: DEFAULT_POLL_POLICY,
+    tick: [],
+    nextWakeupAt: null,
     emittedAt: now().toISOString(),
   }
 
@@ -93,6 +100,20 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     return created
   }
 
+  /** The earliest instant across every (repository, source) — shared by
+   *  `scheduleNext()`'s own `setTimeout` delay and `buildSnapshot()`'s
+   *  `nextWakeupAt`, so the UI can never announce a wakeup this watcher did
+   *  not actually schedule (#62). */
+  function earliestDueAt(): Date {
+    const readyEntries = repositories.filter(isReady)
+    const candidates = [nextDueAt(sessionsHealth, now()).getTime()]
+    for (const entry of readyEntries) {
+      const h = ensureHealth(entry.id)
+      candidates.push(nextDueAt(h.github, now()).getTime(), nextDueAt(h.worktrees, now()).getTime(), nextDueAt(h.denials, now()).getTime())
+    }
+    return new Date(Math.min(...candidates))
+  }
+
   function buildSnapshot(): BoardSnapshot {
     const readyEntries = repositories.filter(isReady)
     const state = projectFromCache(cache, repositories, now)
@@ -100,7 +121,16 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       const h = ensureHealth(entry.id)
       return { ...h, sessions: sessionsHealth }
     })
-    latest = { state, health: healthList, policy: DEFAULT_POLL_POLICY, emittedAt: now().toISOString() }
+    // One TickReport per ready repository (#105) — over the same
+    // PipelineState above, never a second poll or a second cadence. Each
+    // repository's own `nextDecisionAt` is its GitHub source's next-due
+    // instant, the same `nextDueAt` call `dueSources`/`isDue` already make.
+    const readyIds = new Set(readyEntries.map((entry) => entry.id))
+    const tick = state.repositories
+      .filter((repository) => readyIds.has(repository.repoId))
+      .map((repository) => planTick({ repository, ledger, nextDecisionAt: nextDueAt(ensureHealth(repository.repoId).github, now()), now }))
+    const nextWakeupAt = stopped ? null : earliestDueAt().toISOString()
+    latest = { state, health: healthList, policy: DEFAULT_POLL_POLICY, tick, nextWakeupAt, emittedAt: now().toISOString() }
     return latest
   }
 
@@ -198,14 +228,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
   function scheduleNext(): void {
     if (stopped) return
     if (timer !== null) timer.clear()
-    const readyEntries = repositories.filter(isReady)
-    const candidates = [nextDueAt(sessionsHealth, now()).getTime()]
-    for (const entry of readyEntries) {
-      const h = ensureHealth(entry.id)
-      candidates.push(nextDueAt(h.github, now()).getTime(), nextDueAt(h.worktrees, now()).getTime(), nextDueAt(h.denials, now()).getTime())
-    }
-    const earliest = Math.min(...candidates)
-    const delay = Math.max(0, earliest - now().getTime())
+    const delay = Math.max(0, earliestDueAt().getTime() - now().getTime())
     timer = setTimer(() => {
       void tick().then(() => {
         params.onSnapshot(buildSnapshot())
@@ -232,6 +255,9 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       stopped = true
       if (timer !== null) timer.clear()
       timer = null
+      // The honest rendering of "no wakeup scheduled" (#62) — applied to the
+      // cached snapshot directly, since a stopped watcher never rebuilds one.
+      latest = { ...latest, nextWakeupAt: null }
     },
   }
 }
