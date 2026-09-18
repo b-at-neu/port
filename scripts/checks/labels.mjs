@@ -78,7 +78,7 @@ export default async function ({ fail, note, ok }) {
   // guard: two files listing the same vocabulary and drifting. Two files
   // independently list the same label keys. They have drifted before.
   {
-    const templateKeys = new Set(readJson('plugins/port/templates/labels.json').labels.map((l) => l.key));
+    const templateKeys = new Set(readJson('plugins/port/data/labels.json').labels.map((l) => l.key));
     const schemaKeys = new Set(
       Object.keys(readJson('schema/port.config.schema.json').properties.labels.properties),
     );
@@ -117,27 +117,27 @@ export default async function ({ fail, note, ok }) {
         if (row) inline.set(row[1], { name: row[2], role: row[3] });
       }
       const canonical = new Map(
-        readJson('plugins/port/templates/labels.json').labels.map((l) => [l.key, { name: l.name, role: l.role }]),
+        readJson('plugins/port/data/labels.json').labels.map((l) => [l.key, { name: l.name, role: l.role }]),
       );
       for (const [key, entry] of inline) {
         const c = canonical.get(key);
         if (!c) {
-          fail('label-vocabulary', `${skillRel} lists key '${key}', which is not in templates/labels.json`);
+          fail('label-vocabulary', `${skillRel} lists key '${key}', which is not in data/labels.json`);
         } else if (c.name !== entry.name) {
           fail(
             'label-vocabulary',
-            `${skillRel} names '${key}' as '${entry.name}', but templates/labels.json says '${c.name}'`,
+            `${skillRel} names '${key}' as '${entry.name}', but data/labels.json says '${c.name}'`,
           );
         } else if (c.role !== entry.role) {
           fail(
             'label-vocabulary',
-            `${skillRel} gives '${key}' role '${entry.role}', but templates/labels.json says '${c.role}'`,
+            `${skillRel} gives '${key}' role '${entry.role}', but data/labels.json says '${c.role}'`,
           );
         }
       }
       for (const [key, entry] of canonical) {
         if (!inline.has(key)) {
-          fail('label-vocabulary', `templates/labels.json has key '${key}' ('${entry.name}'), missing from ${skillRel}'s inline table`);
+          fail('label-vocabulary', `data/labels.json has key '${key}' ('${entry.name}'), missing from ${skillRel}'s inline table`);
         }
       }
       ok();
@@ -157,7 +157,7 @@ export default async function ({ fail, note, ok }) {
   // thing as a GraphQL `labels: [...]` list, which the original regex —
   // keyed on `--label` flags only — would silently miss.
   {
-    const mismatched = readJson('plugins/port/templates/labels.json')
+    const mismatched = readJson('plugins/port/data/labels.json')
       .labels.filter((l) => l.key !== l.name)
       .map((l) => l.key);
     const files = walk(join(root, 'plugins')).filter((f) => f.endsWith('.md'));
@@ -209,7 +209,7 @@ export default async function ({ fail, note, ok }) {
       fail('labels', `${rel} has no 'LABEL_ROLES = [...] as const' array`);
     } else {
       const declaredRoles = new Set([...m[1].matchAll(/'([^']+)'/g)].map((t) => t[1]));
-      const realRoles = new Set(readJson('plugins/port/templates/labels.json').labels.map((l) => l.role));
+      const realRoles = new Set(readJson('plugins/port/data/labels.json').labels.map((l) => l.role));
       for (const r of declaredRoles) {
         if (!realRoles.has(r)) fail('labels', `${rel}'s LABEL_ROLES has '${r}', which no labels.json entry uses`);
       }
@@ -225,7 +225,7 @@ export default async function ({ fail, note, ok }) {
   // position within its role ramp depends on a unique hex; a duplicate
   // collapses two labels back to pixel-identical, silently.
   {
-    const labels = readJson('plugins/port/templates/labels.json').labels;
+    const labels = readJson('plugins/port/data/labels.json').labels;
     const seen = new Map();
     for (const l of labels) {
       if (!/^[0-9A-F]{6}$/.test(l.color)) {
@@ -290,7 +290,7 @@ export default async function ({ fail, note, ok }) {
     }
 
     const cfg = readJson('.claude/port.config.json');
-    const labelDefs = readJson('plugins/port/templates/labels.json').labels;
+    const labelDefs = readJson('plugins/port/data/labels.json').labels;
     const resolvedName = (key) => cfg.labels?.[key] ?? labelDefs.find((l) => l.key === key).name;
     const blockingLabels = labelDefs
       .filter((l) => l.role === 'in-flight' || l.role === 'gate')
@@ -383,7 +383,7 @@ export default async function ({ fail, note, ok }) {
       fail('desktop-label-defaults', `${rel} has no 'LABEL_KEYS = [...] as const' array`);
     } else {
       const desktopKeys = new Set([...m[1].matchAll(/'([^']+)'/g)].map((t) => t[1]));
-      const templateKeys = new Set(readJson('plugins/port/templates/labels.json').labels.map((l) => l.key));
+      const templateKeys = new Set(readJson('plugins/port/data/labels.json').labels.map((l) => l.key));
       for (const k of desktopKeys) {
         if (!templateKeys.has(k)) fail('desktop-label-defaults', `${rel}'s LABEL_KEYS has '${k}', which is not in labels.json`);
       }
@@ -406,7 +406,7 @@ export default async function ({ fail, note, ok }) {
   // contains them as literals. Widened from shared/labels/ to all of
   // apps/desktop/src/.
   {
-    const mismatched = readJson('plugins/port/templates/labels.json')
+    const mismatched = readJson('plugins/port/data/labels.json')
       .labels.filter((l) => l.key !== l.name)
       .map((l) => l.name);
     const dir = join(root, 'apps/desktop/src');

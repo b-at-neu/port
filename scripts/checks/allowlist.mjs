@@ -156,7 +156,7 @@ export default async function ({ fail, note, ok }) {
       'absolute artifacts.mjs invocation with quoted args is allowed',
       decide({
         payload: subagentPayload(
-          `node "${root}/plugins/port/templates/artifacts.mjs" check review "${root}/.temp/r.json" --cycle 2`,
+          `node "${root}/plugins/port/bin/artifacts.mjs" check review "${root}/.temp/r.json" --cycle 2`,
         ),
         matchers,
         sessionRequiredPaths: [],
@@ -228,9 +228,9 @@ export default async function ({ fail, note, ok }) {
     // the root prefix, because the allowlist matches the unquoted relative form.
     rel(
       'quoted absolute arguments lose their quotes with the root prefix',
-      `node "${r}/templates/artifacts.mjs" check review "${r}/.temp/r.json"`,
+      `node "${r}/bin/artifacts.mjs" check review "${r}/.temp/r.json"`,
       r,
-      'node templates/artifacts.mjs check review .temp/r.json',
+      'node bin/artifacts.mjs check review .temp/r.json',
     );
 
     // (3) The docstring's "any other quoted span is left untouched" claim.

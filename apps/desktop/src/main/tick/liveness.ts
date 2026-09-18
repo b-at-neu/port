@@ -2,7 +2,7 @@
 // ported verbatim from scripts/port-tick/liveness.mjs's own `classifyUnmatched`
 // and `RETRY_TRIGGER` — pinned against that file, both directions, by
 // `scripts/checks/desktop-tick.mjs`'s dynamic import, the same idiom
-// `desktop-local.mjs` already uses for `templates/worktrees.mjs`'s `correlate`.
+// `desktop-local.mjs` already uses for `bin/worktrees.mjs`'s `correlate`.
 //
 // `capped` is currently unreachable from `plan.ts` alone: reaching it needs a
 // prior automatic `reset`, and nothing under `main/tick/` writes a label —

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Per-ticket dispatch cost accounting (#188) — a self-contained script whose
-// stdout *is* the verdict, following the `templates/worktrees.mjs` /
-// `templates/artifacts.mjs` precedent: copied into a managed repository by
+// stdout *is* the verdict, following the `bin/worktrees.mjs` /
+// `bin/artifacts.mjs` precedent: copied into a managed repository by
 // `/port:init`, addressed through `commands.budget`. Four subcommands —
 // `reset` (cockpit startup), `dispatch` (the gate), `sweep` (each tick) and
 // `report` (read-only); `SKILL.md` holds every call site. The enforced
@@ -159,7 +159,7 @@ export function unavailableAliases(errors) {
   return new Set(paths.filter((seg) => typeof seg === 'string'));
 }
 
-/** The same `Closes #N` grammar `templates/artifacts.mjs`'s `checkPrBody`
+/** The same `Closes #N` grammar `bin/artifacts.mjs`'s `checkPrBody`
  *  validates, read from the first line only. */
 export function issueFromPrBody(body) {
   const m = /^Closes #(\d+)$/.exec((body ?? '').split('\n')[0]?.trim() ?? '');

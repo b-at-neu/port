@@ -132,7 +132,7 @@ export default async function ({ fail, note, ok }) {
   // guard(#203): the engine's label vocabulary drifting from the template
   // it must resolve against.
   {
-    const labelsJson = readJson('plugins/port/templates/labels.json');
+    const labelsJson = readJson('plugins/port/data/labels.json');
     const { LABEL_DEFAULTS, LABEL_ROLES, LABEL_SURFACE } = await importEngine(`${TICK_DIR}/config.mjs`);
     const jsonKeys = new Set(labelsJson.labels.map((l) => l.key));
     const engineKeys = new Set(Object.keys(LABEL_DEFAULTS));

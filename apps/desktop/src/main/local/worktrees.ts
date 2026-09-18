@@ -1,6 +1,6 @@
 // readWorktrees: parses `git worktree list --porcelain` into the app's own
 // worktree model. Local-only (Decision 1) — no `gh` call, no item state, no
-// removal; that stays `templates/worktrees.mjs`'s job and #79's join. Three
+// removal; that stays `bin/worktrees.mjs`'s job and #79's join. Three
 // batched `git` invocations per repository, independent of worktree count
 // (Decision 3): one `worktree list --porcelain`, one `config --get-regexp`
 // for every upstream at once, one `log --no-walk=unsorted` for every head at

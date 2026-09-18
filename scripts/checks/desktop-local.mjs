@@ -85,7 +85,7 @@ export default async function ({ fail, ok }) {
     }
     ok();
 
-    const { correlate } = await import(pathToFileURL(join(root, 'plugins/port/templates/worktrees.mjs')).href);
+    const { correlate } = await import(pathToFileURL(join(root, 'plugins/port/bin/worktrees.mjs')).href);
     for (const c of cases) {
       const actual = correlate(c.input);
       const expected = c.expect;
@@ -93,7 +93,7 @@ export default async function ({ fail, ok }) {
       if (!matches) {
         fail(
           'desktop-local-correlation-table',
-          `templates/worktrees.mjs's correlate() disagrees with '${c.name}': expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`,
+          `bin/worktrees.mjs's correlate() disagrees with '${c.name}': expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`,
         );
       }
     }

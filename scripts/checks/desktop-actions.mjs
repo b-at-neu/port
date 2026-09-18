@@ -86,7 +86,7 @@ export default async function ({ fail, ok }) {
   // label's name and its LabelKey coincide (e.g. 'ready' is both), which a
   // bare string-equality check cannot tell apart.
   {
-    const mismatched = readJson('plugins/port/templates/labels.json')
+    const mismatched = readJson('plugins/port/data/labels.json')
       .labels.filter((l) => l.key !== l.name)
       .map((l) => l.name);
     let found = false;

@@ -1,4 +1,4 @@
-// Validates `templates/worktrees.mjs report --json`'s stdout field by field
+// Validates `bin/worktrees.mjs report --json`'s stdout field by field
 // into `ParsedWorktree[]` plus `orphanDirs`/`mainRoot`/`integrationRef`/
 // `registered`/`byState`. A missing field, a non-array `candidates`, or a
 // `state` outside `WORKTREE_STATES` fails the whole payload as

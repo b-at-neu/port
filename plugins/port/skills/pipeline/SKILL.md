@@ -387,7 +387,7 @@ On start and on every wakeup, run one polling pass.
 
 **UX states**, unchanged from the prose path — reuse **Resumed after a gap**, **Blind tick**, **Partial response**, **Truncated alias**, **Liveness clause**, and the staleness/backing-off lines below verbatim; only *how* the underlying fact was computed changed.
 
-**Worktree hygiene (each tick, step 6).** `commands.worktrees` collapses everything this section used to do by hand — enumeration, correlation, gh resolution, and removal — into one deterministic call whose stdout *is* the report; see `${CLAUDE_PLUGIN_ROOT}/templates/worktrees.mjs`. This cockpit no longer runs `git worktree` itself at all. **Not configured** (`commands.worktrees` is null) — skip this step; the Startup preflight already said so once, and the closing line carries `not configured` every tick instead of a hygiene line.
+**Worktree hygiene (each tick, step 6).** `commands.worktrees` collapses everything this section used to do by hand — enumeration, correlation, gh resolution, and removal — into one deterministic call whose stdout *is* the report; see `${CLAUDE_PLUGIN_ROOT}/bin/worktrees.mjs`. This cockpit no longer runs `git worktree` itself at all. **Not configured** (`commands.worktrees` is null) — skip this step; the Startup preflight already said so once, and the closing line carries `not configured` every tick instead of a hygiene line.
 
 **Configured** — one call, one `--protect` per live agent worktree `TaskList` reports (belt and braces on top of the script's own `OPEN` check):
 

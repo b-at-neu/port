@@ -1,6 +1,6 @@
 // The four-rung correlation ladder, pure and I/O-free so it is directly
 // unit-testable and directly comparable to the reclaimer's own copy
-// (`plugins/port/templates/worktrees.mjs`'s `correlate`). Byte-for-byte the
+// (`plugins/port/bin/worktrees.mjs`'s `correlate`). Byte-for-byte the
 // same ladder, first hit wins (PIPELINE.md → "Worktree lifecycle" →
 // "Correlation"); the shared case table (`correlation.cases.json`) is what
 // pins the two together, run by both `correlate.test.ts` here and

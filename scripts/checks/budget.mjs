@@ -7,22 +7,17 @@ import { root, readJson, pipelineTickText } from '../lib/files.mjs';
 // than growing scripts/checks/cockpit.mjs (already at its recorded 610-line
 // cap) — scripts/checks.mjs wires it in directly.
 export default async function ({ fail, ok }) {
-  const templateRel = 'plugins/port/templates/budget.mjs';
+  const templateRel = 'plugins/port/bin/budget.mjs';
   const templatePath = join(root, templateRel);
   const templateText = readFileSync(templatePath, 'utf8');
 
-  // --- Budget template is self-contained and cross-platform -------------------
+  // --- Budget template reaches outside its contract ---------------------------
   // guard(#188): a per-ticket dispatch ceiling silently drifting from what
   // the docs promise. Mirrors the artifacts.mjs / worktrees.mjs rule: an
-  // adopting repository copies this file alone, so it must carry no
-  // relative import and never shell out via a POSIX-only string.
+  // adopting repository copies this file alone, so it must never shell out
+  // via a POSIX-only string. Self-containment itself is now the
+  // directory-wide `layout.mjs` check (issue 171).
   {
-    const relativeImport = /\bfrom\s+['"]\.\.?\//.exec(templateText);
-    if (relativeImport) {
-      fail('budget-template', `${templateRel} has a relative import (${JSON.stringify(relativeImport[0])}) — it must be self-contained`);
-    } else {
-      ok();
-    }
     if (/\bexecSync\b/.test(templateText)) {
       fail('budget-template', `${templateRel} uses execSync — every child process must use spawnSync with an explicit argv array`);
     } else {

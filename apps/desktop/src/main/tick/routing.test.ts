@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import labels from '../../../../../plugins/port/templates/labels.json'
+import labels from '../../../../../plugins/port/data/labels.json'
 import { AGENT_FOR_TRIGGER } from './routing'
 
 describe('AGENT_FOR_TRIGGER', () => {

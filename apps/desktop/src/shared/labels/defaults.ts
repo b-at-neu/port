@@ -1,7 +1,7 @@
 // The deliberate single point of contact with the shipped template: every
 // other file under labels/ reads LABEL_DEFAULTS below, never this relative
-// import or `plugins/port/templates/labels.json` directly.
-import template from '../../../../../plugins/port/templates/labels.json'
+// import or `plugins/port/data/labels.json` directly.
+import template from '../../../../../plugins/port/data/labels.json'
 import type { LabelKey } from './vocabulary'
 
 /**

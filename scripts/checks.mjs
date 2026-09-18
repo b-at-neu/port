@@ -28,6 +28,7 @@ import release from './checks/release.mjs';
 import labels from './checks/labels.mjs';
 import artifacts from './checks/artifacts.mjs';
 import docs from './checks/docs.mjs';
+import layout from './checks/layout.mjs';
 import evals from './checks/evals.mjs';
 import cockpit from './checks/cockpit.mjs';
 import preflight from './checks/preflight.mjs';
@@ -97,6 +98,7 @@ if (argv.includes('--guards')) {
     labels,
     artifacts,
     docs,
+    layout,
     evals,
     cockpit,
     preflight,

@@ -2,7 +2,7 @@
 // Worktree reclamation — one deterministic call whose stdout *is* the report.
 // Replaces the cockpit's prose worktree-hygiene procedure (which never
 // executed reliably — see #144) with a shipped script, following the
-// templates/artifacts.mjs precedent #149 established: self-contained, copied
+// bin/artifacts.mjs precedent #149 established: self-contained, copied
 // into a managed repository by `/port:init`, addressed through
 // `commands.worktrees`.
 //
