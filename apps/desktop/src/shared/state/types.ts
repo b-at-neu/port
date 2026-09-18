@@ -41,7 +41,7 @@ export interface StageResult {
 /**
  * From `stage.role` plus the attachment ladder (Decision 2). `stalled` is a
  * **report, never a proof** — `TaskList` is the only real liveness evidence
- * and this app has none (PIPELINE.md → "Liveness"). A session scan that
+ * and this app has none (RECOVERY.md → "Liveness"). A session scan that
  * could not run, or a repository with no session slice, is *absence of
  * evidence* and never produces this verdict — a check that could not run is
  * not a check that found nothing.
