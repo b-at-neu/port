@@ -1,5 +1,5 @@
 {
-  "$comment": "Authoritative decision-case table for scripts/port-tick/liveness.mjs's classifyUnmatched. Per plugins/port/docs/PIPELINE.md → 'Liveness': at most one automatic reset per item per session, and only when this session's own dispatch log records the item.",
+  "$comment": "Authoritative decision-case table for scripts/port-tick/liveness.mjs's classifyUnmatched. Per plugins/port/docs/RECOVERY.md → 'Liveness': at most one automatic reset per item per session, and only when this session's own dispatch log records the item.",
   "function": "classifyUnmatched",
   "cases": [
     { "name": "no dispatch-log row at all — report-only forever", "input": null, "expected": { "class": "no-record" } },

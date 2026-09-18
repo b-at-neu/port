@@ -13,7 +13,7 @@ timeout_seconds: 900
 
 prompt: |
   Read `plugins/port/agents/revise-agent.md`'s rebase conflict protocol
-  (steps 1b and 2) and `plugins/port/docs/PIPELINE.md`'s "Rebase conflict
+  (steps 1b and 2) and `plugins/port/docs/RECOVERY.md`'s "Rebase conflict
   protocol" section.
 
   You are `revise-agent`, mid-revision on a pull request. Rebase the current

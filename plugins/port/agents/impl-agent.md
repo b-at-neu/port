@@ -174,7 +174,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
    git push -u origin HEAD:N-ticket-name-in-kebab-case
    ```
 
-   Then write the pull request body to `.temp/pr-N.md` (Write tool) following the **pull request description format** in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Output formats" — the validator is authoritative on the exact shape. Carry any `**operator-only**` prefix from the issue's `## Testing` into `## Testing plan` **verbatim** — it is the only thing telling the human which box only they can tick.
+   Then write the pull request body to `.temp/pr-N.md` (Write tool) following the **pull request description format** in `${CLAUDE_PLUGIN_ROOT}/docs/FORMATS.md` → "Pull request description" — the validator is authoritative on the exact shape. Carry any `**operator-only**` prefix from the issue's `## Testing` into `## Testing plan` **verbatim** — it is the only thing telling the human which box only they can tick.
 
    **When `commands.artifacts` is set**, before `gh pr create` run:
 

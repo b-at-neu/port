@@ -1,7 +1,7 @@
 // Reads and writes the two state files under the gitignored `.temp/`: tick
 // state (the pacing ladder, the resume clock, the denial-log offset, the
 // remembered report sets) and the dispatch log (this session's own proof of
-// what it dispatched, per plugins/port/docs/PIPELINE.md → "Liveness"). Each
+// what it dispatched, per plugins/port/docs/RECOVERY.md → "Liveness"). Each
 // carries a `repo` field treated as absent when it names a different
 // repository — a `start` rewrites both fresh, and that overwrite *is* the
 // session scoping, no clock or session id needed.
