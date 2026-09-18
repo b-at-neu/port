@@ -197,14 +197,16 @@ export default async function ({ fail, note, ok }) {
     ok();
   }
 
-  // --- Design document wiring (#49) -------------------------------------------
-  // guard(#49): a dangling template reference or a silently narrowed
+  // --- Design document wiring (#49, widened #191) -----------------------------
+  // guard(#49, #191): a dangling template reference or a silently narrowed
   // writable set failing only at runtime, with nothing static to catch it.
   // A dangling ${CLAUDE_PLUGIN_ROOT}/templates/... reference in analyze/SKILL.md
   // is silent at runtime — the skill just cannot find the file, with nothing
   // static to catch it. Pins the two template paths the skill references as
-  // existing on disk, that its writable-set sentence still names all three
-  // files, and that it still states the docs.design skip rule.
+  // existing on disk, that its writable-set sentence still names all four
+  // files (issue 191 widened this from three once step 6.5 added a fourth
+  // writable — the skills generated under .claude/skills/), and that it
+  // still states the docs.design skip rule.
   const skillPath = join(root, 'plugins/port/skills/analyze/SKILL.md');
   const skillText = readFileSync(skillPath, 'utf8');
 
@@ -218,8 +220,8 @@ export default async function ({ fail, note, ok }) {
     }
   }
 
-  if (!skillText.includes('the engineering document, the design document, and')) {
-    fail('standards', "analyze/SKILL.md's writable-set sentence no longer names all three files");
+  if (!skillText.includes('the engineering document, the design document, `.claude/port.config.json`, and the skills generated under `.claude/skills/`')) {
+    fail('standards', "analyze/SKILL.md's writable-set sentence no longer names all four files");
   } else {
     ok();
   }

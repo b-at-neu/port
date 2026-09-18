@@ -28,6 +28,13 @@ Two guards specific to `plugins/port/templates/artifacts.mjs` (#231), both in `s
 - `stageViolation`'s pair-wise legality, asserted directly: every sanctioned pair (a stage label alone, a refresh label alone, one of each) passes, and both illegal shapes — two stage labels, or both refresh labels — fail with a message naming the offending labels.
 - The audit workflow's trigger, read off `plugins/port/templates/artifacts.yml`: `pull_request.types` names `labeled`, `opened`, and `synchronize`; the one `if:` key sits at step indentation, never job indentation; and neither it nor this document still carries the retired "never register this as a required status check" warning.
 
+Guards for `/port:analyze`'s skill-generation step (#191), in `scripts/checks/analyze.mjs` and `scripts/checks/standards.mjs`:
+
+- `SKILL.md`'s step 6.5 references `skills/analyze/SKILL-GENERATION.md`, and that file in turn references both `templates/SCAFFOLDER.template.md` and `templates/AUDITOR.template.md` — each pinned to actually exist on disk, so a dangling reference fails at check time rather than silently at runtime.
+- Both archetype templates' frontmatter parses and declares `name`, `description`, and an `allowed-tools` no wider than the archetype's default (`Write`/`Edit` present for the scaffolder, absent for the auditor).
+- The recipe names the generic test and resolves a name collision by reading `${CLAUDE_PLUGIN_ROOT}/skills/` directly — never a transcribed list of every shipped skill name, which would be a second copy needing its own pin.
+- The writable-set sentence in `analyze/SKILL.md`'s "You do not change code. Ever." — previously pinned to three files — now names all **four**: the engineering document, the design document, `.claude/port.config.json`, and the skills generated under `.claude/skills/`.
+
 ## Layer 2 — artifact assertions on real runs
 
 The output formats live in `PIPELINE.md` prose and, until now, were asserted nowhere. The one that matters most is the review heading — the cockpit **counts** occurrences of the literal `## Code Review` to derive the cycle number, so renaming it silently breaks the cycle cap and the escalating bar, with no error anywhere. That is why the literal prefix is asserted separately from the rest of the heading.

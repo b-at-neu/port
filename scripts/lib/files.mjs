@@ -32,10 +32,13 @@ export const relOf = (f) => f.slice(root.length + 1).split('\\').join('/');
 export const pipelineTickText = () =>
   `${readFileSync(join(root, 'plugins/port/skills/pipeline/SKILL.md'), 'utf8')}\n${readFileSync(join(root, 'plugins/port/skills/pipeline/TICK-PROSE.md'), 'utf8')}`;
 
-/** Frontmatter key/value pairs. Deliberately not a YAML parser — presence and
- *  scalar shape is all these checks need, and a dependency is not worth it. */
-export function frontmatter(file) {
-  const text = readFileSync(file, 'utf8');
+/** Frontmatter key/value pairs from already-read text. Deliberately not a
+ *  YAML parser — presence and scalar shape is all these checks need, and a
+ *  dependency is not worth it. Split out from `frontmatter()` so a
+ *  self-test can exercise this parsing logic directly against literal
+ *  strings, rather than a hand-rolled duplicate that can silently drift
+ *  from the real thing. */
+export function parseFrontmatter(text) {
   const m = /^---\n([\s\S]*?)\n---/.exec(text);
   if (!m) return null;
   const out = {};
@@ -44,4 +47,9 @@ export function frontmatter(file) {
     if (kv) out[kv[1]] = kv[2].trim();
   }
   return out;
+}
+
+/** Frontmatter key/value pairs, read from `file` on disk. */
+export function frontmatter(file) {
+  return parseFrontmatter(readFileSync(file, 'utf8'));
 }

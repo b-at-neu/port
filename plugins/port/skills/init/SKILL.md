@@ -235,7 +235,7 @@ Ensure `.gitignore` covers `.agents/`, `.temp/`, and the worktree root `.claude/
 
 The repository is usable at this point, so this is the last thing asked and the only optional one.
 
-`docs.engineering` is the highest-leverage field in the configuration: all four stage agents read it and `review-agent` cites it as a review dimension. `/port:analyze` fills it by reading the codebase and proposing standards — conventions inferred from the code, inconsistencies put to you as decisions, improvements approved individually. **When the repository has a real interface, it also produces a design document and sets `docs.design`** the same way — a repository with no interface, or barely any, gets neither, stated plainly rather than silently skipped. It also recommends plugins that suit the stack.
+`docs.engineering` is the highest-leverage field in the configuration: all four stage agents read it and `review-agent` cites it as a review dimension. `/port:analyze` fills it by reading the codebase and proposing standards — conventions inferred from the code, inconsistencies put to you as decisions, improvements approved individually. **When the repository has a real interface, it also produces a design document and sets `docs.design`** the same way — a repository with no interface, or barely any, gets neither, stated plainly rather than silently skipped. It also recommends plugins that suit the stack, and — after the plugin search finds nothing already covering it — proposes repository-specific skills generated from what actually recurs in the codebase, landing in `.claude/skills/` one confirmation each.
 
 Ask whether to run it now.
 

@@ -1,6 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { root } from '../lib/files.mjs';
+import { root, frontmatter, parseFrontmatter } from '../lib/files.mjs';
 
 // guard(#50): /port:analyze's step 6 recommended plugins on three bad
 // criteria — "already installed" measured against the operator's own
@@ -75,4 +75,135 @@ export default async function ({ fail, note, ok }) {
   }
 
   note('analyze: step 6 prose pins for #50 — scope-aware exclusion, unconditional tier 3, delivery-surface criterion, delivery table shape');
+
+  // --- #191: skill generation (step 6.5) --------------------------------------
+  // guard(#191): a dangling reference from step 6.5's thin defer to the
+  // recipe or its two templates is silent at runtime — the skill just cannot
+  // find the file, exactly the failure mode "Design document wiring" in
+  // scripts/checks/standards.mjs already guards for the engineering and
+  // design templates. Also pins the frontmatter shape of both archetypes, the
+  // marketplace-first/propose-nothing ordering, the generic test as the
+  // named central gate, and the absence of a transcribed shipped-skill list
+  // that would be a second copy needing its own pin.
+  {
+    const recipeRel = 'plugins/port/skills/analyze/SKILL-GENERATION.md';
+    const recipePath = join(root, recipeRel);
+    if (!existsSync(recipePath)) {
+      fail('analyze-skillgen', `${skillRel} is expected to defer to ${recipeRel}, which does not exist`);
+    } else if (!text.includes('SKILL-GENERATION.md')) {
+      fail('analyze-skillgen', `${skillRel} no longer references ${recipeRel}`);
+    } else {
+      ok();
+
+      const recipeText = readFileSync(recipePath, 'utf8');
+
+      for (const ref of ['templates/SCAFFOLDER.template.md', 'templates/AUDITOR.template.md']) {
+        if (!recipeText.includes(ref)) {
+          fail('analyze-skillgen', `${recipeRel} no longer references ${ref}`);
+        } else if (!existsSync(join(root, 'plugins/port', ref))) {
+          fail('analyze-skillgen', `${recipeRel} references ${ref}, which does not exist on disk`);
+        } else {
+          ok();
+        }
+      }
+
+      for (const [templateRel, expectedTools] of [
+        ['plugins/port/templates/SCAFFOLDER.template.md', ['Read', 'Grep', 'Glob', 'Write', 'Edit']],
+        ['plugins/port/templates/AUDITOR.template.md', ['Read', 'Grep', 'Glob']],
+      ]) {
+        const templatePath = join(root, templateRel);
+        const fm = existsSync(templatePath) ? frontmatter(templatePath) : null;
+        if (!fm) {
+          fail('analyze-skillgen', `${templateRel} has no --- delimited frontmatter`);
+          continue;
+        }
+        for (const key of ['name', 'description', 'allowed-tools']) {
+          if (!fm[key]) fail('analyze-skillgen', `${templateRel} is missing '${key}' in frontmatter`);
+          else ok();
+        }
+        const declaredTools = (fm['allowed-tools'] ?? '').split(',').map((t) => t.trim()).filter(Boolean);
+        for (const tool of expectedTools) {
+          if (!declaredTools.includes(tool)) {
+            fail('analyze-skillgen', `${templateRel}'s allowed-tools is missing '${tool}'`);
+          } else {
+            ok();
+          }
+        }
+      }
+
+      // A malformed frontmatter block must fail the same shape check, and a
+      // missing allowed-tools entry must fail too — a check that cannot be
+      // made to fail is not a check. Exercises the real shared
+      // `parseFrontmatter()` from lib/files.mjs (the same parser the loop
+      // above calls, via `frontmatter()`, against the on-disk templates) —
+      // not a hand-rolled duplicate that could silently drift from it.
+      const goodFrontmatter = '---\nname: x\ndescription: y\nallowed-tools: Read, Grep, Glob\n---\n';
+      const missingAllowedTools = '---\nname: x\ndescription: y\n---\n';
+      const missingName = '---\ndescription: y\nallowed-tools: Read, Grep, Glob\n---\n';
+      const good = parseFrontmatter(goodFrontmatter);
+      const badTools = parseFrontmatter(missingAllowedTools);
+      const badName = parseFrontmatter(missingName);
+      if (!good?.name || !good?.description || !good?.['allowed-tools']) {
+        fail('analyze-skillgen', 'self-test: frontmatter parser rejected a known-good template literal');
+      } else {
+        ok();
+      }
+      if (badTools?.['allowed-tools']) {
+        fail('analyze-skillgen', 'self-test: frontmatter parser accepted a block missing allowed-tools');
+      } else {
+        ok();
+      }
+      if (badName?.name) {
+        fail('analyze-skillgen', 'self-test: frontmatter parser accepted a block missing name');
+      } else {
+        ok();
+      }
+
+      for (const phrase of [
+        'Runs after step 6',
+        'never before it',
+        'Propose, never write unconfirmed',
+      ]) {
+        if (!text.includes(phrase)) {
+          fail('analyze-skillgen', `${skillRel} no longer states "${phrase}" for step 6.5`);
+        } else {
+          ok();
+        }
+      }
+
+      if (!recipeText.includes('generic test')) {
+        fail('analyze-skillgen', `${recipeRel} no longer names the generic test`);
+      } else {
+        ok();
+      }
+
+      if (!recipeText.includes('${CLAUDE_PLUGIN_ROOT}/skills/')) {
+        fail('analyze-skillgen', `${recipeRel} no longer resolves a name collision by reading \${CLAUDE_PLUGIN_ROOT}/skills/`);
+      } else {
+        ok();
+      }
+
+      if (!recipeText.includes('never work from a transcribed list')) {
+        fail('analyze-skillgen', `${recipeRel} no longer states the anti-transcribed-list rule`);
+      } else {
+        ok();
+      }
+
+      // The transcribed-list guard, self-tested: a literal that *does*
+      // enumerate every shipped skill name must be caught by the same rule.
+      const enumeratedList =
+        'The shipped skills are: analyze, implement, init, pipeline, release, scope, worktree-clean.';
+      const looksLikeTranscribedList = (s) =>
+        /shipped skills are:.*analyze.*implement.*init.*pipeline.*release.*scope.*worktree-clean/is.test(s);
+      if (!looksLikeTranscribedList(enumeratedList)) {
+        fail('analyze-skillgen', 'self-test: transcribed-list guard did not flag a literal that enumerates every shipped skill name');
+      } else if (looksLikeTranscribedList(recipeText)) {
+        fail('analyze-skillgen', `${recipeRel} carries a transcribed list of every shipped skill name — a second copy needing its own pin`);
+      } else {
+        ok();
+      }
+    }
+  }
+
+  note('analyze: step 6.5 pins for #191 — recipe and template references resolve, archetype frontmatter shape, generic test named, no transcribed skill list');
 }

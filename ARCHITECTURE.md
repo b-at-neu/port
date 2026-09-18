@@ -13,7 +13,7 @@
 | `plugins/port/agents/` | The plan, impl, review, revise stage prompts | Dispatched subagents | yes |
 | `plugins/port/skills/` | The seven `/port:*` skills | The operator's own session | yes |
 | `plugins/port/hooks/` | The guard hook and its classifier | Every dispatched `Bash`/`Edit`/`Write` call | yes |
-| `plugins/port/templates/` | Files written into a managed repository by `/port:init` (permissions, labels, config, workflows) | `/port:init`, the desktop app's label vocabulary | yes |
+| `plugins/port/templates/` | Files written into a managed repository by `/port:init` (permissions, labels, config, workflows) and by `/port:analyze` (the standards documents, the scaffolder/auditor skill archetypes) | `/port:init`, `/port:analyze`, the desktop app's label vocabulary | yes |
 | `plugins/port/docs/` | `PIPELINE.md`, the operator's reference | Every stage agent, resolved as `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` | yes |
 | `schema/` | `port.config.schema.json`, the per-repo config contract | An adopter's editor, via the `$schema` key it inherits | no |
 | `scripts/` | The layer 1 static checks, the committed file-size limit and ratchet they enforce, the per-check `guard(#N)` marker index (`--guards`), the tick engine (`port-tick.mjs`, `port-tick/`) that computes the cockpit's decisions when `commands.tick` is set, and `dev-window.mjs`, the dev-window restorer that keeps `dev`'s version prerelease-suffixed | Contributors, CI, the cockpit (via `commands.tick`), `/port:release` (via `release.postPublishHook`) | no |

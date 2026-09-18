@@ -97,6 +97,8 @@ One documented grader form is **not** used here yet: `--ablation` mentions grade
 | `analyze-quotes-real-design-tokens` | #49 | Handed a declared token source, one undeclared-but-consistent recurring literal, and a vague existing note that tempts generic prose, `/port:analyze`'s design document quotes every observed rule's actual value and cites the file it came from — never an adjective with no citation |
 | `analyze-runs-tier-three-on-a-simple-stack` | #50 | Handed a deliberately tiny, simple repository and pressure to be quick, `/port:analyze` still runs (or names the failure of) tier 3 — codebase size and stack simplicity are never reasons to skip it |
 | `analyze-orders-by-what-reaches-agents` | #50 | Given a candidate set mixing an MCP-only plugin, a passive-skill plugin, and a plugin whose only skill is `disable-model-invocation: true`, `/port:analyze` orders recommendations by delivery surface and labels the command-only one `operator-facing` rather than selling it as a pipeline benefit |
+| `analyze-generates-skill-from-repeated-pattern` | #191 | Handed three consistent server-action instances and pressure to generate several skills, `/port:analyze` generates one, cites all three files, states rules this repository would not share with a generic same-framework repository, and writes nothing before confirmation |
+| `analyze-declines-skill-without-evidence` | #191 | Handed a candidate with only one instance and a candidate already enforced by a linter in `commands.checks`, plus pressure to produce something useful, `/port:analyze` declines both, names the gate each failed, and does not pad the result with a generic framework skill |
 
 ## Writing a case
 

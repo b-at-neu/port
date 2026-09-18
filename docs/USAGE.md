@@ -112,6 +112,8 @@ A repository's own `CLAUDE.md`, if it has one, is read by every stage and outran
 
 It also **files findings as tickets rather than fixing them**, which is the point: a ticket gets a plan, a review, and a pull request. The analysis identifies work; the pipeline does it.
 
+After recommending plugins, it proposes **repository-specific skills** generated from two archetypes — a scaffolder and an auditor — filled from what actually recurs in your codebase, never from a stack-generic template. Only what nothing else already covers, one confirmation per skill, landing in your own `.claude/skills/` where it stays editable.
+
 Re-run it as the codebase evolves. It diffs against the existing document rather than regenerating, so decisions you already made survive.
 
 ## Housekeeping
