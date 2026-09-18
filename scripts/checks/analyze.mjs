@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, frontmatter } from '../lib/files.mjs';
+import { root, frontmatter, parseFrontmatter } from '../lib/files.mjs';
 
 // guard(#50): /port:analyze's step 6 recommended plugins on three bad
 // criteria — "already installed" measured against the operator's own
@@ -133,23 +133,16 @@ export default async function ({ fail, note, ok }) {
 
       // A malformed frontmatter block must fail the same shape check, and a
       // missing allowed-tools entry must fail too — a check that cannot be
-      // made to fail is not a check.
+      // made to fail is not a check. Exercises the real shared
+      // `parseFrontmatter()` from lib/files.mjs (the same parser the loop
+      // above calls, via `frontmatter()`, against the on-disk templates) —
+      // not a hand-rolled duplicate that could silently drift from it.
       const goodFrontmatter = '---\nname: x\ndescription: y\nallowed-tools: Read, Grep, Glob\n---\n';
       const missingAllowedTools = '---\nname: x\ndescription: y\n---\n';
       const missingName = '---\ndescription: y\nallowed-tools: Read, Grep, Glob\n---\n';
-      const parse = (fmText) => {
-        const m = /^---\n([\s\S]*?)\n---/.exec(fmText);
-        if (!m) return null;
-        const out = {};
-        for (const line of m[1].split('\n')) {
-          const kv = /^([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$/.exec(line);
-          if (kv) out[kv[1]] = kv[2].trim();
-        }
-        return out;
-      };
-      const good = parse(goodFrontmatter);
-      const badTools = parse(missingAllowedTools);
-      const badName = parse(missingName);
+      const good = parseFrontmatter(goodFrontmatter);
+      const badTools = parseFrontmatter(missingAllowedTools);
+      const badName = parseFrontmatter(missingName);
       if (!good?.name || !good?.description || !good?.['allowed-tools']) {
         fail('analyze-skillgen', 'self-test: frontmatter parser rejected a known-good template literal');
       } else {
