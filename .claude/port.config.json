@@ -9,8 +9,8 @@
   "commands": {
     "bootstrap": ["pnpm install"],
     "checks": [{ "run": "node scripts/checks.mjs", "fix": null }],
-    "artifacts": "node plugins/port/templates/artifacts.mjs",
-    "worktrees": "node plugins/port/templates/worktrees.mjs",
+    "artifacts": "node plugins/port/bin/artifacts.mjs",
+    "worktrees": "node plugins/port/bin/worktrees.mjs",
     "tick": "node scripts/port-tick.mjs"
   },
   "docs": {
@@ -51,8 +51,8 @@
   "extraAllow": [
     "Bash(node scripts/checks.mjs)",
     "Bash(node scripts/checks.mjs *)",
-    "Bash(node plugins/port/templates/artifacts.mjs *)",
-    "Bash(node plugins/port/templates/worktrees.mjs *)",
+    "Bash(node plugins/port/bin/artifacts.mjs *)",
+    "Bash(node plugins/port/bin/worktrees.mjs *)",
     "Bash(node scripts/port-tick.mjs *)",
     "Bash(node scripts/dev-window.mjs)",
     "Bash(node scripts/dev-window.mjs *)"

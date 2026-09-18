@@ -1,4 +1,4 @@
-// readWorktreeReport: drives the shipped `templates/worktrees.mjs report
+// readWorktreeReport: drives the shipped `bin/worktrees.mjs report
 // --json` through `commands.worktrees`, classifies its outcome, and joins
 // #77's `readWorktrees` for the one fact the script's JSON omits
 // (`prunable`) — never a second classification implementation, and never a
@@ -24,7 +24,7 @@ type ReclaimerOwnFailureKind = 'not-configured' | 'unparseable-command' | 'unsup
 export const _kindsCoverCommandResult: AssertEqual<ReclaimerFailureKind, CommandResultFailureKind | ReclaimerOwnFailureKind> = true
 
 /** Two literals reaching in from the shipped script, pinned against
- *  `templates/worktrees.mjs`'s own copies by the `desktop-reclaimer` layer 1
+ *  `bin/worktrees.mjs`'s own copies by the `desktop-reclaimer` layer 1
  *  check — `die()`'s own `FAIL` prefix, and the sentence Decision 3's retry
  *  keys on. */
 export const SCRIPT_FAIL_PREFIX = 'FAIL  '

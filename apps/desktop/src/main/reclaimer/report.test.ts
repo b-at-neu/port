@@ -68,11 +68,11 @@ describe('readWorktreeReport', () => {
     }
     const result = await readWorktreeReport({
       repoRoot: '/repo',
-      worktreesCommand: 'node plugins/port/templates/worktrees.mjs',
+      worktreesCommand: 'node plugins/port/bin/worktrees.mjs',
       runNode,
       pathOps: posixPathOps,
     })
-    expect(seenArgs).toEqual(['plugins/port/templates/worktrees.mjs', 'report', '--json'])
+    expect(seenArgs).toEqual(['plugins/port/bin/worktrees.mjs', 'report', '--json'])
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.githubResolution).toBe('resolved')

@@ -27,7 +27,7 @@ import { join, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 // --- Label vocabulary --------------------------------------------------------
-// Mirrors templates/labels.json (key, default name, module). The port
+// Mirrors data/labels.json (key, default name, module). The port
 // repository's own layer 1 checks assert the two agree, both directions, so
 // a drift here fails layer 1 rather than silently mismatching in `audit`.
 export const LABELS = {

@@ -4,31 +4,14 @@ import { pathToFileURL } from 'node:url';
 import { root, readJson } from '../lib/files.mjs';
 
 export default async function ({ fail, ok }) {
-  // --- Artifact validator template is self-contained --------------------------
-  // guard(#149): the one file an adopting repository copies alone breaking
-  // silently outside this checkout. An adopting repository copies
-  // plugins/port/templates/artifacts.mjs alone — no plugins/port/, no
-  // scripts/lib/ — so a relative import that resolves here and nowhere else
-  // would break silently for every adopter while passing in this repository.
-  {
-    const rel = 'plugins/port/templates/artifacts.mjs';
-    const text = readFileSync(join(root, rel), 'utf8');
-    const relativeImport = /\bfrom\s+['"]\.\.?\//.exec(text);
-    if (relativeImport) {
-      fail('artifacts-template', `${rel} has a relative import (${JSON.stringify(relativeImport[0])}) — it must be self-contained`);
-    } else {
-      ok();
-    }
-  }
-
   // --- Artifact validator's LABELS table matches labels.json ------------------
   // guard(#149): audit's label resolution drifting from the source of truth
   // now that it can't import the file directly. The template can't import
   // labels.json (previous check), so it carries its own copy. The two must
   // agree on keys, names, and modules, both directions.
   {
-    const { LABELS } = await import(pathToFileURL(join(root, 'plugins/port/templates/artifacts.mjs')).href);
-    const canonical = new Map(readJson('plugins/port/templates/labels.json').labels.map((l) => [l.key, l]));
+    const { LABELS } = await import(pathToFileURL(join(root, 'plugins/port/bin/artifacts.mjs')).href);
+    const canonical = new Map(readJson('plugins/port/data/labels.json').labels.map((l) => [l.key, l]));
     for (const [key, entry] of Object.entries(LABELS)) {
       const c = canonical.get(key);
       if (!c) {
@@ -61,7 +44,7 @@ export default async function ({ fail, ok }) {
   // literal passes, and identity only bites for the regex-typed `review` /
   // `revision` entries.
   {
-    const mod = await import(pathToFileURL(join(root, 'plugins/port/templates/artifacts.mjs')).href);
+    const mod = await import(pathToFileURL(join(root, 'plugins/port/bin/artifacts.mjs')).href);
     const headingExports = Object.keys(mod).filter((k) => /_HEADING$/.test(k));
     const registryHeadings = Object.values(mod.CHECKS).map((e) => e.heading).filter((h) => h != null);
     for (const name of headingExports) {
@@ -98,7 +81,7 @@ export default async function ({ fail, ok }) {
   // recurred four times in one pipeline run before this validator existed.
   {
     const { COMMIT_SUBJECT, REVIEW_HEADING, REVISION_HEADING, REVISION_OPENS, REVISION_DETAIL, OPERATOR_ONLY_STEP, CHECKS } =
-      await import(pathToFileURL(join(root, 'plugins/port/templates/artifacts.mjs')).href);
+      await import(pathToFileURL(join(root, 'plugins/port/bin/artifacts.mjs')).href);
 
     const cases = [
       [
@@ -163,7 +146,7 @@ export default async function ({ fail, ok }) {
   // and a failing case's message must name the labels actually offending,
   // not just a count.
   {
-    const { stageViolation } = await import(pathToFileURL(join(root, 'plugins/port/templates/artifacts.mjs')).href);
+    const { stageViolation } = await import(pathToFileURL(join(root, 'plugins/port/bin/artifacts.mjs')).href);
     const legal = [
       [['ready for review'], ['refresh branch']],
       [['approved'], ['refreshing']],

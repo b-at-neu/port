@@ -4,20 +4,15 @@ import { pathToFileURL } from 'node:url';
 import { root, readJson, pipelineTickText } from '../lib/files.mjs';
 
 export default async function ({ fail, ok }) {
-  // --- Worktree reclamation template is self-contained and cross-platform ----
-  // guard(#144): the one file an adopting repository copies alone breaking
-  // silently outside this checkout, or reaching outside its contract —
-  // never shell out via a POSIX-only binary name or a shell string.
+  // --- Worktree reclamation template reaches outside its contract ------------
+  // guard(#144): the one file an adopting repository copies alone reaching
+  // outside its contract — never shell out via a POSIX-only binary name or a
+  // shell string. Self-containment itself is now the directory-wide
+  // `layout.mjs` check (issue 171); this module keeps only this file's own
+  // contract-specific assertions.
   {
-    const rel = 'plugins/port/templates/worktrees.mjs';
+    const rel = 'plugins/port/bin/worktrees.mjs';
     const text = readFileSync(join(root, rel), 'utf8');
-
-    const relativeImport = /\bfrom\s+['"]\.\.?\//.exec(text);
-    if (relativeImport) {
-      fail('worktrees-template', `${rel} has a relative import (${JSON.stringify(relativeImport[0])}) — it must be self-contained`);
-    } else {
-      ok();
-    }
 
     if (/\bexecSync\b/.test(text)) {
       fail('worktrees-template', `${rel} uses execSync — every child process must use spawnSync with an explicit argv array`);
@@ -51,7 +46,7 @@ export default async function ({ fail, ok }) {
   // functions in isolation from every git/gh call.
   {
     const { parsePorcelain, correlate, classifyCandidate } =
-      await import(pathToFileURL(join(root, 'plugins/port/templates/worktrees.mjs')).href);
+      await import(pathToFileURL(join(root, 'plugins/port/bin/worktrees.mjs')).href);
 
     // parsePorcelain: main worktree first, a linked one, a locked one with a
     // reason, and a detached one.

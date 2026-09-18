@@ -163,7 +163,7 @@ export default async function ({ fail, note, ok }) {
   // that fails to parse.
   for (const t of [
     'plugins/port/templates/permissions.base.json',
-    'plugins/port/templates/labels.json',
+    'plugins/port/data/labels.json',
     'plugins/port/templates/port.config.json',
     'schema/port.config.schema.json',
     '.claude-plugin/marketplace.json',

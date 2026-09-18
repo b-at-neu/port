@@ -82,7 +82,7 @@ export default async function ({ fail, ok }) {
   // guard(#105): the app's own stalled-claim recovery target silently
   // drifting from scripts/port-tick/liveness.mjs's own ladder — checked by
   // dynamic import of the real engine, the same idiom desktop-local.mjs
-  // already uses for templates/worktrees.mjs's correlate.
+  // already uses for bin/worktrees.mjs's correlate.
   {
     const livenessFile = `${mainDir}/liveness.ts`;
     const enginePath = join(root, 'scripts/port-tick/liveness.mjs');
@@ -118,7 +118,7 @@ export default async function ({ fail, ok }) {
     const routingFile = `${mainDir}/routing.ts`;
     const routingText = readFileSync(join(root, routingFile), 'utf8');
     const routingMatch = /const AGENT_FOR_TRIGGER[^{]*\{([^}]*)\}/.exec(routingText);
-    const labelsJson = readJson('plugins/port/templates/labels.json');
+    const labelsJson = readJson('plugins/port/data/labels.json');
     const triggerKeys = new Set(labelsJson.labels.filter((l) => l.role === 'trigger').map((l) => l.key));
 
     if (!routingMatch) {

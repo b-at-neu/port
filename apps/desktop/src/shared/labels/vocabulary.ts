@@ -1,7 +1,7 @@
 import { LABEL_DEFAULTS, type LabelModule, type LabelRole } from './defaults'
 
 /**
- * Every label key `plugins/port/templates/labels.json` defines, in the
+ * Every label key `plugins/port/data/labels.json` defines, in the
  * template's own order. TypeScript widens a JSON import's string values to
  * `string`, so this literal union cannot be derived from that import — it is
  * hand-maintained and cross-checked against the template both directions by

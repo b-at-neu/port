@@ -1,12 +1,12 @@
 // Reads .claude/port.config.json and resolves everything the tick engine
-// needs from it: the label vocabulary (pinned to templates/labels.json,
+// needs from it: the label vocabulary (pinned to data/labels.json,
 // checked by scripts/checks/tick.mjs), models, modules, concurrency, and the
 // review cycle cap. No path is string-concatenated — node:path only.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // Defaults and roles mirror plugins/port/docs/PIPELINE.md → "Label lifecycle"
-// and plugins/port/templates/labels.json exactly — the pin check in
+// and plugins/port/data/labels.json exactly — the pin check in
 // scripts/checks/tick.mjs asserts both directions.
 export const LABEL_DEFAULTS = {
   marker: 'claude',

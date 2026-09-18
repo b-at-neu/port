@@ -14,7 +14,7 @@
 export type CorrelationRung = 'upstream-branch' | 'branch-name' | 'directory-basename' | 'head-subject'
 
 /** `{ number, rung }` when one of the four ladder rungs matched, byte-for-byte
- *  the reclaimer's own ladder (`templates/worktrees.mjs`'s `correlate`,
+ *  the reclaimer's own ladder (`bin/worktrees.mjs`'s `correlate`,
  *  pinned against this repository's TypeScript copy by the shared case
  *  table in `main/local/correlation.cases.json`). */
 export interface WorktreeCorrelation {

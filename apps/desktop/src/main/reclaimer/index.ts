@@ -1,6 +1,6 @@
 // The public surface the IPC layer imports — never `./command`, `./parse`,
 // or `./report` directly. The classification behind `readWorktreeReport`
-// comes from the shipped `templates/worktrees.mjs report --json`, never a
+// comes from the shipped `bin/worktrees.mjs report --json`, never a
 // second implementation here, and this directory never calls `git worktree`
 // itself — `main/local/`'s join (via #77's own `readWorktrees`) is the one
 // place that does.

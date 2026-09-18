@@ -77,7 +77,7 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Label-cas carve-outs and existing-work pre-flight ---------------------
-  // guard(#209): the block's carve-outs agree with templates/labels.json,
+  // guard(#209): the block's carve-outs agree with data/labels.json,
   // both directions — every marker-role label must be named, and the
   // sanctioned co-presence pair is exactly refreshBranch/refreshing — so a
   // new marker label fails this check until the block is updated to name it,
@@ -86,14 +86,14 @@ export default async function ({ fail, note, ok }) {
   // covers the same issue.
   if (withBlock.length > 0) {
     const canonical = withBlock[0].block;
-    const markerKeys = readJson('plugins/port/templates/labels.json')
+    const markerKeys = readJson('plugins/port/data/labels.json')
       .labels.filter((l) => l.role === 'marker')
       .map((l) => l.key);
     for (const key of markerKeys) {
       if (!canonical.includes(`<labels.${key}>`)) {
         fail(
           'label-protocol',
-          `label-cas block does not name marker label '<labels.${key}>', which templates/labels.json declares role: "marker"`,
+          `label-cas block does not name marker label '<labels.${key}>', which data/labels.json declares role: "marker"`,
         );
       } else {
         ok();

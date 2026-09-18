@@ -3,10 +3,10 @@ import { parseWorktreesCommand } from './command'
 
 describe('parseWorktreesCommand', () => {
   it('accepts a plain node prefix', () => {
-    expect(parseWorktreesCommand('node plugins/port/templates/worktrees.mjs')).toEqual({
+    expect(parseWorktreesCommand('node plugins/port/bin/worktrees.mjs')).toEqual({
       ok: true,
       binary: 'node',
-      args: ['plugins/port/templates/worktrees.mjs'],
+      args: ['plugins/port/bin/worktrees.mjs'],
     })
   })
 

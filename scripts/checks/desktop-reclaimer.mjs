@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { root, walk, relOf } from '../lib/files.mjs';
 
 // Issue 86: apps/desktop/src/main/reclaimer/ drives the shipped
-// plugins/port/templates/worktrees.mjs through commands.worktrees and never
+// plugins/port/bin/worktrees.mjs through commands.worktrees and never
 // re-implements its classification — this directory calls no `git worktree`
 // itself (main/local/'s join is the one place that does). Four assertions
 // pin that mechanically, in the shape of desktop-local.mjs's own guards.
@@ -54,7 +54,7 @@ export default async function ({ fail, ok }) {
       const appStates = [...statesMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
       const appReclaimable = [...reclaimableMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
 
-      const templatePath = join(root, 'plugins/port/templates/worktrees.mjs');
+      const templatePath = join(root, 'plugins/port/bin/worktrees.mjs');
       const templateText = readFileSync(templatePath, 'utf8');
       const reasonFnMatch = /function describeReason\(c\) \{([\s\S]*?)\n\}/.exec(templateText);
       if (!reasonFnMatch) {
@@ -65,12 +65,12 @@ export default async function ({ fail, ok }) {
         const appSet = new Set(appStates);
         for (const state of appStates) {
           if (!templateSet.has(state)) {
-            fail('desktop-reclaimer', `WORKTREE_STATES has '${state}', which templates/worktrees.mjs's describeReason has no case for`);
+            fail('desktop-reclaimer', `WORKTREE_STATES has '${state}', which bin/worktrees.mjs's describeReason has no case for`);
           }
         }
         for (const state of templateStates) {
           if (!appSet.has(state)) {
-            fail('desktop-reclaimer', `templates/worktrees.mjs's describeReason has a case for '${state}', missing from WORKTREE_STATES`);
+            fail('desktop-reclaimer', `bin/worktrees.mjs's describeReason has a case for '${state}', missing from WORKTREE_STATES`);
           }
         }
       }
@@ -103,7 +103,7 @@ export default async function ({ fail, ok }) {
   // pinned copies, breaking the offline-retry and script-failed
   // classification silently.
   {
-    const templatePath = join(root, 'plugins/port/templates/worktrees.mjs');
+    const templatePath = join(root, 'plugins/port/bin/worktrees.mjs');
     const templateText = readFileSync(templatePath, 'utf8');
     const reportPath = join(root, 'apps/desktop/src/main/reclaimer/report.ts');
     const reportText = readFileSync(reportPath, 'utf8');

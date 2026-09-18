@@ -171,7 +171,7 @@ A command matches only if it **starts with an allowlisted binary**. `Bash(npm *)
 
 ## 5. Create the labels
 
-Read `${CLAUDE_PLUGIN_ROOT}/templates/labels.json` and create the subset whose `module` is `core` or an **enabled** module. Use the configured name from `labels` where the repository overrode it.
+Read `${CLAUDE_PLUGIN_ROOT}/data/labels.json` and create the subset whose `module` is `core` or an **enabled** module. Use the configured name from `labels` where the repository overrode it.
 
 ```bash
 gh label create "<name>" --color "<color>" --description "<description>"
@@ -197,7 +197,7 @@ node --version
 
 **Node present and the operator accepts:**
 
-- Copy `${CLAUDE_PLUGIN_ROOT}/templates/artifacts.mjs` to `scripts/port-artifacts.mjs`.
+- Copy `${CLAUDE_PLUGIN_ROOT}/bin/artifacts.mjs` to `scripts/port-artifacts.mjs`.
 - Copy `${CLAUDE_PLUGIN_ROOT}/templates/artifacts.yml` to `.github/workflows/artifacts.yml`, substituting `{{artifactsCommand}}` with `node scripts/port-artifacts.mjs`, `{{markerLabel}}` with the configured marker label name, and `{{approvedLabel}}` with the configured approved label name.
 - If either file already exists, diff it rather than overwriting, and ask.
 - Set `commands.artifacts` to `"node scripts/port-artifacts.mjs"` in `.claude/port.config.json`.
@@ -211,7 +211,7 @@ node --version
 
 **Node present and the operator accepts:**
 
-- Copy `${CLAUDE_PLUGIN_ROOT}/templates/worktrees.mjs` to `scripts/port-worktrees.mjs`. If it already exists, diff it rather than overwriting, and ask.
+- Copy `${CLAUDE_PLUGIN_ROOT}/bin/worktrees.mjs` to `scripts/port-worktrees.mjs`. If it already exists, diff it rather than overwriting, and ask.
 - Set `commands.worktrees` to `"node scripts/port-worktrees.mjs"` in `.claude/port.config.json`.
 - Add `Bash(node scripts/port-worktrees.mjs *)` to **both** `.claude/settings.json`'s `permissions.allow` and `.claude/port.config.json`'s `extraAllow`, so a later reconcile keeps it.
 
@@ -223,7 +223,7 @@ node --version
 
 **Node present and the operator accepts:**
 
-- Copy `${CLAUDE_PLUGIN_ROOT}/templates/budget.mjs` to `scripts/port-budget.mjs`. If it already exists, diff it rather than overwriting, and ask.
+- Copy `${CLAUDE_PLUGIN_ROOT}/bin/budget.mjs` to `scripts/port-budget.mjs`. If it already exists, diff it rather than overwriting, and ask.
 - Set `commands.budget` to `"node scripts/port-budget.mjs"` in `.claude/port.config.json`.
 - Add `Bash(node scripts/port-budget.mjs *)` to **both** `.claude/settings.json`'s `permissions.allow` and `.claude/port.config.json`'s `extraAllow`, so a later reconcile keeps it.
 

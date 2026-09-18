@@ -1,6 +1,6 @@
 // The trigger-key to stage-agent map (#105) — exported for #106's own
 // dispatch to consume rather than re-declared there. `scripts/checks/desktop-tick.mjs`
-// pins this against `plugins/port/templates/labels.json`'s own `role: "trigger"`
+// pins this against `plugins/port/data/labels.json`'s own `role: "trigger"`
 // keys, both directions, so a label added or retired there cannot silently
 // leave this map out of step.
 import type { LabelKey } from '../../shared/labels/vocabulary'

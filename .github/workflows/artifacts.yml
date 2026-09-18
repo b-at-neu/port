@@ -54,4 +54,4 @@ jobs:
           PR: ${{ github.event_name == 'workflow_dispatch' && inputs.pr || github.event.pull_request.number }}
         # $PR is deliberately unquoted: a blank dispatch input must expand to no
         # argument at all, which is how the script enters sweep mode.
-        run: node plugins/port/templates/artifacts.mjs audit $PR
+        run: node plugins/port/bin/artifacts.mjs audit $PR

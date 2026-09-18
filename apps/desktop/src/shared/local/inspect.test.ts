@@ -355,7 +355,7 @@ describe('shapeOf', () => {
   })
 
   it('worked example: node <path>', () => {
-    expect(shapeOf('node /home/op/.claude/plugins/cache/port/port/0.1.0/templates/artifacts.mjs')).toBe('node <path>')
+    expect(shapeOf('node /home/op/.claude/plugins/cache/port/port/0.1.0/bin/artifacts.mjs')).toBe('node <path>')
   })
 
   it('worked example: node <path> <arg> tail, identically for -100 and -60', () => {

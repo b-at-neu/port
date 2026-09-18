@@ -23,10 +23,17 @@ Each rule is worth testing by breaking it deliberately. If a check cannot be mad
 
 The script reports full schema validation as **skipped**, because a draft 2020-12 validator is a dependency and the script must run where none is installed. CI does that part.
 
-Two guards specific to `plugins/port/templates/artifacts.mjs` (#231), both in `scripts/checks/artifacts.mjs`:
+Two guards specific to `plugins/port/bin/artifacts.mjs` (#231), both in `scripts/checks/artifacts.mjs`:
 
 - `stageViolation`'s pair-wise legality, asserted directly: every sanctioned pair (a stage label alone, a refresh label alone, one of each) passes, and both illegal shapes — two stage labels, or both refresh labels — fail with a message naming the offending labels.
 - The audit workflow's trigger, read off `plugins/port/templates/artifacts.yml`: `pull_request.types` names `labeled`, `opened`, and `synchronize`; the one `if:` key sits at step indentation, never job indentation; and neither it nor this document still carries the retired "never register this as a required status check" warning.
+
+A layer 1 check specific to the three-way split under `plugins/port/` (#171), in `scripts/checks/layout.mjs`:
+
+- `templates/` holds only its eight fill-in templates (`DESIGN.template.md`, `ENGINEERING.template.md`, `AUDITOR.template.md`, `SCAFFOLDER.template.md`, `permissions.base.json`, the config template, `approval-check.yml`, `artifacts.yml`), asserted both directions against the tree.
+- `bin/` holds only self-contained `.mjs` files — no relative import escaping the file, checked directory-wide rather than per file.
+- `data/` holds only `.json`.
+- No tracked text file still names the old `templates/`-relative path to `artifacts.mjs`, `worktrees.mjs`, `budget.mjs`, or `labels.json` — each now lives under `bin/` or `data/`.
 
 Guards for `/port:analyze`'s skill-generation step (#191), in `scripts/checks/analyze.mjs` and `scripts/checks/standards.mjs`:
 
@@ -39,19 +46,19 @@ Guards for `/port:analyze`'s skill-generation step (#191), in `scripts/checks/an
 
 The output formats live in `PIPELINE.md` prose and, until now, were asserted nowhere. The one that matters most is the review heading — the cockpit **counts** occurrences of the literal `## Code Review` to derive the cycle number, so renaming it silently breaks the cycle cap and the escalating bar, with no error anywhere. That is why the literal prefix is asserted separately from the rest of the heading.
 
-`plugins/port/templates/artifacts.mjs` is the one executable statement of these patterns. Two modes read from the exact same constants, so there is nothing to keep in sync between them:
+`plugins/port/bin/artifacts.mjs` is the one executable statement of these patterns. Two modes read from the exact same constants, so there is nothing to keep in sync between them:
 
 ```bash
-node plugins/port/templates/artifacts.mjs check commit .temp/commit-msg.txt --issue 149      # one artifact file, offline
-node plugins/port/templates/artifacts.mjs check pr-body .temp/pr-149.md --issue 149
-node plugins/port/templates/artifacts.mjs check review .temp/review-65.json --cycle 1
-node plugins/port/templates/artifacts.mjs check revision .temp/revision-65.md --cycle 1
-node plugins/port/templates/artifacts.mjs check withdrawn .temp/withdrawn-196.md
-node plugins/port/templates/artifacts.mjs check rebase-required .temp/rebase-required-196.md
+node plugins/port/bin/artifacts.mjs check commit .temp/commit-msg.txt --issue 149      # one artifact file, offline
+node plugins/port/bin/artifacts.mjs check pr-body .temp/pr-149.md --issue 149
+node plugins/port/bin/artifacts.mjs check review .temp/review-65.json --cycle 1
+node plugins/port/bin/artifacts.mjs check revision .temp/revision-65.md --cycle 1
+node plugins/port/bin/artifacts.mjs check withdrawn .temp/withdrawn-196.md
+node plugins/port/bin/artifacts.mjs check rebase-required .temp/rebase-required-196.md
 
-node plugins/port/templates/artifacts.mjs audit 65      # audit named pull requests
-node plugins/port/templates/artifacts.mjs audit         # the 5 most recent, plus the parked sweep
-node plugins/port/templates/artifacts.mjs audit --limit 10
+node plugins/port/bin/artifacts.mjs audit 65      # audit named pull requests
+node plugins/port/bin/artifacts.mjs audit         # the 5 most recent, plus the parked sweep
+node plugins/port/bin/artifacts.mjs audit --limit 10
 ```
 
 **`check <kind> <file>` is the earlier net, not a second layer.** It is what `commands.artifacts` points the three stage agents at: each validates the file it just wrote — a commit message, a pull request body, a review payload, a revision note — before producing it, so a malformed one fails in the worktree seconds after it is written instead of after `<labels.approved>`. It is offline: no `gh`, no network, no config read, and it works in any worktree, including one with no `.claude/port.config.json`. A repository with no Node leaves `commands.artifacts` null and gets no production-time validation at all — `audit` below is then the only net.

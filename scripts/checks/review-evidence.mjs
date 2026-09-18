@@ -177,7 +177,7 @@ export default async function ({ fail, ok }) {
   // rebase route, so its bounds and its no-cycle-cost accounting must
   // actually be documented, not merely implemented.
   {
-    const labels = readJson('plugins/port/templates/labels.json');
+    const labels = readJson('plugins/port/data/labels.json');
     for (const key of ['refreshBranch', 'refreshing']) {
       const entry = labels.labels.find((l) => l.key === key);
       if (!entry || entry.module !== 'core') {

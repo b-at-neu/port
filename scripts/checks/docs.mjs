@@ -149,7 +149,7 @@ export default async function ({ fail, note, ok }) {
       ['schema/port.config.schema.json', 'fail'],
       ['plugins/port/skills/pipeline/SKILL.md', 'fail'],
       ['${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md', 'pass'],
-      ['templates/artifacts.mjs', 'pass'],
+      ['bin/artifacts.mjs', 'pass'],
       ['skills/pipeline/SKILL.md', 'pass'],
       ['.claude/port.config.json', 'skip'],
       ['.claude-plugin/marketplace.json', 'skip'],
@@ -184,7 +184,7 @@ export default async function ({ fail, note, ok }) {
       // Still-legitimate forms the widening must not start failing: a shipped
       // path behind a command prefix, an adopter-only install target, and a
       // templated path whose placeholder is only part of a segment.
-      ['node templates/artifacts.mjs check commit .temp/m.txt', 'pass'],
+      ['node bin/artifacts.mjs check commit .temp/m.txt', 'pass'],
       ['Bash(node scripts/port-artifacts.mjs *)', 'skip'],
       ['repos/<repo>/pulls/<pr-number>/comments', 'skip'],
       ['scripts/checks-<topic>.mjs', 'skip'],
