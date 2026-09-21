@@ -16,7 +16,7 @@
 | `plugins/port/templates/` | Fill-in templates only, written into a managed repository by `/port:init` (permissions, config, workflows) and by `/port:analyze` (the standards documents, the scaffolder/auditor skill archetypes) | `/port:init`, `/port:analyze` | yes |
 | `plugins/port/bin/` | The three scripts `/port:init` copies verbatim into a managed repository (`artifacts.mjs`, `worktrees.mjs`, `budget.mjs`); `artifacts.mjs` and `worktrees.mjs` also run in place here, addressed through `commands.artifacts`/`commands.worktrees` | `/port:init`, this repository's CI and cockpit | yes |
 | `plugins/port/data/` | `labels.json`, the canonical label vocabulary — nothing fills it in | `/port:init`, this repository's layer 1 checks, the desktop app's label vocabulary | yes |
-| `plugins/port/docs/` | `PIPELINE.md`, the operator's reference | Every stage agent, resolved as `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` | yes |
+| `plugins/port/docs/` | `PIPELINE.md`, `FORMATS.md`, `RECOVERY.md` — the operator's reference | Every stage agent, resolved as `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` (and its two companions) | yes |
 | `schema/` | `port.config.schema.json`, the per-repo config contract | An adopter's editor, via the `$schema` key it inherits | no |
 | `scripts/` | The layer 1 static checks, the committed file-size limit and ratchet they enforce, the per-check `guard(#N)` marker index (`--guards`), the tick engine (`port-tick.mjs`, `port-tick/`) that computes the cockpit's decisions when `commands.tick` is set — including the trajectory record it emits to `.agents/events.jsonl` (`port-tick/events.mjs`) and the `report` subcommand that reads it back (`port-tick/report.mjs`) — and `dev-window.mjs`, the dev-window restorer that keeps `dev`'s version prerelease-suffixed | Contributors, CI, the cockpit (via `commands.tick`), `/port:release` (via `release.postPublishHook`) | no |
 | `evals/` | Layer 3 behavioural eval cases and graders | Contributors, CI (gated) | no |
@@ -33,9 +33,9 @@ Each of these reads as arbitrary and is not — the reason is recoverable only b
 
 Its `$id` (`schema/port.config.schema.json:3`) and the `$schema` key every adopter's config inherits (`plugins/port/templates/port.config.json:2`) are absolute `raw.githubusercontent.com/…/main/schema/…` URLs. Moving `schema/` breaks editor validation in every repository that has already run `/port:init`, silently and retroactively — nothing re-fetches the old URL to notice it 404s.
 
-### `plugins/port/docs/PIPELINE.md`
+### `plugins/port/docs/PIPELINE.md`, `FORMATS.md`, `RECOVERY.md`
 
-Every agent and skill resolves it as `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md`. At the repository root it is unreachable from an install — `${CLAUDE_PLUGIN_ROOT}` only ever points inside the plugin directory.
+Every agent and skill resolves the hub as `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md`; its two companions resolve the same `${CLAUDE_PLUGIN_ROOT}/docs/` argument with their own filename. At the repository root all three are unreachable from an install — `${CLAUDE_PLUGIN_ROOT}` only ever points inside the plugin directory.
 
 ### `plugins/<name>/` nesting, and `.claude-plugin/marketplace.json` at the root
 

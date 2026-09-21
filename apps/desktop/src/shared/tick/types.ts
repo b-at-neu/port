@@ -39,7 +39,7 @@ export interface TickHeld {
  * An in-flight claim's own resolution. `session-required` never reaches
  * `classifyUnmatched` at all — an operator's own interactive session has no
  * `TaskList` entry to match, so it must never be read as a stall
- * (PIPELINE.md → "Liveness"). `matched` is this app's own analogue of a live
+ * (RECOVERY.md → "Liveness"). `matched` is this app's own analogue of a live
  * `TaskList` hit: an attached agent or session this app's own scan found
  * active. The remaining four are `classifyUnmatched`'s own literals, with
  * its `reset` renamed `stalled-confirmed` here — this app resets nothing, so

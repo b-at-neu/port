@@ -21,6 +21,9 @@ import shellDiscipline from './checks/shell-discipline.mjs';
 import labelProtocol from './checks/label-protocol.mjs';
 import standards from './checks/standards.mjs';
 import hooks from './checks/hooks.mjs';
+import hooksClassifier from './checks/hooks-classifier.mjs';
+import hooksCockpitRules from './checks/hooks-cockpit-rules.mjs';
+import hooksGateRule from './checks/hooks-gate-rule.mjs';
 import allowlist from './checks/allowlist.mjs';
 import config from './checks/config.mjs';
 import install from './checks/install.mjs';
@@ -31,11 +34,14 @@ import docs from './checks/docs.mjs';
 import layout from './checks/layout.mjs';
 import evals from './checks/evals.mjs';
 import cockpit from './checks/cockpit.mjs';
+import cockpitTick from './checks/cockpit-tick.mjs';
+import worktrees from './checks/worktrees.mjs';
 import preflight from './checks/preflight.mjs';
 import budget from './checks/budget.mjs';
 import reviewEvidence from './checks/review-evidence.mjs';
 import harness from './checks/harness.mjs';
 import guards from './checks/guards.mjs';
+import companions from './checks/companions.mjs';
 import desktopPlatform from './checks/desktop-platform.mjs';
 import desktopRegistry from './checks/desktop-registry.mjs';
 import desktopGithub from './checks/desktop-github.mjs';
@@ -91,6 +97,9 @@ if (argv.includes('--guards')) {
     labelProtocol,
     standards,
     hooks,
+    hooksClassifier,
+    hooksCockpitRules,
+    hooksGateRule,
     allowlist,
     config,
     install,
@@ -101,11 +110,14 @@ if (argv.includes('--guards')) {
     layout,
     evals,
     cockpit,
+    cockpitTick,
+    worktrees,
     preflight,
     budget,
     reviewEvidence,
     harness,
     guards,
+    companions,
     desktopPlatform,
     desktopRegistry,
     desktopGithub,

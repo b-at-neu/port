@@ -66,8 +66,8 @@ This is **this repository's own** standards document, not a template — `plugin
 | `scripts/port-tick/config.mjs`'s `LABEL_DEFAULTS`/`LABEL_ROLES` ↔ `data/labels.json` | `tick-labels` (`scripts/checks/tick.mjs`) |
 | `scripts/port-tick/cases/*.json` ↔ every pure function in `scripts/port-tick/` it names | `tick-cases` (`scripts/checks/tick.mjs`) — the authoritative decision-case table a second implementation (`apps/desktop`'s own tick, when #105 converges onto this engine) is asserted against |
 | `bin/worktrees.mjs`'s two diagnostic literals (`die()`'s `FAIL` prefix, `gh issueOrPullRequest resolution failed`) ↔ `main/reclaimer/report.ts`'s pinned copies | `desktop-reclaimer` |
-| The `label-cas` block ↔ its copies in the four agent files — a fallback compared pairwise, since the #177 ratchet forbids a `PIPELINE.md` canonical copy until #220 moves it there once #181 frees the headroom | "Label transitions are compare-and-swap" |
-| The `standards-precedence` block ↔ its copies in the four agent files — compared pairwise, same "no `PIPELINE.md` canonical copy until #181 frees the headroom" carve-out as `label-cas` | `standards` (`scripts/checks/standards.mjs`) |
+| The `label-cas` block ↔ its copies in the four agent files — a fallback compared pairwise, since the #177 ratchet forbids a `PIPELINE.md` canonical copy until #220 moves it there | "Label transitions are compare-and-swap" |
+| The `standards-precedence` block ↔ its copies in the four agent files — compared pairwise, same "no `PIPELINE.md` canonical copy until #220 moves it there" carve-out as `label-cas` | `standards` (`scripts/checks/standards.mjs`) |
 | `shared/writes/types.ts`'s `Conflict` union ↔ `docs/COORDINATION.md`'s fenced `type Conflict` block — kind literals and field-name sets, both directions, not byte-identity (the doc's fence omits the `readonly` modifiers this app's style requires) | `desktop-writes` |
 | `main/writes/scope.ts`'s `PLAN_GATE_KEYS` ↔ `docs/COORDINATION.md`'s claim-contract keys, both directions | `desktop-writes` |
 | The `ENGINEERING.md`/`DESIGN.md` boundary statement (accessibility's single home) ↔ its copy in `templates/ENGINEERING.template.md` and `templates/DESIGN.template.md` — both directions, plus `DESIGN.template.md` carrying no Accessibility heading of its own | `standards` (`scripts/checks/standards.mjs`) |
@@ -104,7 +104,7 @@ This is **this repository's own** standards document, not a template — `plugin
 
 The users of this system are operators reading GitHub and a terminal, so "user-facing" means every plan, review, comment, and cockpit line.
 
-**Writing style, every output** (PIPELINE.md → "Writing style"): bullets and short sentences over paragraphs, one idea per bullet · never restate context the reader already has, reference it · omit sections that do not apply, with no "N/A" or "None" filler · no meta-commentary about the document itself · say each point exactly once, never across body, inline, and summary.
+**Writing style, every output** (FORMATS.md → "Writing style"): bullets and short sentences over paragraphs, one idea per bullet · never restate context the reader already has, reference it · omit sections that do not apply, with no "N/A" or "None" filler · no meta-commentary about the document itself · say each point exactly once, never across body, inline, and summary.
 
 **Every failure mode states, in writing, which direction it fails toward and why.** Both directions are chosen deliberately and neither is a default:
 

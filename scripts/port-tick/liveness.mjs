@@ -1,5 +1,5 @@
 // Pure: the liveness diff against the dispatch log, per
-// plugins/port/docs/PIPELINE.md → "Liveness". `TaskList` itself is a model-
+// plugins/port/docs/RECOVERY.md → "Liveness". `TaskList` itself is a model-
 // only call (this engine cannot make it), so the model calls it and passes
 // the live `description` strings in; this module only classifies.
 
