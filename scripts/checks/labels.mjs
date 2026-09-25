@@ -1,5 +1,5 @@
 import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { root, readJson, walk, relOf } from '../lib/files.mjs';
 
 /** Substitutes every `{{name}}` in `text` with `subs[name]`. A multi-line
@@ -420,7 +420,7 @@ export default async function ({ fail, note, ok }) {
       .map((l) => l.name);
     const dir = join(root, 'apps/desktop/src');
     const labelFreeDirs = [join(dir, 'main/platform'), join(dir, 'main/runtime')];
-    for (const f of walk(dir).filter((p) => p.endsWith('.ts') && !p.endsWith('.test.ts') && !labelFreeDirs.some((d) => p.startsWith(`${d}/`)))) {
+    for (const f of walk(dir).filter((p) => p.endsWith('.ts') && !p.endsWith('.test.ts') && !labelFreeDirs.some((d) => p === d || p.startsWith(`${d}${sep}`)))) {
       const rel = relOf(f);
       const text = readFileSync(f, 'utf8');
       for (const name of mismatched) {

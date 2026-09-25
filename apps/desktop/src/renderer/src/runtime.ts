@@ -16,7 +16,7 @@ interface ReadyRepo {
 type RuntimeStripState =
   | { readonly status: 'loading' }
   | { readonly status: 'error' }
-  | { readonly status: 'ready'; readonly preflight: RuntimePreflight; readonly repo: ReadyRepo | null; readonly probing: boolean; readonly probe: RuntimeProbe | null }
+  | { readonly status: 'ready'; readonly preflight: RuntimePreflight; readonly repo: ReadyRepo | null; readonly probing: boolean; readonly probe: RuntimeProbe | null; readonly probeError: boolean }
 
 let state: RuntimeStripState = { status: 'loading' }
 let strip: HTMLElement | null = null
@@ -54,11 +54,15 @@ function draw(): void {
     return
   }
 
-  const { preflight, repo, probing, probe } = state
+  const { preflight, repo, probing, probe, probeError } = state
   const diagnosis = probe?.diagnosis ?? preflight.diagnosis
   const copy = RUNTIME_COPY[diagnosis]
   const detail = probe?.detail ?? preflight.detail
   const versionSuffix = preflight.version !== null && preflight.version.raw !== null ? ` ${preflight.version.raw}` : ''
+
+  if (probeError) {
+    appendLine('runtime-strip__line', "Couldn't reach the main process to test the connection.")
+  }
 
   if (diagnosis === 'unverified' && preflight.executable !== null) {
     appendLine('runtime-strip__line', `Claude Code${versionSuffix} · ${preflight.executable.path}`)
@@ -107,7 +111,7 @@ async function loadReadyRepo(): Promise<ReadyRepo | null> {
 async function refreshPreflight(): Promise<void> {
   try {
     const [preflight, repo] = await Promise.all([window.port.runtimePreflight(), loadReadyRepo()])
-    state = { status: 'ready', preflight, repo, probing: false, probe: null }
+    state = { status: 'ready', preflight, repo, probing: false, probe: null, probeError: false }
   } catch (error) {
     console.error('Failed to reach the main process while checking the runtime', error)
     state = { status: 'error' }
@@ -118,14 +122,14 @@ async function refreshPreflight(): Promise<void> {
 async function runProbe(): Promise<void> {
   if (state.status !== 'ready' || state.repo === null || state.probing) return
   const repoId = state.repo.id
-  state = { ...state, probing: true }
+  state = { ...state, probing: true, probeError: false }
   draw()
   try {
     const probe = await window.port.runtimeProbe({ repoId })
-    if (state.status === 'ready') state = { ...state, probing: false, probe }
+    if (state.status === 'ready') state = { ...state, probing: false, probe, probeError: false }
   } catch (error) {
     console.error('Failed to reach the main process while testing the connection', error)
-    if (state.status === 'ready') state = { ...state, probing: false }
+    if (state.status === 'ready') state = { ...state, probing: false, probeError: true }
   }
   draw()
 }
