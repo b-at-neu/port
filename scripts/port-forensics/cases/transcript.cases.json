@@ -1,0 +1,96 @@
+{
+  "$comment": "Decision cases for scripts/lib/transcript.mjs's own pure functions (#123), run by scripts/checks/forensics.mjs. Broader than the shared apps/desktop/src/main/sessions/transcript.cases.json table: this one also covers parseLines' malformed-line counting, sanitize, and excerpt — concerns that live in this module alone, not in apps/desktop's transcript-entries.ts. A C0 control character is awkward to embed literally in JSON (JSON forbids an unescaped U+0000-U+001F in a string), so sanitize's C0 case is asserted directly in scripts/checks/forensics.mjs via String.fromCharCode instead of here; the bidi-override case below needs no such workaround, since U+202E is not in JSON's forbidden range.",
+  "cases": [
+    {
+      "name": "parseLines counts a malformed line without dropping the good ones",
+      "function": "parseLines",
+      "input": "{\"a\":1}\n{not json\n\n{\"b\":2}\n",
+      "expected": { "records": [{ "a": 1 }, { "b": 2 }], "malformed": 1 }
+    },
+    {
+      "name": "parseLines on an empty string is 0 records, 0 malformed",
+      "function": "parseLines",
+      "input": "",
+      "expected": { "records": [], "malformed": 0 }
+    },
+    {
+      "name": "sanitize strips a bidi override",
+      "function": "sanitize",
+      "input": "a‮b",
+      "expected": "ab"
+    },
+    {
+      "name": "sanitize keeps tab and newline",
+      "function": "sanitize",
+      "input": "a\tb\nc",
+      "expected": "a\tb\nc"
+    },
+    {
+      "name": "excerpt passes short text through with omittedChars 0",
+      "function": "excerpt",
+      "input": ["hello"],
+      "expected": { "text": "hello", "omittedChars": 0 }
+    },
+    {
+      "name": "excerpt caps at the given length and counts what was omitted",
+      "function": "excerpt",
+      "input": ["0123456789ABCDE", 10],
+      "expected": { "text": "0123456789", "omittedChars": 5 }
+    },
+    {
+      "name": "classifyRecord reads a plain-string user message",
+      "function": "classifyRecord",
+      "input": { "uuid": "u1", "timestamp": "t1", "message": { "role": "user", "content": "hi" } },
+      "expected": [{ "kind": "user-text", "uuid": "u1", "timestamp": "t1", "text": "hi" }]
+    },
+    {
+      "name": "classifyRecord skips a record with no uuid",
+      "function": "classifyRecord",
+      "input": { "timestamp": "t1", "message": { "role": "user", "content": "hi" } },
+      "expected": []
+    },
+    {
+      "name": "classifyRecord reads an attachment record as meta",
+      "function": "classifyRecord",
+      "input": { "uuid": "u1", "timestamp": "t1", "type": "attachment", "attachment": { "type": "task_status", "taskId": "a1" } },
+      "expected": [{ "kind": "meta", "uuid": "u1", "timestamp": "t1", "attachment": { "type": "task_status", "taskId": "a1" } }]
+    },
+    {
+      "name": "pairToolResults pairs a tool-use with its tool-result",
+      "function": "pairToolResults",
+      "input": [
+        { "kind": "tool-use", "id": "t1", "name": "Bash", "input": { "command": "echo hi" } },
+        { "kind": "tool-result", "id": "t1", "isError": false, "content": "hi" }
+      ],
+      "expected": {
+        "emitted": [{ "kind": "tool-call", "name": "Bash", "input": { "command": "echo hi" }, "id": "t1" }],
+        "paired": [{ "index": 0, "isError": false, "text": "hi" }]
+      }
+    },
+    {
+      "name": "pairToolResults ignores a duplicate result for the same id",
+      "function": "pairToolResults",
+      "input": [
+        { "kind": "tool-use", "id": "t1", "name": "Bash", "input": {} },
+        { "kind": "tool-result", "id": "t1", "isError": false, "content": "first" },
+        { "kind": "tool-result", "id": "t1", "isError": true, "content": "second" }
+      ],
+      "expected": {
+        "emitted": [{ "kind": "tool-call", "name": "Bash", "input": {}, "id": "t1" }],
+        "paired": [{ "index": 0, "isError": false, "text": "first" }]
+      }
+    },
+    {
+      "name": "deriveEvents runs classifyRecord and pairToolResults together over a whole session",
+      "function": "deriveEvents",
+      "input": [
+        { "uuid": "u1", "timestamp": "t1", "message": { "role": "assistant", "content": [{ "type": "tool_use", "id": "t1", "name": "Bash", "input": { "command": "echo hi" } }] } },
+        { "uuid": "u2", "timestamp": "t2", "message": { "role": "user", "content": [{ "type": "tool_result", "tool_use_id": "t1", "content": "hi", "is_error": false }] } }
+      ],
+      "expected": {
+        "emitted": [{ "kind": "tool-call", "name": "Bash", "input": { "command": "echo hi" }, "id": "t1" }],
+        "paired": [{ "index": 0, "isError": false, "text": "hi" }]
+      }
+    }
+  ]
+}

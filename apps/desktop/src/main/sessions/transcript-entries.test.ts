@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { capPayload, createDeriver, deriveEntries, headlineFor, sanitize } from './transcript-entries'
+import type { TranscriptEntry } from '../../shared/sessions/transcript'
+import sharedCaseTable from './transcript.cases.json'
 
 function toolUseRecord(uuid: string, id: string, name: string, input: unknown): unknown {
   return {
@@ -260,4 +262,55 @@ describe('headlineFor', () => {
   it('strips a bidi override from the extracted headline (R4-M1)', () => {
     expect(headlineFor('Bash', { command: '‮evil' }, null)).toBe('evil')
   })
+})
+
+interface SharedCaseEmitted {
+  readonly kind: string
+  readonly name?: string
+  readonly text?: string
+}
+interface SharedCasePaired {
+  readonly index: number
+  readonly isError: boolean
+  readonly text: string
+}
+interface SharedCase {
+  readonly name: string
+  readonly pushes: readonly (readonly unknown[])[]
+  readonly expect: { readonly emitted: readonly SharedCaseEmitted[]; readonly paired: readonly SharedCasePaired[] }
+}
+
+const sharedCases = (sharedCaseTable as { readonly cases: readonly SharedCase[] }).cases
+
+describe('shared record-classification contract (#123)', () => {
+  it('the table covers pairing across a batch boundary and a duplicate result', () => {
+    expect(sharedCases.some((c) => c.name.includes('batch boundary'))).toBe(true)
+    expect(sharedCases.some((c) => c.name.includes('duplicate'))).toBe(true)
+  })
+
+  for (const row of sharedCases) {
+    it(row.name, () => {
+      const deriver = createDeriver()
+      const entries: TranscriptEntry[] = []
+      for (const batch of row.pushes) {
+        const { appended, patched } = deriver.push(batch)
+        entries.push(...appended)
+        for (const patch of patched) entries[patch.index] = patch.entry
+      }
+
+      const gotEmitted = entries.map((e) =>
+        e.type === 'tool-call' ? { kind: e.type, name: e.name } : e.type === 'meta' ? { kind: e.type } : { kind: e.type, text: e.text.text },
+      )
+      expect(gotEmitted).toEqual(row.expect.emitted)
+
+      const gotPaired = entries
+        .map((e, index) => ({ e, index }))
+        .filter(({ e }) => e.type === 'tool-call' && e.result !== null)
+        .map(({ e, index }) => {
+          if (e.type !== 'tool-call' || e.result === null) throw new Error('unreachable')
+          return { index, isError: e.result.isError, text: e.result.payload.text }
+        })
+      expect(gotPaired).toEqual(row.expect.paired)
+    })
+  }
 })

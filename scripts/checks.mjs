@@ -60,6 +60,7 @@ import fileSize from './checks/file-size.mjs';
 import tick from './checks/tick.mjs';
 import tickEvents from './checks/tick-events.mjs';
 import analyze from './checks/analyze.mjs';
+import forensics from './checks/forensics.mjs';
 
 // `--guards` is a second mode, not a check: it reads every topic module's own
 // guard(#N) markers (scripts/checks/*.mjs → docs/TESTING.md's replacement for
@@ -136,6 +137,7 @@ if (argv.includes('--guards')) {
     tick,
     tickEvents,
     analyze,
+    forensics,
   ]) {
     await module(reporter);
   }

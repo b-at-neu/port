@@ -12,7 +12,8 @@
     "artifacts": null,
     "worktrees": null,
     "budget": null,
-    "tick": null
+    "tick": null,
+    "forensics": null
   },
   "docs": {
     "engineering": null,
