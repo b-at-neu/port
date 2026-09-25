@@ -57,6 +57,7 @@ export default async function ({ fail, ok }) {
     const banned = [
       [/plugin\s+eval/, 'a behavioural eval'],
       [/artifacts\.mjs/, 'the artifact validator (audit shells out to `gh`; neither mode belongs in commands.checks)'],
+      [/port-forensics\.mjs/, 'the forensics engine (it reads a machine-local transcript tree outside the repository and shells out to `gh`; unavailable to a dispatched agent\'s worktree)'],
     ];
     for (const rel of ['.claude/port.config.json', 'plugins/port/templates/port.config.json']) {
       if (!existsSync(join(root, rel))) continue;

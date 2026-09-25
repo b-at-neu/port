@@ -1,0 +1,97 @@
+{
+  "$comment": "The record-level contract both transcript readers must satisfy (#123): type discrimination (user/assistant string vs array content, thinking, tool_use, tool_result, attachment), tool_use/tool_result pairing by id with first-result-wins, and an unrecognizable record being skipped rather than thrown on. `pushes` is an array of batches — this app's transcript-entries.test.ts runs one `createDeriver().push(...)` call per batch (a live poll's own chunking), scripts/lib/transcript.mjs's own check concatenates every batch into one flat read (a finished file's own chunking) — pairing has no batch boundary of its own, so both must reach the same `expect`. `emitted` names, in final order, every entry each reader keeps; `paired` names which `tool-call`-kind entries (by their index into `emitted`) eventually got a result, and what it carries.",
+  "cases": [
+    {
+      "name": "plain-string user message",
+      "pushes": [[{ "uuid": "u1", "timestamp": "2026-01-01T00:00:00.000Z", "message": { "role": "user", "content": "hello" } }]],
+      "expect": { "emitted": [{ "kind": "user-text", "text": "hello" }], "paired": [] }
+    },
+    {
+      "name": "plain-string assistant message",
+      "pushes": [[{ "uuid": "u1", "timestamp": "2026-01-01T00:00:00.000Z", "message": { "role": "assistant", "content": "hi there" } }]],
+      "expect": { "emitted": [{ "kind": "assistant-text", "text": "hi there" }], "paired": [] }
+    },
+    {
+      "name": "array-form user text block",
+      "pushes": [[{ "uuid": "u1", "timestamp": "2026-01-01T00:00:00.000Z", "message": { "role": "user", "content": [{ "type": "text", "text": "hi" }] } }]],
+      "expect": { "emitted": [{ "kind": "user-text", "text": "hi" }], "paired": [] }
+    },
+    {
+      "name": "array-form assistant text block",
+      "pushes": [[{ "uuid": "u1", "timestamp": "2026-01-01T00:00:00.000Z", "message": { "role": "assistant", "content": [{ "type": "text", "text": "ok" }] } }]],
+      "expect": { "emitted": [{ "kind": "assistant-text", "text": "ok" }], "paired": [] }
+    },
+    {
+      "name": "thinking block",
+      "pushes": [[{ "uuid": "u1", "timestamp": "2026-01-01T00:00:00.000Z", "message": { "role": "assistant", "content": [{ "type": "thinking", "thinking": "hmm" }] } }]],
+      "expect": { "emitted": [{ "kind": "thinking", "text": "hmm" }], "paired": [] }
+    },
+    {
+      "name": "attachment record",
+      "pushes": [[{ "uuid": "u1", "timestamp": "2026-01-01T00:00:00.000Z", "type": "attachment", "attachment": { "type": "task_status", "taskId": "a1" } }]],
+      "expect": { "emitted": [{ "kind": "meta" }], "paired": [] }
+    },
+    {
+      "name": "tool_use paired with its tool_result in the same push",
+      "pushes": [
+        [
+          { "uuid": "u1", "timestamp": "2026-01-01T00:00:00.000Z", "message": { "role": "assistant", "content": [{ "type": "tool_use", "id": "t1", "name": "Bash", "input": { "command": "echo hi" } }] } },
+          { "uuid": "u2", "timestamp": "2026-01-01T00:00:01.000Z", "message": { "role": "user", "content": [{ "type": "tool_result", "tool_use_id": "t1", "content": "hi", "is_error": false }] } }
+        ]
+      ],
+      "expect": { "emitted": [{ "kind": "tool-call", "name": "Bash" }], "paired": [{ "index": 0, "isError": false, "text": "hi" }] }
+    },
+    {
+      "name": "tool_use with no result stays unpaired, never dropped",
+      "pushes": [[{ "uuid": "u1", "timestamp": "2026-01-01T00:00:00.000Z", "message": { "role": "assistant", "content": [{ "type": "tool_use", "id": "t1", "name": "Bash", "input": { "command": "echo hi" } }] } }]],
+      "expect": { "emitted": [{ "kind": "tool-call", "name": "Bash" }], "paired": [] }
+    },
+    {
+      "name": "tool_use in one push, its tool_result in the next — pairing crosses a batch boundary",
+      "pushes": [
+        [{ "uuid": "u1", "timestamp": "2026-01-01T00:00:00.000Z", "message": { "role": "assistant", "content": [{ "type": "tool_use", "id": "t1", "name": "Read", "input": { "file_path": "/a.txt" } }] } }],
+        [{ "uuid": "u2", "timestamp": "2026-01-01T00:00:01.000Z", "message": { "role": "user", "content": [{ "type": "tool_result", "tool_use_id": "t1", "content": "contents", "is_error": false }] } }]
+      ],
+      "expect": { "emitted": [{ "kind": "tool-call", "name": "Read" }], "paired": [{ "index": 0, "isError": false, "text": "contents" }] }
+    },
+    {
+      "name": "a duplicate tool_result for the same id is a no-op, not a second patch",
+      "pushes": [
+        [
+          { "uuid": "u1", "timestamp": "2026-01-01T00:00:00.000Z", "message": { "role": "assistant", "content": [{ "type": "tool_use", "id": "t1", "name": "Bash", "input": { "command": "echo hi" } }] } },
+          { "uuid": "u2", "timestamp": "2026-01-01T00:00:01.000Z", "message": { "role": "user", "content": [{ "type": "tool_result", "tool_use_id": "t1", "content": "first", "is_error": false }] } }
+        ],
+        [{ "uuid": "u3", "timestamp": "2026-01-01T00:00:02.000Z", "message": { "role": "user", "content": [{ "type": "tool_result", "tool_use_id": "t1", "content": "second", "is_error": true }] } }]
+      ],
+      "expect": { "emitted": [{ "kind": "tool-call", "name": "Bash" }], "paired": [{ "index": 0, "isError": false, "text": "first" }] }
+    },
+    {
+      "name": "a tool_result whose tool_use_id matches no call in this stream is ignored",
+      "pushes": [[{ "uuid": "u1", "timestamp": "2026-01-01T00:00:00.000Z", "message": { "role": "user", "content": [{ "type": "tool_result", "tool_use_id": "unknown", "content": "orphan", "is_error": false }] } }]],
+      "expect": { "emitted": [], "paired": [] }
+    },
+    {
+      "name": "an unrecognized content-block type is skipped, never thrown on",
+      "pushes": [[{ "uuid": "u1", "timestamp": "2026-01-01T00:00:00.000Z", "message": { "role": "assistant", "content": [{ "type": "redacted_thinking", "data": "xyz" }] } }]],
+      "expect": { "emitted": [], "paired": [] }
+    },
+    {
+      "name": "a record missing uuid/timestamp is skipped entirely",
+      "pushes": [[{ "message": { "role": "user", "content": "hi" } }]],
+      "expect": { "emitted": [], "paired": [] }
+    },
+    {
+      "name": "two independent tool calls each pair with their own result, never cross-wired",
+      "pushes": [
+        [
+          { "uuid": "u1", "timestamp": "2026-01-01T00:00:00.000Z", "message": { "role": "assistant", "content": [{ "type": "tool_use", "id": "t1", "name": "Bash", "input": {} }, { "type": "tool_use", "id": "t2", "name": "Read", "input": {} }] } },
+          { "uuid": "u2", "timestamp": "2026-01-01T00:00:01.000Z", "message": { "role": "user", "content": [{ "type": "tool_result", "tool_use_id": "t2", "content": "b", "is_error": false }, { "type": "tool_result", "tool_use_id": "t1", "content": "a", "is_error": false }] } }
+        ]
+      ],
+      "expect": {
+        "emitted": [{ "kind": "tool-call", "name": "Bash" }, { "kind": "tool-call", "name": "Read" }],
+        "paired": [{ "index": 0, "isError": false, "text": "a" }, { "index": 1, "isError": false, "text": "b" }]
+      }
+    }
+  ]
+}

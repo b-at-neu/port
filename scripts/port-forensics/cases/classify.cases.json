@@ -1,0 +1,211 @@
+{
+  "$comment": "Decision cases for every pure function in scripts/port-forensics/classify.mjs (#123), run by scripts/checks/forensics.mjs — the six assertions, the two reimplemented shell-syntax predicates, and item correlation. Includes a case for each stated fail direction: an 'unknown' termination, a 'not-computable' notification result, and the shell-loop/timeout/denial positive and negative shapes.",
+  "cases": [
+    {
+      "name": "classifyTermination reads a quota (rate_limit) record",
+      "function": "classifyTermination",
+      "input": [[{ "isApiErrorMessage": true, "apiErrorStatus": { "error": "rate_limit", "resetsAt": 1755978600, "rateLimitType": "five_hour" } }]],
+      "expected": { "class": "quota", "evidence": { "resetsAt": 1755978600, "rateLimitType": "five_hour" } }
+    },
+    {
+      "name": "classifyTermination reads an operator stop",
+      "function": "classifyTermination",
+      "input": [[{ "uuid": "u1", "timestamp": "t1", "message": { "role": "user", "content": "Request interrupted by user" } }]],
+      "expected": { "class": "operator-stop", "evidence": { "text": "Request interrupted by user" } }
+    },
+    {
+      "name": "classifyTermination reads a truncated transcript (last turn is an unpaired tool-use)",
+      "function": "classifyTermination",
+      "input": [
+        [
+          { "uuid": "u1", "timestamp": "t1", "message": { "role": "assistant", "content": [{ "type": "tool_use", "id": "t1", "name": "Bash", "input": { "command": "echo hi" } }] } }
+        ]
+      ],
+      "expected": { "class": "truncated", "evidence": { "tool": "Bash" } }
+    },
+    {
+      "name": "classifyTermination reads a clean terminal ending (last turn is assistant text)",
+      "function": "classifyTermination",
+      "input": [
+        [
+          { "uuid": "u1", "timestamp": "t1", "message": { "role": "assistant", "content": [{ "type": "text", "text": "done" }] } }
+        ]
+      ],
+      "expected": { "class": "terminal", "evidence": { "text": "done" } }
+    },
+    {
+      "name": "classifyTermination reads unknown for an empty transcript, never terminal or truncated",
+      "function": "classifyTermination",
+      "input": [[]],
+      "expected": { "class": "unknown", "evidence": { "lastKind": "none", "reason": "empty transcript" } }
+    },
+    {
+      "name": "classifyTermination reads unknown when the last turn is unrecognizable, never guessed as terminal",
+      "function": "classifyTermination",
+      "input": [[{ "uuid": "u1", "timestamp": "t1", "type": "attachment", "attachment": { "type": "skill_listing" } }]],
+      "expected": { "class": "unknown", "evidence": { "lastKind": "meta" } }
+    },
+    {
+      "name": "notificationGaps is not computable when the session carries zero task_status records",
+      "function": "notificationGaps",
+      "input": [[{ "toolUseResult": { "status": "async_launched", "agentId": "a1" } }]],
+      "expected": { "computable": false, "reason": "1 dispatch(es), 0 task_status records (this session predates that attachment type, or none were dispatched)" }
+    },
+    {
+      "name": "notificationGaps reports a dispatch that got no task_status once at least one exists",
+      "function": "notificationGaps",
+      "input": [
+        [
+          { "toolUseResult": { "status": "async_launched", "agentId": "a1" } },
+          { "toolUseResult": { "status": "async_launched", "agentId": "a2" } },
+          { "uuid": "u1", "timestamp": "t1", "type": "attachment", "attachment": { "type": "task_status", "taskId": "a1" } }
+        ]
+      ],
+      "expected": { "computable": true, "gaps": ["a2"] }
+    },
+    {
+      "name": "orphans reports an in-flight item with no correlated agent at all",
+      "function": "orphans",
+      "input": [[{ "number": 63, "label": "planning" }], []],
+      "expected": [{ "item": 63, "label": "planning", "reason": "no correlated agent transcript in this session" }]
+    },
+    {
+      "name": "orphans reports an in-flight item whose only correlated agent already stopped",
+      "function": "orphans",
+      "input": [
+        [{ "number": 63, "label": "planning" }],
+        [{ "agentId": "a202f40dc", "itemNumber": 63, "class": "operator-stop" }]
+      ],
+      "expected": [{ "item": 63, "label": "planning", "agentId": "a202f40dc", "class": "operator-stop" }]
+    },
+    {
+      "name": "orphans is silent when a correlated agent shows a terminal turn",
+      "function": "orphans",
+      "input": [
+        [{ "number": 63, "label": "planning" }],
+        [{ "agentId": "a1", "itemNumber": 63, "class": "terminal" }]
+      ],
+      "expected": []
+    },
+    {
+      "name": "shellLoopHits flags a gh call inside a for/do loop, targeting gh",
+      "function": "shellLoopHits",
+      "input": [[{ "source": "session", "name": "Bash", "command": "for n in 63 66 67; do gh issue edit $n --add-label x; done" }]],
+      "expected": [{ "source": "session", "occurrences": 1, "example": "for n in 63 66 67; do gh issue edit $n --add-label x; done" }]
+    },
+    {
+      "name": "shellLoopHits ignores a loop that never targets gh or git",
+      "function": "shellLoopHits",
+      "input": [[{ "source": "session", "name": "Bash", "command": "for f in *.txt; do wc -l \"$f\"; done" }]],
+      "expected": []
+    },
+    {
+      "name": "bashTimeouts flags a tool-result carrying the timeout message",
+      "function": "bashTimeouts",
+      "input": [[{ "source": "session", "name": "Bash", "resultText": "Command timed out after 2m 0s" }]],
+      "expected": [{ "source": "session", "example": "Command timed out after 2m 0s" }]
+    },
+    {
+      "name": "bashTimeouts ignores an ordinary result",
+      "function": "bashTimeouts",
+      "input": [[{ "source": "session", "name": "Bash", "resultText": "hi" }]],
+      "expected": []
+    },
+    {
+      "name": "blockedAfterDenial is null when the agent hit no denial at all",
+      "function": "blockedAfterDenial",
+      "input": [{ "agentId": "a1", "description": "impl-agent #66", "resultTexts": ["ok"], "finalAssistantText": "done" }],
+      "expected": null
+    },
+    {
+      "name": "blockedAfterDenial is null when a denied agent's final turn opens with BLOCKED:",
+      "function": "blockedAfterDenial",
+      "input": [{ "agentId": "a1", "description": "impl-agent #66", "resultTexts": ["port: denied"], "finalAssistantText": "BLOCKED: needed X" }],
+      "expected": null
+    },
+    {
+      "name": "blockedAfterDenial reports a denied agent whose final turn never opens with BLOCKED:",
+      "function": "blockedAfterDenial",
+      "input": [{ "agentId": "a1", "description": "impl-agent #66", "stage": "impl-agent", "resultTexts": ["port: denied"], "finalAssistantText": "I could not proceed." }],
+      "expected": { "agentId": "a1", "description": "impl-agent #66", "stage": "impl-agent", "denialCount": 1, "finalExcerpt": "I could not proceed." }
+    },
+    {
+      "name": "blockedAfterDenial requires BLOCKED: to open the turn, not merely appear in it",
+      "function": "blockedAfterDenial",
+      "input": [{ "agentId": "a1", "description": "impl-agent #66", "resultTexts": ["port: denied"], "finalAssistantText": "I stopped. See BLOCKED: elsewhere." }],
+      "expected": { "agentId": "a1", "description": "impl-agent #66", "stage": null, "denialCount": 1, "finalExcerpt": "I stopped. See BLOCKED: elsewhere." }
+    },
+    {
+      "name": "quotaClass groups agents sharing the same resetsAt into one class",
+      "function": "quotaClass",
+      "input": [
+        [
+          { "agentId": "a1", "class": "quota", "evidence": { "resetsAt": 100, "rateLimitType": "five_hour" } },
+          { "agentId": "a2", "class": "quota", "evidence": { "resetsAt": 100, "rateLimitType": "five_hour" } },
+          { "agentId": "a3", "class": "terminal", "evidence": {} }
+        ]
+      ],
+      "expected": [{ "resetsAt": 100, "rateLimitType": "five_hour", "agentIds": ["a1", "a2"] }]
+    },
+    {
+      "name": "usesShellLoop requires both a loop keyword and do, at command position",
+      "function": "usesShellLoop",
+      "input": ["for n in 1 2; do echo $n; done"],
+      "expected": true
+    },
+    {
+      "name": "usesShellLoop is false with no do keyword",
+      "function": "usesShellLoop",
+      "input": ["for n in 1 2"],
+      "expected": false
+    },
+    {
+      "name": "usesShellLoop never fires on a loop keyword inside a quoted argument",
+      "function": "usesShellLoop",
+      "input": ["gh issue comment -b \"a loop for each item to do\""],
+      "expected": false
+    },
+    {
+      "name": "targetsGhOrGit is true for a bare gh call",
+      "function": "targetsGhOrGit",
+      "input": ["gh issue list"],
+      "expected": true
+    },
+    {
+      "name": "targetsGhOrGit is false for an unrelated binary",
+      "function": "targetsGhOrGit",
+      "input": ["wc -l file.txt"],
+      "expected": false
+    },
+    {
+      "name": "stageOf resolves a namespaced agent type",
+      "function": "stageOf",
+      "input": ["port:impl-agent"],
+      "expected": "impl-agent"
+    },
+    {
+      "name": "stageOf resolves a bare agent type",
+      "function": "stageOf",
+      "input": ["plan-agent"],
+      "expected": "plan-agent"
+    },
+    {
+      "name": "stageOf is null for a non-port agent",
+      "function": "stageOf",
+      "input": ["general-purpose"],
+      "expected": null
+    },
+    {
+      "name": "itemNumberOf reads the first #N, excluding #0",
+      "function": "itemNumberOf",
+      "input": ["impl-agent #66 (retry)"],
+      "expected": 66
+    },
+    {
+      "name": "itemNumberOf rejects #0",
+      "function": "itemNumberOf",
+      "input": ["impl-agent #0"],
+      "expected": null
+    }
+  ]
+}

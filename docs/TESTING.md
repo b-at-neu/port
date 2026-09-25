@@ -89,6 +89,43 @@ Each rule is worth testing by breaking it deliberately — change the expected r
 
 **The audit workflow may now be registered as a required check.** It used to run only on `labeled`, so requiring it left the check pending forever on every pull request that never reached `approved` — a pending required check explains nothing, which is worse than a failing one. Widening the trigger to `opened`/`synchronize` alone would not have fixed that: the job-level `if:` still gated the whole job, and a job skipped by its own `if:` is the one shape that leaves a required check unreported. The narrowing moved to the one step that reads `labeled`, so every event this workflow subscribes to now concludes the job — layer 1 pins the widened trigger, the step-level (not job-level) `if:`, and the retired warning's absence.
 
+## Forensics — behavioural assertions on transcripts
+
+Layer 2 asserts on **artifacts** — pull requests, labels, review bodies — what the pipeline *left behind*. It cannot see what a dispatched agent actually *did*: a killed or quota-exhausted agent looks identical to a slow one, a `for`-loop timeout looks like a deliberate partial label change, and a permission dialog reaching the operator leaves no artifact at all. The forensics engine (#123) reads the session tree instead — `~/.claude/projects/<encoded-cwd>/` — and asserts on agent behaviour directly.
+
+```bash
+node scripts/port-forensics.mjs report                                              # every session this repository's cwd owns
+node scripts/port-forensics.mjs report --session <uuid> --since 2026-09-01T00:00Z
+node scripts/port-forensics.mjs report --json
+```
+
+`scripts/lib/transcript.mjs` is `scripts/`'s **only** JSONL parser and record classifier — pinned against `apps/desktop/src/main/sessions/transcript-entries.ts`'s own deriver by a shared case table (`apps/desktop/src/main/sessions/transcript.cases.json`), so the two readers can never silently disagree about what a record means. `scripts/port-forensics/classify.mjs` holds the six assertions as pure functions; `scan.mjs` is the engine's only I/O; `gh.mjs` is its one read-only `gh api graphql` call (the orphan assertion's in-flight label read).
+
+| Assertion | Fails toward |
+| --- | --- |
+| Termination class (`quota`/`operator-stop`/`truncated`/`terminal`/`unknown`) — there is no persisted `status: killed`/`status: failed` anywhere in the on-disk format, so every class is derived from an observable record shape | An unclassifiable ending is `unknown`, named with its last record's kind — never folded into `terminal` (reads as clean) or `truncated` (reads as a crash) |
+| Every dispatched agent (`toolUseResult.status === 'async_launched'`) produced a `task_status` attachment | **Not computable**, never a fabricated failure count, when the session carries zero `task_status` records — an era that predates the attachment type |
+| No in-flight-labelled item lacks a correlated agent showing a terminal turn | Reports only — the engine has no write path at all |
+| No `gh`/`git` call inside a `for`/`while`/`until` loop, and no Bash call hit the tool timeout | Complements the `PreToolUse` guard hook: the hook prevents, this detects what the hook missed |
+| Every stage agent that hit a guard-hook denial (a tool-result opening `port: `) opens its **final** assistant turn with the literal `BLOCKED:` | Checked at the start of the turn, never as a substring — the literal string appears thousands of times in prompts and prose and would pass vacuously otherwise |
+| Quota exhaustion is grouped by `resetsAt`, not reported as N independent crashes | — |
+
+**Exit codes**: `0` clean · `1` at least one finding, or a malformed `--session`/`--since` · `2` the session tree could not be read at all — never `0` findings, which an operator reads as clean.
+
+**Never in `commands.checks`.** It reads a machine-local path outside the repository and shells out to `gh`, meaningless in CI and unavailable to a dispatched agent's own worktree — the same placement layer 2's own `audit` and the trajectory record's own `report` establish for operator-facing tooling that needs a real machine to run against. `scripts/checks/evals.mjs` pins the absence mechanically, alongside the eval and audit bans it already holds.
+
+Every transcript byte is untrusted data: parsed and classified, never interpreted as instructions and never executed. `excerpt` (`scripts/lib/transcript.mjs`) is the one chokepoint for transcript-derived text reaching a finding — sanitize, then cap at 200 characters with an `omittedChars` count — and a live agent's transcript is never read into an agent's own context; this engine reports counts and short excerpts only, run by the operator or the cockpit's tick, never inline in a dispatched agent's prompt.
+
+| Check | Source |
+| --- | --- |
+| Every case in both decision-case tables (`scripts/port-forensics/cases/*.json`) resolves and passes | `scripts/checks/forensics.mjs` |
+| `usesShellLoop`/`targetsGhOrGit` (reimplemented, not imported, since `scripts/` may not depend on a shipped path's internals) agree with `plugins/port/hooks/lib/command-rules.mjs`'s own originals, both directions | `scripts/checks/forensics.mjs` |
+| The item-correlation stage list is pinned against `plugins/port/agents/`'s real basenames and `apps/desktop`'s own `PORT_STAGE_AGENTS`, both directions | `scripts/checks/forensics.mjs` |
+| Read-only: no mutating `gh` subcommand, no `--jq`, no `shell: true`, no second child process spawn, no whole-transcript dump flag | `scripts/checks/forensics.mjs` |
+| No sanitizer reimplemented outside `scripts/lib/transcript.mjs`; no `running`/`alive`/`isLive`-named identifier | `scripts/checks/forensics.mjs` |
+| `commands.forensics` never appears in `commands.checks` | `scripts/checks/evals.mjs`, `scripts/checks/forensics.mjs` |
+| The fixture tree (`scripts/port-forensics/fixtures/`) exercises `scan.mjs`'s resolve and degrade paths, and `report.mjs`'s own orchestration end to end | `scripts/checks/forensics.mjs` |
+
 ## Layer 3 — behavioural evals
 
 ```bash
