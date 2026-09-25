@@ -17,15 +17,33 @@ export type StageAgent = 'plan' | 'impl' | 'review' | 'revise'
 
 /** Why a trigger-stage item is held rather than actionable — first hit wins
  *  in `planTick`: `unowned` before `other-operator` before
- *  `session-required`, mirroring `ReconciledItem.waitingOn`'s own ladder
- *  with an ownership check inserted ahead of the session-required one. */
-export type TickHeldReason = 'unowned' | 'other-operator' | 'session-required'
+ *  `session-required` before `contended`, mirroring
+ *  `ReconciledItem.waitingOn`'s own ladder with an ownership check inserted
+ *  ahead of the session-required one, and the file-contention gate applied
+ *  only to the impl candidates that survive all three. */
+export type TickHeldReason = 'unowned' | 'other-operator' | 'session-required' | 'contended'
+
+/** The file-contention gate's own held detail (`main/tick/contention.ts`'s
+ *  `gateCandidates`) — populated only for `reason: 'contended'`, `null` for
+ *  the other three reasons, since none of them names a blocker or a path
+ *  list. */
+export interface TickContention {
+  readonly blocker: number
+  readonly blockerStage: string
+  readonly depth: number
+  readonly paths: readonly string[]
+}
 
 export interface TickActionable {
   readonly number: number
   readonly kind: PipelineItemKind
   readonly trigger: LabelKey
   readonly agent: StageAgent
+  /** `true` when this candidate's plan carried no ` ```files ` fence at all
+   *  — it dispatches unchecked rather than held, per "Fail-open on an
+   *  unstructured plan": silently holding every pre-contract plan would
+   *  stall the pipeline harder than the collision the gate prevents. */
+  readonly unchecked: boolean
 }
 
 export interface TickHeld {
@@ -33,6 +51,7 @@ export interface TickHeld {
   readonly kind: PipelineItemKind
   readonly trigger: LabelKey
   readonly reason: TickHeldReason
+  readonly contention: TickContention | null
 }
 
 /**

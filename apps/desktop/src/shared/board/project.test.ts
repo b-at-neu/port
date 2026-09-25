@@ -35,6 +35,7 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     mergedAt: null,
     matchedKeys: ['ready'],
     sources: ['github'],
+    claimedFiles: null,
     ...overrides,
   }
 }
@@ -65,6 +66,7 @@ function readyRepo(overrides: Partial<Extract<RepositoryState, { ok: true }>> = 
     viewer: 'op',
     approvalGate: true,
     disabled: [],
+    concurrency: { sharedFiles: [], overlapThreshold: 2 },
     ...overrides,
   }
 }

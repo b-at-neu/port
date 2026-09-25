@@ -57,6 +57,7 @@ function readyEntry(id: string, path: string, repo: string): Extract<RepositoryE
       name: repo.split('/')[1] ?? '',
       branches: { integration: 'dev', production: 'main' },
       commands: { worktrees: null },
+      concurrency: { sharedFiles: [], overlapThreshold: 2 },
       models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
       modules: { approvalGate: true, release: true, scope: true },
       reviewCycleCap: 5,
@@ -311,7 +312,7 @@ describe('createPipelineWatcher — tick wiring (#105)', () => {
     expect(snap.tick).toHaveLength(1)
     expect(snap.tick[0]?.repoId).toBe('repo-a')
     expect(snap.tick[0]?.blind).toBeNull()
-    expect(snap.tick[0]?.actionable).toEqual([{ number: 42, kind: 'issue', trigger: 'ready', agent: 'plan' }])
+    expect(snap.tick[0]?.actionable).toEqual([{ number: 42, kind: 'issue', trigger: 'ready', agent: 'plan', unchecked: false }])
     expect(snap.tick[0]?.held).toEqual([])
   })
 
@@ -333,7 +334,7 @@ describe('createPipelineWatcher — tick wiring (#105)', () => {
 
     const snap = await watcher.refresh()
     expect(snap.tick[0]?.actionable).toEqual([])
-    expect(snap.tick[0]?.held).toEqual([{ number: 42, kind: 'issue', trigger: 'ready', reason: 'unowned' }])
+    expect(snap.tick[0]?.held).toEqual([{ number: 42, kind: 'issue', trigger: 'ready', reason: 'unowned', contention: null }])
   })
 })
 

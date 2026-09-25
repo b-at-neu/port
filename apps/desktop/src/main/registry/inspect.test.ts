@@ -72,6 +72,7 @@ describe('inspectRepository', () => {
     expect(entry.config.modules).toEqual({ approvalGate: true, release: true, scope: true })
     expect(entry.config.reviewCycleCap).toBe(5)
     expect(entry.config.commands).toEqual({ worktrees: null })
+    expect(entry.config.concurrency).toEqual({ sharedFiles: [], overlapThreshold: 2 })
   })
 
   it('resolves commands.worktrees onto the config when present (#86)', async () => {
@@ -88,6 +89,24 @@ describe('inspectRepository', () => {
     const entry = await inspectRepository(root, { git: fakeGit(root) })
     if (!('config' in entry)) throw new Error('unreachable')
     expect(entry.config.commands).toEqual({ worktrees: null })
+    const schemaDiagnostic = entry.diagnostics.find((d) => d.kind === 'schema-violations')
+    expect(schemaDiagnostic).toBeDefined()
+  })
+
+  it('resolves concurrency onto the config when present (#106)', async () => {
+    const root = await makeRepoDir()
+    await writeConfig(root, JSON.stringify({ repo: 'o/n', concurrency: { sharedFiles: ['docs/ENGINEERING.md'], overlapThreshold: 3 } }))
+    const entry = await inspectRepository(root, { git: fakeGit(root) })
+    if (!('config' in entry)) throw new Error('unreachable')
+    expect(entry.config.concurrency).toEqual({ sharedFiles: ['docs/ENGINEERING.md'], overlapThreshold: 3 })
+  })
+
+  it('falls back to the schema defaults for an unresolvable concurrency value rather than holding everything', async () => {
+    const root = await makeRepoDir()
+    await writeConfig(root, JSON.stringify({ repo: 'o/n', concurrency: { overlapThreshold: 0 } }))
+    const entry = await inspectRepository(root, { git: fakeGit(root) })
+    if (!('config' in entry)) throw new Error('unreachable')
+    expect(entry.config.concurrency).toEqual({ sharedFiles: [], overlapThreshold: 2 })
     const schemaDiagnostic = entry.diagnostics.find((d) => d.kind === 'schema-violations')
     expect(schemaDiagnostic).toBeDefined()
   })

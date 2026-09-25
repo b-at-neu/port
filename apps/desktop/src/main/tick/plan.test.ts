@@ -35,6 +35,7 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     mergedAt: null,
     matchedKeys: ['ready'],
     sources: ['github'],
+    claimedFiles: null,
     ...overrides,
   }
 }
@@ -65,6 +66,7 @@ function readyRepo(items: readonly ReconciledItem[], overrides: Partial<Extract<
     viewer: 'op',
     approvalGate: true,
     disabled: [],
+    concurrency: { sharedFiles: [], overlapThreshold: 2 },
     ...overrides,
   }
 }
@@ -122,38 +124,38 @@ describe('planTick — trigger-stage items: actionable vs held', () => {
   it('an unassigned trigger item is held, unowned — never actionable', () => {
     const repo = readyRepo([item({ assignees: [] })])
     const report = planTick({ repository: repo, ledger: createDispatchLedger(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW })
-    expect(report.held).toEqual([{ number: 1, kind: 'issue', trigger: 'ready', reason: 'unowned' }])
+    expect(report.held).toEqual([{ number: 1, kind: 'issue', trigger: 'ready', reason: 'unowned', contention: null }])
     expect(report.actionable).toEqual([])
   })
 
   it('a trigger item assigned to another operator is held, other-operator', () => {
     const repo = readyRepo([item({ assignees: ['someone-else'] })])
     const report = planTick({ repository: repo, ledger: createDispatchLedger(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW })
-    expect(report.held).toEqual([{ number: 1, kind: 'issue', trigger: 'ready', reason: 'other-operator' }])
+    expect(report.held).toEqual([{ number: 1, kind: 'issue', trigger: 'ready', reason: 'other-operator', contention: null }])
   })
 
   it('a session-required trigger item owned by the viewer is held, session-required', () => {
     const repo = readyRepo([item({ sessionRequired: true })])
     const report = planTick({ repository: repo, ledger: createDispatchLedger(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW })
-    expect(report.held).toEqual([{ number: 1, kind: 'issue', trigger: 'ready', reason: 'session-required' }])
+    expect(report.held).toEqual([{ number: 1, kind: 'issue', trigger: 'ready', reason: 'session-required', contention: null }])
   })
 
   it('an ordinary owned trigger item is actionable with its routed agent', () => {
     const repo = readyRepo([item()])
     const report = planTick({ repository: repo, ledger: createDispatchLedger(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW })
-    expect(report.actionable).toEqual([{ number: 1, kind: 'issue', trigger: 'ready', agent: 'plan' }])
+    expect(report.actionable).toEqual([{ number: 1, kind: 'issue', trigger: 'ready', agent: 'plan', unchecked: false }])
     expect(report.held).toEqual([])
   })
 
   it('planApproved routes to impl, needsRevision to revise', () => {
     const repo = readyRepo([
-      item({ number: 2, stages: [{ key: 'planApproved', name: 'plan approved', role: 'trigger' }] }),
+      item({ number: 2, stages: [{ key: 'planApproved', name: 'plan approved', role: 'trigger' }], claimedFiles: ['a.ts'] }),
       item({ number: 3, kind: 'pull-request', stages: [{ key: 'needsRevision', name: 'needs revision', role: 'trigger' }] }),
     ])
     const report = planTick({ repository: repo, ledger: createDispatchLedger(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW })
     expect(report.actionable).toEqual([
-      { number: 2, kind: 'issue', trigger: 'planApproved', agent: 'impl' },
-      { number: 3, kind: 'pull-request', trigger: 'needsRevision', agent: 'revise' },
+      { number: 3, kind: 'pull-request', trigger: 'needsRevision', agent: 'revise', unchecked: false },
+      { number: 2, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false },
     ])
   })
 
@@ -163,6 +165,90 @@ describe('planTick — trigger-stage items: actionable vs held', () => {
     expect(report.actionable).toEqual([])
     expect(report.held).toEqual([])
     expect(report.claims).toEqual([])
+  })
+})
+
+describe('planTick — file-contention gate (#106)', () => {
+  function inProgressItem(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
+    return item({
+      number: 67,
+      stage: 'in-flight',
+      stages: [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }],
+      status: 'in-flight',
+      statusEvidence: 'agent-active',
+      claimedFiles: ['src/lib/auth.ts', 'src/lib/session.ts'],
+      ...overrides,
+    })
+  }
+  function candidateItem(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
+    return item({ number: 52, stages: [{ key: 'planApproved', name: 'plan approved', role: 'trigger' }], claimedFiles: ['src/lib/session.ts'], ...overrides })
+  }
+
+  it('a plan with no files fence dispatches unchecked, never held', () => {
+    const repo = readyRepo([inProgressItem(), candidateItem({ claimedFiles: null })])
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW })
+    expect(report.actionable).toEqual([{ number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: true }])
+    expect(report.held).toEqual([])
+  })
+
+  it('below the overlap threshold dispatches freely', () => {
+    const repo = readyRepo([inProgressItem(), candidateItem()])
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW })
+    expect(report.actionable).toEqual([{ number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false }])
+    expect(report.held).toEqual([])
+  })
+
+  it('at or above the threshold holds, contended, with the blocker and contended paths named', () => {
+    const repo = readyRepo([inProgressItem(), candidateItem({ claimedFiles: ['src/lib/auth.ts', 'src/lib/session.ts'] })])
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW })
+    expect(report.actionable).toEqual([])
+    expect(report.held).toEqual([
+      {
+        number: 52,
+        kind: 'issue',
+        trigger: 'planApproved',
+        reason: 'contended',
+        contention: { blocker: 67, blockerStage: 'in progress', depth: 2, paths: ['src/lib/auth.ts', 'src/lib/session.ts'] },
+      },
+    ])
+  })
+
+  it('a sharedFiles path never contributes to a hold', () => {
+    const repo = readyRepo([inProgressItem({ claimedFiles: ['src/lib/registry.ts'] }), candidateItem({ claimedFiles: ['src/lib/registry.ts'] })], {
+      concurrency: { sharedFiles: ['src/lib/registry.ts'], overlapThreshold: 1 },
+    })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW })
+    expect(report.actionable).toEqual([{ number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false }])
+    expect(report.held).toEqual([])
+  })
+
+  it('an open pr opened issue joins the occupied set the same as an in-flight one', () => {
+    const prOpenedItem = item({
+      number: 67,
+      stage: 'terminal',
+      stages: [{ key: 'prOpened', name: 'pr opened', role: 'terminal' }],
+      claimedFiles: ['src/lib/auth.ts', 'src/lib/session.ts'],
+    })
+    const repo = readyRepo([prOpenedItem, candidateItem({ claimedFiles: ['src/lib/auth.ts', 'src/lib/session.ts'] })])
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW })
+    expect(report.held).toEqual([
+      {
+        number: 52,
+        kind: 'issue',
+        trigger: 'planApproved',
+        reason: 'contended',
+        contention: { blocker: 67, blockerStage: 'pr opened', depth: 2, paths: ['src/lib/auth.ts', 'src/lib/session.ts'] },
+      },
+    ])
+  })
+
+  it('fewest-conflicts-first: a later survivor is held once an earlier one dispatches', () => {
+    const repo = readyRepo([candidateItem({ number: 10, claimedFiles: ['a.ts'] }), candidateItem({ number: 11, claimedFiles: ['a.ts', 'b.ts'] })], {
+      concurrency: { sharedFiles: [], overlapThreshold: 1 },
+    })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW })
+    expect(report.actionable.map((a) => a.number)).toEqual([10])
+    expect(report.held.map((h) => h.number)).toEqual([11])
   })
 })
 

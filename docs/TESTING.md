@@ -42,6 +42,13 @@ Guards for `/port:analyze`'s skill-generation step (#191), in `scripts/checks/an
 - The recipe names the generic test and resolves a name collision by reading `${CLAUDE_PLUGIN_ROOT}/skills/` directly — never a transcribed list of every shipped skill name, which would be a second copy needing its own pin.
 - The writable-set sentence in `analyze/SKILL.md`'s "You do not change code. Ever." — previously pinned to three files — now names all **four**: the engineering document, the design document, `.claude/port.config.json`, and the skills generated under `.claude/skills/`.
 
+`desktop-tick`'s own guards for the file-contention gate (#106), in `scripts/checks/desktop-tick.mjs`:
+
+- `main/tick/contention.test.ts` resolves `scripts/port-tick/cases/contention.cases.json` — catches the test silently drifting off the shared table it exists to be asserted against, so the app's port and the engine could disagree with nothing to catch it.
+- `main/tick/contention.ts`'s exported function names agree with `scripts/port-tick/contention.mjs`'s own, both directions — catches the app's own port silently gaining or losing a function relative to the engine it is ported from.
+- `main/tick/plan.ts`'s occupied-set stage keys (`inProgress`, `prOpened`) resolve in `data/labels.json` with the roles the gate assumes (`in-flight`, `terminal`) — catches a retired or renamed stage key silently emptying the occupied set rather than failing here.
+- `main/registry/schema.ts`'s `CONFIG_DEFAULTS.concurrency` carries no hand-typed numeric or array literal — catches the default silently drifting from the schema's own default the moment either changes.
+
 ## Layer 2 — artifact assertions on real runs
 
 The output formats live in `FORMATS.md` prose and, until now, were asserted nowhere. The one that matters most is the review heading — the cockpit **counts** occurrences of the literal `## Code Review` to derive the cycle number, so renaming it silently breaks the cycle cap and the escalating bar, with no error anywhere. That is why the literal prefix is asserted separately from the rest of the heading.

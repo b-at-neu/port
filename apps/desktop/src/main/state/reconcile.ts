@@ -27,6 +27,7 @@ import type {
 import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers } from './attach'
 import { closingReference, sessionRequiredAt } from './link'
 import { stageOf } from './stage'
+import { parseFilesBlock } from '../tick'
 
 /** The repository-scoped slice of #78's whole-machine `SessionScan` — never
  *  a second scan. `available` is `false` only when the scan itself failed
@@ -166,6 +167,10 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     if (agents.length > 0 || sessions.length > 0) sources.push('sessions')
     if (worktreeAttachments.length > 0) sources.push('worktrees')
 
+    // Parsed for issues only — a pull request's `## Changes` block is prose,
+    // not a fence, and the occupied set PIPELINE.md defines is issue-based.
+    const claimedFiles = item.kind === 'issue' ? parseFilesBlock(item.body) : null
+
     return {
       repoId,
       repo: item.repo,
@@ -192,6 +197,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
       mergedAt: item.mergedAt,
       matchedKeys: item.matchedKeys,
       sources,
+      claimedFiles,
     }
   })
 
@@ -233,5 +239,6 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     viewer: pipelineFetch.viewer,
     approvalGate: entry.config.modules.approvalGate,
     disabled: pipelineFetch.disabled,
+    concurrency: entry.config.concurrency,
   }
 }
