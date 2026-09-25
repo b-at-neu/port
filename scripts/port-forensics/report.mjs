@@ -225,7 +225,12 @@ export function renderText({ notes, findings, checksRun }) {
     return lines.join('\n');
   }
   for (const f of findings) lines.push(`FAIL  ${f.kind}: ${f.message}`);
-  lines.push('', `${findings.length} failure(s), ${checksRun} checks run`);
+  // The single synthetic `forensics`-kind finding from a malformed argument
+  // (exit 1) or an unreadable session tree (exit 2) is a bare `FAIL` line
+  // with no trailing count, per the plan's "Could not read" sample — those
+  // paths never ran a check, so a count line would misreport 0 as a tally.
+  const isSyntheticFailure = findings.length === 1 && findings[0].kind === 'forensics' && checksRun === 0;
+  if (!isSyntheticFailure) lines.push('', `${findings.length} failure(s), ${checksRun} checks run`);
   return lines.join('\n');
 }
 

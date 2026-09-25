@@ -6,7 +6,7 @@
 // untrusted, partially-written, machine-local state.
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { parseLines } from '../lib/transcript.mjs';
 
 export const DEFAULT_READ_CAP_BYTES = 16 * 1024 * 1024;
@@ -93,6 +93,15 @@ export function firstCwdOf(records) {
   return null;
 }
 
+/** True when `child`, once resolved, is `parent` itself or nested under it —
+ *  the containment rail `readSession` applies before reading any path built
+ *  from an untrusted directory-entry name. */
+function isContainedIn(child, parent) {
+  const resolvedParent = resolve(parent);
+  const resolvedChild = resolve(child);
+  return resolvedChild === resolvedParent || resolvedChild.startsWith(resolvedParent + sep);
+}
+
 /** Every session id this Claude home knows about, oldest listing order —
  *  `--since`/no-`--session` both start here. Read-only: this lists what
  *  `buildProjectIndex` already found, it does not re-scan. */
@@ -140,6 +149,10 @@ export function readSession(sessionId, projectDir, { cap = DEFAULT_READ_CAP_BYTE
       if (!file.endsWith(AGENT_META_SUFFIX)) continue;
       const agentId = file.slice(0, -AGENT_META_SUFFIX.length).replace(/^agent-/, '');
       const metaPath = join(subagentsDir, file);
+      if (!isContainedIn(metaPath, subagentsDir)) {
+        problems.push({ path: metaPath, kind: 'unsafe-path', message: `${metaPath} escapes ${subagentsDir}` });
+        continue;
+      }
       const metaRead = readBounded(metaPath, cap);
       if (!metaRead.ok) {
         problems.push({ path: metaPath, kind: metaRead.kind, message: metaRead.message });
@@ -158,6 +171,10 @@ export function readSession(sessionId, projectDir, { cap = DEFAULT_READ_CAP_BYTE
       }
 
       const jsonlPath = join(subagentsDir, `agent-${agentId}.jsonl`);
+      if (!isContainedIn(jsonlPath, subagentsDir)) {
+        problems.push({ path: jsonlPath, kind: 'unsafe-path', message: `${jsonlPath} escapes ${subagentsDir}` });
+        continue;
+      }
       let agentRecords = [];
       let agentMalformed = 0;
       const agentRead = readBounded(jsonlPath, cap);
