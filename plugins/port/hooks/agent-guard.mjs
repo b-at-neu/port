@@ -10,18 +10,25 @@
 // `permissionMode: dontAsk` on the stage agents is a second line of defence,
 // not the mechanism this relies on.
 //
-// Four more rules apply to *any* caller, cockpit included: a `gh`/`git`
+// Five more rules apply to *any* caller, cockpit included: a `gh`/`git`
 // call wrapped in a shell loop (#120), an unauthorised removal of the
-// `needsHuman` gate label (#138), a `claude plugin` install/uninstall/
+// `needsHuman` gate label (#138), an add/remove of a plan-gate label while
+// an external claim holds it (#206), a `claude plugin` install/uninstall/
 // marketplace mutation run from inside any `.claude/worktrees/` cwd (#144),
 // and a cockpit session `git checkout`/`git switch`ing branches out from
-// under its own startup refusal (#216). The first, second, and fourth exempt
+// under its own startup refusal (#216). Loop, gate, claim, and branch exempt
 // an `/port:implement` operator worktree; the install rule deliberately does
 // not, since every install scope shares one `installPath` regardless of who
-// is typing the command. The gate and branch rules are the two call paths
-// that do extra I/O — reading the calling session's transcript — and only
-// when the command actually matches what each rule guards, from a
-// non-subagent, non-operator-worktree caller.
+// is typing the command — and the claim rule's own write-tool arm (denying
+// a write to the claim file itself) does not exempt it either, for the same
+// reason. The gate and branch rules are the two call paths that do extra
+// I/O — reading the calling session's transcript — and only when the
+// command actually matches what each rule guards, from a non-subagent,
+// non-operator-worktree caller. The claim rule's own read (the claim file
+// itself) runs whenever a Bash call carries `--add-label`/`--remove-label`
+// or a write targets the claim file path, independent of caller identity —
+// the write-tool arm needs the result for every caller, not only a
+// non-subagent one.
 //
 // Every decision — deny, a same-shape miss from a non-subagent session, an
 // allowed gate clear, or an internal failure — is logged to a gitignored
@@ -39,6 +46,7 @@ import { appendFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { allowMatchers, decide, callerKind, recentOperatorMessages, invokedCockpitSkill } from './lib/guard-rules.mjs';
 import { gateClearAttempt, switchesBranch } from './lib/command-rules.mjs';
+import { classifyGateClaim } from './lib/claim-rules.mjs';
 
 /** Nearest ancestor of `from` containing `rel`, or null. */
 function findUp(from, rel) {
@@ -101,6 +109,33 @@ if (configRoot) {
       join(configRoot, '.claude', 'settings.local.json'),
     ]);
 
+    // The claim rule's own path — every worktree of a checkout resolves to
+    // the one file, the base repository root, never a per-worktree copy.
+    const baseRoot = baseRepoRoot(cwd);
+    const claimFilePath = join(baseRoot, '.agents', 'gate-claim.json');
+    const planGateLabels = [
+      config?.labels?.planReview ?? 'plan review',
+      config?.labels?.planApproved ?? 'plan approved',
+      config?.labels?.planChangesRequested ?? 'plan changes requested',
+    ];
+
+    // The claim rule's own extra I/O — reading and classifying the claim
+    // file — runs only when a Bash call actually carries a label-editing
+    // flag, the same "extra I/O only where the rule might fire" shape the
+    // gate/branch transcript read below already uses. The write-tool arm
+    // needs no read at all: it only compares `file_path` against
+    // `claimFilePath`, decided inside `decide` itself.
+    let planGateClaim;
+    if (
+      payload?.tool_name === 'Bash' &&
+      typeof payload?.tool_input?.command === 'string' &&
+      /--(?:add|remove)-label/.test(payload.tool_input.command)
+    ) {
+      const exists = existsSync(claimFilePath);
+      const text = exists ? readFileSync(claimFilePath, 'utf8') : '';
+      planGateClaim = classifyGateClaim(exists, text, config?.repo);
+    }
+
     // The gate and branch rules are the two paths that need extra I/O — the
     // calling session's transcript — so the read only happens when either
     // rule's own command test says it might apply, and only for a caller
@@ -137,8 +172,11 @@ if (configRoot) {
       needsHumanLabel,
       operatorMessages,
       isCockpitSession,
+      planGateClaim,
+      planGateLabels,
+      claimFilePath,
     });
-    const logDir = join(baseRepoRoot(cwd), '.agents');
+    const logDir = join(baseRoot, '.agents');
     const actor = actorOf(result.who) ?? `session:${field(payload?.session_id, 40) || 'unknown'}`;
 
     if (result.decision === 'deny') {

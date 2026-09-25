@@ -182,6 +182,17 @@ If the file does not exist, baseline at `0`. Every field after this step is writ
 
 **Step 9 — budget reset.** Read `commands.budget` (a `string | null` field — the full command prefix, e.g. `node scripts/port-budget.mjs`); **absent or `null` → skip silently, say nothing** for the rest of the session — no dispatch ceiling and no cost reporting, matching `commands.artifacts`. **Set** → run `<commands.budget> reset` once, before the first tick, closing any open dispatch a crashed prior session left running (flushed to its ticket's ledger as `lost`); echo its output only if it closed anything.
 
+**Step 10 — gate claim.** Full contract: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "External gate claim". A second surface (a desktop application) can claim the plan-review gate for itself; this step is what makes the cockpit notice and stand down from it, once at startup and again every tick (see Tick procedure → Housekeeping for the per-tick re-read).
+
+1. **Resolve `<base-root>`**: `git rev-parse --git-common-dir`, then take that path's parent directory (resolved against `<root>` when the output is relative, e.g. a bare `.git`) — the same resolution `.agents/denials.log` already uses, so every worktree of a checkout sees the one claim rather than a per-worktree copy.
+2. **Read `<base-root>/.agents/gate-claim.json`** (Read tool).
+3. **Classify into exactly one of three verdicts**, mirroring the desktop app's own claim reader field-for-field:
+   - **`absent`** — the file does not exist, or it parses but its `repo` field names a different repository than this session's `<repo>`. Say nothing; the plan-review gate is answered as always for the rest of this session.
+   - **`held`** — parses as a JSON object, `repo` matches, and `owner`/`claimedAt` are both strings. If `scopes` (an array) includes `"plan-gate"`, the plan-review gate is claimed — report the matching **UX states** message below and hold this verdict for the rest of the session (see Human gates → Plan review, and Tick procedure step 3). Report any entry in `scopes` other than `"plan-gate"` as an unrecognized scope (**UX states**, appended clause) — never silently dropped, and never itself a reason to stand down. A `held` claim naming no recognized scope at all answers the gate normally.
+   - **`unreadable`** — the file exists but fails to parse as JSON, does not parse to an object, or is missing `owner` or `claimedAt`. Treat exactly like a `held` claim on `plan-gate` — report the matching **UX states** message, naming the parse reason, and hold this verdict for the rest of the session. A malformed claim's only ambiguity is which writer owns the gate; standing down is the one reading that cannot produce an unintended decision.
+
+**Never compare `claimedAt` against a clock.** A claim never expires — expiring it would silently transfer the gate back to this session, which is a wrong decision dressed as a timeout, never this step's call to make.
+
 ## UX states (startup preflight)
 
 Exact copy, one message per state, `<…>` substituted:
@@ -249,3 +260,17 @@ Exact copy, one message per state, `<…>` substituted:
 - **`commands.worktrees` not configured** (say once at startup, then a closing-line clause every tick thereafter):
 
   > ⚠️ `commands.worktrees` isn't set, so I can't reclaim worktrees — and the pipeline creates one per ticket. Re-run `/port:init` to install the script, or run `/port:worktree-clean` by hand.
+
+- **Plan gate claimed** (at startup, then again **every** tick while it holds — see `SKILL.md` → "Tick procedure" → Housekeeping — deliberately not change-only, unlike the unowned and ungated sweeps, because a silent omission is indistinguishable from a gate nobody is watching):
+
+  > 🖥️ **Plan gate claimed by `port-desktop`** since 2026-09-05T14:02Z. 2 issues wait at `plan review`: #148, #151 — I won't approve or bounce them. Release the claim in the app, or delete `.agents/gate-claim.json`, to take the gate back.
+
+  With no issues currently at `<labels.planReview>`, keep the first sentence and drop the rest — the claim is still worth stating, since it changes what this session will do the moment one arrives.
+
+- **Claim unreadable** (the loud stall the fail direction chooses — same cadence as "Plan gate claimed" above):
+
+  > ⚠️ `.agents/gate-claim.json` can't be read (`<reason>`). Until it's valid or removed, I stand down from the plan gate exactly as if it were claimed — nothing will answer an issue at `plan review`. Fix or delete the file.
+
+- **Unrecognized scope** (appended to whichever of the two lines above applies):
+
+  > · it also claims `<scope>`, which I don't recognize — I'm only standing down from the plan gate.

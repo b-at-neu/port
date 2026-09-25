@@ -49,6 +49,14 @@ Guards for `/port:analyze`'s skill-generation step (#191), in `scripts/checks/an
 - `main/tick/plan.ts`'s occupied-set stage keys (`inProgress`, `prOpened`) resolve in `data/labels.json` with the roles the gate assumes (`in-flight`, `terminal`) — catches a retired or renamed stage key silently emptying the occupied set rather than failing here.
 - `main/registry/schema.ts`'s `CONFIG_DEFAULTS.concurrency` carries no hand-typed numeric or array literal — catches the default silently drifting from the schema's own default the moment either changes.
 
+Guards for the plan-gate claim (#206), in `scripts/checks/gate-claim.mjs`:
+
+- `classifyGateClaim`'s three verdicts (`absent`/`held`/`unreadable`) against a missing file, a repository mismatch, unparseable JSON, a non-object, missing `owner`/`claimedAt`, an unrecognized scope, and a `held` claim naming only an unrecognized scope (never denied on).
+- The guard rule's own two arms: a `gh issue edit`/`gh pr edit` adding or removing a plan-gate label while a claim holds or is unreadable is denied, exempt for a subagent and an `/port:implement` `impl-<n>` worktree — but a `Write`/`Edit`/`NotebookEdit` targeting the claim file itself is denied with **no** exemption at all, including from `impl-<n>`.
+- `autoPlan` never matches the claimed label set, and a label name quoted inside a `-b` body never trips either arm.
+- End-to-end wiring — the real `agent-guard.mjs`, spawned against a temp fixture carrying a held claim, actually denies the label edit and lets an unrelated one through.
+- The doc pins: the hook's plan-gate key reads match `PIPELINE.md`'s "External gate claim" section and `docs/COORDINATION.md`'s claim-contract keys; the cockpit's stand-down precondition and UX-state copy are literal phrases in the pipeline skill; `PIPELINE.md`'s "Cockpit rules" paragraph states five and its list carries five bullets.
+
 ## Layer 2 — artifact assertions on real runs
 
 The output formats live in `FORMATS.md` prose and, until now, were asserted nowhere. The one that matters most is the review heading — the cockpit **counts** occurrences of the literal `## Code Review` to derive the cycle number, so renaming it silently breaks the cycle cap and the escalating bar, with no error anywhere. That is why the literal prefix is asserted separately from the rest of the heading.

@@ -7,11 +7,15 @@
 // The pure command-syntax predicates (#216) live in the sibling
 // command-rules.mjs — this file was at 483/500 lines, and the branch rule
 // below needed room the ceiling did not have. This file keeps caller
-// identity, settings/transcript I/O, and `decide` itself.
+// identity, settings/transcript I/O, and `decide` itself. The plan-gate
+// claim classifier (#206) lives in the sibling claim-rules.mjs for the same
+// reason — `decide` only ever consumes its already-classified verdict,
+// never imports it directly.
 import { readFileSync, existsSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import {
   gateClearAttempt,
+  labelEditAttempt,
   pluginInstallMutation,
   switchesBranch,
   targetsGhOrGit,
@@ -244,15 +248,21 @@ export function operatorNamed(numbers, messages) {
  *                     (operator-named, or unverifiable). Not a denial;
  *                     logged as the audit record for the clear.
  *
- *  Rule order for a Bash call: gate → install → branch → loop → allowlist.
- *  Each of the first four returns its own specific reason instead of falling
- *  through to the generic allowlist miss/deny. Gate, branch, and loop are
- *  inert — `allow` immediately — for `who.isOperatorWorktree`, an
- *  `/port:implement` session that must stay unguarded by the cockpit rules.
- *  **Install is the one rule that is not**: an install performed from an
- *  `impl-<n>` operator worktree repoints every session on the machine
- *  exactly as one from a dispatched agent's worktree would, so it is never
- *  exempt.
+ *  Rule order for a Bash call: gate → claim → install → branch → loop →
+ *  allowlist. Each of the first five returns its own specific reason instead
+ *  of falling through to the generic allowlist miss/deny. Gate, claim,
+ *  branch, and loop are inert — `allow` immediately — for
+ *  `who.isOperatorWorktree`, an `/port:implement` session that must stay
+ *  unguarded by the cockpit rules (`plan-agent`/`impl-agent` write the same
+ *  labels the claim rule guards, at handoff — a subagent- or
+ *  operator-worktree-facing deny there would deadlock the pipeline the
+ *  instant a claim is taken). **Install is the one Bash-arm rule that is
+ *  not**: an install performed from an `impl-<n>` operator worktree
+ *  repoints every session on the machine exactly as one from a dispatched
+ *  agent's worktree would, so it is never exempt — and the claim rule's own
+ *  write-tool arm (below) matches that same non-exemption, for the same
+ *  reason: a machine that can release its own constraint is the #138
+ *  failure again.
  *
  *  `needsHumanLabel` and `operatorMessages` are optional: omitting
  *  `needsHumanLabel` skips the gate rule entirely (used by callers with no
@@ -262,7 +272,23 @@ export function operatorNamed(numbers, messages) {
  *  the caller's already-read `invokedCockpitSkill` result, `null` when the
  *  transcript was unreadable): omitting it skips the branch rule entirely,
  *  matching `needsHumanLabel`'s pattern for a caller with no cockpit rule to
- *  guard. */
+ *  guard.
+ *
+ *  `planGateClaim` and `planGateLabels` are the same optional-inert shape,
+ *  for the claim rule (#206, see `PIPELINE.md` → "External gate claim"):
+ *  `planGateClaim` is the caller's already-read, already-classified verdict
+ *  (`{state: 'absent'}` / `{state: 'held', owner, scopes, unknownScopes,
+ *  claimedAt}` / `{state: 'unreadable', message}` — the same three verdicts
+ *  the desktop app's own claim reader returns) and `planGateLabels` the
+ *  resolved names for `planReview`/`planApproved`/
+ *  `planChangesRequested`. Omitting either skips the rule entirely; a
+ *  `state: 'absent'` verdict also does not fire it — nothing is claimed, so
+ *  there is nothing to deny. `claimFilePath` (optional, absolute) is the
+ *  claim rule's second, write-tool arm: a `Write`/`Edit`/`NotebookEdit`
+ *  targeting that exact path is denied for **every** caller, including a
+ *  subagent and an `/port:implement` worktree — the cockpit's own
+ *  `allowed-tools` already grants it `Write`, so this is the one guard that
+ *  keeps it from releasing a claim it did not create. */
 export function decide({
   payload,
   matchers,
@@ -271,6 +297,9 @@ export function decide({
   needsHumanLabel,
   operatorMessages,
   isCockpitSession,
+  planGateClaim,
+  planGateLabels,
+  claimFilePath,
 }) {
   const who = callerKind(payload);
   const toolName = payload?.tool_name;
@@ -327,6 +356,40 @@ export function decide({
         // named === true, or null (unverifiable transcript) — allow, and
         // let the caller log this as the audit record for the clear.
         return { decision: 'gate-clear', who, subject: command };
+      }
+    }
+
+    // Claim rule (#206), Bash arm — a `plan-gate` claim (see `PIPELINE.md` →
+    // "External gate claim") transfers the plan-review gate to an external
+    // owner; adding or removing any of the three plan-gate labels while a
+    // claim holds it (a `held` verdict naming `plan-gate` in its scopes), or
+    // while the claim is unreadable (a malformed claim reads as claimed on
+    // both sides, since the ambiguity is which writer owns the gate), is
+    // denied. A `held` claim naming some *other* scope is not this rule's
+    // business — the gate is unclaimed either way. Exempt for a subagent
+    // and for `who.isOperatorWorktree`, the same shape the gate rule uses:
+    // `plan-agent` writes `planReview` at handoff and removes
+    // `planChangesRequested` in revision mode, `impl-agent` removes
+    // `planApproved`, and `/port:implement` needs the same exemption for the
+    // same reason — a rule that fired there would deadlock the pipeline the
+    // moment a claim is taken.
+    const claimsPlanGate =
+      planGateClaim?.state === 'unreadable' ||
+      (planGateClaim?.state === 'held' && (planGateClaim.scopes ?? []).includes('plan-gate'));
+    if (claimsPlanGate && planGateLabels && !who.isSubagent && !who.isOperatorWorktree) {
+      const attempt = labelEditAttempt(command, planGateLabels);
+      if (attempt.isAttempt) {
+        const names = attempt.matched.join(', ');
+        const owner =
+          planGateClaim.state === 'held'
+            ? `claimed by "${planGateClaim.owner}"`
+            : `unreadable (${planGateClaim.message})`;
+        return {
+          decision: 'deny',
+          who,
+          subject: command,
+          reason: `port: the plan gate is ${owner} — ${names} is denied until the claim is released. Release it in the app, or delete .agents/gate-claim.json, to take the gate back.`,
+        };
       }
     }
 
@@ -397,6 +460,24 @@ export function decide({
 
   if (toolName === 'Edit' || toolName === 'Write' || toolName === 'NotebookEdit') {
     const filePath = payload?.tool_input?.file_path;
+
+    // Claim rule (#206), write-tool arm — denied for every caller, including
+    // a subagent and an /port:implement impl-<n> worktree: unlike the Bash
+    // arm above, this one has no exemption, because releasing the claim
+    // file is exactly the #138 shape (a machine undoing its own
+    // constraint) regardless of who is asking. Runs before the ordinary
+    // non-subagent early return below, which would otherwise let a plain
+    // session's write straight through.
+    if (claimFilePath && typeof filePath === 'string' && filePath.length > 0 && resolve(root, filePath) === claimFilePath) {
+      return {
+        decision: 'deny',
+        who,
+        subject: filePath,
+        reason:
+          'port: .agents/gate-claim.json is created and released only by an explicit operator action in the app — no session or agent may write to it, including from an operator worktree. Release a claim in the app instead.',
+      };
+    }
+
     if (!who.isSubagent || typeof filePath !== 'string' || filePath.length === 0) {
       return { decision: 'allow', who, subject: filePath ?? null };
     }

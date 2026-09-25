@@ -81,6 +81,8 @@ This is **this repository's own** standards document, not a template — `plugin
 | `scripts/port-tick/denials.mjs`'s `DENIAL_DECISIONS` ↔ `hooks/agent-guard.mjs`'s logged decisions ↔ `apps/desktop`'s `CURRENT_DECISIONS`, all three directions | `tick-events` (`scripts/checks/tick-events.mjs`) |
 | `scripts/port-tick/cases/contention.cases.json` ↔ `main/tick/contention.ts`'s ported `parseFilesBlock`/`gateCandidates`, the same table `tick-cases` already asserts the engine's own exports against | `desktop-tick` |
 | `main/tick/plan.ts`'s occupied-set stage keys (`inProgress` → `in-flight`, `prOpened` → `terminal`) ↔ `data/labels.json`'s own roles | `desktop-tick` |
+| `hooks/agent-guard.mjs`'s plan-gate label key reads (`planReview`/`planApproved`/`planChangesRequested`) ↔ `PIPELINE.md`'s "External gate claim" section ↔ `docs/COORDINATION.md`'s claim-contract keys | `gate-claim` (`scripts/checks/gate-claim.mjs`) |
+| `PIPELINE.md`'s "Cockpit rules" paragraph stating "five" ↔ its own bulleted list actually carrying five entries, so a sixth rule cannot land without the prose moving with it | `gate-claim` (`scripts/checks/gate-claim.mjs`) |
 
 **If a change introduces a further copy of anything, it introduces its pin in the same commit.** A comment asking a future reader to remember is not a pin.
 
