@@ -24,6 +24,7 @@ import hooks from './checks/hooks.mjs';
 import hooksClassifier from './checks/hooks-classifier.mjs';
 import hooksCockpitRules from './checks/hooks-cockpit-rules.mjs';
 import hooksGateRule from './checks/hooks-gate-rule.mjs';
+import gateClaim from './checks/gate-claim.mjs';
 import allowlist from './checks/allowlist.mjs';
 import config from './checks/config.mjs';
 import install from './checks/install.mjs';
@@ -101,6 +102,7 @@ if (argv.includes('--guards')) {
     hooksClassifier,
     hooksCockpitRules,
     hooksGateRule,
+    gateClaim,
     allowlist,
     config,
     install,

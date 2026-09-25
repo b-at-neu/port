@@ -132,24 +132,21 @@ export function switchesBranch(command) {
   return false;
 }
 
-/** Detects a `gh pr edit`/`gh issue edit` call that removes `label`, and the
- *  item numbers it targets — a bare positional digit, or the trailing digits
- *  of a `github.com/**\/(issues|pull)/<n>` URL. Quote-aware, so a label name
- *  with spaces (`"needs human"`) is read correctly. `numbers` is always
- *  collected, even when `isAttempt` is false, so a caller never re-tokenizes.
- *  `hasNumbers` is `false` whenever `gh` was given no digit and no
- *  `issues|pull` URL to key off — e.g. `gh pr edit <branch-name> ...` or
- *  `gh pr edit --remove-label ...` with no identifier at all, which `gh`
- *  accepts as "the current branch's PR". A caller must not treat an empty
- *  `numbers` array as "nothing to verify": `[].every(...)` is vacuously
- *  `true`, so skipping this check would let an unidentified item's gate
- *  clear through with nothing for the operator to have named. */
-export function gateClearAttempt(command, label) {
-  const tokens = tokenize(command);
-  const isEdit =
+/** True when `tokens[0..2]` spell `gh pr edit` or `gh issue edit` — the one
+ *  test both `gateClearAttempt` and `labelEditAttempt` share. */
+function isGhLabelEdit(tokens) {
+  return (
     tokens[0] === 'gh' &&
-    ((tokens[1] === 'pr' && tokens[2] === 'edit') || (tokens[1] === 'issue' && tokens[2] === 'edit'));
+    ((tokens[1] === 'pr' && tokens[2] === 'edit') || (tokens[1] === 'issue' && tokens[2] === 'edit'))
+  );
+}
 
+/** The item numbers a `gh pr edit`/`gh issue edit` call targets — a bare
+ *  positional digit, or the trailing digits of a `github.com/**\/(issues|
+ *  pull)/<n>` URL. Shared by `gateClearAttempt` and `labelEditAttempt` so
+ *  neither re-derives it, and so a future third caller gets the same
+ *  behaviour rather than a hand-rolled copy. */
+function commandNumbers(tokens) {
   const numbers = [];
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
@@ -162,20 +159,70 @@ export function gateClearAttempt(command, label) {
     const m = /\/(?:issues|pull)\/(\d+)(?:[/?#].*)?$/.exec(t);
     if (m) numbers.push(Number(m[1]));
   }
+  return numbers;
+}
+
+/** Every value `flag` (spaced or `=`-glued) carries on `tokens`, comma-split
+ *  and trimmed, lower-cased — the reader `gateClearAttempt` used to inline
+ *  for `--remove-label` alone, factored out so `labelEditAttempt` can reuse
+ *  it for `--add-label` too without a second implementation to drift from
+ *  the first. */
+function flagValues(tokens, flag) {
+  const values = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    let value = null;
+    if (t === flag) value = tokens[i + 1] ?? '';
+    else if (t.startsWith(`${flag}=`)) value = t.slice(flag.length + 1);
+    if (value === null) continue;
+    values.push(...value.split(',').map((v) => v.trim().toLowerCase()));
+  }
+  return values;
+}
+
+/** Detects a `gh pr edit`/`gh issue edit` call that removes `label`, and the
+ *  item numbers it targets. Quote-aware, so a label name with spaces
+ *  (`"needs human"`) is read correctly. `numbers` is always collected, even
+ *  when `isAttempt` is false, so a caller never re-tokenizes. `hasNumbers`
+ *  is `false` whenever `gh` was given no digit and no `issues|pull` URL to
+ *  key off — e.g. `gh pr edit <branch-name> ...` or `gh pr edit
+ *  --remove-label ...` with no identifier at all, which `gh` accepts as "the
+ *  current branch's PR". A caller must not treat an empty `numbers` array as
+ *  "nothing to verify": `[].every(...)` is vacuously `true`, so skipping
+ *  this check would let an unidentified item's gate clear through with
+ *  nothing for the operator to have named. */
+export function gateClearAttempt(command, label) {
+  const tokens = tokenize(command);
+  const isEdit = isGhLabelEdit(tokens);
+  const numbers = commandNumbers(tokens);
   const hasNumbers = numbers.length > 0;
 
   if (!isEdit) return { isAttempt: false, numbers, hasNumbers };
 
   const target = label.trim().toLowerCase();
-  let isAttempt = false;
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i];
-    let value = null;
-    if (t === '--remove-label') value = tokens[i + 1] ?? '';
-    else if (t.startsWith('--remove-label=')) value = t.slice('--remove-label='.length);
-    if (value === null) continue;
-    if (value.split(',').map((v) => v.trim().toLowerCase()).includes(target)) isAttempt = true;
-  }
+  const isAttempt = flagValues(tokens, '--remove-label').includes(target);
 
   return { isAttempt, numbers, hasNumbers };
+}
+
+/** Detects a `gh pr edit`/`gh issue edit` call whose `--add-label` **or**
+ *  `--remove-label` value set intersects `names` (any iterable of label
+ *  names, matched case-insensitively) — the guard rule for #206's plan-gate
+ *  claim needs both directions, unlike `gateClearAttempt`'s `--remove-label`
+ *  only. `matched` names every label from `names` the command actually
+ *  touched, in the casing `names` provided, so a deny reason can name them
+ *  without re-deriving anything. Shares `gateClearAttempt`'s quote-aware
+ *  tokenizing, number extraction, and flag-value reading. */
+export function labelEditAttempt(command, names) {
+  const tokens = tokenize(command);
+  const isEdit = isGhLabelEdit(tokens);
+  const numbers = commandNumbers(tokens);
+  const hasNumbers = numbers.length > 0;
+
+  if (!isEdit) return { isAttempt: false, matched: [], numbers, hasNumbers };
+
+  const touched = new Set([...flagValues(tokens, '--add-label'), ...flagValues(tokens, '--remove-label')]);
+  const matched = [...names].filter((name) => touched.has(name.trim().toLowerCase()));
+
+  return { isAttempt: matched.length > 0, matched, numbers, hasNumbers };
 }
