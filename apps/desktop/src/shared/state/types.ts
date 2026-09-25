@@ -150,6 +150,12 @@ export interface ReconciledItem {
   readonly mergedAt: string | null
   readonly matchedKeys: readonly LabelKey[]
   readonly sources: readonly ('github' | 'itemStates' | 'sessions' | 'worktrees' | 'denials')[]
+  /** The plan's own ` ```files ` fence, parsed for issues only (#106) — a
+   *  pull request's body is prose, not a fence, so its `claimedFiles` is
+   *  always `null`. `null` is "no file list" (dispatches unchecked); `[]` is
+   *  a fence that parsed to nothing (contends with nothing) — the two are
+   *  never collapsed. */
+  readonly claimedFiles: readonly string[] | null
 }
 
 /** `{ at }` when the source answered, `{ unavailable: <reason> }` when it did
@@ -221,6 +227,11 @@ export type RepositoryState =
        *  never needs a second config read to report a gated stage as
        *  absent rather than a stage rendered at zero. */
       readonly disabled: readonly LabelKey[]
+      /** `entry.config.concurrency`, copied the same way `approvalGate`
+       *  already is (#106) — so `planTick`'s file-contention gate never
+       *  needs a second config read to know this repository's own
+       *  `sharedFiles`/`overlapThreshold`. */
+      readonly concurrency: { readonly sharedFiles: readonly string[]; readonly overlapThreshold: number }
     }
   | {
       readonly ok: false

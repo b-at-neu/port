@@ -71,6 +71,11 @@ export interface ResolvedRepoConfig {
    *  script. Nothing here validates or spawns it; that is `main/reclaimer/`'s
    *  job. */
   readonly commands: { readonly worktrees: string | null }
+  /** The file-contention gate's own tuning (#106) — `sharedFiles` never
+   *  contributes to a hold in either direction, `overlapThreshold` is how
+   *  many non-shared paths one in-flight item must share with a candidate
+   *  before it holds. Both come off the schema's own defaults when absent. */
+  readonly concurrency: { readonly sharedFiles: readonly string[]; readonly overlapThreshold: number }
 }
 
 /** Discriminated on status, so "ready implies a config" is enforced by the

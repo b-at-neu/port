@@ -52,6 +52,7 @@ interface LooseConfig {
   }
   readonly reviewCycleCap?: unknown
   readonly commands?: { readonly worktrees?: unknown }
+  readonly concurrency?: { readonly sharedFiles?: unknown; readonly overlapThreshold?: unknown }
 }
 
 function asLooseConfig(value: unknown): LooseConfig {
@@ -140,9 +141,13 @@ export async function inspectRepository(path: string, deps: InspectDeps): Promis
   const commands = {
     worktrees: resolveField(cfg.commands?.worktrees, '/commands/worktrees', violatedPaths, CONFIG_DEFAULTS.commands.worktrees),
   }
+  const concurrency = {
+    sharedFiles: resolveField(cfg.concurrency?.sharedFiles, '/concurrency/sharedFiles', violatedPaths, CONFIG_DEFAULTS.concurrency.sharedFiles),
+    overlapThreshold: resolveField(cfg.concurrency?.overlapThreshold, '/concurrency/overlapThreshold', violatedPaths, CONFIG_DEFAULTS.concurrency.overlapThreshold),
+  }
   const vocabulary = resolveVocabulary({ labels: cfg.labels, modules })
 
-  const config: ResolvedRepoConfig = { repo, owner: owner ?? '', name: name ?? '', branches, models, modules, reviewCycleCap, vocabulary, commands }
+  const config: ResolvedRepoConfig = { repo, owner: owner ?? '', name: name ?? '', branches, models, modules, reviewCycleCap, vocabulary, commands, concurrency }
 
   const diagnostics: RepoDiagnostic[] = [...branchDiagnostics]
   if (branchInfo.kind === 'detached') {

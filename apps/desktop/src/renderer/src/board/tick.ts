@@ -7,7 +7,7 @@
 import type { BoardSnapshot, RepositoryHealth } from '../../../shared/board/types'
 import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
 import type { LabelKey } from '../../../shared/labels/vocabulary'
-import type { TickBlind, TickClaim, TickHeld, TickReport } from '../../../shared/tick/types'
+import type { TickActionable, TickBlind, TickClaim, TickHeld, TickReport } from '../../../shared/tick/types'
 
 function labelNameOf(key: LabelKey): string {
   return LABEL_DEFAULTS.find((def) => def.key === key)?.name ?? key
@@ -70,8 +70,21 @@ export function repositoryLineCopy(report: TickReport): string {
 
   const dispatchPart =
     report.actionable.length === 0 ? 'nothing to dispatch' : `would dispatch ${report.actionable.map((a) => `${a.agent} #${String(a.number)}`).join(', ')}`
+  const uncheckedCount = report.actionable.filter((a) => a.unchecked).length
+  // Never omitted: an unchecked dispatch is exactly the case an operator may
+  // want to look at (plan's own **UX states**).
+  const uncheckedPart = uncheckedCount > 0 ? ` · ${String(uncheckedCount)} plan${uncheckedCount === 1 ? '' : 's'} unchecked` : ''
   const heldPart = report.held.length > 0 ? ` · ${String(report.held.length)} held` : ''
-  return `${report.displayName} — ${dispatchPart}${heldPart} · ${livenessSummary(report.claims)}`
+  return `${report.displayName} — ${dispatchPart}${uncheckedPart}${heldPart} · ${livenessSummary(report.claims)}`
+}
+
+/** Truncates a contended path list to the first three, naming the remainder
+ *  as a count rather than overflowing the hover detail — plan's own **UX
+ *  states**, "Held detail, contended and truncated". */
+function contendedPathList(paths: readonly string[]): string {
+  const shown = paths.slice(0, 3)
+  const more = paths.length - shown.length
+  return more > 0 ? `${shown.join(', ')} and ${String(more)} more` : shown.join(', ')
 }
 
 export function heldDetailCopy(held: TickHeld): string {
@@ -83,7 +96,24 @@ export function heldDetailCopy(held: TickHeld): string {
       return `#${n} assigned to someone else.`
     case 'session-required':
       return `#${n} session required — run /port:implement.`
+    case 'contended': {
+      const c = held.contention
+      // Defensive: `planTick` never emits `reason: 'contended'` without a
+      // populated `contention` — checked anyway, since this module never
+      // assumes another module's invariant stays exactly as documented.
+      if (c === null) return `#${n} held — contended, with no detail reported.`
+      const count = c.paths.length
+      return `#${n} held behind #${String(c.blocker)} — ${String(count)} contended file${count === 1 ? '' : 's'}: ${contendedPathList(c.paths)}.`
+    }
   }
+}
+
+/** "Unchecked detail" (plan's own **UX states**) — the one testing step
+ *  this app must never let a warning fall silent for, since dispatching a
+ *  plan with no claimed-file fence is exactly the case an operator may want
+ *  to look at. */
+export function uncheckedDetailCopy(actionable: TickActionable): string {
+  return `#${String(actionable.number)} has no file list in its plan — dispatching unchecked.`
 }
 
 /** `null` for the two non-stall classes — never called for them in
@@ -129,7 +159,11 @@ export function buildTickStrip(snapshot: BoardSnapshot, now: Date): HTMLElement 
     line.textContent = repositoryLineCopy(report)
 
     if (report.blind === null) {
-      const details = [...report.held.map(heldDetailCopy), ...report.claims.map(stalledDetailCopy)].filter((d): d is string => d !== null)
+      const details = [
+        ...report.held.map(heldDetailCopy),
+        ...report.actionable.filter((a) => a.unchecked).map(uncheckedDetailCopy),
+        ...report.claims.map(stalledDetailCopy),
+      ].filter((d): d is string => d !== null)
       if (details.length > 0) line.title = details.join('\n')
     }
 

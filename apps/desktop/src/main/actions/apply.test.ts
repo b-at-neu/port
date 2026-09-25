@@ -24,6 +24,7 @@ function entry(overrides: Partial<ReadyEntry> = {}): ReadyEntry {
       name: 'a',
       branches: { integration: 'dev', production: 'main' },
       commands: { worktrees: null },
+      concurrency: { sharedFiles: [], overlapThreshold: 2 },
       models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
       modules: { approvalGate: true, release: true, scope: true },
       reviewCycleCap: 5,
@@ -61,6 +62,7 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     mergedAt: null,
     matchedKeys: ['planApproved'],
     sources: ['github'],
+    claimedFiles: null,
     ...overrides,
   }
 }
@@ -91,6 +93,7 @@ function repoState(items: readonly ReconciledItem[], overrides: Partial<Extract<
     viewer: 'op',
     approvalGate: true,
     disabled: [],
+    concurrency: { sharedFiles: [], overlapThreshold: 2 },
     ...overrides,
   }
 }

@@ -44,6 +44,7 @@ const READY_ENTRY = {
     reviewCycleCap: 3,
     vocabulary: {} as never,
     commands: { worktrees: 'node scripts/worktrees.mjs' },
+    concurrency: { sharedFiles: [], overlapThreshold: 2 },
   },
   diagnostics: [],
 }

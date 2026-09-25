@@ -24,6 +24,7 @@ function entry(): Extract<RepositoryEntry, { status: 'ready' }> {
       modules: { approvalGate: true, release: true, scope: true },
       reviewCycleCap: 5,
       vocabulary: VOCABULARY,
+      concurrency: { sharedFiles: [], overlapThreshold: 2 },
     },
     diagnostics: [],
   }
@@ -318,6 +319,41 @@ describe('reconcileRepository — pass-through fields', () => {
     })
     if (!state.ok) throw new Error('unreachable')
     expect(state.disabled).toEqual(['refreshBranch'])
+  })
+
+  it('carries entry.config.concurrency onto RepositoryState (#106)', () => {
+    const state = reconcileRepository({
+      entry: { ...entry(), config: { ...entry().config, concurrency: { sharedFiles: ['data/labels.json'], overlapThreshold: 3 } } },
+      pipelineFetch: fetchOf([]),
+      itemsByNumberFetch: null,
+      repoSessions: sessionsOf(),
+      worktrees: worktreesOf(),
+      denials: denialsOf(),
+    })
+    if (!state.ok) throw new Error('unreachable')
+    expect(state.concurrency).toEqual({ sharedFiles: ['data/labels.json'], overlapThreshold: 3 })
+  })
+})
+
+describe('reconcileRepository — claimedFiles (#106)', () => {
+  it('parses an issue plan body\'s ```files fence', () => {
+    const body = '## Changes\n\n```files\nsrc/lib/auth.ts — adds the check\n```'
+    const state = reconcile([item({ matchedKeys: ['planApproved'], body })])
+    if (!state.ok) throw new Error('unreachable')
+    expect(state.items[0]?.claimedFiles).toEqual(['src/lib/auth.ts'])
+  })
+
+  it('is null for an issue with no files fence at all — never an empty array', () => {
+    const state = reconcile([item({ matchedKeys: ['planApproved'], body: '## Changes\nNo fence here.' })])
+    if (!state.ok) throw new Error('unreachable')
+    expect(state.items[0]?.claimedFiles).toBeNull()
+  })
+
+  it('is always null for a pull request — its body is prose, never a claim fence', () => {
+    const body = '```files\nsrc/lib/auth.ts\n```'
+    const state = reconcile([item({ kind: 'pull-request', number: 196, matchedKeys: ['readyForReview'], body })])
+    if (!state.ok) throw new Error('unreachable')
+    expect(state.items[0]?.claimedFiles).toBeNull()
   })
 })
 

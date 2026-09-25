@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../../../shared/repos'
 import type { RepositoryHealth } from '../../../shared/board/types'
 import { initialHealth } from '../../../shared/board/types'
-import type { TickClaim, TickHeld, TickReport } from '../../../shared/tick/types'
-import { clockLineCopy, heldDetailCopy, repositoryLineCopy, stalledDetailCopy } from './tick'
+import type { TickActionable, TickClaim, TickHeld, TickReport } from '../../../shared/tick/types'
+import { clockLineCopy, heldDetailCopy, repositoryLineCopy, stalledDetailCopy, uncheckedDetailCopy } from './tick'
 
 const NOW = new Date('2026-01-01T00:00:00.000Z')
 
@@ -54,10 +54,13 @@ describe('repositoryLineCopy', () => {
   it('a repository with work to do names every actionable item, the held count, and the liveness split', () => {
     const rep = report({
       actionable: [
-        { number: 105, kind: 'issue', trigger: 'ready', agent: 'plan' },
-        { number: 112, kind: 'issue', trigger: 'planApproved', agent: 'impl' },
+        { number: 105, kind: 'issue', trigger: 'ready', agent: 'plan', unchecked: false },
+        { number: 112, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false },
       ],
-      held: [{ number: 1, kind: 'issue', trigger: 'ready', reason: 'unowned' }, { number: 2, kind: 'issue', trigger: 'ready', reason: 'unowned' }],
+      held: [
+        { number: 1, kind: 'issue', trigger: 'ready', reason: 'unowned', contention: null },
+        { number: 2, kind: 'issue', trigger: 'ready', reason: 'unowned', contention: null },
+      ],
       claims: [
         { number: 3, kind: 'issue', inFlight: 'inProgress', class: 'matched', retryKey: null },
         { number: 4, kind: 'issue', inFlight: 'inProgress', class: 'matched', retryKey: null },
@@ -67,14 +70,42 @@ describe('repositoryLineCopy', () => {
     })
     expect(repositoryLineCopy(rep)).toBe('o/a — would dispatch plan #105, impl #112 · 2 held · Liveness: 3 claims matched, 1 stalled')
   })
+
+  it('names an unstructured plan as a count, never omitted (#106)', () => {
+    const rep = report({ actionable: [{ number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: true }] })
+    expect(repositoryLineCopy(rep)).toBe('o/a — would dispatch impl #52 · 1 plan unchecked · Liveness: nothing in flight.')
+  })
 })
 
 describe('heldDetailCopy', () => {
-  const base: TickHeld = { number: 118, kind: 'issue', trigger: 'ready', reason: 'unowned' }
-  it('covers all three reasons', () => {
+  const base: TickHeld = { number: 118, kind: 'issue', trigger: 'ready', reason: 'unowned', contention: null }
+  it('covers all three ownership/session reasons', () => {
     expect(heldDetailCopy(base)).toBe('#118 unassigned — no cockpit will pick this up.')
     expect(heldDetailCopy({ ...base, reason: 'other-operator' })).toBe('#118 assigned to someone else.')
     expect(heldDetailCopy({ ...base, reason: 'session-required' })).toBe('#118 session required — run /port:implement.')
+  })
+
+  it('names the blocker and contended files for a contended hold (#106)', () => {
+    const held: TickHeld = { number: 118, kind: 'issue', trigger: 'planApproved', reason: 'contended', contention: { blocker: 67, blockerStage: 'in progress', depth: 2, paths: ['src/lib/auth.ts', 'src/lib/session.ts'] } }
+    expect(heldDetailCopy(held)).toBe('#118 held behind #67 — 2 contended files: src/lib/auth.ts, src/lib/session.ts.')
+  })
+
+  it('truncates a contended hold past three paths with an "and N more" clause (#106)', () => {
+    const held: TickHeld = {
+      number: 118,
+      kind: 'issue',
+      trigger: 'planApproved',
+      reason: 'contended',
+      contention: { blocker: 67, blockerStage: 'in progress', depth: 5, paths: ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts', 'src/e.ts'] },
+    }
+    expect(heldDetailCopy(held)).toBe('#118 held behind #67 — 5 contended files: src/a.ts, src/b.ts, src/c.ts and 2 more.')
+  })
+})
+
+describe('uncheckedDetailCopy', () => {
+  it('names the item and the reason it dispatches unchecked (#106)', () => {
+    const actionable: TickActionable = { number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: true }
+    expect(uncheckedDetailCopy(actionable)).toBe('#52 has no file list in its plan — dispatching unchecked.')
   })
 })
 

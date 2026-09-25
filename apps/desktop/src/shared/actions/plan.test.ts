@@ -34,6 +34,7 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     mergedAt: null,
     matchedKeys: [],
     sources: ['github'],
+    claimedFiles: null,
     ...overrides,
   }
 }

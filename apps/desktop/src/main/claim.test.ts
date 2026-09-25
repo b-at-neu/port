@@ -35,6 +35,7 @@ const READY_ENTRY = {
     reviewCycleCap: 3,
     vocabulary: VOCABULARY,
     commands: { worktrees: null },
+    concurrency: { sharedFiles: [], overlapThreshold: 2 },
   },
   diagnostics: [],
 }

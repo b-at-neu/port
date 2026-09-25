@@ -4,10 +4,12 @@ import { pathToFileURL } from 'node:url';
 import { root, readJson, walk, relOf } from '../lib/files.mjs';
 
 // Issue 105: apps/desktop/src/main/tick/ turns one repository's reconciled
-// RepositoryState into a TickReport — it computes, it never writes (dispatch
-// is issue 106, the retry write is issue 94). Seven assertions pin its
-// decisions mechanically, in the shape of desktop-actions.mjs's and
-// desktop-local.mjs's own guards.
+// RepositoryState into a TickReport — it computes, it never writes (the
+// dispatch call itself is blocked on issues 97, 98, and 101, the retry write
+// is issue 94). Issue 106 adds the file-contention gate as a third ported
+// family, so the report's own actionable order is the real dispatch order
+// once a dispatcher exists. Ten assertions pin its decisions mechanically,
+// in the shape of desktop-actions.mjs's and desktop-local.mjs's own guards.
 export default async function ({ fail, ok }) {
   const mainDir = 'apps/desktop/src/main/tick';
   const sharedDir = 'apps/desktop/src/shared/tick';
@@ -52,21 +54,23 @@ export default async function ({ fail, ok }) {
     if (!violated) ok();
   }
 
-  // --- (3) ownership.test.ts and liveness.test.ts import a real case table ---
-  // guard(#105): either test silently drifting off the shared table it
+  // --- (3) ownership/liveness/contention tests import a real case table -----
+  // guard(#105, #106): a test silently drifting off the shared table it
   // exists to be asserted against, so the two implementations could
   // disagree with nothing to catch it.
   {
     const pairs = [
       { test: `${mainDir}/ownership.test.ts`, table: 'scripts/port-tick/cases/ownership.cases.json' },
       { test: `${mainDir}/liveness.test.ts`, table: 'scripts/port-tick/cases/liveness.cases.json' },
+      { test: `${mainDir}/contention.test.ts`, table: 'scripts/port-tick/cases/contention.cases.json' },
     ];
     for (const { test, table } of pairs) {
       const testPath = join(root, test);
       const tablePath = join(root, table);
       const text = readFileSync(testPath, 'utf8');
-      if (!text.includes('ownership.cases.json') && !text.includes('liveness.cases.json')) {
-        fail('desktop-tick', `${test} does not import a cases.json table at all`);
+      const tableBasename = table.split('/').pop();
+      if (!text.includes(tableBasename)) {
+        fail('desktop-tick', `${test} does not import ${tableBasename} at all`);
         continue;
       }
       try {
@@ -178,6 +182,88 @@ export default async function ({ fail, ok }) {
         }
       }
       if (!violated) ok();
+    }
+  }
+
+  // --- (8) main/tick/contention.ts's exported function names agree with ------
+  // scripts/port-tick/contention.mjs's own exports, both directions
+  // guard(#106): the app's own port silently gaining or losing a function
+  // relative to the engine it is ported from — checked by dynamic import of
+  // the real engine, the same idiom (4) above already uses for
+  // liveness.ts's RETRY_TRIGGER.
+  {
+    const contentionFile = `${mainDir}/contention.ts`;
+    const enginePath = join(root, 'scripts/port-tick/contention.mjs');
+    const appText = readFileSync(join(root, contentionFile), 'utf8');
+    const appFunctions = new Set([...appText.matchAll(/^export function (\w+)/gm)].map((m) => m[1]));
+
+    const engineModule = await import(pathToFileURL(enginePath).href);
+    const engineFunctions = new Set(Object.keys(engineModule).filter((k) => typeof engineModule[k] === 'function'));
+
+    const allNames = new Set([...appFunctions, ...engineFunctions]);
+    const mismatches = [...allNames].filter((name) => appFunctions.has(name) !== engineFunctions.has(name));
+    if (mismatches.length > 0) {
+      fail('desktop-tick', `${contentionFile}'s exported functions and scripts/port-tick/contention.mjs's disagree on: ${mismatches.join(', ')}`);
+    } else {
+      ok();
+    }
+  }
+
+  // --- (9) main/tick/plan.ts's occupied-set stage keys resolve in labels.json ---
+  // guard(#106): a retired or renamed stage key silently emptying the
+  // occupied set rather than failing here — the gate's whole premise is
+  // that 'inProgress'/'prOpened' name real labels with the roles it assumes.
+  {
+    const planFile = `${mainDir}/plan.ts`;
+    const planText = readFileSync(join(root, planFile), 'utf8');
+    const fnMatch = /function occupiedSetOf\([^)]*\)[^{]*\{([\s\S]*?)\n\}/.exec(planText);
+    if (!fnMatch) {
+      fail('desktop-tick', `${planFile} has no 'occupiedSetOf' function to check`);
+    } else {
+      const keys = new Set([...fnMatch[1].matchAll(/'(\w+)'/g)].map((m) => m[1]));
+      const labelsJson = readJson('plugins/port/data/labels.json');
+      const roleByKey = new Map(labelsJson.labels.map((l) => [l.key, l.role]));
+      const expected = { inProgress: 'in-flight', prOpened: 'terminal' };
+      let violated = false;
+      for (const [key, role] of Object.entries(expected)) {
+        if (!keys.has(key)) {
+          violated = true;
+          fail('desktop-tick', `${planFile}'s occupiedSetOf no longer names '${key}' — the occupied set would silently drop it`);
+          continue;
+        }
+        if (roleByKey.get(key) !== role) {
+          violated = true;
+          fail('desktop-tick', `${planFile}'s occupiedSetOf assumes '${key}' is role '${role}', but labels.json now has '${roleByKey.get(key)}'`);
+        }
+      }
+      if (!violated) ok();
+    }
+  }
+
+  // --- (10) schema.ts's concurrency default reads off the schema import, ------
+  // never a hand-typed literal
+  // guard(#106): a literal number or array silently drifting from the
+  // schema's own default the moment either changes — `desktop-registry.mjs`'s
+  // own guard only walks string-typed defaults (`collectStringDefaults`), so
+  // `concurrency`'s numeric `overlapThreshold` and array `sharedFiles` need
+  // this narrower rail of their own.
+  {
+    const schemaFile = 'apps/desktop/src/main/registry/schema.ts';
+    const text = readFileSync(join(root, schemaFile), 'utf8');
+    const constIdx = text.indexOf('export const CONFIG_DEFAULTS');
+    const constText = constIdx === -1 ? '' : text.slice(constIdx);
+    const concurrencyMatch = /concurrency:\s*\{([^}]*)\}/.exec(constText);
+    if (!concurrencyMatch) {
+      fail('desktop-tick', `${schemaFile} has no 'concurrency: {...}' block in CONFIG_DEFAULTS to check`);
+    } else {
+      const body = concurrencyMatch[1];
+      if (/:\s*\d/.test(body) || /:\s*\[/.test(body)) {
+        fail('desktop-tick', `${schemaFile}'s CONFIG_DEFAULTS.concurrency carries a literal number or array rather than reading off the schema import`);
+      } else if (!/schema\.properties\.concurrency/.test(body)) {
+        fail('desktop-tick', `${schemaFile}'s CONFIG_DEFAULTS.concurrency does not read off 'schema.properties.concurrency'`);
+      } else {
+        ok();
+      }
     }
   }
 }

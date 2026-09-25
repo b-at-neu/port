@@ -59,6 +59,7 @@ describe('CONFIG_DEFAULTS', () => {
       modules: { approvalGate: true, release: true, scope: true },
       reviewCycleCap: 5,
       commands: { worktrees: null },
+      concurrency: { sharedFiles: [], overlapThreshold: 2 },
     })
   })
 })
