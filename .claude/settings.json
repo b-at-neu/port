@@ -45,13 +45,13 @@
       "Write(**)",
       "Read(~/.claude/plugins/**)",
       "WebFetch(domain:code.claude.com)",
-      "Bash(node scripts/checks.mjs)",
-      "Bash(node scripts/checks.mjs *)",
+      "Bash(node scripts/checks.ts)",
+      "Bash(node scripts/checks.ts *)",
       "Bash(node plugins/port/bin/artifacts.mjs *)",
       "Bash(node plugins/port/bin/worktrees.mjs *)",
-      "Bash(node scripts/port-tick.mjs *)",
-      "Bash(node scripts/dev-window.mjs)",
-      "Bash(node scripts/dev-window.mjs *)"
+      "Bash(node scripts/port-tick.ts *)",
+      "Bash(node scripts/dev-window.ts)",
+      "Bash(node scripts/dev-window.ts *)"
     ],
     "deny": [
       "Bash(gh pr merge *)",

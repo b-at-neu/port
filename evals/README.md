@@ -59,7 +59,7 @@ So nothing here runs yet on this account. The cases exist anyway, and that is no
 
 One documented grader form is **not** used here yet: `--ablation` mentions graders marked `with-only`, including `tool_used: Skill`, which act as a plugin-fired indicator rather than part of the score. That is the right way to assert the skill actually triggered, and is worth adding once the shape can be verified against a real run.
 
-`scripts/checks.mjs` checks what is statically knowable about these files — every case declares `name`, `prompt` and `graders`, every named grader resolves to a file, and every grader file is referenced by at least one case. That runs for free on every pull request, with no API key and no early access, so a case broken by a rename is caught immediately rather than whenever the gate lifts.
+`scripts/checks.ts` checks what is statically knowable about these files — every case declares `name`, `prompt` and `graders`, every named grader resolves to a file, and every grader file is referenced by at least one case. That runs for free on every pull request, with no API key and no early access, so a case broken by a rename is caught immediately rather than whenever the gate lifts.
 
 ## The cases
 
@@ -107,4 +107,4 @@ One documented grader form is **not** used here yet: `--ablation` mentions grade
 - **Apply pressure.** A rule is only worth testing where following it costs something, which is why the refuse-to-edit case explicitly asks for the fix.
 - **Grade the artifact, not the narration.** A run that announces the right thing and does the wrong thing must fail; every grader here says so explicitly.
 - **Name the failure the grader exists to catch,** at the top. A grader whose purpose has to be reconstructed from its pass conditions gets loosened the first time it is inconvenient.
-- **Never add these to `commands.checks`.** That list is what `impl-agent` runs before pushing, so an eval there means every dispatched agent spawning its own model runs — recursive, slow, and paid for on every ticket. `scripts/checks.mjs` enforces this mechanically.
+- **Never add these to `commands.checks`.** That list is what `impl-agent` runs before pushing, so an eval there means every dispatched agent spawning its own model runs — recursive, slow, and paid for on every ticket. `scripts/checks.ts` enforces this mechanically.

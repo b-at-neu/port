@@ -1,5 +1,5 @@
 {
-  "$comment": "Authoritative decision-case table for scripts/port-tick/events.mjs (#187). formatEvent is tested only within the 8KB cap here — an exact truncated string isn't a stable expectation to pin in a case table, so the truncation path is asserted separately by scripts/checks/tick.mjs's own byte-cap check. rotationDecision is the retention boundary literal: rotates at or over the cap, never under.",
+  "$comment": "Authoritative decision-case table for scripts/port-tick/events.ts (#187). formatEvent is tested only within the 8KB cap here — an exact truncated string isn't a stable expectation to pin in a case table, so the truncation path is asserted separately by scripts/checks/tick.ts's own byte-cap check. rotationDecision is the retention boundary literal: rotates at or over the cap, never under.",
   "cases": [
     { "function": "formatEvent", "name": "envelope and payload merge, small payload passes through unchanged", "input": [{ "v": 1, "ts": "2026-01-01T00:00:00Z", "runId": "abc", "repo": "o/n", "kind": "tick" }, { "tickId": "5", "foo": "bar" }], "expected": "{\"v\":1,\"ts\":\"2026-01-01T00:00:00Z\",\"runId\":\"abc\",\"repo\":\"o/n\",\"kind\":\"tick\",\"tickId\":\"5\",\"foo\":\"bar\"}" },
     { "function": "rotationDecision", "name": "under the cap — no rotation", "input": [1000, 8000], "expected": false },

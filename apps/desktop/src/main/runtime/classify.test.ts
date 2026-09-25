@@ -1,5 +1,5 @@
 // Runs both exported classifiers over the shared case table
-// (`classify.cases.json`) — the same file `scripts/checks/desktop-runtime.mjs`
+// (`classify.cases.json`) — the same file `scripts/checks/desktop-runtime.ts`
 // resolves every case against, so a case that names a function this module
 // no longer exports fails loudly rather than being silently skipped.
 import { describe, expect, it } from 'vitest'

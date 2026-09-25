@@ -1,5 +1,5 @@
 # Regression target: #135 — #67, #61 and #52 all claimed
-# `plugins/port/skills/pipeline/SKILL.md`, `PIPELINE.md` and `scripts/checks.mjs`
+# `plugins/port/skills/pipeline/SKILL.md`, `PIPELINE.md` and `scripts/checks.ts`
 # in their plans and were dispatched concurrently; whichever pull request
 # merged first invalidated the others' rebases, and the loser escalated to
 # `needs human` on a conflict the cockpit could have avoided by ordering the

@@ -1,5 +1,5 @@
 {
-  "$comment": "Authoritative decision-case table for scripts/port-tick/classify.mjs's partitionOwnership. Per plugins/port/docs/PIPELINE.md → 'Multi-operator partitioning': an item whose assignees do not include the viewer is never acted on, only reported.",
+  "$comment": "Authoritative decision-case table for scripts/port-tick/classify.ts's partitionOwnership. Per plugins/port/docs/PIPELINE.md → 'Multi-operator partitioning': an item whose assignees do not include the viewer is never acted on, only reported.",
   "function": "partitionOwnership",
   "cases": [
     {

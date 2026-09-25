@@ -1,5 +1,5 @@
 // The trigger-key to stage-agent map (#105) — exported for #106's own
-// dispatch to consume rather than re-declared there. `scripts/checks/desktop-tick.mjs`
+// dispatch to consume rather than re-declared there. `scripts/checks/desktop-tick.ts`
 // pins this against `plugins/port/data/labels.json`'s own `role: "trigger"`
 // keys, both directions, so a label added or retired there cannot silently
 // leave this map out of step.

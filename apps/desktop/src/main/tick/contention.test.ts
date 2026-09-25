@@ -1,6 +1,6 @@
 // Runs the ported `parseFilesBlock`/`gateCandidates` over the tick engine's
 // own shared case table — the same file `scripts/checks/tick.mjs` runs
-// `scripts/port-tick/contention.mjs`'s own exports over, so the two gates
+// `scripts/port-tick/contention.ts`'s own exports over, so the two gates
 // can never silently disagree. Each row dispatches on its own `function`
 // field, adapting the wire shape at the edges only, exactly as
 // `ownership.test.ts` does.

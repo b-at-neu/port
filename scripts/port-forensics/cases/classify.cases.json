@@ -1,5 +1,5 @@
 {
-  "$comment": "Decision cases for every pure function in scripts/port-forensics/classify.mjs (#123), run by scripts/checks/forensics.mjs — the six assertions, the two reimplemented shell-syntax predicates, and item correlation. Includes a case for each stated fail direction: an 'unknown' termination, a 'not-computable' notification result, and the shell-loop/timeout/denial positive and negative shapes.",
+  "$comment": "Decision cases for every pure function in scripts/port-forensics/classify.ts (#123), run by scripts/checks/forensics.ts — the six assertions, the two reimplemented shell-syntax predicates, and item correlation. Includes a case for each stated fail direction: an 'unknown' termination, a 'not-computable' notification result, and the shell-loop/timeout/denial positive and negative shapes.",
   "cases": [
     {
       "name": "classifyTermination reads a quota (rate_limit) record",

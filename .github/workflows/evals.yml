@@ -5,7 +5,7 @@
 #
 # NEVER add this to commands.checks. That list is what impl-agent runs before
 # pushing, so an eval there means every dispatched agent spawning its own model
-# runs — recursive, slow, and paid for on every ticket. scripts/checks.mjs
+# runs — recursive, slow, and paid for on every ticket. scripts/checks.ts
 # enforces that mechanically.
 
 name: Evals

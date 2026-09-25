@@ -1,5 +1,5 @@
 {
-  "$comment": "Authoritative decision-case table for scripts/port-tick/classify.mjs's session-required marker-slot readers. Per plugins/port/docs/PIPELINE.md → 'Session-required tickets' → 'Detection': slot plus form, never a body-wide substring search — the words appearing elsewhere are not a marker.",
+  "$comment": "Authoritative decision-case table for scripts/port-tick/classify.ts's session-required marker-slot readers. Per plugins/port/docs/PIPELINE.md → 'Session-required tickets' → 'Detection': slot plus form, never a body-wide substring search — the words appearing elsewhere are not a marker.",
   "cases": [
     {
       "function": "issueSessionRequiredReason",

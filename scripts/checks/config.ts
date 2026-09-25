@@ -1,0 +1,355 @@
+import { readFileSync, existsSync } from 'node:fs';
+import { basename, join } from 'node:path';
+import { root, readJson, walk, relOf } from '../lib/files.ts';
+import type { Reporter } from '../lib/report.ts';
+import { message } from '../lib/errors.ts';
+
+/** The branch-model coherence rule the schema cannot express (#54): draft
+ *  2020-12 has no way to compare two sibling values, so a null `production`
+ *  paired with `modules.release` defaulting true, and a `production` that
+ *  resolves to the same name as `integration`, are both caught here rather
+ *  than in the schema. Returns a message describing the problem, or `null`
+ *  when the config is coherent. Pure — no I/O — so it is unit-testable
+ *  inline and reusable against every config-shaped file in the repository. */
+export function branchModelError(cfg: any): string | null {
+  const integration = cfg.branches?.integration ?? 'dev';
+  const hasProduction = Object.hasOwn(cfg.branches ?? {}, 'production');
+  const production = hasProduction ? cfg.branches.production : 'main';
+  if (production === null) {
+    const release = cfg.modules?.release;
+    if (release !== false) {
+      return `branches.production is null but modules.release is not explicitly false (got ${JSON.stringify(release)})`;
+    }
+    return null;
+  }
+  if (production === integration) {
+    return `branches.integration and branches.production both resolve to '${integration}'`;
+  }
+  return null;
+}
+
+/** Every whitespace-delimited token in `command` that ends in
+ *  `.ts`/`.mjs`/`.js`/`.cjs` and carries no `<` or `{{` (a placeholder, only
+ *  ever real for an adopter). A trailing bare `*` — the allowlist's own
+ *  wildcard-suffix convention — is stripped before extraction, never a
+ *  reason to skip the command: the path before it is still real and still
+ *  checked, which is what catches a stale wildcard-only entry left behind
+ *  when a rename touched only the bare form. Pure, so the block below can
+ *  self-test it before trusting it against the repository's real config. */
+export function scriptPathsIn(command: string): string[] {
+  const inner = command.replace(/^Bash\(/, '').replace(/\)$/, '');
+  const tokens = inner.trim().split(/\s+/).filter(Boolean);
+  const withoutWildcard = tokens.at(-1) === '*' ? tokens.slice(0, -1) : tokens;
+  return withoutWildcard.filter((t) => /\.(ts|mjs|js|cjs)$/.test(t) && !t.includes('<') && !t.includes('{{'));
+}
+
+export default async function ({ fail, note, ok }: Reporter) {
+  // --- Branch model coherence rail ---------------------------------------------
+  // guard(#54): a single-branch repository (null production) silently
+  // asking for both no release flow and a release flow, or a dropped
+  // placeholder left unsubstituted for an adopter with one branch. A check
+  // that cannot be made to fail is not a check: self-test branchModelError
+  // against a passing and a failing example of each rule before trusting it.
+  {
+    const cases = [
+      {
+        name: 'null production, explicit release: false',
+        cfg: { repo: 'x/y', branches: { integration: 'main', production: null }, modules: { release: false } },
+        wantError: false,
+      },
+      {
+        name: 'null production, modules omitted (release defaults true)',
+        cfg: { repo: 'x/y', branches: { integration: 'main', production: null } },
+        wantError: true,
+      },
+      {
+        name: 'null production, release explicitly true',
+        cfg: { repo: 'x/y', branches: { integration: 'main', production: null }, modules: { release: true } },
+        wantError: true,
+      },
+      {
+        name: 'distinct integration and production',
+        cfg: { repo: 'x/y', branches: { integration: 'dev', production: 'main' } },
+        wantError: false,
+      },
+      {
+        name: 'integration equals production explicitly',
+        cfg: { repo: 'x/y', branches: { integration: 'main', production: 'main' } },
+        wantError: true,
+      },
+      {
+        name: 'integration explicitly main, production omitted (resolves to main too)',
+        cfg: { repo: 'x/y', branches: { integration: 'main' } },
+        wantError: true,
+      },
+    ];
+    for (const c of cases) {
+      const got = branchModelError(c.cfg) !== null;
+      if (got !== c.wantError) {
+        fail('branch-model', `branchModelError self-test failed for '${c.name}': expected error=${c.wantError}, got=${got}`);
+      } else {
+        ok();
+      }
+    }
+
+    // Run the real predicate over every config-shaped file in the repository.
+    const targets = [
+      '.claude/port.config.json',
+      'plugins/port/templates/port.config.json',
+      ...walk(join(root, 'schema/fixtures'))
+        .filter((f) => basename(f).startsWith('valid.'))
+        .map(relOf),
+    ];
+    for (const rel of targets) {
+      const cfg = readJson(rel);
+      const err = branchModelError(cfg);
+      if (err) fail('branch-model', `${rel}: ${err}`);
+      else ok();
+    }
+
+    // The invalid fixtures built for exactly this rule must still be rejected.
+    for (const rel of [
+      'schema/fixtures/invalid.release-with-null-production.json',
+      'schema/fixtures/invalid.null-production-default-release.json',
+    ]) {
+      const cfg = readJson(rel);
+      if (branchModelError(cfg) === null) {
+        fail('branch-model', `${rel}: expected branchModelError to reject this fixture, got no error`);
+      } else {
+        ok();
+      }
+    }
+
+    // The rendered approval-check template must carry no `{{production}}` token —
+    // a placeholder a single-branch install could never fill.
+    const templateRel = 'plugins/port/templates/approval-check.yml';
+    if (readFileSync(join(root, templateRel), 'utf8').includes('{{production}}')) {
+      fail('branch-model', `${templateRel} still contains an unresolvable {{production}} token`);
+    } else {
+      ok();
+    }
+
+    // Every `{{name}}` placeholder in permissions.base.json's allow/deny must be
+    // named somewhere in init/SKILL.md, and the bullet that carries
+    // {{packageManager}}'s drop-when-absent rule must also name {{production}} —
+    // regression guard for the same drop rule silently applying to only one of
+    // the two placeholders that can be absent.
+    const permsText = readFileSync(join(root, 'plugins/port/templates/permissions.base.json'), 'utf8');
+    const perms = JSON.parse(permsText);
+    const placeholders = new Set(
+      [...JSON.stringify([...perms.allow, ...perms.deny]).matchAll(/\{\{([A-Za-z][A-Za-z0-9]*)\}\}/g)].map((m) => m[1]),
+    );
+    const skillRel = 'plugins/port/skills/init/SKILL.md';
+    const skillText = readFileSync(join(root, skillRel), 'utf8');
+    for (const name of placeholders) {
+      if (!skillText.includes(`{{${name}}}`)) {
+        fail('branch-model', `${skillRel} never names the '{{${name}}}' placeholder from permissions.base.json`);
+      } else {
+        ok();
+      }
+    }
+    const dropBullet = /^-.*\{\{packageManager\}\}.*drop.*$/m.exec(skillText);
+    if (!dropBullet) {
+      fail('branch-model', `${skillRel} is missing the bullet stating {{packageManager}}'s drop-when-absent rule`);
+    } else if (!dropBullet[0].includes('{{production}}')) {
+      fail('branch-model', `${skillRel}: the {{packageManager}} drop-rule bullet must also name {{production}}`);
+    } else {
+      ok();
+    }
+
+    // PIPELINE.md must state what null production means, and what the CI merge
+    // gate covers in single-branch mode.
+    const pipelineRel = 'plugins/port/docs/PIPELINE.md';
+    const pipelineText = readFileSync(join(root, pipelineRel), 'utf8');
+    const productionRow = /\|\s*`<production>`\s*\|[^\n]*\|/.exec(pipelineText);
+    if (!productionRow || !productionRow[0].includes('null')) {
+      fail('branch-model', `${pipelineRel}'s '<production>' table row must name 'null'`);
+    } else {
+      ok();
+    }
+    const gateSection = /### CI merge gate[\s\S]*?(?=\n## )/.exec(pipelineText);
+    if (!gateSection || !gateSection[0].toLowerCase().includes('single-branch')) {
+      fail('branch-model', `${pipelineRel}'s CI merge gate section must name the single-branch case`);
+    } else {
+      ok();
+    }
+  }
+
+  // --- Templates are valid JSON ----------------------------------------------
+  // guard: anything downstream reading `undefined` off a template or manifest
+  // that fails to parse.
+  for (const t of [
+    'plugins/port/templates/permissions.base.json',
+    'plugins/port/data/labels.json',
+    'plugins/port/templates/port.config.json',
+    'schema/port.config.schema.json',
+    '.claude-plugin/marketplace.json',
+    'plugins/port/.claude-plugin/plugin.json',
+  ]) {
+    try {
+      readJson(t);
+      ok();
+    } catch (e) {
+      fail('json', `${t} does not parse: ${message(e)}`);
+    }
+  }
+
+  // --- This repository's own permissions are non-empty -----------------------
+  // guard: a repository with `.claude/settings.json` present but
+  // `permissions.allow` missing or empty, leaving no permission rules at all,
+  // fully silently — stage agents run `dontAsk` and auto-deny anything not
+  // allowlisted. This is the exact condition the cockpit's startup preflight
+  // checks at runtime.
+  {
+    const settings = readJson('.claude/settings.json');
+    const allow = settings.permissions?.allow;
+    if (!Array.isArray(allow) || allow.length === 0) {
+      fail('permissions', `.claude/settings.json's permissions.allow must be a non-empty array, got ${JSON.stringify(allow)}`);
+    } else {
+      ok();
+    }
+  }
+
+  // --- The config template matches its own schema's shape --------------------
+  // guard: bare strings, which parse fine and read plausibly while every
+  // consumer reading `entry.run` gets undefined.
+  {
+    const cfg = readJson('plugins/port/templates/port.config.json');
+    for (const entry of cfg.commands?.checks ?? []) {
+      if (typeof entry !== 'object' || entry === null || typeof entry.run !== 'string') {
+        fail('config-template', `commands.checks entries must be objects with a 'run' string, got ${JSON.stringify(entry)}`);
+      }
+    }
+    for (const entry of cfg.commands?.bootstrap ?? []) {
+      if (typeof entry !== 'string') {
+        fail('config-template', `commands.bootstrap entries must be strings, got ${JSON.stringify(entry)}`);
+      }
+    }
+    ok();
+  }
+
+  // --- Schema fixtures still discriminate ------------------------------------
+  // guard: a fixture set that only proves acceptance proves nothing — both
+  // directions must be asserted. Needs a real validator; reported as skipped
+  // rather than silently passing, because a check that quietly does nothing
+  // is worse than one that is absent.
+  {
+    const fixtures = walk(join(root, 'schema/fixtures')).filter((f) => f.endsWith('.json'));
+    const valid = fixtures.filter((f) => basename(f).startsWith('valid.'));
+    const invalid = fixtures.filter((f) => basename(f).startsWith('invalid.'));
+    if (valid.length === 0 || invalid.length === 0) {
+      fail('fixtures', 'expected both valid.* and invalid.* fixtures');
+    }
+    for (const f of fixtures) {
+      try {
+        JSON.parse(readFileSync(f, 'utf8'));
+      } catch (e) {
+        fail('fixtures', `${basename(f)} does not parse: ${message(e)}`);
+      }
+    }
+    note(
+      `fixtures: ${valid.length} valid, ${invalid.length} invalid — parse-checked only; run a draft 2020-12 validator for full coverage (see schema/README.md)`,
+    );
+    ok();
+  }
+
+  // --- No previewDatabase survives ---------------------------------------------
+  // guard(#189): a deleted config flag's name surviving as dead scaffolding
+  // somewhere it was never swept. This issue deleted modules.previewDatabase
+  // and promoted refresh mode to the pipeline's only rebase route. The
+  // flag's own literal is the one place it may still appear — this check's
+  // message and this comment — so the walk deliberately excludes scripts/,
+  // never the repository root.
+  {
+    const scanDirs = ['plugins', 'schema', 'apps/desktop/src', 'evals', '.github'];
+    const hits = [];
+    for (const dir of scanDirs) {
+      for (const f of walk(join(root, dir))) {
+        const text = readFileSync(f, 'utf8');
+        if (text.includes('previewDatabase')) hits.push(relOf(f));
+      }
+    }
+    const cfg = readJson('.claude/port.config.json');
+    if ('previewDatabase' in (cfg.modules ?? {})) hits.push('.claude/port.config.json');
+    if (hits.length > 0) {
+      fail('no-preview-database', `'previewDatabase' still appears outside scripts/: ${hits.join(', ')}`);
+    } else {
+      ok();
+    }
+  }
+
+  // --- CI workflow names every platform in its matrix -------------------------
+  // guard(#73): quietly dropping a platform after a red run, which would
+  // look like a tidy-up in review, and nothing else would notice the
+  // platform stopped being tested.
+  {
+    const rel = '.github/workflows/checks.yml';
+    const text = readFileSync(join(root, rel), 'utf8');
+    for (const label of ['ubuntu-latest', 'macos-latest', 'windows-latest']) {
+      if (!text.includes(label)) {
+        fail('platform-matrix', `${rel} never names the runner label '${label}'`);
+      } else {
+        ok();
+      }
+    }
+  }
+
+  // --- Every script path this repository configures resolves on disk ---------
+  // guard(#122): the exact-match allowlist and the extension filters going
+  // *silent* rather than red the moment a rename misses one reference —
+  // this repository's own two config files, never a template or fixture
+  // (an adopter's own commands.artifacts names a path only they have).
+  {
+    const selfTestCases: [string, string[]][] = [
+      ['pnpm install', []],
+      ['node scripts/checks.ts', ['scripts/checks.ts']],
+      ['node scripts/checks.ts --guards', ['scripts/checks.ts']],
+      ['Bash(node scripts/checks.ts *)', ['scripts/checks.ts']],
+      ['node scripts/checks-<topic>.ts', []],
+    ];
+    for (const [command, expected] of selfTestCases) {
+      const got = scriptPathsIn(command);
+      if (JSON.stringify(got) !== JSON.stringify(expected)) {
+        fail('config-script-paths-selftest', `scriptPathsIn(${JSON.stringify(command)}) = ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`);
+      } else {
+        ok();
+      }
+    }
+
+    const cfg = readJson('.claude/port.config.json');
+    const settings = readJson('.claude/settings.json');
+    const commandSources: string[] = [
+      ...(cfg.commands?.bootstrap ?? []),
+      ...(cfg.commands?.checks ?? []).flatMap((e: any) => [e.run, e.fix]),
+      cfg.commands?.artifacts,
+      cfg.commands?.worktrees,
+      cfg.commands?.budget,
+      cfg.commands?.tick,
+      cfg.release?.postPublishHook,
+      ...(cfg.extraAllow ?? []),
+      ...(settings.permissions?.allow ?? []),
+    ].filter((c) => typeof c === 'string');
+
+    let anyPath = false;
+    for (const command of commandSources) {
+      for (const p of scriptPathsIn(command)) {
+        anyPath = true;
+        if (!existsSync(join(root, p))) {
+          fail('config-script-paths', `'${command}' names '${p}', which does not exist on disk`);
+        } else {
+          ok();
+        }
+      }
+    }
+    if (!anyPath) {
+      fail('config-script-paths', 'no script path resolved at all across commands.*, extraAllow, and permissions.allow — the extractor may be broken');
+    }
+
+    const pkg = readJson('package.json');
+    if (pkg.type !== 'module') {
+      fail('config-script-paths', `package.json's 'type' is ${JSON.stringify(pkg.type)}, not 'module' — every scripts/*.ts file loads as ESM only because of this field`);
+    } else {
+      ok();
+    }
+  }
+}

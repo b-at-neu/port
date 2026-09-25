@@ -1,12 +1,12 @@
 // Pure: the file-contention gate from plugins/port/docs/PIPELINE.md → "File
 // contention" and plugins/port/skills/pipeline/SKILL.md → "File contention
-// gate", ported verbatim from scripts/port-tick/contention.mjs's own
+// gate", ported verbatim from scripts/port-tick/contention.ts's own
 // exports — pinned against that file, both directions, by
-// scripts/checks/desktop-tick.mjs's dynamic import, the same idiom
+// scripts/checks/desktop-tick.ts's dynamic import, the same idiom
 // liveness.ts already uses for RETRY_TRIGGER. Typed against local
 // ClaimedItem/OccupiedEntry/GateResult shapes; no `node:` import, no
 // `../platform` — `main/tick/` is a pure decision layer, it never reaches
-// I/O (the same rail `scripts/checks/desktop-tick.mjs` already pins for this
+// I/O (the same rail `scripts/checks/desktop-tick.ts` already pins for this
 // directory).
 
 /** One structured candidate's own item number and claimed paths — the

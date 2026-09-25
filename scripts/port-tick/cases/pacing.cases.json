@@ -1,5 +1,5 @@
 {
-  "$comment": "Authoritative decision-case table for scripts/port-tick/pacing.mjs's nextDelay. Per plugins/port/skills/pipeline/SKILL.md → 'Pacing': floor with no backoff whenever something will move without a human; otherwise advance one rung per consecutive no-change tick; reset to the floor unconditionally on any observed change.",
+  "$comment": "Authoritative decision-case table for scripts/port-tick/pacing.ts's nextDelay. Per plugins/port/skills/pipeline/SKILL.md → 'Pacing': floor with no backoff whenever something will move without a human; otherwise advance one rung per consecutive no-change tick; reset to the floor unconditionally on any observed change.",
   "function": "nextDelay",
   "cases": [
     { "name": "something will move — floor, cadence reset", "input": [2, { "willMoveWithoutHuman": true, "observedChange": false }], "expected": { "delay": 270, "cadenceStep": 0 } },
