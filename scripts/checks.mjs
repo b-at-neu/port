@@ -57,6 +57,7 @@ import desktopClaim from './checks/desktop-claim.mjs';
 import desktopActions from './checks/desktop-actions.mjs';
 import desktopSearch from './checks/desktop-search.mjs';
 import desktopTick from './checks/desktop-tick.mjs';
+import desktopRuntime from './checks/desktop-runtime.mjs';
 import fileSize from './checks/file-size.mjs';
 import tick from './checks/tick.mjs';
 import tickEvents from './checks/tick-events.mjs';
@@ -135,6 +136,7 @@ if (argv.includes('--guards')) {
     desktopActions,
     desktopSearch,
     desktopTick,
+    desktopRuntime,
     fileSize,
     tick,
     tickEvents,

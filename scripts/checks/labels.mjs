@@ -398,8 +398,8 @@ export default async function ({ fail, note, ok }) {
   }
 
   // --- Desktop app never retypes a resolved label name it should import ------
-  // guard(#75, #74): the app retyping a resolved label name by hand instead
-  // of reading it from the LABEL_DEFAULTS import — the same
+  // guard(#75, #74, #97): the app retyping a resolved label name by hand
+  // instead of reading it from the LABEL_DEFAULTS import — the same
   // second-transcription drift this rail exists to prevent — and the
   // registry or the renderer retyping a resolved label name instead of
   // importing it, now that both are consumers. The strings where
@@ -408,12 +408,19 @@ export default async function ({ fail, note, ok }) {
   // where `key === name` are excluded, since LABEL_KEYS legitimately
   // contains them as literals. Widened from shared/labels/ to all of
   // apps/desktop/src/.
+  //
+  // `main/platform/` and `main/runtime/` are excluded from this scan:
+  // the marker label's `name` is `'claude'`, the same literal as the Claude
+  // Code CLI binary these two label-vocabulary-free directories spawn and
+  // resolve — neither imports label vocabulary or reads a label name, so a
+  // hit there can only ever be the binary name, never a retyped label.
   {
     const mismatched = readJson('plugins/port/data/labels.json')
       .labels.filter((l) => l.key !== l.name)
       .map((l) => l.name);
     const dir = join(root, 'apps/desktop/src');
-    for (const f of walk(dir).filter((p) => p.endsWith('.ts') && !p.endsWith('.test.ts'))) {
+    const labelFreeDirs = [join(dir, 'main/platform'), join(dir, 'main/runtime')];
+    for (const f of walk(dir).filter((p) => p.endsWith('.ts') && !p.endsWith('.test.ts') && !labelFreeDirs.some((d) => p.startsWith(`${d}/`)))) {
       const rel = relOf(f);
       const text = readFileSync(f, 'utf8');
       for (const name of mismatched) {
