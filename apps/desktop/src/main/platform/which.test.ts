@@ -117,6 +117,83 @@ describe('which', () => {
     expect(probed).toContain('C:\\Program Files\\nodejs\\node.exe')
   })
 
+  it('resolves claude from the posix $HOME/.local/bin fallback (#97)', async () => {
+    const { which } = createWhich()
+    const probed: string[] = []
+    const result = await which({
+      command: 'claude',
+      env: { PATH: '/usr/bin', HOME: '/home/operator' },
+      platform: 'linux',
+      probe: (candidate) => {
+        probed.push(candidate)
+        return Promise.resolve(candidate === '/home/operator/.local/bin/claude')
+      },
+    })
+    expect(result).toEqual({ ok: true, path: '/home/operator/.local/bin/claude' })
+    expect(probed).toContain('/home/operator/.local/bin/claude')
+  })
+
+  it('tries every posix claude fallback before giving up, and never touches os.homedir()', async () => {
+    const { which } = createWhich()
+    const result = await which({
+      command: 'claude',
+      env: { PATH: '/usr/bin', HOME: '/home/operator' },
+      platform: 'linux',
+      probe: () => Promise.resolve(false),
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('unreachable')
+    expect(result.searched).toContain('/home/operator/.local/bin/claude')
+    expect(result.searched).toContain('/home/operator/.claude/local/claude')
+    expect(result.searched).toContain('/home/operator/.bun/bin/claude')
+    expect(result.searched).toContain('/home/operator/.npm-global/bin/claude')
+  })
+
+  it('a posix claude fallback with no HOME in env contributes no candidates', async () => {
+    const { which } = createWhich()
+    const result = await which({
+      command: 'claude',
+      env: { PATH: '/usr/bin' },
+      platform: 'linux',
+      probe: () => Promise.resolve(false),
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('unreachable')
+    expect(result.searched.some((path) => path.includes('.local/bin/claude'))).toBe(false)
+  })
+
+  it('resolves claude from the win32 LOCALAPPDATA fallback, simulated from a posix host (#97)', async () => {
+    const { which } = createWhich()
+    const result = await which({
+      command: 'claude',
+      env: { PATH: 'C:\\tools', LOCALAPPDATA: 'C:\\Users\\operator\\AppData\\Local' },
+      platform: 'win32',
+      probe: (candidate) => Promise.resolve(candidate === 'C:\\Users\\operator\\AppData\\Local\\Programs\\claude\\claude.exe'),
+    })
+    expect(result).toEqual({ ok: true, path: 'C:\\Users\\operator\\AppData\\Local\\Programs\\claude\\claude.exe' })
+  })
+
+  it('tries every win32 claude fallback, derived only from the injected env', async () => {
+    const { which } = createWhich()
+    const result = await which({
+      command: 'claude',
+      env: {
+        PATH: 'C:\\tools',
+        LOCALAPPDATA: 'C:\\Users\\operator\\AppData\\Local',
+        APPDATA: 'C:\\Users\\operator\\AppData\\Roaming',
+        USERPROFILE: 'C:\\Users\\operator',
+      },
+      platform: 'win32',
+      probe: () => Promise.resolve(false),
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('unreachable')
+    expect(result.searched.some((path) => path.startsWith('C:\\Users\\operator\\AppData\\Local\\Programs\\claude\\'))).toBe(true)
+    expect(result.searched.some((path) => path.startsWith('C:\\Users\\operator\\AppData\\Local\\claude\\'))).toBe(true)
+    expect(result.searched.some((path) => path.startsWith('C:\\Users\\operator\\AppData\\Roaming\\npm\\'))).toBe(true)
+    expect(result.searched.some((path) => path.startsWith('C:\\Users\\operator\\.local\\bin\\'))).toBe(true)
+  })
+
   it('a fresh createWhich() instance has its own cache', async () => {
     const first = createWhich()
     const second = createWhich()

@@ -22,6 +22,9 @@ export { classifyGhExit, gh, ghAuthStatus, ghJson } from './gh'
 export type { NodeOptions } from './node'
 export { node } from './node'
 
+export type { ClaudeOptions } from './claude'
+export { claude } from './claude'
+
 export type { DirEntry, DirEntryKind, FileFailureKind, FileResult, ReadLinesFromOptions, ReadLinesFromResult, ReadLinesFromValue, StatInfo } from './files'
 export {
   appendTextFile,

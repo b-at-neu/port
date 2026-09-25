@@ -8,6 +8,7 @@ import type { BoardSnapshot, SourceKind } from './board/types'
 import type { ClaimApplyResponse, ClaimPreflightResponse, PlanGateChoice } from './claim/types'
 import type { LabelKey } from './labels/vocabulary'
 import type { ItemActionResult, OperatorAction } from './actions/types'
+import type { RuntimePreflight, RuntimeProbe } from './runtime/types'
 
 export interface AppInfo {
   app: string
@@ -119,6 +120,20 @@ export interface IpcMap {
     request: { repoId: RepoId; kind: 'issue' | 'pull-request'; number: number; action: OperatorAction; expectedStage: LabelKey | null }
     response: ItemActionResult
   }
+  /** The runtime strip's cheap check (#97) — no repository context, no
+   *  subprocess beyond `claude --version`, no network. Safe on every app
+   *  start; there is no failure branch, because every failure *is* a
+   *  diagnosis. */
+  'runtime:preflight': {
+    request: void
+    response: RuntimePreflight
+  }
+  /** One `query()` turn against a registered, `ready` repository — the
+   *  renderer names an intent (`repoId`), never a path or a `cwd`. */
+  'runtime:probe': {
+    request: { repoId: RepoId }
+    response: RuntimeProbe
+  }
 }
 
 export const IPC_CHANNELS = [
@@ -138,6 +153,8 @@ export const IPC_CHANNELS = [
   'claim:preflight',
   'claim:apply',
   'item:action',
+  'runtime:preflight',
+  'runtime:probe',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]

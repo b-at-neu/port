@@ -1,0 +1,104 @@
+[
+  {
+    "fn": "classifyPreflight",
+    "name": "not-found is cli-missing",
+    "input": { "locate": "not-found", "versionUsable": true, "credentials": null, "now": 1000 },
+    "expect": "cli-missing"
+  },
+  {
+    "fn": "classifyPreflight",
+    "name": "bundled-fallback wins even with everything else healthy",
+    "input": { "locate": "bundled-fallback", "versionUsable": true, "credentials": { "present": true, "expiresAt": 999999999999, "hasRefreshToken": true }, "now": 1000 },
+    "expect": "bundled-fallback"
+  },
+  {
+    "fn": "classifyPreflight",
+    "name": "a version that will not parse is cli-unusable",
+    "input": { "locate": "found", "versionUsable": false, "credentials": null, "now": 1000 },
+    "expect": "cli-unusable"
+  },
+  {
+    "fn": "classifyPreflight",
+    "name": "no credentials tell at all falls through to unverified",
+    "input": { "locate": "found", "versionUsable": true, "credentials": null, "now": 1000 },
+    "expect": "unverified"
+  },
+  {
+    "fn": "classifyPreflight",
+    "name": "a healthy, far-future token is unverified -- only a completed turn proves verified",
+    "input": { "locate": "found", "versionUsable": true, "credentials": { "present": true, "expiresAt": 999999999999, "hasRefreshToken": true }, "now": 1000 },
+    "expect": "unverified"
+  },
+  {
+    "fn": "classifyPreflight",
+    "name": "#145: expiresAt 0 with a refresh token present is token-stale",
+    "input": { "locate": "found", "versionUsable": true, "credentials": { "present": true, "expiresAt": 0, "hasRefreshToken": true }, "now": 1000 },
+    "expect": "token-stale"
+  },
+  {
+    "fn": "classifyPreflight",
+    "name": "an expiresAt already in the past with a refresh token present is token-stale",
+    "input": { "locate": "found", "versionUsable": true, "credentials": { "present": true, "expiresAt": 500, "hasRefreshToken": true }, "now": 1000 },
+    "expect": "token-stale"
+  },
+  {
+    "fn": "classifyPreflight",
+    "name": "expiresAt 0 with no refresh token is unverified, not token-stale -- nothing to recover with a re-login alone would not already offer",
+    "input": { "locate": "found", "versionUsable": true, "credentials": { "present": true, "expiresAt": 0, "hasRefreshToken": false }, "now": 1000 },
+    "expect": "unverified"
+  },
+  {
+    "fn": "classifyPreflight",
+    "name": "present: false is unknown, never read as unauthenticated -- falls through to unverified",
+    "input": { "locate": "found", "versionUsable": true, "credentials": { "present": false, "expiresAt": null, "hasRefreshToken": false }, "now": 1000 },
+    "expect": "unverified"
+  },
+  {
+    "fn": "classifyProbeFailure",
+    "name": "the credentials tell wins over unrelated probe text",
+    "input": { "text": "connection reset", "credentials": { "present": true, "expiresAt": 0, "hasRefreshToken": true }, "now": 1000 },
+    "expect": "token-stale"
+  },
+  {
+    "fn": "classifyProbeFailure",
+    "name": "OAuth wording is token-stale",
+    "input": { "text": "OAuth token could not be validated", "credentials": null, "now": 1000 },
+    "expect": "token-stale"
+  },
+  {
+    "fn": "classifyProbeFailure",
+    "name": "refresh token wording is token-stale",
+    "input": { "text": "The refresh token has expired", "credentials": null, "now": 1000 },
+    "expect": "token-stale"
+  },
+  {
+    "fn": "classifyProbeFailure",
+    "name": "#145: the CLI's own 'Invalid API key' wording, paired with a login instruction, routes to unauthenticated -- never reported as an API key problem",
+    "input": { "text": "Invalid API key · Please run /login", "credentials": null, "now": 1000 },
+    "expect": "unauthenticated"
+  },
+  {
+    "fn": "classifyProbeFailure",
+    "name": "'not logged in' wording is unauthenticated",
+    "input": { "text": "Error: not logged in", "credentials": null, "now": 1000 },
+    "expect": "unauthenticated"
+  },
+  {
+    "fn": "classifyProbeFailure",
+    "name": "unambiguous policy wording is policy-refused",
+    "input": { "text": "Your organization's policy does not permit this action", "credentials": null, "now": 1000 },
+    "expect": "policy-refused"
+  },
+  {
+    "fn": "classifyProbeFailure",
+    "name": "ambiguous text carrying both login and policy wording resolves toward unauthenticated, never policy-refused",
+    "input": { "text": "Please log in again; this may also be restricted by organization policy", "credentials": null, "now": 1000 },
+    "expect": "unauthenticated"
+  },
+  {
+    "fn": "classifyProbeFailure",
+    "name": "unrelated text is probe-failed",
+    "input": { "text": "network timeout after 30s", "credentials": null, "now": 1000 },
+    "expect": "probe-failed"
+  }
+]

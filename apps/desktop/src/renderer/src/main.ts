@@ -29,8 +29,10 @@ import { handleItemAction, pruneItemActionStates } from './board/actions'
 import type { OperatorAction } from '../../shared/actions/types'
 import type { LabelKey } from '../../shared/labels/vocabulary'
 import { initClaim, openClaimDialog } from './claim/controller'
+import { initRuntime } from './runtime'
 
 const app = document.querySelector<HTMLDivElement>('#app')
+const runtimeStrip = document.querySelector<HTMLDivElement>('#runtime-strip')
 const nav = document.querySelector<HTMLDivElement>('#nav')
 const boardContainer = document.querySelector<HTMLDivElement>('#board-view')
 const reposContainer = document.querySelector<HTMLDivElement>('#repositories-view')
@@ -416,3 +418,4 @@ draw()
 void refreshRepositories()
 void initBoard()
 if (app) initClaim(app)
+if (runtimeStrip) initRuntime(runtimeStrip)

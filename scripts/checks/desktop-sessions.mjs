@@ -12,30 +12,37 @@ export default async function ({ fail, ok }) {
   const sharedSessionsDir = 'apps/desktop/src/shared/sessions';
   const srcDir = join(root, 'apps/desktop/src');
   const sdkRel = `${sessionsDir}/sdk.ts`;
+  const runtimeSdkRel = 'apps/desktop/src/main/runtime/sdk.ts';
+  const sdkAllowlist = new Set([sdkRel, runtimeSdkRel]);
   const allFiles = walk(srcDir).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
 
-  // --- The Agent SDK is referenced under apps/desktop/src/ only in sdk.ts, and sdk.ts does reference it ---
-  // guard(#78): a second reader spawning the SDK directly instead of going
-  // through the one lazy-imported seam.
+  // --- The Agent SDK is referenced under apps/desktop/src/ only in the two allowlisted seams ---
+  // guard(#78, #97): a second reader spawning the SDK directly instead of
+  // going through one of the two lazy-imported seams — the session reader
+  // (#78) and the runtime probe (#97). Matched only as an import specifier
+  // (`from '...'` or `import(...)`), never a bare substring — `runtime/
+  // locate.test.ts`'s own fixtures legitimately spell the SDK's per-platform
+  // package name out as a path string (what a resolved `claude` binary
+  // sitting inside it looks like), never as an import.
   {
-    let sdkHasIt = false;
+    const importSpecifierRe = /(?:from\s+|import\()\s*['"]@anthropic-ai\/claude-agent-sdk['"]/;
+    const seenAllowlisted = new Set();
     let extraReferences = false;
     for (const f of allFiles) {
       const rel = relOf(f);
       const text = readFileSync(f, 'utf8');
-      if (!text.includes('@anthropic-ai/claude-agent-sdk')) continue;
-      if (rel === sdkRel) {
-        sdkHasIt = true;
+      if (!importSpecifierRe.test(text)) continue;
+      if (sdkAllowlist.has(rel)) {
+        seenAllowlisted.add(rel);
         continue;
       }
       extraReferences = true;
-      fail('desktop-sessions', `${rel} references '@anthropic-ai/claude-agent-sdk' — only ${sdkRel} may (Decision 3)`);
+      fail('desktop-sessions', `${rel} references '@anthropic-ai/claude-agent-sdk' — only ${[...sdkAllowlist].join(' or ')} may`);
     }
-    if (!sdkHasIt) {
-      fail('desktop-sessions', `${sdkRel} does not reference '@anthropic-ai/claude-agent-sdk' — the guard cannot pass vacuously if the file is deleted`);
-    } else if (!extraReferences) {
-      ok();
+    for (const rel of sdkAllowlist) {
+      if (!seenAllowlisted.has(rel)) fail('desktop-sessions', `${rel} does not reference '@anthropic-ai/claude-agent-sdk' — the guard cannot pass vacuously if the file is deleted`);
     }
+    if (seenAllowlisted.size === sdkAllowlist.size && !extraReferences) ok();
   }
 
   // --- PORT_STAGE_AGENTS matches plugins/port/agents/'s basenames, both directions ---
