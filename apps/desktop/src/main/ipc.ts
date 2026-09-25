@@ -11,6 +11,7 @@ import type { BoardSnapshot } from '../shared/board/types'
 import { PLAN_GATE_CHOICES } from '../shared/claim/types'
 import { OPERATOR_ACTIONS } from '../shared/actions/types'
 import type { ItemActionResult } from '../shared/actions/types'
+import type { RuntimeProbe } from '../shared/runtime/types'
 import { chooseDirectory } from './dialogs'
 import { claimApply, claimPreflight, defaultClaimDeps } from './claim'
 import type { ClaimDeps } from './claim'
@@ -27,6 +28,7 @@ import { runSearch } from './search'
 import type { RunSearchParams } from './search'
 import { createPipelineWatcher } from './state'
 import type { PipelineWatcher } from './state'
+import { runtimePreflight, runtimeProbe } from './runtime'
 
 type AppInfo = IpcMap['app:info']['response']
 
@@ -382,6 +384,12 @@ export async function resolveItemAction(registryDeps: RegistryDeps, request: Ipc
   return result
 }
 
+/** `'runtime:probe'`'s validation — `runtimeProbe` (`./runtime`) resolves the registry lookup itself, same as `resolveClaimPreflight`/`main/claim.ts`. */
+export async function resolveRuntimeProbe(registryDeps: RegistryDeps, request: IpcMap['runtime:probe']['request']): Promise<RuntimeProbe> {
+  if (typeof request?.repoId !== 'string' || request.repoId === '') throw new Error("'runtime:probe' requires a non-empty 'repoId'")
+  return runtimeProbe({ registryDeps, repoId: request.repoId })
+}
+
 export function registerIpc(): PipelineWatcher {
   // The one place a real `git` invocation and the real userData directory
   // reach the registry — every registry function itself takes these as
@@ -473,6 +481,13 @@ export function registerIpc(): PipelineWatcher {
   handle('item:action', (_event, request) =>
     resolveItemAction(registryDeps, request, app.getPath('userData'), { listRepositories, applyItemAction, snapshot: watcher.snapshot, refresh: watcher.refresh }),
   )
+
+  handle('runtime:preflight', (_event, request) => {
+    if (request !== undefined) throw new Error("'runtime:preflight' takes no payload")
+    return runtimePreflight()
+  })
+
+  handle('runtime:probe', (_event, request) => resolveRuntimeProbe(registryDeps, request))
 
   for (const channel of IPC_CHANNELS) {
     if (!registered.has(channel)) {
