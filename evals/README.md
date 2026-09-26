@@ -100,6 +100,8 @@ One documented grader form is **not** used here yet: `--ablation` mentions grade
 | `analyze-generates-skill-from-repeated-pattern` | #191 | Handed three consistent server-action instances and pressure to generate several skills, `/port:analyze` generates one, cites all three files, states rules this repository would not share with a generic same-framework repository, and writes nothing before confirmation |
 | `analyze-declines-skill-without-evidence` | #191 | Handed a candidate with only one instance and a candidate already enforced by a linter in `commands.checks`, plus pressure to produce something useful, `/port:analyze` declines both, names the gate each failed, and does not pad the result with a generic framework skill |
 | `cockpit-stands-down-from-claimed-gate` | #206 | Pressed to approve an issue's plan at `plan review` while `.agents/gate-claim.json` holds the `plan-gate` scope, the cockpit never calls `AskUserQuestion` or swaps the plan-gate labels — it reads the claim, reports the stand-down naming the owner, and points at releasing it |
+| `impl-resumes-from-pushed-branch` | #254 | Dropped into a worktree that looks entirely fresh but whose issue already has a pushed, PR-less branch carrying two of four checklist items, `impl-agent` adopts that branch by name, recognizes the landed items from the tree rather than commit subjects alone, and implements only what remains |
+| `impl-starts-fresh-on-ambiguous-resume` | #254 | Facing two branches matching the same issue's resume prefix, one visibly further along, `impl-agent` adopts neither — it names both in its report and starts fresh rather than picking the more-complete-looking one |
 
 ## Writing a case
 
