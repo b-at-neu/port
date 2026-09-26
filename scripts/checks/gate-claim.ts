@@ -332,6 +332,8 @@ export default async function ({ fail, ok, note }: Reporter) {
   // and docs/COORDINATION.md's own claim-contract prose drifting apart —
   // each names the same three label keys, and a fourth added to one without
   // the others would silently narrow or widen what the hook actually denies.
+  // pin: `hooks/agent-guard.mjs`'s plan-gate label key reads (`planReview`/`planApproved`/`planChangesRequested`) ↔ `PIPELINE.md`'s "External gate claim" section ↔ `docs/COORDINATION.md`'s claim-contract keys
+  // pin: `PIPELINE.md`'s "Cockpit rules" paragraph stating "five" ↔ its own bulleted list actually carrying five entries, so a sixth rule cannot land without the prose moving with it
   {
     const hookText = readFileSync(join(root, 'plugins/port/hooks/agent-guard.mjs'), 'utf8');
     const planGateLabelsBlock = /const planGateLabels = \[([\s\S]*?)\];/.exec(hookText)?.[1] ?? '';

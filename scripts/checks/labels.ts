@@ -79,6 +79,7 @@ export default async function ({ fail, note, ok }: Reporter) {
   // --- Label vocabulary matches the schema -----------------------------------
   // guard: two files listing the same vocabulary and drifting. Two files
   // independently list the same label keys. They have drifted before.
+  // pin: `data/labels.json` ↔ the schema
   {
     const templateKeys = new Set<string>(readJson('plugins/port/data/labels.json').labels.map((l: any) => l.key));
     const schemaKeys = new Set(
@@ -103,6 +104,7 @@ export default async function ({ fail, note, ok }: Reporter) {
   // it is what the workflow-render check below derives `{{blockingLabels}}`
   // from, so it is pinned against `labels.json`'s own `role` field too, both
   // directions.
+  // pin: `pipeline/SKILL.md`'s inline label table ↔ `labels.json`
   {
     // issue 181: the inline vocabulary table is Startup preflight step 5, which
     // moved into PREFLIGHT.md — a structural table parse, so this names one
@@ -252,6 +254,7 @@ export default async function ({ fail, note, ok }: Reporter) {
   // `.github/workflows/approval-check.yml` and `artifacts.yml` are rendered
   // copies of `plugins/port/templates/*.yml` with the substitutions applied.
   // Nothing pinned them together.
+  // pin: `.github/workflows/*.yml` ↔ `plugins/port/templates/*.yml`
   {
     // Self-test both helpers first — a check that cannot be made to fail is not
     // a check.
@@ -380,6 +383,7 @@ export default async function ({ fail, note, ok }: Reporter) {
   // no second transcription to drift there, but LABEL_KEYS itself must be
   // diffed against the template here, the same shape as the cockpit-table
   // and artifacts-labels guards above.
+  // pin: `apps/desktop`'s `LABEL_KEYS` ↔ `labels.json`
   {
     const rel = 'apps/desktop/src/shared/labels/vocabulary.ts';
     const text = readFileSync(join(root, rel), 'utf8');

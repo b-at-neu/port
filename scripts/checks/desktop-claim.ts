@@ -106,6 +106,7 @@ export default async function ({ fail, ok }: Reporter) {
   // --- shared/claim/'s opt-in key set matches SKILL.md's opt-in paragraph, -
   // guard(#93): the claim dialog's opt-in write drifting from the cockpit's
   // own opt-in labels. Checked both directions.
+  // pin: `shared/claim/classify.ts`'s opt-in key set (`CLAIM_LABEL_KEYS` + `AUTO_PLAN_KEY`) ↔ `plugins/port/skills/pipeline/SKILL.md`'s "work on #N" paragraph's `<labels.X>` keys, both directions
   {
     const text = readFileSync(join(root, classifyFile), 'utf8');
     const claimKeysMatch = /CLAIM_LABEL_KEYS[^=]*=\s*\[([^\]]*)\]/.exec(text);

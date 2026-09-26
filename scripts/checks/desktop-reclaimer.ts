@@ -43,6 +43,7 @@ export default async function ({ fail, ok }: Reporter) {
   // --- (3) WORKTREE_STATES/RECLAIMABLE_STATES pinned against the template ----
   // guard(#86): the app's reclaimability vocabulary silently drifting from
   // the script's real classification.
+  // pin: `bin/worktrees.mjs`'s state vocabulary (`describeReason`'s cases, and which states `classifyCandidate` returns `removable: true` for) ↔ `shared/reclaimer/types.ts`'s `WORKTREE_STATES`/`RECLAIMABLE_STATES`
   {
     const typesPath = join(root, 'apps/desktop/src/shared/reclaimer/types.ts');
     const typesText = readFileSync(typesPath, 'utf8');
@@ -103,6 +104,7 @@ export default async function ({ fail, ok }: Reporter) {
   // guard(#86): the script's own diagnostic literals drifting from the app's
   // pinned copies, breaking the offline-retry and script-failed
   // classification silently.
+  // pin: `bin/worktrees.mjs`'s two diagnostic literals (`die()`'s `FAIL` prefix, `gh issueOrPullRequest resolution failed`) ↔ `main/reclaimer/report.ts`'s pinned copies
   {
     const templatePath = join(root, 'plugins/port/bin/worktrees.mjs');
     const templateText = readFileSync(templatePath, 'utf8');
