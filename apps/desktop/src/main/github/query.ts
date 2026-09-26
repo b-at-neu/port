@@ -205,6 +205,40 @@ export interface ClaimPreflightQuery {
  * `buildItemsByNumberQuery`'s per-orphan-number batch: the claim dialog acts
  * on exactly one number the operator typed, never a list.
  */
+export interface GatePreflightQuery {
+  readonly document: string
+}
+
+/**
+ * The plan gate's one round trip (#92): the number's own identity, labels,
+ * assignees, and body — the same two rails `buildPipelineQuery`/
+ * `buildClaimPreflightQuery` already state (no server-side label filter, no
+ * GraphQL `search`) — plus the signed-in account's own login, top-level and
+ * outside `repository` for the same reason `buildClaimPreflightQuery`'s own
+ * `viewer` is. `body` is requested only inside the `Issue` fragment —
+ * `classifyGate` refuses a pull request (`not-an-issue`) before it would ever
+ * matter, so a `PullRequest` node carries just its identity fields, never a
+ * wasted selection. This is a single-number, single-alias query (`c0`), the
+ * same shape `buildClaimPreflightQuery` uses for the same reason: the plan
+ * gate acts on exactly one number the operator opened, never a list.
+ */
+export function buildGatePreflightQuery(number: number): GatePreflightQuery {
+  const labelsField = `labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }`
+  const assigneesField = `assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } }`
+  const issueFields = `number title url body state ${labelsField} ${assigneesField}`
+
+  const document = [
+    'query($owner: String!, $name: String!) {',
+    '  repository(owner: $owner, name: $name) {',
+    `    c0: issueOrPullRequest(number: ${number}) { __typename ... on Issue { ${issueFields} } ... on PullRequest { number title url state } }`,
+    '  }',
+    '  viewer { login }',
+    '}',
+  ].join('\n')
+
+  return { document }
+}
+
 export function buildClaimPreflightQuery(number: number): ClaimPreflightQuery {
   const labelsField = `labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }`
   const assigneesField = `assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } }`

@@ -1,10 +1,11 @@
 // resolveSearchQuery's own tests, split out of ipc.test.ts (#87) once that
 // file crossed ENGINEERING §7's 500-line limit -- the same "split by topic"
-// remedy scripts/checks.mjs itself follows.
+// remedy scripts/checks.mjs itself follows. Repointed to `./channels/sessions`
+// once #92 relocated the resolver itself there.
 import { describe, expect, it } from 'vitest'
 import type { SearchResult } from '../shared/search/types'
-import { resolveSearchQuery } from './ipc'
-import type { SearchQueryDeps } from './ipc'
+import { resolveSearchQuery } from './channels/sessions'
+import type { SearchQueryDeps } from './channels/sessions'
 import type { RegistryDeps } from './registry'
 
 const registryDeps: RegistryDeps = {

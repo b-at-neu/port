@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { closingReference, sessionRequiredAt, SESSION_REQUIRED_PREFIX } from './link'
+import { closingReference, sessionRequiredAt, sessionRequiredMarkerAt, SESSION_REQUIRED_PREFIX } from './link'
 
 describe('closingReference', () => {
   it.each(['Closes #79', 'closes #79', 'Fixes #79', 'resolves #79'])('links on %s', (line) => {
@@ -79,6 +79,21 @@ describe('sessionRequiredAt', () => {
       '',
       'A `SESSION REQUIRED` ticket runs stages 2 and 4 in the operator\'s own `/port:implement` session.',
     ].join('\n')
+    expect(sessionRequiredAt(body, 'issue')).toBe(false)
+  })
+})
+
+describe('sessionRequiredMarkerAt', () => {
+  const CANONICAL = `${SESSION_REQUIRED_PREFIX}touches \`.claude/**\` — a dispatched agent can't edit those`
+
+  it('returns the reason text, not just a boolean, when the marker holds', () => {
+    const body = ['A ticket body.', '', '---', '', '## Implementation Plan', '', CANONICAL, '', '## Overview', 'text'].join('\n')
+    expect(sessionRequiredMarkerAt(body, 'issue')).toBe("touches `.claude/**` — a dispatched agent can't edit those")
+  })
+
+  it('returns null when no marker holds — the one detector sessionRequiredAt is built from', () => {
+    const body = ['---', '', '## Implementation Plan', '', '## Overview', 'text'].join('\n')
+    expect(sessionRequiredMarkerAt(body, 'issue')).toBeNull()
     expect(sessionRequiredAt(body, 'issue')).toBe(false)
   })
 })

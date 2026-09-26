@@ -107,13 +107,13 @@ export default async function ({ fail, ok }: Reporter) {
 
   // --- applyLabels( is called under apps/desktop/src/ only from main/actions/
   // guard(#94): a third applyLabels caller diffusing the write chokepoint
-  // built for issue 90, instead of main/actions/ staying the one
-  // composition root — main/claim.ts's own pre-#94 call is a recorded
-  // exception (docs/ENGINEERING.md names it as the second-caller debt
-  // issue 92 should retire), never a precedent for a further caller.
+  // built for issue 90, instead of main/actions/ staying the one composition
+  // root. Issue 92 retired main/claim.ts's own pre-#94 grandfathered call
+  // (docs/ENGINEERING.md named it "the second-caller debt issue 92 should
+  // retire") by moving the write into main/actions/claim.ts — so
+  // main/actions/ is now this rail's only caller, with no exception left.
   {
     const definitionFile = 'apps/desktop/src/main/writes/apply.ts';
-    const grandfathered = 'apps/desktop/src/main/claim.ts';
     let found = false;
     let sawMainActions = false;
     for (const f of allFiles) {
@@ -124,11 +124,9 @@ export default async function ({ fail, ok }: Reporter) {
       if (!/\bapplyLabels\(/.test(text)) continue;
       if (rel.startsWith(`${mainActionsDir}/`)) {
         sawMainActions = true;
-      } else if (rel === grandfathered) {
-        continue;
       } else {
         found = true;
-        fail('desktop-actions', `${rel} calls applyLabels( — only ${mainActionsDir}/ and the grandfathered ${grandfathered} may`);
+        fail('desktop-actions', `${rel} calls applyLabels( — only ${mainActionsDir}/ may`);
       }
     }
     if (!sawMainActions) fail('desktop-actions', `no file under ${mainActionsDir} calls applyLabels( — the guard cannot pass vacuously`);

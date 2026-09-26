@@ -17,7 +17,7 @@ export { createPipelineWatcher } from './watcher'
 export type { CreatePipelineWatcherParams, PipelineWatcher, RefreshRequest, TimerFactory, TimerHandle } from './watcher'
 
 export { stageOf, STAGE_PRECEDENCE } from './stage'
-export { closingReference, sessionRequiredAt, SESSION_REQUIRED_PREFIX } from './link'
+export { closingReference, IMPLEMENTATION_PLAN_HEADING, sessionRequiredAt, sessionRequiredMarkerAt, SESSION_REQUIRED_PREFIX } from './link'
 export { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers } from './attach'
 export type { AttachTarget } from './attach'
 

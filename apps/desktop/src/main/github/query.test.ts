@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { resolveVocabulary, type LabelVocabulary } from '../../shared/labels/vocabulary'
-import { buildClaimPreflightQuery, buildItemStatesQuery, buildItemsByNumberQuery, buildPipelineQuery, graphqlStringLiteral } from './query'
+import { buildClaimPreflightQuery, buildGatePreflightQuery, buildItemStatesQuery, buildItemsByNumberQuery, buildPipelineQuery, graphqlStringLiteral } from './query'
 
 describe('graphqlStringLiteral', () => {
   it('round-trips a name containing a double quote, a backslash, and a newline', () => {
@@ -226,6 +226,39 @@ describe('buildClaimPreflightQuery', () => {
 
   it('never uses GraphQL search', () => {
     const { document } = buildClaimPreflightQuery(1)
+    expect(document).not.toContain('search(')
+  })
+})
+
+describe('buildGatePreflightQuery', () => {
+  it('aliases the number as c0 and embeds it as a literal', () => {
+    const { document } = buildGatePreflightQuery(148)
+    expect(document).toContain('c0: issueOrPullRequest(number: 148)')
+  })
+
+  it('requests body, labels, and assignees inside the Issue fragment only — never the PullRequest one', () => {
+    const { document } = buildGatePreflightQuery(1)
+    const issueFragment = extractFragment(document, 'Issue')
+    const prFragment = extractFragment(document, 'PullRequest')
+    expect(issueFragment).toContain('body')
+    expect(issueFragment).toContain('labels(first:')
+    expect(issueFragment).toContain('assignees(first:')
+    expect(prFragment).not.toContain('body')
+    expect(prFragment).not.toContain('labels(first:')
+    expect(prFragment).not.toContain('assignees(first:')
+  })
+
+  it('requests viewer as a top-level field, outside repository', () => {
+    const { document } = buildGatePreflightQuery(1)
+    const repositoryStart = document.indexOf('repository(owner:')
+    const viewerIndex = document.indexOf('viewer { login }')
+    expect(viewerIndex).toBeGreaterThan(-1)
+    const closeIndex = document.indexOf('\n  }\n', repositoryStart)
+    expect(viewerIndex).toBeGreaterThan(closeIndex)
+  })
+
+  it('never uses GraphQL search', () => {
+    const { document } = buildGatePreflightQuery(1)
     expect(document).not.toContain('search(')
   })
 })

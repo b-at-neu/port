@@ -2,6 +2,7 @@ import './index.css'
 import './transcript.css'
 import './board.css'
 import './claim.css'
+import './gate.css'
 import './search.css'
 import type { AppInfo } from '../../shared/ipc'
 import type { RepoId, RepositoryEntry } from '../../shared/repos'
@@ -29,6 +30,7 @@ import { handleItemAction, pruneItemActionStates } from './board/actions'
 import type { OperatorAction } from '../../shared/actions/types'
 import type { LabelKey } from '../../shared/labels/vocabulary'
 import { initClaim, openClaimDialog } from './claim/controller'
+import { initGate, openGateDialog, openReviewDialog } from './gate/controller'
 import { initRuntime } from './runtime'
 
 const app = document.querySelector<HTMLDivElement>('#app')
@@ -252,6 +254,14 @@ function handleItemActionClick(target: HTMLElement): void {
   void handleItemAction({ repoId: repoId as RepoId, kind: kind as 'issue' | 'pull-request', number: Number(number), action, expectedStage: (stage || null) as LabelKey | null, redraw: drawBoard })
 }
 
+/** The plan gate's own row entry point — dataset carries `repoId`/`number`
+ *  verbatim from `board/rows.ts`'s own **Review plan** button. */
+function handleGateReviewClick(target: HTMLElement): void {
+  const { repoId, number } = target.dataset
+  if (!repoId || !number) return
+  openReviewDialog(repoId as RepoId, Number(number))
+}
+
 function toggleGroupBy(): void {
   const next: GroupBy = boardState.groupBy === 'stage' ? 'repo' : 'stage'
   boardState = { ...boardState, groupBy: next }
@@ -392,6 +402,8 @@ app?.addEventListener('click', (event) => {
   else if (action === 'jump-to-latest') jumpToLatest()
   else if (action === 'retry-transcript') resumeFollowing()
   else if (action === 'claim-open') openClaimDialog()
+  else if (action === 'gate-open') openGateDialog()
+  else if (action === 'gate-review') handleGateReviewClick(target)
   else if (action?.startsWith('item-')) handleItemActionClick(target)
   else {
     const row = target.closest<HTMLElement>('.board-row')
@@ -418,4 +430,5 @@ draw()
 void refreshRepositories()
 void initBoard()
 if (app) initClaim(app)
+if (app) initGate(app)
 if (runtimeStrip) initRuntime(runtimeStrip)

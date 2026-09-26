@@ -54,8 +54,8 @@ function depsWith(overrides: Partial<ClaimDeps>): ClaimDeps {
     fetchClaimPreflight: () => {
       throw new Error('fetchClaimPreflight should not be invoked in this case')
     },
-    applyLabels: () => {
-      throw new Error('applyLabels should not be invoked in this case')
+    applyClaimLabels: () => {
+      throw new Error('applyClaimLabels should not be invoked in this case')
     },
     ...overrides,
   }
@@ -121,7 +121,7 @@ describe('claimApply', () => {
     const outcome: WriteOutcome = { kind: 'applied', argv: ['issue', 'edit', '93'] }
     const deps = depsWith({
       fetchClaimPreflight: () => Promise.resolve(preflightFetch()),
-      applyLabels: (params) => {
+      applyClaimLabels: (params) => {
         received = params.request
         return Promise.resolve(outcome)
       },

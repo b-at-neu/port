@@ -1,8 +1,9 @@
 // The claim dialog's composition root (#93): registry lookup, the preflight
 // fetch, pure classification, and — for apply — the write chokepoint. No
 // `gh` import here — the read comes from `./github`, the write from
-// `./writes`, exactly the `main/writes/apply.ts` idiom of composing rather
-// than reaching into either directly.
+// `./actions` (relocated by #92 — `main/actions/` is the app's only
+// `applyLabels` caller), exactly the `main/writes/apply.ts` idiom of
+// composing rather than reaching into either directly.
 import { classifyPreflight, buildClaimRequest } from '../shared/claim/classify'
 import type { ClaimApplyResponse, ClaimPreflight, ClaimPreflightResponse, PlanGateChoice } from '../shared/claim/types'
 import type { ClaimPreflightFetch } from '../shared/github/types'
@@ -10,7 +11,7 @@ import type { RepoId, RepositoryEntry } from '../shared/repos'
 import { fetchClaimPreflight } from './github'
 import { listRepositories } from './registry'
 import type { RegistryDeps } from './registry'
-import { applyLabels } from './writes'
+import { applyClaimLabels } from './actions/claim'
 import type { ApplyLabelsParams, WriteOutcome } from './writes'
 
 type ReadyEntry = Extract<RepositoryEntry, { readonly status: 'ready' }>
@@ -19,14 +20,15 @@ type ReadyEntry = Extract<RepositoryEntry, { readonly status: 'ready' }>
  *  classification branching below is testable without Electron, a real
  *  registry, or a real `gh`, the same seam every other `main/ipc.ts` deps
  *  interface already gives its own channel. `fetchClaimPreflight`'s and
- *  `applyLabels`' own default exports are what production wiring supplies. */
+ *  `applyClaimLabels`' own default exports are what production wiring
+ *  supplies. */
 export interface ClaimDeps {
   readonly listRepositories: typeof listRepositories
   readonly fetchClaimPreflight: typeof fetchClaimPreflight
-  readonly applyLabels: (params: ApplyLabelsParams) => Promise<WriteOutcome>
+  readonly applyClaimLabels: (params: ApplyLabelsParams) => Promise<WriteOutcome>
 }
 
-export const defaultClaimDeps: ClaimDeps = { listRepositories, fetchClaimPreflight, applyLabels }
+export const defaultClaimDeps: ClaimDeps = { listRepositories, fetchClaimPreflight, applyClaimLabels }
 
 async function resolveReadyEntry(registryDeps: RegistryDeps, repoId: RepoId, deps: ClaimDeps): Promise<ReadyEntry> {
   const list = await deps.listRepositories(registryDeps)
@@ -123,6 +125,6 @@ export async function claimApply(params: ClaimApplyParams, deps: ClaimDeps = def
     planGate: params.planGate,
   })
 
-  const outcome = await deps.applyLabels({ request, repoRoot: entry.path, auditDir: params.auditDir })
+  const outcome = await deps.applyClaimLabels({ request, repoRoot: entry.path, auditDir: params.auditDir })
   return { kind: 'write', outcome }
 }
