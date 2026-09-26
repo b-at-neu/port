@@ -56,6 +56,7 @@ import desktopWrites from './checks/desktop-writes.ts';
 import desktopBoard from './checks/desktop-board.ts';
 import desktopClaim from './checks/desktop-claim.ts';
 import desktopActions from './checks/desktop-actions.ts';
+import desktopGate from './checks/desktop-gate.ts';
 import desktopSearch from './checks/desktop-search.ts';
 import desktopTick from './checks/desktop-tick.ts';
 import desktopRuntime from './checks/desktop-runtime.ts';
@@ -135,6 +136,7 @@ if (argv.includes('--guards')) {
     desktopBoard,
     desktopClaim,
     desktopActions,
+    desktopGate,
     desktopSearch,
     desktopTick,
     desktopRuntime,

@@ -7,7 +7,7 @@ import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
 import { OPERATOR_ACTIONS } from '../../../shared/actions/types'
 import type { ActionAvailability, OperatorAction } from '../../../shared/actions/types'
 import { itemActionState } from './actions'
-import { actionButtonLabel, actionPendingLabel, actionRefusalNote, actionResultCopy, statusWord, subLineFor } from './copy'
+import { actionButtonLabel, actionPendingLabel, actionRefusalNote, actionResultCopy, reviewPlanButtonLabel, statusWord, subLineFor } from './copy'
 
 function text(tag: string, className: string, value: string): HTMLElement {
   const el = document.createElement(tag)
@@ -113,6 +113,20 @@ export function buildRow(row: BoardItemRow): HTMLElement {
   headline.appendChild(text('span', 'board-row__repo', row.item.repo))
   headline.appendChild(text('span', 'board-row__title', row.item.title))
   if (row.item.assignees.length > 0) headline.appendChild(text('span', 'board-row__assignee', `@${row.item.assignees[0] ?? ''}`))
+
+  // The plan gate's own row entry point (#92) — an issue at `plan review`
+  // offers a direct route into the dialog's Reviewing step, carrying
+  // repoId/number verbatim, the same dataset idiom the action strip below
+  // already uses.
+  if (row.item.kind === 'issue' && row.stageLabel?.key === 'planReview') {
+    const reviewButton = document.createElement('button')
+    reviewButton.className = 'board-row__review'
+    reviewButton.dataset.action = 'gate-review'
+    reviewButton.dataset.repoId = row.item.repoId
+    reviewButton.dataset.number = String(row.item.number)
+    reviewButton.textContent = reviewPlanButtonLabel()
+    headline.appendChild(reviewButton)
+  }
 
   const strip = buildActionStrip(row)
   if (strip !== null) headline.appendChild(strip)

@@ -30,7 +30,11 @@ export const SESSION_REQUIRED_PREFIX = '> **SESSION REQUIRED:** '
 
 const SESSION_REQUIRED_LINE = new RegExp(`^${SESSION_REQUIRED_PREFIX.replace(/[*]/g, '\\*')}(.+)$`)
 
-const IMPLEMENTATION_PLAN_HEADING = '## Implementation Plan'
+/** Exported so `main/actions/gate.ts` splits an issue body at the same
+ *  heading `sessionRequiredMarkerAt` scans from — one definition of "where
+ *  the plan starts", never a second copy re-typed in the gate dialog's
+ *  composition root. */
+export const IMPLEMENTATION_PLAN_HEADING = '## Implementation Plan'
 const CLOSES_LINE = /^Closes #\d+\b/
 
 /** The first non-empty line starting at `fromIdx` must hold the canonical
@@ -39,16 +43,19 @@ const CLOSES_LINE = /^Closes #\d+\b/
  *  toward "not session-required": a false positive here stalls an item
  *  forever and invisibly (a trigger label at rest looks like normal
  *  in-flight work), while a false negative costs one denied edit and a
- *  retry — the recoverable direction. */
-function slotHoldsMarker(lines: readonly string[], fromIdx: number): boolean {
+ *  retry — the recoverable direction. Returns the reason text itself, so the
+ *  plan gate can render *why*, never just a boolean. */
+function slotMarkerReason(lines: readonly string[], fromIdx: number): string | null {
   for (let i = fromIdx; i < lines.length; i++) {
     const line = lines[i]
-    if (line === undefined) return false
+    if (line === undefined) return null
     if (line.trim() === '') continue
     const match = SESSION_REQUIRED_LINE.exec(line)
-    return match !== undefined && match !== null && (match[1]?.trim() ?? '') !== ''
+    if (match === undefined || match === null) return null
+    const reason = match[1]?.trim() ?? ''
+    return reason !== '' ? reason : null
   }
-  return false
+  return null
 }
 
 /**
@@ -56,16 +63,23 @@ function slotHoldsMarker(lines: readonly string[], fromIdx: number): boolean {
  * Plan` heading (the plan is appended below the human-authored ticket, so
  * the body's own first line is never the plan's). Pull request slot: the
  * first non-empty line after the `Closes #<n>` line. Absent slot → not
- * session-required, per the fail-open rule above.
+ * session-required, per the fail-open rule above. Returns the reason text
+ * behind the marker, or `null` — the one slot detector both
+ * `sessionRequiredAt` (the boolean the tick engine already needs) and the
+ * plan gate (which renders the reason itself, #92) read.
  */
-export function sessionRequiredAt(body: string, kind: PipelineItemKind): boolean {
+export function sessionRequiredMarkerAt(body: string, kind: PipelineItemKind): string | null {
   const lines = body.split(/\r?\n/)
   if (kind === 'issue') {
     const headingIdx = lines.findIndex((line) => line.trim() === IMPLEMENTATION_PLAN_HEADING)
-    if (headingIdx === -1) return false
-    return slotHoldsMarker(lines, headingIdx + 1)
+    if (headingIdx === -1) return null
+    return slotMarkerReason(lines, headingIdx + 1)
   }
   const closesIdx = lines.findIndex((line) => CLOSES_LINE.test(line.trim()))
-  if (closesIdx === -1) return false
-  return slotHoldsMarker(lines, closesIdx + 1)
+  if (closesIdx === -1) return null
+  return slotMarkerReason(lines, closesIdx + 1)
+}
+
+export function sessionRequiredAt(body: string, kind: PipelineItemKind): boolean {
+  return sessionRequiredMarkerAt(body, kind) !== null
 }

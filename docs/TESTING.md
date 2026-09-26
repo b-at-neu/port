@@ -64,6 +64,17 @@ Guards for the plan-gate claim (#206), in `scripts/checks/gate-claim.ts`:
 - End-to-end wiring — the real `agent-guard.mjs`, spawned against a temp fixture carrying a held claim, actually denies the label edit and lets an unrelated one through.
 - The doc pins: the hook's plan-gate key reads match `PIPELINE.md`'s "External gate claim" section and `docs/COORDINATION.md`'s claim-contract keys; the cockpit's stand-down precondition and UX-state copy are literal phrases in the pipeline skill; `PIPELINE.md`'s "Cockpit rules" paragraph states five and its list carries five bullets.
 
+Guards for the plan gate in the UI (#92), in `scripts/checks/desktop-gate.ts`:
+
+- `shared/gate/classify.ts`'s LabelKeys (`planReview`/`planApproved`/`planChangesRequested`) agree with `main/writes/scope.ts`'s `PLAN_GATE_KEYS`, both directions — the gate can never write a key the claim scope does not actually cover.
+- Both decisions' own plan set `expect.present` to `['planReview']` — the "don't answer an item that already moved" guard.
+- `GATE_CLAIM_OWNER`'s value appears in `docs/COORDINATION.md`'s stand-down copy, so the cockpit's own report names what this app actually writes to the claim file.
+- `postComment(` is called under `apps/desktop/src/` only from `main/actions/gate.ts`, and there it precedes `applyLabels(` in source order — the comment-then-swap ordering, mechanically.
+- `shared/markdown/` imports no `node:` builtin and nothing from `main/`; `renderer/src/markdown.ts` is the only file under `renderer/` importing it.
+- `shared/markdown/inline.ts`'s link-scheme allowlist names exactly `http://` and `https://`.
+- `renderer/src/gate/copy.ts` carries the session-required consequence as a literal phrase naming `/port:implement` and the fact that no agent picks it up, plus the claim-step lines `docs/COORDINATION.md` decided.
+- No file under `shared/gate/`, `main/actions/`, or `renderer/src/gate/` names a literal label name, reusing `desktop-actions.ts`'s own mismatched-name scan.
+
 ## Layer 2 — artifact assertions on real runs
 
 The output formats live in `FORMATS.md` prose and, until now, were asserted nowhere. The one that matters most is the review heading — the cockpit **counts** occurrences of the literal `## Code Review` to derive the cycle number, so renaming it silently breaks the cycle cap and the escalating bar, with no error anywhere. That is why the literal prefix is asserted separately from the rest of the heading.

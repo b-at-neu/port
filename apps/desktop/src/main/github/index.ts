@@ -5,11 +5,16 @@
 export type { FetchClaimPreflightParams, FetchItemsByNumberParams, FetchItemStatesParams, FetchPipelineItemsParams, GhRunner, RepoRef } from './adapter'
 export { applyItemStates, fetchClaimPreflight, fetchItemsByNumber, fetchItemStates, fetchPipelineItems } from './adapter'
 
+export { fetchGatePreflight } from './gate'
+export type { FetchGatePreflightParams } from './gate'
+
 export type {
   BlockerRead,
   ClaimBlocker,
   ClaimPreflightFetch,
   ClaimPreflightItem,
+  GatePreflightFetch,
+  GatePreflightItem,
   ItemRef,
   ItemsByNumberFetch,
   ItemState,

@@ -6,9 +6,11 @@ import type { TranscriptRead, TranscriptTailOpen, TranscriptTailPoll } from './s
 import type { SearchQuery, SearchResult } from './search/types'
 import type { BoardSnapshot, SourceKind } from './board/types'
 import type { ClaimApplyResponse, ClaimPreflightResponse, PlanGateChoice } from './claim/types'
+import type { GateAnswerResponse, GateClaimResponse, GateDecision, GatePreflightResponse } from './gate/types'
 import type { LabelKey } from './labels/vocabulary'
 import type { ItemActionResult, OperatorAction } from './actions/types'
 import type { RuntimePreflight, RuntimeProbe } from './runtime/types'
+import type { ClaimRead } from './writes/types'
 
 export interface AppInfo {
   app: string
@@ -134,6 +136,37 @@ export interface IpcMap {
     request: { repoId: RepoId }
     response: RuntimeProbe
   }
+  /** The plan gate's own preflight read (#92) — resolves one issue's
+   *  identity, labels, assignees, and body (split into ticket/plan
+   *  markdown), classifies it, and reads the plan-gate claim, all
+   *  server-side; the renderer names an intent, never a precondition. */
+  'gate:preflight': {
+    request: { repoId: RepoId; number: number }
+    response: GatePreflightResponse
+  }
+  /** The Claim step's own re-read — called fresh every time the dialog opens
+   *  at that step, never reused from the preflight's own (potentially
+   *  stale) claim reading. */
+  'gate:claim:read': {
+    request: { repoId: RepoId }
+    response: ClaimRead
+  }
+  /** `held` is the target state the operator's own button named — `true` to
+   *  take the claim, `false` to release it — never a toggle this channel
+   *  infers from the current state. */
+  'gate:claim:set': {
+    request: { repoId: RepoId; held: boolean }
+    response: GateClaimResponse
+  }
+  /** The plan gate's own write. `feedback` is required (non-empty) only when
+   *  `decision` is `'request-changes'` and `skipComment` is `false`;
+   *  `skipComment` is `true` only on a retry after a comment already landed
+   *  and the label swap alone failed — it can only ever suppress a write,
+   *  never widen one. */
+  'gate:answer': {
+    request: { repoId: RepoId; number: number; decision: GateDecision; feedback: string | null; skipComment: boolean }
+    response: GateAnswerResponse
+  }
 }
 
 export const IPC_CHANNELS = [
@@ -155,6 +188,10 @@ export const IPC_CHANNELS = [
   'item:action',
   'runtime:preflight',
   'runtime:probe',
+  'gate:preflight',
+  'gate:claim:read',
+  'gate:claim:set',
+  'gate:answer',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]

@@ -116,6 +116,16 @@ export function rateLimitCopy(freshness: RepositoryFreshness | null, remaining: 
   return `${remaining.toLocaleString()} API points left, resets ${label}`
 }
 
+// --- The plan gate (#92) ----------------------------------------------------
+
+export function reviewPlanButtonLabel(): string {
+  return 'Review plan'
+}
+
+export function planGateHeaderButtonLabel(): string {
+  return 'Plan gate'
+}
+
 // --- The single-label operator actions (#94) -------------------------------
 
 export function actionButtonLabel(action: OperatorAction): string {

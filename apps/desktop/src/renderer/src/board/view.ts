@@ -9,7 +9,7 @@ import type { RepositoryState } from '../../../shared/state/types'
 import type { RepoId } from '../../../shared/repos'
 import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
 import { actionsFingerprint } from './actions'
-import { notReadyCopy, rateLimitCopy, sourceHealthCopy } from './copy'
+import { notReadyCopy, planGateHeaderButtonLabel, rateLimitCopy, sourceHealthCopy } from './copy'
 import { buildRow } from './rows'
 import { buildTickStrip } from './tick'
 
@@ -44,6 +44,12 @@ function buildHeader(state: BoardViewState): HTMLElement {
   claimButton.dataset.action = 'claim-open'
   claimButton.textContent = 'Work on…'
   actions.appendChild(claimButton)
+
+  const gateButton = document.createElement('button')
+  gateButton.className = 'board-header__gate'
+  gateButton.dataset.action = 'gate-open'
+  gateButton.textContent = planGateHeaderButtonLabel()
+  actions.appendChild(gateButton)
 
   const groupToggle = document.createElement('button')
   groupToggle.className = 'board-header__toggle'

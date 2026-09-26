@@ -234,3 +234,31 @@ export interface ClaimPreflightItem {
 export type ClaimPreflightFetch =
   | { readonly ok: true; readonly item: ClaimPreflightItem | null; readonly viewer: string; readonly fetchedAt: string }
   | { readonly ok: false; readonly kind: PipelineFailureKind; readonly message: string; readonly fetchedAt: string }
+
+/** `fetchGatePreflight`'s resolved node (#92) — a pull request carries only
+ *  its identity fields, since `classifyGate` refuses it (`not-an-issue`)
+ *  before `body`/`labels`/`assignees` would ever matter, and the query never
+ *  requests them on that branch (`main/github/query.ts`'s own
+ *  `buildGatePreflightQuery`). `body` is the raw issue body, unsplit —
+ *  `main/actions/gate.ts` is where it is divided at
+ *  `IMPLEMENTATION_PLAN_HEADING`, never this adapter. */
+export interface GatePreflightItem {
+  readonly kind: PipelineItemKind
+  readonly number: number
+  readonly title: string
+  readonly url: string
+  readonly state: string
+  readonly body: string
+  readonly labels: readonly string[]
+  readonly assignees: readonly string[]
+}
+
+/** `fetchGatePreflight`'s result. `item: null` covers both "the number does
+ *  not exist" and "the alias itself errored" — neither is a failure, the
+ *  same rule `ClaimPreflightFetch` follows. An unresolvable `viewer.login` is
+ *  the one thing that fails the whole preflight (`ok: false`, kind
+ *  `no-data`) — the assignee note and the `answerable` verdict's own
+ *  ownership context cannot be rendered without knowing who "me" is. */
+export type GatePreflightFetch =
+  | { readonly ok: true; readonly item: GatePreflightItem | null; readonly viewer: string; readonly fetchedAt: string }
+  | { readonly ok: false; readonly kind: PipelineFailureKind; readonly message: string; readonly fetchedAt: string }
