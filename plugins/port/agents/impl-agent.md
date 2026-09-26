@@ -107,6 +107,22 @@ gh pr list --repo <repo> --state open --json number,url,headRefName,body --jq '[
 
 Non-empty → stop, change nothing, and end with `BLOCKED: #N already has an open pull request (#<pr>, branch <head>) — I would be re-implementing work that exists. Nothing was changed.`
 
+**Resume-branch lookup.** The open-pull-request lookup above is unchanged and still wins — a resume never overrides it. Otherwise, check for a branch a prior attempt pushed and never opened a pull request for:
+
+```bash
+git ls-remote --heads origin "N-*"
+```
+
+One command, no pipe, live against the remote — "Read the configuration first" already ran `git fetch origin`, so `origin` is reachable this early. Match on the `N-` **prefix** only, never a full slug — the slug is model-generated, so two attempts would never agree on a full one.
+
+Three-way outcome, carried into step 2:
+
+- **Exactly one match** → the **adopted branch**. Use its name verbatim everywhere below.
+- **Zero matches** → fresh start.
+- **Two or more matches** → fresh start, naming every match in the final message so the operator can see the orphans.
+
+The governing rule, stated once and true for every branch point below: **every failure in the resume path degrades to a fresh start** — resume is an optimisation, never a correctness dependency. A missed resume costs one re-implementation, the cost this ticket is already paying; a wrongly-adopted branch would ship another attempt's commits under this issue, which review would have to catch.
+
 ## Label swap (first action after pre-flight)
 
 ```bash
@@ -119,18 +135,32 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
 1. **Read the plan.** `gh issue view N --repo <repo>` for the plan and its checklist — a GitHub read, always current regardless of what the worktree checkout holds at this point.
 
-2. **Bootstrap the worktree.** A fresh checkout lacks anything gitignored — dependencies, generated clients. Run each entry in `commands.bootstrap` **in order, one per Bash call**, exactly as written. Then sync onto the integration branch:
+2. **Sync the worktree.** `git fetch origin` first, needed on both paths.
+
+   **Adopted branch** (Pre-flight's lookup found exactly one match) — check it out **detached**, to avoid worktree branch-lock and to sidestep the untrustworthy initial checkout entirely rather than rebase on top of it, then rebase:
+
+   ```bash
+   git fetch origin
+   git checkout --detach origin/<branch>
+   git rebase origin/<integration>
+   ```
+
+   **Fresh start** — the initial checkout needs no adoption step; the rebase alone reconciles it:
 
    ```bash
    git fetch origin
    git rebase origin/<integration>
    ```
 
-   If `commands.bootstrap` is empty, the checkout needs no preparation — skip straight to the rebase.
+   **Rebase conflicts are reachable for the first time now that a branch can carry prior work** — a branch cut fresh off `<integration>` cannot conflict, so this only ever fires on an adopted branch. Classification and auto-resolution are deferred to `${CLAUDE_PLUGIN_ROOT}/docs/RECOVERY.md` → "Rebase conflict protocol" rather than restated here. On **any** ambiguous hunk: `git rebase --abort`, **abandon the adopted branch**, start fresh from `origin/<integration>`, and say so in the final report — never escalate to a human, because unlike a revision, re-implementing is always a valid outcome here.
+
+   Then run each entry in `commands.bootstrap` **in order, one per Bash call**, exactly as written, against the final tree — fresh or adopted. If `commands.bootstrap` is empty, skip straight to reading standards.
 
    **Only now read standards** — before the rebase the checkout is not evidence of anything, since the worktree's initial checkout is untrustworthy per "Read the configuration first" above. When `docs.engineering` is set, read it. When `docs.design` is set and the ticket touches an interface, read it too. Read the worktree's `CLAUDE.md` if one is present, at the precedence this file's "standards-precedence" block states.
 
-3. **Implement the checklist.** Follow the plan's ordered steps. Where `docs.engineering` is set, build to its standards and its pre-pull-request self-check; where `docs.design` is set and the ticket touches an interface, build to its tokens and copy tone too; where either is null, follow the conventions visible in the surrounding code — match the neighbourhood for layering, naming, and structure rather than introducing your own.
+3. **On an adopted branch, derive what already landed — after the rebase, before implementing anything.** `git log --format=%s origin/<integration>..HEAD` and `git diff --name-status origin/<integration>...HEAD` say *where to look*; the worktree itself, read with Read and Grep, says what is actually done — a commit subject is a map, never proof. Tick a checklist item only when the tree shows it done; an **unverifiable item counts as not done** and is re-applied after reading its target region first, so a re-application is a no-op rather than a duplicate. Fail direction, stated plainly: toward redoing, never toward skipping — a wrongly-skipped item ships a half-implemented ticket whose only record was the plan, a wrongly-redone one costs one read and produces the same tree. Skip this entirely on a fresh start — every item is undone by construction.
+
+   **Implement the checklist.** Follow the plan's ordered steps not already verified done above. Where `docs.engineering` is set, build to its standards and its pre-pull-request self-check; where `docs.design` is set and the ticket touches an interface, build to its tokens and copy tone too; where either is null, follow the conventions visible in the surrounding code — match the neighbourhood for layering, naming, and structure rather than introducing your own.
 
    The plan's **## Testing** section is the human's pre-merge checklist, not your build steps — your verification is `commands.checks`. **Never** execute a step carrying the `**operator-only**` prefix, and never attempt a write under `sessionRequiredPaths` even if a testing step asks for it: a permission prompt there kills your run, and the step exists precisely because it is the operator's to run, not yours.
 
@@ -143,11 +173,13 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
    git commit -F .temp/commit-msg.txt
    ```
 
-   Use **`git add -A`** to stage everything (`.temp/` is gitignored, so it is never staged). If you must stage selectively, **quote each path**. **Message format:** subject `#N <imperative lowercase summary>`, under 80 characters, no trailing period, a `Co-Authored-By:` trailer naming the model from `models.impl` — the validator is authoritative on the exact shape.
+   Use **`git add -A`** to stage everything (`.temp/` is gitignored, so it is never staged). If you must stage selectively, **quote each path**. **Message format:** subject `#N <imperative lowercase summary>`, under 80 characters, no trailing period, naming the checklist unit this commit completes — free, and what makes the derivation above cheap on the next attempt — plus a `Co-Authored-By:` trailer naming the model from `models.impl` — the validator is authoritative on the exact shape.
 
    **When `commands.artifacts` is set**, run the `check commit` command above before every commit. A non-zero exit means rewrite `.temp/commit-msg.txt` and re-run it — never `git commit` past a failing check. Skip this when `commands.artifacts` is null.
 
-4. **Blockers — report back, stay resumable.** If something the plan did not cover blocks you and you cannot resolve it within the plan's intent: write the blocker text to `.temp/blocker-N.md` (the Write tool creates `.temp/`), then re-read labels (compare-and-swap — the last read was steps ago) and swap:
+   **Push a checkpoint after every commit**, so a killed run leaves the branch behind it, not nothing. **Fresh branch, first commit** — derive the slug once and never re-derive it: `git push -u origin HEAD:N-ticket-name-in-kebab-case`; every checkpoint after reuses the same name: `git push origin HEAD:<branch>`. **Adopted branch, every commit** — `git push --force-with-lease origin HEAD:<branch>`: the rebase already rewrote history, and the lease is also what stops a second agent clobbering a branch it never read.
+
+4. **Blockers — report back, stay resumable.** If something the plan did not cover blocks you and you cannot resolve it within the plan's intent: **push the checkpoint first**, by the same idiom as step 3 — the blocker may outlive this run, and the branch, not this run, is what a resumed attempt continues from. Then write the blocker text to `.temp/blocker-N.md` (the Write tool creates `.temp/`), then re-read labels (compare-and-swap — the last read was steps ago) and swap:
 
    ```bash
    gh issue view N --repo <repo> --json labels
@@ -155,7 +187,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
    gh issue edit N --repo <repo> --remove-label "<labels.inProgress>" --add-label "<labels.blocked>"
    ```
 
-   If `<labels.inProgress>` is no longer present, apply the label-cas contract's step 3 instead of issuing the edit. Do not push partial work. End your final message in exactly this form so the cockpit can relay and resume you: `BLOCKED: <one-paragraph summary of the blocker and the decision needed>`. When resumed, re-read labels, then swap them back (`--remove-label "<labels.blocked>" --add-label "<labels.inProgress>"`) and continue from the stopped checklist item.
+   If `<labels.inProgress>` is no longer present, apply the label-cas contract's step 3 instead of issuing the edit. End your final message in exactly this form so the cockpit can relay and resume you: `BLOCKED: <one-paragraph summary of the blocker and the decision needed>`. When resumed, re-read labels, then swap them back (`--remove-label "<labels.blocked>" --add-label "<labels.inProgress>"`) and continue from the stopped checklist item.
 
 5. **Run the checks.** Work through `commands.checks` **in order**, each as its own Bash call — never prefixed with `cd`, never pasted together as one multi-line script, and never with an extra command appended: no `2>&1`, no pipe into `tail`/`head`/`grep` (#205 — the reporter prints one `ok` line or one `FAIL` line per failure, so there is nothing to truncate), and no expansion to an absolute path (the harness preamble's "use absolute file paths" is wrong for a `commands.*` invocation specifically — the allowlist entry is the repo-relative string, run it exactly as configured).
 
@@ -166,12 +198,13 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
    **Never suppress a check to make it pass** — no inline disable comments, no widened ignore globs, no relaxed configuration. A check that cannot be satisfied honestly is a `BLOCKED:`.
 
-   Every check must pass before you push. If `commands.checks` is empty, there is nothing to run — do not invent checks by guessing at the repository's tooling.
+   Every check must pass before the **final** push in step 6 — the checkpoint pushes in step 3 already ran ahead of this gate, deliberately, so a killed run's commits survive regardless of whether checks ever ran. If `commands.checks` is empty, there is nothing to run — do not invent checks by guessing at the repository's tooling.
 
-6. **Push and open the pull request.** Push your worktree HEAD to the correctly named feature branch, regardless of the worktree's local branch name:
+6. **Final push, and open the pull request.** Push whatever remains, by the same idiom as every checkpoint before it — the adopted branch's name, or the slug chosen at the first checkpoint of a fresh branch, never a freshly derived one:
 
    ```bash
-   git push -u origin HEAD:N-ticket-name-in-kebab-case
+   git push origin HEAD:<branch>                       # fresh branch, unchanged since the first checkpoint
+   git push --force-with-lease origin HEAD:<branch>     # adopted branch
    ```
 
    Then write the pull request body to `.temp/pr-N.md` (Write tool) following the **pull request description format** in `${CLAUDE_PLUGIN_ROOT}/docs/FORMATS.md` → "Pull request description" — the validator is authoritative on the exact shape. Carry any `**operator-only**` prefix from the issue's `## Testing` into `## Testing plan` **verbatim** — it is the only thing telling the human which box only they can tick.
@@ -193,7 +226,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
      --body-file .temp/pr-N.md \
      --assignee "<issue-assignee-login>" \
      --label "<labels.marker>" \
-     --head N-ticket-name-in-kebab-case
+     --head <branch>
    ```
 
    `--assignee` is the **issue's assignee login recorded in pre-flight** (`@me` if the issue had none) — the pull request must carry the same owner as its issue or it never appears in that operator's `ready for review` query. **Substitute the literal login string you read in pre-flight; never use `$(...)` command substitution**, which is not allowlisted and would silently produce an empty argument.
