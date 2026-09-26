@@ -68,6 +68,20 @@ This applies **unchanged in refresh mode**: a conflict is a real blocker and sti
 4. **If any is ambiguous** — `git rebase --abort` immediately (abort the whole rebase; never leave a half-rebased state). Comment `## Pipeline Escalation`: a one-line summary (`<k> conflicts — <a> resolved automatically, <b> need a decision`), an `### Auto-resolved (reapplied on the next attempt)` list of `` `path` — <strategy> ``, then one `### D<n> — \`path\`` block per ambiguous hunk — **not** a raw conflict-marker dump — containing what each side (**ours**/**theirs**) is trying to achieve in one line each, a two-or-three-row options table with `Keeps`/`Loses` columns (typically **A take ours** · **B take theirs** · **C** a specific described combination), and a bolded `**Recommendation: <letter>** — <reason>`. IDs are `D1..Dn`, restarting at `D1` in each escalation comment. Then label `needs human` and stop — the operator picks a direction with `unblock #N`, never edits a file themselves.
 5. **On the next attempt** — read the newest `## Gate cleared` comment (if newer than the newest `## Pipeline Escalation`) for its `### Rebase decisions` lines (`` - D<n> `path` — **<letter> <label>** ``) and apply each recorded decision to its matching hunk alongside every auto-resolvable one, in a single pass. A decision whose hunk no longer exists (the base moved again) is dropped and noted in the revision comment; a **new** ambiguous hunk with no recorded decision escalates again with fresh `D1..Dn` IDs.
 
+### Resume protocol (`impl-agent`)
+
+What a retried `impl-agent` dispatch resumes from instead of an empty worktree, since a killed run (most often a usage-limit cutoff mid-checklist, not `maxTurns`) previously discarded every commit along with the ephemeral worktree (#254).
+
+**The three-way lookup outcome (Pre-flight).** `git ls-remote --heads origin "N-*"` matches on the `N-` prefix alone, never a full slug — the slug is model-generated, so two attempts never agree on one. Exactly one match is the **adopted branch**; zero matches is a fresh start; two or more is also a fresh start, with every match named in the final message so the operator can see the orphans and delete the stale one.
+
+**The checkpoint-push rule (step 3).** A fresh branch's slug is derived once, at the first commit's push, and never re-derived; every push after reuses it. An adopted branch pushes with `--force-with-lease` on every commit, since the rebase already rewrote its history and the lease is also what stops a second agent clobbering a branch it never read. The final push in step 6 is the same idiom, one more time, after every configured check has passed.
+
+**The tree-is-authoritative derivation rule (step 3, adopted branch only).** A commit subject on the adopted branch is a map of where to look, never proof of what is done — `impl-agent` reads the actual tree with Read and Grep before ticking any checklist item as already landed. An unverifiable item counts as not done and is re-applied after reading its target region first, so a re-application is a no-op rather than a duplicate.
+
+**The governing failure direction, stated once for the whole protocol:** every failure in the resume path degrades to a fresh start. Resume is an optimisation, never a correctness dependency — an ambiguous rebase conflict abandons the adopted branch and starts fresh rather than escalating to a human (unlike a revision, re-implementing is always a valid outcome here), and a wrongly-skipped checklist item is a worse failure than a wrongly-redone one, so the derivation rule above fails toward redoing.
+
+**One adopter-visible cost.** A repository whose CI runs `on: push` for every branch, not only `<integration>`/`<production>`, now runs it on every intermediate checkpoint commit, not only the final push. Nothing gates on those runs — no pull request exists yet, and the final push supersedes them — but it is real spend, worth knowing about rather than discovering later.
+
 ## Stopping and draining
 
 The pipeline runs autonomously once started; these cockpit commands are the clean off-switch:
@@ -85,6 +99,9 @@ Closing the cockpit session also halts dispatch, since it is the only dispatcher
 | --- | --- | --- |
 | `Unknown skill: port:init` right after installing | The session resolved its plugins at startup, before the install | Start a new session in the same directory — the install itself is fine |
 | Item stuck in an in-flight label with no agent running | Agent crashed or the session closed mid-flight | `retry #N` in the cockpit, or re-apply the trigger label |
+| A branch named `<n>-…` exists with no open pull request | Normal — a prior `impl-agent` attempt pushed a checkpoint and then died | The next `retry #N` adopts it automatically (see "Resume protocol") — nothing to do |
+| Two or more branches named `<n>-…` exist with no open pull request | Two prior attempts both pushed checkpoints under the same issue | `impl-agent` starts fresh and names both in its final message — delete the stale one to let the next retry adopt cleanly |
+| A retried `impl-agent` reports it abandoned an adopted branch and started fresh | Its rebase onto `<integration>` hit an ambiguous conflict | Expected, not an escalation — re-implementing is always a valid outcome for this stage; no human decision needed |
 | Nothing dispatches for an item | It has no trigger label (paused, in-flight, or gated) | `status` shows where it is; `resume #N` re-applies the right trigger |
 | Nothing dispatches **and** `status` does not list it at all | It is unassigned, or owned by another operator — queries are assignee-filtered | The tick's unowned sweep reports it; claim it with `work on #N` |
 | An item sits at a trigger label and nothing dispatches | Its marker slot holds `SESSION REQUIRED` (see "Detection") — the cockpit never dispatches those | Open a named session and run `/port:implement <n>` |

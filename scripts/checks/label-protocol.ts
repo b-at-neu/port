@@ -142,6 +142,57 @@ export default async function ({ fail, note, ok }: Reporter) {
     }
   }
 
+  // --- Resume from a pushed branch ---------------------------------------------
+  // guard(#254): a killed impl-agent run previously discarded every commit
+  // along with its ephemeral worktree, since nothing pushed before the final
+  // step. A retry then re-implemented the whole ticket from scratch — the
+  // single most expensive failure mode in a 14-day usage audit. Four
+  // assertions pin the fix so a future edit can't quietly regress it.
+  {
+    const rel = 'plugins/port/agents/impl-agent.md';
+    const text = readFileSync(join(root, rel), 'utf8');
+
+    const preflightIdx = text.indexOf('## Pre-flight');
+    const labelSwapIdx = text.indexOf('## Label swap (first action after pre-flight)');
+    const lsRemoteIdx = text.indexOf('git ls-remote --heads origin');
+    if (
+      preflightIdx === -1 ||
+      labelSwapIdx === -1 ||
+      lsRemoteIdx === -1 ||
+      !(preflightIdx < lsRemoteIdx && lsRemoteIdx < labelSwapIdx)
+    ) {
+      fail('label-protocol', `${rel}'s Pre-flight is missing the resume-branch lookup ('git ls-remote --heads origin')`);
+    } else {
+      ok();
+    }
+
+    // The first checkpoint push must land before the checks step — a push
+    // gated behind every check passing is exactly the durability gap #254
+    // reports, since a killed run never reaches it.
+    const firstPushIdx = text.indexOf('git push');
+    const runChecksIdx = text.indexOf('**Run the checks.**');
+    if (firstPushIdx === -1 || runChecksIdx === -1 || !(firstPushIdx < runChecksIdx)) {
+      fail('label-protocol', `${rel} does not push a checkpoint before its 'Run the checks' step — a killed run must leave a pushed branch behind it`);
+    } else {
+      ok();
+    }
+
+    if (!text.includes('every failure in the resume path degrades to a fresh start')) {
+      fail('label-protocol', `${rel} is missing the literal phrase "every failure in the resume path degrades to a fresh start"`);
+    } else {
+      ok();
+    }
+  }
+  {
+    const rel = 'plugins/port/skills/implement/SKILL.md';
+    const text = readFileSync(join(root, rel), 'utf8');
+    if (!text.includes('git ls-remote --heads origin')) {
+      fail('label-protocol', `${rel} does not name the same 'git ls-remote --heads origin' resume-branch lookup impl-agent.md's Pre-flight uses — the dispatched and operator routes have drifted apart`);
+    } else {
+      ok();
+    }
+  }
+
   // --- Refresh escalation removes the surviving trigger too -------------------
   // guard(#225): a refresh escalation leaving needs human beside a live
   // trigger — three role-bearing labels at once. The additive-only refresh
