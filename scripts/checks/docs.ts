@@ -352,6 +352,7 @@ export default async function ({ fail, note, ok }: Reporter) {
   // Root-level *files* are deliberately outside this mechanical set — they are
   // covered by the "Placements that cannot move" prose instead, not by a row —
   // so the coverage check below only ever looks at directories.
+  // pin: `ARCHITECTURE.md`'s map ↔ the real tree
   {
     const rel = 'ARCHITECTURE.md';
     const text = readFileSync(join(root, rel), 'utf8');
@@ -425,6 +426,69 @@ export default async function ({ fail, note, ok }: Reporter) {
         fail('architecture-map', `${rel}: row '${path}' has Ships cell ${JSON.stringify(ships)} — must be exactly 'yes' or 'no'`);
       } else {
         ok();
+      }
+    }
+  }
+
+  // --- ENGINEERING.md's Module boundaries stay in ascending path order ------
+  // guard(#255): a boundary paragraph appended at the section's end instead
+  // of its alphabetical slot silently restores the single anchor #255
+  // fixes — every paragraph in this subsection opens with a bolded
+  // backticked path, and two tickets adding one each must land at different
+  // offsets for git to merge both.
+  {
+    /** Extracts the ordered list of paths each `### Module boundaries`
+     *  paragraph opens with — the first backticked token inside the
+     *  paragraph's leading bold span (`**...**`), which is the path every
+     *  such paragraph is anchored on. Pure so a self-test can exercise it
+     *  against a literal fixture, not just the real document. */
+    function boundaryPaths(section: string): string[] {
+      const paragraphs = section.split(/\n\n+/).filter((p) => p.trim().startsWith('**'));
+      const paths: string[] = [];
+      for (const p of paragraphs) {
+        const boldSpan = /^\*\*(.*?)\*\*/s.exec(p.trim());
+        const pathMatch = boldSpan && /`([^`]+)`/.exec(boldSpan[1]);
+        if (pathMatch) paths.push(pathMatch[1]);
+      }
+      return paths;
+    }
+
+    // Self-test first — three paragraphs, deliberately out of order.
+    const fixture = [
+      '**`b/two` does the second thing.**',
+      '**`a/one` does the first thing.**',
+      '**`c/three` does the third thing.**',
+    ].join('\n\n');
+    const fixturePaths = boundaryPaths(fixture);
+    const fixtureSorted = [...fixturePaths].sort();
+    if (fixturePaths.length !== 3 || JSON.stringify(fixturePaths) === JSON.stringify(fixtureSorted)) {
+      fail('engineering-module-boundaries', 'boundaryPaths self-test: a deliberately out-of-order fixture parsed as already sorted, or lost an entry');
+    } else {
+      ok();
+    }
+
+    const rel = 'docs/ENGINEERING.md';
+    const text = readFileSync(join(root, rel), 'utf8');
+    const sectionMatch = /### Module boundaries\n([\s\S]*?)(?=\n## |$)/.exec(text);
+    if (!sectionMatch) {
+      fail('engineering-module-boundaries', `${rel} has no '### Module boundaries' subsection`);
+    } else {
+      const paths = boundaryPaths(sectionMatch[1]);
+      if (paths.length === 0) {
+        fail('engineering-module-boundaries', `${rel}'s '### Module boundaries' subsection parsed 0 paragraphs — the parser or the subsection itself has broken`);
+      } else {
+        note(`engineering-module-boundaries: ${paths.length} paragraphs parsed`);
+        ok();
+        for (let i = 1; i < paths.length; i++) {
+          if (paths[i - 1] > paths[i]) {
+            fail(
+              'engineering-module-boundaries',
+              `${rel}: '### Module boundaries' is out of order — '${paths[i - 1]}' appears before '${paths[i]}'`,
+            );
+          } else {
+            ok();
+          }
+        }
       }
     }
   }

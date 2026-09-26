@@ -59,6 +59,8 @@ export default async function ({ fail, ok }: Reporter) {
   // guard(#105, #106): a test silently drifting off the shared table it
   // exists to be asserted against, so the two implementations could
   // disagree with nothing to catch it.
+  // pin: `scripts/port-tick/cases/ownership.cases.json`/`liveness.cases.json` ↔ `main/tick/ownership.ts`'s `partitionOwnership`/`main/tick/liveness.ts`'s `classifyUnmatched`, the same tables `tick-cases` already asserts the engine's own exports against
+  // pin: `scripts/port-tick/cases/contention.cases.json` ↔ `main/tick/contention.ts`'s ported `parseFilesBlock`/`gateCandidates`, the same table `tick-cases` already asserts the engine's own exports against
   {
     const pairs = [
       { test: `${mainDir}/ownership.test.ts`, table: 'scripts/port-tick/cases/ownership.cases.json' },
@@ -92,6 +94,7 @@ export default async function ({ fail, ok }: Reporter) {
   // drifting from scripts/port-tick/liveness.ts's own ladder — checked by
   // dynamic import of the real engine, the same idiom desktop-local.ts
   // already uses for bin/worktrees.mjs's correlate.
+  // pin: `main/tick/liveness.ts`'s `RETRY_TRIGGER` ↔ `scripts/port-tick/liveness.ts`'s own `RETRY_TRIGGER`, both directions, keys and values — a third copy alongside `shared/actions/plan.ts`'s own, since a recovered manual retry and a stalled claim's recovery target are different callers on different sides of the `shared/`↔`main/` boundary
   {
     const livenessFile = `${mainDir}/liveness.ts`;
     const enginePath = join(root, 'scripts/port-tick/liveness.ts');
@@ -123,6 +126,7 @@ export default async function ({ fail, ok }: Reporter) {
   // trigger keys, both directions
   // guard(#105): a trigger label added or retired in labels.json leaving the
   // dispatch-routing map silently out of step, either direction.
+  // pin: `main/tick/routing.ts`'s `AGENT_FOR_TRIGGER` keys ↔ `data/labels.json`'s `role: "trigger"` keys, both directions
   {
     const routingFile = `${mainDir}/routing.ts`;
     const routingText = readFileSync(join(root, routingFile), 'utf8');
@@ -218,6 +222,7 @@ export default async function ({ fail, ok }: Reporter) {
   // guard(#106): a retired or renamed stage key silently emptying the
   // occupied set rather than failing here — the gate's whole premise is
   // that 'inProgress'/'prOpened' name real labels with the roles it assumes.
+  // pin: `main/tick/plan.ts`'s occupied-set stage keys (`inProgress` → `in-flight`, `prOpened` → `terminal`) ↔ `data/labels.json`'s own roles
   {
     const planFile = `${mainDir}/plan.ts`;
     const planText = readFileSync(join(root, planFile), 'utf8');

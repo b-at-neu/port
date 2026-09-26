@@ -27,7 +27,10 @@ Every pipeline agent reads this document before working. It defines the quality 
 ## 2. Data and integrity
 
 <!-- Query and mutation conventions, transaction boundaries, migration discipline,
-     where input is validated. -->
+     where input is validated. A record of which copies are pinned together
+     belongs beside the check that enforces each pin, not gathered into one
+     table every change has to append to — the same generalization §7's
+     comment carries for regression guards. -->
 
 ## 3. Security
 

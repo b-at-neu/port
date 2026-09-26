@@ -13,6 +13,7 @@ import type { Reporter } from '../lib/report.ts';
 // canonical copy today — issue 177's file-size ratchet forbids that file
 // growing until issue 181 frees the headroom — so the four agent copies are
 // compared pairwise against each other instead of against one source.
+// pin: The `label-cas` block ↔ its copies in the four agent files — a fallback compared pairwise, since the issue 177 ratchet forbids a `PIPELINE.md` canonical copy until issue 220 moves it there
 export default async function ({ fail, note, ok }: Reporter) {
   const BEGIN = '<!-- label-cas:begin -->';
   const END = '<!-- label-cas:end -->';

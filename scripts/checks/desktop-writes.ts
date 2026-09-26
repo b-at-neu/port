@@ -122,6 +122,7 @@ export default async function ({ fail, ok }: Reporter) {
   // guard(#90): the claim gating a different set of labels than the doc
   // that defines it.
   // directions.
+  // pin: `main/writes/scope.ts`'s `PLAN_GATE_KEYS` ↔ `docs/COORDINATION.md`'s claim-contract keys, both directions
   {
     const scopeText = readFileSync(join(root, scopeFile), 'utf8');
     const scopeMatch = /PLAN_GATE_KEYS[^=]*=\s*\[([^\]]*)\]/.exec(scopeText);
@@ -155,6 +156,7 @@ export default async function ({ fail, ok }: Reporter) {
   // COORDINATION.md.
   // directions — by literal kind and field-name set, not byte-identity (the
   // doc's fence omits the `readonly` modifiers this app's style requires).
+  // pin: `shared/writes/types.ts`'s `Conflict` union ↔ `docs/COORDINATION.md`'s fenced `type Conflict` block — kind literals and field-name sets, both directions, not byte-identity
   {
     const typesText = readFileSync(join(root, typesFile), 'utf8');
     const typesMatch = /export type Conflict =\n([\s\S]*?)\n\n/.exec(typesText);

@@ -16,6 +16,7 @@ export default async function ({ fail, note, ok }: Reporter) {
   // converges) silently diverging from the engine's own recorded behaviour.
   // #187 adds three families for the trajectory record: events, denials,
   // report.
+  // pin: `scripts/port-tick/cases/*.json` ↔ every pure function in `scripts/port-tick/` it names
   {
     const families: Record<string, string> = {
       'envelope.cases.json': 'envelope.ts',
@@ -135,6 +136,7 @@ export default async function ({ fail, note, ok }: Reporter) {
   // --- Defaults table matches labels.json, both directions --------------------
   // guard(#203): the engine's label vocabulary drifting from the template
   // it must resolve against.
+  // pin: `scripts/port-tick/config.ts`'s `LABEL_DEFAULTS`/`LABEL_ROLES` ↔ `data/labels.json`
   {
     const labelsJson = readJson('plugins/port/data/labels.json');
     const { LABEL_DEFAULTS, LABEL_ROLES, LABEL_SURFACE } = await importEngine(`${TICK_DIR}/config.ts`);
@@ -191,6 +193,7 @@ export default async function ({ fail, note, ok }: Reporter) {
   }
 
   // --- LABEL_SURFACE pinned against query.ts's issueSet/prSet call sites, and the cross-surface/no-target-literal rails (#236) ---
+  // pin: `scripts/port-tick/config.ts`'s `LABEL_SURFACE` ↔ `query.ts`'s `issueSet`/`prSet` call sites
   {
     const { LABEL_SURFACE } = await importEngine(`${TICK_DIR}/config.ts`);
     const { RETRY_TRIGGER } = await importEngine(`${TICK_DIR}/liveness.ts`);

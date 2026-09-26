@@ -41,6 +41,7 @@ export default async function ({ fail, ok }: Reporter) {
   // PLAN_GATE_KEYS, both directions.
   // guard(#92): the gate answering a label the claim scope does not
   // actually cover, or covering one the gate never touches.
+  // pin: `shared/gate/classify.ts`'s LabelKeys (`planReview`/`planApproved`/`planChangesRequested`) ↔ `main/writes/scope.ts`'s `PLAN_GATE_KEYS`, both directions
   {
     const classifyText = readFileSync(join(root, classifyFile), 'utf8');
     const scopeText = readFileSync(join(root, scopeFile), 'utf8');
@@ -75,6 +76,7 @@ export default async function ({ fail, ok }: Reporter) {
   // --- GATE_CLAIM_OWNER's value appears in docs/COORDINATION.md -------------
   // guard(#92): the cockpit's own stand-down report naming a different
   // owner than what this app actually writes to the claim file.
+  // pin: `shared/gate/types.ts`'s `GATE_CLAIM_OWNER` ↔ `docs/COORDINATION.md`'s stand-down report copy
   {
     const typesText = readFileSync(join(root, typesFile), 'utf8');
     const coordinationText = readFileSync(join(root, coordinationFile), 'utf8');
