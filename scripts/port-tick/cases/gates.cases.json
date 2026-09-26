@@ -1,5 +1,5 @@
 {
-  "$comment": "Authoritative decision-case table for scripts/port-tick/gates.mjs. Per plugins/port/skills/pipeline/SKILL.md's Mergeability gate, Refresh sweep, Zero-diff review gate, Cycle cap, and Approved pull requests sections.",
+  "$comment": "Authoritative decision-case table for scripts/port-tick/gates.ts. Per plugins/port/skills/pipeline/SKILL.md's Mergeability gate, Refresh sweep, Zero-diff review gate, Cycle cap, and Approved pull requests sections.",
   "cases": [
     { "function": "mergeabilityRoute", "name": "MERGEABLE dispatches", "input": ["MERGEABLE", 0], "expected": { "action": "dispatch", "unknownStreak": 0 } },
     { "function": "mergeabilityRoute", "name": "CONFLICTING routes to refresh", "input": ["CONFLICTING", 0], "expected": { "action": "refresh", "unknownStreak": 0 } },

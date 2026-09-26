@@ -33,10 +33,12 @@ jobs:
         with:
           node-version: '22'
       # Deliberately no install step and no `cache:` key on setup-node — an
-      # empty node_modules here is the assertion that scripts/checks.mjs runs
-      # from files alone. Do not add one back.
+      # empty node_modules here is the assertion that scripts/checks.ts runs
+      # from files alone. It is also now the assertion that Node's own type
+      # stripping, not an installed `typescript`, is what makes these files
+      # runnable. Do not add one back.
       - name: Static checks
-        run: node scripts/checks.mjs
+        run: node scripts/checks.ts
 
   # JSON Schema validation is platform-invariant, so running it three times
   # buys nothing; its `pipx` install and `for` loop are POSIX-shaped anyway.
@@ -64,6 +66,41 @@ jobs:
             fi
             echo "correctly rejected: $f"
           done
+
+  # scripts/'s own type check. CI-only and out of commands.checks, the same
+  # boundary run-app-checks draws below — a dispatched agent's worktree has
+  # no toolchain, so a real type check can never be a prerequisite for it.
+  run-scripts-typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Typecheck scripts
+        run: pnpm typecheck:scripts
+
+  # Built into the CLI; nothing to install but the CLI itself. Validates
+  # plugin.json schema, hooks.json validity, and component frontmatter more
+  # thoroughly than layer 1's hand-rolled checks — additive, never a
+  # replacement (docs/TESTING.md → "why the frontmatter checks stay").
+  run-plugin-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Validate plugin
+        run: claude plugin validate ./plugins/port --strict
 
   # apps/desktop's typecheck/lint/test/build. Deliberately CI-only and out of
   # commands.checks — see CONTRIBUTING.md → "Working on the desktop app".

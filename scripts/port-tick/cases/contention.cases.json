@@ -1,5 +1,5 @@
 {
-  "$comment": "Authoritative decision-case table for scripts/port-tick/contention.mjs. Per plugins/port/docs/PIPELINE.md → 'File contention': held only at or above concurrency.overlapThreshold against one in-flight item's non-shared claims, counted per in-flight item, never pooled; fewest-conflicts-first ordering among survivors.",
+  "$comment": "Authoritative decision-case table for scripts/port-tick/contention.ts. Per plugins/port/docs/PIPELINE.md → 'File contention': held only at or above concurrency.overlapThreshold against one in-flight item's non-shared claims, counted per in-flight item, never pooled; fewest-conflicts-first ordering among survivors.",
   "cases": [
     {
       "function": "parseFilesBlock",

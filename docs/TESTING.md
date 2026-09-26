@@ -5,51 +5,58 @@ This plugin is almost entirely prompts, which makes it easy to change confidentl
 ## Layer 1 — static checks
 
 ```bash
-node scripts/checks.mjs
+node scripts/checks.ts
 ```
 
-No dependencies, no plugin install, no model calls. Runs in seconds, in an agent's worktree before it pushes, and in CI's `run-static-checks` job on every pull request, matrixed across `ubuntu-latest`, `macos-latest`, and `windows-latest` with no install step — the empty `node_modules` in that job is what makes the dependency-free invariant an executed assertion rather than a comment. This is the only thing an agent runs before pushing; `.github/workflows/checks.yml` runs two further jobs CI-only: `run-schema-fixtures` (ubuntu only, full JSON Schema validation) and `run-app-checks` (the same three-OS matrix, `apps/desktop`'s typecheck/lint/test/build — see CONTRIBUTING.md → "Working on the desktop app" for why it stays out of `commands.checks`).
+No dependencies, no plugin install, no model calls. Runs in seconds, in an agent's worktree before it pushes, and in CI's `run-static-checks` job on every pull request, matrixed across `ubuntu-latest`, `macos-latest`, and `windows-latest` with no install step — the empty `node_modules` in that job is what makes the dependency-free invariant an executed assertion rather than a comment (`scripts/` is TypeScript, type-stripped at load by Node's own runtime — no toolchain needed to run it, only to type-check it). This is the only thing an agent runs before pushing; `.github/workflows/checks.yml` runs three further jobs CI-only: `run-schema-fixtures` (ubuntu only, full JSON Schema validation), `run-scripts-typecheck` (ubuntu only, `pnpm typecheck:scripts` — real type checking, which needs a toolchain a dispatched agent's worktree never has), `run-plugin-validate` (ubuntu only, `claude plugin validate ./plugins/port --strict` — built into the CLI, so nothing extra to install beyond it), and `run-app-checks` (the same three-OS matrix, `apps/desktop`'s typecheck/lint/test/build — see CONTRIBUTING.md → "Working on the desktop app" for why it stays out of `commands.checks`).
+
+**`claude plugin validate` is additive, never a replacement for the hand-rolled frontmatter checks above.** It covers `plugin.json` schema and `hooks/hooks.json` validity more thoroughly than layer 1 does, but it needs the `claude` binary — exactly the toolchain a dispatched agent's worktree never has, and exactly why layer 1's own component checks stay: trading a check every agent runs *before* pushing for one that only runs after would be a net loss in coverage where it matters most.
 
 **These guard against silence.** A skill or agent whose frontmatter is malformed is *absent* from Claude Code's component inventory rather than reported as an error, so nothing complains — the component simply is not there. Same for a hook.
 
 **Each guard is declared on the check that pins it, in `scripts/checks/`** — a `// guard(#N): <one line>` marker colocated on the block it describes, never a shared registry file every guard-adding pull request has to touch (#217; see `docs/ENGINEERING.md` §7).
 
 ```bash
-node scripts/checks.mjs --guards               # the whole index, one section per check module
-node scripts/checks.mjs --guards --issue 149    # is there a guard for this fix? at least one row, or exit 1
+node scripts/checks.ts --guards               # the whole index, one section per check module
+node scripts/checks.ts --guards --issue 149    # is there a guard for this fix? at least one row, or exit 1
 ```
 
 Each rule is worth testing by breaking it deliberately. If a check cannot be made to fail, it is not a check.
 
 The script reports full schema validation as **skipped**, because a draft 2020-12 validator is a dependency and the script must run where none is installed. CI does that part.
 
-Two guards specific to `plugins/port/bin/artifacts.mjs` (#231), both in `scripts/checks/artifacts.mjs`:
+Two guards specific to `plugins/port/bin/artifacts.mjs` (#231), both in `scripts/checks/artifacts.ts`:
 
 - `stageViolation`'s pair-wise legality, asserted directly: every sanctioned pair (a stage label alone, a refresh label alone, one of each) passes, and both illegal shapes — two stage labels, or both refresh labels — fail with a message naming the offending labels.
 - The audit workflow's trigger, read off `plugins/port/templates/artifacts.yml`: `pull_request.types` names `labeled`, `opened`, and `synchronize`; the one `if:` key sits at step indentation, never job indentation; and neither it nor this document still carries the retired "never register this as a required status check" warning.
 
-A layer 1 check specific to the three-way split under `plugins/port/` (#171), in `scripts/checks/layout.mjs`:
+A layer 1 check specific to the three-way split under `plugins/port/` (#171), in `scripts/checks/layout.ts`:
 
 - `templates/` holds only its eight fill-in templates (`DESIGN.template.md`, `ENGINEERING.template.md`, `AUDITOR.template.md`, `SCAFFOLDER.template.md`, `permissions.base.json`, the config template, `approval-check.yml`, `artifacts.yml`), asserted both directions against the tree.
-- `bin/` holds only self-contained `.mjs` files — no relative import escaping the file, checked directory-wide rather than per file.
+- `bin/` holds only self-contained `.mjs` files — no relative import escaping the file, checked directory-wide rather than per file. `scripts/` is the opposite: every file there is `.ts`, never `.mjs`, checked directory-wide the same way (`scripts/checks/harness.ts`).
 - `data/` holds only `.json`.
 - No tracked text file still names the old `templates/`-relative path to `artifacts.mjs`, `worktrees.mjs`, `budget.mjs`, or `labels.json` — each now lives under `bin/` or `data/`.
 
-Guards for `/port:analyze`'s skill-generation step (#191), in `scripts/checks/analyze.mjs` and `scripts/checks/standards.mjs`:
+Guards for the `scripts/` → TypeScript migration (#122):
+
+- `scripts/checks/config.ts`: every script path this repository's own `.claude/port.config.json` and `.claude/settings.json` configure (`commands.*`, `extraAllow`, `permissions.allow`) resolves to a real file on disk — scoped to these two files only, never a template or a fixture, which name paths only an adopter has. Also asserts root `package.json` still declares `"type": "module"`, since every `scripts/*.ts` file loads as ESM only because of that field.
+- `scripts/checks/harness.ts`: the topic-module scan (and each of `scripts/checks/tick.ts`'s three `scripts/port-tick/` scans) fails outright if its extension filter matches zero files — an extension filter that matches nothing runs no assertions and reports nothing, exactly the silence a half-finished rename produces. Also asserts no file under `plugins/port/` carries a `.ts` extension, since type stripping needs Node ≥22.18, which an adopting repository never agreed to.
+
+Guards for `/port:analyze`'s skill-generation step (#191), in `scripts/checks/analyze.ts` and `scripts/checks/standards.ts`:
 
 - `SKILL.md`'s step 6.5 references `skills/analyze/SKILL-GENERATION.md`, and that file in turn references both `templates/SCAFFOLDER.template.md` and `templates/AUDITOR.template.md` — each pinned to actually exist on disk, so a dangling reference fails at check time rather than silently at runtime.
 - Both archetype templates' frontmatter parses and declares `name`, `description`, and an `allowed-tools` no wider than the archetype's default (`Write`/`Edit` present for the scaffolder, absent for the auditor).
 - The recipe names the generic test and resolves a name collision by reading `${CLAUDE_PLUGIN_ROOT}/skills/` directly — never a transcribed list of every shipped skill name, which would be a second copy needing its own pin.
 - The writable-set sentence in `analyze/SKILL.md`'s "You do not change code. Ever." — previously pinned to three files — now names all **four**: the engineering document, the design document, `.claude/port.config.json`, and the skills generated under `.claude/skills/`.
 
-`desktop-tick`'s own guards for the file-contention gate (#106), in `scripts/checks/desktop-tick.mjs`:
+`desktop-tick`'s own guards for the file-contention gate (#106), in `scripts/checks/desktop-tick.ts`:
 
 - `main/tick/contention.test.ts` resolves `scripts/port-tick/cases/contention.cases.json` — catches the test silently drifting off the shared table it exists to be asserted against, so the app's port and the engine could disagree with nothing to catch it.
-- `main/tick/contention.ts`'s exported function names agree with `scripts/port-tick/contention.mjs`'s own, both directions — catches the app's own port silently gaining or losing a function relative to the engine it is ported from.
+- `main/tick/contention.ts`'s exported function names agree with `scripts/port-tick/contention.ts`'s own, both directions — catches the app's own port silently gaining or losing a function relative to the engine it is ported from.
 - `main/tick/plan.ts`'s occupied-set stage keys (`inProgress`, `prOpened`) resolve in `data/labels.json` with the roles the gate assumes (`in-flight`, `terminal`) — catches a retired or renamed stage key silently emptying the occupied set rather than failing here.
 - `main/registry/schema.ts`'s `CONFIG_DEFAULTS.concurrency` carries no hand-typed numeric or array literal — catches the default silently drifting from the schema's own default the moment either changes.
 
-Guards for the plan-gate claim (#206), in `scripts/checks/gate-claim.mjs`:
+Guards for the plan-gate claim (#206), in `scripts/checks/gate-claim.ts`:
 
 - `classifyGateClaim`'s three verdicts (`absent`/`held`/`unreadable`) against a missing file, a repository mismatch, unparseable JSON, a non-object, missing `owner`/`claimedAt`, an unrecognized scope, and a `held` claim naming only an unrecognized scope (never denied on).
 - The guard rule's own two arms: a `gh issue edit`/`gh pr edit` adding or removing a plan-gate label while a claim holds or is unreadable is denied, exempt for a subagent and an `/port:implement` `impl-<n>` worktree — but a `Write`/`Edit`/`NotebookEdit` targeting the claim file itself is denied with **no** exemption at all, including from `impl-<n>`.
@@ -109,12 +116,12 @@ Each rule is worth testing by breaking it deliberately — change the expected r
 Layer 2 asserts on **artifacts** — pull requests, labels, review bodies — what the pipeline *left behind*. It cannot see what a dispatched agent actually *did*: a killed or quota-exhausted agent looks identical to a slow one, a `for`-loop timeout looks like a deliberate partial label change, and a permission dialog reaching the operator leaves no artifact at all. The forensics engine (#123) reads the session tree instead — `~/.claude/projects/<encoded-cwd>/` — and asserts on agent behaviour directly.
 
 ```bash
-node scripts/port-forensics.mjs report                                              # every session this repository's cwd owns
-node scripts/port-forensics.mjs report --session <uuid> --since 2026-09-01T00:00Z
-node scripts/port-forensics.mjs report --json
+node scripts/port-forensics.ts report                                              # every session this repository's cwd owns
+node scripts/port-forensics.ts report --session <uuid> --since 2026-09-01T00:00Z
+node scripts/port-forensics.ts report --json
 ```
 
-`scripts/lib/transcript.mjs` is `scripts/`'s **only** JSONL parser and record classifier — pinned against `apps/desktop/src/main/sessions/transcript-entries.ts`'s own deriver by a shared case table (`apps/desktop/src/main/sessions/transcript.cases.json`), so the two readers can never silently disagree about what a record means. `scripts/port-forensics/classify.mjs` holds the six assertions as pure functions; `scan.mjs` is the engine's only I/O; `gh.mjs` is its one read-only `gh api graphql` call (the orphan assertion's in-flight label read).
+`scripts/lib/transcript.ts` is `scripts/`'s **only** JSONL parser and record classifier — pinned against `apps/desktop/src/main/sessions/transcript-entries.ts`'s own deriver by a shared case table (`apps/desktop/src/main/sessions/transcript.cases.json`), so the two readers can never silently disagree about what a record means. `scripts/port-forensics/classify.ts` holds the six assertions as pure functions; `scan.ts` is the engine's only I/O; `gh.ts` is its one read-only `gh api graphql` call (the orphan assertion's in-flight label read).
 
 | Assertion | Fails toward |
 | --- | --- |
@@ -127,19 +134,19 @@ node scripts/port-forensics.mjs report --json
 
 **Exit codes**: `0` clean · `1` at least one finding, or a malformed `--session`/`--since` · `2` the session tree could not be read at all — never `0` findings, which an operator reads as clean.
 
-**Never in `commands.checks`.** It reads a machine-local path outside the repository and shells out to `gh`, meaningless in CI and unavailable to a dispatched agent's own worktree — the same placement layer 2's own `audit` and the trajectory record's own `report` establish for operator-facing tooling that needs a real machine to run against. `scripts/checks/evals.mjs` pins the absence mechanically, alongside the eval and audit bans it already holds.
+**Never in `commands.checks`.** It reads a machine-local path outside the repository and shells out to `gh`, meaningless in CI and unavailable to a dispatched agent's own worktree — the same placement layer 2's own `audit` and the trajectory record's own `report` establish for operator-facing tooling that needs a real machine to run against. `scripts/checks/evals.ts` pins the absence mechanically, alongside the eval and audit bans it already holds.
 
-Every transcript byte is untrusted data: parsed and classified, never interpreted as instructions and never executed. `excerpt` (`scripts/lib/transcript.mjs`) is the one chokepoint for transcript-derived text reaching a finding — sanitize, then cap at 200 characters with an `omittedChars` count — and a live agent's transcript is never read into an agent's own context; this engine reports counts and short excerpts only, run by the operator or the cockpit's tick, never inline in a dispatched agent's prompt.
+Every transcript byte is untrusted data: parsed and classified, never interpreted as instructions and never executed. `excerpt` (`scripts/lib/transcript.ts`) is the one chokepoint for transcript-derived text reaching a finding — sanitize, then cap at 200 characters with an `omittedChars` count — and a live agent's transcript is never read into an agent's own context; this engine reports counts and short excerpts only, run by the operator or the cockpit's tick, never inline in a dispatched agent's prompt.
 
 | Check | Source |
 | --- | --- |
-| Every case in both decision-case tables (`scripts/port-forensics/cases/*.json`) resolves and passes | `scripts/checks/forensics.mjs` |
-| `usesShellLoop`/`targetsGhOrGit` (reimplemented, not imported, since `scripts/` may not depend on a shipped path's internals) agree with `plugins/port/hooks/lib/command-rules.mjs`'s own originals, both directions | `scripts/checks/forensics.mjs` |
-| The item-correlation stage list is pinned against `plugins/port/agents/`'s real basenames and `apps/desktop`'s own `PORT_STAGE_AGENTS`, both directions | `scripts/checks/forensics.mjs` |
-| Read-only: no mutating `gh` subcommand, no `--jq`, no `shell: true`, no second child process spawn, no whole-transcript dump flag | `scripts/checks/forensics.mjs` |
-| No sanitizer reimplemented outside `scripts/lib/transcript.mjs`; no `running`/`alive`/`isLive`-named identifier | `scripts/checks/forensics.mjs` |
-| `commands.forensics` never appears in `commands.checks` | `scripts/checks/evals.mjs`, `scripts/checks/forensics.mjs` |
-| The fixture tree (`scripts/port-forensics/fixtures/`) exercises `scan.mjs`'s resolve and degrade paths, and `report.mjs`'s own orchestration end to end | `scripts/checks/forensics.mjs` |
+| Every case in both decision-case tables (`scripts/port-forensics/cases/*.json`) resolves and passes | `scripts/checks/forensics.ts` |
+| `usesShellLoop`/`targetsGhOrGit` (reimplemented, not imported, since `scripts/` may not depend on a shipped path's internals) agree with `plugins/port/hooks/lib/command-rules.mjs`'s own originals, both directions | `scripts/checks/forensics.ts` |
+| The item-correlation stage list is pinned against `plugins/port/agents/`'s real basenames and `apps/desktop`'s own `PORT_STAGE_AGENTS`, both directions | `scripts/checks/forensics.ts` |
+| Read-only: no mutating `gh` subcommand, no `--jq`, no `shell: true`, no second child process spawn, no whole-transcript dump flag | `scripts/checks/forensics.ts` |
+| No sanitizer reimplemented outside `scripts/lib/transcript.ts`; no `running`/`alive`/`isLive`-named identifier | `scripts/checks/forensics.ts` |
+| `commands.forensics` never appears in `commands.checks` | `scripts/checks/evals.ts`, `scripts/checks/forensics.ts` |
+| The fixture tree (`scripts/port-forensics/fixtures/`) exercises `scan.ts`'s resolve and degrade paths, and `report.ts`'s own orchestration end to end | `scripts/checks/forensics.ts` |
 
 ## Layer 3 — behavioural evals
 
@@ -168,15 +175,15 @@ The pipeline's own two evaluation tiers — end-to-end (`evals/`) and component-
 - `.agents/events.jsonl` — one JSON line per tick-engine event: `run-start` (from `start`), `tick` (from `plan`), `tick-commit` (from `commit`). Rotates only at `start`, never mid-tick, at an 8 MB cap — two generations, ~16 MB ceiling.
 - `.agents/denials.log` — unchanged, deliberately **not** widened or rotated (its format already has three readers — the guard hook, the cockpit, and the desktop app — and rotating it would silently truncate the desktop's history). The tick record instead consumes it as a source: each tick's delta folds into that `tick` event's own `denials` field.
 
-**The reader:** `node scripts/port-tick.mjs report [--since <iso>] [--run <id>]` — read-only, local-only, no `gh` call. Answers this ticket's four questions directly: stage duration by model (`dispatches.byStage`/`byStageMedianSeconds`), failures/denials/escalations (`ticks.incomplete`/`blind` + `denials` + `escalations`), cycles per ticket (`items[].reviewCycles`), and whether the cockpit was ticking (`cadence.gaps`). An absent `.agents/events.jsonl` reports "nothing recorded", never a zero-filled report or a crash — durations are always derived from tick boundaries (±270s), never a precise per-dispatch figure, which is what `commands.budget`'s own ledger (#188) is for.
+**The reader:** `node scripts/port-tick.ts report [--since <iso>] [--run <id>]` — read-only, local-only, no `gh` call. Answers this ticket's four questions directly: stage duration by model (`dispatches.byStage`/`byStageMedianSeconds`), failures/denials/escalations (`ticks.incomplete`/`blind` + `denials` + `escalations`), cycles per ticket (`items[].reviewCycles`), and whether the cockpit was ticking (`cadence.gaps`). An absent `.agents/events.jsonl` reports "nothing recorded", never a zero-filled report or a crash — durations are always derived from tick boundaries (±270s), never a precise per-dispatch figure, which is what `commands.budget`'s own ledger (#188) is for.
 
 **Never in `commands.checks`.** It reads a gitignored path absent from a dispatched agent's worktree and from CI, the same placement layer 2's own `audit` establishes for operator-facing tooling that needs a real repository to run against.
 
 | Check | Source |
 | --- | --- |
-| `tick-cases` covers the three new decision families (`events`, `denials`, `report`), same as every other pure tick-engine module | `scripts/checks/tick.mjs` |
-| Write-only rail: nothing but `port-tick.mjs` and `report.mjs` itself imports `events.mjs`/`report.mjs`; `events.mjs` exports no `read`/`parse`-named function | `scripts/checks/tick-events.mjs` |
-| `formatEvent`'s envelope contract: parses as JSON, carries `v`/`ts`/`runId`/`repo`/`kind`, no raw newline, caps at 8 KB with `truncated: true` | `scripts/checks/tick-events.mjs` |
-| `DENIAL_DECISIONS` equals `agent-guard.mjs`'s own logged decisions and the desktop app's `CURRENT_DECISIONS`, both directions | `scripts/checks/tick-events.mjs` |
-| The 8 MB rotation cap is a literal | `scripts/checks/tick-events.mjs` |
-| `SKILL.md` names `<commands.tick> start` and `--live`; `TICK-PROSE.md` carries the moved "Denial report" section | `scripts/checks/tick.mjs` |
+| `tick-cases` covers the three new decision families (`events`, `denials`, `report`), same as every other pure tick-engine module | `scripts/checks/tick.ts` |
+| Write-only rail: nothing but `port-tick.ts` and `report.ts` itself imports `events.ts`/`report.ts`; `events.ts` exports no `read`/`parse`-named function | `scripts/checks/tick-events.ts` |
+| `formatEvent`'s envelope contract: parses as JSON, carries `v`/`ts`/`runId`/`repo`/`kind`, no raw newline, caps at 8 KB with `truncated: true` | `scripts/checks/tick-events.ts` |
+| `DENIAL_DECISIONS` equals `agent-guard.mjs`'s own logged decisions and the desktop app's `CURRENT_DECISIONS`, both directions | `scripts/checks/tick-events.ts` |
+| The 8 MB rotation cap is a literal | `scripts/checks/tick-events.ts` |
+| `SKILL.md` names `<commands.tick> start` and `--live`; `TICK-PROSE.md` carries the moved "Denial report" section | `scripts/checks/tick.ts` |

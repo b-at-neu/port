@@ -1,5 +1,5 @@
 {
-  "$comment": "Authoritative decision-case table for scripts/port-tick/envelope.mjs's classifyEnvelope. scripts/checks/tick.mjs asserts every case here resolves correctly — this is the contract a second implementation (apps/desktop's own, when #105 converges onto this engine) is tested against.",
+  "$comment": "Authoritative decision-case table for scripts/port-tick/envelope.ts's classifyEnvelope. scripts/checks/tick.ts asserts every case here resolves correctly — this is the contract a second implementation (apps/desktop's own, when #105 converges onto this engine) is tested against.",
   "function": "classifyEnvelope",
   "cases": [
     { "name": "no body at all", "input": null, "expected": { "kind": "blind", "unavailable": [] } },

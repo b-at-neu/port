@@ -1,7 +1,7 @@
 // Pure: ownership partition against the viewer, ported verbatim from
 // scripts/port-tick/classify.mjs's own `partitionOwnership` — asserted
 // against its shared case table (`ownership.test.ts`) and pinned against the
-// engine's real behaviour by `scripts/checks/desktop-tick.mjs`. Per
+// engine's real behaviour by `scripts/checks/desktop-tick.ts`. Per
 // plugins/port/docs/PIPELINE.md → "Multi-operator partitioning": an item
 // whose assignees do not include the viewer is never acted on, only
 // reported.

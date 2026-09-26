@@ -1,5 +1,5 @@
 // #97: two pure functions, both driven by the authoritative decision-case
-// table (`classify.cases.json`, pinned by `desktop-runtime.mjs` per
+// table (`classify.cases.json`, pinned by `desktop-runtime.ts` per
 // ENGINEERING §2) — no I/O here, so every rung is exercised without a real
 // `claude` binary or a real credentials file.
 //

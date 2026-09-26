@@ -1,7 +1,7 @@
 // Pure: the liveness diff against this app's own dispatch ledger (`ledger.ts`),
 // ported verbatim from scripts/port-tick/liveness.mjs's own `classifyUnmatched`
 // and `RETRY_TRIGGER` — pinned against that file, both directions, by
-// `scripts/checks/desktop-tick.mjs`'s dynamic import, the same idiom
+// `scripts/checks/desktop-tick.ts`'s dynamic import, the same idiom
 // `desktop-local.mjs` already uses for `bin/worktrees.mjs`'s `correlate`.
 //
 // `capped` is currently unreachable from `plan.ts` alone: reaching it needs a
@@ -46,7 +46,7 @@ export function classifyUnmatched(row: LedgerRow | undefined): UnmatchedResult {
 
 /** The retry mapping from an in-flight label back to its trigger label,
  *  transcribed byte-for-byte from `scripts/port-tick/liveness.mjs`'s own
- *  `RETRY_TRIGGER` — `scripts/checks/desktop-tick.mjs` pins this against
+ *  `RETRY_TRIGGER` — `scripts/checks/desktop-tick.ts` pins this against
  *  that file, both directions, keys and values. A third copy alongside
  *  `shared/actions/plan.ts`'s own (`desktop-actions`'s pin) — deliberate:
  *  that one recovers an operator's manual retry click, this one names a

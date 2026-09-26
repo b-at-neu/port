@@ -21,7 +21,7 @@ export interface RuntimeCopy {
 }
 
 /** Every `RuntimeDiagnosis` member, both directions pinned by
- *  `desktop-runtime.mjs` — a variant added to the union with no entry here
+ *  `desktop-runtime.ts` — a variant added to the union with no entry here
  *  is a compile error (`Record`'s exhaustiveness), and an entry with no
  *  corresponding variant is dead copy the check also rejects.
  *

@@ -8,10 +8,10 @@
   },
   "commands": {
     "bootstrap": ["pnpm install"],
-    "checks": [{ "run": "node scripts/checks.mjs", "fix": null }],
+    "checks": [{ "run": "node scripts/checks.ts", "fix": null }],
     "artifacts": "node plugins/port/bin/artifacts.mjs",
     "worktrees": "node plugins/port/bin/worktrees.mjs",
-    "tick": "node scripts/port-tick.mjs"
+    "tick": "node scripts/port-tick.ts"
   },
   "docs": {
     "engineering": "docs/ENGINEERING.md",
@@ -33,7 +33,7 @@
     "versionSource": "package",
     "versionFiles": ["plugins/port/.claude-plugin/plugin.json"],
     "versionCommand": null,
-    "postPublishHook": "node scripts/dev-window.mjs"
+    "postPublishHook": "node scripts/dev-window.ts"
   },
   "reviewCycleCap": 5,
   "concurrency": {
@@ -43,18 +43,18 @@
       "docs/ENGINEERING.md",
       "docs/TESTING.md",
       "evals/README.md",
-      "scripts/checks.mjs"
+      "scripts/checks.ts"
     ],
     "overlapThreshold": 2
   },
   "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"],
   "extraAllow": [
-    "Bash(node scripts/checks.mjs)",
-    "Bash(node scripts/checks.mjs *)",
+    "Bash(node scripts/checks.ts)",
+    "Bash(node scripts/checks.ts *)",
     "Bash(node plugins/port/bin/artifacts.mjs *)",
     "Bash(node plugins/port/bin/worktrees.mjs *)",
-    "Bash(node scripts/port-tick.mjs *)",
-    "Bash(node scripts/dev-window.mjs)",
-    "Bash(node scripts/dev-window.mjs *)"
+    "Bash(node scripts/port-tick.ts *)",
+    "Bash(node scripts/dev-window.ts)",
+    "Bash(node scripts/dev-window.ts *)"
   ]
 }
