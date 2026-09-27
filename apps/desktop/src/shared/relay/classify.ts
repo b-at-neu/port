@@ -77,10 +77,11 @@ function markerLineIndex(text: string, marker: string): number | null {
  * for a tail this function never saw.
  */
 export function classifyFinalMessage(text: string): RelayVerdict {
-  const lines = text.split('\n')
-
   const questionsAt = markerLineIndex(text, RELAY_MARKERS.questions)
-  if (questionsAt !== null && lines.slice(questionsAt + 1).some((line) => NUMBERED_LINE_RE.test(line))) {
+  if (
+    questionsAt !== null &&
+    eligibleLines(text).some(({ line, index }) => index > questionsAt && NUMBERED_LINE_RE.test(line))
+  ) {
     return 'questions'
   }
 
