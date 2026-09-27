@@ -33,6 +33,7 @@ export default async function ({ fail, ok }: Reporter) {
   // automatic reset silently recovering to two different trigger labels —
   // checked both directions, keys and values, against
   // scripts/port-tick/liveness.ts's own RETRY_TRIGGER.
+  // pin: `shared/actions/plan.ts`'s `RETRY_TRIGGER` ↔ `scripts/port-tick/liveness.ts`'s own `RETRY_TRIGGER`, both directions, keys and values
   {
     const planText = readFileSync(join(root, planFile), 'utf8');
     const livenessText = readFileSync(join(root, livenessFile), 'utf8');

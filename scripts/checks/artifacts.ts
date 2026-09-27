@@ -10,6 +10,7 @@ export default async function ({ fail, ok }: Reporter) {
   // now that it can't import the file directly. The template can't import
   // labels.json (previous check), so it carries its own copy. The two must
   // agree on keys, names, and modules, both directions.
+  // pin: `bin/artifacts.mjs`'s `LABELS` ↔ `labels.json`
   {
     const { LABELS }: { LABELS: Record<string, any> } = await import(pathToFileURL(join(root, 'plugins/port/bin/artifacts.mjs')).href);
     const canonical = new Map<string, any>(readJson('plugins/port/data/labels.json').labels.map((l: any) => [l.key, l]));

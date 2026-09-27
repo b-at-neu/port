@@ -18,6 +18,7 @@ export default async function ({ fail, ok }: Reporter) {
   // --- Every RuntimeDiagnosis member has a copy.ts entry, both directions ---
   // guard(#97): a diagnosis added to the union with no operator-facing copy,
   // or a copy entry left behind for a diagnosis that no longer exists.
+  // pin: `shared/runtime/types.ts`'s `RuntimeDiagnosis` ↔ `shared/runtime/copy.ts`'s `RUNTIME_COPY`, both directions
   {
     if (!typesFile || !copyFile) {
       fail('desktop-runtime', 'shared/runtime/types.ts or shared/runtime/copy.ts does not exist');
@@ -113,6 +114,7 @@ export default async function ({ fail, ok }: Reporter) {
   // --- classify.cases.json resolves every case against a real export ------
   // guard(#97): a case naming a function classify.ts no longer exports,
   // silently skipped rather than failing loudly.
+  // pin: `main/runtime/classify.cases.json` ↔ `classifyPreflight`/`classifyProbeFailure` in `main/runtime/classify.ts`
   {
     const classifyFile = allFiles.find((f) => relOf(f) === `${runtimeDir}/classify.ts`);
     const casesPath = `${runtimeDir}/classify.cases.json`;

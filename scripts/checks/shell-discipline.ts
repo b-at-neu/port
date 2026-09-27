@@ -10,6 +10,7 @@ import type { Reporter } from '../lib/report.ts';
 // comments; every agent granting Bash must carry an exact copy, or the rules
 // it actually has in context can silently fall behind the ones it was
 // reviewed against.
+// pin: The shell-discipline block ↔ its canonical copy in PIPELINE.md
 export default async function ({ fail, note, ok }: Reporter) {
   const BEGIN = '<!-- shell-discipline:begin -->';
   const END = '<!-- shell-discipline:end -->';

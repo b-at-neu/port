@@ -107,6 +107,7 @@ export default async function ({ fail, ok }: Reporter) {
   // --- Decision vocabulary pinned three ways: DENIAL_DECISIONS equals the
   // literals hooks/agent-guard.mjs passes to log(), and equals the desktop's
   // CURRENT_DECISIONS, both directions.
+  // pin: `scripts/port-tick/denials.ts`'s `DENIAL_DECISIONS` ↔ `hooks/agent-guard.mjs`'s logged decisions ↔ `apps/desktop`'s `CURRENT_DECISIONS`, all three directions
   {
     const { DENIAL_DECISIONS } = await importEngine(`${TICK_DIR}/denials.ts`);
     const hookText = readFileSync(join(root, 'plugins/port/hooks/agent-guard.mjs'), 'utf8');
