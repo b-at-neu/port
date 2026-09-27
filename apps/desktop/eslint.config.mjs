@@ -24,6 +24,7 @@ export default tseslint.config(
     files: ['*.config.mts', '*.config.mjs', 'scripts/*.mjs'],
     ...tseslint.configs.disableTypeChecked,
     languageOptions: {
+      ...tseslint.configs.disableTypeChecked.languageOptions,
       globals: {
         console: 'readonly',
         process: 'readonly'
