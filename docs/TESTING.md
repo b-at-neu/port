@@ -28,17 +28,6 @@ The script reports full schema validation as **skipped**, because a draft 2020-1
 
 **Every guard-adding pull request stays out of this file.** A guard's own description lives on the check block that pins it (`--guards` above), and a duplicated-content pin lives the same way (`--pins`, `docs/ENGINEERING.md` §2) — never restated here in prose, which is what regrew `docs/TESTING.md` into a hub after #217 first relieved it (#255).
 
-Guards for the plan gate in the UI (#92), in `scripts/checks/desktop-gate.ts`:
-
-- `shared/gate/classify.ts`'s LabelKeys (`planReview`/`planApproved`/`planChangesRequested`) agree with `main/writes/scope.ts`'s `PLAN_GATE_KEYS`, both directions — the gate can never write a key the claim scope does not actually cover.
-- Both decisions' own plan set `expect.present` to `['planReview']` — the "don't answer an item that already moved" guard.
-- `GATE_CLAIM_OWNER`'s value appears in `docs/COORDINATION.md`'s stand-down copy, so the cockpit's own report names what this app actually writes to the claim file.
-- `postComment(` is called under `apps/desktop/src/` only from `main/actions/gate.ts`, and there it precedes `applyLabels(` in source order — the comment-then-swap ordering, mechanically.
-- `shared/markdown/` imports no `node:` builtin and nothing from `main/`; `renderer/src/markdown.ts` is the only file under `renderer/` importing it.
-- `shared/markdown/inline.ts`'s link-scheme allowlist names exactly `http://` and `https://`.
-- `renderer/src/gate/copy.ts` carries the session-required consequence as a literal phrase naming `/port:implement` and the fact that no agent picks it up, plus the claim-step lines `docs/COORDINATION.md` decided.
-- No file under `shared/gate/`, `main/actions/`, or `renderer/src/gate/` names a literal label name, reusing `desktop-actions.ts`'s own mismatched-name scan.
-
 ## Layer 2 — artifact assertions on real runs
 
 The output formats live in `FORMATS.md` prose and, until now, were asserted nowhere. The one that matters most is the review heading — the cockpit **counts** occurrences of the literal `## Code Review` to derive the cycle number, so renaming it silently breaks the cycle cap and the escalating bar, with no error anywhere. That is why the literal prefix is asserted separately from the rest of the heading.
