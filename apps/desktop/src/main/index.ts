@@ -6,7 +6,7 @@ import { applyNavigationGuards } from './navigation'
 
 // A dev-only `pnpm install` never runs as root, so the SUID sandbox helper
 // (`chrome-sandbox`) ships without the root-owned 4755 permissions Chromium
-// requires, and aborts rather than falling back unprivileged (#260). Packaged
+// requires, and aborts rather than falling back unprivileged. Packaged
 // builds are unaffected — installers set up `chrome-sandbox` correctly.
 if (!app.isPackaged) {
   app.commandLine.appendSwitch('no-sandbox')

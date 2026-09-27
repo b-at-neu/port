@@ -1,5 +1,5 @@
 // A pnpm store relink can recreate the `electron` package directory with its
-// `path.txt` intact but its `dist/` binary gone (#260's second bug) —
+// `path.txt` intact but its `dist/` binary gone —
 // `electron-vite`'s own bundled `getElectronPath` trusts `path.txt`
 // unconditionally and never checks the binary still exists, so `pnpm dev`
 // crashes mid-launch with `Electron uninstall` instead of a clear message.
