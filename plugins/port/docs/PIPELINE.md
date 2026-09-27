@@ -33,6 +33,30 @@ Label names are written as their defaults (`ready`, `plan review`, …). A repos
 
 **One section is an optional subsystem**, marked at its heading and inert when its flag is false: "CI merge gate" (`modules.approvalGate`). When the module is off, its labels are never created, its queries never run, and the agents carry no instructions about it.
 
+## CLAUDE.md overrides
+
+`commands.*` and `extraAllow` stay schema-only, no exception — the permission surface the guard hook allowlists stage-agent Bash calls from. Every other `.claude/port.config.json`-governed category — `labels`, `branches`, `sessionRequiredPaths`, `modules`, `models`, `reviewCycleCap`, `concurrency`, and check dispositions (below) — is overridable through one delimited block in a repository's **own root `CLAUDE.md`** (never `~/.claude/CLAUDE.md`, never a nested one) when its stated convention contradicts the port default. Every agent resolves the **effective configuration** this way, never `.claude/port.config.json` alone.
+
+**The block**, at most one per file — a second is refused, never merged:
+
+```
+<!-- port-overrides:begin -->
+```port-overrides
+checks.deploy-preview = infrastructure  # org preview-DB pool; red at capacity, no code change fixes it
+reviewCycleCap = 3                      # we converge in three or it needs a human
+sessionRequiredPaths += infra/**        # terraform is operator-only here
+```
+<!-- port-overrides:end -->
+```
+
+**Grammar**, one entry per non-blank line: split on the first ` = ` or ` += `; everything left is the dotted path, trimmed, everything right is the value then the reason after the first ` # `. **A reason is required** — an undocumented override is what this mechanism forbids. `+=` is legal only for `sessionRequiredPaths` and `concurrency.sharedFiles`, and only ever appends; neither can be narrowed. No globs on the left-hand side.
+
+**Categories**: `checks.<rollup check name>` (`blocking`, the default, or `infrastructure`) · `labels.<key>` · `branches.integration`/`branches.production` · `models.<plan|impl|review|revise>` · `modules.<approvalGate|release|scope>` · `reviewCycleCap` · `concurrency.overlapThreshold` · `concurrency.sharedFiles` (`+=` only) · `sessionRequiredPaths` (`+=` only). **`commands.*` and `extraAllow` are the sole non-overridable exception**, refused by name; every other schema key (`repo`, `tracker`, `docs.*`, `release.*`, `budget.*`) is refused as simply not overridable. Coding and quality standards stay prose, governed by `standards-precedence` — not enumerable, so no parsed entry.
+
+**Fails closed on the entry, open on the run.** A line that fails to parse, names a non-overridable or unknown path, carries a bad value type, uses `+=` where it is not allowed, or omits its reason is refused: the port value stands for that one entry, the refusal is reported, and nothing else in the block is affected. An absent block reports nothing at all — every category behaves byte-identically to today.
+
+**Never silent.** Every applied override is named wherever the pipeline reports state — the cockpit's startup preflight, a review body, `run-start` — with the port default it replaced and `CLAUDE.md` as the source. `/port:init` reconciles a repository's pre-existing conventions against the port defaults at import time and writes each contradiction into the block with its own stated reason, so nothing is negotiated in prose (#121, #125).
+
 ## Quick start
 
 ```
@@ -393,7 +417,7 @@ One shared contract, read by `review-agent` before it forms a verdict and by the
 
 **Concluded, green, and empty.** **Concluded** is `status == "COMPLETED"` (CheckRun) or `state != "PENDING"` (StatusContext). **Green** is `SUCCESS`, `NEUTRAL`, or `SKIPPED`; every other conclusion — `FAILURE`, `TIMED_OUT`, `ACTION_REQUIRED`, `STARTUP_FAILURE`, `ERROR`, `CANCELLED` — is **not evidence of passing** and blocks. **An empty rollup is pending, never green** — no checks reported is the absence of evidence, not its presence. A repository with no CI at all will therefore park every pull request here; that is a known, deliberately conservative limitation, not a bug to route around.
 
-**The one carve-out.** Only when `modules.approvalGate` is true: read `.github/workflows/approval-check.yml` (the path `/port:init` installs the module's workflow at) and take the single key under `jobs:` as the check-run name to excuse — derived from the file, never typed as a literal, so a repository that renamed the job is still correct. File absent, or the module false → **no carve-out at all, and every red check blocks.** The excused check is excluded from **verdicts and routing only** — it is always listed with its real conclusion wherever conclusions are reported. This list has **exactly one entry**; widening it is the failure this section exists to prevent.
+**Dispositions, generalized from the one derived carve-out (#246).** Every check name resolves to `blocking` (the default) or `infrastructure` through a **disposition map**, never a single derived name: the approval-gate excusal folds in first — only when `modules.approvalGate` is true, read `.github/workflows/approval-check.yml` (the path `/port:init` installs the module's workflow at) and take the single key under `jobs:` as the excused name, `source: 'approval-gate'`, derived from the file, never typed as a literal — then every `checks.<name> = infrastructure` entry from the repository's own `CLAUDE.md` (→ "CLAUDE.md overrides") folds in beside it, `source: 'CLAUDE.md'`. File absent, module false, and no override block → **no carve-out at all, and every red check blocks.** An `infrastructure` disposition is excluded from **verdicts and routing only** — it is always listed with its real conclusion and source wherever conclusions are reported, and a disposition entry that never appears in the reduced rollup is reported as `unmatched`, never treated as satisfied. **Zero evidence**: when every entry in the reduced rollup was excused, the verdict is `pending`, never green — a repository must show at least one `blocking` green check before a pull request reads ready.
 
 **The head must not move.** Record `headRefOid` before any wait and re-read it after. A different SHA means the evidence belongs to a different diff, and no verdict formed against the old one is valid — the caller re-reads or bails out; see `review-agent.md` step 4 for the exact exit.
 

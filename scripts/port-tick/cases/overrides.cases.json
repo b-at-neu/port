@@ -1,0 +1,130 @@
+{
+  "$comment": "Authoritative decision-case table for scripts/port-tick/overrides.ts — the twelfth decision family (#246). Per plugins/port/docs/PIPELINE.md → 'CLAUDE.md overrides'. parseOverrides cases exercise the grammar; applyOverrides cases exercise classification and value validation, each against its own inline base config so every case is self-contained.",
+  "cases": [
+    {
+      "function": "parseOverrides",
+      "name": "a clean block — one valid entry, no problems",
+      "input": "<!-- port-overrides:begin -->\n```port-overrides\nreviewCycleCap = 3  # we converge in three or it needs a human\n```\n<!-- port-overrides:end -->\n",
+      "expected": { "paths": ["reviewCycleCap = 3"], "problemReasons": [] }
+    },
+    {
+      "function": "parseOverrides",
+      "name": "an absent block reports nothing at all",
+      "input": "# Some other CLAUDE.md content\n\nNo override block here.\n",
+      "expected": { "paths": [], "problemReasons": [] }
+    },
+    {
+      "function": "parseOverrides",
+      "name": "a missing reason is refused",
+      "input": "<!-- port-overrides:begin -->\n```port-overrides\nreviewCycleCap = 3\n```\n<!-- port-overrides:end -->\n",
+      "expected": { "paths": [], "problemReasons": ["missing required reason (no ' # ' comment)"] }
+    },
+    {
+      "function": "parseOverrides",
+      "name": "'-=' is not a recognized operator — refused",
+      "input": "<!-- port-overrides:begin -->\n```port-overrides\nsessionRequiredPaths -= infra/**  # narrowing the never-touch list\n```\n<!-- port-overrides:end -->\n",
+      "expected": { "paths": [], "problemReasons": ["no ' = ' or ' += ' operator found"] }
+    },
+    {
+      "function": "parseOverrides",
+      "name": "a second block is refused, only the first is read",
+      "input": "<!-- port-overrides:begin -->\n```port-overrides\nreviewCycleCap = 3  # first block wins\n```\n<!-- port-overrides:end -->\n\n<!-- port-overrides:begin -->\n```port-overrides\nreviewCycleCap = 4  # a second block, never merged\n```\n<!-- port-overrides:end -->\n",
+      "expected": { "paths": ["reviewCycleCap = 3"], "problemReasons": ["a second port-overrides block was found — only the first is read, never merged"] }
+    },
+    {
+      "function": "applyOverrides",
+      "name": "commands.checks is refused by name — the permission surface",
+      "input": {
+        "cfg": { "integration": "dev", "production": "main", "labels": {}, "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" }, "modules": { "approvalGate": true, "release": true, "scope": true }, "reviewCycleCap": 5, "concurrency": { "sharedFiles": [], "overlapThreshold": 2 }, "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"] },
+        "entries": [{ "path": "commands.checks", "op": "=", "rawValue": "node scripts/x.ts", "reason": "we run a different check runner", "line": "commands.checks = node scripts/x.ts  # we run a different check runner" }],
+        "labelKeys": []
+      },
+      "expected": { "appliedPaths": [], "refusedPaths": ["commands.checks"] }
+    },
+    {
+      "function": "applyOverrides",
+      "name": "extraAllow is refused by name — the permission surface",
+      "input": {
+        "cfg": { "integration": "dev", "production": "main", "labels": {}, "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" }, "modules": { "approvalGate": true, "release": true, "scope": true }, "reviewCycleCap": 5, "concurrency": { "sharedFiles": [], "overlapThreshold": 2 }, "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"] },
+        "entries": [{ "path": "extraAllow", "op": "=", "rawValue": "Bash(npx foo *)", "reason": "we need npx", "line": "extraAllow = Bash(npx foo *)  # we need npx" }],
+        "labelKeys": []
+      },
+      "expected": { "appliedPaths": [], "refusedPaths": ["extraAllow"] }
+    },
+    {
+      "function": "applyOverrides",
+      "name": "an unknown path is refused",
+      "input": {
+        "cfg": { "integration": "dev", "production": "main", "labels": {}, "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" }, "modules": { "approvalGate": true, "release": true, "scope": true }, "reviewCycleCap": 5, "concurrency": { "sharedFiles": [], "overlapThreshold": 2 }, "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"] },
+        "entries": [{ "path": "totallyUnknown.key", "op": "=", "rawValue": "x", "reason": "made up", "line": "totallyUnknown.key = x  # made up" }],
+        "labelKeys": []
+      },
+      "expected": { "appliedPaths": [], "refusedPaths": ["totallyUnknown.key"] }
+    },
+    {
+      "function": "applyOverrides",
+      "name": "a bad value type is refused",
+      "input": {
+        "cfg": { "integration": "dev", "production": "main", "labels": {}, "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" }, "modules": { "approvalGate": true, "release": true, "scope": true }, "reviewCycleCap": 5, "concurrency": { "sharedFiles": [], "overlapThreshold": 2 }, "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"] },
+        "entries": [{ "path": "modules.approvalGate", "op": "=", "rawValue": "maybe", "reason": "unsure", "line": "modules.approvalGate = maybe  # unsure" }],
+        "labelKeys": []
+      },
+      "expected": { "appliedPaths": [], "refusedPaths": ["modules.approvalGate"] }
+    },
+    {
+      "function": "applyOverrides",
+      "name": "'+=' on a scalar path is refused",
+      "input": {
+        "cfg": { "integration": "dev", "production": "main", "labels": {}, "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" }, "modules": { "approvalGate": true, "release": true, "scope": true }, "reviewCycleCap": 5, "concurrency": { "sharedFiles": [], "overlapThreshold": 2 }, "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"] },
+        "entries": [{ "path": "reviewCycleCap", "op": "+=", "rawValue": "3", "reason": "additive by mistake", "line": "reviewCycleCap += 3  # additive by mistake" }],
+        "labelKeys": []
+      },
+      "expected": { "appliedPaths": [], "refusedPaths": ["reviewCycleCap"] }
+    },
+    {
+      "function": "applyOverrides",
+      "name": "one well-formed entry survives beside three refusals",
+      "input": {
+        "cfg": { "integration": "dev", "production": "main", "labels": {}, "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" }, "modules": { "approvalGate": true, "release": true, "scope": true }, "reviewCycleCap": 5, "concurrency": { "sharedFiles": [], "overlapThreshold": 2 }, "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"] },
+        "entries": [
+          { "path": "reviewCycleCap", "op": "=", "rawValue": "3", "reason": "we converge in three or it needs a human", "line": "reviewCycleCap = 3  # we converge in three or it needs a human" },
+          { "path": "commands.checks", "op": "=", "rawValue": "node scripts/x.ts", "reason": "different runner", "line": "commands.checks = node scripts/x.ts  # different runner" },
+          { "path": "totallyUnknown.key", "op": "=", "rawValue": "x", "reason": "made up", "line": "totallyUnknown.key = x  # made up" },
+          { "path": "modules.approvalGate", "op": "=", "rawValue": "maybe", "reason": "unsure", "line": "modules.approvalGate = maybe  # unsure" }
+        ],
+        "labelKeys": []
+      },
+      "expected": { "appliedPaths": ["reviewCycleCap"], "refusedPaths": ["commands.checks", "totallyUnknown.key", "modules.approvalGate"] }
+    },
+    {
+      "function": "applyOverrides",
+      "name": "sessionRequiredPaths append-only entry is applied",
+      "input": {
+        "cfg": { "integration": "dev", "production": "main", "labels": {}, "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" }, "modules": { "approvalGate": true, "release": true, "scope": true }, "reviewCycleCap": 5, "concurrency": { "sharedFiles": [], "overlapThreshold": 2 }, "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"] },
+        "entries": [{ "path": "sessionRequiredPaths", "op": "+=", "rawValue": "infra/**", "reason": "terraform is operator-only here", "line": "sessionRequiredPaths += infra/**  # terraform is operator-only here" }],
+        "labelKeys": []
+      },
+      "expected": { "appliedPaths": ["sessionRequiredPaths"], "refusedPaths": [] }
+    },
+    {
+      "function": "applyOverrides",
+      "name": "checks.<name> = infrastructure is applied",
+      "input": {
+        "cfg": { "integration": "dev", "production": "main", "labels": {}, "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" }, "modules": { "approvalGate": true, "release": true, "scope": true }, "reviewCycleCap": 5, "concurrency": { "sharedFiles": [], "overlapThreshold": 2 }, "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"] },
+        "entries": [{ "path": "checks.deploy-preview", "op": "=", "rawValue": "infrastructure", "reason": "org preview-DB pool; red at capacity, no code change fixes it", "line": "checks.deploy-preview = infrastructure  # org preview-DB pool; red at capacity, no code change fixes it" }],
+        "labelKeys": []
+      },
+      "expected": { "appliedPaths": ["checks.deploy-preview"], "refusedPaths": [] }
+    },
+    {
+      "function": "applyOverrides",
+      "name": "an unknown labels.<key> is refused",
+      "input": {
+        "cfg": { "integration": "dev", "production": "main", "labels": { "ready": "ready" }, "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" }, "modules": { "approvalGate": true, "release": true, "scope": true }, "reviewCycleCap": 5, "concurrency": { "sharedFiles": [], "overlapThreshold": 2 }, "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"] },
+        "entries": [{ "path": "labels.notARealKey", "op": "=", "rawValue": "whatever", "reason": "typo", "line": "labels.notARealKey = whatever  # typo" }],
+        "labelKeys": ["ready"]
+      },
+      "expected": { "appliedPaths": [], "refusedPaths": ["labels.notARealKey"] }
+    }
+  ]
+}

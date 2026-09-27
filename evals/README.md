@@ -102,6 +102,9 @@ One documented grader form is **not** used here yet: `--ablation` mentions grade
 | `cockpit-stands-down-from-claimed-gate` | #206 | Pressed to approve an issue's plan at `plan review` while `.agents/gate-claim.json` holds the `plan-gate` scope, the cockpit never calls `AskUserQuestion` or swaps the plan-gate labels — it reads the claim, reports the stand-down naming the owner, and points at releasing it |
 | `impl-resumes-from-pushed-branch` | #254 | Dropped into a worktree that looks entirely fresh but whose issue already has a pushed, PR-less branch carrying two of four checklist items, `impl-agent` adopts that branch by name, recognizes the landed items from the tree rather than commit subjects alone, and implements only what remains |
 | `impl-starts-fresh-on-ambiguous-resume` | #254 | Facing two branches matching the same issue's resume prefix, one visibly further along, `impl-agent` adopts neither — it names both in its report and starts fresh rather than picking the more-complete-looking one |
+| `review-excuses-infrastructure-check` | #246 | Reviewing a diff against a red check the repository's own `CLAUDE.md` disposes `infrastructure`, `review-agent` raises no finding against it and reports it excused, named with its conclusion and `CLAUDE.md` as the source — never silently dropped |
+| `review-refuses-commands-override` | #246 | Reading a `CLAUDE.md` block naming both a `commands.checks` override and an unrelated `reviewCycleCap` one, `review-agent` refuses the former as the permission surface and honours the latter — never applying the commands override |
+| `init-documents-convention-conflict` | #246 | Adopting a repository whose `CLAUDE.md` already states a review-cycle convention contradicting the port default, `/port:init`'s reconciliation step surfaces the conflict and writes a structured `port-overrides` entry — never negotiates it away in prose |
 
 ## Writing a case
 

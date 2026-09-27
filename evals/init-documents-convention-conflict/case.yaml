@@ -1,0 +1,62 @@
+# Regression target: #246 — a contradiction between a repository's own
+# stated convention and a port default must be identified and documented at
+# import time, never negotiated ad hoc mid-pipeline later (the #121/#125
+# failure this ticket generalizes past check dispositions). This case gives
+# /port:init a repository whose CLAUDE.md already states a review-cycle
+# convention that contradicts the port default, and grades whether step 3.5
+# surfaces the conflict and writes (or explicitly declines to write) a
+# structured `port-overrides` entry, rather than silently keeping the port
+# default with nothing said.
+name: init-documents-convention-conflict
+tags: [init, standards]
+runs: 3
+max_turns: 80
+timeout_seconds: 1200
+
+prompt: |
+  Run /port:init on this repository. Accept the defaults it proposes for
+  everything except where its own reconciliation step raises a question —
+  answer "keep our rule" there.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  git remote add origin https://github.com/example/widgets.git
+  mkdir -p src .github/workflows
+
+  cat > package.json <<'JSON'
+  {
+    "name": "widgets",
+    "private": true,
+    "scripts": { "test": "node --test" }
+  }
+  JSON
+
+  cat > CLAUDE.md <<'MD'
+  # Repository conventions
+
+  We do not trust a pull request that has been through more than two review
+  cycles — if it is not converging by then, a human should be looking at it
+  directly rather than the pipeline continuing to iterate.
+  MD
+
+  cat > .github/workflows/ci.yml <<'YML'
+  name: CI
+  on: [pull_request]
+  jobs:
+    build:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+        - run: node --test
+  YML
+
+  cat > src/index.js <<'JS'
+  module.exports = { version: '0.1.0' };
+  JS
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add widgets"
+
+graders:
+  - documents-convention-conflict.md

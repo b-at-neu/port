@@ -132,6 +132,14 @@ Also in this pass, when both files are present but the branch from step 1's `git
 
 **Every tick after the first** reads `.temp/label-vocabulary.md` instead of re-deriving it — see Tick procedure, step 0. If the file is absent (a fresh session, or another checkout's leftover artifact with a different repository's vocabulary), re-run this section before that tick's queries.
 
+**Step 5.5 — CLAUDE.md overrides** (`${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "CLAUDE.md overrides"). Report once, at startup only — every value the rest of this session reads is already the effective one; this step only makes that visible.
+
+**`commands.tick` set** — `<commands.tick> start`'s own JSON (already run in step 7 below; read its `overrides` field, `{ applied, refused }`) is the source — never a second read of `CLAUDE.md` by hand. **`commands.tick` null** — read the repository's root `CLAUDE.md` (Read tool; absent is normal, not an error) and apply `TICK-PROSE.md`'s own disposition-and-override read.
+
+- **No applied entries and no refusals** (including no `CLAUDE.md` at all) → say nothing further; every category runs on the port default.
+- **Applied entries present** → echo one line per entry: `override: <path> = <value> (port default: <default>) — <reason> — source: CLAUDE.md`.
+- **Refusals present** → echo one line per refusal: `refused: <line> — <reason>`. Never silently dropped.
+
 **Step 6 — worktree reconciliation.** Read `commands.worktrees` (a `string | null` field — the full command prefix, e.g. `node scripts/port-worktrees.mjs`). **Absent or `null`** → say so once (see **UX states**) and skip this step entirely for the rest of the session — hygiene reports `not configured` in the tick's closing clause instead. **Set** → run it once, before the first tick:
 
 ```bash

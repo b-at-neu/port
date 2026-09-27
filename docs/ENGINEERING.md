@@ -95,6 +95,7 @@ The users of this system are operators reading GitHub and a terminal, so "user-f
 - `SESSION REQUIRED` detection **fails open** toward dispatch, because a false positive stalls an item forever and invisibly while a false negative costs one denied edit and a retry.
 - The tick **fails closed on actions, never on reporting**: a blind tick dispatches nothing, runs no hygiene, resets nothing, and never claims "all clear" — but still schedules the next wakeup.
 - The CI merge gate is **deliberately fail-open** on an unlabelled pull request, with the mitigations named upstream.
+- A `CLAUDE.md` override **fails closed on the entry, open on the run** (#246): a refused line leaves the port default standing for that one field, reported, never silently applied — but a wholly malformed `port-overrides` block never aborts config loading, since a repository whose whole block is broken must still run on port defaults rather than halt.
 
 **A blocked or denied action is reported exactly, never retried or routed around.** Emit `BLOCKED: <exact denied command + what you needed>` and stop; a denied command returns a hook decision with a reason, not a prompt.
 

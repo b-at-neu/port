@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { message } from '../lib/errors.ts';
+import { parseOverrides, applyOverrides } from './overrides.ts';
 
 // Defaults and roles mirror plugins/port/docs/PIPELINE.md → "Label lifecycle"
 // and plugins/port/data/labels.json exactly — the pin check in
@@ -116,7 +117,7 @@ export function loadConfig(repoRoot: string): any {
 
   const hasProduction = Object.hasOwn(cfg.branches ?? {}, 'production');
 
-  return {
+  const resolved = {
     repo: cfg.repo,
     owner,
     name,
@@ -149,11 +150,46 @@ export function loadConfig(repoRoot: string): any {
     labelsOverridden: Object.keys(cfg.labels ?? {}),
     budgetConfigured: Boolean(cfg.commands?.budget),
   };
+
+  // CLAUDE.md overrides (#246) — a repository's own root CLAUDE.md, never
+  // ~/.claude/CLAUDE.md, applied after every port.config.json default has
+  // already resolved. Absent file → empty parse, no problem reported, and
+  // the effective config is byte-identical to `resolved` above.
+  let claudeMdText = '';
+  try {
+    claudeMdText = readFileSync(join(repoRoot, 'CLAUDE.md'), 'utf8');
+  } catch {
+    // No repository-root CLAUDE.md — every category runs on the port default.
+  }
+  const parsedOverrides = parseOverrides(claudeMdText);
+  const { cfg: effective, applied, refused } = applyOverrides(resolved, parsedOverrides, {
+    labelKeys: Object.keys(LABEL_DEFAULTS),
+  });
+
+  // Check dispositions (#246): the approval-gate carve-out folds in first,
+  // as `source: 'approval-gate'`, resolved against the *effective*
+  // modules.approvalGate — an override to that flag must be able to turn the
+  // carve-out itself off. Every `checks.<name>` applied entry follows, as
+  // `source: 'CLAUDE.md'`. A later `applied` entry never overwrites the
+  // approval-gate's own name — the two sources cannot collide, since the
+  // workflow file's job key is never a name an operator would also write by
+  // hand into the block for the same disposition value.
+  const excusedCheckName = resolveExcusedCheckName(repoRoot, effective.modules);
+  const checkDispositions: Record<string, { disposition: 'blocking' | 'infrastructure'; source: 'approval-gate' | 'CLAUDE.md' }> = {};
+  if (excusedCheckName) checkDispositions[excusedCheckName] = { disposition: 'infrastructure', source: 'approval-gate' };
+  for (const a of applied) {
+    if (a.path.startsWith('checks.')) {
+      checkDispositions[a.path.slice('checks.'.length)] = { disposition: a.value, source: 'CLAUDE.md' };
+    }
+  }
+
+  return { ...effective, overrides: { applied, refused }, checkDispositions };
 }
 
 /** The single job key under `jobs:` in `.github/workflows/approval-check.yml`
- *  — the one check-run name the `<labels.approved>` re-verify excuses, per
- *  plugins/port/docs/PIPELINE.md → "Check evidence" → "The one carve-out".
+ *  — the approval-gate's own excused check-run name, folded into
+ *  `loadConfig`'s `checkDispositions` map as `source: 'approval-gate'`, per
+ *  plugins/port/docs/PIPELINE.md → "Check evidence" → "Dispositions".
  *  Derived from the file, never typed as a literal. Returns `null` when
  *  `modules.approvalGate` is false or the workflow file is absent — no
  *  carve-out at all, and every red check blocks. A minimal line-based read,

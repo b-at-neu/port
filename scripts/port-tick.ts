@@ -17,7 +17,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { loadConfig, resolveExcusedCheckName } from './port-tick/config.ts';
+import { loadConfig } from './port-tick/config.ts';
 import { buildQuery } from './port-tick/query.ts';
 import { runGraphql } from './port-tick/gh.ts';
 import { classifyEnvelope, truncatedAliases } from './port-tick/envelope.ts';
@@ -59,7 +59,7 @@ function cmdStart(root: string, cfg: any): void {
   writeState(root, TICK_STATE_PATH, tickState);
   writeState(root, DISPATCH_LOG_PATH, freshDispatchLog(cfg.repo));
   appendEvent(root, formatEvent(envelopeFor('run-start', tickState.runId, cfg.repo), runStartPayload(cfg)));
-  emit({ ok: true, repo: cfg.repo, labels: cfg.labels, integration: cfg.integration, runId: tickState.runId });
+  emit({ ok: true, repo: cfg.repo, labels: cfg.labels, integration: cfg.integration, runId: tickState.runId, overrides: cfg.overrides });
 }
 
 // --- plan -----------------------------------------------------------------
@@ -224,7 +224,7 @@ function cmdPlan(root: string, cfg: any): void {
   }
 
   // approved: refresh-wins veto, then re-verify against the two authorising facts
-  const excusedCheckName = resolveExcusedCheckName(root, cfg.modules);
+  const dispositions = cfg.checkDispositions;
   for (const item of partitions.approved.mine) {
     const veto = refreshWins({ number: item.number, refreshBranch: refreshBranchNumbers, refreshing: refreshingNumbers });
     if (veto.action === 'veto') {
@@ -233,7 +233,7 @@ function cmdPlan(root: string, cfg: any): void {
     }
 
     const rollup = item.commits?.nodes?.[0]?.commit?.statusCheckRollup;
-    const verdict = rollupVerdict(rollup, excusedCheckName);
+    const verdict = rollupVerdict(rollup, dispositions);
     const result = approvedReverify({ verdict, mergeable: item.mergeable });
     if (result.action === 'withdraw') {
       writes.push(approvalWithdrawnWrite({ repo: cfg.repo, labels: cfg.labels, number: item.number }));
