@@ -113,6 +113,9 @@ export function buildRow(row: BoardItemRow): HTMLElement {
   headline.appendChild(text('span', 'board-row__repo', row.item.repo))
   headline.appendChild(text('span', 'board-row__title', row.item.title))
   if (row.item.assignees.length > 0) headline.appendChild(text('span', 'board-row__assignee', `@${row.item.assignees[0] ?? ''}`))
+  // The relay loop's own row badge (#107) — readable without opening the
+  // banner above the groups.
+  if (row.relay !== null) headline.appendChild(text('span', 'board-row__relay-badge', 'Waiting on you'))
 
   // The plan gate's own row entry point (#92) — an issue at `plan review`
   // offers a direct route into the dialog's Reviewing step, carrying

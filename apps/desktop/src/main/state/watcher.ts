@@ -6,10 +6,12 @@
 import type { GhRunner } from '../github'
 import type { WorktreesGitRunner as GitRunner } from '../local'
 import { readSessionState } from '../sessions'
+import { createRelayReader } from '../relay'
 import type { RepoId } from '../../shared/repos'
 import type { RepositoryEntry } from '../../shared/repos'
 import { DEFAULT_POLL_POLICY, SOURCE_KINDS, initialHealth } from '../../shared/board/types'
 import type { BoardSnapshot, RepositoryHealth, SourceHealth, SourceKind } from '../../shared/board/types'
+import type { RelayScan } from '../../shared/relay/types'
 import { createDispatchLedger, planTick } from '../tick'
 import { isReady, projectFromCache } from './read'
 import { afterFailure, afterSuccess, deferredUntil, dueSources, nextDueAt } from './schedule'
@@ -79,6 +81,13 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
   // restarted app gets a fresh one, so every in-flight item reads
   // `no-record` on the first tick after a restart, never a false reset.
   const ledger = createDispatchLedger()
+  // The relay reader (#107) — one instance for the watcher's whole
+  // lifetime, run inside `runSessions()` right after `refreshSessions`, over
+  // the same session scan that call just refreshed. Relay carries no new
+  // `SourceKind`: it never schedules its own cadence, only rides the
+  // sessions source's.
+  const relayReader = createRelayReader()
+  let relay: RelayScan = { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: now().toISOString() }
   let latest: BoardSnapshot = {
     state: {
       repositories: [],
@@ -88,6 +97,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     health: [],
     policy: DEFAULT_POLL_POLICY,
     tick: [],
+    relay,
     nextWakeupAt: null,
     emittedAt: now().toISOString(),
   }
@@ -130,7 +140,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       .filter((repository) => readyIds.has(repository.repoId))
       .map((repository) => planTick({ repository, ledger, nextDecisionAt: nextDueAt(ensureHealth(repository.repoId).github, now()), now }))
     const nextWakeupAt = stopped ? null : earliestDueAt().toISOString()
-    latest = { state, health: healthList, policy: DEFAULT_POLL_POLICY, tick, nextWakeupAt, emittedAt: now().toISOString() }
+    latest = { state, health: healthList, policy: DEFAULT_POLL_POLICY, tick, relay, nextWakeupAt, emittedAt: now().toISOString() }
     return latest
   }
 
@@ -183,6 +193,11 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
         now,
       })
       sessionsHealth = outcome.ok ? afterSuccess(sessionsHealth, 'sessions', now()) : afterFailure(sessionsHealth, 'sessions', now(), outcome.error ?? 'unknown error')
+      // Right after the sessions scan, over the same fresh `cache.sessions`
+      // (#107) — never a second poll or a second cadence of its own.
+      if (cache.sessions !== null) {
+        relay = await relayReader.read({ scan: cache.sessions, claudeHome: params.claudeHome, now })
+      }
     } finally {
       inFlight.delete(key)
     }

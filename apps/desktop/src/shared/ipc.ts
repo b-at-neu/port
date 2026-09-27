@@ -11,6 +11,7 @@ import type { LabelKey } from './labels/vocabulary'
 import type { ItemActionResult, OperatorAction } from './actions/types'
 import type { RuntimePreflight, RuntimeProbe } from './runtime/types'
 import type { ClaimRead } from './writes/types'
+import type { RelayCopyResponse } from './relay/types'
 
 export interface AppInfo {
   app: string
@@ -167,6 +168,16 @@ export interface IpcMap {
     request: { repoId: RepoId; number: number; decision: GateDecision; feedback: string | null; skipComment: boolean }
     response: GateAnswerResponse
   }
+  /** The relay loop's own copy button (#107) — the renderer sends the
+   *  already-composed reply text; `main/relay/clipboard.ts`'s
+   *  `copyRelayReply` validates it (non-empty string, under
+   *  `MAX_REPLY_CHARS`) before electron's clipboard is ever touched. Nothing
+   *  is sent anywhere — the operator still pastes it into the session that
+   *  dispatched the agent. */
+  'relay:copy': {
+    request: { text: string }
+    response: RelayCopyResponse
+  }
 }
 
 export const IPC_CHANNELS = [
@@ -192,6 +203,7 @@ export const IPC_CHANNELS = [
   'gate:claim:read',
   'gate:claim:set',
   'gate:answer',
+  'relay:copy',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]
