@@ -39,7 +39,7 @@ export function createHostedInput(): HostedInput {
   function deliver(message: SDKUserMessage): void {
     // A `push()` that lands after `end()` must not resurrect the iterator as
     // a real turn — `ended` already means "no more values", so a late
-    // message is dropped rather than queued (#98 review).
+    // message is dropped rather than queued.
     if (ended) return
     if (pendingResolve !== null) {
       const resolve = pendingResolve
