@@ -6,6 +6,7 @@
 // than clever. Type-only, no function — the same shape every other
 // `shared/*/types.ts` and `main/tick/`'s own consumers already take.
 import type { RepoId } from '../../shared/repos'
+import type { LabelKey } from '../../shared/labels/vocabulary'
 import type { StageAgent, TickBlind, TickClaimClass, TickContention, TickHeldReason } from '../../shared/tick/types'
 
 /** One dispatch candidate this poll's tick would have sent out — `stage` is
@@ -18,13 +19,17 @@ export interface DesktopDispatchEvent {
   readonly agent: StageAgent
 }
 
-/** One held trigger-stage candidate — `reason`/`contention` copied straight
- *  off `TickHeld`, dropping `kind`/`trigger`, neither of which the parity
- *  diff needs. */
+/** One held trigger-stage candidate — `reason`/`contention`/`trigger` copied
+ *  straight off `TickHeld`, dropping only `kind`, which the parity diff has
+ *  no use for. `trigger` is load-bearing: `scripts/port-tick/parity.ts`'s
+ *  `diffOwnership` reads it on every entry to bucket `unowned`/`other-operator`
+ *  counts per `OWNERSHIP_TRIGGER_KEYS` before comparing against the
+ *  cockpit's own `othersCounts`/`unownedCounts`. */
 export interface DesktopHeldEvent {
   readonly item: number
   readonly reason: TickHeldReason
   readonly contention: TickContention | null
+  readonly trigger: LabelKey
 }
 
 /** One in-flight claim's own resolution — `TickClaim` minus `kind`/

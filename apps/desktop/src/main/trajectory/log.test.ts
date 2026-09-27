@@ -46,7 +46,7 @@ describe('buildDesktopTickEvent', () => {
       repo: 'o/r',
       repoId: REPO_ID,
       dispatch: [{ item: 42, stage: 'plan-agent', agent: 'plan' }],
-      held: [{ item: 7, reason: 'contended', contention: { blocker: 9, blockerStage: 'in progress', depth: 2, paths: ['a.ts'] } }],
+      held: [{ item: 7, reason: 'contended', contention: { blocker: 9, blockerStage: 'in progress', depth: 2, paths: ['a.ts'] }, trigger: 'planApproved' }],
       claims: [{ item: 9, class: 'matched' }],
       blind: null,
     })

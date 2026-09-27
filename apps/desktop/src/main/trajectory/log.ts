@@ -64,7 +64,7 @@ export function buildDesktopTickEvent(params: { readonly repo: string; readonly 
     repo,
     repoId: report.repoId,
     dispatch: report.actionable.map((a) => ({ item: a.number, stage: `${a.agent}-agent`, agent: a.agent })),
-    held: report.held.map((h) => ({ item: h.number, reason: h.reason, contention: h.contention })),
+    held: report.held.map((h) => ({ item: h.number, reason: h.reason, contention: h.contention, trigger: h.trigger })),
     claims: report.claims.map((c) => ({ item: c.number, class: c.class })),
     blind: report.blind,
   }

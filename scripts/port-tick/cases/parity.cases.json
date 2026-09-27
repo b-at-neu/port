@@ -229,6 +229,80 @@
     },
     {
       "function": "computeParity",
+      "name": "an ownership agreement with a real app-side held entry — trigger populated and counted correctly",
+      "input": {
+        "cockpitEvents": [
+          {
+            "kind": "tick",
+            "ts": "2026-01-01T00:00:00.000Z",
+            "repo": "o/r",
+            "tickId": "t1",
+            "envelope": { "kind": "full" },
+            "planned": { "dispatch": [], "held": [] },
+            "othersCounts": { "ready": 1 },
+            "unownedCounts": {}
+          }
+        ],
+        "desktopEvents": [
+          {
+            "v": 1,
+            "ts": "2026-01-01T00:00:10.000Z",
+            "repo": "o/r",
+            "dispatch": [],
+            "held": [{ "item": 2, "reason": "other-operator", "contention": null, "trigger": "ready" }],
+            "claims": [],
+            "blind": null
+          }
+        ]
+      },
+      "expected": {
+        "pairCount": 1,
+        "unmatchedCockpitCount": 0,
+        "unmatchedDesktopCount": 0,
+        "dispatch": [{ "extraApp": [], "missingApp": [], "mismatchKinds": [] }],
+        "contention": [{ "extraApp": [], "missingApp": [], "mismatchKinds": [] }],
+        "ownership": [[]]
+      }
+    },
+    {
+      "function": "computeParity",
+      "name": "an ownership mismatch with real held entries on both sides — app's trigger disagrees with the cockpit's",
+      "input": {
+        "cockpitEvents": [
+          {
+            "kind": "tick",
+            "ts": "2026-01-01T00:00:00.000Z",
+            "repo": "o/r",
+            "tickId": "t1",
+            "envelope": { "kind": "full" },
+            "planned": { "dispatch": [], "held": [] },
+            "othersCounts": { "ready": 1 },
+            "unownedCounts": {}
+          }
+        ],
+        "desktopEvents": [
+          {
+            "v": 1,
+            "ts": "2026-01-01T00:00:10.000Z",
+            "repo": "o/r",
+            "dispatch": [],
+            "held": [{ "item": 2, "reason": "other-operator", "contention": null, "trigger": "readyForReview" }],
+            "claims": [],
+            "blind": null
+          }
+        ]
+      },
+      "expected": {
+        "pairCount": 1,
+        "unmatchedCockpitCount": 0,
+        "unmatchedDesktopCount": 0,
+        "dispatch": [{ "extraApp": [], "missingApp": [], "mismatchKinds": [] }],
+        "contention": [{ "extraApp": [], "missingApp": [], "mismatchKinds": [] }],
+        "ownership": [[{ "trigger": "ready", "class": "other-operator", "cockpit": 1, "app": 0 }, { "trigger": "readyForReview", "class": "other-operator", "cockpit": 0, "app": 1 }]]
+      }
+    },
+    {
+      "function": "computeParity",
       "name": "no desktop reading in the window — unmatchedCockpit",
       "input": {
         "cockpitEvents": [
