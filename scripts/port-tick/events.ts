@@ -123,6 +123,10 @@ export function runStartPayload(cfg: any): any {
     modules: cfg.modules,
     labelsOverridden: cfg.labelsOverridden,
     budgetConfigured: cfg.budgetConfigured,
+    // CLAUDE.md overrides (#246) — alongside labelsOverridden above, the same
+    // "what actually differs from the port default" fact, now for every
+    // overridable category rather than labels alone.
+    overrides: { applied: cfg.overrides?.applied ?? [], refused: cfg.overrides?.refused ?? [] },
   };
 }
 

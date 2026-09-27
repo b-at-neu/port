@@ -42,19 +42,55 @@ export function conclusionOf(entry: any): string | null {
   return entry.conclusion ?? entry.state ?? null;
 }
 
+/** A single check's disposition (#246, generalizing the one derived
+ *  approval-gate carve-out into a map): `blocking` (the default — a red
+ *  conclusion forms a finding and blocks) or `infrastructure` (red is
+ *  reported, forms no finding, never blocks). `source` names where the
+ *  disposition came from, since an excused check is always listed with it. */
+export interface Disposition {
+  disposition: 'blocking' | 'infrastructure';
+  source: 'approval-gate' | 'CLAUDE.md';
+}
+
 /** Reduces `rollup` (the GraphQL `statusCheckRollup` shape: `{ state,
- *  contexts: { nodes } }`) to a verdict against `excusedCheckName` (the
- *  single approval-gate job name, or `null` when `modules.approvalGate` is
- *  false or the workflow file is absent — "no carve-out at all, and every
- *  red check blocks"). An empty rollup is pending, never green. */
-export function rollupVerdict(rollup: any, excusedCheckName: string | null): any {
+ *  contexts: { nodes } }`) to a verdict against `dispositions` — a map from
+ *  check name to `Disposition`, keyed by the same name `nameOf` reads
+ *  (`config.ts`'s `loadConfig` builds this: the approval-gate's own derived
+ *  excusal folded in as `source: 'approval-gate'`, every `checks.<name> =
+ *  infrastructure` override in `CLAUDE.md` folded in as `source:
+ *  'CLAUDE.md'`). An empty rollup is pending, never green.
+ *
+ *  `excused` names every disposition-excused check still found in the
+ *  rollup, with its real conclusion and source — nothing an excused check
+ *  reported is ever dropped from a listing. `unmatched` names a
+ *  disposition entry whose check never appeared in the reduced rollup at
+ *  all — reported, never treated as satisfied. **Zero evidence**: when the
+ *  rollup is non-empty but every entry in it was excused, the verdict is
+ *  `pending` with `zeroEvidence: true`, never green. */
+export function rollupVerdict(rollup: any, dispositions: Record<string, Disposition> = {}): any {
   const contexts = rollup?.contexts?.nodes ?? [];
-  if (contexts.length === 0) return { pending: true, red: [], green: [] };
+  if (contexts.length === 0) return { pending: true, red: [], green: [], excused: [], unmatched: [] };
 
-  const reduced = reduceRollup(contexts).filter((e) => nameOf(e) !== excusedCheckName);
-  const pending = reduced.some((e) => !isConcluded(e));
-  const red = reduced.filter((e) => isConcluded(e) && !GREEN.has(conclusionOf(e) ?? '')).map((e) => ({ name: nameOf(e), conclusion: conclusionOf(e) }));
-  const green = reduced.filter((e) => isConcluded(e) && GREEN.has(conclusionOf(e) ?? '')).map((e) => nameOf(e));
+  const reduced = reduceRollup(contexts);
+  const isExcused = (e: any) => dispositions[nameOf(e) ?? '']?.disposition === 'infrastructure';
 
-  return { pending: pending && red.length === 0, red, green };
+  const blocking = reduced.filter((e) => !isExcused(e));
+  const excused = reduced
+    .filter((e) => isExcused(e))
+    .map((e) => ({ name: nameOf(e), conclusion: conclusionOf(e), source: dispositions[nameOf(e) ?? ''].source }));
+
+  const reducedNames = new Set(reduced.map((e) => nameOf(e)));
+  const unmatched = Object.entries(dispositions)
+    .filter(([name, d]) => d.disposition === 'infrastructure' && !reducedNames.has(name))
+    .map(([name]) => name);
+
+  const pending = blocking.some((e) => !isConcluded(e));
+  const red = blocking.filter((e) => isConcluded(e) && !GREEN.has(conclusionOf(e) ?? '')).map((e) => ({ name: nameOf(e), conclusion: conclusionOf(e) }));
+  const green = blocking.filter((e) => isConcluded(e) && GREEN.has(conclusionOf(e) ?? '')).map((e) => nameOf(e));
+
+  if (blocking.length === 0 && excused.length > 0) {
+    return { pending: true, zeroEvidence: true, red: [], green: [], excused, unmatched };
+  }
+
+  return { pending: pending && red.length === 0, red, green, excused, unmatched };
 }

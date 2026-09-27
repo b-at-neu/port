@@ -11,11 +11,11 @@ async function importEngine(rel: string): Promise<any> {
 }
 
 export default async function ({ fail, note, ok }: Reporter) {
-  // --- Every decision case resolves, and the table covers all eleven families
-  // guard(#203): a second implementation (apps/desktop's, when issue 105
-  // converges) silently diverging from the engine's own recorded behaviour.
-  // #187 adds three families for the trajectory record: events, denials,
-  // report.
+  // --- Every decision case resolves, and the table covers all twelve families
+  // guard(#203, #246): a second implementation (apps/desktop's, when issue
+  // 105 converges) silently diverging from the engine's own recorded
+  // behaviour. #187 adds three families for the trajectory record: events,
+  // denials, report. #246 adds the twelfth: the CLAUDE.md override resolver.
   // pin: `scripts/port-tick/cases/*.json` ↔ every pure function in `scripts/port-tick/` it names
   {
     const families: Record<string, string> = {
@@ -30,11 +30,12 @@ export default async function ({ fail, note, ok }: Reporter) {
       'events.cases.json': 'events.ts',
       'denials.cases.json': 'denials.ts',
       'report.cases.json': 'report.ts',
+      'overrides.cases.json': 'overrides.ts',
     };
     const casesDir = join(root, TICK_DIR, 'cases');
     const present = walk(casesDir).map((f) => relOf(f).split('/').pop());
     for (const file of Object.keys(families)) {
-      if (!present.includes(file)) fail('tick-cases', `${TICK_DIR}/cases/${file} is missing — the eleven decision families must all have a case table`);
+      if (!present.includes(file)) fail('tick-cases', `${TICK_DIR}/cases/${file} is missing — the twelve decision families must all have a case table`);
       else ok();
     }
 
@@ -73,6 +74,8 @@ export default async function ({ fail, note, ok }: Reporter) {
       deriveSpans: modules['report.ts'].deriveSpans,
       aggregate: modules['report.ts'].aggregate,
       renderText: modules['report.ts'].renderText,
+      parseOverrides: modules['overrides.ts'].parseOverrides,
+      applyOverrides: modules['overrides.ts'].applyOverrides,
     };
 
     for (const [file] of Object.entries(families)) {
@@ -424,6 +427,14 @@ function runCase(fn: string, impl: any, input: any): any {
       return impl(...input);
     case 'aggregate':
       return impl(input);
+    case 'parseOverrides': {
+      const result = impl(input);
+      return { paths: result.entries.map((e: any) => `${e.path} ${e.op} ${e.rawValue}`), problemReasons: result.problems.map((p: any) => p.reason) };
+    }
+    case 'applyOverrides': {
+      const result = impl(input.cfg, { entries: input.entries, problems: [] }, { labelKeys: input.labelKeys });
+      return { appliedPaths: result.applied.map((a: any) => a.path), refusedPaths: result.refused.map((r: any) => r.path) };
+    }
     default:
       throw new Error(`no case runner wired for function '${fn}'`);
   }
