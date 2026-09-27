@@ -38,6 +38,8 @@ Your worktree comes from the harness's `isolation: worktree`, and its initial ch
 
 Also read: `commands.bootstrap`, `commands.checks`, `commands.artifacts` (production-time artifact validation; null means skip it), `docs.engineering`, `docs.design` (when the ticket touches an interface), `models.revise` (for the commit trailer), and `sessionRequiredPaths` (which seeds the never-touch list).
 
+**Then resolve the effective configuration.** Read `git show origin/HEAD:CLAUDE.md` the same way (missing is normal, not an error) and fold any `port-overrides` block over what you just read (`${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "CLAUDE.md overrides") — every value above is the *effective* one, never `.claude/port.config.json` alone. Report any refused override; never work around it.
+
 Your **model** comes from `models.revise`; the cockpit passes it at dispatch.
 
 ## Operating rules (read first)
@@ -72,10 +74,10 @@ Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROO
 **Three sources describe how code should be written, in a fixed order, joined by a fourth for interface work.** Conventions come from the repository's `CLAUDE.md` first, then `docs.engineering`, then `docs.design` when the ticket touches an interface, then the style visible in the surrounding code. The more specific and more human-authored source wins: a repository that stated a rule in `CLAUDE.md` has already said what it wants.
 
 - **Read it explicitly, at a named ref — never rely on it being in context.** What the harness injects depends on scope and cwd, so a worktree agent may receive a different file than the one its work lands against, or none, and nothing distinguishes the two cases from inside the run. An implicit read is not a contract.
-- **It never overrides mechanics.** `commands.*`, `labels`, `branches`, and `sessionRequiredPaths` come from `.claude/port.config.json` alone — they are schema-validated and gate the allowlist, and a command sourced from free-form prose could be neither validated nor permitted in advance. The rails in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` are not overridable either. `CLAUDE.md` decides how code is written, never what the pipeline does.
+- **`commands.*` and `extraAllow` are the sole non-overridable exception.** They stay schema-only, read from `.claude/port.config.json` alone — the permission surface the guard hook allowlists stage-agent Bash calls from, where free-form prose granting or expanding shell command authority is an injection surface, not a preference. Every other `.claude/port.config.json`-governed category — `labels`, `branches`, `sessionRequiredPaths`, `modules`, `models`, `reviewCycleCap`, `concurrency`, and check dispositions — is overridable through a repository's own `port-overrides` block in `CLAUDE.md` when its stated convention contradicts the port default; resolve the **effective configuration** (`${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "CLAUDE.md overrides") rather than `.claude/port.config.json` alone, and report any refusal rather than working around it. The rails in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` are not overridable either.
 - **Code that follows `CLAUDE.md` is never a finding**, at any severity, however plainly `docs.engineering`, `docs.design`, or the surrounding style says otherwise — that inversion is the whole reason this contract exists. Where documents genuinely disagree, name the conflict once in your own output and leave the code alone; it is a documentation defect for the human, not a change to request.
 - **`docs.design` slots in below `docs.engineering`, above ambient style, for interface work only.** `docs.engineering` wins any genuine overlap between the two — accessibility is the one already assigned to it. Null means no interface, or not enough of one documented, and every agent behaves exactly as it does today.
-- **Absent is normal.** No `CLAUDE.md` → the order is simply `docs.engineering`, then `docs.design`, then ambient style. Nothing degrades and nothing is reported.
+- **Absent is normal.** No `CLAUDE.md` → the order is simply `docs.engineering`, then `docs.design`, then ambient style; no `port-overrides` block → every category behaves byte-identically to today. Nothing degrades and nothing is reported.
 <!-- standards-precedence:end -->
 
 Revise-agent specifics, identical in intent to `impl-agent`:

@@ -4,9 +4,12 @@ import { root, walk, relOf, frontmatter } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
 // --- Standards precedence ----------------------------------------------------
-// guard(#192): CLAUDE.md honored by impl-agent alone, so review-agent and
-// revise-agent silently "fixed" code away from a convention the repository
-// itself stated.
+// guard(#192, #246): CLAUDE.md honored by impl-agent alone, so review-agent
+// and revise-agent silently "fixed" code away from a convention the
+// repository itself stated. #246 widens the block's own boundary: every
+// port.config.json category except commands.*/extraAllow becomes
+// overridable through CLAUDE.md, and literalProblems below is widened to
+// assert the block still names commands.* as the sole exception.
 // Regression guard for #192: CLAUDE.md was read by impl-agent alone, so
 // review-agent and revise-agent judged code against docs.engineering and
 // ambient style with no visibility into a repository's own stated
@@ -111,10 +114,12 @@ export default async function ({ fail, note, ok }: Reporter) {
 
   // The load-bearing literals survive paraphrase: CLAUDE.md's index precedes
   // docs.engineering's, which in turn precedes docs.design's, in the
-  // ordering sentence; the phrase "never a finding" is present; and the
-  // commands carve-out names both commands.* and .claude/port.config.json.
-  // Pulled out as a function so the self-test below can prove it actually
-  // rejects a broken block before it is trusted to pass the real one.
+  // ordering sentence; the phrase "never a finding" is present; the commands
+  // carve-out names both commands.* and .claude/port.config.json; and (#246)
+  // commands.* is named as the sole non-overridable exception, with the rest
+  // stated as overridable. Pulled out as a function so the self-test below
+  // can prove it actually rejects a broken block before it is trusted to
+  // pass the real one.
   const literalProblems = (block: string): string[] => {
     const problems: string[] = [];
     const claudeIdx = block.indexOf('CLAUDE.md');
@@ -131,6 +136,14 @@ export default async function ({ fail, note, ok }: Reporter) {
     }
     if (!block.includes('commands.*') || !block.includes('.claude/port.config.json')) {
       problems.push('the commands carve-out does not name both commands.* and .claude/port.config.json');
+    }
+    const cmdIdx = block.indexOf('commands.*');
+    const soleIdx = block.indexOf('sole non-overridable exception');
+    if (cmdIdx === -1 || soleIdx === -1 || cmdIdx > soleIdx) {
+      problems.push('does not name commands.* as the sole non-overridable exception (#246)');
+    }
+    if (!block.includes('is overridable')) {
+      problems.push('does not state that every other category is overridable (#246)');
     }
     return problems;
   };
@@ -156,6 +169,7 @@ export default async function ({ fail, note, ok }: Reporter) {
   const GOOD =
     "Conventions come from the repository's CLAUDE.md first, then docs.engineering, then docs.design, then ambient style. " +
     'commands.* and .claude/port.config.json alone decide the rest. ' +
+    'commands.* is the sole non-overridable exception; every other category is overridable. ' +
     'Code that follows CLAUDE.md is never a finding, at any severity.';
   if (literalProblems(GOOD).length !== 0) {
     fail('standards', 'self-test: literalProblems rejected a known-good block');
@@ -196,6 +210,22 @@ export default async function ({ fail, note, ok }: Reporter) {
   );
   if (literalProblems(designOrderReversed).length === 0) {
     fail('standards', 'self-test: literalProblems accepted a block with the docs.engineering/docs.design order reversed');
+  } else {
+    ok();
+  }
+
+  // (#246) two further mutations: the sole-exception phrase deleted, and the
+  // overridable statement deleted — each must still be rejected.
+  const soleExceptionDeleted = GOOD.replace('commands.* is the sole non-overridable exception; every other category is overridable. ', '');
+  if (literalProblems(soleExceptionDeleted).length === 0) {
+    fail('standards', 'self-test: literalProblems accepted a block with the sole-non-overridable-exception phrase deleted');
+  } else {
+    ok();
+  }
+
+  const overridableStatementDeleted = GOOD.replace('every other category is overridable', 'every other category behaves how it likes');
+  if (literalProblems(overridableStatementDeleted).length === 0) {
+    fail('standards', 'self-test: literalProblems accepted a block with no statement that the rest is overridable');
   } else {
     ok();
   }
