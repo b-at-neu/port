@@ -10,6 +10,7 @@ import type { RepoId } from '../../../shared/repos'
 import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
 import { actionsFingerprint } from './actions'
 import { notReadyCopy, planGateHeaderButtonLabel, rateLimitCopy, sourceHealthCopy } from './copy'
+import { buildRelayBanner, relayFingerprint, relayLineCopy } from './relay'
 import { buildRow } from './rows'
 import { buildTickStrip } from './tick'
 
@@ -85,6 +86,18 @@ function buildHeader(state: BoardViewState): HTMLElement {
     // Directly under the freshness strip (#105) — re-renders on every draw,
     // same as the strip above, so the wakeup countdown stays live.
     header.appendChild(buildTickStrip(state.snapshot, state.now))
+
+    // The relay loop's own header line (#107), directly under the tick
+    // strip — always rendered once there is at least one candidate, or the
+    // scan itself failed; the zero case is written out, never an absent
+    // line.
+    const relayLine = relayLineCopy(state.snapshot.relay)
+    if (relayLine !== '') {
+      const line = document.createElement('div')
+      line.className = 'board-header__relay'
+      line.textContent = relayLine
+      header.appendChild(line)
+    }
   }
 
   return header
@@ -145,7 +158,7 @@ function buildNotReadySection(states: readonly Extract<RepositoryState, { readon
  *  until GitHub is re-read, so an action's `pending`/`result` transition
  *  would never repaint without this second half. */
 function signatureOf(projection: ReturnType<typeof projectBoard>): string {
-  return `${projection.signature}|${actionsFingerprint()}`
+  return `${projection.signature}|${actionsFingerprint()}|${relayFingerprint()}`
 }
 
 function buildList(state: BoardViewState): HTMLElement {
@@ -162,6 +175,13 @@ function buildList(state: BoardViewState): HTMLElement {
 
   const notReadySection = buildNotReadySection(projection.notReady)
   if (notReadySection !== null) list.appendChild(notReadySection)
+
+  // Above the group sections and above the ungated section (#107) — the
+  // longest-stalled pending relay leads, since `projection.relays` is
+  // already sorted oldest-waiting first.
+  const repoNameByRepoId = new Map(projection.repositorySummaries.map((summary) => [summary.repoId, summary.displayName]))
+  const relayBanner = buildRelayBanner(projection.relays, (repoId) => (repoId !== null ? (repoNameByRepoId.get(repoId) ?? repoId) : 'unknown repo'), state.now)
+  if (relayBanner !== null) list.appendChild(relayBanner)
 
   const ungatedSection = buildUngatedSection(projection.ungated.map(buildRow))
   if (ungatedSection !== null) list.appendChild(ungatedSection)

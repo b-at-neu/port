@@ -27,8 +27,10 @@ import { changeSearchScope, openSearch, registerSearchRedraw, renderSearch, sear
 import { render as renderBoard } from './board/view'
 import type { BoardViewState } from './board/view'
 import { handleItemAction, pruneItemActionStates } from './board/actions'
+import { handleRelayCopy, pruneRelayStates, relayKeyOf, setRelayAnswer, toggleRelayExpanded } from './board/relay'
 import type { OperatorAction } from '../../shared/actions/types'
 import type { LabelKey } from '../../shared/labels/vocabulary'
+import type { RelayPending } from '../../shared/relay/types'
 import { initClaim, openClaimDialog } from './claim/controller'
 import { initGate, openGateDialog, openReviewDialog } from './gate/controller'
 import { initRuntime } from './runtime'
@@ -217,7 +219,43 @@ async function handleInspectWorktrees(id: RepoId): Promise<void> {
 
 function applySnapshot(snapshot: BoardSnapshot): void {
   pruneItemActionStates(snapshot)
+  pruneRelayStates(snapshot.relay)
   boardState = { ...boardState, status: 'ready', snapshot, refreshing: false }
+  drawBoard()
+}
+
+/** Resolves the `dataset.key`'s own `RelayPending` from the live snapshot —
+ *  `board/relay.ts` holds no second copy of the pending list itself, only
+ *  the per-key UI state keyed by the same string. */
+function findRelayPending(key: string): RelayPending | null {
+  const relay = boardState.snapshot?.relay
+  if (relay === undefined || !relay.ok) return null
+  return relay.pending.find((p) => relayKeyOf(p) === key) ?? null
+}
+
+function handleRelayToggleClick(target: HTMLElement): void {
+  const key = target.dataset.key
+  if (key === undefined) return
+  const pending = findRelayPending(key)
+  if (pending === null) return
+  toggleRelayExpanded(pending)
+  drawBoard()
+}
+
+function handleRelayCopyClick(target: HTMLElement): void {
+  const key = target.dataset.key
+  if (key === undefined) return
+  const pending = findRelayPending(key)
+  if (pending === null) return
+  void handleRelayCopy(pending, drawBoard)
+}
+
+function handleRelayAnswerInput(target: HTMLTextAreaElement): void {
+  const { key, index } = target.dataset
+  if (key === undefined || index === undefined) return
+  const pending = findRelayPending(key)
+  if (pending === null) return
+  setRelayAnswer(pending, Number(index), target.value)
   drawBoard()
 }
 
@@ -404,6 +442,8 @@ app?.addEventListener('click', (event) => {
   else if (action === 'claim-open') openClaimDialog()
   else if (action === 'gate-open') openGateDialog()
   else if (action === 'gate-review') handleGateReviewClick(target)
+  else if (action === 'relay-toggle') handleRelayToggleClick(target)
+  else if (action === 'relay-copy') handleRelayCopyClick(target)
   else if (action?.startsWith('item-')) handleItemActionClick(target)
   else {
     const row = target.closest<HTMLElement>('.board-row')
@@ -414,6 +454,11 @@ app?.addEventListener('click', (event) => {
 app?.addEventListener('change', (event) => {
   const target = event.target
   if (target instanceof HTMLSelectElement && target.dataset.field === 'search-scope') handleSearchScopeChange(target.value)
+})
+
+app?.addEventListener('input', (event) => {
+  const target = event.target
+  if (target instanceof HTMLTextAreaElement && target.classList.contains('relay-banner__answer')) handleRelayAnswerInput(target)
 })
 
 app?.addEventListener('submit', (event) => {
