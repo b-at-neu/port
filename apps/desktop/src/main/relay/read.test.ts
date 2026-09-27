@@ -141,6 +141,24 @@ describe('createRelayReader — classification', () => {
     expect(scan.unreached).toBe(0)
   })
 
+  it('counts an unresolvable transcript path as checked and unreached, never silently dropped', async () => {
+    const claudeHome = await makeClaudeHome()
+    // `projects/` exists (so `buildProjectIndex` itself succeeds) but no
+    // transcript is ever written for this agent's session, so
+    // `resolveTranscriptPath` returns `ok: false` — the candidate must still
+    // be counted rather than vanish before the counting loop runs.
+    await mkdir(join(claudeHome, 'projects'), { recursive: true })
+
+    const reader = createRelayReader()
+    const scan = await reader.read({ scan: scanOf([agentOf()], [sessionOf()]), claudeHome })
+
+    expect(scan.ok).toBe(true)
+    if (!scan.ok) throw new Error('unreachable')
+    expect(scan.pending).toEqual([])
+    expect(scan.checked).toBe(1)
+    expect(scan.unreached).toBe(1)
+  })
+
   it('propagates a not-ok session scan unchanged', async () => {
     const reader = createRelayReader()
     const scan = await reader.read({ scan: { ok: false, kind: 'claude-home-missing', message: 'no home', scannedAt: '2026-01-01T00:00:00.000Z' } })

@@ -45,7 +45,10 @@ export interface RelayReader {
 interface Candidate {
   readonly agent: AgentRecord
   readonly stage: PortStageAgent
-  readonly path: string
+  /** `null` when the transcript path itself never resolved — kept as a
+   *  candidate rather than dropped, so it still increments `checked` and
+   *  `unreached` in the main loop below, same as any other failure mode. */
+  readonly path: string | null
 }
 
 /** `text` rides along with a `definite` verdict so the caller never has to
@@ -98,7 +101,7 @@ function candidatesOf(scan: Extract<SessionScan, { ok: true }>, index: ProjectIn
   const withPath = scan.agents.flatMap((agent) => {
     if (agent.stage === null || agent.repoId === null) return []
     const resolved = resolveTranscriptPath(agent.sessionId, agent.agentId, index)
-    return resolved.ok ? [{ agent, stage: agent.stage, path: resolved.path }] : []
+    return [{ agent, stage: agent.stage, path: resolved.ok ? resolved.path : null }]
   })
   return withPath.slice().sort((a, b) => a.agent.idleMs - b.agent.idleMs)
 }
@@ -135,6 +138,12 @@ export function createRelayReader(): RelayReader {
 
       for (const candidate of candidates) {
         if (checked + unreached >= MAX_RELAY_CANDIDATES || nowFn().getTime() - start >= RELAY_BUDGET_MS) {
+          unreached += 1
+          continue
+        }
+
+        if (candidate.path === null) {
+          checked += 1
           unreached += 1
           continue
         }
