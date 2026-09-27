@@ -6,6 +6,7 @@ import type { RepoId } from '../repos'
 import type { ItemStatus, PipelineState, ReconciledItem, RepositoryState, StageLabel } from '../state/types'
 import type { ActionAvailability, OperatorAction } from '../actions/types'
 import type { TickReport } from '../tick/types'
+import type { RelayPending, RelayScan } from '../relay/types'
 
 /**
  * The four sources the watcher polls independently. Deliberately not five:
@@ -106,6 +107,11 @@ export interface BoardSnapshot {
    *  `buildSnapshot()` from the same `PipelineState` above, never a second
    *  poll or a second cadence. */
   readonly tick: readonly TickReport[]
+  /** The relay loop's own scan (#107) — computed inside `runSessions()`
+   *  right after `refreshSessions`, over the same session scan it just
+   *  refreshed. No new `SourceKind`: it rides the `sessions` source's own
+   *  cadence and freshness rather than scheduling a second one. */
+  readonly relay: RelayScan
   /** The earliest instant the watcher's one timer (`main/state/watcher.ts`)
    *  is next due to fire — `null` once `stop()` has run, the honest
    *  rendering of "no wakeup scheduled" (#62). Shares the same expression
@@ -135,6 +141,10 @@ export interface BoardItemRow {
    *  or not, so the row can render its strip and its refusal note from one
    *  already-computed value, never a second derivation client-side. */
   readonly actions: Readonly<Record<OperatorAction, ActionAvailability>>
+  /** This row's own pending relay (#107), matched on `repoId`+`number` —
+   *  `null` when nothing dispatched against this item is waiting on a human.
+   *  Drives the row's `Waiting on you` badge. */
+  readonly relay: RelayPending | null
 }
 
 export interface BoardGroup {
@@ -173,6 +183,10 @@ export interface BoardProjection {
    *  request. Never populated when the module is off: there is no gate to
    *  restore, so the section is absent entirely, not disabled. */
   readonly ungated: readonly BoardItemRow[]
+  /** Every pending relay (#107), oldest-waiting first — a pending whose
+   *  number matches no row still appears here, never dropped for having no
+   *  home on the board. */
+  readonly relays: readonly RelayPending[]
   readonly emittedAt: string
   /** The Decision 1 no-op guard — a compact string over every rendered
    *  field, deliberately excluding `emittedAt` itself, so a poll that

@@ -6,6 +6,7 @@ import { LABEL_DEFAULTS } from '../labels/defaults'
 import { inspectDenials } from '../local/inspect'
 import { actionsFor } from '../actions/plan'
 import type { RepoId } from '../repos'
+import type { RelayPending } from '../relay/types'
 import type { RepositoryFreshness, RepositoryState, StageLabel } from '../state/types'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from './types'
 import type { BoardGroup, BoardItemRow, BoardProjection, BoardRepositorySummary, BoardSnapshot, DisplayStatus, GroupBy, RepositoryHealth, SourceHealth, SourceKind } from './types'
@@ -106,12 +107,18 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
   const readyRepos = snapshot.state.repositories.filter((r): r is Extract<RepositoryState, { readonly ok: true }> => r.ok)
   const displayNameOf = new Map<RepoId, string>(readyRepos.map((r) => [r.repoId, repoDisplayName(r)]))
 
+  // Oldest-waiting first (#107) — the same lead the banner itself renders,
+  // so a row's own badge and the banner's own order never disagree about
+  // which pending relay is longest-stalled.
+  const relays = snapshot.relay.ok ? snapshot.relay.pending.slice().sort((a, b) => Date.parse(a.lastActivityAt) - Date.parse(b.lastActivityAt)) : []
+  const relayFor = (repoId: RepoId, number: number): RelayPending | null => relays.find((r) => r.repoId === repoId && r.number === number) ?? null
+
   const rows: BoardItemRow[] = []
   for (const repo of readyRepos) {
     const health = healthByRepo.get(repo.repoId)
     for (const item of repo.items) {
       const actions = actionsFor({ item, viewer: repo.viewer, approvalGate: repo.approvalGate })
-      rows.push({ item, displayStatus: displayStatus(item, health, repo.freshness, now), stageLabel: stageLabelOf(item), actions })
+      rows.push({ item, displayStatus: displayStatus(item, health, repo.freshness, now), stageLabel: stageLabelOf(item), actions, relay: relayFor(item.repoId, item.number) })
     }
   }
   rows.sort((a, b) => compareRows(a, b, displayNameOf))
@@ -139,7 +146,7 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
     }
   })
 
-  const base = { groupBy, groups, notReady, repositorySummaries, totalItems: rows.length, ungated }
+  const base = { groupBy, groups, notReady, repositorySummaries, totalItems: rows.length, ungated, relays }
   return { ...base, emittedAt: snapshot.emittedAt, signature: JSON.stringify(base) }
 }
 
@@ -155,5 +162,6 @@ export function boardSignature(projection: BoardProjection): string {
     repositorySummaries: projection.repositorySummaries,
     totalItems: projection.totalItems,
     ungated: projection.ungated,
+    relays: projection.relays,
   })
 }

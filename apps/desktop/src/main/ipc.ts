@@ -16,6 +16,7 @@ import { applyItemAction, gateAnswer, gateClaimRead, gateClaimSet, gatePreflight
 import type { ApplyItemActionParams, ReadyEntry } from './actions'
 import { resolveGateAnswer, resolveGateClaimRead, resolveGateClaimSet, resolveGatePreflight } from './channels/gate'
 import type { GateChannelDeps } from './channels/gate'
+import { copyRelayReply } from './relay'
 import { resolveSearchQuery, resolveSessionsScan, resolveTranscriptRead, resolveTranscriptTailClose, resolveTranscriptTailOpen, resolveTranscriptTailPoll } from './channels/sessions'
 import { git } from './platform'
 import { readWorktreeReport } from './reclaimer'
@@ -359,6 +360,11 @@ export function registerIpc(): PipelineWatcher {
   handle('gate:claim:set', (_event, request) => resolveGateClaimSet(registryDeps, request, gateChannelDeps))
 
   handle('gate:answer', (_event, request) => resolveGateAnswer(registryDeps, request, app.getPath('userData'), app.getPath('temp'), gateChannelDeps))
+
+  // The relay loop's own copy button (#107) — one delegating line;
+  // `copyRelayReply` (`./relay`) does the validation and the one electron
+  // clipboard write.
+  handle('relay:copy', (_event, request) => copyRelayReply(request))
 
   for (const channel of IPC_CHANNELS) {
     if (!registered.has(channel)) {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { resolveVocabulary } from '../labels/vocabulary'
 import type { RepoId } from '../repos'
+import type { RelayPending } from '../relay/types'
 import type { PipelineState, ReconciledItem, RepositoryState } from '../state/types'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS, initialHealth } from './types'
 import type { BoardSnapshot, RepositoryHealth } from './types'
@@ -82,6 +83,7 @@ function snapshotOf(repositories: readonly RepositoryState[], healths: readonly 
     health: healths,
     policy: { baseIntervalMs: SOURCE_BASE_INTERVAL_MS, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: STALE_GRACE_MS },
     tick: [],
+    relay: { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: NOW.toISOString() },
     nextWakeupAt: null,
     emittedAt: NOW.toISOString(),
   }
@@ -229,5 +231,65 @@ describe('boardSignature — Decision 1 no-op guard', () => {
     const a = projectBoard({ snapshot: snapshotEarly, groupBy: 'stage', now: NOW })
     const b = projectBoard({ snapshot: snapshotLate, groupBy: 'stage', now: NOW })
     expect(boardSignature(a)).toBe(boardSignature(b))
+  })
+})
+
+describe('projectBoard — relays (#107)', () => {
+  function pendingOf(overrides: Partial<RelayPending> = {}): RelayPending {
+    return {
+      repoId: 'repo-a' as RepoId,
+      number: 1,
+      stage: 'plan-agent',
+      sessionId: 's1',
+      agentId: null,
+      parentSessionLabel: 'cockpit session',
+      agentLabel: 'plan-agent #1',
+      lastActivityAt: '2026-01-01T00:00:00.000Z',
+      kind: 'questions',
+      questions: [{ index: 0, text: 'Which branch is base?' }],
+      ...overrides,
+    } as RelayPending
+  }
+
+  it('matches a pending relay onto the row sharing its repoId and number', () => {
+    const repo = readyRepo({ items: [item({ number: 1 })] })
+    const snapshot = { ...snapshotOf([repo], [health()]), relay: { ok: true as const, pending: [pendingOf()], checked: 1, unreached: 0, scannedAt: NOW.toISOString() } }
+    const projection = projectBoard({ snapshot, groupBy: 'stage', now: NOW })
+    const row = projection.groups.flatMap((g) => g.rows).find((r) => r.item.number === 1)
+    expect(row?.relay).toEqual(pendingOf())
+  })
+
+  it('carries a pending relay whose number matches no row in relays, never dropped', () => {
+    const repo = readyRepo({ items: [item({ number: 1 })] })
+    const orphan = pendingOf({ number: 99 })
+    const snapshot = { ...snapshotOf([repo], [health()]), relay: { ok: true as const, pending: [orphan], checked: 1, unreached: 0, scannedAt: NOW.toISOString() } }
+    const projection = projectBoard({ snapshot, groupBy: 'stage', now: NOW })
+    expect(projection.relays).toEqual([orphan])
+    const row = projection.groups.flatMap((g) => g.rows).find((r) => r.item.number === 1)
+    expect(row?.relay).toBeNull()
+  })
+
+  it('sorts relays oldest-waiting first', () => {
+    const repo = readyRepo({ items: [] })
+    const older = pendingOf({ number: 1, lastActivityAt: '2026-01-01T00:00:00.000Z', sessionId: 'older' })
+    const newer = pendingOf({ number: 2, lastActivityAt: '2026-01-01T00:30:00.000Z', sessionId: 'newer' })
+    const snapshot = { ...snapshotOf([repo], [health()]), relay: { ok: true as const, pending: [newer, older], checked: 2, unreached: 0, scannedAt: NOW.toISOString() } }
+    const projection = projectBoard({ snapshot, groupBy: 'stage', now: NOW })
+    expect(projection.relays.map((r) => r.sessionId)).toEqual(['older', 'newer'])
+  })
+
+  it('reports no relays when the relay scan itself is not ok', () => {
+    const repo = readyRepo({ items: [item({ number: 1 })] })
+    const snapshot = { ...snapshotOf([repo], [health()]), relay: { ok: false as const, kind: 'claude-home-missing' as const, message: 'no home', scannedAt: NOW.toISOString() } }
+    const projection = projectBoard({ snapshot, groupBy: 'stage', now: NOW })
+    expect(projection.relays).toEqual([])
+  })
+
+  it('changes the signature when a relay appears with no other rendered field changed', () => {
+    const repo = readyRepo({ items: [item({ number: 1 })] })
+    const a = projectBoard({ snapshot: snapshotOf([repo], [health()]), groupBy: 'stage', now: NOW })
+    const withRelay = { ...snapshotOf([repo], [health()]), relay: { ok: true as const, pending: [pendingOf()], checked: 1, unreached: 0, scannedAt: NOW.toISOString() } }
+    const b = projectBoard({ snapshot: withRelay, groupBy: 'stage', now: NOW })
+    expect(boardSignature(a)).not.toBe(boardSignature(b))
   })
 })
