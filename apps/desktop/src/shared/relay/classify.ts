@@ -22,10 +22,14 @@ export const RELAY_MARKERS: Readonly<Record<'questions' | 'blocked', string>> = 
 
 /** Matched case-insensitively, anywhere in the text — never line-anchored,
  *  since the real phrasing ("You've hit your session limit · resets …")
- *  never starts a line. Checked **only** when neither marker above matched
- *  (`classifyFinalMessage`'s own order), and carries no payload — it is
- *  reported, never relayable (`pipeline/SKILL.md`'s own "Agent questions and
- *  blockers": the class that must not be redispatched). */
+ *  never starts a line. Still checked only over `eligibleLines`, the same
+ *  fence/inline-code exclusion the two line-anchored markers above get, so a
+ *  message that merely *quotes* the phrase inside a fenced block or inline
+ *  code never misclassifies as pending — "form, not substring" again, just
+ *  without the line-start anchor. Checked **only** when neither marker above
+ *  matched (`classifyFinalMessage`'s own order), and carries no payload — it
+ *  is reported, never relayable (`pipeline/SKILL.md`'s own "Agent questions
+ *  and blockers": the class that must not be redispatched). */
 export const USAGE_LIMIT_PHRASE = 'session limit'
 
 /** `N.` or `N)` followed by at least one non-space character — a numbered
@@ -88,7 +92,11 @@ export function classifyFinalMessage(text: string): RelayVerdict {
   const blockedAt = markerLineIndex(text, RELAY_MARKERS.blocked)
   if (blockedAt !== null) return 'blocked'
 
-  if (text.toLowerCase().includes(USAGE_LIMIT_PHRASE)) return 'usage-limit'
+  const eligibleText = eligibleLines(text)
+    .map(({ line }) => line)
+    .join('\n')
+    .toLowerCase()
+  if (eligibleText.includes(USAGE_LIMIT_PHRASE)) return 'usage-limit'
 
   return 'completed'
 }

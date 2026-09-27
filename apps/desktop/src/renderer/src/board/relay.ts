@@ -116,15 +116,15 @@ function labelOf(pending: RelayPending): string {
   return pending.number !== null ? `#${String(pending.number)}` : 'this item'
 }
 
-/** The header line, always rendered once `scan` carries at least one
- *  candidate (or failed outright) — the zero case is written out, never an
- *  absent line (ENGINEERING §4: an absent signal is never read as a passing
- *  one). */
+/** The header line — never `''`. A zero-checked scan (a ready repository
+ *  with no dispatched stage agents at all) is written out the same as any
+ *  other "nothing waiting" case, never silence (ENGINEERING §4: an absent
+ *  signal is never read as a passing one). Only the caller (`view.ts`)
+ *  withholds the line entirely, before the first snapshot lands. */
 export function relayLineCopy(scan: RelayScan): string {
   if (!scan.ok) return "Relay: can't read agent transcripts, so a waiting agent would be invisible here."
 
   const { pending, checked, unreached } = scan
-  if (checked === 0 && unreached === 0) return ''
   if (pending.length > 0) return `Relay: ${String(pending.length)} waiting on you.`
   if (unreached > 0) {
     return `Relay: nothing waiting (${String(checked)} checked, ${String(unreached)} transcript${unreached === 1 ? '' : 's'} unreadable — can't tell whether it's waiting).`

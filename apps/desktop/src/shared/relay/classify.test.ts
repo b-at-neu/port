@@ -45,6 +45,16 @@ describe('classifyFinalMessage', () => {
     const text = 'BLOCKED: dispatch failed after a session limit reset; need a decision.'
     expect(classifyFinalMessage(text)).toBe('blocked')
   })
+
+  it('never matches the usage-limit phrase quoted inside a fenced code block', () => {
+    const text = ['Here is what that error looks like:', '```', "You've hit your session limit.", '```', 'Nothing pending.'].join('\n')
+    expect(classifyFinalMessage(text)).toBe('completed')
+  })
+
+  it('never matches the usage-limit phrase quoted inside an inline code span', () => {
+    const text = 'The copy reads `session limit` when this class is reported.'
+    expect(classifyFinalMessage(text)).toBe('completed')
+  })
 })
 
 describe('relayPayloadOf', () => {

@@ -46,9 +46,9 @@ describe('relayLineCopy', () => {
     expect(relayLineCopy(scan)).toBe("Relay: can't read agent transcripts, so a waiting agent would be invisible here.")
   })
 
-  it('renders no line at all before the first candidate exists', () => {
+  it('writes out the zero-checked case too, never silence, for a repository with no dispatched agents at all', () => {
     const scan: RelayScan = { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: NOW.toISOString() }
-    expect(relayLineCopy(scan)).toBe('')
+    expect(relayLineCopy(scan)).toBe('Relay: nothing waiting (0 agents checked).')
   })
 })
 
