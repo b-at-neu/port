@@ -13,6 +13,14 @@ export { createTailStore, tailStore } from './tail'
 export type { OpenTranscriptParams, OpenTranscriptResult, TranscriptCursor } from './transcript'
 export { openTranscript } from './transcript'
 
+// `main/relay/read.ts` imports the deriver through this barrel only, never
+// `./transcript-entries` directly (ENGINEERING §1) — its own bounded tail
+// read needs the pairing state `openTranscript` already builds this from,
+// starting at an arbitrary offset rather than `openTranscript`'s own
+// from-zero loop.
+export type { DerivedChunk, Deriver } from './transcript-entries'
+export { createDeriver } from './transcript-entries'
+
 // `main/search/` imports the project index and path resolver through this
 // barrel only, never `./locate` directly (ENGINEERING §1) -- one seam for
 // both the sessions adapter and search to share.
