@@ -21,6 +21,7 @@ export default async function ({ fail, note, ok }: Reporter) {
   // synthetic entry allowed on the overridable side — no `port.config.json`
   // field backs it, since it is the first consumer of this general
   // mechanism rather than a schema-derived category.
+  // pin: `schema/port.config.schema.json`'s top-level keys ↔ `scripts/port-tick/overrides.ts`'s `OVERRIDABLE`/`NEVER_OVERRIDABLE`, both directions
   {
     const schema = readJson('schema/port.config.schema.json');
     const schemaKeys = new Set(Object.keys(schema.properties ?? {}));

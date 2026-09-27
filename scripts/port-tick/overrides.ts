@@ -160,8 +160,12 @@ export function parseOverrides(text: string): { entries: OverrideEntry[]; proble
 /** Reads `path` (the same dotted grammar `parseOverrides` produces) off the
  *  **effective config shape** `config.ts`'s `loadConfig` builds — flattened,
  *  never the raw `branches`-nested `port.config.json` shape. Returns
- *  `undefined` for `checks.*`, which has no config field of its own (folded
- *  into `checkDispositions` by the caller instead). */
+ *  `'blocking'` for `checks.<name>` — that category has no config field of
+ *  its own (folded into `checkDispositions` by the caller instead), but
+ *  `PIPELINE.md` → "CLAUDE.md overrides" names `blocking` as the implicit
+ *  port default every unlisted check name carries, so that is the real
+ *  `portDefault` an applied `checks.*` override replaced, never
+ *  `undefined`. */
 function readPath(cfg: any, path: string): any {
   switch (path) {
     case 'branches.integration':
@@ -186,6 +190,7 @@ function readPath(cfg: any, path: string): any {
     case 'sessionRequiredPaths':
       return cfg.sessionRequiredPaths;
     default:
+      if (path.startsWith('checks.')) return 'blocking';
       if (path.startsWith('labels.')) return cfg.labels[path.slice('labels.'.length)];
       return undefined;
   }
