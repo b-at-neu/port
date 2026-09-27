@@ -1,0 +1,274 @@
+{
+  "$comment": "Authoritative decision-case table for scripts/port-tick/parity.ts's computeParity — the parity harness (#111) reconciling the cockpit's own trajectory record (.agents/events.jsonl) against the desktop app's (.agents/desktop-events.jsonl). Each case's 'expected' is the projection scripts/checks/tick-parity.ts's runCase produces, not computeParity's raw return value — see that file's own comment for the projection shape.",
+  "cases": [
+    {
+      "function": "computeParity",
+      "name": "full agreement — no divergence in any of the three diffs",
+      "input": {
+        "cockpitEvents": [
+          {
+            "kind": "tick",
+            "ts": "2026-01-01T00:00:00.000Z",
+            "repo": "o/r",
+            "tickId": "t1",
+            "envelope": { "kind": "full" },
+            "planned": { "dispatch": [{ "item": 1, "stage": "impl-agent", "model": "sonnet" }], "held": [] },
+            "othersCounts": {},
+            "unownedCounts": {}
+          }
+        ],
+        "desktopEvents": [
+          { "v": 1, "ts": "2026-01-01T00:00:10.000Z", "repo": "o/r", "dispatch": [{ "item": 1, "stage": "impl-agent", "agent": "impl" }], "held": [], "claims": [], "blind": null }
+        ]
+      },
+      "expected": {
+        "pairCount": 1,
+        "unmatchedCockpitCount": 0,
+        "unmatchedDesktopCount": 0,
+        "dispatch": [{ "extraApp": [], "missingApp": [], "mismatchKinds": [] }],
+        "contention": [{ "extraApp": [], "missingApp": [], "mismatchKinds": [] }],
+        "ownership": [[]]
+      }
+    },
+    {
+      "function": "computeParity",
+      "name": "an extra app dispatch — the app dispatched an item the cockpit never planned",
+      "input": {
+        "cockpitEvents": [
+          {
+            "kind": "tick",
+            "ts": "2026-01-01T00:00:00.000Z",
+            "repo": "o/r",
+            "tickId": "t1",
+            "envelope": { "kind": "full" },
+            "planned": { "dispatch": [{ "item": 1, "stage": "impl-agent", "model": "sonnet" }], "held": [] },
+            "othersCounts": {},
+            "unownedCounts": {}
+          }
+        ],
+        "desktopEvents": [
+          {
+            "v": 1,
+            "ts": "2026-01-01T00:00:10.000Z",
+            "repo": "o/r",
+            "dispatch": [
+              { "item": 1, "stage": "impl-agent", "agent": "impl" },
+              { "item": 2, "stage": "impl-agent", "agent": "impl" }
+            ],
+            "held": [],
+            "claims": [],
+            "blind": null
+          }
+        ]
+      },
+      "expected": {
+        "pairCount": 1,
+        "unmatchedCockpitCount": 0,
+        "unmatchedDesktopCount": 0,
+        "dispatch": [{ "extraApp": [2], "missingApp": [], "mismatchKinds": [] }],
+        "contention": [{ "extraApp": [], "missingApp": [], "mismatchKinds": [] }],
+        "ownership": [[]]
+      }
+    },
+    {
+      "function": "computeParity",
+      "name": "a missing app dispatch — the cockpit planned an item the app never dispatched",
+      "input": {
+        "cockpitEvents": [
+          {
+            "kind": "tick",
+            "ts": "2026-01-01T00:00:00.000Z",
+            "repo": "o/r",
+            "tickId": "t1",
+            "envelope": { "kind": "full" },
+            "planned": {
+              "dispatch": [
+                { "item": 1, "stage": "impl-agent", "model": "sonnet" },
+                { "item": 3, "stage": "impl-agent", "model": "sonnet" }
+              ],
+              "held": []
+            },
+            "othersCounts": {},
+            "unownedCounts": {}
+          }
+        ],
+        "desktopEvents": [
+          { "v": 1, "ts": "2026-01-01T00:00:10.000Z", "repo": "o/r", "dispatch": [{ "item": 1, "stage": "impl-agent", "agent": "impl" }], "held": [], "claims": [], "blind": null }
+        ]
+      },
+      "expected": {
+        "pairCount": 1,
+        "unmatchedCockpitCount": 0,
+        "unmatchedDesktopCount": 0,
+        "dispatch": [{ "extraApp": [], "missingApp": [3], "mismatchKinds": [] }],
+        "contention": [{ "extraApp": [], "missingApp": [], "mismatchKinds": [] }],
+        "ownership": [[]]
+      }
+    },
+    {
+      "function": "computeParity",
+      "name": "a stage mismatch — same item, different stage on each side",
+      "input": {
+        "cockpitEvents": [
+          {
+            "kind": "tick",
+            "ts": "2026-01-01T00:00:00.000Z",
+            "repo": "o/r",
+            "tickId": "t1",
+            "envelope": { "kind": "full" },
+            "planned": { "dispatch": [{ "item": 1, "stage": "impl-agent", "model": "sonnet" }], "held": [] },
+            "othersCounts": {},
+            "unownedCounts": {}
+          }
+        ],
+        "desktopEvents": [
+          { "v": 1, "ts": "2026-01-01T00:00:10.000Z", "repo": "o/r", "dispatch": [{ "item": 1, "stage": "review-agent", "agent": "review" }], "held": [], "claims": [], "blind": null }
+        ]
+      },
+      "expected": {
+        "pairCount": 1,
+        "unmatchedCockpitCount": 0,
+        "unmatchedDesktopCount": 0,
+        "dispatch": [{ "extraApp": [], "missingApp": [], "mismatchKinds": [["stage-mismatch"]] }],
+        "contention": [{ "extraApp": [], "missingApp": [], "mismatchKinds": [] }],
+        "ownership": [[]]
+      }
+    },
+    {
+      "function": "computeParity",
+      "name": "a model mismatch — same item and stage, different model where the app also reports one",
+      "input": {
+        "cockpitEvents": [
+          {
+            "kind": "tick",
+            "ts": "2026-01-01T00:00:00.000Z",
+            "repo": "o/r",
+            "tickId": "t1",
+            "envelope": { "kind": "full" },
+            "planned": { "dispatch": [{ "item": 1, "stage": "impl-agent", "model": "sonnet" }], "held": [] },
+            "othersCounts": {},
+            "unownedCounts": {}
+          }
+        ],
+        "desktopEvents": [
+          { "v": 1, "ts": "2026-01-01T00:00:10.000Z", "repo": "o/r", "dispatch": [{ "item": 1, "stage": "impl-agent", "agent": "impl", "model": "opus" }], "held": [], "claims": [], "blind": null }
+        ]
+      },
+      "expected": {
+        "pairCount": 1,
+        "unmatchedCockpitCount": 0,
+        "unmatchedDesktopCount": 0,
+        "dispatch": [{ "extraApp": [], "missingApp": [], "mismatchKinds": [["model-mismatch"]] }],
+        "contention": [{ "extraApp": [], "missingApp": [], "mismatchKinds": [] }],
+        "ownership": [[]]
+      }
+    },
+    {
+      "function": "computeParity",
+      "name": "a contention hold blocker mismatch — same held item, disagreeing blocker",
+      "input": {
+        "cockpitEvents": [
+          {
+            "kind": "tick",
+            "ts": "2026-01-01T00:00:00.000Z",
+            "repo": "o/r",
+            "tickId": "t1",
+            "envelope": { "kind": "full" },
+            "planned": { "dispatch": [], "held": [{ "item": 5, "blocker": 9, "blockerLabel": "in progress", "depth": 2, "contendedPaths": ["a.ts"] }] },
+            "othersCounts": {},
+            "unownedCounts": {}
+          }
+        ],
+        "desktopEvents": [
+          {
+            "v": 1,
+            "ts": "2026-01-01T00:00:10.000Z",
+            "repo": "o/r",
+            "dispatch": [],
+            "held": [{ "item": 5, "reason": "contended", "contention": { "blocker": 11, "blockerStage": "in progress", "depth": 2, "paths": ["a.ts"] } }],
+            "claims": [],
+            "blind": null
+          }
+        ]
+      },
+      "expected": {
+        "pairCount": 1,
+        "unmatchedCockpitCount": 0,
+        "unmatchedDesktopCount": 0,
+        "dispatch": [{ "extraApp": [], "missingApp": [], "mismatchKinds": [] }],
+        "contention": [{ "extraApp": [], "missingApp": [], "mismatchKinds": [["blocker-mismatch"]] }],
+        "ownership": [[]]
+      }
+    },
+    {
+      "function": "computeParity",
+      "name": "an ownership count mismatch — cockpit counts one other-operator hold the app never held",
+      "input": {
+        "cockpitEvents": [
+          {
+            "kind": "tick",
+            "ts": "2026-01-01T00:00:00.000Z",
+            "repo": "o/r",
+            "tickId": "t1",
+            "envelope": { "kind": "full" },
+            "planned": { "dispatch": [], "held": [] },
+            "othersCounts": { "ready": 1 },
+            "unownedCounts": {}
+          }
+        ],
+        "desktopEvents": [{ "v": 1, "ts": "2026-01-01T00:00:10.000Z", "repo": "o/r", "dispatch": [], "held": [], "claims": [], "blind": null }]
+      },
+      "expected": {
+        "pairCount": 1,
+        "unmatchedCockpitCount": 0,
+        "unmatchedDesktopCount": 0,
+        "dispatch": [{ "extraApp": [], "missingApp": [], "mismatchKinds": [] }],
+        "contention": [{ "extraApp": [], "missingApp": [], "mismatchKinds": [] }],
+        "ownership": [[{ "trigger": "ready", "class": "other-operator", "cockpit": 1, "app": 0 }]]
+      }
+    },
+    {
+      "function": "computeParity",
+      "name": "no desktop reading in the window — unmatchedCockpit",
+      "input": {
+        "cockpitEvents": [
+          {
+            "kind": "tick",
+            "ts": "2026-01-01T00:00:00.000Z",
+            "repo": "o/r",
+            "tickId": "t1",
+            "envelope": { "kind": "full" },
+            "planned": { "dispatch": [], "held": [] },
+            "othersCounts": {},
+            "unownedCounts": {}
+          }
+        ],
+        "desktopEvents": []
+      },
+      "expected": {
+        "pairCount": 0,
+        "unmatchedCockpitCount": 1,
+        "unmatchedDesktopCount": 0,
+        "dispatch": [],
+        "contention": [],
+        "ownership": []
+      }
+    },
+    {
+      "function": "computeParity",
+      "name": "a desktop reading with no cockpit tick nearby — unmatchedDesktop",
+      "input": {
+        "cockpitEvents": [],
+        "desktopEvents": [{ "v": 1, "ts": "2026-01-01T00:00:00.000Z", "repo": "o/r", "dispatch": [], "held": [], "claims": [], "blind": null }]
+      },
+      "expected": {
+        "pairCount": 0,
+        "unmatchedCockpitCount": 0,
+        "unmatchedDesktopCount": 1,
+        "dispatch": [],
+        "contention": [],
+        "ownership": []
+      }
+    }
+  ]
+}

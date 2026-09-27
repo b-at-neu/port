@@ -7,11 +7,16 @@
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { EVENTS_PATH, EVENTS_PREV_PATH } from './events.ts';
+import { computeParity } from './parity.ts';
 
 const RESOLUTION_SECONDS = 270;
 const DENIAL_LOG_WARN_BYTES = 4 * 1024 * 1024;
 const DEFAULT_GAP_GRACE_SECONDS = 300;
 const ESCALATION_KINDS = new Set(['cycle-cap', 'zero-diff', 'refresh-stuck', 'approval-withdrawn', 'blocked']);
+// The desktop app's own trajectory record (apps/desktop/src/main/trajectory/log.ts)
+// — a sibling of EVENTS_PATH, read only here, never by the tick engine
+// itself (#111's parity harness).
+const DEFAULT_DESKTOP_EVENTS_PATH = '.agents/desktop-events.jsonl';
 
 /** Reads both generations, oldest first, tolerating either being absent or
  *  unreadable. Never throws — a missing file means "nothing recorded",
@@ -338,10 +343,73 @@ export function renderText(
   return lines.join('\n');
 }
 
+/** Reads one desktop trajectory line file whole, tolerating an absent or
+ *  unreadable path — never a throw, the same direction `readEventLines`
+ *  already takes for the cockpit's own two-generation pair. Unlike that
+ *  reader, this one reads only the single path given (no `.prev` fallback):
+ *  the parity harness compares against what is currently live, and the
+ *  desktop side's own rotation history is out of scope here. */
+function readDesktopEventLines(path: string): string[] {
+  if (!existsSync(path)) return [];
+  let text: string;
+  try {
+    text = readFileSync(path, 'utf8');
+  } catch {
+    return [];
+  }
+  return text.split('\n').filter((line) => line !== '');
+}
+
+/** Pure: parses raw JSONL lines from the desktop trajectory record. A line
+ *  that does not parse, or whose `v` is not the recognized version, is
+ *  counted in `malformed` rather than thrown on or silently dropped — the
+ *  same forward-compatible-but-loud direction `parseEventLines` already
+ *  takes for the cockpit side. */
+export function parseDesktopEventLines(lines: readonly string[]): { events: any[]; malformed: number } {
+  const events: any[] = [];
+  let malformed = 0;
+  for (const line of lines) {
+    let obj: any;
+    try {
+      obj = JSON.parse(line);
+    } catch {
+      malformed += 1;
+      continue;
+    }
+    if (obj == null || typeof obj !== 'object' || obj.v !== 1) {
+      malformed += 1;
+      continue;
+    }
+    events.push(obj);
+  }
+  return { events, malformed };
+}
+
+/** The `--desktop-events <path>` mode's own read + diff, split out of
+ *  `runReport` so its early return stays a single expression there. An
+ *  absent desktop trajectory file reports `{ available: false, reason }` —
+ *  never `{ available: true, pairs: [] }`, which would read as "compared,
+ *  and clean" for a comparison that never ran (docs/ENGINEERING.md §4). */
+function buildParitySection(root: string, cockpitEvents: readonly any[], desktopEventsArg: string | undefined): any {
+  const relPath = desktopEventsArg ?? DEFAULT_DESKTOP_EVENTS_PATH;
+  const path = join(root, relPath);
+  if (!existsSync(path)) {
+    return { available: false, reason: `no desktop trajectory recorded at ${relPath}` };
+  }
+  const { events: desktopEvents, malformed } = parseDesktopEventLines(readDesktopEventLines(path));
+  const { pairs, unmatchedCockpit, unmatchedDesktop } = computeParity(cockpitEvents, desktopEvents);
+  const section: any = { available: true, pairs, unmatchedCockpit, unmatchedDesktop };
+  if (malformed > 0) section.malformed = malformed;
+  return section;
+}
+
 /** The `report` subcommand's whole implementation — the only impure entry
- *  point in this module. `args` may carry `since` (ISO string) and `run` (a
- *  `runId`), both filters applied before aggregation. Never throws: an
- *  absent record is reported in `text`, not treated as an error. */
+ *  point in this module. `args` may carry `since` (ISO string), `run` (a
+ *  `runId`), and `desktop-events` (a path, default
+ *  `.agents/desktop-events.jsonl` under `root`) — the first two filters
+ *  applied before aggregation, the third read independently for the parity
+ *  section. Never throws: an absent record is reported in `text`, not
+ *  treated as an error. */
 export function runReport(root: string, cfg: any, args: any = {}): any {
   const present = existsSync(join(root, EVENTS_PATH)) || existsSync(join(root, EVENTS_PREV_PATH));
   if (!present) {
@@ -371,6 +439,7 @@ export function runReport(root: string, cfg: any, args: any = {}): any {
     denialLogBytes = null;
   }
   const text = renderText(report, { repo: cfg.repo, skipped, denialLogBytes });
+  const parity = buildParitySection(root, events, args['desktop-events']);
 
-  return { ok: true, present: true, ...report, skipped, text };
+  return { ok: true, present: true, ...report, skipped, text, parity };
 }
