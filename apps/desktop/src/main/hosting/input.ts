@@ -17,7 +17,9 @@ export interface HostedInput {
    *  iterable exactly once, the same restriction every push-driven async
    *  iterator in this app already carries. */
   readonly stream: AsyncIterable<SDKUserMessage>
-  /** Always accepted, never refused mid-turn — the SDK owns the queue. */
+  /** Always accepted, never refused mid-turn — the SDK owns the queue.
+   *  Dropped silently once `end()` has been called; the returned uuid still
+   *  stamps the message but nothing delivers it. */
   push(text: string): PushResult
   /** Idempotent: a second call is a no-op, since a handle may call this from
    *  both its own `close()` and a caller that raced it. */
@@ -35,6 +37,10 @@ export function createHostedInput(): HostedInput {
   let ended = false
 
   function deliver(message: SDKUserMessage): void {
+    // A `push()` that lands after `end()` must not resurrect the iterator as
+    // a real turn — `ended` already means "no more values", so a late
+    // message is dropped rather than queued (#98 review).
+    if (ended) return
     if (pendingResolve !== null) {
       const resolve = pendingResolve
       pendingResolve = null

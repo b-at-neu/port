@@ -23,8 +23,7 @@ import { createHostedHandle } from './handle'
 import type { HostedHandle, HostedQueryFn } from './handle'
 import { createHostedSdk } from './sdk'
 import type { HostedSdk } from './sdk'
-import { titleFork } from './fork'
-import { createSdkSessionReader } from '../sessions/sdk'
+import { defaultForkListSessions, titleFork } from './fork'
 import type { SessionReader } from '../sessions/sdk'
 import { readCredentialsTell, resolveClaudeExecutable } from '../runtime'
 
@@ -46,7 +45,7 @@ export const defaultHostedStoreDeps: HostedStoreDeps = {
   getSdk: createHostedSdk(),
   resolveClaudeExecutable,
   readCredentialsTell,
-  listSessionsForFork: createSdkSessionReader(),
+  listSessionsForFork: defaultForkListSessions,
   env: process.env,
   platform: process.platform,
   now: () => Date.now(),

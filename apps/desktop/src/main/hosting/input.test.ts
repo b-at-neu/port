@@ -65,6 +65,14 @@ describe('createHostedInput', () => {
     expect(second.done).toBe(true)
   })
 
+  it('a push() after end() is dropped, never delivered as a real turn (#98 R1-M1)', async () => {
+    const input = createHostedInput()
+    input.end()
+    input.push('late')
+    const result = await next(input)
+    expect(result.done).toBe(true)
+  })
+
   it('a second end() is a no-op, never a second resolution', () => {
     const input = createHostedInput()
     input.end()
