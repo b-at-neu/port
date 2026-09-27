@@ -96,6 +96,19 @@ Get `commands.checks` right in particular: its items are **objects** with a requ
 
 Also confirm `repo` matches the detected remote.
 
+## 3.5. Reconcile `CLAUDE.md` against the port defaults
+
+Import-time reconciliation (#246, `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "CLAUDE.md overrides") — a repository's pre-existing conventions get identified and documented now, never negotiated ad hoc mid-pipeline later.
+
+**No repository-root `CLAUDE.md`** (never `~/.claude/CLAUDE.md`) → say so and write nothing. Every overridable category runs on the port default.
+
+**Present** → read it. For each overridable category (`checks`, `labels`, `branches`, `models`, `modules`, `reviewCycleCap`, `concurrency`, `sessionRequiredPaths`) look for a stated convention contradicting the value just written to `.claude/port.config.json` in step 3 — a review-cycle expectation, a renamed branch, a check the repository already treats as informational. For each contradiction found, ask with `AskUserQuestion` (header the category name):
+
+- **Keep your rule** — writes a `port-overrides` entry into `CLAUDE.md`, the reason drawn from the operator's own words, never invented.
+- **Keep the port default** — writes nothing, and states plainly that the repository's own `CLAUDE.md` prose now disagrees with the pipeline until the operator reconciles it by hand.
+
+A pre-existing `port-overrides` block is **re-validated and reconciled, never rebuilt**: every existing entry is kept unless the operator says otherwise, and any line the parser refuses is reported, never silently dropped. `commands.*` and `extraAllow` are never offered — the permission surface stays schema-only, no exception, so a `CLAUDE.md` convention naming either is reported as unresolvable outside this flow.
+
 ## 4. Merge the permission lists
 
 Read `${CLAUDE_PLUGIN_ROOT}/templates/permissions.base.json` and merge into `.claude/settings.json`:
@@ -247,6 +260,8 @@ Ask whether to run it now.
 ## 10. Report, including what you did not do
 
 Summarize: the config written, permissions added versus already present, labels created versus skipped, whether the workflow was installed, and files touched.
+
+**Report what step 3.5 found.** No `CLAUDE.md` at all → say every overridable category runs on the port default. Otherwise → list every `port-overrides` entry written this run with the port default it replaced, and every line refused with its reason.
 
 Then state the manual steps explicitly. Chiefly:
 
