@@ -18,6 +18,15 @@ import { resolveGateAnswer, resolveGateClaimRead, resolveGateClaimSet, resolveGa
 import type { GateChannelDeps } from './channels/gate'
 import { copyRelayReply } from './relay'
 import { resolveSearchQuery, resolveSessionsScan, resolveTranscriptRead, resolveTranscriptTailClose, resolveTranscriptTailOpen, resolveTranscriptTailPoll } from './channels/sessions'
+import {
+  defaultHostingChannelDeps,
+  resolveSessionAttach,
+  resolveSessionClose,
+  resolveSessionInterrupt,
+  resolveSessionList,
+  resolveSessionSend,
+  resolveSessionStart,
+} from './channels/hosting'
 import { git } from './platform'
 import { readWorktreeReport } from './reclaimer'
 import type { ReadWorktreeReportParams } from './reclaimer'
@@ -26,6 +35,8 @@ import type { RegistryDeps } from './registry'
 import { createPipelineWatcher } from './state'
 import type { PipelineWatcher } from './state'
 import { runtimePreflight, runtimeProbe } from './runtime'
+import { createHostedStore, defaultHostedStoreDeps } from './hosting'
+import type { HostedStore } from './hosting'
 
 type AppInfo = IpcMap['app:info']['response']
 
@@ -248,7 +259,12 @@ export async function resolveRuntimeProbe(registryDeps: RegistryDeps, request: I
   return runtimeProbe({ registryDeps, repoId: request.repoId })
 }
 
-export function registerIpc(): PipelineWatcher {
+export interface RegisteredIpc {
+  readonly watcher: PipelineWatcher
+  readonly hostedStore: HostedStore
+}
+
+export function registerIpc(): RegisteredIpc {
   // The one place a real `git` invocation and the real userData directory
   // reach the registry — every registry function itself takes these as
   // injected dependencies, so its own tests need neither Electron nor a
@@ -366,11 +382,42 @@ export function registerIpc(): PipelineWatcher {
   // clipboard write.
   handle('relay:copy', (_event, request) => copyRelayReply(request))
 
+  // #98: one hosted-session store for the process lifetime, pushing every
+  // envelope and every phase-change snapshot to every open window over
+  // `session:event`/`session:status` — the same broadcast shape the
+  // watcher's own `onSnapshot` already uses for `board:update`.
+  const hostedStore = createHostedStore({
+    ...defaultHostedStoreDeps,
+    onEvent: (envelope) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) window.webContents.send('session:event', envelope)
+      }
+    },
+    onStatus: (snapshot) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) window.webContents.send('session:status', snapshot)
+      }
+    },
+  })
+  const hostingChannelDeps = defaultHostingChannelDeps(hostedStore)
+
+  handle('session:start', (_event, request) => resolveSessionStart(registryDeps, request, hostingChannelDeps))
+
+  handle('session:send', (_event, request) => resolveSessionSend(request, hostingChannelDeps))
+
+  handle('session:interrupt', (_event, request) => resolveSessionInterrupt(request, hostingChannelDeps))
+
+  handle('session:close', (_event, request) => resolveSessionClose(request, hostingChannelDeps))
+
+  handle('session:attach', (_event, request) => resolveSessionAttach(request, hostingChannelDeps))
+
+  handle('session:list', (_event, request) => resolveSessionList(request, hostingChannelDeps))
+
   for (const channel of IPC_CHANNELS) {
     if (!registered.has(channel)) {
       throw new Error(`IPC channel '${channel}' is declared but has no handler`)
     }
   }
 
-  return watcher
+  return { watcher, hostedStore }
 }

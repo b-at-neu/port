@@ -1,0 +1,57 @@
+[
+  {
+    "name": "a non-zero exit is exit-nonzero, with the code parsed out",
+    "input": { "text": "Claude Code process exited with code 1", "closeRequested": false, "credentials": null, "now": 1000 },
+    "expect": { "reason": "exit-nonzero", "exitCode": 1, "signal": null, "diagnosis": "probe-failed" }
+  },
+  {
+    "name": "a negative-looking exit code still parses",
+    "input": { "text": "Claude Code process exited with code -1", "closeRequested": false, "credentials": null, "now": 1000 },
+    "expect": { "reason": "exit-nonzero", "exitCode": -1, "signal": null, "diagnosis": "probe-failed" }
+  },
+  {
+    "name": "a signal termination is signal, with the signal name carried",
+    "input": { "text": "Claude Code process terminated by signal SIGTERM", "closeRequested": false, "credentials": null, "now": 1000 },
+    "expect": { "reason": "signal", "exitCode": null, "signal": "SIGTERM", "diagnosis": "probe-failed" }
+  },
+  {
+    "name": "a spawn/process error is process-error",
+    "input": { "text": "Claude Code process error: EACCES", "closeRequested": false, "credentials": null, "now": 1000 },
+    "expect": { "reason": "process-error", "exitCode": null, "signal": null, "diagnosis": "probe-failed" }
+  },
+  {
+    "name": "aborted by user when this handle asked for it is closed, not stream-error",
+    "input": { "text": "Claude Code process aborted by user", "closeRequested": true, "credentials": null, "now": 1000 },
+    "expect": { "reason": "closed", "exitCode": null, "signal": null, "diagnosis": null }
+  },
+  {
+    "name": "aborted by user when this handle never asked is stream-error, not closed",
+    "input": { "text": "Claude Code process aborted by user", "closeRequested": false, "credentials": null, "now": 1000 },
+    "expect": { "reason": "stream-error", "exitCode": null, "signal": null, "diagnosis": "probe-failed" }
+  },
+  {
+    "name": "unrecognised text is stream-error, the message carried verbatim rather than a guessed reason",
+    "input": { "text": "connection reset by peer", "closeRequested": false, "credentials": null, "now": 1000 },
+    "expect": { "reason": "stream-error", "exitCode": null, "signal": null, "diagnosis": "probe-failed" }
+  },
+  {
+    "name": "the CLI's resume-drops-turn refusal is resume-rejected, never diagnosed as a failure",
+    "input": {
+      "text": "Resume rejected by --resume-drops-turn: a queued user message fell inside the discarded range",
+      "closeRequested": false,
+      "credentials": null,
+      "now": 1000
+    },
+    "expect": { "reason": "resume-rejected", "exitCode": null, "signal": null, "diagnosis": null }
+  },
+  {
+    "name": "a mid-stream auth failure reaches the operator as token-stale, the same vocabulary the runtime strip already shows",
+    "input": { "text": "Claude Code process exited with code 1", "closeRequested": false, "credentials": { "present": true, "expiresAt": 0, "hasRefreshToken": true }, "now": 1000 },
+    "expect": { "reason": "exit-nonzero", "exitCode": 1, "signal": null, "diagnosis": "token-stale" }
+  },
+  {
+    "name": "login wording inside a process error is unauthenticated, not a bare process-error",
+    "input": { "text": "Claude Code process error: not logged in", "closeRequested": false, "credentials": null, "now": 1000 },
+    "expect": { "reason": "process-error", "exitCode": null, "signal": null, "diagnosis": "unauthenticated" }
+  }
+]
