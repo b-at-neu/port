@@ -68,6 +68,7 @@ export default async function ({ fail, ok }: Reporter) {
   // --- (4) The shared case table pins both correlate ladders together --------
   // guard(#77): the reclaimer's and the desktop app's correlation ladders
   // silently disagreeing about which issue a worktree belongs to.
+  // pin: `bin/worktrees.mjs`'s `correlate` ↔ the desktop `correlate` (`apps/desktop/src/main/local/correlate.ts`)
   {
     const casesPath = join(root, dir, 'correlation.cases.json');
     const cases = readJson(`${dir}/correlation.cases.json`);

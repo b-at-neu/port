@@ -17,63 +17,16 @@ No dependencies, no plugin install, no model calls. Runs in seconds, in an agent
 **Each guard is declared on the check that pins it, in `scripts/checks/`** — a `// guard(#N): <one line>` marker colocated on the block it describes, never a shared registry file every guard-adding pull request has to touch (#217; see `docs/ENGINEERING.md` §7).
 
 ```bash
-node scripts/checks.ts --guards               # the whole index, one section per check module
+node scripts/checks.ts --guards               # the whole guard index, one section per check module
 node scripts/checks.ts --guards --issue 149    # is there a guard for this fix? at least one row, or exit 1
+node scripts/checks.ts --pins                  # the whole copy-pin index, one section per check module
 ```
 
 Each rule is worth testing by breaking it deliberately. If a check cannot be made to fail, it is not a check.
 
 The script reports full schema validation as **skipped**, because a draft 2020-12 validator is a dependency and the script must run where none is installed. CI does that part.
 
-Two guards specific to `plugins/port/bin/artifacts.mjs` (#231), both in `scripts/checks/artifacts.ts`:
-
-- `stageViolation`'s pair-wise legality, asserted directly: every sanctioned pair (a stage label alone, a refresh label alone, one of each) passes, and both illegal shapes — two stage labels, or both refresh labels — fail with a message naming the offending labels.
-- The audit workflow's trigger, read off `plugins/port/templates/artifacts.yml`: `pull_request.types` names `labeled`, `opened`, and `synchronize`; the one `if:` key sits at step indentation, never job indentation; and neither it nor this document still carries the retired "never register this as a required status check" warning.
-
-A layer 1 check specific to the three-way split under `plugins/port/` (#171), in `scripts/checks/layout.ts`:
-
-- `templates/` holds only its eight fill-in templates (`DESIGN.template.md`, `ENGINEERING.template.md`, `AUDITOR.template.md`, `SCAFFOLDER.template.md`, `permissions.base.json`, the config template, `approval-check.yml`, `artifacts.yml`), asserted both directions against the tree.
-- `bin/` holds only self-contained `.mjs` files — no relative import escaping the file, checked directory-wide rather than per file. `scripts/` is the opposite: every file there is `.ts`, never `.mjs`, checked directory-wide the same way (`scripts/checks/harness.ts`).
-- `data/` holds only `.json`.
-- No tracked text file still names the old `templates/`-relative path to `artifacts.mjs`, `worktrees.mjs`, `budget.mjs`, or `labels.json` — each now lives under `bin/` or `data/`.
-
-Guards for the `scripts/` → TypeScript migration (#122):
-
-- `scripts/checks/config.ts`: every script path this repository's own `.claude/port.config.json` and `.claude/settings.json` configure (`commands.*`, `extraAllow`, `permissions.allow`) resolves to a real file on disk — scoped to these two files only, never a template or a fixture, which name paths only an adopter has. Also asserts root `package.json` still declares `"type": "module"`, since every `scripts/*.ts` file loads as ESM only because of that field.
-- `scripts/checks/harness.ts`: the topic-module scan (and each of `scripts/checks/tick.ts`'s three `scripts/port-tick/` scans) fails outright if its extension filter matches zero files — an extension filter that matches nothing runs no assertions and reports nothing, exactly the silence a half-finished rename produces. Also asserts no file under `plugins/port/` carries a `.ts` extension, since type stripping needs Node ≥22.18, which an adopting repository never agreed to.
-
-Guards for `/port:analyze`'s skill-generation step (#191), in `scripts/checks/analyze.ts` and `scripts/checks/standards.ts`:
-
-- `SKILL.md`'s step 6.5 references `skills/analyze/SKILL-GENERATION.md`, and that file in turn references both `templates/SCAFFOLDER.template.md` and `templates/AUDITOR.template.md` — each pinned to actually exist on disk, so a dangling reference fails at check time rather than silently at runtime.
-- Both archetype templates' frontmatter parses and declares `name`, `description`, and an `allowed-tools` no wider than the archetype's default (`Write`/`Edit` present for the scaffolder, absent for the auditor).
-- The recipe names the generic test and resolves a name collision by reading `${CLAUDE_PLUGIN_ROOT}/skills/` directly — never a transcribed list of every shipped skill name, which would be a second copy needing its own pin.
-- The writable-set sentence in `analyze/SKILL.md`'s "You do not change code. Ever." — previously pinned to three files — now names all **four**: the engineering document, the design document, `.claude/port.config.json`, and the skills generated under `.claude/skills/`.
-
-`desktop-tick`'s own guards for the file-contention gate (#106), in `scripts/checks/desktop-tick.ts`:
-
-- `main/tick/contention.test.ts` resolves `scripts/port-tick/cases/contention.cases.json` — catches the test silently drifting off the shared table it exists to be asserted against, so the app's port and the engine could disagree with nothing to catch it.
-- `main/tick/contention.ts`'s exported function names agree with `scripts/port-tick/contention.ts`'s own, both directions — catches the app's own port silently gaining or losing a function relative to the engine it is ported from.
-- `main/tick/plan.ts`'s occupied-set stage keys (`inProgress`, `prOpened`) resolve in `data/labels.json` with the roles the gate assumes (`in-flight`, `terminal`) — catches a retired or renamed stage key silently emptying the occupied set rather than failing here.
-- `main/registry/schema.ts`'s `CONFIG_DEFAULTS.concurrency` carries no hand-typed numeric or array literal — catches the default silently drifting from the schema's own default the moment either changes.
-
-Guards for the plan-gate claim (#206), in `scripts/checks/gate-claim.ts`:
-
-- `classifyGateClaim`'s three verdicts (`absent`/`held`/`unreadable`) against a missing file, a repository mismatch, unparseable JSON, a non-object, missing `owner`/`claimedAt`, an unrecognized scope, and a `held` claim naming only an unrecognized scope (never denied on).
-- The guard rule's own two arms: a `gh issue edit`/`gh pr edit` adding or removing a plan-gate label while a claim holds or is unreadable is denied, exempt for a subagent and an `/port:implement` `impl-<n>` worktree — but a `Write`/`Edit`/`NotebookEdit` targeting the claim file itself is denied with **no** exemption at all, including from `impl-<n>`.
-- `autoPlan` never matches the claimed label set, and a label name quoted inside a `-b` body never trips either arm.
-- End-to-end wiring — the real `agent-guard.mjs`, spawned against a temp fixture carrying a held claim, actually denies the label edit and lets an unrelated one through.
-- The doc pins: the hook's plan-gate key reads match `PIPELINE.md`'s "External gate claim" section and `docs/COORDINATION.md`'s claim-contract keys; the cockpit's stand-down precondition and UX-state copy are literal phrases in the pipeline skill; `PIPELINE.md`'s "Cockpit rules" paragraph states five and its list carries five bullets.
-
-Guards for the plan gate in the UI (#92), in `scripts/checks/desktop-gate.ts`:
-
-- `shared/gate/classify.ts`'s LabelKeys (`planReview`/`planApproved`/`planChangesRequested`) agree with `main/writes/scope.ts`'s `PLAN_GATE_KEYS`, both directions — the gate can never write a key the claim scope does not actually cover.
-- Both decisions' own plan set `expect.present` to `['planReview']` — the "don't answer an item that already moved" guard.
-- `GATE_CLAIM_OWNER`'s value appears in `docs/COORDINATION.md`'s stand-down copy, so the cockpit's own report names what this app actually writes to the claim file.
-- `postComment(` is called under `apps/desktop/src/` only from `main/actions/gate.ts`, and there it precedes `applyLabels(` in source order — the comment-then-swap ordering, mechanically.
-- `shared/markdown/` imports no `node:` builtin and nothing from `main/`; `renderer/src/markdown.ts` is the only file under `renderer/` importing it.
-- `shared/markdown/inline.ts`'s link-scheme allowlist names exactly `http://` and `https://`.
-- `renderer/src/gate/copy.ts` carries the session-required consequence as a literal phrase naming `/port:implement` and the fact that no agent picks it up, plus the claim-step lines `docs/COORDINATION.md` decided.
-- No file under `shared/gate/`, `main/actions/`, or `renderer/src/gate/` names a literal label name, reusing `desktop-actions.ts`'s own mismatched-name scan.
+**Every guard-adding pull request stays out of this file.** A guard's own description lives on the check block that pins it (`--guards` above), and a duplicated-content pin lives the same way (`--pins`, `docs/ENGINEERING.md` §2) — never restated here in prose, which is what regrew `docs/TESTING.md` into a hub after #217 first relieved it (#255).
 
 ## Layer 2 — artifact assertions on real runs
 

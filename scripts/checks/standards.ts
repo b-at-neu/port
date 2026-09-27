@@ -19,6 +19,8 @@ import type { Reporter } from '../lib/report.ts';
 // file growing until issue 181 frees the headroom — so the four agent copies are
 // compared pairwise against each other instead of against one source, the
 // same resolution docs/ENGINEERING.md §2 records for the label-cas block.
+// pin: The `standards-precedence` block ↔ its copies in the four agent files — compared pairwise, same "no `PIPELINE.md` canonical copy until issue 220 moves it there" carve-out as `label-cas`
+// pin: `docs.design`'s presence in the `standards-precedence` block ↔ its copies in the four agent files, and every agent naming `docs.engineering` also naming `docs.design` (and vice versa)
 export default async function ({ fail, note, ok }: Reporter) {
   const BEGIN = '<!-- standards-precedence:begin -->';
   const END = '<!-- standards-precedence:end -->';
@@ -241,6 +243,7 @@ export default async function ({ fail, note, ok }: Reporter) {
   // carries the accessibility heading, DESIGN.template.md carries none, and
   // DESIGN.template.md cross-references the engineering document instead of
   // restating it.
+  // pin: The `ENGINEERING.md`/`DESIGN.md` boundary statement (accessibility's single home) ↔ its copy in `templates/ENGINEERING.template.md` and `templates/DESIGN.template.md` — both directions, plus `DESIGN.template.md` carrying no Accessibility heading of its own
   const engineeringTemplate = readFileSync(
     join(root, 'plugins/port/templates/ENGINEERING.template.md'),
     'utf8',

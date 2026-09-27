@@ -1,20 +1,34 @@
 import { readFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { join } from 'node:path';
 import { root, walk } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
 // --- Runner stays thin, every topic module stays wired ----------------------
-// guard(#168): a topic module present on disk but never imported by the
-// runner runs nothing and reports nothing — exactly the silence layer 1
-// exists to catch. Keeps the split honest, mechanically, so it cannot
-// silently regress back into one monolith: the runner may only wire modules
-// together and call report(), never fail/note/ok directly.
+// guard(#255): a topic module present on disk but never run — issue 168's
+// original regression — is now structurally impossible, since the runner
+// carries no static per-module import to omit one from: it discovers every
+// scripts/checks/*.ts file from disk and imports each dynamically. What
+// replaces issue 168's guard is the rail that makes it impossible in the
+// first place — the runner may never hand-list a module, only wire
+// whatever the scan finds together and call report(), never fail/note/ok
+// directly.
 export default async function ({ fail, ok }: Reporter) {
   const runnerRel = 'scripts/checks.ts';
   const runnerText = readFileSync(join(root, runnerRel), 'utf8');
 
   if (/\b(?:fail|note|ok)\(/.test(runnerText)) {
     fail('harness', `${runnerRel} calls fail/note/ok directly — check logic belongs in a scripts/checks/*.ts module, not the runner`);
+  } else {
+    ok();
+  }
+
+  // guard(#255): a static `import … from './checks/…'` line reappearing is
+  // the exact half-wired shape issue 168 originally guarded against — the
+  // runner must discover every topic module from disk, never hand-list
+  // one, or a module added to the list but never actually present on disk
+  // (or vice versa) can silently drift again.
+  if (/from\s+['"]\.\/checks\//.test(runnerText)) {
+    fail('harness', `${runnerRel} carries a static 'import … from ./checks/…' line — every topic module must be discovered from disk, never hand-listed`);
   } else {
     ok();
   }
@@ -27,14 +41,6 @@ export default async function ({ fail, ok }: Reporter) {
     fail('harness', `scripts/checks/*.ts matched zero files — the topic-module scan itself is broken`);
   } else {
     ok();
-  }
-  for (const f of moduleFiles) {
-    const name = basename(f);
-    if (!runnerText.includes(`checks/${name}`)) {
-      fail('harness', `scripts/checks/${name} exists but is never imported by ${runnerRel}`);
-    } else {
-      ok();
-    }
   }
 
   // --- No file under plugins/port/ carries a .ts extension --------------------
