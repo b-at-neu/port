@@ -38,7 +38,7 @@ function citedIssues(text: string): Set<number> {
  *  exists to enforce. Returns an array of failure strings — empty means the
  *  module passes. Pure, so the same function checks a real file and an
  *  inline self-test fixture. */
-function validateModule(text: string, moduleName: string): string[] {
+function validateModule(text: string, moduleName: string): { problems: string[]; pinCount: number } {
   const problems: string[] = [];
   const entries = parseModule(text, moduleName);
   const guardEntries = entries.filter((e) => e.kind === 'guard');
@@ -46,7 +46,7 @@ function validateModule(text: string, moduleName: string): string[] {
 
   if (guardEntries.length === 0) {
     problems.push(`${moduleName}: no guard entries — every check module must declare at least one`);
-    if (pinEntries.length === 0) return problems;
+    if (pinEntries.length === 0) return { problems, pinCount: pinEntries.length };
   }
 
   for (const e of entries) {
@@ -77,7 +77,7 @@ function validateModule(text: string, moduleName: string): string[] {
     }
   }
 
-  return problems;
+  return { problems, pinCount: pinEntries.length };
 }
 
 export default async function ({ fail, ok }: Reporter) {
@@ -99,7 +99,7 @@ export default async function ({ fail, ok }: Reporter) {
     const clean = [`${cmt} --- A clean check ---`, `${cmt} guard(#1): a real regression this block pins.`, 'export default async function () {}'].join(
       '\n',
     );
-    if (validateModule(clean, 'fixture-clean').length !== 0) {
+    if (validateModule(clean, 'fixture-clean').problems.length !== 0) {
       fail('guards', 'validateModule rejected a well-formed fixture module');
     } else {
       ok();
@@ -110,7 +110,7 @@ export default async function ({ fail, ok }: Reporter) {
       `${cmt} Fixes the regression from #2, no marker below.`,
       `${cmt} guard(#1): unrelated.`,
     ].join('\n');
-    const citedProblems = validateModule(citedWithNoMarker, 'fixture-cited');
+    const citedProblems = validateModule(citedWithNoMarker, 'fixture-cited').problems;
     if (!citedProblems.some((p) => p.includes('#2'))) {
       fail('guards', 'validateModule accepted a module citing #2 in prose with no guard(#2) marker');
     } else {
@@ -118,14 +118,14 @@ export default async function ({ fail, ok }: Reporter) {
     }
 
     const emptyDescription = [`${cmt} --- A check ---`, `${cmt} guard(#1):`].join('\n');
-    if (!validateModule(emptyDescription, 'fixture-empty').some((p) => p.includes('empty description'))) {
+    if (!validateModule(emptyDescription, 'fixture-empty').problems.some((p) => p.includes('empty description'))) {
       fail('guards', 'validateModule accepted a guard marker with an empty description');
     } else {
       ok();
     }
 
     const badIssueList = [`${cmt} --- A check ---`, `${cmt} guard(#abc): a description.`].join('\n');
-    if (!validateModule(badIssueList, 'fixture-bad-issue').some((p) => p.includes('unparsable'))) {
+    if (!validateModule(badIssueList, 'fixture-bad-issue').problems.some((p) => p.includes('unparsable'))) {
       fail('guards', 'validateModule accepted guard(#abc), a non-numeric issue reference');
     } else {
       ok();
@@ -136,21 +136,21 @@ export default async function ({ fail, ok }: Reporter) {
     // structural rule, never a fix record), or naming only one thing instead
     // of two — the exact shape every real §2 row avoided.
     const wellFormedPin = [`${cmt} --- A pinned check ---`, `${cmt} guard(#1): a real regression this block pins.`, `${cmt} pin: \`a\` ↔ \`b\``].join('\n');
-    if (validateModule(wellFormedPin, 'fixture-pin-clean').length !== 0) {
+    if (validateModule(wellFormedPin, 'fixture-pin-clean').problems.length !== 0) {
       fail('guards', 'validateModule rejected a well-formed pin fixture');
     } else {
       ok();
     }
 
     const pinWithIssues = [`${cmt} --- A check ---`, `${cmt} guard(#1): a real regression this block pins.`, `${cmt} pin(#2): \`a\` ↔ \`b\``].join('\n');
-    if (!validateModule(pinWithIssues, 'fixture-pin-issues').some((p) => p.includes('declares an issue list'))) {
+    if (!validateModule(pinWithIssues, 'fixture-pin-issues').problems.some((p) => p.includes('declares an issue list'))) {
       fail('guards', 'validateModule accepted a pin(#2) marker — a pin declares no issue list');
     } else {
       ok();
     }
 
     const pinNoArrow = [`${cmt} --- A check ---`, `${cmt} guard(#1): a real regression this block pins.`, `${cmt} pin: names only one thing`].join('\n');
-    if (!validateModule(pinNoArrow, 'fixture-pin-no-arrow').some((p) => p.includes("does not name two things with '↔'"))) {
+    if (!validateModule(pinNoArrow, 'fixture-pin-no-arrow').problems.some((p) => p.includes("does not name two things with '↔'"))) {
       fail('guards', 'validateModule accepted a pin marker with no ↔ — a pin names two things or it is not a pin');
     } else {
       ok();
@@ -161,18 +161,19 @@ export default async function ({ fail, ok }: Reporter) {
   // guard(#217): a module with no guard marker passing vacuously, or a
   // regression fixed in one module and only ever recorded in prose the way
   // docs/TESTING.md's table used to be, with nothing checking it survived.
-  // pin(#255)-completeness: the scan also counts every real `pin:` marker
-  // it finds — a vacuous pass after a botched §2 migration is the exact
-  // silence layer 1 exists to catch, so zero pins found across the whole
-  // scan is a failure below, never a silent zero.
+
+  // guard(#255): the scan also counts every real `pin:` marker it finds — a
+  // vacuous pass after a botched §2 migration is the exact silence layer 1
+  // exists to catch, so zero pins found across the whole scan is a failure
+  // below, never a silent zero.
   let totalPins = 0;
   {
     const files = walk(join(root, 'scripts/checks')).filter((f) => f.endsWith('.ts'));
     for (const f of files) {
       const moduleName = basename(f, '.ts');
       const text = readFileSync(f, 'utf8');
-      const problems = validateModule(text, moduleName);
-      totalPins += parseModule(text, moduleName).filter((e) => e.kind === 'pin').length;
+      const { problems, pinCount } = validateModule(text, moduleName);
+      totalPins += pinCount;
       if (problems.length === 0) {
         ok();
       } else {
