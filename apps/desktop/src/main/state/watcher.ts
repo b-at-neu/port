@@ -13,6 +13,8 @@ import { DEFAULT_POLL_POLICY, SOURCE_KINDS, initialHealth } from '../../shared/b
 import type { BoardSnapshot, RepositoryHealth, SourceHealth, SourceKind } from '../../shared/board/types'
 import type { RelayScan } from '../../shared/relay/types'
 import { createDispatchLedger, planTick } from '../tick'
+import { buildDesktopTickEvent, recordTick as defaultRecordTick } from '../trajectory'
+import type { DesktopTickEvent, RecordTickDeps } from '../trajectory'
 import { isReady, projectFromCache } from './read'
 import { afterFailure, afterSuccess, deferredUntil, dueSources, nextDueAt } from './schedule'
 import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from './sources'
@@ -34,6 +36,11 @@ const defaultSetTimer: TimerFactory = (callback, ms) => {
   return { clear: () => clearTimeout(handle) }
 }
 
+/** The same seam `gh`/`git`/`sessionReader` already declare below — injected
+ *  so `watcher.test.ts` never touches a real filesystem for the trajectory
+ *  record either (#111). */
+export type RecordTickFn = (repoRoot: string, event: DesktopTickEvent, deps?: RecordTickDeps) => Promise<void>
+
 export interface CreatePipelineWatcherParams {
   /** A static list, or a provider re-invoked on the GitHub cadence — so a
    *  repository added or removed on the Repositories view appears on the
@@ -46,6 +53,7 @@ export interface CreatePipelineWatcherParams {
   readonly claudeHome?: string
   readonly now?: () => Date
   readonly setTimer?: TimerFactory
+  readonly recordTick?: RecordTickFn
 }
 
 export interface PipelineWatcher {
@@ -81,6 +89,10 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
   // restarted app gets a fresh one, so every in-flight item reads
   // `no-record` on the first tick after a restart, never a false reset.
   const ledger = createDispatchLedger()
+  // The trajectory record's one appender for this watcher's whole lifetime
+  // (#111) — injectable the same way `gh`/`git`/`sessionReader` already are,
+  // so a test never touches a real filesystem for it.
+  const recordTickFn: RecordTickFn = params.recordTick ?? defaultRecordTick
   // The relay reader (#107) — one instance for the watcher's whole
   // lifetime, run inside `runSessions()` right after `refreshSessions`, over
   // the same session scan that call just refreshed. Relay carries no new
@@ -139,6 +151,21 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     const tick = state.repositories
       .filter((repository) => readyIds.has(repository.repoId))
       .map((repository) => planTick({ repository, ledger, nextDecisionAt: nextDueAt(ensureHealth(repository.repoId).github, now()), now }))
+
+    // The trajectory record's desktop-side twin (#111) — fire-and-forget,
+    // right after computing tick, never awaited and never part of the
+    // BoardSnapshot returned below: a write failure here must not change
+    // what the board renders. Skipped for a blind report — an empty
+    // dispatch/held/claims set standing in for "nothing recorded" would be
+    // exactly the ambiguity a blind tick exists to remove.
+    const entryById = new Map(readyEntries.map((entry) => [entry.id, entry] as const))
+    for (const report of tick) {
+      if (report.blind !== null) continue
+      const entry = entryById.get(report.repoId)
+      if (entry === undefined) continue
+      void recordTickFn(entry.path, buildDesktopTickEvent({ repo: entry.config.repo, report, now }), { git: params.git })
+    }
+
     const nextWakeupAt = stopped ? null : earliestDueAt().toISOString()
     latest = { state, health: healthList, policy: DEFAULT_POLL_POLICY, tick, relay, nextWakeupAt, emittedAt: now().toISOString() }
     return latest
