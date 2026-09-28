@@ -3,7 +3,7 @@
 // item's `matchedKeys` comes from the alias table `query.ts` built, not from
 // re-matching `labels` against the vocabulary.
 import type { LabelKey } from '../../shared/labels/vocabulary'
-import type { ItemState, PipelineItem, PipelineItemKind, QueriedLabel } from '../../shared/github/types'
+import type { ItemState, PipelineItem, PipelineItemKind, PullRequestCommentNode, QueriedLabel, ReviewNode } from '../../shared/github/types'
 
 interface ConnectionLike {
   readonly totalCount?: unknown
@@ -23,6 +23,9 @@ interface RawNode {
   readonly mergedAt?: unknown
   readonly assignees?: unknown
   readonly labels?: unknown
+  readonly headRefOid?: unknown
+  readonly reviews?: unknown
+  readonly comments?: unknown
 }
 
 function isRawNode(value: unknown): value is RawNode {
@@ -55,9 +58,47 @@ export function fieldListOf(value: unknown, field: 'login' | 'name'): readonly s
   return out
 }
 
+/** Reads `{ nodes: [{ body, submittedAt, commit: { oid } }] }` — the
+ *  review's own `commit.oid` is flattened to `commitOid` here so nothing
+ *  downstream (`main/tick/gates.ts`) ever reaches into a nested GraphQL
+ *  shape. Filters out anything that is not string-shaped the same way
+ *  `fieldListOf` does. */
+function reviewNodesOf(value: unknown): readonly ReviewNode[] {
+  const connection = asConnection(value)
+  const nodes = connection?.nodes
+  if (!Array.isArray(nodes)) return []
+  const out: ReviewNode[] = []
+  for (const node of nodes) {
+    if (typeof node !== 'object' || node === null) continue
+    const raw = node as Record<string, unknown>
+    if (typeof raw.body !== 'string' || typeof raw.submittedAt !== 'string') continue
+    const commit = typeof raw.commit === 'object' && raw.commit !== null ? (raw.commit as Record<string, unknown>) : undefined
+    const commitOid = typeof commit?.oid === 'string' ? commit.oid : null
+    out.push({ body: raw.body, submittedAt: raw.submittedAt, commitOid })
+  }
+  return out
+}
+
+/** Reads `{ nodes: [{ body, createdAt }] }` — the `## Gate cleared`
+ *  carve-out's own evidence, the same shape `reviewNodesOf` establishes. */
+function commentNodesOf(value: unknown): readonly PullRequestCommentNode[] {
+  const connection = asConnection(value)
+  const nodes = connection?.nodes
+  if (!Array.isArray(nodes)) return []
+  const out: PullRequestCommentNode[] = []
+  for (const node of nodes) {
+    if (typeof node !== 'object' || node === null) continue
+    const raw = node as Record<string, unknown>
+    if (typeof raw.body !== 'string' || typeof raw.createdAt !== 'string') continue
+    out.push({ body: raw.body, createdAt: raw.createdAt })
+  }
+  return out
+}
+
 function nodeToItem(node: RawNode, kind: PipelineItemKind, repo: string, key: LabelKey): PipelineItem | undefined {
   const number = numberField(node.number)
   if (number === undefined) return undefined
+  const isPullRequest = kind === 'pull-request'
   return {
     repo,
     kind,
@@ -70,6 +111,9 @@ function nodeToItem(node: RawNode, kind: PipelineItemKind, repo: string, key: La
     assignees: fieldListOf(node.assignees, 'login'),
     labels: fieldListOf(node.labels, 'name'),
     matchedKeys: [key],
+    headRefOid: isPullRequest && typeof node.headRefOid === 'string' ? node.headRefOid : null,
+    reviews: isPullRequest ? reviewNodesOf(node.reviews) : null,
+    comments: isPullRequest ? commentNodesOf(node.comments) : null,
   }
 }
 

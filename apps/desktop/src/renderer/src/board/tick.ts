@@ -105,7 +105,25 @@ export function heldDetailCopy(held: TickHeld): string {
       const count = c.paths.length
       return `#${n} held behind #${String(c.blocker)} — ${String(count)} contended file${count === 1 ? '' : 's'}: ${contendedPathList(c.paths)}.`
     }
+    case 'cycle-cap': {
+      const e = held.escalation
+      // Defensive: `planTick` never emits `reason: 'cycle-cap'` without a
+      // populated `escalation` of the same kind.
+      if (e === null || e.kind !== 'cycle-cap') return `#${n} would escalate to needs human — the review cycle cap was reached.`
+      return `#${n} would escalate to needs human — cycle ${String(e.count)} reached the cap of ${String(e.cap)}.`
+    }
+    case 'zero-diff':
+      return `#${n} would escalate to needs human — the latest review already covers the current head.`
   }
+}
+
+/** "Actionable detail, approaching the cap" (plan's own **UX states**) —
+ *  `null` when this candidate carries no cycle count (every agent but
+ *  `revise`/`review`), so a pull request's own cycle position is visible on
+ *  hover the moment it enters the loop, not only once it nears the cap. */
+export function cycleDetailCopy(actionable: TickActionable): string | null {
+  if (actionable.cycle === null) return null
+  return `#${String(actionable.number)} ${actionable.agent} — cycle ${String(actionable.cycle.count)} of ${String(actionable.cycle.cap)}.`
 }
 
 /** "Unchecked detail" (plan's own **UX states**) — the one testing step
@@ -162,6 +180,7 @@ export function buildTickStrip(snapshot: BoardSnapshot, now: Date): HTMLElement 
       const details = [
         ...report.held.map(heldDetailCopy),
         ...report.actionable.filter((a) => a.unchecked).map(uncheckedDetailCopy),
+        ...report.actionable.map(cycleDetailCopy),
         ...report.claims.map(stalledDetailCopy),
       ].filter((d): d is string => d !== null)
       if (details.length > 0) line.title = details.join('\n')

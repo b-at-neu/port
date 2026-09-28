@@ -55,17 +55,19 @@ export default async function ({ fail, ok }: Reporter) {
     if (!violated) ok();
   }
 
-  // --- (3) ownership/liveness/contention tests import a real case table -----
-  // guard(#105, #106): a test silently drifting off the shared table it
+  // --- (3) ownership/liveness/contention/gates tests import a real case table -
+  // guard(#105, #106, #108): a test silently drifting off the shared table it
   // exists to be asserted against, so the two implementations could
   // disagree with nothing to catch it.
   // pin: `scripts/port-tick/cases/ownership.cases.json`/`liveness.cases.json` ↔ `main/tick/ownership.ts`'s `partitionOwnership`/`main/tick/liveness.ts`'s `classifyUnmatched`, the same tables `tick-cases` already asserts the engine's own exports against
   // pin: `scripts/port-tick/cases/contention.cases.json` ↔ `main/tick/contention.ts`'s ported `parseFilesBlock`/`gateCandidates`, the same table `tick-cases` already asserts the engine's own exports against
+  // pin: `scripts/port-tick/cases/gates.cases.json` ↔ `main/tick/gates.ts`'s ported `cycleCapExceeded`/`zeroDiffGate`, the same table `tick-cases` already asserts the engine's own exports against
   {
     const pairs = [
       { test: `${mainDir}/ownership.test.ts`, table: 'scripts/port-tick/cases/ownership.cases.json' },
       { test: `${mainDir}/liveness.test.ts`, table: 'scripts/port-tick/cases/liveness.cases.json' },
       { test: `${mainDir}/contention.test.ts`, table: 'scripts/port-tick/cases/contention.cases.json' },
+      { test: `${mainDir}/gates.test.ts`, table: 'scripts/port-tick/cases/gates.cases.json' },
     ];
     for (const { test, table } of pairs) {
       const testPath = join(root, test);
@@ -274,6 +276,32 @@ export default async function ({ fail, ok }: Reporter) {
       } else {
         ok();
       }
+    }
+  }
+
+  // --- (11) main/tick/gates.ts's exported functions are each either ----------
+  // codeReviewCount (the one documented exception) or a same-named export of
+  // scripts/port-tick/gates.ts — one-directional, unlike (8)'s full
+  // bidirectional contention pin, since this ticket ports only 2 of that
+  // file's 7 functions
+  // guard(#108): the app's own gates.ts silently gaining a function that
+  // neither ports the engine nor is the one documented exception — checked
+  // by dynamic import of the real engine, the same idiom (8) already uses.
+  // pin: `main/tick/gates.ts`'s exported functions ↔ `codeReviewCount` or `scripts/port-tick/gates.ts`'s own exports of the same name (one direction only)
+  {
+    const gatesFile = `${mainDir}/gates.ts`;
+    const enginePath = join(root, 'scripts/port-tick/gates.ts');
+    const appText = readFileSync(join(root, gatesFile), 'utf8');
+    const appFunctions = [...appText.matchAll(/^export function (\w+)/gm)].map((m) => m[1]);
+
+    const engineModule = await import(pathToFileURL(enginePath).href);
+    const engineFunctions = new Set(Object.keys(engineModule).filter((k) => typeof engineModule[k] === 'function'));
+
+    const stray = appFunctions.filter((name) => name !== 'codeReviewCount' && !engineFunctions.has(name!));
+    if (stray.length > 0) {
+      fail('desktop-tick', `${gatesFile} exports ${stray.join(', ')} — neither 'codeReviewCount' nor a same-named export of scripts/port-tick/gates.ts`);
+    } else {
+      ok();
     }
   }
 }

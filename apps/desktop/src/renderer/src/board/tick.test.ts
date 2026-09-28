@@ -7,7 +7,7 @@ import type { RepoId } from '../../../shared/repos'
 import type { RepositoryHealth } from '../../../shared/board/types'
 import { initialHealth } from '../../../shared/board/types'
 import type { TickActionable, TickClaim, TickHeld, TickReport } from '../../../shared/tick/types'
-import { clockLineCopy, heldDetailCopy, repositoryLineCopy, stalledDetailCopy, uncheckedDetailCopy } from './tick'
+import { clockLineCopy, cycleDetailCopy, heldDetailCopy, repositoryLineCopy, stalledDetailCopy, uncheckedDetailCopy } from './tick'
 
 const NOW = new Date('2026-01-01T00:00:00.000Z')
 
@@ -54,12 +54,12 @@ describe('repositoryLineCopy', () => {
   it('a repository with work to do names every actionable item, the held count, and the liveness split', () => {
     const rep = report({
       actionable: [
-        { number: 105, kind: 'issue', trigger: 'ready', agent: 'plan', unchecked: false },
-        { number: 112, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false },
+        { number: 105, kind: 'issue', trigger: 'ready', agent: 'plan', unchecked: false, cycle: null },
+        { number: 112, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null },
       ],
       held: [
-        { number: 1, kind: 'issue', trigger: 'ready', reason: 'unowned', contention: null },
-        { number: 2, kind: 'issue', trigger: 'ready', reason: 'unowned', contention: null },
+        { number: 1, kind: 'issue', trigger: 'ready', reason: 'unowned', contention: null, escalation: null },
+        { number: 2, kind: 'issue', trigger: 'ready', reason: 'unowned', contention: null, escalation: null },
       ],
       claims: [
         { number: 3, kind: 'issue', inFlight: 'inProgress', class: 'matched', retryKey: null },
@@ -72,13 +72,13 @@ describe('repositoryLineCopy', () => {
   })
 
   it('names an unstructured plan as a count, never omitted (#106)', () => {
-    const rep = report({ actionable: [{ number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: true }] })
+    const rep = report({ actionable: [{ number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: true, cycle: null }] })
     expect(repositoryLineCopy(rep)).toBe('o/a — would dispatch impl #52 · 1 plan unchecked · Liveness: nothing in flight.')
   })
 })
 
 describe('heldDetailCopy', () => {
-  const base: TickHeld = { number: 118, kind: 'issue', trigger: 'ready', reason: 'unowned', contention: null }
+  const base: TickHeld = { number: 118, kind: 'issue', trigger: 'ready', reason: 'unowned', contention: null, escalation: null }
   it('covers all three ownership/session reasons', () => {
     expect(heldDetailCopy(base)).toBe('#118 unassigned — no cockpit will pick this up.')
     expect(heldDetailCopy({ ...base, reason: 'other-operator' })).toBe('#118 assigned to someone else.')
@@ -86,7 +86,14 @@ describe('heldDetailCopy', () => {
   })
 
   it('names the blocker and contended files for a contended hold (#106)', () => {
-    const held: TickHeld = { number: 118, kind: 'issue', trigger: 'planApproved', reason: 'contended', contention: { blocker: 67, blockerStage: 'in progress', depth: 2, paths: ['src/lib/auth.ts', 'src/lib/session.ts'] } }
+    const held: TickHeld = {
+      number: 118,
+      kind: 'issue',
+      trigger: 'planApproved',
+      reason: 'contended',
+      contention: { blocker: 67, blockerStage: 'in progress', depth: 2, paths: ['src/lib/auth.ts', 'src/lib/session.ts'] },
+      escalation: null,
+    }
     expect(heldDetailCopy(held)).toBe('#118 held behind #67 — 2 contended files: src/lib/auth.ts, src/lib/session.ts.')
   })
 
@@ -97,15 +104,45 @@ describe('heldDetailCopy', () => {
       trigger: 'planApproved',
       reason: 'contended',
       contention: { blocker: 67, blockerStage: 'in progress', depth: 5, paths: ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts', 'src/e.ts'] },
+      escalation: null,
     }
     expect(heldDetailCopy(held)).toBe('#118 held behind #67 — 5 contended files: src/a.ts, src/b.ts, src/c.ts and 2 more.')
+  })
+
+  it('names the cycle count and cap for a cycle-cap hold (#108)', () => {
+    const held: TickHeld = {
+      number: 204,
+      kind: 'pull-request',
+      trigger: 'needsRevision',
+      reason: 'cycle-cap',
+      contention: null,
+      escalation: { kind: 'cycle-cap', count: 5, cap: 5 },
+    }
+    expect(heldDetailCopy(held)).toBe('#204 would escalate to needs human — cycle 5 reached the cap of 5.')
+  })
+
+  it('names the zero-diff fact for a zero-diff hold (#108)', () => {
+    const held: TickHeld = { number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } }
+    expect(heldDetailCopy(held)).toBe('#157 would escalate to needs human — the latest review already covers the current head.')
   })
 })
 
 describe('uncheckedDetailCopy', () => {
   it('names the item and the reason it dispatches unchecked (#106)', () => {
-    const actionable: TickActionable = { number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: true }
+    const actionable: TickActionable = { number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: true, cycle: null }
     expect(uncheckedDetailCopy(actionable)).toBe('#52 has no file list in its plan — dispatching unchecked.')
+  })
+})
+
+describe('cycleDetailCopy', () => {
+  it('names the cycle count and cap for a candidate that carries one (#108)', () => {
+    const actionable: TickActionable = { number: 204, kind: 'pull-request', trigger: 'needsRevision', agent: 'revise', unchecked: false, cycle: { count: 4, cap: 5 } }
+    expect(cycleDetailCopy(actionable)).toBe('#204 revise — cycle 4 of 5.')
+  })
+
+  it('is null for a candidate with no cycle count', () => {
+    const actionable: TickActionable = { number: 105, kind: 'issue', trigger: 'ready', agent: 'plan', unchecked: false, cycle: null }
+    expect(cycleDetailCopy(actionable)).toBeNull()
   })
 })
 

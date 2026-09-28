@@ -20,8 +20,20 @@ export type StageAgent = 'plan' | 'impl' | 'review' | 'revise'
  *  `session-required` before `contended`, mirroring
  *  `ReconciledItem.waitingOn`'s own ladder with an ownership check inserted
  *  ahead of the session-required one, and the file-contention gate applied
- *  only to the impl candidates that survive all three. */
-export type TickHeldReason = 'unowned' | 'other-operator' | 'session-required' | 'contended'
+ *  only to the impl candidates that survive all three. `cycle-cap`/
+ *  `zero-diff` (#108) are checked per-item, after that ladder and before the
+ *  file-contention gate — a `revise`/`review` candidate that would escalate
+ *  to `needsHuman` moves from `actionable` to `held` naming why, since this
+ *  app computes the decision and the report, never the write (the real
+ *  escalation lands beside the eventual dispatch call, per the plan's own
+ *  **Risks / notes**). */
+export type TickHeldReason = 'unowned' | 'other-operator' | 'session-required' | 'contended' | 'cycle-cap' | 'zero-diff'
+
+/** `TickHeld.escalation`'s own shape (#108) — `null` for the four reasons
+ *  above, populated for `cycle-cap`/`zero-diff` so the held detail can name
+ *  the count and the cap, or the zero-diff fact, without re-deriving either
+ *  from raw review data. */
+export type TickEscalation = { readonly kind: 'cycle-cap'; readonly count: number; readonly cap: number } | { readonly kind: 'zero-diff' }
 
 /** The file-contention gate's own held detail (`main/tick/contention.ts`'s
  *  `gateCandidates`) — populated only for `reason: 'contended'`, `null` for
@@ -44,6 +56,11 @@ export interface TickActionable {
    *  unstructured plan": silently holding every pre-contract plan would
    *  stall the pipeline harder than the collision the gate prevents. */
   readonly unchecked: boolean
+  /** The current review cycle count and cap (#108) — populated only for a
+   *  `revise`/`review` candidate that carries a cycle count, `null` for
+   *  every other agent, so a pull request approaching the cap is visible on
+   *  hover before it ever holds. */
+  readonly cycle: { readonly count: number; readonly cap: number } | null
 }
 
 export interface TickHeld {
@@ -52,6 +69,10 @@ export interface TickHeld {
   readonly trigger: LabelKey
   readonly reason: TickHeldReason
   readonly contention: TickContention | null
+  /** Populated only for `reason: 'cycle-cap'` / `'zero-diff'`, `null` for
+   *  the other four reasons — the file-contention gate's own `contention`
+   *  field, mirrored for this pair (#108). */
+  readonly escalation: TickEscalation | null
 }
 
 /**

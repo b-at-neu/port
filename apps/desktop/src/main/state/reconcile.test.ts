@@ -43,6 +43,9 @@ function item(overrides: Partial<PipelineItem> = {}): PipelineItem {
     assignees: ['op'],
     labels: ['ready'],
     matchedKeys: ['ready'],
+    headRefOid: null,
+    reviews: null,
+    comments: null,
     ...overrides,
   }
 }
@@ -354,6 +357,33 @@ describe('reconcileRepository — claimedFiles (#106)', () => {
     const state = reconcile([item({ kind: 'pull-request', number: 196, matchedKeys: ['readyForReview'], body })])
     if (!state.ok) throw new Error('unreachable')
     expect(state.items[0]?.claimedFiles).toBeNull()
+  })
+})
+
+describe('reconcileRepository — headRefOid/reviews/comments/reviewCycleCount (#108)', () => {
+  it('copies headRefOid/reviews/comments through for a pull request, and computes reviewCycleCount', () => {
+    const reviews = [
+      { body: '## Code Review — Cycle 1 · needs revision', submittedAt: '2026-01-01T00:00:00Z', commitOid: 'sha1' },
+      { body: '## Code Review — Cycle 2 · approved', submittedAt: '2026-01-02T00:00:00Z', commitOid: 'sha2' },
+    ]
+    const comments = [{ body: '## Gate cleared', createdAt: '2026-01-03T00:00:00Z' }]
+    const state = reconcile([
+      item({ kind: 'pull-request', number: 196, matchedKeys: ['readyForReview'], headRefOid: 'sha2', reviews, comments }),
+    ])
+    if (!state.ok) throw new Error('unreachable')
+    expect(state.items[0]?.headRefOid).toBe('sha2')
+    expect(state.items[0]?.reviews).toEqual(reviews)
+    expect(state.items[0]?.comments).toEqual(comments)
+    expect(state.items[0]?.reviewCycleCount).toBe(2)
+  })
+
+  it('is null for an issue, never a guessed count', () => {
+    const state = reconcile([item({ matchedKeys: ['ready'] })])
+    if (!state.ok) throw new Error('unreachable')
+    expect(state.items[0]?.headRefOid).toBeNull()
+    expect(state.items[0]?.reviews).toBeNull()
+    expect(state.items[0]?.comments).toBeNull()
+    expect(state.items[0]?.reviewCycleCount).toBeNull()
   })
 })
 

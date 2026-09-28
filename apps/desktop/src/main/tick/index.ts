@@ -17,3 +17,6 @@ export type { OwnershipItem, OwnershipPartition } from './ownership'
 
 export { parseFilesBlock, gateCandidates } from './contention'
 export type { ClaimedItem, OccupiedEntry, GateHeld, GateResult } from './contention'
+
+export { cycleCapExceeded, zeroDiffGate, codeReviewCount } from './gates'
+export type { ReviewNode, CommentNode, ZeroDiffAction } from './gates'
