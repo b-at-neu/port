@@ -14,13 +14,15 @@ export default async function ({ fail, ok }: Reporter) {
   const srcDir = join(root, 'apps/desktop/src');
   const sdkRel = `${sessionsDir}/sdk.ts`;
   const runtimeSdkRel = 'apps/desktop/src/main/runtime/sdk.ts';
-  const sdkAllowlist = new Set([sdkRel, runtimeSdkRel]);
+  const hostingSdkRel = 'apps/desktop/src/main/hosting/sdk.ts';
+  const sdkAllowlist = new Set([sdkRel, runtimeSdkRel, hostingSdkRel]);
   const allFiles = walk(srcDir).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
 
-  // --- The Agent SDK is referenced under apps/desktop/src/ only in the two allowlisted seams ---
-  // guard(#78, #97): a second reader spawning the SDK directly instead of
-  // going through one of the two lazy-imported seams — the session reader
-  // (#78) and the runtime probe (#97). Matched only as an import specifier
+  // --- The Agent SDK is referenced under apps/desktop/src/ only in the three allowlisted seams ---
+  // guard(#78, #97, #98): a second reader spawning the SDK directly instead
+  // of going through one of the three lazy-imported seams — the session
+  // reader (#78), the runtime probe (#97), and the hosted-session query/
+  // renameSession seam (#98). Matched only as an import specifier
   // (`from '...'` or `import(...)`), never a bare substring — `runtime/
   // locate.test.ts`'s own fixtures legitimately spell the SDK's per-platform
   // package name out as a path string (what a resolved `claude` binary

@@ -12,6 +12,17 @@ import type { ItemActionResult, OperatorAction } from './actions/types'
 import type { RuntimePreflight, RuntimeProbe } from './runtime/types'
 import type { ClaimRead } from './writes/types'
 import type { RelayCopyResponse } from './relay/types'
+import type {
+  HostedSessionSnapshot,
+  SessionAttachResult,
+  SessionCloseResult,
+  SessionEventEnvelope,
+  SessionInterruptResult,
+  SessionKey,
+  SessionSendResult,
+  SessionStartMode,
+  SessionStartResult,
+} from './hosting/types'
 
 export interface AppInfo {
   app: string
@@ -178,6 +189,40 @@ export interface IpcMap {
     request: { text: string }
     response: RelayCopyResponse
   }
+  /** #98: owns the full lifecycle of a hosted session in the main process
+   *  — the renderer only sends intents and receives events. `mode.kind` one
+   *  of `fresh | resume | resume-at | fork`; `repoId` must name a
+   *  currently registered, `ready` repository. */
+  'session:start': {
+    request: { repoId: RepoId; mode: SessionStartMode }
+    response: SessionStartResult
+  }
+  /** Always accepted, never refused mid-turn — the SDK owns the queue. */
+  'session:send': {
+    request: { sessionKey: SessionKey; text: string }
+    response: SessionSendResult
+  }
+  'session:interrupt': {
+    request: { sessionKey: SessionKey }
+    response: SessionInterruptResult
+  }
+  /** Graceful: the input iterator ends, a bounded grace window, then
+   *  `query.close()`. */
+  'session:close': {
+    request: { sessionKey: SessionKey }
+    response: SessionCloseResult
+  }
+  /** The reconnect path after a renderer reload — handles are
+   *  main-process-owned and survive it. `replay` is a bounded window, never
+   *  the whole session. */
+  'session:attach': {
+    request: { sessionKey: SessionKey }
+    response: SessionAttachResult
+  }
+  'session:list': {
+    request: void
+    response: readonly HostedSessionSnapshot[]
+  }
 }
 
 export const IPC_CHANNELS = [
@@ -204,6 +249,12 @@ export const IPC_CHANNELS = [
   'gate:claim:set',
   'gate:answer',
   'relay:copy',
+  'session:start',
+  'session:send',
+  'session:interrupt',
+  'session:close',
+  'session:attach',
+  'session:list',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]
@@ -221,9 +272,17 @@ export const _channelsMatchIpcMap: AssertEqual<IpcChannel, keyof IpcMap> = true
  */
 export interface IpcEventMap {
   'board:update': BoardSnapshot
+  /** Opaque SDK passthrough (#98) — this app does not narrow `message`,
+   *  does not interpret instructions inside it, and does not execute
+   *  anything it contains. #219/#83 own every narrowing decision. */
+  'session:event': SessionEventEnvelope
+  /** This app's own typed snapshot, on every phase change — never a delta,
+   *  since folding the phase machine into the SDK envelope would put our
+   *  vocabulary inside a payload we promised to forward untouched. */
+  'session:status': HostedSessionSnapshot
 }
 
-export const IPC_EVENTS = ['board:update'] as const
+export const IPC_EVENTS = ['board:update', 'session:event', 'session:status'] as const
 
 export type IpcEvent = (typeof IPC_EVENTS)[number]
 
