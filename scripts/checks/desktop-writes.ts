@@ -195,14 +195,20 @@ export default async function ({ fail, ok }: Reporter) {
   }
 
   // --- appendTextFile( is called under apps/desktop/src/ only from ----------
-  // guard(#90): a second path writing an audit entry that skipped the
+  // guard(#90, #111): a second path writing an audit entry that skipped the
   // chokepoint.
-  // main/writes/audit.ts — one appender, so no second path can write an
-  // entry that skipped the chokepoint.
+  // main/writes/audit.ts — one appender for the write audit log, joined by
+  // main/trajectory/log.ts (#111) as the one appender for the desktop
+  // trajectory record (a separate file, a separate chokepoint, the same
+  // "no second path skips it" rail) — no third caller under apps/desktop/src/
+  // may append to anything.
   {
     const auditFile = `${writesDir}/audit.ts`;
+    const trajectoryFile = 'apps/desktop/src/main/trajectory/log.ts';
+    const allowedAppenders = new Set([auditFile, trajectoryFile]);
     let found = false;
     let sawAudit = false;
+    let sawTrajectory = false;
     for (const f of allFiles) {
       const rel = relOf(f);
       if (rel.startsWith(`${platformDir}/`)) continue;
@@ -210,12 +216,15 @@ export default async function ({ fail, ok }: Reporter) {
       if (!/\bappendTextFile\s*\(/.test(text)) continue;
       if (rel === auditFile) {
         sawAudit = true;
+      } else if (rel === trajectoryFile) {
+        sawTrajectory = true;
       } else {
         found = true;
-        fail('desktop-writes', `${rel} calls 'appendTextFile(' — only ${auditFile} may append to the audit log`);
+        fail('desktop-writes', `${rel} calls 'appendTextFile(' — only ${[...allowedAppenders].join(' or ')} may append to a log file`);
       }
     }
     if (!sawAudit) fail('desktop-writes', `${auditFile} does not call 'appendTextFile(' — the guard cannot pass vacuously`);
+    else if (!sawTrajectory) fail('desktop-writes', `${trajectoryFile} does not call 'appendTextFile(' — the guard cannot pass vacuously`);
     else if (!found) ok();
   }
 }

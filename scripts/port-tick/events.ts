@@ -164,6 +164,13 @@ export function tickEventPayload({
     tickId,
     envelope,
     counts: Object.fromEntries(Object.entries<any>(items?.mine ?? {}).map(([k, v]) => [k, v.length])),
+    // othersCounts/unownedCounts (#111): the same shape as counts, built from
+    // items.others/items.unowned — without these, an ownership divergence
+    // (the desktop app holds an item as unowned/other-operator that the
+    // cockpit actually dispatched, or vice versa) has nothing recorded on
+    // this side to diff against; items.mine alone cannot show that.
+    othersCounts: Object.fromEntries(Object.entries<any>(items?.others ?? {}).map(([k, v]) => [k, v.length])),
+    unownedCounts: Object.fromEntries(Object.entries<any>(items?.unowned ?? {}).map(([k, v]) => [k, v.length])),
     liveItems: (livenessExpected ?? []).map((e: any) => ({ item: e.item, stage: e.stage })),
     planned: {
       dispatch: (dispatch ?? []).map((d: any) => ({ stage: d.stage, item: d.item, model: d.model })),

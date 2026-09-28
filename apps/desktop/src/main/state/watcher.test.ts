@@ -339,6 +339,69 @@ describe('createPipelineWatcher — tick wiring (#105)', () => {
   })
 })
 
+describe('createPipelineWatcher — trajectory wiring (#111)', () => {
+  it('calls recordTick once per ready, non-blind repository per poll, fire-and-forget', async () => {
+    const now = () => new Date('2026-01-01T00:00:00.000Z')
+    const timer = makeFakeTimer()
+    const waiter = makeSnapshotWaiter()
+    const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
+    const calls: { repoRoot: string; event: unknown }[] = []
+
+    const watcher = createPipelineWatcher({
+      repositories: [readyEntry('repo-a', root, 'o/a')],
+      onSnapshot: waiter.onSnapshot,
+      now,
+      setTimer: timer.factory,
+      git: fakeGit({ worktreeList: 0 }),
+      gh: () => Promise.resolve({ ok: true, stdout: readyItemStdout('op', ['op']), stderr: '' } satisfies GhResult),
+      sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+      recordTick: (repoRoot, event) => {
+        calls.push({ repoRoot, event })
+        return Promise.resolve()
+      },
+    })
+
+    const snap = await watcher.refresh()
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.repoRoot).toBe(root)
+    expect(calls[0]?.event).toMatchObject({
+      v: 1,
+      repo: 'o/a',
+      repoId: 'repo-a',
+      blind: null,
+      dispatch: [{ item: 42, stage: 'plan-agent', agent: 'plan' }],
+    })
+    expect(snap.tick).toHaveLength(1)
+  })
+
+  it('never awaits recordTick — refresh() resolves even while it is still pending', async () => {
+    const now = () => new Date('2026-01-01T00:00:00.000Z')
+    const timer = makeFakeTimer()
+    const waiter = makeSnapshotWaiter()
+    const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
+    const pending: { resolve: (() => void) | null } = { resolve: null }
+
+    const watcher = createPipelineWatcher({
+      repositories: [readyEntry('repo-a', root, 'o/a')],
+      onSnapshot: waiter.onSnapshot,
+      now,
+      setTimer: timer.factory,
+      git: fakeGit({ worktreeList: 0 }),
+      gh: () => Promise.resolve({ ok: true, stdout: readyItemStdout('op', ['op']), stderr: '' } satisfies GhResult),
+      sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+      recordTick: () =>
+        new Promise((resolve) => {
+          pending.resolve = () => resolve()
+        }),
+    })
+
+    await watcher.refresh()
+    expect(pending.resolve).not.toBeNull()
+    pending.resolve?.()
+  })
+})
+
 describe('createPipelineWatcher — stop() and nextWakeupAt', () => {
   it('nextWakeupAt on the snapshot itself is null after stop(), not just the timer', async () => {
     const now = () => new Date('2026-01-01T00:00:00.000Z')
