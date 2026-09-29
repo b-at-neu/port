@@ -38,6 +38,12 @@ const ISSUE_FRAGMENT = `fragment IssueFields on Issue {
   labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }
 }`
 
+// `reviews`/`comments` page sizes match `scripts/port-tick/query.ts`'s own
+// `reviews(first: 30)`/`comments(last: 20)` — the same bound for the same
+// purpose (the cycle cap and the zero-diff gate), so a repository's own
+// review/comment history never needs a second round trip larger than the
+// cockpit's own. `headRefOid` is the head this app's own gates compare a
+// review's `commit.oid` against.
 const PULL_REQUEST_FRAGMENT = `fragment PullRequestFields on PullRequest {
   number
   title
@@ -45,8 +51,11 @@ const PULL_REQUEST_FRAGMENT = `fragment PullRequestFields on PullRequest {
   body
   state
   mergedAt
+  headRefOid
   assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } }
   labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }
+  reviews(first: 30) { totalCount nodes { body submittedAt commit { oid } } }
+  comments(last: 20) { totalCount nodes { body createdAt } }
 }`
 
 export interface PipelineQuery {

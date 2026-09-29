@@ -89,6 +89,19 @@ describe('buildPipelineQuery', () => {
     const { document } = buildPipelineQuery(vocabulary)
     expect(document).toContain(graphqlStringLiteral('weird "quoted" label'))
   })
+
+  // #108: headRefOid/reviews/comments feed the cycle-cap and zero-diff
+  // gates — requested once, on the PullRequestFields fragment, never a
+  // second round trip.
+  it('the PullRequestFields fragment carries headRefOid, reviews, and comments', () => {
+    const vocabulary = resolveVocabulary({})
+    const { document } = buildPipelineQuery(vocabulary)
+    const fragmentStart = document.indexOf('fragment PullRequestFields')
+    const fragment = document.slice(fragmentStart)
+    expect(fragment).toContain('headRefOid')
+    expect(fragment).toContain('reviews(first: 30)')
+    expect(fragment).toContain('comments(last: 20)')
+  })
 })
 
 describe('buildItemStatesQuery', () => {

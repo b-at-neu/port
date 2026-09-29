@@ -4,7 +4,11 @@
 // in-flight set (claims), each in the order plan's own **Implementation**
 // states. #106 adds the file-contention gate as a fourth, narrower filter
 // applied only to `impl` candidates that already survived ownership and
-// session-required.
+// session-required. #108 adds the cycle-cap/zero-diff gates, checked per
+// trigger item after the ownership/session-required ladder and before the
+// file-contention gate — this app computes the decision and the report, it
+// never writes the escalation itself (the real write lands beside the
+// eventual dispatch call, per the plan's own **Risks / notes**).
 import type { PipelineItemKind } from '../../shared/github/types'
 import type { LabelKey } from '../../shared/labels/vocabulary'
 import type { RepoId } from '../../shared/repos'
@@ -13,6 +17,7 @@ import type { ReconciledItem, RepositoryState } from '../../shared/state/types'
 import type { TickActionable, TickBlind, TickClaim, TickHeld, TickReport } from '../../shared/tick/types'
 import type { ClaimedItem, OccupiedEntry } from './contention'
 import { gateCandidates } from './contention'
+import { cycleCapExceeded, zeroDiffGate } from './gates'
 import type { DispatchLedger } from './ledger'
 import { classifyUnmatched, RETRY_TRIGGER } from './liveness'
 import { partitionOwnership } from './ownership'
@@ -27,6 +32,10 @@ export interface PlanTickParams {
    *  already owns that computation for its own scheduling. */
   readonly nextDecisionAt: Date
   readonly now: () => Date
+  /** `entry.config.reviewCycleCap` (#108) — read from config per repository,
+   *  never hardcoded; `main/state/watcher.ts` passes it through the same way
+   *  it already does `repository.concurrency`. */
+  readonly reviewCycleCap: number
 }
 
 function emptyReport(repoId: RepoId, displayName: string, blind: TickBlind): TickReport {
@@ -55,11 +64,18 @@ function stageKeyOf(item: Pick<ReconciledItem, 'stage' | 'stages'>): LabelKey | 
  *  primitive `ownership.test.ts` asserts against the shared case table, so a
  *  future change to `classify.mjs`'s rule can't silently diverge from this
  *  caller. */
-function heldReasonOf(item: ReconciledItem, unowned: ReadonlySet<number>, others: ReadonlySet<number>): Exclude<TickHeld['reason'], 'contended'> | null {
+function heldReasonOf(item: ReconciledItem, unowned: ReadonlySet<number>, others: ReadonlySet<number>): Exclude<TickHeld['reason'], 'contended' | 'cycle-cap' | 'zero-diff'> | null {
   if (unowned.has(item.number)) return 'unowned'
   if (others.has(item.number)) return 'other-operator'
   if (item.sessionRequired) return 'session-required'
   return null
+}
+
+/** `TickActionable.cycle` — populated only when this item carries a
+ *  precomputed review count (a `revise`/`review` candidate; `null` for
+ *  every other agent, since `reviewCycleCount` is pull-request only). */
+function cycleOf(item: ReconciledItem, cap: number): { readonly count: number; readonly cap: number } | null {
+  return item.reviewCycleCount !== null ? { count: item.reviewCycleCount, cap } : null
 }
 
 /** The file-contention gate's own occupied set (PIPELINE.md → "File
@@ -93,6 +109,7 @@ function actionableAndHeld(
   items: readonly ReconciledItem[],
   viewer: string,
   concurrency: { readonly sharedFiles: readonly string[]; readonly overlapThreshold: number },
+  reviewCycleCap: number,
 ): { readonly actionable: readonly TickActionable[]; readonly held: readonly TickHeld[] } {
   const held: TickHeld[] = []
 
@@ -121,14 +138,40 @@ function actionableAndHeld(
 
     const reason = heldReasonOf(item, unownedNumbers, othersNumbers)
     if (reason !== null) {
-      held.push({ number: item.number, kind: item.kind, trigger, reason, contention: null })
+      held.push({ number: item.number, kind: item.kind, trigger, reason, contention: null, escalation: null })
       continue
     }
     const agent = AGENT_FOR_TRIGGER[trigger]
     if (agent === undefined) continue
 
+    // The cycle-cap gate — unconditional, per `cycleCapExceeded`'s own
+    // contract: fires whatever the latest review said.
+    if (agent === 'revise' && cycleCapExceeded(item.reviews ?? undefined, reviewCycleCap)) {
+      held.push({
+        number: item.number,
+        kind: item.kind,
+        trigger,
+        reason: 'cycle-cap',
+        contention: null,
+        escalation: { kind: 'cycle-cap', count: item.reviewCycleCount ?? 0, cap: reviewCycleCap },
+      })
+      continue
+    }
+    // The zero-diff gate — `dispatch`/`dispatch-once` both fall through to
+    // ordinary dispatch below; the one-time re-review permission is
+    // inherent in the label state itself, nothing further to track here.
+    if (
+      agent === 'review' &&
+      zeroDiffGate({ reviews: item.reviews ?? undefined, comments: item.comments ?? undefined, headRefOid: item.headRefOid ?? '' }).action === 'escalate'
+    ) {
+      held.push({ number: item.number, kind: item.kind, trigger, reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } })
+      continue
+    }
+
+    const cycle = cycleOf(item, reviewCycleCap)
+
     if (agent !== 'impl' || item.claimedFiles === null) {
-      ungated.push({ number: item.number, kind: item.kind, trigger, agent, unchecked: agent === 'impl' && item.claimedFiles === null })
+      ungated.push({ number: item.number, kind: item.kind, trigger, agent, unchecked: agent === 'impl' && item.claimedFiles === null, cycle })
       continue
     }
 
@@ -143,7 +186,9 @@ function actionableAndHeld(
     // Defensive: every number in `gated.dispatch` came from `structuredCandidates`,
     // built from this same map's keys, just above.
     if (meta === undefined) throw new Error(`gateCandidates dispatched #${String(number)}, which was never a structured candidate`)
-    return { number, kind: meta.kind, trigger: meta.trigger, agent: 'impl', unchecked: false }
+    // Always `null`: every structured candidate is an `impl` trigger over an
+    // issue, and `reviewCycleCount` is pull-request only.
+    return { number, kind: meta.kind, trigger: meta.trigger, agent: 'impl', unchecked: false, cycle: null }
   })
 
   for (const h of gated.held) {
@@ -155,6 +200,7 @@ function actionableAndHeld(
       trigger: meta.trigger,
       reason: 'contended',
       contention: { blocker: h.blocker, blockerStage: h.blockerLabel, depth: h.depth, paths: h.contendedPaths },
+      escalation: null,
     })
   }
 
@@ -187,7 +233,7 @@ function claimsOf(items: readonly ReconciledItem[], repoId: RepoId, ledger: Disp
 }
 
 export function planTick(params: PlanTickParams): TickReport {
-  const { repository, ledger, nextDecisionAt, now } = params
+  const { repository, ledger, nextDecisionAt, now, reviewCycleCap } = params
 
   if (!repository.ok) {
     const blind: TickBlind = repository.reason === 'not-ready' ? { reason: 'not-ready' } : { reason: 'github-unavailable', message: repository.message }
@@ -208,7 +254,7 @@ export function planTick(params: PlanTickParams): TickReport {
     }
   }
 
-  const { actionable, held } = actionableAndHeld(repository.items, repository.viewer, repository.concurrency)
+  const { actionable, held } = actionableAndHeld(repository.items, repository.viewer, repository.concurrency, reviewCycleCap)
   const claims = claimsOf(repository.items, repository.repoId, ledger)
 
   return {

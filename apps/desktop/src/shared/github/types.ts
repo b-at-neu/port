@@ -7,12 +7,30 @@ import type { LabelKey, LabelSource, VocabularyReport } from '../labels/vocabula
 
 export type PipelineItemKind = 'issue' | 'pull-request'
 
-/** The field list is exactly the ticket's, plus `matchedKeys`. `mergeable`,
- *  `headRefOid`, and `updatedAt` are deliberately absent — each belongs to a
- *  later ticket that has a use for it (ENGINEERING §7: no field shipped in
- *  anticipation). The viewer's own login is no longer absent: #94 needs it
- *  at the repository level (see `PipelineFetch.viewer` below), one alias
- *  reused for every item rather than a per-item field. */
+/** One `reviews` connection node (#108) — `commitOid` is the review's own
+ *  `commit.oid`, flattened at read time (`map.ts`) so nothing under
+ *  `main/tick/` ever reaches into a nested GraphQL shape. */
+export interface ReviewNode {
+  readonly body: string
+  readonly submittedAt: string
+  readonly commitOid: string | null
+}
+
+/** One `comments` connection node (#108) — the `## Gate cleared` carve-out's
+ *  own evidence, alongside `reviews`. */
+export interface PullRequestCommentNode {
+  readonly body: string
+  readonly createdAt: string
+}
+
+/** The field list is exactly the ticket's, plus `matchedKeys`. `mergeable`
+ *  and `updatedAt` remain deliberately absent — each belongs to a later
+ *  ticket that has a use for it (ENGINEERING §7: no field shipped in
+ *  anticipation); `headRefOid` has landed (#108). The viewer's own login is
+ *  no longer absent: #94 needs it at the repository level (see
+ *  `PipelineFetch.viewer` below), one alias reused for every item rather
+ *  than a per-item field. `headRefOid`/`reviews`/`comments` are `null` for
+ *  an issue — only a pull request carries any of the three. */
 export interface PipelineItem {
   readonly repo: string
   readonly kind: PipelineItemKind
@@ -25,6 +43,9 @@ export interface PipelineItem {
   readonly assignees: readonly string[]
   readonly labels: readonly string[]
   readonly matchedKeys: readonly LabelKey[]
+  readonly headRefOid: string | null
+  readonly reviews: readonly ReviewNode[] | null
+  readonly comments: readonly PullRequestCommentNode[] | null
 }
 
 /** One entry per enabled label — the names actually queried, reported

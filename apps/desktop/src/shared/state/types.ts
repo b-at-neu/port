@@ -7,7 +7,7 @@
 // never a throw.
 import type { LabelKey, VocabularyReport } from '../labels/vocabulary'
 import type { LabelRole } from '../labels/defaults'
-import type { PipelineFailureKind, PipelineItemKind, RateLimitInfo, TruncatedSet, UnavailableAlias } from '../github/types'
+import type { PipelineFailureKind, PipelineItemKind, PullRequestCommentNode, RateLimitInfo, ReviewNode, TruncatedSet, UnavailableAlias } from '../github/types'
 import type { RepoDiagnostic, RepoId, RepoProblem } from '../repos'
 import type { DenialsRead, UnresolvedReason } from '../local/types'
 import type { PortStageAgent, SessionScan } from '../sessions/types'
@@ -156,6 +156,16 @@ export interface ReconciledItem {
    *  a fence that parsed to nothing (contends with nothing) — the two are
    *  never collapsed. */
   readonly claimedFiles: readonly string[] | null
+  /** Copied straight off `PipelineItem`, pull-request only (#108) — `null`
+   *  for an issue, the same direction `claimedFiles` takes in reverse. Feed
+   *  `main/tick/gates.ts`'s `cycleCapExceeded`/`zeroDiffGate`. */
+  readonly headRefOid: string | null
+  readonly reviews: readonly ReviewNode[] | null
+  readonly comments: readonly PullRequestCommentNode[] | null
+  /** `codeReviewCount(reviews)`, precomputed here so the renderer never
+   *  re-derives it from raw review bodies (#108) — `null` for an issue,
+   *  mirroring `reviews` itself. */
+  readonly reviewCycleCount: number | null
 }
 
 /** `{ at }` when the source answered, `{ unavailable: <reason> }` when it did

@@ -27,7 +27,7 @@ import type {
 import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers } from './attach'
 import { closingReference, sessionRequiredAt } from './link'
 import { stageOf } from './stage'
-import { parseFilesBlock } from '../tick'
+import { codeReviewCount, parseFilesBlock } from '../tick'
 
 /** The repository-scoped slice of #78's whole-machine `SessionScan` — never
  *  a second scan. `available` is `false` only when the scan itself failed
@@ -171,6 +171,10 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     // not a fence, and the occupied set PIPELINE.md defines is issue-based.
     const claimedFiles = item.kind === 'issue' ? parseFilesBlock(item.body) : null
 
+    // Precomputed here so the renderer never re-derives it from raw review
+    // bodies (#108) — `null` for an issue, mirroring `item.reviews` itself.
+    const reviewCycleCount = item.kind === 'pull-request' ? codeReviewCount(item.reviews ?? undefined) : null
+
     return {
       repoId,
       repo: item.repo,
@@ -198,6 +202,10 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
       matchedKeys: item.matchedKeys,
       sources,
       claimedFiles,
+      headRefOid: item.headRefOid,
+      reviews: item.reviews,
+      comments: item.comments,
+      reviewCycleCount,
     }
   })
 

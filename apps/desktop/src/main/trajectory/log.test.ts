@@ -33,8 +33,8 @@ async function makeTempDir(): Promise<string> {
 describe('buildDesktopTickEvent', () => {
   it('maps a TickReport into the line recordTick appends', () => {
     const report = makeReport({
-      actionable: [{ number: 42, kind: 'issue', trigger: 'ready', agent: 'plan', unchecked: false }],
-      held: [{ number: 7, kind: 'issue', trigger: 'planApproved', reason: 'contended', contention: { blocker: 9, blockerStage: 'in progress', depth: 2, paths: ['a.ts'] } }],
+      actionable: [{ number: 42, kind: 'issue', trigger: 'ready', agent: 'plan', unchecked: false, cycle: null }],
+      held: [{ number: 7, kind: 'issue', trigger: 'planApproved', reason: 'contended', contention: { blocker: 9, blockerStage: 'in progress', depth: 2, paths: ['a.ts'] }, escalation: null }],
       claims: [{ number: 9, kind: 'issue', inFlight: 'inProgress', class: 'matched', retryKey: null }],
     })
 

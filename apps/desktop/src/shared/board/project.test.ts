@@ -37,6 +37,10 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     matchedKeys: ['ready'],
     sources: ['github'],
     claimedFiles: null,
+    headRefOid: null,
+    reviews: null,
+    comments: null,
+    reviewCycleCount: null,
     ...overrides,
   }
 }

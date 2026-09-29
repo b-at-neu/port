@@ -148,9 +148,18 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     // repository's own `nextDecisionAt` is its GitHub source's next-due
     // instant, the same `nextDueAt` call `dueSources`/`isDue` already make.
     const readyIds = new Set(readyEntries.map((entry) => entry.id))
+    // `entry.config.reviewCycleCap` per repository (#108) — read from config,
+    // never hardcoded; guarded the same way `gated.dispatch`'s lookup already
+    // is in `plan.ts`: `readyIds`/`cycleCapByRepo` are built from the same
+    // `readyEntries`, so a miss here is a defect, not a runtime case.
+    const cycleCapByRepo = new Map(readyEntries.map((entry) => [entry.id, entry.config.reviewCycleCap]))
     const tick = state.repositories
       .filter((repository) => readyIds.has(repository.repoId))
-      .map((repository) => planTick({ repository, ledger, nextDecisionAt: nextDueAt(ensureHealth(repository.repoId).github, now()), now }))
+      .map((repository) => {
+        const reviewCycleCap = cycleCapByRepo.get(repository.repoId)
+        if (reviewCycleCap === undefined) throw new Error(`no reviewCycleCap for ready repository ${String(repository.repoId)}`)
+        return planTick({ repository, ledger, nextDecisionAt: nextDueAt(ensureHealth(repository.repoId).github, now()), now, reviewCycleCap })
+      })
 
     // The trajectory record's desktop-side twin (#111) — fire-and-forget,
     // right after computing tick, never awaited and never part of the
