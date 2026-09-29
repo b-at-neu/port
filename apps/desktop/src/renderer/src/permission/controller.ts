@@ -169,6 +169,25 @@ async function answer(item: QueuedPermission, decision: PermissionDecision): Pro
   }
 }
 
+/** Seeds the queue from the boot-time snapshot list, then subscribes to live
+ *  pushes — never the other way around. `initBoard`'s own idiom (main.ts):
+ *  awaiting the snapshot to completion before wiring the push listener is
+ *  what stops a `session:status` that lands mid-fetch from being clobbered
+ *  by the older `sessionList()` result resolving after it — the seed and a
+ *  push both fold into `queue` through the same `applySnapshot`, but only
+ *  when they land in the order they actually happened. */
+async function loadInitialQueue(): Promise<void> {
+  try {
+    const snapshots = await window.port.sessionList()
+    queue = seed(snapshots)
+    pruneStaleEntries()
+    draw()
+  } catch (err) {
+    console.error('Failed to load the initial permission queue', err)
+  }
+  window.port.onSessionStatus((snapshot) => applyStatus(snapshot))
+}
+
 /** Appended once to `#app`, outside the board's own signature-guarded
  *  rebuild — a poll landing mid-decision cannot blow away a half-typed deny
  *  reason. */
@@ -177,12 +196,7 @@ export function initPermissions(container: HTMLElement): void {
   container.appendChild(dialog)
   draw()
 
-  void window.port.sessionList().then((snapshots) => {
-    queue = seed(snapshots)
-    pruneStaleEntries()
-    draw()
-  })
-  window.port.onSessionStatus((snapshot) => applyStatus(snapshot))
+  void loadInitialQueue()
   void loadRepoLabels()
 
   dialog.addEventListener('click', (event) => {
