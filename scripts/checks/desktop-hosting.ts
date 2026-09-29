@@ -3,10 +3,10 @@ import { join } from 'node:path';
 import { root, readJson, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// #98: apps/desktop/src/main/hosting/ owns the full lifecycle of a hosted
-// session in the main process. Nine assertions pin its plan's decisions
-// mechanically, in the shape desktop-runtime.ts's and desktop-sessions.ts's
-// own guards already use.
+// #98/#99: apps/desktop/src/main/hosting/ owns the full lifecycle of a
+// hosted session in the main process. Thirteen assertions pin its plan's
+// decisions mechanically, in the shape desktop-runtime.ts's and
+// desktop-sessions.ts's own guards already use.
 export default async function ({ fail, ok }: Reporter) {
   const hostingDir = 'apps/desktop/src/main/hosting';
   const sharedHostingDir = 'apps/desktop/src/shared/hosting';
@@ -203,6 +203,101 @@ export default async function ({ fail, ok }: Reporter) {
         fail('desktop-hosting', `${hostingDir}/live.test.ts does not reference PORT_LIVE_SDK`);
       } else if (!/skipIf/.test(text)) {
         fail('desktop-hosting', `${hostingDir}/live.test.ts has no 'skipIf' guard — it must stay opt-in`);
+      } else {
+        ok();
+      }
+    }
+  }
+
+  // --- No permissionPromptToolName under main/hosting/ ----------------------
+  // guard(#99): mutually exclusive with canUseTool — the SDK throws when
+  // both are present, so this option must never appear here at all.
+  {
+    let found = false;
+    for (const f of hostingProdFiles) {
+      const rel = relOf(f);
+      const code = stripComments(readFileSync(f, 'utf8'));
+      if (code.includes('permissionPromptToolName')) {
+        found = true;
+        fail('desktop-hosting', `${rel} names 'permissionPromptToolName' — it is mutually exclusive with 'canUseTool' and the SDK throws when both are present`);
+      }
+    }
+    if (!found) ok();
+  }
+
+  // --- No bypass/dontAsk escape hatch under main/hosting/ -------------------
+  // guard(#99): options.ts must name both canUseTool and permissionMode:
+  // 'default' — nothing under main/hosting/ may silently widen past the
+  // host prompt this ticket builds.
+  {
+    const forbidden = ['bypassPermissions', 'allowDangerouslySkipPermissions', "'dontAsk'"];
+    let found = false;
+    for (const f of hostingProdFiles) {
+      const rel = relOf(f);
+      const code = stripComments(readFileSync(f, 'utf8'));
+      for (const term of forbidden) {
+        if (code.includes(term)) {
+          found = true;
+          fail('desktop-hosting', `${rel} contains '${term}' — main/hosting/ must never bypass the operator's own permission prompt`);
+        }
+      }
+    }
+    const optionsFile = allFiles.find((f) => relOf(f) === `${hostingDir}/options.ts`);
+    if (!optionsFile) {
+      found = true;
+      fail('desktop-hosting', `${hostingDir}/options.ts does not exist`);
+    } else {
+      const text = readFileSync(optionsFile, 'utf8');
+      if (!/canUseTool/.test(text)) {
+        found = true;
+        fail('desktop-hosting', `${hostingDir}/options.ts does not name 'canUseTool'`);
+      }
+      if (!/permissionMode:\s*'default'/.test(text)) {
+        found = true;
+        fail('desktop-hosting', `${hostingDir}/options.ts does not set permissionMode: 'default'`);
+      }
+    }
+    if (!found) ok();
+  }
+
+  // --- Every destination: in grant.ts is 'session' --------------------------
+  // guard(#99): an "allow for this session" must never write a settings
+  // file — a widened destination here would be unrecoverable from inside
+  // the app.
+  {
+    const grantFile = allFiles.find((f) => relOf(f) === `${hostingDir}/grant.ts`);
+    if (!grantFile) {
+      fail('desktop-hosting', `${hostingDir}/grant.ts does not exist`);
+    } else {
+      const text = stripComments(readFileSync(grantFile, 'utf8'));
+      const destinations = [...text.matchAll(/destination:\s*'([^']+)'/g)].map((m) => m[1]);
+      const stray = destinations.filter((d) => d !== 'session');
+      if (destinations.length === 0) {
+        fail('desktop-hosting', `${hostingDir}/grant.ts names no 'destination:' literal at all`);
+      } else if (stray.length > 0) {
+        fail('desktop-hosting', `${hostingDir}/grant.ts names a 'destination:' other than 'session': ${stray.join(', ')}`);
+      } else {
+        ok();
+      }
+    }
+  }
+
+  // --- permissions.ts's canUseTool returns Promise<PermissionResult>, no | null ---
+  // guard(#99): the SDK's own CanUseTool returns `Promise<PermissionResult |
+  // null>`, treating `null` as "already answered out of band" and leaving
+  // the tool blocked forever. This broker never answers out of band, so its
+  // own declared type excludes `null` — a compile error catches a future
+  // edit that reintroduces it.
+  {
+    const permissionsFile = allFiles.find((f) => relOf(f) === `${hostingDir}/permissions.ts`);
+    if (!permissionsFile) {
+      fail('desktop-hosting', `${hostingDir}/permissions.ts does not exist`);
+    } else {
+      const text = readFileSync(permissionsFile, 'utf8');
+      if (!/readonly canUseTool:\s*CanUseTool/.test(text)) {
+        fail('desktop-hosting', `${hostingDir}/permissions.ts's PermissionBroker does not declare 'canUseTool: CanUseTool'`);
+      } else if (/Promise<PermissionResult\s*\|\s*null>/.test(text)) {
+        fail('desktop-hosting', `${hostingDir}/permissions.ts's canUseTool is typed to allow '| null' — this broker must never answer out of band`);
       } else {
         ok();
       }
