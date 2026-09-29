@@ -30,6 +30,33 @@ function looksBinary(buf: Buffer): boolean {
   return buf.subarray(0, 8192).includes(0);
 }
 
+/** Pure text parse, no file I/O: finds the paragraph containing the "a
+ *  source file is at most N lines" sentence, skips any blank lines after
+ *  it, then collects the first backticked token of each consecutive
+ *  `- \`…\`` line that follows — the doc's own stated exclusion list.
+ *  Returns `[]` when no such list follows the paragraph, meaning the doc
+ *  declares none. */
+function docExclusions(text: string): string[] {
+  const limitIdx = text.search(/a source file is at most \d+ lines/i);
+  if (limitIdx === -1) return [];
+
+  const afterLimit = text.slice(limitIdx);
+  const blankLineRel = afterLimit.search(/\n[ \t]*\n/);
+  const pastParagraph = blankLineRel === -1 ? text.length : limitIdx + blankLineRel;
+
+  const lines = text.slice(pastParagraph).split('\n');
+  let i = 0;
+  while (i < lines.length && lines[i].trim() === '') i++;
+
+  const globs: string[] = [];
+  for (; i < lines.length; i++) {
+    const m = /^-\s+`([^`]+)`/.exec(lines[i].trim());
+    if (!m) break;
+    globs.push(m[1]);
+  }
+  return globs;
+}
+
 export default async function ({ fail, note, ok }: Reporter) {
   const configPath = join(root, CONFIG_REL);
   if (!existsSync(configPath)) {
@@ -117,6 +144,16 @@ export default async function ({ fail, note, ok }: Reporter) {
     }
     if (trackedSet && !trackedSet.has(entry.path)) {
       fail('file-size', `allowlist entry \`${entry.path}\` is not a tracked file — remove it`);
+    }
+    // guard(#183): checkFile below returns early for an excluded path, so a
+    // leftover allowlist entry for a now-exempt file would sit in the debt
+    // list forever, silently ignored rather than measured.
+    const excludedBy = excludeRes.find((e) => e.re.test(entry.path));
+    if (excludedBy) {
+      fail(
+        'file-size',
+        `allowlist entry \`${entry.path}\` is also excluded by \`${excludedBy.glob}\` — the ratchet never measures it; remove the entry`,
+      );
     }
   }
   ok();
@@ -211,5 +248,60 @@ export default async function ({ fail, note, ok }: Reporter) {
     );
   } else {
     ok();
+  }
+
+  // --- Stated exclusions must agree with the configured ones --------------
+  // guard(#183): an exemption stated in prose with nothing tying it to the
+  // config — docs.engineering's exclusion bullet list could drift from
+  // file-size.config.json's own `exclude` globs in either direction with
+  // nothing here to catch it, the same lesson §2 draws for every other
+  // duplicated copy.
+  // pin: docs.engineering §7's exclusion bullet list ↔ file-size.config.json's `exclude` globs — both directions
+
+  // Self-test first (§7: "a check that cannot be made to fail is not a
+  // check"). One inline fixture must parse to its exact glob set; the same
+  // fixture with a bullet removed must parse to a different one.
+  const FIXTURE_GOOD =
+    'A source file is at most 500 lines. Trailing prose in the same paragraph.\n\n' +
+    '- `foo/**` — a reason.\n' +
+    '- `bar/**` — another reason.\n\n' +
+    'An unrelated paragraph that follows.\n';
+  const FIXTURE_MISSING_BULLET =
+    'A source file is at most 500 lines. Trailing prose in the same paragraph.\n\n' +
+    '- `foo/**` — a reason.\n\n' +
+    'An unrelated paragraph that follows.\n';
+
+  const fixtureGlobs = docExclusions(FIXTURE_GOOD);
+  if (fixtureGlobs.length !== 2 || fixtureGlobs[0] !== 'foo/**' || fixtureGlobs[1] !== 'bar/**') {
+    fail('file-size', 'self-test: docExclusions did not parse a known-good bullet list to its exact glob set');
+  } else {
+    ok();
+  }
+
+  const missingBulletGlobs = docExclusions(FIXTURE_MISSING_BULLET);
+  if (JSON.stringify(missingBulletGlobs) === JSON.stringify(fixtureGlobs)) {
+    fail('file-size', 'self-test: docExclusions did not notice a bullet missing from the list');
+  } else {
+    ok();
+  }
+
+  // Now the real comparison, only once the doc is known to exist (the two
+  // `return`s above already skip this when it is unset or missing).
+  const docGlobs = new Set(docExclusions(standardsText));
+  const configGlobs = new Set(excludeRes.map((e) => e.glob));
+
+  for (const g of configGlobs) {
+    if (!docGlobs.has(g)) {
+      fail('file-size', `exclude glob \`${g}\` is not named in ${standardsDocRel}'s exclusion list`);
+    } else {
+      ok();
+    }
+  }
+  for (const g of docGlobs) {
+    if (!configGlobs.has(g)) {
+      fail('file-size', `${standardsDocRel} names exclusion \`${g}\`, which has no exclude entry`);
+    } else {
+      ok();
+    }
   }
 }
