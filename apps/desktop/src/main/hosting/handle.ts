@@ -9,11 +9,22 @@
 // — `persistSession: true` means #84's tail already holds the full record,
 // so the ring exists only so a renderer attaching mid-stream is not blank.
 import type { CredentialsTell } from '../../shared/runtime/types'
-import type { HostedSessionSnapshot, SessionEnd, SessionEventEnvelope, SessionKey, SessionOrigin, SessionPhase, SessionStartMode } from '../../shared/hosting/types'
+import type {
+  HostedSessionSnapshot,
+  PermissionDecision,
+  SessionEnd,
+  SessionEventEnvelope,
+  SessionKey,
+  SessionOrigin,
+  SessionPermissionAnswerResult,
+  SessionPhase,
+  SessionStartMode,
+} from '../../shared/hosting/types'
 import type { RepoId } from '../../shared/repos'
 import { createHostedInput } from './input'
 import { buildSessionOptions } from './options'
 import { classifyEnd } from './classify'
+import { createPermissionBroker } from './permissions'
 import type { HostedQuery, Options, SDKMessage, SDKUserMessage } from './sdk'
 
 export type { HostedQuery } from './sdk'
@@ -74,6 +85,10 @@ export interface HostedHandle {
   /** `fork.ts`'s own titling result — `false` only when the rename attempt
    *  failed; logged there, never retried and never fatal here. */
   setTitled(titled: boolean): void
+  /** #99: delegates to this handle's own permission broker — the id is
+   *  resolved only within this handle, so a permissionId from another
+   *  session's broker can never settle a prompt here. */
+  answerPermission(permissionId: string, decision: PermissionDecision, message: string | null): SessionPermissionAnswerResult
 }
 
 function originFor(mode: SessionStartMode): SessionOrigin {
@@ -102,7 +117,11 @@ function grace(ms: number): Promise<void> {
 
 export function createHostedHandle(params: CreateHostedHandleParams, query: HostedQueryFn): HostedHandle {
   const input = createHostedInput()
-  const options = buildSessionOptions({ mode: params.mode, cwd: params.cwd, executablePath: params.executablePath })
+  // #99: created before buildSessionOptions, whose 'default' permissionMode
+  // (never 'dontAsk') routes an un-preapproved tool call through this
+  // broker's own canUseTool rather than a silent auto-deny.
+  const broker = createPermissionBroker({ now: params.now, onChange: () => emitStatus() })
+  const options = buildSessionOptions({ mode: params.mode, cwd: params.cwd, executablePath: params.executablePath, canUseTool: broker.canUseTool })
   const startedAt = new Date(params.now()).toISOString()
 
   let phase: SessionPhase = 'starting'
@@ -126,6 +145,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
       queuedAfterInterrupt,
       end,
       titled,
+      pendingPermissions: broker.pending(),
     }
   }
 
@@ -182,6 +202,9 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
       const classified = classifyEnd({ text, closeRequested, credentials: params.credentials, now: params.now() })
       end = { reason: classified.reason, exitCode: classified.exitCode, signal: classified.signal, message: text, diagnosis: classified.diagnosis }
     }
+    // An ended session must never report a pending prompt, even if the SDK
+    // never fires the abort signals itself.
+    broker.cancelAll()
     phase = 'ended'
     emitStatus()
   }
@@ -220,6 +243,9 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     setTitled(value) {
       titled = value
       emitStatus()
+    },
+    answerPermission(permissionId, decision, message) {
+      return broker.answer(permissionId, decision, message)
     },
   }
 }

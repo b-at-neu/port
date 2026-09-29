@@ -6,16 +6,21 @@ export type { HostedStore, HostedStoreDeps, StartSessionParams } from './store'
 
 export type {
   HostedSessionSnapshot,
+  PendingPermission,
+  PermissionDecision,
   SessionAttachResult,
   SessionCloseResult,
   SessionEnd,
   SessionEndReason,
   SessionEventEnvelope,
+  SessionGrantItem,
   SessionInterruptResult,
   SessionKey,
   SessionOrigin,
+  SessionPermissionAnswerResult,
   SessionPhase,
   SessionSendResult,
   SessionStartMode,
   SessionStartResult,
 } from '../../shared/hosting/types'
+export { PERMISSION_DECISIONS } from '../../shared/hosting/types'

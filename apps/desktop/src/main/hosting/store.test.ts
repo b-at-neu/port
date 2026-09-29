@@ -76,13 +76,22 @@ describe('createHostedStore', () => {
     expect(result).toEqual({ ok: false, kind: 'runtime', diagnosis: 'bundled-fallback', detail: '/bundled/claude' })
   })
 
-  it('send/interrupt/close/attach all report unknown-session for a key that was never started', async () => {
+  it('send/interrupt/close/attach/answerPermission all report unknown-session for a key that was never started', async () => {
     const store = createHostedStore(baseDeps())
     const key = 'hosted-999' as import('../../shared/hosting/types').SessionKey
     expect(store.send(key, 'hi')).toEqual({ ok: false, kind: 'unknown-session' })
     await expect(store.interrupt(key)).resolves.toEqual({ ok: false, kind: 'unknown-session' })
     await expect(store.close(key)).resolves.toEqual({ ok: false, kind: 'unknown-session' })
     expect(store.attach(key)).toEqual({ ok: false, kind: 'unknown-session' })
+    expect(store.answerPermission(key, 'perm-1', 'deny', null)).toEqual({ ok: false, kind: 'unknown-session' })
+  })
+
+  it('answerPermission on a live session delegates to that handle, refusing an unknown permission id', async () => {
+    const store = createHostedStore(baseDeps())
+    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    if (!started.ok) throw new Error('unreachable')
+    const result = store.answerPermission(started.snapshot.sessionKey, 'nonexistent', 'deny', null)
+    expect(result).toEqual({ ok: false, kind: 'unknown-permission' })
   })
 
   it('send() on a live session delegates to the handle and returns queued: true', async () => {

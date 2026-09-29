@@ -247,6 +247,55 @@ describe('createHostedHandle', () => {
     expect(events[events.length - 1]?.seq).toBe(total)
   })
 
+  it('snapshot() starts with an empty pendingPermissions list', () => {
+    const fake = fakeQuery()
+    const handle = createHostedHandle(baseParams(), () => fake.query)
+    expect(handle.snapshot().pendingPermissions).toEqual([])
+  })
+
+  it('answerPermission delegates to the handle-owned broker, refusing an unknown id', () => {
+    const fake = fakeQuery()
+    const handle = createHostedHandle(baseParams(), () => fake.query)
+    expect(handle.answerPermission('nonexistent', 'deny', null)).toEqual({ ok: false, kind: 'unknown-permission' })
+  })
+
+  it('a canUseTool call made through the options passed to query() shows up on the snapshot, and answering it resolves', async () => {
+    const fake = fakeQuery()
+    let capturedOptions: { canUseTool?: (toolName: string, input: Record<string, unknown>, options: unknown) => Promise<unknown> } | undefined
+    const handle = createHostedHandle(baseParams(), (queryParams) => {
+      capturedOptions = queryParams.options as typeof capturedOptions
+      return fake.query
+    })
+    expect(capturedOptions?.canUseTool).toBeDefined()
+
+    const controller = new AbortController()
+    const resultPromise = capturedOptions?.canUseTool?.('Bash', { command: 'touch x' }, { signal: controller.signal, toolUseID: 'tool-use-1' })
+    expect(handle.snapshot().pendingPermissions).toHaveLength(1)
+    const permissionId = handle.snapshot().pendingPermissions[0]?.permissionId as string
+
+    const outcome = handle.answerPermission(permissionId, 'allow-once', null)
+    expect(outcome).toEqual({ ok: true })
+    await expect(resultPromise).resolves.toEqual({ behavior: 'allow', updatedInput: { command: 'touch x' }, toolUseID: 'tool-use-1' })
+    expect(handle.snapshot().pendingPermissions).toEqual([])
+  })
+
+  it('a generator that ends cancels every pending permission before the ended snapshot', async () => {
+    const fake = fakeQuery()
+    let capturedOptions: { canUseTool?: (toolName: string, input: Record<string, unknown>, options: unknown) => Promise<unknown> } | undefined
+    const handle = createHostedHandle(baseParams(), (queryParams) => {
+      capturedOptions = queryParams.options as typeof capturedOptions
+      return fake.query
+    })
+    const controller = new AbortController()
+    void capturedOptions?.canUseTool?.('Bash', {}, { signal: controller.signal, toolUseID: 'tool-use-1' })
+    expect(handle.snapshot().pendingPermissions).toHaveLength(1)
+
+    fake.finish()
+    await flush()
+    expect(handle.snapshot().phase).toBe('ended')
+    expect(handle.snapshot().pendingPermissions).toEqual([])
+  })
+
   it('origin reflects the start mode: fresh, resumed, and forked', () => {
     const fresh = createHostedHandle(baseParams({ mode: { kind: 'fresh' } }), () => fakeQuery().query)
     expect(fresh.snapshot().origin).toEqual({ kind: 'fresh' })

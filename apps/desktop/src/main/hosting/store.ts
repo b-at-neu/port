@@ -10,11 +10,13 @@
 import type { RepoId } from '../../shared/repos'
 import type {
   HostedSessionSnapshot,
+  PermissionDecision,
   SessionAttachResult,
   SessionCloseResult,
   SessionEventEnvelope,
   SessionInterruptResult,
   SessionKey,
+  SessionPermissionAnswerResult,
   SessionSendResult,
   SessionStartMode,
   SessionStartResult,
@@ -69,6 +71,9 @@ export interface HostedStore {
   attach(sessionKey: SessionKey): SessionAttachResult
   list(): readonly HostedSessionSnapshot[]
   closeAll(): Promise<void>
+  /** #99: routed to the named handle's own broker; `unknown-session` for a
+   *  key that names no live handle. */
+  answerPermission(sessionKey: SessionKey, permissionId: string, decision: PermissionDecision, message: string | null): SessionPermissionAnswerResult
 }
 
 function toSessionKey(n: number): SessionKey {
@@ -171,5 +176,11 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     await Promise.all([...handles.values()].map((handle) => handle.close()))
   }
 
-  return { start, send, interrupt, close, attach, list, closeAll }
+  function answerPermission(sessionKey: SessionKey, permissionId: string, decision: PermissionDecision, message: string | null): SessionPermissionAnswerResult {
+    const handle = handles.get(sessionKey)
+    if (!handle) return { ok: false, kind: 'unknown-session' }
+    return handle.answerPermission(permissionId, decision, message)
+  }
+
+  return { start, send, interrupt, close, attach, list, closeAll, answerPermission }
 }
