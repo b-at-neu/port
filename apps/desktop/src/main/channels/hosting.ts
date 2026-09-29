@@ -1,5 +1,5 @@
-// The six hosted-session channels' validation and registry resolution
-// (#98) — everything a stale renderer could get wrong throws here, never a
+// The seven hosted-session channels' validation and registry resolution
+// (#98, #99) — everything a stale renderer could get wrong throws here, never a
 // value `main/hosting/store.ts` has to defend against, the same rail every
 // other channel already applies. `repoId` resolves through the same
 // `listRepositories` ready-entry rail `resolveWorktreesReport`/
@@ -8,6 +8,7 @@
 // own job, not this file's).
 import type { IpcMap } from '../../shared/ipc'
 import type { RepositoryEntry } from '../../shared/repos'
+import { PERMISSION_DECISIONS } from '../../shared/hosting/types'
 import type { SessionStartMode } from '../../shared/hosting/types'
 import type { HostedStore } from '../hosting'
 import { listRepositories } from '../registry'
@@ -102,4 +103,29 @@ export function resolveSessionAttach(request: IpcMap['session:attach']['request'
 export function resolveSessionList(request: IpcMap['session:list']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['list']> {
   if (request !== undefined) throw new Error("'session:list' takes no payload")
   return deps.store.list()
+}
+
+/** `sessionKey`/`permissionId` non-empty strings, `decision` one of
+ *  `PERMISSION_DECISIONS`, `message` either `null` or a string of 1–2000
+ *  characters, and a non-null `message` only ever alongside `'deny'` — every
+ *  one of these can only come from a stale or buggy renderer, so each
+ *  throws rather than reaching `HostedStore.answerPermission` with a shape
+ *  it was never built to defend against. */
+export function resolveSessionPermissionAnswer(
+  request: IpcMap['session:permission:answer']['request'],
+  deps: HostingChannelDeps,
+): ReturnType<HostedStore['answerPermission']> {
+  if (typeof request?.sessionKey !== 'string' || request.sessionKey === '') throw new Error("'session:permission:answer' requires a non-empty 'sessionKey'")
+  if (typeof request.permissionId !== 'string' || request.permissionId === '') throw new Error("'session:permission:answer' requires a non-empty 'permissionId'")
+  if (!(PERMISSION_DECISIONS as readonly string[]).includes(request.decision)) {
+    throw new Error(`'session:permission:answer' requires 'decision' to be one of ${PERMISSION_DECISIONS.join(', ')}`)
+  }
+  const message: unknown = request.message
+  if (message !== null && (typeof message !== 'string' || message.length < 1 || message.length > 2000)) {
+    throw new Error("'session:permission:answer' requires 'message' to be null or a string of 1-2000 characters")
+  }
+  if (message !== null && request.decision !== 'deny') {
+    throw new Error("'session:permission:answer' requires 'message' to be null when 'decision' is not 'deny'")
+  }
+  return deps.store.answerPermission(request.sessionKey, request.permissionId, request.decision, message)
 }
