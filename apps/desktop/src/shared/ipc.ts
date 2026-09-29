@@ -9,6 +9,7 @@ import type { ClaimApplyResponse, ClaimPreflightResponse, PlanGateChoice } from 
 import type { GateAnswerResponse, GateClaimResponse, GateDecision, GatePreflightResponse } from './gate/types'
 import type { LabelKey } from './labels/vocabulary'
 import type { ItemActionResult, OperatorAction } from './actions/types'
+import type { DispatchCommand, DispatchControlResult } from './dispatch/types'
 import type { RuntimePreflight, RuntimeProbe } from './runtime/types'
 import type { ClaimRead } from './writes/types'
 import type { RelayCopyResponse } from './relay/types'
@@ -136,6 +137,14 @@ export interface IpcMap {
     request: { repoId: RepoId; kind: 'issue' | 'pull-request'; number: number; action: OperatorAction; expectedStage: LabelKey | null }
     response: ItemActionResult
   }
+  /** Operator control over dispatch (#110) — drain, resume, halt. No
+   *  repository context: drain is app-wide, one switch (PIPELINE.md's own
+   *  scarce-resource rule, ENGINEERING §7), and halt sweeps every ready
+   *  repository this app knows about. */
+  'dispatch:control': {
+    request: { command: DispatchCommand }
+    response: DispatchControlResult
+  }
   /** The runtime strip's cheap check (#97) — no repository context, no
    *  subprocess beyond `claude --version`, no network. Safe on every app
    *  start; there is no failure branch, because every failure *is* a
@@ -250,6 +259,7 @@ export const IPC_CHANNELS = [
   'claim:preflight',
   'claim:apply',
   'item:action',
+  'dispatch:control',
   'runtime:preflight',
   'runtime:probe',
   'gate:preflight',

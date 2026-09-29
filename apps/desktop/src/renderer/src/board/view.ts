@@ -10,9 +10,18 @@ import type { RepoId } from '../../../shared/repos'
 import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
 import { actionsFingerprint } from './actions'
 import { notReadyCopy, planGateHeaderButtonLabel, rateLimitCopy, sourceHealthCopy } from './copy'
+import { buildHaltReport, currentHaltReport, drainTogglePending, drainToggleLabel, haltButtonLabel, haltPending, isHaltConfirmArmed } from './dispatch'
 import { buildRelayBanner, relayFingerprint, relayLineCopy } from './relay'
 import { buildRow } from './rows'
 import { buildTickStrip } from './tick'
+
+/** Every claim across every repository's own tick report — `Halt
+ *  everything`'s own visibility rail (plan's own **UX states**: "rendered
+ *  only when at least one repository reports an in-flight claim") and the
+ *  confirm step's own count. */
+function totalInFlightClaims(snapshot: BoardSnapshot): number {
+  return snapshot.tick.reduce((total, report) => total + report.claims.length, 0)
+}
 
 export interface BoardViewState {
   readonly status: 'loading' | 'ready' | 'error'
@@ -65,6 +74,36 @@ function buildHeader(state: BoardViewState): HTMLElement {
   refreshButton.disabled = state.refreshing
   actions.appendChild(refreshButton)
 
+  // Operator control over dispatch (#110), after Refresh: a single Drain/
+  // Resume toggle plus Halt everything, the latter rendered only once at
+  // least one repository reports an in-flight claim.
+  if (state.snapshot !== null) {
+    const drainButton = document.createElement('button')
+    drainButton.className = 'board-header__drain'
+    drainButton.dataset.action = 'dispatch-toggle'
+    drainButton.textContent = drainToggleLabel(state.snapshot.drain)
+    drainButton.disabled = drainTogglePending()
+    actions.appendChild(drainButton)
+
+    const inFlightCount = totalInFlightClaims(state.snapshot)
+    if (inFlightCount > 0) {
+      const haltButton = document.createElement('button')
+      haltButton.className = 'board-header__halt'
+      haltButton.dataset.action = 'dispatch-halt'
+      haltButton.textContent = haltButtonLabel(inFlightCount)
+      haltButton.disabled = haltPending()
+      actions.appendChild(haltButton)
+
+      if (isHaltConfirmArmed()) {
+        const cancelButton = document.createElement('button')
+        cancelButton.className = 'board-header__halt-cancel'
+        cancelButton.dataset.action = 'dispatch-halt-cancel'
+        cancelButton.textContent = 'Cancel'
+        actions.appendChild(cancelButton)
+      }
+    }
+  }
+
   top.appendChild(actions)
   header.appendChild(top)
 
@@ -86,6 +125,11 @@ function buildHeader(state: BoardViewState): HTMLElement {
     // Directly under the freshness strip (#105) — re-renders on every draw,
     // same as the strip above, so the wakeup countdown stays live.
     header.appendChild(buildTickStrip(state.snapshot, state.now))
+
+    // The halt report (#110), directly under the tick strip, until
+    // dismissed — never rendered when nothing has been halted this session.
+    const haltReport = currentHaltReport()
+    if (haltReport !== null) header.appendChild(buildHaltReport(haltReport, state.now))
 
     // The relay loop's own header line (#107), directly under the tick
     // strip — always rendered once there is at least one candidate, or the

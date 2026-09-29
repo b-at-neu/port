@@ -79,7 +79,11 @@ function pausePlan(item: ReconciledItem, viewer: string): ActionAvailability {
  *  module never performs. `main/actions/apply.ts` calls
  *  `recoverPausedTrigger` itself and fills `add` in before building the
  *  `LabelWriteRequest` — everything else about the plan (the absent-key
- *  guard, the assignee half) is already fully determined here. */
+ *  guard, the assignee half) is already fully determined here. The
+ *  recovered key may now come from a `stop` entry as well as a `pause` one
+ *  (#110) — `main/actions/resume.ts`'s own `recoverPausedTrigger` maps an
+ *  in-flight key forward through `RETRY_TRIGGER` before this plan's `add` is
+ *  ever filled in, so `apply.ts` itself needs no change either way. */
 function resumePlan(item: ReconciledItem, viewer: string): ActionAvailability {
   if (!item.marked || item.stage !== null) return notApplicable()
   const { addAssignees, assignees } = assigneeHalf(item, viewer)
@@ -96,6 +100,22 @@ function retryPlan(item: ReconciledItem, viewer: string): ActionAvailability {
   const { addAssignees, assignees } = assigneeHalf(item, viewer)
   const precondition: LabelPrecondition = { present: [inFlight], absent: [trigger], assignees }
   return { available: true, plan: recoveryPlan('retry', precondition, [trigger], [inFlight], addAssignees) }
+}
+
+/** `add: []` is the deliberate difference from `retryPlan` (#110's own
+ *  **Data & contracts**): retry hands the item back to its trigger so the
+ *  next tick dispatches it again now; stop takes it off the pipeline
+ *  entirely, until the operator asks for it back through `resume`. No
+ *  absent-key guard either — unlike pause, there is no trigger label a
+ *  stage could race this write against, since the item is already
+ *  in-flight. */
+function stopPlan(item: ReconciledItem, viewer: string): ActionAvailability {
+  if (item.stage !== 'in-flight') return notApplicable()
+  const inFlight = stageKeyOf(item)
+  if (inFlight === null) return notApplicable()
+  const { addAssignees, assignees } = assigneeHalf(item, viewer)
+  const precondition: LabelPrecondition = { present: [inFlight], absent: [], assignees }
+  return { available: true, plan: recoveryPlan('stop', precondition, [], [inFlight], addAssignees) }
 }
 
 /** Deliberately not ownership-gated (plan's own **Implementation**): gate is
@@ -116,21 +136,21 @@ export interface ActionsForParams {
 }
 
 /** Every action's availability for one item. Ownership is checked first for
- *  pause/resume/retry, so it can never be skipped: `viewer === null` refuses
- *  all three `viewer-unknown`; an assignee set that is neither empty nor
- *  exactly `[viewer]` refuses all three `not-owned` (PIPELINE.md's "exactly
- *  one assignee per in-flight pipeline item" — viewer-among-several is
- *  refused, not accepted). `gate` runs its own, ownership-free check. */
-function refusedTriple(reason: ActionRefusal, item: ReconciledItem, approvalGate: boolean): Readonly<Record<OperatorAction, ActionAvailability>> {
+ *  pause/resume/retry/stop, so it can never be skipped: `viewer === null`
+ *  refuses all four `viewer-unknown`; an assignee set that is neither empty
+ *  nor exactly `[viewer]` refuses all four `not-owned` (PIPELINE.md's
+ *  "exactly one assignee per in-flight pipeline item" — viewer-among-several
+ *  is refused, not accepted). `gate` runs its own, ownership-free check. */
+function refusedRecovery(reason: ActionRefusal, item: ReconciledItem, approvalGate: boolean): Readonly<Record<OperatorAction, ActionAvailability>> {
   const refused: ActionAvailability = { available: false, reason }
-  return { pause: refused, resume: refused, retry: refused, gate: gatePlan(item, approvalGate) }
+  return { pause: refused, resume: refused, retry: refused, stop: refused, gate: gatePlan(item, approvalGate) }
 }
 
 export function actionsFor(params: ActionsForParams): Readonly<Record<OperatorAction, ActionAvailability>> {
   const { item, viewer, approvalGate } = params
-  if (viewer === null) return refusedTriple('viewer-unknown', item, approvalGate)
-  if (!(item.assignees.length === 0 || (item.assignees.length === 1 && item.assignees[0] === viewer))) return refusedTriple('not-owned', item, approvalGate)
-  return { pause: pausePlan(item, viewer), resume: resumePlan(item, viewer), retry: retryPlan(item, viewer), gate: gatePlan(item, approvalGate) }
+  if (viewer === null) return refusedRecovery('viewer-unknown', item, approvalGate)
+  if (!(item.assignees.length === 0 || (item.assignees.length === 1 && item.assignees[0] === viewer))) return refusedRecovery('not-owned', item, approvalGate)
+  return { pause: pausePlan(item, viewer), resume: resumePlan(item, viewer), retry: retryPlan(item, viewer), stop: stopPlan(item, viewer), gate: gatePlan(item, approvalGate) }
 }
 
 /** The inverse of `pausePlan`'s own `expect.present` — given a pause's own

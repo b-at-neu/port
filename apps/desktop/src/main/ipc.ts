@@ -14,6 +14,7 @@ import { claimApply, claimPreflight, defaultClaimDeps } from './claim'
 import type { ClaimDeps } from './claim'
 import { applyItemAction, gateAnswer, gateClaimRead, gateClaimSet, gatePreflight } from './actions'
 import type { ApplyItemActionParams, ReadyEntry } from './actions'
+import { createDrainStore, haltDispatch, resolveDispatchControl } from './dispatch'
 import { resolveGateAnswer, resolveGateClaimRead, resolveGateClaimSet, resolveGatePreflight } from './channels/gate'
 import type { GateChannelDeps } from './channels/gate'
 import { copyRelayReply } from './relay'
@@ -323,6 +324,14 @@ export function registerIpc(): RegisteredIpc {
 
   handle('search:query', (_event, request) => resolveSearchQuery(registryDeps, request, app.getPath('userData')))
 
+  // The app-wide drain switch (#110) — one store for the process lifetime,
+  // read fresh by every `buildSnapshot()` so a drain applied mid-session is
+  // visible on the very next snapshot. `load()` resolves the on-disk state
+  // asynchronously; `current()` stays synchronous and starts `unread` so
+  // `registerIpc()` itself never blocks on it.
+  const drain = createDrainStore(app.getPath('userData'))
+  void drain.load()
+
   // The board's own clock (#80) — one watcher for the process lifetime,
   // pushing every snapshot to every open window over `board:update`. The
   // registry is re-listed through the same `listRepositories` every other
@@ -333,6 +342,7 @@ export function registerIpc(): RegisteredIpc {
       return list.ok ? list.repositories : []
     },
     git: (args, cwd) => git(args, { cwd }),
+    drain: drain.current,
     onSnapshot: (snapshot) => {
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) window.webContents.send('board:update', snapshot)
@@ -355,6 +365,20 @@ export function registerIpc(): RegisteredIpc {
 
   handle('item:action', (_event, request) =>
     resolveItemAction(registryDeps, request, app.getPath('userData'), { listRepositories, applyItemAction, snapshot: watcher.snapshot, refresh: watcher.refresh }),
+  )
+
+  // Operator control over dispatch (#110) — drain/resume/halt, all its
+  // branching in `resolveDispatchControl` itself, never here.
+  handle('dispatch:control', (_event, request) =>
+    resolveDispatchControl(registryDeps, request, {
+      listRepositories,
+      drain,
+      haltDispatch,
+      snapshot: watcher.snapshot,
+      refresh: watcher.refresh,
+      auditDir: app.getPath('userData'),
+      now: () => new Date(),
+    }),
   )
 
   handle('runtime:preflight', (_event, request) => {

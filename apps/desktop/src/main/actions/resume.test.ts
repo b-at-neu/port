@@ -83,4 +83,34 @@ describe('recoverPausedTrigger', () => {
     const result = await recoverPausedTrigger({ auditDir: '/tmp/audit', repo: 'o/r', number: 148, vocabulary: VOCABULARY, readAuditLog: fakeRead(entries) })
     expect(result).toEqual({ kind: 'unresolvable' })
   })
+
+  it('recovers a stop entry, mapping the in-flight key forward through RETRY_TRIGGER (#110)', async () => {
+    const entries = [pauseEntry({ action: 'stop', precondition: { present: ['reviewing'], absent: [], assignees: { kind: 'any' } } })]
+    const result = await recoverPausedTrigger({ auditDir: '/tmp/audit', repo: 'o/r', number: 148, vocabulary: VOCABULARY, readAuditLog: fakeRead(entries) })
+    expect(result).toEqual({ kind: 'recovered', trigger: 'readyForReview' })
+  })
+
+  it('picks the newest of a mixed pause/stop history, not the first', async () => {
+    const entries = [
+      pauseEntry({ action: 'stop', precondition: { present: ['reviewing'], absent: [], assignees: { kind: 'any' } } }),
+      pauseEntry({ action: 'pause', precondition: { present: ['plan approved'], absent: [], assignees: { kind: 'any' } } }),
+    ]
+    const result = await recoverPausedTrigger({ auditDir: '/tmp/audit', repo: 'o/r', number: 148, vocabulary: VOCABULARY, readAuditLog: fakeRead(entries) })
+    expect(result).toEqual({ kind: 'recovered', trigger: 'planApproved' })
+  })
+
+  it('reports unresolvable for a recorded key with neither a trigger role nor an in-flight role', async () => {
+    // `stop` never actually removes a marker — this exercises the "neither
+    // role" fallback defensively, the same way `retryPlan`'s own absent-key
+    // guard is asserted even though every real in-flight key maps.
+    const entries = [pauseEntry({ action: 'stop', precondition: { present: ['marker'], absent: [], assignees: { kind: 'any' } } })]
+    const result = await recoverPausedTrigger({ auditDir: '/tmp/audit', repo: 'o/r', number: 148, vocabulary: VOCABULARY, readAuditLog: fakeRead(entries) })
+    expect(result).toEqual({ kind: 'unresolvable' })
+  })
+
+  it('ignores a stop entry whose result is not applied', async () => {
+    const entries = [pauseEntry({ action: 'stop', result: { kind: 'no-op' }, precondition: { present: ['reviewing'], absent: [], assignees: { kind: 'any' } } })]
+    const result = await recoverPausedTrigger({ auditDir: '/tmp/audit', repo: 'o/r', number: 148, vocabulary: VOCABULARY, readAuditLog: fakeRead(entries) })
+    expect(result).toEqual({ kind: 'no-record' })
+  })
 })

@@ -88,6 +88,7 @@ function snapshotOf(repositories: readonly RepositoryState[], healths: readonly 
     policy: { baseIntervalMs: SOURCE_BASE_INTERVAL_MS, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: STALE_GRACE_MS },
     tick: [],
     relay: { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: NOW.toISOString() },
+    drain: { gate: 'open' },
     nextWakeupAt: null,
     emittedAt: NOW.toISOString(),
   }

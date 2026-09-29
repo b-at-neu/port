@@ -5,6 +5,7 @@
 // `buildHeader`, so both re-render on every draw and the countdown stays
 // live.
 import type { BoardSnapshot, RepositoryHealth } from '../../../shared/board/types'
+import type { DrainState } from '../../../shared/dispatch/types'
 import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
 import type { LabelKey } from '../../../shared/labels/vocabulary'
 import type { TickActionable, TickBlind, TickClaim, TickHeld, TickReport } from '../../../shared/tick/types'
@@ -36,6 +37,26 @@ export function clockLineCopy(nextWakeupAt: string | null, health: readonly Repo
   return `Next wakeup in ${String(minutes)}:${String(seconds).padStart(2, '0')}`
 }
 
+/** The drain line, directly above the clock line (#110's own **UX states**)
+ *  — `null` while the gate is open, since the clock line already carries
+ *  the countdown and nothing more needs saying. `title` is the full
+ *  dispatch.json path, set only for the `unreadable` reason, so the line
+ *  itself stays one sentence while the path is still reachable on hover. */
+export function drainLineFor(drain: DrainState): { readonly text: string; readonly title: string | null } | null {
+  if (drain.gate === 'open') return null
+  switch (drain.reason) {
+    case 'operator': {
+      const since = new Date(drain.since)
+      const label = Number.isNaN(since.getTime()) ? drain.since : since.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      return { text: `Draining since ${label} — nothing will be dispatched. Still reading every 60s, so in-flight work keeps reporting.`, title: null }
+    }
+    case 'unread':
+      return { text: 'Draining — reading the saved dispatch state…', title: null }
+    case 'unreadable':
+      return { text: `Draining — dispatch.json can't be read (${drain.message}). Fix or delete it to resume.`, title: drain.path }
+  }
+}
+
 function blindCopy(blind: TickBlind): string {
   switch (blind.reason) {
     case 'not-ready':
@@ -65,11 +86,19 @@ function livenessSummary(claims: readonly TickClaim[]): string {
   return `Liveness: ${parts.join(', ')}`
 }
 
-export function repositoryLineCopy(report: TickReport): string {
+/** `draining` never renders as "nothing to dispatch" (#110's own **UX
+ *  states**) — a held set and an empty one are different facts, so a
+ *  drained repository still names what it would have dispatched. */
+function dispatchPartOf(report: TickReport, draining: boolean): string {
+  if (report.actionable.length === 0) return draining ? 'draining: nothing would dispatch' : 'nothing to dispatch'
+  const named = report.actionable.map((a) => `${a.agent} #${String(a.number)}`).join(', ')
+  return draining ? `draining: ${String(report.actionable.length)} would dispatch, held back (${named})` : `would dispatch ${named}`
+}
+
+export function repositoryLineCopy(report: TickReport, drain: DrainState): string {
   if (report.blind !== null) return `${report.displayName} — ${blindCopy(report.blind)}`
 
-  const dispatchPart =
-    report.actionable.length === 0 ? 'nothing to dispatch' : `would dispatch ${report.actionable.map((a) => `${a.agent} #${String(a.number)}`).join(', ')}`
+  const dispatchPart = dispatchPartOf(report, drain.gate !== 'open')
   const uncheckedCount = report.actionable.filter((a) => a.unchecked).length
   // Never omitted: an unchecked dispatch is exactly the case an operator may
   // want to look at (plan's own **UX states**).
@@ -166,6 +195,15 @@ export function buildTickStrip(snapshot: BoardSnapshot, now: Date): HTMLElement 
   const strip = document.createElement('div')
   strip.className = 'board-header__tick'
 
+  const drainLine = drainLineFor(snapshot.drain)
+  if (drainLine !== null) {
+    const line = document.createElement('div')
+    line.className = 'board-header__tick-drain'
+    line.textContent = drainLine.text
+    if (drainLine.title !== null) line.title = drainLine.title
+    strip.appendChild(line)
+  }
+
   const clock = document.createElement('div')
   clock.className = 'board-header__tick-clock'
   clock.textContent = clockLineCopy(snapshot.nextWakeupAt, snapshot.health, now)
@@ -174,7 +212,7 @@ export function buildTickStrip(snapshot: BoardSnapshot, now: Date): HTMLElement 
   for (const report of snapshot.tick) {
     const line = document.createElement('div')
     line.className = 'board-header__tick-line'
-    line.textContent = repositoryLineCopy(report)
+    line.textContent = repositoryLineCopy(report, snapshot.drain)
 
     if (report.blind === null) {
       const details = [

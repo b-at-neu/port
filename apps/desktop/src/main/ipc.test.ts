@@ -112,7 +112,7 @@ describe('resolveWorktreesReport', () => {
   })
 })
 
-const FAKE_SNAPSHOT = { state: { repositories: [], sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: '2026-01-01T00:00:00.000Z' }, readAt: '2026-01-01T00:00:00.000Z' }, health: [], policy: { baseIntervalMs: { github: 60_000, sessions: 15_000, worktrees: 15_000, denials: 15_000 }, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: 30_000 }, tick: [], relay: { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: '2026-01-01T00:00:00.000Z' }, nextWakeupAt: null, emittedAt: '2026-01-01T00:00:00.000Z' } satisfies BoardSnapshot
+const FAKE_SNAPSHOT = { state: { repositories: [], sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: '2026-01-01T00:00:00.000Z' }, readAt: '2026-01-01T00:00:00.000Z' }, health: [], policy: { baseIntervalMs: { github: 60_000, sessions: 15_000, worktrees: 15_000, denials: 15_000 }, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: 30_000 }, tick: [], relay: { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: '2026-01-01T00:00:00.000Z' }, drain: { gate: 'open' }, nextWakeupAt: null, emittedAt: '2026-01-01T00:00:00.000Z' } satisfies BoardSnapshot
 
 function boardDepsWith(overrides: Partial<BoardRefreshDeps>): BoardRefreshDeps {
   return {
@@ -248,6 +248,7 @@ const EMPTY_SNAPSHOT: BoardSnapshot = {
   policy: { baseIntervalMs: { github: 60_000, sessions: 15_000, worktrees: 15_000, denials: 15_000 }, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: 30_000 },
   tick: [],
   relay: { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: 't' },
+  drain: { gate: 'open' },
   nextWakeupAt: null,
   emittedAt: 't',
 }
@@ -288,7 +289,7 @@ describe('resolveItemAction', () => {
   it('rejects an action outside OPERATOR_ACTIONS', async () => {
     await expect(
       resolveItemAction(registryDeps, { repoId: REPO_ID, kind: 'issue', number: 1, action: 'bogus' as never, expectedStage: null }, '/audit', itemActionDepsWith({})),
-    ).rejects.toThrow("'item:action' requires 'action' to be one of pause, resume, retry, gate")
+    ).rejects.toThrow("'item:action' requires 'action' to be one of pause, resume, retry, stop, gate")
   })
 
   it('rejects an empty-string expectedStage', async () => {

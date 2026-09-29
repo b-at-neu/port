@@ -124,6 +124,27 @@ describe('actionsFor — retry', () => {
   })
 })
 
+describe('actionsFor — stop', () => {
+  it('offers stop on every in-flight-labelled row, adding nothing — the deliberate difference from retry', () => {
+    const it1 = item({ stage: 'in-flight', stages: [stageLabel('reviewing', 'in-flight')], assignees: ['op'] })
+    const result = actionsFor({ item: it1, viewer: 'op', approvalGate: true })
+    expect(result.stop).toEqual({
+      available: true,
+      plan: { add: [], remove: ['reviewing'], addAssignees: [], removeAssignees: [], expect: { present: ['reviewing'], absent: [], assignees: { kind: 'exactly', logins: ['op'] } }, action: 'stop' },
+    })
+  })
+
+  it('is not-applicable off an in-flight role', () => {
+    const it1 = item({ stage: 'trigger', stages: [stageLabel('ready', 'trigger')] })
+    expect(actionsFor({ item: it1, viewer: 'op', approvalGate: true }).stop).toEqual({ available: false, reason: 'not-applicable' })
+  })
+
+  it('refuses not-owned when assigned to someone else, the same as pause/resume/retry', () => {
+    const it1 = item({ stage: 'in-flight', stages: [stageLabel('inProgress', 'in-flight')], assignees: ['other'] })
+    expect(actionsFor({ item: it1, viewer: 'op', approvalGate: true }).stop).toEqual({ available: false, reason: 'not-owned' })
+  })
+})
+
 describe('actionsFor — gate', () => {
   function pr(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     return item({ kind: 'pull-request', stage: 'in-flight', stages: [stageLabel('reviewing', 'in-flight')], marked: false, ...overrides })
@@ -160,11 +181,12 @@ describe('actionsFor — gate', () => {
 describe('actionsFor — ownership', () => {
   const triggerItem = item({ stage: 'trigger', stages: [stageLabel('ready', 'trigger')] })
 
-  it('refuses pause/resume/retry viewer-unknown when viewer is null', () => {
+  it('refuses pause/resume/retry/stop viewer-unknown when viewer is null', () => {
     const result = actionsFor({ item: triggerItem, viewer: null, approvalGate: true })
     expect(result.pause).toEqual({ available: false, reason: 'viewer-unknown' })
     expect(result.resume).toEqual({ available: false, reason: 'viewer-unknown' })
     expect(result.retry).toEqual({ available: false, reason: 'viewer-unknown' })
+    expect(result.stop).toEqual({ available: false, reason: 'viewer-unknown' })
   })
 
   it('allows an unassigned item', () => {

@@ -11,6 +11,7 @@ import type { RepoId } from '../../shared/repos'
 import type { RepositoryEntry } from '../../shared/repos'
 import { DEFAULT_POLL_POLICY, SOURCE_KINDS, initialHealth } from '../../shared/board/types'
 import type { BoardSnapshot, RepositoryHealth, SourceHealth, SourceKind } from '../../shared/board/types'
+import type { DrainState } from '../../shared/dispatch/types'
 import type { RelayScan } from '../../shared/relay/types'
 import { createDispatchLedger, planTick } from '../tick'
 import { buildDesktopTickEvent, recordTick as defaultRecordTick } from '../trajectory'
@@ -54,6 +55,11 @@ export interface CreatePipelineWatcherParams {
   readonly now?: () => Date
   readonly setTimer?: TimerFactory
   readonly recordTick?: RecordTickFn
+  /** The app's own drain switch (#110) — read fresh on every
+   *  `buildSnapshot()`, never cached, so a drain applied mid-session is
+   *  visible on the very next snapshot. Defaults to `{ gate: 'open' }`, the
+   *  same default a repository with no drain source at all reads as. */
+  readonly drain?: () => DrainState
 }
 
 export interface PipelineWatcher {
@@ -99,6 +105,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
   // `SourceKind`: it never schedules its own cadence, only rides the
   // sessions source's.
   const relayReader = createRelayReader()
+  const drain = params.drain ?? ((): DrainState => ({ gate: 'open' }))
   let relay: RelayScan = { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: now().toISOString() }
   let latest: BoardSnapshot = {
     state: {
@@ -110,6 +117,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     policy: DEFAULT_POLL_POLICY,
     tick: [],
     relay,
+    drain: drain(),
     nextWakeupAt: null,
     emittedAt: now().toISOString(),
   }
@@ -176,7 +184,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     }
 
     const nextWakeupAt = stopped ? null : earliestDueAt().toISOString()
-    latest = { state, health: healthList, policy: DEFAULT_POLL_POLICY, tick, relay, nextWakeupAt, emittedAt: now().toISOString() }
+    latest = { state, health: healthList, policy: DEFAULT_POLL_POLICY, tick, relay, drain: drain(), nextWakeupAt, emittedAt: now().toISOString() }
     return latest
   }
 

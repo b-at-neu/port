@@ -65,11 +65,11 @@ function buildActionStrip(row: BoardItemRow): HTMLElement | null {
   return strip
 }
 
-/** The first pause/resume/retry ownership refusal this item carries —
+/** The first pause/resume/retry/stop ownership refusal this item carries —
  *  `gate` runs no ownership check, so it never contributes one. A row with
  *  no refusal and no action result at all renders no note. */
 function ownershipNoteFor(actions: Readonly<Record<OperatorAction, ActionAvailability>>, item: { readonly number: number; readonly assignees: readonly string[] }): string | null {
-  for (const action of ['pause', 'resume', 'retry'] as const) {
+  for (const action of ['pause', 'resume', 'retry', 'stop'] as const) {
     const availability = actions[action]
     if (!availability.available && (availability.reason === 'not-owned' || availability.reason === 'viewer-unknown')) {
       return actionRefusalNote(availability.reason, item)
@@ -78,13 +78,26 @@ function ownershipNoteFor(actions: Readonly<Record<OperatorAction, ActionAvailab
   return null
 }
 
+/** `stop`'s own applied-with-an-attachment sentence (plan's own **UX
+ *  states**) — this app cannot stop an agent or session it did not dispatch
+ *  (#106's job), so the write's own success is reported alongside, never
+ *  instead of, that fact. `null` when nothing is attached, the same
+ *  first-hit-wins priority `agentSummaryOf` above already uses. */
+function stopAttachedAgentNote(row: BoardItemRow): string | null {
+  const agent = row.item.agents[0]
+  const name = agent !== undefined ? (agent.stage ?? agent.agentType) : (row.item.sessions.find((s) => s.role === 'implement') !== undefined ? '/port:implement session' : null)
+  if (name === null) return null
+  const n = String(row.item.number)
+  return `A ${name} is attached to #${n}. This app didn't dispatch it, so it can't stop it — stop it in the session that did, or run stop #${n} in the cockpit.`
+}
+
 /** A click's own result while there is one, otherwise the ownership
  *  refusal — never both, and never in a tooltip. */
 function actionNoteFor(row: BoardItemRow): string | null {
   const state = itemActionState(row.item.repoId, row.item.number)
   if (state?.kind === 'result') {
     const availability = row.actions[state.action]
-    return actionResultCopy({
+    const base = actionResultCopy({
       action: state.action,
       number: row.item.number,
       plan: availability.available ? availability.plan : null,
@@ -92,6 +105,11 @@ function actionNoteFor(row: BoardItemRow): string | null {
       result: state.result,
       now: new Date(),
     })
+    if (state.action === 'stop' && state.result.ok && state.result.outcome.kind === 'applied') {
+      const attached = stopAttachedAgentNote(row)
+      return attached !== null ? `${base} ${attached}` : base
+    }
+    return base
   }
   return ownershipNoteFor(row.actions, row.item)
 }

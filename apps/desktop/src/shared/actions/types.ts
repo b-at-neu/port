@@ -1,5 +1,5 @@
-// Renderer-safe contract for the four single-label operator actions (#94):
-// pause, resume, retry, gate. No import here may reach a Node builtin —
+// Renderer-safe contract for the single-label operator actions (#94, #110):
+// pause, resume, retry, stop, gate. No import here may reach a Node builtin —
 // `apps/desktop/src/main/actions/` is the only place that calls
 // `applyLabels`, but the renderer is this ticket's own consumer, the same
 // rule `shared/writes/types.ts` and `shared/claim/types.ts` already state for
@@ -9,8 +9,11 @@ import type { LabelPrecondition, WriteOutcome } from '../writes/types'
 
 /** The literal strings recorded verbatim as `AuditEntry.action` — the verb
  *  in the log and the verb in the UI can never drift, since nothing else
- *  names an operator action. */
-export const OPERATOR_ACTIONS = ['pause', 'resume', 'retry', 'gate'] as const
+ *  names an operator action. `stop` (#110) joins the other three recovery
+ *  actions rather than sitting beside `gate`: it takes an in-flight item
+ *  off the pipeline until the operator asks for it back, `retry`'s own
+ *  mirror image. */
+export const OPERATOR_ACTIONS = ['pause', 'resume', 'retry', 'stop', 'gate'] as const
 export type OperatorAction = (typeof OPERATOR_ACTIONS)[number]
 
 /** The `LabelWriteRequest` key-level shape minus `repoId`/`repo`/`kind`/

@@ -7,9 +7,11 @@ import type { RepoId } from '../../../shared/repos'
 import type { RepositoryHealth } from '../../../shared/board/types'
 import { initialHealth } from '../../../shared/board/types'
 import type { TickActionable, TickClaim, TickHeld, TickReport } from '../../../shared/tick/types'
-import { clockLineCopy, cycleDetailCopy, heldDetailCopy, repositoryLineCopy, stalledDetailCopy, uncheckedDetailCopy } from './tick'
+import type { DrainState } from '../../../shared/dispatch/types'
+import { clockLineCopy, cycleDetailCopy, drainLineFor, heldDetailCopy, repositoryLineCopy, stalledDetailCopy, uncheckedDetailCopy } from './tick'
 
 const NOW = new Date('2026-01-01T00:00:00.000Z')
+const OPEN: DrainState = { gate: 'open' }
 
 function health(overrides: Partial<RepositoryHealth> = {}): RepositoryHealth {
   return { repoId: 'repo-a' as RepoId, github: initialHealth('github'), sessions: initialHealth('sessions'), worktrees: initialHealth('worktrees'), denials: initialHealth('denials'), ...overrides }
@@ -42,13 +44,13 @@ describe('clockLineCopy', () => {
 
 describe('repositoryLineCopy', () => {
   it('a blind repository never shows dispatch or held counts', () => {
-    expect(repositoryLineCopy(report({ blind: { reason: 'github-unavailable', message: 'boom' } }))).toBe("o/a — can't decide: GitHub is unavailable. Showing the last good read.")
-    expect(repositoryLineCopy(report({ blind: { reason: 'viewer-unknown' } }))).toBe("o/a — can't decide: can't tell whose items these are.")
-    expect(repositoryLineCopy(report({ blind: { reason: 'stale-read', ageMs: 240_000 } }))).toBe("o/a — can't decide: the label list is 4m old.")
+    expect(repositoryLineCopy(report({ blind: { reason: 'github-unavailable', message: 'boom' } }), OPEN)).toBe("o/a — can't decide: GitHub is unavailable. Showing the last good read.")
+    expect(repositoryLineCopy(report({ blind: { reason: 'viewer-unknown' } }), OPEN)).toBe("o/a — can't decide: can't tell whose items these are.")
+    expect(repositoryLineCopy(report({ blind: { reason: 'stale-read', ageMs: 240_000 } }), OPEN)).toBe("o/a — can't decide: the label list is 4m old.")
   })
 
   it('a quiet repository names nothing to dispatch and no in-flight claims', () => {
-    expect(repositoryLineCopy(report())).toBe('o/a — nothing to dispatch · Liveness: nothing in flight.')
+    expect(repositoryLineCopy(report(), OPEN)).toBe('o/a — nothing to dispatch · Liveness: nothing in flight.')
   })
 
   it('a repository with work to do names every actionable item, the held count, and the liveness split', () => {
@@ -68,12 +70,51 @@ describe('repositoryLineCopy', () => {
         { number: 6, kind: 'pull-request', inFlight: 'reviewing', class: 'stalled-confirmed', retryKey: 'readyForReview' },
       ],
     })
-    expect(repositoryLineCopy(rep)).toBe('o/a — would dispatch plan #105, impl #112 · 2 held · Liveness: 3 claims matched, 1 stalled')
+    expect(repositoryLineCopy(rep, OPEN)).toBe('o/a — would dispatch plan #105, impl #112 · 2 held · Liveness: 3 claims matched, 1 stalled')
   })
 
   it('names an unstructured plan as a count, never omitted (#106)', () => {
     const rep = report({ actionable: [{ number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: true, cycle: null }] })
-    expect(repositoryLineCopy(rep)).toBe('o/a — would dispatch impl #52 · 1 plan unchecked · Liveness: nothing in flight.')
+    expect(repositoryLineCopy(rep, OPEN)).toBe('o/a — would dispatch impl #52 · 1 plan unchecked · Liveness: nothing in flight.')
+  })
+
+  it('never renders "nothing to dispatch" while draining — a held set and an empty one are different facts (#110)', () => {
+    const draining: DrainState = { gate: 'draining', reason: 'operator', since: '2026-01-01T00:00:00Z' }
+    expect(repositoryLineCopy(report(), draining)).toBe('o/a — draining: nothing would dispatch · Liveness: nothing in flight.')
+  })
+
+  it('names every held-back candidate while draining, instead of "would dispatch"', () => {
+    const draining: DrainState = { gate: 'draining', reason: 'operator', since: '2026-01-01T00:00:00Z' }
+    const rep = report({
+      actionable: [
+        { number: 105, kind: 'issue', trigger: 'ready', agent: 'plan', unchecked: false, cycle: null },
+        { number: 112, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null },
+      ],
+    })
+    expect(repositoryLineCopy(rep, draining)).toBe('o/a — draining: 2 would dispatch, held back (plan #105, impl #112) · Liveness: nothing in flight.')
+  })
+})
+
+describe('drainLineFor', () => {
+  it('is null while the gate is open', () => {
+    expect(drainLineFor(OPEN)).toBeNull()
+  })
+
+  it('names the since instant for an operator drain', () => {
+    const line = drainLineFor({ gate: 'draining', reason: 'operator', since: '2026-01-01T14:02:00.000Z' })
+    expect(line?.text).toContain('Draining since')
+    expect(line?.text).toContain('nothing will be dispatched')
+    expect(line?.title).toBeNull()
+  })
+
+  it('reads as reading the saved state before load() resolves', () => {
+    expect(drainLineFor({ gate: 'draining', reason: 'unread' })).toEqual({ text: 'Draining — reading the saved dispatch state…', title: null })
+  })
+
+  it('carries the full path as the title when the file cannot be read', () => {
+    const line = drainLineFor({ gate: 'draining', reason: 'unreadable', message: 'boom', path: '/userData/dispatch.json' })
+    expect(line?.text).toContain("can't be read (boom)")
+    expect(line?.title).toBe('/userData/dispatch.json')
   })
 })
 

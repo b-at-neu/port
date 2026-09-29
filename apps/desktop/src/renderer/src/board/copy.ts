@@ -7,6 +7,7 @@ import type { DisplayStatus, SourceHealth, SourceKind } from '../../../shared/bo
 import type { RepoProblem } from '../../../shared/repos'
 import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
 import type { LabelKey } from '../../../shared/labels/vocabulary'
+import { RETRY_TRIGGER } from '../../../shared/actions/plan'
 import type { ActionPlan, ActionRefusal, ItemActionResult, OperatorAction } from '../../../shared/actions/types'
 import type { Conflict } from '../../../shared/writes/types'
 
@@ -136,6 +137,8 @@ export function actionButtonLabel(action: OperatorAction): string {
       return 'Resume'
     case 'retry':
       return 'Retry'
+    case 'stop':
+      return 'Stop'
     case 'gate':
       return 'Add gate label'
   }
@@ -149,6 +152,8 @@ export function actionPendingLabel(action: OperatorAction): string {
       return 'Resuming…'
     case 'retry':
       return 'Retrying…'
+    case 'stop':
+      return 'Stopping…'
     case 'gate':
       return 'Adding…'
   }
@@ -193,6 +198,15 @@ function appliedCopy(action: OperatorAction, number: number, plan: ActionPlan | 
     }
     case 'resume':
       return `Resumed #${n} — restored "${currentStageName ?? ''}".`
+    case 'stop': {
+      const removed = plan?.remove[0]
+      const removedName = removed !== undefined ? labelNameOf(removed) : ''
+      const restoreKey = removed !== undefined ? RETRY_TRIGGER[removed] : undefined
+      const restoreName = restoreKey !== undefined ? labelNameOf(restoreKey) : null
+      return restoreName !== null
+        ? `Stopped #${n} — removed "${removedName}". Nothing will dispatch it now; Resume restores "${restoreName}".`
+        : `Stopped #${n} — removed "${removedName}". Nothing will dispatch it now.`
+    }
     case 'gate':
       return `Gate label added to #${n}. The "labeled" event re-runs the approval check, so the gate is live on that run.`
   }
@@ -215,7 +229,7 @@ function preconditionFailedCopy(action: OperatorAction, number: number, conflict
   return `#${n} moved while you were deciding. Nothing was written.`
 }
 
-const ACTION_PAST_TENSE: Readonly<Record<OperatorAction, string>> = { pause: 'paused', resume: 'resumed', retry: 'retried', gate: 'gated' }
+const ACTION_PAST_TENSE: Readonly<Record<OperatorAction, string>> = { pause: 'paused', resume: 'resumed', retry: 'retried', stop: 'stopped', gate: 'gated' }
 
 /** `outcome.keys` is the request `applyLabels` actually evaluated — built
  *  server-side, after resume's own recovered trigger is known — so it names
