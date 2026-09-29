@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { buildSessionOptions } from './options'
+import type { CanUseTool } from './sdk'
 
-const BASE = { cwd: '/repo', executablePath: '/home/operator/.local/bin/claude' }
+const canUseTool = vi.fn() as unknown as CanUseTool
+const BASE = { cwd: '/repo', executablePath: '/home/operator/.local/bin/claude', canUseTool }
 
 describe('buildSessionOptions', () => {
   it('every mode carries the shared constants', () => {
@@ -10,7 +12,9 @@ describe('buildSessionOptions', () => {
     expect(options.pathToClaudeCodeExecutable).toBe('/home/operator/.local/bin/claude')
     expect(options.persistSession).toBe(true)
     expect(options.includePartialMessages).toBe(true)
-    expect(options.permissionMode).toBe('dontAsk')
+    expect(options.permissionMode).toBe('default')
+    expect(options.canUseTool).toBe(canUseTool)
+    expect(options.permissionPromptToolName).toBeUndefined()
   })
 
   it('fresh carries no resume-shaped field', () => {

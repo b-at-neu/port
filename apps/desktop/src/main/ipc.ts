@@ -24,6 +24,7 @@ import {
   resolveSessionClose,
   resolveSessionInterrupt,
   resolveSessionList,
+  resolveSessionPermissionAnswer,
   resolveSessionSend,
   resolveSessionStart,
 } from './channels/hosting'
@@ -412,6 +413,8 @@ export function registerIpc(): RegisteredIpc {
   handle('session:attach', (_event, request) => resolveSessionAttach(request, hostingChannelDeps))
 
   handle('session:list', (_event, request) => resolveSessionList(request, hostingChannelDeps))
+
+  handle('session:permission:answer', (_event, request) => resolveSessionPermissionAnswer(request, hostingChannelDeps))
 
   for (const channel of IPC_CHANNELS) {
     if (!registered.has(channel)) {

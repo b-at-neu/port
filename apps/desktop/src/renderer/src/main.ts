@@ -3,6 +3,7 @@ import './transcript.css'
 import './board.css'
 import './claim.css'
 import './gate.css'
+import './permission.css'
 import './search.css'
 import type { AppInfo } from '../../shared/ipc'
 import type { RepoId, RepositoryEntry } from '../../shared/repos'
@@ -33,6 +34,7 @@ import type { LabelKey } from '../../shared/labels/vocabulary'
 import type { RelayPending } from '../../shared/relay/types'
 import { initClaim, openClaimDialog } from './claim/controller'
 import { initGate, openGateDialog, openReviewDialog } from './gate/controller'
+import { initPermissions } from './permission/controller'
 import { initRuntime } from './runtime'
 
 const app = document.querySelector<HTMLDivElement>('#app')
@@ -476,4 +478,5 @@ void refreshRepositories()
 void initBoard()
 if (app) initClaim(app)
 if (app) initGate(app)
+if (app) initPermissions(app)
 if (runtimeStrip) initRuntime(runtimeStrip)

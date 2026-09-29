@@ -9,9 +9,13 @@
 // `PORT_LIVE_SDK_CWD` names the registered, `ready` repository to run
 // against (a real git checkout with Claude Code logged in); the run is
 // skipped with a clear reason when it is not set, never silently no-op'd.
+import { access, rm } from 'node:fs/promises'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
 import { createHostedStore, defaultHostedStoreDeps } from './store'
 import type { RepoId } from '../../shared/repos'
+import type { HostedSessionSnapshot, PendingPermission, SessionKey } from '../../shared/hosting/types'
 
 const live = process.env['PORT_LIVE_SDK'] === '1'
 const cwd = process.env['PORT_LIVE_SDK_CWD']
@@ -51,4 +55,65 @@ describe.skipIf(!live || !cwd)('hosting — live SDK acceptance (PORT_LIVE_SDK=1
 
     await store.closeAll()
   }, 60_000)
+
+  it('#99: a Write outside cwd always prompts — deny leaves no file, allow-once creates it', async () => {
+    if (!cwd) throw new Error('PORT_LIVE_SDK=1 requires PORT_LIVE_SDK_CWD to name a registered, ready repository')
+    const target = join(tmpdir(), `port-permission-probe-${Date.now()}.txt`)
+    await rm(target, { force: true })
+
+    let latest: HostedSessionSnapshot | null = null
+    const store = createHostedStore({ ...defaultHostedStoreDeps, onStatus: (snapshot) => (latest = snapshot) })
+    const repoId = 'live-permission-acceptance' as RepoId
+
+    try {
+      const started = await store.start({ repoId, mode: { kind: 'fresh' }, cwd })
+      expect(started.ok).toBe(true)
+      if (!started.ok) return
+      const sessionKey = started.snapshot.sessionKey
+
+      store.send(sessionKey, `Use the Write tool to write the text "hi" to the exact path ${target}. Do not ask, just call the tool.`)
+
+      const deniedPrompt = await waitForPendingPermission(() => latest, sessionKey)
+      store.answerPermission(sessionKey, deniedPrompt.permissionId, 'deny', 'not this time')
+      await new Promise((resolve) => setTimeout(resolve, 3_000))
+      expect(await fileExists(target)).toBe(false)
+
+      store.send(sessionKey, `Use the Write tool again to write the text "hi" to the exact path ${target}. Do not ask, just call the tool.`)
+      const secondPrompt = await waitForPendingPermission(() => latest, sessionKey)
+      store.answerPermission(sessionKey, secondPrompt.permissionId, 'allow-once', null)
+      await new Promise((resolve) => setTimeout(resolve, 3_000))
+      expect(await fileExists(target)).toBe(true)
+
+      await store.close(sessionKey)
+    } finally {
+      await rm(target, { force: true })
+      await store.closeAll()
+    }
+  }, 60_000)
 })
+
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await access(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Polls the latest captured snapshot for the named session until it
+ *  carries at least one pending permission, or throws after a bounded wait
+ *  — the SDK's own round trip to the real `claude` child has no fixed
+ *  latency this test can await directly. */
+async function waitForPendingPermission(latest: () => HostedSessionSnapshot | null, sessionKey: SessionKey): Promise<PendingPermission> {
+  const deadline = Date.now() + 30_000
+  while (Date.now() < deadline) {
+    const snapshot = latest()
+    if (snapshot?.sessionKey === sessionKey && snapshot.pendingPermissions.length > 0) {
+      const first = snapshot.pendingPermissions[0]
+      if (first) return first
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+  throw new Error('Timed out waiting for a pending permission request')
+}

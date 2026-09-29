@@ -1,14 +1,14 @@
 // #98: the third lazy Agent SDK seam, alongside `sessions/sdk.ts` (#78) and
 // `runtime/sdk.ts` (#97) — the `desktop-sessions` layer 1 check's own
 // allowlist names all three. Exposes exactly `query` and `renameSession`; no
-// other SDK export enters this tree. The three type-only re-exports below
-// are the one way the rest of `main/hosting/` reaches `Options`/`SDKMessage`/
-// `SDKUserMessage` — every other file imports them from here, never from
-// the package directly, which is what keeps this the only file naming the
-// package specifier at all.
-import type { Options, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+// other SDK export enters this tree. The type-only re-exports below are the
+// one way the rest of `main/hosting/` reaches `Options`/`SDKMessage`/
+// `SDKUserMessage`/`CanUseTool`/`PermissionResult`/`PermissionUpdate` — every
+// other file imports them from here, never from the package directly, which
+// is what keeps this the only file naming the package specifier at all.
+import type { CanUseTool, Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 
-export type { Options, SDKMessage, SDKUserMessage }
+export type { CanUseTool, Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage }
 
 /** The narrow structural slice of the real `Query` this app needs, the same
  *  idiom `runtime/sdk.ts`'s own `SdkQuery`/`ProbeMessage` already use — the

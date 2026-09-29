@@ -71,7 +71,13 @@ export interface SessionEnd {
  *  is `null` until `init` arrives. `queuedAfterInterrupt` is `null` when the
  *  CLI returned no receipt, reported as unknown, never as zero (ENGINEERING
  *  §4). `titled` is `null` for a non-fork session, and `false` only when a
- *  fork's own rename attempt failed — logged, never fatal. */
+ *  fork's own rename attempt failed — logged, never fatal. `pendingPermissions`
+ *  (#99) is sorted oldest first; a prompt arriving mid-turn is not a new
+ *  `SessionPhase` — the phase stays `streaming`, and #219 derives "awaiting
+ *  a permission decision" from this list's length instead. It rides the
+ *  snapshot rather than a second event stream so a renderer reload is
+ *  lossless — the SDK gives permission prompts no park deadline, so one
+ *  dropped by a reload would block the tool forever. */
 export interface HostedSessionSnapshot {
   readonly sessionKey: SessionKey
   readonly claudeSessionId: string | null
@@ -82,6 +88,7 @@ export interface HostedSessionSnapshot {
   readonly queuedAfterInterrupt: number | null
   readonly end: SessionEnd | null
   readonly titled: boolean | null
+  readonly pendingPermissions: readonly PendingPermission[]
 }
 
 /** `session:event`'s payload — the SDK message crosses the boundary opaque
@@ -123,3 +130,47 @@ export type SessionCloseResult = { readonly ok: true } | { readonly ok: false; r
 export type SessionAttachResult =
   | { readonly ok: true; readonly snapshot: HostedSessionSnapshot; readonly replay: readonly SessionEventEnvelope[]; readonly droppedBefore: number }
   | { readonly ok: false; readonly kind: 'unknown-session' }
+
+/** #99: the three decisions the operator can send back for a pending
+ *  permission request. `allow-session` is offered only when the request's
+ *  own `sessionGrant` is non-null. */
+export const PERMISSION_DECISIONS = ['allow-once', 'allow-session', 'deny'] as const
+
+export type PermissionDecision = (typeof PERMISSION_DECISIONS)[number]
+
+/** What "allow for this session" would grant, narrowed and renderer-safe —
+ *  never the SDK's own `PermissionUpdate` (see "Never crosses the boundary"
+ *  below). One line of dialog copy per kind, `renderer/src/permission/
+ *  copy.ts`'s own `grantLines`. */
+export type SessionGrantItem =
+  | { readonly kind: 'rule'; readonly toolName: string; readonly ruleContent: string | null }
+  | { readonly kind: 'directory'; readonly path: string }
+  | { readonly kind: 'accept-edits' }
+
+/** One pending `canUseTool` call, as the renderer sees it — `permissionId`
+ *  is app-minted (`main/hosting/permissions.ts`'s own `crypto.randomUUID()`),
+ *  never the SDK's own `requestId`/`toolUseID`, which never cross this
+ *  boundary. `input` is verbatim and untrusted: rendered as text only, never
+ *  interpreted. `sessionGrant` is `null` when the SDK offered nothing worth
+ *  a session-wide grant — the dialog then omits "allow for this session"
+ *  entirely, with no explanatory filler. */
+export interface PendingPermission {
+  readonly permissionId: string
+  readonly toolName: string
+  readonly input: Readonly<Record<string, unknown>>
+  readonly title: string | null
+  readonly displayName: string | null
+  readonly description: string | null
+  readonly decisionReason: string | null
+  readonly blockedPath: string | null
+  readonly agentId: string | null
+  readonly requestedAt: string
+  readonly sessionGrant: readonly SessionGrantItem[] | null
+}
+
+/** `'session:permission:answer'`'s response. `unknown-session`/
+ *  `unknown-permission` are ordinary races an operator can hit (a second
+ *  window, a withdrawn request) — reported as values, never thrown.
+ *  `no-session-grant` is `allow-session` sent for a request whose
+ *  `sessionGrant` is `null`; nothing is settled in either case. */
+export type SessionPermissionAnswerResult = { readonly ok: true } | { readonly ok: false; readonly kind: 'unknown-session' | 'unknown-permission' | 'no-session-grant' }

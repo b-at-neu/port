@@ -8,6 +8,7 @@ import {
   resolveSessionClose,
   resolveSessionInterrupt,
   resolveSessionList,
+  resolveSessionPermissionAnswer,
   resolveSessionSend,
   resolveSessionStart,
 } from './hosting'
@@ -68,6 +69,9 @@ function storeStub(overrides: Partial<HostedStore> = {}): HostedStore {
     },
     closeAll: () => {
       throw new Error('closeAll should not be invoked in this case')
+    },
+    answerPermission: () => {
+      throw new Error('answerPermission should not be invoked in this case')
     },
     ...overrides,
   }
@@ -169,5 +173,51 @@ describe('resolveSessionList', () => {
     const list = vi.fn(() => [])
     resolveSessionList(undefined, depsWith({ store: storeStub({ list }) }))
     expect(list).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('resolveSessionPermissionAnswer', () => {
+  const base = { sessionKey: SESSION_KEY, permissionId: 'perm-1', decision: 'deny' as const, message: null }
+
+  it('rejects a missing sessionKey', () => {
+    expect(() => resolveSessionPermissionAnswer({ ...base, sessionKey: '' as SessionKey }, depsWith())).toThrow(
+      "'session:permission:answer' requires a non-empty 'sessionKey'",
+    )
+  })
+
+  it('rejects a missing permissionId', () => {
+    expect(() => resolveSessionPermissionAnswer({ ...base, permissionId: '' }, depsWith())).toThrow(
+      "'session:permission:answer' requires a non-empty 'permissionId'",
+    )
+  })
+
+  it('rejects an unrecognised decision', () => {
+    expect(() => resolveSessionPermissionAnswer({ ...base, decision: 'bogus' as never }, depsWith())).toThrow(
+      "'session:permission:answer' requires 'decision' to be one of allow-once, allow-session, deny",
+    )
+  })
+
+  it('rejects an empty-string message', () => {
+    expect(() => resolveSessionPermissionAnswer({ ...base, message: '' }, depsWith())).toThrow(
+      "'session:permission:answer' requires 'message' to be null or a string of 1-2000 characters",
+    )
+  })
+
+  it('rejects a message over 2000 characters', () => {
+    expect(() => resolveSessionPermissionAnswer({ ...base, message: 'x'.repeat(2001) }, depsWith())).toThrow(
+      "'session:permission:answer' requires 'message' to be null or a string of 1-2000 characters",
+    )
+  })
+
+  it('rejects a non-null message alongside a decision other than deny', () => {
+    expect(() => resolveSessionPermissionAnswer({ ...base, decision: 'allow-once', message: 'why' }, depsWith())).toThrow(
+      "'session:permission:answer' requires 'message' to be null when 'decision' is not 'deny'",
+    )
+  })
+
+  it('delegates to the store with the validated request', () => {
+    const answerPermission = vi.fn(() => ({ ok: true as const }))
+    resolveSessionPermissionAnswer({ ...base, message: 'no thanks' }, depsWith({ store: storeStub({ answerPermission }) }))
+    expect(answerPermission).toHaveBeenCalledWith(SESSION_KEY, 'perm-1', 'deny', 'no thanks')
   })
 })
