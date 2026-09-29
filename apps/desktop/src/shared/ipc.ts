@@ -14,11 +14,13 @@ import type { ClaimRead } from './writes/types'
 import type { RelayCopyResponse } from './relay/types'
 import type {
   HostedSessionSnapshot,
+  PermissionDecision,
   SessionAttachResult,
   SessionCloseResult,
   SessionEventEnvelope,
   SessionInterruptResult,
   SessionKey,
+  SessionPermissionAnswerResult,
   SessionSendResult,
   SessionStartMode,
   SessionStartResult,
@@ -223,6 +225,12 @@ export interface IpcMap {
     request: void
     response: readonly HostedSessionSnapshot[]
   }
+  /** #99: the permission dialog's own write. `message` is required
+   *  (non-null) only when `decision` is `'deny'`, optional even then. */
+  'session:permission:answer': {
+    request: { sessionKey: SessionKey; permissionId: string; decision: PermissionDecision; message: string | null }
+    response: SessionPermissionAnswerResult
+  }
 }
 
 export const IPC_CHANNELS = [
@@ -255,6 +263,7 @@ export const IPC_CHANNELS = [
   'session:close',
   'session:attach',
   'session:list',
+  'session:permission:answer',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]
