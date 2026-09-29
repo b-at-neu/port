@@ -148,7 +148,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     // guard(#183): checkFile below returns early for an excluded path, so a
     // leftover allowlist entry for a now-exempt file would sit in the debt
     // list forever, silently ignored rather than measured.
-    const excludedBy = excludeRes.find((e) => typeof entry.path === 'string' && e.re.test(entry.path));
+    const excludedBy = excludeRes.find((e) => e.re.test(entry.path));
     if (excludedBy) {
       fail(
         'file-size',
