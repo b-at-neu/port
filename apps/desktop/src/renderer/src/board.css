@@ -71,6 +71,12 @@
   font-weight: 600;
 }
 
+.board-header__drain-note {
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  color: #e8a33d;
+}
+
 .board-halt {
   margin-top: 0.4rem;
   border: 1px solid #444;

@@ -3,14 +3,20 @@
 // strip. `main.ts` delegates its three click branches here rather than
 // owning this state itself, the same split `board/actions.ts` draws for the
 // board's own per-item actions.
-import type { DrainState, HaltItemOutcome, HaltReport } from '../../../shared/dispatch/types'
+import type { DispatchControlResult, DrainState, HaltItemOutcome, HaltReport } from '../../../shared/dispatch/types'
 import { actionResultCopy } from './copy'
 
 type PendingCommand = 'drain' | 'resume' | 'halt' | null
 
+/** The two commands `currentDrainResult`/`drainResultNote` care about —
+ *  `halt`'s own report keeps its separate `lastHaltReport` slot below,
+ *  unchanged. */
+type DrainCommandResult = Extract<DispatchControlResult, { readonly command: 'drain' } | { readonly command: 'resume' }>
+
 let pending: PendingCommand = null
 let haltConfirmArmed = false
 let lastHaltReport: HaltReport | null = null
+let lastDrainResult: DrainCommandResult | null = null
 
 export function drainTogglePending(): boolean {
   return pending === 'drain' || pending === 'resume'
@@ -28,6 +34,14 @@ export function isHaltConfirmArmed(): boolean {
  *  dismissed, or before any halt has ever run this session. */
 export function currentHaltReport(): HaltReport | null {
   return lastHaltReport
+}
+
+/** `view.ts`'s own lookup for the drain/resume result note, rendered near
+ *  the drain toggle — `null` before either command has ever run this
+ *  session, and overwritten (never accumulated) by every later attempt, so
+ *  a subsequent success clears whatever the previous failure left showing. */
+export function currentDrainResult(): DrainCommandResult | null {
+  return lastDrainResult
 }
 
 /** gate open → `Drain` · pending `Draining…`; gate closed → `Resume
@@ -51,6 +65,7 @@ async function runDispatchCommand(command: 'drain' | 'resume' | 'halt', redraw: 
   try {
     const result = await window.port.dispatchControl({ command })
     if (result.command === 'halt') lastHaltReport = result.report
+    else lastDrainResult = result
   } catch (error) {
     console.error(`Failed to reach the main process for dispatch ${command}`, error)
   }
@@ -89,6 +104,22 @@ export function handleHaltCancel(redraw: () => void): void {
   haltConfirmArmed = false
   lastHaltReport = null
   redraw()
+}
+
+/** The one line rendered near the drain toggle once a drain/resume command's
+ *  own result needs the operator's attention — `null` for an ordinary
+ *  success, since `tick.ts`'s own `drainLineFor` already covers the
+ *  persisted state on every later read. A failed drain write still closed
+ *  the gate in memory (`persisted: false`, plan's own **Data & contracts**:
+ *  "a resume that did not persist... reports that the state will not
+ *  survive a restart"); a refused resume changed nothing at all. */
+export function drainResultNote(result: DrainCommandResult): string | null {
+  if (result.command === 'drain') {
+    if (result.persisted) return null
+    return "Drain applied, but wasn't saved to disk — it won't survive a restart."
+  }
+  if (result.ok) return null
+  return `Resume refused — ${result.path} couldn't be written (${result.message}). Dispatch is still draining.`
 }
 
 function skippedLine(outcome: Extract<HaltItemOutcome, { readonly kind: 'skipped' }>): string {

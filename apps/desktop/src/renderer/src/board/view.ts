@@ -10,7 +10,7 @@ import type { RepoId } from '../../../shared/repos'
 import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
 import { actionsFingerprint } from './actions'
 import { notReadyCopy, planGateHeaderButtonLabel, rateLimitCopy, sourceHealthCopy } from './copy'
-import { buildHaltReport, currentHaltReport, drainTogglePending, drainToggleLabel, haltButtonLabel, haltPending, isHaltConfirmArmed } from './dispatch'
+import { buildHaltReport, currentDrainResult, currentHaltReport, drainResultNote, drainTogglePending, drainToggleLabel, haltButtonLabel, haltPending, isHaltConfirmArmed } from './dispatch'
 import { buildRelayBanner, relayFingerprint, relayLineCopy } from './relay'
 import { buildRow } from './rows'
 import { buildTickStrip } from './tick'
@@ -106,6 +106,17 @@ function buildHeader(state: BoardViewState): HTMLElement {
 
   top.appendChild(actions)
   header.appendChild(top)
+
+  // The last drain/resume command's own result (#110 R1-M1), directly under
+  // the row that holds the drain toggle — unconditional on `health` below,
+  // since the toggle itself renders regardless of whether health data has
+  // arrived yet. `null` for an ordinary success; `tick.ts`'s own
+  // `drainLineFor` covers the persisted state on every later read.
+  if (state.snapshot !== null) {
+    const drainResult = currentDrainResult()
+    const note = drainResult !== null ? drainResultNote(drainResult) : null
+    if (note !== null) header.appendChild(text('div', 'board-header__drain-note', note))
+  }
 
   const health = state.snapshot?.health ?? []
   if (state.snapshot !== null && health.length > 0) {

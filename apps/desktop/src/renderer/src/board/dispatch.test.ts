@@ -6,8 +6,8 @@
 // too; only the derived copy is asserted.
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../../../shared/repos'
-import type { HaltItemOutcome, HaltReport } from '../../../shared/dispatch/types'
-import { drainToggleLabel, haltButtonLabel, haltAbortedCopy, haltHeadingCopy, haltItemLine } from './dispatch'
+import type { DispatchControlResult, HaltItemOutcome, HaltReport } from '../../../shared/dispatch/types'
+import { drainResultNote, drainToggleLabel, haltButtonLabel, haltAbortedCopy, haltHeadingCopy, haltItemLine } from './dispatch'
 
 describe('drainToggleLabel', () => {
   it('reads Drain while the gate is open', () => {
@@ -18,6 +18,28 @@ describe('drainToggleLabel', () => {
     expect(drainToggleLabel({ gate: 'draining', reason: 'operator', since: '2026-01-01T00:00:00Z' })).toBe('Resume dispatch')
     expect(drainToggleLabel({ gate: 'draining', reason: 'unread' })).toBe('Resume dispatch')
     expect(drainToggleLabel({ gate: 'draining', reason: 'unreadable', message: 'boom', path: '/dispatch.json' })).toBe('Resume dispatch')
+  })
+})
+
+describe('drainResultNote', () => {
+  it('says nothing for an ordinary persisted drain', () => {
+    const result: Extract<DispatchControlResult, { readonly command: 'drain' }> = { ok: true, command: 'drain', drain: { gate: 'draining', reason: 'operator', since: '2026-01-01T00:00:00Z' }, persisted: true }
+    expect(drainResultNote(result)).toBeNull()
+  })
+
+  it('warns once a drain write fails to persist, since the gate still closed in memory', () => {
+    const result: Extract<DispatchControlResult, { readonly command: 'drain' }> = { ok: true, command: 'drain', drain: { gate: 'draining', reason: 'operator', since: '2026-01-01T00:00:00Z' }, persisted: false }
+    expect(drainResultNote(result)).toBe("Drain applied, but wasn't saved to disk — it won't survive a restart.")
+  })
+
+  it('says nothing for an ordinary successful resume', () => {
+    const result: Extract<DispatchControlResult, { readonly command: 'resume' }> = { ok: true, command: 'resume', drain: { gate: 'open' } }
+    expect(drainResultNote(result)).toBeNull()
+  })
+
+  it('names the path and message for a refused resume', () => {
+    const result: Extract<DispatchControlResult, { readonly command: 'resume' }> = { ok: false, command: 'resume', reason: 'drain-unwritable', message: 'disk full', path: '/userData/dispatch.json' }
+    expect(drainResultNote(result)).toBe("Resume refused — /userData/dispatch.json couldn't be written (disk full). Dispatch is still draining.")
   })
 })
 
