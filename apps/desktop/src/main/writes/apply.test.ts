@@ -12,7 +12,7 @@ import type { ItemsByNumberFetch, ResolvedItem } from '../github'
 import { applyLabels, postComment } from './apply'
 import type { GhRunner } from './apply'
 import { readAuditLog } from './audit'
-import { takeGateClaim } from './claim'
+import { takeClaimScope } from './claim'
 import type { GitRunner } from './claim'
 
 const VOCABULARY: LabelVocabulary = resolveVocabulary({})
@@ -103,7 +103,7 @@ describe('applyLabels — the plan-gate claim', () => {
 
   it('proceeds to a real write once the scope is held', async () => {
     const { repoRoot, auditDir, git } = await makeDirs()
-    await takeGateClaim({ repoRoot, repo: 'o/r', owner: 'port-desktop', scopes: ['plan-gate'], git, now })
+    await takeClaimScope({ repoRoot, repo: 'o/r', owner: 'port-desktop', scope: 'plan-gate', git, now })
 
     const req = request({ add: ['planApproved'], remove: ['planReview'], expect: { present: ['planReview'], absent: [], assignees: { kind: 'any' } } })
     const fetcher = fetcherReturning({ ok: true, resolved: [resolvedItem({ labels: ['plan review'] })], unavailable: [], fetchedAt: now().toISOString() })

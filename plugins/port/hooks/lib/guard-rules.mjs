@@ -7,20 +7,23 @@
 // The pure command-syntax predicates (#216) live in the sibling
 // command-rules.mjs — this file was at 483/500 lines, and the branch rule
 // below needed room the ceiling did not have. This file keeps caller
-// identity, settings/transcript I/O, and `decide` itself. The plan-gate
-// claim classifier (#206) lives in the sibling claim-rules.mjs for the same
-// reason — `decide` only ever consumes its already-classified verdict,
-// never imports it directly.
+// identity, settings/transcript I/O, and `decide` itself. The claim
+// classifier (#206, #265) and both claim-scope denial predicates
+// (`planGateDenial`, moved out verbatim; `dispatchDenial`, new) live in the
+// sibling claim-rules.mjs for the same reason — this file was at 497/500
+// lines again once the `Agent` arm needed room — `decide` only ever calls
+// them with an already-classified verdict, never reasons about claim JSON
+// itself.
 import { readFileSync, existsSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import {
   gateClearAttempt,
-  labelEditAttempt,
   pluginInstallMutation,
   switchesBranch,
   targetsGhOrGit,
   usesShellLoop,
 } from './command-rules.mjs';
+import { dispatchDenial, planGateDenial } from './claim-rules.mjs';
 
 /** Compiles a glob (`**` → any depth, `*` → one path segment, everything else
  *  escaped) into an anchored RegExp. Used for `sessionRequiredPaths` globs
@@ -275,20 +278,25 @@ export function operatorNamed(numbers, messages) {
  *  guard.
  *
  *  `planGateClaim` and `planGateLabels` are the same optional-inert shape,
- *  for the claim rule (#206, see `PIPELINE.md` → "External gate claim"):
- *  `planGateClaim` is the caller's already-read, already-classified verdict
- *  (`{state: 'absent'}` / `{state: 'held', owner, scopes, unknownScopes,
- *  claimedAt}` / `{state: 'unreadable', message}` — the same three verdicts
- *  the desktop app's own claim reader returns) and `planGateLabels` the
- *  resolved names for `planReview`/`planApproved`/
+ *  for the plan-gate claim rule (#206, see `PIPELINE.md` → "External gate
+ *  claim"): `planGateClaim` is the caller's already-read, already-classified
+ *  verdict (`{state: 'absent'}` / `{state: 'held', owner, scopes,
+ *  unknownScopes, claimedAt}` / `{state: 'unreadable', message}` — the same
+ *  three verdicts the desktop app's own claim reader returns) and
+ *  `planGateLabels` the resolved names for `planReview`/`planApproved`/
  *  `planChangesRequested`. Omitting either skips the rule entirely; a
  *  `state: 'absent'` verdict also does not fire it — nothing is claimed, so
- *  there is nothing to deny. `claimFilePath` (optional, absolute) is the
- *  claim rule's second, write-tool arm: a `Write`/`Edit`/`NotebookEdit`
- *  targeting that exact path is denied for **every** caller, including a
- *  subagent and an `/port:implement` worktree — the cockpit's own
- *  `allowed-tools` already grants it `Write`, so this is the one guard that
- *  keeps it from releasing a claim it did not create. */
+ *  there is nothing to deny. The rule itself lives in `claim-rules.mjs`'s
+ *  `planGateDenial`, moved there verbatim (#265). `dispatchClaim` is the
+ *  sixth rule's own already-classified verdict (`claim-rules.mjs`'s
+ *  `dispatchDenial`, #265) — the `Agent` tool's arm, gated on the same
+ *  `isCockpitSession` this function already threads through for the branch
+ *  rule. `claimFilePath` (optional, absolute) is the claim rule's seventh
+ *  arm, a write-tool one: a `Write`/`Edit`/`NotebookEdit` targeting that
+ *  exact path is denied for **every** caller, including a subagent and an
+ *  `/port:implement` worktree — the cockpit's own `allowed-tools` already
+ *  grants it `Write`, so this is the one guard that keeps it from releasing
+ *  a claim it did not create. */
 export function decide({
   payload,
   matchers,
@@ -299,10 +307,17 @@ export function decide({
   isCockpitSession,
   planGateClaim,
   planGateLabels,
+  dispatchClaim,
   claimFilePath,
 }) {
   const who = callerKind(payload);
   const toolName = payload?.tool_name;
+
+  if (toolName === 'Agent') {
+    const denial = dispatchDenial({ toolName, who, isCockpitSession, claim: dispatchClaim });
+    if (denial) return denial;
+    return { decision: 'allow', who, subject: null };
+  }
 
   if (toolName === 'Bash') {
     const command = payload?.tool_input?.command;
@@ -362,37 +377,10 @@ export function decide({
 
     // Claim rule (#206), Bash arm — a `plan-gate` claim (see `PIPELINE.md` →
     // "External gate claim") transfers the plan-review gate to an external
-    // owner; adding or removing any of the three plan-gate labels while a
-    // claim holds it (a `held` verdict naming `plan-gate` in its scopes), or
-    // while the claim is unreadable (a malformed claim reads as claimed on
-    // both sides, since the ambiguity is which writer owns the gate), is
-    // denied. A `held` claim naming some *other* scope is not this rule's
-    // business — the gate is unclaimed either way. Exempt for a subagent
-    // and for `who.isOperatorWorktree`, the same shape the gate rule uses:
-    // `plan-agent` writes `planReview` at handoff and removes
-    // `planChangesRequested` in revision mode, `impl-agent` removes
-    // `planApproved`, and `/port:implement` needs the same exemption for the
-    // same reason — a rule that fired there would deadlock the pipeline the
-    // moment a claim is taken.
-    const claimsPlanGate =
-      planGateClaim?.state === 'unreadable' ||
-      (planGateClaim?.state === 'held' && (planGateClaim.scopes ?? []).includes('plan-gate'));
-    if (claimsPlanGate && planGateLabels && !who.isSubagent && !who.isOperatorWorktree) {
-      const attempt = labelEditAttempt(command, planGateLabels);
-      if (attempt.isAttempt) {
-        const names = attempt.matched.join(', ');
-        const owner =
-          planGateClaim.state === 'held'
-            ? `claimed by "${planGateClaim.owner}"`
-            : `unreadable (${planGateClaim.message})`;
-        return {
-          decision: 'deny',
-          who,
-          subject: command,
-          reason: `port: the plan gate is ${owner} — ${names} is denied until the claim is released. Release it in the app, or delete .agents/gate-claim.json, to take the gate back.`,
-        };
-      }
-    }
+    // owner. The rule itself lives in `claim-rules.mjs`'s `planGateDenial`,
+    // moved there verbatim (#265, forced: this file was at 497/500 lines).
+    const planGateResult = planGateDenial({ command, who, planGateClaim, planGateLabels });
+    if (planGateResult) return planGateResult;
 
     // Install rule (#144) — every install scope resolves to one shared
     // `installPath`, so a `claude plugin install`/`marketplace add` (or the
