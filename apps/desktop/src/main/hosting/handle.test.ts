@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createHostedHandle, REPLAY_LIMIT } from './handle'
 import type { HostedQuery } from './handle'
-import type { SessionEventEnvelope, SessionKey } from '../../shared/hosting/types'
+import type { SessionEntriesDelta, SessionEventEnvelope, SessionKey } from '../../shared/hosting/types'
 import type { RepoId } from '../../shared/repos'
 
 const SESSION_KEY = 'hosted-1' as SessionKey
@@ -122,20 +122,99 @@ describe('createHostedHandle', () => {
     expect(onSessionId).toHaveBeenCalledTimes(1)
   })
 
-  it('a user message moves ready to streaming, and a result moves it back to ready', async () => {
+  it('send() moves ready to streaming, and a result moves it back to ready', async () => {
     const fake = fakeQuery()
     const handle = createHostedHandle(baseParams(), () => fake.query)
     fake.push({ type: 'system', subtype: 'init', session_id: 'sdk-session-1' })
     await flush()
     expect(handle.snapshot().phase).toBe('ready')
 
-    fake.push({ type: 'user', message: { role: 'user', content: 'hi' } })
-    await flush()
+    handle.send('hi')
     expect(handle.snapshot().phase).toBe('streaming')
 
     fake.push({ type: 'result', subtype: 'success' })
     await flush()
     expect(handle.snapshot().phase).toBe('ready')
+  })
+
+  it('send() moves starting to streaming, before init has even reported ready', () => {
+    const fake = fakeQuery()
+    const handle = createHostedHandle(baseParams(), () => fake.query)
+    expect(handle.snapshot().phase).toBe('starting')
+    handle.send('hi')
+    expect(handle.snapshot().phase).toBe('streaming')
+  })
+
+  it('a later init leaves streaming — it never demotes a send that raced it', async () => {
+    const fake = fakeQuery()
+    const handle = createHostedHandle(baseParams(), () => fake.query)
+    handle.send('hi')
+    expect(handle.snapshot().phase).toBe('streaming')
+
+    fake.push({ type: 'system', subtype: 'init', session_id: 'sdk-session-1' })
+    await flush()
+    expect(handle.snapshot().phase).toBe('streaming')
+  })
+
+  it('a result with a positive queued_turn_count stays streaming', async () => {
+    const fake = fakeQuery()
+    const handle = createHostedHandle(baseParams(), () => fake.query)
+    handle.send('hi')
+    expect(handle.snapshot().phase).toBe('streaming')
+
+    fake.push({ type: 'result', subtype: 'success', queued_turn_count: 1 })
+    await flush()
+    expect(handle.snapshot().phase).toBe('streaming')
+  })
+
+  it('onEntries fires for send() and for an assistant message, never for one the projector ignores', async () => {
+    const onEntries = vi.fn((delta: SessionEntriesDelta): void => {
+      void delta
+    })
+    const fake = fakeQuery()
+    const handle = createHostedHandle(baseParams({ onEntries }), () => fake.query)
+    handle.send('hi')
+    expect(onEntries).toHaveBeenCalledTimes(1)
+    expect(onEntries.mock.calls[0]?.[0]?.sessionKey).toBe(SESSION_KEY)
+
+    fake.push({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] }, uuid: 'a-1', parent_tool_use_id: null })
+    await flush()
+    expect(onEntries).toHaveBeenCalledTimes(2)
+
+    // A message type the projector never renders (live-edge ephemera) fires
+    // no further onEntries call.
+    fake.push({ type: 'system', subtype: 'init', session_id: 'sdk-session-1' })
+    await flush()
+    expect(onEntries).toHaveBeenCalledTimes(2)
+  })
+
+  it('a throwing onEntries/projector never stops the pump — the message is still forwarded to onEvent', async () => {
+    const onEvent = vi.fn()
+    const fake = fakeQuery()
+    // `onEntries` throwing exercises the same "never stops the pump" rail as
+    // a projector throw — handle.ts wraps the whole `projector.push(...)` +
+    // `emitEntries(...)` pair in one try/catch.
+    const onEntries = vi.fn(() => {
+      throw new Error('boom')
+    })
+    const handle = createHostedHandle(baseParams({ onEvent, onEntries }), () => fake.query)
+    fake.push({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] }, uuid: 'a-1', parent_tool_use_id: null })
+    await flush()
+    expect(onEvent).toHaveBeenCalledTimes(1)
+    fake.push({ type: 'result', subtype: 'success' })
+    await flush()
+    expect(onEvent).toHaveBeenCalledTimes(2)
+    expect(handle.snapshot().phase).not.toBe('ended')
+  })
+
+  it('entriesWindow() reflects what the projector has derived so far', () => {
+    const fake = fakeQuery()
+    const handle = createHostedHandle(baseParams(), () => fake.query)
+    handle.send('hi')
+    const window = handle.entriesWindow()
+    expect(window.entries).toHaveLength(1)
+    expect(window.entries[0]).toMatchObject({ type: 'user-text' })
+    expect(window.pendingSends).toEqual([expect.any(String)])
   })
 
   it('every pushed message is forwarded to onEvent with a monotonic seq', async () => {

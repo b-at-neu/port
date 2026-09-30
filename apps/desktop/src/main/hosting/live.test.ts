@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
 import { createHostedStore, defaultHostedStoreDeps } from './store'
 import type { RepoId } from '../../shared/repos'
-import type { HostedSessionSnapshot, PendingPermission, SessionKey } from '../../shared/hosting/types'
+import type { HostedSessionSnapshot, PendingPermission, SessionEntriesDelta, SessionKey } from '../../shared/hosting/types'
 
 const live = process.env['PORT_LIVE_SDK'] === '1'
 const cwd = process.env['PORT_LIVE_SDK_CWD']
@@ -89,6 +89,46 @@ describe.skipIf(!live || !cwd)('hosting — live SDK acceptance (PORT_LIVE_SDK=1
       await rm(target, { force: true })
       await store.closeAll()
     }
+  }, 60_000)
+
+  // #219: the one check of the SDK shape assumptions in project.ts's own
+  // header (no prompt echo, user_message_uuids on the first frame,
+  // queued_turn_count on result) against the real CLI, rather than a fake.
+  it('#219: partial text streams before the phase reads streaming, and an assistant entry lands', async () => {
+    if (!cwd) throw new Error('PORT_LIVE_SDK=1 requires PORT_LIVE_SDK_CWD to name a registered, ready repository')
+    const entries: SessionEntriesDelta[] = []
+    const statuses: HostedSessionSnapshot['phase'][] = []
+    const store = createHostedStore({
+      ...defaultHostedStoreDeps,
+      onEntries: (delta) => entries.push(delta),
+      onStatus: (snapshot) => statuses.push(snapshot.phase),
+    })
+    const repoId = 'live-entries-acceptance' as RepoId
+
+    const started = await store.start({ repoId, mode: { kind: 'fresh' }, cwd })
+    expect(started.ok).toBe(true)
+    if (!started.ok) return
+    const sessionKey = started.snapshot.sessionKey
+
+    store.send(sessionKey, 'Reply with only the word "ok" and stop.')
+
+    const deadline = Date.now() + 30_000
+    while (Date.now() < deadline && !entries.some((delta) => delta.appended.some((entry) => entry.type === 'assistant-text'))) {
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+
+    const firstAssistantTextIndex = entries.findIndex((delta) => delta.appended.some((entry) => entry.type === 'assistant-text'))
+    const firstPartialAppendIndex = entries.findIndex((delta) => delta.partial?.op === 'append')
+    expect(firstPartialAppendIndex).toBeGreaterThanOrEqual(0)
+    expect(firstPartialAppendIndex).toBeLessThanOrEqual(firstAssistantTextIndex === -1 ? Infinity : firstAssistantTextIndex)
+
+    const streamingIndex = statuses.indexOf('streaming')
+    const readyIndexAfterStreaming = statuses.indexOf('ready', streamingIndex + 1)
+    expect(streamingIndex).toBeGreaterThanOrEqual(0)
+    expect(readyIndexAfterStreaming).toBeGreaterThan(streamingIndex)
+
+    await store.close(sessionKey)
+    await store.closeAll()
   }, 60_000)
 })
 

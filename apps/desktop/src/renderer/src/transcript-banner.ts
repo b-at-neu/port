@@ -2,7 +2,8 @@
 // transcript.ts (#87) once the search screen's own wiring pushed that file
 // past ENGINEERING §7's 500-line limit -- reaches the live view only through
 // `getBannerHost()`, transcript.ts's one seam into its own private model.
-import { getBannerHost, text } from './transcript'
+import { getBannerHost } from './transcript'
+import { text } from './entry-rows'
 
 export type TailBannerKind = 'not-found' | 'unreadable' | 'too-large' | 'unreachable'
 

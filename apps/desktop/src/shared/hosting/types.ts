@@ -8,6 +8,7 @@
 // against this file's own guess at the SDK's 37-variant union.
 import type { RepoId } from '../repos'
 import type { RuntimeDiagnosis } from '../runtime/types'
+import type { EntryPatch, TranscriptEntry } from '../sessions/transcript'
 
 declare const sessionKeyBrand: unique symbol
 
@@ -126,10 +127,73 @@ export type SessionCloseResult = { readonly ok: true } | { readonly ok: false; r
  *  reload; handles are main-process-owned and survive it. `replay` is a
  *  bounded window (`REPLAY_LIMIT`), never the whole session; `droppedBefore`
  *  is how a consumer knows to fall back to the transcript reader instead of
- *  trusting the replay as complete. */
+ *  trusting the replay as complete.
+ *
+ *  #219's own window rides alongside `replay`, never replacing it —
+ *  `entries`/`firstIndex` are the projector's own bounded ring
+ *  (`ENTRY_RETAIN_LIMIT`), `partial` is the live streaming block's current
+ *  state (`null` when nothing is mid-stream), `pendingSends` the sent-but-
+ *  unacknowledged prompt uuids, and `revision` the projector's own monotonic
+ *  counter — a gap between this and a later `session:entries` push is the
+ *  renderer's own re-attach signal (`session/sequence.ts`). */
 export type SessionAttachResult =
-  | { readonly ok: true; readonly snapshot: HostedSessionSnapshot; readonly replay: readonly SessionEventEnvelope[]; readonly droppedBefore: number }
+  | {
+      readonly ok: true
+      readonly snapshot: HostedSessionSnapshot
+      readonly replay: readonly SessionEventEnvelope[]
+      readonly droppedBefore: number
+      readonly entries: readonly TranscriptEntry[]
+      readonly firstIndex: number
+      readonly partial: LiveBlock | null
+      readonly pendingSends: readonly string[]
+      readonly revision: number
+    }
   | { readonly ok: false; readonly kind: 'unknown-session' }
+
+/** #219: a streaming text/thinking block's own kind — never a third value,
+ *  since a tool call's input JSON is never streamed (see `main/hosting/
+ *  project.ts`'s own "Tool-input JSON deltas are not streamed" rule). */
+export type LiveBlockKind = 'text' | 'thinking'
+
+/** #219: one streaming block's accumulated state, as reconnect
+ *  (`session:attach`) and the renderer's own live row both need it —
+ *  `blockId` is `<messageId>:<contentBlockIndex>`, never a tool call's own
+ *  id, so it stays stable across a block that has no tool call at all.
+ *  `omittedChars` mirrors `Payload`'s own
+ *  truncation signal once the block's accumulated text reaches
+ *  `MAX_PAYLOAD_CHARS` — best-effort during the stream itself; the eventual
+ *  on-disk-shaped entry the deriver produces from the completed message is
+ *  the exact count. */
+export interface LiveBlock {
+  readonly blockId: string
+  readonly kind: LiveBlockKind
+  readonly text: string
+  readonly omittedChars: number
+}
+
+/** #219: the operation `session:entries`' own `partial` field carries —
+ *  never the whole accumulated block (that would repeat every prior chunk on
+ *  every delta). `append` both opens a new block (an empty `text`, on the
+ *  block's first appearance) and grows an existing one; `clear` is every
+ *  place project.ts's own "clears" rules fire — a stopped block's matching
+ *  `assistant` message, or any `result`. */
+export type PartialUpdate = { readonly op: 'append'; readonly blockId: string; readonly kind: LiveBlockKind; readonly text: string } | { readonly op: 'clear' }
+
+/** `'session:entries'`'s push payload (#219) — the live projection's own
+ *  delta, in the same `appended`/`patched` shape #84's tail poll already
+ *  gives a transcript reader, so the renderer's `entry-list.ts` applies both
+ *  through one code path. `revision` is monotonic per session; a gap means
+ *  re-attach (`session/sequence.ts`). `partial` is `null` when no streaming
+ *  block changed this delta; `pendingSends` is `null` when the sent-but-
+ *  unacknowledged uuid set did not change, never re-sent unchanged. */
+export interface SessionEntriesDelta {
+  readonly sessionKey: SessionKey
+  readonly revision: number
+  readonly appended: readonly TranscriptEntry[]
+  readonly patched: readonly EntryPatch[]
+  readonly partial: PartialUpdate | null
+  readonly pendingSends: readonly string[] | null
+}
 
 /** #99: the three decisions the operator can send back for a pending
  *  permission request. `allow-session` is offered only when the request's

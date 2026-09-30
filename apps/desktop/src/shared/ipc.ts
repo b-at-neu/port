@@ -18,6 +18,7 @@ import type {
   PermissionDecision,
   SessionAttachResult,
   SessionCloseResult,
+  SessionEntriesDelta,
   SessionEventEnvelope,
   SessionInterruptResult,
   SessionKey,
@@ -299,9 +300,13 @@ export interface IpcEventMap {
    *  since folding the phase machine into the SDK envelope would put our
    *  vocabulary inside a payload we promised to forward untouched. */
   'session:status': HostedSessionSnapshot
+  /** #219: the live projector's own delta — narrowed, renderer-safe
+   *  `TranscriptEntry`/`PartialUpdate` values, never the opaque envelope
+   *  `session:event` already carries. */
+  'session:entries': SessionEntriesDelta
 }
 
-export const IPC_EVENTS = ['board:update', 'session:event', 'session:status'] as const
+export const IPC_EVENTS = ['board:update', 'session:event', 'session:status', 'session:entries'] as const
 
 export type IpcEvent = (typeof IPC_EVENTS)[number]
 

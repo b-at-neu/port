@@ -303,6 +303,42 @@ export default async function ({ fail, ok }: Reporter) {
       }
     }
   }
+
+  // --- project.ts's live projection goes through createDeriver ------------
+  // guard(#219): the live projector must reuse issue 83/issue 84's own
+  // pairing state, never a second implementation — the whole point of "one
+  // normalizer, one renderer" (the plan's own framing, and the fix for the
+  // issue 123 three-renderers trap).
+  {
+    const projectFile = allFiles.find((f) => relOf(f) === `${hostingDir}/project.ts`);
+    if (!projectFile) {
+      fail('desktop-hosting', `${hostingDir}/project.ts does not exist`);
+    } else {
+      const text = readFileSync(projectFile, 'utf8');
+      if (!/createDeriver/.test(text) || !/from\s+['"]\.\.\/sessions['"]/.test(text)) {
+        fail('desktop-hosting', `${hostingDir}/project.ts does not import 'createDeriver' from '../sessions'`);
+      } else {
+        ok();
+      }
+    }
+  }
+
+  // --- No second tool_use_id pairing implementation -----------------------
+  // guard(#219): `\btool_use_id\b` may appear in exactly one production file
+  // — `main/sessions/transcript-entries.ts`'s own deriver. A second match
+  // anywhere else under apps/desktop/src/ (project.ts included) would be a
+  // competing pairing implementation, the same trap the createDeriver guard
+  // above exists to prevent from the other direction.
+  {
+    const allowedFile = 'apps/desktop/src/main/sessions/transcript-entries.ts';
+    const prodFiles = allFiles.filter((f) => !relOf(f).endsWith('.test.ts'));
+    const stray = prodFiles.filter((f) => relOf(f) !== allowedFile).filter((f) => /\btool_use_id\b/.test(readFileSync(f, 'utf8')));
+    if (stray.length > 0) {
+      fail('desktop-hosting', `'tool_use_id' appears outside ${allowedFile}, in: ${stray.map(relOf).join(', ')} — a second pairing implementation is the three-renderers trap #123 flagged`);
+    } else {
+      ok();
+    }
+  }
 }
 
 function stripComments(text: string): string {

@@ -1,0 +1,328 @@
+/* The Session view (#219) — reuses transcript.css's own `#1e1e1e` palette
+   and row styles (`.entry`, `.entry__payload`, …) since entry-rows.ts builds
+   both screens' rows from the same TranscriptEntry. This file adds only
+   what the live screen needs on top: the header/pill, the composer, and the
+   ended panel. */
+
+.session-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+}
+
+.session-view--empty {
+  align-items: center;
+  justify-content: center;
+}
+
+.session-view__empty {
+  text-align: center;
+  opacity: 0.8;
+}
+
+.session-view__empty-title {
+  font-size: 1rem;
+  margin: 0 0 0.25rem;
+}
+
+.session-view__empty-hint {
+  margin: 0;
+  opacity: 0.7;
+}
+
+.session-view__live {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.session-view__header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  margin-bottom: 0.5rem;
+}
+
+.session-view__pill {
+  font-size: 0.78rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: #2a2a2a;
+  white-space: nowrap;
+}
+
+.session-view__pill--ready {
+  background: #2a3a2a;
+}
+
+.session-view__pill--streaming {
+  background: #2a3a52;
+}
+
+.session-view__pill--interrupting,
+.session-view__pill--closing {
+  background: #3a3220;
+}
+
+.session-view__pill--ended {
+  background: #3a2a2a;
+}
+
+.session-view__meta {
+  flex: 1;
+  font-size: 0.78rem;
+  opacity: 0.65;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-view__button {
+  font-family: inherit;
+  font-size: 0.8rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #2a2a2a;
+  color: inherit;
+  cursor: pointer;
+}
+
+.session-view__button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.session-view__button--danger {
+  background: #6b2a2a;
+  border-color: #8a3a3a;
+}
+
+.session-view__banner-host:empty {
+  display: none;
+}
+
+.session-view__banner {
+  margin: 0 0 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.session-view__banner--error {
+  border: 1px solid #6b2a2a;
+  background: #3a1f1f;
+  color: #ff9d94;
+}
+
+.session-view__banner--busy,
+.session-view__banner--dim {
+  border: 1px solid #444;
+  background: #2a2a2a;
+  opacity: 0.85;
+}
+
+.session-view__banner-title {
+  margin: 0 0 0.2rem;
+  font-weight: 600;
+}
+
+.session-view__banner-body {
+  margin: 0;
+}
+
+.session-view__banner-detail {
+  margin: 0.4rem 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.session-view__confirm {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #6b2a2a;
+  border-radius: 4px;
+  background: #3a1f1f;
+}
+
+.session-view__confirm-prompt {
+  flex: 1;
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.session-view__status {
+  margin-top: 1rem;
+  opacity: 0.75;
+  text-align: center;
+}
+
+.session-view__list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.entry--live {
+  border-color: #3a4a6a;
+}
+
+/* A caret at the end of a still-streaming row -- disabled under
+   prefers-reduced-motion (ENGINEERING §5's own accessibility rule extended
+   to motion), so the live row still reads plainly without the blink. */
+.entry--live .entry__payload::after {
+  content: '▍';
+  animation: session-caret-blink 1s step-start infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entry--live .entry__payload::after {
+    animation: none;
+  }
+}
+
+@keyframes session-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.entry--thinking-live {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.session-view__jump {
+  position: absolute;
+  bottom: 4.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: inherit;
+  font-size: 0.75rem;
+  padding: 0.35rem 0.9rem;
+  border: 1px solid #444;
+  border-radius: 999px;
+  background: #2f3b52;
+  color: inherit;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.session-view__ended {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.session-view__ended-content {
+  max-width: 32rem;
+  margin: 2rem auto;
+  text-align: center;
+}
+
+.session-view__ended-title {
+  font-size: 1.1rem;
+  margin: 0 0 0.5rem;
+}
+
+.session-view__ended-body {
+  margin: 0 0 0.75rem;
+  opacity: 0.85;
+}
+
+.session-view__ended-message {
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  background: #202020;
+  font-size: 0.78rem;
+  margin: 0 0 0.75rem;
+}
+
+.session-view__ended-diagnosis-title {
+  font-size: 0.85rem;
+  margin: 0 0 0.2rem;
+}
+
+.session-view__ended-diagnosis-body {
+  margin: 0 0 0.75rem;
+  opacity: 0.8;
+  font-size: 0.82rem;
+}
+
+.session-view__new-button {
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.4rem 1rem;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #2a3a2a;
+  color: inherit;
+  cursor: pointer;
+}
+
+.session-view__composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  margin-top: 0.5rem;
+}
+
+.session-view__input {
+  flex: 1;
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: #202020;
+  color: inherit;
+  resize: vertical;
+  min-height: 2.5rem;
+  max-height: 10rem;
+}
+
+.session-view__input:disabled {
+  opacity: 0.5;
+}
+
+.session-view__send {
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid #2f5b3f;
+  border-radius: 6px;
+  background: #2a4a34;
+  color: inherit;
+  cursor: pointer;
+}
+
+.session-view__send:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.session-view__note {
+  margin: 0.4rem 0 0;
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.session-view__hint {
+  margin: 0.3rem 0 0;
+  font-size: 0.7rem;
+  opacity: 0.5;
+}

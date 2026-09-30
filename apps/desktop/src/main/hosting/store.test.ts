@@ -30,6 +30,7 @@ function baseDeps(overrides: Partial<HostedStoreDeps> = {}): HostedStoreDeps {
     now: () => 1_000,
     onEvent: vi.fn(),
     onStatus: vi.fn(),
+    onEntries: vi.fn(),
     ...overrides,
   }
 }
@@ -104,12 +105,36 @@ describe('createHostedStore', () => {
     expect(result.queued).toBe(true)
   })
 
-  it('attach() returns the snapshot plus an empty replay for a freshly started session', async () => {
+  it('attach() returns the snapshot plus an empty replay and entries window for a freshly started session', async () => {
     const store = createHostedStore(baseDeps())
     const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
     if (!started.ok) throw new Error('unreachable')
     const result = store.attach(started.snapshot.sessionKey)
-    expect(result).toEqual({ ok: true, snapshot: started.snapshot, replay: [], droppedBefore: 0 })
+    expect(result).toEqual({
+      ok: true,
+      snapshot: started.snapshot,
+      replay: [],
+      droppedBefore: 0,
+      entries: [],
+      firstIndex: 0,
+      partial: null,
+      pendingSends: [],
+      revision: 0,
+    })
+  })
+
+  it('attach() reflects a sent message in the entries window', async () => {
+    const store = createHostedStore(baseDeps())
+    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    if (!started.ok) throw new Error('unreachable')
+    store.send(started.snapshot.sessionKey, 'hello')
+    const result = store.attach(started.snapshot.sessionKey)
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.entries).toHaveLength(1)
+    expect(result.entries[0]).toMatchObject({ type: 'user-text' })
+    expect(result.pendingSends).toHaveLength(1)
+    expect(result.revision).toBe(1)
   })
 
   it('list() reports every started session', async () => {

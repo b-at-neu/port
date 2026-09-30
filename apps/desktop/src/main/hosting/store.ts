@@ -13,6 +13,7 @@ import type {
   PermissionDecision,
   SessionAttachResult,
   SessionCloseResult,
+  SessionEntriesDelta,
   SessionEventEnvelope,
   SessionInterruptResult,
   SessionKey,
@@ -41,6 +42,9 @@ export interface HostedStoreDeps {
   readonly now: () => number
   readonly onEvent: (envelope: SessionEventEnvelope) => void
   readonly onStatus: (snapshot: HostedSessionSnapshot) => void
+  /** #219: forwarded verbatim to every handle's own `onEntries` — a no-op
+   *  default, the same shape `onEvent`/`onStatus` already default to. */
+  readonly onEntries: (delta: SessionEntriesDelta) => void
 }
 
 export const defaultHostedStoreDeps: HostedStoreDeps = {
@@ -53,6 +57,7 @@ export const defaultHostedStoreDeps: HostedStoreDeps = {
   now: () => Date.now(),
   onEvent: () => undefined,
   onStatus: () => undefined,
+  onEntries: () => undefined,
 }
 
 export interface StartSessionParams {
@@ -133,6 +138,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
         onEvent: deps.onEvent,
         onStatus: deps.onStatus,
         onSessionId,
+        onEntries: deps.onEntries,
       },
       queryFn,
     )
@@ -165,7 +171,8 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     const handle = handles.get(sessionKey)
     if (!handle) return { ok: false, kind: 'unknown-session' }
     const { events, droppedBefore } = handle.replay()
-    return { ok: true, snapshot: handle.snapshot(), replay: events, droppedBefore }
+    const { entries, firstIndex, partial, pendingSends, revision } = handle.entriesWindow()
+    return { ok: true, snapshot: handle.snapshot(), replay: events, droppedBefore, entries, firstIndex, partial, pendingSends, revision }
   }
 
   function list(): readonly HostedSessionSnapshot[] {
