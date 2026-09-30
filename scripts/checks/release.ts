@@ -59,7 +59,7 @@ export function onTriggers(text: string): string[] | null {
 
 export default async function ({ fail, note, ok }: Reporter) {
   const { classifyCorridor, releaseInFlight } = await import(pathToFileURL(join(root, 'scripts/release-corridor.ts')).href);
-  const { parseVersion, nextDevWindow, decide } = await import(pathToFileURL(join(root, 'scripts/dev-window.ts')).href);
+  const { parseVersion, nextDevWindow, decide, devWindowSubject } = await import(pathToFileURL(join(root, 'scripts/dev-window.ts')).href);
 
   // --- Integration branch stays on a prerelease version (#224) ---------------
   // guard(#224): a dev-loop install and a released consumer install both
@@ -385,5 +385,27 @@ export default async function ({ fail, note, ok }: Reporter) {
     else ok();
   }
 
-  note('release: corridor rail (#224, #275), one-check-per-commit trigger guard, postPublishHook three-way shape, SKILL.md pin, dev-window.ts decision cases');
+  // --- scripts/dev-window.ts's subject carries no ticket prefix -------------
+  // guard(#278): the dev-window restore commit and PR title regrowing a '#0'
+  // prefix the bump commit deliberately omits.
+  {
+    if (devWindowSubject('0.2.1-dev') !== 'open dev window for v0.2.1-dev') {
+      fail('dev-window', "devWindowSubject('0.2.1-dev') must equal 'open dev window for v0.2.1-dev'");
+    } else {
+      ok();
+    }
+    if (/^#\d+\s/.test(devWindowSubject('0.2.1-dev'))) {
+      fail('dev-window', 'devWindowSubject must never carry a ticket-number prefix');
+    } else {
+      ok();
+    }
+    const devWindowSource = readFileSync(join(root, 'scripts/dev-window.ts'), 'utf8');
+    if (/#\d+ open dev window/.test(devWindowSource)) {
+      fail('dev-window', 'scripts/dev-window.ts must not carry an inline "#<n> open dev window" literal — use devWindowSubject at every call site');
+    } else {
+      ok();
+    }
+  }
+
+  note('release: corridor rail (#224, #275), one-check-per-commit trigger guard, postPublishHook three-way shape, SKILL.md pin, dev-window.ts decision cases, dev-window subject (#278)');
 }
