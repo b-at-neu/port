@@ -1,6 +1,7 @@
 ---
 name: scope
 description: Stage 0 — interactive decomposition of a major feature into an epic with dependency-ordered sub-issues, before any per-ticket planning. Runs on the session model; use a strong one. Usage: /port:scope <feature description>
+argument-hint: "<feature description>"
 allowed-tools: Bash(gh issue create *) Bash(gh issue view *) Bash(gh issue edit *) Bash(gh api repos/*) Bash(gh api graphql *) Read Grep Glob AskUserQuestion
 ---
 
