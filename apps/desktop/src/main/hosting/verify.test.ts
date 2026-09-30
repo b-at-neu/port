@@ -47,17 +47,21 @@ describe('checkPluginLoad', () => {
 })
 
 describe('checkComponents', () => {
-  it('unchecked when expected is null', () => {
-    expect(checkComponents({ expected: null, commandNames: [], agentNames: [] })).toEqual({ kind: 'unchecked', reason: 'unreadable' })
+  it('unchecked, no-plugin-path, when expected is null and no read was ever attempted', () => {
+    expect(checkComponents({ expected: null, expectedAttempted: false, commandNames: [], agentNames: [] })).toEqual({ kind: 'unchecked', reason: 'no-plugin-path' })
+  })
+
+  it('unchecked, unreadable, when expected is null after a read was attempted', () => {
+    expect(checkComponents({ expected: null, expectedAttempted: true, commandNames: [], agentNames: [] })).toEqual({ kind: 'unchecked', reason: 'unreadable' })
   })
 
   it('complete when every expected skill and agent is present', () => {
-    const result = checkComponents({ expected: { skills: ['pipeline'], agents: ['plan-agent'] }, commandNames: ['pipeline', 'scope'], agentNames: ['plan-agent'] })
+    const result = checkComponents({ expected: { skills: ['pipeline'], agents: ['plan-agent'] }, expectedAttempted: true, commandNames: ['pipeline', 'scope'], agentNames: ['plan-agent'] })
     expect(result).toEqual({ kind: 'complete' })
   })
 
   it('incomplete naming exactly the missing skills and agents', () => {
-    const result = checkComponents({ expected: { skills: ['pipeline', 'scope'], agents: ['plan-agent', 'impl-agent'] }, commandNames: ['pipeline'], agentNames: [] })
+    const result = checkComponents({ expected: { skills: ['pipeline', 'scope'], agents: ['plan-agent', 'impl-agent'] }, expectedAttempted: true, commandNames: ['pipeline'], agentNames: [] })
     expect(result).toEqual({ kind: 'incomplete', missingSkills: ['scope'], missingAgents: ['plan-agent', 'impl-agent'] })
   })
 })

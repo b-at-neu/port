@@ -57,16 +57,21 @@ export function checkPluginLoad(params: CheckPluginLoadParams): PluginLoad {
 }
 
 export interface CheckComponentsParams {
-  /** `null` when the plugin directory could not be read — never treated as
+  /** `null` when there is nothing to compare against yet — never treated as
    *  `complete` (ENGINEERING §4's "fails closed on complete" direction). */
   readonly expected: { readonly skills: readonly string[]; readonly agents: readonly string[] } | null
+  /** Whether a read of the plugin directory has actually settled (succeeded
+   *  or failed). `false` means there was no plugin path yet to read from —
+   *  the `installed` source before `init` has reported one — so `expected`
+   *  being `null` reflects `'no-plugin-path'`, not a failed read. */
+  readonly expectedAttempted: boolean
   /** Already stripped of the `port:` qualifier. */
   readonly commandNames: readonly string[]
   readonly agentNames: readonly string[]
 }
 
 export function checkComponents(params: CheckComponentsParams): ComponentCheck {
-  if (params.expected === null) return { kind: 'unchecked', reason: 'unreadable' }
+  if (params.expected === null) return { kind: 'unchecked', reason: params.expectedAttempted ? 'unreadable' : 'no-plugin-path' }
 
   const missingSkills = params.expected.skills.filter((skill) => !params.commandNames.includes(skill))
   const missingAgents = params.expected.agents.filter((agent) => !params.agentNames.includes(agent))

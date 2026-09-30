@@ -135,6 +135,30 @@ describe('bannerCopy', () => {
     expect(bannerCopy(capabilities)).toBeNull()
   })
 
+  it('null while loaded but the component check has no plugin path yet — still settling', () => {
+    const capabilities: SessionCapabilities = {
+      kind: 'ready',
+      request: INSTALLED_REQUEST,
+      commands: [],
+      agents: [],
+      plugin: { kind: 'loaded', path: '/x', version: null },
+      components: { kind: 'unchecked', reason: 'no-plugin-path' },
+    }
+    expect(bannerCopy(capabilities)).toBeNull()
+  })
+
+  it('loaded but unreadable names the path that could not be read', () => {
+    const capabilities: SessionCapabilities = {
+      kind: 'ready',
+      request: REPO_REQUEST,
+      commands: [],
+      agents: [],
+      plugin: { kind: 'loaded', path: '/x', version: null },
+      components: { kind: 'unchecked', reason: 'unreadable' },
+    }
+    expect(bannerCopy(capabilities)?.text).toContain('/repo/plugins/port')
+  })
+
   it('missing, repository copy, names the path', () => {
     const capabilities: SessionCapabilities = {
       kind: 'ready',
@@ -181,6 +205,18 @@ describe('bannerCopy', () => {
       components: { kind: 'unchecked', reason: 'no-plugin-path' },
     }
     expect(bannerCopy(capabilities)?.text).toBe('Claude Code loaded port from /a and /b. A command may resolve to either copy.')
+  })
+
+  it('duplicate with three or more paths reads as a comma list with "and" before the last', () => {
+    const capabilities: SessionCapabilities = {
+      kind: 'ready',
+      request: INSTALLED_REQUEST,
+      commands: [],
+      agents: [],
+      plugin: { kind: 'duplicate', paths: ['/a', '/b', '/c'] },
+      components: { kind: 'unchecked', reason: 'no-plugin-path' },
+    }
+    expect(bannerCopy(capabilities)?.text).toBe('Claude Code loaded port from /a, /b, and /c. A command may resolve to either copy.')
   })
 })
 

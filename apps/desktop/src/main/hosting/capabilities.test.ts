@@ -147,6 +147,30 @@ describe('createCapabilityTracker', () => {
     expect(state.components).toEqual({ kind: 'complete' })
   })
 
+  it('installed source, before init: unchecked with no-plugin-path, never unreadable', async () => {
+    const tracker = createCapabilityTracker({ request: INSTALLED, readExpectedComponents: () => Promise.resolve(null), samePath, onChange: vi.fn() })
+    await tracker.start(fakeQuery([PIPELINE_COMMAND], []))
+    const state = tracker.current()
+    expect(state.kind).toBe('ready')
+    if (state.kind !== 'ready') return
+    expect(state.components).toEqual({ kind: 'unchecked', reason: 'no-plugin-path' })
+  })
+
+  it('reports unreadable once a read of a known plugin path has actually failed', async () => {
+    const onChange = vi.fn()
+    const tracker = createCapabilityTracker({
+      request: REPOSITORY,
+      readExpectedComponents: () => Promise.resolve(null),
+      samePath,
+      onChange,
+    })
+    await tracker.start(fakeQuery([PIPELINE_COMMAND], []))
+    const state = tracker.current()
+    expect(state.kind).toBe('ready')
+    if (state.kind !== 'ready') return
+    expect(state.components).toEqual({ kind: 'unchecked', reason: 'unreadable' })
+  })
+
   it('observe() ignores anything but system/init and system/commands_changed', async () => {
     const onChange = vi.fn()
     const tracker = createCapabilityTracker({ request: INSTALLED, readExpectedComponents: () => Promise.resolve(null), samePath, onChange })

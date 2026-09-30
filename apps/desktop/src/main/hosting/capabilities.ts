@@ -89,7 +89,11 @@ function initPluginsOf(message: Record<string, unknown>): readonly InitPlugin[] 
 export function createCapabilityTracker(params: CreateCapabilityTrackerParams): CapabilityTracker {
   let state: SessionCapabilities = { kind: 'pending', request: params.request }
   let expected: ExpectedComponents | null = null
-  let expectedRead = false
+  let expectedRequested = false
+  /** Distinct from `expectedRequested`: this flips only once the read has
+   *  actually settled, so `checkComponents` can tell "no path yet" from "a
+   *  read is in flight or failed" — both leave `expected` at `null`. */
+  let expectedSettled = false
   let commands: CommandSummary[] = []
   let agents: AgentSummary[] = []
   let initPlugins: readonly InitPlugin[] | null = null
@@ -98,6 +102,7 @@ export function createCapabilityTracker(params: CreateCapabilityTrackerParams): 
     const plugin = checkPluginLoad({ request: params.request, initPlugins, samePath: params.samePath })
     const components = checkComponents({
       expected,
+      expectedAttempted: expectedSettled,
       commandNames: commands.map((command) => command.name),
       agentNames: agents.map((agent) => agent.name),
     })
@@ -105,9 +110,10 @@ export function createCapabilityTracker(params: CreateCapabilityTrackerParams): 
   }
 
   async function ensureExpected(pluginPath: string): Promise<void> {
-    if (expectedRead) return
-    expectedRead = true
+    if (expectedRequested) return
+    expectedRequested = true
     expected = await params.readExpectedComponents(pluginPath).catch(() => null)
+    expectedSettled = true
   }
 
   async function start(query: HostedQuery): Promise<void> {

@@ -19,6 +19,14 @@ function requestedPathFor(request: PluginRequest): string {
   return request.source === 'repository' ? request.path : 'the installed copy'
 }
 
+/** `a and b`, `a, b, and c`, … — an Oxford-comma list rather than
+ *  `paths.join(' and ')`, which reads as `a and b and c` for three or more
+ *  duplicate-loaded paths (a rare edge case, but an awkward one to read). */
+function joinWithAnd(items: readonly string[]): string {
+  if (items.length <= 2) return items.join(' and ')
+  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`
+}
+
 /** The status chip's text — glyph plus words, never colour alone. The full
  *  path is never in the chip itself (it goes in the element's `title`,
  *  `commands.ts`'s own job). */
@@ -74,7 +82,9 @@ export interface CapabilitiesBanner {
 }
 
 /** The banner under the chip (`aria-live="polite"`) — `null` when there is
- *  nothing to say (`pending`, `unconfirmed`, or `loaded` + `complete`). */
+ *  nothing to say (`pending`, `unconfirmed`, `loaded` + `complete`, or
+ *  `loaded` + `unchecked` with no plugin path yet to report on — the
+ *  two-stage check is still settling and the chip's `◐` already says so). */
 export function bannerCopy(capabilities: SessionCapabilities): CapabilitiesBanner | null {
   if (capabilities.kind === 'pending') return null
   if (capabilities.kind === 'unavailable') return { text: "Claude Code didn't return this session's commands.", detail: capabilities.message }
@@ -95,11 +105,12 @@ export function bannerCopy(capabilities: SessionCapabilities): CapabilitiesBanne
   }
 
   if (plugin.kind === 'duplicate') {
-    return { text: `Claude Code loaded port from ${plugin.paths.join(' and ')}. A command may resolve to either copy.`, detail: null }
+    return { text: `Claude Code loaded port from ${joinWithAnd(plugin.paths)}. A command may resolve to either copy.`, detail: null }
   }
 
   if (plugin.kind === 'loaded') {
     if (components.kind === 'unchecked') {
+      if (components.reason === 'no-plugin-path') return null
       const path = request.source === 'repository' ? request.path : plugin.path
       return { text: `Port couldn't read ${path} to check which skills and agents should be there.`, detail: null }
     }

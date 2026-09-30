@@ -21,17 +21,17 @@ describe('resolvePluginRequest', () => {
 
   it('resolves repository when the manifest names port', async () => {
     const request = await resolvePluginRequest('/repo', jsonDeps({ ok: true, value: { name: 'port' } }))
-    expect(request).toEqual({ source: 'repository', path: '/repo/plugins/port' })
+    expect(request).toEqual({ source: 'repository', path: pathOps.join('/repo', 'plugins', 'port') })
   })
 
   it('resolves repository, not installed, when the manifest exists but cannot be read — fails loud rather than silently falling back', async () => {
     const request = await resolvePluginRequest('/repo', jsonDeps({ ok: false, kind: 'permission-denied', message: 'nope' }))
-    expect(request).toEqual({ source: 'repository', path: '/repo/plugins/port' })
+    expect(request).toEqual({ source: 'repository', path: pathOps.join('/repo', 'plugins', 'port') })
   })
 
   it('resolves repository when the manifest is unparseable', async () => {
     const request = await resolvePluginRequest('/repo', jsonDeps({ ok: false, kind: 'unparseable', message: 'bad json' }))
-    expect(request).toEqual({ source: 'repository', path: '/repo/plugins/port' })
+    expect(request).toEqual({ source: 'repository', path: pathOps.join('/repo', 'plugins', 'port') })
   })
 })
 
