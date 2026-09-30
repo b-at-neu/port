@@ -1,7 +1,23 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { root, readJson, walk, relOf } from '../lib/files.ts';
+import { root, readJson, walk, relOf, blockScalar, sectionText } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
+
+/** Every key a case.yaml may declare, read live from evals/README.md's own
+ *  schema table (its "Key" column) rather than transcribed here — a second,
+ *  hand-typed copy of that table is exactly the kind of duplicate
+ *  docs/ENGINEERING.md §2 requires a mechanical pin for, and the cheaper fix
+ *  is to have only one copy at all. The `max_turns, timeout_seconds` row
+ *  packs two backtick-quoted keys into one cell, so every backtick token in
+ *  the column is taken, not just the row's first. */
+function readmeSchemaKeys(readmeText: string): string[] {
+  const schemaSection = sectionText(readmeText, 'The case schema, and where it came from');
+  const keys: string[] = [];
+  for (const row of schemaSection.matchAll(/^\|\s*((?:`[a-zA-Z_]+`,?\s*)+)\|/gm)) {
+    for (const m of row[1].matchAll(/`([a-zA-Z_]+)`/g)) keys.push(m[1]);
+  }
+  return keys;
+}
 
 export default async function ({ fail, ok }: Reporter) {
   // --- Eval cases are structurally sound --------------------------------------
@@ -48,6 +64,32 @@ export default async function ({ fail, ok }: Reporter) {
     ok();
   }
 
+  // --- Case top-level keys are a subset of the README schema ------------------
+  // guard(#124): an invented key (an `ablation:` field is the one the ticket
+  // names explicitly) reads plausibly but no consumer of case.yaml — today's
+  // interim tooling or the eventual real `claude plugin eval` — has any
+  // reason to look for it, so it silently does nothing. Keeping every case's
+  // keys inside the README's own schema table is what keeps that table
+  // authoritative rather than aspirational.
+  {
+    const schemaKeys = readmeSchemaKeys(readFileSync(join(root, 'evals/README.md'), 'utf8'));
+    if (schemaKeys.length === 0) {
+      fail('evals-schema', "evals/README.md's case schema table produced zero keys — the table moved, or the section heading changed");
+    }
+    const caseFiles = walk(join(root, 'evals')).filter((f) => basename(f) === 'case.yaml');
+    for (const f of caseFiles) {
+      const rel = relOf(f);
+      const text = readFileSync(f, 'utf8');
+      const keys = [...text.matchAll(/^([a-zA-Z_]+):/gm)].map((m) => m[1]);
+      for (const key of keys) {
+        if (!schemaKeys.includes(key)) {
+          fail('evals-schema', `${rel} declares '${key}:', which is not in evals/README.md's case schema table`);
+        }
+      }
+      ok();
+    }
+  }
+
   // --- Behavioural evals never enter commands.checks --------------------------
   // guard: every dispatched agent spawning its own model run before it can
   // push. The mechanical form of the ticket's own last rule — `commands.checks`
@@ -75,4 +117,50 @@ export default async function ({ fail, ok }: Reporter) {
       ok();
     }
   }
+
+  // --- Every `claude plugin eval` invocation carries --ablation with-without --
+  // guard(#124): a documented or CI command missing the flag measures Claude,
+  // not port — the delta is the whole point of this layer, so an invocation
+  // that silently drops it produces a number nobody should trust. Scoped to
+  // fenced code blocks (markdown) and `run:` step bodies (the workflow),
+  // never a bare prose mention of the subcommand name — a sentence like
+  // "`claude plugin eval --help` is the exception" is documentation about the
+  // command, not an invocation of it.
+  {
+    const files = ['evals/README.md', 'docs/TESTING.md', '.github/workflows/evals.yml'];
+    for (const rel of files) {
+      const text = readFileSync(join(root, rel), 'utf8');
+      const isYaml = rel.endsWith('.yml');
+      const blocks = isYaml
+        ? [text]
+        : [...text.matchAll(/```(?:bash)?\n([\s\S]*?)```/g)].map((m) => m[1]);
+      for (const block of blocks) {
+        for (const line of block.split('\n')) {
+          if (!line.includes('claude plugin eval')) continue;
+          if (line.includes('--help')) continue;
+          if (!line.includes('--ablation with-without')) {
+            fail('evals-ablation', `${rel}: a \`claude plugin eval\` invocation is missing --ablation with-without: ${line.trim()}`);
+            continue;
+          }
+          const ablationValues = [...line.matchAll(/--ablation[= ](\S+)/g)].map((m) => m[1]);
+          if (ablationValues.some((v) => v !== 'with-without')) {
+            fail('evals-ablation', `${rel}: an --ablation value other than with-without appears: ${line.trim()}`);
+          }
+        }
+      }
+      ok();
+    }
+  }
+}
+
+/** Used by evals-cases.ts and evals-baseline.ts, both of which need the same
+ *  block-scalar reads this module already validated the presence of. Kept
+ *  here rather than duplicated so the two extraction shapes (a case's
+ *  `prompt:`/`scaffold_script:` blocks) can never drift between modules. */
+export function readCasePrompt(text: string): string {
+  return blockScalar(text, 'prompt') ?? '';
+}
+
+export function readCaseScaffold(text: string): string {
+  return blockScalar(text, 'scaffold_script') ?? '';
 }
