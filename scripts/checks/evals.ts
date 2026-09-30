@@ -153,10 +153,10 @@ export default async function ({ fail, ok }: Reporter) {
   }
 }
 
-/** Used by evals-cases.ts and evals-baseline.ts, both of which need the same
- *  block-scalar reads this module already validated the presence of. Kept
- *  here rather than duplicated so the two extraction shapes (a case's
- *  `prompt:`/`scaffold_script:` blocks) can never drift between modules. */
+/** Used by evals-cases.ts, which needs the same block-scalar reads this
+ *  module already validated the presence of. Kept here rather than
+ *  duplicated so the extraction shape (a case's `prompt:`/`scaffold_script:`
+ *  blocks) can never drift between modules. */
 export function readCasePrompt(text: string): string {
   return blockScalar(text, 'prompt') ?? '';
 }
