@@ -60,12 +60,7 @@ export function devWindowBranch(next: string): string {
   return `devwindow/v${next}`;
 }
 
-/** The dev-window restore commit subject and pull request title, e.g.
- *  `devWindowSubject('0.2.1-dev')` → `'open dev window for v0.2.1-dev'` — no
- *  ticket-number prefix, matching the release skill's own bump subject
- *  (`bump version to v<version>`, `plugins/port/skills/release/SKILL.md`
- *  Part 1 step 3): a mechanical corridor commit carries no ticket behind it,
- *  so it carries no ticket prefix either (#278). */
+/** No ticket-number prefix — matches the release skill's bump subject. */
 export function devWindowSubject(next: string): string {
   return `open dev window for v${next}`;
 }
