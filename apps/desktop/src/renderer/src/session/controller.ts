@@ -1,208 +1,197 @@
-// #219: the Session tab's own state machine, IPC wiring, and keyboard
-// handling — the same module-level-closure idiom `permission/controller.ts`
-// and `transcript-tail.ts` already establish (no framework, no class). Owns
-// exactly one live session in the UI at a time (#103 owns switching between
-// several); a start while the current one is not `ended` is refused
-// client-side with a banner rather than silently discarding it.
+// #103: many hosted sessions — the rail lists every one of them; this
+// controller owns select/switch/re-attach, per-session composer drafts, and
+// the rail/restore/picker wiring on top of #219's single-session base.
+// Every start (card, rail picker, restore, or a resume/fork row) selects the
+// session it created; `already-open` switches to the returned key instead of
+// showing a failure. The same module-level-closure idiom #219 and
+// `permission/controller.ts` already establish — no framework, no class.
 import type { RepoId } from '../../../shared/repos'
-import type { HostedSessionSnapshot, SessionEntriesDelta, SessionKey } from '../../../shared/hosting/types'
+import type { HostedSessionSnapshot, SessionEntriesDelta, SessionKey, SessionStartResult } from '../../../shared/hosting/types'
 import { buildSessionView, renderSessionChrome } from './view'
 import type { SessionRefs, SessionScreenState } from './view'
-import { createEntryList } from '../entry-list'
-import type { EntryList } from '../entry-list'
-import { accept, drainBuffered } from './sequence'
-import { BUSY_BANNER, SEND_FAILED_UNKNOWN_SESSION, SEND_FAILED_UNREACHABLE, START_UNREACHABLE, interruptNote, startFailureCopy } from './copy'
+import { renderRail } from './rail'
+import type { RailProps } from './rail'
+import { renderRestore } from './restore'
+import type { RestoreBannerState } from './restore'
+import { fallbackSelection } from './rail-model'
+import { applyEntriesDelta, freshPerSessionState, reattachSession } from './attach'
+import type { PerSessionState } from './attach'
+import { SEND_FAILED_UNKNOWN_SESSION, SEND_FAILED_UNREACHABLE, START_UNREACHABLE, interruptNote, startFailureCopy } from './copy'
 import { handleAgentsToggle, handleArgsCancel, handleArgsInput, handleArgsSubmit, handleCommandRun, openRowCommandName, renderCommands, resetCommandsState } from './commands'
+import { onRepoLabelsChange, readyRepos, repoLabelFor, reloadRepoLabels } from '../repo-labels'
+import { onSelectionChange, selectedSession, setSelectedSession } from './selection'
+import { capacityState, decrementLimit, incrementLimit, loadCapacity } from './capacity-controller'
+import { dismissBanner, forget, loadRestoreList, resumeAll, resumeOne, restoreState, toggleReviewing } from './restore-controller'
 
 let refs: SessionRefs | null = null
 let showCallback: (() => void) | null = null
+let onNavChange: (() => void) | null = null
 
-let currentSessionKey: SessionKey | null = null
-let repoLabel = ''
-let latestSnapshot: HostedSessionSnapshot | null = null
-
-let entryList: EntryList | null = null
-let lastRevision = 0
-let buffered: SessionEntriesDelta[] = []
-let attaching = false
+let sessions = new Map<SessionKey, HostedSessionSnapshot>()
+const perSession = new Map<SessionKey, PerSessionState>()
+let switchToken = 0
 
 let screen: SessionScreenState = { kind: 'empty' }
-let composerValue = ''
-let sendError: string | null = null
-/** Set once `send()` gets back `unknown-session` -- the composer stays
- *  disabled from then on (R1-M2), since the plan's own UX states single this
- *  case out from a merely-rejected send. Reset only where a session starts
- *  fresh (`startSession`), never by `send()` clearing `sendError` alone. */
-let sessionGone = false
-let closeConfirming = false
-let interruptNoteValue: string | null = null
-let windowNoteVisible = false
-let busyBanner: string | null = null
+let newSessionRepoId: RepoId | null = null
 
-/** Builds the 'live' screen from every field this controller tracks — the
- *  one place that shape is assembled, called wherever any of those fields
- *  changes while a snapshot is already known. Every other screen kind
- *  (`empty`, `reconnecting`, `starting`, `start-failed`) is assigned
- *  directly by the function whose own action caused it, never derived here —
- *  `draw()` only ever paints whatever `screen` currently holds. */
+function stateFor(key: SessionKey): PerSessionState {
+  let state = perSession.get(key)
+  if (state === undefined) {
+    state = freshPerSessionState()
+    perSession.set(key, state)
+  }
+  return state
+}
+
+function snapshotList(): readonly HostedSessionSnapshot[] {
+  return [...sessions.values()]
+}
+
 function liveScreen(snapshot: HostedSessionSnapshot): SessionScreenState {
-  return { kind: 'live', snapshot, repoLabel, sendError, closeConfirming, interruptNote: interruptNoteValue, windowNoteVisible, composerValue, busyBanner, sessionGone }
+  const state = stateFor(snapshot.sessionKey)
+  return {
+    kind: 'live',
+    snapshot,
+    repoLabel: repoLabelFor(snapshot.repoId),
+    sendError: state.sendError,
+    closeConfirming: state.closeConfirming,
+    interruptNote: state.interruptNoteValue,
+    windowNoteVisible: state.windowNoteVisible,
+    composerValue: state.composerValue,
+    busyBanner: null,
+    sessionGone: state.sessionGone,
+  }
+}
+
+function notifyNavChange(): void {
+  onNavChange?.()
 }
 
 function draw(): void {
   if (refs === null) return
   renderSessionChrome(refs, screen)
-  // #101: the Pipeline strip needs the raw snapshot, not the chrome's own
-  // `SessionScreenState` — rendered here, right after the chrome, so every
-  // path that draws a live screen (a status push, a completed (re)attach)
-  // gets the strip for free rather than each caller remembering to.
   if (screen.kind === 'live') renderCommands(refs.commandsHost, screen.snapshot)
-}
 
-function applyPartial(delta: SessionEntriesDelta): void {
-  if (entryList === null) return
-  if (delta.partial === null) return
-  if (delta.partial.op === 'clear') {
-    entryList.setLive(null)
-  } else {
-    entryList.setLive({ blockId: delta.partial.blockId, kind: delta.partial.kind, text: '', omittedChars: 0 })
-    entryList.appendLive(delta.partial.text)
+  const capacity = capacityState()
+  const railProps: RailProps = {
+    snapshots: snapshotList(),
+    selectedKey: selectedSession(),
+    limit: capacity.limit,
+    ceiling: capacity.ceiling,
+    repoLabelFor,
+    readyRepos: readyRepos(),
+    newSessionRepoId,
+    capacityError: capacity.error,
+    now: new Date(),
   }
-}
+  renderRail(refs.railHost, railProps)
 
-function ingestDelta(delta: SessionEntriesDelta): void {
-  if (entryList === null) return
-  entryList.append(delta.appended)
-  entryList.patch(delta.patched)
-  applyPartial(delta)
+  const restore = restoreState()
+  const restoreProps: RestoreBannerState = {
+    entries: restore.entries,
+    reviewing: restore.reviewing,
+    notice: restore.notice,
+    repoLabelFor,
+    now: new Date(),
+  }
+  renderRestore(refs.restoreHost, restoreProps)
 }
 
 function onEntriesPush(delta: SessionEntriesDelta): void {
-  if (delta.sessionKey !== currentSessionKey) return
-  if (attaching) {
-    buffered.push(delta)
-    return
-  }
-  const outcome = accept(lastRevision, delta)
-  if (outcome === 'apply') {
-    ingestDelta(delta)
-    lastRevision = delta.revision
-  } else if (outcome === 'gap') {
-    // A push was missed entirely — re-attach and re-render rather than
-    // apply the rest out of order.
-    void reattach()
-  }
-  // 'stale' -- a duplicate or a replay of something already applied; nothing
-  // to do.
+  const state = stateFor(delta.sessionKey)
+  applyEntriesDelta(state, selectedSession(), delta, () => void reattach(delta.sessionKey))
 }
 
 function onStatusPush(snapshot: HostedSessionSnapshot): void {
-  if (snapshot.sessionKey !== currentSessionKey) return
-  latestSnapshot = snapshot
-  if (snapshot.phase !== 'ended') closeConfirming = false
-  screen = liveScreen(snapshot)
+  const previous = sessions.get(snapshot.sessionKey)
+  sessions.set(snapshot.sessionKey, snapshot)
+  if (snapshot.phase !== 'ended') stateFor(snapshot.sessionKey).closeConfirming = false
+  if (previous === undefined || previous.phase !== snapshot.phase) notifyNavChange()
+
+  if (snapshot.sessionKey === selectedSession()) {
+    screen = liveScreen(snapshot)
+  }
   draw()
 }
 
-function buildEntryList(firstIndex: number): void {
+/** Attaches (or re-attaches) to `sessionKey` — a switch token comparison
+ *  discards a round trip superseded by a later `switchTo`, so an attach that
+ *  resolves late never renders into the wrong session. */
+async function reattach(sessionKey: SessionKey): Promise<void> {
   if (refs === null) return
-  entryList?.dispose()
-  refs.list.textContent = ''
-  entryList = createEntryList({ list: refs.list, jumpButton: refs.jumpButton, baseIndex: firstIndex, focusIndex: null })
-}
-
-/** Attaches (or re-attaches) to `currentSessionKey`, looping internally on a
- *  drained gap rather than recursing — `attaching` must stay `true` for the
- *  whole of that retry, and a recursive call's own `finally` would clear the
- *  flag out from under the call that triggered it. Every `session:entries`
- *  push that lands while this runs is buffered (`onEntriesPush`), never
- *  applied out of order against a window this call has not finished
- *  building. */
-async function reattach(): Promise<void> {
-  const sessionKey = currentSessionKey
-  if (sessionKey === null) return
-  attaching = true
-  try {
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      const result = await window.port.sessionAttach({ sessionKey })
-      if (sessionKey !== currentSessionKey) return // superseded while this round trip was in flight
-      if (!result.ok) {
-        currentSessionKey = null
-        resetCommandsState(null)
-        latestSnapshot = null
-        entryList?.dispose()
-        entryList = null
+  const token = switchToken
+  await reattachSession({
+    refs,
+    sessionKey,
+    state: stateFor(sessionKey),
+    superseded: () => token !== switchToken || selectedSession() !== sessionKey,
+    onSnapshot: (snapshot) => {
+      sessions.set(sessionKey, snapshot)
+      if (selectedSession() === sessionKey) screen = liveScreen(snapshot)
+    },
+    onGone: () => {
+      sessions.delete(sessionKey)
+      if (selectedSession() === sessionKey) {
+        setSelectedSession(null)
         screen = { kind: 'empty' }
-        draw()
-        return
       }
-      latestSnapshot = result.snapshot
-      windowNoteVisible = result.firstIndex > 0
-      buildEntryList(result.firstIndex)
-      entryList?.append(result.entries)
-      if (result.partial !== null) entryList?.setLive(result.partial)
-      lastRevision = result.revision
-
-      const toDrain = buffered
-      buffered = []
-      const drained = drainBuffered(result.revision, toDrain)
-      if (drained.kind === 'gap') continue // one more push was missed while draining -- attach again, fresh
-
-      for (const delta of drained.deltas) {
-        ingestDelta(delta)
-        lastRevision = delta.revision
-      }
-      screen = liveScreen(result.snapshot)
-      draw()
-      return
-    }
-  } catch (error) {
-    console.error('Failed to attach to the hosted session', error)
-  } finally {
-    attaching = false
-  }
+    },
+    draw,
+  })
 }
 
 function focusComposer(): void {
   refs?.composerTextarea.focus()
 }
 
-async function startSession(repoId: RepoId, label: string): Promise<void> {
-  if (latestSnapshot !== null && latestSnapshot.phase !== 'ended') {
-    busyBanner = BUSY_BANNER
-    screen = liveScreen(latestSnapshot)
-    draw()
+/** Selects `key`, disposing the previous entry list and re-attaching to the
+ *  new one — the composer draft and every other per-session field already
+ *  lives keyed by session, so nothing here needs saving or restoring by
+ *  hand. */
+function switchTo(key: SessionKey): void {
+  if (selectedSession() === key) return
+  switchToken += 1
+  setSelectedSession(key)
+  resetCommandsState(key)
+  const snapshot = sessions.get(key)
+  screen = snapshot !== undefined ? liveScreen(snapshot) : { kind: 'reconnecting' }
+  draw()
+  void reattach(key)
+}
+
+function selectAfterStart(snapshot: HostedSessionSnapshot): void {
+  sessions.set(snapshot.sessionKey, snapshot)
+  switchToken += 1
+  setSelectedSession(snapshot.sessionKey)
+  resetCommandsState(snapshot.sessionKey)
+  screen = liveScreen(snapshot)
+  draw()
+  void reattach(snapshot.sessionKey)
+  focusComposer()
+  showCallback?.()
+  notifyNavChange()
+}
+
+function handleStartResult(result: SessionStartResult): void {
+  if (result.ok) {
+    selectAfterStart(result.snapshot)
     return
   }
-  busyBanner = null
-  repoLabel = label
-  currentSessionKey = null
-  resetCommandsState(null)
-  latestSnapshot = null
-  sessionGone = false
-  entryList?.dispose()
-  entryList = null
+  if (result.kind === 'already-open') {
+    switchTo(result.sessionKey)
+    showCallback?.()
+    return
+  }
+  screen = { kind: 'start-failed', ...startFailureCopy(result) }
+  draw()
+}
+
+async function startSession(repoId: RepoId, label: string): Promise<void> {
   screen = { kind: 'starting', repoLabel: label }
   draw()
-
   try {
     const result = await window.port.sessionStart({ repoId, mode: { kind: 'fresh' } })
-    if (!result.ok) {
-      screen = { kind: 'start-failed', ...startFailureCopy(result) }
-      draw()
-      return
-    }
-    currentSessionKey = result.snapshot.sessionKey
-    resetCommandsState(currentSessionKey)
-    latestSnapshot = result.snapshot
-    lastRevision = 0
-    buffered = []
-    // Always re-attaches rather than trusting this start response's own
-    // snapshot directly -- the same code path a boot-time reconnect takes,
-    // so buffering is uniform between the two.
-    await reattach()
-    focusComposer()
-    showCallback?.()
+    handleStartResult(result)
   } catch (error) {
     console.error('Failed to reach the main process starting a session', error)
     screen = { kind: 'start-failed', title: 'Could not start a session', body: START_UNREACHABLE, detail: null }
@@ -217,82 +206,120 @@ function handleSessionStartClick(target: HTMLElement): void {
   void startSession(repoId as RepoId, label ?? repoId)
 }
 
-/** Redraws the live screen from whatever `latestSnapshot` currently holds —
- *  every composer/banner/confirm field lives at module scope, so this is
- *  the one call every one of their own handlers makes before `draw()`. A
- *  no-op with no live snapshot (nothing to redraw as 'live'). */
-function redrawLive(): void {
-  if (latestSnapshot === null) return
-  screen = liveScreen(latestSnapshot)
+function handleRailStart(): void {
+  const repoId = newSessionRepoId ?? readyRepos()[0]?.id ?? null
+  if (repoId === null) return
+  const label = repoLabelFor(repoId)
+  void startSession(repoId, label)
+}
+
+/** The Transcripts picker's own Resume/Fork buttons (`sessions.ts`) — both
+ *  open the Sessions tab on the resulting session. */
+async function startFromTranscript(repoId: RepoId, sessionId: string, kind: 'resume' | 'fork'): Promise<void> {
+  try {
+    const result = await window.port.sessionStart({ repoId, mode: { kind, sessionId } })
+    handleStartResult(result)
+  } catch (error) {
+    console.error('Failed to reach the main process starting a session from a transcript', error)
+  }
+}
+
+function redrawLive(sessionKey: SessionKey): void {
+  const snapshot = sessions.get(sessionKey)
+  if (snapshot === undefined || selectedSession() !== sessionKey) return
+  screen = liveScreen(snapshot)
   draw()
 }
 
 async function send(): Promise<void> {
-  if (currentSessionKey === null) return
-  const text = composerValue.trim()
+  const sessionKey = selectedSession()
+  if (sessionKey === null) return
+  const state = stateFor(sessionKey)
+  const text = state.composerValue.trim()
   if (text === '') return
-  composerValue = ''
-  sendError = null
-  redrawLive()
+  state.composerValue = ''
+  state.sendError = null
+  redrawLive(sessionKey)
   try {
-    const result = await window.port.sessionSend({ sessionKey: currentSessionKey, text })
+    const result = await window.port.sessionSend({ sessionKey, text })
     if (!result.ok) {
-      sendError = SEND_FAILED_UNKNOWN_SESSION
-      sessionGone = true
-      composerValue = text
-      redrawLive()
+      state.sendError = SEND_FAILED_UNKNOWN_SESSION
+      state.sessionGone = true
+      state.composerValue = text
+      redrawLive(sessionKey)
     }
   } catch (error) {
     console.error('Failed to reach the main process sending a message', error)
-    sendError = SEND_FAILED_UNREACHABLE
-    composerValue = text
-    redrawLive()
+    state.sendError = SEND_FAILED_UNREACHABLE
+    state.composerValue = text
+    redrawLive(sessionKey)
   }
 }
 
 async function stop(): Promise<void> {
-  if (currentSessionKey === null) return
+  const sessionKey = selectedSession()
+  if (sessionKey === null) return
+  const state = stateFor(sessionKey)
   try {
-    const result = await window.port.sessionInterrupt({ sessionKey: currentSessionKey })
-    interruptNoteValue = result.ok ? interruptNote(result.queuedAfterInterrupt) : null
-    redrawLive()
+    const result = await window.port.sessionInterrupt({ sessionKey })
+    state.interruptNoteValue = result.ok ? interruptNote(result.queuedAfterInterrupt) : null
+    redrawLive(sessionKey)
   } catch (error) {
     console.error('Failed to reach the main process interrupting a session', error)
   }
 }
 
-async function close(): Promise<void> {
-  if (currentSessionKey === null) return
-  closeConfirming = false
+async function close(sessionKey: SessionKey): Promise<void> {
+  stateFor(sessionKey).closeConfirming = false
   try {
-    await window.port.sessionClose({ sessionKey: currentSessionKey })
+    await window.port.sessionClose({ sessionKey })
   } catch (error) {
     console.error('Failed to reach the main process closing a session', error)
   }
 }
 
 function requestClose(): void {
-  if (latestSnapshot === null) return
-  if (latestSnapshot.phase === 'streaming' || latestSnapshot.phase === 'interrupting') {
-    closeConfirming = true
-    redrawLive()
+  const sessionKey = selectedSession()
+  if (sessionKey === null) return
+  const snapshot = sessions.get(sessionKey)
+  if (snapshot === undefined) return
+  if (snapshot.phase === 'streaming' || snapshot.phase === 'interrupting') {
+    stateFor(sessionKey).closeConfirming = true
+    redrawLive(sessionKey)
     return
   }
-  void close()
+  void close(sessionKey)
 }
 
-async function bootFromExistingSession(): Promise<void> {
+async function dismiss(sessionKey: SessionKey): Promise<void> {
+  try {
+    const result = await window.port.sessionDismiss({ sessionKey })
+    if (!result.ok) return
+    sessions.delete(sessionKey)
+    perSession.delete(sessionKey)
+    if (selectedSession() === sessionKey) {
+      const next = fallbackSelection(snapshotList(), sessionKey)
+      if (next === null) {
+        switchToken += 1
+        setSelectedSession(null)
+        screen = { kind: 'empty' }
+      } else {
+        switchTo(next)
+      }
+    }
+    draw()
+  } catch (error) {
+    console.error('Failed to reach the main process dismissing a session', error)
+  }
+}
+
+async function bootFromExistingSessions(): Promise<void> {
   try {
     const snapshots = await window.port.sessionList()
-    const candidate = [...snapshots].reverse().find((snapshot) => snapshot.phase !== 'ended')
-    if (candidate === undefined) return
-    currentSessionKey = candidate.sessionKey
-    resetCommandsState(currentSessionKey)
-    lastRevision = 0
-    buffered = []
-    screen = { kind: 'reconnecting' }
+    sessions = new Map(snapshots.map((snapshot) => [snapshot.sessionKey, snapshot]))
+    const candidate = [...sessions.values()].reverse().find((snapshot) => snapshot.phase !== 'ended')
     draw()
-    await reattach()
+    if (candidate !== undefined) switchTo(candidate.sessionKey)
   } catch (error) {
     console.error('Failed to load the session list at boot', error)
   }
@@ -304,54 +331,104 @@ function isComposingKeyEvent(event: KeyboardEvent): boolean {
 
 export interface InitSessionParams {
   readonly show: () => void
+  /** Called whenever the open session count changes, so `main.ts` can
+   *  refresh the nav tab's own label (`Sessions`, `Sessions · 2`). */
+  readonly onNavChange?: () => void
+}
+
+/** `Sessions`, or `Sessions · <open count>` while sessions are open — read
+ *  by `main.ts`'s own nav label. */
+export function sessionsTabText(): string {
+  const open = snapshotList().filter((snapshot) => snapshot.phase !== 'ended').length
+  return open === 0 ? 'Sessions' : `Sessions · ${String(open)}`
 }
 
 export function initSession(container: HTMLElement, params: InitSessionParams): void {
   refs = buildSessionView(container)
   showCallback = params.show
+  onNavChange = params.onNavChange ?? null
   draw()
 
   window.port.onSessionStatus(onStatusPush)
   window.port.onSessionEntries(onEntriesPush)
-  void bootFromExistingSession()
+  onRepoLabelsChange(draw)
+  onSelectionChange(draw)
+  void reloadRepoLabels()
+  void loadCapacity(draw)
+  void loadRestoreList(draw)
+  void bootFromExistingSessions()
 
   document.querySelector('#app')?.addEventListener('click', (event) => {
     const target = event.target
     if (!(target instanceof HTMLElement)) return
     const actionable = target.closest<HTMLElement>('[data-action="session-start"]')
     if (actionable !== null) handleSessionStartClick(actionable)
+    const resumeRow = target.closest<HTMLElement>('[data-action="session-resume"]')
+    if (resumeRow !== null && resumeRow.dataset.sessionId !== undefined) {
+      void startFromTranscript(resumeRow.dataset.repoId as RepoId, resumeRow.dataset.sessionId, 'resume')
+    }
+    const forkRow = target.closest<HTMLElement>('[data-action="session-fork"]')
+    if (forkRow !== null && forkRow.dataset.sessionId !== undefined) {
+      void startFromTranscript(forkRow.dataset.repoId as RepoId, forkRow.dataset.sessionId, 'fork')
+    }
   })
 
-  refs.root.addEventListener('click', (event) => {
+  if (refs === null) return
+  const currentRefs = refs
+
+  currentRefs.root.addEventListener('click', (event) => {
     const target = event.target
     if (!(target instanceof HTMLElement)) return
     const button = target.closest<HTMLElement>('button')
     const action = button?.dataset.action
+    const selected = selectedSession()
     if (action === 'session-stop') void stop()
     else if (action === 'session-close') requestClose()
-    else if (action === 'session-jump-to-latest') entryList?.jumpToLatest()
-    else if (action === 'session-close-confirm') void close()
-    else if (action === 'session-close-cancel') {
-      closeConfirming = false
-      redrawLive()
+    else if (action === 'session-jump-to-latest') (selected !== null ? stateFor(selected).entryList : null)?.jumpToLatest()
+    else if (action === 'session-close-confirm' && selected !== null) void close(selected)
+    else if (action === 'session-close-cancel' && selected !== null) {
+      stateFor(selected).closeConfirming = false
+      redrawLive(selected)
     } else if (action === 'session-new-from-ended') {
-      const repoId = latestSnapshot?.repoId
-      if (repoId !== undefined) void startSession(repoId, button?.dataset.repoLabel ?? repoLabel)
+      const snapshot = selected !== null ? sessions.get(selected) : undefined
+      if (snapshot !== undefined) void startSession(snapshot.repoId, button?.dataset.repoLabel ?? repoLabelFor(snapshot.repoId))
     } else if (action === 'session-command-run') {
-      if (currentSessionKey !== null && button !== null) handleCommandRun(button, currentSessionKey)
+      if (selected !== null && button !== null) handleCommandRun(button, selected)
     } else if (action === 'session-command-args-submit') {
       const name = button?.dataset.commandName
-      const input = refs?.commandsHost.querySelector<HTMLTextAreaElement>('[data-field="session-command-args"]')
-      if (currentSessionKey !== null && name !== undefined && input !== null && input !== undefined) handleArgsSubmit(currentSessionKey, name, input.value)
+      const input = currentRefs.commandsHost.querySelector<HTMLTextAreaElement>('[data-field="session-command-args"]')
+      if (selected !== null && name !== undefined && input !== null && input !== undefined) handleArgsSubmit(selected, name, input.value)
     } else if (action === 'session-command-args-cancel') {
       handleArgsCancel()
+    } else if (action === 'session-select' && button?.dataset.sessionKey !== undefined) {
+      switchTo(button.dataset.sessionKey as SessionKey)
+    } else if (action === 'session-dismiss' && button?.dataset.sessionKey !== undefined) {
+      void dismiss(button.dataset.sessionKey as SessionKey)
+    } else if (action === 'session-new-start') {
+      handleRailStart()
+    } else if (action === 'session-limit-increment') {
+      incrementLimit(draw)
+    } else if (action === 'session-limit-decrement') {
+      decrementLimit(draw)
+    } else if (action === 'session-restore-all') {
+      void resumeAll((snapshot) => sessions.set(snapshot.sessionKey, snapshot), draw)
+    } else if (action === 'session-restore-review') {
+      toggleReviewing(draw)
+    } else if (action === 'session-restore-one' && button?.dataset.restoreId !== undefined) {
+      void resumeOne(button.dataset.restoreId, { onStarted: selectAfterStart, onAlreadyOpen: switchTo, onChange: draw })
+    } else if (action === 'session-restore-forget' && button?.dataset.restoreId !== undefined) {
+      void forget(button.dataset.restoreId, draw)
+    } else if (action === 'session-restore-dismiss') {
+      void dismissBanner(draw)
     }
   })
 
-  // `toggle` on <details> (the Agents disclosure) does not always bubble
-  // the way a click does, so this listens in the capture phase directly on
-  // the commands host rather than the delegated click listener above.
-  refs.commandsHost.addEventListener(
+  currentRefs.root.addEventListener('change', (event) => {
+    const target = event.target
+    if (target instanceof HTMLSelectElement && target.dataset.field === 'session-new-repo') newSessionRepoId = target.value as RepoId
+  })
+
+  currentRefs.commandsHost.addEventListener(
     'toggle',
     (event) => {
       const target = event.target
@@ -360,38 +437,41 @@ export function initSession(container: HTMLElement, params: InitSessionParams): 
     true,
   )
 
-  refs.commandsHost.addEventListener('input', (event) => {
+  currentRefs.commandsHost.addEventListener('input', (event) => {
     const target = event.target
     if (target instanceof HTMLTextAreaElement && target.dataset.field === 'session-command-args') handleArgsInput(target.value)
   })
 
-  refs.commandsHost.addEventListener('keydown', (event) => {
+  currentRefs.commandsHost.addEventListener('keydown', (event) => {
     const target = event.target
     if (!(target instanceof HTMLTextAreaElement) || target.dataset.field !== 'session-command-args') return
     if (event.key === 'Escape') {
       event.preventDefault()
       const commandName = openRowCommandName()
       handleArgsCancel()
-      if (commandName !== null) refs?.commandsHost.querySelector<HTMLButtonElement>(`[data-action="session-command-run"][data-command-name="${commandName}"]`)?.focus()
+      if (commandName !== null) currentRefs.commandsHost.querySelector<HTMLButtonElement>(`[data-action="session-command-run"][data-command-name="${commandName}"]`)?.focus()
       return
     }
     if (event.key !== 'Enter' || event.shiftKey || isComposingKeyEvent(event)) return
     event.preventDefault()
     const name = openRowCommandName()
-    if (currentSessionKey !== null && name !== null) handleArgsSubmit(currentSessionKey, name, target.value)
+    const selected = selectedSession()
+    if (selected !== null && name !== null) handleArgsSubmit(selected, name, target.value)
   })
 
-  refs.composerForm.addEventListener('submit', (event) => {
+  currentRefs.composerForm.addEventListener('submit', (event) => {
     event.preventDefault()
     void send()
   })
 
-  refs.composerTextarea.addEventListener('input', () => {
-    composerValue = refs?.composerTextarea.value ?? ''
-    if (refs !== null) refs.sendButton.disabled = composerValue.trim() === ''
+  currentRefs.composerTextarea.addEventListener('input', () => {
+    const selected = selectedSession()
+    if (selected === null) return
+    stateFor(selected).composerValue = currentRefs.composerTextarea.value
+    currentRefs.sendButton.disabled = currentRefs.composerTextarea.value.trim() === ''
   })
 
-  refs.composerTextarea.addEventListener('keydown', (event) => {
+  currentRefs.composerTextarea.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter' || event.shiftKey || isComposingKeyEvent(event)) return
     event.preventDefault()
     void send()

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { SessionEnd, SessionStartResult } from '../../../shared/hosting/types'
+import type { SessionEnd } from '../../../shared/hosting/types'
 import { composerCopy, endBody, interruptNote, startFailureCopy } from './copy'
+import type { RenderableStartFailure } from './copy'
 
 describe('composerCopy', () => {
   it('ready and starting offer Send, never disabled', () => {
@@ -48,12 +49,12 @@ describe('endBody', () => {
 
 describe('startFailureCopy', () => {
   it('names the limit for at-capacity', () => {
-    const result: Extract<SessionStartResult, { ok: false }> = { ok: false, kind: 'at-capacity', limit: 4 }
+    const result: RenderableStartFailure = { ok: false, kind: 'at-capacity', limit: 4 }
     expect(startFailureCopy(result).body).toContain('4 sessions')
   })
 
   it('reuses RUNTIME_COPY for a runtime failure, carrying detail through', () => {
-    const result: Extract<SessionStartResult, { ok: false }> = { ok: false, kind: 'runtime', diagnosis: 'cli-missing', detail: 'not on PATH' }
+    const result: RenderableStartFailure = { ok: false, kind: 'runtime', diagnosis: 'cli-missing', detail: 'not on PATH' }
     const copy = startFailureCopy(result)
     expect(copy.title).toContain("isn't installed")
     expect(copy.detail).toBe('not on PATH')

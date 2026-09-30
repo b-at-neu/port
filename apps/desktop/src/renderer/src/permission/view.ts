@@ -27,20 +27,27 @@ import {
   grantSummaryLine,
   headingText,
   INPUT_UNRENDERABLE_MESSAGE,
+  OTHER_SESSION_LINE,
   primaryLine,
   SENDING_LABEL,
 } from './copy'
 
 export interface PermissionDialogProps {
   readonly permission: PendingPermission
-  readonly repoLabel: string
-  readonly sessionKey: string
+  /** `sessionDisplayLabel`'s own output — never the raw `sessionKey`. */
+  readonly sessionLabel: string
+  /** `startedClock`'s own output for the session's `startedAt`. */
+  readonly started: string
   readonly index: number
   readonly total: number
   readonly message: string
   readonly armed: boolean
   readonly sending: PermissionDecision | null
   readonly error: string | null
+  /** #103: true when the prompt's own session differs from the one
+   *  currently selected in Sessions — shown as a warning row above the
+   *  heading. */
+  readonly otherSession: boolean
 }
 
 function el(tag: string, className: string, content?: string): HTMLElement {
@@ -71,8 +78,13 @@ function buildBody(props: PermissionDialogProps): HTMLElement {
   const { permission } = props
   const step = el('div', 'permission-dialog__step')
 
+  const otherSessionLine = el('p', 'permission-dialog__other-session', OTHER_SESSION_LINE)
+  otherSessionLine.dataset.role = 'other-session'
+  otherSessionLine.hidden = !props.otherSession
+  step.appendChild(otherSessionLine)
+
   step.appendChild(el('h2', 'permission-dialog__title', headingText(permission)))
-  step.appendChild(el('p', 'permission-dialog__context', contextLine(props.repoLabel, props.sessionKey, permission.agentId, props.index, props.total)))
+  step.appendChild(el('p', 'permission-dialog__context', contextLine(props.sessionLabel, props.started, permission.agentId, props.index, props.total)))
 
   if (permission.description !== null && permission.description !== '') {
     step.appendChild(el('p', 'permission-dialog__hint', permission.description))
@@ -151,6 +163,9 @@ function buildBody(props: PermissionDialogProps): HTMLElement {
  *  called once by `buildBody` on a fresh build, and again by `patchBody` on
  *  every redraw for the same permission. Never touches the textarea. */
 function applyButtonState(root: ParentNode, props: PermissionDialogProps): void {
+  const otherSessionLine = root.querySelector<HTMLElement>('[data-role="other-session"]')
+  if (otherSessionLine) otherSessionLine.hidden = !props.otherSession
+
   const busy = props.sending !== null
   const deny = root.querySelector<HTMLButtonElement>('[data-role="deny-button"]')
   if (deny) {

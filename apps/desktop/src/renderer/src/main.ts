@@ -6,6 +6,8 @@ import './gate.css'
 import './permission.css'
 import './search.css'
 import './session.css'
+import './session-rail.css'
+import './commands-strip.css'
 import type { AppInfo } from '../../shared/ipc'
 import type { RepoId, RepositoryEntry } from '../../shared/repos'
 import type { BoardSnapshot, GroupBy } from '../../shared/board/types'
@@ -38,7 +40,7 @@ import { initClaim, openClaimDialog } from './claim/controller'
 import { initGate, openGateDialog, openReviewDialog } from './gate/controller'
 import { initPermissions } from './permission/controller'
 import { initRuntime } from './runtime'
-import { initSession } from './session/controller'
+import { initSession, sessionsTabText } from './session/controller'
 
 const app = document.querySelector<HTMLDivElement>('#app')
 const runtimeStrip = document.querySelector<HTMLDivElement>('#runtime-strip')
@@ -76,7 +78,7 @@ let view: View = { screen: 'board' }
 let boardState: BoardViewState = { status: 'loading', snapshot: null, groupBy: 'stage', refreshing: false, now: new Date() }
 let sessionsState: SessionsPickerState = { status: 'loading' }
 
-const TAB_LABELS: Readonly<Record<'board' | 'repositories' | 'session', string>> = { board: 'Board', repositories: 'Repositories', session: 'Session' }
+const TAB_LABELS: Readonly<Record<'board' | 'repositories', string>> = { board: 'Board', repositories: 'Repositories' }
 function drawNav(): void {
   if (!nav) return
   const active = tabFor(view)
@@ -84,7 +86,7 @@ function drawNav(): void {
   for (const tab of ['board', 'repositories', 'session'] as const) {
     const button = document.createElement('button')
     button.className = tab === active ? 'nav-tab nav-tab--active' : 'nav-tab'
-    button.textContent = TAB_LABELS[tab]
+    button.textContent = tab === 'session' ? sessionsTabText() : TAB_LABELS[tab]
     button.dataset.action = 'view-switch'
     button.dataset.view = tab
     nav.appendChild(button)
@@ -495,4 +497,4 @@ if (app) initClaim(app)
 if (app) initGate(app)
 if (app) initPermissions(app)
 if (runtimeStrip) initRuntime(runtimeStrip)
-if (sessionContainer) initSession(sessionContainer, { show: () => switchTab('session') })
+if (sessionContainer) initSession(sessionContainer, { show: () => switchTab('session'), onNavChange: drawNav })

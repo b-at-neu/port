@@ -1,0 +1,121 @@
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { describe, expect, it, vi } from 'vitest'
+import { createHostingPersistence, DEFAULT_SESSION_LIMIT } from './persist'
+import type { RepoId } from '../../shared/repos'
+
+async function makeTempDir(): Promise<string> {
+  return mkdtemp(join(tmpdir(), 'port-hosting-persist-'))
+}
+
+const ENTRY = { repoId: 'repo-1' as RepoId, claudeSessionId: 'session-1', title: 'Title', startedAt: '2026-01-01T00:00:00.000Z' }
+
+/** `save()` is deliberately fire-and-forget over real filesystem I/O
+ *  (`writeFile` + `rename`), which needs a real macrotask turn to settle —
+ *  a microtask-only flush never lets its callback run. */
+async function flush(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 20))
+}
+
+describe('createHostingPersistence', () => {
+  it('load() returns the default empty state when the file is absent', async () => {
+    const dir = await makeTempDir()
+    const persistence = createHostingPersistence({ dir })
+    await expect(persistence.load()).resolves.toEqual({ limit: DEFAULT_SESSION_LIMIT, open: [] })
+  })
+
+  it('load() returns the default empty state for garbage JSON', async () => {
+    const dir = await makeTempDir()
+    await writeFile(join(dir, 'hosting.json'), '{not json')
+    const persistence = createHostingPersistence({ dir })
+    await expect(persistence.load()).resolves.toEqual({ limit: DEFAULT_SESSION_LIMIT, open: [] })
+  })
+
+  it('load() returns the default empty state for a newer version', async () => {
+    const dir = await makeTempDir()
+    await writeFile(join(dir, 'hosting.json'), JSON.stringify({ version: 2, limit: 4, open: [] }))
+    const persistence = createHostingPersistence({ dir })
+    await expect(persistence.load()).resolves.toEqual({ limit: DEFAULT_SESSION_LIMIT, open: [] })
+  })
+
+  it('load() drops an out-of-range limit, falling back to the default', async () => {
+    const dir = await makeTempDir()
+    await writeFile(join(dir, 'hosting.json'), JSON.stringify({ version: 1, limit: 99, open: [] }))
+    const persistence = createHostingPersistence({ dir })
+    await expect(persistence.load()).resolves.toEqual({ limit: DEFAULT_SESSION_LIMIT, open: [] })
+  })
+
+  it('load() drops invalid open entries one by one', async () => {
+    const dir = await makeTempDir()
+    await writeFile(join(dir, 'hosting.json'), JSON.stringify({ version: 1, limit: 4, open: [ENTRY, { repoId: '' }, 'nope'] }))
+    const persistence = createHostingPersistence({ dir })
+    await expect(persistence.load()).resolves.toEqual({ limit: 4, open: [ENTRY] })
+  })
+
+  it('save() then load() round-trips the state', async () => {
+    const dir = await makeTempDir()
+    const persistence = createHostingPersistence({ dir })
+    await persistence.load()
+    persistence.save({ limit: 3, open: [ENTRY] })
+    await flush()
+    const reloaded = createHostingPersistence({ dir })
+    await expect(reloaded.load()).resolves.toEqual({ limit: 3, open: [ENTRY] })
+  })
+
+  it('save() skips a write whose serialized JSON equals the last one written', async () => {
+    const dir = await makeTempDir()
+    const persistence = createHostingPersistence({ dir })
+    await persistence.load()
+    persistence.save({ limit: 4, open: [ENTRY] })
+    await flush()
+    const before = await readFile(join(dir, 'hosting.json'), 'utf8')
+    persistence.save({ limit: 4, open: [ENTRY] })
+    await flush()
+    const after = await readFile(join(dir, 'hosting.json'), 'utf8')
+    expect(after).toBe(before)
+  })
+
+  it('coalesces a save that lands while a write is already in flight to the newest state', async () => {
+    const dir = await makeTempDir()
+    const persistence = createHostingPersistence({ dir })
+    await persistence.load()
+    persistence.save({ limit: 4, open: [] })
+    persistence.save({ limit: 4, open: [ENTRY] })
+    persistence.save({ limit: 2, open: [] })
+    await flush()
+    await flush()
+    const reloaded = createHostingPersistence({ dir })
+    await expect(reloaded.load()).resolves.toEqual({ limit: 2, open: [] })
+  })
+
+  it('freeze() drops every later save', async () => {
+    const dir = await makeTempDir()
+    const persistence = createHostingPersistence({ dir })
+    await persistence.load()
+    persistence.save({ limit: 4, open: [] })
+    await flush()
+    persistence.freeze()
+    persistence.save({ limit: 4, open: [ENTRY] })
+    await flush()
+    const reloaded = createHostingPersistence({ dir })
+    await expect(reloaded.load()).resolves.toEqual({ limit: 4, open: [] })
+  })
+
+  it('a failed write is logged and resolves rather than throwing', async () => {
+    const dir = await makeTempDir()
+    const persistence = createHostingPersistence({ dir })
+    await persistence.load()
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    // Writing into a path that is itself a directory forces the atomic
+    // rename to fail without touching real filesystem permissions.
+    const badDir = join(dir, 'blocked')
+    await import('node:fs/promises').then((fs) => fs.mkdir(join(badDir, 'hosting.json'), { recursive: true }))
+    const blocked = createHostingPersistence({ dir: badDir })
+    await blocked.load()
+    expect(() => blocked.save({ limit: 4, open: [] })).not.toThrow()
+    await flush()
+    expect(errorSpy).toHaveBeenCalled()
+    errorSpy.mockRestore()
+  })
+})

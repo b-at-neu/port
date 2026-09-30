@@ -1,24 +1,29 @@
-// #98: `Map<sessionKey, Handle>`, the process-lifetime instance
-// `main/ipc.ts` binds, plus `closeAll()`. `MAX_HOSTED_SESSIONS = 4`; a start
-// past it returns `{ ok: false, kind: 'at-capacity', limit }` — counted
-// against **live** handles only (`phase !== 'ended'`), since an ended
-// handle's child process is already gone and the history stays visible for
-// `session:list`/`session:attach` rather than disappearing the moment a
-// session ends. Fails closed on the live count: each handle is a real child
-// process with real memory, so refusing one start costs one message while
-// not refusing costs an unbounded spawn loop.
+// #98/#103: `Map<sessionKey, Handle>`, the process-lifetime instance
+// `main/ipc.ts` binds, plus `closeAll()`. `DEFAULT_SESSION_LIMIT = 4`,
+// adjustable 1-`SESSION_LIMIT_CEILING` (8) from the rail and persisted; a
+// start past the current limit returns `{ ok: false, kind: 'at-capacity',
+// limit }` — counted against **live** handles only (`phase !== 'ended'`),
+// since an ended handle's child process is already gone and the history
+// stays visible for `session:list`/`session:attach` rather than
+// disappearing the moment a session ends. Fails closed on the live count:
+// each handle is a real child process with real memory, so refusing one
+// start costs one message while not refusing costs an unbounded spawn loop.
 import type { RepoId } from '../../shared/repos'
 import type {
   HostedSessionSnapshot,
+  HostingCapacity,
   PermissionDecision,
   SessionAttachResult,
   SessionCloseResult,
+  SessionDismissResult,
   SessionEntriesDelta,
   SessionEventEnvelope,
   SessionInterruptResult,
   SessionInvokeResult,
   SessionKey,
   SessionPermissionAnswerResult,
+  SessionRestoreDiscardResult,
+  SessionRestoreResult,
   SessionSendResult,
   SessionStartMode,
   SessionStartResult,
@@ -29,11 +34,21 @@ import { createHostedSdk } from './sdk'
 import type { HostedSdk } from './sdk'
 import { defaultForkListSessions, titleFork } from './fork'
 import { defaultReadExpectedComponentsDeps, readExpectedComponents, resolvePluginRequest } from './plugin'
+import { resolveStartTitle } from './title'
+import { createInMemoryHostingPersistence, DEFAULT_SESSION_LIMIT, SESSION_LIMIT_CEILING } from './persist'
+import type { HostingPersistence } from './persist'
+import { dropAdopted, mintRestorable, nextPersisted, persistedOpen } from './restore'
+import type { MintedRestorable } from './restore'
 import type { SessionReader } from '../sessions/sdk'
 import { readCredentialsTell, resolveClaudeExecutable } from '../runtime'
 import { pathOps } from '../platform'
 
-export const MAX_HOSTED_SESSIONS = 4
+export { DEFAULT_SESSION_LIMIT, SESSION_LIMIT_CEILING } from './persist'
+
+/** Ended handles are retained for `session:list`/`session:attach` up to this
+ *  many — the oldest-ended is evicted on the next `end`, so a long day of
+ *  short sessions does not grow the map without bound. */
+export const ENDED_RETAIN_LIMIT = 20
 
 export interface HostedStoreDeps {
   readonly getSdk: () => Promise<HostedSdk>
@@ -54,6 +69,10 @@ export interface HostedStoreDeps {
   readonly resolvePluginRequest: typeof resolvePluginRequest
   readonly readExpectedComponents: (pluginPath: string) => ReturnType<typeof readExpectedComponents>
   readonly samePath: (a: string, b: string) => boolean
+  /** #103: `hosting.json`'s own load/save/freeze — `main/ipc.ts` supplies
+   *  the real file-backed one; the default here is disk-free, for tests and
+   *  any caller that never overrides it. */
+  readonly persistence: HostingPersistence
 }
 
 export const defaultHostedStoreDeps: HostedStoreDeps = {
@@ -70,6 +89,7 @@ export const defaultHostedStoreDeps: HostedStoreDeps = {
   resolvePluginRequest,
   readExpectedComponents: (pluginPath: string) => readExpectedComponents(pluginPath, defaultReadExpectedComponentsDeps),
   samePath: (a: string, b: string) => pathOps.samePath(a, b),
+  persistence: createInMemoryHostingPersistence(),
 }
 
 export interface StartSessionParams {
@@ -78,6 +98,9 @@ export interface StartSessionParams {
   /** The ready registry entry's own path — resolved by the caller
    *  (`main/channels/hosting.ts`), never re-derived here. */
   readonly cwd: string
+  /** #103: the restore path's own resolved title — `null`/omitted for every
+   *  other start path, which instead runs `resolveStartTitle` itself. */
+  readonly initialTitle?: string | null
 }
 
 export interface HostedStore {
@@ -94,15 +117,42 @@ export interface HostedStore {
   /** #101: routed to the named handle's own `invoke`; `unknown-session` for
    *  a key that names no live handle. */
   invoke(sessionKey: SessionKey, name: string, args: string): SessionInvokeResult
+  /** #103: removes an ended handle — `still-open` for any other phase. */
+  dismiss(sessionKey: SessionKey): SessionDismissResult
+  capacity(): Promise<HostingCapacity>
+  /** Persists the new limit and never closes a session, even when it drops
+   *  below the current open count — that only refuses new starts. */
+  setLimit(limit: number): Promise<HostingCapacity>
+  restorable(): Promise<readonly MintedRestorable[]>
+  /** Starts `{ kind: 'resume', sessionId }` through the normal `start` path,
+   *  so capacity and `already-open` still apply. The entry is removed only
+   *  when that start succeeds or reports `already-open`. */
+  restore(restoreId: string, cwd: string): Promise<SessionRestoreResult>
+  discardRestorable(restoreId: string | null): Promise<SessionRestoreDiscardResult>
 }
 
 function toSessionKey(n: number): SessionKey {
-  return `hosted-${n}` as SessionKey
+  return `hosted-${String(n)}` as SessionKey
 }
 
 export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps): HostedStore {
   const handles = new Map<SessionKey, HostedHandle>()
   let nextId = 1
+  let limit = DEFAULT_SESSION_LIMIT
+  let restorable: readonly MintedRestorable[] = []
+  const endedOrder: SessionKey[] = []
+  const endedSeen = new Set<SessionKey>()
+  let loaded: Promise<void> | null = null
+
+  function ensureLoaded(): Promise<void> {
+    if (loaded === null) {
+      loaded = deps.persistence.load().then((state) => {
+        limit = state.limit
+        restorable = mintRestorable(state.open)
+      })
+    }
+    return loaded
+  }
 
   function liveCount(): number {
     let count = 0
@@ -112,9 +162,59 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     return count
   }
 
+  function list(): readonly HostedSessionSnapshot[] {
+    return [...handles.values()].map((handle) => handle.snapshot())
+  }
+
+  function persistSave(): void {
+    const live = persistedOpen(list())
+    deps.persistence.save(nextPersisted({ limit, live, restorable }))
+  }
+
+  function forgetHandle(sessionKey: SessionKey): void {
+    handles.delete(sessionKey)
+    endedSeen.delete(sessionKey)
+    const index = endedOrder.indexOf(sessionKey)
+    if (index !== -1) endedOrder.splice(index, 1)
+  }
+
+  function onHandleStatus(snapshot: HostedSessionSnapshot): void {
+    deps.onStatus(snapshot)
+    if (snapshot.phase === 'ended' && !endedSeen.has(snapshot.sessionKey)) {
+      endedSeen.add(snapshot.sessionKey)
+      endedOrder.push(snapshot.sessionKey)
+      while (endedOrder.length > ENDED_RETAIN_LIMIT) {
+        const evicted = endedOrder.shift()
+        if (evicted !== undefined) forgetHandle(evicted)
+      }
+    }
+    persistSave()
+  }
+
+  /** `already-open` compares a live (non-`ended`) handle's own
+   *  `claudeSessionId ?? resumeTarget` against the requested `sessionId` —
+   *  the id it has adopted once `init` reports it, or the id it was told to
+   *  resume before that. Never checked for `fork`: a fork of an open session
+   *  gets a new id, so it is always allowed. */
+  function findAlreadyOpen(sessionId: string): HostedHandle | null {
+    for (const handle of handles.values()) {
+      if (handle.snapshot().phase === 'ended') continue
+      const target = handle.snapshot().claudeSessionId ?? handle.resumeTarget
+      if (target === sessionId) return handle
+    }
+    return null
+  }
+
   async function start(params: StartSessionParams): Promise<SessionStartResult> {
-    if (liveCount() >= MAX_HOSTED_SESSIONS) {
-      return { ok: false, kind: 'at-capacity', limit: MAX_HOSTED_SESSIONS }
+    await ensureLoaded()
+
+    if (params.mode.kind === 'resume' || params.mode.kind === 'resume-at') {
+      const existing = findAlreadyOpen(params.mode.sessionId)
+      if (existing !== null) return { ok: false, kind: 'already-open', sessionKey: existing.sessionKey }
+    }
+
+    if (liveCount() >= limit) {
+      return { ok: false, kind: 'at-capacity', limit }
     }
 
     const located = await deps.resolveClaudeExecutable({ env: deps.env, platform: deps.platform })
@@ -132,13 +232,17 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     nextId += 1
     const mode = params.mode
     const queryFn: HostedQueryFn = (queryParams) => sdk.query(queryParams)
+    const initialTitle = params.initialTitle ?? null
 
     function onSessionId(claudeSessionId: string): void {
-      if (mode.kind !== 'fork') return
-      void titleFork(
-        { parentSessionId: mode.sessionId, forkedSessionId: claudeSessionId, cwd: params.cwd },
-        { listSessions: deps.listSessionsForFork, renameSession: sdk.renameSession },
-      ).then((titled) => handles.get(sessionKey)?.setTitled(titled))
+      restorable = dropAdopted(restorable, claudeSessionId)
+      if (mode.kind === 'fork') {
+        void titleFork(
+          { parentSessionId: mode.sessionId, forkedSessionId: claudeSessionId, cwd: params.cwd },
+          { listSessions: deps.listSessionsForFork, renameSession: sdk.renameSession },
+        ).then((titled) => handles.get(sessionKey)?.setTitled(titled))
+      }
+      persistSave()
     }
 
     const handle = createHostedHandle(
@@ -151,16 +255,25 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
         credentials,
         now: deps.now,
         onEvent: deps.onEvent,
-        onStatus: deps.onStatus,
+        onStatus: onHandleStatus,
         onSessionId,
         onEntries: deps.onEntries,
         plugin,
         readExpectedComponents: deps.readExpectedComponents,
         samePath: deps.samePath,
+        initialTitle,
       },
       queryFn,
     )
     handles.set(sessionKey, handle)
+    persistSave()
+
+    if (initialTitle === null && mode.kind !== 'fresh') {
+      void resolveStartTitle(mode, deps.listSessionsForFork).then((title) => {
+        if (title !== null) handles.get(sessionKey)?.setTitle(title)
+      })
+    }
+
     return { ok: true, snapshot: handle.snapshot() }
   }
 
@@ -193,11 +306,10 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     return { ok: true, snapshot: handle.snapshot(), replay: events, droppedBefore, entries, firstIndex, partial, pendingSends, revision }
   }
 
-  function list(): readonly HostedSessionSnapshot[] {
-    return [...handles.values()].map((handle) => handle.snapshot())
-  }
-
   async function closeAll(): Promise<void> {
+    // Freezing before closing a single handle keeps the `closing` phase that
+    // quitting causes from erasing the very set this ticket persists.
+    deps.persistence.freeze()
     await Promise.all([...handles.values()].map((handle) => handle.close()))
   }
 
@@ -213,5 +325,66 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     return handle.invoke(name, args)
   }
 
-  return { start, send, interrupt, close, attach, list, closeAll, answerPermission, invoke }
+  function dismiss(sessionKey: SessionKey): SessionDismissResult {
+    const handle = handles.get(sessionKey)
+    if (!handle) return { ok: false, kind: 'unknown-session' }
+    if (handle.snapshot().phase !== 'ended') return { ok: false, kind: 'still-open' }
+    forgetHandle(sessionKey)
+    persistSave()
+    return { ok: true }
+  }
+
+  async function capacity(): Promise<HostingCapacity> {
+    await ensureLoaded()
+    return { limit, ceiling: SESSION_LIMIT_CEILING }
+  }
+
+  async function setLimit(next: number): Promise<HostingCapacity> {
+    await ensureLoaded()
+    limit = next
+    persistSave()
+    return { limit, ceiling: SESSION_LIMIT_CEILING }
+  }
+
+  async function restorableList(): Promise<readonly MintedRestorable[]> {
+    await ensureLoaded()
+    return restorable
+  }
+
+  async function restore(restoreId: string, cwd: string): Promise<SessionRestoreResult> {
+    await ensureLoaded()
+    const entry = restorable.find((candidate) => candidate.restoreId === restoreId)
+    if (entry === undefined) return { ok: false, kind: 'unknown-restore' }
+    const result = await start({ repoId: entry.repoId, mode: { kind: 'resume', sessionId: entry.claudeSessionId }, cwd, initialTitle: entry.title })
+    if (result.ok || result.kind === 'already-open') {
+      restorable = restorable.filter((candidate) => candidate.restoreId !== restoreId)
+      persistSave()
+    }
+    return result
+  }
+
+  async function discardRestorable(restoreId: string | null): Promise<SessionRestoreDiscardResult> {
+    await ensureLoaded()
+    restorable = restoreId === null ? [] : restorable.filter((candidate) => candidate.restoreId !== restoreId)
+    persistSave()
+    return { ok: true }
+  }
+
+  return {
+    start,
+    send,
+    interrupt,
+    close,
+    attach,
+    list,
+    closeAll,
+    answerPermission,
+    invoke,
+    dismiss,
+    capacity,
+    setLimit,
+    restorable: restorableList,
+    restore,
+    discardRestorable,
+  }
 }

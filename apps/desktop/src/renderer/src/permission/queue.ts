@@ -4,11 +4,17 @@
 // entries wholesale (an `ended` snapshot, or one with no pending requests,
 // clears them), so a request withdrawn by an interrupt, a session end, or
 // an SDK-side cancel disappears on the very next `session:status` push.
-import type { HostedSessionSnapshot, PendingPermission, SessionKey } from '../../../shared/hosting/types'
+import type { HostedSessionSnapshot, PendingPermission, SessionKey, SessionOrigin } from '../../../shared/hosting/types'
 import type { RepoId } from '../../../shared/repos'
 
 interface SessionEntry {
   readonly repoId: RepoId
+  /** #103: carried alongside the pending list so the dialog's context line
+   *  can name the session with the same `sessionDisplayLabel` the rail
+   *  shows — never the raw `sessionKey`. */
+  readonly title: string | null
+  readonly origin: SessionOrigin
+  readonly startedAt: string
   readonly permissions: readonly PendingPermission[]
 }
 
@@ -19,6 +25,9 @@ export const EMPTY_QUEUE: PermissionQueue = new Map()
 export interface QueuedPermission {
   readonly sessionKey: SessionKey
   readonly repoId: RepoId
+  readonly title: string | null
+  readonly origin: SessionOrigin
+  readonly startedAt: string
   readonly permission: PendingPermission
 }
 
@@ -30,7 +39,7 @@ export function applySnapshot(queue: PermissionQueue, snapshot: HostedSessionSna
   if (snapshot.pendingPermissions.length === 0) {
     next.delete(snapshot.sessionKey)
   } else {
-    next.set(snapshot.sessionKey, { repoId: snapshot.repoId, permissions: snapshot.pendingPermissions })
+    next.set(snapshot.sessionKey, { repoId: snapshot.repoId, title: snapshot.title, origin: snapshot.origin, startedAt: snapshot.startedAt, permissions: snapshot.pendingPermissions })
   }
   return next
 }
@@ -51,7 +60,7 @@ export function ordered(queue: PermissionQueue): readonly QueuedPermission[] {
   const items: QueuedPermission[] = []
   for (const [sessionKey, entry] of queue) {
     for (const permission of entry.permissions) {
-      items.push({ sessionKey, repoId: entry.repoId, permission })
+      items.push({ sessionKey, repoId: entry.repoId, title: entry.title, origin: entry.origin, startedAt: entry.startedAt, permission })
     }
   }
   items.sort((a, b) => {
