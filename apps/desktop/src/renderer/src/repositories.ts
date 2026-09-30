@@ -110,6 +110,13 @@ function buildReadyCard(entry: Extract<RepositoryEntry, { status: 'ready' }>, hi
   const titleRow = document.createElement('div')
   titleRow.className = 'repo-card__title-row'
   titleRow.appendChild(text('span', 'repo-card__title', entry.config.repo))
+  const newSessionButton = document.createElement('button')
+  newSessionButton.className = 'repo-card__new-session'
+  newSessionButton.textContent = 'New session'
+  newSessionButton.dataset.action = 'session-start'
+  newSessionButton.dataset.repoId = entry.id
+  newSessionButton.dataset.repoLabel = entry.config.repo
+  titleRow.appendChild(newSessionButton)
   const transcriptsButton = document.createElement('button')
   transcriptsButton.className = 'repo-card__transcripts'
   transcriptsButton.textContent = 'Transcripts'
