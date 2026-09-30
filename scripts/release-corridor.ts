@@ -91,6 +91,7 @@ export function classifyCorridor({
 export function releaseInFlight({
   version,
   releasePrs,
+  productionName,
   productionVersion,
   publishedTags,
   devWindowPrs,
@@ -98,6 +99,7 @@ export function releaseInFlight({
 }: {
   version: string;
   releasePrs: { number: number; title: string }[];
+  productionName: string;
   productionVersion: string;
   publishedTags: { tagName: string; isDraft: boolean }[];
   devWindowPrs: { number: number }[];
@@ -120,7 +122,7 @@ export function releaseInFlight({
   }
 
   if (productionVersion === version && !shipped) {
-    return { reason: `v${version} merged into <production>, not yet published`, shipped: false };
+    return { reason: `v${version} merged into ${productionName}, not yet published`, shipped: false };
   }
 
   if (devWindowPrs.length > 0) {
@@ -235,6 +237,7 @@ async function main(): Promise<void> {
       const inFlight = releaseInFlight({
         version: integrationVersionRaw,
         releasePrs,
+        productionName,
         productionVersion: productionVersionRaw,
         publishedTags,
         devWindowPrs,
