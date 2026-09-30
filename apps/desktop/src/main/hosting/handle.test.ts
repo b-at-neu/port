@@ -1,17 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createHostedHandle, REPLAY_LIMIT } from './handle'
 import type { HostedQuery } from './handle'
-import type { SessionEntriesDelta, SessionEventEnvelope, SessionKey } from '../../shared/hosting/types'
+import type { PluginRequest, SessionEntriesDelta, SessionEventEnvelope, SessionKey } from '../../shared/hosting/types'
 import type { RepoId } from '../../shared/repos'
 
 const SESSION_KEY = 'hosted-1' as SessionKey
 const REPO_ID = 'repo-1' as RepoId
+const INSTALLED_PLUGIN: PluginRequest = { source: 'installed' }
 
 /** A fake `HostedQuery` driven entirely from the test — `push` delivers the
  *  next message to whichever `next()` is currently waiting, `end`/`fail`
  *  finish the generator, and `interrupt`/`close` are spies the assertions
  *  read back. */
-function fakeQuery() {
+function fakeQuery(options: { readonly commands?: readonly { name: string; description: string; argumentHint: string }[]; readonly agents?: readonly { name: string; description: string; model?: string }[] } = {}) {
   let pendingResolve: ((result: IteratorResult<unknown>) => void) | null = null
   let pendingReject: ((error: Error) => void) | null = null
   const queue: unknown[] = []
@@ -20,10 +21,14 @@ function fakeQuery() {
 
   const interrupt = vi.fn((): Promise<{ still_queued: string[] } | undefined> => Promise.resolve({ still_queued: ['a', 'b'] }))
   const close = vi.fn()
+  const supportedCommands = vi.fn(() => Promise.resolve(options.commands ?? []))
+  const supportedAgents = vi.fn(() => Promise.resolve(options.agents ?? []))
 
   const query: HostedQuery = {
     interrupt,
     close,
+    supportedCommands,
+    supportedAgents,
     [Symbol.asyncIterator]() {
       return {
         next(): Promise<IteratorResult<unknown>> {
@@ -43,6 +48,8 @@ function fakeQuery() {
     query,
     interrupt,
     close,
+    supportedCommands,
+    supportedAgents,
     push(message: unknown) {
       if (pendingResolve) {
         const resolve = pendingResolve
@@ -85,6 +92,9 @@ function baseParams(overrides: Partial<Parameters<typeof createHostedHandle>[0]>
     now: () => 1_000,
     onEvent: vi.fn(),
     onStatus: vi.fn(),
+    plugin: INSTALLED_PLUGIN,
+    readExpectedComponents: () => Promise.resolve(null),
+    samePath: (a: string, b: string) => a === b,
     ...overrides,
   }
 }
@@ -384,5 +394,50 @@ describe('createHostedHandle', () => {
 
     const forked = createHostedHandle(baseParams({ mode: { kind: 'fork', sessionId: 'parent' } }), () => fakeQuery().query)
     expect(forked.snapshot().origin).toEqual({ kind: 'forked', from: 'parent', atMessageUuid: null })
+  })
+
+  describe('invoke()', () => {
+    async function readyHandle(commands: readonly { name: string; description: string; argumentHint: string }[] = [{ name: 'port:pipeline', description: 'Cockpit', argumentHint: '' }]) {
+      const fake = fakeQuery({ commands })
+      const handle = createHostedHandle(baseParams(), () => fake.query)
+      await flush()
+      return { fake, handle }
+    }
+
+    it('refuses a leading-slash name as invalid-command, without sending anything', async () => {
+      const { fake, handle } = await readyHandle()
+      const result = handle.invoke('/port:pipeline', '')
+      expect(result.ok).toBe(false)
+      if (result.ok) return
+      expect(result.kind).toBe('invalid-command')
+      expect(fake).toBeDefined()
+      expect(handle.entriesWindow().pendingSends).toEqual([])
+    })
+
+    it('refuses a name outside this session\'s reported command list as unknown-command', async () => {
+      const { handle } = await readyHandle()
+      const result = handle.invoke('nope', '')
+      expect(result).toEqual({ ok: false, kind: 'unknown-command', name: 'nope' })
+    })
+
+    it('composes and sends a known, valid command, queuing it like any other send', async () => {
+      const { handle } = await readyHandle()
+      const result = handle.invoke('pipeline', 'status')
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(result.queued).toBe(true)
+      expect(handle.entriesWindow().pendingSends).toEqual([result.uuid])
+    })
+
+    it('reports unknown-session once the handle is closing', async () => {
+      const fake = fakeQuery({ commands: [{ name: 'port:pipeline', description: '', argumentHint: '' }] })
+      const handle = createHostedHandle(baseParams(), () => fake.query)
+      await flush()
+      const closePromise = handle.close()
+      const result = handle.invoke('pipeline', '')
+      expect(result).toEqual({ ok: false, kind: 'unknown-session' })
+      fake.finish()
+      await closePromise
+    })
   })
 })

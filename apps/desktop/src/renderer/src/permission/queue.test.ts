@@ -35,6 +35,7 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     end: null,
     titled: null,
     pendingPermissions: [],
+    capabilities: { kind: 'pending', request: { source: 'installed' } },
     ...overrides,
   }
 }

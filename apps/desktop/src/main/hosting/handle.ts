@@ -12,9 +12,11 @@ import type { CredentialsTell } from '../../shared/runtime/types'
 import type {
   HostedSessionSnapshot,
   PermissionDecision,
+  PluginRequest,
   SessionEnd,
   SessionEntriesDelta,
   SessionEventEnvelope,
+  SessionInvokeResult,
   SessionKey,
   SessionOrigin,
   SessionPermissionAnswerResult,
@@ -28,6 +30,9 @@ import { classifyEnd } from './classify'
 import { createPermissionBroker } from './permissions'
 import { createSessionProjector } from './project'
 import type { ProjectedDelta, SessionProjectorWindow } from './project'
+import { createCapabilityTracker } from './capabilities'
+import { composeInvocation, validateCommandName } from './verify'
+import type { ExpectedComponents } from './plugin'
 import type { HostedQuery, Options, SDKMessage, SDKUserMessage } from './sdk'
 
 export type { HostedQuery } from './sdk'
@@ -53,6 +58,11 @@ export interface CreateHostedHandleParams {
   readonly now: () => number
   readonly onEvent: (envelope: SessionEventEnvelope) => void
   readonly onStatus: (snapshot: HostedSessionSnapshot) => void
+  /** #101: which plugin path this session asked for, resolved once before
+   *  spawn — never re-derived here. */
+  readonly plugin: PluginRequest
+  readonly readExpectedComponents: (pluginPath: string) => Promise<ExpectedComponents | null>
+  readonly samePath: (a: string, b: string) => boolean
   /** Fired exactly once, the first time `init` reports the real
    *  `claudeSessionId` — `main/hosting/store.ts` uses this to kick off
    *  `fork.ts`'s titling for a `fork`-mode handle, never fired synchronously
@@ -99,6 +109,14 @@ export interface HostedHandle {
   /** #219: the live projector's own bounded window — `session:attach`'s ok
    *  branch spreads this alongside the raw envelope replay. */
   entriesWindow(): SessionProjectorWindow
+  /** #101: the Pipeline strip's own write — `unknown-session` when this
+   *  handle is already `closing`/`ended` (the same reading a gone key gets
+   *  everywhere else), `invalid-command` when `name` fails the SDK's own
+   *  canonical-name rules, `unknown-command` when it is not in this
+   *  session's current `port:` command list. Otherwise composes and
+   *  `send()`s it, so #219's `recordSend` shows it as a `Prompt` row and its
+   *  `Queued` chip applies mid-turn exactly like any other send. */
+  invoke(name: string, args: string): SessionInvokeResult
 }
 
 function originFor(mode: SessionStartMode): SessionOrigin {
@@ -131,9 +149,15 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
   // (never 'dontAsk') routes an un-preapproved tool call through this
   // broker's own canUseTool rather than a silent auto-deny.
   const broker = createPermissionBroker({ now: params.now, onChange: () => emitStatus() })
-  const options = buildSessionOptions({ mode: params.mode, cwd: params.cwd, executablePath: params.executablePath, canUseTool: broker.canUseTool })
+  const options = buildSessionOptions({ mode: params.mode, cwd: params.cwd, executablePath: params.executablePath, canUseTool: broker.canUseTool, plugin: params.plugin })
   const startedAt = new Date(params.now()).toISOString()
   const projector = createSessionProjector({ cwd: params.cwd })
+  const capabilities = createCapabilityTracker({
+    request: params.plugin,
+    readExpectedComponents: params.readExpectedComponents,
+    samePath: params.samePath,
+    onChange: () => emitStatus(),
+  })
 
   function emitEntries(delta: ProjectedDelta | null): void {
     if (delta === null) return
@@ -162,6 +186,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
       end,
       titled,
       pendingPermissions: broker.pending(),
+      capabilities: capabilities.current(),
     }
   }
 
@@ -189,6 +214,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
   }
 
   function applyMessage(message: SDKMessage): void {
+    capabilities.observe(message)
     if (message.type === 'system' && message.subtype === 'init') {
       const firstInit = claudeSessionId === null
       claudeSessionId = message.session_id
@@ -217,6 +243,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
   // bundled fallback (the same rail `desktop-runtime`'s own guard pins for
   // every real `query({` call site).
   const stream = query({ prompt: input.stream, options })
+  void capabilities.start(stream)
 
   async function pump(): Promise<void> {
     try {
@@ -247,6 +274,18 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     emitStatus()
   }
 
+  function doSend(text: string): HostedSendResult {
+    const { uuid } = input.push(text)
+    emitEntries(projector.recordSend(uuid, text, new Date(params.now()).toISOString()))
+    // Streaming input mode means a send is always accepted immediately --
+    // moved here rather than waiting for the stream to echo it back,
+    // since the CLI never does that unless started with
+    // --replay-user-messages, which options.ts does not pass.
+    if (phase === 'starting' || phase === 'ready') phase = 'streaming'
+    emitStatus()
+    return { uuid, queued: true }
+  }
+
   const pumpDone = pump()
 
   return {
@@ -256,15 +295,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
       return { events: [...ring], droppedBefore }
     },
     send(text) {
-      const { uuid } = input.push(text)
-      emitEntries(projector.recordSend(uuid, text, new Date(params.now()).toISOString()))
-      // Streaming input mode means a send is always accepted immediately --
-      // moved here rather than waiting for the stream to echo it back,
-      // since the CLI never does that unless started with
-      // --replay-user-messages, which options.ts does not pass.
-      if (phase === 'starting' || phase === 'ready') phase = 'streaming'
-      emitStatus()
-      return { uuid, queued: true }
+      return doSend(text)
     },
     async interrupt() {
       if (phase === 'ended') return queuedAfterInterrupt
@@ -294,6 +325,14 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     },
     entriesWindow() {
       return projector.window()
+    },
+    invoke(name, args) {
+      if (phase === 'closing' || phase === 'ended') return { ok: false, kind: 'unknown-session' }
+      const validation = validateCommandName(name)
+      if (!validation.ok) return { ok: false, kind: 'invalid-command', reason: validation.reason }
+      if (!capabilities.has(name)) return { ok: false, kind: 'unknown-command', name }
+      const { uuid } = doSend(composeInvocation(name, args))
+      return { ok: true, uuid, queued: true }
     },
   }
 }

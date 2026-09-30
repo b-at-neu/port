@@ -5,13 +5,19 @@ export { createHostedStore, defaultHostedStoreDeps, MAX_HOSTED_SESSIONS } from '
 export type { HostedStore, HostedStoreDeps, StartSessionParams } from './store'
 
 export type {
+  AgentSummary,
+  CommandSummary,
+  ComponentCheck,
   HostedSessionSnapshot,
   LiveBlock,
   LiveBlockKind,
   PartialUpdate,
   PendingPermission,
   PermissionDecision,
+  PluginLoad,
+  PluginRequest,
   SessionAttachResult,
+  SessionCapabilities,
   SessionCloseResult,
   SessionEnd,
   SessionEndReason,
@@ -19,6 +25,7 @@ export type {
   SessionEventEnvelope,
   SessionGrantItem,
   SessionInterruptResult,
+  SessionInvokeResult,
   SessionKey,
   SessionOrigin,
   SessionPermissionAnswerResult,

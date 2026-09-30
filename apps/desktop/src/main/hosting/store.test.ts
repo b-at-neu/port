@@ -31,6 +31,9 @@ function baseDeps(overrides: Partial<HostedStoreDeps> = {}): HostedStoreDeps {
     onEvent: vi.fn(),
     onStatus: vi.fn(),
     onEntries: vi.fn(),
+    resolvePluginRequest: () => Promise.resolve({ source: 'installed' }),
+    readExpectedComponents: () => Promise.resolve(null),
+    samePath: (a: string, b: string) => a === b,
     ...overrides,
   }
 }
@@ -77,7 +80,7 @@ describe('createHostedStore', () => {
     expect(result).toEqual({ ok: false, kind: 'runtime', diagnosis: 'bundled-fallback', detail: '/bundled/claude' })
   })
 
-  it('send/interrupt/close/attach/answerPermission all report unknown-session for a key that was never started', async () => {
+  it('send/interrupt/close/attach/answerPermission/invoke all report unknown-session for a key that was never started', async () => {
     const store = createHostedStore(baseDeps())
     const key = 'hosted-999' as import('../../shared/hosting/types').SessionKey
     expect(store.send(key, 'hi')).toEqual({ ok: false, kind: 'unknown-session' })
@@ -85,6 +88,32 @@ describe('createHostedStore', () => {
     await expect(store.close(key)).resolves.toEqual({ ok: false, kind: 'unknown-session' })
     expect(store.attach(key)).toEqual({ ok: false, kind: 'unknown-session' })
     expect(store.answerPermission(key, 'perm-1', 'deny', null)).toEqual({ ok: false, kind: 'unknown-session' })
+    expect(store.invoke(key, 'pipeline', '')).toEqual({ ok: false, kind: 'unknown-session' })
+  })
+
+  it('start() resolves the plugin request for the installed source and passes no plugins to buildSessionOptions', async () => {
+    const resolvePluginRequest = vi.fn(() => Promise.resolve({ source: 'installed' as const }))
+    let capturedOptions: { plugins?: unknown } | undefined
+    const query = (queryParams: { options?: { plugins?: unknown } }): HostedQuery => {
+      capturedOptions = queryParams.options
+      return idleQuery()
+    }
+    const store = createHostedStore(baseDeps({ resolvePluginRequest, getSdk: () => Promise.resolve({ query, renameSession: vi.fn(() => Promise.resolve(undefined)) }) }))
+    await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    expect(resolvePluginRequest).toHaveBeenCalledWith('/repo')
+    expect(capturedOptions?.plugins).toBeUndefined()
+  })
+
+  it('start() resolves the plugin request for the repository source and passes it to buildSessionOptions', async () => {
+    const resolvePluginRequest = vi.fn(() => Promise.resolve({ source: 'repository' as const, path: '/repo/plugins/port' }))
+    let capturedOptions: { plugins?: unknown } | undefined
+    const query = (queryParams: { options?: { plugins?: unknown } }): HostedQuery => {
+      capturedOptions = queryParams.options
+      return idleQuery()
+    }
+    const store = createHostedStore(baseDeps({ resolvePluginRequest, getSdk: () => Promise.resolve({ query, renameSession: vi.fn(() => Promise.resolve(undefined)) }) }))
+    await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    expect(capturedOptions?.plugins).toEqual([{ type: 'local', path: '/repo/plugins/port' }])
   })
 
   it('answerPermission on a live session delegates to that handle, refusing an unknown permission id', async () => {

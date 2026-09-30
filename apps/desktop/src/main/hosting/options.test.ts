@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildSessionOptions } from './options'
+import { buildSessionOptions, SETTING_SOURCES } from './options'
 import type { CanUseTool } from './sdk'
+import type { PluginRequest } from '../../shared/hosting/types'
 
 const canUseTool = vi.fn() as unknown as CanUseTool
-const BASE = { cwd: '/repo', executablePath: '/home/operator/.local/bin/claude', canUseTool }
+const INSTALLED: PluginRequest = { source: 'installed' }
+const REPOSITORY: PluginRequest = { source: 'repository', path: '/repo/plugins/port' }
+const BASE = { cwd: '/repo', executablePath: '/home/operator/.local/bin/claude', canUseTool, plugin: INSTALLED }
 
 describe('buildSessionOptions', () => {
   it('every mode carries the shared constants', () => {
@@ -57,5 +60,38 @@ describe('buildSessionOptions', () => {
       const options = buildSessionOptions({ ...BASE, mode })
       expect(options.sessionId).toBeUndefined()
     }
+  })
+
+  const MODES = [
+    { kind: 'fresh' as const },
+    { kind: 'resume' as const, sessionId: 'x' },
+    { kind: 'resume-at' as const, sessionId: 'x', messageUuid: 'y', resumeDropsTurn: null },
+    { kind: 'fork' as const, sessionId: 'x' },
+  ]
+
+  it('settingSources is always the three explicit sources, never omitted, in every start mode', () => {
+    for (const mode of MODES) {
+      const options = buildSessionOptions({ ...BASE, mode, plugin: INSTALLED })
+      expect(options.settingSources).toEqual([...SETTING_SOURCES])
+    }
+  })
+
+  it('the installed source passes no plugins option, in every start mode', () => {
+    for (const mode of MODES) {
+      const options = buildSessionOptions({ ...BASE, mode, plugin: INSTALLED })
+      expect(options.plugins).toBeUndefined()
+    }
+  })
+
+  it('the repository source passes one local plugin entry at its own path, in every start mode', () => {
+    for (const mode of MODES) {
+      const options = buildSessionOptions({ ...BASE, mode, plugin: REPOSITORY })
+      expect(options.plugins).toEqual([{ type: 'local', path: '/repo/plugins/port' }])
+    }
+  })
+
+  it('never sets a skills option key', () => {
+    const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, plugin: REPOSITORY })
+    expect((options as Record<string, unknown>)['skills']).toBeUndefined()
   })
 })

@@ -90,6 +90,10 @@ export interface HostedSessionSnapshot {
   readonly end: SessionEnd | null
   readonly titled: boolean | null
   readonly pendingPermissions: readonly PendingPermission[]
+  /** #101: the Pipeline strip's own state — rides this snapshot rather than
+   *  a second event stream, the same reasoning `pendingPermissions` already
+   *  states for itself. */
+  readonly capabilities: SessionCapabilities
 }
 
 /** `session:event`'s payload — the SDK message crosses the boundary opaque
@@ -238,3 +242,81 @@ export interface PendingPermission {
  *  `no-session-grant` is `allow-session` sent for a request whose
  *  `sessionGrant` is `null`; nothing is settled in either case. */
 export type SessionPermissionAnswerResult = { readonly ok: true } | { readonly ok: false; readonly kind: 'unknown-session' | 'unknown-permission' | 'no-session-grant' }
+
+/** #101: which plugin path a session asked for — the repository's own
+ *  `plugins/port/` (this checkout, self-hosting) or the operator's installed
+ *  copy (`port@port` from `enabledPlugins`). Resolved once, before spawn
+ *  (`main/hosting/plugin.ts`'s `resolvePluginRequest`), and carried on the
+ *  snapshot so the operator can see which copy a session asked for even
+ *  before `init` confirms what actually loaded. */
+export type PluginRequest = { readonly source: 'repository'; readonly path: string } | { readonly source: 'installed' }
+
+/** #101: what actually loaded, read back from the SDK rather than assumed —
+ *  "a malformed component is *absent* from the inventory rather than
+ *  reported as an error" (ENGINEERING §7) is exactly the failure mode this
+ *  guards against for the plugin load itself. `unconfirmed` is the state
+ *  before any `init` has arrived — the repository copy's own component
+ *  check can already run by then (`readExpectedComponents` reads from
+ *  `request.path` directly), but the load state itself waits for the wire. */
+export type PluginLoad =
+  | { readonly kind: 'unconfirmed' }
+  | { readonly kind: 'loaded'; readonly path: string; readonly version: string | null }
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'shadowed'; readonly path: string; readonly version: string | null }
+  | { readonly kind: 'duplicate'; readonly paths: readonly string[] }
+
+/** #101: whether the loaded plugin's skills/agents match what the plugin
+ *  directory itself declares — `unchecked` when the directory could not be
+ *  read (never reported as `complete`, ENGINEERING's "fails closed on
+ *  complete" direction), `complete` when everything expected showed up in
+ *  the reported commands/agents, `incomplete` naming exactly what did not. */
+export type ComponentCheck =
+  | { readonly kind: 'unchecked'; readonly reason: 'no-plugin-path' | 'unreadable' }
+  | { readonly kind: 'complete' }
+  | { readonly kind: 'incomplete'; readonly missingSkills: readonly string[]; readonly missingAgents: readonly string[] }
+
+/** #101: one `port:` slash command, renderer-safe — `description` goes
+ *  through `sanitize` (author-controlled plugin text) before it ever
+ *  reaches this shape. */
+export interface CommandSummary {
+  readonly name: string
+  readonly description: string
+  readonly argumentHint: string
+}
+
+/** #101: one `port:` agent, renderer-safe — `model` is `null` when the
+ *  agent's own frontmatter names none (inherits the parent's). */
+export interface AgentSummary {
+  readonly name: string
+  readonly description: string
+  readonly model: string | null
+}
+
+/** #101: the Pipeline strip's own state, read back from the session rather
+ *  than assumed the moment a plugin request is resolved — `pending` before
+ *  the capability read settles, `unavailable` when it timed out or the SDK
+ *  call rejected (never an empty list standing in for either), `ready`
+ *  otherwise, carrying the plugin load and component check alongside the
+ *  filtered, sorted `port:` command/agent lists. */
+export type SessionCapabilities =
+  | { readonly kind: 'pending'; readonly request: PluginRequest }
+  | { readonly kind: 'unavailable'; readonly request: PluginRequest; readonly message: string }
+  | {
+      readonly kind: 'ready'
+      readonly request: PluginRequest
+      readonly commands: readonly CommandSummary[]
+      readonly agents: readonly AgentSummary[]
+      readonly plugin: PluginLoad
+      readonly components: ComponentCheck
+    }
+
+/** #101: `'session:invoke'`'s response — a typed refusal for a name that
+ *  fails the SDK's own canonical-name rules or that this session's current
+ *  command list does not carry, alongside `SessionSendResult`'s own ok
+ *  branch and `unknown-session` (the same reading a gone key already gets
+ *  everywhere else in this file). */
+export type SessionInvokeResult =
+  | { readonly ok: true; readonly uuid: string; readonly queued: boolean }
+  | { readonly ok: false; readonly kind: 'unknown-session' }
+  | { readonly ok: false; readonly kind: 'invalid-command'; readonly reason: string }
+  | { readonly ok: false; readonly kind: 'unknown-command'; readonly name: string }

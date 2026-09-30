@@ -16,6 +16,7 @@ import type {
   SessionEntriesDelta,
   SessionEventEnvelope,
   SessionInterruptResult,
+  SessionInvokeResult,
   SessionKey,
   SessionPermissionAnswerResult,
   SessionSendResult,
@@ -27,8 +28,10 @@ import type { HostedHandle, HostedQueryFn } from './handle'
 import { createHostedSdk } from './sdk'
 import type { HostedSdk } from './sdk'
 import { defaultForkListSessions, titleFork } from './fork'
+import { defaultReadExpectedComponentsDeps, readExpectedComponents, resolvePluginRequest } from './plugin'
 import type { SessionReader } from '../sessions/sdk'
 import { readCredentialsTell, resolveClaudeExecutable } from '../runtime'
+import { pathOps } from '../platform'
 
 export const MAX_HOSTED_SESSIONS = 4
 
@@ -45,6 +48,12 @@ export interface HostedStoreDeps {
   /** #219: forwarded verbatim to every handle's own `onEntries` — a no-op
    *  default, the same shape `onEvent`/`onStatus` already default to. */
   readonly onEntries: (delta: SessionEntriesDelta) => void
+  /** #101: resolved once per `start()`, after the executable and before a
+   *  key is minted — the repository's own `plugins/port/` wins over the
+   *  installed cache when this checkout is port's own repository. */
+  readonly resolvePluginRequest: typeof resolvePluginRequest
+  readonly readExpectedComponents: (pluginPath: string) => ReturnType<typeof readExpectedComponents>
+  readonly samePath: (a: string, b: string) => boolean
 }
 
 export const defaultHostedStoreDeps: HostedStoreDeps = {
@@ -58,6 +67,9 @@ export const defaultHostedStoreDeps: HostedStoreDeps = {
   onEvent: () => undefined,
   onStatus: () => undefined,
   onEntries: () => undefined,
+  resolvePluginRequest,
+  readExpectedComponents: (pluginPath: string) => readExpectedComponents(pluginPath, defaultReadExpectedComponentsDeps),
+  samePath: (a: string, b: string) => pathOps.samePath(a, b),
 }
 
 export interface StartSessionParams {
@@ -79,6 +91,9 @@ export interface HostedStore {
   /** #99: routed to the named handle's own broker; `unknown-session` for a
    *  key that names no live handle. */
   answerPermission(sessionKey: SessionKey, permissionId: string, decision: PermissionDecision, message: string | null): SessionPermissionAnswerResult
+  /** #101: routed to the named handle's own `invoke`; `unknown-session` for
+   *  a key that names no live handle. */
+  invoke(sessionKey: SessionKey, name: string, args: string): SessionInvokeResult
 }
 
 function toSessionKey(n: number): SessionKey {
@@ -112,7 +127,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
       }
     }
 
-    const [credentials, sdk] = await Promise.all([deps.readCredentialsTell(), deps.getSdk()])
+    const [credentials, sdk, plugin] = await Promise.all([deps.readCredentialsTell(), deps.getSdk(), deps.resolvePluginRequest(params.cwd)])
     const sessionKey = toSessionKey(nextId)
     nextId += 1
     const mode = params.mode
@@ -139,6 +154,9 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
         onStatus: deps.onStatus,
         onSessionId,
         onEntries: deps.onEntries,
+        plugin,
+        readExpectedComponents: deps.readExpectedComponents,
+        samePath: deps.samePath,
       },
       queryFn,
     )
@@ -189,5 +207,11 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     return handle.answerPermission(permissionId, decision, message)
   }
 
-  return { start, send, interrupt, close, attach, list, closeAll, answerPermission }
+  function invoke(sessionKey: SessionKey, name: string, args: string): SessionInvokeResult {
+    const handle = handles.get(sessionKey)
+    if (!handle) return { ok: false, kind: 'unknown-session' }
+    return handle.invoke(name, args)
+  }
+
+  return { start, send, interrupt, close, attach, list, closeAll, answerPermission, invoke }
 }

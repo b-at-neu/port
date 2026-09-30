@@ -4,9 +4,11 @@ import type { SessionKey } from '../../shared/hosting/types'
 import type { RegistryDeps } from '../registry'
 import type { HostedStore } from '../hosting'
 import {
+  MAX_INVOKE_ARGS_CHARS,
   resolveSessionAttach,
   resolveSessionClose,
   resolveSessionInterrupt,
+  resolveSessionInvoke,
   resolveSessionList,
   resolveSessionPermissionAnswer,
   resolveSessionSend,
@@ -72,6 +74,9 @@ function storeStub(overrides: Partial<HostedStore> = {}): HostedStore {
     },
     answerPermission: () => {
       throw new Error('answerPermission should not be invoked in this case')
+    },
+    invoke: () => {
+      throw new Error('invoke should not be invoked in this case')
     },
     ...overrides,
   }
@@ -173,6 +178,30 @@ describe('resolveSessionList', () => {
     const list = vi.fn(() => [])
     resolveSessionList(undefined, depsWith({ store: storeStub({ list }) }))
     expect(list).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('resolveSessionInvoke', () => {
+  it('rejects a missing sessionKey', () => {
+    expect(() => resolveSessionInvoke({ sessionKey: '' as SessionKey, name: 'pipeline', args: '' }, depsWith())).toThrow(
+      "'session:invoke' requires a non-empty 'sessionKey'",
+    )
+  })
+
+  it('rejects an empty name', () => {
+    expect(() => resolveSessionInvoke({ sessionKey: SESSION_KEY, name: '', args: '' }, depsWith())).toThrow("'session:invoke' requires a non-empty 'name'")
+  })
+
+  it('rejects args over the character cap', () => {
+    expect(() => resolveSessionInvoke({ sessionKey: SESSION_KEY, name: 'pipeline', args: 'x'.repeat(MAX_INVOKE_ARGS_CHARS + 1) }, depsWith())).toThrow(
+      `'session:invoke' requires 'args' to be a string of at most ${MAX_INVOKE_ARGS_CHARS} characters`,
+    )
+  })
+
+  it('delegates to the store, never validating the name itself here', () => {
+    const invoke = vi.fn(() => ({ ok: true as const, uuid: 'u', queued: true }))
+    resolveSessionInvoke({ sessionKey: SESSION_KEY, name: '/not-canonical', args: 'hi' }, depsWith({ store: storeStub({ invoke }) }))
+    expect(invoke).toHaveBeenCalledWith(SESSION_KEY, '/not-canonical', 'hi')
   })
 })
 
