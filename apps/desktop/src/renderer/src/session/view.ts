@@ -53,6 +53,10 @@ export interface SessionRefs {
   readonly list: HTMLElement
   readonly jumpButton: HTMLButtonElement
   readonly endedPanel: HTMLElement
+  /** #101: the Pipeline strip's own host — between the entry list and the
+   *  composer, rebuilt in place by `session/commands.ts`'s own
+   *  `renderCommands`, never by this file. */
+  readonly commandsHost: HTMLElement
   readonly composerForm: HTMLFormElement
   readonly composerTextarea: HTMLTextAreaElement
   readonly sendButton: HTMLButtonElement
@@ -98,6 +102,9 @@ export function buildSessionView(container: HTMLElement): SessionRefs {
   endedPanel.hidden = true
   live.appendChild(endedPanel)
 
+  const commandsHost = el('div', 'commands-strip')
+  live.appendChild(commandsHost)
+
   const composerForm = document.createElement('form')
   composerForm.className = 'session-view__composer'
   composerForm.dataset.action = 'session-composer'
@@ -121,7 +128,7 @@ export function buildSessionView(container: HTMLElement): SessionRefs {
   root.appendChild(live)
   container.appendChild(root)
 
-  return { root, emptyState, live, pill, headerMeta, stopButton, closeButton, bannerHost, list, jumpButton, endedPanel, composerForm, composerTextarea, sendButton, noteLine, hintLine }
+  return { root, emptyState, live, pill, headerMeta, stopButton, closeButton, bannerHost, list, jumpButton, endedPanel, commandsHost, composerForm, composerTextarea, sendButton, noteLine, hintLine }
 }
 
 /** What the header's meta line shows before `init` has reported a real id —
@@ -218,6 +225,7 @@ export function renderSessionChrome(refs: SessionRefs, state: SessionScreenState
     refs.bannerHost.appendChild(el('p', 'session-view__status', RECONNECTING))
     refs.list.textContent = ''
     refs.endedPanel.hidden = true
+    refs.commandsHost.hidden = true
     refs.composerTextarea.disabled = true
     refs.sendButton.hidden = true
     return
@@ -230,6 +238,7 @@ export function renderSessionChrome(refs: SessionRefs, state: SessionScreenState
     refs.bannerHost.textContent = ''
     refs.bannerHost.appendChild(el('p', 'session-view__status', startingCopy(state.repoLabel)))
     refs.endedPanel.hidden = true
+    refs.commandsHost.hidden = true
     applyStopClose(refs, 'starting')
     applyComposer(refs, 'starting', '', false)
     return
@@ -242,6 +251,7 @@ export function renderSessionChrome(refs: SessionRefs, state: SessionScreenState
     banner.appendChild(el('p', 'session-view__banner-body', state.body))
     if (state.detail !== null) banner.appendChild(el('pre', 'session-view__banner-detail', state.detail))
     refs.bannerHost.appendChild(banner)
+    refs.commandsHost.hidden = true
     return
   }
 

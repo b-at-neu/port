@@ -1,6 +1,7 @@
 ---
 name: implement
 description: Run pipeline stage 2 or 4 yourself, in your own session, for a ticket marked SESSION REQUIRED — one that cannot be handed to a dispatched agent because it touches a path the harness blocks subagents from editing. Resolves the stage from the item's labels, works in a dedicated worktree, and follows the existing impl-agent and revise-agent definitions unchanged. Manual only. Usage: /port:implement <issue-or-pr-number>
+argument-hint: "<issue-or-pr-number>"
 disable-model-invocation: true
 allowed-tools: Read, Edit, Write, Glob, Grep, Bash, AskUserQuestion
 ---

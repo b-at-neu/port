@@ -6,18 +6,21 @@
 // `SDKUserMessage`/`CanUseTool`/`PermissionResult`/`PermissionUpdate` — every
 // other file imports them from here, never from the package directly, which
 // is what keeps this the only file naming the package specifier at all.
-import type { CanUseTool, Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { AgentInfo, CanUseTool, Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage, SlashCommand } from '@anthropic-ai/claude-agent-sdk'
 
-export type { CanUseTool, Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage }
+export type { AgentInfo, CanUseTool, Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage, SlashCommand }
 
 /** The narrow structural slice of the real `Query` this app needs, the same
  *  idiom `runtime/sdk.ts`'s own `SdkQuery`/`ProbeMessage` already use — the
  *  real `Query` (`query()`'s own return type) structurally satisfies this,
  *  so a test fake needs no unrelated method off the real 20-plus-method
- *  interface. */
+ *  interface. #101: `supportedCommands`/`supportedAgents` are control
+ *  requests, so a fake need not drive a turn to answer them. */
 export interface HostedQuery extends AsyncIterable<SDKMessage> {
   interrupt(): Promise<{ readonly still_queued: readonly string[] } | undefined>
   close(): void
+  supportedCommands(): Promise<SlashCommand[]>
+  supportedAgents(): Promise<AgentInfo[]>
 }
 
 /** The two functions this app calls, typed narrowly rather than re-exporting

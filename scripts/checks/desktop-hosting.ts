@@ -339,6 +339,68 @@ export default async function ({ fail, ok }: Reporter) {
       ok();
     }
   }
+
+  // --- options.ts sets settingSources to exactly the three explicit sources ---
+  // guard(#101): an omitted or empty settingSources silently drops the
+  // repository's own permissions.deny, its enabledPlugins (so no installed
+  // port), and CLAUDE.md — this must never regress to the SDK's own
+  // unstated default.
+  {
+    const optionsFile = allFiles.find((f) => relOf(f) === `${hostingDir}/options.ts`);
+    if (!optionsFile) {
+      fail('desktop-hosting', `${hostingDir}/options.ts does not exist`);
+    } else {
+      const text = stripComments(readFileSync(optionsFile, 'utf8'));
+      if (!/SETTING_SOURCES[^=]*=\s*\[\s*'user'\s*,\s*'project'\s*,\s*'local'\s*\]/.test(text)) {
+        fail('desktop-hosting', `${hostingDir}/options.ts does not assign settingSources to exactly ['user', 'project', 'local']`);
+      } else if (!/settingSources/.test(text)) {
+        fail('desktop-hosting', `${hostingDir}/options.ts declares SETTING_SOURCES but never assigns it to 'settingSources'`);
+      } else {
+        ok();
+      }
+    }
+  }
+
+  // --- No production file under main/hosting/ passes a skills: option key ---
+  // guard(#101): a command runs as a typed slash command in the live
+  // session, never through the Skill-tool filter — `skills` only hides
+  // every unlisted skill and cannot target an already-running session, so
+  // this option key must never appear here at all. `ExpectedComponents`'s
+  // own `readonly skills: readonly string[]` field (plugin.ts/verify.ts) is
+  // an unrelated shape naming the same word — excluded by requiring the
+  // match not be a `readonly skills:` type declaration.
+  {
+    let found = false;
+    for (const f of hostingProdFiles) {
+      const rel = relOf(f);
+      const code = stripComments(readFileSync(f, 'utf8'));
+      for (const line of code.split('\n')) {
+        if (/\bskills\s*:/.test(line) && !/readonly\s+skills\s*:/.test(line)) {
+          found = true;
+          fail('desktop-hosting', `${rel} passes a 'skills:' option key — commands must run as typed slash commands, never through the Skill-tool filter`);
+        }
+      }
+    }
+    if (!found) ok();
+  }
+
+  // --- capabilities.ts reads both supportedCommands() and supportedAgents() ---
+  // guard(#101): the inventory is read back, never assumed — a plugin flag
+  // silently doing nothing must surface as 'missing'/'unavailable', not an
+  // empty command strip nobody investigates.
+  {
+    const capabilitiesFile = allFiles.find((f) => relOf(f) === `${hostingDir}/capabilities.ts`);
+    if (!capabilitiesFile) {
+      fail('desktop-hosting', `${hostingDir}/capabilities.ts does not exist`);
+    } else {
+      const text = readFileSync(capabilitiesFile, 'utf8');
+      if (!/supportedCommands\(/.test(text) || !/supportedAgents\(/.test(text)) {
+        fail('desktop-hosting', `${hostingDir}/capabilities.ts does not call both supportedCommands() and supportedAgents()`);
+      } else {
+        ok();
+      }
+    }
+  }
 }
 
 function stripComments(text: string): string {

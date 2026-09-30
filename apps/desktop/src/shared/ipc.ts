@@ -21,6 +21,7 @@ import type {
   SessionEntriesDelta,
   SessionEventEnvelope,
   SessionInterruptResult,
+  SessionInvokeResult,
   SessionKey,
   SessionPermissionAnswerResult,
   SessionSendResult,
@@ -241,6 +242,14 @@ export interface IpcMap {
     request: { sessionKey: SessionKey; permissionId: string; decision: PermissionDecision; message: string | null }
     response: SessionPermissionAnswerResult
   }
+  /** #101: the Pipeline strip's own write — runs `name` (already
+   *  namespace-stripped, e.g. `'pipeline'`) as `/<name> <args>` in the live
+   *  session. `name`'s content is validated server-side, never here — see
+   *  `channels/hosting.ts`'s own doc comment. */
+  'session:invoke': {
+    request: { sessionKey: SessionKey; name: string; args: string }
+    response: SessionInvokeResult
+  }
 }
 
 export const IPC_CHANNELS = [
@@ -275,6 +284,7 @@ export const IPC_CHANNELS = [
   'session:attach',
   'session:list',
   'session:permission:answer',
+  'session:invoke',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]

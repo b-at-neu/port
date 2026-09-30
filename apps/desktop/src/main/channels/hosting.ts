@@ -111,6 +111,19 @@ export function resolveSessionList(request: IpcMap['session:list']['request'], d
  *  one of these can only come from a stale or buggy renderer, so each
  *  throws rather than reaching `HostedStore.answerPermission` with a shape
  *  it was never built to defend against. */
+/** #101: the shape rail every channel uses. `name`'s content is **not**
+ *  validated here — that is a typed result from `HostedStore.invoke`
+ *  (`invalid-command`/`unknown-command`), so the UI can show it rather than
+ *  the channel throwing on a name the operator might legitimately click. */
+export const MAX_INVOKE_ARGS_CHARS = 8_000
+
+export function resolveSessionInvoke(request: IpcMap['session:invoke']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['invoke']> {
+  if (typeof request?.sessionKey !== 'string' || request.sessionKey === '') throw new Error("'session:invoke' requires a non-empty 'sessionKey'")
+  if (typeof request.name !== 'string' || request.name === '') throw new Error("'session:invoke' requires a non-empty 'name'")
+  if (typeof request.args !== 'string' || request.args.length > MAX_INVOKE_ARGS_CHARS) throw new Error(`'session:invoke' requires 'args' to be a string of at most ${MAX_INVOKE_ARGS_CHARS} characters`)
+  return deps.store.invoke(request.sessionKey, request.name, request.args)
+}
+
 export function resolveSessionPermissionAnswer(
   request: IpcMap['session:permission:answer']['request'],
   deps: HostingChannelDeps,

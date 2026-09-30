@@ -12,6 +12,7 @@ import { createEntryList } from '../entry-list'
 import type { EntryList } from '../entry-list'
 import { accept, drainBuffered } from './sequence'
 import { BUSY_BANNER, SEND_FAILED_UNKNOWN_SESSION, SEND_FAILED_UNREACHABLE, START_UNREACHABLE, interruptNote, startFailureCopy } from './copy'
+import { handleAgentsToggle, handleArgsCancel, handleArgsInput, handleArgsSubmit, handleCommandRun, openRowCommandName, renderCommands, resetCommandsState } from './commands'
 
 let refs: SessionRefs | null = null
 let showCallback: (() => void) | null = null
@@ -51,6 +52,11 @@ function liveScreen(snapshot: HostedSessionSnapshot): SessionScreenState {
 function draw(): void {
   if (refs === null) return
   renderSessionChrome(refs, screen)
+  // #101: the Pipeline strip needs the raw snapshot, not the chrome's own
+  // `SessionScreenState` — rendered here, right after the chrome, so every
+  // path that draws a live screen (a status push, a completed (re)attach)
+  // gets the strip for free rather than each caller remembering to.
+  if (screen.kind === 'live') renderCommands(refs.commandsHost, screen.snapshot)
 }
 
 function applyPartial(delta: SessionEntriesDelta): void {
@@ -122,6 +128,7 @@ async function reattach(): Promise<void> {
       if (sessionKey !== currentSessionKey) return // superseded while this round trip was in flight
       if (!result.ok) {
         currentSessionKey = null
+        resetCommandsState(null)
         latestSnapshot = null
         entryList?.dispose()
         entryList = null
@@ -170,6 +177,7 @@ async function startSession(repoId: RepoId, label: string): Promise<void> {
   busyBanner = null
   repoLabel = label
   currentSessionKey = null
+  resetCommandsState(null)
   latestSnapshot = null
   sessionGone = false
   entryList?.dispose()
@@ -185,6 +193,7 @@ async function startSession(repoId: RepoId, label: string): Promise<void> {
       return
     }
     currentSessionKey = result.snapshot.sessionKey
+    resetCommandsState(currentSessionKey)
     latestSnapshot = result.snapshot
     lastRevision = 0
     buffered = []
@@ -278,6 +287,7 @@ async function bootFromExistingSession(): Promise<void> {
     const candidate = [...snapshots].reverse().find((snapshot) => snapshot.phase !== 'ended')
     if (candidate === undefined) return
     currentSessionKey = candidate.sessionKey
+    resetCommandsState(currentSessionKey)
     lastRevision = 0
     buffered = []
     screen = { kind: 'reconnecting' }
@@ -327,7 +337,48 @@ export function initSession(container: HTMLElement, params: InitSessionParams): 
     } else if (action === 'session-new-from-ended') {
       const repoId = latestSnapshot?.repoId
       if (repoId !== undefined) void startSession(repoId, button?.dataset.repoLabel ?? repoLabel)
+    } else if (action === 'session-command-run') {
+      if (currentSessionKey !== null && button !== null) handleCommandRun(button, currentSessionKey)
+    } else if (action === 'session-command-args-submit') {
+      const name = button?.dataset.commandName
+      const input = refs?.commandsHost.querySelector<HTMLTextAreaElement>('[data-field="session-command-args"]')
+      if (currentSessionKey !== null && name !== undefined && input !== null && input !== undefined) handleArgsSubmit(currentSessionKey, name, input.value)
+    } else if (action === 'session-command-args-cancel') {
+      handleArgsCancel()
     }
+  })
+
+  // `toggle` on <details> (the Agents disclosure) does not always bubble
+  // the way a click does, so this listens in the capture phase directly on
+  // the commands host rather than the delegated click listener above.
+  refs.commandsHost.addEventListener(
+    'toggle',
+    (event) => {
+      const target = event.target
+      if (target instanceof HTMLDetailsElement && target.dataset.action === 'session-agents-toggle') handleAgentsToggle(target.open)
+    },
+    true,
+  )
+
+  refs.commandsHost.addEventListener('input', (event) => {
+    const target = event.target
+    if (target instanceof HTMLTextAreaElement && target.dataset.field === 'session-command-args') handleArgsInput(target.value)
+  })
+
+  refs.commandsHost.addEventListener('keydown', (event) => {
+    const target = event.target
+    if (!(target instanceof HTMLTextAreaElement) || target.dataset.field !== 'session-command-args') return
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      const commandName = openRowCommandName()
+      handleArgsCancel()
+      if (commandName !== null) refs?.commandsHost.querySelector<HTMLButtonElement>(`[data-action="session-command-run"][data-command-name="${commandName}"]`)?.focus()
+      return
+    }
+    if (event.key !== 'Enter' || event.shiftKey || isComposingKeyEvent(event)) return
+    event.preventDefault()
+    const name = openRowCommandName()
+    if (currentSessionKey !== null && name !== null) handleArgsSubmit(currentSessionKey, name, target.value)
   })
 
   refs.composerForm.addEventListener('submit', (event) => {

@@ -130,7 +130,63 @@ describe.skipIf(!live || !cwd)('hosting — live SDK acceptance (PORT_LIVE_SDK=1
     await store.close(sessionKey)
     await store.closeAll()
   }, 60_000)
+
+  // #101: the one check of the `port:<agent>` naming and the `--plugin-dir`
+  // override behaviour against the real CLI, since both come from the
+  // SDK's own types and the bundled binary rather than anything this app
+  // controls.
+  it('#101: capabilities reach ready before any send, then loaded/complete after one turn, naming the repository copy', async () => {
+    if (!cwd) throw new Error('PORT_LIVE_SDK=1 requires PORT_LIVE_SDK_CWD to name a registered, ready repository')
+    let latest: HostedSessionSnapshot | null = null
+    const store = createHostedStore({ ...defaultHostedStoreDeps, onStatus: (snapshot) => (latest = snapshot) })
+    const repoId = 'live-capabilities-acceptance' as RepoId
+
+    const started = await store.start({ repoId, mode: { kind: 'fresh' }, cwd })
+    expect(started.ok).toBe(true)
+    if (!started.ok) return
+    const sessionKey = started.snapshot.sessionKey
+
+    const readyCapabilities = await waitForReadyCapabilities(() => latest)
+    const commandNames = readyCapabilities.commands.map((command) => command.name)
+    expect(commandNames).toEqual(expect.arrayContaining(['pipeline', 'scope']))
+    const agentNames = readyCapabilities.agents.map((agent) => agent.name)
+    expect(agentNames).toEqual(expect.arrayContaining(['plan-agent']))
+
+    store.send(sessionKey, 'Reply with only the word "ok" and stop.')
+    const loaded = await waitForLoadedPlugin(() => latest)
+    expect(loaded.plugin.kind).toBe('loaded')
+    if (loaded.plugin.kind === 'loaded') {
+      expect(loaded.plugin.path).toBe(join(cwd, 'plugins', 'port'))
+      expect(typeof loaded.plugin.version).toBe('string')
+    }
+    expect(loaded.components).toEqual({ kind: 'complete' })
+
+    await store.close(sessionKey)
+    await store.closeAll()
+  }, 60_000)
 })
+
+type ReadyCapabilities = Extract<HostedSessionSnapshot['capabilities'], { kind: 'ready' }>
+
+async function waitForReadyCapabilities(latest: () => HostedSessionSnapshot | null): Promise<ReadyCapabilities> {
+  const deadline = Date.now() + 30_000
+  while (Date.now() < deadline) {
+    const capabilities = latest()?.capabilities
+    if (capabilities?.kind === 'ready') return capabilities
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+  throw new Error('Timed out waiting for capabilities to reach ready')
+}
+
+async function waitForLoadedPlugin(latest: () => HostedSessionSnapshot | null): Promise<ReadyCapabilities> {
+  const deadline = Date.now() + 30_000
+  while (Date.now() < deadline) {
+    const capabilities = latest()?.capabilities
+    if (capabilities?.kind === 'ready' && capabilities.plugin.kind !== 'unconfirmed') return capabilities
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+  throw new Error('Timed out waiting for the plugin load to be confirmed')
+}
 
 async function fileExists(path: string): Promise<boolean> {
   try {
