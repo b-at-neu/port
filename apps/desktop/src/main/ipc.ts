@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
-import { IPC_CHANNELS, type IpcChannel, type IpcMap } from '../shared/ipc'
+import { IPC_CHANNELS, type IpcChannel, type IpcEvent, type IpcEventMap, type IpcMap } from '../shared/ipc'
 import type { WorktreesReport } from '../shared/reclaimer/types'
 import type { RepositoryEntry } from '../shared/repos'
 import { SOURCE_KINDS } from '../shared/board/types'
@@ -59,6 +59,16 @@ function handle<C extends IpcChannel>(channel: C, handler: Handler<C>): void {
       throw error
     }
   })
+}
+
+/** The one place every main → renderer push goes through (#219) — a net
+ *  line reduction over each caller repeating its own `for (const window of
+ *  BrowserWindow.getAllWindows())` loop, and one seam if a future push ever
+ *  needs anything beyond "every open, non-destroyed window". */
+function broadcast<E extends IpcEvent>(event: E, payload: IpcEventMap[E]): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) window.webContents.send(event, payload)
+  }
 }
 
 function getAppInfo(): AppInfo {
@@ -343,11 +353,7 @@ export function registerIpc(): RegisteredIpc {
     },
     git: (args, cwd) => git(args, { cwd }),
     drain: drain.current,
-    onSnapshot: (snapshot) => {
-      for (const window of BrowserWindow.getAllWindows()) {
-        if (!window.isDestroyed()) window.webContents.send('board:update', snapshot)
-      }
-    },
+    onSnapshot: (snapshot) => broadcast('board:update', snapshot),
   })
 
   handle('board:snapshot', (_event, request) => {
@@ -413,16 +419,9 @@ export function registerIpc(): RegisteredIpc {
   // watcher's own `onSnapshot` already uses for `board:update`.
   const hostedStore = createHostedStore({
     ...defaultHostedStoreDeps,
-    onEvent: (envelope) => {
-      for (const window of BrowserWindow.getAllWindows()) {
-        if (!window.isDestroyed()) window.webContents.send('session:event', envelope)
-      }
-    },
-    onStatus: (snapshot) => {
-      for (const window of BrowserWindow.getAllWindows()) {
-        if (!window.isDestroyed()) window.webContents.send('session:status', snapshot)
-      }
-    },
+    onEvent: (envelope) => broadcast('session:event', envelope),
+    onStatus: (snapshot) => broadcast('session:status', snapshot),
+    onEntries: (delta) => broadcast('session:entries', delta),
   })
   const hostingChannelDeps = defaultHostingChannelDeps(hostedStore)
 

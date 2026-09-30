@@ -13,6 +13,7 @@ import type {
   HostedSessionSnapshot,
   PermissionDecision,
   SessionEnd,
+  SessionEntriesDelta,
   SessionEventEnvelope,
   SessionKey,
   SessionOrigin,
@@ -25,6 +26,8 @@ import { createHostedInput } from './input'
 import { buildSessionOptions } from './options'
 import { classifyEnd } from './classify'
 import { createPermissionBroker } from './permissions'
+import { createSessionProjector } from './project'
+import type { ProjectedDelta, SessionProjectorWindow } from './project'
 import type { HostedQuery, Options, SDKMessage, SDKUserMessage } from './sdk'
 
 export type { HostedQuery } from './sdk'
@@ -55,6 +58,10 @@ export interface CreateHostedHandleParams {
    *  `fork.ts`'s titling for a `fork`-mode handle, never fired synchronously
    *  from inside `createHostedHandle` itself. */
   readonly onSessionId?: (claudeSessionId: string) => void
+  /** #219: this handle's own projector delta, one per message that produced
+   *  a visible change, plus one for every `send()`. Optional the same way
+   *  `onSessionId` is — a caller that never wires it just never gets it. */
+  readonly onEntries?: (delta: SessionEntriesDelta) => void
 }
 
 export interface HostedHandleReplay {
@@ -89,6 +96,9 @@ export interface HostedHandle {
    *  resolved only within this handle, so a permissionId from another
    *  session's broker can never settle a prompt here. */
   answerPermission(permissionId: string, decision: PermissionDecision, message: string | null): SessionPermissionAnswerResult
+  /** #219: the live projector's own bounded window — `session:attach`'s ok
+   *  branch spreads this alongside the raw envelope replay. */
+  entriesWindow(): SessionProjectorWindow
 }
 
 function originFor(mode: SessionStartMode): SessionOrigin {
@@ -123,6 +133,12 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
   const broker = createPermissionBroker({ now: params.now, onChange: () => emitStatus() })
   const options = buildSessionOptions({ mode: params.mode, cwd: params.cwd, executablePath: params.executablePath, canUseTool: broker.canUseTool })
   const startedAt = new Date(params.now()).toISOString()
+  const projector = createSessionProjector({ cwd: params.cwd })
+
+  function emitEntries(delta: ProjectedDelta | null): void {
+    if (delta === null) return
+    params.onEntries?.({ sessionKey: params.sessionKey, ...delta })
+  }
 
   let phase: SessionPhase = 'starting'
   let claudeSessionId: string | null = null
@@ -153,9 +169,9 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     params.onStatus(snapshot())
   }
 
-  function pushEnvelope(message: unknown): void {
+  function pushEnvelope(message: unknown, receivedAt: string): void {
     seq += 1
-    const envelope: SessionEventEnvelope = { sessionKey: params.sessionKey, seq, receivedAt: new Date(params.now()).toISOString(), message }
+    const envelope: SessionEventEnvelope = { sessionKey: params.sessionKey, seq, receivedAt, message }
     ring.push(envelope)
     if (ring.length > REPLAY_LIMIT) {
       ring.shift()
@@ -164,22 +180,34 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     params.onEvent(envelope)
   }
 
+  /** `queued_turn_count` rides only the two `result` variants, never the
+   *  wider `SDKMessage` union — read structurally rather than narrowing
+   *  `message` to `SDKResultMessage` first, since both branches already
+   *  agree on the field's shape. */
+  function queuedTurnCountOf(message: SDKMessage): number | undefined {
+    return 'queued_turn_count' in message ? (message as { queued_turn_count?: number }).queued_turn_count : undefined
+  }
+
   function applyMessage(message: SDKMessage): void {
     if (message.type === 'system' && message.subtype === 'init') {
       const firstInit = claudeSessionId === null
       claudeSessionId = message.session_id
+      // Never demotes a send that raced it: only 'starting' -> 'ready' is
+      // ever assigned here, so a send() that already moved the phase to
+      // 'streaming' stays there.
       if (phase === 'starting') phase = 'ready'
       emitStatus()
       if (firstInit) params.onSessionId?.(message.session_id)
       return
     }
-    if (message.type === 'user') {
-      if (phase === 'ready') phase = 'streaming'
-      emitStatus()
-      return
-    }
     if (message.type === 'result') {
-      if (phase === 'streaming' || phase === 'interrupting') phase = 'ready'
+      const queuedTurnCount = queuedTurnCountOf(message)
+      // Only drops back to 'ready' when nothing is still queued -- a
+      // positive queued_turn_count means the next turn has already been
+      // dequeued, so the session is still working.
+      if ((phase === 'streaming' || phase === 'interrupting') && !(typeof queuedTurnCount === 'number' && queuedTurnCount > 0)) {
+        phase = 'ready'
+      }
       emitStatus()
     }
   }
@@ -193,8 +221,18 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
   async function pump(): Promise<void> {
     try {
       for await (const message of stream) {
-        pushEnvelope(message)
+        const receivedAt = new Date(params.now()).toISOString()
+        pushEnvelope(message, receivedAt)
         applyMessage(message)
+        // A throw here must never stop the pump or drop the envelope this
+        // message already got forwarded through above — the on-disk
+        // transcript still holds it, so this app fails open on the session
+        // and closed on one row.
+        try {
+          emitEntries(projector.push(message, receivedAt))
+        } catch (error) {
+          console.error(`[hosting] projector threw for session ${params.sessionKey}`, error)
+        }
       }
       end = { reason: 'completed', exitCode: null, signal: null, message: null, diagnosis: null }
     } catch (error) {
@@ -219,6 +257,13 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     },
     send(text) {
       const { uuid } = input.push(text)
+      emitEntries(projector.recordSend(uuid, text, new Date(params.now()).toISOString()))
+      // Streaming input mode means a send is always accepted immediately --
+      // moved here rather than waiting for the stream to echo it back,
+      // since the CLI never does that unless started with
+      // --replay-user-messages, which options.ts does not pass.
+      if (phase === 'starting' || phase === 'ready') phase = 'streaming'
+      emitStatus()
       return { uuid, queued: true }
     },
     async interrupt() {
@@ -246,6 +291,9 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     },
     answerPermission(permissionId, decision, message) {
       return broker.answer(permissionId, decision, message)
+    },
+    entriesWindow() {
+      return projector.window()
     },
   }
 }
