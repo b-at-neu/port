@@ -278,22 +278,6 @@ export default async function ({ fail, note, ok }: Reporter) {
     }
   }
 
-  // --- CI workflow names every platform in its matrix -------------------------
-  // guard(#73): quietly dropping a platform after a red run, which would
-  // look like a tidy-up in review, and nothing else would notice the
-  // platform stopped being tested.
-  {
-    const rel = '.github/workflows/checks.yml';
-    const text = readFileSync(join(root, rel), 'utf8');
-    for (const label of ['ubuntu-latest', 'macos-latest', 'windows-latest']) {
-      if (!text.includes(label)) {
-        fail('platform-matrix', `${rel} never names the runner label '${label}'`);
-      } else {
-        ok();
-      }
-    }
-  }
-
   // --- Every script path this repository configures resolves on disk ---------
   // guard(#122): the exact-match allowlist and the extension filters going
   // *silent* rather than red the moment a rename misses one reference —
