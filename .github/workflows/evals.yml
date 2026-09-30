@@ -62,7 +62,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          PROBE="$(claude plugin eval port@port --eval-dir evals --case __no_such_case__ 2>&1 || true)"
+          PROBE="$(claude plugin eval port@port --eval-dir evals --ablation with-without --case __no_such_case__ 2>&1 || true)"
           printf '%s\n' "$PROBE"
           if printf '%s' "$PROBE" | grep -qF 'currently in early access'; then
             echo "::notice::Evals skipped: \`plugin eval\` is currently in early access on this account. See evals/README.md."
