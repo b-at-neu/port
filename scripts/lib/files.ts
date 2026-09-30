@@ -76,3 +76,51 @@ export function parseFrontmatter(text: string): Record<string, string> | null {
 export function frontmatter(file: string): Record<string, string> | null {
   return parseFrontmatter(readFileSync(file, 'utf8'));
 }
+
+/** The named `##`-level markdown section's body, up to the next `##`
+ *  heading or end of file. Deliberately not a markdown parser (same
+ *  reasoning as `parseFrontmatter` above) — a heading slice is all a flat
+ *  table or a fixed prose block needs. `(?![\s\S])` is the true
+ *  end-of-string test: with the `m` flag a bare `$` matches end-of-*line*
+ *  too, which would stop the lazy capture at the section's own first blank
+ *  line (nearly every section opens with one) instead of running to the
+ *  next heading. */
+export function sectionText(text: string, heading: string): string {
+  const re = new RegExp(`^## ${heading}\\n([\\s\\S]*?)(?=\\n## |(?![\\s\\S]))`, 'm');
+  return re.exec(text)?.[1] ?? '';
+}
+
+/** Extracts a YAML block-scalar value (`<key>: |`) from already-read `text` —
+ *  every line indented (or blank) after the `<key>: |` line, up to the next
+ *  top-level (unindented, non-blank) line or end of file, dedented by the
+ *  block's own minimum indentation. Deliberately not a YAML parser (same
+ *  reasoning as `parseFrontmatter` above): an eval `case.yaml`'s `prompt:`
+ *  and `scaffold_script:` are the only two block scalars layer 1 needs to
+ *  read, and presence/shape is all it checks. Normalizes `\r\n` first so the
+ *  extraction is identical on Windows. Returns `null` when `key: |` is not
+ *  present at all. */
+export function blockScalar(text: string, key: string): string | null {
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  const startRe = new RegExp(`^${key}:\\s*\\|`);
+  const startIdx = lines.findIndex((l) => startRe.test(l));
+  if (startIdx === -1) return null;
+
+  const collected: string[] = [];
+  for (let i = startIdx + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trim() === '') {
+      collected.push('');
+      continue;
+    }
+    if (/^[ \t]/.test(line)) {
+      collected.push(line);
+      continue;
+    }
+    break;
+  }
+  while (collected.length > 0 && collected[collected.length - 1] === '') collected.pop();
+
+  const indents = collected.filter((l) => l.trim() !== '').map((l) => /^[ \t]*/.exec(l)![0].length);
+  const indent = indents.length > 0 ? Math.min(...indents) : 0;
+  return collected.map((l) => (l === '' ? '' : l.slice(indent))).join('\n');
+}

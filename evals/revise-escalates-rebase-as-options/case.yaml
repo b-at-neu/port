@@ -12,29 +12,54 @@ max_turns: 60
 timeout_seconds: 900
 
 prompt: |
-  Read `plugins/port/agents/revise-agent.md`'s rebase conflict protocol
-  (steps 1b and 2) and `plugins/port/docs/RECOVERY.md`'s "Rebase conflict
-  protocol" section.
+  Dispatch the `port:revise-agent` subagent and pass it the brief below,
+  verbatim, as its prompt. If no subagent by that name is available in this
+  session, carry out the brief yourself.
 
-  You are `revise-agent`, mid-revision on a pull request. Rebase the current
-  branch (`feature`) onto `main` — this sandbox has no `origin` remote, so
-  treat `main` as the pull request's base branch and rebase onto it
-  directly, following the protocol exactly. `docs/CONFIG.md` is an ordinary
-  source file: it is not under `sessionRequiredPaths`, is not a database
-  migration, and is not environment or build configuration.
+  Brief:
+  Run your pipeline stage for PR #61 in refresh mode. Follow your rebase
+  conflict protocol exactly.
 
-  Classify every conflict, auto-resolve what the matrix allows, and
+  You are mid-revision on a pull request. Rebase the current branch
+  (`feature`) onto `main`, the pull request's base branch. `docs/CONFIG.md`
+  is an ordinary source file: it is not under `sessionRequiredPaths`, is not
+  a database migration, and is not environment or build configuration.
+
+  Classify every conflict, auto-resolve what your protocol allows, and
   escalate only what is genuinely ambiguous — as a decision request, never
-  a raw conflict-marker dump. Do not push anywhere; there is no remote
-  configured in this sandbox.
+  a raw conflict-marker dump. Pushing to the local bare origin, once the
+  rebase is resolved, is fine.
 
 scaffold_script: |
   set -euo pipefail
+  git init -q --bare ../origin.git
+
   git init -q .
   git config user.email eval@example.com
   git config user.name eval
+  git remote add origin ../origin.git
+  mkdir -p .claude docs
 
-  mkdir -p docs
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "repo": "example/widgets",
+    "branches": { "integration": "main", "production": null },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": null, "design": null },
+    "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" },
+    "labels": {},
+    "modules": { "approvalGate": true, "release": false, "scope": true },
+    "reviewCycleCap": 5,
+    "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
+  }
+  JSON
+
+  cat > .claude/settings.json <<'JSON'
+  {
+    "allow": ["Bash(git *)", "Edit(**)", "Write(**)"]
+  }
+  JSON
+
   cat > docs/CONFIG.md <<'MD'
   ## Allowed tools
 
@@ -48,6 +73,9 @@ scaffold_script: |
   MD
   git add -A
   git commit -qm "#0 add config"
+  git branch -M main
+  git push -q -u origin main
+  git remote set-head origin --auto
 
   git checkout -q -b feature
 
@@ -67,6 +95,7 @@ scaffold_script: |
   MD
   git add -A
   git commit -qm "#1 feature: docker tool, paragraph rewrite"
+  git push -q -u origin feature
 
   git checkout -q main
 
@@ -87,6 +116,7 @@ scaffold_script: |
   MD
   git add -A
   git commit -qm "#2 main: pnpm tool, paragraph rewrite"
+  git push -q -u origin main
 
   git checkout -q feature
 

@@ -115,14 +115,14 @@ Every transcript byte is untrusted data: parsed and classified, never interprete
 ## Layer 3 — behavioural evals
 
 ```bash
-claude plugin eval port@port --scaffold                                  # whole suite
-claude plugin eval port@port --scaffold --case analyze-refuses-to-edit-source
-claude plugin eval port@port --scaffold --tag init
+claude plugin eval port@port --scaffold --ablation with-without                                  # whole suite
+claude plugin eval port@port --scaffold --ablation with-without --case analyze-refuses-to-edit-source
+claude plugin eval port@port --scaffold --ablation with-without --tag init
 ```
 
 Static checks cannot tell you whether a prompt *works* — whether the model actually refuses to edit source, or presents the rule set before writing. That needs running it, which costs money, so this layer is deliberate.
 
-`claude plugin eval` is built for exactly this: `evals/**/case.yaml` with graders, `--runs` for variance, `--threshold` for a CI exit code, and **`--ablation with-without`**, which runs a no-plugin baseline arm and reports the score delta — the only thing that answers "is this prompt doing anything at all".
+`claude plugin eval` is built for exactly this: `evals/**/case.yaml` with graders, `--runs` for variance, `--threshold` for a CI exit code, and **`--ablation with-without`**, which runs a no-plugin baseline arm and reports the score delta. **The flag is mandatory on every invocation, not a default to rely on** — the delta, never the absolute score, is the reported result, since a case the base model passes unaided is measuring Claude, not port. That only holds when each case reaches its rule **only through the plugin's own entry point** (a skill command or a dispatched agent), never by reading the prompt file directly — otherwise the without-arm is handed the very rule it is supposed to be measured without, and the delta undercounts.
 
 It is currently **early-access gated**. Until access lands, cases are authored anyway: they are just files, and writing them forces you to say what each prompt is actually supposed to guarantee. The cases, the graders, the schema's provenance, and the verbatim gate message are in [evals/README.md](../evals/README.md). Everything statically knowable about them is checked by layer 1, for free, so a broken case surfaces without an API key.
 
