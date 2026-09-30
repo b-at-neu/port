@@ -86,9 +86,13 @@ const SESSION_MARKER = /^>\s*\*\*SESSION REQUIRED:\*\*\s+\S/;
 
 /** Pull request stage labels; legality is pair-wise, checked by
  *  `stageViolation` below, not by this list alone. */
-const PR_STAGE_KEYS = ['readyForReview', 'reviewing', 'needsRevision', 'revising', 'approved', 'needsHuman'];
+export const PR_STAGE_KEYS = ['readyForReview', 'reviewing', 'needsRevision', 'revising', 'approved', 'needsHuman'];
 /** The refresh pair — sanctioned beside a stage label, never twice over. */
-const PR_REFRESH_KEYS = ['refreshBranch', 'refreshing'];
+export const PR_REFRESH_KEYS = ['refreshBranch', 'refreshing'];
+/** Issue-side stage labels — the `ISSUE_STAGE_KEYS` counterpart to
+ *  `PR_STAGE_KEYS` (#220). No refresh pair on this surface: the refresh
+ *  labels only ever apply to a pull request. */
+export const ISSUE_STAGE_KEYS = ['ready', 'planChangesRequested', 'planApproved', 'planning', 'inProgress', 'planReview', 'blocked', 'prOpened'];
 const IN_FLIGHT_KEYS = ['planning', 'inProgress', 'reviewing', 'revising', 'refreshing'];
 const TRIGGER_KEYS = ['ready', 'planChangesRequested', 'planApproved', 'readyForReview', 'needsRevision', 'refreshBranch'];
 
@@ -528,12 +532,12 @@ function runAudit(argv) {
     }
 
     // --- Labels ---
-    const present = (keys) => keys.filter((k) => labelEnabled(k) && names.includes(label(k))).map(label);
-    const violation = stageViolation(present(PR_STAGE_KEYS), present(PR_REFRESH_KEYS));
+    const present = (ns, keys) => keys.filter((k) => labelEnabled(k) && ns.includes(label(k))).map(label);
+    const violation = stageViolation(present(names, PR_STAGE_KEYS), present(names, PR_REFRESH_KEYS));
     if (violation) auditFail(at('labels'), violation);
     else auditOk();
     if (pr.state === 'MERGED') {
-      const unfinished = [...new Set([...present(IN_FLIGHT_KEYS), ...present(TRIGGER_KEYS)])];
+      const unfinished = [...new Set([...present(names, IN_FLIGHT_KEYS), ...present(names, TRIGGER_KEYS)])];
       if (unfinished.length > 0) auditFail(at('labels'), `merged but still labelled ${unfinished.join(', ')} — a merged pull request is terminal`);
       else auditOk();
     }
@@ -548,8 +552,12 @@ function runAudit(argv) {
     const closes = /^Closes #(\d+)\s*$/.exec((body[0] ?? '').trim());
     if (closes) {
       const issueNo = Number(closes[1]);
-      const issue = ghJson(['issue', 'view', String(issueNo), '--repo', repo, '--json', 'body']);
+      const issue = ghJson(['issue', 'view', String(issueNo), '--repo', repo, '--json', 'body,labels']);
       const issueBody = issue.body ?? '';
+      const issueNames = issue.labels.map((l) => l.name);
+      const issueViolation = stageViolation(present(issueNames, ISSUE_STAGE_KEYS), []);
+      if (issueViolation) auditFail(at(`labels (issue #${issueNo})`), issueViolation);
+      else auditOk();
       if (!/^## Implementation Plan\s*$/m.test(issueBody)) {
         auditFail(at('cross-surface'), `issue #${issueNo} has no '## Implementation Plan' — the pull request implements a plan that is not there`);
       } else {

@@ -17,12 +17,10 @@ import type { Reporter } from '../lib/report.ts';
 // followed CLAUDE.md got "fixed" away from it), not just a missed read.
 // Every agent granting Bash must carry the byte-identical
 // `standards-precedence` block establishing CLAUDE.md > docs.engineering >
-// ambient style and the commands.*/PIPELINE.md carve-out. There is no
-// PIPELINE.md canonical copy — the issue 177 file-size ratchet forbids that
-// file growing until issue 181 frees the headroom — so the four agent copies are
-// compared pairwise against each other instead of against one source, the
-// same resolution docs/ENGINEERING.md §2 records for the label-cas block.
-// pin: The `standards-precedence` block ↔ its copies in the four agent files — compared pairwise, same "no `PIPELINE.md` canonical copy until issue 220 moves it there" carve-out as `label-cas`
+// ambient style and the commands.*/PIPELINE.md carve-out. Issue 220 moved the
+// canonical copy into PIPELINE.md (issue 181 freed the headroom) — every
+// agent copy is now compared against that one source, never pairwise.
+// pin: The `standards-precedence` block ↔ its canonical copy in PIPELINE.md
 // pin: `docs.design`'s presence in the `standards-precedence` block ↔ its copies in the four agent files, and every agent naming `docs.engineering` also naming `docs.design` (and vice versa)
 export default async function ({ fail, note, ok }: Reporter) {
   const BEGIN = '<!-- standards-precedence:begin -->';
@@ -33,6 +31,14 @@ export default async function ({ fail, note, ok }: Reporter) {
     if (beginIdx === -1 || endIdx === -1) return null;
     return text.slice(beginIdx + BEGIN.length, endIdx).trim();
   };
+
+  const pipelineText = readFileSync(join(root, 'plugins/port/docs/PIPELINE.md'), 'utf8');
+  const canonicalBlock = extractBlock(pipelineText);
+  if (canonicalBlock === null) {
+    fail('standards', 'plugins/port/docs/PIPELINE.md carries no standards-precedence canonical copy');
+  } else {
+    ok();
+  }
 
   const agentsDir = join(root, 'plugins/port/agents');
   const agentFiles = walk(agentsDir).filter((f) => f.endsWith('.md'));
@@ -52,7 +58,11 @@ export default async function ({ fail, note, ok }: Reporter) {
       fail('standards', `${rel} grants Bash but is missing the standards-precedence markers`);
     } else {
       withBlock.push({ rel, block });
-      ok();
+      if (canonicalBlock !== null && block !== canonicalBlock) {
+        fail('standards', `${rel}'s standards-precedence block has drifted from PIPELINE.md's canonical copy`);
+      } else {
+        ok();
+      }
     }
   }
 
@@ -60,18 +70,6 @@ export default async function ({ fail, note, ok }: Reporter) {
     fail('standards', `only ${matched} agent(s) granting Bash matched under plugins/port/agents — expected at least 4`);
   } else {
     ok();
-  }
-
-  // Pairwise byte-identity — no external canonical to diff against.
-  for (let i = 1; i < withBlock.length; i++) {
-    if (withBlock[i].block !== withBlock[0].block) {
-      fail(
-        'standards',
-        `${withBlock[i].rel}'s standards-precedence block has drifted from ${withBlock[0].rel}'s`,
-      );
-    } else {
-      ok();
-    }
   }
 
   // guard(#49): docs.design staying a dead field wired into only some of
@@ -148,8 +146,8 @@ export default async function ({ fail, note, ok }: Reporter) {
     return problems;
   };
 
-  if (withBlock.length > 0) {
-    const canonical = withBlock[0].block;
+  if (canonicalBlock !== null) {
+    const canonical = canonicalBlock;
     const problems = literalProblems(canonical);
     if (problems.length > 0) {
       for (const p of problems) fail('standards', `standards-precedence block: ${p}`);

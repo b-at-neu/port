@@ -165,7 +165,7 @@ An over-limit file outside these exclusions is split by topic, following the run
 
 - [ ] Is this checkout current? `git rev-list --count HEAD..origin/dev` must be `0` — analysis and citations from a stale tree are wrong in ways that look right.
 - [ ] Every new or changed agent/skill has valid frontmatter: `name` matches its file or directory name, `description` is non-empty.
-- [ ] If a Bash-granting agent was touched, its shell-discipline block is still byte-identical to PIPELINE.md's canonical copy.
+- [ ] If a Bash-granting agent was touched, its shell-discipline, label-cas, and standards-precedence blocks are still byte-identical to PIPELINE.md's canonical copies.
 - [ ] No label name, CI check name, branch name, or repository slug appears as a literal in prompt text.
 - [ ] Would this behave correctly in a freshly `/port:init`-ed repository with renamed labels, a single branch, and different CI checks?
 - [ ] Any content newly duplicated across two files has its mechanical pin added in the same commit, as a `pin:` marker on the check that enforces it.

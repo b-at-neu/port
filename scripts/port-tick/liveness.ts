@@ -36,6 +36,24 @@ export function classifyUnmatched(logRow: any): any {
   return { class: 'capped' };
 }
 
+/** The five in-flight aliases' `livenessExpected` rows, read from `actionable`
+ *  (#220's exclusion applied) rather than the raw partition — a contradictory
+ *  in-flight item is never cross-checked or auto-reset. `label` is resolved
+ *  through `labels`, never the default string literal. Moved out of
+ *  `port-tick.ts` for line-budget headroom (#220); behaviour-identical. */
+export function buildLivenessExpected(actionable: Record<string, { mine: any[] }>, labels: Record<string, string>): any[] {
+  const specs: Array<[string, string, string]> = [
+    ['planning', 'planning', 'plan-agent'],
+    ['inProgress', 'inProgress', 'impl-agent'],
+    ['reviewing', 'reviewing', 'review-agent'],
+    ['revising', 'revising', 'revise-agent'],
+    ['refreshing', 'refreshing', 'revise-agent'],
+  ];
+  return specs.flatMap(([alias, labelKey, stage]) =>
+    actionable[alias].mine.map((n: any) => ({ item: n.number, labelKey, label: labels[labelKey], stage })),
+  );
+}
+
 /** The retry mapping from an in-flight label back to its trigger label,
  *  keyed by the config label key (never the resolved name — the caller
  *  substitutes the resolved name). */
