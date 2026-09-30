@@ -59,7 +59,7 @@ node plugins/port/bin/artifacts.mjs audit --limit 10
 | An `## Approval withdrawn` comment names both a check and a 7–40 character hex SHA | Check evidence — the `<labels.approved>` carve-out |
 | A `## Rebase required` comment names both a base branch and a 7–40 character hex SHA | Rebase required |
 | Commit subjects are `#N <imperative lowercase>`, under 80 characters, no trailing period, with a `Co-Authored-By:` trailer | Commit messages |
-| At most one stage label, beside at most one of the refresh pair — a refresh deliberately leaves the other labels in place, so that pair is the one sanctioned co-presence; a merged pull request keeps no trigger or in-flight label | Label lifecycle — "Branch refresh" |
+| At most one stage label, beside at most one of the refresh pair — a refresh deliberately leaves the other labels in place, so that pair is the one sanctioned co-presence; a merged pull request keeps no trigger or in-flight label; and the closing issue carries at most one issue stage label | Label lifecycle — "Branch refresh" |
 | Nothing under `.temp/` or `.agents/` in the diff | Operating rules |
 | The closing issue has an `## Implementation Plan`, and the marker is read at its slot — the plan block's first non-empty line and, on the pull request, the first non-empty line under `Closes #N` — matching on both surfaces or neither, with the canonical rendering never repeated outside either slot | Session-required tickets |
 | An operator-only testing step on the issue plan reaches the pull request's testing plan | Session-required tickets |

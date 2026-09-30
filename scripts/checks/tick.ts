@@ -11,11 +11,12 @@ async function importEngine(rel: string): Promise<any> {
 }
 
 export default async function ({ fail, note, ok }: Reporter) {
-  // --- Every decision case resolves, and the table covers all twelve families
-  // guard(#203, #246): a second implementation (apps/desktop's, when issue
+  // --- Every decision case resolves, and the table covers all thirteen families
+  // guard(#203, #246, #220): a second implementation (apps/desktop's, when issue
   // 105 converges) silently diverging from the engine's own recorded
   // behaviour. #187 adds three families for the trajectory record: events,
   // denials, report. #246 adds the twelfth: the CLAUDE.md override resolver.
+  // #220 adds the thirteenth: label-state reconciliation.
   // pin: `scripts/port-tick/cases/*.json` ↔ every pure function in `scripts/port-tick/` it names
   {
     const families: Record<string, string> = {
@@ -31,6 +32,7 @@ export default async function ({ fail, note, ok }: Reporter) {
       'denials.cases.json': 'denials.ts',
       'report.cases.json': 'report.ts',
       'overrides.cases.json': 'overrides.ts',
+      'reconcile.cases.json': 'reconcile.ts',
     };
     const casesDir = join(root, TICK_DIR, 'cases');
     const present = walk(casesDir).map((f) => relOf(f).split('/').pop());
@@ -76,6 +78,15 @@ export default async function ({ fail, note, ok }: Reporter) {
       renderText: modules['report.ts'].renderText,
       parseOverrides: modules['overrides.ts'].parseOverrides,
       applyOverrides: modules['overrides.ts'].applyOverrides,
+      labelsByItem: modules['reconcile.ts'].labelsByItem,
+      contradictions: modules['reconcile.ts'].contradictions,
+      actionablePartitions: modules['reconcile.ts'].actionablePartitions,
+      linkedIssues: modules['reconcile.ts'].linkedIssues,
+      duplicatePullRequests: modules['reconcile.ts'].duplicatePullRequests,
+      ungatedPullRequests: modules['reconcile.ts'].ungatedPullRequests,
+      reportDelta: modules['reconcile.ts'].reportDelta,
+      reportOrphans: modules['reconcile.ts'].reportOrphans,
+      reconcileTick: modules['reconcile.ts'].reconcileTick,
     };
 
     for (const [file] of Object.entries(families)) {
@@ -435,6 +446,24 @@ function runCase(fn: string, impl: any, input: any): any {
       const result = impl(input.cfg, { entries: input.entries, problems: [] }, { labelKeys: input.labelKeys });
       return { appliedPaths: result.applied.map((a: any) => a.path), refusedPaths: result.refused.map((r: any) => r.path) };
     }
+    case 'labelsByItem':
+      return impl(input.repository, input.keys);
+    case 'contradictions':
+      return impl(input.byItem, input.viewer, input.labels);
+    case 'actionablePartitions':
+      return impl(input.partitions, input.contradictory);
+    case 'linkedIssues':
+      return impl(input);
+    case 'duplicatePullRequests':
+      return impl(input.prs, input.integration, input.labels);
+    case 'ungatedPullRequests':
+      return impl(input.prs, input.labels);
+    case 'reportDelta':
+      return impl(input.previous, input.current, input.complete);
+    case 'reportOrphans':
+      return impl(input.liveness, input.orphansReported);
+    case 'reconcileTick':
+      return impl(input);
     default:
       throw new Error(`no case runner wired for function '${fn}'`);
   }

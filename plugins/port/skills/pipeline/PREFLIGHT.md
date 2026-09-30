@@ -178,7 +178,12 @@ Uncorrelatable announced:
 Plugin staleness: <not computable | N>
 Refreshed:
 Budget holds:
+Contradictions reported:
+Duplicates reported:
+Orphans reported:
 ```
+
+`Contradictions reported`/`Duplicates reported`/`Orphans reported` are read and rewritten by `TICK-PROSE.md`'s own "Label reconciliation" paragraph, the change-only counterpart to `SKILL.md`'s "Reconcile report".
 
 Baseline `Denials consumed` with one call, and report nothing from the log on this first tick — a fresh session has no prior offset to diff against, so there is nothing new to report, not zero:
 

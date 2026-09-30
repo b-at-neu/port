@@ -178,6 +178,61 @@ export default async function ({ fail, ok }: Reporter) {
     }
   }
 
+  // --- Issue-side stage keys pinned to labels.json's roles/surfaces, both
+  // directions, plus the issue-side stageViolation cases (#220) ---------------
+  // guard(#220): `ISSUE_STAGE_KEYS` drifting from the label vocabulary's own
+  // roles/surfaces — a key silently added to one side but not the other
+  // leaves the issue-side audit checking the wrong set, exactly the gap
+  // issue 209's Route 2 (`plan approved` + `pr opened`) found with nothing
+  // pinning the issue surface the way `PR_STAGE_KEYS` already pins the pull
+  // request one.
+  // pin: `artifacts.mjs`'s `ISSUE_STAGE_KEYS` ↔ `data/labels.json`'s non-marker `issue`-surface keys, both directions
+  // pin: `artifacts.mjs`'s `PR_STAGE_KEYS` ∪ `PR_REFRESH_KEYS` ↔ `data/labels.json`'s non-marker `pr`-surface keys, both directions
+  {
+    const { ISSUE_STAGE_KEYS, PR_STAGE_KEYS, PR_REFRESH_KEYS, stageViolation } =
+      await import(pathToFileURL(join(root, 'plugins/port/bin/artifacts.mjs')).href);
+    const { LABEL_ROLES, LABEL_SURFACE } = await import(pathToFileURL(join(root, 'scripts/port-tick/config.ts')).href);
+
+    const issueKeys = new Set(
+      Object.keys(LABEL_ROLES).filter((k) => LABEL_ROLES[k] !== 'marker' && LABEL_SURFACE[k] === 'issue'),
+    );
+    for (const key of ISSUE_STAGE_KEYS) {
+      if (!issueKeys.has(key)) fail('artifacts-stage-keys', `artifacts.mjs's ISSUE_STAGE_KEYS names '${key}', which labels.json does not mark as a non-marker issue-surface key`);
+      else ok();
+    }
+    for (const key of issueKeys) {
+      if (!ISSUE_STAGE_KEYS.includes(key)) fail('artifacts-stage-keys', `labels.json marks '${key}' as a non-marker issue-surface key, which artifacts.mjs's ISSUE_STAGE_KEYS omits`);
+      else ok();
+    }
+
+    const prKeys = new Set(
+      Object.keys(LABEL_ROLES).filter((k) => LABEL_ROLES[k] !== 'marker' && LABEL_SURFACE[k] === 'pr'),
+    );
+    const prUnion = new Set([...PR_STAGE_KEYS, ...PR_REFRESH_KEYS]);
+    for (const key of prUnion) {
+      if (!prKeys.has(key)) fail('artifacts-stage-keys', `artifacts.mjs's PR_STAGE_KEYS/PR_REFRESH_KEYS names '${key}', which labels.json does not mark as a non-marker pr-surface key`);
+      else ok();
+    }
+    for (const key of prKeys) {
+      if (!prUnion.has(key)) fail('artifacts-stage-keys', `labels.json marks '${key}' as a non-marker pr-surface key, which artifacts.mjs's PR_STAGE_KEYS/PR_REFRESH_KEYS omits`);
+      else ok();
+    }
+
+    const issueLabel = (key: string) => readJson('plugins/port/data/labels.json').labels.find((l: any) => l.key === key)?.name;
+    const flagged = stageViolation([issueLabel('planApproved'), issueLabel('prOpened')], []);
+    if (flagged == null || !flagged.includes(issueLabel('planApproved')) || !flagged.includes(issueLabel('prOpened'))) {
+      fail('artifacts-stage-keys', `stageViolation(['plan approved', 'pr opened'], []) must name both offending labels — got ${JSON.stringify(flagged)}`);
+    } else {
+      ok();
+    }
+    const legal = stageViolation([issueLabel('prOpened')], []);
+    if (legal != null) {
+      fail('artifacts-stage-keys', `stageViolation(['pr opened'], []) reported a violation for a legal single issue-stage label`);
+    } else {
+      ok();
+    }
+  }
+
   // --- Artifact workflow's trigger widened, narrowing moved to the step -------
   // guard(#231): the layer 2 audit running only at `approved`, so a malformed
   // commit subject or pull request body survived a full plan → implement →

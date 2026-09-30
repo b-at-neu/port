@@ -9,11 +9,10 @@ import type { Reporter } from '../lib/report.ts';
 // labels silently degrades into a bare add and leaves two contradictory
 // stage labels behind (Route 2 and Route 3). Every agent granting Bash must
 // carry the byte-identical `label-cas` block that turns every
-// `--remove-label` into a checked precondition. There is no PIPELINE.md
-// canonical copy today — issue 177's file-size ratchet forbids that file
-// growing until issue 181 frees the headroom — so the four agent copies are
-// compared pairwise against each other instead of against one source.
-// pin: The `label-cas` block ↔ its copies in the four agent files — a fallback compared pairwise, since the issue 177 ratchet forbids a `PIPELINE.md` canonical copy until issue 220 moves it there
+// `--remove-label` into a checked precondition. Issue 220 moved the canonical copy
+// into PIPELINE.md (issue 181 freed the headroom) — every agent copy is now
+// compared against that one source, never pairwise against each other.
+// pin: The `label-cas` block ↔ its canonical copy in PIPELINE.md
 export default async function ({ fail, note, ok }: Reporter) {
   const BEGIN = '<!-- label-cas:begin -->';
   const END = '<!-- label-cas:end -->';
@@ -23,6 +22,14 @@ export default async function ({ fail, note, ok }: Reporter) {
     if (beginIdx === -1 || endIdx === -1) return null;
     return text.slice(beginIdx + BEGIN.length, endIdx).trim();
   };
+
+  const pipelineText = readFileSync(join(root, 'plugins/port/docs/PIPELINE.md'), 'utf8');
+  const canonicalBlock = extractBlock(pipelineText);
+  if (canonicalBlock === null) {
+    fail('label-protocol', 'plugins/port/docs/PIPELINE.md carries no label-cas canonical copy');
+  } else {
+    ok();
+  }
 
   const agentsDir = join(root, 'plugins/port/agents');
   const agentFiles = walk(agentsDir).filter((f) => f.endsWith('.md'));
@@ -42,7 +49,11 @@ export default async function ({ fail, note, ok }: Reporter) {
       fail('label-protocol', `${rel} grants Bash but is missing the label-cas markers`);
     } else {
       withBlock.push({ rel, block });
-      ok();
+      if (canonicalBlock !== null && block !== canonicalBlock) {
+        fail('label-protocol', `${rel}'s label-cas block has drifted from PIPELINE.md's canonical copy`);
+      } else {
+        ok();
+      }
     }
   }
 
@@ -50,18 +61,6 @@ export default async function ({ fail, note, ok }: Reporter) {
     fail('label-protocol', `only ${matched} agent(s) granting Bash matched under plugins/port/agents — expected at least 4`);
   } else {
     ok();
-  }
-
-  // Pairwise byte-identity — no external canonical to diff against.
-  for (let i = 1; i < withBlock.length; i++) {
-    if (withBlock[i].block !== withBlock[0].block) {
-      fail(
-        'label-protocol',
-        `${withBlock[i].rel}'s label-cas block has drifted from ${withBlock[0].rel}'s`,
-      );
-    } else {
-      ok();
-    }
   }
 
   // Every --remove-label occurrence under plugins/port/agents/ is in a file
@@ -86,8 +85,8 @@ export default async function ({ fail, note, ok }: Reporter) {
   // and impl-agent.md's Pre-flight still runs the existing-work lookup that
   // stops a second implementation duplicating a pull request that already
   // covers the same issue.
-  if (withBlock.length > 0) {
-    const canonical = withBlock[0].block;
+  if (canonicalBlock !== null) {
+    const canonical = canonicalBlock;
     const markerKeys = readJson('plugins/port/data/labels.json')
       .labels.filter((l: any) => l.role === 'marker')
       .map((l: any) => l.key);

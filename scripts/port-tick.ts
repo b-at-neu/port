@@ -22,10 +22,11 @@ import { buildQuery } from './port-tick/query.ts';
 import { runGraphql } from './port-tick/gh.ts';
 import { classifyEnvelope, truncatedAliases } from './port-tick/envelope.ts';
 import { partitionOwnership, issueSessionRequiredReason, prSessionRequiredReason } from './port-tick/classify.ts';
+import { labelsByItem, contradictions, actionablePartitions, reconcileTick, ungatedPullRequests, reportOrphans } from './port-tick/reconcile.ts';
 import { rollupVerdict } from './port-tick/checks.ts';
 import { mergeabilityRoute, refreshDecision, capRefreshes, zeroDiffGate, cycleCapExceeded, approvedReverify, refreshWins } from './port-tick/gates.ts';
 import { parseFilesBlock, gateCandidates } from './port-tick/contention.ts';
-import { classifyUnmatched, descriptionOf, RETRY_TRIGGER, isUsageLimitMessage } from './port-tick/liveness.ts';
+import { classifyUnmatched, descriptionOf, RETRY_TRIGGER, isUsageLimitMessage, buildLivenessExpected } from './port-tick/liveness.ts';
 import { nextDelay } from './port-tick/pacing.ts';
 import { readState, writeState, freshTickState, freshDispatchLog, newRunId, TICK_STATE_PATH, DISPATCH_LOG_PATH } from './port-tick/state.ts';
 import { refreshSweepWrite, zeroDiffWrite, cycleCapWrite, approvalWithdrawnWrite, livenessResetWrite, gateResolveWrite } from './port-tick/writes.ts';
@@ -71,7 +72,6 @@ function cmdPlan(root: string, cfg: any): void {
     owner: cfg.owner,
     name: cfg.name,
     labels: cfg.labels,
-    modules: cfg.modules,
     announcedApproved: tickState.announcedApproved ?? [],
   });
   const res = runGraphql(query);
@@ -112,9 +112,18 @@ function cmdPlan(root: string, cfg: any): void {
     partitions[alias] = set ? partitionOwnership(set.nodes, viewer) : { mine: [], others: [], unowned: [] };
   }
 
+  // Reconcile (#209/#220): flag any item holding more than one role-bearing
+  // label and exclude it from every action below, reported, never repaired.
+  // `actionable` feeds dispatch/gates/writes/liveness; `partitions` itself
+  // stays the full picture for inFlightClaims, `items`, `willMoveWithoutHuman`.
+  const roleBearingKeys = aliasSpecs.map(([a]) => a);
+  const byItem = labelsByItem(repository, roleBearingKeys);
+  const contradictionsList = contradictions(byItem, viewer, cfg.labels);
+  const actionable = actionablePartitions(partitions, contradictionsList.map((c) => c.item));
+
   // --- Session-required filtering + dispatch: plan/impl/revise triggers ----
-  for (const item of partitions.ready.mine) dispatch.push({ stage: 'plan-agent', item: item.number, kind: 'plan', model: cfg.models.plan, reason: 'ready' });
-  for (const item of partitions.planChangesRequested.mine) dispatch.push({ stage: 'plan-agent', item: item.number, kind: 'plan-revision', model: cfg.models.plan, reason: 'plan changes requested' });
+  for (const item of actionable.ready.mine) dispatch.push({ stage: 'plan-agent', item: item.number, kind: 'plan', model: cfg.models.plan, reason: 'ready' });
+  for (const item of actionable.planChangesRequested.mine) dispatch.push({ stage: 'plan-agent', item: item.number, kind: 'plan-revision', model: cfg.models.plan, reason: 'plan changes requested' });
 
   // planApproved: session-required check, then file contention gate
   const inFlightClaims: any[] = [];
@@ -126,7 +135,7 @@ function cmdPlan(root: string, cfg: any): void {
   }
 
   const structuredCandidates: any[] = [];
-  for (const item of partitions.planApproved.mine) {
+  for (const item of actionable.planApproved.mine) {
     const reason = issueSessionRequiredReason(item.body);
     if (reason) {
       announce.push({ kind: 'session-required-issue', item: item.number, facts: { reason } });
@@ -144,7 +153,7 @@ function cmdPlan(root: string, cfg: any): void {
   for (const h of gated.held) held.push(h);
 
   // refreshBranch trigger: always revise-agent in refresh mode
-  for (const item of partitions.refreshBranch.mine) {
+  for (const item of actionable.refreshBranch.mine) {
     dispatch.push({ stage: 'revise-agent', item: item.number, kind: 'refresh', model: cfg.models.revise, reason: 'refresh branch' });
   }
 
@@ -169,7 +178,7 @@ function cmdPlan(root: string, cfg: any): void {
   const refreshingNumbers = (repository.refreshing?.nodes ?? []).map((n: any) => n.number);
 
   // readyForReview: mergeability routing, zero-diff gate, then dispatch
-  for (const item of partitions.readyForReview.mine) {
+  for (const item of actionable.readyForReview.mine) {
     const veto = refreshWins({ number: item.number, refreshBranch: refreshBranchNumbers, refreshing: refreshingNumbers });
     if (veto.action === 'veto') {
       announce.push({ kind: 'refresh-in-flight', item: item.number, facts: { label: veto.label } });
@@ -203,7 +212,7 @@ function cmdPlan(root: string, cfg: any): void {
   }
 
   // needsRevision: refresh-wins veto, session-required, then cycle cap
-  for (const item of partitions.needsRevision.mine) {
+  for (const item of actionable.needsRevision.mine) {
     const veto = refreshWins({ number: item.number, refreshBranch: refreshBranchNumbers, refreshing: refreshingNumbers });
     if (veto.action === 'veto') {
       announce.push({ kind: 'refresh-in-flight', item: item.number, facts: { label: veto.label } });
@@ -225,7 +234,7 @@ function cmdPlan(root: string, cfg: any): void {
 
   // approved: refresh-wins veto, then re-verify against the two authorising facts
   const dispositions = cfg.checkDispositions;
-  for (const item of partitions.approved.mine) {
+  for (const item of actionable.approved.mine) {
     const veto = refreshWins({ number: item.number, refreshBranch: refreshBranchNumbers, refreshing: refreshingNumbers });
     if (veto.action === 'veto') {
       announce.push({ kind: 'refresh-in-flight', item: item.number, facts: { label: veto.label } });
@@ -271,36 +280,29 @@ function cmdPlan(root: string, cfg: any): void {
   // issue's own blocker comment and resuming the *same* dispatched agent via
   // SendMessage — a conversation the tick engine has no handle for, so it is
   // report-only here rather than a fabricated resolve path.
-  for (const item of partitions.planReview.mine) {
+  for (const item of actionable.planReview.mine) {
     gates.push({ kind: 'plan-review', item: item.number, facts: {} });
   }
-  for (const item of partitions.needsHuman.mine) {
+  for (const item of actionable.needsHuman.mine) {
     gates.push({ kind: 'needs-human', item: item.number, facts: {} });
   }
-  for (const item of partitions.blocked.mine) {
+  for (const item of actionable.blocked.mine) {
     announce.push({ kind: 'blocked', item: item.number, facts: {} });
   }
 
-  // Ungated sweep (module-gated, never assignee-filtered — a worktree
-  // belongs to the checkout regardless of who owns the item): the raw set,
-  // exposed the same way `items.unowned` already is, so Housekeeping's
-  // existing change-only dedup/report prose (SKILL.md, unaffected by
-  // commands.tick) has data to report from instead of running its own
-  // second query for it.
-  let ungated: number[] = [];
-  if (cfg.modules.approvalGate && repository.allOpenPRs) {
-    const stageLabelNames = new Set([
-      cfg.labels.readyForReview, cfg.labels.reviewing, cfg.labels.needsRevision,
-      cfg.labels.revising, cfg.labels.approved, cfg.labels.needsHuman,
-      cfg.labels.refreshBranch, cfg.labels.refreshing,
-    ]);
-    ungated = repository.allOpenPRs.nodes
-      .filter((pr: any) => {
-        const names = (pr.labels?.nodes ?? []).map((l: any) => l.name);
-        return names.some((n: string) => stageLabelNames.has(n)) && !names.includes(cfg.labels.marker);
-      })
-      .map((pr: any) => pr.number);
-  }
+  // Ungated sweep (module-gated, never assignee-filtered): the raw set, for
+  // Housekeeping's own change-only dedup/report. `allOpenPRs` is unconditional
+  // (#220) — only the filter and the report stay module-gated.
+  const openPRs = repository.allOpenPRs?.nodes ?? [];
+  const ungated: number[] = cfg.modules.approvalGate ? ungatedPullRequests(openPRs, cfg.labels) : [];
+
+  // Duplicate-pull-request sweep + reconcile reporting (#220), change-only
+  // against `.temp/tick-state.json`'s two remembered sets.
+  const { reconcile, persist: reconcilePersist } = reconcileTick({
+    repository, roleBearingKeys, viewer, labels: cfg.labels, integration: cfg.integration,
+    envelopeUnavailable: envelope.unavailable, truncated,
+    contradictionsReported: tickState.contradictionsReported ?? [], duplicatesReported: tickState.duplicatesReported ?? [],
+  });
 
   const items = {
     mine: Object.fromEntries(aliasSpecs.map(([a]) => [a, partitions[a].mine.map((n: any) => n.number)])),
@@ -326,23 +328,14 @@ function cmdPlan(root: string, cfg: any): void {
     envelope: { ...envelope, truncated },
     items,
     ungated,
+    reconcile,
     dispatch,
     gates,
     held,
     announce,
     writes,
     artifacts: [],
-    // `label` is resolved through `cfg.labels`, never the default string
-    // literal — a repository that overrides e.g. `labels.inProgress` must
-    // still match here, since `commit`'s liveness reset writes `--remove-label
-    // "${expected.label}"` verbatim.
-    livenessExpected: [
-      ...partitions.planning.mine.map((n: any) => ({ item: n.number, labelKey: 'planning', label: cfg.labels.planning, stage: 'plan-agent' })),
-      ...partitions.inProgress.mine.map((n: any) => ({ item: n.number, labelKey: 'inProgress', label: cfg.labels.inProgress, stage: 'impl-agent' })),
-      ...partitions.reviewing.mine.map((n: any) => ({ item: n.number, labelKey: 'reviewing', label: cfg.labels.reviewing, stage: 'review-agent' })),
-      ...partitions.revising.mine.map((n: any) => ({ item: n.number, labelKey: 'revising', label: cfg.labels.revising, stage: 'revise-agent' })),
-      ...partitions.refreshing.mine.map((n: any) => ({ item: n.number, labelKey: 'refreshing', label: cfg.labels.refreshing, stage: 'revise-agent' })),
-    ],
+    livenessExpected: buildLivenessExpected(actionable, cfg.labels),
     refreshedUpdates,
     unknownStreakUpdates,
     wakeup,
@@ -353,7 +346,7 @@ function cmdPlan(root: string, cfg: any): void {
 
   appendEvent(root, formatEvent(envelopeFor('tick', tickState.runId, cfg.repo, clock), tickEventPayload({ tickId, envelope: plan.envelope, items, livenessExpected: plan.livenessExpected, dispatch, gates, held, announce, writes, wakeup, rateLimit: plan.rateLimit, denials: denialsDelta })));
 
-  writeState(root, TICK_PLAN_CACHE_PATH, { repo: cfg.repo, ...plan, dispatchLog });
+  writeState(root, TICK_PLAN_CACHE_PATH, { repo: cfg.repo, ...plan, dispatchLog, reconcilePersist });
   emit(plan, 0);
 }
 
@@ -413,6 +406,11 @@ function cmdCommit(root: string, cfg: any, args: any): void {
     // 'no-record' and 'capped' — report-only, no dispatchLog change, but
     // still named in `liveness` above so the model can render them.
   }
+
+  // Orphan reporting (#220) — change-only against `orphansReported`.
+  tickState.orphansReported = reportOrphans(liveness, tickState.orphansReported ?? []);
+  tickState.contradictionsReported = cache.reconcilePersist?.contradictions ?? tickState.contradictionsReported ?? [];
+  tickState.duplicatesReported = cache.reconcilePersist?.duplicates ?? tickState.duplicatesReported ?? [];
 
   for (const r of resets) {
     if (!r.toKey) continue;

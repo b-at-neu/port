@@ -23,22 +23,23 @@ function prSet(alias: string, labelName: string, extraFields = ''): string {
 }
 
 /** `labels` is the resolved vocabulary (scripts/port-tick/config.ts's
- *  `resolveLabels`). `modules.approvalGate` gates the `allOpenPRs` alias.
- *  `announcedApproved` is `.temp/tick-state.json`'s remembered set of
- *  already-announced approved pull request numbers — each gets its own
- *  `pullRequest(number:)` alias for the merged/approved re-verify, folded
- *  into the same call rather than a follow-up `gh pr view`. */
+ *  `resolveLabels`). `announcedApproved` is `.temp/tick-state.json`'s
+ *  remembered set of already-announced approved pull request numbers — each
+ *  gets its own `pullRequest(number:)` alias for the merged/approved
+ *  re-verify, folded into the same call rather than a follow-up `gh pr
+ *  view`. `allOpenPRs` below is unconditional (#220): it is the duplicate-
+ *  pull-request sweep's source as well as the ungated report's, and only the
+ *  latter is module-gated — `modules.approvalGate` filters and reports it,
+ *  never whether it is fetched. */
 export function buildQuery({
   owner,
   name,
   labels,
-  modules,
   announcedApproved = [],
 }: {
   owner: string;
   name: string;
   labels: any;
-  modules: any;
   announcedApproved?: number[];
 }): string {
   const parts: string[] = [];
@@ -73,12 +74,11 @@ export function buildQuery({
   // --- Occupied set for the file contention gate ---------------------------
   parts.push(issueSet('prOpened', labels.prOpened));
 
-  // --- Module-gated: ungated sweep -----------------------------------------
-  if (modules.approvalGate) {
-    parts.push(
-      'allOpenPRs: pullRequests(states: OPEN, first: 100) { nodes { number title labels(first: 20) { nodes { name } } assignees(first: 5) { nodes { login } } } }',
-    );
-  }
+  // --- Unconditional: the duplicate-pull-request sweep and the (module-
+  // gated) ungated report share this one alias (#220) ------------------------
+  parts.push(
+    'allOpenPRs: pullRequests(states: OPEN, first: 100) { totalCount nodes { number title headRefName baseRefName body labels(first: 20) { nodes { name } } assignees(first: 5) { nodes { login } } } }',
+  );
 
   // --- Approved re-verify / merged-PR reconciliation -----------------------
   for (const n of announcedApproved) {
