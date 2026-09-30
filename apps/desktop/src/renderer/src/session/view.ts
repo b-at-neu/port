@@ -149,6 +149,10 @@ export type SessionScreenState =
        *  plan's own UX states) — a transient banner over the live view
        *  itself, never a separate screen. */
       readonly busyBanner: string | null
+      /** The `unknown-session` send failure (R1-M2) — disables the composer
+       *  regardless of `phase`, since the session is confirmed gone rather
+       *  than merely between phases. */
+      readonly sessionGone: boolean
     }
 
 function buildEndedPanel(snapshot: HostedSessionSnapshot, repoLabel: string): HTMLElement {
@@ -189,15 +193,14 @@ function applyStopClose(refs: SessionRefs, phase: SessionPhase): void {
   refs.closeButton.textContent = copy.close === 'closing' ? 'Closing…' : CLOSE_BUTTON
 }
 
-function applyComposer(refs: SessionRefs, phase: SessionPhase, value: string, error: string | null): void {
-  const copy = composerCopy(phase)
+function applyComposer(refs: SessionRefs, phase: SessionPhase, value: string, sessionGone: boolean): void {
+  const copy = composerCopy(phase, sessionGone)
   refs.composerTextarea.disabled = copy.disabled
   refs.composerTextarea.placeholder = copy.placeholder
   if (refs.composerTextarea.value !== value) refs.composerTextarea.value = value
   refs.sendButton.hidden = copy.sendLabel === null
   refs.sendButton.textContent = copy.sendLabel ?? ''
   refs.sendButton.disabled = copy.disabled || value.trim() === ''
-  void error
 }
 
 export function renderSessionChrome(refs: SessionRefs, state: SessionScreenState): void {
@@ -228,7 +231,7 @@ export function renderSessionChrome(refs: SessionRefs, state: SessionScreenState
     refs.bannerHost.appendChild(el('p', 'session-view__status', startingCopy(state.repoLabel)))
     refs.endedPanel.hidden = true
     applyStopClose(refs, 'starting')
-    applyComposer(refs, 'starting', '', null)
+    applyComposer(refs, 'starting', '', false)
     return
   }
 
@@ -243,7 +246,7 @@ export function renderSessionChrome(refs: SessionRefs, state: SessionScreenState
   }
 
   // state.kind === 'live'
-  const { snapshot, repoLabel, sendError, closeConfirming, interruptNote: note, windowNoteVisible, composerValue, busyBanner } = state
+  const { snapshot, repoLabel, sendError, closeConfirming, interruptNote: note, windowNoteVisible, composerValue, busyBanner, sessionGone } = state
   const phase = snapshot.phase
 
   refs.pill.className = pillClass(phase)
@@ -251,7 +254,7 @@ export function renderSessionChrome(refs: SessionRefs, state: SessionScreenState
   refs.headerMeta.textContent = `${repoLabel} · started ${new Date(snapshot.startedAt).toLocaleTimeString()} · ${shortId(snapshot.claudeSessionId)}`
 
   applyStopClose(refs, phase)
-  applyComposer(refs, phase, composerValue, sendError)
+  applyComposer(refs, phase, composerValue, sessionGone)
 
   refs.bannerHost.textContent = ''
   if (closeConfirming) {

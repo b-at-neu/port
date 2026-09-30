@@ -70,9 +70,14 @@ export interface ComposerCopy {
   readonly sendLabel: string | null
 }
 
-export function composerCopy(phase: SessionPhase): ComposerCopy {
+/** `sessionGone` is the `unknown-session` send failure (#219 plan → "Send
+ *  failed"): the main process no longer has this session at all, distinct
+ *  from a merely-rejected IPC call, so the composer disables regardless of
+ *  what `phase` still says -- `phase` alone never reaches a disabled state
+ *  for this case, since nothing tells the phase machine the session died. */
+export function composerCopy(phase: SessionPhase, sessionGone = false): ComposerCopy {
   const copy = PHASE_COPY[phase]
-  return { disabled: copy.composerDisabled, placeholder: copy.composerPlaceholder, sendLabel: copy.sendLabel }
+  return { disabled: copy.composerDisabled || sessionGone, placeholder: copy.composerPlaceholder, sendLabel: copy.sendLabel }
 }
 
 export interface StartFailureCopy {

@@ -16,8 +16,10 @@ const CHUNK_THRESHOLD = 500
 const CHUNK_SIZE = 200
 
 /** Within this many pixels of the bottom counts as "already there" for the
- *  pin-to-bottom behaviour. */
-const NEAR_BOTTOM_PX = 64
+ *  pin-to-bottom behaviour. Exported so a caller's own scroll listener (e.g.
+ *  `transcript.ts`'s near-bottom band) shares the same threshold rather than
+ *  a second hardcoded copy. */
+export const NEAR_BOTTOM_PX = 64
 
 export interface EntryListParams {
   readonly list: HTMLElement
@@ -38,6 +40,11 @@ export interface EntryList {
   patch(patches: readonly EntryPatch[]): void
   rowAt(absoluteIndex: number): HTMLElement | undefined
   jumpToLatest(): void
+  /** Clears the "N new below" counter and hides the jump button without
+   *  moving the scroll position -- what a manual scroll back near the bottom
+   *  does; `jumpToLatest` is reserved for the append-driven pin-to-bottom
+   *  path and the explicit jump button/action. */
+  clearPendingBelow(): void
   /** `null` removes the live row entirely. A non-null block with the same
    *  `blockId` as the current live row is a no-op here — `appendLive` is
    *  what grows it; a different (or first) `blockId` rebuilds the row from
@@ -158,6 +165,11 @@ export function createEntryList(params: EntryListParams): EntryList {
 
     jumpToLatest() {
       list.scrollTop = list.scrollHeight
+      pendingBelow = 0
+      updateJumpButton()
+    },
+
+    clearPendingBelow() {
       pendingBelow = 0
       updateJumpButton()
     },

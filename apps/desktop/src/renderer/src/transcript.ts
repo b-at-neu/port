@@ -6,7 +6,7 @@
 // follow toggle, banner host, empty state, and focus behaviour.
 import type { EntryPatch, TranscriptEntry, TranscriptFailureKind, TranscriptSource } from '../../shared/sessions/transcript'
 import { text } from './entry-rows'
-import { createEntryList } from './entry-list'
+import { createEntryList, NEAR_BOTTOM_PX } from './entry-list'
 import type { EntryList } from './entry-list'
 
 export type TranscriptViewState =
@@ -156,8 +156,8 @@ export function renderTranscript(container: HTMLElement, state: TranscriptViewSt
   const entryList = createEntryList({ list, jumpButton, baseIndex: 0, focusIndex })
 
   list.addEventListener('scroll', () => {
-    if (live !== null && list.scrollHeight - list.scrollTop - list.clientHeight <= 64) {
-      entryList.jumpToLatest()
+    if (live !== null && list.scrollHeight - list.scrollTop - list.clientHeight <= NEAR_BOTTOM_PX) {
+      entryList.clearPendingBelow()
     }
   })
 

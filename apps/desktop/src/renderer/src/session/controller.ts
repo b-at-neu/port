@@ -28,6 +28,11 @@ let attaching = false
 let screen: SessionScreenState = { kind: 'empty' }
 let composerValue = ''
 let sendError: string | null = null
+/** Set once `send()` gets back `unknown-session` -- the composer stays
+ *  disabled from then on (R1-M2), since the plan's own UX states single this
+ *  case out from a merely-rejected send. Reset only where a session starts
+ *  fresh (`startSession`), never by `send()` clearing `sendError` alone. */
+let sessionGone = false
 let closeConfirming = false
 let interruptNoteValue: string | null = null
 let windowNoteVisible = false
@@ -40,7 +45,7 @@ let busyBanner: string | null = null
  *  directly by the function whose own action caused it, never derived here —
  *  `draw()` only ever paints whatever `screen` currently holds. */
 function liveScreen(snapshot: HostedSessionSnapshot): SessionScreenState {
-  return { kind: 'live', snapshot, repoLabel, sendError, closeConfirming, interruptNote: interruptNoteValue, windowNoteVisible, composerValue, busyBanner }
+  return { kind: 'live', snapshot, repoLabel, sendError, closeConfirming, interruptNote: interruptNoteValue, windowNoteVisible, composerValue, busyBanner, sessionGone }
 }
 
 function draw(): void {
@@ -166,6 +171,7 @@ async function startSession(repoId: RepoId, label: string): Promise<void> {
   repoLabel = label
   currentSessionKey = null
   latestSnapshot = null
+  sessionGone = false
   entryList?.dispose()
   entryList = null
   screen = { kind: 'starting', repoLabel: label }
@@ -223,6 +229,7 @@ async function send(): Promise<void> {
     const result = await window.port.sessionSend({ sessionKey: currentSessionKey, text })
     if (!result.ok) {
       sendError = SEND_FAILED_UNKNOWN_SESSION
+      sessionGone = true
       composerValue = text
       redrawLive()
     }

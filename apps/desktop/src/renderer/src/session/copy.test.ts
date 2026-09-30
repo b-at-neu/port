@@ -20,6 +20,12 @@ describe('composerCopy', () => {
     expect(composerCopy('ended').disabled).toBe(true)
     expect(composerCopy('ended').sendLabel).toBeNull()
   })
+
+  it('disables even an otherwise-enabled phase once the session is confirmed gone (R1-M2)', () => {
+    expect(composerCopy('ready', true).disabled).toBe(true)
+    expect(composerCopy('streaming', true).disabled).toBe(true)
+    expect(composerCopy('ready', false).disabled).toBe(false)
+  })
 })
 
 function end(overrides: Partial<SessionEnd>): SessionEnd {
