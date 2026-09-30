@@ -13,9 +13,10 @@
 // integration branch to the next patch version with a prerelease suffix,
 // which no released install can ever occupy.
 //
-// Decision logic (parseVersion, nextDevWindow, decide) is pure and exported,
-// so the layer 1 check in scripts/checks/release.ts can assert every case
-// without a git subprocess (docs/ENGINEERING.md §1's guard-rules.mjs split).
+// Decision logic (parseVersion, nextDevWindow, decide, devWindowSubject) is
+// pure and exported, so the layer 1 check in scripts/checks/release.ts can
+// assert every case without a git subprocess (docs/ENGINEERING.md §1's
+// guard-rules.mjs split).
 // The I/O — reading config, talking to git and gh — lives in this same
 // file's thin CLI wrapper below.
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -57,6 +58,16 @@ export function nextDevWindow(productionVersion: string, suffix = DEV_SUFFIX): s
  *  of this string shape to drift from this one. */
 export function devWindowBranch(next: string): string {
   return `devwindow/v${next}`;
+}
+
+/** The dev-window restore commit subject and pull request title, e.g.
+ *  `devWindowSubject('0.2.1-dev')` → `'open dev window for v0.2.1-dev'` — no
+ *  ticket-number prefix, matching the release skill's own bump subject
+ *  (`bump version to v<version>`, `plugins/port/skills/release/SKILL.md`
+ *  Part 1 step 3): a mechanical corridor commit carries no ticket behind it,
+ *  so it carries no ticket prefix either (#278). */
+export function devWindowSubject(next: string): string {
+  return `open dev window for v${next}`;
 }
 
 /** The pure decision: given the integration branch's current version, the
@@ -157,7 +168,7 @@ function openDevWindow({ root, cfg, next, branch }: { root: string; cfg: any; ne
     const commitMsgPath = join(root, '.temp/commit-msg.txt');
     writeFileSync(
       commitMsgPath,
-      `#0 open dev window for v${next}\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n`,
+      `${devWindowSubject(next)}\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n`,
     );
     git(['add', cfg.versionFile]);
     git(['commit', '-F', commitMsgPath]);
@@ -186,7 +197,7 @@ function openDevWindow({ root, cfg, next, branch }: { root: string; cfg: any; ne
   );
   const url = execFileSync(
     'gh',
-    ['pr', 'create', '--repo', cfg.repo, '--base', cfg.integration, '--head', branch, '--title', `#0 open dev window for v${next}`, '--body-file', bodyPath],
+    ['pr', 'create', '--repo', cfg.repo, '--base', cfg.integration, '--head', branch, '--title', devWindowSubject(next), '--body-file', bodyPath],
     { encoding: 'utf8' },
   ).trim();
   console.log(url);
