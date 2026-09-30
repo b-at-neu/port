@@ -1,0 +1,4 @@
+{
+  "repo": "b-at-neu/port",
+  "concurrency": { "overlapThreshold": 0 }
+}

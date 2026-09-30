@@ -4,13 +4,18 @@
   "type": "module",
   "packageManager": "pnpm@11.24.0",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.18.0"
   },
   "scripts": {
     "dev": "pnpm --filter @port/desktop dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
+    "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "typescript": "^6.0.3"
   }
 }

@@ -62,10 +62,22 @@ Then report the resolved mode, worktree path, and branch **before** the slow ste
 
 Never work in the main checkout: editing configuration from the session using it mutates your live setup mid-task. Never touch another worktree, and never `--force`.
 
-**impl mode** — branch straight off the integration branch; this replaces the agent's checkout-then-rebase:
+**impl mode** — branch straight off the integration branch; this replaces the agent's checkout-then-rebase, so it is the one route that would otherwise ignore a resume branch and then need a force push to reconcile. Run the same resume-branch lookup `impl-agent.md`'s Pre-flight does before creating anything:
 
 ```bash
 git fetch origin
+git ls-remote --heads origin "<n>-*"
+```
+
+**Exactly one match** — adopt it, detached:
+
+```bash
+git worktree add --detach .claude/worktrees/impl-<n> origin/<branch>
+```
+
+**Zero matches, or two or more** — fresh start, the shape below unchanged (naming every match in your report when there were two or more):
+
+```bash
 git worktree add -b <n>-ticket-name-in-kebab-case .claude/worktrees/impl-<n> origin/<integration>
 ```
 
@@ -76,7 +88,7 @@ git fetch origin
 git worktree add --detach .claude/worktrees/impl-<n> origin/<headRefName>
 ```
 
-Then work inside the worktree and run each entry in `commands.bootstrap` in order. In revise mode, rebase onto the base branch from inside the worktree: `git rebase origin/<baseRefName>` — the pull request's **own** base, not an assumed one.
+Then work inside the worktree and run each entry in `commands.bootstrap` in order. In revise mode, rebase onto the base branch from inside the worktree: `git rebase origin/<baseRefName>` — the pull request's **own** base, not an assumed one. In impl mode on an adopted branch, rebase onto the integration branch the same way: `git rebase origin/<integration>` — the same reachable-for-the-first-time rebase-conflict handling `impl-agent.md` states applies here too.
 
 **Never install, reinstall, or uninstall the plugin from inside this worktree** (`claude plugin install`/`uninstall`/`marketplace add`/`marketplace remove`) — every install scope shares one `installPath`, so a change made from here silently repoints every session on the machine and keeps doing so after this worktree is gone. The guard hook denies it from an `impl-<n>` worktree exactly as it would from anywhere else — this is the one guard-hook rule that does not exempt this skill's own worktree. Run it from the main checkout instead.
 

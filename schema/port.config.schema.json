@@ -27,7 +27,7 @@
 
     "branches": {
       "type": "object",
-      "description": "The two long-lived branches. Feature work targets `integration`; `production` is only ever reached by a release.",
+      "description": "The repository's long-lived branch(es). Feature work always targets `integration`. `production` is only ever reached by a release, or is null for a repository with no separate production branch — see the root allOf conditional pairing null `production` with `modules.release: false`.",
       "additionalProperties": false,
       "properties": {
         "integration": {
@@ -37,8 +37,8 @@
           "minLength": 1
         },
         "production": {
-          "type": "string",
-          "description": "Branch that releases promote to. Agents never open a feature pull request against it.",
+          "type": ["string", "null"],
+          "description": "Branch that releases promote to. Agents never open a feature pull request against it. Null means this repository has one long-lived branch and no release flow — prefer null over repeating `integration`'s name, which reads as a mistake at every use site.",
           "default": "main",
           "minLength": 1
         }
@@ -90,6 +90,24 @@
           "description": "Command prefix the cockpit appends `report`/`reclaim` to for worktree reclamation, and that `/port:worktree-clean` drives interactively. Null means hygiene is unavailable — worktrees still accumulate under `.claude/worktrees/` per ticket, and the cockpit says so once at startup rather than silently doing nothing.",
           "default": null,
           "examples": ["node scripts/port-worktrees.mjs"]
+        },
+        "budget": {
+          "type": ["string", "null"],
+          "description": "Command prefix the cockpit appends `reset`/`dispatch`/`sweep`/`report` to for per-ticket dispatch cost accounting. Null means nothing measures or bounds ticket cost, and the cockpit skips it silently — `reviewCycleCap` still bounds review loops only.",
+          "default": null,
+          "examples": ["node scripts/port-budget.mjs"]
+        },
+        "tick": {
+          "type": ["string", "null"],
+          "description": "Command prefix the cockpit appends `start`/`plan`/`commit`/`resolve` to for the tick engine, which moves the tick's decisions (query build, envelope classification, ownership partition, label classification, mergeability/contention/cycle-cap/liveness routing, and the pacing ladder) out of prose and into a deterministic script. Null means the cockpit follows the prose tick procedure in `TICK-PROSE.md` instead.",
+          "default": null,
+          "examples": ["node scripts/port-tick.mjs"]
+        },
+        "forensics": {
+          "type": ["string", "null"],
+          "description": "Command prefix the operator and the cockpit-tick housekeeping sweep append `report` to for the forensics engine, which asserts on what a dispatched agent's transcript actually shows (terminations, missing task-notifications, orphaned in-flight labels, shell loops, Bash timeouts, and BLOCKED: compliance after a denial) rather than only on the artifacts a run leaves behind. Reads a machine-local transcript tree outside the repository, so it is never run from `commands.checks`. Null means the repository has no forensics engine wired up, and the cockpit skips it silently.",
+          "default": null,
+          "examples": ["node scripts/port-forensics.mjs"]
         }
       }
     },
@@ -107,8 +125,9 @@
         },
         "design": {
           "type": ["string", "null"],
-          "description": "Path to the design system or token reference, for repositories with a user interface.",
-          "default": null
+          "description": "Path to the design standards plan-agent, impl-agent, review-agent, and revise-agent read for interface work, with review treating it as a review dimension. Null means the repository has no interface, or not enough of one to document — the agents fall back to the plan and the surrounding code.",
+          "default": null,
+          "examples": [".claude/docs/DESIGN.md"]
         }
       }
     },
@@ -232,12 +251,12 @@
         },
         "refreshBranch": {
           "type": "string",
-          "description": "Trigger: rebase and force-push with no code changes. Requires the previewDatabase module.",
+          "description": "Trigger: rebase and force-push with no code changes.",
           "default": "refresh branch"
         },
         "refreshing": {
           "type": "string",
-          "description": "In flight: branch refresh underway. Requires the previewDatabase module.",
+          "description": "In flight: branch refresh underway.",
           "default": "refreshing"
         }
       }
@@ -252,11 +271,6 @@
           "type": "boolean",
           "description": "Enforce the merge gate in CI. When off, no workflow is installed and review still applies the approved label, but the merge gate is conversational rather than enforced. Leave it off unless a branch ruleset makes the check required, since otherwise the workflow is noise.",
           "default": true
-        },
-        "previewDatabase": {
-          "type": "boolean",
-          "description": "Account for a finite pool of preview databases, one per open pull request. When on, a red deployment check is read as an infrastructure condition rather than a code finding, and merges trigger a branch refresh to reclaim a freed slot. Only relevant to repositories whose previews hold a database branch.",
-          "default": false
         },
         "release": {
           "type": "boolean",
@@ -293,6 +307,12 @@
           "description": "Command that writes the new version into `versionFiles` without committing or tagging, with `{{version}}` substituted. Null means edit the files directly instead. Ignored for `tags`.",
           "default": null,
           "examples": ["npm version {{version}} --no-git-tag-version --allow-same-version"]
+        },
+        "postPublishHook": {
+          "type": ["string", "null"],
+          "description": "A `node` invocation run verbatim, once, with no appended arguments, immediately after `/port:release` publishes the tag and GitHub release — the same command-prefix convention `commands.artifacts`/`worktrees`/`budget`/`tick` already follow. It resolves everything it needs from the repository itself. Must be idempotent: both Phase B's own step and the 'Done' exit run it, so a run that died after `gh release create` still completes. A non-zero exit is reported and never retried — the release has already shipped by the time the hook runs. Null means skip silently.",
+          "default": null,
+          "examples": ["node scripts/port-release-hook.mjs"]
         }
       }
     },
@@ -304,6 +324,40 @@
       "default": 5
     },
 
+    "budget": {
+      "type": "object",
+      "description": "The per-ticket dispatch cost rail. Null `wallClockMinutes` means unbounded — nothing changes for a repository that does not opt in. Whether this is enforced at all is `commands.budget`; this block only shapes it once that is set.",
+      "additionalProperties": false,
+      "properties": {
+        "wallClockMinutes": {
+          "type": ["integer", "null"],
+          "description": "Ceiling on cumulative agent wall-clock per ticket. At or over it, `commands.budget dispatch` returns `exceeded` and the cockpit escalates to `<labels.needsHuman>` instead of dispatching, the same shape `reviewCycleCap` already uses.",
+          "minimum": 1,
+          "default": null
+        }
+      }
+    },
+
+    "concurrency": {
+      "type": "object",
+      "description": "Narrows the file-contention gate from any shared path to enough shared paths that a rebase probably escalates. Absent means both defaults apply.",
+      "additionalProperties": false,
+      "properties": {
+        "sharedFiles": {
+          "type": "array",
+          "description": "Paths that never contribute to a hold, in either direction. Uses the `## Changes` grammar, not glob syntax: repo-relative, forward-slashed, no leading `./`, case-sensitive, and a trailing `/` matches any path beneath it — deliberately different from `sessionRequiredPaths`' `**` globs, since this list is compared against claimed paths written in that same grammar. List a path only when two tickets both touching it produce a union the rebase protocol already auto-resolves — a registry, an index, a table, a wiring file. A path where two tickets would edit the same key, the same constant, or the same paragraph does not belong here.",
+          "items": { "type": "string", "minLength": 1 },
+          "default": []
+        },
+        "overlapThreshold": {
+          "type": "integer",
+          "description": "How many non-excused paths one in-flight item must share with a candidate before it holds. Counted per in-flight item, never pooled. `1` restores the pre-#190 behaviour of holding on any shared path.",
+          "minimum": 1,
+          "default": 2
+        }
+      }
+    },
+
     "sessionRequiredPaths": {
       "type": "array",
       "description": "Globs that cannot be handed to a dispatched agent, because the harness denies edits under them to subagents. A plan touching any of these is marked so the operator runs that stage in their own session instead. Also seeds the never-touch list for automatic rebase conflict resolution.",
@@ -313,10 +367,34 @@
 
     "extraAllow": {
       "type": "array",
-      "description": "Additional permission patterns merged into the repository's allowlist by the installer, for tooling the base list does not cover. Keep these narrow: the allowlist is the safety surface, and a broad entry can hand an agent a general command-execution escape hatch.",
+      "description": "Additional permission patterns merged into the repository's allowlist by the installer, for tooling the base list does not cover. An entry covering a `commands.*` command ends in ` *` (#205) — the matcher treats anything else as whole-command-exact, so a bare form denies every invocation an agent appends output-limiting flags to. Keep these narrow otherwise: the allowlist is the safety surface, and a broad entry can hand an agent a general command-execution escape hatch.",
       "items": { "type": "string", "minLength": 1 },
       "default": [],
       "examples": [["Bash(npx shadcn@latest *)"]]
     }
-  }
+  },
+
+  "$comment": "Root allOf: a null branches.production (single-branch mode) requires modules.release to be explicitly false, since release defaults to true and a config saying nothing would otherwise ask for both. Draft 2020-12 cannot compare two sibling values, so 'production must differ from integration' is NOT expressed here — /port:init's pre-write validation and layer 1's coherence check (comparing resolved defaults) enforce that instead.",
+  "allOf": [
+    {
+      "if": {
+        "required": ["branches"],
+        "properties": {
+          "branches": {
+            "required": ["production"],
+            "properties": { "production": { "type": "null" } }
+          }
+        }
+      },
+      "then": {
+        "required": ["modules"],
+        "properties": {
+          "modules": {
+            "required": ["release"],
+            "properties": { "release": { "const": false } }
+          }
+        }
+      }
+    }
+  ]
 }

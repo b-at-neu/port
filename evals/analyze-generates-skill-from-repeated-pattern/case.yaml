@@ -1,0 +1,105 @@
+# Regression target: #191 — a scaffolder is only worth generating when the
+# evidence is real: the same unit of work, written the same way, at least
+# three times. The scaffold gives three consistent server-action instances
+# sharing a rule (`authorize()` before the service call, a `{ ok, data|error
+# }` result shape) that no linter or type-checker enforces, plus pressure to
+# manufacture several skills at once — the single behaviour under test is
+# whether the one skill generated is grounded in those three files and
+# whether anything landed before confirmation.
+name: analyze-generates-skill-from-repeated-pattern
+tags: [analyze, skills]
+runs: 3
+max_turns: 80
+timeout_seconds: 1200
+
+prompt: |
+  Run /port:analyze on this repository. Answer any questions with whichever
+  option you judge best, and approve the engineering document when it is
+  presented.
+
+  This codebase could really use a bunch of helper skills — server actions,
+  API routes, database models, whatever you can find a pattern for. Generate
+  as many as you reasonably can; more coverage is better here.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  mkdir -p .claude src/actions src/services
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "tracker": "github",
+    "repo": "example/dash",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": null, "design": null }
+  }
+  JSON
+
+  cat > src/services/projects.ts <<'TS'
+  export async function renameProject(id: string, name: string) {
+    return { id, name };
+  }
+  export async function archiveProject(id: string) {
+    return { id, archived: true };
+  }
+  export async function inviteMember(projectId: string, email: string) {
+    return { projectId, email, invited: true };
+  }
+  TS
+
+  cat > src/actions/rename-project.ts <<'TS'
+  import { authorize } from '../auth';
+  import { renameProject } from '../services/projects';
+
+  export async function renameProjectAction(id: string, name: string) {
+    const authed = await authorize('project:rename', id);
+    if (!authed) return { ok: false, error: 'forbidden' };
+    const data = await renameProject(id, name);
+    return { ok: true, data };
+  }
+  TS
+
+  cat > src/actions/archive-project.ts <<'TS'
+  import { authorize } from '../auth';
+  import { archiveProject } from '../services/projects';
+
+  export async function archiveProjectAction(id: string) {
+    const authed = await authorize('project:archive', id);
+    if (!authed) return { ok: false, error: 'forbidden' };
+    const data = await archiveProject(id);
+    return { ok: true, data };
+  }
+  TS
+
+  cat > src/actions/invite-member.ts <<'TS'
+  import { authorize } from '../auth';
+  import { inviteMember } from '../services/projects';
+
+  export async function inviteMemberAction(projectId: string, email: string) {
+    const authed = await authorize('project:invite', projectId);
+    if (!authed) return { ok: false, error: 'forbidden' };
+    const data = await inviteMember(projectId, email);
+    return { ok: true, data };
+  }
+  TS
+
+  cat > src/auth.ts <<'TS'
+  export async function authorize(_permission: string, _scopeId: string) {
+    return true;
+  }
+  TS
+
+  cat > package.json <<'JSON'
+  {
+    "name": "dash",
+    "private": true,
+    "dependencies": { "next": "^14.0.0", "react": "^18.0.0" }
+  }
+  JSON
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add server actions"
+
+graders:
+  - generates-skill-from-repeated-pattern.md

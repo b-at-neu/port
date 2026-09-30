@@ -13,6 +13,8 @@
 
 Every pipeline agent reads this document before working. It defines the quality bar beyond what is obvious from the code. Plans must account for it per feature, implementations must follow it, and review findings may cite its sections the same way they cite the plan.
 
+**Boundary with `DESIGN.md`.** This document is how code is structured and what must be true of it — correctness, security, layering, error handling, testing. `DESIGN.md`, where a repository has one, is what the interface looks like and the vocabulary for building it — tokens, typography, component treatments, copy tone. **Accessibility lives here alone**, never restated in `DESIGN.md`, because it is a correctness requirement review blocks on. Where the two genuinely overlap — contrast — the ratio *values* belong in `DESIGN.md` as design vocabulary, while the *requirement* to meet a given ratio stays here.
+
 **Stack:** <!-- languages, framework, database, auth, styling, testing -->
 
 ## 1. Architecture
@@ -25,7 +27,10 @@ Every pipeline agent reads this document before working. It defines the quality 
 ## 2. Data and integrity
 
 <!-- Query and mutation conventions, transaction boundaries, migration discipline,
-     where input is validated. -->
+     where input is validated. A record of which copies are pinned together
+     belongs beside the check that enforces each pin, not gathered into one
+     table every change has to append to — the same generalization §7's
+     comment carries for regression guards. -->
 
 ## 3. Security
 
@@ -42,7 +47,9 @@ Every pipeline agent reads this document before working. It defines the quality 
 
 ## 5. Accessibility
 
-<!-- Semantics, keyboard operability, focus management, labelling, contrast. -->
+<!-- Semantics, keyboard operability, focus management, labelling, contrast. This
+     section is accessibility's single home — `DESIGN.md`, where a repository has
+     one, cross-references it and never restates it. -->
 
 ## 6. Performance
 
@@ -52,7 +59,10 @@ Every pipeline agent reads this document before working. It defines the quality 
 
 <!-- Type strictness, exhaustiveness, naming, and comment discipline: when a comment
      earns its place and how long it may be — and the maximum length of a source
-     file, if you set one. -->
+     file, if you set one. A per-fix regression guard belongs beside the check
+     that pins it, not gathered into one shared registry file every fix has to
+     touch — that single-file shape is what turns "every fix leaves a guard"
+     into constant rebases as concurrency scales up. -->
 
 ## 8. Pre-pull-request self-check
 

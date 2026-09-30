@@ -1,0 +1,77 @@
+[
+  {
+    "name": "upstream-branch wins on its own",
+    "input": { "upstreamMergeRef": "refs/heads/77-foo", "branch": null, "dirBasename": null, "headSubject": null },
+    "expect": { "number": 77, "rung": "upstream-branch" }
+  },
+  {
+    "name": "branch-name wins on its own",
+    "input": { "upstreamMergeRef": null, "branch": "77-foo", "dirBasename": null, "headSubject": null },
+    "expect": { "number": 77, "rung": "branch-name" }
+  },
+  {
+    "name": "directory-basename wins on its own",
+    "input": { "upstreamMergeRef": null, "branch": null, "dirBasename": "impl-77", "headSubject": null },
+    "expect": { "number": 77, "rung": "directory-basename" }
+  },
+  {
+    "name": "head-subject wins on its own",
+    "input": { "upstreamMergeRef": null, "branch": null, "dirBasename": null, "headSubject": "#77 fix the thing" },
+    "expect": { "number": 77, "rung": "head-subject" }
+  },
+  {
+    "name": "upstream-branch takes precedence over branch-name",
+    "input": { "upstreamMergeRef": "refs/heads/77-foo", "branch": "99-bar", "dirBasename": null, "headSubject": null },
+    "expect": { "number": 77, "rung": "upstream-branch" }
+  },
+  {
+    "name": "branch-name takes precedence over directory-basename",
+    "input": { "upstreamMergeRef": null, "branch": "77-foo", "dirBasename": "impl-99", "headSubject": null },
+    "expect": { "number": 77, "rung": "branch-name" }
+  },
+  {
+    "name": "directory-basename takes precedence over head-subject",
+    "input": { "upstreamMergeRef": null, "branch": null, "dirBasename": "impl-77", "headSubject": "#99 bar" },
+    "expect": { "number": 77, "rung": "directory-basename" }
+  },
+  {
+    "name": "#0 is rejected at the upstream-branch rung",
+    "input": { "upstreamMergeRef": "refs/heads/0-foo", "branch": null, "dirBasename": null, "headSubject": null },
+    "expect": null
+  },
+  {
+    "name": "#0 is rejected at the branch-name rung",
+    "input": { "upstreamMergeRef": null, "branch": "0-foo", "dirBasename": null, "headSubject": null },
+    "expect": null
+  },
+  {
+    "name": "#0 is rejected at the directory-basename rung",
+    "input": { "upstreamMergeRef": null, "branch": null, "dirBasename": "impl-0", "headSubject": null },
+    "expect": null
+  },
+  {
+    "name": "#0 is rejected at the head-subject rung",
+    "input": { "upstreamMergeRef": null, "branch": null, "dirBasename": null, "headSubject": "#0 foo" },
+    "expect": null
+  },
+  {
+    "name": "a non-numeric branch prefix does not match the branch-name rung",
+    "input": { "upstreamMergeRef": null, "branch": "feature-foo", "dirBasename": null, "headSubject": null },
+    "expect": null
+  },
+  {
+    "name": "an agent-<hash> basename resolves only via upstream-branch",
+    "input": { "upstreamMergeRef": "refs/heads/77-foo", "branch": null, "dirBasename": "agent-deadbeef", "headSubject": null },
+    "expect": { "number": 77, "rung": "upstream-branch" }
+  },
+  {
+    "name": "an agent-<hash> basename resolves only via head-subject",
+    "input": { "upstreamMergeRef": null, "branch": null, "dirBasename": "agent-deadbeef", "headSubject": "#77 fix the thing" },
+    "expect": { "number": 77, "rung": "head-subject" }
+  },
+  {
+    "name": "a fully unresolvable entry",
+    "input": { "upstreamMergeRef": null, "branch": null, "dirBasename": null, "headSubject": null },
+    "expect": null
+  }
+]

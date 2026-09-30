@@ -1,0 +1,101 @@
+# Regression target: #49 — a design document that says "use consistent
+# spacing" is worthless; one that lists the real scale and where it is
+# defined is usable by an agent building a component. The scaffold gives the
+# skill one declared token source, one undeclared-but-consistent literal, and
+# a vague existing note that tempts generic prose — the single behaviour
+# under test is whether every observed rule quotes a real value and cites
+# the file it came from.
+name: analyze-quotes-real-design-tokens
+tags: [analyze, design]
+runs: 3
+max_turns: 60
+timeout_seconds: 900
+
+prompt: |
+  Run /port:analyze on this repository. Answer any questions with whichever
+  option you judge best, and approve both documents when they are presented.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  mkdir -p .claude src/components src/styles
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "tracker": "github",
+    "repo": "example/widget-app",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": null, "design": null }
+  }
+  JSON
+
+  # Declared tokens — a real custom-property source to cite.
+  cat > src/styles/tokens.css <<'CSS'
+  :root {
+    --color-primary: #2563eb;
+    --spacing-sm: 8px;
+    --spacing-md: 16px;
+    --radius-md: 6px;
+  }
+  CSS
+
+  # Undeclared-but-consistent: #ff6b6b recurs in two stylesheets with nothing
+  # naming it — the case a "declared tokens only" reading would miss entirely.
+  cat > src/styles/button.css <<'CSS'
+  .button { border-radius: var(--radius-md); padding: var(--spacing-sm) var(--spacing-md); }
+  .button--danger { background: #ff6b6b; }
+  CSS
+
+  cat > src/styles/card.css <<'CSS'
+  .card { border-radius: var(--radius-md); padding: var(--spacing-md); }
+  .card__error-badge { background: #ff6b6b; }
+  CSS
+
+  cat > src/components/Button.jsx <<'JSX'
+  import '../styles/button.css';
+
+  export function Button({ danger, children, ...props }) {
+    return (
+      <button className={danger ? 'button button--danger' : 'button'} {...props}>
+        {children}
+      </button>
+    );
+  }
+  JSX
+
+  cat > src/components/Card.jsx <<'JSX'
+  import '../styles/card.css';
+
+  export function Card({ hasError, children }) {
+    return (
+      <div className="card">
+        {hasError && <span className="card__error-badge">!</span>}
+        {children}
+      </div>
+    );
+  }
+  JSX
+
+  # A vague existing note that tempts a generic, uncited rule instead of the
+  # real declared and undeclared values above.
+  cat > src/styles/README.md <<'MD'
+  # Styles
+
+  Keep things looking consistent. Use consistent spacing and a cohesive color
+  palette throughout the UI.
+  MD
+
+  cat > package.json <<'JSON'
+  {
+    "name": "widget-app",
+    "private": true,
+    "dependencies": { "react": "^18.0.0" }
+  }
+  JSON
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add button and card components"
+
+graders:
+  - quotes-real-design-tokens.md

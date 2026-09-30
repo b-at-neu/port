@@ -1,0 +1,277 @@
+import { describe, expect, it } from 'vitest'
+import { resolveVocabulary, type LabelVocabulary } from '../../shared/labels/vocabulary'
+import { buildClaimPreflightQuery, buildGatePreflightQuery, buildItemStatesQuery, buildItemsByNumberQuery, buildPipelineQuery, graphqlStringLiteral } from './query'
+
+describe('graphqlStringLiteral', () => {
+  it('round-trips a name containing a double quote, a backslash, and a newline', () => {
+    const name = 'plan "approved"\\with\\backslashes\nand a newline'
+    const literal = graphqlStringLiteral(name)
+    expect(JSON.parse(literal)).toBe(name)
+    // A GraphQL StringValue is single-line — no raw newline may appear in it.
+    expect(literal.includes('\n')).toBe(false)
+  })
+
+  it('is the identity for a plain name', () => {
+    expect(JSON.parse(graphqlStringLiteral('ready'))).toBe('ready')
+  })
+})
+
+describe('buildPipelineQuery', () => {
+  it('emits two aliases per enabled label and none for a disabled one', () => {
+    // No shipped label is module-gated any more (#189) — `resolveVocabulary`
+    // itself never produces a non-empty `disabled` today (see
+    // `vocabulary.test.ts` → "disables nothing"). `disabled` stays a designed
+    // extension point (`labels.json`'s own `$comment`), so this builds a
+    // `LabelVocabulary` by hand to keep `buildPipelineQuery`'s handling of it
+    // under test rather than dropping the case.
+    const vocabulary: LabelVocabulary = {
+      labels: [
+        { key: 'ready', name: 'ready', source: 'default', module: 'core', role: 'trigger' },
+        { key: 'blocked', name: 'blocked', source: 'default', module: 'core', role: 'gate' },
+      ],
+      disabled: ['refreshBranch', 'refreshing'],
+      problems: [],
+    }
+    const { document, aliases } = buildPipelineQuery(vocabulary)
+
+    expect(aliases.length).toBe(vocabulary.labels.length)
+    expect(vocabulary.disabled.length).toBeGreaterThan(0)
+    for (const disabledKey of vocabulary.disabled) {
+      expect(aliases.some((a) => a.key === disabledKey)).toBe(false)
+    }
+    for (const alias of aliases) {
+      expect(document).toContain(`${alias.issueAlias}: issues(`)
+      expect(document).toContain(`${alias.prAlias}: pullRequests(`)
+    }
+  })
+
+  it('aliases are unique, GraphQL-name-shaped, and independent of the label text', () => {
+    const vocabulary = resolveVocabulary({ labels: { ready: 'a name with spaces & symbols!' } })
+    const { aliases } = buildPipelineQuery(vocabulary)
+    const seen = new Set<string>()
+    for (const alias of aliases) {
+      for (const name of [alias.issueAlias, alias.prAlias]) {
+        expect(seen.has(name)).toBe(false)
+        seen.add(name)
+        expect(/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)).toBe(true)
+      }
+    }
+  })
+
+  it('every connection carries totalCount', () => {
+    const vocabulary = resolveVocabulary({})
+    const { document } = buildPipelineQuery(vocabulary)
+    const connectionLines = document.split('\n').filter((line) => /^\s*(i\d+|p\d+|repoLabels):/.test(line))
+    expect(connectionLines.length).toBeGreaterThan(0)
+    for (const line of connectionLines) {
+      expect(line).toContain('totalCount')
+    }
+  })
+
+  it('never uses GraphQL search', () => {
+    const vocabulary = resolveVocabulary({})
+    const { document } = buildPipelineQuery(vocabulary)
+    expect(document).not.toContain('search(')
+  })
+
+  it('requests viewer as a top-level field, outside repository (#94)', () => {
+    const vocabulary = resolveVocabulary({})
+    const { document } = buildPipelineQuery(vocabulary)
+    const repositoryStart = document.indexOf('repository(owner:')
+    const viewerIndex = document.indexOf('viewer { login }')
+    expect(viewerIndex).toBeGreaterThan(-1)
+    const closeIndex = document.indexOf('\n  }\n', repositoryStart)
+    expect(viewerIndex).toBeGreaterThan(closeIndex)
+  })
+
+  it('a label name containing a double quote round-trips through the built document', () => {
+    const vocabulary = resolveVocabulary({ labels: { ready: 'weird "quoted" label' } })
+    const { document } = buildPipelineQuery(vocabulary)
+    expect(document).toContain(graphqlStringLiteral('weird "quoted" label'))
+  })
+
+  // #108: headRefOid/reviews/comments feed the cycle-cap and zero-diff
+  // gates — requested once, on the PullRequestFields fragment, never a
+  // second round trip.
+  it('the PullRequestFields fragment carries headRefOid, reviews, and comments', () => {
+    const vocabulary = resolveVocabulary({})
+    const { document } = buildPipelineQuery(vocabulary)
+    const fragmentStart = document.indexOf('fragment PullRequestFields')
+    const fragment = document.slice(fragmentStart)
+    expect(fragment).toContain('headRefOid')
+    expect(fragment).toContain('reviews(first: 30)')
+    expect(fragment).toContain('comments(last: 20)')
+  })
+})
+
+describe('buildItemStatesQuery', () => {
+  it('emits exactly one alias per input item', () => {
+    const items = [
+      { kind: 'issue' as const, number: 76 },
+      { kind: 'pull-request' as const, number: 184 },
+    ]
+    const { aliases } = buildItemStatesQuery(items)
+    expect(aliases).toEqual([
+      { alias: 's0', kind: 'issue', number: 76 },
+      { alias: 's1', kind: 'pull-request', number: 184 },
+    ])
+  })
+
+  it('picks the field selector from kind — issue() vs pullRequest(), no mergedAt on an issue alias', () => {
+    const { document } = buildItemStatesQuery([
+      { kind: 'issue', number: 1 },
+      { kind: 'pull-request', number: 2 },
+    ])
+    expect(document).toContain('s0: issue(number: 1) { number state closedAt url }')
+    expect(document).toContain('s1: pullRequest(number: 2) { number state mergedAt closedAt url }')
+  })
+
+  it('returns an empty alias list and a still-valid document for no items', () => {
+    const { document, aliases } = buildItemStatesQuery([])
+    expect(aliases).toEqual([])
+    expect(document).toContain('repository(owner: $owner, name: $name)')
+  })
+})
+
+/** Extracts the balanced-brace body of `... on <typeName> { ... }` — the
+ *  naive `/\{([^}]*)\}/` regex `mergedAt`/`labels` used to check against
+ *  stops at the *first* nested `}`, which now falls inside `assignees`'s own
+ *  `{ nodes { login } }` before the fragment's real close. */
+function extractFragment(document: string, typeName: string): string {
+  const start = document.indexOf(`... on ${typeName} {`)
+  if (start === -1) return ''
+  let depth = 0
+  let i = document.indexOf('{', start)
+  const bodyStart = i + 1
+  for (; i < document.length; i++) {
+    if (document[i] === '{') depth++
+    else if (document[i] === '}') {
+      depth--
+      if (depth === 0) return document.slice(bodyStart, i)
+    }
+  }
+  return document.slice(bodyStart)
+}
+
+describe('buildItemsByNumberQuery', () => {
+  it('emits one issueOrPullRequest alias per number', () => {
+    const { aliases } = buildItemsByNumberQuery([79, 184])
+    expect(aliases).toEqual([
+      { alias: 'n0', number: 79 },
+      { alias: 'n1', number: 184 },
+    ])
+  })
+
+  it('requests __typename, and selects mergedAt only inside the PullRequest fragment', () => {
+    const { document } = buildItemsByNumberQuery([1])
+    expect(document).toContain('n0: issueOrPullRequest(number: 1)')
+    expect(document).toContain('__typename')
+    const issueFragment = extractFragment(document, 'Issue')
+    const prFragment = extractFragment(document, 'PullRequest')
+    expect(issueFragment).not.toContain('mergedAt')
+    expect(prFragment).toContain('mergedAt')
+  })
+
+  it('returns an empty alias list and a still-valid document for no numbers', () => {
+    const { document, aliases } = buildItemsByNumberQuery([])
+    expect(aliases).toEqual([])
+    expect(document).toContain('repository(owner: $owner, name: $name)')
+  })
+
+  it('never uses GraphQL search', () => {
+    const { document } = buildItemsByNumberQuery([1, 2, 3])
+    expect(document).not.toContain('search(')
+  })
+
+  it('selects labels inside both the Issue and the PullRequest fragment', () => {
+    const { document } = buildItemsByNumberQuery([1])
+    const issueFragment = extractFragment(document, 'Issue')
+    const prFragment = extractFragment(document, 'PullRequest')
+    expect(issueFragment).toContain('labels(first:')
+    expect(prFragment).toContain('labels(first:')
+  })
+
+  // #90: the write chokepoint's authoritative read needs assignees beside
+  // labels — one round trip, not a second query.
+  it('selects assignees inside both the Issue and the PullRequest fragment', () => {
+    const { document } = buildItemsByNumberQuery([1])
+    const issueFragment = extractFragment(document, 'Issue')
+    const prFragment = extractFragment(document, 'PullRequest')
+    expect(issueFragment).toContain('assignees(first:')
+    expect(prFragment).toContain('assignees(first:')
+  })
+})
+
+describe('buildClaimPreflightQuery', () => {
+  it('aliases the number as c0 and embeds it as a literal', () => {
+    const { document } = buildClaimPreflightQuery(93)
+    expect(document).toContain('c0: issueOrPullRequest(number: 93)')
+  })
+
+  it('requests labels, assignees, and blockedBy inside the Issue fragment only — never the PullRequest one', () => {
+    const { document } = buildClaimPreflightQuery(1)
+    const issueFragment = extractFragment(document, 'Issue')
+    const prFragment = extractFragment(document, 'PullRequest')
+    expect(issueFragment).toContain('labels(first:')
+    expect(issueFragment).toContain('assignees(first:')
+    expect(issueFragment).toContain('blockedBy(first:')
+    expect(prFragment).not.toContain('labels(first:')
+    expect(prFragment).not.toContain('assignees(first:')
+    expect(prFragment).not.toContain('blockedBy(first:')
+  })
+
+  it('blockedBy requests totalCount beside its nodes, for truncation reporting', () => {
+    const { document } = buildClaimPreflightQuery(1)
+    const issueFragment = extractFragment(document, 'Issue')
+    expect(issueFragment).toMatch(/blockedBy\(first: \d+\) \{ totalCount nodes/)
+  })
+
+  it('requests viewer as a top-level field, outside repository', () => {
+    const { document } = buildClaimPreflightQuery(1)
+    const repositoryStart = document.indexOf('repository(owner:')
+    const viewerIndex = document.indexOf('viewer { login }')
+    expect(viewerIndex).toBeGreaterThan(-1)
+    // The repository block closes with a lone '  }' before viewer appears —
+    // asserting viewer is not nested inside it rather than merely present.
+    const closeIndex = document.indexOf('\n  }\n', repositoryStart)
+    expect(viewerIndex).toBeGreaterThan(closeIndex)
+  })
+
+  it('never uses GraphQL search', () => {
+    const { document } = buildClaimPreflightQuery(1)
+    expect(document).not.toContain('search(')
+  })
+})
+
+describe('buildGatePreflightQuery', () => {
+  it('aliases the number as c0 and embeds it as a literal', () => {
+    const { document } = buildGatePreflightQuery(148)
+    expect(document).toContain('c0: issueOrPullRequest(number: 148)')
+  })
+
+  it('requests body, labels, and assignees inside the Issue fragment only — never the PullRequest one', () => {
+    const { document } = buildGatePreflightQuery(1)
+    const issueFragment = extractFragment(document, 'Issue')
+    const prFragment = extractFragment(document, 'PullRequest')
+    expect(issueFragment).toContain('body')
+    expect(issueFragment).toContain('labels(first:')
+    expect(issueFragment).toContain('assignees(first:')
+    expect(prFragment).not.toContain('body')
+    expect(prFragment).not.toContain('labels(first:')
+    expect(prFragment).not.toContain('assignees(first:')
+  })
+
+  it('requests viewer as a top-level field, outside repository', () => {
+    const { document } = buildGatePreflightQuery(1)
+    const repositoryStart = document.indexOf('repository(owner:')
+    const viewerIndex = document.indexOf('viewer { login }')
+    expect(viewerIndex).toBeGreaterThan(-1)
+    const closeIndex = document.indexOf('\n  }\n', repositoryStart)
+    expect(viewerIndex).toBeGreaterThan(closeIndex)
+  })
+
+  it('never uses GraphQL search', () => {
+    const { document } = buildGatePreflightQuery(1)
+    expect(document).not.toContain('search(')
+  })
+})

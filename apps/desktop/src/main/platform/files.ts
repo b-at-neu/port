@@ -1,5 +1,8 @@
 import type { Dirent } from 'node:fs'
-import { readFile, readdir, stat } from 'node:fs/promises'
+import { createReadStream } from 'node:fs'
+import { randomUUID } from 'node:crypto'
+import { appendFile, mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 
 /** ENOENT is a value, never an exception — `.agents/denials.log` legitimately
  *  does not exist, and callers must distinguish "no config" from "unreadable
@@ -93,14 +96,185 @@ export async function listDirectory(path: string): Promise<FileResult<readonly D
 export interface StatInfo {
   readonly kind: 'file' | 'directory' | 'other'
   readonly size: number
+  readonly modifiedAt: string
 }
 
+/** `modifiedAt` (`info.mtime.toISOString()`) is the only per-agent activity
+ *  source a local read can produce (#78) — a transcript's own mtime, read
+ *  beside its `meta.json`. `main/platform/` is the only place under `src/`
+ *  allowed to reach `node:fs`, so every activity signal in the app comes
+ *  through here rather than a second `stat` call elsewhere. */
 export async function statPath(path: string): Promise<FileResult<StatInfo>> {
   try {
     const info = await stat(path)
     const kind: StatInfo['kind'] = info.isDirectory() ? 'directory' : info.isFile() ? 'file' : 'other'
-    return { ok: true, value: { kind, size: info.size } }
+    return { ok: true, value: { kind, size: info.size, modifiedAt: info.mtime.toISOString() } }
   } catch (error) {
+    return { ok: false, ...classifyFsError(error) }
+  }
+}
+
+/** Creates `path` and every missing parent, succeeding silently when it
+ *  already exists — the registry's userData directory may or may not exist
+ *  on first launch, and both cases are the same "make sure it's there". */
+export async function ensureDirectory(path: string): Promise<FileResult<void>> {
+  try {
+    await mkdir(path, { recursive: true })
+    return { ok: true, value: undefined }
+  } catch (error) {
+    return { ok: false, ...classifyFsError(error) }
+  }
+}
+
+export interface ReadLinesFromOptions {
+  readonly maxBytes: number
+}
+
+export interface ReadLinesFromValue {
+  readonly lines: readonly string[]
+  /** Exactly the bytes (starting at `start`) that produced a complete line —
+   *  the caller's next `start`. A partial trailing line (no terminating
+   *  `\n` yet, e.g. a `.jsonl` mid-append) is never counted here and never
+   *  appears in `lines`, so a resumed read picks it back up whole. */
+  readonly bytesConsumed: number
+  /** `bytesRead === maxBytes` — the only honest "there may be more past this
+   *  window" signal. A caller must not read `nextOffset < size` as that
+   *  signal: a partial trailing line makes it permanently true and would
+   *  spin a poller. */
+  readonly filledBudget: boolean
+}
+
+export type ReadLinesFromResult = FileResult<ReadLinesFromValue>
+
+/** Streams raw `Buffer` chunks from `path` starting at byte offset `start`
+ *  (no `encoding`, so this stays exact — a `readline`-split, already
+ *  `\r`-stripped string cannot be turned back into byte arithmetic), through
+ *  at most `maxBytes`. Finds the **last** `0x0A` in the accumulated buffer,
+ *  decodes only the bytes before it as UTF-8 (a range ending on a newline
+ *  byte can never split a multi-byte sequence, so this needs no
+ *  `StringDecoder` carry-over), and splits on `\n` with one trailing `\r`
+ *  stripped per line — the CRLF-safe equivalent of `readline`'s own
+ *  `crlfDelay: Infinity`. No newline anywhere in the window yields
+ *  `bytesConsumed: 0, lines: []`; `bytesConsumed === 0` while the read
+ *  filled `maxBytes` means one line longer than the whole budget, which
+ *  would never advance the caller's offset, so that case reports
+ *  `too-large` instead of spinning. `start` past EOF is a value, not an
+ *  error — an empty read, zero bytes. */
+export async function readLinesFrom(path: string, start: number, options: ReadLinesFromOptions): Promise<ReadLinesFromResult> {
+  return new Promise((resolve) => {
+    let settled = false
+    const chunks: Buffer[] = []
+    let bytesRead = 0
+
+    const stream = createReadStream(path, { start, end: start + options.maxBytes - 1 })
+
+    function finish(result: ReadLinesFromResult): void {
+      if (settled) return
+      settled = true
+      if (!stream.destroyed) stream.destroy()
+      resolve(result)
+    }
+
+    stream.on('data', (chunk: Buffer) => {
+      chunks.push(chunk)
+      bytesRead += chunk.length
+    })
+    stream.on('error', (error) => {
+      finish({ ok: false, ...classifyFsError(error) })
+    })
+    stream.on('end', () => {
+      const buffer = Buffer.concat(chunks)
+      const lastNewline = buffer.lastIndexOf(0x0a)
+      const filledBudget = bytesRead === options.maxBytes
+
+      if (lastNewline === -1) {
+        if (filledBudget) {
+          finish({ ok: false, kind: 'too-large', message: `${path} has no newline within ${options.maxBytes} bytes of offset ${start}` })
+          return
+        }
+        finish({ ok: true, value: { lines: [], bytesConsumed: 0, filledBudget } })
+        return
+      }
+
+      const text = buffer.subarray(0, lastNewline).toString('utf8')
+      const lines = text.split('\n').map((line) => (line.endsWith('\r') ? line.slice(0, -1) : line))
+      finish({ ok: true, value: { lines, bytesConsumed: lastNewline + 1, filledBudget } })
+    })
+  })
+}
+
+/** Writes `text` to `path`, creating it if absent and overwriting it whole
+ *  otherwise — the plain (non-atomic) counterpart to `writeJsonFileAtomic`,
+ *  for a caller (`main/writes/claim.ts`'s scratch comment file) that already
+ *  owns the whole write and deletes the file itself in a `finally`. */
+export async function writeTextFile(path: string, text: string): Promise<FileResult<void>> {
+  try {
+    await writeFile(path, text, 'utf8')
+    return { ok: true, value: undefined }
+  } catch (error) {
+    return { ok: false, ...classifyFsError(error) }
+  }
+}
+
+/** Appends `text` to `path`, creating it if absent — the only way anything
+ *  under `src/` may grow a file line by line. `main/writes/audit.ts` is this
+ *  helper's one caller, so no second path can write an audit entry that
+ *  skipped the chokepoint. */
+export async function appendTextFile(path: string, text: string): Promise<FileResult<void>> {
+  try {
+    await appendFile(path, text, 'utf8')
+    return { ok: true, value: undefined }
+  } catch (error) {
+    return { ok: false, ...classifyFsError(error) }
+  }
+}
+
+/** Deletes `path`, reporting `not-found` rather than throwing when it is
+ *  already gone — `main/writes/claim.ts`'s `releaseGateClaim` treats that as
+ *  success, since the caller's intent ("the claim should not exist") is
+ *  already satisfied. */
+export async function removeFile(path: string): Promise<FileResult<void>> {
+  try {
+    await unlink(path)
+    return { ok: true, value: undefined }
+  } catch (error) {
+    return { ok: false, ...classifyFsError(error) }
+  }
+}
+
+/** Renames `from` to `to`, replacing an existing file at `to` atomically on
+ *  POSIX and on Windows alike — `main/writes/audit.ts`'s log-rotation step
+ *  (`writes.jsonl` → `writes.prev.jsonl`) is the one caller that needs this
+ *  outside `writeJsonFileAtomic`'s own internal use. */
+export async function renamePath(from: string, to: string): Promise<FileResult<void>> {
+  try {
+    await rename(from, to)
+    return { ok: true, value: undefined }
+  } catch (error) {
+    return { ok: false, ...classifyFsError(error) }
+  }
+}
+
+/** Writes `value` as JSON to `path` without ever leaving a half-written file
+ *  behind: serialize first (a circular value throws before anything touches
+ *  disk), write a uuid-suffixed temp file beside the target, then `rename`
+ *  over it — `rename` replaces an existing file atomically on POSIX and on
+ *  Windows alike, unlike a plain `writeFile` to the target path. The temp
+ *  file is written in the target's own directory so the rename never crosses
+ *  a filesystem boundary, and a best-effort unlink cleans it up on failure. */
+export async function writeJsonFileAtomic(path: string, value: unknown): Promise<FileResult<void>> {
+  const text = JSON.stringify(value, null, 2)
+  const tempPath = join(dirname(path), `${randomUUID()}.tmp`)
+  try {
+    await writeFile(tempPath, text, 'utf8')
+    await rename(tempPath, path)
+    return { ok: true, value: undefined }
+  } catch (error) {
+    try {
+      await unlink(tempPath)
+    } catch {
+      // Best-effort only — the temp file may never have been created.
+    }
     return { ok: false, ...classifyFsError(error) }
   }
 }

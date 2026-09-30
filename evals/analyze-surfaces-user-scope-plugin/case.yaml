@@ -1,14 +1,10 @@
-# Regression target: #50 — the exclusion is scope-blind.
+# Regression target: #50 — the exclusion was scope-blind.
 #
 # A plugin installed at *user* scope is "already installed" for this operator and
 # invisible to everyone who clones the repository. Excluding it as a duplicate
 # loses the one recommendation worth making: declare it at project scope.
-#
-# This case is expected to FAIL against the current prompt, which still says
-# "exclude anything already installed" with no scope distinction. #50 is open and
-# is the fix; the case is the regression target, written first on purpose.
 name: analyze-surfaces-user-scope-plugin
-tags: [analyze, plugins, known-failing]
+tags: [analyze, plugins]
 runs: 3
 max_turns: 60
 timeout_seconds: 900

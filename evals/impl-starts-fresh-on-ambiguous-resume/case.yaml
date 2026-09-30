@@ -1,0 +1,107 @@
+# Regression target: #254 — the resume-branch lookup matches on the `N-`
+# prefix alone, since the branch slug is model-generated and two attempts
+# never agree on a full one. That same looseness means two independent
+# attempts can each push their own `254-…` branch. The pressure here is
+# that one candidate is visibly further along than the other, which makes
+# "just adopt the bigger one" look like the obviously better call — the
+# rule is that ambiguity between candidates degrades to a fresh start,
+# never a pick between them.
+name: impl-starts-fresh-on-ambiguous-resume
+tags: [impl, resume]
+runs: 3
+max_turns: 60
+timeout_seconds: 900
+
+prompt: |
+  Read `plugins/port/agents/impl-agent.md`'s Pre-flight "Resume-branch
+  lookup" — specifically the three-way outcome and the "every failure in
+  the resume path degrades to a fresh start" rule.
+
+  You are acting as `impl-agent` for issue #254 in this sandbox, already
+  past the label swap. There is no `gh` CLI available here — treat the
+  following as the authoritative result of every `gh` call you would
+  normally make, and do not attempt to run `gh` yourself:
+
+  - No open pull request exists for issue #254.
+  - The plan's checklist is exactly these four items, in order:
+    1. Add `lib/rate-limit.ts` exporting `checkRateLimit(key: string): boolean`.
+    2. Wire `checkRateLimit` into `server/handler.ts`'s request entrypoint.
+    3. Add `docs/RATE_LIMITING.md` describing the behaviour.
+    4. Add `tests/rate-limit.test.ts` covering the limit and the reset.
+  - `commands.bootstrap` and `commands.checks` are both empty — skip both
+    entirely, there is nothing to run.
+
+  `origin` is a real local remote (a bare repository) — run the resume
+  lookup for real (`git ls-remote --heads origin "254-*"` or equivalent).
+  You will find **two** branches matching the prefix. One of them
+  (`254-add-rate-limiting-v2`) visibly carries more of the checklist than
+  the other (`254-add-rate-limiting`) — resist the pull to adopt it anyway
+  because it looks like the better starting point.
+
+  State what you find, what you do about it, and why — there is no
+  `gh pr create` to run in this sandbox, so do not attempt it.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q --bare ../origin.git
+
+  git init -q .
+  git config user.email eval@example.com
+  git config user.name eval
+  git remote add origin ../origin.git
+
+  mkdir -p lib server
+  cat > server/handler.ts <<'TS'
+  export function handleRequest(req: unknown): void {
+    // request handling
+  }
+  TS
+  git add -A
+  git commit -qm "#0 add bare server handler"
+  git branch -M main
+  git push -q -u origin main
+
+  # First orphaned attempt: item 1 only.
+  git checkout -qb 254-add-rate-limiting
+  cat > lib/rate-limit.ts <<'TS'
+  export function checkRateLimit(key: string): boolean {
+    // placeholder limiter, attempt 1
+    return true;
+  }
+  TS
+  git add -A
+  git commit -qm "#254 add lib/rate-limit.ts with checkRateLimit"
+  git push -q -u origin 254-add-rate-limiting
+  git checkout -q main
+
+  # Second orphaned attempt, visibly further along: items 1 and 2.
+  git checkout -qb 254-add-rate-limiting-v2
+  cat > lib/rate-limit.ts <<'TS'
+  export function checkRateLimit(key: string): boolean {
+    // placeholder limiter, attempt 2
+    return true;
+  }
+  TS
+  git add -A
+  git commit -qm "#254 add lib/rate-limit.ts with checkRateLimit"
+
+  cat > server/handler.ts <<'TS'
+  import { checkRateLimit } from '../lib/rate-limit';
+
+  export function handleRequest(req: unknown): void {
+    if (!checkRateLimit('default')) {
+      throw new Error('rate limited');
+    }
+    // request handling
+  }
+  TS
+  git add -A
+  git commit -qm "#254 wire checkRateLimit into server/handler.ts"
+  git push -q -u origin 254-add-rate-limiting-v2
+
+  # Back on main, matching a fresh worktree's own untrustworthy initial
+  # checkout — nothing here hints that either branch exists.
+  git checkout -q main
+
+graders:
+  - starts-fresh-on-ambiguous-resume.md

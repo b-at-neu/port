@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyGhExit, ghAuthStatus, ghJson } from './gh'
+import { classifyGhExit, gh, ghAuthStatus, ghJson } from './gh'
 
 describe('classifyGhExit — pure classifier, no gh spawned', () => {
   it('exit code 4 is unauthenticated, ahead of any string match', () => {
@@ -39,6 +39,17 @@ describe('classifyGhExit — pure classifier, no gh spawned', () => {
   })
 })
 
+describe('gh — classified failure preserves stdout', () => {
+  it('a non-zero exit carries both stdout and stderr (#76: gh api graphql exits non-zero with data still in stdout)', async () => {
+    const result = await gh(['api', 'graphql'], {
+      resolve: () => Promise.resolve({ ok: true, path: '/usr/bin/gh' }),
+      spawner: () =>
+        Promise.reject(Object.assign(new Error('exit 1'), { code: 1, stdout: '{"data":{},"errors":[{}]}', stderr: 'gh: some errors' })),
+    })
+    expect(result).toEqual({ ok: false, kind: 'unknown', stdout: '{"data":{},"errors":[{}]}', stderr: 'gh: some errors' })
+  })
+})
+
 describe('ghJson', () => {
   it('returns unparseable with the raw stdout on malformed JSON, never null', async () => {
     const result = await ghJson(['api', 'repos/x/y'], {
@@ -59,8 +70,12 @@ describe('ghJson', () => {
 
 describe('ghAuthStatus — integration', () => {
   it('reads only the exit code, distinguishing authenticated from unauthenticated', async (ctx) => {
-    const result = await ghAuthStatus()
-    if (!result.ok && result.kind === 'not-found') {
+    // Bounded well under this test's own 15s timeout (#200 review): the
+    // default 30s command timeout races the test framework's own timeout on
+    // a slow CI runner, which fails the test on a hang rather than letting it
+    // classify as `timeout` and skip cleanly.
+    const result = await ghAuthStatus({ timeoutMs: 8_000 })
+    if (!result.ok && (result.kind === 'not-found' || result.kind === 'timeout')) {
       ctx.skip()
       return
     }

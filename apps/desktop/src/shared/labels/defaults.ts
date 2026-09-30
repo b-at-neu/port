@@ -1,7 +1,7 @@
 // The deliberate single point of contact with the shipped template: every
 // other file under labels/ reads LABEL_DEFAULTS below, never this relative
-// import or `plugins/port/templates/labels.json` directly.
-import template from '../../../../../plugins/port/templates/labels.json'
+// import or `plugins/port/data/labels.json` directly.
+import template from '../../../../../plugins/port/data/labels.json'
 import type { LabelKey } from './vocabulary'
 
 /**
@@ -9,14 +9,24 @@ import type { LabelKey } from './vocabulary'
  * `modules` keys plus the `core` sentinel for a label that is always
  * created regardless of config.
  */
-export const LABEL_MODULES = ['core', 'approvalGate', 'previewDatabase', 'release', 'scope'] as const
+export const LABEL_MODULES = ['core', 'approvalGate', 'release', 'scope'] as const
 export type LabelModule = (typeof LABEL_MODULES)[number]
+
+/**
+ * `labels.json`'s own machine-readable authority on what kind of label each
+ * one is — PIPELINE.md's two label tables transcribed as data, never as a
+ * fourth prose copy (#79 Decision 1). `scripts/checks/labels.mjs` pins this
+ * against `labels.json`'s real `role` values, both directions.
+ */
+export const LABEL_ROLES = ['marker', 'trigger', 'in-flight', 'gate', 'terminal'] as const
+export type LabelRole = (typeof LABEL_ROLES)[number]
 
 export interface LabelDefault {
   readonly key: LabelKey
   readonly name: string
   readonly module: LabelModule
   readonly color: string
+  readonly role: LabelRole
   readonly description: string
 }
 
@@ -30,6 +40,7 @@ function isLabelDefault(entry: unknown): entry is LabelDefault {
   if (typeof entry !== 'object' || entry === null) return false
   const candidate = entry as Record<string, unknown>
   const modules = LABEL_MODULES as readonly string[]
+  const roles = LABEL_ROLES as readonly string[]
   return (
     typeof candidate.key === 'string' &&
     candidate.key.length > 0 &&
@@ -37,14 +48,14 @@ function isLabelDefault(entry: unknown): entry is LabelDefault {
     typeof candidate.module === 'string' &&
     modules.includes(candidate.module) &&
     typeof candidate.color === 'string' &&
+    typeof candidate.role === 'string' &&
+    roles.includes(candidate.role) &&
     typeof candidate.description === 'string'
   )
 }
 
-// Cast to `unknown[]` before filtering: `labels.json` entries carry a `role`
-// field this app has no use for and `LabelDefault` deliberately omits, and
-// TypeScript's generic filter overload requires `LabelDefault` to extend the
-// JSON's own inferred element type — which fails the moment the JSON has a
-// field the interface lacks. The predicate itself still verifies every field
-// this module actually needs.
+// Cast to `unknown[]` before filtering: TypeScript's generic filter overload
+// requires `LabelDefault` to extend the JSON's own inferred element type,
+// which is `string` for every field the JSON import widens. The predicate
+// itself still verifies every field this module actually needs.
 export const LABEL_DEFAULTS: readonly LabelDefault[] = (template.labels as unknown[]).filter(isLabelDefault)

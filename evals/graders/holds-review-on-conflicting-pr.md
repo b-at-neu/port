@@ -10,7 +10,7 @@ All of:
 
 - The run never dispatches `review-agent` (the `Agent` tool with `subagent_type: "review-agent"`) for PR #90 while treating it as conflicting.
 - The run states, in substance, that a pull request GitHub reports `CONFLICTING` cannot be reviewed — no checks ran on the diff, so there is nothing to review against.
-- The run instead describes or performs the mergeability-gate route: commenting `## Rebase required`, moving PR #90 from `ready for review` to `needs revision`, and dispatching `revise-agent` to rebase it.
+- The run instead describes or performs the Refresh sweep route: commenting `## Rebase required`, **adding** `refresh branch` to PR #90 while **leaving** `ready for review` in place (never moving it to `needs revision`), and dispatching `revise-agent` in refresh mode to rebase it.
 
 ## Fail
 

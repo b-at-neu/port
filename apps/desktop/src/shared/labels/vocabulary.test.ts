@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import template from '../../../../../plugins/port/templates/labels.json'
+import template from '../../../../../plugins/port/data/labels.json'
 import { LABEL_DEFAULTS } from './defaults'
 import { LABEL_KEYS, labelName, resolveVocabulary, verifyVocabulary, type RepoLabels } from './vocabulary'
 
@@ -33,6 +33,13 @@ describe('LABEL_KEYS / LABEL_DEFAULTS match the shipped template', () => {
       expect(def.module).toBe(t?.module)
     }
   })
+
+  it('carries every LABEL_DEFAULTS entry\'s role equal to the template\'s (#79)', () => {
+    const byKey = new Map(template.labels.map((l) => [l.key, l]))
+    for (const def of LABEL_DEFAULTS) {
+      expect(def.role).toBe(byKey.get(def.key)?.role)
+    }
+  })
 })
 
 describe('resolveVocabulary', () => {
@@ -57,18 +64,23 @@ describe('resolveVocabulary', () => {
     }
   })
 
-  it('omits exactly refreshBranch/refreshing when previewDatabase is off', () => {
-    const vocabulary = resolveVocabulary({ labels: {}, modules: { previewDatabase: false } })
-    expect([...vocabulary.disabled].sort()).toEqual(['refreshBranch', 'refreshing'])
-    expect(vocabulary.labels.some((l) => l.key === 'refreshBranch')).toBe(false)
-    expect(vocabulary.labels.some((l) => l.key === 'refreshing')).toBe(false)
+  it('carries the template role onto every resolved label, unaffected by an overridden name (#79)', () => {
+    const byKey = new Map(LABEL_DEFAULTS.map((d) => [d.key, d]))
+    const vocabulary = resolveVocabulary({ labels: { ready: 'todo' } })
+    for (const label of vocabulary.labels) {
+      expect(label.role).toBe(byKey.get(label.key)?.role)
+    }
+    const ready = vocabulary.labels.find((l) => l.key === 'ready')
+    expect(ready?.name).toBe('todo')
+    expect(ready?.role).toBe(byKey.get('ready')?.role)
   })
 
-  it('includes refreshBranch/refreshing when previewDatabase is on', () => {
-    const vocabulary = resolveVocabulary({ labels: {}, modules: { previewDatabase: true } })
+  it('disables nothing — every label default is core', () => {
+    const vocabulary = resolveVocabulary({ labels: {} })
     expect(vocabulary.disabled).toEqual([])
-    expect(vocabulary.labels.some((l) => l.key === 'refreshBranch')).toBe(true)
-    expect(vocabulary.labels.some((l) => l.key === 'refreshing')).toBe(true)
+    for (const label of vocabulary.labels) {
+      expect(label.module).toBe('core')
+    }
   })
 
   it('flags a labels key that is not a known LabelKey', () => {
@@ -148,11 +160,6 @@ describe('verifyVocabulary', () => {
 })
 
 describe('labelName', () => {
-  it('returns undefined for a module-disabled key', () => {
-    const vocabulary = resolveVocabulary({ labels: {}, modules: { previewDatabase: false } })
-    expect(labelName(vocabulary, 'refreshBranch')).toBeUndefined()
-  })
-
   it('returns the resolved name for an enabled key', () => {
     const vocabulary = resolveVocabulary({ labels: { ready: 'todo' } })
     expect(labelName(vocabulary, 'ready')).toBe('todo')

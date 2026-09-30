@@ -1,0 +1,141 @@
+# Regression target: #192 — CLAUDE.md was read by impl-agent alone, so
+# review-agent, with no visibility into a repository's own stated
+# convention, read a diff that correctly followed CLAUDE.md as a
+# docs.engineering violation and raised a blocking finding — which a later
+# revise-agent, equally blind, then "fixed" away from the convention the
+# repository itself wrote down. This case supplies a real disagreement —
+# CLAUDE.md permits what docs.engineering and the surrounding code both
+# forbid — and grades whether the diff following CLAUDE.md draws a finding.
+name: review-honors-claude-md-convention
+tags: [review, standards]
+runs: 3
+max_turns: 40
+timeout_seconds: 900
+
+prompt: |
+  Read `plugins/port/agents/review-agent.md` end to end, in particular its
+  "standards-precedence" block, its step 2 severity rubric (the Medium row),
+  and its "Conventions" dimension.
+
+  You are acting as review-agent for PR #42 in `example/widgets`. This
+  scaffold repository has no real PR #42 — treat the following as the
+  authoritative result of every `gh` call you would normally make, and do
+  not run any `gh` command yourself.
+
+  `docs/ENGINEERING.md` (`docs.engineering` in `.claude/port.config.json`)
+  states:
+
+  > Never call `console.error` directly. Route every failure through
+  > `src/logger.js`'s `logError(scope, err)` helper, so every error is
+  > captured in one place.
+
+  Every other existing file in the repository follows that rule —
+  `logError` is used everywhere else a failure is reported.
+
+  The repository's `CLAUDE.md`, at the reviewed commit, states:
+
+  > `src/tasks/importJob.js` runs inside a sandboxed executor with no access
+  > to `src/logger.js` — it loads in a separate process with its own module
+  > graph. In that one file, and only that file, log with `console.error`,
+  > prefixed `[importJob]`. Do not add the logger wrapper here; it silently
+  > deadlocks the executor.
+
+  The diff under review touches only `src/tasks/importJob.js`:
+
+  ```diff
+  --- a/src/tasks/importJob.js
+  +++ b/src/tasks/importJob.js
+  @@ -1,7 +1,9 @@
+   async function runImportJob(payload) {
+     try {
+       await importRecords(payload);
+     } catch (err) {
+  -    // TODO: report this failure somewhere
+  +    console.error(`[importJob] import failed: ${err.message}`);
+  +    throw err;
+     }
+   }
+  ```
+
+  This is cycle 1, and this is the only change in the diff. Every check on
+  the head commit has concluded green. Post the review and state the
+  verdict — name every finding you would raise, if any, and its severity.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  git remote add origin https://github.com/example/widgets.git
+  mkdir -p .claude docs src/tasks
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "repo": "example/widgets",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": "docs/ENGINEERING.md", "design": null },
+    "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" },
+    "labels": {},
+    "modules": { "approvalGate": true, "release": true, "scope": true },
+    "reviewCycleCap": 5,
+    "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
+  }
+  JSON
+
+  cat > docs/ENGINEERING.md <<'MD'
+  # Engineering Standards
+
+  Never call `console.error` directly. Route every failure through
+  `src/logger.js`'s `logError(scope, err)` helper, so every error is
+  captured in one place.
+  MD
+
+  cat > CLAUDE.md <<'MD'
+  # Repository conventions
+
+  `src/tasks/importJob.js` runs inside a sandboxed executor with no access
+  to `src/logger.js` — it loads in a separate process with its own module
+  graph. In that one file, and only that file, log with `console.error`,
+  prefixed `[importJob]`. Do not add the logger wrapper here; it silently
+  deadlocks the executor.
+  MD
+
+  cat > src/logger.js <<'JS'
+  function logError(scope, err) {
+    process.stderr.write(`[${scope}] ${err.message}\n`);
+  }
+  module.exports = { logError };
+  JS
+
+  cat > src/tasks/otherJob.js <<'JS'
+  const { logError } = require('../logger');
+
+  async function runOtherJob(payload) {
+    try {
+      await doWork(payload);
+    } catch (err) {
+      logError('otherJob', err);
+      throw err;
+    }
+  }
+
+  module.exports = { runOtherJob };
+  JS
+
+  cat > src/tasks/importJob.js <<'JS'
+  async function runImportJob(payload) {
+    try {
+      await importRecords(payload);
+    } catch (err) {
+      console.error(`[importJob] import failed: ${err.message}`);
+      throw err;
+    }
+  }
+
+  module.exports = { runImportJob };
+  JS
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add widgets"
+
+graders:
+  - honors-claude-md-convention.md

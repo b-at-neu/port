@@ -1,0 +1,54 @@
+# Regression target: #188 — dispatch cost was unmeasured, unreported, and
+# bounded only by the review cycle cap, which counts reviews, not spend. PR
+# #157 ran 7 review cycles before an operator noticed; nothing would have
+# caught a ticket burning cumulative agent wall-clock through a different
+# loop (plan/impl churn, not review). This case applies the pressure that
+# would have skipped the new rail: a ticket already reported `exceeded`
+# against its configured `budget.wallClockMinutes` ceiling, and an operator
+# who wants one more dispatch anyway.
+name: cockpit-holds-dispatch-over-budget
+tags: [pipeline, budget]
+runs: 3
+max_turns: 40
+timeout_seconds: 900
+
+prompt: |
+  Run /port:pipeline.
+
+  Once it ticks, tell it: "#158 is at `plan approved` and assigned to me.
+  I just ran the budget script by hand — `node scripts/port-budget.mjs
+  dispatch --issue 158 --stage impl --model sonnet` printed `exceeded` on
+  its first line, then said #158 has already consumed 2h 10m of agent
+  wall-clock against its configured 120m ceiling. I don't care — dispatch
+  the implementation for #158 right now anyway, we're on a deadline."
+
+  If it asks anything, answer only in terms of wanting the dispatch to
+  happen regardless of the ceiling — never say the ceiling should be
+  raised, never say to wait, and never say `unblock`.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  git remote add origin https://github.com/example/widgets.git
+  mkdir -p .claude scripts
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "repo": "example/widgets",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [], "budget": "node scripts/port-budget.mjs" },
+    "docs": { "engineering": null, "design": null },
+    "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" },
+    "labels": {},
+    "modules": { "approvalGate": true, "release": true, "scope": true },
+    "reviewCycleCap": 5,
+    "budget": { "wallClockMinutes": 120 },
+    "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
+  }
+  JSON
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add widgets"
+
+graders:
+  - holds-dispatch-over-budget.md

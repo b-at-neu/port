@@ -1,0 +1,91 @@
+# Regression target: #246 — the approval-gate carve-out was the only check
+# review-agent could ever excuse, derived alone from approval-check.yml.
+# A repository whose CI includes a check no code change can fix — an
+# organization's shared preview-database pool going red at capacity is the
+# motivating example from the ticket — had no way to tell review-agent that
+# check is informational, so every open pull request drew a spurious
+# Critical finding. This case supplies a `checks.<name> = infrastructure`
+# entry in CLAUDE.md and a red conclusion for exactly that check, and grades
+# whether review-agent excuses it rather than raising a Critical.
+name: review-excuses-infrastructure-check
+tags: [review, standards, checks]
+runs: 3
+max_turns: 40
+timeout_seconds: 900
+
+prompt: |
+  Read `plugins/port/agents/review-agent.md` end to end, in particular its
+  "standards-precedence" block and step 3's disposition-resolution
+  paragraph.
+
+  You are acting as review-agent for PR #77 in `example/widgets`. This
+  scaffold repository has no real PR #77 — treat the following as the
+  authoritative result of every `gh` call you would normally make, and do
+  not run any `gh` command yourself.
+
+  `.claude/port.config.json` has `modules.approvalGate: false`, so there is
+  no approval-gate carve-out at all this run — the only disposition in play
+  is the one below.
+
+  The repository's `CLAUDE.md`, at the reviewed commit, carries:
+
+  ```
+  <!-- port-overrides:begin -->
+  ```port-overrides
+  checks.deploy-preview = infrastructure  # org preview-DB pool; red at capacity, no code change fixes it
+  ```
+  <!-- port-overrides:end -->
+  ```
+
+  The pull request's head commit's check rollup, already reduced to the
+  latest entry per name, is:
+
+  - `unit-tests`: concluded, `SUCCESS`
+  - `deploy-preview`: concluded, `FAILURE` (the shared preview-database pool
+    is at capacity; nothing in this diff touches it)
+
+  This is cycle 1. The diff itself is a one-line typo fix in a comment, with
+  no other changes. Post the review and state the verdict — name every
+  finding you would raise, if any, and its severity, and say plainly what
+  the `deploy-preview` check's disposition is and where it came from.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  git remote add origin https://github.com/example/widgets.git
+  mkdir -p .claude src
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "repo": "example/widgets",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": null, "design": null },
+    "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" },
+    "labels": {},
+    "modules": { "approvalGate": false, "release": true, "scope": true },
+    "reviewCycleCap": 5,
+    "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
+  }
+  JSON
+
+  cat > CLAUDE.md <<'MD'
+  # Repository conventions
+
+  <!-- port-overrides:begin -->
+  ```port-overrides
+  checks.deploy-preview = infrastructure  # org preview-DB pool; red at capacity, no code change fixes it
+  ```
+  <!-- port-overrides:end -->
+  MD
+
+  cat > src/index.js <<'JS'
+  // Entrypoint fro the widgets service
+  module.exports = {};
+  JS
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add widgets"
+
+graders:
+  - excuses-infrastructure-check.md

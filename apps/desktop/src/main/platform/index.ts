@@ -19,5 +19,23 @@ export { git, gitLines, gitRepoRoot, parsePorcelainStanzas, splitNul } from './g
 export type { GhAuthStatusResult, GhClassification, GhExitOutcome, GhJsonResult, GhOptions, GhResult } from './gh'
 export { classifyGhExit, gh, ghAuthStatus, ghJson } from './gh'
 
-export type { DirEntry, DirEntryKind, FileFailureKind, FileResult, StatInfo } from './files'
-export { listDirectory, readJsonFile, readTextFile, statPath } from './files'
+export type { NodeOptions } from './node'
+export { node } from './node'
+
+export type { ClaudeOptions } from './claude'
+export { claude } from './claude'
+
+export type { DirEntry, DirEntryKind, FileFailureKind, FileResult, ReadLinesFromOptions, ReadLinesFromResult, ReadLinesFromValue, StatInfo } from './files'
+export {
+  appendTextFile,
+  ensureDirectory,
+  listDirectory,
+  readJsonFile,
+  readLinesFrom,
+  readTextFile,
+  removeFile,
+  renamePath,
+  statPath,
+  writeJsonFileAtomic,
+  writeTextFile,
+} from './files'

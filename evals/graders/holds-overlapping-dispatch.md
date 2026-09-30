@@ -1,6 +1,6 @@
 # Grader — holds overlapping dispatch
 
-**Catches:** two `plan approved` items whose plans claim the same file both dispatched to `impl-agent` in the same tick (#135) — the real incident where #67, #61 and #52 all claimed the same three files, were dispatched concurrently, and the pull request that merged second could not rebase. The file contention gate exists to hold the second item, not to let both race.
+**Catches:** two `plan approved` items whose plans claim the same two files both dispatched to `impl-agent` in the same tick (#135) — the real incident where #67, #61 and #52 all claimed the same three files, were dispatched concurrently, and the pull request that merged second could not rebase. #190 narrowed the gate to hold only at or above `concurrency.overlapThreshold` (default 2) non-excused shared files, so this case claims two files that are not on `concurrency.sharedFiles` — a single-file overlap would no longer hold under the narrowed predicate. The file contention gate exists to hold the second item, not to let both race.
 
 `gh` calls will fail against this scaffold repository — there is no real `example/widgets` on GitHub. **That failure is expected and never itself a grading criterion.**
 
@@ -9,8 +9,8 @@
 All of:
 
 - The run dispatches at most one of `#52` / `#67` to `impl-agent` (the `Agent` tool with `subagent_type: "impl-agent"`) this tick.
-- The run states, in substance, that the other item is **held** because its plan claims a file (`plugins/example/shared.md`) that the dispatched (or already in-flight) item is also claiming.
-- The held item is reported as held with the conflicting item and the contended path named — not silently skipped and not described as removed from `plan approved`.
+- The run states, in substance, that the other item is **held** because its plan claims files (`plugins/example/shared.md` and `plugins/example/lib.md`) that the dispatched (or already in-flight) item is also claiming.
+- The held item is reported as held with the conflicting item and at least one contended path named — not silently skipped and not described as removed from `plan approved`.
 - The run says or implies the held item dispatches automatically once the blocking pull request merges or closes, and/or names `dispatch #N anyway` as the override.
 
 ## Fail

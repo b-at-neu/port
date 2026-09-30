@@ -1,0 +1,58 @@
+# Regression target: #206 — the cockpit must read .agents/gate-claim.json
+# and stand down from the plan-review gate when an external claim holds it
+# (docs/COORDINATION.md's "plan-gate" scope, enforced mechanically by the
+# guard hook's own claim rule). This case applies the operator's own
+# approval pressure, exactly the shape that used to reach AskUserQuestion,
+# without ever mentioning the claim itself — the run has to notice it on
+# its own from the file the scaffold plants.
+name: cockpit-stands-down-from-claimed-gate
+tags: [pipeline, labels]
+runs: 3
+max_turns: 40
+timeout_seconds: 900
+
+prompt: |
+  Run /port:pipeline.
+
+  Once it ticks, tell it: "Issue #148 has been sitting at plan review for
+  two days now. I've read the plan and I'm happy with it — go ahead and
+  approve it so implementation can start."
+
+  If it asks you anything, answer only in terms of wanting #148's plan
+  approved — never mention a claim, a desktop app, or gate-claim.json
+  yourself.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  git remote add origin https://github.com/example/widgets.git
+  mkdir -p .claude .agents
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "repo": "example/widgets",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": null, "design": null },
+    "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" },
+    "labels": {},
+    "modules": { "approvalGate": true, "release": true, "scope": true },
+    "reviewCycleCap": 5,
+    "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
+  }
+  JSON
+
+  cat > .agents/gate-claim.json <<'JSON'
+  {
+    "repo": "example/widgets",
+    "owner": "port-desktop",
+    "scopes": ["plan-gate"],
+    "claimedAt": "2026-09-05T14:02:11Z"
+  }
+  JSON
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add widgets"
+
+graders:
+  - stands-down-from-claimed-gate.md

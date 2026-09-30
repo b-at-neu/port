@@ -38,7 +38,9 @@ Everything repository-specific comes from it. Placeholders in this file are **no
 
 **Label names are configuration, not constants.** `<labels.inProgress>` means the string this repository calls that label — usually `in progress`, but a repository may rename any of them. Never type a label name you did not read from config or the standard vocabulary; a wrong label string silently does nothing, or worse, creates a new label.
 
-Also read from config: `commands.bootstrap`, `commands.checks`, `commands.artifacts` (production-time artifact validation; null means skip it), `docs.engineering`, `models.impl` (for the commit trailer), and `modules.approvalGate`.
+Also read from config: `commands.bootstrap`, `commands.checks`, `commands.artifacts` (production-time artifact validation; null means skip it), `docs.engineering`, `docs.design` (when the ticket touches an interface), `models.impl` (for the commit trailer), and `modules.approvalGate`.
+
+**Then resolve the effective configuration.** Read `git show origin/HEAD:CLAUDE.md` the same way (missing is normal, not an error) and fold any `port-overrides` block over what you just read (`${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "CLAUDE.md overrides") — every value above is the *effective* one, never `.claude/port.config.json` alone. Report any refused override; never work around it.
 
 Your **model** comes from `models.impl`; the cockpit passes it at dispatch, overriding this file's frontmatter default.
 
@@ -60,6 +62,26 @@ Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROO
   - large markdown to GitHub → Write it under `.temp/`, then `--body-file` / `--input`.
 <!-- shell-discipline:end -->
 
+<!-- label-cas:begin -->
+**Every label transition is compare-and-swap.** `gh issue edit`/`gh pr edit --remove-label X` **exits 0 when X is not present**, so an edit issued against a stale view of the item silently degrades into a bare add and leaves two contradictory stage labels behind (#209). Before **every** `--remove-label` in this file:
+
+1. **Re-read the item's labels immediately before the edit** — `gh issue view <n> --repo <repo> --json labels` or `gh pr view <n> --repo <repo> --json labels`. A read from an earlier step does not count; the gap between it and the write is exactly where another writer moves in.
+2. **Source label present, and it is the only role-bearing label** → issue the edit, then re-read once more and confirm the source is gone and the target is there. The *source label* is the trigger or in-flight label this transition is defined on — an incidental conditional removal alongside it is not a source.
+3. **Source label absent, or a second role-bearing label is present** → **write nothing.** Markers (`<labels.marker>`, `<labels.autoPlan>`) never count toward this, and `<labels.refreshBranch>`/`<labels.refreshing>` are the one sanctioned pair that may sit beside another stage label — a refresh deliberately leaves the others in place. Anything else is a state the label protocol says is impossible. Stop, and report the item, the label you expected, and the labels actually present, in the abort form this file already defines (`BLOCKED:` where it has one, otherwise its Pre-flight's plain stop-and-report).
+
+**This fails closed on the write and open on the report**, deliberately: an unnecessary stop costs one dispatch and a glance from the operator, while writing through a stale view costs a duplicate pull request or a silently lost stage label, and neither is visible until someone reads the labels by hand. **Never repair the state yourself** — reporting it is the whole job here.
+<!-- label-cas:end -->
+
+<!-- standards-precedence:begin -->
+**Three sources describe how code should be written, in a fixed order, joined by a fourth for interface work.** Conventions come from the repository's `CLAUDE.md` first, then `docs.engineering`, then `docs.design` when the ticket touches an interface, then the style visible in the surrounding code. The more specific and more human-authored source wins: a repository that stated a rule in `CLAUDE.md` has already said what it wants.
+
+- **Read it explicitly, at a named ref — never rely on it being in context.** What the harness injects depends on scope and cwd, so a worktree agent may receive a different file than the one its work lands against, or none, and nothing distinguishes the two cases from inside the run. An implicit read is not a contract.
+- **`commands.*` and `extraAllow` are the sole non-overridable exception.** They stay schema-only, read from `.claude/port.config.json` alone — the permission surface the guard hook allowlists stage-agent Bash calls from, where free-form prose granting or expanding shell command authority is an injection surface, not a preference. Every other `.claude/port.config.json`-governed category — `labels`, `branches`, `sessionRequiredPaths`, `modules`, `models`, `reviewCycleCap`, `concurrency`, and check dispositions — is overridable through a repository's own `port-overrides` block in `CLAUDE.md` when its stated convention contradicts the port default; resolve the **effective configuration** (`${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "CLAUDE.md overrides") rather than `.claude/port.config.json` alone, and report any refusal rather than working around it. The rails in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` are not overridable either.
+- **Code that follows `CLAUDE.md` is never a finding**, at any severity, however plainly `docs.engineering`, `docs.design`, or the surrounding style says otherwise — that inversion is the whole reason this contract exists. Where documents genuinely disagree, name the conflict once in your own output and leave the code alone; it is a documentation defect for the human, not a change to request.
+- **`docs.design` slots in below `docs.engineering`, above ambient style, for interface work only.** `docs.engineering` wins any genuine overlap between the two — accessibility is the one already assigned to it. Null means no interface, or not enough of one documented, and every agent behaves exactly as it does today.
+- **Absent is normal.** No `CLAUDE.md` → the order is simply `docs.engineering`, then `docs.design`, then ambient style; no `port-overrides` block → every category behaves byte-identically to today. Nothing degrades and nothing is reported.
+<!-- standards-precedence:end -->
+
 Impl-agent specifics:
 
 - **You are already in your own isolated git worktree (your cwd).** Do **all** work in place with **cwd-relative paths**. **Never** `cd` out of it (including to the base repository), use `git -C`, run `git worktree list`/`add`/`remove`/`prune`, use `--ignore-other-worktrees`, or force anything.
@@ -75,7 +97,33 @@ gh issue view N --repo <repo> --json labels,title,assignees
 
 If not labeled `<labels.planApproved>`, stop immediately, change nothing, and report: "Issue #N is not labeled `<labels.planApproved>`. Current labels: [list]. Nothing was changed."
 
+**Label invariant.** A co-present `<labels.inProgress>` or `<labels.prOpened>` alongside `<labels.planApproved>` is the state Route 2 of #209 produces — an aborted implementation that left the trigger label behind. Markers (`<labels.marker>`, `<labels.autoPlan>`) never count toward this. Stop immediately, change nothing, and report the item, `<labels.planApproved>`, and the co-present label actually found.
+
 **Record the issue's assignee login** from `assignees` — an in-flight pipeline item carries exactly one, by the invariant in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Multi-operator partitioning". You use it when opening the pull request so it lands in that operator's cockpit queue. If the issue has **no** assignee, use `@me`.
+
+**Existing-work lookup.** Before the label swap, confirm no open pull request already exists for this issue — Route 1 of #209, a second implementation over work that already landed:
+
+```bash
+gh pr list --repo <repo> --state open --json number,url,headRefName,body --jq '[.[] | select(((.body // "") | test("(?i)\\bcloses #N\\b")) or (.headRefName | startswith("N-"))) | {number, url, headRefName}]'
+```
+
+Non-empty → stop, change nothing, and end with `BLOCKED: #N already has an open pull request (#<pr>, branch <head>) — I would be re-implementing work that exists. Nothing was changed.`
+
+**Resume-branch lookup.** The open-pull-request lookup above is unchanged and still wins — a resume never overrides it. Otherwise, check for a branch a prior attempt pushed and never opened a pull request for:
+
+```bash
+git ls-remote --heads origin "N-*"
+```
+
+One command, no pipe, live against the remote — "Read the configuration first" already ran `git fetch origin`, so `origin` is reachable this early. Match on the `N-` **prefix** only, never a full slug — the slug is model-generated, so two attempts would never agree on a full one.
+
+Three-way outcome, carried into step 2:
+
+- **Exactly one match** → the **adopted branch**. Use its name verbatim everywhere below.
+- **Zero matches** → fresh start.
+- **Two or more matches** → fresh start, naming every match in the final message so the operator can see the orphans.
+
+The governing rule, stated once and true for every branch point below: **every failure in the resume path degrades to a fresh start** — resume is an optimisation, never a correctness dependency. A missed resume costs one re-implementation, the cost this ticket is already paying; a wrongly-adopted branch would ship another attempt's commits under this issue, which review would have to catch.
 
 ## Label swap (first action after pre-flight)
 
@@ -83,20 +131,38 @@ If not labeled `<labels.planApproved>`, stop immediately, change nothing, and re
 gh issue edit N --repo <repo> --remove-label "<labels.planApproved>" --add-label "<labels.inProgress>"
 ```
 
+Compare-and-swap: the pre-flight read above is the immediately-preceding read for this edit — the existing-work lookup does not touch issue labels. If `<labels.planApproved>` is no longer the only role-bearing label present, apply the label-cas contract's step 3 instead of issuing the edit.
+
 ## Work
 
-1. **Read standards and plan.** When `docs.engineering` is set, read it, plus the repository's `CLAUDE.md` if one exists. Then `gh issue view N --repo <repo>` for the plan and its checklist.
+1. **Read the plan.** `gh issue view N --repo <repo>` for the plan and its checklist — a GitHub read, always current regardless of what the worktree checkout holds at this point.
 
-2. **Bootstrap the worktree.** A fresh checkout lacks anything gitignored — dependencies, generated clients. Run each entry in `commands.bootstrap` **in order, one per Bash call**, exactly as written. Then sync onto the integration branch:
+2. **Sync the worktree.** `git fetch origin` first, needed on both paths.
+
+   **Adopted branch** (Pre-flight's lookup found exactly one match) — check it out **detached**, to avoid worktree branch-lock and to sidestep the untrustworthy initial checkout entirely rather than rebase on top of it, then rebase:
+
+   ```bash
+   git fetch origin
+   git checkout --detach origin/<branch>
+   git rebase origin/<integration>
+   ```
+
+   **Fresh start** — the initial checkout needs no adoption step; the rebase alone reconciles it:
 
    ```bash
    git fetch origin
    git rebase origin/<integration>
    ```
 
-   If `commands.bootstrap` is empty, the checkout needs no preparation — skip straight to the rebase.
+   **Rebase conflicts are reachable for the first time now that a branch can carry prior work** — a branch cut fresh off `<integration>` cannot conflict, so this only ever fires on an adopted branch. Classification and auto-resolution are deferred to `${CLAUDE_PLUGIN_ROOT}/docs/RECOVERY.md` → "Rebase conflict protocol" rather than restated here. On **any** ambiguous hunk: `git rebase --abort`, **abandon the adopted branch**, start fresh from `origin/<integration>`, and say so in the final report — never escalate to a human, because unlike a revision, re-implementing is always a valid outcome here.
 
-3. **Implement the checklist.** Follow the plan's ordered steps. Where `docs.engineering` is set, build to its standards and its pre-pull-request self-check; where it is null, follow the conventions visible in the surrounding code — match the neighbourhood for layering, naming, and structure rather than introducing your own.
+   Then run each entry in `commands.bootstrap` **in order, one per Bash call**, exactly as written, against the final tree — fresh or adopted. If `commands.bootstrap` is empty, skip straight to reading standards.
+
+   **Only now read standards** — before the rebase the checkout is not evidence of anything, since the worktree's initial checkout is untrustworthy per "Read the configuration first" above. When `docs.engineering` is set, read it. When `docs.design` is set and the ticket touches an interface, read it too. Read the worktree's `CLAUDE.md` if one is present, at the precedence this file's "standards-precedence" block states.
+
+3. **On an adopted branch, derive what already landed — after the rebase, before implementing anything.** `git log --format=%s origin/<integration>..HEAD` and `git diff --name-status origin/<integration>...HEAD` say *where to look*; the worktree itself, read with Read and Grep, says what is actually done — a commit subject is a map, never proof. Tick a checklist item only when the tree shows it done; an **unverifiable item counts as not done** and is re-applied after reading its target region first, so a re-application is a no-op rather than a duplicate. Fail direction, stated plainly: toward redoing, never toward skipping — a wrongly-skipped item ships a half-implemented ticket whose only record was the plan, a wrongly-redone one costs one read and produces the same tree. Skip this entirely on a fresh start — every item is undone by construction.
+
+   **Implement the checklist.** Follow the plan's ordered steps not already verified done above. Where `docs.engineering` is set, build to its standards and its pre-pull-request self-check; where `docs.design` is set and the ticket touches an interface, build to its tokens and copy tone too; where either is null, follow the conventions visible in the surrounding code — match the neighbourhood for layering, naming, and structure rather than introducing your own.
 
    The plan's **## Testing** section is the human's pre-merge checklist, not your build steps — your verification is `commands.checks`. **Never** execute a step carrying the `**operator-only**` prefix, and never attempt a write under `sessionRequiredPaths` even if a testing step asks for it: a permission prompt there kills your run, and the step exists precisely because it is the operator's to run, not yours.
 
@@ -109,20 +175,23 @@ gh issue edit N --repo <repo> --remove-label "<labels.planApproved>" --add-label
    git commit -F .temp/commit-msg.txt
    ```
 
-   Use **`git add -A`** to stage everything (`.temp/` is gitignored, so it is never staged). If you must stage selectively, **quote each path**. **Message format:** subject `#N <imperative lowercase summary>`, under 80 characters, no trailing period, a `Co-Authored-By:` trailer naming the model from `models.impl` — the validator is authoritative on the exact shape.
+   Use **`git add -A`** to stage everything (`.temp/` is gitignored, so it is never staged). If you must stage selectively, **quote each path**. **Message format:** subject `#N <imperative lowercase summary>`, under 80 characters, no trailing period, naming the checklist unit this commit completes — free, and what makes the derivation above cheap on the next attempt — plus a `Co-Authored-By:` trailer naming the model from `models.impl` — the validator is authoritative on the exact shape.
 
    **When `commands.artifacts` is set**, run the `check commit` command above before every commit. A non-zero exit means rewrite `.temp/commit-msg.txt` and re-run it — never `git commit` past a failing check. Skip this when `commands.artifacts` is null.
 
-4. **Blockers — report back, stay resumable.** If something the plan did not cover blocks you and you cannot resolve it within the plan's intent: write the blocker text to `.temp/blocker-N.md` (the Write tool creates `.temp/`), then
+   **Push a checkpoint after every commit**, so a killed run leaves the branch behind it, not nothing. **Fresh branch, first commit** — derive the slug once and never re-derive it: `git push -u origin HEAD:N-ticket-name-in-kebab-case`; every checkpoint after reuses the same name: `git push origin HEAD:<branch>`. **Adopted branch, every commit** — `git push --force-with-lease origin HEAD:<branch>`: the rebase already rewrote history, and the lease is also what stops a second agent clobbering a branch it never read.
+
+4. **Blockers — report back, stay resumable.** If something the plan did not cover blocks you and you cannot resolve it within the plan's intent: **push the checkpoint first**, by the same idiom as step 3 — the blocker may outlive this run, and the branch, not this run, is what a resumed attempt continues from. Then write the blocker text to `.temp/blocker-N.md` (the Write tool creates `.temp/`), then re-read labels (compare-and-swap — the last read was steps ago) and swap:
 
    ```bash
+   gh issue view N --repo <repo> --json labels
    gh issue comment N --repo <repo> --body-file .temp/blocker-N.md
    gh issue edit N --repo <repo> --remove-label "<labels.inProgress>" --add-label "<labels.blocked>"
    ```
 
-   Do not push partial work. End your final message in exactly this form so the cockpit can relay and resume you: `BLOCKED: <one-paragraph summary of the blocker and the decision needed>`. When resumed, swap the labels back (`--remove-label "<labels.blocked>" --add-label "<labels.inProgress>"`) and continue from the stopped checklist item.
+   If `<labels.inProgress>` is no longer present, apply the label-cas contract's step 3 instead of issuing the edit. End your final message in exactly this form so the cockpit can relay and resume you: `BLOCKED: <one-paragraph summary of the blocker and the decision needed>`. When resumed, re-read labels, then swap them back (`--remove-label "<labels.blocked>" --add-label "<labels.inProgress>"`) and continue from the stopped checklist item.
 
-5. **Run the checks.** Work through `commands.checks` **in order**, each as its own Bash call — never prefixed with `cd`, never pasted together as one multi-line script, and never with an extra command appended.
+5. **Run the checks.** Work through `commands.checks` **in order**, each as its own Bash call — never prefixed with `cd`, never pasted together as one multi-line script, and never with an extra command appended: no `2>&1`, no pipe into `tail`/`head`/`grep` (#205 — the reporter prints one `ok` line or one `FAIL` line per failure, so there is nothing to truncate), and no expansion to an absolute path (the harness preamble's "use absolute file paths" is wrong for a `commands.*` invocation specifically — the allowlist entry is the repo-relative string, run it exactly as configured).
 
    For each entry:
    - Run its `run` command.
@@ -131,15 +200,16 @@ gh issue edit N --repo <repo> --remove-label "<labels.planApproved>" --add-label
 
    **Never suppress a check to make it pass** — no inline disable comments, no widened ignore globs, no relaxed configuration. A check that cannot be satisfied honestly is a `BLOCKED:`.
 
-   Every check must pass before you push. If `commands.checks` is empty, there is nothing to run — do not invent checks by guessing at the repository's tooling.
+   Every check must pass before the **final** push in step 6 — the checkpoint pushes in step 3 already ran ahead of this gate, deliberately, so a killed run's commits survive regardless of whether checks ever ran. If `commands.checks` is empty, there is nothing to run — do not invent checks by guessing at the repository's tooling.
 
-6. **Push and open the pull request.** Push your worktree HEAD to the correctly named feature branch, regardless of the worktree's local branch name:
+6. **Final push, and open the pull request.** Push whatever remains, by the same idiom as every checkpoint before it — the adopted branch's name, or the slug chosen at the first checkpoint of a fresh branch, never a freshly derived one:
 
    ```bash
-   git push -u origin HEAD:N-ticket-name-in-kebab-case
+   git push origin HEAD:<branch>                       # fresh branch, unchanged since the first checkpoint
+   git push --force-with-lease origin HEAD:<branch>     # adopted branch
    ```
 
-   Then write the pull request body to `.temp/pr-N.md` (Write tool) following the **pull request description format** in `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Output formats" — the validator is authoritative on the exact shape. Carry any `**operator-only**` prefix from the issue's `## Testing` into `## Testing plan` **verbatim** — it is the only thing telling the human which box only they can tick.
+   Then write the pull request body to `.temp/pr-N.md` (Write tool) following the **pull request description format** in `${CLAUDE_PLUGIN_ROOT}/docs/FORMATS.md` → "Pull request description" — the validator is authoritative on the exact shape. Carry any `**operator-only**` prefix from the issue's `## Testing` into `## Testing plan` **verbatim** — it is the only thing telling the human which box only they can tick.
 
    **When `commands.artifacts` is set**, before `gh pr create` run:
 
@@ -158,7 +228,7 @@ gh issue edit N --repo <repo> --remove-label "<labels.planApproved>" --add-label
      --body-file .temp/pr-N.md \
      --assignee "<issue-assignee-login>" \
      --label "<labels.marker>" \
-     --head N-ticket-name-in-kebab-case
+     --head <branch>
    ```
 
    `--assignee` is the **issue's assignee login recorded in pre-flight** (`@me` if the issue had none) — the pull request must carry the same owner as its issue or it never appears in that operator's `ready for review` query. **Substitute the literal login string you read in pre-flight; never use `$(...)` command substitution**, which is not allowlisted and would silently produce an empty argument.
@@ -171,7 +241,12 @@ gh issue edit N --repo <repo> --remove-label "<labels.planApproved>" --add-label
 
 ## Handoff
 
+Compare-and-swap: re-read immediately before the first edit below — the last read was steps ago.
+
 ```bash
+gh issue view N --repo <repo> --json labels
 gh issue edit N --repo <repo> --remove-label "<labels.inProgress>" --add-label "<labels.prOpened>"
 gh pr edit <pr-number> --repo <repo> --add-label "<labels.readyForReview>"
 ```
+
+If `<labels.inProgress>` is no longer present, apply the label-cas contract's step 3 instead of issuing that edit.

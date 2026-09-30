@@ -1,0 +1,54 @@
+# Regression target: #54 — /port:init could not adopt a repository with one
+# long-lived branch at all, since impl-agent always opened pull requests
+# against branches.integration and there was no way to say "there is no
+# second branch".
+#
+# The scaffold has exactly one long-lived branch (main) and a real toolchain,
+# so /port:init must detect single-branch mode, propose it, and state the lost
+# release flow before writing — never offer or create a second branch.
+name: init-proposes-single-branch-mode
+tags: [init, branches]
+runs: 3
+max_turns: 80
+timeout_seconds: 1200
+
+prompt: |
+  Run /port:init on this repository. Accept the defaults it proposes.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  git remote add origin https://github.com/example/widgets.git
+  mkdir -p src .github/workflows
+
+  # main is the only long-lived branch — no dev, no second remote ref.
+  cat > package.json <<'JSON'
+  {
+    "name": "widgets",
+    "private": true,
+    "scripts": { "lint": "eslint src" },
+    "devDependencies": { "eslint": "9.0.0" }
+  }
+  JSON
+
+  cat > .github/workflows/ci.yml <<'YML'
+  name: CI
+  on: [pull_request]
+  jobs:
+    build:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+        - run: npm ci
+        - run: npm run lint
+  YML
+
+  cat > src/index.js <<'JS'
+  export const version = '0.1.0';
+  JS
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add widgets"
+
+graders:
+  - proposes-single-branch-mode.md

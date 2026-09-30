@@ -3,8 +3,24 @@
 // Kept separate from agent-guard.mjs (which owns stdin/stdout/exit-code
 // plumbing) so the port repository's own layer 1 checks can unit-test the
 // decision logic directly — no stdin, no plugin install, no model call.
+//
+// The pure command-syntax predicates (#216) live in the sibling
+// command-rules.mjs — this file was at 483/500 lines, and the branch rule
+// below needed room the ceiling did not have. This file keeps caller
+// identity, settings/transcript I/O, and `decide` itself. The plan-gate
+// claim classifier (#206) lives in the sibling claim-rules.mjs for the same
+// reason — `decide` only ever consumes its already-classified verdict,
+// never imports it directly.
 import { readFileSync, existsSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
+import {
+  gateClearAttempt,
+  labelEditAttempt,
+  pluginInstallMutation,
+  switchesBranch,
+  targetsGhOrGit,
+  usesShellLoop,
+} from './command-rules.mjs';
 
 /** Compiles a glob (`**` → any depth, `*` → one path segment, everything else
  *  escaped) into an anchored RegExp. Used for `sessionRequiredPaths` globs
@@ -30,12 +46,38 @@ export function globToRegExp(glob) {
  *  match the whole command exactly. This mirrors the shape of every entry in
  *  `templates/permissions.base.json` — it does not attempt to parse full
  *  shell-glob semantics beyond that. */
-function bashPatternMatches(pattern, command) {
+export function bashPatternMatches(pattern, command) {
   if (pattern.endsWith(' *')) {
     const prefix = pattern.slice(0, -2);
     return command === prefix || command.startsWith(`${prefix} `);
   }
   return command === pattern;
+}
+
+/** Rewrites an in-repo absolute invocation back to its repo-relative form
+ *  (#205) — a worktree agent's `configRoot` is its worktree, so `node
+ *  <root>/<script>` is the identical command to the allowlisted `node
+ *  <script>`, just spelled with the harness's requested absolute path.
+ *  A quoted absolute argument (`"<root>/x" check "<root>/y"`)
+ *  has its surrounding quotes dropped along with the root prefix, since an
+ *  unquoted relative path is the form the allowlist actually matches — any
+ *  *other* quoted span is left untouched. Fails closed **byte-for-byte**: a
+ *  command with no occurrence of `root` (elsewhere on disk, or a relative `..`
+ *  escape) is returned exactly as it came in — not separator-normalized —
+ *  because normalizing it would be a second, silent effect of a
+ *  security-relevant classifier: a backslash-spelled command outside the root
+ *  would get reshaped into the POSIX form the allow patterns are written in,
+ *  widening the match for a path this function deliberately declines to
+ *  resolve. Normalization is therefore only ever a by-product of an actual
+ *  strip. */
+export function repoRelative(command, root) {
+  const posixRoot = toPosix(root);
+  const posixCommand = toPosix(command);
+  if (typeof posixRoot !== 'string' || typeof posixCommand !== 'string') return command;
+  const escapedRoot = posixRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const quotedRoot = new RegExp(`(['"])${escapedRoot}/([^'"]*)\\1`, 'g');
+  const stripped = posixCommand.replace(quotedRoot, '$2').split(`${posixRoot}/`).join('');
+  return stripped === posixCommand ? command : stripped;
 }
 
 /** Reads `permissions.allow` out of each settings file that exists (missing
@@ -110,133 +152,26 @@ export function callerKind(payload) {
   return { isSubagent: false, isOperatorWorktree, isManagedWorktree, agent: null, signal: null };
 }
 
-/** True when `command` (already quote-stripped by the caller) invokes a
- *  `claude plugin` mutation that changes what a shared `installPath`
- *  resolves to: `install`, `uninstall`, `marketplace add`, or `marketplace
- *  remove`. Read-only subcommands (`list`, `details`, ...) are deliberately
- *  not matched. */
-export function pluginInstallMutation(command) {
-  const stripped = stripQuoted(command);
-  if (!atCommandPosition(stripped, 'claude')) return false;
-  const tokens = tokenize(stripped);
-  const claudeIdx = tokens.indexOf('claude');
-  if (claudeIdx === -1 || tokens[claudeIdx + 1] !== 'plugin') return false;
-  const sub = tokens[claudeIdx + 2];
-  if (sub === 'install' || sub === 'uninstall') return true;
-  if (sub === 'marketplace' && (tokens[claudeIdx + 3] === 'add' || tokens[claudeIdx + 3] === 'remove')) return true;
-  return false;
-}
-
-/** Tokenizes a shell command, respecting single/double quotes — a quoted
- *  span's contents (spaces included) become one token, so a flag value like
- *  `"needs human"` is not split in two. */
-function tokenize(command) {
-  const tokens = [];
-  let i = 0;
-  while (i < command.length) {
-    while (i < command.length && /\s/.test(command[i])) i++;
-    if (i >= command.length) break;
-    let token = '';
-    while (i < command.length && !/\s/.test(command[i])) {
-      const c = command[i];
-      if (c === '"' || c === "'") {
-        const quote = c;
-        i++;
-        while (i < command.length && command[i] !== quote) {
-          token += command[i];
-          i++;
-        }
-        i++; // skip the closing quote, if any
-      } else {
-        token += c;
-        i++;
-      }
-    }
-    tokens.push(token);
-  }
-  return tokens;
-}
-
-/** True if `text` carries `keyword` at a shell command position — the start
- *  of the string, or preceded by whitespace, `;`, `&`, `|`, or `(` — and
- *  followed by a word boundary. This is what keeps `github` from matching
- *  `gh` and a `for` inside a longer identifier from matching the loop
- *  keyword. */
-function atCommandPosition(text, keyword) {
-  const re = new RegExp(`(?:^|[\\s;&|(])${keyword}(?=[\\s;&|)]|$)`);
-  return re.test(text);
-}
-
-/** Replaces every quoted span's *contents* with nothing, so every syntactic
- *  test below runs on the command's shell structure, never on the contents
- *  of a `-b`/`-m`/`--jq` argument. This is what keeps
- *  `gh issue comment -b "a loop for each item to do"` out of the loop rule. */
-export function stripQuoted(command) {
-  return command.replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""');
-}
-
-/** A `for`/`while`/`until` keyword **and** a `do` keyword, each at a command
- *  position, on the quote-stripped command — the exact shape #120 froze the
- *  pipeline with. */
-export function usesShellLoop(command) {
-  const stripped = stripQuoted(command);
-  const hasLoopKeyword = ['for', 'while', 'until'].some((kw) => atCommandPosition(stripped, kw));
-  return hasLoopKeyword && atCommandPosition(stripped, 'do');
-}
-
-/** `gh` or `git`, at a command position, on the quote-stripped command — so a
- *  loop over an unrelated binary is never denied. */
-export function targetsGhOrGit(command) {
-  const stripped = stripQuoted(command);
-  return atCommandPosition(stripped, 'gh') || atCommandPosition(stripped, 'git');
-}
-
-/** Detects a `gh pr edit`/`gh issue edit` call that removes `label`, and the
- *  item numbers it targets — a bare positional digit, or the trailing digits
- *  of a `github.com/**\/(issues|pull)/<n>` URL. Quote-aware, so a label name
- *  with spaces (`"needs human"`) is read correctly. `numbers` is always
- *  collected, even when `isAttempt` is false, so a caller never re-tokenizes.
- *  `hasNumbers` is `false` whenever `gh` was given no digit and no
- *  `issues|pull` URL to key off — e.g. `gh pr edit <branch-name> ...` or
- *  `gh pr edit --remove-label ...` with no identifier at all, which `gh`
- *  accepts as "the current branch's PR". A caller must not treat an empty
- *  `numbers` array as "nothing to verify": `[].every(...)` is vacuously
- *  `true`, so skipping this check would let an unidentified item's gate
- *  clear through with nothing for the operator to have named. */
-export function gateClearAttempt(command, label) {
-  const tokens = tokenize(command);
-  const isEdit =
-    tokens[0] === 'gh' &&
-    ((tokens[1] === 'pr' && tokens[2] === 'edit') || (tokens[1] === 'issue' && tokens[2] === 'edit'));
-
-  const numbers = [];
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i];
-    const prev = tokens[i - 1] ?? '';
-    if (prev.startsWith('-')) continue; // a flag's value, not a positional item number
-    if (/^\d+$/.test(t)) {
-      numbers.push(Number(t));
-      continue;
-    }
-    const m = /\/(?:issues|pull)\/(\d+)(?:[/?#].*)?$/.exec(t);
-    if (m) numbers.push(Number(m[1]));
-  }
-  const hasNumbers = numbers.length > 0;
-
-  if (!isEdit) return { isAttempt: false, numbers, hasNumbers };
-
-  const target = label.trim().toLowerCase();
-  let isAttempt = false;
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i];
-    let value = null;
-    if (t === '--remove-label') value = tokens[i + 1] ?? '';
-    else if (t.startsWith('--remove-label=')) value = t.slice('--remove-label='.length);
-    if (value === null) continue;
-    if (value.split(',').map((v) => v.trim().toLowerCase()).includes(target)) isAttempt = true;
-  }
-
-  return { isAttempt, numbers, hasNumbers };
+/** True when `jsonlText` (a session transcript's raw JSONL) carries the
+ *  harness's slash-command expansion wrapper element around `pipeline`, with
+ *  an optional leading `/` and an optional `<ns>:` namespace prefix — the
+ *  tell that this session has invoked the cockpit skill at some point in its
+ *  life, never undone (#216). **The wrapper element is the whole tell**:
+ *  matching a bare `/port:pipeline` substring would also fire on any session
+ *  that merely *read* `SKILL.md`, which names that string in its own pacing
+ *  section, so this only matches the harness's own expansion wrapper form.
+ *  The wrapper's tag name is assembled at runtime rather than written as a
+ *  contiguous literal anywhere in this file — a shipped file naming it
+ *  directly would itself make any session that merely reads that file look
+ *  like a cockpit invocation (see the `preflight-tell-guard` layer 1 check).
+ *  Returns `false`, never `null`, for unreadable or empty text — callers
+ *  that need "unreadable" distinguished pass that through separately, the
+ *  same shape `recentOperatorMessages` uses. */
+export function invokedCockpitSkill(jsonlText) {
+  if (typeof jsonlText !== 'string' || jsonlText.length === 0) return false;
+  const tag = ['command', 'name'].join('-');
+  const wrapper = new RegExp(`<${tag}>/?(?:[a-z0-9_-]+:)?pipeline<\\/${tag}>`);
+  return wrapper.test(jsonlText);
 }
 
 /** The last `limit` operator (human) messages found in a session transcript's
@@ -313,21 +248,59 @@ export function operatorNamed(numbers, messages) {
  *                     (operator-named, or unverifiable). Not a denial;
  *                     logged as the audit record for the clear.
  *
- *  Rule order for a Bash call: gate → install → loop → allowlist. Each of
- *  the first three returns its own specific reason instead of falling
- *  through to the generic allowlist miss/deny. Gate and loop are inert —
- *  `allow` immediately — for `who.isOperatorWorktree`, an `/port:implement`
- *  session that must stay unguarded by the cockpit rules. **Install is the
- *  one rule that is not**: an install performed from an `impl-<n>` operator
- *  worktree repoints every session on the machine exactly as one from a
- *  dispatched agent's worktree would, so it is never exempt.
+ *  Rule order for a Bash call: gate → claim → install → branch → loop →
+ *  allowlist. Each of the first five returns its own specific reason instead
+ *  of falling through to the generic allowlist miss/deny. Gate, claim,
+ *  branch, and loop are inert — `allow` immediately — for
+ *  `who.isOperatorWorktree`, an `/port:implement` session that must stay
+ *  unguarded by the cockpit rules (`plan-agent`/`impl-agent` write the same
+ *  labels the claim rule guards, at handoff — a subagent- or
+ *  operator-worktree-facing deny there would deadlock the pipeline the
+ *  instant a claim is taken). **Install is the one Bash-arm rule that is
+ *  not**: an install performed from an `impl-<n>` operator worktree
+ *  repoints every session on the machine exactly as one from a dispatched
+ *  agent's worktree would, so it is never exempt — and the claim rule's own
+ *  write-tool arm (below) matches that same non-exemption, for the same
+ *  reason: a machine that can release its own constraint is the #138
+ *  failure again.
  *
  *  `needsHumanLabel` and `operatorMessages` are optional: omitting
  *  `needsHumanLabel` skips the gate rule entirely (used by callers with no
  *  gate to guard), and `operatorMessages` is the caller's *already-read*
  *  transcript tail (`recentOperatorMessages`) — `decide` never does I/O
- *  itself. */
-export function decide({ payload, matchers, sessionRequiredPaths, root, needsHumanLabel, operatorMessages }) {
+ *  itself. `isCockpitSession` is the same shape (`true`/`false`/`null` —
+ *  the caller's already-read `invokedCockpitSkill` result, `null` when the
+ *  transcript was unreadable): omitting it skips the branch rule entirely,
+ *  matching `needsHumanLabel`'s pattern for a caller with no cockpit rule to
+ *  guard.
+ *
+ *  `planGateClaim` and `planGateLabels` are the same optional-inert shape,
+ *  for the claim rule (#206, see `PIPELINE.md` → "External gate claim"):
+ *  `planGateClaim` is the caller's already-read, already-classified verdict
+ *  (`{state: 'absent'}` / `{state: 'held', owner, scopes, unknownScopes,
+ *  claimedAt}` / `{state: 'unreadable', message}` — the same three verdicts
+ *  the desktop app's own claim reader returns) and `planGateLabels` the
+ *  resolved names for `planReview`/`planApproved`/
+ *  `planChangesRequested`. Omitting either skips the rule entirely; a
+ *  `state: 'absent'` verdict also does not fire it — nothing is claimed, so
+ *  there is nothing to deny. `claimFilePath` (optional, absolute) is the
+ *  claim rule's second, write-tool arm: a `Write`/`Edit`/`NotebookEdit`
+ *  targeting that exact path is denied for **every** caller, including a
+ *  subagent and an `/port:implement` worktree — the cockpit's own
+ *  `allowed-tools` already grants it `Write`, so this is the one guard that
+ *  keeps it from releasing a claim it did not create. */
+export function decide({
+  payload,
+  matchers,
+  sessionRequiredPaths,
+  root,
+  needsHumanLabel,
+  operatorMessages,
+  isCockpitSession,
+  planGateClaim,
+  planGateLabels,
+  claimFilePath,
+}) {
   const who = callerKind(payload);
   const toolName = payload?.tool_name;
 
@@ -342,10 +315,10 @@ export function decide({ payload, matchers, sessionRequiredPaths, root, needsHum
     //
     // Deliberately not extended to <labels.approved>: the same rail in
     // PIPELINE.md covers it too, but it has no observed violation, and it
-    // carries the previewDatabase refresh carve-out (an approved pull
-    // request's label set IS allowed to change there), which would need a
-    // second predicate this rule does not have. Noted here so the omission
-    // reads as a choice, not an oversight.
+    // carries the refresh carve-out (an approved pull request's label set IS
+    // allowed to change there), which would need a second predicate this rule
+    // does not have. Noted here so the omission reads as a choice, not an
+    // oversight.
     if (needsHumanLabel && !who.isOperatorWorktree) {
       const gate = gateClearAttempt(command, needsHumanLabel);
       if (gate.isAttempt) {
@@ -386,6 +359,40 @@ export function decide({ payload, matchers, sessionRequiredPaths, root, needsHum
       }
     }
 
+    // Claim rule (#206), Bash arm — a `plan-gate` claim (see `PIPELINE.md` →
+    // "External gate claim") transfers the plan-review gate to an external
+    // owner; adding or removing any of the three plan-gate labels while a
+    // claim holds it (a `held` verdict naming `plan-gate` in its scopes), or
+    // while the claim is unreadable (a malformed claim reads as claimed on
+    // both sides, since the ambiguity is which writer owns the gate), is
+    // denied. A `held` claim naming some *other* scope is not this rule's
+    // business — the gate is unclaimed either way. Exempt for a subagent
+    // and for `who.isOperatorWorktree`, the same shape the gate rule uses:
+    // `plan-agent` writes `planReview` at handoff and removes
+    // `planChangesRequested` in revision mode, `impl-agent` removes
+    // `planApproved`, and `/port:implement` needs the same exemption for the
+    // same reason — a rule that fired there would deadlock the pipeline the
+    // moment a claim is taken.
+    const claimsPlanGate =
+      planGateClaim?.state === 'unreadable' ||
+      (planGateClaim?.state === 'held' && (planGateClaim.scopes ?? []).includes('plan-gate'));
+    if (claimsPlanGate && planGateLabels && !who.isSubagent && !who.isOperatorWorktree) {
+      const attempt = labelEditAttempt(command, planGateLabels);
+      if (attempt.isAttempt) {
+        const names = attempt.matched.join(', ');
+        const owner =
+          planGateClaim.state === 'held'
+            ? `claimed by "${planGateClaim.owner}"`
+            : `unreadable (${planGateClaim.message})`;
+        return {
+          decision: 'deny',
+          who,
+          subject: command,
+          reason: `port: the plan gate is ${owner} — ${names} is denied until the claim is released. Release it in the app, or delete .agents/gate-claim.json, to take the gate back.`,
+        };
+      }
+    }
+
     // Install rule (#144) — every install scope resolves to one shared
     // `installPath`, so a `claude plugin install`/`marketplace add` (or the
     // uninstall/remove forms, which repoint the same way on the next
@@ -406,6 +413,21 @@ export function decide({ payload, matchers, sessionRequiredPaths, root, needsHum
       };
     }
 
+    // Branch rule (#216) — a cockpit session `git checkout`/`git switch`ing
+    // out from under its own startup refusal ("check one of those out and
+    // start me again" is not an instruction to change branches itself).
+    // `isCockpitSession === null` (transcript unreadable) allows, matching
+    // the gate rule: an unknowable identity is not an established cockpit.
+    if (!who.isOperatorWorktree && !who.isSubagent && isCockpitSession && switchesBranch(command)) {
+      return {
+        decision: 'deny',
+        who,
+        subject: command,
+        reason:
+          'port: switching branches from a cockpit session is denied (#216) — the startup preflight\'s hard stop names the carrying branch or /port:init; it is never escaped by checking one out from here. Stop and emit the preflight\'s hard-stop message rather than changing the operator\'s branch.',
+      };
+    }
+
     // Loop rule.
     if (!who.isOperatorWorktree && usesShellLoop(command) && targetsGhOrGit(command)) {
       return {
@@ -420,7 +442,12 @@ export function decide({ payload, matchers, sessionRequiredPaths, root, needsHum
     if (matchers === null) {
       return { decision: 'allow', who, subject: command };
     }
-    const matched = matchers.some((m) => m.test(command));
+    // #205: an absolute in-repo invocation (worktree or base checkout) is the
+    // same command as its repo-relative allowlisted form — resolved here, at
+    // the miss, so a logged deny/miss still shows what the agent actually
+    // typed rather than a rewritten stand-in.
+    const matched =
+      matchers.some((m) => m.test(command)) || matchers.some((m) => m.test(repoRelative(command, root)));
     if (matched) return { decision: 'allow', who, subject: command };
     return {
       decision: who.isSubagent ? 'deny' : 'miss',
@@ -433,6 +460,24 @@ export function decide({ payload, matchers, sessionRequiredPaths, root, needsHum
 
   if (toolName === 'Edit' || toolName === 'Write' || toolName === 'NotebookEdit') {
     const filePath = payload?.tool_input?.file_path;
+
+    // Claim rule (#206), write-tool arm — denied for every caller, including
+    // a subagent and an /port:implement impl-<n> worktree: unlike the Bash
+    // arm above, this one has no exemption, because releasing the claim
+    // file is exactly the #138 shape (a machine undoing its own
+    // constraint) regardless of who is asking. Runs before the ordinary
+    // non-subagent early return below, which would otherwise let a plain
+    // session's write straight through.
+    if (claimFilePath && typeof filePath === 'string' && filePath.length > 0 && resolve(root, filePath) === claimFilePath) {
+      return {
+        decision: 'deny',
+        who,
+        subject: filePath,
+        reason:
+          'port: .agents/gate-claim.json is created and released only by an explicit operator action in the app — no session or agent may write to it, including from an operator worktree. Release a claim in the app instead.',
+      };
+    }
+
     if (!who.isSubagent || typeof filePath !== 'string' || filePath.length === 0) {
       return { decision: 'allow', who, subject: filePath ?? null };
     }

@@ -1,0 +1,207 @@
+{
+  "$comment": "Authoritative decision-case table for scripts/port-tick/reconcile.ts (#209/#220). Per plugins/port/docs/PIPELINE.md → 'Label lifecycle' → 'State invariant': at most one role-bearing label, excluding markers and the sanctioned refresh pair.",
+  "cases": [
+    {
+      "function": "labelsByItem",
+      "name": "inverts two aliases into one number-keyed map, assignees deduped",
+      "input": {
+        "repository": {
+          "planApproved": { "nodes": [{ "number": 203, "assignees": { "nodes": [{ "login": "b-at-neu" }] } }] },
+          "prOpened": { "nodes": [{ "number": 203, "assignees": { "nodes": [{ "login": "b-at-neu" }] } }] }
+        },
+        "keys": ["planApproved", "prOpened"]
+      },
+      "expected": { "203": { "keys": ["planApproved", "prOpened"], "assignees": ["b-at-neu"] } }
+    },
+    {
+      "function": "contradictions",
+      "name": "Route 2 — planApproved + prOpened flagged",
+      "input": {
+        "byItem": { "203": { "keys": ["planApproved", "prOpened"], "assignees": ["b-at-neu"] } },
+        "viewer": "b-at-neu",
+        "labels": { "planApproved": "plan approved", "prOpened": "pr opened" }
+      },
+      "expected": [{ "item": 203, "keys": ["planApproved", "prOpened"], "labels": ["plan approved", "pr opened"], "owner": "mine" }]
+    },
+    {
+      "function": "contradictions",
+      "name": "Route 3 — reviewing + revising flagged",
+      "input": {
+        "byItem": { "212": { "keys": ["reviewing", "revising"], "assignees": [] } },
+        "viewer": "b-at-neu",
+        "labels": { "reviewing": "reviewing", "revising": "revising" }
+      },
+      "expected": [{ "item": 212, "keys": ["reviewing", "revising"], "labels": ["reviewing", "revising"], "owner": "unowned" }]
+    },
+    {
+      "function": "contradictions",
+      "name": "readyForReview + refreshBranch is legal — one stage label beside the refresh trigger",
+      "input": {
+        "byItem": { "50": { "keys": ["readyForReview", "refreshBranch"], "assignees": ["op"] } },
+        "viewer": "op",
+        "labels": { "readyForReview": "ready for review", "refreshBranch": "refresh branch" }
+      },
+      "expected": []
+    },
+    {
+      "function": "contradictions",
+      "name": "approved + refreshing is legal — the sanctioned carve-out",
+      "input": {
+        "byItem": { "51": { "keys": ["approved", "refreshing"], "assignees": ["op"] } },
+        "viewer": "op",
+        "labels": { "approved": "approved", "refreshing": "refreshing" }
+      },
+      "expected": []
+    },
+    {
+      "function": "contradictions",
+      "name": "refreshBranch + refreshing at once is flagged — the pair may never sit beside itself",
+      "input": {
+        "byItem": { "52": { "keys": ["refreshBranch", "refreshing"], "assignees": ["op"] } },
+        "viewer": "op",
+        "labels": { "refreshBranch": "refresh branch", "refreshing": "refreshing" }
+      },
+      "expected": [{ "item": 52, "keys": ["refreshBranch", "refreshing"], "labels": ["refresh branch", "refreshing"], "owner": "mine" }]
+    },
+    {
+      "function": "contradictions",
+      "name": "markers never count toward the invariant",
+      "input": {
+        "byItem": { "53": { "keys": ["marker", "autoPlan", "planApproved"], "assignees": ["op"] } },
+        "viewer": "op",
+        "labels": { "planApproved": "plan approved" }
+      },
+      "expected": []
+    },
+    {
+      "function": "actionablePartitions",
+      "name": "drops the item from planApproved.mine but leaves prOpened.mine untouched",
+      "input": {
+        "partitions": {
+          "planApproved": { "mine": [{ "number": 203 }], "others": [], "unowned": [] },
+          "prOpened": { "mine": [{ "number": 203 }], "others": [], "unowned": [] }
+        },
+        "contradictory": [203]
+      },
+      "expected": {
+        "planApproved": { "mine": [], "others": [], "unowned": [] },
+        "prOpened": { "mine": [{ "number": 203 }], "others": [], "unowned": [] }
+      }
+    },
+    {
+      "function": "linkedIssues",
+      "name": "both rungs — Closes #N in the body and the branch's leading N- prefix",
+      "input": { "body": "Closes #89\n\nSummary.", "headRefName": "89-cockpit-reconcile" },
+      "expected": [89]
+    },
+    {
+      "function": "linkedIssues",
+      "name": "neither rung — no link at all",
+      "input": { "body": "No closing line here.", "headRefName": "misc-fix" },
+      "expected": []
+    },
+    {
+      "function": "duplicatePullRequests",
+      "name": "Route 1 — #207 by branch prefix and #208 by Closes line both link #89, one duplicate",
+      "input": {
+        "prs": [
+          { "number": 207, "baseRefName": "dev", "body": "some notes", "headRefName": "89-cockpit-reconcile", "labels": { "nodes": [{ "name": "needs human" }] } },
+          { "number": 208, "baseRefName": "dev", "body": "Closes #89", "headRefName": "89-cockpit-reconcile-2", "labels": { "nodes": [{ "name": "approved" }] } }
+        ],
+        "integration": "dev",
+        "labels": { "needsHuman": "needs human", "approved": "approved" }
+      },
+      "expected": [{ "issue": 89, "prs": [{ "number": 207, "labels": ["needs human"] }, { "number": 208, "labels": ["approved"] }] }]
+    },
+    {
+      "function": "duplicatePullRequests",
+      "name": "a release pull request with a foreign base is never counted",
+      "input": {
+        "prs": [
+          { "number": 300, "baseRefName": "dev", "body": "Closes #40", "headRefName": "40-fix", "labels": { "nodes": [] } },
+          { "number": 301, "baseRefName": "main", "body": "Closes #40", "headRefName": "release-40", "labels": { "nodes": [] } }
+        ],
+        "integration": "dev",
+        "labels": {}
+      },
+      "expected": []
+    },
+    {
+      "function": "ungatedPullRequests",
+      "name": "a stage label without the marker is ungated",
+      "input": {
+        "prs": [{ "number": 66, "labels": { "nodes": [{ "name": "reviewing" }] } }],
+        "labels": { "readyForReview": "ready for review", "reviewing": "reviewing", "needsRevision": "needs revision", "revising": "revising", "approved": "approved", "needsHuman": "needs human", "refreshBranch": "refresh branch", "refreshing": "refreshing", "marker": "claude" }
+      },
+      "expected": [66]
+    },
+    {
+      "function": "ungatedPullRequests",
+      "name": "the marker present means gated — never reported",
+      "input": {
+        "prs": [{ "number": 67, "labels": { "nodes": [{ "name": "reviewing" }, { "name": "claude" }] } }],
+        "labels": { "readyForReview": "ready for review", "reviewing": "reviewing", "needsRevision": "needs revision", "revising": "revising", "approved": "approved", "needsHuman": "needs human", "refreshBranch": "refresh branch", "refreshing": "refreshing", "marker": "claude" }
+      },
+      "expected": []
+    },
+    {
+      "function": "reportDelta",
+      "name": "a brand-new signature is not a repeat",
+      "input": { "previous": [], "current": [{ "sig": "203:planApproved+prOpened" }], "complete": true },
+      "expected": { "entries": [{ "sig": "203:planApproved+prOpened", "repeat": false }], "cleared": [], "persist": ["203:planApproved+prOpened"] }
+    },
+    {
+      "function": "reportDelta",
+      "name": "an unchanged signature is a repeat",
+      "input": { "previous": ["203:planApproved+prOpened"], "current": [{ "sig": "203:planApproved+prOpened" }], "complete": true },
+      "expected": { "entries": [{ "sig": "203:planApproved+prOpened", "repeat": true }], "cleared": [], "persist": ["203:planApproved+prOpened"] }
+    },
+    {
+      "function": "reportDelta",
+      "name": "complete read: a vanished signature is announced cleared",
+      "input": { "previous": ["203:planApproved+prOpened"], "current": [], "complete": true },
+      "expected": { "entries": [], "cleared": ["203:planApproved+prOpened"], "persist": [] }
+    },
+    {
+      "function": "reportDelta",
+      "name": "incomplete read: a vanished signature is carried forward, never announced cleared",
+      "input": { "previous": ["203:planApproved+prOpened"], "current": [], "complete": false },
+      "expected": { "entries": [], "cleared": [], "persist": ["203:planApproved+prOpened"] }
+    },
+    {
+      "function": "reportOrphans",
+      "name": "a no-record item gets repeat: false the first time, true the second",
+      "input": { "liveness": [{ "item": 66, "class": "no-record" }], "orphansReported": ["66:no-record"] },
+      "expected": ["66:no-record"]
+    },
+    {
+      "function": "reconcileTick",
+      "name": "Route 2 surfaces as a fresh, non-repeat reconcile entry with the duplicate sweep empty",
+      "input": {
+        "repository": {
+          "planApproved": { "nodes": [{ "number": 203, "assignees": { "nodes": [{ "login": "op" }] } }] },
+          "prOpened": { "nodes": [{ "number": 203, "assignees": { "nodes": [{ "login": "op" }] } }] },
+          "allOpenPRs": { "nodes": [] }
+        },
+        "roleBearingKeys": ["planApproved", "prOpened"],
+        "viewer": "op",
+        "labels": { "planApproved": "plan approved", "prOpened": "pr opened" },
+        "integration": "dev",
+        "envelopeUnavailable": [],
+        "truncated": [],
+        "contradictionsReported": [],
+        "duplicatesReported": []
+      },
+      "expected": {
+        "contradictoryNumbers": [203],
+        "reconcile": {
+          "complete": { "contradictions": true, "duplicates": true },
+          "contradictions": [{ "sig": "203:planApproved+prOpened", "item": 203, "keys": ["planApproved", "prOpened"], "labels": ["plan approved", "pr opened"], "owner": "mine", "repeat": false }],
+          "duplicates": [],
+          "cleared": { "contradictions": [], "duplicates": [] }
+        },
+        "persist": { "contradictions": ["203:planApproved+prOpened"], "duplicates": [] }
+      }
+    }
+  ]
+}

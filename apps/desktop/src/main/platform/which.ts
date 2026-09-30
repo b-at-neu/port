@@ -27,10 +27,42 @@ export type WhichResult =
  *  ships neither by default, so the CLIs' own installer locations stand in. A
  *  login shell is never spawned to harvest `PATH` — that is exactly the
  *  POSIX-only shell-out this layer forbids. */
+// `C:\Program Files\nodejs` covers the GUI-launched case for `node` the same
+// way the Git/GitHub CLI entries above it do (#86) — the desktop app's own
+// `commands.worktrees` spawn is the first caller that needs a `node`
+// resolution on Windows with a truncated PATH.
 const FALLBACK_DIRS: Readonly<Record<WhichPlatform, readonly string[]>> = {
   darwin: ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin'],
   linux: ['/usr/local/bin', '/usr/bin'],
-  win32: ['C:\\Program Files\\Git\\cmd', 'C:\\Program Files\\Git\\bin', 'C:\\Program Files\\GitHub CLI'],
+  win32: ['C:\\Program Files\\Git\\cmd', 'C:\\Program Files\\Git\\bin', 'C:\\Program Files\\GitHub CLI', 'C:\\Program Files\\nodejs'],
+}
+
+/** Per-command, env-derived fallback directories, consulted after the static
+ *  `FALLBACK_DIRS` above miss. `claude` is commonly installed somewhere no
+ *  static list can anticipate (a version manager, a user-local prefix), so
+ *  its own installer locations are derived from the injected `env` rather
+ *  than hard-coded — never `os.homedir()`, or a simulated win32-from-Linux
+ *  test would silently read the host's real home directory instead of the
+ *  fixture it was given (#97). */
+const COMMAND_FALLBACK_DIRS: Readonly<Record<string, (env: WhichEnv, platform: WhichPlatform) => readonly string[]>> = {
+  claude: (env, platform) => {
+    const impl = pathImplFor(platform)
+    if (platform === 'win32') {
+      const dirs: string[] = []
+      const localAppData = env.LOCALAPPDATA
+      if (localAppData !== undefined && localAppData !== '') {
+        dirs.push(impl.join(localAppData, 'Programs', 'claude'), impl.join(localAppData, 'claude'))
+      }
+      const appData = env.APPDATA
+      if (appData !== undefined && appData !== '') dirs.push(impl.join(appData, 'npm'))
+      const userProfile = env.USERPROFILE
+      if (userProfile !== undefined && userProfile !== '') dirs.push(impl.join(userProfile, '.local', 'bin'))
+      return dirs
+    }
+    const home = env.HOME
+    if (home === undefined || home === '') return []
+    return [impl.join(home, '.local', 'bin'), impl.join(home, '.claude', 'local'), impl.join(home, '.bun', 'bin'), impl.join(home, '.npm-global', 'bin')]
+  },
 }
 
 function normalizePlatform(platform: NodeJS.Platform): WhichPlatform {
@@ -100,7 +132,8 @@ export function createWhich(): { which: (options: WhichOptions) => Promise<Which
     const names = candidateNames(options.command, platform, options.env)
     const impl = pathImplFor(platform)
     const pathDirs = (options.env.PATH ?? '').split(delimiterFor(platform)).filter((dir) => dir !== '')
-    const dirs = [...pathDirs, ...FALLBACK_DIRS[platform]]
+    const commandFallbacks = COMMAND_FALLBACK_DIRS[options.command]?.(options.env, platform) ?? []
+    const dirs = [...pathDirs, ...FALLBACK_DIRS[platform], ...commandFallbacks]
 
     for (const dir of dirs) {
       for (const name of names) {

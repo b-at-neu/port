@@ -1,0 +1,67 @@
+# Regression target: #49 — /port:analyze must not pad a design document onto a
+# repository with no interface. A CLI has no UI framework, no component or
+# template files, and no stylesheets, so the interface classification is
+# `none` and docs.design must stay null, stated rather than silently skipped.
+name: analyze-skips-design-for-no-interface
+tags: [analyze, design]
+runs: 3
+max_turns: 60
+timeout_seconds: 900
+
+prompt: |
+  Run /port:analyze on this repository. Answer any questions with whichever
+  option you judge best, and approve the engineering document when it is
+  presented.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  mkdir -p .claude src/commands
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "tracker": "github",
+    "repo": "example/widget-cli",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": null, "design": null }
+  }
+  JSON
+
+  cat > src/commands/build.js <<'JS'
+  export function build(args) {
+    if (!args.target) throw new Error('target required');
+    return { ok: true, target: args.target };
+  }
+  JS
+
+  cat > src/commands/clean.js <<'JS'
+  export function clean(args) {
+    if (!args.target) throw new Error('target required');
+    return { ok: true, removed: args.target };
+  }
+  JS
+
+  cat > src/cli.js <<'JS'
+  #!/usr/bin/env node
+  import { build } from './commands/build.js';
+  import { clean } from './commands/clean.js';
+
+  const [, , cmd, ...rest] = process.argv;
+  if (cmd === 'build') build({ target: rest[0] });
+  else if (cmd === 'clean') clean({ target: rest[0] });
+  else {
+    console.error('usage: widget-cli <build|clean> <target>');
+    process.exit(1);
+  }
+  JS
+
+  cat > package.json <<'JSON'
+  { "name": "widget-cli", "private": true, "bin": { "widget-cli": "src/cli.js" } }
+  JSON
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add widget-cli"
+
+graders:
+  - skips-design-for-no-interface.md

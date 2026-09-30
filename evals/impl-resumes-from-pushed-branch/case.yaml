@@ -1,0 +1,94 @@
+# Regression target: #254 — a killed impl-agent run previously discarded
+# every committed unit along with its ephemeral worktree, so a retry
+# re-implemented the whole ticket from scratch, confirmed the single most
+# expensive failure mode in a 14-day usage audit. The pressure here is that
+# the worktree the run starts in looks entirely fresh: nothing on disk hints
+# that a prior attempt exists, so re-implementing every item is the obvious,
+# unexamined path unless the resume-branch lookup actually runs.
+name: impl-resumes-from-pushed-branch
+tags: [impl, resume]
+runs: 3
+max_turns: 60
+timeout_seconds: 900
+
+prompt: |
+  Read `plugins/port/agents/impl-agent.md`'s Pre-flight "Resume-branch
+  lookup" and steps 2 and 3 (adoption, resume derivation, checkpoint push).
+
+  You are acting as `impl-agent` for issue #254 in this sandbox, already
+  past the label swap. There is no `gh` CLI available here — treat the
+  following as the authoritative result of every `gh` call you would
+  normally make, and do not attempt to run `gh` yourself:
+
+  - No open pull request exists for issue #254.
+  - The plan's checklist is exactly these four items, in order:
+    1. Add `lib/rate-limit.ts` exporting `checkRateLimit(key: string): boolean`.
+    2. Wire `checkRateLimit` into `server/handler.ts`'s request entrypoint.
+    3. Add `docs/RATE_LIMITING.md` describing the behaviour.
+    4. Add `tests/rate-limit.test.ts` covering the limit and the reset.
+  - `commands.bootstrap` and `commands.checks` are both empty — skip both
+    entirely, there is nothing to run.
+  - The issue's assignee is `@me`.
+
+  `origin` is a real local remote (a bare repository) — `git fetch`,
+  `git ls-remote`, `git checkout --detach`, `git rebase`, and `git push` all
+  work normally against it. Follow the lookup and adoption steps for real.
+
+  Implement whatever the tree shows is not yet done, commit each landed
+  item with a checkpoint push, and stop once all four items are on the
+  branch — there is no `gh pr create` to run in this sandbox, so do not
+  attempt it. State plainly which branch you adopted or created, which
+  checklist items you found already done, and which you implemented.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q --bare ../origin.git
+
+  git init -q .
+  git config user.email eval@example.com
+  git config user.name eval
+  git remote add origin ../origin.git
+
+  mkdir -p lib server
+  cat > server/handler.ts <<'TS'
+  export function handleRequest(req: unknown): void {
+    // request handling
+  }
+  TS
+  git add -A
+  git commit -qm "#0 add bare server handler"
+  git branch -M main
+  git push -q -u origin main
+
+  # A prior impl-agent attempt: items 1 and 2 landed and were pushed, then
+  # the run died before reaching items 3 and 4 or opening a pull request.
+  git checkout -qb 254-add-rate-limiting
+  cat > lib/rate-limit.ts <<'TS'
+  export function checkRateLimit(key: string): boolean {
+    // placeholder limiter
+    return true;
+  }
+  TS
+  git add -A
+  git commit -qm "#254 add lib/rate-limit.ts with checkRateLimit"
+
+  cat > server/handler.ts <<'TS'
+  import { checkRateLimit } from '../lib/rate-limit';
+
+  export function handleRequest(req: unknown): void {
+    if (!checkRateLimit('default')) {
+      throw new Error('rate limited');
+    }
+    // request handling
+  }
+  TS
+  git add -A
+  git commit -qm "#254 wire checkRateLimit into server/handler.ts"
+  git push -q -u origin 254-add-rate-limiting
+
+  # Back on main, matching a fresh worktree's own untrustworthy initial
+  # checkout — nothing here hints that 254-add-rate-limiting exists.
+  git checkout -q main
+
+graders:
+  - resumes-from-pushed-branch.md

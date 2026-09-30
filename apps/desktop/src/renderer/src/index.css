@@ -5,32 +5,405 @@
 
 body {
   margin: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   height: 100vh;
   background: #1e1e1e;
   color: #e6e6e6;
 }
 
 #app {
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  box-sizing: border-box;
+  padding: 1.5rem 2rem;
+  /* The anchor for the transcript view's floating jump-to-latest button
+     (#84) — every other screen ignores this, since none of them position
+     a descendant absolutely. */
+  position: relative;
 }
 
 h1 {
-  font-size: 1.5rem;
-  margin-bottom: 0.5rem;
-}
-
-.versions {
-  margin: 0.25rem 0;
-}
-
-.app-version {
-  margin: 0.25rem 0;
-  opacity: 0.7;
+  font-size: 1.25rem;
+  margin: 0;
 }
 
 .error {
   color: #ff6b6b;
+}
+
+/* Header */
+
+.repos-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  margin-bottom: 1rem;
+}
+
+.repos-header__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.repos-header__actions button {
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #2a2a2a;
+  color: inherit;
+  cursor: pointer;
+}
+
+.repos-header__actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* List and empty state */
+
+.repos-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.repos-empty {
+  text-align: center;
+  margin: auto;
+  opacity: 0.8;
+}
+
+.repos-empty__title {
+  font-size: 1rem;
+  margin: 0 0 0.25rem;
+}
+
+.repos-empty__hint {
+  margin: 0;
+  opacity: 0.7;
+}
+
+/* Repository cards */
+
+.repo-card {
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  background: #262626;
+  text-align: left;
+}
+
+.repo-card--highlighted {
+  border-color: #6ba8ff;
+}
+
+.repo-card__title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.repo-card__title {
+  font-weight: 600;
+}
+
+.repo-card__transcripts {
+  font-family: inherit;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  margin-right: 0.4rem;
+}
+
+.repo-card__remove {
+  font-family: inherit;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.repo-card__path {
+  opacity: 0.65;
+  font-size: 0.85rem;
+  margin-top: 0.15rem;
+}
+
+.repo-card__summary {
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+.repo-card__banner {
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+  color: #ff6b6b;
+}
+
+.repo-card__diagnostics {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.8rem;
+  color: #e0a83b;
+}
+
+.repo-card__diagnostic {
+  margin: 0.1rem 0;
+}
+
+/* Worktrees section (#86) */
+
+.worktrees {
+  margin-top: 0.6rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #333;
+}
+
+.worktrees__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.worktrees__title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.worktrees__button {
+  font-family: inherit;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.worktrees__button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.worktrees__banner {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: #e0a83b;
+}
+
+.worktrees__body {
+  margin-top: 0.4rem;
+}
+
+.worktrees__summary {
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+
+.worktrees__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.25rem;
+}
+
+.worktrees__checked {
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+.worktrees__empty {
+  margin: 0.4rem 0 0;
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.worktree-rows {
+  margin-top: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.worktree-row {
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  background: #202020;
+}
+
+.worktree-row__headline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.worktree-row__name {
+  font-weight: 600;
+}
+
+.worktree-row__chip {
+  font-size: 0.7rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 3px;
+  background: #333;
+  text-transform: uppercase;
+}
+
+.worktree-row__chip--active {
+  background: #2a5d34;
+}
+
+.worktree-row__chip--done,
+.worktree-row__chip--no-work {
+  background: #2f4d6b;
+}
+
+.worktree-row__chip--locked,
+.worktree-row__chip--dirty,
+.worktree-row__chip--unresolved {
+  background: #6b4a1f;
+}
+
+.worktree-row__chip--outside {
+  background: #444;
+}
+
+.worktree-row__branch,
+.worktree-row__issue {
+  opacity: 0.7;
+}
+
+.worktree-row__reason {
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.worktree-row__note {
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  opacity: 0.65;
+}
+
+.worktrees__orphans {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: #e0a83b;
+}
+
+.worktrees__orphans-title {
+  margin: 0;
+}
+
+.worktrees__orphan-path {
+  margin: 0.1rem 0 0;
+  opacity: 0.85;
+}
+
+.worktrees__reclaim-note {
+  margin-top: 0.5rem;
+  font-size: 0.72rem;
+  opacity: 0.55;
+}
+
+/* Footer */
+
+.repos-footer {
+  flex-shrink: 0;
+  margin-top: 1rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #333;
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+.repos-footer .versions,
+.repos-footer .app-version {
+  margin: 0.15rem 0;
+}
+
+/* Runtime strip (#97) */
+
+.runtime-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  padding: 0.5rem 2rem;
+  border-bottom: 1px solid #333;
+  font-size: 0.85rem;
+}
+
+.runtime-strip__text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.runtime-strip__sub {
+  opacity: 0.7;
+  font-size: 0.8rem;
+}
+
+.runtime-strip__action {
+  font-family: inherit;
+  font-size: 0.8rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #2a2a2a;
+  color: inherit;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.runtime-strip__action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Nav switch (#80) */
+
+#nav {
+  display: flex;
+  gap: 0.25rem;
+  flex-shrink: 0;
+  padding: 0.75rem 2rem 0;
+}
+
+.nav-tab {
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.9rem;
+  border: 1px solid #333;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  background: #202020;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.nav-tab--active {
+  opacity: 1;
+  background: #262626;
 }

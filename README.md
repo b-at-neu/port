@@ -42,7 +42,7 @@ It also reconciles the `port` marketplace entry that step 1's install command wr
 Five things, each of which otherwise fails confusingly:
 
 - **`gh` authenticated**, with access to the repository. Every stage agent works through it.
-- **An integration branch distinct from your default branch.** Feature pull requests target `branches.integration` (`dev` by default) and never the production branch. If your repository only has one long-lived branch, adopting the pipeline means creating an integration branch first.
+- **Either two long-lived branches, or one.** Feature pull requests always target `branches.integration` (`dev` by default) and never the production branch. With two branches, `branches.production` names the release target. With one — your default branch doubles as `integration` — `/port:init` proposes single-branch mode: `branches.production` is null, `modules.release` is off, and there is no release flow. `/port:init` detects which you have and never creates a branch on your behalf.
 - **The committed `.claude/port.config.json` must land on your repository's default branch.** Dispatched agents resolve their config from `origin/HEAD` before they have read any config at all, so a config change that only reaches your integration branch does not reach them — it has to reach the default branch too, whether that is directly or through your normal release flow. Skip this and dispatch halts, reporting the repository as unmanaged.
 - **Run the cockpit in `default` permission mode.** Not `acceptEdits`, `bypassPermissions`, or `auto`. A stage agent's denied commands are handled by a `PreToolUse` guard hook, independent of your session's mode — but `default` keeps *your own* edits from auto-accepting, so any residual dialog stays visible instead of silently approved. This is the most likely cause of "why is it asking me things".
 - **A branch ruleset**, if you want the approval gate enforced rather than advisory. `/port:init` will tell you it has not created one; making a check required is an administrative change it deliberately leaves to you.
@@ -73,14 +73,14 @@ Then talk to it. `work on #142` opts a ticket in and starts planning. `status` r
 
 The plan gate comes back to you in the terminal: approve it, or give feedback and it revises. After that, implementation, review, and revision run on their own until the pull request is `approved` — then you merge on GitHub. The pipeline never merges.
 
-Full walkthrough: [docs/USAGE.md](docs/USAGE.md). Reference for the label lifecycle, permission model, and output formats: [plugins/port/docs/PIPELINE.md](plugins/port/docs/PIPELINE.md).
+Full walkthrough: [docs/USAGE.md](docs/USAGE.md). Reference for the label lifecycle and permission model: [plugins/port/docs/PIPELINE.md](plugins/port/docs/PIPELINE.md); for output formats: [FORMATS.md](plugins/port/docs/FORMATS.md).
 
 ## Skills
 
 | Skill | What it does |
 | --- | --- |
 | `/port:init` | Adopt a repository |
-| `/port:analyze` | Read the codebase, propose engineering standards, recommend plugins |
+| `/port:analyze` | Read the codebase, propose engineering standards, recommend plugins, generate repository-specific skills |
 | `/port:pipeline` | The cockpit — poll, dispatch, run the gates |
 | `/port:scope` | Break a feature into an epic with dependency-ordered sub-issues |
 | `/port:implement` | Run a stage yourself, for tickets an agent cannot be given |

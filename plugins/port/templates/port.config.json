@@ -10,7 +10,10 @@
     "bootstrap": [],
     "checks": [],
     "artifacts": null,
-    "worktrees": null
+    "worktrees": null,
+    "budget": null,
+    "tick": null,
+    "forensics": null
   },
   "docs": {
     "engineering": null,
@@ -25,11 +28,13 @@
   "labels": {},
   "modules": {
     "approvalGate": false,
-    "previewDatabase": false,
     "release": true,
     "scope": true
   },
+  "release": { "postPublishHook": null },
   "reviewCycleCap": 5,
+  "budget": { "wallClockMinutes": null },
+  "concurrency": { "sharedFiles": [], "overlapThreshold": 2 },
   "sessionRequiredPaths": ["CLAUDE.md", ".claude/**", "port.config.json"],
   "extraAllow": []
 }

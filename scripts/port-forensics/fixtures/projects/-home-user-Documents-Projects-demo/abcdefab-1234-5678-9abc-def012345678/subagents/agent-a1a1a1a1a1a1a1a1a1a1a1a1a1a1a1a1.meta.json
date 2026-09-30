@@ -1,0 +1,6 @@
+{
+  "agentType": "port:impl-agent",
+  "description": "impl-agent #10",
+  "model": "claude-sonnet-4-5",
+  "spawnDepth": 1
+}

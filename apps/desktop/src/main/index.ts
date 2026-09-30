@@ -1,7 +1,17 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import { registerIpc } from './ipc'
+import type { PipelineWatcher } from './state'
+import type { HostedStore } from './hosting'
 import { applyNavigationGuards } from './navigation'
+
+// A dev-only `pnpm install` never runs as root, so the SUID sandbox helper
+// (`chrome-sandbox`) ships without the root-owned 4755 permissions Chromium
+// requires, and aborts rather than falling back unprivileged. Packaged
+// builds are unaffected — installers set up `chrome-sandbox` correctly.
+if (!app.isPackaged) {
+  app.commandLine.appendSwitch('no-sandbox')
+}
 
 const gotLock = app.requestSingleInstanceLock()
 
@@ -9,6 +19,8 @@ if (!gotLock) {
   app.quit()
 } else {
   let mainWindow: BrowserWindow | null = null
+  let watcher: PipelineWatcher | null = null
+  let hostedStore: HostedStore | null = null
 
   app.on('second-instance', () => {
     if (!mainWindow) return
@@ -53,7 +65,9 @@ if (!gotLock) {
   }
 
   void app.whenReady().then(() => {
-    registerIpc()
+    const registered = registerIpc()
+    watcher = registered.watcher
+    hostedStore = registered.hostedStore
     createWindow()
 
     app.on('activate', () => {
@@ -63,5 +77,14 @@ if (!gotLock) {
 
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()
+  })
+
+  // Stop the watcher's timer and close every hosted session on quit, so a
+  // closing app leaves no `gh`/`git` spawn (#80) or `claude` child (#98)
+  // behind — `before-quit` fires on every platform, unlike
+  // `window-all-closed`, which macOS's dock-icon convention skips.
+  app.on('before-quit', () => {
+    watcher?.stop()
+    void hostedStore?.closeAll()
   })
 }

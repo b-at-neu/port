@@ -2,7 +2,7 @@
 
 Install and adoption are in the [README](../README.md) — both are per-repository, and nothing is installed globally. This is the operator’s walkthrough for running it.
 
-Reference material — the full label lifecycle, permission model, output formats, and recovery runbook — lives in [plugins/port/docs/PIPELINE.md](../plugins/port/docs/PIPELINE.md). This document points at it rather than repeating it.
+Reference material — the full label lifecycle and permission model in [plugins/port/docs/PIPELINE.md](../plugins/port/docs/PIPELINE.md), output formats in [FORMATS.md](../plugins/port/docs/FORMATS.md), and the recovery runbook in [RECOVERY.md](../plugins/port/docs/RECOVERY.md). This document points at them rather than repeating them.
 
 ## The shape of it
 
@@ -108,7 +108,11 @@ Run this on a strong model. It is the highest-leverage thinking in the pipeline,
 
 This matters more than it looks. `docs.engineering` is what implementation builds toward and what review cites — a repository without it gets a pipeline working from the plan and the surrounding code alone.
 
+A repository's own `CLAUDE.md`, if it has one, is read by every stage and outranks `docs.engineering` on conventions — the more specific, human-authored document wins. It cannot change `commands.*` or any other pipeline mechanic; those stay config-only, exactly as before.
+
 It also **files findings as tickets rather than fixing them**, which is the point: a ticket gets a plan, a review, and a pull request. The analysis identifies work; the pipeline does it.
+
+After recommending plugins, it proposes **repository-specific skills** generated from two archetypes — a scaffolder and an auditor — filled from what actually recurs in your codebase, never from a stack-generic template. Only what nothing else already covers, one confirmation per skill, landing in your own `.claude/skills/` where it stays editable.
 
 Re-run it as the codebase evolves. It diffs against the existing document rather than regenerating, so decisions you already made survive.
 
@@ -146,6 +150,6 @@ The common causes, in rough order of likelihood:
 - **An agent stopped with `BLOCKED:`.** A clean stop by design. Resolve it and retry.
 - **The cockpit is fully idle, fully backed off.** A label change you make by hand can then wait up to 30 minutes before it's noticed, not the usual ~4.5 — the ladder holds at that ceiling only once everything left is waiting on a human, and any observed change resets it to the floor immediately. Not a stall.
 
-The full symptom-to-fix table is in [PIPELINE.md's recovery runbook](../plugins/port/docs/PIPELINE.md#recovery-runbook).
+The full symptom-to-fix table is in [RECOVERY.md's recovery runbook](../plugins/port/docs/RECOVERY.md#recovery-runbook).
 
 Because all durable state is in labels, changing a label on GitHub is always a valid way to intervene. The next tick acts on whatever the labels say.

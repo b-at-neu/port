@@ -35,7 +35,7 @@ If `.claude/port.config.json` already exists, this is a **reconcile**: read it, 
 
 Gather, without writing anything:
 
-- **Branches** — `git branch -r` and `git rev-parse --abbrev-ref HEAD`. Look for an integration branch distinct from the default. If only one long-lived branch exists, say so; the pipeline needs an integration branch, and creating one is the operator's decision. Keep the current branch from this pass — step 10's report reuses it rather than looking it up again.
+- **Branches** — `git branch -r` and `git rev-parse --abbrev-ref HEAD`. Classify the branch model: **two-branch** when a long-lived branch distinct from the default exists, **single-branch** when the default is the only long-lived branch. Report which was detected. In single-branch mode, state plainly, before proposing anything: "Only one long-lived branch here: `<default>`. I can adopt this as a single-branch repository — feature pull requests target `<default>`, and there is no release flow. I will not create a second branch for you." Keep the current branch from this pass — step 10's report reuses it rather than looking it up again.
 - **Toolchain** — read the manifest and lockfiles the repository actually has, and list the available scripts. **Do not assume a package manager**; a repository may have none.
   - **Propose the repository's declared scripts, not ad-hoc invocations.** A repository with a `lint` script gets that script — not a direct call to whatever binary you guess it wraps. The script is what its authors maintain and what CI runs; a direct invocation drifts from both the moment either changes.
   - **A check with no backing script is proposed by asking, never assumed.** A repository with no type-check script may simply not have that check. Inventing one produces an agent that fails every run, and — worse than failing — fails by *prompting*, because an invented command is usually one the allowlist does not cover.
@@ -46,15 +46,21 @@ Gather, without writing anything:
 
 Report what you found before proposing anything.
 
-## 2. Choose the modules
+## 2. Choose the branch model, then the modules
 
-Ask about each `modules` flag with `AskUserQuestion`, presenting the detected default as the recommendation and stating what the flag actually does.
+**Only when step 1 detected a single long-lived branch**, ask the branch-model question first, before any module question, with `AskUserQuestion` (header `Branch model`):
+
+- **Single branch — `<default>`** *(recommended)* — "`branches.production` is null and `modules.release` is off. `/port:release` will refuse; releasing is whatever you already do by hand. Every pipeline pull request targets `<default>`."
+- **Two branches** — "I need an integration branch distinct from `<default>` before I can write a two-branch config. Create one, then re-run `/port:init`." Choosing this **stops the run**; it never creates the branch itself.
+
+In single-branch mode, `modules.release` is `false` by construction and the `release` question below is **not asked**.
+
+Ask about each remaining `modules` flag with `AskUserQuestion`, presenting the detected default as the recommendation and stating what the flag actually does.
 
 | Flag | Recommend | Because |
 | --- | --- | --- |
 | `approvalGate` | **off** when no ruleset protects the integration branch | The check would never be required, so the workflow is pure noise. Say plainly that with no ruleset the gate is advisory either way. |
-| `previewDatabase` | **off** unless the repository's previews demonstrably hold a per-pull-request database branch from a finite pool | It is a narrow situation, and enabling it makes the pipeline treat a red deployment as infrastructure rather than a bug. |
-| `release` | on | Most repositories want an integration-to-production promotion flow. |
+| `release` | on, **skipped in single-branch mode** (forced `false`) | Most two-branch repositories want an integration-to-production promotion flow. |
 | `scope` | on | Cheap, and only used when invoked. |
 
 The answers decide which of the remaining steps run at all.
@@ -71,9 +77,14 @@ git check-ignore -v .claude/port.config.json
 
 If it is ignored, **stop and explain** rather than writing it. The config has to be committed: it travels into dispatched agents' worktrees, and an ignored one means every agent reports the repository as unmanaged and halts. Tell the operator which `.gitignore` rule is responsible — `check-ignore -v` names the file and line — so they can narrow it. A repository that ignores all of `.claude/` usually wants to ignore `settings.local.json` and the worktree root, not this.
 
-Set `docs.engineering` to a path only if that file **exists and says something real**. Leave it null otherwise — pointing it at an empty skeleton makes review cite a document with no content. Step 8 offers to fill it properly, and sets the field itself if the operator accepts.
+Set `docs.engineering` to a path only if that file **exists and says something real**; the same condition applies to `docs.design`. Leave either null otherwise — pointing it at an empty skeleton makes review cite a document with no content. Step 9 offers to fill both in properly, and sets each field itself if the operator accepts.
 
 **Validation is mandatory, not conditional. Never write a config that does not validate.** Check it against the schema at the `$schema` URL the config template carries, with a validator if one is available; if none is, walk the schema by hand and confirm every field's type and shape. A config that fails validation is a config every consumer misreads.
+
+**Two branch-model coherence rules, both hard stops, neither expressible by the schema alone:**
+
+- **Null `production` requires an explicit `modules.release: false`.** The schema rejects a null `production` paired with `release: true` or with `modules` omitted (`release` defaults to true), so single-branch mode always writes both together.
+- **A string `production` must differ from `integration` after defaults are resolved.** `integration ?? "dev"` compared against `production ?? "main"` — the schema cannot compare sibling values, so this is caught here or nowhere. On a match: "`branches.integration` and `branches.production` both resolve to `<name>`. Set `production` to null for single-branch mode, or name a distinct production branch — two identical values read as a mistake at every use site." Stop; do not write.
 
 Get `commands.checks` right in particular: its items are **objects** with a required `run` and an optional `fix` —
 
@@ -84,6 +95,19 @@ Get `commands.checks` right in particular: its items are **objects** with a requ
 — **not bare strings.** A list of strings still parses as JSON and still looks plausible, so nothing downstream complains; every consumer reading `entry.run` simply gets `undefined`. This has already shipped once.
 
 Also confirm `repo` matches the detected remote.
+
+## 3.5. Reconcile `CLAUDE.md` against the port defaults
+
+Import-time reconciliation (#246, `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "CLAUDE.md overrides") — a repository's pre-existing conventions get identified and documented now, never negotiated ad hoc mid-pipeline later.
+
+**No repository-root `CLAUDE.md`** (never `~/.claude/CLAUDE.md`) → say so and write nothing. Every overridable category runs on the port default.
+
+**Present** → read it. For each overridable category (`checks`, `labels`, `branches`, `models`, `modules`, `reviewCycleCap`, `concurrency`, `sessionRequiredPaths`) look for a stated convention contradicting the value just written to `.claude/port.config.json` in step 3 — a review-cycle expectation, a renamed branch, a check the repository already treats as informational. For each contradiction found, ask with `AskUserQuestion` (header the category name):
+
+- **Keep your rule** — writes a `port-overrides` entry into `CLAUDE.md`, the reason drawn from the operator's own words, never invented.
+- **Keep the port default** — writes nothing, and states plainly that the repository's own `CLAUDE.md` prose now disagrees with the pipeline until the operator reconciles it by hand.
+
+A pre-existing `port-overrides` block is **re-validated and reconciled, never rebuilt**: every existing entry is kept unless the operator says otherwise, and any line the parser refuses is reported, never silently dropped. `commands.*` and `extraAllow` are never offered — the permission surface stays schema-only, no exception, so a `CLAUDE.md` convention naming either is reported as unresolvable outside this flow.
 
 ## 4. Merge the permission lists
 
@@ -132,7 +156,7 @@ Drop `enabledPlugins` or `extraKnownMarketplaces` entirely and you have **uninst
 
 Then, within the two lists you do own:
 
-- Substitute `{{integration}}` and `{{production}}` into the push-deny rules, and `{{packageManager}}` into the package-manager entries. **If the repository has no package manager, drop those entries** rather than leaving a literal placeholder — an unsubstituted pattern matches nothing and silently grants nothing.
+- Substitute `{{integration}}` and `{{production}}` into the push-deny rules, and `{{packageManager}}` into the package-manager entries. **If the repository has no package manager, drop those entries**, and **if `branches.production` is null, drop its three `{{production}}` push-deny entries the same way** — never leave a literal placeholder, since an unsubstituted pattern matches nothing and silently grants nothing.
 - Append `extraAllow` to the allow list.
 - **Union with what is already there. Never drop an existing entry**, even one that looks redundant; it may be load-bearing for something outside the pipeline.
 - Deduplicate exact repeats.
@@ -147,16 +171,20 @@ You write the config and the allowlist in the same run, so you are the only thin
 
 A command matches only if it **starts with an allowlisted binary**. `Bash(npm *)` does not cover `npx` — they are different binaries, and this exact pair has already shipped a repository whose every check prompted on every run. In `default` mode the operator approves them forever; for a dispatched agent the guard hook **denies** them outright, so the agent can never reach a green check and never pushes.
 
+**Every allow entry you add for a `commands.*` command carries a trailing ` *`, never the bare form (#205).** The trailing wildcard matches both the bare command and the command with any suffix; the bare form matches only itself. This has already shipped wrong once: `Bash(node <check-script>)` with no wildcard matched the configured check and nothing else, so every `2>&1 | tail -N` an agent appended to limit output was denied outright. §7 and §7.5 below are instances of this same rule — they already write `Bash(node scripts/port-artifacts.mjs *)` and `Bash(node scripts/port-worktrees.mjs *)` with the wildcard.
+
 **An unmatched command is a hard stop**, resolved one of two ways:
 
 - **Pick a command that is already covered** — usually the repository's own script, which is the better answer anyway.
-- **Add a narrow allow entry for that specific tool**, such as `Bash(npx tsc *)`, and record it in `extraAllow` so a later reconcile keeps it.
+- **Add an allow entry for that specific tool**, such as `Bash(npx tsc *)`, and record it in `extraAllow` so a later reconcile keeps it.
 
-**Never widen to bare `Bash(npx *)`.** That is not a permission for one tool; it is a general package-execution primitive handed to every agent, which is exactly why the base list omits it.
+**Never widen to bare `Bash(npx *)`.** That is not a permission for one tool; it is a general package-execution primitive handed to every agent, which is exactly why the base list omits it. A trailing ` *` after the full command (`Bash(npx tsc *)`) is a wildcard on that command's own arguments and output redirection, not on the binary — the two are not the same kind of broadening.
+
+**On a reconcile, an existing narrow entry shadowing a `commands.*` command gets its wildcard form added alongside it — never removed.** Step 4's existing rules already make this safe with no special case: "Union with what is already there. Never drop an existing entry" keeps the narrow form in place, and "Deduplicate exact repeats" keeps a second reconcile from doubling the wildcard form once it exists.
 
 ## 5. Create the labels
 
-Read `${CLAUDE_PLUGIN_ROOT}/templates/labels.json` and create the subset whose `module` is `core` or an **enabled** module. Use the configured name from `labels` where the repository overrode it.
+Read `${CLAUDE_PLUGIN_ROOT}/data/labels.json` and create the subset whose `module` is `core` or an **enabled** module. Use the configured name from `labels` where the repository overrode it.
 
 ```bash
 gh label create "<name>" --color "<color>" --description "<description>"
@@ -182,7 +210,7 @@ node --version
 
 **Node present and the operator accepts:**
 
-- Copy `${CLAUDE_PLUGIN_ROOT}/templates/artifacts.mjs` to `scripts/port-artifacts.mjs`.
+- Copy `${CLAUDE_PLUGIN_ROOT}/bin/artifacts.mjs` to `scripts/port-artifacts.mjs`.
 - Copy `${CLAUDE_PLUGIN_ROOT}/templates/artifacts.yml` to `.github/workflows/artifacts.yml`, substituting `{{artifactsCommand}}` with `node scripts/port-artifacts.mjs`, `{{markerLabel}}` with the configured marker label name, and `{{approvedLabel}}` with the configured approved label name.
 - If either file already exists, diff it rather than overwriting, and ask.
 - Set `commands.artifacts` to `"node scripts/port-artifacts.mjs"` in `.claude/port.config.json`.
@@ -196,9 +224,21 @@ node --version
 
 **Node present and the operator accepts:**
 
-- Copy `${CLAUDE_PLUGIN_ROOT}/templates/worktrees.mjs` to `scripts/port-worktrees.mjs`. If it already exists, diff it rather than overwriting, and ask.
+- Copy `${CLAUDE_PLUGIN_ROOT}/bin/worktrees.mjs` to `scripts/port-worktrees.mjs`. If it already exists, diff it rather than overwriting, and ask.
 - Set `commands.worktrees` to `"node scripts/port-worktrees.mjs"` in `.claude/port.config.json`.
 - Add `Bash(node scripts/port-worktrees.mjs *)` to **both** `.claude/settings.json`'s `permissions.allow` and `.claude/port.config.json`'s `extraAllow`, so a later reconcile keeps it.
+
+## 7.6. Install the budget script
+
+`commands.budget` gives the cockpit a per-ticket dispatch ceiling (`budget.wallClockMinutes`) and cost reporting, instead of no visibility into what a ticket costs at all. Installing it needs Node, under the **same gate** as step 7 — do not ask about Node twice; reuse the answer from that step.
+
+**No Node, or the operator declined step 7** → leave `commands.budget` null, install nothing, and say plainly in step 10's report that nothing measures or bounds ticket cost — `reviewCycleCap` still bounds review loops only.
+
+**Node present and the operator accepts:**
+
+- Copy `${CLAUDE_PLUGIN_ROOT}/bin/budget.mjs` to `scripts/port-budget.mjs`. If it already exists, diff it rather than overwriting, and ask.
+- Set `commands.budget` to `"node scripts/port-budget.mjs"` in `.claude/port.config.json`.
+- Add `Bash(node scripts/port-budget.mjs *)` to **both** `.claude/settings.json`'s `permissions.allow` and `.claude/port.config.json`'s `extraAllow`, so a later reconcile keeps it.
 
 ## 8. Bootstrap ignores
 
@@ -208,12 +248,12 @@ Ensure `.gitignore` covers `.agents/`, `.temp/`, and the worktree root `.claude/
 
 The repository is usable at this point, so this is the last thing asked and the only optional one.
 
-`docs.engineering` is the highest-leverage field in the configuration: all four stage agents read it and `review-agent` cites it as a review dimension. `/port:analyze` fills it by reading the codebase and proposing standards — conventions inferred from the code, inconsistencies put to you as decisions, improvements approved individually. It also recommends plugins that suit the stack.
+`docs.engineering` is the highest-leverage field in the configuration: all four stage agents read it and `review-agent` cites it as a review dimension. `/port:analyze` fills it by reading the codebase and proposing standards — conventions inferred from the code, inconsistencies put to you as decisions, improvements approved individually. **When the repository has a real interface, it also produces a design document and sets `docs.design`** the same way — a repository with no interface, or barely any, gets neither, stated plainly rather than silently skipped. It also recommends plugins that suit the stack, and — after the plugin search finds nothing already covering it — proposes repository-specific skills generated from what actually recurs in the codebase, landing in `.claude/skills/` one confirmation each.
 
 Ask whether to run it now.
 
-- **Accepted** → read `${CLAUDE_PLUGIN_ROOT}/skills/analyze/SKILL.md` and follow it end to end. It writes the document and sets `docs.engineering` itself, so do not write either here. **Pass on what detection already found** in step 1 rather than making it re-derive the stack.
-- **Declined** → leave `docs.engineering` null and **say what that means**: the stage agents will work from the plan and the surrounding code, and review will have no standards document to cite. Then note that `/port:analyze` can be run at any time.
+- **Accepted** → read `${CLAUDE_PLUGIN_ROOT}/skills/analyze/SKILL.md` and follow it end to end. It writes both documents and sets `docs.engineering`/`docs.design` itself, so do not write either here. **Pass on what detection already found** in step 1 rather than making it re-derive the stack.
+- **Declined** → leave `docs.engineering` and `docs.design` null and **say what that means**: the stage agents will work from the plan and the surrounding code, and review will have no standards document to cite. Then note that `/port:analyze` can be run at any time.
 
 **Declining is a genuinely supported path.** The analysis is slow and asks real questions, and an operator who just wants the pipeline running would rush exactly the decisions that matter most. State the consequence once and move on — do not press it.
 
@@ -221,23 +261,31 @@ Ask whether to run it now.
 
 Summarize: the config written, permissions added versus already present, labels created versus skipped, whether the workflow was installed, and files touched.
 
+**Report what step 3.5 found.** No `CLAUDE.md` at all → say every overridable category runs on the port default. Otherwise → list every `port-overrides` entry written this run with the port default it replaced, and every line refused with its reason.
+
 Then state the manual steps explicitly. Chiefly:
 
 > **The approval gate is advisory until you make it a required check.** Add `run-approval-check` as a required status check in a branch ruleset on `<integration>`. I have not done this: it is an administrative change, hard to reverse, and it can block every merge if misconfigured.
 
+If `commands.artifacts` was installed, `audit-artifacts` may also be registered as a required status check now that it runs on every push rather than only at `<labels.approved>` — the same "I have not done this" framing applies: it is an administrative change the installer does not make.
+
 Never let the operator walk away believing they have a merge gate they do not have. If `approvalGate` was left off, say that too — plainly, not as a footnote.
 
-**If `commands.artifacts` was left null** — no Node, or the operator declined — say so here too: the stage agents will still produce the strict commit/pull-request/review/revision format, but nothing validates it locally, and a malformed one surfaces only in the layer 2 audit at `<labels.approved>`, or not at all if that workflow was never installed either.
+**If `commands.artifacts` was left null** — no Node, or the operator declined — say so here too: the stage agents will still produce the strict commit/pull-request/review/revision format, but nothing validates it locally, and a malformed one surfaces on the next push, or not at all if that workflow was never installed either.
 
 **If `commands.worktrees` was left null** — say so here too: the pipeline creates a worktree per ticket regardless, and with no reclamation script installed they will accumulate under `.claude/worktrees/` with no automatic cleanup; `/port:worktree-clean` is manual-only without it.
 
-**If step 1 found this checkout is not on the integration branch**, say so here:
+**If `commands.budget` was left null** — say so here too: nothing measures or bounds ticket cost, and `reviewCycleCap` still bounds review loops only.
+
+**In single-branch mode**, say instead of the warning below about the default branch differing from the integration branch (it is unreachable when there is only one branch, since single-branch mode sets `integration` to the default branch by construction): "Single-branch mode: `<default>` is both the integration branch and the default branch, so this config reaches dispatched agents on the merge that lands it. `/port:release` is unavailable. If you enabled the approval gate, it covers every pipeline pull request — there is no release pull request to exempt."
+
+**If step 1 found this checkout is not on the integration branch**, say so here — this check is unconditional, including in single-branch mode: a checkout can be on a feature branch off the default branch even when there is only one long-lived branch, so this warning stays reachable regardless of branch model:
 
 > ⚠️ You're on `<branch>`, not `<integration>`. Everything I just wrote — the config, the permission lists, and the plugin declaration — reaches dispatched agents only once it merges to `<integration>`, because their worktrees are checkouts of that branch and carry the committed files. Until then the cockpit works and dispatch does not.
 
 **Plugin updates land on the next session, not mid-session.** Say that once. Under a tag pin, an immutable `ref` never advances on its own — the supported way to move to a newer release is **re-running `/port:init`**, which re-resolves the newest published tag and reports the move in words, as above. Note also that `DISABLE_AUTOUPDATER` suppresses plugin updates entirely unless `FORCE_AUTOUPDATE_PLUGINS=1` is also set.
 
-**The config just written must reach this repository's default branch — `<default branch>`, from step 0's `gh repo view --json defaultBranchRef` — before any dispatched agent can read it.** `impl-agent` and `revise-agent` bootstrap from `git show origin/HEAD:.claude/port.config.json`, which resolves the default branch, not `branches.integration`. If the default branch and the integration branch differ, say so here and be explicit: a config change merged only to `<integration>` does not reach dispatched agents until it also reaches `<default branch>`.
+**The config just written must reach this repository's default branch — `<default branch>`, from step 0's `gh repo view --json defaultBranchRef` — before any dispatched agent can read it.** `impl-agent` and `revise-agent` bootstrap from `git show origin/HEAD:.claude/port.config.json`, which resolves the default branch, not `branches.integration`. If the default branch and the integration branch differ, say so here and be explicit (single-branch mode never reaches this, since the two are the same by construction): a config change merged only to `<integration>` does not reach dispatched agents until it also reaches `<default branch>`.
 
 Also flag anything detection could not settle: no integration branch, no CI checks to mirror, an empty `commands.checks`. Finish with the next step:
 
