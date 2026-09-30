@@ -1,14 +1,19 @@
-// #98: the public surface `main/channels/hosting.ts` and `main/index.ts`
-// import — never `./handle`, `./store`, `./options`, `./classify`, `./sdk`,
-// `./fork`, or `./input` directly.
-export { createHostedStore, defaultHostedStoreDeps, MAX_HOSTED_SESSIONS } from './store'
+// #98/#103: the public surface `main/channels/hosting.ts` and
+// `main/index.ts` import — never `./handle`, `./store`, `./options`,
+// `./classify`, `./sdk`, `./fork`, `./persist`, `./restore`, or `./input`
+// directly.
+export { createHostedStore, defaultHostedStoreDeps, DEFAULT_SESSION_LIMIT, ENDED_RETAIN_LIMIT, SESSION_LIMIT_CEILING } from './store'
 export type { HostedStore, HostedStoreDeps, StartSessionParams } from './store'
+
+export { createHostingPersistence } from './persist'
+export type { HostingPersistedState, HostingPersistence, PersistedOpenEntry } from './persist'
 
 export type {
   AgentSummary,
   CommandSummary,
   ComponentCheck,
   HostedSessionSnapshot,
+  HostingCapacity,
   LiveBlock,
   LiveBlockKind,
   PartialUpdate,
@@ -16,9 +21,11 @@ export type {
   PermissionDecision,
   PluginLoad,
   PluginRequest,
+  RestorableSession,
   SessionAttachResult,
   SessionCapabilities,
   SessionCloseResult,
+  SessionDismissResult,
   SessionEnd,
   SessionEndReason,
   SessionEntriesDelta,
@@ -30,6 +37,9 @@ export type {
   SessionOrigin,
   SessionPermissionAnswerResult,
   SessionPhase,
+  SessionRateLimit,
+  SessionRestoreDiscardResult,
+  SessionRestoreResult,
   SessionSendResult,
   SessionStartMode,
   SessionStartResult,

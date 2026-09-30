@@ -22,11 +22,17 @@ import { resolveSearchQuery, resolveSessionsScan, resolveTranscriptRead, resolve
 import {
   defaultHostingChannelDeps,
   resolveSessionAttach,
+  resolveSessionCapacity,
+  resolveSessionCapacitySet,
   resolveSessionClose,
+  resolveSessionDismiss,
   resolveSessionInterrupt,
   resolveSessionInvoke,
   resolveSessionList,
   resolveSessionPermissionAnswer,
+  resolveSessionRestore,
+  resolveSessionRestoreDiscard,
+  resolveSessionRestoreList,
   resolveSessionSend,
   resolveSessionStart,
 } from './channels/hosting'
@@ -38,7 +44,7 @@ import type { RegistryDeps } from './registry'
 import { createPipelineWatcher } from './state'
 import type { PipelineWatcher } from './state'
 import { runtimePreflight, runtimeProbe } from './runtime'
-import { createHostedStore, defaultHostedStoreDeps } from './hosting'
+import { createHostedStore, createHostingPersistence, defaultHostedStoreDeps } from './hosting'
 import type { HostedStore } from './hosting'
 
 type AppInfo = IpcMap['app:info']['response']
@@ -423,6 +429,7 @@ export function registerIpc(): RegisteredIpc {
     onEvent: (envelope) => broadcast('session:event', envelope),
     onStatus: (snapshot) => broadcast('session:status', snapshot),
     onEntries: (delta) => broadcast('session:entries', delta),
+    persistence: createHostingPersistence({ dir: app.getPath('userData') }),
   })
   const hostingChannelDeps = defaultHostingChannelDeps(hostedStore)
 
@@ -441,6 +448,18 @@ export function registerIpc(): RegisteredIpc {
   handle('session:permission:answer', (_event, request) => resolveSessionPermissionAnswer(request, hostingChannelDeps))
 
   handle('session:invoke', (_event, request) => resolveSessionInvoke(request, hostingChannelDeps))
+
+  handle('session:dismiss', (_event, request) => resolveSessionDismiss(request, hostingChannelDeps))
+
+  handle('session:capacity', (_event, request) => resolveSessionCapacity(request, hostingChannelDeps))
+
+  handle('session:capacity:set', (_event, request) => resolveSessionCapacitySet(request, hostingChannelDeps))
+
+  handle('session:restore:list', (_event, request) => resolveSessionRestoreList(registryDeps, request, hostingChannelDeps))
+
+  handle('session:restore', (_event, request) => resolveSessionRestore(registryDeps, request, hostingChannelDeps))
+
+  handle('session:restore:discard', (_event, request) => resolveSessionRestoreDiscard(request, hostingChannelDeps))
 
   for (const channel of IPC_CHANNELS) {
     if (!registered.has(channel)) {

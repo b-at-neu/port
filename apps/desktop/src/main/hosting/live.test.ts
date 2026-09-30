@@ -164,6 +164,49 @@ describe.skipIf(!live || !cwd)('hosting — live SDK acceptance (PORT_LIVE_SDK=1
     await store.close(sessionKey)
     await store.closeAll()
   }, 60_000)
+
+  // #103: two hosted sessions route independently, and a second resume of a
+  // live id is refused rather than opening a second writer on one transcript.
+  it('#103: two concurrent sessions route independently, and a second resume of a live id is refused', async () => {
+    if (!cwd) throw new Error('PORT_LIVE_SDK=1 requires PORT_LIVE_SDK_CWD to name a registered, ready repository')
+    const envelopes: { sessionKey: SessionKey }[] = []
+    const store = createHostedStore({ ...defaultHostedStoreDeps, onEvent: (envelope) => envelopes.push(envelope) })
+    const repoId = 'live-concurrent-acceptance' as RepoId
+
+    const first = await store.start({ repoId, mode: { kind: 'fresh' }, cwd })
+    const second = await store.start({ repoId, mode: { kind: 'fresh' }, cwd })
+    expect(first.ok).toBe(true)
+    expect(second.ok).toBe(true)
+    if (!first.ok || !second.ok) return
+
+    store.send(first.snapshot.sessionKey, 'Reply with only the word "one" and stop.')
+    store.send(second.snapshot.sessionKey, 'Reply with only the word "two" and stop.')
+
+    const firstKey = first.snapshot.sessionKey
+    const secondKey = second.snapshot.sessionKey
+    const deadline = Date.now() + 30_000
+    const bothReady = (): boolean => store.list().filter((snapshot) => snapshot.phase === 'ready' && (snapshot.sessionKey === firstKey || snapshot.sessionKey === secondKey)).length === 2
+    while (Date.now() < deadline && !bothReady()) {
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+    expect(bothReady()).toBe(true)
+
+    for (const envelope of envelopes) {
+      expect(envelope.sessionKey === firstKey || envelope.sessionKey === secondKey).toBe(true)
+    }
+
+    const firstAttached = store.attach(firstKey)
+    const firstClaudeSessionId = firstAttached.ok ? firstAttached.snapshot.claudeSessionId : null
+    expect(firstClaudeSessionId).not.toBeNull()
+    if (firstClaudeSessionId === null) return
+
+    const refused = await store.start({ repoId, mode: { kind: 'resume', sessionId: firstClaudeSessionId }, cwd })
+    expect(refused).toEqual({ ok: false, kind: 'already-open', sessionKey: firstKey })
+
+    await store.close(firstKey)
+    await store.close(secondKey)
+    await store.closeAll()
+  }, 60_000)
 })
 
 type ReadyCapabilities = Extract<HostedSessionSnapshot['capabilities'], { kind: 'ready' }>

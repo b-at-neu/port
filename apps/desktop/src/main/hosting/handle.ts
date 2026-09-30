@@ -21,6 +21,7 @@ import type {
   SessionOrigin,
   SessionPermissionAnswerResult,
   SessionPhase,
+  SessionRateLimit,
   SessionStartMode,
 } from '../../shared/hosting/types'
 import type { RepoId } from '../../shared/repos'
@@ -31,6 +32,8 @@ import { createPermissionBroker } from './permissions'
 import { createSessionProjector } from './project'
 import type { ProjectedDelta, SessionProjectorWindow } from './project'
 import { createCapabilityTracker } from './capabilities'
+import { readRateLimit } from './rate-limit'
+import { promptTitle } from './title'
 import { composeInvocation, validateCommandName } from './verify'
 import type { ExpectedComponents } from './plugin'
 import type { HostedQuery, Options, SDKMessage, SDKUserMessage } from './sdk'
@@ -63,6 +66,10 @@ export interface CreateHostedHandleParams {
   readonly plugin: PluginRequest
   readonly readExpectedComponents: (pluginPath: string) => Promise<ExpectedComponents | null>
   readonly samePath: (a: string, b: string) => boolean
+  /** #103: the restore path's own resolved title, `null` otherwise — set
+   *  once and never overwritten after it goes non-null, the same rule the
+   *  first `send()` and `setTitle()` both follow. */
+  readonly initialTitle: string | null
   /** Fired exactly once, the first time `init` reports the real
    *  `claudeSessionId` — `main/hosting/store.ts` uses this to kick off
    *  `fork.ts`'s titling for a `fork`-mode handle, never fired synchronously
@@ -86,6 +93,9 @@ export interface HostedSendResult {
 
 export interface HostedHandle {
   readonly sessionKey: SessionKey
+  /** #103: `mode.sessionId` for `resume`/`resume-at`, `null` otherwise — the
+   *  `already-open` refusal's own comparison target. */
+  readonly resumeTarget: string | null
   snapshot(): HostedSessionSnapshot
   replay(): HostedHandleReplay
   /** Always accepts and returns `{ uuid, queued: true }` — the SDK owns the
@@ -102,6 +112,10 @@ export interface HostedHandle {
   /** `fork.ts`'s own titling result — `false` only when the rename attempt
    *  failed; logged there, never retried and never fatal here. */
   setTitled(titled: boolean): void
+  /** #103: fills `title` only while it is still `null` — the store's own
+   *  asynchronous `resolveStartTitle` lookup races nothing, since a first
+   *  `send()` on the same handle would already have set it. */
+  setTitle(title: string): void
   /** #99: delegates to this handle's own permission broker — the id is
    *  resolved only within this handle, so a permissionId from another
    *  session's broker can never settle a prompt here. */
@@ -117,6 +131,12 @@ export interface HostedHandle {
    *  `send()`s it, so #219's `recordSend` shows it as a `Prompt` row and its
    *  `Queued` chip applies mid-turn exactly like any other send. */
   invoke(name: string, args: string): SessionInvokeResult
+}
+
+/** `mode.sessionId` for `resume`/`resume-at`, `null` otherwise — the
+ *  `already-open` refusal's own comparison target (`store.ts`). */
+function resumeTargetFor(mode: SessionStartMode): string | null {
+  return mode.kind === 'resume' || mode.kind === 'resume-at' ? mode.sessionId : null
 }
 
 function originFor(mode: SessionStartMode): SessionOrigin {
@@ -169,6 +189,8 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
   let queuedAfterInterrupt: number | null = null
   let end: SessionEnd | null = null
   let titled: boolean | null = null
+  let title: string | null = params.initialTitle
+  let rateLimit: SessionRateLimit | null = null
   let closeRequested = false
   let seq = 0
   const ring: SessionEventEnvelope[] = []
@@ -187,6 +209,8 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
       titled,
       pendingPermissions: broker.pending(),
       capabilities: capabilities.current(),
+      title,
+      rateLimit,
     }
   }
 
@@ -215,6 +239,12 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
 
   function applyMessage(message: SDKMessage): void {
     capabilities.observe(message)
+    const observedAt = new Date(params.now()).toISOString()
+    const reading = readRateLimit(message, observedAt)
+    if (reading !== null) {
+      rateLimit = reading
+      emitStatus()
+    }
     if (message.type === 'system' && message.subtype === 'init') {
       const firstInit = claudeSessionId === null
       claudeSessionId = message.session_id
@@ -275,6 +305,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
   }
 
   function doSend(text: string): HostedSendResult {
+    if (title === null) title = promptTitle(text)
     const { uuid } = input.push(text)
     emitEntries(projector.recordSend(uuid, text, new Date(params.now()).toISOString()))
     // Streaming input mode means a send is always accepted immediately --
@@ -290,6 +321,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
 
   return {
     sessionKey: params.sessionKey,
+    resumeTarget: resumeTargetFor(params.mode),
     snapshot,
     replay() {
       return { events: [...ring], droppedBefore }
@@ -318,6 +350,11 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     },
     setTitled(value) {
       titled = value
+      emitStatus()
+    },
+    setTitle(value) {
+      if (title !== null) return
+      title = value
       emitStatus()
     },
     answerPermission(permissionId, decision, message) {

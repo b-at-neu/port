@@ -36,6 +36,8 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     titled: null,
     pendingPermissions: [],
     capabilities: { kind: 'pending', request: { source: 'installed' } },
+    title: null,
+    rateLimit: null,
     ...overrides,
   }
 }
@@ -97,6 +99,14 @@ describe('ordered', () => {
   it('carries the session repoId alongside each queued permission', () => {
     const queue = applySnapshot(EMPTY_QUEUE, snapshot({ repoId: REPO_B, pendingPermissions: [permission()] }))
     expect(ordered(queue)[0]?.repoId).toBe(REPO_B)
+  })
+
+  it('carries the session title, origin, and startedAt alongside each queued permission', () => {
+    const queue = applySnapshot(EMPTY_QUEUE, snapshot({ title: 'Fix the thing', origin: { kind: 'fresh' }, startedAt: '2026-01-01T00:00:00.000Z', pendingPermissions: [permission()] }))
+    const item = ordered(queue)[0]
+    expect(item?.title).toBe('Fix the thing')
+    expect(item?.origin).toEqual({ kind: 'fresh' })
+    expect(item?.startedAt).toBe('2026-01-01T00:00:00.000Z')
   })
 
   it('returns an empty list for an empty queue', () => {

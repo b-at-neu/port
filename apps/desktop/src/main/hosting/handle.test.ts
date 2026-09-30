@@ -95,6 +95,7 @@ function baseParams(overrides: Partial<Parameters<typeof createHostedHandle>[0]>
     plugin: INSTALLED_PLUGIN,
     readExpectedComponents: () => Promise.resolve(null),
     samePath: (a: string, b: string) => a === b,
+    initialTitle: null,
     ...overrides,
   }
 }

@@ -15,15 +15,20 @@ import type { ClaimRead } from './writes/types'
 import type { RelayCopyResponse } from './relay/types'
 import type {
   HostedSessionSnapshot,
+  HostingCapacity,
   PermissionDecision,
+  RestorableSession,
   SessionAttachResult,
   SessionCloseResult,
+  SessionDismissResult,
   SessionEntriesDelta,
   SessionEventEnvelope,
   SessionInterruptResult,
   SessionInvokeResult,
   SessionKey,
   SessionPermissionAnswerResult,
+  SessionRestoreDiscardResult,
+  SessionRestoreResult,
   SessionSendResult,
   SessionStartMode,
   SessionStartResult,
@@ -250,6 +255,40 @@ export interface IpcMap {
     request: { sessionKey: SessionKey; name: string; args: string }
     response: SessionInvokeResult
   }
+  /** #103: removes an ended handle from the rail — `still-open` for any
+   *  other phase. */
+  'session:dismiss': {
+    request: { sessionKey: SessionKey }
+    response: SessionDismissResult
+  }
+  /** #103: the rail's own limit/open count — takes no payload. */
+  'session:capacity': {
+    request: void
+    response: HostingCapacity
+  }
+  /** #103: `limit` must be an integer from 1 to `SESSION_LIMIT_CEILING` —
+   *  never closes a session, even when lowered below the open count. */
+  'session:capacity:set': {
+    request: { limit: number }
+    response: HostingCapacity
+  }
+  /** #103: the restore banner's own boot-time read — availability resolved
+   *  through `listRepositories`. */
+  'session:restore:list': {
+    request: void
+    response: { entries: readonly RestorableSession[] }
+  }
+  /** #103: resumes one restorable entry through the normal `start` path, so
+   *  capacity and `already-open` still apply. */
+  'session:restore': {
+    request: { restoreId: string }
+    response: SessionRestoreResult
+  }
+  /** #103: `restoreId: null` discards every entry — idempotent either way. */
+  'session:restore:discard': {
+    request: { restoreId: string | null }
+    response: SessionRestoreDiscardResult
+  }
 }
 
 export const IPC_CHANNELS = [
@@ -285,6 +324,12 @@ export const IPC_CHANNELS = [
   'session:list',
   'session:permission:answer',
   'session:invoke',
+  'session:dismiss',
+  'session:capacity',
+  'session:capacity:set',
+  'session:restore:list',
+  'session:restore',
+  'session:restore:discard',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]

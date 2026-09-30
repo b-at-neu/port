@@ -43,6 +43,11 @@ function button(label: string, action: string, className: string): HTMLButtonEle
 
 export interface SessionRefs {
   readonly root: HTMLElement
+  /** #103: the rail column's two hosts — `restoreHost` above `railHost`,
+   *  rendered by `session/restore.ts`/`session/rail.ts`, never built here. */
+  readonly restoreHost: HTMLElement
+  readonly railHost: HTMLElement
+  readonly pane: HTMLElement
   readonly emptyState: HTMLElement
   readonly live: HTMLElement
   readonly pill: HTMLElement
@@ -68,10 +73,23 @@ export function buildSessionView(container: HTMLElement): SessionRefs {
   container.textContent = ''
   const root = el('div', 'session-view')
 
+  // #103: the rail column — a restore banner host above the rail itself,
+  // 16rem wide (session.css collapses it to 12rem below 1000px). Both hosts
+  // are rebuilt in place by `session/restore.ts`/`session/rail.ts`, never by
+  // this file.
+  const railColumn = el('div', 'session-view__rail-column')
+  const restoreHost = el('div', 'session-view__restore-host')
+  railColumn.appendChild(restoreHost)
+  const railHost = el('div', 'session-view__rail-host')
+  railColumn.appendChild(railHost)
+  root.appendChild(railColumn)
+
+  const pane = el('div', 'session-view__pane')
+
   const emptyState = el('div', 'session-view__empty')
   emptyState.appendChild(el('p', 'session-view__empty-title', EMPTY_TITLE))
   emptyState.appendChild(el('p', 'session-view__empty-hint', EMPTY_HINT))
-  root.appendChild(emptyState)
+  pane.appendChild(emptyState)
 
   const live = el('div', 'session-view__live')
 
@@ -125,10 +143,32 @@ export function buildSessionView(container: HTMLElement): SessionRefs {
   const hintLine = el('p', 'session-view__hint', COMPOSER_HINT)
   live.appendChild(hintLine)
 
-  root.appendChild(live)
+  pane.appendChild(live)
+  root.appendChild(pane)
   container.appendChild(root)
 
-  return { root, emptyState, live, pill, headerMeta, stopButton, closeButton, bannerHost, list, jumpButton, endedPanel, commandsHost, composerForm, composerTextarea, sendButton, noteLine, hintLine }
+  return {
+    root,
+    restoreHost,
+    railHost,
+    pane,
+    emptyState,
+    live,
+    pill,
+    headerMeta,
+    stopButton,
+    closeButton,
+    bannerHost,
+    list,
+    jumpButton,
+    endedPanel,
+    commandsHost,
+    composerForm,
+    composerTextarea,
+    sendButton,
+    noteLine,
+    hintLine,
+  }
 }
 
 /** What the header's meta line shows before `init` has reported a real id —

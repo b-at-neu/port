@@ -94,6 +94,17 @@ export interface HostedSessionSnapshot {
    *  a second event stream, the same reasoning `pendingPermissions` already
    *  states for itself. */
   readonly capabilities: SessionCapabilities
+  /** #103: the session's own display title — set once from the first
+   *  prompt (or, for a resume/fork, resolved before spawn) and never
+   *  changed after it goes non-null, so a label never shifts under the
+   *  operator. `null` until then; `sessionDisplayLabel` (`shared/hosting/
+   *  label.ts`) is what turns this into what the rail and the permission
+   *  dialog actually show. */
+  readonly title: string | null
+  /** #103: the newest reading `main/hosting/rate-limit.ts` narrowed off a
+   *  `rate_limit_event` message — `null` until the first one arrives, never
+   *  synthesized. */
+  readonly rateLimit: SessionRateLimit | null
 }
 
 /** `session:event`'s payload — the SDK message crosses the boundary opaque
@@ -115,6 +126,12 @@ export type SessionStartResult =
   | { readonly ok: true; readonly snapshot: HostedSessionSnapshot }
   | { readonly ok: false; readonly kind: 'at-capacity'; readonly limit: number }
   | { readonly ok: false; readonly kind: 'runtime'; readonly diagnosis: RuntimeDiagnosis; readonly detail: string | null }
+  /** #103: a `resume`/`resume-at` whose `sessionId` already names a live
+   *  handle — fails closed, since two `claude` processes appending to one
+   *  transcript is unrecoverable. `sessionKey` is that existing handle's, so
+   *  a caller (the rail, the restore banner, the Transcripts picker) can
+   *  switch to it rather than merely reporting the refusal. */
+  | { readonly ok: false; readonly kind: 'already-open'; readonly sessionKey: SessionKey }
 
 /** `'session:send'`'s response — always `queued` rather than refusing
  *  mid-turn (the SDK owns the queue), or `unknown-session` when the key
@@ -320,3 +337,51 @@ export type SessionInvokeResult =
   | { readonly ok: false; readonly kind: 'unknown-session' }
   | { readonly ok: false; readonly kind: 'invalid-command'; readonly reason: string }
   | { readonly ok: false; readonly kind: 'unknown-command'; readonly name: string }
+
+/** #103: a `rate_limit_event` narrowed structurally by `main/hosting/
+ *  rate-limit.ts` — `utilization` is deliberately not read, since its unit
+ *  is undocumented in SDK 0.3.261 and a percentage in the wrong unit is
+ *  misinformation. `observedAt` is this process's own clock, never the
+ *  SDK's. */
+export interface SessionRateLimit {
+  readonly status: 'allowed' | 'warning' | 'rejected'
+  readonly window: 'five-hour' | 'weekly' | 'weekly-opus' | 'weekly-sonnet' | 'overage' | null
+  readonly resetsAt: string | null
+  readonly observedAt: string
+}
+
+/** #103: `'session:capacity'`/`'session:capacity:set'`'s own shape —
+ *  `ceiling` (`SESSION_LIMIT_CEILING`) never changes, `limit` is the
+ *  operator's own setting, persisted. */
+export interface HostingCapacity {
+  readonly limit: number
+  readonly ceiling: number
+}
+
+/** #103: one entry offered by the restore banner at boot — app-minted
+ *  (`restoreId`), never the persisted `claudeSessionId` itself, so the
+ *  renderer can never send that id back verbatim. `availability` is the
+ *  registry's own read, resolved by `main/channels/hosting.ts`. */
+export interface RestorableSession {
+  readonly restoreId: string
+  readonly repoId: RepoId
+  readonly title: string | null
+  readonly origin: { readonly kind: 'resumed'; readonly from: string }
+  readonly startedAt: string
+  readonly availability: { readonly ok: true } | { readonly ok: false; readonly reason: string }
+}
+
+/** `'session:dismiss'`'s response — an ended handle's row leaving the rail. */
+export type SessionDismissResult = { readonly ok: true } | { readonly ok: false; readonly kind: 'unknown-session' | 'still-open' }
+
+/** `'session:restore'`'s response — `SessionStartResult`'s own branches plus
+ *  the two ways a restore entry itself can fail to resolve. */
+export type SessionRestoreResult =
+  | SessionStartResult
+  | { readonly ok: false; readonly kind: 'unknown-restore' }
+  | { readonly ok: false; readonly kind: 'repo-unavailable'; readonly reason: string }
+
+/** `'session:restore:discard'`'s response — always `{ ok: true }`, since
+ *  discarding an already-gone entry (or every entry with `null`) is
+ *  idempotent by design. */
+export type SessionRestoreDiscardResult = { readonly ok: true }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blockedPathLine, contextLine, decisionReasonLine, documentTitle, formatInput, grantLines, grantSummaryLine, headingText, primaryLine } from './copy'
+import { blockedPathLine, contextLine, decisionReasonLine, documentTitle, formatInput, grantLines, grantSummaryLine, headingText, OTHER_SESSION_LINE, primaryLine } from './copy'
 import type { PendingPermission } from '../../../shared/hosting/types'
 
 function permission(overrides: Partial<PendingPermission> = {}): PendingPermission {
@@ -34,20 +34,26 @@ describe('headingText', () => {
 })
 
 describe('contextLine', () => {
-  it('names the repo and session alone for one request, no subagent', () => {
-    expect(contextLine('acme/widgets', 'hosted-1', null, 1, 1)).toBe('acme/widgets · hosted-1')
+  it('names the session label and started time alone for one request, no subagent', () => {
+    expect(contextLine('acme/widgets · New session', '14:02', null, 1, 1)).toBe('acme/widgets · New session · started 14:02')
   })
 
   it('adds the subagent segment when present', () => {
-    expect(contextLine('acme/widgets', 'hosted-1', 'agent-9', 1, 1)).toBe('acme/widgets · hosted-1 · subagent agent-9')
+    expect(contextLine('acme/widgets · New session', '14:02', 'agent-9', 1, 1)).toBe('acme/widgets · New session · started 14:02 · subagent agent-9')
   })
 
   it('adds the waiting counter only once more than one request is queued', () => {
-    expect(contextLine('acme/widgets', 'hosted-1', null, 1, 2)).toBe('acme/widgets · hosted-1 · 1 of 2 waiting')
+    expect(contextLine('acme/widgets · New session', '14:02', null, 1, 2)).toBe('acme/widgets · New session · started 14:02 · 1 of 2 waiting')
   })
 
   it('orders subagent before the waiting counter', () => {
-    expect(contextLine('acme/widgets', 'hosted-1', 'agent-9', 2, 3)).toBe('acme/widgets · hosted-1 · subagent agent-9 · 2 of 3 waiting')
+    expect(contextLine('acme/widgets · New session', '14:02', 'agent-9', 2, 3)).toBe('acme/widgets · New session · started 14:02 · subagent agent-9 · 2 of 3 waiting')
+  })
+})
+
+describe('OTHER_SESSION_LINE', () => {
+  it('names the different-session warning', () => {
+    expect(OTHER_SESSION_LINE).toContain('different session')
   })
 })
 

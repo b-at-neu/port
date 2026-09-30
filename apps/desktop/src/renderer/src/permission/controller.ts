@@ -3,19 +3,19 @@
 // #219's session view, which is not built yet. The dialog owns its
 // `data-action="permission-*"` handling directly, the same idiom `claim/
 // controller.ts` and `gate/controller.ts` already establish.
-import type { RepoId, RepositoryEntry } from '../../../shared/repos'
 import type { HostedSessionSnapshot, PermissionDecision } from '../../../shared/hosting/types'
 import { applySnapshot, EMPTY_QUEUE, ordered, seed } from './queue'
 import type { PermissionQueue, QueuedPermission } from './queue'
 import { documentTitle, IPC_FAILURE_MESSAGE } from './copy'
 import { buildPermissionDialog, renderPermissionDialog } from './view'
 import type { PermissionDialogProps } from './view'
+import { onRepoLabelsChange, reloadRepoLabels, repoLabelFor } from '../repo-labels'
+import { onSelectionChange, selectedSession } from '../session/selection'
+import { sessionDisplayLabel, startedClock } from '../../../shared/hosting/label'
 
 const ARM_DELAY_MS = 600
 
 let queue: PermissionQueue = EMPTY_QUEUE
-let repoLabels = new Map<RepoId, string>()
-const repoLabelReloadTried = new Set<RepoId>()
 const messages = new Map<string, string>()
 const armedAt = new Map<string, number>()
 let sending: string | null = null
@@ -26,35 +26,6 @@ let errorFor: string | null = null
 let dialog: HTMLDialogElement | null = null
 let lastShownPermissionId: string | null = null
 let armTimer: ReturnType<typeof setTimeout> | null = null
-
-function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { status: 'ready' }> {
-  return 'config' in entry
-}
-
-async function loadRepoLabels(): Promise<void> {
-  try {
-    const result = await window.port.reposList()
-    if (!result.ok) return
-    const next = new Map<RepoId, string>()
-    for (const entry of result.repositories) next.set(entry.id, isReady(entry) ? entry.config.repo : entry.displayName)
-    repoLabels = next
-    draw()
-  } catch (err) {
-    console.error('Failed to load repository labels for the permission dialog', err)
-  }
-}
-
-/** Falls back to the raw id — reloaded at most once per unresolved id, so a
- *  genuinely unknown repository never triggers a reload loop. */
-function repoLabelFor(repoId: RepoId): string {
-  const label = repoLabels.get(repoId)
-  if (label !== undefined) return label
-  if (!repoLabelReloadTried.has(repoId)) {
-    repoLabelReloadTried.add(repoId)
-    void loadRepoLabels()
-  }
-  return repoId
-}
 
 function current(): QueuedPermission | null {
   return ordered(queue)[0] ?? null
@@ -112,14 +83,15 @@ function draw(): void {
 
   const props: PermissionDialogProps = {
     permission: item.permission,
-    repoLabel: repoLabelFor(item.repoId),
-    sessionKey: item.sessionKey,
+    sessionLabel: sessionDisplayLabel({ title: item.title, origin: item.origin }, repoLabelFor(item.repoId)),
+    started: startedClock(item.startedAt, new Date()),
     index: 1,
     total: items.length,
     message: messages.get(permissionId) ?? '',
     armed: isArmed(permissionId),
     sending: sending === permissionId ? sendingDecision : null,
     error: errorFor === permissionId ? error : null,
+    otherSession: selectedSession() !== null && selectedSession() !== item.sessionKey,
   }
   renderPermissionDialog(dialog, props, lastShownPermissionId)
   lastShownPermissionId = permissionId
@@ -197,7 +169,9 @@ export function initPermissions(container: HTMLElement): void {
   draw()
 
   void loadInitialQueue()
-  void loadRepoLabels()
+  void reloadRepoLabels()
+  onRepoLabelsChange(draw)
+  onSelectionChange(draw)
 
   dialog.addEventListener('click', (event) => {
     const target = event.target

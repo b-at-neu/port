@@ -3,8 +3,8 @@ import { join } from 'node:path';
 import { root, readJson, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// #98/#99: apps/desktop/src/main/hosting/ owns the full lifecycle of a
-// hosted session in the main process. Thirteen assertions pin its plan's
+// #98/#99/#103: apps/desktop/src/main/hosting/ owns the full lifecycle of a
+// hosted session in the main process. Fifteen assertions pin its plan's
 // decisions mechanically, in the shape desktop-runtime.ts's and
 // desktop-sessions.ts's own guards already use.
 export default async function ({ fail, ok }: Reporter) {
@@ -399,6 +399,48 @@ export default async function ({ fail, ok }: Reporter) {
       } else {
         ok();
       }
+    }
+  }
+
+  // --- Only persist.ts names writeJsonFileAtomic or hosting.json under main/hosting/ ---
+  // guard(#103): hosting.json is recoverable app state, not an operator-
+  // curated list — a second writer could persist a set that skipped
+  // freeze() on quit, silently restoring a session the operator already
+  // closed.
+  {
+    const stray = hostingProdFiles.filter((f) => relOf(f) !== `${hostingDir}/persist.ts`).filter((f) => {
+      const code = stripComments(readFileSync(f, 'utf8'));
+      return code.includes('writeJsonFileAtomic') || code.includes('hosting.json');
+    });
+    if (stray.length > 0) {
+      fail('desktop-hosting', `writeJsonFileAtomic or 'hosting.json' appears outside ${hostingDir}/persist.ts, in: ${stray.map(relOf).join(', ')} — a second writer could skip freeze() on quit`);
+    } else {
+      ok();
+    }
+  }
+
+  // --- shared/hosting/label.ts's sessionDisplayLabel is declared once and used by both consumers ---
+  // guard(#103) / pin: shared/hosting/label.ts's sessionDisplayLabel ↔ its
+  // two consumers (renderer/src/session/rail.ts, renderer/src/permission/
+  // controller.ts). If the dialog and the rail named a session differently,
+  // the operator would have no reliable way to tell which session a prompt
+  // belongs to.
+  {
+    const declarations = allFiles.filter((f) => !relOf(f).endsWith('.test.ts')).filter((f) => /export function sessionDisplayLabel\(/.test(readFileSync(f, 'utf8')));
+    const declaredOnlyInLabel = declarations.length === 1 && relOf(declarations[0] ?? '') === `${sharedHostingDir}/label.ts`;
+    const railFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/renderer/src/session/rail.ts');
+    const controllerFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/renderer/src/permission/controller.ts');
+    const copyFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/renderer/src/permission/copy.ts');
+    if (!declaredOnlyInLabel) {
+      fail('desktop-hosting', `sessionDisplayLabel must be declared only in ${sharedHostingDir}/label.ts, found in: ${declarations.map(relOf).join(', ') || '(nowhere)'}`);
+    } else if (!railFile || !/sessionDisplayLabel/.test(readFileSync(railFile, 'utf8'))) {
+      fail('desktop-hosting', 'apps/desktop/src/renderer/src/session/rail.ts does not import sessionDisplayLabel');
+    } else if (!controllerFile || !/sessionDisplayLabel/.test(readFileSync(controllerFile, 'utf8'))) {
+      fail('desktop-hosting', 'apps/desktop/src/renderer/src/permission/controller.ts does not import sessionDisplayLabel');
+    } else if (!copyFile || /function contextLine\([^)]*sessionKey/.test(readFileSync(copyFile, 'utf8'))) {
+      fail('desktop-hosting', "apps/desktop/src/renderer/src/permission/copy.ts's contextLine must take no 'sessionKey' parameter");
+    } else {
+      ok();
     }
   }
 }
