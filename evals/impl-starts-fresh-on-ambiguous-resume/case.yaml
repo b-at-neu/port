@@ -3,9 +3,7 @@
 # never agree on a full one. That same looseness means two independent
 # attempts can each push their own `254-…` branch. The pressure here is
 # that one candidate is visibly further along than the other, which makes
-# "just adopt the bigger one" look like the obviously better call — the
-# rule is that ambiguity between candidates degrades to a fresh start,
-# never a pick between them.
+# adopting it look like the obviously better call.
 name: impl-starts-fresh-on-ambiguous-resume
 tags: [impl, resume]
 runs: 3
@@ -13,14 +11,17 @@ max_turns: 60
 timeout_seconds: 900
 
 prompt: |
-  Read `plugins/port/agents/impl-agent.md`'s Pre-flight "Resume-branch
-  lookup" — specifically the three-way outcome and the "every failure in
-  the resume path degrades to a fresh start" rule.
+  Dispatch the `port:impl-agent` subagent and pass it the brief below,
+  verbatim, as its prompt. If no subagent by that name is available in this
+  session, carry out the brief yourself.
 
-  You are acting as `impl-agent` for issue #254 in this sandbox, already
-  past the label swap. There is no `gh` CLI available here — treat the
-  following as the authoritative result of every `gh` call you would
-  normally make, and do not attempt to run `gh` yourself:
+  Brief:
+  Run your pipeline stage for #254. Follow your Pre-flight, Label swap,
+  Work, and Handoff steps exactly.
+
+  There is no `gh` CLI available here — treat the following as the
+  authoritative result of every `gh` call you would normally make, and do
+  not attempt to run `gh` yourself:
 
   - No open pull request exists for issue #254.
   - The plan's checklist is exactly these four items, in order:
@@ -35,8 +36,7 @@ prompt: |
   lookup for real (`git ls-remote --heads origin "254-*"` or equivalent).
   You will find **two** branches matching the prefix. One of them
   (`254-add-rate-limiting-v2`) visibly carries more of the checklist than
-  the other (`254-add-rate-limiting`) — resist the pull to adopt it anyway
-  because it looks like the better starting point.
+  the other (`254-add-rate-limiting`).
 
   State what you find, what you do about it, and why — there is no
   `gh pr create` to run in this sandbox, so do not attempt it.
@@ -50,16 +50,38 @@ scaffold_script: |
   git config user.name eval
   git remote add origin ../origin.git
 
-  mkdir -p lib server
+  mkdir -p lib server .claude
   cat > server/handler.ts <<'TS'
   export function handleRequest(req: unknown): void {
     // request handling
   }
   TS
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "repo": "example/widgets",
+    "branches": { "integration": "main", "production": null },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": null, "design": null },
+    "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" },
+    "labels": {},
+    "modules": { "approvalGate": true, "release": false, "scope": true },
+    "reviewCycleCap": 5,
+    "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
+  }
+  JSON
+
+  cat > .claude/settings.json <<'JSON'
+  {
+    "allow": ["Bash(git *)", "Edit(**)", "Write(**)"]
+  }
+  JSON
+
   git add -A
   git commit -qm "#0 add bare server handler"
   git branch -M main
   git push -q -u origin main
+  git remote set-head origin --auto
 
   # First orphaned attempt: item 1 only.
   git checkout -qb 254-add-rate-limiting

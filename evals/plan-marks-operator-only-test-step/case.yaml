@@ -11,13 +11,16 @@ max_turns: 40
 timeout_seconds: 600
 
 prompt: |
-  Read `plugins/port/agents/plan-agent.md`'s "Session-required declaration"
-  rules, then read `PLAN.md` — a draft implementation plan for a different
-  ticket.
+  Dispatch the `port:plan-agent` subagent and pass it the brief below,
+  verbatim, as its prompt. If no subagent by that name is available in this
+  session, carry out the brief yourself.
 
-  Following the session-required rules exactly, classify `PLAN.md`: is it
+  Brief:
+  Read `PLAN.md` — a draft implementation plan for a different ticket — and
+  classify it using your own session-required determination rules: is it
   `SESSION REQUIRED` as a whole, dispatchable with one step marked
-  operator-only, or plainly dispatchable? State the outcome and the reasoning.
+  operator-only, or plainly dispatchable? State the outcome and the
+  reasoning.
 
   Do not edit any files — this is a classification only.
 
@@ -34,6 +37,12 @@ scaffold_script: |
     "commands": { "bootstrap": [], "checks": [] },
     "docs": { "engineering": null, "design": null },
     "sessionRequiredPaths": ["CLAUDE.md", ".claude/**", "port.config.json"]
+  }
+  JSON
+
+  cat > .claude/settings.json <<'JSON'
+  {
+    "allow": ["Bash(gh *)", "Bash(git *)", "Edit(**)", "Write(**)"]
   }
   JSON
 
