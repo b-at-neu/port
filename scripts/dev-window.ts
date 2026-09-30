@@ -51,6 +51,14 @@ export function nextDevWindow(productionVersion: string, suffix = DEV_SUFFIX): s
   return `${v.major}.${v.minor}.${v.patch + 1}-${suffix}`;
 }
 
+/** The one constructor for a dev-window branch name, e.g.
+ *  `devWindowBranch('0.2.1-dev')` → `'devwindow/v0.2.1-dev'` — used here and
+ *  by `scripts/release-corridor.ts` (#275), so there is never a second copy
+ *  of this string shape to drift from this one. */
+export function devWindowBranch(next: string): string {
+  return `devwindow/v${next}`;
+}
+
 /** The pure decision: given the integration branch's current version, the
  *  next dev-window version (already computed from production's version by
  *  the caller), and whether that window's branch already exists on origin —
@@ -58,7 +66,7 @@ export function nextDevWindow(productionVersion: string, suffix = DEV_SUFFIX): s
 export function decide({ integrationVersion, next, devWindowBranchExists }: { integrationVersion: string; next: string; devWindowBranchExists: boolean }): any {
   const integration = parseVersion(integrationVersion);
   if (!integration) throw new Error(`decide: integration version '${integrationVersion}' is not well-formed semver`);
-  const branch = `devwindow/v${next}`;
+  const branch = devWindowBranch(next);
   if (integration.suffix) return { action: 'nothing-to-do', version: integrationVersion };
   if (devWindowBranchExists) return { action: 'pr-exists', version: next, branch };
   return { action: 'open', version: next, branch };
@@ -195,7 +203,7 @@ function main(): void {
   const productionVersion = readVersionAt(`origin/${cfg.production}`, cfg.versionFile);
   const integrationVersion = readVersionAt(`origin/${cfg.integration}`, cfg.versionFile);
   const next = nextDevWindow(productionVersion);
-  const branch = `devwindow/v${next}`;
+  const branch = devWindowBranch(next);
   const devWindowBranchExists = remoteBranchExists(branch);
 
   const result = decide({ integrationVersion, next, devWindowBranchExists });
