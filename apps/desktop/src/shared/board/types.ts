@@ -7,6 +7,7 @@ import type { ItemStatus, PipelineState, ReconciledItem, RepositoryState, StageL
 import type { ActionAvailability, OperatorAction } from '../actions/types'
 import type { TickReport } from '../tick/types'
 import type { RelayPending, RelayScan } from '../relay/types'
+import type { DrainState } from '../dispatch/types'
 
 /**
  * The four sources the watcher polls independently. Deliberately not five:
@@ -112,6 +113,11 @@ export interface BoardSnapshot {
    *  refreshed. No new `SourceKind`: it rides the `sessions` source's own
    *  cadence and freshness rather than scheduling a second one. */
   readonly relay: RelayScan
+  /** The app's one drain switch (#110) — `main/tick/dispatchable.ts`'s own
+   *  gate, stamped onto every snapshot so the board's header controls and
+   *  drain line never need a second read channel. Defaults to `{ gate:
+   *  'open' }` when the watcher was built with no drain source at all. */
+  readonly drain: DrainState
   /** The earliest instant the watcher's one timer (`main/state/watcher.ts`)
    *  is next due to fire — `null` once `stop()` has run, the honest
    *  rendering of "no wakeup scheduled" (#62). Shares the same expression

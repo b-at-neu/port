@@ -4,6 +4,8 @@
 export { planTick } from './plan'
 export type { PlanTickParams } from './plan'
 
+export { dispatchableFrom } from './dispatchable'
+
 export { createDispatchLedger } from './ledger'
 export type { DispatchLedger } from './ledger'
 

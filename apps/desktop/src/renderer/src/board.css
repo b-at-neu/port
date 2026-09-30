@@ -66,6 +66,52 @@
   margin-top: 0.1rem;
 }
 
+.board-header__tick-drain {
+  color: #e8a33d;
+  font-weight: 600;
+}
+
+.board-header__drain-note {
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  color: #e8a33d;
+}
+
+.board-halt {
+  margin-top: 0.4rem;
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.8rem;
+}
+
+.board-halt__heading {
+  font-weight: 600;
+  margin-bottom: 0.2rem;
+}
+
+.board-halt__note {
+  opacity: 0.75;
+  margin-bottom: 0.3rem;
+}
+
+.board-halt__line {
+  opacity: 0.9;
+  margin: 0.15rem 0;
+}
+
+.board-halt__dismiss {
+  margin-top: 0.4rem;
+  font-family: inherit;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #2a2a2a;
+  color: inherit;
+  cursor: pointer;
+}
+
 .board-list {
   flex: 1;
   overflow-y: auto;

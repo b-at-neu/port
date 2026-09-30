@@ -21,7 +21,8 @@ Every write the cockpit makes today, classified:
 | --- | --- | --- |
 | `planReview` → `planApproved` / `planChangesRequested`, including the `autoPlan` swap | a human answering the gate | **external gate owner**, under a `plan-gate` claim |
 | opt-in (`work on #N`): add marker, `ready`, optional `autoPlan`, assignee | human | either — convergent |
-| `pause`, `resume`, `retry`, `gate #N`, `refresh #N` | human | either — convergent |
+| `pause`, `resume`, `retry`, `stop #N`, `gate #N`, `refresh #N` | human | either — convergent |
+| drain, `stop #N`, halt (the desktop app's own dispatch gate, #110) | human | either — convergent, but scoped to the app: draining stands the app's own dispatcher down, never the cockpit's |
 | removing `needsHuman` (`unblock #N`) | human, guarded | cockpit only — see "Risks" below |
 | liveness reset, usage-limit park | machine observation | cockpit only |
 | cycle-cap and zero-diff escalation to `needsHuman` | machine observation | cockpit only |
