@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, walk, relOf } from '../lib/files.ts';
+import { root, walk, relOf, readJson } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
 // Issue 72: apps/desktop/src/main/platform/ is the only place under
@@ -60,8 +60,12 @@ export default async function ({ fail, ok }: Reporter) {
   }
 
   // --- KNOWN_COMMANDS contains no POSIX-only/shell utility --------------------
-  // guard(#72): a POSIX-only or shell-only executable becoming spawnable,
-  // which fails only on Windows at runtime instead of at compile time.
+  // guard(#72, #116): a POSIX-only or shell-only executable becoming
+  // spawnable, which fails only on Windows at runtime instead of at compile
+  // time. The denylist itself now reads scripts/checks/portability.config.json's
+  // shared 'nonPortable' classification rather than carrying a second inline
+  // copy of it (docs/ENGINEERING.md §2) — a superset of the original list, so
+  // nothing that passed before starts failing.
   {
     const runFile = files.find((f) => relOf(f) === runRel);
     const text = runFile ? readFileSync(runFile, 'utf8') : '';
@@ -70,10 +74,11 @@ export default async function ({ fail, ok }: Reporter) {
       fail('desktop-platform-layer', `${runRel} has no 'KNOWN_COMMANDS = [...] as const' array`);
     } else {
       const names = [...m[1].matchAll(/'([^']+)'/g)].map((t) => t[1]);
-      const denylist = new Set(['grep', 'find', 'wc', 'stat', 'file', 'ls', 'cat', 'sed', 'awk', 'head', 'tail', 'which', 'xargs', 'sh', 'bash', 'cmd', 'powershell', 'pwsh']);
+      const portabilityConfigRel = 'scripts/checks/portability.config.json';
+      const denylist = new Set<string>(readJson(portabilityConfigRel).nonPortable ?? []);
       for (const name of names) {
         if (denylist.has(name)) {
-          fail('desktop-platform-layer', `${runRel}'s KNOWN_COMMANDS includes '${name}', a POSIX-only/shell utility`);
+          fail('desktop-platform-layer', `${runRel}'s KNOWN_COMMANDS includes '${name}', classified non-portable by ${portabilityConfigRel}`);
         }
       }
       ok();
