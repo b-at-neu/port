@@ -4,20 +4,28 @@
 # checks are free, take seconds, and the defects they catch are silent ones —
 # a malformed component is absent from Claude Code's inventory rather than
 # reported, so nothing else would notice.
+#
+# `pull_request` only — no `push` (#275). A push to dev/main re-ran this whole
+# workflow under the same run-static-checks (<os>) names the release pull
+# request's own pull_request-triggered run already produced for the same
+# commit, and the two disagreed on the release-corridor check for the
+# entirely mechanical reason that a push run checks out dev/main as a real
+# branch while a pull_request run checks out a detached merge ref. Every
+# `run-static-checks (<os>)` name now has exactly one result per head SHA.
+# The corridor's own network-aware verdict moved to release-corridor.yml,
+# push-only, which is the one authoritative reader of that question.
 
 name: Checks
 
 on:
   pull_request:
-  push:
-    branches: [dev, main]
 
 permissions:
   contents: read
 
 concurrency:
   group: checks-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
   run-static-checks:
