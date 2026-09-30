@@ -60,4 +60,38 @@ export default async function ({ fail, ok }: Reporter) {
     }
     ok();
   }
+
+  // --- Install docs keep live source and pinned install apart (#282) ----------
+  // guard(#282): README's inventory section presenting `claude plugin details`
+  // alone as what is installed, and the machine-wide marketplace-name note
+  // dropping out of README or CONTRIBUTING.
+  {
+    const readme = readFileSync(join(root, 'README.md'), 'utf8');
+    const contributing = readFileSync(join(root, 'CONTRIBUTING.md'), 'utf8');
+
+    const heading = '### Checking the component inventory';
+    const headingIndex = readme.indexOf(heading);
+    if (headingIndex === -1) {
+      fail('install-docs', 'README.md: "### Checking the component inventory" heading not found');
+    } else {
+      const after = readme.slice(headingIndex + heading.length);
+      const nextHeading = /\n#{1,3} /.exec(after);
+      const section = nextHeading ? after.slice(0, nextHeading.index) : after;
+      if (!section.includes('claude plugin details')) {
+        fail('install-docs', 'README.md\'s inventory section no longer mentions `claude plugin details`');
+      } else if (!section.includes('claude plugin list')) {
+        fail('install-docs', 'README.md\'s inventory section no longer mentions `claude plugin list`');
+      } else {
+        ok();
+      }
+    }
+
+    for (const [name, text] of [['README.md', readme], ['CONTRIBUTING.md', contributing]] as const) {
+      if (!/one live source per marketplace name/i.test(text)) {
+        fail('install-docs', `${name} no longer states 'one live source per marketplace name'`);
+      } else {
+        ok();
+      }
+    }
+  }
 }
