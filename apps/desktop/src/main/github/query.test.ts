@@ -92,13 +92,15 @@ describe('buildPipelineQuery', () => {
 
   // #108: headRefOid/reviews/comments feed the cycle-cap and zero-diff
   // gates — requested once, on the PullRequestFields fragment, never a
-  // second round trip.
-  it('the PullRequestFields fragment carries headRefOid, reviews, and comments', () => {
+  // second round trip. #265: mergeable feeds the mergeability gate the same
+  // way.
+  it('the PullRequestFields fragment carries headRefOid, mergeable, reviews, and comments', () => {
     const vocabulary = resolveVocabulary({})
     const { document } = buildPipelineQuery(vocabulary)
     const fragmentStart = document.indexOf('fragment PullRequestFields')
     const fragment = document.slice(fragmentStart)
     expect(fragment).toContain('headRefOid')
+    expect(fragment).toContain('mergeable')
     expect(fragment).toContain('reviews(first: 30)')
     expect(fragment).toContain('comments(last: 20)')
   })

@@ -143,6 +143,12 @@ export function heldDetailCopy(held: TickHeld): string {
     }
     case 'zero-diff':
       return `#${n} would escalate to needs human — the latest review already covers the current head.`
+    case 'refresh-wins':
+      return `#${n} held — a branch refresh claims it (refresh branch).`
+    case 'conflicting':
+      return `#${n} held — GitHub reports merge conflicts. The cockpit's refresh sweep rebases it; this app doesn't.`
+    case 'mergeability-unknown':
+      return `#${n} held one poll — GitHub hasn't worked out mergeability yet.`
   }
 }
 

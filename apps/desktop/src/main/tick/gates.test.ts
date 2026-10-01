@@ -6,7 +6,7 @@
 // (`main/github/map.ts`'s own `reviewNodesOf`) — adapted at the edge here,
 // never inside `gates.ts` itself.
 import { describe, expect, it } from 'vitest'
-import { codeReviewCount, cycleCapExceeded, zeroDiffGate } from './gates'
+import { codeReviewCount, cycleCapExceeded, mergeabilityRoute, refreshWins, zeroDiffGate } from './gates'
 import type { ReviewNode } from './gates'
 import cases from '../../../../../scripts/port-tick/cases/gates.cases.json'
 
@@ -34,14 +34,28 @@ interface CycleCapCase {
   readonly expected: boolean
 }
 
-type Case = ZeroDiffCase | CycleCapCase | { readonly function: string; readonly name: string }
+interface MergeabilityRouteCase {
+  readonly function: 'mergeabilityRoute'
+  readonly name: string
+  readonly input: readonly [string, number]
+  readonly expected: { readonly action: string; readonly unknownStreak: number }
+}
 
-const table = (cases.cases as readonly Case[]).filter((c): c is ZeroDiffCase | CycleCapCase => c.function === 'zeroDiffGate' || c.function === 'cycleCapExceeded')
+interface RefreshWinsCase {
+  readonly function: 'refreshWins'
+  readonly name: string
+  readonly input: { readonly number: number; readonly refreshBranch: readonly number[]; readonly refreshing: readonly number[] }
+  readonly expected: { readonly action: string; readonly label?: string }
+}
+
+type Case = ZeroDiffCase | CycleCapCase | MergeabilityRouteCase | RefreshWinsCase | { readonly function: string; readonly name: string }
+
+const PORTED_FUNCTIONS = new Set(['zeroDiffGate', 'cycleCapExceeded', 'mergeabilityRoute', 'refreshWins'])
+const table = (cases.cases as readonly Case[]).filter((c): c is ZeroDiffCase | CycleCapCase | MergeabilityRouteCase | RefreshWinsCase => PORTED_FUNCTIONS.has(c.function))
 
 describe('gates — shared case table', () => {
-  it('the table covers both ported functions', () => {
-    expect(table.some((c) => c.function === 'zeroDiffGate')).toBe(true)
-    expect(table.some((c) => c.function === 'cycleCapExceeded')).toBe(true)
+  it('the table covers all four ported functions', () => {
+    for (const fn of PORTED_FUNCTIONS) expect(table.some((c) => c.function === fn)).toBe(true)
   })
 
   for (const row of table) {
@@ -51,8 +65,17 @@ describe('gates — shared case table', () => {
         expect(zeroDiffGate({ reviews: reviews.map(toReviewNode), comments, headRefOid })).toEqual(row.expected)
         return
       }
-      const [reviews, cap] = row.input
-      expect(cycleCapExceeded(reviews.map(toReviewNode), cap)).toBe(row.expected)
+      if (row.function === 'cycleCapExceeded') {
+        const [reviews, cap] = row.input
+        expect(cycleCapExceeded(reviews.map(toReviewNode), cap)).toBe(row.expected)
+        return
+      }
+      if (row.function === 'mergeabilityRoute') {
+        const [mergeable, priorUnknownStreak] = row.input
+        expect(mergeabilityRoute(mergeable, priorUnknownStreak)).toEqual(row.expected)
+        return
+      }
+      expect(refreshWins(row.input)).toEqual(row.expected)
     })
   }
 })

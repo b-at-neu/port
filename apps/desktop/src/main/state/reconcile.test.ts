@@ -44,6 +44,7 @@ function item(overrides: Partial<PipelineItem> = {}): PipelineItem {
     labels: ['ready'],
     matchedKeys: ['ready'],
     headRefOid: null,
+    mergeable: null,
     reviews: null,
     comments: null,
     ...overrides,

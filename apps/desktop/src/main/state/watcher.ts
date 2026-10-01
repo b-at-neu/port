@@ -13,7 +13,8 @@ import { DEFAULT_POLL_POLICY, SOURCE_KINDS, initialHealth } from '../../shared/b
 import type { BoardSnapshot, RepositoryHealth, SourceHealth, SourceKind } from '../../shared/board/types'
 import type { DrainState } from '../../shared/dispatch/types'
 import type { RelayScan } from '../../shared/relay/types'
-import { createDispatchLedger, planTick } from '../tick'
+import { createDispatchLedger, createUnknownStreaks, planTick } from '../tick'
+import type { DispatchLedger, UnknownStreaks } from '../tick'
 import { buildDesktopTickEvent, recordTick as defaultRecordTick } from '../trajectory'
 import type { DesktopTickEvent, RecordTickDeps } from '../trajectory'
 import { isReady, projectFromCache } from './read'
@@ -60,6 +61,13 @@ export interface CreatePipelineWatcherParams {
    *  visible on the very next snapshot. Defaults to `{ gate: 'open' }`, the
    *  same default a repository with no drain source at all reads as. */
   readonly drain?: () => DrainState
+  /** Injectable the same way `drain` is (#265) — a dispatcher built after
+   *  the watcher needs the *same* ledger/streak memo this watcher's own
+   *  `planTick` calls read and write, never a second instance that would
+   *  disagree with what the board just reported. Defaulting to a fresh one
+   *  keeps every existing caller (and test) unchanged. */
+  readonly ledger?: DispatchLedger
+  readonly unknownStreaks?: UnknownStreaks
 }
 
 export interface PipelineWatcher {
@@ -94,7 +102,10 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
   // One process-scoped ledger, this watcher's whole lifetime (#105) — a
   // restarted app gets a fresh one, so every in-flight item reads
   // `no-record` on the first tick after a restart, never a false reset.
-  const ledger = createDispatchLedger()
+  const ledger = params.ledger ?? createDispatchLedger()
+  // This app's own process-scoped mergeability-UNKNOWN memo (#265) — same
+  // lifetime and restart behaviour as `ledger` above.
+  const unknownStreaks = params.unknownStreaks ?? createUnknownStreaks()
   // The trajectory record's one appender for this watcher's whole lifetime
   // (#111) — injectable the same way `gh`/`git`/`sessionReader` already are,
   // so a test never touches a real filesystem for it.
@@ -166,7 +177,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       .map((repository) => {
         const reviewCycleCap = cycleCapByRepo.get(repository.repoId)
         if (reviewCycleCap === undefined) throw new Error(`no reviewCycleCap for ready repository ${String(repository.repoId)}`)
-        return planTick({ repository, ledger, nextDecisionAt: nextDueAt(ensureHealth(repository.repoId).github, now()), now, reviewCycleCap })
+        return planTick({ repository, ledger, unknownStreaks, nextDecisionAt: nextDueAt(ensureHealth(repository.repoId).github, now()), now, reviewCycleCap })
       })
 
     // The trajectory record's desktop-side twin (#111) — fire-and-forget,

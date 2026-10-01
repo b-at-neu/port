@@ -38,6 +38,7 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     sources: ['github'],
     claimedFiles: null,
     headRefOid: null,
+    mergeable: null,
     reviews: null,
     comments: null,
     reviewCycleCount: null,
