@@ -4,7 +4,7 @@
 
 Repository map and the ship boundary: [ARCHITECTURE.md](ARCHITECTURE.md).
 
-This repository is both a plugin marketplace and the plugin it distributes. `README.md`'s install command — `claude plugin marketplace add b-at-neu/port@main --scope project` — is the **consumer** path: it is what a managed repository commits so the pipeline travels with the checkout. It is wrong here, because this repository's own committed `.claude/settings.json` already carries a **project**-scope `port` marketplace entry, and a plain `marketplace add` with no `--scope` writes **user** scope — which project scope silently outranks. Following the README's instructions unscoped in this repository looks like it worked and changes nothing.
+This repository is both a plugin marketplace and the plugin it distributes. `README.md`'s install command — `claude plugin marketplace add b-at-neu/port@main --scope project` — is the **consumer** path: it is what a managed repository commits so the pipeline travels with the checkout. It is wrong here, because this repository's own committed `.claude/settings.json` already carries a **project**-scope `port` marketplace entry, and a plain `marketplace add` with no `--scope` writes **user** scope — which project scope silently outranks. Following the README's instructions unscoped in this repository looks like it worked and changes nothing this repository loads — though it still repoints the `port` name for the whole machine (below).
 
 The only scope that outranks the committed project-scope entry is **`local`** — gitignored, machine-specific, and exactly what a local-directory dev loop needs:
 
@@ -14,6 +14,8 @@ claude plugin install port@port --scope local
 ```
 
 This writes to `.claude/settings.local.json`, already covered by this repository's `.gitignore`.
+
+**That `marketplace add` repoints `port` for every repository on this machine.** `--scope` picks which settings file declares the marketplace, but there is one live source per marketplace name — the `port` key in `~/.claude/plugins/known_marketplaces.json` — and the most recent `marketplace add` wins whatever its scope; the CLI says so itself: "Plugins already installed from it now update from the new source." This checkout's manifest names its marketplace `port`, the same name every consumer's GitHub source uses, so the two cannot both be live. Pinned installs are untouched — each consumer keeps running what its `installed_plugins.json` record installed — but the next install or update against `port` in a consumer repository, auto-update included, fetches from this checkout. So re-point deliberately before each: in a consumer, re-run README step 1's `marketplace add` line, then `/port:init` to restore that entry's release pin; here, re-run the local-scope pair above. The tell in a consumer is its cockpit startup line reporting `staleness not computable` because the source is a directory outside its working tree.
 
 Edits under `plugins/port/` take effect immediately — there is no build step and nothing to invalidate. A session that is already running has loaded its components, so run `/reload-plugins` there to pick up changes. **A cache path is not evidence of a stale copy** — a directory-sourced plugin is *copied* into `~/.claude/plugins/cache/` at install time, so a local-scope install from this checkout lands at exactly the same kind of cache path a GitHub-sourced one does; the old tell reported "stale" every time under a directory source, including when the override worked perfectly. **The replacement tell is the cockpit's own startup line** (see "Running plugin identity" in `pipeline/SKILL.md`), which resolves and prints the applicable install record's short commit sha and scope — that sha should equal `git rev-parse --short HEAD` in this checkout once the local-scope override is running. If it does not, the override has not taken yet — reinstall and start a new session.
 
@@ -68,7 +70,7 @@ Then start a **new** session — an update never applies mid-session.
 claude plugin details port
 ```
 
-This prints the component inventory. **A skill that fails to parse is silently absent from it rather than reported as an error** — so check that the counts went up, rather than looking for a complaint. It confirms the component parsed, not that the running session has it — that is confirmed only by invoking it.
+This prints the component inventory. **A skill that fails to parse is silently absent from it rather than reported as an error** — so check that the counts went up, rather than looking for a complaint. It confirms the component parsed, not that the running session has it — that is confirmed only by invoking it. It reads the `port` name's live source, so it reflects this checkout only while the local-scope `marketplace add` above is the most recent one on this machine.
 
 After editing `marketplace.json` or `plugin.json`, re-validate them:
 

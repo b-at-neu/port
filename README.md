@@ -23,6 +23,8 @@ The `@main` pin is the release branch, so this installs a released version regar
 
 Both write to that repository's `.claude/settings.json`, which is committed. So the pipeline **travels with the repository**: anyone who clones it gets the same plugin from the same source, with no separate setup, and nothing leaks into your other projects.
 
+**The marketplace name, though, is shared by the whole machine.** `--scope` decides which settings file *declares* the `port` marketplace, not what the name resolves to: there is one live source per marketplace name, and the most recent `claude plugin marketplace add` for that name wins, at any scope. Installs already pinned in other repositories keep running what they pinned; only a later install or update against `port` fetches from the new source. This matters only if you also keep a local checkout of port added as a marketplace — see [CONTRIBUTING.md](CONTRIBUTING.md) → "Working on the plugin".
+
 **Step 2 — load it into a session.** Installing does not load the plugin into the session you installed from — that session resolved its plugins at startup, before the install existed. **Start a new session** in the same directory. Skipping this makes the next step fail with `Unknown skill: port:init`, an error that says nothing about reloading.
 
 **Step 3 — run `/port:init`.** This is the verification and the adoption in one: it either resolves or it does not, and that is the only question worth asking at this point.
@@ -61,7 +63,11 @@ claude plugin details port
 
 You should see 7 skills, 4 agents, and 1 hook. A component that fails to parse is **silently absent** from that inventory rather than reported as an error, so check the counts rather than looking for a complaint.
 
-This reports what is **installed**, not what your session has **loaded** — it can list all seven skills in a session where `/port:init` does not resolve, which is why it is not the verification step.
+`details` reads what the `port` marketplace name resolves to **right now** — its live source — not the install pinned for this repository, so the version it prints can differ from the one you are running. Three questions, three answers:
+
+- **Did every component parse?** `claude plugin details port` — the counts above.
+- **What is pinned here?** `claude plugin list` — the `port@port` entry at `project` scope for this repository is what it runs. Where it and `details` disagree, `list` is right.
+- **Did this session load it?** Invoke `/port:init`. Neither command answers that, which is why neither is the verification step.
 
 ## Day to day
 
