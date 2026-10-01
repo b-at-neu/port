@@ -121,7 +121,7 @@ This is not tidiness. Installation is per-repository, so this same file carries 
 {
   "extraKnownMarketplaces": {
     "port": {
-      "source": { "source": "github", "repo": "b-at-neu/port", "ref": "v0.2.0" },
+      "source": { "source": "github", "repo": "b-at-neu/port", "ref": "<tag>" },
       "autoUpdate": true
     }
   },
@@ -142,13 +142,13 @@ gh api repos/b-at-neu/port/releases/latest --jq .tag_name
 
 Write it even when reconciling an entry that already exists but is missing `ref` or `autoUpdate`, and **write it even when the resolved `ref` is unchanged from what is already there.**
 
-**A `ref` change is called out in words, too, naming both values — the settings diff below is not enough on its own.** Never write a ref change silently. Use, verbatim:
+**A `ref` change is called out in words, too, naming both values — the settings diff below is not enough on its own.** Never write a ref change silently. Use, verbatim, substituting `<tag>` (the ref just resolved) and `<old-tag>` (the ref already in the file):
 
-- narrowed → `Marketplace pin: port ref main → v0.2.0. main tracks the release branch; the tag pins you to exactly what was published.`
-- moved → `Marketplace pin: port ref v0.1.0 → v0.2.0. This changes which version of the pipeline this repository runs; it takes effect on your next session.`
-- first pin → `Marketplace pin: port ref unset → v0.2.0. Unset tracked b-at-neu/port's default branch; this pins you to its last published release.`
+- narrowed → `Marketplace pin: port ref main → <tag>. main tracks the release branch; the tag pins you to exactly what was published.`
+- moved → `Marketplace pin: port ref <old-tag> → <tag>. This changes which version of the pipeline this repository runs; it takes effect on your next session.`
+- first pin → `Marketplace pin: port ref unset → <tag>. Unset tracked b-at-neu/port's default branch; this pins you to its last published release.`
 - no release yet → `b-at-neu/port has no published release yet — pinning ref to main, its release branch. Marketplace pin: port ref unset → main.`
-- unchanged → `Marketplace pin: port ref v0.2.0 (unchanged).`
+- unchanged → `Marketplace pin: port ref <tag> (unchanged).`
 
 **`ref` pins the plugin's own repository (`b-at-neu/port`), not the managed repository's `branches.production`.** These are unrelated values that happen to share a name — reading the latter would be actively wrong, and it is why the value above is resolved from `b-at-neu/port`'s own releases rather than from anything in `.claude/port.config.json`. This is also why a single-branch repository (#54, where `branches.production` is null) needs no special case here: this field never reads that config in the first place.
 

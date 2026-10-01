@@ -28,7 +28,7 @@ Read `permissions.defaultMode` from the same file, for step 3's report. **Warn o
 
 **The sha about to be printed is the resolved record's `gitCommitSha` and nothing else** — never `git log`, never a commit that merely touches some repository file, never a path. If the sha about to be printed is not a prefix of the resolved record's `gitCommitSha`, print the **Registry unreadable** line instead of a sha. Open with one line naming the resolved short commit sha, scope, `projectPath`, the session's own model, and the mode read in step 2 — **no warning glyph on the model, ever**; it is information, not a check. Append step 4's staleness verdict, once it has run, in place of the plain scope clause — `current with <marketplace>@<target-ref>` when `behindBy` is `0`, or the **stale** UX state's warning form when it is not, or `staleness not computable — <reason>` when no target resolved:
 
-> `port` v0.1.0 · `1a12608` (local scope, installed 2026-08-31) · current with `b-at-neu/port@dev` · model `claude-sonnet-5` · mode `default` (as configured — a launch flag overrides this and I can't read it from here)
+> `port` `v<version>` · `1a12608` (local scope, installed 2026-08-31) · current with `b-at-neu/port@dev` · model `claude-sonnet-5` · mode `default` (as configured — a launch flag overrides this and I can't read it from here)
 
 When step 2 found a non-`default` `defaultMode`, replace the mode clause with the warning instead of the all-clear parenthetical:
 
@@ -248,15 +248,15 @@ Exact copy, one message per state, `<…>` substituted:
 
 - **Registry unreadable** (fall back to the version-only line):
 
-  > `port` v0.1.0 — commit unresolved (couldn't read the plugin registry) · model `claude-sonnet-5` · mode `default`. The path alone can't tell a stale copy from your working tree, so treat the version as unverified.
+  > `port` `v<version>` — commit unresolved (couldn't read the plugin registry) · model `claude-sonnet-5` · mode `default`. The path alone can't tell a stale copy from your working tree, so treat the version as unverified.
 
 - **Running plugin, stale relative to the remote** (warn, in place of the plain scope clause):
 
-  > ⚠️ `port` v0.1.0 · `4634fc1` (project scope, installed 2026-08-23) · **42 commits behind `b-at-neu/port@dev`** — I'm running a copy from before those merged, so I'm following the older rails whatever `dev` says. Refresh the installed plugin and restart me. · model `claude-haiku-4-5` · mode `default`
+  > ⚠️ `port` `v<version>` · `4634fc1` (project scope, installed 2026-08-23) · **42 commits behind `b-at-neu/port@dev`** — I'm running a copy from before those merged, so I'm following the older rails whatever `dev` says. Refresh the installed plugin and restart me. · model `claude-haiku-4-5` · mode `default`
 
 - **Staleness not computable** (substitute the reason: no install record matched this directory · the record has no `gitCommitSha` · no marketplace record for `<marketplace>` · the source is a directory outside this working tree · GitHub can't resolve `<sha>`, so it was probably never pushed):
 
-  > `port` v0.1.0 · `4634fc1` (project scope, installed 2026-08-23) · staleness not computable — `<reason>` · model `claude-haiku-4-5` · mode `default`
+  > `port` `v<version>` · `4634fc1` (project scope, installed 2026-08-23) · staleness not computable — `<reason>` · model `claude-haiku-4-5` · mode `default`
 
 - **Install record pinned to a worktree** (warn once):
 

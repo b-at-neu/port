@@ -32,7 +32,7 @@ diff -rq ~/.claude/plugins/cache/port/port/<version> plugins/port              #
 
 ### The integration branch stays on a prerelease version
 
-`dev`'s `plugins/port/.claude-plugin/plugin.json` carries a version like `0.2.1-dev` at rest, never a clean `0.2.1`. Reason: the cache directory above is keyed by marketplace, plugin, **and** version — a dev-loop install from this checkout and a consumer's released install both resolve to `cache/port/port/<version>/` for as long as `dev` and a shipped release share the same version string, and reinstalling either one silently overwrites the other with whichever ran last.
+`dev`'s `plugins/port/.claude-plugin/plugin.json` carries a prerelease-suffixed version (`<X.Y.Z>-dev`) at rest, never a clean `<X.Y.Z>`. Reason: the cache directory above is keyed by marketplace, plugin, **and** version — a dev-loop install from this checkout and a consumer's released install both resolve to `cache/port/port/<version>/` for as long as `dev` and a shipped release share the same version string, and reinstalling either one silently overwrites the other with whichever ran last.
 
 `/port:release`'s bump pull request strips the suffix as part of the bump it already performs, and `release.postPublishHook` → `scripts/dev-window.ts` restores it immediately after publishing, by opening a `devwindow/v<next>` pull request against `dev`. **Merge that pull request before doing anything else with the dev loop** — between the bump merging and the dev-window pull request merging, `dev` does carry a releasable version, and reinstalling the local-scope dev loop during that window reproduces the exact collision this convention exists to prevent.
 
@@ -84,7 +84,7 @@ Three layers, separated by cost: static file checks, artifact assertions on real
 
 ## Working on scripts/
 
-`scripts/` is TypeScript, but Node's own type stripping runs it directly — no build step, no install, and no `typescript` dependency for a dispatched agent's worktree. That needs **Node ≥22.18.0**: below that floor, `node scripts/checks.ts` fails with a parse error before any of the file's own code runs, so the symptom will not name the cause. `package.json`'s `engines.node` states the floor; CI's `node-version: '22'` resolves well above it.
+`scripts/` is TypeScript, but Node's own type stripping runs it directly — no build step, no install, and no `typescript` dependency for a dispatched agent's worktree. That needs **Node ≥22.18.0**, a genuine compatibility floor, not an example: below that floor, `node scripts/checks.ts` fails with a parse error before any of the file's own code runs, so the symptom will not name the cause. `package.json`'s `engines.node` is the source of the floor, and layer 1 pins the two together. CI's `setup-node` major resolves above it.
 
 Type stripping is not type checking — it erases annotations, it does not verify them. `scripts/` is never type-checked at runtime, only at load; run `pnpm typecheck:scripts` yourself before pushing if you touched a `.ts` file there; CI's `run-scripts-typecheck` job runs it on every pull request regardless. `pnpm install` is needed only for that (and for `apps/desktop`), never for running the scripts themselves.
 

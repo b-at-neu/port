@@ -44,8 +44,9 @@ export default async function ({ fail, ok }: Reporter) {
   }
 
   // --- No file under plugins/port/ carries a .ts extension --------------------
-  // guard(#122): type stripping needs Node >=22.18, which an adopting
-  // repository never agreed to — a shipped .ts file would pass every check
+  // guard(#122): type stripping needs the Node floor package.json's
+  // engines.node sets, which an adopting repository never agreed to — a
+  // shipped .ts file would pass every check
   // here while failing silently in their checkout. This is the boundary
   // between what this repository strips at load and what it ships.
   const shippedTsFiles = walk(join(root, 'plugins/port')).filter((f) => f.endsWith('.ts'));
