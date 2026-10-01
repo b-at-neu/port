@@ -67,11 +67,11 @@ Then, in this order. Steps 7 and 8 are split apart deliberately — they are the
 - **`CONFLICTING`** — do not dispatch review. Handled by the **Refresh sweep** below, not restated here.
 - **`UNKNOWN`** — GitHub has not computed it yet (normal on a freshly opened pull request; the query itself is what triggers computation). Hold review one tick and report:
 
-  > ⏳ PR #134's mergeability is still `UNKNOWN` — holding review one tick.
+  > ⏳ #134's pull request: mergeability still `UNKNOWN` — holding review one tick.
 
   On a **second** consecutive `UNKNOWN` tick for the same pull request, dispatch review anyway — `review-agent` re-checks mergeability itself before posting — and say so:
 
-  > ⚠️ PR #134's mergeability is still `UNKNOWN` after two ticks — dispatching review anyway; it re-checks before it posts.
+  > ⚠️ #134's pull request: mergeability still `UNKNOWN` after two ticks — dispatching review anyway; it re-checks before it posts.
 
 **Approved-and-conflicting is the same fact read at a different gate** — see "Approved pull requests" under Human gates and the **Refresh sweep** below; both routes handle it identically.
 
@@ -79,11 +79,11 @@ Then, in this order. Steps 7 and 8 are split apart deliberately — they are the
 
 1. **Same-SHA guard** — never refresh a head SHA this session already refreshed. This pull request's `.temp/tick-state.md` `Refreshed:` entry (`#<pr>@<sha>×<count>`) recorded the same sha as the current `headRefOid`? Refreshing again would change nothing — **escalate instead**: add `<labels.needsHuman>` (drop `<labels.approved>` only if present — a stuck refresh loop is its own authorising fact), comment naming the stuck sha:
 
-   > ⛔ PR #134 still reads `CONFLICTING` at `cb2dc1a`, which I already refreshed this session — a second refresh would change nothing. Escalated to `needs human`. Say `unblock #134` once you know why the rebase isn't clearing it.
+   > ⛔ #134's pull request still reads `CONFLICTING` at `cb2dc1a`, which I already refreshed this session — a second refresh would change nothing. Escalated to `needs human`. Say `unblock #134` once you know why the rebase isn't clearing it.
 
 2. **Otherwise, refresh it.** Write `.temp/rebase-required-<pr>.md` (`${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Rebase required"), comment it, then `gh pr edit <pr-number> --repo <repo> --add-label "<labels.refreshBranch>"` — **remove nothing** — and dispatch `revise-agent` in refresh mode this same tick. Update `Refreshed:`: carry the count forward (`+1`) when the prior sha moved via this session's own dispatch-logged refresh; otherwise (an outside push) reset it to `1`. Report, e.g.:
 
-   > 🔄 PR #134 conflicts with `dev` — refreshing it (rebase + force-push) rather than calling it `needs revision`; nothing found anything wrong with it. It stays at `ready for review` and gets reviewed once the checks come back. (On an approved candidate, name why the approval survives: the approval stands, since a clean rebase doesn't change the diff that was approved; revision withdraws it only if the rebase has to resolve anything.)
+   > 🔄 #134's pull request conflicts with `dev` — refreshing it (rebase + force-push) rather than calling it `needs revision`; nothing found anything wrong with it. It stays at `ready for review` and gets reviewed once the checks come back. (On an approved candidate, name why the approval survives: the approval stands, since a clean rebase doesn't change the diff that was approved; revision withdraws it only if the rebase has to resolve anything.)
 
 3. **Bounds** — at most 3 consecutive refreshes per pull request: step 2's count reaching `4` escalates instead of refreshing again, same form as step 1; and at most 5 refreshes per tick, oldest first — any remainder waits for the next tick, reported (e.g. *"Refreshed 5 conflicting pull requests this tick … — 2 more are waiting and go next tick"*).
 
@@ -104,7 +104,7 @@ An entry is dropped from `Refreshed:` once its pull request reads `MERGEABLE`, s
 
    then `gh pr comment <pr-number> --repo <repo> --body-file .temp/zero-diff-<pr>.md`, `gh pr edit <pr-number> --repo <repo> --remove-label "<labels.readyForReview>" --add-label "<labels.needsHuman>"`, and announce:
 
-   > ⛔ PR #157 is at `ready for review`, but cycle 7 already reviewed `cb2dc1a` and the head hasn't moved — a new cycle would grade the same diff. Escalated to `needs human` and commented. If a check on that SHA has since changed, say `unblock #157` and choose **Back to review**; I'll dispatch one review against it.
+   > ⛔ #157's pull request is at `ready for review`, but cycle 7 already reviewed `cb2dc1a` and the head hasn't moved — a new cycle would grade the same diff. Escalated to `needs human` and commented. If a check on that SHA has since changed, say `unblock #157` and choose **Back to review**; I'll dispatch one review against it.
 
 **File contention gate (each tick, step 4, before dispatching `impl-agent`).** A `<labels.planApproved>` item dispatches only when no single in-flight item's plan claims `concurrency.overlapThreshold` or more of the same non-shared files — counted per in-flight item, never pooled. Full background: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "File contention".
 
@@ -128,7 +128,7 @@ An entry is dropped from `Refreshed:` once its pull request reads `MERGEABLE`, s
 
 **Liveness cross-check (each tick, step 5).** An in-flight label is a claim, never a heartbeat, and neither is its absence — a label is not evidence of liveness or of non-liveness. Call `TaskList` first, before reading anything else in this step, whether or not any set below is non-empty: the zero-agent case is exactly where a stall goes unnoticed, and it is the case a 96-tick session once sat in without ever making this call. Take the results of the five in-flight aliases above and match each item against that `TaskList` result by the dispatch `description`, which the harness records verbatim (`"<stage> #<n>"`, where `<n>` is the item's own number — a pull request for `review`/`revise`). **`TaskList` reports live agents only:** a finished agent is absent from it, never present with a finished state, which is why every class below infers termination from absence and why the budget sweep takes `--completed` from the relay loop instead. Before classifying, Read `.temp/dispatch-log.md` — the precondition for every reset below is **"reset only an item this session's own dispatch log records"**, never an item this session never dispatched.
 
-**The tick report's Liveness clause is what makes the call checkable, not the sentence.** State the live agent count and each live agent's `description` — the same shape worktree hygiene already requires ("an adjective like *pruned* is never a sufficient report"). **A tick that reports on liveness without a `TaskList` call this tick has failed**, and an empty count is written as `**Liveness:** 0 agents live · no in-flight items` (see UX states), never omitted.
+**The tick report's Liveness clause is what makes the call checkable, not the sentence.** State the live agent count and each live agent's `description` — the same shape worktree hygiene already requires ("an adjective like *pruned* is never a sufficient report"). **The report renders each live agent as `<stage> #<ticket>`** per `SKILL.md` → "## Numbering" — for `review`/`revise`, resolved from the pull request's own number; **matching against `TaskList`'s result still uses the raw, unresolved `description`**, since that field is internal bookkeeping, never operator-facing copy. **A tick that reports on liveness without a `TaskList` call this tick has failed**, and an empty count is written as `**Liveness:** 0 agents live · no in-flight items` (see UX states), never omitted.
 
 - **Matched, running** — nothing to do; it is genuinely mid-flight.
 - **No match** — an in-flight label with no live agent, resolved against the dispatch log into exactly three outcomes. The invariant across all three: **at most one automatic reset per item per session** (the log's `Resets` column) — a crash loop reports instead of burning the session on repeated resets:
@@ -138,7 +138,7 @@ An entry is dropped from `Refreshed:` once its pull request reads `MERGEABLE`, s
 
   - **Log row `State: suspect`, still unmatched, and `Resets: 0`** — provably dead: **reset**. Use the retry mapping (`planning`→`ready`, `in progress`→`plan approved`, `reviewing`→`ready for review`, `revising`→`needs revision`, `refreshing`→`refresh branch`), batched by (current → trigger) pair in one `gh issue edit` naming every number, pull requests one call each, then re-query to confirm every item moved. Rewrite the row to `State: reset`, `Resets: 1`. Dispatch is step 4 and liveness is step 5, so a reset item redispatches on the **next** tick, never this one — say so:
 
-    > ♻️ **Reset 2 stalled items** — #63 (`in progress` → `plan approved`), PR #117 (`reviewing` → `ready for review`). I dispatched both this session and neither has a live agent. They redispatch next tick.
+    > ♻️ **Reset 2 stalled items** — #63 (`in progress` → `plan approved`), #117's pull request (`reviewing` → `ready for review`). I dispatched both this session and neither has a live agent. They redispatch next tick.
 
   - **No row at all** (a prior session's work, or another cockpit's) — this session cannot prove anything about it: **report-only, never touch**, every tick while the set is non-empty, as one grouped line:
 
@@ -152,7 +152,7 @@ An entry is dropped from `Refreshed:` once its pull request reads `MERGEABLE`, s
 
   **A `SESSION REQUIRED` item at an in-flight label is never reported as a stall.** `<labels.inProgress>` and `<labels.revising>`'s queries already carry `body` for exactly this: an item marked `SESSION REQUIRED` at its slot is the operator's own `/port:implement` session, not a stalled dispatch, and it can never have a dispatch-log row (this cockpit never dispatches one), so it is report-only by construction:
 
-  > 🧰 PR #512 is `revising` under `SESSION REQUIRED` — that's your `/port:implement` session, not a stall.
+  > 🧰 #512's pull request is `revising` under `SESSION REQUIRED` — that's your `/port:implement` session, not a stall.
 
 - **Every in-flight item unmatched at once, and the most recent completion or error mentions a session limit** (a `"session limit"`/`"resets at"`-shaped message) — this is the **usage-limit** class, not ordinary stalling, and it takes precedence: when it fires, it has already reset everything and no per-item liveness reset above runs that tick. Reset each affected item's in-flight label back to its trigger label — group by (current label → trigger label) pair and issue one `gh issue edit` per group naming every number, pull requests one call each, then re-query to confirm — report the reset time verbatim from the message, and schedule the next wakeup for just after it — a small buffer past the reset, or the idle delay with a note if the time cannot be parsed. Never redispatch before it, and never substitute a different model to work around it.
 - **`TaskList` cannot be correlated to numbers at all** (e.g. no `description` field surfaced) — report the in-flight set alongside the running-agent count and say the correlation is uncertain, rather than guessing which is which.
