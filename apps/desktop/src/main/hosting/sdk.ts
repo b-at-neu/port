@@ -21,6 +21,11 @@ export interface HostedQuery extends AsyncIterable<SDKMessage> {
   close(): void
   supportedCommands(): Promise<SlashCommand[]>
   supportedAgents(): Promise<AgentInfo[]>
+  /** #265: stops a running background task — the dispatcher's own
+   *  `stopFor()` call. The SDK emits a `task_notification` with
+   *  `status: 'stopped'`; this app never infers the stop from the call
+   *  resolving, only from that notification arriving (`hosting/tasks.ts`). */
+  stopTask(taskId: string): Promise<void>
 }
 
 /** The two functions this app calls, typed narrowly rather than re-exporting

@@ -87,6 +87,12 @@ function storeStub(overrides: Partial<HostedStore> = {}): HostedStore {
     dismiss: () => {
       throw new Error('dismiss should not be invoked in this case')
     },
+    stopTask: () => {
+      throw new Error('stopTask should not be invoked in this case')
+    },
+    snapshotOf: () => {
+      throw new Error('snapshotOf should not be invoked in this case')
+    },
     capacity: () => {
       throw new Error('capacity should not be invoked in this case')
     },

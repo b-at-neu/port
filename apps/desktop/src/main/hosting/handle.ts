@@ -27,11 +27,13 @@ import type {
 import type { RepoId } from '../../shared/repos'
 import { createHostedInput } from './input'
 import { buildSessionOptions } from './options'
+import type { SessionOptionsRole } from './options'
 import { classifyEnd } from './classify'
 import { createPermissionBroker } from './permissions'
 import { createSessionProjector } from './project'
 import type { ProjectedDelta, SessionProjectorWindow } from './project'
 import { createCapabilityTracker } from './capabilities'
+import { createTaskTracker } from './tasks'
 import { readRateLimit } from './rate-limit'
 import { promptTitle } from './title'
 import { composeInvocation, validateCommandName } from './verify'
@@ -70,6 +72,10 @@ export interface CreateHostedHandleParams {
    *  once and never overwritten after it goes non-null, the same rule the
    *  first `send()` and `setTitle()` both follow. */
   readonly initialTitle: string | null
+  /** #265: `{ kind: 'operator' }` unless this handle is the app's own
+   *  dispatcher — forwarded verbatim to `buildSessionOptions`, and its
+   *  `.kind` alone is what the snapshot's own `role` field reports. */
+  readonly role?: SessionOptionsRole
   /** Fired exactly once, the first time `init` reports the real
    *  `claudeSessionId` — `main/hosting/store.ts` uses this to kick off
    *  `fork.ts`'s titling for a `fork`-mode handle, never fired synchronously
@@ -131,6 +137,12 @@ export interface HostedHandle {
    *  `send()`s it, so #219's `recordSend` shows it as a `Prompt` row and its
    *  `Queued` chip applies mid-turn exactly like any other send. */
   invoke(name: string, args: string): SessionInvokeResult
+  /** #265: the dispatcher's own `stopFor()` call — `unknown-task` for an id
+   *  not among this handle's own `tasks` (`hosting/tasks.ts`'s tracker),
+   *  otherwise delegates to `stream.stopTask`. The SDK confirms the stop
+   *  through a later `task_notification`, never read from this call's own
+   *  resolution. */
+  stopTask(taskId: string): Promise<{ readonly ok: true } | { readonly ok: false; readonly kind: 'unknown-task' }>
 }
 
 /** `mode.sessionId` for `resume`/`resume-at`, `null` otherwise — the
@@ -169,7 +181,8 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
   // (never 'dontAsk') routes an un-preapproved tool call through this
   // broker's own canUseTool rather than a silent auto-deny.
   const broker = createPermissionBroker({ now: params.now, onChange: () => emitStatus() })
-  const options = buildSessionOptions({ mode: params.mode, cwd: params.cwd, executablePath: params.executablePath, canUseTool: broker.canUseTool, plugin: params.plugin })
+  const role: SessionOptionsRole = params.role ?? { kind: 'operator' }
+  const options = buildSessionOptions({ mode: params.mode, cwd: params.cwd, executablePath: params.executablePath, canUseTool: broker.canUseTool, plugin: params.plugin, role })
   const startedAt = new Date(params.now()).toISOString()
   const projector = createSessionProjector({ cwd: params.cwd })
   const capabilities = createCapabilityTracker({
@@ -178,6 +191,10 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     samePath: params.samePath,
     onChange: () => emitStatus(),
   })
+  // #265: this handle's own background-task view, fed beside `capabilities`
+  // — populated for every role, though only a dispatcher's own `Agent()`
+  // calls produce any today.
+  const tasks = createTaskTracker({ now: params.now, onChange: () => emitStatus() })
 
   function emitEntries(delta: ProjectedDelta | null): void {
     if (delta === null) return
@@ -211,6 +228,8 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
       capabilities: capabilities.current(),
       title,
       rateLimit,
+      role: role.kind,
+      tasks: tasks.current(),
     }
   }
 
@@ -239,6 +258,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
 
   function applyMessage(message: SDKMessage): void {
     capabilities.observe(message)
+    tasks.observe(message)
     const observedAt = new Date(params.now()).toISOString()
     const reading = readRateLimit(message, observedAt)
     if (reading !== null) {
@@ -370,6 +390,11 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
       if (!capabilities.has(name)) return { ok: false, kind: 'unknown-command', name }
       const { uuid } = doSend(composeInvocation(name, args))
       return { ok: true, uuid, queued: true }
+    },
+    async stopTask(taskId) {
+      if (!tasks.current().some((t) => t.taskId === taskId)) return { ok: false, kind: 'unknown-task' }
+      await stream.stopTask(taskId)
+      return { ok: true }
     },
   }
 }
