@@ -112,6 +112,33 @@ export function linkedIssues(pr: { body?: string | null; headRefName?: string | 
   return [...found].sort((a, b) => a - b);
 }
 
+/** A PR → ticket map (#281), computed from the same `allOpenPRs` alias every
+ *  tick, ownership-independent: display/selector input only, never a
+ *  dispatch, gate, or write decision. Includes only open pull requests based
+ *  on `integration` whose `linkedIssues()` returns **exactly one** issue — a
+ *  pull request linking zero or two or more issues is omitted, so the
+ *  cockpit falls back to that pull request's own number rather than guess.
+ *  `branch` is the pull request's own `headRefName` when its leading `N-`
+ *  equals the resolved issue, else `null` — the gate-clear branch selector
+ *  (`writes.ts`'s `gateResolveWrite`) is only ever built from a `branch` that
+ *  is not `null` here. */
+export function ticketsByPullRequest(
+  prs: Array<{ number: number; baseRefName?: string | null; body?: string | null; headRefName?: string | null }>,
+  integration: string,
+): Record<number, { issue: number; branch: string | null }> {
+  const out: Record<number, { issue: number; branch: string | null }> = {};
+  for (const pr of prs) {
+    if (pr.baseRefName !== integration) continue;
+    const issues = linkedIssues(pr);
+    if (issues.length !== 1) continue;
+    const issue = issues[0];
+    const branchMatch = /^(\d+)-/.exec(pr.headRefName ?? '');
+    const branch = branchMatch && Number(branchMatch[1]) === issue ? (pr.headRefName as string) : null;
+    out[pr.number] = { issue, branch };
+  }
+  return out;
+}
+
 /** Every issue linked by two or more open pull requests whose `baseRefName`
  *  is `integration` — a release pull request into `<production>` is never
  *  counted. Each pull request's `labels` are its own role-bearing resolved

@@ -142,12 +142,17 @@ function isGhLabelEdit(tokens) {
 }
 
 /** The item numbers a `gh pr edit`/`gh issue edit` call targets — a bare
- *  positional digit, or the trailing digits of a `github.com/**\/(issues|
- *  pull)/<n>` URL. Shared by `gateClearAttempt` and `labelEditAttempt` so
- *  neither re-derives it, and so a future third caller gets the same
+ *  positional digit, the trailing digits of a `github.com/**\/(issues|
+ *  pull)/<n>` URL, or (#281, `gh pr edit` only) a branch-selector
+ *  positional token's leading `N-` (`tokens[1] === 'pr'`): a branch **with**
+ *  a leading `N-` names `N`; a branch with no leading `N-` (or `gh issue
+ *  edit`, which has no branch selector at all) still gives `hasNumbers:
+ *  false` for that token. Shared by `gateClearAttempt` and `labelEditAttempt`
+ *  so neither re-derives it, and so a future third caller gets the same
  *  behaviour rather than a hand-rolled copy. */
 function commandNumbers(tokens) {
   const numbers = [];
+  const isPrEdit = tokens[0] === 'gh' && tokens[1] === 'pr';
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
     const prev = tokens[i - 1] ?? '';
@@ -157,7 +162,14 @@ function commandNumbers(tokens) {
       continue;
     }
     const m = /\/(?:issues|pull)\/(\d+)(?:[/?#].*)?$/.exec(t);
-    if (m) numbers.push(Number(m[1]));
+    if (m) {
+      numbers.push(Number(m[1]));
+      continue;
+    }
+    if (isPrEdit) {
+      const b = /^(\d+)-[\w./-]+$/.exec(t);
+      if (b) numbers.push(Number(b[1]));
+    }
   }
   return numbers;
 }
@@ -184,10 +196,11 @@ function flagValues(tokens, flag) {
  *  item numbers it targets. Quote-aware, so a label name with spaces
  *  (`"needs human"`) is read correctly. `numbers` is always collected, even
  *  when `isAttempt` is false, so a caller never re-tokenizes. `hasNumbers`
- *  is `false` whenever `gh` was given no digit and no `issues|pull` URL to
- *  key off — e.g. `gh pr edit <branch-name> ...` or `gh pr edit
- *  --remove-label ...` with no identifier at all, which `gh` accepts as "the
- *  current branch's PR". A caller must not treat an empty `numbers` array as
+ *  is `false` whenever `gh` was given no digit, no `issues|pull` URL, and no
+ *  branch selector with a leading `N-` to key off — e.g. `gh pr edit
+ *  <branch-name-with-no-leading-N-> ...` or `gh pr edit --remove-label ...`
+ *  with no identifier at all, which `gh` accepts as "the current branch's
+ *  PR". A caller must not treat an empty `numbers` array as
  *  "nothing to verify": `[].every(...)` is vacuously `true`, so skipping
  *  this check would let an unidentified item's gate clear through with
  *  nothing for the operator to have named. */

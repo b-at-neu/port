@@ -13,7 +13,7 @@ export default async function ({ fail, ok }: Reporter) {
   const check = makeCheck(fail, ok);
 
   // --- Cockpit rules: gate rule ------------------------------------------------
-  // guard(#138, #142): the cockpit clearing its own needs-human gate under throughput pressure, unverified.
+  // guard(#138, #142, #281): the cockpit clearing its own needs-human gate under throughput pressure, unverified; #281 adds the gh pr edit branch-selector rung so `unblock #<ticket>` clears via the pull request's own branch too.
   const needsHumanLabel = 'needs human';
 
   // A gate-clear attempt with operator messages naming a different item →
@@ -68,13 +68,93 @@ export default async function ({ fail, ok }: Reporter) {
   );
 
   // #142/R1-C1 — a gate-clear attempt with no bare digit and no issues/pull
-  // URL (a branch-name identifier, which `gh` accepts) must be denied
-  // outright, never fall through to operatorNamed's vacuously-true
-  // `[].every(...)` on an empty numbers array. Even an operator message that
-  // would otherwise satisfy some *other* item must not let this through —
-  // there is nothing here for it to have named.
+  // URL, and a branch with no leading N- (which `gh` still accepts as an
+  // identifier), must be denied outright, never fall through to
+  // operatorNamed's vacuously-true `[].every(...)` on an empty numbers
+  // array. Even an operator message that would otherwise satisfy some
+  // *other* item must not let this through — there is nothing here for it
+  // to have named.
   check(
-    '#142 gate clear denied — command names no item number (branch form)',
+    '#142 gate clear denied — command names no item number (branch form, no leading N-)',
+    decide({
+      payload: plainPayload({
+        tool_input: { command: 'gh pr edit my-feature-branch --repo b-at-neu/port --remove-label "needs human"' },
+      }),
+      matchers,
+      sessionRequiredPaths: [],
+      root,
+      needsHumanLabel,
+      operatorMessages: ['unblock #134'],
+    }),
+    'deny',
+  );
+
+  // #281 — a branch selector with a leading N- names N for `gh pr edit`
+  // (never for `gh issue edit`, which has no branch selector at all), so
+  // `unblock #<ticket>` now clears the gate through the pull request's own
+  // branch, not only through its numeric id. Once this branch rung is in
+  // play, the 139-guard-… case below is denied because 139 was not named,
+  // not because nothing was named — reworded from its prior comment.
+  check(
+    '#281 gate clear allowed — branch selector names the ticket the operator named',
+    decide({
+      payload: plainPayload({
+        tool_input: {
+          command: 'gh pr edit "281-cockpit-ticket-numbers" --repo b-at-neu/port --remove-label "needs human" --add-label "needs revision"',
+        },
+      }),
+      matchers,
+      sessionRequiredPaths: [],
+      root,
+      needsHumanLabel,
+      operatorMessages: ['unblock #281'],
+    }),
+    'gate-clear',
+  );
+
+  // Same command, operator named a different item — denied: naming the
+  // pull request's own number never substitutes for naming the ticket the
+  // branch selector resolves to.
+  check(
+    '#281 gate clear denied — branch selector names a ticket the operator did not name',
+    decide({
+      payload: plainPayload({
+        tool_input: {
+          command: 'gh pr edit "281-cockpit-ticket-numbers" --repo b-at-neu/port --remove-label "needs human" --add-label "needs revision"',
+        },
+      }),
+      matchers,
+      sessionRequiredPaths: [],
+      root,
+      needsHumanLabel,
+      operatorMessages: ['unblock #290'],
+    }),
+    'deny',
+  );
+
+  // No prefix collision: a branch numbered 2810 never satisfies "the
+  // operator named #281" merely because '281' is a leading substring of
+  // '2810'.
+  check(
+    '#281 gate clear denied — no prefix collision between 281 and 2810',
+    decide({
+      payload: plainPayload({
+        tool_input: { command: 'gh pr edit 2810-x --repo b-at-neu/port --remove-label "needs human"' },
+      }),
+      matchers,
+      sessionRequiredPaths: [],
+      root,
+      needsHumanLabel,
+      operatorMessages: ['unblock #281'],
+    }),
+    'deny',
+  );
+
+  // The pre-existing 139-guard-… case stays deny, now for a different
+  // reason: the branch rung extracts 139, so this is "operator named a
+  // different item", not "command names no item number".
+  check(
+    '#142 gate clear denied — operator named a different item (139-guard-… branch names 139)',
     decide({
       payload: plainPayload({
         tool_input: { command: 'gh pr edit 139-guard-cockpit-loop-and-gate-rules --repo b-at-neu/port --remove-label "needs human"' },
@@ -169,6 +249,31 @@ export default async function ({ fail, ok }: Reporter) {
     const noIdentifier = gateClearAttempt('gh pr edit --remove-label "needs human"', 'needs human');
     if (!noIdentifier.isAttempt || noIdentifier.hasNumbers) {
       fail('guard-classifier', `gateClearAttempt: expected isAttempt with hasNumbers false for no identifier, got ${JSON.stringify(noIdentifier)}`);
+    } else {
+      ok();
+    }
+
+    // #281 — a `gh pr edit` branch selector with a leading N- names N.
+    const branchSelector = gateClearAttempt('gh pr edit 281-x --remove-label "needs human"', 'needs human');
+    if (!branchSelector.isAttempt || !branchSelector.hasNumbers || branchSelector.numbers.length !== 1 || branchSelector.numbers[0] !== 281) {
+      fail('guard-classifier', `gateClearAttempt: expected isAttempt with numbers [281] for a branch selector, got ${JSON.stringify(branchSelector)}`);
+    } else {
+      ok();
+    }
+
+    // #281 — `gh issue edit` gets no branch rung at all: an issue has no
+    // branch selector, so a dash-shaped argument is never read as one.
+    const issueEditBranchShaped = gateClearAttempt('gh issue edit 281-x --remove-label "needs human"', 'needs human');
+    if (!issueEditBranchShaped.isAttempt || issueEditBranchShaped.hasNumbers) {
+      fail('guard-classifier', `gateClearAttempt: expected isAttempt with hasNumbers false for 'gh issue edit 281-x', got ${JSON.stringify(issueEditBranchShaped)}`);
+    } else {
+      ok();
+    }
+
+    // #281 — no dash after the leading digits is not a branch selector.
+    const noDash = gateClearAttempt('gh pr edit 281x-branch --remove-label "needs human"', 'needs human');
+    if (!noDash.isAttempt || noDash.hasNumbers) {
+      fail('guard-classifier', `gateClearAttempt: expected isAttempt with hasNumbers false for '281x-branch', got ${JSON.stringify(noDash)}`);
     } else {
       ok();
     }
