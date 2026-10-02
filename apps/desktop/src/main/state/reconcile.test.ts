@@ -25,6 +25,7 @@ function entry(): Extract<RepositoryEntry, { status: 'ready' }> {
       reviewCycleCap: 5,
       vocabulary: VOCABULARY,
       concurrency: { sharedFiles: [], overlapThreshold: 2 },
+      checkDispositions: { excusedCheck: null, unverifiable: null },
     },
     diagnostics: [],
   }
@@ -47,6 +48,7 @@ function item(overrides: Partial<PipelineItem> = {}): PipelineItem {
     mergeable: null,
     reviews: null,
     comments: null,
+    checkRollup: null,
     ...overrides,
   }
 }

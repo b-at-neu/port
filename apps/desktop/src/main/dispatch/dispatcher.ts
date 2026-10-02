@@ -5,24 +5,26 @@
 // to `onSnapshot`; `status`/`relay`/`stopFor` serve the renderer's own
 // reads and writes.
 import type { BoardSnapshot } from '../../shared/board/types'
-import type { BudgetNote, BudgetStatus, DispatchOwner, DispatchRecord, DispatchRelayResult, DispatcherState, RepoDispatchStatus } from '../../shared/dispatch/types'
+import type { BudgetNote, BudgetStatus, DispatchOwner, DispatchRecord, DispatchRelayResult, DispatcherState, ObservationRecord, RepoDispatchStatus } from '../../shared/dispatch/types'
 import type { DrainState } from '../../shared/dispatch/types'
 import type { RepoId } from '../../shared/repos'
 import type { AgentSummary, HostedSessionSnapshot, HostedStore, SessionKey } from '../hosting'
 import type { ReadyEntry } from '../actions'
-import type { EscalateToHumanParams, EscalateToHumanResult } from '../actions'
+import type { ApplyObservationParams, ApplyObservationResult, EscalateToHumanParams, EscalateToHumanResult } from '../actions'
 import type { RegistryDeps } from '../registry'
 import type { ReposListResponse } from '../../shared/ipc'
-import type { DispatchLedger } from '../tick'
-import { dispatchableFrom } from '../tick'
+import type { DispatchLedger, RefreshMemo } from '../tick'
+import { dispatchableFrom, observableFrom } from '../tick'
 import type { ReadGateClaimParams } from '../writes'
 import type { ClaimRead } from '../writes'
 import type { FetchItemsByNumberParams } from '../github'
 import type { ItemsByNumberFetch, ResolvedItem } from '../../shared/github/types'
 import { labelName } from '../../shared/labels/vocabulary'
 import type { LabelVocabulary } from '../../shared/labels/vocabulary'
+import type { RepositoryState } from '../../shared/state/types'
 import type { WriteOutcome } from '../../shared/writes/types'
 import type { TickActionable, TickReport } from '../../shared/tick/types'
+import { runObservationPass } from './observe-pass'
 import { confirmStarted, markUnconfirmed, selectDispatches } from './select'
 import { budgetLiveSets, budgetRoute, escalationBody } from './budget'
 import type { BudgetGate } from './budget-gate'
@@ -46,6 +48,15 @@ export interface CreateDispatcherParams {
    *  classifies the result — `budget-gate.ts`'s own composition. */
   readonly budget: BudgetGate
   readonly escalate: (params: EscalateToHumanParams) => Promise<EscalateToHumanResult>
+  /** #292: writes one machine observation — defaults to
+   *  `main/actions/observe.ts`'s `applyObservation` (`runtime.ts`'s own
+   *  composition), injectable the same way `escalate` already is. */
+  readonly writeObservation: (params: ApplyObservationParams) => Promise<ApplyObservationResult>
+  /** #292: the app's own process-scoped refresh memo
+   *  (`main/tick/ledger.ts`'s `createRefreshMemo`) — the *same* instance
+   *  `main/state/watcher.ts`'s own `planTick` calls read and write, never a
+   *  second one that would disagree with what the tick just reported. */
+  readonly refreshMemo: RefreshMemo
   readonly dirs: { readonly audit: string; readonly scratch: string }
   readonly onChange: () => void
   readonly now: () => Date
@@ -64,6 +75,13 @@ export interface Dispatcher {
    *  `started` task for `(repoId, number)` and the SDK call itself did not
    *  throw. */
   stopFor(repoId: RepoId, number: number): Promise<boolean>
+  /** #292: this repository's own live dispatcher session's `tasks` with
+   *  `status: 'started'`, as descriptions (`"<stage> #<n>"`) — `[]` when no
+   *  dispatcher session is live. `main/state/watcher.ts` passes this into
+   *  `planTick`'s own `startedTasks` param, so a reset never fires against an
+   *  agent this app itself just started, even before the session scan has
+   *  caught up to it. */
+  startedTasks(repoId: RepoId): readonly string[]
 }
 
 interface RepoDispatcherState {
@@ -82,10 +100,31 @@ interface RepoDispatcherState {
    *  starts every item back at 0, never a false second-strike dispatch. */
   budgetHolds: Map<number, number>
   budget: BudgetStatus | null
+  /** #292: every observation write this process has attempted, newest last,
+   *  bounded to `OBSERVED_LIMIT`. */
+  observed: ObservationRecord[]
+  /** #292: the instant (this process's own clock) each item number's most
+   *  recent observation write attempt happened — the stale-read guard reads
+   *  this against the repository's current GitHub `fetchedAt`, so an item
+   *  this process already wrote is skipped until a fresher read has caught
+   *  up to it, never decided again from a read that predates the write. */
+  observedWriteAt: Map<number, string>
 }
 
 function emptyRepoState(): RepoDispatcherState {
-  return { sessionKey: null, recent: [], owner: 'cockpit', dispatcherState: { kind: 'idle' }, draining: false, claimedAt: null, budgetReset: false, budgetHolds: new Map(), budget: null }
+  return {
+    sessionKey: null,
+    recent: [],
+    owner: 'cockpit',
+    dispatcherState: { kind: 'idle' },
+    draining: false,
+    claimedAt: null,
+    budgetReset: false,
+    budgetHolds: new Map(),
+    budget: null,
+    observed: [],
+    observedWriteAt: new Map(),
+  }
 }
 
 function ownerOf(claim: ClaimRead): DispatchOwner {
@@ -103,7 +142,14 @@ function survived(resolved: ResolvedItem, candidate: TickActionable, vocabulary:
   const triggerLabel = vocabulary.labels.find((l) => l.key === candidate.trigger)
   if (triggerLabel === undefined || !resolved.labels.includes(triggerLabel.name)) return false
   const roleBearingNames = new Set(vocabulary.labels.filter((l) => l.role !== 'marker').map((l) => l.name))
-  if (resolved.labels.some((name) => name !== triggerLabel.name && roleBearingNames.has(name))) return false
+  const others = resolved.labels.filter((name) => name !== triggerLabel.name && roleBearingNames.has(name))
+  // #292: a `refreshBranch` candidate tolerates exactly one co-present
+  // role-bearing label — the sanctioned pair `main/tick/plan.ts`'s own
+  // `actionableAndHeld` already allows (a refresh trigger sitting beside
+  // another trigger it does not strand). Every other trigger keeps the
+  // original single-label rule.
+  const tolerance = candidate.trigger === 'refreshBranch' ? 1 : 0
+  if (others.length > tolerance) return false
   return resolved.assignees.includes(viewer)
 }
 
@@ -167,7 +213,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     return snapshot.capabilities.kind === 'ready' ? snapshot.capabilities.agents : []
   }
 
-  async function considerRepo(entry: ReadyEntry, tick: TickReport | undefined, viewer: string | null): Promise<void> {
+  async function considerRepo(entry: ReadyEntry, tick: TickReport | undefined, viewer: string | null, repository: Extract<RepositoryState, { readonly ok: true }> | undefined): Promise<void> {
     if (inFlight.has(entry.id)) return
     inFlight.add(entry.id)
     try {
@@ -231,6 +277,22 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
         const recent = stateFor(entry.id).recent
         report(entry.id, owner, recent.length > 0 ? { kind: 'active', recent } : { kind: 'idle' }, draining)
         return
+      }
+
+      // #292: the observation pass — independent of whatever dispatches
+      // below, so it still runs on a repository with nothing else to
+      // dispatch this pass.
+      if (repository !== undefined) {
+        const observable = observableFrom(tick, deps.drain())
+        if (observable.length > 0) {
+          await runObservationPass(entry, observable, repository, state, {
+            writeObservation: deps.writeObservation,
+            refreshMemo: deps.refreshMemo,
+            dirs: deps.dirs,
+            now: deps.now,
+            onChange: deps.onChange,
+          })
+        }
       }
 
       const dispatchable = dispatchableFrom(tick, deps.drain())
@@ -367,8 +429,9 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     if (!list.ok) return
     const readyEntries = list.repositories.filter((entry): entry is ReadyEntry => 'config' in entry)
     const tickByRepo = new Map(snapshot.tick.map((t) => [t.repoId, t] as const))
-    const viewerByRepo = new Map(snapshot.state.repositories.filter((r): r is Extract<typeof r, { readonly ok: true }> => r.ok).map((r) => [r.repoId, r.viewer] as const))
-    await Promise.all(readyEntries.map((entry) => considerRepo(entry, tickByRepo.get(entry.id), viewerByRepo.get(entry.id) ?? null)))
+    const repoByRepo = new Map(snapshot.state.repositories.filter((r): r is Extract<typeof r, { readonly ok: true }> => r.ok).map((r) => [r.repoId, r] as const))
+    const viewerByRepo = new Map([...repoByRepo.entries()].map(([repoId, r]) => [repoId, r.viewer] as const))
+    await Promise.all(readyEntries.map((entry) => considerRepo(entry, tickByRepo.get(entry.id), viewerByRepo.get(entry.id) ?? null, repoByRepo.get(entry.id))))
   }
 
   function status(): readonly RepoDispatchStatus[] {
@@ -380,7 +443,15 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       claudeSessionId: s.sessionKey !== null ? (deps.store.snapshotOf(s.sessionKey)?.claudeSessionId ?? null) : null,
       claimedAt: s.claimedAt,
       budget: s.budget,
+      observed: s.observed,
     }))
+  }
+
+  function startedTasks(repoId: RepoId): readonly string[] {
+    const state = repoStates.get(repoId)
+    if (state === undefined || state.sessionKey === null) return []
+    const snap = deps.store.snapshotOf(state.sessionKey)
+    return snap?.tasks.filter((t) => t.status === 'started').map((t) => t.description) ?? []
   }
 
   function relay(params: { readonly repoId: RepoId; readonly agentId: string; readonly text: string }): Promise<DispatchRelayResult> {
@@ -408,5 +479,5 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     return result.ok
   }
 
-  return { consider, status, relay, stopFor }
+  return { consider, status, relay, stopFor, startedTasks }
 }

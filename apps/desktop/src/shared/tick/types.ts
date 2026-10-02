@@ -123,6 +123,42 @@ export type TickBlind =
   | { readonly reason: 'viewer-unknown' }
   | { readonly reason: 'stale-read'; readonly ageMs: number }
 
+/** The four machine-observation write families #292 ports from the cockpit's
+ *  own cadence, plus two report-only kinds the board's hover state names but
+ *  that authorise no write of their own (`refresh-deferred` — a refresh
+ *  candidate this pass already capped at `capRefreshes`'s own per-tick limit;
+ *  `withdraw-unverifiable` — a red check on an approved pull request this app
+ *  cannot safely withdraw approval for, per `checkDispositions.unverifiable`).
+ *  `main/tick/observe.ts`'s `observationsOf` is the only producer;
+ *  `main/tick/dispatchable.ts`'s `observableFrom` narrows this to the
+ *  write-bearing subset the dispatcher may actually act on. */
+export type TickObservationKind = 'liveness-reset' | 'cycle-cap' | 'zero-diff' | 'refresh' | 'refresh-stuck' | 'refresh-deferred' | 'withdraw-approval' | 'withdraw-unverifiable'
+
+interface TickObservationBase {
+  readonly number: number
+  readonly itemKind: PipelineItemKind
+}
+
+export type TickObservation =
+  | (TickObservationBase & { readonly kind: 'liveness-reset'; readonly inFlight: LabelKey; readonly retryKey: LabelKey })
+  | (TickObservationBase & { readonly kind: 'cycle-cap'; readonly count: number; readonly cap: number })
+  | (TickObservationBase & { readonly kind: 'zero-diff'; readonly count: number; readonly headRefOid: string })
+  | (TickObservationBase & { readonly kind: 'refresh'; readonly sourceLabel: LabelKey; readonly headRefOid: string; readonly count: number })
+  | (TickObservationBase & {
+      readonly kind: 'refresh-stuck'
+      readonly sourceLabel: LabelKey
+      readonly reason: 'same-sha' | 'consecutive-cap'
+      readonly sha: string
+      readonly count: number
+    })
+  | (TickObservationBase & { readonly kind: 'refresh-deferred' })
+  | (TickObservationBase & {
+      readonly kind: 'withdraw-approval'
+      readonly red: readonly { readonly name: string | null; readonly conclusion: string | null; readonly url: string | null }[]
+      readonly headRefOid: string
+    })
+  | (TickObservationBase & { readonly kind: 'withdraw-unverifiable'; readonly reason: 'claude-md-overrides' | 'unreadable' })
+
 /** One repository's own tick — `planTick`'s whole result. `disabledStages`
  *  is always `[]` on a blind repository, the same direction as
  *  `actionable`/`held`/`claims`. */
@@ -144,4 +180,8 @@ export interface TickReport {
    *  for has no decision instant to report either (#62 — a field that
    *  cannot express "no timer" is the bug this app exists to not repeat). */
   readonly nextTickAt: string | null
+  /** #292: the machine-observation writes the app would make (or has made)
+   *  this pass, under the `dispatch` claim — always `[]` on a blind report,
+   *  the same direction as `actionable`/`held`/`claims`. */
+  readonly observations: readonly TickObservation[]
 }

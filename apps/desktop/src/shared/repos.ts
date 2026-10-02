@@ -81,6 +81,20 @@ export interface ResolvedRepoConfig {
    *  many non-shared paths one in-flight item must share with a candidate
    *  before it holds. Both come off the schema's own defaults when absent. */
   readonly concurrency: { readonly sharedFiles: readonly string[]; readonly overlapThreshold: number }
+  /** The approval-withdrawal observation's own check dispositions (#292),
+   *  resolved by `main/registry/inspect.ts` through `../platform`'s
+   *  `readTextFile` — never read a second time inside `main/tick/`.
+   *  `excusedCheck` is the single job key under `jobs:` in
+   *  `.github/workflows/approval-check.yml` (`null` when
+   *  `modules.approvalGate` is false or the file is absent — no carve-out at
+   *  all). `unverifiable` is set when this app cannot safely apply the
+   *  CLAUDE.md overrides a repository's `checks.*` entries would otherwise
+   *  need (`'claude-md-overrides'` when the root CLAUDE.md carries the
+   *  overrides marker, `'unreadable'` when either file failed to read for
+   *  any other reason) — withdrawal fails closed on it rather than ever
+   *  ignoring a `checks.<name> = infrastructure` excusal this app has not
+   *  applied. */
+  readonly checkDispositions: { readonly excusedCheck: string | null; readonly unverifiable: 'claude-md-overrides' | 'unreadable' | null }
 }
 
 /** Discriminated on status, so "ready implies a config" is enforced by the

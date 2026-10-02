@@ -18,7 +18,7 @@ function health(overrides: Partial<RepositoryHealth> = {}): RepositoryHealth {
 }
 
 function report(overrides: Partial<TickReport> = {}): TickReport {
-  return { repoId: 'repo-a' as RepoId, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: NOW.toISOString(), ...overrides }
+  return { repoId: 'repo-a' as RepoId, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: NOW.toISOString(), observations: [], ...overrides }
 }
 
 describe('clockLineCopy', () => {

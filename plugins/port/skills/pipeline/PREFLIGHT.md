@@ -282,7 +282,7 @@ Exact copy, one message per state, `<…>` substituted:
 
 - **Dispatch claimed** (#265 — same cadence as "Plan gate claimed" above, and independent of it: a repository can hold neither, either, or both at once):
 
-  > 🖥️ **Dispatch claimed by `port-desktop`** since 2026-09-05T14:02Z. 2 items are actionable this tick: plan #105, impl #52 — I won't launch a stage agent for either. Release the claim in the app, or delete `.agents/gate-claim.json`, to take dispatch back.
+  > 🖥️ **Dispatch claimed by `port-desktop`** since 2026-09-05T14:02Z. 2 items are actionable this tick: plan #105, impl #52 — I won't launch a stage agent for either, and the app makes the refresh, escalation, and approval-withdrawal writes here. Release the claim in the app, or delete `.agents/gate-claim.json`, to take dispatch back.
 
   With nothing currently actionable, keep the first sentence and drop the rest, the same carve-out "Plan gate claimed" takes.
 

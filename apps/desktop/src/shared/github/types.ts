@@ -31,6 +31,30 @@ export interface PullRequestCommentNode {
  *  evidence" → "Mergeability precondition"). */
 export type Mergeable = 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN' | null
 
+/** One reduced `statusCheckRollup` context (#292) — a CheckRun or a
+ *  StatusContext, flattened to the one shape `main/tick/checks.ts`'s
+ *  `rollupVerdict` reads, the same `(.name // .context)`/`(.conclusion //
+ *  .state)` fallback `scripts/port-tick/checks.ts` already establishes.
+ *  `startedAt`/`completedAt`/`createdAt` are kept distinct rather than
+ *  pre-reduced to one `at` field, since `reduceRollup` itself needs all
+ *  three to pick the latest entry per name. */
+export interface CheckContext {
+  readonly __typename: 'CheckRun' | 'StatusContext' | null
+  readonly name: string | null
+  readonly conclusion: string | null
+  readonly status: string | null
+  readonly state: string | null
+  readonly startedAt: string | null
+  readonly completedAt: string | null
+  readonly createdAt: string | null
+  /** A CheckRun's `detailsUrl`, or a StatusContext's `targetUrl` — never read
+   *  by `main/tick/checks.ts`'s own `rollupVerdict` (a verbatim port of the
+   *  cockpit's own shape, which carries neither), only by
+   *  `main/tick/observe.ts`'s approval-withdrawal observation, to compose
+   *  the `## Approval withdrawn` comment's own link. */
+  readonly url: string | null
+}
+
 /** The field list is exactly the ticket's, plus `matchedKeys`. `updatedAt`
  *  remains deliberately absent — it belongs to a later ticket that has a use
  *  for it (ENGINEERING §7: no field shipped in anticipation); `headRefOid`
@@ -55,6 +79,12 @@ export interface PipelineItem {
   readonly mergeable: Mergeable
   readonly reviews: readonly ReviewNode[] | null
   readonly comments: readonly PullRequestCommentNode[] | null
+  /** The `approved` alias's own `statusCheckRollup` selection (#292) — `null`
+   *  means this alias did not select it (every alias but `approved`, and
+   *  every issue); `[]` means it was selected but GitHub returned no rollup
+   *  at all. The cross-alias merge (`map.ts`) keeps whichever copy is
+   *  non-null, since `approved` is the last alias in vocabulary order. */
+  readonly checkRollup: readonly CheckContext[] | null
 }
 
 /** One entry per enabled label — the names actually queried, reported

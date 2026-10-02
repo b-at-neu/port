@@ -161,6 +161,7 @@ async function readyEntry(path?: string): Promise<ReadyEntry> {
       branches: { integration: 'dev', production: 'main' },
       commands: { worktrees: null, budget: null },
       concurrency: { sharedFiles: [], overlapThreshold: 2 },
+      checkDispositions: { excusedCheck: null, unverifiable: null },
       models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
       modules: { approvalGate: true, release: true, scope: true },
       reviewCycleCap: 5,
@@ -176,6 +177,7 @@ function fakeDispatcher(overrides: Partial<Dispatcher> = {}): Dispatcher {
     status: () => [],
     relay: () => Promise.resolve({ ok: false, kind: 'no-dispatcher' }),
     stopFor: () => Promise.resolve(false),
+    startedTasks: () => [],
     ...overrides,
   }
 }
@@ -189,7 +191,7 @@ describe('resolveDispatchClaimSet (#265)', () => {
   it('takes the claim, refreshes once, and reports the dispatcher status it then reads back', async () => {
     let refreshed = 0
     const entry = await readyEntry()
-    const dispatcher = fakeDispatcher({ status: () => [{ repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null, budget: null }] })
+    const dispatcher = fakeDispatcher({ status: () => [{ repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null, budget: null, observed: [] }] })
     const deps: ResolveDispatchClaimSetDeps = {
       listRepositories: () => Promise.resolve({ ok: true, repositories: [entry] }),
       dispatcher,
@@ -197,7 +199,7 @@ describe('resolveDispatchClaimSet (#265)', () => {
       now: () => new Date('2026-01-01T00:00:00Z'),
     }
     const result = await resolveDispatchClaimSet(registryDeps, { repoId: REPO_ID, held: true }, deps)
-    expect(result).toEqual({ kind: 'ok', status: { repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null, budget: null } })
+    expect(result).toEqual({ kind: 'ok', status: { repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null, budget: null, observed: [] } })
     expect(refreshed).toBe(1)
   })
 })

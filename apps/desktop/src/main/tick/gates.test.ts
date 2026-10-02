@@ -6,7 +6,7 @@
 // (`main/github/map.ts`'s own `reviewNodesOf`) — adapted at the edge here,
 // never inside `gates.ts` itself.
 import { describe, expect, it } from 'vitest'
-import { codeReviewCount, cycleCapExceeded, mergeabilityRoute, refreshWins, zeroDiffGate } from './gates'
+import { approvedReverify, capRefreshes, codeReviewCount, cycleCapExceeded, mergeabilityRoute, refreshDecision, refreshWins, zeroDiffGate } from './gates'
 import type { ReviewNode } from './gates'
 import cases from '../../../../../scripts/port-tick/cases/gates.cases.json'
 
@@ -48,13 +48,47 @@ interface RefreshWinsCase {
   readonly expected: { readonly action: string; readonly label?: string }
 }
 
-type Case = ZeroDiffCase | CycleCapCase | MergeabilityRouteCase | RefreshWinsCase | { readonly function: string; readonly name: string }
+interface RefreshDecisionCase {
+  readonly function: 'refreshDecision'
+  readonly name: string
+  readonly input: readonly [{ readonly sha: string; readonly count: number } | null, string]
+  readonly expected: { readonly action: string; readonly reason?: string; readonly count: number }
+}
 
-const PORTED_FUNCTIONS = new Set(['zeroDiffGate', 'cycleCapExceeded', 'mergeabilityRoute', 'refreshWins'])
-const table = (cases.cases as readonly Case[]).filter((c): c is ZeroDiffCase | CycleCapCase | MergeabilityRouteCase | RefreshWinsCase => PORTED_FUNCTIONS.has(c.function))
+interface CapRefreshesCase {
+  readonly function: 'capRefreshes'
+  readonly name: string
+  readonly input: readonly [readonly { readonly number: number }[], number]
+  readonly expected: { readonly toRefreshNumbers: readonly number[]; readonly deferredNumbers: readonly number[] }
+}
+
+interface ApprovedReverifyCase {
+  readonly function: 'approvedReverify'
+  readonly name: string
+  readonly input: {
+    readonly verdict: { readonly pending: boolean; readonly red: readonly { readonly name: string | null; readonly conclusion: string | null }[]; readonly green: readonly (string | null)[] }
+    readonly mergeable: string
+  }
+  readonly expected: { readonly action: string }
+}
+
+type Case =
+  | ZeroDiffCase
+  | CycleCapCase
+  | MergeabilityRouteCase
+  | RefreshWinsCase
+  | RefreshDecisionCase
+  | CapRefreshesCase
+  | ApprovedReverifyCase
+  | { readonly function: string; readonly name: string }
+
+const PORTED_FUNCTIONS = new Set(['zeroDiffGate', 'cycleCapExceeded', 'mergeabilityRoute', 'refreshWins', 'refreshDecision', 'capRefreshes', 'approvedReverify'])
+const table = (cases.cases as readonly Case[]).filter(
+  (c): c is ZeroDiffCase | CycleCapCase | MergeabilityRouteCase | RefreshWinsCase | RefreshDecisionCase | CapRefreshesCase | ApprovedReverifyCase => PORTED_FUNCTIONS.has(c.function),
+)
 
 describe('gates — shared case table', () => {
-  it('the table covers all four ported functions', () => {
+  it('the table covers all seven ported functions', () => {
     for (const fn of PORTED_FUNCTIONS) expect(table.some((c) => c.function === fn)).toBe(true)
   })
 
@@ -75,7 +109,22 @@ describe('gates — shared case table', () => {
         expect(mergeabilityRoute(mergeable, priorUnknownStreak)).toEqual(row.expected)
         return
       }
-      expect(refreshWins(row.input)).toEqual(row.expected)
+      if (row.function === 'refreshWins') {
+        expect(refreshWins(row.input)).toEqual(row.expected)
+        return
+      }
+      if (row.function === 'refreshDecision') {
+        const [memoEntry, currentSha] = row.input
+        expect(refreshDecision(memoEntry ?? undefined, currentSha)).toEqual(row.expected)
+        return
+      }
+      if (row.function === 'capRefreshes') {
+        const [candidates, max] = row.input
+        const result = capRefreshes(candidates, max)
+        expect({ toRefreshNumbers: result.toRefresh.map((c) => c.number), deferredNumbers: result.deferred.map((c) => c.number) }).toEqual(row.expected)
+        return
+      }
+      expect(approvedReverify(row.input)).toEqual(row.expected)
     })
   }
 })

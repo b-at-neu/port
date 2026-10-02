@@ -3,7 +3,7 @@
 // item's `matchedKeys` comes from the alias table `query.ts` built, not from
 // re-matching `labels` against the vocabulary.
 import type { LabelKey } from '../../shared/labels/vocabulary'
-import type { ItemState, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, QueriedLabel, ReviewNode } from '../../shared/github/types'
+import type { CheckContext, ItemState, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, QueriedLabel, ReviewNode } from '../../shared/github/types'
 
 interface ConnectionLike {
   readonly totalCount?: unknown
@@ -27,6 +27,7 @@ interface RawNode {
   readonly mergeable?: unknown
   readonly reviews?: unknown
   readonly comments?: unknown
+  readonly commits?: unknown
 }
 
 function isRawNode(value: unknown): value is RawNode {
@@ -88,6 +89,44 @@ function reviewNodesOf(value: unknown): readonly ReviewNode[] {
   return out
 }
 
+/** Reads the `CheckRollupFields` selection (#292): `{ commits: { nodes: [{
+ *  commit: { statusCheckRollup: { contexts: { nodes: [...] } } } }] } }`.
+ *  `undefined` — `commits` was never selected on this alias — reads as
+ *  `null` ("this alias did not select it"); selected but reducing to no
+ *  contexts at all (a missing `commits`/`statusCheckRollup` node, or a
+ *  genuinely empty rollup) reads as `[]` ("selected but GitHub returned no
+ *  rollup"), never conflated with "not selected". */
+function checkRollupOf(node: RawNode): readonly CheckContext[] | null {
+  if (!('commits' in node)) return null
+  const commits = asConnection(node.commits)
+  const commitNodes = commits?.nodes
+  const firstCommit = Array.isArray(commitNodes) ? commitNodes[0] : undefined
+  const commit = typeof firstCommit === 'object' && firstCommit !== null ? (firstCommit as Record<string, unknown>).commit : undefined
+  const rollup = typeof commit === 'object' && commit !== null ? (commit as Record<string, unknown>).statusCheckRollup : undefined
+  const rollupObj = typeof rollup === 'object' && rollup !== null ? (rollup as Record<string, unknown>) : undefined
+  const contexts = asConnection(rollupObj?.contexts)
+  const contextNodes = contexts?.nodes
+  if (!Array.isArray(contextNodes)) return []
+  const out: CheckContext[] = []
+  for (const raw of contextNodes) {
+    if (typeof raw !== 'object' || raw === null) continue
+    const c = raw as Record<string, unknown>
+    const typename = c.__typename === 'CheckRun' || c.__typename === 'StatusContext' ? c.__typename : null
+    out.push({
+      __typename: typename,
+      name: typeof c.name === 'string' ? c.name : typeof c.context === 'string' ? c.context : null,
+      conclusion: typeof c.conclusion === 'string' ? c.conclusion : null,
+      status: typeof c.status === 'string' ? c.status : null,
+      state: typeof c.state === 'string' ? c.state : null,
+      startedAt: typeof c.startedAt === 'string' ? c.startedAt : null,
+      completedAt: typeof c.completedAt === 'string' ? c.completedAt : null,
+      createdAt: typeof c.createdAt === 'string' ? c.createdAt : null,
+      url: typeof c.detailsUrl === 'string' ? c.detailsUrl : typeof c.targetUrl === 'string' ? c.targetUrl : null,
+    })
+  }
+  return out
+}
+
 /** Reads `{ nodes: [{ body, createdAt }] }` — the `## Gate cleared`
  *  carve-out's own evidence, the same shape `reviewNodesOf` establishes. */
 function commentNodesOf(value: unknown): readonly PullRequestCommentNode[] {
@@ -124,6 +163,7 @@ function nodeToItem(node: RawNode, kind: PipelineItemKind, repo: string, key: La
     mergeable: isPullRequest ? mergeableOf(node.mergeable) : null,
     reviews: isPullRequest ? reviewNodesOf(node.reviews) : null,
     comments: isPullRequest ? commentNodesOf(node.comments) : null,
+    checkRollup: isPullRequest ? checkRollupOf(node) : null,
   }
 }
 
@@ -151,8 +191,16 @@ export function mapPipelineItems(repository: Readonly<Record<string, unknown>>, 
         merged.set(mapKey, item)
         continue
       }
-      if (!existing.matchedKeys.includes(key)) {
-        merged.set(mapKey, { ...existing, matchedKeys: [...existing.matchedKeys, key] })
+      // #292: the cross-alias merge keeps whichever copy of `checkRollup` is
+      // non-null — only the `approved` alias ever selects it, so this never
+      // overwrites a real rollup with an unselected `null` from another
+      // alias the same item also matched.
+      if (!existing.matchedKeys.includes(key) || existing.checkRollup === null) {
+        merged.set(mapKey, {
+          ...existing,
+          matchedKeys: existing.matchedKeys.includes(key) ? existing.matchedKeys : [...existing.matchedKeys, key],
+          checkRollup: existing.checkRollup ?? item.checkRollup,
+        })
       }
     }
   }

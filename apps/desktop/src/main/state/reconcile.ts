@@ -207,6 +207,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
       reviews: item.reviews,
       comments: item.comments,
       reviewCycleCount,
+      checkRollup: item.checkRollup,
     }
   })
 

@@ -13,7 +13,7 @@ const WRITE_FAILED = { kind: 'write-failed' as const, classification: 'unknown' 
 const REPO_ID = 'repo-a' as RepoId
 
 function status(overrides: Partial<RepoDispatchStatus> = {}): RepoDispatchStatus {
-  return { repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null, budget: null, ...overrides }
+  return { repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null, budget: null, observed: [], ...overrides }
 }
 
 describe('ownerLineCopy', () => {
