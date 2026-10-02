@@ -1,5 +1,5 @@
 {
-  "$comment": "Allowlist portability ratchet, read by scripts/checks/portability.ts (#116). The list was seeded from epic #112's evidence and the existing desktop KNOWN_COMMANDS denylist (scripts/checks/desktop-platform.ts) — #114's audit table owns amending it. A classification is always about the leading token of a Bash(...) allowlist entry. 'pending' is a ratchet: each entry names a file and the nonPortable tokens its allowlist actually carries today, seeded from the tree at implementation time; any new non-portable entry not already pending fails now, and any pending token #114 removes must be dropped from here in the same commit or the stale-pending rule fails.",
+  "$comment": "Allowlist portability ratchet, read by scripts/checks/portability.ts (#116). The list was seeded from epic #112's evidence and the existing desktop KNOWN_COMMANDS denylist (scripts/checks/desktop-platform.ts). #114 decided: sort, uniq, stat, file, egrep and rg retired outright (no stage used them); find, grep, ls, mkdir, pwd and wc kept pending #295, which owns amending it further. A classification is always about the leading token of a Bash(...) allowlist entry. 'pending' is a ratchet: each entry names a file and the nonPortable tokens its allowlist actually carries today, seeded from the tree at implementation time; any new non-portable entry not already pending fails now, and any pending token #295 removes must be dropped from here in the same commit or the stale-pending rule fails.",
   "nonPortable": [
     "awk", "base64", "bash", "cat", "cmd", "cut", "diff", "echo", "egrep", "file", "find",
     "grep", "head", "ls", "mkdir", "powershell", "pwd", "pwsh", "rg", "sed", "sh",
@@ -8,13 +8,13 @@
   "pending": [
     {
       "file": "plugins/port/templates/permissions.base.json",
-      "commands": ["egrep", "file", "find", "grep", "ls", "mkdir", "pwd", "rg", "sort", "stat", "uniq", "wc"],
-      "issue": 114
+      "commands": ["find", "grep", "ls", "mkdir", "pwd", "wc"],
+      "issue": 295
     },
     {
       "file": ".claude/settings.json",
-      "commands": ["egrep", "file", "find", "grep", "ls", "mkdir", "pwd", "rg", "sort", "stat", "uniq", "wc"],
-      "issue": 114
+      "commands": ["find", "grep", "ls", "mkdir", "pwd", "wc"],
+      "issue": 295
     }
   ]
 }
