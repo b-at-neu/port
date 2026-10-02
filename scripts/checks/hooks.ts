@@ -85,6 +85,16 @@ export default async function ({ fail, ok }: Reporter) {
     } else {
       ok();
     }
+    if (!/shell:\s*true/.test(stripComments("spawn('x', [], { shell: true });"))) {
+      fail('hooks-shell', "self-test: a synthetic { shell: true } call did not trip the pattern");
+    } else {
+      ok();
+    }
+    if (/shell:\s*true/.test(stripComments("spawn('x', [], { shell: false });"))) {
+      fail('hooks-shell', "self-test: { shell: false } must not trip the shell: true pattern");
+    } else {
+      ok();
+    }
 
     const hookFiles = walk(join(root, 'plugins/port/hooks')).filter((f) => f.endsWith('.mjs'));
     for (const f of hookFiles) {
