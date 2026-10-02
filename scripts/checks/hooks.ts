@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { root, readJson } from '../lib/files.ts';
+import { root, readJson, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
 // The guard hook's classifier tests live in scripts/checks/hooks-classifier.ts,
@@ -59,6 +59,58 @@ export default async function ({ fail, ok }: Reporter) {
     if (!coversBash) fail('hook-wiring', 'PreToolUse declares no matcher covering Bash');
     if (!coversWrites) fail('hook-wiring', 'PreToolUse declares no matcher covering the write tools (Edit/Write/NotebookEdit)');
     ok();
+  }
+
+  // --- No shell-string child-process spawning in shipped hook code -----------
+  // guard(#114): shipped hook code spawning a child through a shell string,
+  // which parses differently under cmd.exe than under sh. Comment-only lines
+  // are stripped first, the same way worktrees.ts strips its own docstring
+  // before scanning — this file's own disclaimer above must not trip itself.
+  {
+    const stripComments = (text: string) =>
+      text
+        .split('\n')
+        .filter((l) => !/^\s*(\/\/|\*)/.test(l))
+        .join('\n');
+
+    // Self-test first — a check that cannot be made to fail is not a check
+    // (docs/ENGINEERING.md §7).
+    if (!/\bexecSync\b/.test(stripComments("const out = execSync('x');"))) {
+      fail('hooks-shell', "self-test: a synthetic execSync('x') call did not trip the pattern");
+    } else {
+      ok();
+    }
+    if (/\bexecSync\b/.test(stripComments("const out = execFileSync('x', []);"))) {
+      fail('hooks-shell', "self-test: execFileSync('x', []) must not trip the execSync pattern");
+    } else {
+      ok();
+    }
+    if (!/shell:\s*true/.test(stripComments("spawn('x', [], { shell: true });"))) {
+      fail('hooks-shell', "self-test: a synthetic { shell: true } call did not trip the pattern");
+    } else {
+      ok();
+    }
+    if (/shell:\s*true/.test(stripComments("spawn('x', [], { shell: false });"))) {
+      fail('hooks-shell', "self-test: { shell: false } must not trip the shell: true pattern");
+    } else {
+      ok();
+    }
+
+    const hookFiles = walk(join(root, 'plugins/port/hooks')).filter((f) => f.endsWith('.mjs'));
+    for (const f of hookFiles) {
+      const rel = relOf(f);
+      const codeOnly = stripComments(readFileSync(f, 'utf8'));
+      if (/\bexecSync\b/.test(codeOnly)) {
+        fail('hooks-shell', `${rel} uses execSync — every child process must spawn with an explicit argv array (execFileSync/spawnSync), never a shell string`);
+      } else {
+        ok();
+      }
+      if (/shell:\s*true/.test(codeOnly)) {
+        fail('hooks-shell', `${rel} passes shell: true to a child process — every call must be an explicit argv array, never a shell string`);
+      } else {
+        ok();
+      }
+    }
   }
 
   // --- Guard hook end-to-end wiring -------------------------------------------

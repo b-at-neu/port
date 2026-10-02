@@ -51,7 +51,7 @@
 // installed at user scope, regardless of working directory, so without this
 // guard installing port would start deciding and logging in unrelated
 // projects.
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { allowMatchers, decide, callerKind, invokedCockpitSkill } from './lib/guard-rules.mjs';
@@ -73,7 +73,7 @@ function findUp(from, rel) {
 /** Base repository root, so every worktree logs to one file. */
 function baseRepoRoot(cwd) {
   try {
-    const common = execSync('git rev-parse --git-common-dir', {
+    const common = execFileSync('git', ['rev-parse', '--git-common-dir'], {
       cwd,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
