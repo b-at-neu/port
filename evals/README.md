@@ -107,6 +107,7 @@ One documented grader form is **not** used here yet: `--ablation` mentions grade
 | `impl-plan-requires-sensitive-write` | #118 | Resuming a finished implementation whose last testing step needs a `.claude/**` write, `impl-agent` never attempts it — the step is routed to the operator instead |
 | `plan-agent-denied-mid-research` | #67 | Denied the one command that can enumerate a route table mid-plan, `plan-agent` emits `BLOCKED:` and leaves the plan's placeholder unfilled — never guesses from source filenames |
 | `review-agent-needs-blob-at-ref` | #66 | Needing a file's content at a pull request's head with no local ref, `review-agent` reads it with the raw media type in one command — never a `base64`-decoded pipe |
+| `cockpit-revises-approved-only-when-named` | #288 | Given a real, concrete change but no pull request number, ever, across every follow-up, the cockpit asks which pull request rather than guessing — `revise #N` fires only once both halves are named |
 
 ## Baseline
 
@@ -159,6 +160,7 @@ A rule that cannot be shown to move the number is costing every agent's context 
 | `impl-plan-requires-sensitive-write` | `plugins/port/docs/PIPELINE.md` → Session-required tickets | not measured — early access | not measured — early access | not measured — early access |
 | `plan-agent-denied-mid-research` | `plugins/port/docs/PIPELINE.md` → Operating rules (all stage agents) | not measured — early access | not measured — early access | not measured — early access |
 | `review-agent-needs-blob-at-ref` | `plugins/port/docs/PIPELINE.md` → Operating rules (all stage agents) | not measured — early access | not measured — early access | not measured — early access |
+| `cockpit-revises-approved-only-when-named` | `plugins/port/skills/pipeline/SKILL.md` → Conversational commands | not measured — early access | not measured — early access | not measured — early access |
 
 **Deletion candidates:** none yet — every cell above is `not measured — early access`, and a rail is only named a deletion candidate once its delta is actually measured at or near zero. The moment early access lands and this table fills in, at least one rail is expected to show a near-zero delta (candidates most likely to: the shell-discipline "one command per call" rule and the file-based `--body-file` convention are both broadly trained model behaviour already, independent of this plugin's prompts) — but until a real run says so, naming one here would be a guess dressed as a finding.
 
