@@ -11,7 +11,7 @@ import type { RepoId } from '../../shared/repos'
 import type { RepositoryEntry } from '../../shared/repos'
 import { DEFAULT_POLL_POLICY, SOURCE_KINDS, initialHealth } from '../../shared/board/types'
 import type { BoardSnapshot, RepositoryHealth, SourceHealth, SourceKind } from '../../shared/board/types'
-import type { DrainState } from '../../shared/dispatch/types'
+import type { DrainState, RepoDispatchStatus } from '../../shared/dispatch/types'
 import type { RelayScan } from '../../shared/relay/types'
 import { createDispatchLedger, createUnknownStreaks, planTick } from '../tick'
 import type { DispatchLedger, UnknownStreaks } from '../tick'
@@ -68,12 +68,24 @@ export interface CreatePipelineWatcherParams {
    *  keeps every existing caller (and test) unchanged. */
   readonly ledger?: DispatchLedger
   readonly unknownStreaks?: UnknownStreaks
+  /** #265: the dispatcher's own `status()` — read fresh inside
+   *  `buildSnapshot()`, the same "never cached" rule `drain` above follows,
+   *  so a claim taken or released mid-session is reflected on the very next
+   *  snapshot. `undefined` (every caller until `main/ipc.ts` wires one)
+   *  reads as `[]`. */
+  readonly dispatchStatus?: () => readonly RepoDispatchStatus[]
 }
 
 export interface PipelineWatcher {
   readonly refresh: (request?: RefreshRequest) => Promise<BoardSnapshot>
   readonly snapshot: () => BoardSnapshot
   readonly stop: () => void
+  /** #265: re-reads `dispatchStatus()` onto the existing snapshot and pushes
+   *  it through `onSnapshot` — never a second `buildSnapshot()` call, so the
+   *  dispatcher's own `onChange` (firing between ticks, as its state moves)
+   *  never produces a duplicate trajectory-record line or re-runs a poll.
+   *  `emittedAt` still advances, since this is a real, newly-observed state. */
+  readonly republish: () => void
 }
 
 function repoRefOf(entry: Extract<RepositoryEntry, { status: 'ready' }>): { readonly owner: string; readonly name: string } {
@@ -131,6 +143,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     drain: drain(),
     nextWakeupAt: null,
     emittedAt: now().toISOString(),
+    dispatch: params.dispatchStatus?.() ?? [],
   }
 
   function ensureHealth(repoId: RepoId): RepositoryHealth {
@@ -195,7 +208,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     }
 
     const nextWakeupAt = stopped ? null : earliestDueAt().toISOString()
-    latest = { state, health: healthList, policy: DEFAULT_POLL_POLICY, tick, relay, drain: drain(), nextWakeupAt, emittedAt: now().toISOString() }
+    latest = { state, health: healthList, policy: DEFAULT_POLL_POLICY, tick, relay, drain: drain(), nextWakeupAt, emittedAt: now().toISOString(), dispatch: params.dispatchStatus?.() ?? [] }
     return latest
   }
 
@@ -328,6 +341,11 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       // The honest rendering of "no wakeup scheduled" (#62) — applied to the
       // cached snapshot directly, since a stopped watcher never rebuilds one.
       latest = { ...latest, nextWakeupAt: null }
+    },
+    republish(): void {
+      if (stopped) return
+      latest = { ...latest, dispatch: params.dispatchStatus?.() ?? [], emittedAt: now().toISOString() }
+      params.onSnapshot(latest)
     },
   }
 }

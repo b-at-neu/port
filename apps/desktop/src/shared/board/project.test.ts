@@ -92,6 +92,7 @@ function snapshotOf(repositories: readonly RepositoryState[], healths: readonly 
     drain: { gate: 'open' },
     nextWakeupAt: null,
     emittedAt: NOW.toISOString(),
+    dispatch: [],
   }
 }
 

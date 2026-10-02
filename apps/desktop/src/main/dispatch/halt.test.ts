@@ -112,6 +112,7 @@ function snapshotOf(repositories: readonly RepositoryState[]): BoardSnapshot {
     drain: { gate: 'open' },
     nextWakeupAt: null,
     emittedAt: '2026-01-01T00:00:00Z',
+    dispatch: [],
   }
 }
 

@@ -31,6 +31,7 @@ const SNAPSHOT: BoardSnapshot = {
   drain: { gate: 'open' },
   nextWakeupAt: null,
   emittedAt: 't',
+  dispatch: [],
 }
 
 function fakeDrain(current: DrainStore['current'], setResult: SetDrainResult = { ok: true }): { readonly drain: DrainStore; readonly setCalls: boolean[] } {
