@@ -2,11 +2,14 @@
 // DOM, which this workspace's vitest config does not provide (`environment:
 // 'node'`, no jsdom/happy-dom installed), the same gap every other DOM
 // builder under `renderer/src/board/` already has (see `tick.test.ts`'s own
-// header).
+// header). `observationClause`/`observationTitle` (#292) are exported
+// specifically so the owner-line's observation clause and hover title — both
+// otherwise reachable only from `buildOwnerLine`'s DOM — have a direct,
+// DOM-free test surface.
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../../../shared/repos'
-import type { RepoDispatchStatus } from '../../../shared/dispatch/types'
-import { noteCopy, ownerLineCopy } from './owner'
+import type { ObservationRecord, RepoDispatchStatus } from '../../../shared/dispatch/types'
+import { noteCopy, observationClause, observationTitle, ownerLineCopy } from './owner'
 
 const WRITE_FAILED = { kind: 'write-failed' as const, classification: 'unknown' as const, stderr: 'boom', reread: null }
 
@@ -14,6 +17,10 @@ const REPO_ID = 'repo-a' as RepoId
 
 function status(overrides: Partial<RepoDispatchStatus> = {}): RepoDispatchStatus {
   return { repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null, budget: null, observed: [], ...overrides }
+}
+
+function record(overrides: Partial<ObservationRecord> = {}): ObservationRecord {
+  return { kind: 'liveness-reset', number: 1, itemKind: 'issue', at: '2026-01-01T14:00:00Z', outcome: 'written', scope: null, comment: 'none', ...overrides }
 }
 
 describe('ownerLineCopy', () => {
@@ -119,5 +126,74 @@ describe('noteCopy', () => {
 
   it('gate-failed', () => {
     expect(noteCopy({ kind: 'gate-failed', number: 52, message: 'FAIL  something broke' })).toContain('FAIL  something broke')
+  })
+})
+
+describe('observationClause', () => {
+  it('is empty when nothing has been observed yet', () => {
+    expect(observationClause([])).toBe('')
+  })
+
+  it('renders only the newest record, even with several observed', () => {
+    const first = record({ kind: 'liveness-reset', number: 1, outcome: 'written' })
+    const second = record({ kind: 'cycle-cap', number: 2, outcome: 'already' })
+    const clause = observationClause([first, second])
+    expect(clause).toContain('#2 was already escalated.')
+    expect(clause).not.toContain('#1')
+  })
+
+  it('written — per-kind phrasing, covering every TickObservationKind', () => {
+    expect(observationClause([record({ kind: 'liveness-reset', number: 10 })])).toContain('reset #10')
+    expect(observationClause([record({ kind: 'cycle-cap', number: 11 })])).toContain('escalated #11 to needs human')
+    expect(observationClause([record({ kind: 'cycle-cap', number: 11 })])).toContain('review cycle cap was reached')
+    expect(observationClause([record({ kind: 'zero-diff', number: 12 })])).toContain('the latest review already covers the current head')
+    expect(observationClause([record({ kind: 'refresh', number: 13 })])).toContain('refreshing #13')
+    expect(observationClause([record({ kind: 'refresh-stuck', number: 14 })])).toContain('still conflicting after a refresh')
+    expect(observationClause([record({ kind: 'withdraw-approval', number: 15 })])).toContain('withdrew approval on #15')
+    expect(observationClause([record({ kind: 'refresh-deferred', number: 16 })])).toContain('updated #16')
+    expect(observationClause([record({ kind: 'withdraw-unverifiable', number: 17 })])).toContain('updated #17')
+  })
+
+  it('already / moved / failed outcomes', () => {
+    expect(observationClause([record({ kind: 'cycle-cap', number: 20, outcome: 'already' })])).toContain('#20 was already escalated.')
+    expect(observationClause([record({ kind: 'cycle-cap', number: 21, outcome: 'moved' })])).toContain('#21 moved before this app could escalate it — nothing was written.')
+    expect(observationClause([record({ kind: 'cycle-cap', number: 22, outcome: 'failed' })])).toContain('GitHub refused the write.')
+  })
+
+  it('written with a failed comment uses the commentFailed phrasing instead of the written one', () => {
+    const clause = observationClause([record({ kind: 'liveness-reset', number: 23, outcome: 'written', comment: 'failed' })])
+    expect(clause).toContain("reset #23, but its explanation comment didn't post.")
+    expect(clause).not.toContain('no agent was attached')
+  })
+
+  it('refused — plan-gate scope on liveness-reset gets the dedicated plan-gate copy', () => {
+    const clause = observationClause([record({ kind: 'liveness-reset', number: 24, outcome: 'refused', scope: 'plan-gate' })])
+    expect(clause).toContain('moving it back needs the plan gate too')
+  })
+
+  it('refused — every other kind has no plan-gate copy, so a plan-gate scope still falls back to the dispatch-released line', () => {
+    const clause = observationClause([record({ kind: 'cycle-cap', number: 25, outcome: 'refused', scope: 'plan-gate' })])
+    expect(clause).toContain("didn't escalate #25 — dispatch was released mid-pass.")
+  })
+
+  it('refused — a non-plan-gate scope always uses the dispatch-released copy', () => {
+    expect(observationClause([record({ kind: 'liveness-reset', number: 26, outcome: 'refused', scope: 'dispatch' })])).toContain("didn't reset #26 — dispatch was released mid-pass.")
+    expect(observationClause([record({ kind: 'liveness-reset', number: 27, outcome: 'refused', scope: null })])).toContain("didn't reset #27 — dispatch was released mid-pass.")
+  })
+})
+
+describe('observationTitle', () => {
+  it('is null when nothing has been observed yet', () => {
+    expect(observationTitle([])).toBeNull()
+  })
+
+  it('lists every record, newest first', () => {
+    const first = record({ kind: 'liveness-reset', number: 1, outcome: 'written', at: '2026-01-01T14:00:00Z' })
+    const second = record({ kind: 'cycle-cap', number: 2, outcome: 'already', at: '2026-01-01T15:00:00Z' })
+    const title = observationTitle([first, second])
+    const lines = title?.split('\n') ?? []
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toContain('#2 cycle-cap — already')
+    expect(lines[1]).toContain('#1 liveness-reset — written')
   })
 })

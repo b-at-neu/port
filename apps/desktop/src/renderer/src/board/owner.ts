@@ -138,7 +138,7 @@ function recordClause(record: ObservationRecord): string {
  *  while `owner === 'app'` (plan's own **UX states**, "Owner line clause").
  *  `''` when nothing has been observed yet, so every caller can concatenate
  *  unconditionally the same way `budgetClause` already does. */
-function observationClause(observed: readonly ObservationRecord[]): string {
+export function observationClause(observed: readonly ObservationRecord[]): string {
   const newest = observed[observed.length - 1]
   if (newest === undefined) return ''
   return ` · ${recordClause(newest)}`
@@ -147,7 +147,7 @@ function observationClause(observed: readonly ObservationRecord[]): string {
 /** Every record, newest first, for the owner line's hover title — plan's own
  *  "Put every record (newest first) in the line's title." `null` when there
  *  is nothing to show, so the line keeps whatever `title` it already has. */
-function observationTitle(observed: readonly ObservationRecord[]): string | null {
+export function observationTitle(observed: readonly ObservationRecord[]): string | null {
   if (observed.length === 0) return null
   return observed
     .slice()
