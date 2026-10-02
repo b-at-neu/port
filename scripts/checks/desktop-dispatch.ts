@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { pipelineSkillText, root, walk, relOf } from '../lib/files.ts';
+import { pipelineDocsText, pipelineSkillText, root, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
 // Operator control over dispatch (issue 110) and the app's own dispatcher
@@ -342,5 +342,110 @@ export default async function ({ fail, ok }: Reporter) {
         ok();
       }
     }
+  }
+
+  // --- #292: .observations is read under main/ only by dispatchable.ts's -----
+  // observableFrom
+  // guard(#292): a future caller reading report.observations directly,
+  // bypassing observableFrom — the one function that strips the two
+  // report-only kinds (refresh-deferred, withdraw-unverifiable) before
+  // anything may act on the rest.
+  {
+    let sawObservableFrom = false;
+    let found = false;
+    for (const f of allFiles) {
+      const rel = relOf(f);
+      if (!rel.startsWith('apps/desktop/src/main/') || rel.endsWith('.test.ts')) continue;
+      const text = readFileSync(f, 'utf8');
+      if (!/\.observations\b/.test(text)) continue;
+      if (rel === dispatchableFile) {
+        sawObservableFrom = true;
+      } else {
+        found = true;
+        fail('desktop-dispatch', `${rel} reads '.observations' directly — only ${dispatchableFile} (observableFrom) may`);
+      }
+    }
+    if (!sawObservableFrom) fail('desktop-dispatch', `${dispatchableFile} never reads '.observations' — the gate itself must`);
+    else if (!found) ok();
+  }
+
+  // --- #292: dispatcher.ts wires the observation write only past the owner ---
+  // gate
+  // guard(#292): the write-bearing observation pass being wired before the
+  // owner !== 'app' stand-down, which would let this app write a
+  // repository's observations while the cockpit (or nobody) actually holds
+  // dispatch.
+  {
+    const text = readFileSync(join(root, dispatcherFile), 'utf8');
+    const ownerGateIdx = text.indexOf("owner !== 'app'");
+    // `deps.writeObservation` — the call-site usage, never the interface's
+    // own `writeObservation:` field declaration above it (which the gate
+    // naturally precedes, telling us nothing about ordering).
+    const writeIdx = text.indexOf('deps.writeObservation');
+    if (ownerGateIdx === -1) {
+      fail('desktop-dispatch', `${dispatcherFile} no longer checks owner !== 'app' — the guard cannot compare an ordering that isn't there`);
+    } else if (writeIdx === -1) {
+      fail('desktop-dispatch', `${dispatcherFile} never references deps.writeObservation — the observation pass wiring is missing`);
+    } else if (writeIdx < ownerGateIdx) {
+      fail('desktop-dispatch', `${dispatcherFile} references deps.writeObservation before its own owner !== 'app' stand-down — the observation pass must run only once this app owns dispatch`);
+    } else {
+      ok();
+    }
+  }
+
+  // --- pin: observation.ts's comment templates ↔ FORMATS.md/TICK-PROSE.md ----
+  // fences
+  // guard(#292): a comment template drifting from the fence FORMATS.md or
+  // TICK-PROSE.md documents, so what a human (or revise-agent/review-agent)
+  // reads on the pull request no longer matches what either doc promises.
+  // pin: `main/dispatch/observation.ts`'s comment templates ↔ `FORMATS.md`'s "Approval withdrawn"/"Rebase required" fences and `TICK-PROSE.md`'s zero-diff escalation fence
+  {
+    const observationFile = `${mainDispatchDir}/observation.ts`;
+    const observationText = readFileSync(join(root, observationFile), 'utf8');
+
+    const fenceTextOf = (docText: string, anchor: string): string | null => {
+      const anchorIdx = docText.indexOf(anchor);
+      if (anchorIdx === -1) return null;
+      const fenceStart = docText.indexOf('```', anchorIdx);
+      if (fenceStart === -1) return null;
+      const fenceEnd = docText.indexOf('```', fenceStart + 3);
+      if (fenceEnd === -1) return null;
+      return docText.slice(fenceStart + 3, fenceEnd).trim();
+    };
+
+    // Splits on `<placeholder>` tokens and strips the backticks a placeholder
+    // is usually wrapped in — a JS template literal escapes those (`\``),
+    // so a fragment ending or starting on a bare backtick would never match
+    // the escaped form in source text.
+    const fenceLiteralsOf = (fence: string): readonly string[] =>
+      fence
+        .split('\n')
+        .flatMap((line) => line.split(/<[^>]+>/))
+        .map((s) => s.trim().replace(/^`+/, '').replace(/`+$/, '').trim())
+        .filter((s) => s.length >= 4);
+
+    const docsText = pipelineDocsText();
+    const skillText = pipelineSkillText();
+    const fences: { readonly name: string; readonly fence: string | null }[] = [
+      { name: `"Approval withdrawn" (FORMATS.md)`, fence: fenceTextOf(docsText, '### Approval withdrawn') },
+      { name: `"Rebase required" (FORMATS.md)`, fence: fenceTextOf(docsText, '### Rebase required') },
+      { name: 'the zero-diff escalation (TICK-PROSE.md)', fence: fenceTextOf(skillText, 'zero-diff-<pr>.md') },
+    ];
+
+    let violated = false;
+    for (const { name, fence } of fences) {
+      if (fence === null) {
+        violated = true;
+        fail('desktop-dispatch', `could not find the ${name} fence to compare ${observationFile} against`);
+        continue;
+      }
+      for (const literal of fenceLiteralsOf(fence)) {
+        if (!observationText.includes(literal)) {
+          violated = true;
+          fail('desktop-dispatch', `${observationFile} is missing '${literal}' — drifted from the ${name} fence`);
+        }
+      }
+    }
+    if (!violated) ok();
   }
 }

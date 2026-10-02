@@ -8,7 +8,7 @@ import type { BoardSnapshot, RepositoryHealth } from '../../../shared/board/type
 import type { DispatchOwner, DrainState } from '../../../shared/dispatch/types'
 import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
 import type { LabelKey } from '../../../shared/labels/vocabulary'
-import type { TickActionable, TickBlind, TickClaim, TickHeld, TickReport } from '../../../shared/tick/types'
+import type { TickActionable, TickBlind, TickClaim, TickHeld, TickObservation, TickReport } from '../../../shared/tick/types'
 import { buildOwnerLine } from './owner'
 
 function labelNameOf(key: LabelKey): string {
@@ -122,8 +122,14 @@ function contendedPathList(paths: readonly string[]): string {
   return more > 0 ? `${shown.join(', ')} and ${String(more)} more` : shown.join(', ')
 }
 
-export function heldDetailCopy(held: TickHeld): string {
+/** `owner` defaults to `'cockpit'` — every pre-#292 caller (and test) reads
+ *  exactly as before. While this app itself owns dispatch, the held reasons
+ *  it actually writes (#292: cycle-cap, zero-diff, conflicting) read in the
+ *  present tense rather than "would …" — plan's own **UX states**, "Tick
+ *  strip hover". */
+export function heldDetailCopy(held: TickHeld, owner: DispatchOwner = 'cockpit'): string {
   const n = String(held.number)
+  const byApp = owner === 'app'
   switch (held.reason) {
     case 'unowned':
       return `#${n} unassigned — no cockpit will pick this up.`
@@ -142,17 +148,20 @@ export function heldDetailCopy(held: TickHeld): string {
     }
     case 'cycle-cap': {
       const e = held.escalation
+      const verb = byApp ? 'escalating' : 'would escalate'
       // Defensive: `planTick` never emits `reason: 'cycle-cap'` without a
       // populated `escalation` of the same kind.
-      if (e === null || e.kind !== 'cycle-cap') return `#${n} would escalate to needs human — the review cycle cap was reached.`
-      return `#${n} would escalate to needs human — cycle ${String(e.count)} reached the cap of ${String(e.cap)}.`
+      if (e === null || e.kind !== 'cycle-cap') return `#${n} ${verb} to needs human — the review cycle cap was reached.`
+      return `#${n} ${verb} to needs human — cycle ${String(e.count)} reached the cap of ${String(e.cap)}.`
     }
     case 'zero-diff':
-      return `#${n} would escalate to needs human — the latest review already covers the current head.`
+      return `#${n} ${byApp ? 'escalating' : 'would escalate'} to needs human — the latest review already covers the current head.`
     case 'refresh-wins':
       return `#${n} held — a branch refresh claims it (refresh branch).`
     case 'conflicting':
-      return `#${n} held — GitHub reports merge conflicts. The cockpit's refresh sweep rebases it; this app doesn't.`
+      return byApp
+        ? `#${n} conflicts — this app is refreshing it (rebase + force-push).`
+        : `#${n} held — GitHub reports merge conflicts. The cockpit's refresh sweep rebases it; this app doesn't.`
     case 'mergeability-unknown':
       return `#${n} held one poll — GitHub hasn't worked out mergeability yet.`
   }
@@ -175,18 +184,24 @@ export function uncheckedDetailCopy(actionable: TickActionable): string {
   return `#${String(actionable.number)} has no file list in its plan — dispatching unchecked.`
 }
 
-/** `null` for the two non-stall classes — never called for them in
+/** `owner` defaults to `'cockpit'`, the same direction as `heldDetailCopy`.
+ *  `null` for the two non-stall classes — never called for them in
  *  `buildTickStrip` below, but the switch stays exhaustive so a new
- *  `TickClaimClass` member is a compile error here too. */
-export function stalledDetailCopy(claim: TickClaim): string | null {
+ *  `TickClaimClass` member is a compile error here too. While this app owns
+ *  dispatch, a `stalled-confirmed` claim with a `retryKey` is one it is
+ *  about to reset itself (#292's own liveness-reset write), not one an
+ *  operator must retry by hand — plan's own **UX states**, "Tick strip
+ *  hover". */
+export function stalledDetailCopy(claim: TickClaim, owner: DispatchOwner = 'cockpit'): string | null {
   const n = String(claim.number)
   const name = labelNameOf(claim.inFlight)
   switch (claim.class) {
     case 'stalled-confirmed': {
       const retryName = claim.retryKey !== null ? labelNameOf(claim.retryKey) : null
-      return retryName !== null
-        ? `#${n} ${name} — no claim, and this app dispatched it. Retry re-applies "${retryName}".`
-        : `#${n} ${name} — no claim, and this app dispatched it.`
+      if (retryName === null) return `#${n} ${name} — no claim, and this app dispatched it.`
+      return owner === 'app'
+        ? `#${n} ${name} — no agent, and this app dispatched it. Resetting to ${retryName}.`
+        : `#${n} ${name} — no claim, and this app dispatched it. Retry re-applies "${retryName}".`
     }
     case 'no-record':
       return `#${n} ${name} — no claim, and this app didn't dispatch it, so it can't tell.`
@@ -196,6 +211,33 @@ export function stalledDetailCopy(claim: TickClaim): string | null {
       return `#${n} ${name} — stalled again after this app already reset it once. Reporting only.`
     case 'matched':
     case 'session-required':
+      return null
+  }
+}
+
+/** #292: hover detail for the two report-only observation kinds —
+ *  `refresh-deferred` and `withdraw-unverifiable` — neither of which ever
+ *  becomes an `ObservationRecord` write (`main/tick/dispatchable.ts`'s
+ *  `observableFrom` excludes both), so this is the only place either is ever
+ *  rendered. `null` for every write-bearing kind, which already has its own
+ *  held/stalled detail line above; the switch stays exhaustive so a new
+ *  `TickObservationKind` member is a compile error here too (plan's own
+ *  **UX states**, "Tick strip hover"). */
+export function observationDetailCopy(observation: TickObservation): string | null {
+  const n = String(observation.number)
+  switch (observation.kind) {
+    case 'refresh-deferred':
+      return `#${n} conflicts too — refreshes are capped this poll; it goes next.`
+    case 'withdraw-unverifiable':
+      return observation.reason === 'claude-md-overrides'
+        ? `#${n} has a red check, but this repository's CLAUDE.md carries port overrides this app doesn't read — withdraw approval from the cockpit or by hand.`
+        : `#${n} has a red check, but this app couldn't read approval-check.yml or CLAUDE.md to tell which checks are excused — it won't withdraw approval.`
+    case 'liveness-reset':
+    case 'cycle-cap':
+    case 'zero-diff':
+    case 'refresh':
+    case 'refresh-stuck':
+    case 'withdraw-approval':
       return null
   }
 }
@@ -223,6 +265,7 @@ export function buildTickStrip(snapshot: BoardSnapshot, now: Date): HTMLElement 
 
   for (const report of snapshot.tick) {
     const dispatchStatus = snapshot.dispatch.find((d) => d.repoId === report.repoId)
+    const owner = dispatchStatus?.owner ?? 'cockpit'
 
     const line = document.createElement('div')
     line.className = 'board-header__tick-line'
@@ -230,10 +273,11 @@ export function buildTickStrip(snapshot: BoardSnapshot, now: Date): HTMLElement 
 
     if (report.blind === null) {
       const details = [
-        ...report.held.map(heldDetailCopy),
+        ...report.held.map((h) => heldDetailCopy(h, owner)),
         ...report.actionable.filter((a) => a.unchecked).map(uncheckedDetailCopy),
         ...report.actionable.map(cycleDetailCopy),
-        ...report.claims.map(stalledDetailCopy),
+        ...report.claims.map((c) => stalledDetailCopy(c, owner)),
+        ...report.observations.map(observationDetailCopy),
       ].filter((d): d is string => d !== null)
       if (details.length > 0) line.title = details.join('\n')
     }

@@ -32,6 +32,7 @@ function entry(overrides: Partial<ReadyEntry['config']> = {}): ReadyEntry {
       branches: { integration: 'dev', production: 'main' },
       commands: { worktrees: null, budget: BUDGET_COMMAND },
       concurrency: { sharedFiles: [], overlapThreshold: 2 },
+      checkDispositions: { excusedCheck: null, unverifiable: null },
       models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
       modules: { approvalGate: true, release: true, scope: true },
       reviewCycleCap: 5,
@@ -43,7 +44,7 @@ function entry(overrides: Partial<ReadyEntry['config']> = {}): ReadyEntry {
 }
 
 function tickReport(overrides: Partial<TickReport> = {}): TickReport {
-  return { repoId: REPO_ID, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, ...overrides }
+  return { repoId: REPO_ID, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [], ...overrides }
 }
 
 function snapshotWith(tick: readonly TickReport[]): BoardSnapshot {
@@ -145,7 +146,11 @@ function fakeBudget(overrides: Partial<BudgetGate> = {}): BudgetGate {
 function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispatcherParams {
   return {
     store: fakeStore(),
-    ledger: { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined },
+    ledger: { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined, observeUnmatched: () => ({ class: 'no-record' }) },
+    refreshMemo: { get: () => undefined, set: vi.fn(), clear: vi.fn() },
+    writeObservation: () => {
+      throw new Error('writeObservation should not be invoked unless a test wires its own')
+    },
     drain: () => ({ gate: 'open' }),
     readGateClaim: () => Promise.resolve(HELD_CLAIM),
     fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [], unavailable: [], fetchedAt: 'r' }),

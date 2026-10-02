@@ -17,6 +17,7 @@ export default async function ({ fail, ok }: Reporter) {
   const inlineFile = `${sharedMarkdownDir}/inline.ts`;
   const gateActionFile = `${mainActionsDir}/gate.ts`;
   const escalateActionFile = `${mainActionsDir}/escalate.ts`;
+  const observeActionFile = `${mainActionsDir}/observe.ts`;
   const scopeFile = 'apps/desktop/src/main/writes/scope.ts';
   const writesApplyFile = 'apps/desktop/src/main/writes/apply.ts';
   const copyFile = `${rendererGateDir}/copy.ts`;
@@ -92,18 +93,24 @@ export default async function ({ fail, ok }: Reporter) {
   }
 
   // --- postComment( is called under apps/desktop/src/ only from -----------
-  // main/actions/gate.ts and main/actions/escalate.ts (#293) — each in its
-  // own fixed order. guard(#92): the comment-then-swap ordering (issue 90
-  // left it to this ticket) silently reverting, or a second postComment
-  // caller diffusing the chokepoint main/writes/apply.ts defines it in.
+  // main/actions/gate.ts, main/actions/escalate.ts (#293), and
+  // main/actions/observe.ts (#292) — each in its own fixed order.
+  // guard(#92): the comment-then-swap ordering (issue 90 left it to this
+  // ticket) silently reverting, or a second postComment caller diffusing the
+  // chokepoint main/writes/apply.ts defines it in.
   // guard(#293): escalate.ts's own swap-then-comment ordering (the opposite
   // of gate.ts's) silently reverting — a failed comment must still leave the
   // item stopped, and a failed swap must never post a comment that would
   // repeat on every poll.
+  // guard(#292): observe.ts's own swap-then-comment ordering (the same
+  // direction as escalate.ts's) silently reverting — a losing writer
+  // (unclaimed scope, precondition failed) must never post a comment that
+  // explains a write that never actually happened.
   {
     let found = false;
     let sawGateFile = false;
     let sawEscalateFile = false;
+    let sawObserveFile = false;
     for (const f of allFiles) {
       const rel = relOf(f);
       if (rel.endsWith('.test.ts') || rel === writesApplyFile) continue; // the function's own definition site
@@ -117,21 +124,23 @@ export default async function ({ fail, ok }: Reporter) {
           found = true;
           fail('desktop-gate', `${gateActionFile}'s postComment( call must precede its applyLabels( call in source order — the comment-then-swap ordering`);
         }
-      } else if (rel === escalateActionFile) {
-        sawEscalateFile = true;
+      } else if (rel === escalateActionFile || rel === observeActionFile) {
+        if (rel === escalateActionFile) sawEscalateFile = true;
+        else sawObserveFile = true;
         const labelsIdx = text.indexOf('applyLabels(');
         const commentIdx = text.indexOf('postComment(');
         if (labelsIdx === -1 || labelsIdx > commentIdx) {
           found = true;
-          fail('desktop-gate', `${escalateActionFile}'s applyLabels( call must precede its postComment( call in source order — the swap-then-comment ordering`);
+          fail('desktop-gate', `${rel}'s applyLabels( call must precede its postComment( call in source order — the swap-then-comment ordering`);
         }
       } else {
         found = true;
-        fail('desktop-gate', `${rel} calls postComment( — only ${gateActionFile} and ${escalateActionFile} may`);
+        fail('desktop-gate', `${rel} calls postComment( — only ${gateActionFile}, ${escalateActionFile}, and ${observeActionFile} may`);
       }
     }
     if (!sawGateFile) fail('desktop-gate', `${gateActionFile} does not call postComment( — the guard cannot pass vacuously`);
     else if (!sawEscalateFile) fail('desktop-gate', `${escalateActionFile} does not call postComment( — the guard cannot pass vacuously`);
+    else if (!sawObserveFile) fail('desktop-gate', `${observeActionFile} does not call postComment( — the guard cannot pass vacuously`);
     else if (!found) ok();
   }
 

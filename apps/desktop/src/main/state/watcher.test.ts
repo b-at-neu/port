@@ -59,6 +59,7 @@ function readyEntry(id: string, path: string, repo: string): Extract<RepositoryE
       branches: { integration: 'dev', production: 'main' },
       commands: { worktrees: null, budget: null },
       concurrency: { sharedFiles: [], overlapThreshold: 2 },
+      checkDispositions: { excusedCheck: null, unverifiable: null },
       models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
       modules: { approvalGate: true, release: true, scope: true },
       reviewCycleCap: 5,

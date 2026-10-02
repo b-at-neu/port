@@ -4,7 +4,7 @@
 
 ## The decision
 
-**Split ownership by what authorises the write, not by repository.** The cockpit keeps every write a *machine observation* authorises — liveness resets, escalations, approval withdrawal, refresh — because it is the only thing that observes them. A *human decision* write is transferred, scope by scope, through a durable claim file that an external gate owner writes and only a human releases. Exactly one scope needs the transfer today: `plan-gate`. It is the only divergent decision in this epic, and the only one the cockpit takes unprompted — `auto plan` swaps `plan review` → `plan approved` with no interaction, so there is no race window to narrow there; the cockpit simply always wins it.
+**Split ownership by what authorises the write, not by repository.** Every write a *machine observation* authorises — liveness resets, cycle-cap/zero-diff escalation, approval withdrawal, the refresh sweep — is made by whichever side's own tick actually observed it: the cockpit by default, or the app itself while it holds the `dispatch` claim (#292, extending #265's own dispatch-call transfer to these four writes too) — liveness resets stay the one exception, since each side only ever resets an item its own dispatch record names, never the other's. A *human decision* write is transferred, scope by scope, through a durable claim file that an external gate owner writes and only a human releases. Exactly one scope needs that transfer today: `plan-gate`. It is the only divergent decision in this epic, and the only one the cockpit takes unprompted — `auto plan` swaps `plan review` → `plan approved` with no interaction, so there is no race window to narrow there; the cockpit simply always wins it.
 
 ## Why not the other three
 
@@ -24,10 +24,11 @@ Every write the cockpit makes today, classified:
 | `pause`, `resume`, `retry`, `stop #N`, `gate #N`, `refresh #N` | human | either — convergent |
 | drain, `stop #N`, halt (the desktop app's own dispatch gate, #110) | human | either — convergent, but scoped to the app: draining stands the app's own dispatcher down, never the cockpit's |
 | removing `needsHuman` (`unblock #N`) | human, guarded | cockpit only — see "Risks" below |
-| liveness reset, usage-limit park | machine observation | cockpit only |
-| cycle-cap and zero-diff escalation to `needsHuman` | machine observation | cockpit only |
-| approval withdrawal on a red check | machine observation | cockpit only |
-| refresh sweep adding `refreshBranch` | machine observation | cockpit only |
+| liveness reset | machine observation | whichever side's dispatch record names the item |
+| usage-limit park | machine observation | cockpit only |
+| cycle-cap and zero-diff escalation to `needsHuman` | machine observation | the app under a `dispatch` claim, else the cockpit (#292) |
+| approval withdrawal on a red check | machine observation | the app under a `dispatch` claim, else the cockpit (#292) |
+| refresh sweep adding `refreshBranch` | machine observation | the app under a `dispatch` claim, else the cockpit (#292) |
 | dispatch | operator action, taking/releasing the `dispatch` claim | the app under a `dispatch` claim, else the cockpit (#265) |
 
 **"Either — convergent" is safe without exclusion.** Both writers reach the same label state, and the cockpit re-derives everything from live labels each tick, so a duplicate write is a no-op. The one residual is the pause/dispatch race, and it is not silenced — it is presented (`dispatch-overtook-pause`, below).
@@ -60,7 +61,7 @@ Answering the ticket's three problem bullets against this table:
 
 **`plan-gate` denies the cockpit** adding or removing the resolved names for `planReview`, `planApproved`, and `planChangesRequested`. `autoPlan` is deliberately outside the set — the cockpit's opt-in path still sets it, and its auto-plan *swap* is already denied by `planApproved` being in the set.
 
-**`dispatch` (#265) denies the cockpit making an `Agent` call at all** — the app dispatches for this checkout instead. No label set to name, since the cockpit launches nothing else through that tool.
+**`dispatch` (#265) denies the cockpit making an `Agent` call at all** — the app dispatches for this checkout instead. No label set to name, since the cockpit launches nothing else through that tool. **The claim moves three further writes too (#292):** the app also makes the cycle-cap/zero-diff escalation, the refresh sweep, and approval withdrawal while it holds `dispatch` — the cockpit's own tick runs none of the three while this scope is held or unreadable, reporting **Dispatch claimed** in their place. Liveness resets are the one exception that never moves: each side only resets an item its own dispatch record names.
 
 **Lifecycle.** A claim is created only by an explicit operator action in the app and released only by an explicit operator action or by deleting the file — true of each scope independently. **The cockpit never writes or deletes the file** — the guard hook denies a write to that path from any caller it can see, exactly because a machine that can release its own constraint is the #138 failure again. Known gap, stated rather than tolerated: the hook only sees `Edit`/`Write`/`NotebookEdit` and the Bash allowlist, so a shell deletion through some future allowlisted binary is not covered.
 
@@ -108,7 +109,7 @@ Three rules govern every one of them: **abort, never resolve** · **show both re
 
 **The same report for `dispatch`** (#265 — reported independently, since a repository can hold neither, either, or both scopes):
 
-> 🖥️ **Dispatch claimed by `port-desktop`** since 2026-09-05T14:02Z. 2 items are actionable this tick: plan #105, impl #52 — I won't launch a stage agent for either. Release the claim in the app, or delete `.agents/gate-claim.json`, to take dispatch back.
+> 🖥️ **Dispatch claimed by `port-desktop`** since 2026-09-05T14:02Z. 2 items are actionable this tick: plan #105, impl #52 — I won't launch a stage agent for either, and the app makes the refresh, escalation, and approval-withdrawal writes here. Release the claim in the app, or delete `.agents/gate-claim.json`, to take dispatch back.
 
 ## Failure directions
 

@@ -7,7 +7,7 @@
 // never a throw.
 import type { LabelKey, VocabularyReport } from '../labels/vocabulary'
 import type { LabelRole } from '../labels/defaults'
-import type { Mergeable, PipelineFailureKind, PipelineItemKind, PullRequestCommentNode, RateLimitInfo, ReviewNode, TruncatedSet, UnavailableAlias } from '../github/types'
+import type { CheckContext, Mergeable, PipelineFailureKind, PipelineItemKind, PullRequestCommentNode, RateLimitInfo, ReviewNode, TruncatedSet, UnavailableAlias } from '../github/types'
 import type { RepoDiagnostic, RepoId, RepoProblem } from '../repos'
 import type { DenialsRead, UnresolvedReason } from '../local/types'
 import type { PortStageAgent, SessionScan } from '../sessions/types'
@@ -170,6 +170,11 @@ export interface ReconciledItem {
    *  re-derives it from raw review bodies (#108) — `null` for an issue,
    *  mirroring `reviews` itself. */
   readonly reviewCycleCount: number | null
+  /** Copied straight off `PipelineItem`, pull-request only (#292) — `null`
+   *  for an issue, same direction as `headRefOid`/`mergeable`. Feeds
+   *  `main/tick/checks.ts`'s `rollupVerdict` for the approval-withdrawal
+   *  observation. */
+  readonly checkRollup: readonly CheckContext[] | null
 }
 
 /** `{ at }` when the source answered, `{ unavailable: <reason> }` when it did

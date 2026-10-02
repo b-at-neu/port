@@ -28,3 +28,6 @@ export type { BudgetVerdict } from './budget'
 
 export { createBudgetGate } from './budget-gate'
 export type { BudgetCheckResult, BudgetGate, BudgetGateFailure, BudgetResetResult, BudgetSweepResult, NodeRunner as BudgetNodeRunner } from './budget-gate'
+
+export { observationWrite } from './observation'
+export type { ObservationWritePlan, WriteObservation } from './observation'

@@ -14,14 +14,15 @@ import type { LabelKey } from '../../shared/labels/vocabulary'
 import type { RepoId } from '../../shared/repos'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '../../shared/board/types'
 import type { ReconciledItem, RepositoryState } from '../../shared/state/types'
-import type { TickActionable, TickBlind, TickClaim, TickHeld, TickHeldReason, TickReport } from '../../shared/tick/types'
+import type { TickActionable, TickBlind, TickClaim, TickHeld, TickHeldReason, TickObservation, TickReport } from '../../shared/tick/types'
 import type { ClaimedItem, OccupiedEntry } from './contention'
 import { gateCandidates } from './contention'
 import { cycleCapExceeded, mergeabilityRoute, refreshWins, zeroDiffGate } from './gates'
-import type { DispatchLedger, UnknownStreaks } from './ledger'
-import { classifyUnmatched, RETRY_TRIGGER } from './liveness'
+import type { DispatchLedger, RefreshMemo, UnknownStreaks } from './ledger'
+import { RETRY_TRIGGER } from './liveness'
+import { observationsOf } from './observe'
 import { partitionOwnership } from './ownership'
-import { AGENT_FOR_TRIGGER } from './routing'
+import { AGENT_FOR_IN_FLIGHT, AGENT_FOR_TRIGGER } from './routing'
 
 export interface PlanTickParams {
   readonly repository: RepositoryState
@@ -40,10 +41,25 @@ export interface PlanTickParams {
    *  never hardcoded; `main/state/watcher.ts` passes it through the same way
    *  it already does `repository.concurrency`. */
   readonly reviewCycleCap: number
+  /** #292: this repository's own dispatcher session's `tasks` with `status:
+   *  'started'`, as descriptions (`dispatcher.ts`'s own `startedTasks`) —
+   *  `[]` when no dispatcher session is live. An in-flight claim matches
+   *  when either the session scan (`item.status === 'in-flight'`) or this
+   *  app's own dispatcher record says so, so a reset never fires against an
+   *  agent this app itself just started. */
+  readonly startedTasks: readonly string[]
+  /** #292: the app's own process-scoped refresh memo
+   *  (`main/tick/ledger.ts`'s `createRefreshMemo`) — read and written only
+   *  by `observationsOf`'s refresh family. */
+  readonly refreshMemo: RefreshMemo
+  /** #292: `entry.config.checkDispositions` — read from config per
+   *  repository, never hardcoded; feeds the approval-withdrawal
+   *  observation's own `rollupVerdict` call. */
+  readonly checkDispositions: { readonly excusedCheck: string | null; readonly unverifiable: 'claude-md-overrides' | 'unreadable' | null }
 }
 
 function emptyReport(repoId: RepoId, displayName: string, blind: TickBlind): TickReport {
-  return { repoId, displayName, blind, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null }
+  return { repoId, displayName, blind, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [] }
 }
 
 /** The winning `StageLabel`'s own key — `null` only when `item.stage` is
@@ -183,6 +199,23 @@ function actionableAndHeld(
     if (trigger === null) continue
 
     const reason = heldReasonOf(item, unownedNumbers, othersNumbers)
+
+    // #292: a `refreshBranch` trigger co-present with another trigger label
+    // never wins `stageKeyOf`'s own first-match resolution, so without this
+    // the refresh itself would never get its own actionable entry — stranding
+    // the pull request, since its other trigger's own refresh-wins veto
+    // (below) holds it instead. Its other trigger keeps that hold unchanged;
+    // this yields a second, independent entry for `refreshBranch` itself,
+    // run through the same ownership/session-required ladder (`reason`,
+    // already computed above).
+    if (trigger !== 'refreshBranch' && item.stages.some((label) => label.key === 'refreshBranch')) {
+      if (reason !== null) {
+        held.push({ number: item.number, kind: item.kind, trigger: 'refreshBranch', reason, contention: null, escalation: null })
+      } else {
+        ungated.push({ number: item.number, kind: item.kind, trigger: 'refreshBranch', agent: 'revise', unchecked: false, cycle: null })
+      }
+    }
+
     if (reason !== null) {
       held.push({ number: item.number, kind: item.kind, trigger, reason, contention: null, escalation: null })
       continue
@@ -275,7 +308,7 @@ function actionableAndHeld(
   return { actionable: [...ungated, ...gatedActionable], held }
 }
 
-function claimsOf(items: readonly ReconciledItem[], repoId: RepoId, ledger: DispatchLedger): readonly TickClaim[] {
+function claimsOf(items: readonly ReconciledItem[], repoId: RepoId, ledger: DispatchLedger, startedTasks: readonly string[], readAt: string | null): readonly TickClaim[] {
   const claims: TickClaim[] = []
   for (const item of items) {
     if (item.stage !== 'in-flight') continue
@@ -286,13 +319,19 @@ function claimsOf(items: readonly ReconciledItem[], repoId: RepoId, ledger: Disp
       claims.push({ number: item.number, kind: item.kind, inFlight, class: 'session-required', retryKey: null })
       continue
     }
-    if (item.status === 'in-flight') {
+    // #292: either source is enough to hold a reset back — a session scan
+    // hit (the pre-existing rule) or this app's own dispatcher session
+    // reporting the matching task as `started`, so a reset never fires
+    // against an agent this process itself just dispatched before the
+    // session scan has caught up to it.
+    const agentForInFlight = AGENT_FOR_IN_FLIGHT[inFlight]
+    const matchedByTask = agentForInFlight !== undefined && startedTasks.includes(`${agentForInFlight} #${String(item.number)}`)
+    if (item.status === 'in-flight' || matchedByTask) {
       claims.push({ number: item.number, kind: item.kind, inFlight, class: 'matched', retryKey: null })
       continue
     }
 
-    const result = classifyUnmatched(ledger.rowFor(repoId, item.number))
-    ledger.advance(repoId, item.number, result)
+    const result = ledger.observeUnmatched(repoId, item.number, readAt)
     const cls = result.class === 'reset' ? 'stalled-confirmed' : result.class
     const retryKey = cls === 'stalled-confirmed' ? (RETRY_TRIGGER[inFlight] ?? null) : null
     claims.push({ number: item.number, kind: item.kind, inFlight, class: cls, retryKey })
@@ -301,7 +340,7 @@ function claimsOf(items: readonly ReconciledItem[], repoId: RepoId, ledger: Disp
 }
 
 export function planTick(params: PlanTickParams): TickReport {
-  const { repository, ledger, nextDecisionAt, now, reviewCycleCap, unknownStreaks } = params
+  const { repository, ledger, nextDecisionAt, now, reviewCycleCap, unknownStreaks, startedTasks, refreshMemo, checkDispositions } = params
 
   if (!repository.ok) {
     const blind: TickBlind = repository.reason === 'not-ready' ? { reason: 'not-ready' } : { reason: 'github-unavailable', message: repository.message }
@@ -313,9 +352,10 @@ export function planTick(params: PlanTickParams): TickReport {
   }
 
   const githubEntry = repository.freshness.github
-  if ('at' in githubEntry) {
-    const readAt = Date.parse(githubEntry.at)
-    const ageMs = Number.isNaN(readAt) ? null : now().getTime() - readAt
+  const readAt = 'at' in githubEntry ? githubEntry.at : null
+  if (readAt !== null) {
+    const readAtMs = Date.parse(readAt)
+    const ageMs = Number.isNaN(readAtMs) ? null : now().getTime() - readAtMs
     const threshold = SOURCE_BASE_INTERVAL_MS.github + STALE_GRACE_MS
     if (ageMs !== null && ageMs > threshold) {
       return emptyReport(repository.repoId, repository.displayName, { reason: 'stale-read', ageMs })
@@ -323,7 +363,16 @@ export function planTick(params: PlanTickParams): TickReport {
   }
 
   const { actionable, held } = actionableAndHeld(repository.items, repository.viewer, repository.concurrency, reviewCycleCap, repository.repoId, unknownStreaks)
-  const claims = claimsOf(repository.items, repository.repoId, ledger)
+  const claims = claimsOf(repository.items, repository.repoId, ledger, startedTasks, readAt)
+  const observations: readonly TickObservation[] = observationsOf({
+    repoId: repository.repoId,
+    items: repository.items,
+    claims,
+    held,
+    viewer: repository.viewer,
+    refreshMemo,
+    checkDispositions,
+  })
 
   return {
     repoId: repository.repoId,
@@ -334,5 +383,6 @@ export function planTick(params: PlanTickParams): TickReport {
     claims,
     disabledStages: repository.disabled,
     nextTickAt: nextDecisionAt.toISOString(),
+    observations,
   }
 }

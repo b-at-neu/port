@@ -6,8 +6,8 @@
 import type { PipelineItemKind } from '../github/types'
 import type { ItemActionResult } from '../actions/types'
 import type { RepoId } from '../repos'
-import type { StageAgent } from '../tick/types'
-import type { ClaimWriteResult, WriteOutcome } from '../writes/types'
+import type { StageAgent, TickObservationKind } from '../tick/types'
+import type { ClaimScope, ClaimWriteResult, WriteOutcome } from '../writes/types'
 
 export const DISPATCH_COMMANDS = ['drain', 'resume', 'halt'] as const
 export type DispatchCommand = (typeof DISPATCH_COMMANDS)[number]
@@ -151,6 +151,25 @@ export type BudgetNote =
   | { readonly kind: 'escalation-failed'; readonly number: number; readonly needsHumanLabel: string; readonly triggerLabel: string; readonly outcome: WriteOutcome }
   | { readonly kind: 'gate-failed'; readonly number: number; readonly message: string }
 
+/** #292: one machine-observation write this app attempted this pass, bounded
+ *  to the newest 20 per repository (the same `RECENT_LIMIT` idiom
+ *  `DispatchRecord` already establishes). `outcome` is the mapping
+ *  `main/actions/observe.ts`'s own table carries from a raw `WriteOutcome` —
+ *  `written` (applied), `already` (no-op), `moved` (the item changed under
+ *  it — a precondition failure or a vanished item), `refused` (an unclaimed
+ *  or unreadable scope, or a key this vocabulary cannot resolve), or `failed`
+ *  (the `gh` call itself errored, or the attempt threw). `scope` is the
+ *  scope a `refused` outcome names, `null` for every other outcome. */
+export interface ObservationRecord {
+  readonly kind: TickObservationKind
+  readonly number: number
+  readonly itemKind: PipelineItemKind
+  readonly at: string
+  readonly outcome: 'written' | 'already' | 'moved' | 'refused' | 'failed'
+  readonly scope: ClaimScope | null
+  readonly comment: 'posted' | 'failed' | 'none'
+}
+
 /** #293: one ready repository's own budget-gate status — `line` is the
  *  sweep's own session clause (`bin/budget.mjs`'s `renderTickClause`,
  *  verbatim), `problem` is set only while the most recent sweep itself
@@ -192,6 +211,12 @@ export interface RepoDispatchStatus {
    *  while this app's own agents are still working even after the claim
    *  moves elsewhere. */
   readonly budget: BudgetStatus | null
+  /** #292: the machine-observation writes this app has made for this
+   *  repository, newest last — `[]` while `owner !== 'app'`, or before the
+   *  first observation pass runs. `board/owner.ts`'s owner line appends the
+   *  newest record's clause and lists every record (newest first) in its
+   *  hover title. */
+  readonly observed: readonly ObservationRecord[]
 }
 
 /** `'dispatch:claim:set'`'s response (#265) — the mirror of
