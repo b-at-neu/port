@@ -63,7 +63,10 @@ describe('createBudgetGate — reset', () => {
     }
     const gate = createBudgetGate({ runNode })
     const result = await gate.reset(entry(null))
-    expect(result).toEqual({ ok: false, kind: 'unavailable', message: expect.stringContaining("commands.budget can't run") })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.kind).toBe('unavailable')
+    expect(result.message).toContain("commands.budget can't run")
     expect(called).toBe(false)
   })
 
