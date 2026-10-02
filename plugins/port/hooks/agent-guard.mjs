@@ -12,8 +12,13 @@
 //
 // Six more rules apply to *any* caller, cockpit included: a `gh`/`git` call
 // wrapped in a shell loop (#120), an unauthorised removal of the
-// `needsHuman` gate label (#138), an add/remove of a plan-gate label while
-// an external claim holds it (#206), a `claude plugin` install/uninstall/
+// `needsHuman` gate label (#138) — which now also carries an **audit-only**
+// approval arm (#288): an operator-named removal of the `approved` label
+// (the `revise #N` route) is logged as `gate-clear`, never denied, since the
+// hook cannot see the facts (a red check, a conflict, a stuck refresh loop)
+// that actually authorise the removal — see `hooks/lib/guard-rules.mjs`'s
+// own approval-arm comment — an add/remove of a plan-gate label while an
+// external claim holds it (#206), a `claude plugin` install/uninstall/
 // marketplace mutation run from inside any `.claude/worktrees/` cwd (#144),
 // a cockpit session `git checkout`/`git switch`ing branches out from under
 // its own startup refusal (#216), and a cockpit session calling `Agent`
@@ -23,16 +28,17 @@
 // install scope shares one `installPath` regardless of who is typing the
 // command — and the claim rule's own write-tool arm (denying a write to the
 // claim file itself) does not exempt it either, for the same reason. The
-// gate and branch rules are the two Bash call paths that do extra I/O —
-// reading the calling session's transcript — and only when the command
-// actually matches what each rule guards, from a non-subagent,
+// gate, branch, and approval rules are the Bash call paths that do extra
+// I/O — reading the calling session's transcript — and only when the
+// command actually matches what each rule guards, from a non-subagent,
 // non-operator-worktree caller; the dispatch rule's own `Agent`-arm
 // transcript read follows the same shape, only when the claim names
-// `dispatch` or is unreadable. The claim rule's own read (the claim file
-// itself) runs whenever a Bash call carries `--add-label`/`--remove-label`,
-// an `Agent` call is made, or a write targets the claim file path,
-// independent of caller identity — the write-tool arm needs the result for
-// every caller, not only a non-subagent one.
+// `dispatch` or is unreadable. The claim rule's own read
+// (the claim file itself) runs whenever a Bash call carries
+// `--add-label`/`--remove-label`, an `Agent` call is made, or a write
+// targets the claim file path, independent of caller identity — the
+// write-tool arm needs the result for every caller, not only a non-subagent
+// one.
 //
 // Every decision — deny, a same-shape miss from a non-subagent session, an
 // allowed gate clear, or an internal failure — is logged to a gitignored
@@ -48,9 +54,10 @@
 import { execSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { allowMatchers, decide, callerKind, recentOperatorMessages, invokedCockpitSkill } from './lib/guard-rules.mjs';
+import { allowMatchers, decide, callerKind, invokedCockpitSkill } from './lib/guard-rules.mjs';
 import { gateClearAttempt, switchesBranch } from './lib/command-rules.mjs';
 import { classifyGateClaim } from './lib/claim-rules.mjs';
+import { recentOperatorMessages } from './lib/operator-rules.mjs';
 
 /** Nearest ancestor of `from` containing `rel`, or null. */
 function findUp(from, rel) {
@@ -107,6 +114,7 @@ if (configRoot) {
     const config = JSON.parse(readFileSync(join(configRoot, '.claude', 'port.config.json'), 'utf8'));
     const sessionRequiredPaths = config?.sessionRequiredPaths ?? ['CLAUDE.md', '.claude/**'];
     const needsHumanLabel = config?.labels?.needsHuman ?? 'needs human';
+    const approvedLabel = config?.labels?.approved ?? 'approved';
 
     const matchers = allowMatchers([
       join(configRoot, '.claude', 'settings.json'),
@@ -153,11 +161,11 @@ if (configRoot) {
       dispatchClaim = classifyGateClaim(exists, text, config?.repo);
     }
 
-    // The gate and branch rules are the two Bash paths that need extra I/O —
-    // the calling session's transcript — so the read only happens when
-    // either rule's own command test says it might apply, and only for a
+    // The gate, branch, and approval rules are the Bash paths that need extra
+    // I/O — the calling session's transcript — so the read only happens when
+    // one of their own command tests says it might apply, and only for a
     // caller `decide` will not already deny outright (a subagent) or exempt
-    // outright (an operator worktree). One read serves both rules. The
+    // outright (an operator worktree). One read serves all three. The
     // dispatch rule's own `Agent`-arm read follows the same "only where the
     // rule can fire" shape, gated on the claim just read naming `dispatch`
     // or being unreadable, rather than a second command predicate. A
@@ -170,11 +178,12 @@ if (configRoot) {
       if (!who.isSubagent && !who.isOperatorWorktree) {
         const command = payload.tool_input.command;
         const gate = gateClearAttempt(command, needsHumanLabel);
-        const needsTranscript = gate.isAttempt || switchesBranch(command);
+        const approval = gateClearAttempt(command, approvedLabel);
+        const needsTranscript = gate.isAttempt || approval.isAttempt || switchesBranch(command);
         if (needsTranscript && typeof payload?.transcript_path === 'string') {
           try {
             const transcript = readFileSync(payload.transcript_path, 'utf8');
-            if (gate.isAttempt) operatorMessages = recentOperatorMessages(transcript);
+            if (gate.isAttempt || approval.isAttempt) operatorMessages = recentOperatorMessages(transcript);
             isCockpitSession = invokedCockpitSkill(transcript);
           } catch {
             operatorMessages = null;
@@ -208,6 +217,7 @@ if (configRoot) {
       planGateLabels,
       dispatchClaim,
       claimFilePath,
+      approvedLabel,
     });
     const logDir = join(baseRoot, '.agents');
     const actor = actorOf(result.who) ?? `session:${field(payload?.session_id, 40) || 'unknown'}`;

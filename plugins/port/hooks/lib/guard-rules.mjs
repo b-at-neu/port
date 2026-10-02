@@ -13,7 +13,13 @@
 // sibling claim-rules.mjs for the same reason — this file was at 497/500
 // lines again once the `Agent` arm needed room — `decide` only ever calls
 // them with an already-classified verdict, never reasons about claim JSON
-// itself.
+// itself. `recentOperatorMessages` and `operatorNamed` (#288) moved out
+// verbatim to the sibling operator-rules.mjs for the same reason again —
+// this file was at 486/500 lines once the approval arm needed room. This
+// file imports `operatorNamed` back for `decide`'s own use (the gate rule and
+// the new approval arm); it never re-exports either function — a re-export
+// is the shim ENGINEERING §7 forbids, so every other importer reads both
+// straight from operator-rules.mjs instead.
 import { readFileSync, existsSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import {
@@ -24,6 +30,7 @@ import {
   usesShellLoop,
 } from './command-rules.mjs';
 import { dispatchDenial, planGateDenial } from './claim-rules.mjs';
+import { operatorNamed } from './operator-rules.mjs';
 
 /** Compiles a glob (`**` → any depth, `*` → one path segment, everything else
  *  escaped) into an anchored RegExp. Used for `sessionRequiredPaths` globs
@@ -177,65 +184,6 @@ export function invokedCockpitSkill(jsonlText) {
   return wrapper.test(jsonlText);
 }
 
-/** The last `limit` operator (human) messages found in a session transcript's
- *  JSONL text, oldest first. Drops harness-injected wrapper texts (slash
- *  command expansions, the `Caveat:` preamble) and `tool_result`-only user
- *  entries, which are not something a human typed. Returns `null` when
- *  **no** parseable user entry exists at all, so "unreadable" is
- *  distinguishable from "read, and the item is not named". */
-export function recentOperatorMessages(jsonlText, limit = 5) {
-  if (typeof jsonlText !== 'string' || jsonlText.length === 0) return null;
-  const texts = [];
-  for (const line of jsonlText.split('\n')) {
-    const trimmedLine = line.trim();
-    if (!trimmedLine) continue;
-    let entry;
-    try {
-      entry = JSON.parse(trimmedLine);
-    } catch {
-      continue;
-    }
-    if (entry?.type !== 'user' || entry?.isMeta === true) continue;
-
-    const content = entry?.message?.content ?? entry?.content;
-    let text;
-    if (typeof content === 'string') {
-      text = content;
-    } else if (Array.isArray(content)) {
-      const textBlock = content.find((b) => b?.type === 'text' && typeof b.text === 'string');
-      if (!textBlock) continue; // a tool_result-only entry — not something a human typed
-      text = textBlock.text;
-    } else {
-      continue;
-    }
-
-    const trimmedText = text.trim();
-    if (!trimmedText) continue;
-    if (/^<command-[a-z-]+>/.test(trimmedText)) continue; // slash-command expansion wrapper
-    if (/^Caveat:/.test(trimmedText)) continue; // harness-injected preamble
-    texts.push(trimmedText);
-  }
-  if (texts.length === 0) return null;
-  return texts.slice(-limit);
-}
-
-/** True when every number in `numbers` is named in at least one of
- *  `messages`, as `#N` or as a standalone `N`. `messages === null` means the
- *  transcript could not be read at all — unverifiable, not unauthorised, so
- *  this returns `null` rather than `false`. An empty `numbers` means there is
- *  nothing to verify a name against, so this returns `false` rather than the
- *  vacuously-true result `[].every(...)` would otherwise give — a caller
- *  should prefer checking `gateClearAttempt`'s `hasNumbers` directly so it
- *  can give a specific "no identifier found" reason, but this is the
- *  defense-in-depth backstop if it doesn't. */
-export function operatorNamed(numbers, messages) {
-  if (messages === null) return null;
-  if (numbers.length === 0) return false;
-  const namesNumber = (n, message) =>
-    new RegExp(`#${n}(?!\\d)`).test(message) || new RegExp(`(?:^|[^\\w])${n}(?!\\w)`).test(message);
-  return numbers.every((n) => messages.some((m) => namesNumber(n, m)));
-}
-
 /** The decision for one PreToolUse call.
  *
  *  `decision` is one of:
@@ -248,34 +196,40 @@ export function operatorNamed(numbers, messages) {
  *                     for visibility; the normal permission prompt still
  *                     runs.
  *  - `'gate-clear'` — a `needsHuman` gate clear that is allowed to proceed
- *                     (operator-named, or unverifiable). Not a denial;
- *                     logged as the audit record for the clear.
+ *                     (operator-named, or unverifiable), or an operator-named
+ *                     `<labels.approved>` removal (#288, the `revise #N`
+ *                     route). Neither is a denial; both are logged as the
+ *                     audit record for the respective clear.
  *
  *  Rule order for a Bash call: gate → claim → install → branch → loop →
- *  allowlist. Each of the first five returns its own specific reason instead
- *  of falling through to the generic allowlist miss/deny. Gate, claim,
- *  branch, and loop are inert — `allow` immediately — for
- *  `who.isOperatorWorktree`, an `/port:implement` session that must stay
- *  unguarded by the cockpit rules (`plan-agent`/`impl-agent` write the same
- *  labels the claim rule guards, at handoff — a subagent- or
- *  operator-worktree-facing deny there would deadlock the pipeline the
- *  instant a claim is taken). **Install is the one Bash-arm rule that is
- *  not**: an install performed from an `impl-<n>` operator worktree
- *  repoints every session on the machine exactly as one from a dispatched
- *  agent's worktree would, so it is never exempt — and the claim rule's own
- *  write-tool arm (below) matches that same non-exemption, for the same
- *  reason: a machine that can release its own constraint is the #138
- *  failure again.
+ *  approval → allowlist. Each of the first five returns its own specific
+ *  reason instead of falling through to the generic allowlist miss/deny; the
+ *  sixth (approval) never denies at all — see below. Gate, claim, branch,
+ *  and loop are inert — `allow` immediately — for `who.isOperatorWorktree`,
+ *  an `/port:implement` session that must stay unguarded by the cockpit
+ *  rules (`plan-agent`/`impl-agent` write the same labels the claim rule
+ *  guards, at handoff — a subagent- or operator-worktree-facing deny there
+ *  would deadlock the pipeline the instant a claim is taken). **Install is
+ *  the one Bash-arm rule that is not**: an install performed from an
+ *  `impl-<n>` operator worktree repoints every session on the machine
+ *  exactly as one from a dispatched agent's worktree would, so it is never
+ *  exempt — and the claim rule's own write-tool arm (below) matches that
+ *  same non-exemption, for the same reason: a machine that can release its
+ *  own constraint is the #138 failure again.
  *
  *  `needsHumanLabel` and `operatorMessages` are optional: omitting
  *  `needsHumanLabel` skips the gate rule entirely (used by callers with no
  *  gate to guard), and `operatorMessages` is the caller's *already-read*
- *  transcript tail (`recentOperatorMessages`) — `decide` never does I/O
- *  itself. `isCockpitSession` is the same shape (`true`/`false`/`null` —
- *  the caller's already-read `invokedCockpitSkill` result, `null` when the
+ *  transcript tail (`recentOperatorMessages`, from the sibling
+ *  operator-rules.mjs) — `decide` never does I/O itself. `operatorMessages`
+ *  is also what the approval arm below reads — one read already covers both.
+ *  `isCockpitSession` is the same shape (`true`/`false`/`null` — the
+ *  caller's already-read `invokedCockpitSkill` result, `null` when the
  *  transcript was unreadable): omitting it skips the branch rule entirely,
  *  matching `needsHumanLabel`'s pattern for a caller with no cockpit rule to
- *  guard.
+ *  guard. `approvedLabel` is the same optional-inert shape again, for the
+ *  approval arm (#288): omitting it skips that arm entirely, the same
+ *  pattern `needsHumanLabel` uses.
  *
  *  `planGateClaim` and `planGateLabels` are the same optional-inert shape,
  *  for the plan-gate claim rule (#206, see `PIPELINE.md` → "External gate
@@ -309,6 +263,7 @@ export function decide({
   planGateLabels,
   dispatchClaim,
   claimFilePath,
+  approvedLabel,
 }) {
   const who = callerKind(payload);
   const toolName = payload?.tool_name;
@@ -328,12 +283,14 @@ export function decide({
     // Gate rule — evaluated first so an unauthorised clear gets its own
     // reason, never the generic allowlist copy.
     //
-    // Deliberately not extended to <labels.approved>: the same rail in
-    // PIPELINE.md covers it too, but it has no observed violation, and it
-    // carries the refresh carve-out (an approved pull request's label set IS
-    // allowed to change there), which would need a second predicate this rule
-    // does not have. Noted here so the omission reads as a choice, not an
-    // oversight.
+    // <labels.approved> is a separate rule (the approval arm, below, after
+    // the loop rule) rather than folded in here: unlike this gate, that rule
+    // never denies. The hook cannot observe the facts that actually
+    // authorise an approval removal — a check going red, GitHub reporting a
+    // conflict, a stuck same-SHA refresh loop — so it has no basis to block
+    // an *unnamed* one the way this gate blocks an unnamed needsHuman clear.
+    // All it can do is audit the one fact it *can* observe: an operator
+    // message naming the item.
     if (needsHumanLabel && !who.isOperatorWorktree) {
       const gate = gateClearAttempt(command, needsHumanLabel);
       if (gate.isAttempt) {
@@ -426,6 +383,22 @@ export function decide({
         reason:
           'port: a gh/git call inside a shell loop is denied — one iteration lands and the rest die with the turn (#120). Batch issues in one call: gh issue edit 63 67 71 --repo <repo> --remove-label "planning" --add-label "ready". gh pr edit takes one number, so one call per pull request — then re-query to confirm every item moved.',
       };
+    }
+
+    // Approval arm (#288) — audit-only, the cockpit's one operator-authorised
+    // route off <labels.approved> (`revise #N: <the change>`). Evaluated
+    // after the loop rule so a looped removal is still caught by that rule
+    // first, and before the allowlist match so the audit record is written
+    // regardless of what the allowlist would otherwise decide. Never denies:
+    // both an unnamed removal and a removal of a different label fall
+    // through unchanged, to whatever the allowlist decides below — this arm
+    // only ever adds a 'gate-clear' log line on top of that outcome, never
+    // substitutes for it.
+    if (approvedLabel && !who.isSubagent && !who.isOperatorWorktree) {
+      const approval = gateClearAttempt(command, approvedLabel);
+      if (approval.isAttempt && approval.hasNumbers && operatorNamed(approval.numbers, operatorMessages ?? null) === true) {
+        return { decision: 'gate-clear', who, subject: command };
+      }
     }
 
     if (matchers === null) {
