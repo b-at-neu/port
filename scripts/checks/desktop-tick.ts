@@ -304,4 +304,140 @@ export default async function ({ fail, ok }: Reporter) {
       ok();
     }
   }
+
+  // --- (12) main/tick/routing.ts's AGENT_FOR_IN_FLIGHT matches liveness.ts's -
+  // buildLivenessExpected (labelKey, stage) pairs, both directions
+  // guard(#292): the app's own in-flight-to-stage map silently drifting from
+  // the engine's own liveness spec table — either an in-flight label cross-
+  // checked against the wrong stage, or the dispatcher's own started-task
+  // descriptions (`"${agent} #${n}"`) never matching a live claim at all.
+  // pin: `main/tick/routing.ts`'s `AGENT_FOR_IN_FLIGHT` ↔ `scripts/port-tick/liveness.ts`'s own `buildLivenessExpected` (labelKey, stage) pairs, both directions
+  {
+    const routingFile = `${mainDir}/routing.ts`;
+    const routingText = readFileSync(join(root, routingFile), 'utf8');
+    const inFlightMatch = /const AGENT_FOR_IN_FLIGHT[^{]*\{([^}]*)\}/.exec(routingText);
+    const engineText = readFileSync(join(root, 'scripts/port-tick/liveness.ts'), 'utf8');
+    const specsMatch = /const specs[^=]*=\s*\[([\s\S]*?)\]\s*;/.exec(engineText);
+
+    if (!inFlightMatch) {
+      fail('desktop-tick', `${routingFile} has no 'AGENT_FOR_IN_FLIGHT = {...}' object to compare`);
+    } else if (!specsMatch) {
+      fail('desktop-tick', `scripts/port-tick/liveness.ts has no 'specs = [...]' array to compare buildLivenessExpected against`);
+    } else {
+      const appPairs = new Map([...inFlightMatch[1].matchAll(/(\w+)\s*:\s*'([^']+)'/g)].map((m) => [m[1], m[2]]));
+      const enginePairs = new Map(
+        [...specsMatch[1].matchAll(/\[\s*'(\w+)'\s*,\s*'(\w+)'\s*,\s*'([\w-]+)'\s*\]/g)].map((m) => [m[2], m[3].replace(/-agent$/, '')]),
+      );
+      const allKeys = new Set([...appPairs.keys(), ...enginePairs.keys()]);
+      const mismatches = [...allKeys].filter((key) => appPairs.get(key) !== enginePairs.get(key));
+      if (mismatches.length > 0) {
+        fail('desktop-tick', `${routingFile}'s AGENT_FOR_IN_FLIGHT and scripts/port-tick/liveness.ts's buildLivenessExpected disagree on: ${mismatches.join(', ')}`);
+      } else {
+        ok();
+      }
+    }
+  }
+
+  // --- (13) main/tick/routing.ts's REFRESH_PAIR matches reconcile.ts's own ---
+  // REFRESH_PAIR, both directions
+  // guard(#292): the one sanctioned co-present label pair silently drifting
+  // between the engine and the app — either side would then tolerate (or
+  // reject) a pair of labels the other disagrees on.
+  // pin: `main/tick/routing.ts`'s `REFRESH_PAIR` ↔ `scripts/port-tick/reconcile.ts`'s own `REFRESH_PAIR`, both directions
+  {
+    const routingFile = `${mainDir}/routing.ts`;
+    const routingText = readFileSync(join(root, routingFile), 'utf8');
+    const appMatch = /const REFRESH_PAIR[^=]*=\s*\[([^\]]*)\]/.exec(routingText);
+    const engineText = readFileSync(join(root, 'scripts/port-tick/reconcile.ts'), 'utf8');
+    const engineMatch = /const REFRESH_PAIR\s*=\s*\[([^\]]*)\]/.exec(engineText);
+
+    if (!appMatch) {
+      fail('desktop-tick', `${routingFile} has no 'REFRESH_PAIR = [...]' array to compare`);
+    } else if (!engineMatch) {
+      fail('desktop-tick', `scripts/port-tick/reconcile.ts has no 'REFRESH_PAIR = [...]' array to compare`);
+    } else {
+      const appKeys = [...appMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+      const engineKeys = [...engineMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+      if (appKeys.length !== engineKeys.length || appKeys.some((k, i) => k !== engineKeys[i])) {
+        fail('desktop-tick', `${routingFile}'s REFRESH_PAIR (${appKeys.join(', ')}) and scripts/port-tick/reconcile.ts's (${engineKeys.join(', ')}) disagree`);
+      } else {
+        ok();
+      }
+    }
+  }
+
+  // --- (14) main/dispatch/observation.ts's label table matches writes.ts's ---
+  // own, found by calling each write with an identity labels map, both
+  // directions
+  // guard(#292): the app's own `observationWrite` label plan silently
+  // drifting from the cockpit's own `writes.ts` table it was ported from —
+  // found by actually calling each write with an identity labels map (label
+  // name === label key) and parsing the add/remove flags off the resulting
+  // `gh` command, rather than a second hand-transcribed table that could
+  // drift from both.
+  // pin: `main/dispatch/observation.ts`'s `observationWrite` label plan ↔ `scripts/port-tick/writes.ts`'s own write functions, both directions
+  {
+    const observationPath = join(root, 'apps/desktop/src/main/dispatch/observation.ts');
+    const writesPath = join(root, 'scripts/port-tick/writes.ts');
+    const observationModule = await import(pathToFileURL(observationPath).href);
+    const writesModule = await import(pathToFileURL(writesPath).href);
+
+    const identityLabels: Record<string, string> = new Proxy({}, { get: (_t, key: string) => key }) as Record<string, string>;
+    const identityVocabulary = { labels: [] as any[] };
+    const baseItem = { stages: [] as any[], assignees: [] as string[] };
+    const flagsOf = (command: string) => ({
+      add: /--add-label "([^"]+)"/.exec(command)?.[1] ?? null,
+      remove: /--remove-label "([^"]+)"/.exec(command)?.[1] ?? null,
+    });
+
+    const cases: Array<{ readonly name: string; readonly app: () => { readonly add: readonly string[]; readonly remove: readonly string[] }; readonly engine: () => { readonly command: string } }> = [
+      {
+        name: 'liveness-reset',
+        app: () => observationModule.observationWrite({ kind: 'liveness-reset', number: 1, itemKind: 'issue', inFlight: 'planning', retryKey: 'ready' }, baseItem, identityVocabulary, 'dev'),
+        engine: () => writesModule.livenessResetWrite({ repo: 'o/r', labels: identityLabels, item: 1, fromKey: 'planning', toKey: 'ready' }),
+      },
+      {
+        name: 'cycle-cap',
+        app: () => observationModule.observationWrite({ kind: 'cycle-cap', number: 1, itemKind: 'pull-request', count: 5, cap: 5 }, baseItem, identityVocabulary, 'dev'),
+        engine: () => writesModule.cycleCapWrite({ repo: 'o/r', labels: identityLabels, number: 1 }),
+      },
+      {
+        name: 'zero-diff',
+        app: () => observationModule.observationWrite({ kind: 'zero-diff', number: 1, itemKind: 'pull-request', count: 1, headRefOid: 'abc' }, baseItem, identityVocabulary, 'dev'),
+        engine: () => writesModule.zeroDiffWrite({ repo: 'o/r', labels: identityLabels, number: 1 }),
+      },
+      {
+        name: 'refresh',
+        app: () => observationModule.observationWrite({ kind: 'refresh', number: 1, itemKind: 'pull-request', sourceLabel: 'readyForReview', headRefOid: 'abc', count: 1 }, baseItem, identityVocabulary, 'dev'),
+        engine: () => writesModule.refreshSweepWrite({ repo: 'o/r', labels: identityLabels, candidate: { number: 1, sourceLabelKey: 'readyForReview' }, decision: { action: 'refresh' } }),
+      },
+      {
+        name: 'refresh-stuck',
+        app: () =>
+          observationModule.observationWrite({ kind: 'refresh-stuck', number: 1, itemKind: 'pull-request', sourceLabel: 'readyForReview', reason: 'same-sha', sha: 'abc', count: 1 }, baseItem, identityVocabulary, 'dev'),
+        engine: () => writesModule.refreshSweepWrite({ repo: 'o/r', labels: identityLabels, candidate: { number: 1, sourceLabelKey: 'readyForReview' }, decision: { action: 'escalate', reason: 'same-sha' } }),
+      },
+      {
+        name: 'withdraw-approval',
+        app: () => observationModule.observationWrite({ kind: 'withdraw-approval', number: 1, itemKind: 'pull-request', red: [], headRefOid: 'abc' }, baseItem, identityVocabulary, 'dev'),
+        engine: () => writesModule.approvalWithdrawnWrite({ repo: 'o/r', labels: identityLabels, number: 1 }),
+      },
+    ];
+
+    let violated = false;
+    for (const { name, app, engine } of cases) {
+      const appPlan = app();
+      const engineFlags = flagsOf(engine().command);
+      const appAdd = appPlan.add[0] ?? null;
+      const appRemove = appPlan.remove[0] ?? null;
+      if (appAdd !== engineFlags.add || appRemove !== engineFlags.remove) {
+        violated = true;
+        fail(
+          'desktop-tick',
+          `observation.ts's '${name}' write (add ${String(appAdd)}, remove ${String(appRemove)}) disagrees with writes.ts's own (add ${String(engineFlags.add)}, remove ${String(engineFlags.remove)})`,
+        );
+      }
+    }
+    if (!violated) ok();
+  }
 }

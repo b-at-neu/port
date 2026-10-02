@@ -99,8 +99,8 @@ function reviewNodesOf(value: unknown): readonly ReviewNode[] {
 function checkRollupOf(node: RawNode): readonly CheckContext[] | null {
   if (!('commits' in node)) return null
   const commits = asConnection(node.commits)
-  const commitNodes = commits?.nodes
-  const firstCommit = Array.isArray(commitNodes) ? commitNodes[0] : undefined
+  const commitNodes: readonly unknown[] = Array.isArray(commits?.nodes) ? commits.nodes : []
+  const firstCommit = commitNodes[0]
   const commit = typeof firstCommit === 'object' && firstCommit !== null ? (firstCommit as Record<string, unknown>).commit : undefined
   const rollup = typeof commit === 'object' && commit !== null ? (commit as Record<string, unknown>).statusCheckRollup : undefined
   const rollupObj = typeof rollup === 'object' && rollup !== null ? (rollup as Record<string, unknown>) : undefined
