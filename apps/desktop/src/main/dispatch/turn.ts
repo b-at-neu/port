@@ -11,7 +11,7 @@ import type { StageAgent, TickActionable } from '../../shared/tick/types'
  *  both the cockpit and this app's dispatcher must send the exact same
  *  instruction to a stage agent regardless of which one dispatched it. */
 export const DISPATCH_PROMPT = 'Run your pipeline stage for #<n>. Follow your Pre-flight, Label swap, Work, and Handoff steps exactly.'
-export const REFRESH_PROMPT = 'Run your pipeline stage for PR #<n> in refresh mode.'
+export const REFRESH_PROMPT = 'Run your pipeline stage for pull request #<n> in refresh mode.'
 
 /** The cockpit's own recommendation (`PIPELINE.md` → "Stages and models" →
  *  Cockpit row) — declared once, dispatching is mechanical. */
