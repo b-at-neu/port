@@ -32,7 +32,7 @@ const READY_ENTRY = {
     modules: { approvalGate: true, release: true, scope: true },
     reviewCycleCap: 3,
     vocabulary: {} as never,
-    commands: { worktrees: 'node scripts/worktrees.mjs' },
+    commands: { worktrees: 'node scripts/worktrees.mjs', budget: null },
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
   },
   diagnostics: [],

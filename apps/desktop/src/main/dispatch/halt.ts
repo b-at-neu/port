@@ -9,6 +9,7 @@ import { labelName } from '../../shared/labels/vocabulary'
 import type { BoardSnapshot } from '../../shared/board/types'
 import type { HaltItemOutcome, HaltReport } from '../../shared/dispatch/types'
 import type { ReconciledItem } from '../../shared/state/types'
+import type { RepoId } from '../../shared/repos'
 import { applyItemAction as defaultApplyItemAction } from '../actions'
 import type { ApplyItemActionParams, ReadyEntry } from '../actions'
 import type { DrainStore } from './store'
@@ -23,6 +24,11 @@ export interface HaltDispatchParams {
 
 export interface HaltDispatchDeps {
   readonly applyItemAction: (params: ApplyItemActionParams) => Promise<ItemActionResult>
+  /** #265: the dispatcher's own per-item stop — called before every
+   *  `applyItemAction`, same order as the drain write before it, so the
+   *  agent is asked to stop before its label is ever touched. A no-op
+   *  default (`undefined`) for every caller that has no dispatcher at all. */
+  readonly stopFor?: (repoId: RepoId, number: number) => Promise<boolean>
 }
 
 export const defaultHaltDispatchDeps: HaltDispatchDeps = { applyItemAction: defaultApplyItemAction }
@@ -85,6 +91,11 @@ export async function haltDispatch(params: HaltDispatchParams, deps: HaltDispatc
         continue
       }
 
+      // #265: the dispatcher's own stop, before the label write — same
+      // order as the drain write before the loop, so an app-dispatched
+      // agent is asked to stop before its label is ever touched.
+      const stoppedTask = (await deps.stopFor?.(repoState.repoId, item.number)) ?? false
+
       const result = await deps.applyItemAction({
         request: { repoId: repoState.repoId, kind: item.kind, number: item.number, action: 'stop', expectedStage: inFlight },
         snapshot,
@@ -95,7 +106,7 @@ export async function haltDispatch(params: HaltDispatchParams, deps: HaltDispatc
       if (result.ok && result.outcome.kind === 'applied') {
         const removedKey = availability.plan.remove[0] ?? inFlight
         const removedLabel = labelName(entry.config.vocabulary, removedKey) ?? removedKey
-        items.push({ kind: 'stopped', number: item.number, itemKind: item.kind, repoId: repoState.repoId, removedLabel, attachedAgent: attachedAgentName(item) })
+        items.push({ kind: 'stopped', number: item.number, itemKind: item.kind, repoId: repoState.repoId, removedLabel, attachedAgent: attachedAgentName(item), stoppedTask })
       } else {
         items.push({ kind: 'refused', number: item.number, itemKind: item.kind, repoId: repoState.repoId, result })
       }

@@ -51,7 +51,7 @@ interface LooseConfig {
     readonly scope?: unknown
   }
   readonly reviewCycleCap?: unknown
-  readonly commands?: { readonly worktrees?: unknown }
+  readonly commands?: { readonly worktrees?: unknown; readonly budget?: unknown }
   readonly concurrency?: { readonly sharedFiles?: unknown; readonly overlapThreshold?: unknown }
 }
 
@@ -140,6 +140,7 @@ export async function inspectRepository(path: string, deps: InspectDeps): Promis
   const reviewCycleCap = resolveField(cfg.reviewCycleCap, '/reviewCycleCap', violatedPaths, CONFIG_DEFAULTS.reviewCycleCap)
   const commands = {
     worktrees: resolveField(cfg.commands?.worktrees, '/commands/worktrees', violatedPaths, CONFIG_DEFAULTS.commands.worktrees),
+    budget: resolveField(cfg.commands?.budget, '/commands/budget', violatedPaths, CONFIG_DEFAULTS.commands.budget),
   }
   const concurrency = {
     sharedFiles: resolveField(cfg.concurrency?.sharedFiles, '/concurrency/sharedFiles', violatedPaths, CONFIG_DEFAULTS.concurrency.sharedFiles),
