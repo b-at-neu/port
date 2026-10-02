@@ -66,6 +66,30 @@
   margin-top: 0.1rem;
 }
 
+.board-header__owner-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.1rem;
+  margin-left: 0.8rem;
+  opacity: 0.75;
+}
+
+.board-header__owner-text {
+  flex: 1;
+}
+
+.board-header__owner-button {
+  font-family: inherit;
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #2a2a2a;
+  color: inherit;
+  cursor: pointer;
+}
+
 .board-header__tick-drain {
   color: #e8a33d;
   font-weight: 600;
@@ -348,6 +372,22 @@
 }
 
 .relay-banner__copy:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.relay-banner__send {
+  font-family: inherit;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid #3a6b3a;
+  border-radius: 4px;
+  background: #1f3a1f;
+  color: inherit;
+  cursor: pointer;
+}
+
+.relay-banner__send:disabled {
   opacity: 0.5;
   cursor: default;
 }

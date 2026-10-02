@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../../../shared/repos'
 import type { RelayPending, RelayScan } from '../../../shared/relay/types'
-import { entryLineCopy, relayLineCopy } from './relay'
+import { entryLineCopy, isAppDispatched, relayLineCopy, relaySendResultCopy } from './relay'
 
 const NOW = new Date('2026-01-01T00:30:00.000Z')
 
@@ -69,5 +69,25 @@ describe('entryLineCopy', () => {
 
   it('falls back to "this item" when the number could not be resolved', () => {
     expect(entryLineCopy(pendingOf({ number: null }), 'port', NOW)).toBe('plan this item · port — 1 question, waiting 12m')
+  })
+})
+
+describe('isAppDispatched (#265)', () => {
+  it('false when no dispatcher session id is known for the repository', () => {
+    expect(isAppDispatched(pendingOf(), null)).toBe(false)
+  })
+
+  it('false when this app dispatches elsewhere, but not for this pending relay\'s own session', () => {
+    expect(isAppDispatched(pendingOf({ sessionId: 's1' }), 'some-other-session')).toBe(false)
+  })
+
+  it('true when the pending relay\'s own session is this app\'s own dispatcher session', () => {
+    expect(isAppDispatched(pendingOf({ sessionId: 'dispatcher-session-1' }), 'dispatcher-session-1')).toBe(true)
+  })
+})
+
+describe('relaySendResultCopy (#265)', () => {
+  it('null before any send has been attempted', () => {
+    expect(relaySendResultCopy(pendingOf({ sessionId: 'never-sent', agentId: 'a1' }))).toBeNull()
   })
 })

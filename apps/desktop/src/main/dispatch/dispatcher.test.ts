@@ -143,13 +143,13 @@ describe('createDispatcher — ownership', () => {
     const store = fakeStore()
     const dispatcher = createDispatcher(baseDeps({ store }))
     await dispatcher.consider(snapshotWith([tickReport()]))
-    expect(dispatcher.status()).toEqual([{ repoId: REPO_ID, owner: 'cockpit', state: { kind: 'idle' }, draining: false }])
+    expect(dispatcher.status()).toEqual([{ repoId: REPO_ID, owner: 'cockpit', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null }])
   })
 
   it('reports nobody for an unreadable claim', async () => {
     const dispatcher = createDispatcher(baseDeps({ readGateClaim: () => Promise.resolve(UNREADABLE_CLAIM) }))
     await dispatcher.consider(snapshotWith([tickReport()]))
-    expect(dispatcher.status()).toEqual([{ repoId: REPO_ID, owner: 'nobody', state: { kind: 'idle' }, draining: false }])
+    expect(dispatcher.status()).toEqual([{ repoId: REPO_ID, owner: 'nobody', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null }])
   })
 
   it('reports app for a claim naming dispatch', async () => {
@@ -184,7 +184,7 @@ describe('createDispatcher — app ownership', () => {
     )
     const actionable = [{ number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }]
     await dispatcher.consider(snapshotWith([tickReport({ actionable })]))
-    expect(dispatcher.status()[0]?.state).toEqual({ kind: 'dispatcher-failed', reason: 'at-capacity' })
+    expect(dispatcher.status()[0]?.state).toEqual({ kind: 'dispatcher-failed', reason: 'at-capacity', limit: 4 })
   })
 
   it('waits (idle, unchanged) while capabilities are pending, never a busy-wait', async () => {
@@ -270,6 +270,7 @@ describe('createDispatcher — app ownership', () => {
     expect(state?.kind).toBe('active')
     if (state?.kind !== 'active') return
     expect(state.recent).toEqual([{ agent: 'impl', number: 52, kind: 'issue', state: 'sent', at: '2026-01-01T00:00:00.000Z' }])
+    expect(dispatcher.status()[0]?.claudeSessionId).toBe('sdk-1') // baseSessionSnapshot's own claudeSessionId (#265)
   })
 
   it('confirms a sent record as started once a matching task appears, and calls ledger.record', async () => {

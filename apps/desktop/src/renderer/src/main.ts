@@ -31,7 +31,7 @@ import { changeSearchScope, openSearch, registerSearchRedraw, renderSearch, sear
 import { render as renderBoard } from './board/view'
 import type { BoardViewState } from './board/view'
 import { handleItemAction, pruneItemActionStates } from './board/actions'
-import { handleDrainToggle, handleHaltCancel, handleHaltClick } from './board/dispatch'
+import { handleDispatchClick } from './board/dispatch'
 import { handleRelayCopy, pruneRelayStates, relayKeyOf, setRelayAnswer, toggleRelayExpanded } from './board/relay'
 import type { OperatorAction } from '../../shared/actions/types'
 import type { LabelKey } from '../../shared/labels/vocabulary'
@@ -461,9 +461,7 @@ app?.addEventListener('click', (event) => {
   else if (action === 'relay-toggle') handleRelayToggleClick(target)
   else if (action === 'relay-copy') handleRelayCopyClick(target)
   else if (action?.startsWith('item-')) handleItemActionClick(target)
-  else if (action === 'dispatch-toggle') handleDrainToggle(boardState.snapshot?.drain ?? { gate: 'open' }, drawBoard)
-  else if (action === 'dispatch-halt') handleHaltClick(drawBoard)
-  else if (action === 'dispatch-halt-cancel') handleHaltCancel(drawBoard)
+  else if (action?.startsWith('dispatch-')) handleDispatchClick(target, boardState.snapshot, drawBoard)
   else {
     const row = target.closest<HTMLElement>('.board-row')
     if (row?.dataset.url) window.open(row.dataset.url, '_blank')

@@ -60,10 +60,11 @@ interface RepoDispatcherState {
   owner: DispatchOwner
   dispatcherState: DispatcherState
   draining: boolean
+  claimedAt: string | null
 }
 
 function emptyRepoState(): RepoDispatcherState {
-  return { sessionKey: null, recent: [], owner: 'cockpit', dispatcherState: { kind: 'idle' }, draining: false }
+  return { sessionKey: null, recent: [], owner: 'cockpit', dispatcherState: { kind: 'idle' }, draining: false, claimedAt: null }
 }
 
 function ownerOf(claim: ClaimRead): DispatchOwner {
@@ -110,7 +111,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     deps.onChange()
   }
 
-  async function ensureSession(entry: ReadyEntry, repoId: RepoId): Promise<HostedSessionSnapshot | null> {
+  async function ensureSession(entry: ReadyEntry, repoId: RepoId, draining: boolean): Promise<HostedSessionSnapshot | null> {
     const state = stateFor(repoId)
     if (state.sessionKey !== null) {
       const existing = deps.store.snapshotOf(state.sessionKey)
@@ -123,7 +124,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       role: { kind: 'dispatcher', model: DISPATCHER_MODEL, instructions: DISPATCHER_INSTRUCTIONS, title: `Port dispatcher · ${entry.config.repo}` },
     })
     if (!started.ok) {
-      report(repoId, 'app', { kind: 'dispatcher-failed', reason: started.kind === 'at-capacity' ? 'at-capacity' : 'runtime' }, false)
+      report(repoId, 'app', started.kind === 'at-capacity' ? { kind: 'dispatcher-failed', reason: 'at-capacity', limit: started.limit } : { kind: 'dispatcher-failed', reason: 'runtime' }, draining)
       return null
     }
     state.sessionKey = started.snapshot.sessionKey
@@ -144,6 +145,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       const claim = await deps.readGateClaim({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
       const owner = ownerOf(claim)
       const draining = deps.drain().gate !== 'open'
+      stateFor(entry.id).claimedAt = claim.state === 'held' ? claim.claimedAt : null
       if (owner !== 'app') {
         report(entry.id, owner, { kind: 'idle' }, draining)
         return
@@ -186,7 +188,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
         return
       }
 
-      const snapshot = await ensureSession(entry, entry.id)
+      const snapshot = await ensureSession(entry, entry.id, draining)
       if (snapshot === null) return // ensureSession already reported dispatcher-failed
       if (snapshot.capabilities.kind === 'pending') return // next pass re-checks, never a busy-wait here
       if (snapshot.capabilities.kind === 'unavailable') {
@@ -248,7 +250,14 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
   }
 
   function status(): readonly RepoDispatchStatus[] {
-    return [...repoStates.entries()].map(([repoId, s]) => ({ repoId, owner: s.owner, state: s.dispatcherState, draining: s.draining }))
+    return [...repoStates.entries()].map(([repoId, s]) => ({
+      repoId,
+      owner: s.owner,
+      state: s.dispatcherState,
+      draining: s.draining,
+      claudeSessionId: s.sessionKey !== null ? (deps.store.snapshotOf(s.sessionKey)?.claudeSessionId ?? null) : null,
+      claimedAt: s.claimedAt,
+    }))
   }
 
   function relay(params: { readonly repoId: RepoId; readonly agentId: string; readonly text: string }): Promise<DispatchRelayResult> {

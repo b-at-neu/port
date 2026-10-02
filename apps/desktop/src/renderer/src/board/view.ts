@@ -235,7 +235,12 @@ function buildList(state: BoardViewState): HTMLElement {
   // longest-stalled pending relay leads, since `projection.relays` is
   // already sorted oldest-waiting first.
   const repoNameByRepoId = new Map(projection.repositorySummaries.map((summary) => [summary.repoId, summary.displayName]))
-  const relayBanner = buildRelayBanner(projection.relays, (repoId) => (repoId !== null ? (repoNameByRepoId.get(repoId) ?? repoId) : 'unknown repo'), state.now)
+  // #265: resolves a pending relay's own owning repository to this app's own
+  // live dispatcher session id, straight off `BoardSnapshot.dispatch` —
+  // `null` for a repository this app does not dispatch for.
+  const dispatch = state.snapshot.dispatch
+  const dispatcherSessionIdOf = (repoId: RepoId | null): string | null => (repoId !== null ? (dispatch.find((d) => d.repoId === repoId)?.claudeSessionId ?? null) : null)
+  const relayBanner = buildRelayBanner(projection.relays, (repoId) => (repoId !== null ? (repoNameByRepoId.get(repoId) ?? repoId) : 'unknown repo'), state.now, dispatcherSessionIdOf)
   if (relayBanner !== null) list.appendChild(relayBanner)
 
   const ungatedSection = buildUngatedSection(projection.ungated.map(buildRow))

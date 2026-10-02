@@ -1,10 +1,14 @@
 // Operator control over dispatch (#110): the header's Drain/Resume toggle
 // and Halt everything button, and the halt report rendered under the tick
-// strip. `main.ts` delegates its three click branches here rather than
-// owning this state itself, the same split `board/actions.ts` draws for the
-// board's own per-item actions.
+// strip. #265 adds the dispatch claim's own Take/Release button and the
+// relay's own "Send to agent". `main.ts` delegates one `dispatch-*` click
+// branch here rather than owning this state itself, the same split
+// `board/actions.ts` draws for the board's own per-item actions.
+import type { BoardSnapshot } from '../../../shared/board/types'
 import type { DispatchControlResult, DrainState, HaltItemOutcome, HaltReport } from '../../../shared/dispatch/types'
+import type { RepoId } from '../../../shared/repos'
 import { actionResultCopy } from './copy'
+import { handleRelaySend, relayKeyOf } from './relay'
 
 type PendingCommand = 'drain' | 'resume' | 'halt' | null
 
@@ -134,15 +138,30 @@ function skippedLine(outcome: Extract<HaltItemOutcome, { readonly kind: 'skipped
   }
 }
 
+/** `attachedAgent` names a stage (`'review-agent'`) or a session
+ *  (`'/port:implement session'`) — only the former shortens for the
+ *  "Stopped <agent> #<n>" line (#265); the latter is left as-is, since this
+ *  app never stops an operator's own `/port:implement` session. */
+function agentLabel(attachedAgent: string | null): string {
+  if (attachedAgent === null) return ''
+  return attachedAgent.endsWith('-agent') ? attachedAgent.slice(0, -'-agent'.length) : attachedAgent
+}
+
 /** One line per outcome (plan's own **UX states**) — a stopped item names
  *  what this app removed and, when one exists, the agent or session it
- *  found still attached (this app cannot stop one — #106's job); a refused
- *  item reuses the ordinary row action's own result copy rather than a
- *  second wording for the same `ItemActionResult`. */
+ *  found still attached (this app cannot stop one — #106's job). #265: when
+ *  this app itself dispatched the agent (`stoppedTask`), it replaces "still
+ *  attached — this app can't stop it" with "Stopped <agent> #<n>.", since
+ *  this app just did. A refused item reuses the ordinary row action's own
+ *  result copy rather than a second wording for the same `ItemActionResult`. */
 export function haltItemLine(outcome: HaltItemOutcome, now: Date): string {
   const n = String(outcome.number)
   switch (outcome.kind) {
     case 'stopped': {
+      if (outcome.stoppedTask) {
+        const agent = agentLabel(outcome.attachedAgent)
+        return `#${n} ${outcome.removedLabel} → no stage. Stopped${agent ? ` ${agent}` : ''} #${n}.`
+      }
       const attached = outcome.attachedAgent !== null ? ` ${outcome.attachedAgent} still attached — this app can't stop it.` : ''
       return `#${n} ${outcome.removedLabel} → no stage.${attached}`
     }
@@ -209,4 +228,56 @@ export function buildHaltReport(report: HaltReport, now: Date): HTMLElement {
 
   section.appendChild(dismiss)
   return section
+}
+
+/** #265: the claim take/release button's own click — the target state is
+ *  the button's own action, never a toggle read off the current line (the
+ *  same "never a toggle this channel infers" rule `gate:claim:set` already
+ *  follows), so a stale render can only ever ask for the state its own
+ *  label showed. */
+async function runClaimSet(repoId: RepoId, held: boolean, redraw: () => void): Promise<void> {
+  try {
+    await window.port.dispatchClaimSet({ repoId, held })
+  } catch (error) {
+    console.error(`Failed to ${held ? 'take' : 'release'} the dispatch claim for '${repoId}'`, error)
+  }
+  redraw()
+}
+
+/**
+ * The one `dispatch-*` click branch `main.ts` delegates every such action
+ * to — drain/resume toggle, halt, halt-cancel, the claim's own take/release
+ * (#265), and the relay's own "Send to agent" (#265). A click naming a
+ * repository or a relay this app cannot resolve from `target.dataset` and
+ * `snapshot` is silently ignored, the same fail-safe every other board
+ * control already applies to a stale render.
+ */
+export function handleDispatchClick(target: HTMLElement, snapshot: BoardSnapshot | null, redraw: () => void): void {
+  const action = target.dataset.action
+  if (action === 'dispatch-toggle') {
+    handleDrainToggle(snapshot?.drain ?? { gate: 'open' }, redraw)
+    return
+  }
+  if (action === 'dispatch-halt') {
+    handleHaltClick(redraw)
+    return
+  }
+  if (action === 'dispatch-halt-cancel') {
+    handleHaltCancel(redraw)
+    return
+  }
+  if (action === 'dispatch-claim-take' || action === 'dispatch-claim-release') {
+    const repoId = target.dataset.repoId
+    if (repoId === undefined) return
+    void runClaimSet(repoId as RepoId, action === 'dispatch-claim-take', redraw)
+    return
+  }
+  if (action === 'dispatch-relay-send') {
+    const key = target.dataset.key
+    const repoId = target.dataset.repoId
+    if (key === undefined || repoId === undefined || snapshot === null || !snapshot.relay.ok) return
+    const pending = snapshot.relay.pending.find((p) => relayKeyOf(p) === key)
+    if (pending === undefined) return
+    void handleRelaySend(pending, repoId as RepoId, redraw)
+  }
 }

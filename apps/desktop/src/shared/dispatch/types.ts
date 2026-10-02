@@ -127,7 +127,8 @@ export type DispatcherState =
   | { readonly kind: 'idle' }
   | { readonly kind: 'active'; readonly recent: readonly DispatchRecord[] }
   | { readonly kind: 'refused'; readonly reason: 'budget-unported' }
-  | { readonly kind: 'dispatcher-failed'; readonly reason: 'at-capacity' | 'runtime' | 'plugin' }
+  | { readonly kind: 'dispatcher-failed'; readonly reason: 'at-capacity'; readonly limit: number }
+  | { readonly kind: 'dispatcher-failed'; readonly reason: 'runtime' | 'plugin' }
   | { readonly kind: 'agents-missing'; readonly agent: StageAgent }
 
 /** #265: `BoardSnapshot.dispatch`'s own one-row-per-ready-repository shape —
@@ -142,6 +143,17 @@ export interface RepoDispatchStatus {
    *  never a fifth `DispatcherState` member for what is really an
    *  orthogonal fact. */
   readonly draining: boolean
+  /** The live dispatcher session's own adopted id (`HostedSessionSnapshot.
+   *  claudeSessionId`) — `null` before `init` arrives, or whenever no
+   *  dispatcher session is live. `board/relay.ts` compares a pending
+   *  relay's own `sessionId` against this to decide "Send to agent" vs the
+   *  paste instruction (#265) — the one piece of `DispatcherState` cannot
+   *  express on its own, since it crosses every state the same way. */
+  readonly claudeSessionId: string | null
+  /** The claim's own `claimedAt` (#265) — `null` unless `owner` is `'app'`.
+   *  The owner line's own "claimed 14:02" clause reads this, never a second
+   *  clock of its own. */
+  readonly claimedAt: string | null
 }
 
 /** `'dispatch:claim:set'`'s response (#265) — the mirror of

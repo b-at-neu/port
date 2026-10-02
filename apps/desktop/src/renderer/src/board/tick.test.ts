@@ -93,6 +93,19 @@ describe('repositoryLineCopy', () => {
     })
     expect(repositoryLineCopy(rep, draining)).toBe('o/a — draining: 2 would dispatch, held back (plan #105, impl #112) · Liveness: nothing in flight.')
   })
+
+  it('#265: "would dispatch" becomes "dispatched" when this app owns dispatch for the repository', () => {
+    const rep = report({ actionable: [{ number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null }] })
+    expect(repositoryLineCopy(rep, OPEN, 'app')).toBe('o/a — dispatched impl #52 · Liveness: nothing in flight.')
+    expect(repositoryLineCopy(rep, OPEN, 'cockpit')).toBe('o/a — would dispatch impl #52 · Liveness: nothing in flight.')
+    expect(repositoryLineCopy(rep, OPEN)).toBe('o/a — would dispatch impl #52 · Liveness: nothing in flight.')
+  })
+
+  it('#265: draining still says "would dispatch", even when this app owns dispatch', () => {
+    const draining: DrainState = { gate: 'draining', reason: 'operator', since: '2026-01-01T00:00:00Z' }
+    const rep = report({ actionable: [{ number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null }] })
+    expect(repositoryLineCopy(rep, draining, 'app')).toBe('o/a — draining: 1 would dispatch, held back (impl #52) · Liveness: nothing in flight.')
+  })
 })
 
 describe('drainLineFor', () => {

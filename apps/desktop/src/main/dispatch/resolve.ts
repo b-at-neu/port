@@ -109,7 +109,14 @@ export async function resolveDispatchClaimSet(
   if (!result.ok) return { kind: 'failed', result }
 
   await deps.refresh({ repoId: request.repoId })
-  const status: RepoDispatchStatus = deps.dispatcher.status().find((s) => s.repoId === request.repoId) ?? { repoId: request.repoId, owner: request.held ? 'app' : 'cockpit', state: { kind: 'idle' }, draining: false }
+  const status: RepoDispatchStatus = deps.dispatcher.status().find((s) => s.repoId === request.repoId) ?? {
+    repoId: request.repoId,
+    owner: request.held ? 'app' : 'cockpit',
+    state: { kind: 'idle' },
+    draining: false,
+    claudeSessionId: null,
+    claimedAt: null,
+  }
   return { kind: 'ok', status }
 }
 

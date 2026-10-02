@@ -189,7 +189,7 @@ describe('resolveDispatchClaimSet (#265)', () => {
   it('takes the claim, refreshes once, and reports the dispatcher status it then reads back', async () => {
     let refreshed = 0
     const entry = await readyEntry()
-    const dispatcher = fakeDispatcher({ status: () => [{ repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, draining: false }] })
+    const dispatcher = fakeDispatcher({ status: () => [{ repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null }] })
     const deps: ResolveDispatchClaimSetDeps = {
       listRepositories: () => Promise.resolve({ ok: true, repositories: [entry] }),
       dispatcher,
@@ -197,7 +197,7 @@ describe('resolveDispatchClaimSet (#265)', () => {
       now: () => new Date('2026-01-01T00:00:00Z'),
     }
     const result = await resolveDispatchClaimSet(registryDeps, { repoId: REPO_ID, held: true }, deps)
-    expect(result).toEqual({ kind: 'ok', status: { repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, draining: false } })
+    expect(result).toEqual({ kind: 'ok', status: { repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null } })
     expect(refreshed).toBe(1)
   })
 })
