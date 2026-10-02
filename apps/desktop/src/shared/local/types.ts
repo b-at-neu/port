@@ -137,8 +137,9 @@ export interface DenialSummary {
   /** `miss` — a non-subagent allowlist miss, logged for visibility and
    *  never denied. The #63 false-positive class; never a denial. */
   readonly misses: number
-  /** `gate-clear` — an allowed, authorised `needs human` removal. An audit
-   *  record, not a denial. */
+  /** `gate-clear` — an allowed, authorised `needs human` removal, or an
+   *  operator-named `approved` removal (the `revise #N` route, #288). An
+   *  audit record, not a denial, either way. */
   readonly gateClears: number
   /** `hook-error` — a fail-open hook failure. */
   readonly hookErrors: number

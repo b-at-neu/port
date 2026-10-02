@@ -137,6 +137,43 @@ export default async function ({ fail, ok }: Reporter) {
       else if (run(badHeading).ok) fail('artifacts-patterns', `${kind} accepts a renamed heading`);
       else ok();
     }
+
+    // guard(#288): the revise #N route's own artifact — a 'changes-requested'
+    // body with no SHA, a renamed heading, or only the heading and SHA with
+    // no actual request text — passing the validator silently. It has no
+    // backtick-quoted fact beside the SHA (the request itself is free text),
+    // so it is exercised against its own closure cases rather than folded
+    // into shaCases above: one good body, plus three bad ones.
+    {
+      const good = '## Changes requested\nRequested by the operator on `abc1234` after approval:\n\nRename the --limit flag to --max.';
+      const headingAndShaOnly = '## Changes requested\n`abc1234`';
+      const renamedHeading = '## Changes needed\nRequested by the operator on `abc1234` after approval:\n\nRename the --limit flag to --max.';
+      const noSha = '## Changes requested\nRequested by the operator, after approval:\n\nRename the --limit flag to --max.';
+      const run = CHECKS['changes-requested'].run;
+      if (!run(good).ok) fail('artifacts-patterns', 'changes-requested rejects its own good example');
+      else if (run(headingAndShaOnly).ok) fail('artifacts-patterns', 'changes-requested accepts a body with only the heading and SHA, no request text');
+      else if (run(renamedHeading).ok) fail('artifacts-patterns', 'changes-requested accepts a renamed heading');
+      else if (run(noSha).ok) fail('artifacts-patterns', 'changes-requested accepts a body with no SHA');
+      else ok();
+    }
+
+    // pin: `CHANGES_REQUESTED_HEADING` ↔ its literal rendering in
+    // revise-agent.md, review-agent.md, SKILL.md, and FORMATS.md.
+    {
+      const { CHANGES_REQUESTED_HEADING } = await import(pathToFileURL(join(root, 'plugins/port/bin/artifacts.mjs')).href);
+      for (const rel of [
+        'plugins/port/agents/revise-agent.md',
+        'plugins/port/agents/review-agent.md',
+        'plugins/port/skills/pipeline/SKILL.md',
+        'plugins/port/docs/FORMATS.md',
+      ]) {
+        if (!readFileSync(join(root, rel), 'utf8').includes(CHANGES_REQUESTED_HEADING)) {
+          fail('artifacts-patterns', `${rel} never names the literal '${CHANGES_REQUESTED_HEADING}'`);
+        } else {
+          ok();
+        }
+      }
+    }
   }
 
   // --- stageViolation: pair-wise pull-request stage legality -------------------

@@ -37,8 +37,8 @@ The code review is a **real GitHub pull request review** (`gh api …/pulls/<pr>
 - **Each finding is one inline comment** on a diff line: `**R<n>-<sev><id>** <emoji> — <problem>. Fix: <one line>.` Stable ID `R<cycle>-<sev><id>`; severities 🔴 Critical · 🟠 Medium · 🟡 Low · ⚪ Nit. Inline comments are **new actionable findings only** — never status.
 - **Escalating bar — what blocks rises with the cycle.** Pass 1 polishes everything, later passes converge: **cycle 1** any finding blocks; **cycle 2** Low and above (Nit does not); **cycle 3+** Critical and Medium only. A nit introduced during a revision cannot re-trigger at cycle 2 or later. The cockpit's cap is `reviewCycleCap` cycles, **unconditional** — it fires whatever the latest verdict said, which routes to `needs human`. A red required check, other than the `## Check evidence` carve-out, is **always** Critical, at every cycle — never downgraded to fit a later cycle's bar.
 - **Inline anchoring.** A comment is accepted only on a line **in the diff** — map it from `gh pr diff` hunk headers (added and context lines → `side:"RIGHT"`, new-version line; deletions → `side:"LEFT"`, old-version line). If the reviews API returns 422 for an unresolvable line, **resubmit with `comments:[]`** and list those findings in the body with permalinks, so a review always lands.
-- **Revision resolves threads, it does not summarize.** After pushing fixes, for each **fixed** finding reply `Fixed in <sha>` on its thread and resolve it via GraphQL (`addPullRequestReviewThreadReply` then `resolveReviewThread`), matched by ID; **genuinely-skipped** threads get a one-line reason and stay open. Then one short comment per cycle, or none: `## Revision — Cycle <n>` plus a single line `fixed <ids> · skipped <ids> · <sha>`, appending `· rebase: <file> (<strategy>)` if a conflict was auto-resolved. The detail line may instead open `check <name> · <sha>` for a check-fix cycle — see `revise-agent.md` step 1 — with no `fixed`/`skipped` segment, since there are no threads to resolve.
-- **Other comments** — `## Pipeline Escalation` (revise: ambiguous rebase), `## Blocker` (impl: on the issue), `## Gate cleared` (cockpit: on the pull request, at `unblock #N`), `## Approval withdrawn` (cockpit: on the pull request, when a check goes red after approval — see "The `<labels.approved>` carve-out" in `## Check evidence`), and `## Rebase required` (cockpit or `review-agent`: when `mergeable` reads `CONFLICTING` — see "Rebase required" below) stay short: what is blocked/cleared/withdrawn/needed and the decision required, via `--body-file`.
+- **Revision resolves threads, it does not summarize.** After pushing fixes, for each **fixed** finding reply `Fixed in <sha>` on its thread and resolve it via GraphQL (`addPullRequestReviewThreadReply` then `resolveReviewThread`), matched by ID; **genuinely-skipped** threads get a one-line reason and stay open. Then one short comment per cycle, or none: `## Revision — Cycle <n>` plus a single line `fixed <ids> · skipped <ids> · <sha>`, appending `· rebase: <file> (<strategy>)` if a conflict was auto-resolved. The detail line may instead open `check <name> · <sha>` for a check-fix cycle, or `fixed changes requested · <sha>` for an operator-request cycle — see `revise-agent.md` step 1 — with no `fixed`/`skipped` segment either way, since there are no threads to resolve in either mode.
+- **Other comments** — `## Pipeline Escalation` (revise: ambiguous rebase), `## Blocker` (impl: on the issue), `## Gate cleared` (cockpit: on the pull request, at `unblock #N`), `## Approval withdrawn` (cockpit: on the pull request, when a check goes red after approval — see "The `<labels.approved>` carve-out" in `## Check evidence`), `## Changes requested` (cockpit: on the pull request, at `revise #N` — see "Changes requested" below), and `## Rebase required` (cockpit or `review-agent`: when `mergeable` reads `CONFLICTING` — see "Rebase required" below) stay short: what is blocked/cleared/withdrawn/requested/needed and the decision required, via `--body-file`.
 
 ### Approval withdrawn (cockpit writes it via `--body-file`)
 
@@ -61,6 +61,19 @@ Conflicts with `<base>` at `<head-sha>` — GitHub can't build a merge ref, so n
 ```
 
 Names the base branch and the head SHA the conflict was read against — enough for `revise-agent` to enter refresh mode (see `revise-agent.md`) without re-deriving anything, and enough for a human reading the thread to know the pipeline never had checks to go on.
+
+### Changes requested (cockpit writes it via `--body-file`)
+
+Posted the moment an operator says `revise #N: <the change>` on an approved pull request (see `PIPELINE.md` → "Check evidence" → the `<labels.approved>` carve-out), **before** the label swap so the request is durable even if the swap's compare-and-swap then fails:
+
+```
+## Changes requested
+Requested by the operator on `<head-sha>`, after approval:
+
+<the operator's request, verbatim>
+```
+
+The validator requires the exact heading, a 7-40 character hex SHA, and at least one non-empty line besides it. The cockpit never paraphrases the request — it may split a list the operator typed into bullets, nothing more. `revise-agent` treats this as a third mode-selecting signal alongside `## Code Review` and `## Approval withdrawn` (see `revise-agent.md` step 1); `review-agent` treats it as an amendment to the plan (see `review-agent.md` step 1).
 
 ### Pull request description (`impl-agent` writes it via `--body-file`)
 

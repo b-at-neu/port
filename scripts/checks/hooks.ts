@@ -131,6 +131,50 @@ export default async function ({ fail, ok }: Reporter) {
       if (readLog().length !== 2) fail('guard-hook-fixture', 'an allowed command should not append a line');
       ok();
 
+      // guard(#288): the real hook reading a real transcript_path for the
+      // approval arm — a wiring bug the decide()-only cases in
+      // hooks-gate-rule.ts cannot see. A transcript naming the pull request
+      // makes the approval arm log 'gate-clear' for an operator-named
+      // 'approved' removal.
+      const transcriptNamed = join(fixture, 'transcript-named.jsonl');
+      writeFileSync(
+        transcriptNamed,
+        `${JSON.stringify({ type: 'user', message: { content: [{ type: 'text', text: 'revise #300: rename the --limit flag to --max' }] } })}\n`,
+      );
+      run({
+        cwd: fixture,
+        session_id: 'sess-5',
+        tool_name: 'Bash',
+        tool_input: { command: 'gh pr edit 300 --repo b-at-neu/port --remove-label "approved" --add-label "needs revision"' },
+        transcript_path: transcriptNamed,
+      });
+      lines = readLog();
+      if (lines.length !== 3) fail('guard-hook-fixture', `expected a gate-clear line for an operator-named approval removal, got ${lines.length} lines`);
+      else if (!lines[2].includes('\tgate-clear\t')) fail('guard-hook-fixture', `expected a 'gate-clear' line, got ${JSON.stringify(lines[2])}`);
+      ok();
+
+      // Same command, a transcript naming a different item → never a
+      // gate-clear line. The command still misses this fixture's own narrow
+      // allowlist (`Bash(git *)` only), so it logs 'miss' as it always would
+      // — the point is that this arm never mistakes an unnamed removal for
+      // an authorised one.
+      const transcriptOther = join(fixture, 'transcript-other.jsonl');
+      writeFileSync(
+        transcriptOther,
+        `${JSON.stringify({ type: 'user', message: { content: [{ type: 'text', text: 'unblock #134' }] } })}\n`,
+      );
+      run({
+        cwd: fixture,
+        session_id: 'sess-6',
+        tool_name: 'Bash',
+        tool_input: { command: 'gh pr edit 300 --repo b-at-neu/port --remove-label "approved" --add-label "needs revision"' },
+        transcript_path: transcriptOther,
+      });
+      lines = readLog();
+      if (lines.length !== 4) fail('guard-hook-fixture', `expected exactly one new line (a 'miss', not a 'gate-clear'), got ${lines.length} lines total`);
+      else if (lines[3].includes('\tgate-clear\t')) fail('guard-hook-fixture', 'a removal naming a different item must never log gate-clear');
+      ok();
+
       // No port.config.json in cwd → silent, nothing written.
       const unmanaged = mkdtempSync(join(tmpdir(), 'port-guard-hook-unmanaged-'));
       try {
@@ -154,8 +198,8 @@ export default async function ({ fail, ok }: Reporter) {
         stdio: ['pipe', 'ignore', 'ignore'],
       });
       lines = readLog();
-      if (lines.length !== 3) fail('guard-hook-fixture', `expected a hook-error line for a malformed payload, got ${lines.length} lines`);
-      else if (!lines[2].includes('\thook-error\t')) fail('guard-hook-fixture', `expected a 'hook-error' line, got ${JSON.stringify(lines[2])}`);
+      if (lines.length !== 5) fail('guard-hook-fixture', `expected a hook-error line for a malformed payload, got ${lines.length} lines`);
+      else if (!lines[4].includes('\thook-error\t')) fail('guard-hook-fixture', `expected a 'hook-error' line, got ${JSON.stringify(lines[4])}`);
       ok();
     } catch (e: any) {
       if (e.status !== undefined) fail('guard-hook-fixture', `hook exited non-zero: ${e.message}`);

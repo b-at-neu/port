@@ -113,9 +113,10 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
    gh issue view <issue-number> --repo <repo>
    gh api user --jq .login
    gh pr view <pr-number> --repo <repo> --json reviews --jq '[.reviews[] | select(.body|startswith("## Code Review"))] | length'
+   gh pr view <pr-number> --repo <repo> --json comments --jq '[.comments[] | select(.body|startswith("## Changes requested"))] | sort_by(.createdAt) | last'
    ```
 
-   In order: the diff; check status; `headRefOid` for line permalinks, `author` for the self-review test, `baseRefName` and `mergeable` for the conflict exit below; the original plan; your own login; and the prior review count, so **this cycle is that count plus one**.
+   In order: the diff; check status; `headRefOid` for line permalinks, `author` for the self-review test, `baseRefName` and `mergeable` for the conflict exit below; the original plan; your own login; the prior review count, so **this cycle is that count plus one**; and the newest `## Changes requested` comment, if any — the cockpit's `revise #N` route off an approved pull request (#288). **It amends the plan**: the change it names is in scope by definition, never a scope-creep finding, whether or not `revise-agent` has acted on it yet.
 
    `gh pr checks` exposes status in the **`bucket`** field (pass/fail/pending). There is **no** `status` or `conclusion` field on `gh pr checks` — a detail worth remembering rather than rediscovering. **This early read is for diagnosis only** — it is what any Critical-finding log lookup works from. It is never the verdict's evidence: step 3 re-reads the rollup right before posting, because a check can conclude, or a red one turn green, in the time spent reviewing the diff.
 
@@ -138,7 +139,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
    gh run view <databaseId> --repo <repo> --log-failed
    ```
 
-2. **Review the diff.** Be **exhaustive on the first review** — cover the whole changed surface across every dimension below. **Later reviews are delta-scoped**: verify each prior blocking finding is resolved and check only for **regressions the revision introduced**. Do not hunt fresh marginal issues. A genuinely-missed Critical or Medium still blocks; a new marginal item is noted Low or as a follow-up.
+2. **Review the diff.** Be **exhaustive on the first review** — cover the whole changed surface across every dimension below. **Later reviews are delta-scoped**: verify each prior blocking finding is resolved and check only for **regressions the revision introduced**. Do not hunt fresh marginal issues. A genuinely-missed Critical or Medium still blocks; a new marginal item is noted Low or as a follow-up. **A delta review following a `## Changes requested` comment also verifies that the newest one was actually carried out** — a requested change the diff does not reflect is a 🟠 Medium finding, named against the comment's own text, never a scope-creep item.
 
    For each finding record a **stable ID** (`R<cycle>-<sev><n>`, e.g. `R1-M2`), the **exact lines**, severity, whether it is **introduced or preexisting**, and a **suggested fix**.
 

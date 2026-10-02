@@ -52,6 +52,36 @@ export default async function ({ fail, ok }: Reporter) {
     } else {
       ok();
     }
+
+    // guard(#288): the revise #N route's own precondition phrase, and the
+    // comment-before-swap ordering inside its own bullet (so the request is
+    // durable even when the swap's own compare-and-swap then fails).
+    if (!text.includes("only when an operator's own message names that pull request and states the change it wants")) {
+      fail(
+        'cockpit-rails',
+        `${skillRel} is missing the revise #N precondition phrase "only when an operator's own message names that pull request and states the change it wants"`,
+      );
+    } else {
+      ok();
+    }
+
+    const reviseBulletStart = text.indexOf('**"revise #N:');
+    if (reviseBulletStart === -1) {
+      fail('cockpit-rails', `${skillRel} has no "revise #N: <the change>" conversational command bullet`);
+    } else {
+      const reviseBulletEnd = text.indexOf('\n- **"refresh #N"', reviseBulletStart);
+      const reviseBullet = reviseBulletEnd === -1 ? text.slice(reviseBulletStart) : text.slice(reviseBulletStart, reviseBulletEnd);
+      const commentIdx = reviseBullet.indexOf('gh pr comment');
+      const swapIdx = reviseBullet.indexOf('--remove-label "<labels.approved>"');
+      if (commentIdx === -1 || swapIdx === -1 || commentIdx > swapIdx) {
+        fail(
+          'cockpit-rails',
+          `${skillRel}'s "revise #N" bullet must post 'gh pr comment' before '--remove-label "<labels.approved>"', so the request survives a failed swap`,
+        );
+      } else {
+        ok();
+      }
+    }
   }
 
   // --- Liveness reset — the cockpit resets only what it can prove it dispatched
