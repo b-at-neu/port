@@ -152,7 +152,7 @@ function isGhLabelEdit(tokens) {
  *  behaviour rather than a hand-rolled copy. */
 function commandNumbers(tokens) {
   const numbers = [];
-  const isPrEdit = tokens[0] === 'gh' && tokens[1] === 'pr';
+  const isPrEdit = tokens[0] === 'gh' && tokens[1] === 'pr' && tokens[2] === 'edit';
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
     const prev = tokens[i - 1] ?? '';
