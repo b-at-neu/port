@@ -22,3 +22,9 @@ export type { DispatchSpec } from './turn'
 
 export { confirmStarted, markUnconfirmed, REDISPATCH_FLOOR_MS, selectDispatches } from './select'
 export type { ConfirmStartedResult, SelectDispatchesParams } from './select'
+
+export { BUDGET_SESSION, BUDGET_VERDICTS, budgetLiveSets, budgetRoute, dispatchArgs, escalationBody, OUTDATED_SCRIPT_SENTINEL, parseSweepLine, parseVerdict, resetArgs, sweepArgs } from './budget'
+export type { BudgetVerdict } from './budget'
+
+export { createBudgetGate } from './budget-gate'
+export type { BudgetCheckResult, BudgetGate, BudgetGateFailure, BudgetResetResult, BudgetSweepResult, NodeRunner as BudgetNodeRunner } from './budget-gate'

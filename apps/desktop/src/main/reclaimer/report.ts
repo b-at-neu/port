@@ -11,7 +11,7 @@ import type { WorktreesGitRunner } from '../local'
 import type { AssertEqual } from '../../shared/assert-type'
 import type { GithubResolutionState, InspectedWorktree, PorcelainJoinState, ReclaimerFailureKind, WorktreesReport } from '../../shared/reclaimer/types'
 import { isReclaimableState } from '../../shared/reclaimer/types'
-import { parseWorktreesCommand } from './command'
+import { parseNodeCommand } from './command'
 import { parseReportPayload } from './parse'
 
 /** Fails to compile if a new `CommandResult` failure kind is added to the
@@ -100,7 +100,7 @@ export async function readWorktreeReport(params: ReadWorktreeReportParams): Prom
     return { ok: false, kind: 'not-configured', message: 'commands.worktrees is null — worktree hygiene is unavailable.', readAt }
   }
 
-  const tokenized = parseWorktreesCommand(params.worktreesCommand)
+  const tokenized = parseNodeCommand(params.worktreesCommand)
   if (!tokenized.ok) {
     if (tokenized.kind === 'unsupported-runner') {
       return {

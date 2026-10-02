@@ -7,7 +7,7 @@ import type { PipelineItemKind } from '../github/types'
 import type { ItemActionResult } from '../actions/types'
 import type { RepoId } from '../repos'
 import type { StageAgent } from '../tick/types'
-import type { ClaimWriteResult } from '../writes/types'
+import type { ClaimWriteResult, WriteOutcome } from '../writes/types'
 
 export const DISPATCH_COMMANDS = ['drain', 'resume', 'halt'] as const
 export type DispatchCommand = (typeof DISPATCH_COMMANDS)[number]
@@ -126,10 +126,43 @@ export interface DispatchRecord {
 export type DispatcherState =
   | { readonly kind: 'idle' }
   | { readonly kind: 'active'; readonly recent: readonly DispatchRecord[] }
-  | { readonly kind: 'refused'; readonly reason: 'budget-unported' }
+  /** #293: `commands.budget` is set, but the shipped script can't be run —
+   *  unparseable, a non-`node` runner, or a copy too old to accept
+   *  `--session` (`message` already carries which, and the exact remedy;
+   *  `budget-gate.ts` assembles it, so this stays a generic one-line
+   *  render). Nothing dispatches while this holds — the gate that can't run
+   *  must fail closed. */
+  | { readonly kind: 'budget-unavailable'; readonly message: string }
   | { readonly kind: 'dispatcher-failed'; readonly reason: 'at-capacity'; readonly limit: number }
   | { readonly kind: 'dispatcher-failed'; readonly reason: 'runtime' | 'plugin' }
   | { readonly kind: 'agents-missing'; readonly agent: StageAgent }
+
+/** #293: one candidate the budget gate acted on this pass, alongside an
+ *  ordinary dispatch or hold — rendered as its own line under the owner
+ *  line, never folded into `DispatcherState` itself, since several notes
+ *  can coexist with one dispatcher state. `held`/`gate-failed` carry the
+ *  detail the script or the gate itself produced; the two escalation notes
+ *  carry the resolved `needsHuman` label name and the removed trigger name,
+ *  so the renderer never types a label literal. */
+export type BudgetNote =
+  | { readonly kind: 'held'; readonly number: number; readonly line: string }
+  | { readonly kind: 'held-dispatched'; readonly number: number }
+  | { readonly kind: 'escalated'; readonly number: number; readonly needsHumanLabel: string; readonly commentFailedMessage: string | null }
+  | { readonly kind: 'escalation-failed'; readonly number: number; readonly needsHumanLabel: string; readonly triggerLabel: string; readonly outcome: WriteOutcome }
+  | { readonly kind: 'gate-failed'; readonly number: number; readonly message: string }
+
+/** #293: one ready repository's own budget-gate status — `line` is the
+ *  sweep's own session clause (`bin/budget.mjs`'s `renderTickClause`,
+ *  verbatim), `problem` is set only while the most recent sweep itself
+ *  failed (rows stay open and keep counting), and `notes` is replaced
+ *  whenever a pass actually runs the per-candidate gate, kept otherwise —
+ *  bounded to 20, the same idiom `DispatchRecord`'s own `RECENT_LIMIT`
+ *  establishes. */
+export interface BudgetStatus {
+  readonly line: string | null
+  readonly problem: string | null
+  readonly notes: readonly BudgetNote[]
+}
 
 /** #265: `BoardSnapshot.dispatch`'s own one-row-per-ready-repository shape —
  *  `state` is always `{ kind: 'idle' }` when `owner !== 'app'`, since only
@@ -154,6 +187,11 @@ export interface RepoDispatchStatus {
    *  The owner line's own "claimed 14:02" clause reads this, never a second
    *  clock of its own. */
   readonly claimedAt: string | null
+  /** #293: `null` iff `commands.budget` is `null` — otherwise populated
+   *  regardless of `owner`, since the sweep that produces it keeps going
+   *  while this app's own agents are still working even after the claim
+   *  moves elsewhere. */
+  readonly budget: BudgetStatus | null
 }
 
 /** `'dispatch:claim:set'`'s response (#265) — the mirror of

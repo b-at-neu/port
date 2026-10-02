@@ -372,6 +372,7 @@ export function registerIpc(): RegisteredIpc {
     fetchItemsByNumber,
     listRepositories,
     registryDeps,
+    dirs: { audit: app.getPath('userData'), scratch: app.getPath('temp') },
     now: () => new Date(),
   })
 

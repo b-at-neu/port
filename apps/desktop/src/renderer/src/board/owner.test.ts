@@ -6,12 +6,14 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../../../shared/repos'
 import type { RepoDispatchStatus } from '../../../shared/dispatch/types'
-import { ownerLineCopy } from './owner'
+import { noteCopy, ownerLineCopy } from './owner'
+
+const WRITE_FAILED = { kind: 'write-failed' as const, classification: 'unknown' as const, stderr: 'boom', reread: null }
 
 const REPO_ID = 'repo-a' as RepoId
 
 function status(overrides: Partial<RepoDispatchStatus> = {}): RepoDispatchStatus {
-  return { repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null, ...overrides }
+  return { repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null, budget: null, ...overrides }
 }
 
 describe('ownerLineCopy', () => {
@@ -54,8 +56,20 @@ describe('ownerLineCopy', () => {
     expect(line).toBe('▶ Dispatch: this app · nothing to dispatch.')
   })
 
-  it('refused — budget-unported', () => {
-    expect(ownerLineCopy(status({ state: { kind: 'refused', reason: 'budget-unported' } }))).toContain('commands.budget is set')
+  it('budget-unavailable renders the pre-assembled message verbatim', () => {
+    const message = "commands.budget can't run (could not be parsed as a plain command prefix). Fix it in .claude/port.config.json, or release dispatch to hand it back to the cockpit."
+    expect(ownerLineCopy(status({ state: { kind: 'budget-unavailable', message } }))).toBe(`⏸ Dispatch: this app, but not dispatching — ${message}`)
+  })
+
+  it('the budget clause is appended for every owner, including cockpit and nobody', () => {
+    const budget = { line: 'session 2 dispatches · 41m 12s agent wall-clock', problem: null, notes: [] }
+    expect(ownerLineCopy(status({ budget }))).toContain('Budget: session 2 dispatches')
+    expect(ownerLineCopy(status({ owner: 'cockpit', budget }))).toContain('Budget: session 2 dispatches')
+    expect(ownerLineCopy(status({ owner: 'nobody', budget }))).toContain('Budget: session 2 dispatches')
+  })
+
+  it('no budget clause when the status carries none', () => {
+    expect(ownerLineCopy(status())).not.toContain('Budget:')
   })
 
   it('dispatcher-failed — at-capacity names the limit', () => {
@@ -68,5 +82,42 @@ describe('ownerLineCopy', () => {
 
   it('agents-missing names the dropped agent', () => {
     expect(ownerLineCopy(status({ state: { kind: 'agents-missing', agent: 'impl' } }))).toContain('port:impl-agent')
+  })
+})
+
+describe('noteCopy', () => {
+  it('held — the script line verbatim', () => {
+    const line = "⏳ Couldn't read #158's cost ledger (unparseable table) — holding its dispatch one tick rather than dispatching blind."
+    expect(noteCopy({ kind: 'held', number: 158, line })).toBe(line)
+  })
+
+  it('held-dispatched', () => {
+    expect(noteCopy({ kind: 'held-dispatched', number: 158 })).toContain("Still can't read #158's cost ledger after two polls")
+  })
+
+  it('escalated — comment applied', () => {
+    expect(noteCopy({ kind: 'escalated', number: 52, needsHumanLabel: 'needs human', commentFailedMessage: null })).toBe('⛔ #52 is over its budget ceiling — moved it to needs human and commented why.')
+  })
+
+  it('escalated — comment failed', () => {
+    const line = noteCopy({ kind: 'escalated', number: 52, needsHumanLabel: 'needs human', commentFailedMessage: 'boom' })
+    expect(line).toContain("didn't post (boom)")
+  })
+
+  it('escalation-failed — unclaimed-scope names the trigger and the claim', () => {
+    const outcome = { kind: 'unclaimed-scope' as const, scope: 'plan-gate' as const, claimPath: '/x', keys: ['planApproved' as const] }
+    const line = noteCopy({ kind: 'escalation-failed', number: 52, needsHumanLabel: 'needs human', triggerLabel: 'plan approved', outcome })
+    expect(line).toContain('removing plan approved needs the plan gate claim')
+    expect(line).toContain('needs human')
+  })
+
+  it('escalation-failed — any other outcome falls back to writeOutcomeCopy', () => {
+    const line = noteCopy({ kind: 'escalation-failed', number: 52, needsHumanLabel: 'needs human', triggerLabel: 'plan approved', outcome: WRITE_FAILED })
+    expect(line).toContain('failed:')
+    expect(line).toContain('GitHub refused the write.')
+  })
+
+  it('gate-failed', () => {
+    expect(noteCopy({ kind: 'gate-failed', number: 52, message: 'FAIL  something broke' })).toContain('FAIL  something broke')
   })
 })
