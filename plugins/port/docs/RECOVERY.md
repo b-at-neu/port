@@ -89,7 +89,7 @@ The pipeline runs autonomously once started; these cockpit commands are the clea
 - **`drain` / `pause`** — finish in-flight work, start nothing new (stops dispatch **and** wakeups). **`resume`** restarts ticking.
 - **`stop #N`** — halt one item: drop its trigger label and `TaskStop` its in-flight agent, resetting the label so it can be retried.
 - **`stop` / `halt`** — drain, `TaskStop` all running agents, and reset their labels.
-- **`unblock #N`** — the **only** route off `<labels.needsHuman>`. Not a variant of `retry`/`resume`: those re-apply a trigger for an in-flight label and never touch this gate. `unblock` reads the escalation comment, asks which way to route (back to revision or back to review), comments the clear onto the pull request, then swaps the label — the guard hook denies the same removal from any other route, so this command is the one place it succeeds.
+- **`unblock #N`** — the **only** route off `<labels.needsHuman>`. `#N` is the **ticket** number (the pull request's own number still works too, #281) — the cockpit resolves either to the pull request at `<labels.needsHuman>` and clears it by branch or by number accordingly. Not a variant of `retry`/`resume`: those re-apply a trigger for an in-flight label and never touch this gate. `unblock` reads the escalation comment, asks which way to route (back to revision or back to review), comments the clear onto the pull request, then swaps the label — the guard hook denies the same removal from any other route, so this command is the one place it succeeds.
 
 Closing the cockpit session also halts dispatch, since it is the only dispatcher, but cuts off in-flight agents mid-run — prefer `drain` for a graceful stop.
 

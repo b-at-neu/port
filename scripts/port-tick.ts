@@ -22,7 +22,7 @@ import { buildQuery } from './port-tick/query.ts';
 import { runGraphql } from './port-tick/gh.ts';
 import { classifyEnvelope, truncatedAliases } from './port-tick/envelope.ts';
 import { partitionOwnership, issueSessionRequiredReason, prSessionRequiredReason } from './port-tick/classify.ts';
-import { labelsByItem, contradictions, actionablePartitions, reconcileTick, ungatedPullRequests, reportOrphans } from './port-tick/reconcile.ts';
+import { labelsByItem, contradictions, actionablePartitions, reconcileTick, ungatedPullRequests, reportOrphans, ticketsByPullRequest } from './port-tick/reconcile.ts';
 import { rollupVerdict } from './port-tick/checks.ts';
 import { mergeabilityRoute, refreshDecision, capRefreshes, zeroDiffGate, cycleCapExceeded, approvedReverify, refreshWins } from './port-tick/gates.ts';
 import { parseFilesBlock, gateCandidates } from './port-tick/contention.ts';
@@ -328,6 +328,7 @@ function cmdPlan(root: string, cfg: any): void {
     envelope: { ...envelope, truncated },
     items,
     ungated,
+    tickets: ticketsByPullRequest(openPRs, cfg.integration),
     reconcile,
     dispatch,
     gates,
@@ -454,8 +455,8 @@ function cmdResolve(root: string, cfg: any, args: any): void {
   const decision = args.decision;
   if (!item || !decision) return die('resolve requires --item <n> --decision <approve|changes|back-to-revision|back-to-review>');
 
-  const write = gateResolveWrite({ repo: cfg.repo, labels: cfg.labels, item, decision });
-  if (!write) return die(`unrecognized --decision '${decision}'`);
+  const write = gateResolveWrite({ repo: cfg.repo, labels: cfg.labels, item, decision, branch: args.branch });
+  if (!write) return die(`unrecognized --decision '${decision}', or an invalid --branch`);
   emit({ ok: true, item, decision, writes: [write] });
 }
 

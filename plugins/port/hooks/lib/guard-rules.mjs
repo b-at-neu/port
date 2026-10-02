@@ -331,11 +331,12 @@ export function decide({
           };
         }
         if (!gate.hasNumbers) {
-          // No bare digit and no issues|pull URL to key off — e.g. a
-          // branch-name form, or `--remove-label` with no identifier at all
-          // (`gh` defaults to the current branch's PR). There is nothing to
-          // check an operator message against, so this must never fall
-          // through to operatorNamed's vacuously-true `[].every(...)`.
+          // No bare digit, no issues|pull URL, and no branch selector with a
+          // leading N- to key off — e.g. a branch with no leading N-, or
+          // `--remove-label` with no identifier at all (`gh` defaults to the
+          // current branch's PR). There is nothing to check an operator
+          // message against, so this must never fall through to
+          // operatorNamed's vacuously-true `[].every(...)`.
           return {
             decision: 'deny',
             who,

@@ -22,23 +22,29 @@ import { LABEL_SURFACE } from './config.ts';
  *  omitted entirely when `removeKey` is falsy, never emitted as an empty
  *  string — every exported write below composes through this, so a
  *  label-flag typo, or a wrong-surface `gh` subcommand, only has one place
- *  to happen. */
+ *  to happen. `selector` (#281), when given, is emitted quoted in place of
+ *  `number` — a validated `gh pr edit` branch selector (`gateResolveWrite`'s
+ *  own job to validate, never this formatter's), so a gate clear can name
+ *  the pull request by its branch rather than its own number. */
 function labelEdit({
   removeKey,
   addKey,
   number,
+  selector,
   repo,
   labels,
 }: {
   removeKey: string | null;
   addKey: string;
   number: number;
+  selector?: string | null;
   repo: string;
   labels: Record<string, string>;
 }): string {
   const target = (LABEL_SURFACE as Record<string, string>)[removeKey ?? addKey];
   const removePart = removeKey ? ` --remove-label "${labels[removeKey]}"` : '';
-  return `gh ${target} edit ${number} --repo ${repo}${removePart} --add-label "${labels[addKey]}"`;
+  const subject = selector ? `"${selector}"` : String(number);
+  return `gh ${target} edit ${subject} --repo ${repo}${removePart} --add-label "${labels[addKey]}"`;
 }
 
 /** The refresh sweep's asymmetry, in one place (#225). `candidate` is
@@ -125,22 +131,51 @@ export function livenessResetWrite({
   };
 }
 
+// A `gh pr edit` branch selector (#281): leading digits, a dash, then the
+// rest of the branch name — the same shape `command-rules.mjs`'s own
+// `commandNumbers` branch rung reads back out of the command line it
+// produces here.
+const BRANCH_SELECTOR_RE = /^\d+-[\w./-]+$/;
+
 /** The four `resolve --decision` answers a human gate accepts: two on the
  *  plan-review gate (an issue), two clearing `<labels.needsHuman>` (a pull
  *  request). Returns `null` for an unrecognized decision — the caller turns
- *  that into the CLI's own error. */
-export function gateResolveWrite({ repo, labels, item, decision }: { repo: string; labels: Record<string, string>; item: number; decision: string }): any {
+ *  that into the CLI's own error. `branch` (#281, optional) is honoured only
+ *  for `back-to-revision`/`back-to-review` — the two decisions that ever
+ *  target a pull request — and must match `BRANCH_SELECTOR_RE`; an invalid
+ *  branch, or a `branch` passed alongside one of the two plan-review
+ *  decisions (an issue, which has no branch selector), also returns `null`
+ *  rather than silently falling back to the numeric form. */
+export function gateResolveWrite({
+  repo,
+  labels,
+  item,
+  decision,
+  branch,
+}: {
+  repo: string;
+  labels: Record<string, string>;
+  item: number;
+  decision: string;
+  branch?: string | null;
+}): any {
+  if (branch != null && (decision === 'approve' || decision === 'changes')) return null;
   if (decision === 'approve') {
     return { command: labelEdit({ removeKey: 'planReview', addKey: 'planApproved', number: item, repo, labels }), why: 'plan review: approved' };
   }
   if (decision === 'changes') {
     return { command: labelEdit({ removeKey: 'planReview', addKey: 'planChangesRequested', number: item, repo, labels }), why: 'plan review: changes requested' };
   }
+  let selector: string | undefined;
+  if (branch != null) {
+    if (!BRANCH_SELECTOR_RE.test(branch)) return null;
+    selector = branch;
+  }
   if (decision === 'back-to-revision') {
-    return { command: labelEdit({ removeKey: 'needsHuman', addKey: 'needsRevision', number: item, repo, labels }), why: 'gate cleared: back to revision' };
+    return { command: labelEdit({ removeKey: 'needsHuman', addKey: 'needsRevision', number: item, selector, repo, labels }), why: 'gate cleared: back to revision' };
   }
   if (decision === 'back-to-review') {
-    return { command: labelEdit({ removeKey: 'needsHuman', addKey: 'readyForReview', number: item, repo, labels }), why: 'gate cleared: back to review' };
+    return { command: labelEdit({ removeKey: 'needsHuman', addKey: 'readyForReview', number: item, selector, repo, labels }), why: 'gate cleared: back to review' };
   }
   return null;
 }

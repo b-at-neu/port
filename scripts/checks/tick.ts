@@ -82,6 +82,7 @@ export default async function ({ fail, note, ok }: Reporter) {
       contradictions: modules['reconcile.ts'].contradictions,
       actionablePartitions: modules['reconcile.ts'].actionablePartitions,
       linkedIssues: modules['reconcile.ts'].linkedIssues,
+      ticketsByPullRequest: modules['reconcile.ts'].ticketsByPullRequest,
       duplicatePullRequests: modules['reconcile.ts'].duplicatePullRequests,
       ungatedPullRequests: modules['reconcile.ts'].ungatedPullRequests,
       reportDelta: modules['reconcile.ts'].reportDelta,
@@ -454,6 +455,8 @@ function runCase(fn: string, impl: any, input: any): any {
       return impl(input.partitions, input.contradictory);
     case 'linkedIssues':
       return impl(input);
+    case 'ticketsByPullRequest':
+      return impl(input.prs, input.integration);
     case 'duplicatePullRequests':
       return impl(input.prs, input.integration, input.labels);
     case 'ungatedPullRequests':
