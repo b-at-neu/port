@@ -1,5 +1,6 @@
-// Tokenizes and validates `commands.worktrees` — a free-form command-prefix
-// string a repository's config carries verbatim. `KNOWN_COMMANDS` in
+// Tokenizes and validates a `node`-prefixed `commands.*` string —
+// `commands.worktrees` and `commands.budget` are both a free-form
+// command-prefix string a repository's config carries verbatim. `KNOWN_COMMANDS` in
 // `main/platform/run.ts` is a literal union precisely so an adapter cannot
 // reach for an arbitrary binary (ENGINEERING §1), so this rejects a shell
 // metacharacter or unbalanced quote outright and accepts only a `node`
@@ -61,11 +62,14 @@ function tokenize(prefix: string): readonly string[] | null {
   return tokens
 }
 
-/** Tokenizes `commands.worktrees` and accepts it only when the first token
- *  is exactly `node` — every schema example and every `/port:init` install
- *  is `node <script>`, so this rejects nothing real. Never spawns anything;
- *  the caller (`report.ts`) decides what to do with a successful result. */
-export function parseWorktreesCommand(prefix: string): TokenizeResult {
+/** Tokenizes a `node`-prefixed command string — `commands.worktrees` and
+ *  `commands.budget` share this exact shape (#293: the tokenizer was never
+ *  worktrees-specific) — and accepts it only when the first token is
+ *  exactly `node`: every schema example and every `/port:init` install is
+ *  `node <script>`, so this rejects nothing real. Never spawns anything;
+ *  the caller (`report.ts`, `dispatch/budget-gate.ts`) decides what to do
+ *  with a successful result. */
+export function parseNodeCommand(prefix: string): TokenizeResult {
   const tokens = tokenize(prefix)
   if (tokens === null || tokens.length === 0) return { ok: false, kind: 'unparseable-command' }
 

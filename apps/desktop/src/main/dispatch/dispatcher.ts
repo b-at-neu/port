@@ -5,11 +5,12 @@
 // to `onSnapshot`; `status`/`relay`/`stopFor` serve the renderer's own
 // reads and writes.
 import type { BoardSnapshot } from '../../shared/board/types'
-import type { DispatchOwner, DispatchRecord, DispatchRelayResult, DispatcherState, RepoDispatchStatus } from '../../shared/dispatch/types'
+import type { BudgetNote, BudgetStatus, DispatchOwner, DispatchRecord, DispatchRelayResult, DispatcherState, RepoDispatchStatus } from '../../shared/dispatch/types'
 import type { DrainState } from '../../shared/dispatch/types'
 import type { RepoId } from '../../shared/repos'
 import type { AgentSummary, HostedSessionSnapshot, HostedStore, SessionKey } from '../hosting'
 import type { ReadyEntry } from '../actions'
+import type { EscalateToHumanParams, EscalateToHumanResult } from '../actions'
 import type { RegistryDeps } from '../registry'
 import type { ReposListResponse } from '../../shared/ipc'
 import type { DispatchLedger } from '../tick'
@@ -18,12 +19,18 @@ import type { ReadGateClaimParams } from '../writes'
 import type { ClaimRead } from '../writes'
 import type { FetchItemsByNumberParams } from '../github'
 import type { ItemsByNumberFetch, ResolvedItem } from '../../shared/github/types'
+import { labelName } from '../../shared/labels/vocabulary'
 import type { LabelVocabulary } from '../../shared/labels/vocabulary'
+import type { WriteOutcome } from '../../shared/writes/types'
 import type { TickActionable, TickReport } from '../../shared/tick/types'
 import { confirmStarted, markUnconfirmed, selectDispatches } from './select'
+import { budgetLiveSets, budgetRoute, escalationBody } from './budget'
+import type { BudgetGate } from './budget-gate'
 import { composeDispatchTurn, composeRelayTurn, DISPATCHER_INSTRUCTIONS, DISPATCHER_MODEL, missingAgentOf, specFor } from './turn'
+import type { DispatchSpec } from './turn'
 
 const RECENT_LIMIT = 20
+const NOTE_LIMIT = 20
 
 export interface CreateDispatcherParams {
   readonly store: HostedStore
@@ -35,6 +42,11 @@ export interface CreateDispatcherParams {
   readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
   readonly listRepositories: (registryDeps: RegistryDeps) => Promise<ReposListResponse>
   readonly registryDeps: RegistryDeps
+  /** #293: runs `commands.budget`'s reset/sweep/dispatch modes and
+   *  classifies the result — `budget-gate.ts`'s own composition. */
+  readonly budget: BudgetGate
+  readonly escalate: (params: EscalateToHumanParams) => Promise<EscalateToHumanResult>
+  readonly dirs: { readonly audit: string; readonly scratch: string }
   readonly onChange: () => void
   readonly now: () => Date
 }
@@ -61,10 +73,19 @@ interface RepoDispatcherState {
   dispatcherState: DispatcherState
   draining: boolean
   claimedAt: string | null
+  /** #293: `reset` runs at most once per process per repository — set once
+   *  the attempt actually succeeds, never before, so a failing script keeps
+   *  retrying on every pass rather than wedging the gate shut forever. */
+  budgetReset: boolean
+  /** #293: consecutive `hold` verdicts per candidate number, process-scoped
+   *  like `main/tick/ledger.ts`'s own `createUnknownStreaks` — a restart
+   *  starts every item back at 0, never a false second-strike dispatch. */
+  budgetHolds: Map<number, number>
+  budget: BudgetStatus | null
 }
 
 function emptyRepoState(): RepoDispatcherState {
-  return { sessionKey: null, recent: [], owner: 'cockpit', dispatcherState: { kind: 'idle' }, draining: false, claimedAt: null }
+  return { sessionKey: null, recent: [], owner: 'cockpit', dispatcherState: { kind: 'idle' }, draining: false, claimedAt: null, budgetReset: false, budgetHolds: new Map(), budget: null }
 }
 
 function ownerOf(claim: ClaimRead): DispatchOwner {
@@ -84,6 +105,14 @@ function survived(resolved: ResolvedItem, candidate: TickActionable, vocabulary:
   const roleBearingNames = new Set(vocabulary.labels.filter((l) => l.role !== 'marker').map((l) => l.name))
   if (resolved.labels.some((name) => name !== triggerLabel.name && roleBearingNames.has(name))) return false
   return resolved.assignees.includes(viewer)
+}
+
+/** #293: `null` for a comment that was never attempted or that itself
+ *  applied — a short description otherwise, for the 'escalated' note's own
+ *  "comment explaining why didn't post (<message>)" clause. */
+function commentFailureMessage(comment: WriteOutcome | null): string | null {
+  if (comment === null || comment.kind === 'applied') return null
+  return comment.kind === 'write-failed' ? comment.stderr : comment.kind
 }
 
 export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
@@ -146,23 +175,18 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       const owner = ownerOf(claim)
       const draining = deps.drain().gate !== 'open'
       stateFor(entry.id).claimedAt = claim.state === 'held' ? claim.claimedAt : null
-      if (owner !== 'app') {
-        report(entry.id, owner, { kind: 'idle' }, draining)
-        return
-      }
-
-      if (entry.config.commands.budget !== null) {
-        report(entry.id, owner, { kind: 'refused', reason: 'budget-unported' }, draining)
-        return
-      }
 
       const state = stateFor(entry.id)
 
       // Confirm any already-sent records against the live session's own
       // task view, before computing new candidates — the floor (below)
-      // reads each record's own `at`, regardless of state.
+      // reads each record's own `at`, regardless of state. #293: moved
+      // ahead of the owner early-return below — the budget sweep's live set
+      // must stay current even after the claim is released while this
+      // app's own agents are still working through their tasks.
+      let snap: HostedSessionSnapshot | null = null
       if (state.sessionKey !== null) {
-        const snap = deps.store.snapshotOf(state.sessionKey)
+        snap = deps.store.snapshotOf(state.sessionKey)
         if (snap !== null) {
           const { updated, newlyStarted } = confirmStarted(state.recent, snap.tasks)
           let next = updated
@@ -172,6 +196,35 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
           if (snap.phase === 'ready') next = markUnconfirmed(next)
           pushRecent(entry.id, next)
         }
+      }
+
+      // #293: budget bookkeeping — runs whenever a ceiling is configured and
+      // either this app currently owns dispatch, or it once started a
+      // session here and that session's agents may still be live. `reset`
+      // runs at most once per process per repository; `sweep` runs on every
+      // pass so the ledger comment and the owner line stay current even
+      // while nothing is being dispatched.
+      if (entry.config.commands.budget !== null && (owner === 'app' || state.sessionKey !== null)) {
+        if (!state.budgetReset) {
+          const resetResult = await deps.budget.reset(entry)
+          if (resetResult.ok) {
+            state.budgetReset = true
+          } else if (owner === 'app') {
+            // This fails closed: a gate that can't run dispatches nothing.
+            report(entry.id, owner, { kind: 'budget-unavailable', message: resetResult.message }, draining)
+            return
+          }
+        }
+        if (state.budgetReset) {
+          const sets = budgetLiveSets(snap?.tasks ?? [], state.recent)
+          const sweepResult = await deps.budget.sweep(entry, sets)
+          state.budget = { line: sweepResult.line, problem: sweepResult.problem, notes: state.budget?.notes ?? [] }
+        }
+      }
+
+      if (owner !== 'app') {
+        report(entry.id, owner, { kind: 'idle' }, draining)
+        return
       }
 
       if (tick === undefined || tick.blind !== null || viewer === null) {
@@ -225,10 +278,79 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       }
 
       const resolvableNumbers = new Set(specs.map((s) => s.name))
-      const sentCandidates = survivors.filter((c) => resolvableNumbers.has(`${c.agent}-${String(c.number)}`))
+      let gatedSpecs: readonly DispatchSpec[] = specs
+      let sentCandidates: readonly TickActionable[] = survivors.filter((c) => resolvableNumbers.has(`${c.agent}-${String(c.number)}`))
+
+      // #293: the budget gate — the last pre-dispatch veto, only when a
+      // ceiling is configured, run once every other veto above has already
+      // filtered `survivors`/`specs` down. An `allow` starts a row's clock,
+      // so anything evaluated after this would charge a whole sweep
+      // interval to a ticket that never dispatched.
+      if (entry.config.commands.budget !== null) {
+        const specByName = new Map(specs.map((s) => [s.name, s] as const))
+        const keptSpecs: DispatchSpec[] = []
+        const keptCandidates: TickActionable[] = []
+        const notes: BudgetNote[] = []
+
+        for (const candidate of sentCandidates) {
+          const spec = specByName.get(`${candidate.agent}-${String(candidate.number)}`)
+          if (spec === undefined) continue // this agent was already dropped — nothing here to gate
+
+          const result = await deps.budget.check(entry, candidate, entry.config.models[candidate.agent])
+          if (!result.ok) {
+            notes.push({ kind: 'gate-failed', number: candidate.number, message: result.message })
+            continue
+          }
+
+          const priorHolds = state.budgetHolds.get(candidate.number) ?? 0
+          const route = budgetRoute(result.verdict, priorHolds)
+          if (route.holds === 0) state.budgetHolds.delete(candidate.number)
+          else state.budgetHolds.set(candidate.number, route.holds)
+
+          if (route.action === 'dispatch') {
+            keptSpecs.push(spec)
+            keptCandidates.push(candidate)
+            if (priorHolds > 0) notes.push({ kind: 'held-dispatched', number: candidate.number })
+            continue
+          }
+          if (route.action === 'hold') {
+            notes.push({ kind: 'held', number: candidate.number, line: result.line })
+            continue
+          }
+
+          // route.action === 'escalate'
+          const needsHumanLabel = labelName(entry.config.vocabulary, 'needsHuman') ?? 'needsHuman'
+          const triggerLabel = labelName(entry.config.vocabulary, candidate.trigger) ?? candidate.trigger
+          const escalation = await deps.escalate({
+            entry,
+            kind: candidate.kind,
+            number: candidate.number,
+            trigger: candidate.trigger,
+            viewer,
+            body: escalationBody(result.line),
+            action: 'budget-escalate',
+            auditDir: deps.dirs.audit,
+            scratchDir: deps.dirs.scratch,
+          })
+          if (escalation.labels.kind === 'applied') {
+            notes.push({ kind: 'escalated', number: candidate.number, needsHumanLabel, commentFailedMessage: commentFailureMessage(escalation.comment) })
+          } else {
+            notes.push({ kind: 'escalation-failed', number: candidate.number, needsHumanLabel, triggerLabel, outcome: escalation.labels })
+          }
+        }
+
+        gatedSpecs = keptSpecs
+        sentCandidates = keptCandidates
+        state.budget = { line: state.budget?.line ?? null, problem: state.budget?.problem ?? null, notes: notes.length > NOTE_LIMIT ? notes.slice(notes.length - NOTE_LIMIT) : notes }
+      }
+
+      if (gatedSpecs.length === 0) {
+        report(entry.id, owner, missing !== null ? { kind: 'agents-missing', agent: missing } : { kind: 'idle' }, draining)
+        return
+      }
 
       if (state.sessionKey === null) return // defensive: ensureSession always sets this on success
-      deps.store.send(state.sessionKey, composeDispatchTurn(specs))
+      deps.store.send(state.sessionKey, composeDispatchTurn(gatedSpecs))
 
       const at = deps.now().toISOString()
       const sent: DispatchRecord[] = sentCandidates.map((c) => ({ agent: c.agent, number: c.number, kind: c.kind, state: 'sent', at }))
@@ -257,6 +379,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       draining: s.draining,
       claudeSessionId: s.sessionKey !== null ? (deps.store.snapshotOf(s.sessionKey)?.claudeSessionId ?? null) : null,
       claimedAt: s.claimedAt,
+      budget: s.budget,
     }))
   }
 

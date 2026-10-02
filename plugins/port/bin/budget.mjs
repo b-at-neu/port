@@ -28,6 +28,15 @@
 // `budget.wallClockMinutes` is fatal (`ceilingSecondsFrom`), and a failed
 // ledger write stays `pending` (`flushPending`) — because discarding
 // wall-clock really spent under-counts, the one direction this rail prevents.
+//
+// #293: one session log per *dispatcher*, not one per repository — `reset`,
+// `sweep`, and `dispatch` all accept `--session <name>`, naming the file a
+// sweep closes every open row its own caller does not vouch for. Without
+// this, the cockpit's own sweep would close rows the desktop app's dispatcher
+// is still running (and vice versa), undercounting wall-clock actually
+// spent. Absent `--session` keeps today's single `budget-session.tsv`, so an
+// adopter's existing cockpit-only usage is byte-identical. The ledger
+// comment itself stays shared — it is keyed on the issue, not the caller.
 import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -224,16 +233,29 @@ export function renderTickClause(totals, tickets) {
   return `**Budget:** ${parts.join(' · ')}`;
 }
 
-const sessionLogPath = (mainRoot) => join(mainRoot, '.temp', 'budget-session.tsv');
+/** `undefined` → today's file, byte-identical to before `--session` existed.
+ *  A well-formed name (lowercase letters, digits, dashes, 1–32 characters) →
+ *  its own file. Anything else → `null`, so the caller dies rather than
+ *  silently sharing (or mis-splitting) a log across callers. */
+export function sessionLogName(session) {
+  if (session === undefined) return 'budget-session.tsv';
+  return /^[a-z][a-z0-9-]{0,31}$/.test(session) ? `budget-session-${session}.tsv` : null;
+}
 
-function readSessionLog(mainRoot) {
-  const path = sessionLogPath(mainRoot);
+function sessionLogPath(mainRoot, session) {
+  const name = sessionLogName(session);
+  return join(mainRoot, '.temp', name);
+}
+
+function readSessionLog(mainRoot, session) {
+  const path = sessionLogPath(mainRoot, session);
   return existsSync(path) ? parseSessionLog(readFileSync(path, 'utf8')) : [];
 }
 
-function writeSessionLog(mainRoot, rows) {
-  mkdirSync(dirname(sessionLogPath(mainRoot)), { recursive: true });
-  writeFileSync(sessionLogPath(mainRoot), renderSessionLog(rows));
+function writeSessionLog(mainRoot, session, rows) {
+  const path = sessionLogPath(mainRoot, session);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, renderSessionLog(rows));
 }
 
 // --- Config and repo facts ----------------------------------------------------
@@ -393,12 +415,19 @@ function parseCommonArgs(argv, spec) {
   return opts;
 }
 
+/** Validates `--session` once, at the CLI boundary — every caller below
+ *  resolves it through `sessionLogName` again where it actually needs the
+ *  path, but a malformed name dies here rather than mid-operation. */
+function requireValidSession(session) {
+  if (sessionLogName(session) === null) die(`--session must be lowercase letters, digits and dashes (got '${session}').`);
+}
+
 /** `reset` and `sweep` are one operation over different live sets: close
  *  every open row the caller no longer vouches for, then flush. What each
  *  keeps afterwards is the only difference, and is its own line below. */
 function closeAndFlush(mainRoot, opts, live, done) {
   const { repo, ceilingSeconds } = resolveRepoAndCeiling(mainRoot);
-  const rows = readSessionLog(mainRoot);
+  const rows = readSessionLog(mainRoot, opts.session);
   const nowMs = Date.now();
   const { closed, stillOpen } = closeRows(rows.filter((r) => r.state === 'open'), live, nowMs, done);
   const pending = [...rows.filter((r) => r.state !== 'open'), ...closed];
@@ -406,18 +435,20 @@ function closeAndFlush(mainRoot, opts, live, done) {
 }
 
 function runReset(argv) {
-  const opts = parseCommonArgs(argv, []);
+  const opts = parseCommonArgs(argv, ['--session']);
+  requireValidSession(opts.session);
   const mainRoot = resolveRoot();
   const res = closeAndFlush(mainRoot, opts, [], []);
   // Dropping every flushed row *is* the session scoping; a row whose ledger
   // write failed stays `pending`, so a blip at startup discards nothing.
-  writeSessionLog(mainRoot, res.rows.filter((r) => r.state === 'pending'));
+  writeSessionLog(mainRoot, opts.session, res.rows.filter((r) => r.state === 'pending'));
   if (res.wasEmpty) console.log('ok    no open dispatches to close');
   process.exit(res.failed > 0 ? 1 : 0);
 }
 
 function runSweep(argv) {
-  const opts = parseCommonArgs(argv, ['--live', '--completed']);
+  const opts = parseCommonArgs(argv, ['--live', '--completed', '--session']);
+  requireValidSession(opts.session);
   const mainRoot = resolveRoot();
   const live = parseDescriptionList(opts.live);
   const done = parseDescriptionList(opts.completed);
@@ -425,15 +456,16 @@ function runSweep(argv) {
   const res = closeAndFlush(mainRoot, opts, live.descriptions, done.descriptions);
   // Every closed row is kept (see `parseSessionLog`).
   const all = [...res.stillOpen, ...res.rows];
-  writeSessionLog(mainRoot, all);
+  writeSessionLog(mainRoot, opts.session, all);
   // Prints on every sweep, closing tick or not (see `renderTickClause`).
   console.log(all.length === 0 ? 'note  no dispatches this session' : renderTickClause(sessionTotals(all, res.nowMs), res.tickets));
   process.exit(res.failed > 0 ? 1 : 0);
 }
 
 function runDispatch(argv) {
-  const opts = parseCommonArgs(argv, ['--issue', '--pr', '--stage', '--model']);
-  const usage = 'usage: node budget.mjs dispatch (--issue N | --pr N) --stage <plan|impl|review|revise> --model <m> [--offline]';
+  const opts = parseCommonArgs(argv, ['--issue', '--pr', '--stage', '--model', '--session']);
+  requireValidSession(opts.session);
+  const usage = 'usage: node budget.mjs dispatch (--issue N | --pr N) --stage <plan|impl|review|revise> --model <m> [--offline] [--session <name>]';
   if ((opts.issue == null) === (opts.pr == null)) die(`dispatch needs exactly one of --issue/--pr. ${usage}`);
   if (!STAGES.includes(opts.stage)) die(`--stage must be one of ${STAGES.join(', ')}. ${usage}`);
   if (!opts.model) die(`--model is required. ${usage}`);
@@ -473,7 +505,7 @@ function runDispatch(argv) {
   // This row's clock starts here — the reason the caller runs the gate last.
   const dispatchNumber = opts.pr != null ? Number(opts.pr) : issue;
   const row = { issue, dispatchNumber, stage: opts.stage, model: opts.model, startedAt: new Date().toISOString(), state: 'open', seconds: 0, outcome: '' };
-  writeSessionLog(mainRoot, [...readSessionLog(mainRoot), row]);
+  writeSessionLog(mainRoot, opts.session, [...readSessionLog(mainRoot, opts.session), row]);
   process.exit(0);
 }
 

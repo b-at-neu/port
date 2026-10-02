@@ -1,11 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { pipelineSkillText, root, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
 // Operator control over dispatch (issue 110) and the app's own dispatcher
 // (#265) — thirteen mechanical rails, dependency-free and regex-based, in
 // the shape of desktop-actions.ts's and desktop-writes.ts's own guards.
+// #293 adds the budget gate's own rails alongside them.
 export default async function ({ fail, ok }: Reporter) {
   const sharedDispatchDir = 'apps/desktop/src/shared/dispatch';
   const mainDispatchDir = 'apps/desktop/src/main/dispatch';
@@ -13,6 +15,9 @@ export default async function ({ fail, ok }: Reporter) {
   const haltFile = `${mainDispatchDir}/halt.ts`;
   const dispatcherFile = `${mainDispatchDir}/dispatcher.ts`;
   const turnFile = `${mainDispatchDir}/turn.ts`;
+  const budgetFile = `${mainDispatchDir}/budget.ts`;
+  const budgetGateFile = `${mainDispatchDir}/budget-gate.ts`;
+  const budgetScriptPath = join(root, 'plugins/port/bin/budget.mjs');
   const dispatchableFile = 'apps/desktop/src/main/tick/dispatchable.ts';
   const trajectoryFile = 'apps/desktop/src/main/trajectory/log.ts';
 
@@ -161,13 +166,113 @@ export default async function ({ fail, ok }: Reporter) {
     }
   }
 
-  // --- dispatcher.ts names commands.budget ------------------------------------
-  // guard(#265): the budget refusal silently dropped — a repository with
-  // commands.budget set would then dispatch with no cost ceiling enforced.
+  // --- budget-unported is gone; the gate runs instead -------------------------
+  // guard(#293): #265's refusal reverting instead of staying ported — the
+  // literal reason string must appear nowhere, and the dispatcher's own
+  // ordering (re-read, then gate, then send) must hold so a stale candidate
+  // is never gated and a gated-in candidate is never skipped.
   {
+    let foundRefusal = false;
+    for (const f of allFiles) {
+      const rel = relOf(f);
+      if (rel.endsWith('.test.ts')) continue;
+      if (!rel.startsWith('apps/desktop/src/')) continue;
+      if (readFileSync(f, 'utf8').includes('budget-unported')) {
+        foundRefusal = true;
+        fail('desktop-dispatch', `${rel} still names 'budget-unported' — #293 ported the budget gate; the refusal must be gone`);
+      }
+    }
+    if (!foundRefusal) ok();
+
     const text = readFileSync(join(root, dispatcherFile), 'utf8');
-    if (!text.includes('commands.budget')) {
-      fail('desktop-dispatch', `${dispatcherFile} never names 'commands.budget' — the budget refusal this ticket adds is missing`);
+    const fetchIdx = text.indexOf('fetchItemsByNumber(');
+    const checkIdx = text.indexOf('budget.check(');
+    const sendIdx = text.indexOf('store.send(');
+    if (fetchIdx === -1 || checkIdx === -1 || sendIdx === -1) {
+      fail('desktop-dispatch', `${dispatcherFile} is missing fetchItemsByNumber(, budget.check(, or store.send( — the guard cannot compare an ordering that isn't there`);
+    } else if (!(fetchIdx < checkIdx && checkIdx < sendIdx)) {
+      fail('desktop-dispatch', `${dispatcherFile}'s own fetchItemsByNumber(/budget.check(/store.send( calls are out of order — expected fetchItemsByNumber( before budget.check( before store.send(`);
+    } else {
+      ok();
+    }
+  }
+
+  // --- pin: BUDGET_VERDICTS ↔ budget.mjs's own verdict(), both directions ----
+  // guard(#293): the app's own gate reading a verdict the script can never
+  // produce, or missing one it does — `budgetRoute` would then either throw
+  // on something real or silently treat it as unreachable.
+  // pin: `main/dispatch/budget.ts`'s `BUDGET_VERDICTS` ↔ `bin/budget.mjs`'s `verdict()`, both directions
+  {
+    const budgetText = readFileSync(join(root, budgetFile), 'utf8');
+    const verdictsMatch = /BUDGET_VERDICTS\s*=\s*\[([^\]]*)\]/.exec(budgetText);
+    const mod = await import(pathToFileURL(budgetScriptPath).href);
+    const scriptVerdicts = new Set([
+      mod.verdict({ secondsUsed: 0, ceilingSeconds: null }),
+      mod.verdict({ secondsUsed: 100, ceilingSeconds: 100 }),
+      'hold', // verdict() never returns 'hold' itself — a caller-level state for an unreadable ledger (its own doc comment)
+    ]);
+    if (!verdictsMatch) {
+      fail('desktop-dispatch', `${budgetFile} has no 'BUDGET_VERDICTS = [...]' array to compare against`);
+    } else {
+      const appVerdicts = new Set([...verdictsMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]));
+      const onlyInApp = [...appVerdicts].filter((v) => !scriptVerdicts.has(v));
+      const onlyInScript = [...scriptVerdicts].filter((v) => !appVerdicts.has(v));
+      if (onlyInApp.length > 0 || onlyInScript.length > 0) {
+        fail('desktop-dispatch', `${budgetFile}'s BUDGET_VERDICTS (${[...appVerdicts].join(', ')}) and bin/budget.mjs's verdicts (${[...scriptVerdicts].join(', ')}) disagree`);
+      } else {
+        ok();
+      }
+    }
+
+    // --- pin: sessionLogName(BUDGET_SESSION) !== null -------------------------
+    // guard(#293): BUDGET_SESSION drifting to a name the script's own
+    // validator rejects, wedging the gate shut on every call.
+    // pin: `main/dispatch/budget.ts`'s `BUDGET_SESSION` ↔ `bin/budget.mjs`'s `sessionLogName` accepting it
+    const sessionMatch = /BUDGET_SESSION\s*=\s*'([^']+)'/.exec(budgetText);
+    if (!sessionMatch) {
+      fail('desktop-dispatch', `${budgetFile} has no 'BUDGET_SESSION = ...' assignment`);
+    } else if (mod.sessionLogName(sessionMatch[1]) === null) {
+      fail('desktop-dispatch', `${budgetFile}'s BUDGET_SESSION ('${sessionMatch[1]}') is rejected by bin/budget.mjs's own sessionLogName — the gate would die on every call`);
+    } else {
+      ok();
+    }
+
+    // --- pin: OUTDATED_SCRIPT_SENTINEL matches budget.mjs's own die() template -
+    // guard(#293): the sentinel drifting from the wording an older script's
+    // unrecognized-argument failure produces, so a pre-`--session` copy is
+    // never actually detected as outdated. The rendered message is never a
+    // literal in the script's own source (the argument is interpolated), so
+    // this pins the shared prefix both sides must agree on.
+    // pin: `main/dispatch/budget.ts`'s `OUTDATED_SCRIPT_SENTINEL` ↔ `bin/budget.mjs`'s unrecognized-argument `die()` template
+    const sentinelMatch = /OUTDATED_SCRIPT_SENTINEL\s*=\s*"([^"]+)"/.exec(budgetText);
+    const scriptText = readFileSync(budgetScriptPath, 'utf8');
+    const diePrefix = "unrecognized argument '";
+    if (!sentinelMatch) {
+      fail('desktop-dispatch', `${budgetFile} has no 'OUTDATED_SCRIPT_SENTINEL = "..."' assignment`);
+    } else if (!scriptText.includes(`die(\`${diePrefix}`)) {
+      fail('desktop-dispatch', `bin/budget.mjs no longer defines the unrecognized-argument die() template this sentinel pins against`);
+    } else if (!sentinelMatch[1].startsWith(diePrefix)) {
+      fail('desktop-dispatch', `${budgetFile}'s OUTDATED_SCRIPT_SENTINEL ('${sentinelMatch[1]}') does not match bin/budget.mjs's own unrecognized-argument wording ('${diePrefix}…')`);
+    } else {
+      ok();
+    }
+  }
+
+  // --- pin: bin/budget.mjs contains SCRIPT_FAIL_PREFIX ------------------------
+  // guard(#293): budget-gate.ts reading a FAIL line prefix the shipped
+  // script no longer actually emits, so every real failure reads as an
+  // unparseable platform error instead.
+  // pin: `main/reclaimer/report.ts`'s `SCRIPT_FAIL_PREFIX` ↔ `bin/budget.mjs`'s own `die()`
+  {
+    const scriptText = readFileSync(budgetScriptPath, 'utf8');
+    const gateText = readFileSync(join(root, budgetGateFile), 'utf8');
+    const prefixMatch = /SCRIPT_FAIL_PREFIX\s*=\s*'([^']+)'/.exec(readFileSync(join(root, 'apps/desktop/src/main/reclaimer/report.ts'), 'utf8'));
+    if (!prefixMatch) {
+      fail('desktop-dispatch', `apps/desktop/src/main/reclaimer/report.ts has no 'SCRIPT_FAIL_PREFIX = ...' assignment`);
+    } else if (!scriptText.includes(prefixMatch[1])) {
+      fail('desktop-dispatch', `bin/budget.mjs never emits '${prefixMatch[1]}' — SCRIPT_FAIL_PREFIX would never match a real failure`);
+    } else if (!gateText.includes('SCRIPT_FAIL_PREFIX')) {
+      fail('desktop-dispatch', `${budgetGateFile} never imports SCRIPT_FAIL_PREFIX — it must reuse the reclaimer's own constant, never a retyped literal`);
     } else {
       ok();
     }

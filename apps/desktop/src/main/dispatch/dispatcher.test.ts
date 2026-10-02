@@ -132,6 +132,21 @@ function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispat
     fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [], unavailable: [], fetchedAt: 'r' }),
     listRepositories: () => Promise.resolve({ ok: true, repositories: [entry()] }),
     registryDeps: { registryDir: '/registry', git: () => Promise.reject(new Error('unused')), chooseDirectory: () => Promise.resolve(null) },
+    budget: {
+      reset: () => {
+        throw new Error('budget.reset should not be invoked when commands.budget is null')
+      },
+      sweep: () => {
+        throw new Error('budget.sweep should not be invoked when commands.budget is null')
+      },
+      check: () => {
+        throw new Error('budget.check should not be invoked when commands.budget is null')
+      },
+    },
+    escalate: () => {
+      throw new Error('escalate should not be invoked when commands.budget is null')
+    },
+    dirs: { audit: '/audit', scratch: '/scratch' },
     onChange: vi.fn(),
     now: () => new Date('2026-01-01T00:00:00Z'),
     ...overrides,
@@ -143,13 +158,13 @@ describe('createDispatcher — ownership', () => {
     const store = fakeStore()
     const dispatcher = createDispatcher(baseDeps({ store }))
     await dispatcher.consider(snapshotWith([tickReport()]))
-    expect(dispatcher.status()).toEqual([{ repoId: REPO_ID, owner: 'cockpit', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null }])
+    expect(dispatcher.status()).toEqual([{ repoId: REPO_ID, owner: 'cockpit', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null, budget: null }])
   })
 
   it('reports nobody for an unreadable claim', async () => {
     const dispatcher = createDispatcher(baseDeps({ readGateClaim: () => Promise.resolve(UNREADABLE_CLAIM) }))
     await dispatcher.consider(snapshotWith([tickReport()]))
-    expect(dispatcher.status()).toEqual([{ repoId: REPO_ID, owner: 'nobody', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null }])
+    expect(dispatcher.status()).toEqual([{ repoId: REPO_ID, owner: 'nobody', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null, budget: null }])
   })
 
   it('reports app for a claim naming dispatch', async () => {
@@ -160,14 +175,6 @@ describe('createDispatcher — ownership', () => {
 })
 
 describe('createDispatcher — app ownership', () => {
-  it('refuses with budget-unported when commands.budget is set', async () => {
-    const dispatcher = createDispatcher(
-      baseDeps({ readGateClaim: () => Promise.resolve(HELD_CLAIM), listRepositories: () => Promise.resolve({ ok: true, repositories: [entry({ commands: { worktrees: null, budget: 'node scripts/budget.mjs' } })] }) }),
-    )
-    await dispatcher.consider(snapshotWith([tickReport()]))
-    expect(dispatcher.status()[0]?.state).toEqual({ kind: 'refused', reason: 'budget-unported' })
-  })
-
   it('stays idle with nothing dispatchable', async () => {
     const dispatcher = createDispatcher(baseDeps({ readGateClaim: () => Promise.resolve(HELD_CLAIM) }))
     await dispatcher.consider(snapshotWith([tickReport({ actionable: [] })]))

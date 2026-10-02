@@ -116,6 +116,7 @@ export async function resolveDispatchClaimSet(
     draining: false,
     claudeSessionId: null,
     claimedAt: null,
+    budget: null,
   }
   return { kind: 'ok', status }
 }

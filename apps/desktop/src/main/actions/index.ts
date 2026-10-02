@@ -12,3 +12,6 @@ export { applyClaimLabels } from './claim'
 
 export { defaultGateDeps, gateAnswer, gateClaimRead, gateClaimSet, gatePreflight } from './gate'
 export type { GateAnswerParams, GateClaimReadParams, GateClaimSetParams, GateDeps, GatePreflightParams } from './gate'
+
+export { defaultEscalateDeps, escalateToHuman } from './escalate'
+export type { EscalateToHumanDeps, EscalateToHumanParams, EscalateToHumanResult } from './escalate'
