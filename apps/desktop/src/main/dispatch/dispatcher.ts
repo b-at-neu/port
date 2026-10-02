@@ -11,6 +11,7 @@ import type { RepoId } from '../../shared/repos'
 import type { AgentSummary, HostedSessionSnapshot, HostedStore, SessionKey } from '../hosting'
 import type { ReadyEntry } from '../actions'
 import type { RegistryDeps } from '../registry'
+import type { ReposListResponse } from '../../shared/ipc'
 import type { DispatchLedger } from '../tick'
 import { dispatchableFrom } from '../tick'
 import type { ReadGateClaimParams } from '../writes'
@@ -32,7 +33,7 @@ export interface CreateDispatcherParams {
   readonly drain: () => DrainState
   readonly readGateClaim: (params: ReadGateClaimParams) => Promise<ClaimRead>
   readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
-  readonly listRepositories: (registryDeps: RegistryDeps) => Promise<{ readonly ok: boolean; readonly repositories?: readonly ReadyEntry[] }>
+  readonly listRepositories: (registryDeps: RegistryDeps) => Promise<ReposListResponse>
   readonly registryDeps: RegistryDeps
   readonly onChange: () => void
   readonly now: () => Date
@@ -239,10 +240,11 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
 
   async function consider(snapshot: BoardSnapshot): Promise<void> {
     const list = await deps.listRepositories(deps.registryDeps)
-    if (!list.ok || list.repositories === undefined) return
+    if (!list.ok) return
+    const readyEntries = list.repositories.filter((entry): entry is ReadyEntry => 'config' in entry)
     const tickByRepo = new Map(snapshot.tick.map((t) => [t.repoId, t] as const))
     const viewerByRepo = new Map(snapshot.state.repositories.filter((r): r is Extract<typeof r, { readonly ok: true }> => r.ok).map((r) => [r.repoId, r.viewer] as const))
-    await Promise.all(list.repositories.map((entry) => considerRepo(entry, tickByRepo.get(entry.id), viewerByRepo.get(entry.id) ?? null)))
+    await Promise.all(readyEntries.map((entry) => considerRepo(entry, tickByRepo.get(entry.id), viewerByRepo.get(entry.id) ?? null)))
   }
 
   function status(): readonly RepoDispatchStatus[] {

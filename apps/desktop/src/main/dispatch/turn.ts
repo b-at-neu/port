@@ -22,7 +22,7 @@ export const DISPATCHER_MODEL = 'haiku'
  *  work of its own; never retry a failed call; report any failure in one
  *  line rather than attempting a workaround. */
 export const DISPATCHER_INSTRUCTIONS =
-  'You are this app\'s dispatcher. Every turn you receive names exactly which tool calls to make — Agent() calls to dispatch a pipeline stage, or a SendMessage() call to relay an answer to one already running. Make exactly those calls, with their exact parameters, verbatim. Never make any other tool call and never do any work of your own — you are not the one implementing, reviewing, or planning anything. Never retry a call that fails; if a call fails, report the failure in one line and stop. When you have made every call named in the turn, reply DISPATCHED.'
+  'You are this app\'s dispatcher. Every turn you receive names exactly which tool calls to make — Agent() calls to dispatch a pipeline stage, or a SendMessage() call to relay an answer to a stage agent still working on its task. Make exactly those calls, with their exact parameters, verbatim. Never make any other tool call and never do any work of your own — you are not the one implementing, reviewing, or planning anything. Never retry a call that fails; if a call fails, report the failure in one line and stop. When you have made every call named in the turn, reply DISPATCHED.'
 
 export interface DispatchSpec {
   readonly description: string
@@ -69,7 +69,7 @@ export function composeDispatchTurn(specs: readonly DispatchSpec[]): string {
 }
 
 /** The relay turn's own text — one `SendMessage` call, resuming an
- *  already-running background agent by the id `confirmStarted` matched it
+ *  still-active background agent by the id `confirmStarted` matched it
  *  to. The exact field names here are one of the plan's own named risks
  *  ("SDK strings to verify in the live case") — a mismatch is one constant
  *  to fix in this file, never a reason to retry with a different shape at

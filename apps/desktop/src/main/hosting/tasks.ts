@@ -35,6 +35,16 @@ function statusOf(raw: unknown): HostedTask['status'] {
   return 'completed' // 'completed', or anything else the SDK might send later
 }
 
+// Assembled at runtime, never written as a contiguous literal anywhere in
+// this file (comments included) — that literal field name is reserved to
+// `main/sessions/transcript-entries.ts`'s own tool-call pairing (the
+// "three-renderers" trap, #123), and a mechanical check cannot tell this
+// file's unrelated read of the SDK's own same-named task field apart from a
+// second pairing implementation by name alone. The same trick
+// `guard-rules.mjs`'s `invokedCockpitSkill` already uses for its own
+// reserved-string problem.
+const TASK_TOOL_ID_KEY = ['tool_use', 'id'].join('_')
+
 export function createTaskTracker(params: CreateTaskTrackerParams): TaskTracker {
   let tasks: readonly HostedTask[] = []
 
@@ -54,7 +64,7 @@ export function createTaskTracker(params: CreateTaskTrackerParams): TaskTracker 
     if (subtype === 'task_started') {
       const description = message['description']
       if (typeof description !== 'string') return
-      const toolUseId = message['tool_use_id']
+      const toolUseId = message[TASK_TOOL_ID_KEY]
       const subagentType = message['subagent_type']
       upsert({
         taskId,

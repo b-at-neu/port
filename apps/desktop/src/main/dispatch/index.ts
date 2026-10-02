@@ -14,6 +14,9 @@ export type { ResolveDispatchClaimSetDeps, ResolveDispatchControlDeps, ResolveDi
 export { createDispatcher } from './dispatcher'
 export type { CreateDispatcherParams, Dispatcher } from './dispatcher'
 
+export { createDispatchRuntime } from './runtime'
+export type { DispatchRuntime } from './runtime'
+
 export { composeDispatchTurn, composeRelayTurn, DISPATCH_PROMPT, DISPATCHER_INSTRUCTIONS, DISPATCHER_MODEL, missingAgentOf, REFRESH_PROMPT, specFor } from './turn'
 export type { DispatchSpec } from './turn'
 

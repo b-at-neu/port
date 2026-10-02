@@ -14,10 +14,12 @@ import { claimApply, claimPreflight, defaultClaimDeps } from './claim'
 import type { ClaimDeps } from './claim'
 import { applyItemAction, gateAnswer, gateClaimRead, gateClaimSet, gatePreflight } from './actions'
 import type { ApplyItemActionParams, ReadyEntry } from './actions'
-import { createDrainStore, haltDispatch, resolveDispatchControl } from './dispatch'
+import { createDispatchRuntime, createDrainStore, defaultHaltDispatchDeps, haltDispatch, resolveDispatchClaimSet, resolveDispatchControl, resolveDispatchRelay } from './dispatch'
+import { fetchItemsByNumber } from './github'
+import { readGateClaim } from './writes'
 import { resolveGateAnswer, resolveGateClaimRead, resolveGateClaimSet, resolveGatePreflight } from './channels/gate'
 import type { GateChannelDeps } from './channels/gate'
-import { copyRelayReply } from './relay'
+import { copyRelayReply, MAX_REPLY_CHARS } from './relay'
 import { resolveSearchQuery, resolveSessionsScan, resolveTranscriptRead, resolveTranscriptTailClose, resolveTranscriptTailOpen, resolveTranscriptTailPoll } from './channels/sessions'
 import {
   defaultHostingChannelDeps,
@@ -349,10 +351,34 @@ export function registerIpc(): RegisteredIpc {
   const drain = createDrainStore(app.getPath('userData'))
   void drain.load()
 
+  // #98: one hosted-session store for the process lifetime, broadcasting
+  // over `session:event`/`session:status`. Created before the watcher
+  // (#265): the dispatcher sits between the two and needs this store first.
+  const hostedStore = createHostedStore({
+    ...defaultHostedStoreDeps,
+    onEvent: (envelope) => broadcast('session:event', envelope),
+    onStatus: (snapshot) => broadcast('session:status', snapshot),
+    onEntries: (delta) => broadcast('session:entries', delta),
+    persistence: createHostingPersistence({ dir: app.getPath('userData') }),
+  })
+  const hostingChannelDeps = defaultHostingChannelDeps(hostedStore)
+
+  // #265: the ledger, streak memo, and dispatcher, bundled — see
+  // `main/dispatch/runtime.ts` for why `bindWatcher` exists.
+  const { ledger: dispatchLedger, unknownStreaks, dispatcher, bindWatcher } = createDispatchRuntime({
+    store: hostedStore,
+    drain: drain.current,
+    readGateClaim,
+    fetchItemsByNumber,
+    listRepositories,
+    registryDeps,
+    now: () => new Date(),
+  })
+
   // The board's own clock (#80) — one watcher for the process lifetime,
-  // pushing every snapshot to every open window over `board:update`. The
-  // registry is re-listed through the same `listRepositories` every other
-  // channel reads, never a second config path.
+  // broadcasting every snapshot over `board:update`. #265: `onSnapshot` also
+  // hands the snapshot to the dispatcher, never awaited — a dispatch pass
+  // must never block the broadcast the renderer is waiting on.
   const watcher = createPipelineWatcher({
     repositories: async () => {
       const list = await listRepositories(registryDeps)
@@ -360,8 +386,15 @@ export function registerIpc(): RegisteredIpc {
     },
     git: (args, cwd) => git(args, { cwd }),
     drain: drain.current,
-    onSnapshot: (snapshot) => broadcast('board:update', snapshot),
+    ledger: dispatchLedger,
+    unknownStreaks,
+    dispatchStatus: () => dispatcher.status(),
+    onSnapshot: (snapshot) => {
+      broadcast('board:update', snapshot)
+      void dispatcher.consider(snapshot)
+    },
   })
+  bindWatcher(() => watcher.republish())
 
   handle('board:snapshot', (_event, request) => {
     if (request !== undefined) {
@@ -380,19 +413,26 @@ export function registerIpc(): RegisteredIpc {
     resolveItemAction(registryDeps, request, app.getPath('userData'), { listRepositories, applyItemAction, snapshot: watcher.snapshot, refresh: watcher.refresh }),
   )
 
-  // Operator control over dispatch (#110) — drain/resume/halt, all its
-  // branching in `resolveDispatchControl` itself, never here.
+  // Operator control over dispatch (#110) — all branching in
+  // `resolveDispatchControl` itself. #265: `halt` also stops this app's own
+  // dispatched agents first; `stopFor` is a no-op for anything else.
   handle('dispatch:control', (_event, request) =>
     resolveDispatchControl(registryDeps, request, {
       listRepositories,
       drain,
-      haltDispatch,
+      haltDispatch: (params) => haltDispatch(params, { ...defaultHaltDispatchDeps, stopFor: (repoId, number) => dispatcher.stopFor(repoId, number) }),
       snapshot: watcher.snapshot,
       refresh: watcher.refresh,
       auditDir: app.getPath('userData'),
       now: () => new Date(),
     }),
   )
+
+  // #265: the dispatch claim take/release and the "Send to agent" relay —
+  // both delegate to the one dispatcher instance above.
+  handle('dispatch:claim:set', (_event, request) => resolveDispatchClaimSet(registryDeps, request, { listRepositories, dispatcher, refresh: watcher.refresh, now: () => new Date() }))
+
+  handle('dispatch:relay', (_event, request) => resolveDispatchRelay(registryDeps, request, { listRepositories, dispatcher, maxReplyChars: MAX_REPLY_CHARS }))
 
   handle('runtime:preflight', (_event, request) => {
     if (request !== undefined) throw new Error("'runtime:preflight' takes no payload")
@@ -419,19 +459,6 @@ export function registerIpc(): RegisteredIpc {
   // `copyRelayReply` (`./relay`) does the validation and the one electron
   // clipboard write.
   handle('relay:copy', (_event, request) => copyRelayReply(request))
-
-  // #98: one hosted-session store for the process lifetime, pushing every
-  // envelope and every phase-change snapshot to every open window over
-  // `session:event`/`session:status` — the same broadcast shape the
-  // watcher's own `onSnapshot` already uses for `board:update`.
-  const hostedStore = createHostedStore({
-    ...defaultHostedStoreDeps,
-    onEvent: (envelope) => broadcast('session:event', envelope),
-    onStatus: (snapshot) => broadcast('session:status', snapshot),
-    onEntries: (delta) => broadcast('session:entries', delta),
-    persistence: createHostingPersistence({ dir: app.getPath('userData') }),
-  })
-  const hostingChannelDeps = defaultHostingChannelDeps(hostedStore)
 
   handle('session:start', (_event, request) => resolveSessionStart(registryDeps, request, hostingChannelDeps))
 
