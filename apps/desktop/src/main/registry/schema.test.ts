@@ -58,7 +58,7 @@ describe('CONFIG_DEFAULTS', () => {
       models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
       modules: { approvalGate: true, release: true, scope: true },
       reviewCycleCap: 5,
-      commands: { worktrees: null },
+      commands: { worktrees: null, budget: null },
       concurrency: { sharedFiles: [], overlapThreshold: 2 },
     })
   })

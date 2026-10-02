@@ -36,7 +36,7 @@ export interface ConfigDefaults {
     readonly scope: boolean
   }
   readonly reviewCycleCap: number
-  readonly commands: { readonly worktrees: string | null }
+  readonly commands: { readonly worktrees: string | null; readonly budget: string | null }
   readonly concurrency: { readonly sharedFiles: readonly string[]; readonly overlapThreshold: number }
 }
 
@@ -63,6 +63,7 @@ export const CONFIG_DEFAULTS: ConfigDefaults = {
   reviewCycleCap: schema.properties.reviewCycleCap.default,
   commands: {
     worktrees: schema.properties.commands.properties.worktrees.default,
+    budget: schema.properties.commands.properties.budget.default,
   },
   concurrency: {
     sharedFiles: schema.properties.concurrency.properties.sharedFiles.default,

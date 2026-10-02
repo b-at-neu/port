@@ -47,7 +47,7 @@ const READY_ENTRY = {
     modules: { approvalGate: true, release: true, scope: true },
     reviewCycleCap: 3,
     vocabulary: {} as never,
-    commands: { worktrees: null },
+    commands: { worktrees: null, budget: null },
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
   },
   diagnostics: [],
@@ -86,6 +86,12 @@ function storeStub(overrides: Partial<HostedStore> = {}): HostedStore {
     },
     dismiss: () => {
       throw new Error('dismiss should not be invoked in this case')
+    },
+    stopTask: () => {
+      throw new Error('stopTask should not be invoked in this case')
+    },
+    snapshotOf: () => {
+      throw new Error('snapshotOf should not be invoked in this case')
     },
     capacity: () => {
       throw new Error('capacity should not be invoked in this case')

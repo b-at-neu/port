@@ -14,11 +14,11 @@ import type { LabelKey } from '../../shared/labels/vocabulary'
 import type { RepoId } from '../../shared/repos'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '../../shared/board/types'
 import type { ReconciledItem, RepositoryState } from '../../shared/state/types'
-import type { TickActionable, TickBlind, TickClaim, TickHeld, TickReport } from '../../shared/tick/types'
+import type { TickActionable, TickBlind, TickClaim, TickHeld, TickHeldReason, TickReport } from '../../shared/tick/types'
 import type { ClaimedItem, OccupiedEntry } from './contention'
 import { gateCandidates } from './contention'
-import { cycleCapExceeded, zeroDiffGate } from './gates'
-import type { DispatchLedger } from './ledger'
+import { cycleCapExceeded, mergeabilityRoute, refreshWins, zeroDiffGate } from './gates'
+import type { DispatchLedger, UnknownStreaks } from './ledger'
 import { classifyUnmatched, RETRY_TRIGGER } from './liveness'
 import { partitionOwnership } from './ownership'
 import { AGENT_FOR_TRIGGER } from './routing'
@@ -26,6 +26,10 @@ import { AGENT_FOR_TRIGGER } from './routing'
 export interface PlanTickParams {
   readonly repository: RepositoryState
   readonly ledger: DispatchLedger
+  /** This app's own process-scoped mergeability-UNKNOWN memo (#265) — the
+   *  equivalent of the cockpit's `tickState.unknownStreak`, read and written
+   *  only by the `readyForReview` mergeability check below. */
+  readonly unknownStreaks: UnknownStreaks
   /** This repository's own GitHub source's next-due instant
    *  (`nextDueAt(health.github, now)`) — carried onto the report's own
    *  `nextTickAt`, never derived a second time here; `main/state/watcher.ts`
@@ -86,6 +90,44 @@ function cycleOf(item: ReconciledItem, cap: number): { readonly count: number; r
  *  ?? []` per PIPELINE.md's own phrasing — an unstructured in-flight item
  *  occupies nothing, it never blocks a candidate the way a structured one
  *  does. */
+/** Every item number carrying `key` among its (plural) `stages` — an
+ *  ownership-independent fact, deliberately not filtered to the viewer or to
+ *  `item.stage`'s own single winning role, since `refreshBranch` can sit
+ *  alongside another trigger (the `<labels.approved>` carve-out's own
+ *  shape) and the refresh-wins veto must see it regardless of which label
+ *  `item.stage` resolved to (#265). */
+function numbersCarrying(items: readonly ReconciledItem[], key: LabelKey): readonly number[] {
+  return items.filter((item) => item.stages.some((label) => label.key === key)).map((item) => item.number)
+}
+
+/** The mergeability gate's own held reason, or `null` to proceed —
+ *  `readyForReview` only (PIPELINE.md → "Check evidence" → "Mergeability
+ *  precondition", #265). `CONFLICTING` and `MERGEABLE` both clear the
+ *  streak memo outright ("cleared for any item that reads non-UNKNOWN");
+ *  `UNKNOWN` consults `mergeabilityRoute` with the memo's own prior streak,
+ *  holding once before dispatching on the second consecutive poll; `null`
+ *  holds every poll, unconditionally — GitHub has not reported anything yet,
+ *  so this fails closed on action rather than ever guessing. */
+function mergeabilityHeld(item: ReconciledItem, repoId: RepoId, unknownStreaks: UnknownStreaks): TickHeldReason | null {
+  const mergeable = item.mergeable
+  if (mergeable === 'CONFLICTING') {
+    unknownStreaks.clear(repoId, item.number)
+    return 'conflicting'
+  }
+  if (mergeable === 'UNKNOWN') {
+    const route = mergeabilityRoute(mergeable, unknownStreaks.get(repoId, item.number))
+    if (route.action === 'hold') {
+      unknownStreaks.set(repoId, item.number, route.unknownStreak)
+      return 'mergeability-unknown'
+    }
+    unknownStreaks.clear(repoId, item.number)
+    return null
+  }
+  if (mergeable === null) return 'mergeability-unknown'
+  unknownStreaks.clear(repoId, item.number) // 'MERGEABLE'
+  return null
+}
+
 function occupiedSetOf(items: readonly ReconciledItem[]): readonly OccupiedEntry[] {
   const occupied: OccupiedEntry[] = []
   for (const item of items) {
@@ -110,8 +152,12 @@ function actionableAndHeld(
   viewer: string,
   concurrency: { readonly sharedFiles: readonly string[]; readonly overlapThreshold: number },
   reviewCycleCap: number,
+  repoId: RepoId,
+  unknownStreaks: UnknownStreaks,
 ): { readonly actionable: readonly TickActionable[]; readonly held: readonly TickHeld[] } {
   const held: TickHeld[] = []
+  const refreshBranchNumbers = numbersCarrying(items, 'refreshBranch')
+  const refreshingNumbers = numbersCarrying(items, 'refreshing')
 
   const triggerItems = items.filter(
     (item) =>
@@ -143,6 +189,28 @@ function actionableAndHeld(
     }
     const agent = AGENT_FOR_TRIGGER[trigger]
     if (agent === undefined) continue
+
+    // The refresh-wins veto (#225, #265) — a pull request already claimed by
+    // a refresh must never also be dispatched to review or revision in the
+    // same tick. Scoped to `needsRevision` specifically, never the bare
+    // `agent === 'revise'` test the cycle-cap gate below still uses: a
+    // `refreshBranch` trigger's own dispatch is the refresh itself, so
+    // vetoing it against its own label would deadlock every refresh.
+    if (trigger === 'needsRevision' && refreshWins({ number: item.number, refreshBranch: refreshBranchNumbers, refreshing: refreshingNumbers }).action === 'veto') {
+      held.push({ number: item.number, kind: item.kind, trigger, reason: 'refresh-wins', contention: null, escalation: null })
+      continue
+    }
+    if (agent === 'review') {
+      if (refreshWins({ number: item.number, refreshBranch: refreshBranchNumbers, refreshing: refreshingNumbers }).action === 'veto') {
+        held.push({ number: item.number, kind: item.kind, trigger, reason: 'refresh-wins', contention: null, escalation: null })
+        continue
+      }
+      const mergeHeld = mergeabilityHeld(item, repoId, unknownStreaks)
+      if (mergeHeld !== null) {
+        held.push({ number: item.number, kind: item.kind, trigger, reason: mergeHeld, contention: null, escalation: null })
+        continue
+      }
+    }
 
     // The cycle-cap gate — unconditional, per `cycleCapExceeded`'s own
     // contract: fires whatever the latest review said.
@@ -233,7 +301,7 @@ function claimsOf(items: readonly ReconciledItem[], repoId: RepoId, ledger: Disp
 }
 
 export function planTick(params: PlanTickParams): TickReport {
-  const { repository, ledger, nextDecisionAt, now, reviewCycleCap } = params
+  const { repository, ledger, nextDecisionAt, now, reviewCycleCap, unknownStreaks } = params
 
   if (!repository.ok) {
     const blind: TickBlind = repository.reason === 'not-ready' ? { reason: 'not-ready' } : { reason: 'github-unavailable', message: repository.message }
@@ -254,7 +322,7 @@ export function planTick(params: PlanTickParams): TickReport {
     }
   }
 
-  const { actionable, held } = actionableAndHeld(repository.items, repository.viewer, repository.concurrency, reviewCycleCap)
+  const { actionable, held } = actionableAndHeld(repository.items, repository.viewer, repository.concurrency, reviewCycleCap, repository.repoId, unknownStreaks)
   const claims = claimsOf(repository.items, repository.repoId, ledger)
 
   return {

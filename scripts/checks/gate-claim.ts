@@ -79,6 +79,20 @@ export default async function ({ fail, ok, note }: Reporter) {
     } else {
       ok();
     }
+
+    // guard(#265): both scopes recognized together, with unknownScopes empty
+    // — a claim naming both plan-gate and dispatch must never misclassify
+    // either as unrecognized.
+    const bothScopes = classifyGateClaim(
+      true,
+      JSON.stringify({ repo: 'b-at-neu/port', owner: 'port-desktop', scopes: ['plan-gate', 'dispatch'], claimedAt: '2026-09-05T14:02:11Z' }),
+      'b-at-neu/port',
+    );
+    if (bothScopes.scopes.slice().sort().join(',') !== 'dispatch,plan-gate' || bothScopes.unknownScopes.length !== 0) {
+      fail('gate-claim-classifier', `expected both plan-gate and dispatch recognized with unknownScopes empty, got ${JSON.stringify(bothScopes)}`);
+    } else {
+      ok();
+    }
   }
 
   // --- labelEditAttempt: both directions, unlike gateClearAttempt's remove-only ------------
@@ -401,15 +415,16 @@ export default async function ({ fail, ok, note }: Reporter) {
       ok();
     }
 
-    // "Cockpit rules" now names five rules — a sixth cannot land without the
-    // prose count moving with it, and this pin is what would catch a fourth
-    // silently added to the four-rule count that predates this ticket.
+    // "Cockpit rules" now names six rules (#265 added the dispatch claim's
+    // Agent arm) — a seventh cannot land without the prose count moving with
+    // it, and this pin is what would catch a fifth silently added to the
+    // five-rule count that predated this ticket.
     const cockpitRulesSection = /Cockpit rules\.([\s\S]*?)(?=\n### |\n## )/.exec(docsText)?.[1] ?? '';
     const bulletCount = [...cockpitRulesSection.matchAll(/\n- \*\*/g)].length;
-    if (!/\bfive\b/.test(cockpitRulesSection)) {
-      fail('gate-claim-doc-pin', 'PIPELINE.md\'s "Cockpit rules" paragraph no longer states "five"');
-    } else if (bulletCount !== 5) {
-      fail('gate-claim-doc-pin', `PIPELINE.md's "Cockpit rules" list has ${bulletCount} bullets, expected 5`);
+    if (!/\bsix\b/.test(cockpitRulesSection)) {
+      fail('gate-claim-doc-pin', 'PIPELINE.md\'s "Cockpit rules" paragraph no longer states "six"');
+    } else if (bulletCount !== 6) {
+      fail('gate-claim-doc-pin', `PIPELINE.md's "Cockpit rules" list has ${bulletCount} bullets, expected 6`);
     } else {
       ok();
     }

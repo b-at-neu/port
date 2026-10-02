@@ -3,7 +3,7 @@
 // item's `matchedKeys` comes from the alias table `query.ts` built, not from
 // re-matching `labels` against the vocabulary.
 import type { LabelKey } from '../../shared/labels/vocabulary'
-import type { ItemState, PipelineItem, PipelineItemKind, PullRequestCommentNode, QueriedLabel, ReviewNode } from '../../shared/github/types'
+import type { ItemState, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, QueriedLabel, ReviewNode } from '../../shared/github/types'
 
 interface ConnectionLike {
   readonly totalCount?: unknown
@@ -24,6 +24,7 @@ interface RawNode {
   readonly assignees?: unknown
   readonly labels?: unknown
   readonly headRefOid?: unknown
+  readonly mergeable?: unknown
   readonly reviews?: unknown
   readonly comments?: unknown
 }
@@ -56,6 +57,14 @@ export function fieldListOf(value: unknown, field: 'login' | 'name'): readonly s
     if (typeof raw === 'string') out.push(raw)
   }
   return out
+}
+
+/** Maps GitHub's own mergeability enum to `Mergeable` verbatim — anything
+ *  else (an unrecognized string, or absence) reads as `null`, never guessed
+ *  as one of the three real values. */
+function mergeableOf(value: unknown): Mergeable {
+  if (value === 'MERGEABLE' || value === 'CONFLICTING' || value === 'UNKNOWN') return value
+  return null
 }
 
 /** Reads `{ nodes: [{ body, submittedAt, commit: { oid } }] }` — the
@@ -112,6 +121,7 @@ function nodeToItem(node: RawNode, kind: PipelineItemKind, repo: string, key: La
     labels: fieldListOf(node.labels, 'name'),
     matchedKeys: [key],
     headRefOid: isPullRequest && typeof node.headRefOid === 'string' ? node.headRefOid : null,
+    mergeable: isPullRequest ? mergeableOf(node.mergeable) : null,
     reviews: isPullRequest ? reviewNodesOf(node.reviews) : null,
     comments: isPullRequest ? commentNodesOf(node.comments) : null,
   }

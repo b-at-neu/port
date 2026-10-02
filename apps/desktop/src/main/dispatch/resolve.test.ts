@@ -1,11 +1,18 @@
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { resolveVocabulary } from '../../shared/labels/vocabulary'
+import type { RepoId } from '../../shared/repos'
 import type { ReposListResponse } from '../../shared/ipc'
 import type { BoardSnapshot } from '../../shared/board/types'
 import type { HaltReport } from '../../shared/dispatch/types'
 import type { RegistryDeps } from '../registry'
+import type { ReadyEntry } from '../actions'
+import type { Dispatcher } from './dispatcher'
 import type { DrainStore, SetDrainResult } from './store'
-import { resolveDispatchControl } from './resolve'
-import type { ResolveDispatchControlDeps } from './resolve'
+import { resolveDispatchClaimSet, resolveDispatchControl, resolveDispatchRelay } from './resolve'
+import type { ResolveDispatchClaimSetDeps, ResolveDispatchControlDeps, ResolveDispatchRelayDeps } from './resolve'
 
 const registryDeps: RegistryDeps = {
   registryDir: '/registry',
@@ -24,6 +31,7 @@ const SNAPSHOT: BoardSnapshot = {
   drain: { gate: 'open' },
   nextWakeupAt: null,
   emittedAt: 't',
+  dispatch: [],
 }
 
 function fakeDrain(current: DrainStore['current'], setResult: SetDrainResult = { ok: true }): { readonly drain: DrainStore; readonly setCalls: boolean[] } {
@@ -135,5 +143,88 @@ describe('resolveDispatchControl — halt', () => {
     )
     expect(refreshCalls).toBe(1)
     expect(result).toEqual({ ok: true, command: 'halt', drain: { gate: 'draining', reason: 'operator', since: '2026-01-01T00:00:00Z' }, report: aborted })
+  })
+})
+
+const REPO_ID = 'repo-a' as RepoId
+
+async function readyEntry(path?: string): Promise<ReadyEntry> {
+  return {
+    id: REPO_ID,
+    path: path ?? (await mkdtemp(join(tmpdir(), 'port-dispatch-resolve-'))),
+    displayName: 'o/a',
+    status: 'ready',
+    config: {
+      repo: 'o/a',
+      owner: 'o',
+      name: 'a',
+      branches: { integration: 'dev', production: 'main' },
+      commands: { worktrees: null, budget: null },
+      concurrency: { sharedFiles: [], overlapThreshold: 2 },
+      models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
+      modules: { approvalGate: true, release: true, scope: true },
+      reviewCycleCap: 5,
+      vocabulary: resolveVocabulary({}),
+    },
+    diagnostics: [],
+  }
+}
+
+function fakeDispatcher(overrides: Partial<Dispatcher> = {}): Dispatcher {
+  return {
+    consider: () => Promise.resolve(),
+    status: () => [],
+    relay: () => Promise.resolve({ ok: false, kind: 'no-dispatcher' }),
+    stopFor: () => Promise.resolve(false),
+    ...overrides,
+  }
+}
+
+describe('resolveDispatchClaimSet (#265)', () => {
+  it('throws for a repository that is not ready', async () => {
+    const deps: ResolveDispatchClaimSetDeps = { listRepositories: () => Promise.resolve({ ok: true, repositories: [] }), dispatcher: fakeDispatcher(), refresh: () => Promise.resolve(SNAPSHOT), now: () => new Date('2026-01-01T00:00:00Z') }
+    await expect(resolveDispatchClaimSet(registryDeps, { repoId: REPO_ID, held: true }, deps)).rejects.toThrow("no repository registered with id 'repo-a'")
+  })
+
+  it('takes the claim, refreshes once, and reports the dispatcher status it then reads back', async () => {
+    let refreshed = 0
+    const entry = await readyEntry()
+    const dispatcher = fakeDispatcher({ status: () => [{ repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null }] })
+    const deps: ResolveDispatchClaimSetDeps = {
+      listRepositories: () => Promise.resolve({ ok: true, repositories: [entry] }),
+      dispatcher,
+      refresh: (request) => { refreshed += 1; expect(request).toEqual({ repoId: REPO_ID }); return Promise.resolve(SNAPSHOT) },
+      now: () => new Date('2026-01-01T00:00:00Z'),
+    }
+    const result = await resolveDispatchClaimSet(registryDeps, { repoId: REPO_ID, held: true }, deps)
+    expect(result).toEqual({ kind: 'ok', status: { repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null } })
+    expect(refreshed).toBe(1)
+  })
+})
+
+describe('resolveDispatchRelay (#265)', () => {
+  it('throws on a bad shape — empty agentId — before ever listing repositories', async () => {
+    const deps: ResolveDispatchRelayDeps = { listRepositories: () => Promise.resolve({ ok: true, repositories: [] }), dispatcher: fakeDispatcher(), maxReplyChars: 100 }
+    await expect(resolveDispatchRelay(registryDeps, { repoId: REPO_ID, agentId: '', text: 'x' }, deps)).rejects.toThrow()
+  })
+
+  it('throws on text over maxReplyChars', async () => {
+    const deps: ResolveDispatchRelayDeps = { listRepositories: () => Promise.resolve({ ok: true, repositories: [] }), dispatcher: fakeDispatcher(), maxReplyChars: 3 }
+    await expect(resolveDispatchRelay(registryDeps, { repoId: REPO_ID, agentId: 'a1', text: 'xxxx' }, deps)).rejects.toThrow()
+  })
+
+  it('delegates to dispatcher.relay for a well-formed, ready request', async () => {
+    let seen: { repoId: RepoId; agentId: string; text: string } | null = null
+    const dispatcher = fakeDispatcher({
+      relay: (params) => {
+        seen = params
+        return Promise.resolve({ ok: true })
+      },
+    })
+    const entry = await readyEntry()
+    const deps: ResolveDispatchRelayDeps = { listRepositories: () => Promise.resolve({ ok: true, repositories: [entry] }), dispatcher, maxReplyChars: 100 }
+    const result = await resolveDispatchRelay(registryDeps, { repoId: REPO_ID, agentId: 'a1', text: 'go' }, deps)
+    expect(result).toEqual({ ok: true })
+    expect(seen).toEqual({ repoId: REPO_ID, agentId: 'a1', text: 'go' })
   })
 })

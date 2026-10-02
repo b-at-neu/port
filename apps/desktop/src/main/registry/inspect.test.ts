@@ -71,7 +71,7 @@ describe('inspectRepository', () => {
     expect(entry.config.models).toEqual({ plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' })
     expect(entry.config.modules).toEqual({ approvalGate: true, release: true, scope: true })
     expect(entry.config.reviewCycleCap).toBe(5)
-    expect(entry.config.commands).toEqual({ worktrees: null })
+    expect(entry.config.commands).toEqual({ worktrees: null, budget: null })
     expect(entry.config.concurrency).toEqual({ sharedFiles: [], overlapThreshold: 2 })
   })
 
@@ -80,7 +80,7 @@ describe('inspectRepository', () => {
     await writeConfig(root, JSON.stringify({ repo: 'o/n', commands: { worktrees: 'node scripts/port-worktrees.mjs' } }))
     const entry = await inspectRepository(root, { git: fakeGit(root) })
     if (!('config' in entry)) throw new Error('unreachable')
-    expect(entry.config.commands).toEqual({ worktrees: 'node scripts/port-worktrees.mjs' })
+    expect(entry.config.commands).toEqual({ worktrees: 'node scripts/port-worktrees.mjs', budget: null })
   })
 
   it('falls back to null for a wrong-shaped commands.worktrees rather than carrying it through', async () => {
@@ -88,7 +88,7 @@ describe('inspectRepository', () => {
     await writeConfig(root, JSON.stringify({ repo: 'o/n', commands: { worktrees: 42 } }))
     const entry = await inspectRepository(root, { git: fakeGit(root) })
     if (!('config' in entry)) throw new Error('unreachable')
-    expect(entry.config.commands).toEqual({ worktrees: null })
+    expect(entry.config.commands).toEqual({ worktrees: null, budget: null })
     const schemaDiagnostic = entry.diagnostics.find((d) => d.kind === 'schema-violations')
     expect(schemaDiagnostic).toBeDefined()
   })

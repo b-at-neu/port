@@ -1,5 +1,5 @@
-// PreToolUse hook (matchers: Bash, Edit|Write|NotebookEdit) for the port
-// agent pipeline.
+// PreToolUse hook (matchers: Bash, Edit|Write|NotebookEdit, Agent) for the
+// port agent pipeline.
 //
 // This is the component that actually denies. It decides, for every Bash
 // call and every write-tool call, whether the caller is a dispatched
@@ -10,25 +10,29 @@
 // `permissionMode: dontAsk` on the stage agents is a second line of defence,
 // not the mechanism this relies on.
 //
-// Five more rules apply to *any* caller, cockpit included: a `gh`/`git`
-// call wrapped in a shell loop (#120), an unauthorised removal of the
+// Six more rules apply to *any* caller, cockpit included: a `gh`/`git` call
+// wrapped in a shell loop (#120), an unauthorised removal of the
 // `needsHuman` gate label (#138), an add/remove of a plan-gate label while
 // an external claim holds it (#206), a `claude plugin` install/uninstall/
 // marketplace mutation run from inside any `.claude/worktrees/` cwd (#144),
-// and a cockpit session `git checkout`/`git switch`ing branches out from
-// under its own startup refusal (#216). Loop, gate, claim, and branch exempt
-// an `/port:implement` operator worktree; the install rule deliberately does
-// not, since every install scope shares one `installPath` regardless of who
-// is typing the command — and the claim rule's own write-tool arm (denying
-// a write to the claim file itself) does not exempt it either, for the same
-// reason. The gate and branch rules are the two call paths that do extra
-// I/O — reading the calling session's transcript — and only when the
-// command actually matches what each rule guards, from a non-subagent,
-// non-operator-worktree caller. The claim rule's own read (the claim file
-// itself) runs whenever a Bash call carries `--add-label`/`--remove-label`
-// or a write targets the claim file path, independent of caller identity —
-// the write-tool arm needs the result for every caller, not only a
-// non-subagent one.
+// a cockpit session `git checkout`/`git switch`ing branches out from under
+// its own startup refusal (#216), and a cockpit session calling `Agent`
+// while the claim holds `dispatch` — the app dispatches for this checkout
+// instead (#265). Loop, gate, claim, and branch exempt an `/port:implement`
+// operator worktree; the install rule deliberately does not, since every
+// install scope shares one `installPath` regardless of who is typing the
+// command — and the claim rule's own write-tool arm (denying a write to the
+// claim file itself) does not exempt it either, for the same reason. The
+// gate and branch rules are the two Bash call paths that do extra I/O —
+// reading the calling session's transcript — and only when the command
+// actually matches what each rule guards, from a non-subagent,
+// non-operator-worktree caller; the dispatch rule's own `Agent`-arm
+// transcript read follows the same shape, only when the claim names
+// `dispatch` or is unreadable. The claim rule's own read (the claim file
+// itself) runs whenever a Bash call carries `--add-label`/`--remove-label`,
+// an `Agent` call is made, or a write targets the claim file path,
+// independent of caller identity — the write-tool arm needs the result for
+// every caller, not only a non-subagent one.
 //
 // Every decision — deny, a same-shape miss from a non-subagent session, an
 // allowed gate clear, or an internal failure — is logged to a gitignored
@@ -136,13 +140,29 @@ if (configRoot) {
       planGateClaim = classifyGateClaim(exists, text, config?.repo);
     }
 
-    // The gate and branch rules are the two paths that need extra I/O — the
-    // calling session's transcript — so the read only happens when either
-    // rule's own command test says it might apply, and only for a caller
-    // `decide` will not already deny outright (a subagent) or exempt
-    // outright (an operator worktree). One read serves both rules. A
+    // The dispatch rule's own extra I/O (#265) — reading and classifying the
+    // same claim file, but keyed for `Agent` calls instead of label edits.
+    // Read unconditionally for an `Agent` call (never gated on the command's
+    // own shape the way the Bash reads above are, since there is no second
+    // predicate to test first): the claim is what the `dispatch` rule's own
+    // denial check consumes next.
+    let dispatchClaim;
+    if (payload?.tool_name === 'Agent') {
+      const exists = existsSync(claimFilePath);
+      const text = exists ? readFileSync(claimFilePath, 'utf8') : '';
+      dispatchClaim = classifyGateClaim(exists, text, config?.repo);
+    }
+
+    // The gate and branch rules are the two Bash paths that need extra I/O —
+    // the calling session's transcript — so the read only happens when
+    // either rule's own command test says it might apply, and only for a
+    // caller `decide` will not already deny outright (a subagent) or exempt
+    // outright (an operator worktree). One read serves both rules. The
+    // dispatch rule's own `Agent`-arm read follows the same "only where the
+    // rule can fire" shape, gated on the claim just read naming `dispatch`
+    // or being unreadable, rather than a second command predicate. A
     // missing path, an unreadable file, or a parse failure all yield `null`
-    // (unverifiable) for both, never a throw.
+    // (unverifiable) in every case, never a throw.
     let operatorMessages = null;
     let isCockpitSession = null;
     if (payload?.tool_name === 'Bash' && typeof payload?.tool_input?.command === 'string') {
@@ -162,6 +182,18 @@ if (configRoot) {
           }
         }
       }
+    } else if (payload?.tool_name === 'Agent') {
+      const who = callerKind(payload);
+      const claimsDispatch =
+        dispatchClaim?.state === 'unreadable' ||
+        (dispatchClaim?.state === 'held' && (dispatchClaim.scopes ?? []).includes('dispatch'));
+      if (!who.isSubagent && claimsDispatch && typeof payload?.transcript_path === 'string') {
+        try {
+          isCockpitSession = invokedCockpitSkill(readFileSync(payload.transcript_path, 'utf8'));
+        } catch {
+          isCockpitSession = null;
+        }
+      }
     }
 
     const result = decide({
@@ -174,6 +206,7 @@ if (configRoot) {
       isCockpitSession,
       planGateClaim,
       planGateLabels,
+      dispatchClaim,
       claimFilePath,
     });
     const logDir = join(baseRoot, '.agents');

@@ -86,7 +86,7 @@ export async function recordTick(repoRoot: string, event: DesktopTickEvent, deps
     const prevPath = pathOps.join(baseRoot, '.agents', PREV_LOG_FILE)
 
     // `.agents/` may not exist yet in a fresh checkout — the same order
-    // `main/writes/claim.ts`'s `takeGateClaim` follows before its own first
+    // `main/writes/claim.ts`'s `takeClaimScope` follows before its own first
     // write under that directory.
     await ensureDirectory(pathOps.dirname(path))
 

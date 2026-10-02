@@ -23,14 +23,22 @@ export interface PullRequestCommentNode {
   readonly createdAt: string
 }
 
-/** The field list is exactly the ticket's, plus `matchedKeys`. `mergeable`
- *  and `updatedAt` remain deliberately absent — each belongs to a later
- *  ticket that has a use for it (ENGINEERING §7: no field shipped in
- *  anticipation); `headRefOid` has landed (#108). The viewer's own login is
- *  no longer absent: #94 needs it at the repository level (see
- *  `PipelineFetch.viewer` below), one alias reused for every item rather
- *  than a per-item field. `headRefOid`/`reviews`/`comments` are `null` for
- *  an issue — only a pull request carries any of the three. */
+/** GitHub's own mergeability enum (#265), mapped verbatim — `null` for
+ *  anything else the API returns, and for every issue (only a pull request
+ *  carries mergeability at all). `UNKNOWN` never blocks the caller: GitHub
+ *  has not computed it yet, which is normal right after a push, and reading
+ *  it is itself what triggers the computation (PIPELINE.md → "Check
+ *  evidence" → "Mergeability precondition"). */
+export type Mergeable = 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN' | null
+
+/** The field list is exactly the ticket's, plus `matchedKeys`. `updatedAt`
+ *  remains deliberately absent — it belongs to a later ticket that has a use
+ *  for it (ENGINEERING §7: no field shipped in anticipation); `headRefOid`
+ *  landed at #108, `mergeable` at #265. The viewer's own login is no longer
+ *  absent: #94 needs it at the repository level (see `PipelineFetch.viewer`
+ *  below), one alias reused for every item rather than a per-item field.
+ *  `headRefOid`/`mergeable`/`reviews`/`comments` are `null` for an issue —
+ *  only a pull request carries any of the four. */
 export interface PipelineItem {
   readonly repo: string
   readonly kind: PipelineItemKind
@@ -44,6 +52,7 @@ export interface PipelineItem {
   readonly labels: readonly string[]
   readonly matchedKeys: readonly LabelKey[]
   readonly headRefOid: string | null
+  readonly mergeable: Mergeable
   readonly reviews: readonly ReviewNode[] | null
   readonly comments: readonly PullRequestCommentNode[] | null
 }

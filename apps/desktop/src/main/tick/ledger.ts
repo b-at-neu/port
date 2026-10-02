@@ -47,3 +47,39 @@ export function createDispatchLedger(): DispatchLedger {
     },
   }
 }
+
+export interface UnknownStreaks {
+  readonly get: (repoId: RepoId, number: number) => number
+  readonly set: (repoId: RepoId, number: number, streak: number) => void
+  readonly clear: (repoId: RepoId, number: number) => void
+}
+
+/** The app's own equivalent of the cockpit's `tickState.unknownStreak`
+ *  (#265) — a process-scoped `Map` keyed by `(repoId, number)`, counting how
+ *  many consecutive ticks a pull request's mergeability has read `UNKNOWN`.
+ *  No timer, no filesystem, same shape `createDispatchLedger` already
+ *  establishes: an app restart starts every item back at 0, never a false
+ *  hold. `get` defaults to 0 for an item never recorded. */
+export function createUnknownStreaks(): UnknownStreaks {
+  const rows = new Map<RepoId, Map<number, number>>()
+
+  function bucket(repoId: RepoId): Map<number, number> {
+    const existing = rows.get(repoId)
+    if (existing) return existing
+    const created = new Map<number, number>()
+    rows.set(repoId, created)
+    return created
+  }
+
+  return {
+    get(repoId, number) {
+      return bucket(repoId).get(number) ?? 0
+    },
+    set(repoId, number, streak) {
+      bucket(repoId).set(number, streak)
+    },
+    clear(repoId, number) {
+      bucket(repoId).delete(number)
+    },
+  }
+}

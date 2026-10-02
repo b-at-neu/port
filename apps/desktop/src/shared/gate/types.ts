@@ -77,7 +77,7 @@ export type GateAnswerResponse =
   | { readonly kind: 'comment-failed'; readonly comment: WriteOutcome }
   | { readonly kind: 'answered'; readonly comment: WriteOutcome | null; readonly labels: WriteOutcome }
 
-/** `'gate:claim:set'`'s response — `takeGateClaim`/`releaseGateClaim` re-read
+/** `'gate:claim:set'`'s response — `takeClaimScope`/`releaseClaimScope` re-read
  *  after writing, so the response always carries the state as it now is
  *  rather than as it was asked to be. */
 export type GateClaimResponse = { readonly kind: 'ok'; readonly claim: ClaimRead } | { readonly kind: 'failed'; readonly result: ClaimWriteResult }

@@ -27,12 +27,22 @@ export type StageAgent = 'plan' | 'impl' | 'review' | 'revise'
  *  app computes the decision and the report, never the write (the real
  *  escalation lands beside the eventual dispatch call, per the plan's own
  *  **Risks / notes**). */
-export type TickHeldReason = 'unowned' | 'other-operator' | 'session-required' | 'contended' | 'cycle-cap' | 'zero-diff'
+export type TickHeldReason =
+  | 'unowned'
+  | 'other-operator'
+  | 'session-required'
+  | 'contended'
+  | 'cycle-cap'
+  | 'zero-diff'
+  | 'refresh-wins'
+  | 'conflicting'
+  | 'mergeability-unknown'
 
-/** `TickHeld.escalation`'s own shape (#108) — `null` for the four reasons
- *  above, populated for `cycle-cap`/`zero-diff` so the held detail can name
- *  the count and the cap, or the zero-diff fact, without re-deriving either
- *  from raw review data. */
+/** `TickHeld.escalation`'s own shape (#108) — `null` for every reason above
+ *  except `cycle-cap`/`zero-diff`, which carry the count and the cap, or the
+ *  zero-diff fact, without re-deriving either from raw review data.
+ *  `refresh-wins`/`conflicting`/`mergeability-unknown` (#265) authorise no
+ *  write, so they carry no escalation either. */
 export type TickEscalation = { readonly kind: 'cycle-cap'; readonly count: number; readonly cap: number } | { readonly kind: 'zero-diff' }
 
 /** The file-contention gate's own held detail (`main/tick/contention.ts`'s
@@ -70,7 +80,7 @@ export interface TickHeld {
   readonly reason: TickHeldReason
   readonly contention: TickContention | null
   /** Populated only for `reason: 'cycle-cap'` / `'zero-diff'`, `null` for
-   *  the other four reasons — the file-contention gate's own `contention`
+   *  every other reason — the file-contention gate's own `contention`
    *  field, mirrored for this pair (#108). */
   readonly escalation: TickEscalation | null
 }

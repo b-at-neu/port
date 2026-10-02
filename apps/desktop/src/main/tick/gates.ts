@@ -1,13 +1,18 @@
-// Pure: the review cycle-cap and zero-diff review gates from
-// plugins/port/docs/PIPELINE.md → "Check evidence" → "Zero-diff review" and
+// Pure: the review cycle-cap, zero-diff review gate, mergeability routing,
+// and the refresh-wins veto, from plugins/port/docs/PIPELINE.md → "Check
+// evidence" → "Zero-diff review", "Branch refresh" and
 // plugins/port/skills/pipeline/SKILL.md → "Cycle cap", "Zero-diff review
-// gate" — ported verbatim from scripts/port-tick/gates.ts's own
-// `cycleCapExceeded`/`zeroDiffGate`, pinned against that file
+// gate", "Mergeability gate", "Refresh sweep" — ported verbatim from
+// scripts/port-tick/gates.ts's own `cycleCapExceeded`/`zeroDiffGate`/
+// `mergeabilityRoute`/`refreshWins`, pinned against that file
 // one-directionally (this app's own exports must each be either that file's
 // export of the same name, or `codeReviewCount`, the one documented
 // exception) by scripts/checks/desktop-tick.ts's dynamic import — the same
 // idiom contention.ts already uses, narrowed to one direction since this
-// file ports only 2 of that file's 7 functions. Typed against local
+// file ports only 4 of that file's 7 functions (#265 adds
+// `mergeabilityRoute`/`refreshWins` to the 2 #108 already ported;
+// `refreshDecision`/`capRefreshes`/`approvedReverify` stay cockpit-only, per
+// this ticket's own "Four writes stay cockpit-only"). Typed against local
 // ReviewNode/CommentNode shapes; no import — no `node:` import, no
 // `../platform`, the same self-contained rail contention.ts already states
 // for `main/tick/` as a whole.
@@ -73,4 +78,47 @@ export function cycleCapExceeded(reviews: readonly ReviewNode[] | undefined, cap
  *  ported-name pin `scripts/checks/desktop-tick.ts` enforces below. */
 export function codeReviewCount(reviews: readonly ReviewNode[] | undefined): number {
   return (reviews ?? []).filter((r) => r.body.startsWith(CODE_REVIEW_PREFIX)).length
+}
+
+export type MergeabilityAction = 'dispatch' | 'refresh' | 'hold'
+
+/** `UNKNOWN` holds review dispatch one tick and dispatches on the second
+ *  consecutive occurrence. `priorUnknownStreak` is however many consecutive
+ *  ticks this pull request has already read `UNKNOWN` (0 the first time) —
+ *  `main/tick/ledger.ts`'s `createUnknownStreaks` is this app's own
+ *  process-scoped memo for it, the equivalent of the cockpit's
+ *  `tickState.unknownStreak`. `mergeable` is typed `string` rather than
+ *  `shared/github/types.ts`'s own `Mergeable` — this file takes no import,
+ *  the same self-contained rail the header states for `main/tick/` as a
+ *  whole — so the caller narrows at the edge. Verbatim port of
+ *  `scripts/port-tick/gates.ts`'s own `mergeabilityRoute`. */
+export function mergeabilityRoute(mergeable: string, priorUnknownStreak = 0): { readonly action: MergeabilityAction; readonly unknownStreak: number } {
+  if (mergeable === 'MERGEABLE') return { action: 'dispatch', unknownStreak: 0 }
+  if (mergeable === 'CONFLICTING') return { action: 'refresh', unknownStreak: 0 }
+  if (priorUnknownStreak >= 1) return { action: 'dispatch', unknownStreak: 0 }
+  return { action: 'hold', unknownStreak: priorUnknownStreak + 1 }
+}
+
+export type RefreshWinsResult = { readonly action: 'veto'; readonly label: 'refreshBranch' | 'refreshing' } | { readonly action: 'proceed' }
+
+/** The missing veto #225 found: a pull request already claimed by a refresh
+ *  (`refreshBranch`) or mid-refresh (`refreshing`) must never also be
+ *  dispatched to review or revision in the same tick, or it ends up carrying
+ *  two trigger labels at once. `refreshBranch`/`refreshing` are the full,
+ *  all-owners arrays of item numbers currently carrying each label —
+ *  carrying the label is an ownership-independent fact, so this is never
+ *  narrowed to the viewer's own items. Verbatim port of
+ *  `scripts/port-tick/gates.ts`'s own `refreshWins`. */
+export function refreshWins({
+  number,
+  refreshBranch,
+  refreshing,
+}: {
+  readonly number: number
+  readonly refreshBranch: readonly number[]
+  readonly refreshing: readonly number[]
+}): RefreshWinsResult {
+  if (refreshBranch.includes(number)) return { action: 'veto', label: 'refreshBranch' }
+  if (refreshing.includes(number)) return { action: 'veto', label: 'refreshing' }
+  return { action: 'proceed' }
 }

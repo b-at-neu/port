@@ -4,8 +4,8 @@
 export { applyLabels, postComment } from './apply'
 export type { ApplyLabelsParams, GhRunner, PostCommentParams } from './apply'
 
-export { readGateClaim, releaseGateClaim, takeGateClaim } from './claim'
-export type { GitRunner as ClaimGitRunner, ReadGateClaimParams, ReleaseGateClaimParams, TakeGateClaimParams } from './claim'
+export { readGateClaim, releaseClaimScope, takeClaimScope } from './claim'
+export type { GitRunner as ClaimGitRunner, ReadGateClaimParams, ReleaseClaimScopeParams, TakeClaimScopeParams } from './claim'
 
 export { readAuditLog } from './audit'
 export type { AppendAuditResult } from './audit'

@@ -70,7 +70,12 @@ export interface ResolvedRepoConfig {
    *  null`, `null` meaning the repository has not installed the reclamation
    *  script. Nothing here validates or spawns it; that is `main/reclaimer/`'s
    *  job. */
-  readonly commands: { readonly worktrees: string | null }
+  /** `budget` (#265) is the same full-command-prefix shape as `worktrees` —
+   *  `null` means nothing measures or bounds ticket cost. The app's own
+   *  dispatcher refuses to dispatch at all for a repository that sets it,
+   *  rather than silently skipping the ceiling the cockpit would enforce
+   *  (a follow-up ports the gate itself). */
+  readonly commands: { readonly worktrees: string | null; readonly budget: string | null }
   /** The file-contention gate's own tuning (#106) — `sharedFiles` never
    *  contributes to a hold in either direction, `overlapThreshold` is how
    *  many non-shared paths one in-flight item must share with a candidate

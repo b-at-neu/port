@@ -53,12 +53,12 @@ describe('haltItemLine', () => {
   const NOW = new Date('2026-01-01T00:00:00Z')
 
   it('names the removed label for a stopped item with nothing attached', () => {
-    const outcome: HaltItemOutcome = { kind: 'stopped', number: 148, itemKind: 'issue', repoId: 'repo-a' as RepoId, removedLabel: 'reviewing', attachedAgent: null }
+    const outcome: HaltItemOutcome = { kind: 'stopped', number: 148, itemKind: 'issue', repoId: 'repo-a' as RepoId, removedLabel: 'reviewing', attachedAgent: null, stoppedTask: false }
     expect(haltItemLine(outcome, NOW)).toBe('#148 reviewing → no stage.')
   })
 
   it('names an attached agent without failing the line', () => {
-    const outcome: HaltItemOutcome = { kind: 'stopped', number: 148, itemKind: 'issue', repoId: 'repo-a' as RepoId, removedLabel: 'reviewing', attachedAgent: 'review-agent' }
+    const outcome: HaltItemOutcome = { kind: 'stopped', number: 148, itemKind: 'issue', repoId: 'repo-a' as RepoId, removedLabel: 'reviewing', attachedAgent: 'review-agent', stoppedTask: false }
     expect(haltItemLine(outcome, NOW)).toBe("#148 reviewing → no stage. review-agent still attached — this app can't stop it.")
   })
 
@@ -87,8 +87,8 @@ describe('haltHeadingCopy', () => {
     const report: Extract<HaltReport, { readonly kind: 'completed' }> = {
       kind: 'completed',
       items: [
-        { kind: 'stopped', number: 1, itemKind: 'issue', repoId: 'repo-a' as RepoId, removedLabel: 'reviewing', attachedAgent: null },
-        { kind: 'stopped', number: 2, itemKind: 'issue', repoId: 'repo-a' as RepoId, removedLabel: 'in progress', attachedAgent: null },
+        { kind: 'stopped', number: 1, itemKind: 'issue', repoId: 'repo-a' as RepoId, removedLabel: 'reviewing', attachedAgent: null, stoppedTask: false },
+        { kind: 'stopped', number: 2, itemKind: 'issue', repoId: 'repo-a' as RepoId, removedLabel: 'in progress', attachedAgent: null, stoppedTask: false },
         { kind: 'skipped', number: 3, itemKind: 'issue', repoId: 'repo-a' as RepoId, reason: 'not-owned', owner: 'alice' },
       ],
     }

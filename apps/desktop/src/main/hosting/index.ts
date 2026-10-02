@@ -13,6 +13,7 @@ export type {
   CommandSummary,
   ComponentCheck,
   HostedSessionSnapshot,
+  HostedTask,
   HostingCapacity,
   LiveBlock,
   LiveBlockKind,
@@ -40,11 +41,16 @@ export type {
   SessionRateLimit,
   SessionRestoreDiscardResult,
   SessionRestoreResult,
+  SessionRole,
   SessionSendResult,
   SessionStartMode,
   SessionStartResult,
 } from '../../shared/hosting/types'
 export { PERMISSION_DECISIONS } from '../../shared/hosting/types'
+
+// #265: the dispatcher role's own options shape — `dispatch/dispatcher.ts`
+// is the one caller outside this directory that ever names it.
+export type { SessionOptionsRole } from './options'
 
 // #219: the live projector — the public surface for main/hosting/handle.ts
 // and main/hosting/store.ts, never imported directly from ./project.

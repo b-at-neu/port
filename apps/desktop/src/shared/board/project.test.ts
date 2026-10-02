@@ -38,6 +38,7 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     sources: ['github'],
     claimedFiles: null,
     headRefOid: null,
+    mergeable: null,
     reviews: null,
     comments: null,
     reviewCycleCount: null,
@@ -91,6 +92,7 @@ function snapshotOf(repositories: readonly RepositoryState[], healths: readonly 
     drain: { gate: 'open' },
     nextWakeupAt: null,
     emittedAt: NOW.toISOString(),
+    dispatch: [],
   }
 }
 

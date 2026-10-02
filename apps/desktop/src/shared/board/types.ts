@@ -7,7 +7,7 @@ import type { ItemStatus, PipelineState, ReconciledItem, RepositoryState, StageL
 import type { ActionAvailability, OperatorAction } from '../actions/types'
 import type { TickReport } from '../tick/types'
 import type { RelayPending, RelayScan } from '../relay/types'
-import type { DrainState } from '../dispatch/types'
+import type { DrainState, RepoDispatchStatus } from '../dispatch/types'
 
 /**
  * The four sources the watcher polls independently. Deliberately not five:
@@ -125,6 +125,12 @@ export interface BoardSnapshot {
    *  never announce a wakeup the watcher did not actually schedule. */
   readonly nextWakeupAt: string | null
   readonly emittedAt: string
+  /** #265: one row per ready repository, this app's own dispatcher state —
+   *  computed inside `buildSnapshot()` from `dispatcher.status()`, never a
+   *  second read channel, the same rule `tick`/`relay`/`drain` above already
+   *  follow for their own sources. `[]` when no dispatcher was wired at all
+   *  (every existing caller, until `main/ipc.ts` wires one). */
+  readonly dispatch: readonly RepoDispatchStatus[]
 }
 
 export type GroupBy = 'stage' | 'repo'

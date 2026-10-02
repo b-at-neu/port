@@ -22,7 +22,7 @@ function entry(overrides: Partial<ReadyEntry> = {}): ReadyEntry {
       owner: 'o',
       name: 'a',
       branches: { integration: 'dev', production: 'main' },
-      commands: { worktrees: null },
+      commands: { worktrees: null, budget: null },
       concurrency: { sharedFiles: [], overlapThreshold: 2 },
       models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
       modules: { approvalGate: true, release: true, scope: true },
@@ -63,6 +63,7 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     sources: ['github'],
     claimedFiles: null,
     headRefOid: null,
+    mergeable: null,
     reviews: null,
     comments: null,
     reviewCycleCount: null,
@@ -111,6 +112,7 @@ function snapshotOf(repositories: readonly RepositoryState[]): BoardSnapshot {
     drain: { gate: 'open' },
     nextWakeupAt: null,
     emittedAt: '2026-01-01T00:00:00Z',
+    dispatch: [],
   }
 }
 
@@ -150,7 +152,7 @@ describe('haltDispatch', () => {
     )
     expect(report).toEqual({
       kind: 'completed',
-      items: [{ kind: 'stopped', number: 148, itemKind: 'issue', repoId: REPO_ID, removedLabel: 'reviewing', attachedAgent: null }],
+      items: [{ kind: 'stopped', number: 148, itemKind: 'issue', repoId: REPO_ID, removedLabel: 'reviewing', attachedAgent: null, stoppedTask: false }],
     })
   })
 
@@ -163,8 +165,44 @@ describe('haltDispatch', () => {
     )
     expect(report).toEqual({
       kind: 'completed',
-      items: [{ kind: 'stopped', number: 148, itemKind: 'issue', repoId: REPO_ID, removedLabel: 'reviewing', attachedAgent: 'review-agent' }],
+      items: [{ kind: 'stopped', number: 148, itemKind: 'issue', repoId: REPO_ID, removedLabel: 'reviewing', attachedAgent: 'review-agent', stoppedTask: false }],
     })
+  })
+
+  it('calls stopFor before applyItemAction, and reports stoppedTask: true when it did (#265)', async () => {
+    const { drain } = fakeDrain()
+    const order: string[] = []
+    const report = await haltDispatch(
+      { snapshot: snapshotOf([repoState([item()])]), entries: [entry()], drain, auditDir: '/audit', now: NOW },
+      {
+        stopFor: (repoId, number) => {
+          order.push('stopFor')
+          expect(repoId).toBe(REPO_ID)
+          expect(number).toBe(148)
+          return Promise.resolve(true)
+        },
+        applyItemAction: () => {
+          order.push('applyItemAction')
+          return Promise.resolve({ ok: true, outcome: { kind: 'applied', argv: [] } })
+        },
+      },
+    )
+    expect(order).toEqual(['stopFor', 'applyItemAction'])
+    expect(report).toEqual({
+      kind: 'completed',
+      items: [{ kind: 'stopped', number: 148, itemKind: 'issue', repoId: REPO_ID, removedLabel: 'reviewing', attachedAgent: null, stoppedTask: true }],
+    })
+  })
+
+  it('defaults stoppedTask to false when no stopFor is wired at all', async () => {
+    const { drain } = fakeDrain()
+    const report = await haltDispatch(
+      { snapshot: snapshotOf([repoState([item()])]), entries: [entry()], drain, auditDir: '/audit', now: NOW },
+      { applyItemAction: () => Promise.resolve({ ok: true, outcome: { kind: 'applied', argv: [] } }) },
+    )
+    expect(report.kind).toBe('completed')
+    if (report.kind !== 'completed') return
+    expect(report.items[0]).toMatchObject({ stoppedTask: false })
   })
 
   it('skips a session-required item without ever calling applyItemAction', async () => {

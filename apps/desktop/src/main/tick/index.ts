@@ -6,8 +6,8 @@ export type { PlanTickParams } from './plan'
 
 export { dispatchableFrom } from './dispatchable'
 
-export { createDispatchLedger } from './ledger'
-export type { DispatchLedger } from './ledger'
+export { createDispatchLedger, createUnknownStreaks } from './ledger'
+export type { DispatchLedger, UnknownStreaks } from './ledger'
 
 export { AGENT_FOR_TRIGGER } from './routing'
 
@@ -20,5 +20,5 @@ export type { OwnershipItem, OwnershipPartition } from './ownership'
 export { parseFilesBlock, gateCandidates } from './contention'
 export type { ClaimedItem, OccupiedEntry, GateHeld, GateResult } from './contention'
 
-export { cycleCapExceeded, zeroDiffGate, codeReviewCount } from './gates'
-export type { ReviewNode, CommentNode, ZeroDiffAction } from './gates'
+export { cycleCapExceeded, zeroDiffGate, codeReviewCount, mergeabilityRoute, refreshWins } from './gates'
+export type { ReviewNode, CommentNode, ZeroDiffAction, MergeabilityAction, RefreshWinsResult } from './gates'

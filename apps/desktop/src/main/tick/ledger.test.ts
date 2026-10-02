@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../../shared/repos'
-import { createDispatchLedger } from './ledger'
+import { createDispatchLedger, createUnknownStreaks } from './ledger'
 import { classifyUnmatched } from './liveness'
 
 const REPO = 'repo-1' as RepoId
@@ -47,5 +47,26 @@ describe('createDispatchLedger', () => {
 
     ledger.record(REPO, 9)
     expect(ledger.rowFor(REPO, 9)).toEqual({ state: 'dispatched', resets: 1 })
+  })
+})
+
+describe('createUnknownStreaks', () => {
+  it('a never-recorded item reads 0', () => {
+    const streaks = createUnknownStreaks()
+    expect(streaks.get(REPO, 1)).toBe(0)
+  })
+
+  it('set then get round-trips, scoped per repo', () => {
+    const streaks = createUnknownStreaks()
+    streaks.set(REPO, 42, 1)
+    expect(streaks.get(REPO, 42)).toBe(1)
+    expect(streaks.get(OTHER, 42)).toBe(0)
+  })
+
+  it('clear resets back to 0', () => {
+    const streaks = createUnknownStreaks()
+    streaks.set(REPO, 42, 1)
+    streaks.clear(REPO, 42)
+    expect(streaks.get(REPO, 42)).toBe(0)
   })
 })

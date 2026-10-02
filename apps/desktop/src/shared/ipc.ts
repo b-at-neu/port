@@ -9,7 +9,7 @@ import type { ClaimApplyResponse, ClaimPreflightResponse, PlanGateChoice } from 
 import type { GateAnswerResponse, GateClaimResponse, GateDecision, GatePreflightResponse } from './gate/types'
 import type { LabelKey } from './labels/vocabulary'
 import type { ItemActionResult, OperatorAction } from './actions/types'
-import type { DispatchCommand, DispatchControlResult } from './dispatch/types'
+import type { DispatchClaimSetResult, DispatchCommand, DispatchControlResult, DispatchRelayResult } from './dispatch/types'
 import type { RuntimePreflight, RuntimeProbe } from './runtime/types'
 import type { ClaimRead } from './writes/types'
 import type { RelayCopyResponse } from './relay/types'
@@ -151,6 +151,22 @@ export interface IpcMap {
   'dispatch:control': {
     request: { command: DispatchCommand }
     response: DispatchControlResult
+  }
+  /** #265: takes or releases the `dispatch` claim scope for one repository —
+   *  `held` is the target state the operator's own button named, the same
+   *  never-a-toggle rule `gate:claim:set` already follows. Operator action
+   *  only; nothing machine-observed ever calls this. */
+  'dispatch:claim:set': {
+    request: { repoId: RepoId; held: boolean }
+    response: DispatchClaimSetResult
+  }
+  /** #265: relays an operator's reply to an app-dispatched agent still
+   *  running in this app's own dispatcher session — the `Send to agent`
+   *  footer's own write, alongside `relay:copy`'s clipboard path for a
+   *  cockpit-dispatched one. */
+  'dispatch:relay': {
+    request: { repoId: RepoId; agentId: string; text: string }
+    response: DispatchRelayResult
   }
   /** The runtime strip's cheap check (#97) — no repository context, no
    *  subprocess beyond `claude --version`, no network. Safe on every app
@@ -309,6 +325,8 @@ export const IPC_CHANNELS = [
   'claim:apply',
   'item:action',
   'dispatch:control',
+  'dispatch:claim:set',
+  'dispatch:relay',
   'runtime:preflight',
   'runtime:probe',
   'gate:preflight',

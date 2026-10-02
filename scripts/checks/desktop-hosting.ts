@@ -3,9 +3,9 @@ import { join } from 'node:path';
 import { root, readJson, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// #98/#99/#103: apps/desktop/src/main/hosting/ owns the full lifecycle of a
-// hosted session in the main process. Fifteen assertions pin its plan's
-// decisions mechanically, in the shape desktop-runtime.ts's and
+// #98/#99/#103/#265: apps/desktop/src/main/hosting/ owns the full lifecycle
+// of a hosted session in the main process. Seventeen assertions pin its
+// plan's decisions mechanically, in the shape desktop-runtime.ts's and
 // desktop-sessions.ts's own guards already use.
 export default async function ({ fail, ok }: Reporter) {
   const hostingDir = 'apps/desktop/src/main/hosting';
@@ -378,6 +378,49 @@ export default async function ({ fail, ok }: Reporter) {
         if (/\bskills\s*:/.test(line) && !/readonly\s+skills\s*:/.test(line)) {
           found = true;
           fail('desktop-hosting', `${rel} passes a 'skills:' option key — commands must run as typed slash commands, never through the Skill-tool filter`);
+        }
+      }
+    }
+    if (!found) ok();
+  }
+
+  // --- options.ts's dispatcher branch sets allowedTools to exactly ['Agent', 'SendMessage'] ---
+  // guard(#265): a third tool slipping into this list would let the
+  // dispatcher session do work of its own rather than only dispatch/relay —
+  // exactly what `DISPATCHER_INSTRUCTIONS` tells it never to do, now also
+  // enforced mechanically.
+  {
+    const optionsFile = allFiles.find((f) => relOf(f) === `${hostingDir}/options.ts`);
+    if (!optionsFile) {
+      fail('desktop-hosting', `${hostingDir}/options.ts does not exist`);
+    } else {
+      const text = stripComments(readFileSync(optionsFile, 'utf8'));
+      if (!/allowedTools:\s*\[\s*'Agent'\s*,\s*'SendMessage'\s*\]/.test(text)) {
+        fail('desktop-hosting', `${hostingDir}/options.ts does not set allowedTools to exactly ['Agent', 'SendMessage'] for the dispatcher role`);
+      } else {
+        ok();
+      }
+    }
+  }
+
+  // --- No production file under main/hosting/ names a tools: option key ----
+  // guard(#265): `tools:` restricts the built-in set for the whole session,
+  // including subagents — it would strip `Bash`/`Write` from the stage
+  // agents the dispatcher's own `Agent()` calls spawn. `allowedTools:` (the
+  // additive, narrower option this ticket actually uses) names the same word
+  // but is never mistaken for a bare `tools:` match: the pattern requires a
+  // non-word character (or line start) immediately before `tools`, which the
+  // camelCase `d` in `allowedTools` never is — unlike a whole-line exclusion,
+  // this still catches a stray `tools:` sharing a line with `allowedTools:`.
+  {
+    let found = false;
+    for (const f of hostingProdFiles) {
+      const rel = relOf(f);
+      const code = stripComments(readFileSync(f, 'utf8'));
+      for (const line of code.split('\n')) {
+        if (/(?:^|[^A-Za-z0-9_])tools\s*:/.test(line)) {
+          found = true;
+          fail('desktop-hosting', `${rel} passes a 'tools:' option key — this restricts the whole session's built-in set, including subagents; use 'allowedTools:' instead`);
         }
       }
     }

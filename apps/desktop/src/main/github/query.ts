@@ -43,7 +43,10 @@ const ISSUE_FRAGMENT = `fragment IssueFields on Issue {
 // purpose (the cycle cap and the zero-diff gate), so a repository's own
 // review/comment history never needs a second round trip larger than the
 // cockpit's own. `headRefOid` is the head this app's own gates compare a
-// review's `commit.oid` against.
+// review's `commit.oid` against. `mergeable` (#265) is the mergeability
+// precondition `main/tick/gates.ts`'s `mergeabilityRoute` reads — GitHub's
+// own `MERGEABLE`/`CONFLICTING`/`UNKNOWN` enum, mapped to that same union at
+// the edge (`map.ts`), never re-derived from anything else.
 const PULL_REQUEST_FRAGMENT = `fragment PullRequestFields on PullRequest {
   number
   title
@@ -52,6 +55,7 @@ const PULL_REQUEST_FRAGMENT = `fragment PullRequestFields on PullRequest {
   state
   mergedAt
   headRefOid
+  mergeable
   assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } }
   labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }
   reviews(first: 30) { totalCount nodes { body submittedAt commit { oid } } }
