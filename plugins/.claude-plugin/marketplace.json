@@ -1,0 +1,15 @@
+{
+  "name": "port-dev",
+  "description": "Dev-loop marketplace for the port plugin — installable into any repository.",
+  "owner": {
+    "name": "Benedikt Winkler",
+    "url": "https://github.com/b-at-neu"
+  },
+  "plugins": [
+    {
+      "name": "port",
+      "source": "./port",
+      "description": "A GitHub-driven agent pipeline — plan, implement, review, revise — installable into any repository."
+    }
+  ]
+}

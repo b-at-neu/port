@@ -115,9 +115,9 @@ Every transcript byte is untrusted data: parsed and classified, never interprete
 ## Layer 3 — behavioural evals
 
 ```bash
-claude plugin eval port@port --scaffold --ablation with-without                                  # whole suite
-claude plugin eval port@port --scaffold --ablation with-without --case analyze-refuses-to-edit-source
-claude plugin eval port@port --scaffold --ablation with-without --tag init
+claude plugin eval port@port-dev --scaffold --ablation with-without                                  # whole suite
+claude plugin eval port@port-dev --scaffold --ablation with-without --case analyze-refuses-to-edit-source
+claude plugin eval port@port-dev --scaffold --ablation with-without --tag init
 ```
 
 Static checks cannot tell you whether a prompt *works* — whether the model actually refuses to edit source, or presents the rule set before writing. That needs running it, which costs money, so this layer is deliberate.
