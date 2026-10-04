@@ -12,6 +12,7 @@ import type { PermissionDialogProps } from './view'
 import { onRepoLabelsChange, reloadRepoLabels, repoLabelFor } from '../repo-labels'
 import { onSelectionChange, selectedSession } from '../session/selection'
 import { sessionDisplayLabel, startedClock } from '../../../shared/hosting/label'
+import { sharedSubscriptions } from '../data/subscriptions'
 
 const ARM_DELAY_MS = 600
 
@@ -157,7 +158,7 @@ async function loadInitialQueue(): Promise<void> {
   } catch (err) {
     console.error('Failed to load the initial permission queue', err)
   }
-  window.port.onSessionStatus((snapshot) => applyStatus(snapshot))
+  sharedSubscriptions().subscribe('session:status', (snapshot) => applyStatus(snapshot))
 }
 
 /** Appended once to `#app`, outside the board's own signature-guarded

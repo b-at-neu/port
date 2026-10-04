@@ -1,3 +1,4 @@
+import './styles/app.css'
 import './index.css'
 import './transcript.css'
 import './board.css'
@@ -11,11 +12,9 @@ import './commands-strip.css'
 import type { AppInfo } from '../../shared/ipc'
 import type { RepoId, RepositoryEntry } from '../../shared/repos'
 import type { BoardSnapshot, GroupBy } from '../../shared/board/types'
-import { render } from './repositories'
-import type { RegistryBanner, RendererState } from './repositories'
+import { render, type RegistryBanner, type RendererState } from './repositories'
 import type { WorktreeSectionState } from './worktrees'
-import { renderSessionsPicker } from './sessions'
-import type { SessionsPickerState } from './sessions'
+import { renderSessionsPicker, type SessionsPickerState } from './sessions'
 import { jumpToLatest, renderTranscript } from './transcript'
 import {
   closeTranscriptTail,
@@ -28,8 +27,7 @@ import {
 } from './transcript-tail'
 import { agentLabel, sessionLabel } from '../../shared/sessions/label'
 import { changeSearchScope, openSearch, registerSearchRedraw, renderSearch, searchScreenState, submitSearch } from './search'
-import { render as renderBoard } from './board/view'
-import type { BoardViewState } from './board/view'
+import { render as renderBoard, type BoardViewState } from './board/view'
 import { handleItemAction, pruneItemActionStates } from './board/actions'
 import { handleDispatchClick } from './board/dispatch'
 import { handleRelayCopy, pruneRelayStates, relayKeyOf, setRelayAnswer, toggleRelayExpanded } from './board/relay'
@@ -41,6 +39,12 @@ import { initGate, openGateDialog, openReviewDialog } from './gate/controller'
 import { initPermissions } from './permission/controller'
 import { initRuntime } from './runtime'
 import { initSession, sessionsTabText } from './session/controller'
+import { router } from './router/router'
+import { routeForView, tabFor, viewFromMatch, type Tab, type View } from './router/legacy-view'
+import { createQueryClient, ipcQueryOptions, observeIpcQuery } from './data/query'
+import { connectQueryCache } from './data/subscriptions'
+import { mountReact } from './react/mount'
+import { themeStore } from './theme/store'
 
 const app = document.querySelector<HTMLDivElement>('#app')
 const runtimeStrip = document.querySelector<HTMLDivElement>('#runtime-strip')
@@ -48,42 +52,29 @@ const nav = document.querySelector<HTMLDivElement>('#nav')
 const boardContainer = document.querySelector<HTMLDivElement>('#board-view')
 const reposContainer = document.querySelector<HTMLDivElement>('#repositories-view')
 const sessionContainer = document.querySelector<HTMLDivElement>('#session-view')
-
-/** Which screen is on top. `board` (#80) and `repos` are the nav bar's two
- *  tabs; `sessions` and `transcript` are #83's picker and viewer, reached
- *  only from a ready repository card and never bookmarked (no router, no
- *  URL state) — both nest under the 'Repositories' tab, never their own. */
-type View =
-  | { readonly screen: 'board' }
-  | { readonly screen: 'repos' }
-  | { readonly screen: 'sessions'; readonly repoId: RepoId; readonly repoLabel: string }
-  | { readonly screen: 'search'; readonly repoId: RepoId; readonly repoLabel: string }
-  /** `from` is where `‹ Back` returns to -- the sessions picker normally,
-   *  the search screen (already in memory, no requery) when a hit opened
-   *  this transcript. */
-  | { readonly screen: 'transcript'; readonly sessionId: string; readonly agentId: string | null; readonly title: string; readonly from: 'sessions' | 'search'; readonly focusIndex: number | null }
-  /** #219: a hosted live session — its own nav tab, never nested under
-   *  'Repositories', since it renders independently of the repositories list. */
-  | { readonly screen: 'session' }
-
-function tabFor(view: View): 'board' | 'repositories' | 'session' {
-  if (view.screen === 'board') return 'board'
-  if (view.screen === 'session') return 'session'
-  return 'repositories'
-}
+const reactRootContainer = document.querySelector<HTMLDivElement>('#react-root')
 
 let state: RendererState = { status: 'loading', repositories: [] }
 let worktreeSections = new Map<RepoId, WorktreeSectionState>()
-let view: View = { screen: 'board' }
 let boardState: BoardViewState = { status: 'loading', snapshot: null, groupBy: 'stage', refreshing: false, now: new Date() }
 let sessionsState: SessionsPickerState = { status: 'loading' }
 
-const TAB_LABELS: Readonly<Record<'board' | 'repositories', string>> = { board: 'Board', repositories: 'Repositories' }
-function drawNav(): void {
+// The router is the one source of truth for which screen is on top (#316) —
+// never a `let view` this module holds independently.
+function currentView(): View {
+  const matches = router.state.matches
+  const leaf = matches[matches.length - 1]
+  if (leaf === undefined) return { screen: 'board' }
+  return viewFromMatch(leaf.routeId, leaf.params, leaf.search as Record<string, unknown>)
+}
+
+const TAB_LABELS: Readonly<Record<'board' | 'repositories' | 'settings', string>> = { board: 'Board', repositories: 'Repositories', settings: 'Settings' }
+
+function drawNav(view: View): void {
   if (!nav) return
   const active = tabFor(view)
   nav.textContent = ''
-  for (const tab of ['board', 'repositories', 'session'] as const) {
+  for (const tab of ['board', 'repositories', 'session', 'settings'] as const) {
     const button = document.createElement('button')
     button.className = tab === active ? 'nav-tab nav-tab--active' : 'nav-tab'
     button.textContent = tab === 'session' ? sessionsTabText() : TAB_LABELS[tab]
@@ -93,21 +84,23 @@ function drawNav(): void {
   }
 }
 
-function drawViews(): void {
+function drawViews(view: View): void {
   const active = tabFor(view)
   if (boardContainer) boardContainer.hidden = active !== 'board'
   if (reposContainer) reposContainer.hidden = active !== 'repositories'
   // The session container is hidden rather than cleared on a tab switch, so
   // the stream keeps rendering in the background.
   if (sessionContainer) sessionContainer.hidden = active !== 'session'
+  // #react-root shows only for the one React screen this ticket ships.
+  if (reactRootContainer) reactRootContainer.hidden = active !== 'settings'
 }
 
-function drawRepositories(): void {
+function drawRepositories(view: View): void {
   if (!reposContainer) return
   if (view.screen === 'repos') {
     render(reposContainer, { ...state, worktreeSections })
   } else if (view.screen === 'sessions') {
-    renderSessionsPicker(reposContainer, view.repoId, view.repoLabel, sessionsState)
+    renderSessionsPicker(reposContainer, view.repoId, repoLabelFor(view.repoId), sessionsState)
   } else if (view.screen === 'search') {
     renderSearch(reposContainer, searchScreenState())
   } else if (view.screen === 'transcript') {
@@ -121,10 +114,18 @@ function drawBoard(): void {
 }
 
 function draw(): void {
-  drawNav()
-  drawViews()
-  drawRepositories()
+  const view = currentView()
+  drawNav(view)
+  drawViews(view)
+  drawRepositories(view)
   drawBoard()
+}
+
+// Navigates, then lets `router.subscribe('onResolved', draw)` repaint — the
+// one seam asserting the loose `RouteDescriptor` against `navigate`'s real
+// signature (`data/invoke.ts`'s own "one type assertion" idiom).
+async function navigateTo(next: View): Promise<void> {
+  await router.navigate(routeForView(next) as Parameters<typeof router.navigate>[0])
 }
 
 function bannerFor(kind: string): RegistryBanner['reason'] {
@@ -135,49 +136,49 @@ function bannerFor(kind: string): RegistryBanner['reason'] {
 
 async function refreshRepositories(): Promise<void> {
   state = { ...state, status: 'loading' }
-  drawRepositories()
+  drawRepositories(currentView())
   try {
     const [info, result] = await Promise.all([window.port.appInfo(), window.port.reposList()])
     applyListResult(info, result)
   } catch (error) {
     console.error('Failed to reach the main process', error)
     state = { status: 'error', repositories: [] }
-    drawRepositories()
+    drawRepositories(currentView())
   }
 }
 
 function applyListResult(appInfo: AppInfo, result: Awaited<ReturnType<typeof window.port.reposList>>): void {
   if (!result.ok) {
     state = { status: 'ready', repositories: [], appInfo, registryBanner: { path: 'registry.json', reason: bannerFor(result.kind) } }
-    drawRepositories()
+    drawRepositories(currentView())
     return
   }
   state = { status: 'ready', repositories: result.repositories, appInfo }
-  drawRepositories()
+  drawRepositories(currentView())
 }
 
 function highlight(id: RepoId, repositories: readonly RepositoryEntry[], notice: string): void {
   state = { ...state, status: 'ready', repositories, highlighted: id, notice }
-  drawRepositories()
+  drawRepositories(currentView())
   setTimeout(() => {
     state = { ...state, highlighted: undefined, notice: undefined }
-    drawRepositories()
+    drawRepositories(currentView())
   }, 3000)
 }
 
 async function handleAdd(): Promise<void> {
   state = { ...state, status: 'loading' }
-  drawRepositories()
+  drawRepositories(currentView())
   try {
     const result = await window.port.reposAdd()
     if (!result.ok) {
       state = { ...state, status: 'ready', registryBanner: { path: 'registry.json', reason: bannerFor(result.kind) } }
-      drawRepositories()
+      drawRepositories(currentView())
       return
     }
     if (result.outcome === 'cancelled') {
       state = { ...state, status: 'ready' }
-      drawRepositories()
+      drawRepositories(currentView())
       return
     }
     if (result.outcome === 'already-registered') {
@@ -185,40 +186,38 @@ async function handleAdd(): Promise<void> {
       return
     }
     state = { ...state, status: 'ready', repositories: result.repositories, registryBanner: undefined }
-    drawRepositories()
+    drawRepositories(currentView())
   } catch (error) {
     console.error('Failed to add a repository', error)
     state = { status: 'error', repositories: [] }
-    drawRepositories()
+    drawRepositories(currentView())
   }
 }
 
 async function handleRemove(id: RepoId): Promise<void> {
   state = { ...state, status: 'loading' }
-  drawRepositories()
+  drawRepositories(currentView())
   try {
     const result = await window.port.reposRemove({ id })
     if (!result.ok) {
       state = { ...state, status: 'ready' }
-      drawRepositories()
+      drawRepositories(currentView())
       return
     }
     state = { ...state, status: 'ready', repositories: result.repositories }
-    drawRepositories()
+    drawRepositories(currentView())
   } catch (error) {
     console.error('Failed to remove a repository', error)
     state = { status: 'error', repositories: [] }
-    drawRepositories()
+    drawRepositories(currentView())
   }
 }
 
-/** Holds the per-repository inspection state in its own `Map` (never
- *  blanking one card when another refreshes) and never polls — a
- *  `worktrees:report` round trip runs only when the operator asks
- *  (Decision 5). */
+// Per-repository inspection state in its own Map (never blanking one card
+// when another refreshes); never polls — a report runs only on request.
 async function handleInspectWorktrees(id: RepoId): Promise<void> {
   worktreeSections = new Map(worktreeSections).set(id, { status: 'loading' })
-  drawRepositories()
+  drawRepositories(currentView())
   try {
     const report = await window.port.worktreesReport({ id })
     worktreeSections = new Map(worktreeSections).set(id, { status: 'done', report })
@@ -229,7 +228,7 @@ async function handleInspectWorktrees(id: RepoId): Promise<void> {
       report: { ok: false, kind: 'spawn-failed', message: 'Failed to reach the main process', readAt: new Date().toISOString() },
     })
   }
-  drawRepositories()
+  drawRepositories(currentView())
 }
 
 function applySnapshot(snapshot: BoardSnapshot): void {
@@ -239,9 +238,7 @@ function applySnapshot(snapshot: BoardSnapshot): void {
   drawBoard()
 }
 
-/** Resolves the `dataset.key`'s own `RelayPending` from the live snapshot —
- *  `board/relay.ts` holds no second copy of the pending list itself, only
- *  the per-key UI state keyed by the same string. */
+// Resolves the dataset key's own RelayPending from the live snapshot.
 function findRelayPending(key: string): RelayPending | null {
   const relay = boardState.snapshot?.relay
   if (relay === undefined || !relay.ok) return null
@@ -274,24 +271,26 @@ function handleRelayAnswerInput(target: HTMLTextAreaElement): void {
   drawBoard()
 }
 
-async function initBoard(): Promise<void> {
-  try {
-    const snapshot = await window.port.boardSnapshot()
-    applySnapshot(snapshot)
-  } catch (error) {
-    console.error('Failed to reach the main process', error)
-    boardState = { ...boardState, status: 'error' }
-    drawBoard()
-  }
-  window.port.onBoardUpdate((snapshot) => applySnapshot(snapshot))
+// Reads the board through the query cache (#316) — `connectQueryCache`
+// feeds `board:update` pushes into the same cache, so this one observer
+// reaches `applySnapshot` for both the initial fetch and every later push.
+function initBoard(client: ReturnType<typeof createQueryClient>): void {
+  observeIpcQuery(client, 'board:snapshot', undefined, (result) => {
+    if (result.status === 'success') applySnapshot(result.data)
+    else if (result.status === 'error') {
+      console.error('Failed to reach the main process', result.error)
+      boardState = { ...boardState, status: 'error' }
+      drawBoard()
+    }
+  })
 }
 
-async function handleBoardRefresh(): Promise<void> {
+async function handleBoardRefresh(client: ReturnType<typeof createQueryClient>): Promise<void> {
   boardState = { ...boardState, refreshing: true }
   drawBoard()
   try {
     const snapshot = await window.port.boardRefresh({})
-    applySnapshot(snapshot)
+    client.setQueryData(ipcQueryOptions('board:snapshot').queryKey, snapshot)
   } catch (error) {
     console.error('Failed to refresh the board', error)
     boardState = { ...boardState, refreshing: false }
@@ -299,7 +298,7 @@ async function handleBoardRefresh(): Promise<void> {
   }
 }
 
-/** The action controller's own click entry point — dataset carries `repoId`/`kind`/`number`/`stage` verbatim from `rows.ts`'s own buttons. */
+// The action controller's own click entry point (rows.ts's own buttons).
 function handleItemActionClick(target: HTMLElement): void {
   const action = target.dataset.action?.slice('item-'.length) as OperatorAction | undefined
   const { repoId, number, kind, stage } = target.dataset
@@ -307,8 +306,7 @@ function handleItemActionClick(target: HTMLElement): void {
   void handleItemAction({ repoId: repoId as RepoId, kind: kind as 'issue' | 'pull-request', number: Number(number), action, expectedStage: (stage || null) as LabelKey | null, redraw: drawBoard })
 }
 
-/** The plan gate's own row entry point — dataset carries `repoId`/`number`
- *  verbatim from `board/rows.ts`'s own **Review plan** button. */
+// The plan gate's own row entry point (board/rows.ts's Review plan button).
 function handleGateReviewClick(target: HTMLElement): void {
   const { repoId, number } = target.dataset
   if (!repoId || !number) return
@@ -321,13 +319,11 @@ function toggleGroupBy(): void {
   drawBoard()
 }
 
-/** Switching tabs always lands on that tab's top screen — 'board', the
- *  repositories list, or the session view — rather than trying to preserve a
- *  drill-down (a sessions-picker/transcript screen) across a tab the
- *  operator explicitly left. */
-function switchTab(tab: 'board' | 'repositories' | 'session'): void {
-  view = tab === 'board' ? { screen: 'board' } : tab === 'session' ? { screen: 'session' } : { screen: 'repos' }
-  draw()
+// Switching tabs always lands on that tab's top screen rather than
+// preserving a drill-down the operator explicitly left.
+async function switchTab(tab: Tab): Promise<void> {
+  const next: View = tab === 'board' ? { screen: 'board' } : tab === 'session' ? { screen: 'session' } : tab === 'settings' ? { screen: 'settings' } : { screen: 'repos' }
+  await navigateTo(next)
 }
 
 function repoLabelFor(id: RepoId): string {
@@ -349,21 +345,17 @@ async function loadSessions(): Promise<void> {
   draw()
 }
 
-function handleOpenSessions(repoId: RepoId): void {
-  view = { screen: 'sessions', repoId, repoLabel: repoLabelFor(repoId) }
+async function handleOpenSessions(repoId: RepoId): Promise<void> {
+  await navigateTo({ screen: 'sessions', repoId })
   void loadSessions()
 }
 
-function handleBackToRepos(): void {
-  view = { screen: 'repos' }
-  draw()
+async function handleBackToRepos(): Promise<void> {
+  await navigateTo({ screen: 'repos' })
 }
 
-/** #83's UX spec: "stage plus #N, else the session title" — resolved from
- *  the already-loaded `sessionsState` (`SessionRecord`/`AgentRecord`), never
- *  the raw id, so the transcript header and the back-to-sessions flow show
- *  something scannable rather than an opaque `sessionId`/`agent-<id>`. Falls
- *  back to the raw id only when the picker hasn't loaded (or is stale) yet. */
+// #83: "stage plus #N, else the session title", from the already-loaded
+// sessionsState — falls back to the raw id only when the picker is stale.
 function titleFor(sessionId: string, agentId: string | null): string {
   const scan = sessionsState.status === 'ready' ? sessionsState.scan : null
   if (agentId !== null) {
@@ -374,51 +366,48 @@ function titleFor(sessionId: string, agentId: string | null): string {
   return session !== undefined ? sessionLabel(session) : sessionId
 }
 
-function handleOpenTranscript(sessionId: string, agentId: string): void {
+async function handleOpenTranscript(sessionId: string, agentId: string): Promise<void> {
   const normalizedAgentId = agentId === '' ? null : agentId
   const title = titleFor(sessionId, normalizedAgentId)
-  view = { screen: 'transcript', sessionId, agentId: normalizedAgentId, title, from: 'sessions', focusIndex: null }
+  await navigateTo({ screen: 'transcript', sessionId, agentId: normalizedAgentId, title, from: 'sessions', focusIndex: null })
   void openTranscriptTail(sessionId, normalizedAgentId, title, null)
 }
 
-/** A search hit's own open route — `label` is the group's already-resolved
- *  `sessionLabel`/`agentLabel`, so this never re-derives a title the way
- *  `handleOpenTranscript` does from the (possibly stale) sessions picker. */
-function handleOpenSearchHit(sessionId: string, agentId: string, entryIndex: number, label: string): void {
+// A search hit's own open route — `label` is already resolved, so this
+// never re-derives a title from the (possibly stale) sessions picker.
+async function handleOpenSearchHit(sessionId: string, agentId: string, entryIndex: number, label: string): Promise<void> {
   const normalizedAgentId = agentId === '' ? null : agentId
-  view = { screen: 'transcript', sessionId, agentId: normalizedAgentId, title: label, from: 'search', focusIndex: entryIndex }
+  await navigateTo({ screen: 'transcript', sessionId, agentId: normalizedAgentId, title: label, from: 'search', focusIndex: entryIndex })
   void openTranscriptTail(sessionId, normalizedAgentId, label, entryIndex)
 }
 
-function handleBackToSessions(): void {
+async function handleBackToSessions(): Promise<void> {
+  const view = currentView()
   if (view.screen !== 'transcript') return
   const { sessionId, from } = view
   closeTranscriptTail()
 
   if (from === 'search') {
     const search = searchScreenState()
-    view = { screen: 'search', repoId: search.repoId, repoLabel: search.repoLabel }
-    draw()
+    await navigateTo({ screen: 'search', repoId: search.repoId })
     return
   }
 
-  // The picker's own state is still in memory from the last scan — reopen
-  // it without a fresh round trip; `rescan-sessions` covers a deliberate
-  // refresh.
+  // Reopens the picker from memory, no fresh round trip; rescan-sessions
+  // covers a deliberate refresh.
   const repoId = sessionsState.status === 'ready' ? (sessionsState.scan.sessions.find((s) => s.sessionId === sessionId)?.repoId ?? null) : null
-  view = repoId !== null ? { screen: 'sessions', repoId, repoLabel: repoLabelFor(repoId) } : { screen: 'repos' }
-  draw()
+  await navigateTo(repoId !== null ? { screen: 'sessions', repoId } : { screen: 'repos' })
 }
 
-function handleOpenSearch(repoId: RepoId): void {
-  view = { screen: 'search', repoId, repoLabel: repoLabelFor(repoId) }
+async function handleOpenSearch(repoId: RepoId): Promise<void> {
+  await navigateTo({ screen: 'search', repoId })
   openSearch(repoId, repoLabelFor(repoId))
 }
 
-function handleBackFromSearch(): void {
+async function handleBackFromSearch(): Promise<void> {
+  const view = currentView()
   if (view.screen !== 'search') return
-  view = { screen: 'sessions', repoId: view.repoId, repoLabel: view.repoLabel }
-  draw()
+  await navigateTo({ screen: 'sessions', repoId: view.repoId })
 }
 
 function handleSearchScopeChange(value: string): void {
@@ -433,24 +422,24 @@ app?.addEventListener('click', (event) => {
   if (!(target instanceof HTMLElement)) return
   const action = target.dataset.action
   if (action === 'view-switch' && target.dataset.view) {
-    switchTab(target.dataset.view as 'board' | 'repositories' | 'session')
+    void switchTab(target.dataset.view as Tab)
     return
   }
   if (action === 'add') void handleAdd()
   else if (action === 'rescan') void refreshRepositories()
   else if (action === 'remove' && target.dataset.repoId) void handleRemove(target.dataset.repoId as RepoId)
   else if (action === 'inspect-worktrees' && target.dataset.repoId) void handleInspectWorktrees(target.dataset.repoId as RepoId)
-  else if (action === 'transcripts' && target.dataset.repoId) handleOpenSessions(target.dataset.repoId as RepoId)
-  else if (action === 'back-to-repos') handleBackToRepos()
+  else if (action === 'transcripts' && target.dataset.repoId) void handleOpenSessions(target.dataset.repoId as RepoId)
+  else if (action === 'back-to-repos') void handleBackToRepos()
   else if (action === 'rescan-sessions') void loadSessions()
-  else if (action === 'open-transcript' && target.dataset.sessionId !== undefined) handleOpenTranscript(target.dataset.sessionId, target.dataset.agentId ?? '')
-  else if (action === 'back-to-sessions') handleBackToSessions()
-  else if (action === 'open-search' && target.dataset.repoId) handleOpenSearch(target.dataset.repoId as RepoId)
-  else if (action === 'search-back') handleBackFromSearch()
+  else if (action === 'open-transcript' && target.dataset.sessionId !== undefined) void handleOpenTranscript(target.dataset.sessionId, target.dataset.agentId ?? '')
+  else if (action === 'back-to-sessions') void handleBackToSessions()
+  else if (action === 'open-search' && target.dataset.repoId) void handleOpenSearch(target.dataset.repoId as RepoId)
+  else if (action === 'search-back') void handleBackFromSearch()
   else if (action === 'search-hit' && target.dataset.sessionId !== undefined) {
-    handleOpenSearchHit(target.dataset.sessionId, target.dataset.agentId ?? '', Number(target.dataset.entryIndex ?? '0'), target.dataset.label ?? '')
+    void handleOpenSearchHit(target.dataset.sessionId, target.dataset.agentId ?? '', Number(target.dataset.entryIndex ?? '0'), target.dataset.label ?? '')
   }
-  else if (action === 'board-refresh') void handleBoardRefresh()
+  else if (action === 'board-refresh') void handleBoardRefresh(queryClient)
   else if (action === 'board-group-toggle') toggleGroupBy()
   else if (action === 'toggle-follow') toggleFollow()
   else if (action === 'jump-to-latest') jumpToLatest()
@@ -488,11 +477,24 @@ app?.addEventListener('submit', (event) => {
 
 registerSearchRedraw(draw)
 registerTranscriptRedraw(draw)
-draw()
-void refreshRepositories()
-void initBoard()
-if (app) initClaim(app)
-if (app) initGate(app)
-if (app) initPermissions(app)
-if (runtimeStrip) initRuntime(runtimeStrip)
-if (sessionContainer) initSession(sessionContainer, { show: () => switchTab('session'), onNavChange: drawNav })
+
+// Boot order (#316): theme, query client, push-cache wiring, React mount,
+// then the legacy screens' own init.
+themeStore().apply()
+const queryClient = createQueryClient()
+connectQueryCache(queryClient)
+if (reactRootContainer) mountReact(reactRootContainer, queryClient)
+
+async function boot(): Promise<void> {
+  router.subscribe('onResolved', draw)
+  await router.load()
+  draw()
+  void refreshRepositories()
+  initBoard(queryClient)
+  if (app) initClaim(app)
+  if (app) initGate(app)
+  if (app) initPermissions(app)
+  if (runtimeStrip) initRuntime(runtimeStrip)
+  if (sessionContainer) initSession(sessionContainer, { show: () => void switchTab('session'), onNavChange: () => drawNav(currentView()) })
+}
+void boot()
