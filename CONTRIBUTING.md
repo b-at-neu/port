@@ -6,24 +6,33 @@ Repository map and the ship boundary: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 This repository is both a plugin marketplace and the plugin it distributes. `README.md`'s install command — `claude plugin marketplace add b-at-neu/port@main --scope project` — is the **consumer** path: it is what a managed repository commits so the pipeline travels with the checkout. It is wrong here, because this repository's own committed `.claude/settings.json` already carries a **project**-scope `port` marketplace entry, and a plain `marketplace add` with no `--scope` writes **user** scope — which project scope silently outranks. Following the README's instructions unscoped in this repository looks like it worked and changes nothing this repository loads — though it still repoints the `port` name for the whole machine (below).
 
-The only scope that outranks the committed project-scope entry is **`local`** — gitignored, machine-specific, and exactly what a local-directory dev loop needs:
+The only scope that outranks the committed project-scope entry is **`local`** — gitignored, machine-specific, and exactly what a local-directory dev loop needs. Run all three commands from the **main checkout**:
 
 ```bash
-claude plugin marketplace add /absolute/path/to/port --scope local
-claude plugin install port@port --scope local
+claude plugin marketplace add /absolute/path/to/port/plugins --scope local
+claude plugin install port@port-dev --scope local
+claude plugin disable port@port --scope local
 ```
+
+The dev-loop marketplace manifest lives at `plugins/.claude-plugin/marketplace.json`, named **`port-dev`** — a distinct name from the `port` marketplace every consumer's committed `ref` (`main`, or a release tag) resolves against — and it names this checkout's `./port` as its one plugin's source. It is why the recipe installs from `/absolute/path/to/port/plugins`, not the repository root.
+
+This is **local** scope, not user scope, deliberately: at user scope, `port@port-dev` would be enabled in every repository on the machine, next to each consumer's own project-scope `port@port` — two copies of `port` loading there at once. Local scope stays confined to this checkout, and only local scope outranks the committed project-scope `port@port` enable — a user-scope `disable` could not turn that project-scope enable off.
+
+The third line is what makes exactly one `port` load here: `claude plugin disable port@port --scope local` outranks the committed project-scope enable, locally, so the dev-loop install is the only one this checkout ever loads. Without it, both `port@port` (the committed entry) and `port@port-dev` (the local install) would load side by side.
 
 This writes to `.claude/settings.local.json`, already covered by this repository's `.gitignore`.
 
-**That `marketplace add` repoints `port` for every repository on this machine.** `--scope` picks which settings file declares the marketplace, but there is one live source per marketplace name — the `port` key in `~/.claude/plugins/known_marketplaces.json` — and the most recent `marketplace add` wins whatever its scope; the CLI says so itself: "Plugins already installed from it now update from the new source." This checkout's manifest names its marketplace `port`, the same name every consumer's GitHub source uses, so the two cannot both be live. Pinned installs are untouched — each consumer keeps running what its `installed_plugins.json` record installed — but the next install or update against `port` in a consumer repository, auto-update included, fetches from this checkout. So re-point deliberately before each: in a consumer, re-run README step 1's `marketplace add` line, then `/port:init` to restore that entry's release pin; here, re-run the local-scope pair above. The tell in a consumer is its cockpit startup line reporting `staleness not computable` because the source is a directory outside its working tree.
+**One-time migration**, for a machine still set up with the old shared-name recipe (`port@port` installed at user or local scope from a directory source): remove any `extraKnownMarketplaces.port` entry whose `source` is a `directory`, and its matching `enabledPlugins` key, from `~/.claude/settings.json` and `.claude/settings.local.json`. Then, in a consumer repository, re-run README step 1's `marketplace add` line and `/port:init`. The tell stays the same: that consumer's cockpit line reports `staleness not computable` for a directory source outside its working tree.
+
+**Because `port-dev` is a name no consumer resolves, this checkout's own dev loop never repoints what any other repository loads.** There is one live source per marketplace name — the most recent `claude plugin marketplace add` for a name wins, at any scope, for every repository on the machine that resolves it — but `port-dev` is a name a consumer's committed pin never names, so adding it here repoints nothing else. The `port` marketplace name stays whatever source a consumer's own `marketplace add` or `/port:init` last gave it — this repository's dev loop no longer touches that slot at all.
 
 Edits under `plugins/port/` take effect immediately — there is no build step and nothing to invalidate. A session that is already running has loaded its components, so run `/reload-plugins` there to pick up changes. **A cache path is not evidence of a stale copy** — a directory-sourced plugin is *copied* into `~/.claude/plugins/cache/` at install time, so a local-scope install from this checkout lands at exactly the same kind of cache path a GitHub-sourced one does; the old tell reported "stale" every time under a directory source, including when the override worked perfectly. **The replacement tell is the cockpit's own startup line** (see "Running plugin identity" in `pipeline/SKILL.md`), which resolves and prints the applicable install record's short commit sha and scope — that sha should equal `git rev-parse --short HEAD` in this checkout once the local-scope override is running. If it does not, the override has not taken yet — reinstall and start a new session.
 
 **The ground-truth test is three-way, not `diff -rq` alone.** Measured 2026-08-31: `diff -rq` returned silence while both the cache and this checkout sat 42 commits behind `origin/dev`, so three days of merged fixes were absent and the documented verification reported no problem — a check that cannot distinguish the state it exists to detect. Both halves are required, because either alone passes while the running plugin is stale:
 
 ```bash
-git rev-list --count HEAD..origin/dev                                          # must be 0 — this checkout is current
-diff -rq ~/.claude/plugins/cache/port/port/<version> plugins/port              # must be silent — the cache matches this checkout
+git rev-list --count HEAD..origin/dev                                               # must be 0 — this checkout is current
+diff -rq ~/.claude/plugins/cache/port-dev/port/<version> plugins/port              # must be silent — the cache matches this checkout
 ```
 
 `<version>` is `plugins/port/.claude-plugin/plugin.json`'s own `version` field — read it there rather than typing a literal, which would read wrong the moment this repository releases again.
@@ -32,9 +41,9 @@ diff -rq ~/.claude/plugins/cache/port/port/<version> plugins/port              #
 
 ### The integration branch stays on a prerelease version
 
-`dev`'s `plugins/port/.claude-plugin/plugin.json` carries a prerelease-suffixed version (`<X.Y.Z>-dev`) at rest, never a clean `<X.Y.Z>`. Reason: the cache directory above is keyed by marketplace, plugin, **and** version — a dev-loop install from this checkout and a consumer's released install both resolve to `cache/port/port/<version>/` for as long as `dev` and a shipped release share the same version string, and reinstalling either one silently overwrites the other with whichever ran last.
+`dev`'s `plugins/port/.claude-plugin/plugin.json` carries a prerelease-suffixed version (`<X.Y.Z>-dev`) at rest, never a clean `<X.Y.Z>`. The cache directory is keyed by marketplace, plugin, **and** version, and `port-dev` already gives the dev loop its own marketplace segment (`cache/port-dev/port/<version>/`), separate from a consumer's `cache/port/port/<version>/` — so the marketplace name alone is what now keeps a dev-loop install and a consumer's released install from ever resolving to the same cache directory. The suffix is a second, independent reason to keep a clean version off `dev`: a cache path with no suffix (`cache/port-dev/port/<version>/`) reads identically whether the version underneath it is actually released or still in flight, where the `-dev` suffix is readable at a glance as "not that release" even before anything reads the commit it was installed from.
 
-`/port:release`'s bump pull request strips the suffix as part of the bump it already performs, and `release.postPublishHook` → `scripts/dev-window.ts` restores it immediately after publishing, by opening a `devwindow/v<next>` pull request against `dev`. **Merge that pull request before doing anything else with the dev loop** — between the bump merging and the dev-window pull request merging, `dev` does carry a releasable version, and reinstalling the local-scope dev loop during that window reproduces the exact collision this convention exists to prevent.
+`/port:release`'s bump pull request strips the suffix as part of the bump it already performs, and `release.postPublishHook` → `scripts/dev-window.ts` restores it immediately after publishing, by opening a `devwindow/v<next>` pull request against `dev`. **Merge that pull request before doing anything else with the dev loop** — between the bump merging and the dev-window pull request merging, `dev` does carry a releasable version. The corridor caveat now only matters for an install made from this checkout under the root manifest's own `port` name — the ordinary `port@port-dev` dev loop keeps its own marketplace segment regardless, so it never collides with a consumer's `cache/port/port/<version>/` either way.
 
 That window is the release corridor (#224), and it is entirely legitimate while a release is actually in flight — `run-release-corridor` (`scripts/release-corridor.ts`, on push to `dev`/`main`) is what tells that apart from a corridor left open with nothing addressing it, since only a live GitHub read can. It passes while an open `Release v<version>` pull request, an unpublished merged bump, or an open dev-window pull request explains the clean version, and fails only when none of those do. Layer 1 (`node scripts/checks.ts`) cannot see GitHub, so it only notes a clean integration branch rather than guessing; `node scripts/release-corridor.ts` answers the same question from any checkout.
 
@@ -67,15 +76,15 @@ Then start a **new** session — an update never applies mid-session.
 ## Checking that a change parsed
 
 ```bash
-claude plugin details port
+claude plugin details port@port-dev
 ```
 
-This prints the component inventory. **A skill that fails to parse is silently absent from it rather than reported as an error** — so check that the counts went up, rather than looking for a complaint. It confirms the component parsed, not that the running session has it — that is confirmed only by invoking it. It reads the `port` name's live source, so it reflects this checkout only while the local-scope `marketplace add` above is the most recent one on this machine.
+This prints the component inventory. **A skill that fails to parse is silently absent from it rather than reported as an error** — so check that the counts went up, rather than looking for a complaint. It confirms the component parsed, not that the running session has it — that is confirmed only by invoking it. It reads `port-dev`'s own live source, which always names this checkout's `./port` — so, unlike the old shared-name recipe, it reflects this checkout regardless of what any consumer repository's own `port` marketplace currently points at.
 
-After editing `marketplace.json` or `plugin.json`, re-validate them:
+After editing `plugins/.claude-plugin/marketplace.json` or `plugin.json`, re-validate them:
 
 ```bash
-claude plugin marketplace update port
+claude plugin marketplace update port-dev
 ```
 
 ## Testing a change

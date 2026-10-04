@@ -51,7 +51,7 @@ Then check for self-host drift. Read `<root>/.claude-plugin/marketplace.json`:
 **Resolve the staleness comparison target first**, from `~/.claude/plugins/known_marketplaces.json`, keyed by the `<marketplace>` segment step 3 already derived from `${CLAUDE_PLUGIN_ROOT}` — never from `repo`/`branches.integration`, which describe the *managed* repository and are only incidentally the same one here. **The ref about to be named is this resolved `<target-ref>` and nothing else** — never `branches.production`, never the plugin repository's own default branch guessed some other way; if the ref about to be named is not this one, render `staleness not computable` instead of a number:
 
 - `source.source == "github"` → `<po>`/`<pn>` from `source.repo`; `<target-ref>` is `source.ref`, or that repository's default branch when unset.
-- `source.source == "directory"` whose `path` is this working tree (the self-hosting case) → `<po>`/`<pn>` is `<owner>`/`<name>`; `<target-ref>` is `<integration>`.
+- `source.source == "directory"` whose `path` is this working tree or a directory inside it (the self-hosting case) → `<po>`/`<pn>` is `<owner>`/`<name>`; `<target-ref>` is `<integration>`.
 - Anything else (a directory source pointing elsewhere, no marketplace record, no resolvable owner/name) → **not computable** — say so once at startup (see **UX states**) and omit the `pluginRepo` alias below for the rest of the session; never print a number.
 
 When a target resolved, fold a second aliased root selection into the same query:

@@ -9,20 +9,22 @@ Static checks tell you a prompt *parsed*. They cannot tell you it *works* — th
 The whole suite, against the installed plugin:
 
 ```bash
-claude plugin eval port@port --scaffold --ablation with-without
+claude plugin eval port@port-dev --scaffold --ablation with-without
 ```
 
 One case:
 
 ```bash
-claude plugin eval port@port --scaffold --ablation with-without --case analyze-refuses-to-edit-source
+claude plugin eval port@port-dev --scaffold --ablation with-without --case analyze-refuses-to-edit-source
 ```
 
 All the `/port:init` cases:
 
 ```bash
-claude plugin eval port@port --scaffold --ablation with-without --tag init
+claude plugin eval port@port-dev --scaffold --ablation with-without --tag init
 ```
+
+In this checkout `port@port` is disabled (CONTRIBUTING.md → "Working on the plugin") and would evaluate the released install, not the working tree — `port@port-dev` is what actually runs the code under test.
 
 `--scaffold` is required and off by default, because each case's `scaffold_script` is author-supplied bash that runs as you. Read a case before running it.
 

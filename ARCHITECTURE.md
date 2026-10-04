@@ -9,6 +9,7 @@
 | Path | Holds | Read by | Ships |
 | --- | --- | --- | --- |
 | `.claude-plugin/marketplace.json` | The marketplace index naming `./plugins/port` | The plugin client, at install time | no |
+| `plugins/.claude-plugin/marketplace.json` | The dev-loop marketplace index (`port-dev`) naming `./port` | The plugin client, for this checkout's local-scope dev loop | no |
 | `plugins/port/.claude-plugin/plugin.json` | The plugin manifest; `version` is both the release signal and the on-disk cache key | `/port:init`, the release tooling | yes |
 | `plugins/port/agents/` | The plan, impl, review, revise stage prompts | Dispatched subagents | yes |
 | `plugins/port/skills/` | The seven `/port:*` skills | The operator's own session | yes |
@@ -39,7 +40,7 @@ Every agent and skill resolves the hub as `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.m
 
 ### `plugins/<name>/` nesting, and `.claude-plugin/marketplace.json` at the root
 
-Both are mandated by the marketplace format, not chosen. `marketplace.json`'s `source` is `./plugins/port`; a marketplace index and its plugin directories have to sit where the format expects them, or the client's own resolution fails.
+Both are mandated by the marketplace format, not chosen. `marketplace.json`'s `source` is `./plugins/port`; a marketplace index and its plugin directories have to sit where the format expects them, or the client's own resolution fails. The dev manifest (`plugins/.claude-plugin/marketplace.json`) sits at `plugins/` for the same reason — a marketplace's plugin `source` must resolve inside its own marketplace root, so it names `./port` rather than needing a `../` to reach back out. Its `name` must differ from the root manifest's, because there is one live source per name (#343).
 
 ### The five root toolchain files
 

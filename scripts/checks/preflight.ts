@@ -131,6 +131,19 @@ export default async function ({ fail, ok }: Reporter) {
     } else {
       ok();
     }
+    // guard(#343): a self-hosting directory source below the repository root
+    // reading as not computable — the dev-loop marketplace manifest sits at
+    // plugins/.claude-plugin/marketplace.json, a directory inside this
+    // working tree rather than this working tree itself, and the narrower
+    // phrase before this ticket matched only an exact path.
+    if (!skillText.includes('this working tree or a directory inside it')) {
+      fail(
+        'preflight-identity',
+        `${unionRel} no longer widens the self-hosting directory-source case to "this working tree or a directory inside it"`,
+      );
+    } else {
+      ok();
+    }
   }
 
   // --- Guard against the generality mistake this ticket's own fixes could
