@@ -89,5 +89,15 @@ export default tseslint.config(
       'port/no-raw-colour': 'error'
     }
   },
+  // The visual harness (#317) — Playwright's own test-hook signature requires
+  // an empty object destructuring pattern for an unused leading `fixtures`
+  // parameter (`test.afterEach(async ({}, testInfo) => …)`); that shape is
+  // the framework's own contract, never a lint complaint about real code.
+  {
+    files: ['visual/**/*.mts'],
+    rules: {
+      'no-empty-pattern': 'off'
+    }
+  },
   eslintConfigPrettier
 )

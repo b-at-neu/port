@@ -10,6 +10,7 @@
     "dev": "pnpm --filter @port/desktop dev",
     "build": "pnpm -r build",
     "dist": "pnpm --filter @port/desktop dist",
+    "screenshots": "pnpm --filter @port/desktop screenshots",
     "typecheck": "pnpm -r typecheck",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "lint": "pnpm -r lint",
