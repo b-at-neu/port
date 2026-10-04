@@ -129,6 +129,13 @@ Narrow but real, because the pipeline's whole visible state is a set of GitHub l
 
 **Severity is never colour-only.** Review findings carry both an emoji and the word: 🔴 Critical · 🟠 Medium · 🟡 Low · ⚪ Nit.
 
+**The desktop app's React screens meet WCAG AA.** This applies to every screen built to `docs/DESIGN.md`, not to the legacy screens that predate it:
+- Text contrasts at least 4.5:1 with its background, and focus rings and status dots at least 3:1. `DESIGN.md` §1 records what each token pairing measures and the two rules that follow from the failing ones.
+- Status is never colour-only: every pill and phase carries its name in text, and the phase bar has a tooltip.
+- Every action is reachable by keyboard, with a visible focus ring. An icon-only button has both a tooltip and an accessible name.
+- No text is smaller than 11px, and no click target is smaller than 24px.
+- The OS reduce-motion setting turns off every transition and the attention pulse.
+
 ## 6. Performance
 
 **Cost is measured, then reduced, then pinned.** The polling tick collapsed from roughly 15 GitHub round trips to one aliased `gh api graphql --include` call at a measured ~12 points against the 5,000/hour budget, and layer 1 now fails if a per-label poll creeps back under the Tick procedure heading ("Collapsed tick query — one round trip, never a per-label poll").
