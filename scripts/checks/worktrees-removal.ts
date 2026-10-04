@@ -280,9 +280,13 @@ export default async function ({ fail, ok, note }: Reporter) {
       }
 
       // Purge: the actual orphan is deleted.
-      const purgeRes = spawnSync(process.execPath, [scriptPath, 'purge', '--orphan', orphanDir], { cwd: fixture, env: fixtureEnv(), encoding: 'utf8' });
+      const purgeEnv = { ...fixtureEnv(), PORT_WT_DEBUG: '1' };
+      const purgeRes = spawnSync(process.execPath, [scriptPath, 'purge', '--orphan', orphanDir], { cwd: fixture, env: purgeEnv, encoding: 'utf8' });
       if (purgeRes.status !== 0 || existsSync(orphanDir)) {
-        fail('worktrees-removal-e2e', `purge on the actual orphan: expected exit 0 and the directory gone, got exit ${purgeRes.status}, exists=${existsSync(orphanDir)}`);
+        fail(
+          'worktrees-removal-e2e',
+          `purge on the actual orphan: expected exit 0 and the directory gone, got exit ${purgeRes.status}, exists=${existsSync(orphanDir)}\n${purgeRes.stderr}\n${purgeRes.stdout}`,
+        );
       } else {
         ok();
       }

@@ -516,7 +516,14 @@ function runPurge(argv) {
     const isOutside = relPath === '' || relPath.startsWith('..') || isAbsolute(relPath);
     return { ...r, isOutside };
   });
-  const orphanKeys = new Set(findOrphanDirs(mainRoot, candidates.filter((c) => !c.isOutside)).map(pathKey));
+  const orphans = findOrphanDirs(mainRoot, candidates.filter((c) => !c.isOutside));
+  const orphanKeys = new Set(orphans.map(pathKey));
+
+  if (process.env.PORT_WT_DEBUG) {
+    console.error(`[PORT_WT_DEBUG] mainRoot=${JSON.stringify(mainRoot)}`);
+    for (const o of orphans) console.error(`[PORT_WT_DEBUG] orphan raw=${JSON.stringify(o)} key=${JSON.stringify(pathKey(o))}`);
+    for (const p of paths) console.error(`[PORT_WT_DEBUG] requested raw=${JSON.stringify(p)} key=${JSON.stringify(pathKey(p))}`);
+  }
 
   const results = [];
   let anyFailed = false;
