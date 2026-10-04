@@ -6,7 +6,6 @@ import { dispatchableFrom, observableFrom } from './dispatchable'
 const ACTIONABLE: TickActionable = { number: 1, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null }
 const WRITE_OBSERVATION: TickObservation = { kind: 'zero-diff', number: 2, itemKind: 'pull-request', count: 3, headRefOid: 'abc123' }
 const DEFERRED_OBSERVATION: TickObservation = { kind: 'refresh-deferred', number: 3, itemKind: 'pull-request' }
-const UNVERIFIABLE_OBSERVATION: TickObservation = { kind: 'withdraw-unverifiable', number: 4, itemKind: 'pull-request', reason: 'unreadable' }
 
 function report(overrides: Partial<TickReport> = {}): TickReport {
   return {
@@ -18,7 +17,7 @@ function report(overrides: Partial<TickReport> = {}): TickReport {
     claims: [],
     disabledStages: [],
     nextTickAt: '2026-01-01T00:00:00Z',
-    observations: [WRITE_OBSERVATION, DEFERRED_OBSERVATION, UNVERIFIABLE_OBSERVATION],
+    observations: [WRITE_OBSERVATION, DEFERRED_OBSERVATION],
     ...overrides,
   }
 }

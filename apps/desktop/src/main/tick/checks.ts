@@ -7,6 +7,7 @@
 // reads the verdict — never trusting an empty rollup as green, and never
 // reading an excused check as absent from the record.
 import type { CheckContext } from '../../shared/github/types'
+import type { CheckDisposition } from '../../shared/repos'
 
 const GREEN = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED'])
 
@@ -53,14 +54,10 @@ export function conclusionOf(entry: CheckContext): string | null {
 }
 
 /** A single check's disposition (#246's map, generalizing the one derived
- *  approval-gate carve-out): `blocking` (the default — a red conclusion
- *  forms a finding and blocks) or `infrastructure` (red is reported, forms no
- *  finding, never blocks). `source` names where the disposition came from,
- *  since an excused check is always listed with it. */
-export interface Disposition {
-  readonly disposition: 'blocking' | 'infrastructure'
-  readonly source: 'approval-gate' | 'CLAUDE.md'
-}
+ *  approval-gate carve-out, now the cockpit's own map shape, #300) —
+ *  `shared/repos.ts`'s `CheckDisposition`, re-exported under this file's own
+ *  established name so every existing caller stays unchanged. */
+export type Disposition = CheckDisposition
 
 export interface RollupVerdict {
   readonly pending: boolean

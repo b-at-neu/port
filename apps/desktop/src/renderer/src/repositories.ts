@@ -7,7 +7,7 @@
 // CONTRIBUTING.md → "Working on the desktop app". This screen keeps its own
 // current behaviour, unchanged, beside the new Board view.
 import type { AppInfo } from '../../shared/ipc'
-import type { RepoDiagnostic, RepoId, RepoProblem, RepositoryEntry, ResolvedRepoConfig } from '../../shared/repos'
+import type { AppliedOverride, RepoDiagnostic, RepoId, RepoProblem, RepositoryEntry, ResolvedRepoConfig } from '../../shared/repos'
 import { buildWorktreesSection } from './worktrees'
 import type { WorktreeSectionState } from './worktrees'
 
@@ -46,7 +46,7 @@ function text(tag: string, className: string, value: string): HTMLElement {
   return el
 }
 
-function problemCopy(problem: RepoProblem): string {
+export function problemCopy(problem: RepoProblem): string {
   switch (problem.kind) {
     case 'directory-missing':
       return "That folder is gone. It may have moved, or be on a drive that isn't mounted."
@@ -62,10 +62,14 @@ function problemCopy(problem: RepoProblem): string {
       return `.claude/port.config.json has no usable repo: ${problem.violations[0]?.message ?? 'invalid'}. Every GitHub query is scoped to it, so nothing can be read until it's set.`
     case 'config-unreadable':
       return `Can't read .claude/port.config.json — ${problem.message}.`
+    case 'effective-config-unreadable':
+      return problem.file === 'CLAUDE.md'
+        ? `Can't read CLAUDE.md — ${problem.message}. Its port-overrides block can rename labels and change gates, so this app won't act on this repository until it can read it.`
+        : `Can't read ${problem.file} — ${problem.message}. It names the check the approval gate excuses, so this app won't act on this repository until it can read it.`
   }
 }
 
-function diagnosticCopy(diagnostic: RepoDiagnostic): string {
+export function diagnosticCopy(diagnostic: RepoDiagnostic): string {
   switch (diagnostic.kind) {
     case 'off-integration-branch':
       return `On ${diagnostic.branch}, not ${diagnostic.integration}. Dispatched agents work from ${diagnostic.integration}, so what's on disk here isn't what they see.`
@@ -81,7 +85,37 @@ function diagnosticCopy(diagnostic: RepoDiagnostic): string {
     }
     case 'git-unavailable':
       return "Couldn't run git, so branch checks were skipped."
+    case 'override-refused':
+      return `CLAUDE.md override refused: ${diagnostic.line} — ${diagnostic.reason}. The port value stands.`
   }
+}
+
+/** `portDefault`'s own rendering rule (#300, plan's own **UX states**): an
+ *  array is comma-joined, `null` is `none`, `undefined` is `unset` — never
+ *  the literal word `undefined`, which would read as a bug rather than "this
+ *  field had no prior port value to show". */
+function portDefaultCopy(portDefault: AppliedOverride['portDefault']): string {
+  if (portDefault === undefined) return 'unset'
+  if (portDefault === null) return 'none'
+  if (Array.isArray(portDefault)) return portDefault.join(', ')
+  return String(portDefault)
+}
+
+/** One applied `CLAUDE.md` override's own line (#300) — the exact words the
+ *  cockpit's own startup preflight already prints, so an operator sees the
+ *  same override described identically in both places. */
+export function overrideLineCopy(override: AppliedOverride): string {
+  return `override: ${override.path} = ${String(override.value)} (port default: ${portDefaultCopy(override.portDefault)}) — ${override.reason}`
+}
+
+/** The repository card's own summary line, as parts to join with ` · ` —
+ *  pure, so it is directly testable without building DOM. Single-branch mode
+ *  (`production === null`) shows the integration branch alone, never
+ *  `dev → null`. */
+export function summaryParts(config: ResolvedRepoConfig): readonly string[] {
+  const branchSummary = config.branches.production === null ? config.branches.integration : `${config.branches.integration} → ${config.branches.production}`
+  const labelCount = config.vocabulary.labels.length
+  return [branchSummary, `${labelCount} pipeline labels`, moduleSummary(config.modules)].filter((part) => part !== '')
 }
 
 function registryBannerCopy(banner: RegistryBanner): string {
@@ -133,9 +167,16 @@ function buildReadyCard(entry: Extract<RepositoryEntry, { status: 'ready' }>, hi
 
   card.appendChild(text('div', 'repo-card__path', entry.path))
 
-  const labelCount = entry.config.vocabulary.labels.length
-  const parts = [`${entry.config.branches.integration} → ${entry.config.branches.production}`, `${labelCount} pipeline labels`, moduleSummary(entry.config.modules)].filter((part) => part !== '')
-  card.appendChild(text('div', 'repo-card__summary', parts.join(' · ')))
+  card.appendChild(text('div', 'repo-card__summary', summaryParts(entry.config).join(' · ')))
+
+  if (entry.config.overrides.length > 0) {
+    const list = document.createElement('ul')
+    list.className = 'repo-card__overrides'
+    for (const override of entry.config.overrides) {
+      list.appendChild(text('li', 'repo-card__override', overrideLineCopy(override)))
+    }
+    card.appendChild(list)
+  }
 
   if (entry.diagnostics.length > 0) {
     const list = document.createElement('ul')

@@ -2,11 +2,13 @@
 // logic. `index.ts` is the only caller; everything here is pure given its
 // injected `git` runner, so tests need no real repository.
 import { basename } from 'node:path'
-import { pathOps, readJsonFile, readTextFile, statPath } from '../platform'
+import { pathOps, readJsonFile, statPath } from '../platform'
 import { resolveVocabulary } from '../../shared/labels/vocabulary'
 import type { RepoDiagnostic, RepoId, RepoProblem, RepositoryEntry, ResolvedRepoConfig, SchemaViolation } from '../../shared/repos'
 import { currentBranch, permissionsState, refsCarryingConfig } from './harness'
 import type { GitRunner } from './harness'
+import { resolveEffectiveConfig } from './effective'
+import type { PortResolved } from './effective'
 import { CONFIG_DEFAULTS, validateConfig } from './schema'
 
 export interface InspectDeps {
@@ -53,57 +55,11 @@ interface LooseConfig {
   readonly reviewCycleCap?: unknown
   readonly commands?: { readonly worktrees?: unknown; readonly budget?: unknown }
   readonly concurrency?: { readonly sharedFiles?: unknown; readonly overlapThreshold?: unknown }
+  readonly sessionRequiredPaths?: unknown
 }
 
 function asLooseConfig(value: unknown): LooseConfig {
   return typeof value === 'object' && value !== null ? value : {}
-}
-
-/** The single job key under `jobs:` in `.github/workflows/approval-check.yml`
- *  (#292) — the approval-gate's own excused check-run name, derived from the
- *  file, never typed as a literal. A minimal line-based read, not a YAML
- *  parser, mirroring `scripts/port-tick/config.ts`'s own
- *  `resolveExcusedCheckName` byte-for-byte (same two-space-indent
- *  assumption, same regex), pinned against it by `scripts/checks/desktop-tick.ts`. */
-function parseExcusedCheckName(text: string): string | null {
-  const jobsIdx = text.indexOf('\njobs:')
-  if (jobsIdx === -1) return null
-  const after = text.slice(jobsIdx + '\njobs:'.length)
-  const m = /\n {2}([A-Za-z0-9_-]+):/.exec(after)
-  return m?.[1] ?? null
-}
-
-const PORT_OVERRIDES_MARKER = '<!-- port-overrides:begin -->'
-
-/** The approval-withdrawal observation's own check dispositions (#292) —
- *  `excusedCheck` resolves `.github/workflows/approval-check.yml` only when
- *  `approvalGate` is on (`null` otherwise, or when the file is absent: no
- *  carve-out at all). `unverifiable` is set the moment either file cannot be
- *  read for any reason but absence, or the root `CLAUDE.md` carries the
- *  overrides marker this app does not apply (`main/tick/`'s own withdrawal
- *  observation fails closed on it rather than ever ignoring an excusal this
- *  app has not actually applied). */
-async function resolveCheckDispositions(root: string, approvalGate: boolean): Promise<ResolvedRepoConfig['checkDispositions']> {
-  let excusedCheck: string | null = null
-  let unverifiable: 'claude-md-overrides' | 'unreadable' | null = null
-
-  if (approvalGate) {
-    const workflowResult = await readTextFile(pathOps.join(root, '.github', 'workflows', 'approval-check.yml'))
-    if (workflowResult.ok) {
-      excusedCheck = parseExcusedCheckName(workflowResult.value)
-    } else if (workflowResult.kind !== 'not-found') {
-      unverifiable = 'unreadable'
-    }
-  }
-
-  const claudeMdResult = await readTextFile(pathOps.join(root, 'CLAUDE.md'))
-  if (claudeMdResult.ok) {
-    if (claudeMdResult.value.includes(PORT_OVERRIDES_MARKER)) unverifiable = 'claude-md-overrides'
-  } else if (claudeMdResult.kind !== 'not-found' && unverifiable === null) {
-    unverifiable = 'unreadable'
-  }
-
-  return { excusedCheck, unverifiable }
 }
 
 /** Uses `raw` only when it is present and no violation was reported at
@@ -193,16 +149,42 @@ export async function inspectRepository(path: string, deps: InspectDeps): Promis
     sharedFiles: resolveField(cfg.concurrency?.sharedFiles, '/concurrency/sharedFiles', violatedPaths, CONFIG_DEFAULTS.concurrency.sharedFiles),
     overlapThreshold: resolveField(cfg.concurrency?.overlapThreshold, '/concurrency/overlapThreshold', violatedPaths, CONFIG_DEFAULTS.concurrency.overlapThreshold),
   }
-  const vocabulary = resolveVocabulary({ labels: cfg.labels, modules })
-  const checkDispositions = await resolveCheckDispositions(root, modules.approvalGate)
+  const sessionRequiredPaths = resolveField(cfg.sessionRequiredPaths, '/sessionRequiredPaths', violatedPaths, CONFIG_DEFAULTS.sessionRequiredPaths)
 
-  const config: ResolvedRepoConfig = { repo, owner: owner ?? '', name: name ?? '', branches, models, modules, reviewCycleCap, vocabulary, commands, concurrency, checkDispositions }
+  // #300: fold a root CLAUDE.md's port-overrides block over the
+  // port-resolved values above — never a second, hand-rolled resolution.
+  // An unreadable CLAUDE.md or approval-check.yml fails the whole repository
+  // closed (effective-config-unreadable): either file can rename a label or
+  // change a gate, so this app refuses to act on it rather than silently
+  // running on port defaults for a block it could not actually read.
+  const portResolved: PortResolved = { branches, models, modules, reviewCycleCap, concurrency, sessionRequiredPaths }
+  const effective = await resolveEffectiveConfig(root, portResolved, cfg.labels ?? {})
+  if (!effective.ok) {
+    return problemEntry(root, effective.problem, branchDiagnostics)
+  }
+
+  const vocabulary = resolveVocabulary({ labels: cfg.labels, modules: effective.modules, overrides: effective.labelOverrides })
+
+  const config: ResolvedRepoConfig = {
+    repo,
+    owner: owner ?? '',
+    name: name ?? '',
+    branches: effective.branches,
+    models: effective.models,
+    modules: effective.modules,
+    reviewCycleCap: effective.reviewCycleCap,
+    vocabulary,
+    commands,
+    concurrency: effective.concurrency,
+    checkDispositions: effective.checkDispositions,
+    overrides: effective.applied,
+  }
 
   const diagnostics: RepoDiagnostic[] = [...branchDiagnostics]
   if (branchInfo.kind === 'detached') {
     diagnostics.push({ kind: 'detached-head', sha: branchInfo.sha })
-  } else if (branchInfo.kind === 'branch' && branchInfo.name !== branches.integration) {
-    diagnostics.push({ kind: 'off-integration-branch', branch: branchInfo.name, integration: branches.integration })
+  } else if (branchInfo.kind === 'branch' && branchInfo.name !== effective.branches.integration) {
+    diagnostics.push({ kind: 'off-integration-branch', branch: branchInfo.name, integration: effective.branches.integration })
   }
 
   const permissions = await permissionsState(root)
@@ -211,6 +193,10 @@ export async function inspectRepository(path: string, deps: InspectDeps): Promis
 
   if (nonRepoViolations.length > 0) {
     diagnostics.push({ kind: 'schema-violations', violations: nonRepoViolations })
+  }
+
+  for (const refused of effective.refused) {
+    diagnostics.push({ kind: 'override-refused', path: refused.path, line: refused.line, reason: refused.reason })
   }
 
   return { id: toRepoId(root), path: root, displayName: repo, status: 'ready', config, diagnostics }

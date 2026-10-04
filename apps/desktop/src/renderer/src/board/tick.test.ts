@@ -252,16 +252,6 @@ describe('observationDetailCopy', () => {
     expect(observationDetailCopy(observation)).toBe('#73 conflicts too — refreshes are capped this poll; it goes next.')
   })
 
-  it('withdraw-unverifiable — claude-md-overrides names the override as the reason this app won\'t act', () => {
-    const observation: TickObservation = { kind: 'withdraw-unverifiable', number: 81, itemKind: 'pull-request', reason: 'claude-md-overrides' }
-    expect(observationDetailCopy(observation)).toBe("#81 has a red check, but this repository's CLAUDE.md carries port overrides this app doesn't read — withdraw approval from the cockpit or by hand.")
-  })
-
-  it('withdraw-unverifiable — unreadable names the unreadable-checks reason instead', () => {
-    const observation: TickObservation = { kind: 'withdraw-unverifiable', number: 82, itemKind: 'pull-request', reason: 'unreadable' }
-    expect(observationDetailCopy(observation)).toBe("#82 has a red check, but this app couldn't read approval-check.yml or CLAUDE.md to tell which checks are excused — it won't withdraw approval.")
-  })
-
   it('every write-bearing kind has no detail line of its own here — it already has one from held/stalled above', () => {
     expect(observationDetailCopy({ kind: 'liveness-reset', number: 1, itemKind: 'issue', inFlight: 'inProgress', retryKey: 'ready' })).toBeNull()
     expect(observationDetailCopy({ kind: 'cycle-cap', number: 2, itemKind: 'pull-request', count: 5, cap: 5 })).toBeNull()

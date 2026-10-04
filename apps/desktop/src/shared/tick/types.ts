@@ -124,15 +124,16 @@ export type TickBlind =
   | { readonly reason: 'stale-read'; readonly ageMs: number }
 
 /** The four machine-observation write families #292 ports from the cockpit's
- *  own cadence, plus two report-only kinds the board's hover state names but
- *  that authorise no write of their own (`refresh-deferred` — a refresh
- *  candidate this pass already capped at `capRefreshes`'s own per-tick limit;
- *  `withdraw-unverifiable` — a red check on an approved pull request this app
- *  cannot safely withdraw approval for, per `checkDispositions.unverifiable`).
- *  `main/tick/observe.ts`'s `observationsOf` is the only producer;
- *  `main/tick/dispatchable.ts`'s `observableFrom` narrows this to the
- *  write-bearing subset the dispatcher may actually act on. */
-export type TickObservationKind = 'liveness-reset' | 'cycle-cap' | 'zero-diff' | 'refresh' | 'refresh-stuck' | 'refresh-deferred' | 'withdraw-approval' | 'withdraw-unverifiable'
+ *  own cadence, plus one report-only kind the board's hover state names but
+ *  that authorises no write of its own (`refresh-deferred` — a refresh
+ *  candidate this pass already capped at `capRefreshes`'s own per-tick
+ *  limit). The prior unverifiable-withdrawal kind is retired (#300): the app
+ *  now applies a repository's `CLAUDE.md` overrides itself, so withdrawal
+ *  has nothing left it cannot safely verify. `main/tick/observe.ts`'s
+ *  `observationsOf` is the only producer; `main/tick/dispatchable.ts`'s
+ *  `observableFrom` narrows this to the write-bearing subset the dispatcher
+ *  may actually act on. */
+export type TickObservationKind = 'liveness-reset' | 'cycle-cap' | 'zero-diff' | 'refresh' | 'refresh-stuck' | 'refresh-deferred' | 'withdraw-approval'
 
 interface TickObservationBase {
   readonly number: number
@@ -157,7 +158,6 @@ export type TickObservation =
       readonly red: readonly { readonly name: string | null; readonly conclusion: string | null; readonly url: string | null }[]
       readonly headRefOid: string
     })
-  | (TickObservationBase & { readonly kind: 'withdraw-unverifiable'; readonly reason: 'claude-md-overrides' | 'unreadable' })
 
 /** One repository's own tick — `planTick`'s whole result. `disabledStages`
  *  is always `[]` on a blind repository, the same direction as

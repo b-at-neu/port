@@ -7,7 +7,7 @@ import { planTick } from './plan'
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 const NEXT_DECISION_AT = new Date('2026-01-01T01:01:00.000Z')
 const REPO = 'repo-a' as RepoId
-const NO_CHECK_DISPOSITIONS = { excusedCheck: null, unverifiable: null }
+const NO_CHECK_DISPOSITIONS = {}
 
 function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
   return {

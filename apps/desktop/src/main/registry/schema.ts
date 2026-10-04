@@ -38,6 +38,9 @@ export interface ConfigDefaults {
   readonly reviewCycleCap: number
   readonly commands: { readonly worktrees: string | null; readonly budget: string | null }
   readonly concurrency: { readonly sharedFiles: readonly string[]; readonly overlapThreshold: number }
+  /** The port's own seed for a `sessionRequiredPaths +=` override (#300) —
+   *  nothing else in the app consumes the resolved list. */
+  readonly sessionRequiredPaths: readonly string[]
 }
 
 /** Every default read off the schema import above — never a typed-out
@@ -69,4 +72,5 @@ export const CONFIG_DEFAULTS: ConfigDefaults = {
     sharedFiles: schema.properties.concurrency.properties.sharedFiles.default,
     overlapThreshold: schema.properties.concurrency.properties.overlapThreshold.default,
   },
+  sessionRequiredPaths: schema.properties.sessionRequiredPaths.default,
 }

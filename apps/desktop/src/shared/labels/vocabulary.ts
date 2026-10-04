@@ -31,7 +31,11 @@ export const LABEL_KEYS = [
 
 export type LabelKey = (typeof LABEL_KEYS)[number]
 
-export type LabelSource = 'config' | 'default'
+/** `'CLAUDE.md'` (#300) is a `labels.<key>` override resolved from a
+ *  repository's own root `CLAUDE.md` `port-overrides` block — it wins over
+ *  `'config'` (`.claude/port.config.json`'s own `labels` map), which wins
+ *  over `'default'`. */
+export type LabelSource = 'config' | 'default' | 'CLAUDE.md'
 
 export interface ResolvedLabel {
   readonly key: LabelKey
@@ -63,6 +67,13 @@ export interface LabelVocabulary {
 export interface VocabularyInput {
   readonly labels?: Readonly<Record<string, unknown>>
   readonly modules?: Readonly<Record<string, boolean>>
+  /** `CLAUDE.md` `labels.<key>` overrides (#300) — an entry here wins over
+   *  the same key in `labels`, with `source: 'CLAUDE.md'`. Keyed by the
+   *  already-validated `LabelKey`, unlike `labels` itself: these came off
+   *  `main/registry/overrides.ts`'s own `validate`, which already refused
+   *  anything outside the known key set, so there is no second
+   *  `unknown-key`/`invalid-override` check to run here. */
+  readonly overrides?: Readonly<Partial<Record<LabelKey, string>>>
 }
 
 /**
@@ -96,6 +107,7 @@ function isNonBlankString(value: unknown): value is string {
 export function resolveVocabulary(input: VocabularyInput): LabelVocabulary {
   const labelsInput = input.labels ?? {}
   const modulesInput = input.modules ?? {}
+  const claudeMdOverrides = input.overrides ?? {}
   const problems: VocabularyProblem[] = []
   const disabled: LabelKey[] = []
   const resolved: ResolvedLabel[] = []
@@ -110,6 +122,15 @@ export function resolveVocabulary(input: VocabularyInput): LabelVocabulary {
   for (const def of LABEL_DEFAULTS) {
     if (def.module !== 'core' && modulesInput[def.module] !== true) {
       disabled.push(def.key)
+      continue
+    }
+
+    // A CLAUDE.md override wins over port.config.json's own labels map —
+    // already validated against the key set, so never a second
+    // unknown-key/invalid-override check here.
+    const claudeMdOverride = claudeMdOverrides[def.key]
+    if (claudeMdOverride !== undefined) {
+      resolved.push({ key: def.key, name: claudeMdOverride, source: 'CLAUDE.md', module: def.module, role: def.role })
       continue
     }
 

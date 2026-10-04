@@ -27,7 +27,8 @@ function entry(budget: string | null): ReadyEntry {
       vocabulary: VOCABULARY,
       commands: { worktrees: null, budget },
       concurrency: { sharedFiles: [], overlapThreshold: 2 },
-      checkDispositions: { excusedCheck: null, unverifiable: null },
+      checkDispositions: {},
+      overrides: [],
     },
     diagnostics: [],
   }

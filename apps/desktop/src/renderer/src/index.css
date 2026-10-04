@@ -169,6 +169,20 @@ h1 {
   margin: 0.1rem 0;
 }
 
+/* #300: an applied CLAUDE.md override is not a problem — the diagnostics
+   box model (margin/padding/font-size), but the summary's own neutral
+   opacity rather than the amber diagnostics colour. */
+.repo-card__overrides {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+
+.repo-card__override {
+  margin: 0.1rem 0;
+}
+
 /* Worktrees section (#86) */
 
 .worktrees {

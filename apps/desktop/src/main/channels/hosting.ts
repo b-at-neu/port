@@ -180,6 +180,8 @@ function problemReason(problem: RepoProblem): string {
       return '.claude/port.config.json has no usable repo'
     case 'config-unreadable':
       return "its config can't be read"
+    case 'effective-config-unreadable':
+      return `${problem.file} can't be read`
   }
 }
 

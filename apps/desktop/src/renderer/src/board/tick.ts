@@ -215,23 +215,18 @@ export function stalledDetailCopy(claim: TickClaim, owner: DispatchOwner = 'cock
   }
 }
 
-/** #292: hover detail for the two report-only observation kinds —
- *  `refresh-deferred` and `withdraw-unverifiable` — neither of which ever
- *  becomes an `ObservationRecord` write (`main/tick/dispatchable.ts`'s
- *  `observableFrom` excludes both), so this is the only place either is ever
- *  rendered. `null` for every write-bearing kind, which already has its own
- *  held/stalled detail line above; the switch stays exhaustive so a new
- *  `TickObservationKind` member is a compile error here too (plan's own
- *  **UX states**, "Tick strip hover"). */
+/** #292: hover detail for the one report-only observation kind —
+ *  `refresh-deferred` — which never becomes an `ObservationRecord` write
+ *  (`main/tick/dispatchable.ts`'s `observableFrom` excludes it), so this is
+ *  the only place it is ever rendered. `null` for every write-bearing kind,
+ *  which already has its own held/stalled detail line above; the switch
+ *  stays exhaustive so a new `TickObservationKind` member is a compile error
+ *  here too (plan's own **UX states**, "Tick strip hover"). */
 export function observationDetailCopy(observation: TickObservation): string | null {
   const n = String(observation.number)
   switch (observation.kind) {
     case 'refresh-deferred':
       return `#${n} conflicts too — refreshes are capped this poll; it goes next.`
-    case 'withdraw-unverifiable':
-      return observation.reason === 'claude-md-overrides'
-        ? `#${n} has a red check, but this repository's CLAUDE.md carries port overrides this app doesn't read — withdraw approval from the cockpit or by hand.`
-        : `#${n} has a red check, but this app couldn't read approval-check.yml or CLAUDE.md to tell which checks are excused — it won't withdraw approval.`
     case 'liveness-reset':
     case 'cycle-cap':
     case 'zero-diff':

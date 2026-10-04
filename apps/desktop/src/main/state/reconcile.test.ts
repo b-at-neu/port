@@ -25,7 +25,8 @@ function entry(): Extract<RepositoryEntry, { status: 'ready' }> {
       reviewCycleCap: 5,
       vocabulary: VOCABULARY,
       concurrency: { sharedFiles: [], overlapThreshold: 2 },
-      checkDispositions: { excusedCheck: null, unverifiable: null },
+      checkDispositions: {},
+      overrides: [],
     },
     diagnostics: [],
   }

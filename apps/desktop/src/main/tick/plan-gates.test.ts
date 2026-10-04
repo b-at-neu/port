@@ -11,7 +11,7 @@ import { planTick } from './plan'
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 const NEXT_DECISION_AT = new Date('2026-01-01T01:01:00.000Z')
 const REPO = 'repo-a' as RepoId
-const NO_CHECK_DISPOSITIONS = { excusedCheck: null, unverifiable: null }
+const NO_CHECK_DISPOSITIONS = {}
 
 function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
   return {
@@ -258,5 +258,53 @@ describe('planTick — refresh-wins veto and mergeability gate (#265)', () => {
 
     const again = planTick({ repository: unknownRepo, ledger: createDispatchLedger(), unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
     expect(again.held).toEqual([{ number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'mergeability-unknown', contention: null, escalation: null }])
+  })
+})
+
+describe('planTick — approval withdrawal and CLAUDE.md-excused checks (#300)', () => {
+  function approvedItem(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
+    return item({
+      number: 81,
+      kind: 'pull-request',
+      stages: [{ key: 'approved', name: 'approved', role: 'terminal' }],
+      headRefOid: 'sha1',
+      mergeable: 'MERGEABLE',
+      checkRollup: [
+        { __typename: 'CheckRun', name: 'deploy-preview', conclusion: 'FAILURE', status: 'COMPLETED', state: null, startedAt: '2026-01-01T00:00:00Z', completedAt: null, createdAt: null, url: null },
+      ],
+      ...overrides,
+    })
+  }
+
+  it('a red check excused by a CLAUDE.md override (source: CLAUDE.md) never withdraws approval', () => {
+    const repo = readyRepo([approvedItem()])
+    const report = planTick({
+      repository: repo,
+      ledger: createDispatchLedger(),
+      unknownStreaks: createUnknownStreaks(),
+      nextDecisionAt: NEXT_DECISION_AT,
+      now: () => NOW,
+      reviewCycleCap: 5,
+      startedTasks: [],
+      refreshMemo: createRefreshMemo(),
+      checkDispositions: { 'deploy-preview': { disposition: 'infrastructure', source: 'CLAUDE.md' } },
+    })
+    expect(report.observations.some((o) => o.kind === 'withdraw-approval')).toBe(false)
+  })
+
+  it('the same check under blocking (no excusal) still withdraws approval', () => {
+    const repo = readyRepo([approvedItem()])
+    const report = planTick({
+      repository: repo,
+      ledger: createDispatchLedger(),
+      unknownStreaks: createUnknownStreaks(),
+      nextDecisionAt: NEXT_DECISION_AT,
+      now: () => NOW,
+      reviewCycleCap: 5,
+      startedTasks: [],
+      refreshMemo: createRefreshMemo(),
+      checkDispositions: NO_CHECK_DISPOSITIONS,
+    })
+    expect(report.observations.some((o) => o.kind === 'withdraw-approval')).toBe(true)
   })
 })

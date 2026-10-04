@@ -34,7 +34,8 @@ const READY_ENTRY = {
     vocabulary: {} as never,
     commands: { worktrees: 'node scripts/worktrees.mjs', budget: null },
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
-    checkDispositions: { excusedCheck: null, unverifiable: null },
+    checkDispositions: {},
+    overrides: [],
   },
   diagnostics: [],
 }

@@ -17,6 +17,7 @@ import type { ReconciledItem, RepositoryState } from '../../shared/state/types'
 import type { TickActionable, TickBlind, TickClaim, TickHeld, TickHeldReason, TickObservation, TickReport } from '../../shared/tick/types'
 import type { ClaimedItem, OccupiedEntry } from './contention'
 import { gateCandidates } from './contention'
+import type { Disposition } from './checks'
 import { cycleCapExceeded, mergeabilityRoute, refreshWins, zeroDiffGate } from './gates'
 import type { DispatchLedger, RefreshMemo, UnknownStreaks } from './ledger'
 import { RETRY_TRIGGER } from './liveness'
@@ -52,10 +53,10 @@ export interface PlanTickParams {
    *  (`main/tick/ledger.ts`'s `createRefreshMemo`) — read and written only
    *  by `observationsOf`'s refresh family. */
   readonly refreshMemo: RefreshMemo
-  /** #292: `entry.config.checkDispositions` — read from config per
-   *  repository, never hardcoded; feeds the approval-withdrawal
+  /** #292, generalized in #300: `entry.config.checkDispositions` — read from
+   *  config per repository, never hardcoded; feeds the approval-withdrawal
    *  observation's own `rollupVerdict` call. */
-  readonly checkDispositions: { readonly excusedCheck: string | null; readonly unverifiable: 'claude-md-overrides' | 'unreadable' | null }
+  readonly checkDispositions: Readonly<Record<string, Disposition>>
 }
 
 function emptyReport(repoId: RepoId, displayName: string, blind: TickBlind): TickReport {
