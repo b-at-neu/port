@@ -12,19 +12,32 @@ import type { CredentialsTell } from '../../shared/runtime/types'
 import type {
   HostedSessionSnapshot,
   PermissionDecision,
+  PluginRequest,
   SessionEnd,
+  SessionEntriesDelta,
   SessionEventEnvelope,
+  SessionInvokeResult,
   SessionKey,
   SessionOrigin,
   SessionPermissionAnswerResult,
   SessionPhase,
+  SessionRateLimit,
   SessionStartMode,
 } from '../../shared/hosting/types'
 import type { RepoId } from '../../shared/repos'
 import { createHostedInput } from './input'
 import { buildSessionOptions } from './options'
+import type { SessionOptionsRole } from './options'
 import { classifyEnd } from './classify'
 import { createPermissionBroker } from './permissions'
+import { createSessionProjector } from './project'
+import type { ProjectedDelta, SessionProjectorWindow } from './project'
+import { createCapabilityTracker } from './capabilities'
+import { createTaskTracker } from './tasks'
+import { readRateLimit } from './rate-limit'
+import { promptTitle } from './title'
+import { composeInvocation, validateCommandName } from './verify'
+import type { ExpectedComponents } from './plugin'
 import type { HostedQuery, Options, SDKMessage, SDKUserMessage } from './sdk'
 
 export type { HostedQuery } from './sdk'
@@ -50,11 +63,28 @@ export interface CreateHostedHandleParams {
   readonly now: () => number
   readonly onEvent: (envelope: SessionEventEnvelope) => void
   readonly onStatus: (snapshot: HostedSessionSnapshot) => void
+  /** #101: which plugin path this session asked for, resolved once before
+   *  spawn — never re-derived here. */
+  readonly plugin: PluginRequest
+  readonly readExpectedComponents: (pluginPath: string) => Promise<ExpectedComponents | null>
+  readonly samePath: (a: string, b: string) => boolean
+  /** #103: the restore path's own resolved title, `null` otherwise — set
+   *  once and never overwritten after it goes non-null, the same rule the
+   *  first `send()` and `setTitle()` both follow. */
+  readonly initialTitle: string | null
+  /** #265: `{ kind: 'operator' }` unless this handle is the app's own
+   *  dispatcher — forwarded verbatim to `buildSessionOptions`, and its
+   *  `.kind` alone is what the snapshot's own `role` field reports. */
+  readonly role?: SessionOptionsRole
   /** Fired exactly once, the first time `init` reports the real
    *  `claudeSessionId` — `main/hosting/store.ts` uses this to kick off
    *  `fork.ts`'s titling for a `fork`-mode handle, never fired synchronously
    *  from inside `createHostedHandle` itself. */
   readonly onSessionId?: (claudeSessionId: string) => void
+  /** #219: this handle's own projector delta, one per message that produced
+   *  a visible change, plus one for every `send()`. Optional the same way
+   *  `onSessionId` is — a caller that never wires it just never gets it. */
+  readonly onEntries?: (delta: SessionEntriesDelta) => void
 }
 
 export interface HostedHandleReplay {
@@ -69,6 +99,9 @@ export interface HostedSendResult {
 
 export interface HostedHandle {
   readonly sessionKey: SessionKey
+  /** #103: `mode.sessionId` for `resume`/`resume-at`, `null` otherwise — the
+   *  `already-open` refusal's own comparison target. */
+  readonly resumeTarget: string | null
   snapshot(): HostedSessionSnapshot
   replay(): HostedHandleReplay
   /** Always accepts and returns `{ uuid, queued: true }` — the SDK owns the
@@ -85,10 +118,37 @@ export interface HostedHandle {
   /** `fork.ts`'s own titling result — `false` only when the rename attempt
    *  failed; logged there, never retried and never fatal here. */
   setTitled(titled: boolean): void
+  /** #103: fills `title` only while it is still `null` — the store's own
+   *  asynchronous `resolveStartTitle` lookup races nothing, since a first
+   *  `send()` on the same handle would already have set it. */
+  setTitle(title: string): void
   /** #99: delegates to this handle's own permission broker — the id is
    *  resolved only within this handle, so a permissionId from another
    *  session's broker can never settle a prompt here. */
   answerPermission(permissionId: string, decision: PermissionDecision, message: string | null): SessionPermissionAnswerResult
+  /** #219: the live projector's own bounded window — `session:attach`'s ok
+   *  branch spreads this alongside the raw envelope replay. */
+  entriesWindow(): SessionProjectorWindow
+  /** #101: the Pipeline strip's own write — `unknown-session` when this
+   *  handle is already `closing`/`ended` (the same reading a gone key gets
+   *  everywhere else), `invalid-command` when `name` fails the SDK's own
+   *  canonical-name rules, `unknown-command` when it is not in this
+   *  session's current `port:` command list. Otherwise composes and
+   *  `send()`s it, so #219's `recordSend` shows it as a `Prompt` row and its
+   *  `Queued` chip applies mid-turn exactly like any other send. */
+  invoke(name: string, args: string): SessionInvokeResult
+  /** #265: the dispatcher's own `stopFor()` call — `unknown-task` for an id
+   *  not among this handle's own `tasks` (`hosting/tasks.ts`'s tracker),
+   *  otherwise delegates to `stream.stopTask`. The SDK confirms the stop
+   *  through a later `task_notification`, never read from this call's own
+   *  resolution. */
+  stopTask(taskId: string): Promise<{ readonly ok: true } | { readonly ok: false; readonly kind: 'unknown-task' }>
+}
+
+/** `mode.sessionId` for `resume`/`resume-at`, `null` otherwise — the
+ *  `already-open` refusal's own comparison target (`store.ts`). */
+function resumeTargetFor(mode: SessionStartMode): string | null {
+  return mode.kind === 'resume' || mode.kind === 'resume-at' ? mode.sessionId : null
 }
 
 function originFor(mode: SessionStartMode): SessionOrigin {
@@ -121,14 +181,33 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
   // (never 'dontAsk') routes an un-preapproved tool call through this
   // broker's own canUseTool rather than a silent auto-deny.
   const broker = createPermissionBroker({ now: params.now, onChange: () => emitStatus() })
-  const options = buildSessionOptions({ mode: params.mode, cwd: params.cwd, executablePath: params.executablePath, canUseTool: broker.canUseTool })
+  const role: SessionOptionsRole = params.role ?? { kind: 'operator' }
+  const options = buildSessionOptions({ mode: params.mode, cwd: params.cwd, executablePath: params.executablePath, canUseTool: broker.canUseTool, plugin: params.plugin, role })
   const startedAt = new Date(params.now()).toISOString()
+  const projector = createSessionProjector({ cwd: params.cwd })
+  const capabilities = createCapabilityTracker({
+    request: params.plugin,
+    readExpectedComponents: params.readExpectedComponents,
+    samePath: params.samePath,
+    onChange: () => emitStatus(),
+  })
+  // #265: this handle's own background-task view, fed beside `capabilities`
+  // — populated for every role, though only a dispatcher's own `Agent()`
+  // calls produce any today.
+  const tasks = createTaskTracker({ now: params.now, onChange: () => emitStatus() })
+
+  function emitEntries(delta: ProjectedDelta | null): void {
+    if (delta === null) return
+    params.onEntries?.({ sessionKey: params.sessionKey, ...delta })
+  }
 
   let phase: SessionPhase = 'starting'
   let claudeSessionId: string | null = null
   let queuedAfterInterrupt: number | null = null
   let end: SessionEnd | null = null
   let titled: boolean | null = null
+  let title: string | null = params.initialTitle
+  let rateLimit: SessionRateLimit | null = null
   let closeRequested = false
   let seq = 0
   const ring: SessionEventEnvelope[] = []
@@ -146,6 +225,11 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
       end,
       titled,
       pendingPermissions: broker.pending(),
+      capabilities: capabilities.current(),
+      title,
+      rateLimit,
+      role: role.kind,
+      tasks: tasks.current(),
     }
   }
 
@@ -153,9 +237,9 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     params.onStatus(snapshot())
   }
 
-  function pushEnvelope(message: unknown): void {
+  function pushEnvelope(message: unknown, receivedAt: string): void {
     seq += 1
-    const envelope: SessionEventEnvelope = { sessionKey: params.sessionKey, seq, receivedAt: new Date(params.now()).toISOString(), message }
+    const envelope: SessionEventEnvelope = { sessionKey: params.sessionKey, seq, receivedAt, message }
     ring.push(envelope)
     if (ring.length > REPLAY_LIMIT) {
       ring.shift()
@@ -164,22 +248,42 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     params.onEvent(envelope)
   }
 
+  /** `queued_turn_count` rides only the two `result` variants, never the
+   *  wider `SDKMessage` union — read structurally rather than narrowing
+   *  `message` to `SDKResultMessage` first, since both branches already
+   *  agree on the field's shape. */
+  function queuedTurnCountOf(message: SDKMessage): number | undefined {
+    return 'queued_turn_count' in message ? (message as { queued_turn_count?: number }).queued_turn_count : undefined
+  }
+
   function applyMessage(message: SDKMessage): void {
+    capabilities.observe(message)
+    tasks.observe(message)
+    const observedAt = new Date(params.now()).toISOString()
+    const reading = readRateLimit(message, observedAt)
+    if (reading !== null) {
+      rateLimit = reading
+      emitStatus()
+    }
     if (message.type === 'system' && message.subtype === 'init') {
       const firstInit = claudeSessionId === null
       claudeSessionId = message.session_id
+      // Never demotes a send that raced it: only 'starting' -> 'ready' is
+      // ever assigned here, so a send() that already moved the phase to
+      // 'streaming' stays there.
       if (phase === 'starting') phase = 'ready'
       emitStatus()
       if (firstInit) params.onSessionId?.(message.session_id)
       return
     }
-    if (message.type === 'user') {
-      if (phase === 'ready') phase = 'streaming'
-      emitStatus()
-      return
-    }
     if (message.type === 'result') {
-      if (phase === 'streaming' || phase === 'interrupting') phase = 'ready'
+      const queuedTurnCount = queuedTurnCountOf(message)
+      // Only drops back to 'ready' when nothing is still queued -- a
+      // positive queued_turn_count means the next turn has already been
+      // dequeued, so the session is still working.
+      if ((phase === 'streaming' || phase === 'interrupting') && !(typeof queuedTurnCount === 'number' && queuedTurnCount > 0)) {
+        phase = 'ready'
+      }
       emitStatus()
     }
   }
@@ -189,12 +293,23 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
   // bundled fallback (the same rail `desktop-runtime`'s own guard pins for
   // every real `query({` call site).
   const stream = query({ prompt: input.stream, options })
+  void capabilities.start(stream)
 
   async function pump(): Promise<void> {
     try {
       for await (const message of stream) {
-        pushEnvelope(message)
+        const receivedAt = new Date(params.now()).toISOString()
+        pushEnvelope(message, receivedAt)
         applyMessage(message)
+        // A throw here must never stop the pump or drop the envelope this
+        // message already got forwarded through above — the on-disk
+        // transcript still holds it, so this app fails open on the session
+        // and closed on one row.
+        try {
+          emitEntries(projector.push(message, receivedAt))
+        } catch (error) {
+          console.error(`[hosting] projector threw for session ${params.sessionKey}`, error)
+        }
       }
       end = { reason: 'completed', exitCode: null, signal: null, message: null, diagnosis: null }
     } catch (error) {
@@ -209,17 +324,30 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     emitStatus()
   }
 
+  function doSend(text: string): HostedSendResult {
+    if (title === null) title = promptTitle(text)
+    const { uuid } = input.push(text)
+    emitEntries(projector.recordSend(uuid, text, new Date(params.now()).toISOString()))
+    // Streaming input mode means a send is always accepted immediately --
+    // moved here rather than waiting for the stream to echo it back,
+    // since the CLI never does that unless started with
+    // --replay-user-messages, which options.ts does not pass.
+    if (phase === 'starting' || phase === 'ready') phase = 'streaming'
+    emitStatus()
+    return { uuid, queued: true }
+  }
+
   const pumpDone = pump()
 
   return {
     sessionKey: params.sessionKey,
+    resumeTarget: resumeTargetFor(params.mode),
     snapshot,
     replay() {
       return { events: [...ring], droppedBefore }
     },
     send(text) {
-      const { uuid } = input.push(text)
-      return { uuid, queued: true }
+      return doSend(text)
     },
     async interrupt() {
       if (phase === 'ended') return queuedAfterInterrupt
@@ -244,8 +372,29 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
       titled = value
       emitStatus()
     },
+    setTitle(value) {
+      if (title !== null) return
+      title = value
+      emitStatus()
+    },
     answerPermission(permissionId, decision, message) {
       return broker.answer(permissionId, decision, message)
+    },
+    entriesWindow() {
+      return projector.window()
+    },
+    invoke(name, args) {
+      if (phase === 'closing' || phase === 'ended') return { ok: false, kind: 'unknown-session' }
+      const validation = validateCommandName(name)
+      if (!validation.ok) return { ok: false, kind: 'invalid-command', reason: validation.reason }
+      if (!capabilities.has(name)) return { ok: false, kind: 'unknown-command', name }
+      const { uuid } = doSend(composeInvocation(name, args))
+      return { ok: true, uuid, queued: true }
+    },
+    async stopTask(taskId) {
+      if (!tasks.current().some((t) => t.taskId === taskId)) return { ok: false, kind: 'unknown-task' }
+      await stream.stopTask(taskId)
+      return { ok: true }
     },
   }
 }

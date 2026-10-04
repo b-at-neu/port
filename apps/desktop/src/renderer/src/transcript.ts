@@ -1,11 +1,13 @@
 // The transcript view (#83, followed live since #84): renders a transcript
 // as a scannable message stream that appends and patches in place rather
-// than reloading. Every node is built with `document.createElement`/
-// `textContent`, never `innerHTML` — a tool result is untrusted text from
-// the network and from repositories (`scripts/checks/desktop-renderer.mjs`
-// pins the absence of an HTML-injection sink across this directory).
-// #80 replaces this screen wholesale; until then it stays plain DOM.
-import type { EntryPatch, DiffHunk, FileDiff, Payload, ToolCallEntry, TranscriptEntry, TranscriptFailureKind, TranscriptSource } from '../../shared/sessions/transcript'
+// than reloading. Row building and the append/patch/pin-to-bottom list model
+// moved out to entry-rows.ts/entry-list.ts (#219), shared with the live
+// session view — this file keeps only the screen shell: header, subtitle,
+// follow toggle, banner host, empty state, and focus behaviour.
+import type { EntryPatch, TranscriptEntry, TranscriptFailureKind, TranscriptSource } from '../../shared/sessions/transcript'
+import { text } from './entry-rows'
+import { createEntryList, NEAR_BOTTOM_PX } from './entry-list'
+import type { EntryList } from './entry-list'
 
 export type TranscriptViewState =
   | { readonly status: 'loading' }
@@ -21,25 +23,6 @@ export type TranscriptViewState =
    *  the sessions picker. Read once, on the first `renderTranscript` call;
    *  a later poll never re-focuses anything. */
   | { readonly status: 'ready'; readonly source: TranscriptSource; readonly entries: readonly TranscriptEntry[]; readonly title: string; readonly focusIndex: number | null }
-
-/** Above this many entries, the list is appended in slices across
- *  `requestAnimationFrame` calls rather than in one synchronous pass — the
- *  largest observed transcript renders roughly 3,500 rows. Applies equally
- *  to the initial full render and to a large incremental catch-up. */
-const CHUNK_THRESHOLD = 500
-const CHUNK_SIZE = 200
-const PROMPT_CLAMP_LINES = 12
-
-/** Within this many pixels of the bottom counts as "already there" for the
- *  pin-to-bottom behaviour. */
-const NEAR_BOTTOM_PX = 64
-
-export function text(tag: string, className: string, value: string): HTMLElement {
-  const el = document.createElement(tag)
-  el.className = className
-  el.textContent = value
-  return el
-}
 
 function failureCopy(state: Extract<TranscriptViewState, { status: 'error' }>): string {
   const path = state.path ?? ''
@@ -73,136 +56,6 @@ function subtitleFor(source: TranscriptSource, entryCount: number): string {
   ].join(' · ')
 }
 
-function buildPayload(payload: Payload): HTMLElement {
-  const wrap = document.createElement('div')
-  const pre = document.createElement('pre')
-  pre.className = 'entry__payload'
-  pre.textContent = payload.text
-  wrap.appendChild(pre)
-  if (payload.omittedChars > 0) {
-    wrap.appendChild(text('p', 'entry__truncated', `${payload.omittedChars} characters not shown`))
-  }
-  return wrap
-}
-
-function buildClampedText(payload: Payload, label: string): HTMLElement {
-  const wrap = document.createElement('div')
-  wrap.className = 'entry__prompt'
-  wrap.appendChild(text('span', 'entry__prompt-label', label))
-
-  const lines = payload.text.split('\n')
-  const pre = document.createElement('pre')
-  pre.className = 'entry__payload'
-  pre.textContent = lines.length > PROMPT_CLAMP_LINES ? lines.slice(0, PROMPT_CLAMP_LINES).join('\n') : payload.text
-  wrap.appendChild(pre)
-
-  if (lines.length > PROMPT_CLAMP_LINES) {
-    const toggle = document.createElement('button')
-    toggle.className = 'entry__show-all'
-    toggle.textContent = 'Show all'
-    toggle.addEventListener('click', () => {
-      pre.textContent = payload.text
-      toggle.remove()
-    })
-    wrap.appendChild(toggle)
-  }
-  if (payload.omittedChars > 0) {
-    wrap.appendChild(text('p', 'entry__truncated', `${payload.omittedChars} characters not shown`))
-  }
-  return wrap
-}
-
-function buildHunk(hunk: DiffHunk): HTMLElement {
-  const block = document.createElement('div')
-  block.className = 'diff-hunk'
-  block.appendChild(text('div', 'diff-hunk__header', `@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`))
-  const lines = document.createElement('pre')
-  lines.className = 'diff-hunk__lines'
-  for (const line of hunk.lines) {
-    lines.appendChild(text('div', `diff-line diff-line--${line.sign}`, line.text))
-  }
-  block.appendChild(lines)
-  return block
-}
-
-function buildDiff(diff: FileDiff): HTMLElement {
-  const wrap = document.createElement('div')
-  wrap.className = 'diff'
-  wrap.appendChild(text('div', 'diff__summary', `${diff.isNewFile ? '(new file) ' : ''}${diff.path}  +${diff.additions} -${diff.deletions}`))
-  for (const hunk of diff.hunks) wrap.appendChild(buildHunk(hunk))
-  return wrap
-}
-
-function resultChip(entry: ToolCallEntry): HTMLElement {
-  const label = entry.result === null ? 'no result' : entry.result.isError ? 'error' : 'ok'
-  return text('span', `entry__chip entry__chip--${entry.result === null ? 'none' : entry.result.isError ? 'error' : 'ok'}`, label)
-}
-
-function buildToolCall(entry: ToolCallEntry): HTMLElement {
-  const details = document.createElement('details')
-  details.className = 'entry entry--tool-call'
-
-  const summary = document.createElement('summary')
-  summary.className = 'entry__summary'
-  summary.appendChild(text('span', 'entry__tool-name', entry.name))
-  summary.appendChild(text('span', 'entry__headline', entry.headline))
-  summary.appendChild(resultChip(entry))
-  details.appendChild(summary)
-
-  const body = document.createElement('div')
-  body.className = 'entry__body'
-  body.appendChild(text('div', 'entry__label', 'Input'))
-  body.appendChild(buildPayload(entry.input))
-
-  if (entry.diff !== null) {
-    body.appendChild(buildDiff(entry.diff))
-  } else if (entry.result !== null) {
-    body.appendChild(text('div', 'entry__label', 'Result'))
-    body.appendChild(buildPayload(entry.result.payload))
-  }
-  details.appendChild(body)
-  return details
-}
-
-function buildThinking(entry: Extract<TranscriptEntry, { type: 'thinking' }>): HTMLElement {
-  const details = document.createElement('details')
-  details.className = 'entry entry--thinking'
-  const wordCount = entry.text.text.split(/\s+/).filter((word) => word !== '').length
-  const summary = document.createElement('summary')
-  summary.className = 'entry__summary'
-  summary.textContent = `Thinking · ${wordCount} words`
-  details.appendChild(summary)
-  const body = document.createElement('div')
-  body.className = 'entry__body entry__body--dim'
-  body.appendChild(buildPayload(entry.text))
-  details.appendChild(body)
-  return details
-}
-
-function buildRow(entry: TranscriptEntry): HTMLElement {
-  switch (entry.type) {
-    case 'user-text':
-      return buildClampedText(entry.text, 'Prompt')
-    case 'assistant-text': {
-      const wrap = document.createElement('div')
-      wrap.className = 'entry entry--assistant'
-      wrap.appendChild(text('span', 'entry__label', 'Claude'))
-      wrap.appendChild(buildPayload(entry.text))
-      return wrap
-    }
-    case 'thinking':
-      return buildThinking(entry)
-    case 'tool-call':
-      return buildToolCall(entry)
-    case 'meta':
-      return text('div', 'entry entry--meta', `System · ${entry.label}`)
-  }
-}
-
-function isNearBottom(el: HTMLElement): boolean {
-  return el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR_BOTTOM_PX
-}
-
 function setFollowToggleState(button: HTMLButtonElement, following: boolean): void {
   button.textContent = following ? 'Following' : 'Paused'
   button.setAttribute('aria-pressed', String(following))
@@ -233,97 +86,23 @@ function buildHeader(title: string, following: boolean): { readonly header: HTML
   return { header, subtitle, followToggle }
 }
 
-/** Bumped on every full `renderTranscript` call — a chunk loop from a stale
- *  render checks its own captured value against this counter and discards
- *  itself the moment a navigation started a newer one, rather than
- *  appending rows into a list the operator already left. */
-let renderGeneration = 0
-
-/** The live view's own model, reset on every full `renderTranscript` call —
- *  `entries`/`rows` are mutated in place by `applyTailDelta` so a follow
- *  session never rebuilds the list it is already showing. `rows[i]` stays
- *  `undefined` until the (possibly still-chunking) append loop actually
- *  builds that row; a patch arriving before that just updates `entries[i]`,
- *  which the loop reads fresh when it gets there — it can never build a
- *  stale row. */
+/** The live view's own model — `entryList` owns row building, appending,
+ *  patching, and the jump affordance; this level adds only what the
+ *  transcript screen itself needs on top (the subtitle, the follow toggle,
+ *  the banner host, the empty state). */
 interface LiveModel {
-  readonly list: HTMLElement
-  readonly rows: (HTMLElement | undefined)[]
-  readonly entries: TranscriptEntry[]
+  readonly entryList: EntryList
   readonly subtitleEl: HTMLElement
   readonly followToggle: HTMLButtonElement
-  readonly jumpButton: HTMLButtonElement
   readonly bannerHost: HTMLElement
-  readonly focusIndex: number | null
+  entryCount: number
   emptyEl: HTMLElement | null
-  pendingBelow: number
 }
 
 let live: LiveModel | null = null
 
-function buildAndAppendRow(index: number): void {
-  if (live === null) return
-  const entry = live.entries[index]
-  if (entry === undefined) return
-  const row = buildRow(entry)
-  row.dataset.entryIndex = String(index)
-  live.rows[index] = row
-  live.list.appendChild(row)
-
-  if (index === live.focusIndex) {
-    if (row instanceof HTMLDetailsElement) row.open = true
-    row.classList.add('entry--focused')
-    row.scrollIntoView({ block: 'center' })
-  }
-}
-
-function appendRange(start: number, end: number, generation: number): void {
-  const total = end - start
-  if (total <= CHUNK_THRESHOLD) {
-    for (let i = start; i < end; i++) buildAndAppendRow(i)
-    return
-  }
-
-  let index = start
-  function appendNext(): void {
-    if (generation !== renderGeneration || live === null) return
-    const sliceEnd = Math.min(end, index + CHUNK_SIZE)
-    for (let i = index; i < sliceEnd; i++) buildAndAppendRow(i)
-    index = sliceEnd
-    if (index < end) requestAnimationFrame(appendNext)
-  }
-  appendNext()
-}
-
-function updateJumpButton(): void {
-  if (live === null) return
-  if (live.pendingBelow > 0) {
-    live.jumpButton.textContent = `${live.pendingBelow} new below ↓`
-    live.jumpButton.hidden = false
-  } else {
-    live.jumpButton.hidden = true
-  }
-}
-
-function applyPatch(patch: EntryPatch): void {
-  if (live === null) return
-  live.entries[patch.index] = patch.entry
-  const existingRow = live.rows[patch.index]
-  if (existingRow === undefined) return // not rendered yet -- appendRange picks up the patched entry when it gets there
-  const newRow = buildRow(patch.entry)
-  // Carries the row's open state across the swap -- an operator with a tool
-  // call expanded must not have it silently collapse the moment its result
-  // arrives.
-  if (existingRow instanceof HTMLDetailsElement && newRow instanceof HTMLDetailsElement) {
-    newRow.open = existingRow.open
-  }
-  existingRow.replaceWith(newRow)
-  live.rows[patch.index] = newRow
-}
-
 export function renderTranscript(container: HTMLElement, state: TranscriptViewState): void {
-  renderGeneration += 1
-  const generation = renderGeneration
+  live?.entryList.dispose()
   live = null
   container.textContent = ''
 
@@ -374,27 +153,17 @@ export function renderTranscript(container: HTMLElement, state: TranscriptViewSt
   jumpButton.hidden = true
   container.appendChild(jumpButton)
 
+  const entryList = createEntryList({ list, jumpButton, baseIndex: 0, focusIndex })
+
   list.addEventListener('scroll', () => {
-    if (live !== null && isNearBottom(list)) {
-      live.pendingBelow = 0
-      updateJumpButton()
+    if (live !== null && list.scrollHeight - list.scrollTop - list.clientHeight <= NEAR_BOTTOM_PX) {
+      entryList.clearPendingBelow()
     }
   })
 
-  live = {
-    list,
-    rows: [],
-    entries: entries.slice(),
-    subtitleEl: subtitle,
-    followToggle,
-    jumpButton,
-    bannerHost,
-    focusIndex,
-    emptyEl,
-    pendingBelow: 0,
-  }
-
-  appendRange(0, entries.length, generation)
+  live = { entryList, subtitleEl: subtitle, followToggle, bannerHost, entryCount: 0, emptyEl }
+  entryList.append(entries)
+  live.entryCount = entries.length
 }
 
 export interface TailDelta {
@@ -404,51 +173,26 @@ export interface TailDelta {
 }
 
 /** Applies one poll's delta onto the view already on screen -- never a
- *  re-render, which would drop every `<details>` the operator had open.
- *  Pinned to the bottom when the operator already was there (within
- *  `NEAR_BOTTOM_PX`); otherwise nothing scrolls and the jump affordance's
- *  counter grows instead. */
+ *  re-render, which would drop every `<details>` the operator had open. */
 export function applyTailDelta(delta: TailDelta): void {
   if (live === null) return
-  const generation = renderGeneration
-  const wasAtBottom = isNearBottom(live.list)
-
-  for (const patch of delta.patched) applyPatch(patch)
+  live.entryList.patch(delta.patched)
 
   if (delta.appended.length > 0) {
-    const start = live.entries.length
-    live.entries.push(...delta.appended)
-    appendRange(start, live.entries.length, generation)
+    live.entryList.append(delta.appended)
+    live.entryCount += delta.appended.length
     if (live.emptyEl !== null) {
       live.emptyEl.remove()
       live.emptyEl = null
     }
   }
 
-  live.subtitleEl.textContent = subtitleFor(delta.source, live.entries.length)
-
-  if (delta.appended.length === 0) return
-
-  if (wasAtBottom) {
-    live.pendingBelow = 0
-    updateJumpButton()
-    const listEl = live.list
-    requestAnimationFrame(() => {
-      listEl.scrollTop = listEl.scrollHeight
-    })
-  } else {
-    live.pendingBelow += delta.appended.length
-    updateJumpButton()
-  }
+  live.subtitleEl.textContent = subtitleFor(delta.source, live.entryCount)
 }
 
-/** `data-action="jump-to-latest"`'s handler -- scrolls to the bottom and
- *  clears the counter, the same effect reaching the bottom by hand has. */
+/** `data-action="jump-to-latest"`'s handler. */
 export function jumpToLatest(): void {
-  if (live === null) return
-  live.list.scrollTop = live.list.scrollHeight
-  live.pendingBelow = 0
-  updateJumpButton()
+  live?.entryList.jumpToLatest()
 }
 
 /** Flips the header's follow toggle without touching anything else --

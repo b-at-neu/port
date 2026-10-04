@@ -15,7 +15,7 @@
   },
   "docs": {
     "engineering": "docs/ENGINEERING.md",
-    "design": null
+    "design": "docs/DESIGN.md"
   },
   "models": {
     "plan": "opus",

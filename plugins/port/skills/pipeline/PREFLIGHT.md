@@ -28,7 +28,7 @@ Read `permissions.defaultMode` from the same file, for step 3's report. **Warn o
 
 **The sha about to be printed is the resolved record's `gitCommitSha` and nothing else** — never `git log`, never a commit that merely touches some repository file, never a path. If the sha about to be printed is not a prefix of the resolved record's `gitCommitSha`, print the **Registry unreadable** line instead of a sha. Open with one line naming the resolved short commit sha, scope, `projectPath`, the session's own model, and the mode read in step 2 — **no warning glyph on the model, ever**; it is information, not a check. Append step 4's staleness verdict, once it has run, in place of the plain scope clause — `current with <marketplace>@<target-ref>` when `behindBy` is `0`, or the **stale** UX state's warning form when it is not, or `staleness not computable — <reason>` when no target resolved:
 
-> `port` v0.1.0 · `1a12608` (local scope, installed 2026-08-31) · current with `b-at-neu/port@dev` · model `claude-sonnet-5` · mode `default` (as configured — a launch flag overrides this and I can't read it from here)
+> `port` `v<version>` · `1a12608` (local scope, installed 2026-08-31) · current with `b-at-neu/port@dev` · model `claude-sonnet-5` · mode `default` (as configured — a launch flag overrides this and I can't read it from here)
 
 When step 2 found a non-`default` `defaultMode`, replace the mode clause with the warning instead of the all-clear parenthetical:
 
@@ -195,14 +195,14 @@ If the file does not exist, baseline at `0`. Every field after this step is writ
 
 **Step 9 — budget reset.** Read `commands.budget` (a `string | null` field — the full command prefix, e.g. `node scripts/port-budget.mjs`); **absent or `null` → skip silently, say nothing** for the rest of the session — no dispatch ceiling and no cost reporting, matching `commands.artifacts`. **Set** → run `<commands.budget> reset` once, before the first tick, closing any open dispatch a crashed prior session left running (flushed to its ticket's ledger as `lost`); echo its output only if it closed anything.
 
-**Step 10 — gate claim.** Full contract: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "External gate claim". A second surface (a desktop application) can claim the plan-review gate for itself; this step is what makes the cockpit notice and stand down from it, once at startup and again every tick (see Tick procedure → Housekeeping for the per-tick re-read).
+**Step 10 — gate claim.** Full contract: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "External gate claim". A second surface (a desktop application) can claim the plan-review gate, dispatch itself (#265), or both, for itself; this step is what makes the cockpit notice and stand down from whichever it holds, once at startup and again every tick (see Tick procedure → Housekeeping for the per-tick re-read).
 
 1. **Resolve `<base-root>`**: `git rev-parse --git-common-dir`, then take that path's parent directory (resolved against `<root>` when the output is relative, e.g. a bare `.git`) — the same resolution `.agents/denials.log` already uses, so every worktree of a checkout sees the one claim rather than a per-worktree copy.
 2. **Read `<base-root>/.agents/gate-claim.json`** (Read tool).
 3. **Classify into exactly one of three verdicts**, mirroring the desktop app's own claim reader field-for-field:
-   - **`absent`** — the file does not exist, or it parses but its `repo` field names a different repository than this session's `<repo>`. Say nothing; the plan-review gate is answered as always for the rest of this session.
-   - **`held`** — parses as a JSON object, `repo` matches, and `owner`/`claimedAt` are both strings. If `scopes` (an array) includes `"plan-gate"`, the plan-review gate is claimed — report the matching **UX states** message below and hold this verdict for the rest of the session (see Human gates → Plan review, and Tick procedure step 3). Report any entry in `scopes` other than `"plan-gate"` as an unrecognized scope (**UX states**, appended clause) — never silently dropped, and never itself a reason to stand down. A `held` claim naming no recognized scope at all answers the gate normally.
-   - **`unreadable`** — the file exists but fails to parse as JSON, does not parse to an object, or is missing `owner` or `claimedAt`. Treat exactly like a `held` claim on `plan-gate` — report the matching **UX states** message, naming the parse reason, and hold this verdict for the rest of the session. A malformed claim's only ambiguity is which writer owns the gate; standing down is the one reading that cannot produce an unintended decision.
+   - **`absent`** — the file does not exist, or it parses but its `repo` field names a different repository than this session's `<repo>`. Say nothing; both gates are answered as always for the rest of this session.
+   - **`held`** — parses as a JSON object, `repo` matches, and `owner`/`claimedAt` are both strings. `scopes` (an array) is checked for each recognized entry independently — `"plan-gate"` and `"dispatch"` never imply anything about the other: if it includes `"plan-gate"`, the plan-review gate is claimed — report the matching **UX states** message below and hold this verdict for the rest of the session (see Human gates → Plan review, and Tick procedure step 3). If it includes `"dispatch"`, this session dispatches no stage agent at all — report **Dispatch claimed** (**UX states** below) and hold this verdict the same way (see Safety rails, Dispatching, Tick procedure step 3). Report any entry in `scopes` that is neither as an unrecognized scope (**UX states**, appended clause) — never silently dropped, and never itself a reason to stand down from either gate. A `held` claim naming no recognized scope at all answers both gates normally.
+   - **`unreadable`** — the file exists but fails to parse as JSON, does not parse to an object, or is missing `owner` or `claimedAt`. Treat exactly like a `held` claim naming **both** `plan-gate` and `dispatch` — report both matching **UX states** messages, naming the parse reason, and hold this verdict for the rest of the session. A malformed claim's only ambiguity is which writer owns which gate; standing both down is the one reading that cannot produce an unintended decision.
 
 **Never compare `claimedAt` against a clock.** A claim never expires — expiring it would silently transfer the gate back to this session, which is a wrong decision dressed as a timeout, never this step's call to make.
 
@@ -248,15 +248,15 @@ Exact copy, one message per state, `<…>` substituted:
 
 - **Registry unreadable** (fall back to the version-only line):
 
-  > `port` v0.1.0 — commit unresolved (couldn't read the plugin registry) · model `claude-sonnet-5` · mode `default`. The path alone can't tell a stale copy from your working tree, so treat the version as unverified.
+  > `port` `v<version>` — commit unresolved (couldn't read the plugin registry) · model `claude-sonnet-5` · mode `default`. The path alone can't tell a stale copy from your working tree, so treat the version as unverified.
 
 - **Running plugin, stale relative to the remote** (warn, in place of the plain scope clause):
 
-  > ⚠️ `port` v0.1.0 · `4634fc1` (project scope, installed 2026-08-23) · **42 commits behind `b-at-neu/port@dev`** — I'm running a copy from before those merged, so I'm following the older rails whatever `dev` says. Refresh the installed plugin and restart me. · model `claude-haiku-4-5` · mode `default`
+  > ⚠️ `port` `v<version>` · `4634fc1` (project scope, installed 2026-08-23) · **42 commits behind `b-at-neu/port@dev`** — I'm running a copy from before those merged, so I'm following the older rails whatever `dev` says. Refresh the installed plugin and restart me. · model `claude-haiku-4-5` · mode `default`
 
 - **Staleness not computable** (substitute the reason: no install record matched this directory · the record has no `gitCommitSha` · no marketplace record for `<marketplace>` · the source is a directory outside this working tree · GitHub can't resolve `<sha>`, so it was probably never pushed):
 
-  > `port` v0.1.0 · `4634fc1` (project scope, installed 2026-08-23) · staleness not computable — `<reason>` · model `claude-haiku-4-5` · mode `default`
+  > `port` `v<version>` · `4634fc1` (project scope, installed 2026-08-23) · staleness not computable — `<reason>` · model `claude-haiku-4-5` · mode `default`
 
 - **Install record pinned to a worktree** (warn once):
 
@@ -280,10 +280,16 @@ Exact copy, one message per state, `<…>` substituted:
 
   With no issues currently at `<labels.planReview>`, keep the first sentence and drop the rest — the claim is still worth stating, since it changes what this session will do the moment one arrives.
 
-- **Claim unreadable** (the loud stall the fail direction chooses — same cadence as "Plan gate claimed" above):
+- **Dispatch claimed** (#265 — same cadence as "Plan gate claimed" above, and independent of it: a repository can hold neither, either, or both at once):
 
-  > ⚠️ `.agents/gate-claim.json` can't be read (`<reason>`). Until it's valid or removed, I stand down from the plan gate exactly as if it were claimed — nothing will answer an issue at `plan review`. Fix or delete the file.
+  > 🖥️ **Dispatch claimed by `port-desktop`** since 2026-09-05T14:02Z. 2 items are actionable this tick: plan #105, impl #52 — I won't launch a stage agent for either, and the app makes the refresh, escalation, and approval-withdrawal writes here. Release the claim in the app, or delete `.agents/gate-claim.json`, to take dispatch back.
 
-- **Unrecognized scope** (appended to whichever of the two lines above applies):
+  With nothing currently actionable, keep the first sentence and drop the rest, the same carve-out "Plan gate claimed" takes.
 
-  > · it also claims `<scope>`, which I don't recognize — I'm only standing down from the plan gate.
+- **Claim unreadable** (the loud stall the fail direction chooses for **both** gates at once — same cadence as the two states above):
+
+  > ⚠️ `.agents/gate-claim.json` can't be read (`<reason>`). Until it's valid or removed, I stand down from the plan gate and from dispatch exactly as if both were claimed — nothing will answer an issue at `plan review`, and I'll launch no stage agent. Fix or delete the file.
+
+- **Unrecognized scope** (appended to whichever of the lines above applies):
+
+  > · it also claims `<scope>`, which I don't recognize — that claim is reported, never acted on.

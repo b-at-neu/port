@@ -203,9 +203,11 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
       sources,
       claimedFiles,
       headRefOid: item.headRefOid,
+      mergeable: item.mergeable,
       reviews: item.reviews,
       comments: item.comments,
       reviewCycleCount,
+      checkRollup: item.checkRollup,
     }
   })
 

@@ -112,6 +112,7 @@ h1 {
   font-weight: 600;
 }
 
+.repo-card__new-session,
 .repo-card__transcripts {
   font-family: inherit;
   font-size: 0.75rem;
@@ -122,6 +123,10 @@ h1 {
   color: inherit;
   cursor: pointer;
   margin-right: 0.4rem;
+}
+
+.repo-card__new-session {
+  background: #2a3a2a;
 }
 
 .repo-card__remove {
@@ -161,6 +166,20 @@ h1 {
 }
 
 .repo-card__diagnostic {
+  margin: 0.1rem 0;
+}
+
+/* #300: an applied CLAUDE.md override is not a problem — the diagnostics
+   box model (margin/padding/font-size), but the summary's own neutral
+   opacity rather than the amber diagnostics colour. */
+.repo-card__overrides {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+
+.repo-card__override {
   margin: 0.1rem 0;
 }
 

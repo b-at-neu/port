@@ -8,7 +8,7 @@ This plugin is almost entirely prompts, which makes it easy to change confidentl
 node scripts/checks.ts
 ```
 
-No dependencies, no plugin install, no model calls. Runs in seconds, in an agent's worktree before it pushes, and in CI's `run-static-checks` job on every pull request, matrixed across `ubuntu-latest`, `macos-latest`, and `windows-latest` with no install step — the empty `node_modules` in that job is what makes the dependency-free invariant an executed assertion rather than a comment (`scripts/` is TypeScript, type-stripped at load by Node's own runtime — no toolchain needed to run it, only to type-check it). This is the only thing an agent runs before pushing; `.github/workflows/checks.yml` runs three further jobs CI-only: `run-schema-fixtures` (ubuntu only, full JSON Schema validation), `run-scripts-typecheck` (ubuntu only, `pnpm typecheck:scripts` — real type checking, which needs a toolchain a dispatched agent's worktree never has), `run-plugin-validate` (ubuntu only, `claude plugin validate ./plugins/port --strict` — built into the CLI, so nothing extra to install beyond it), and `run-app-checks` (the same three-OS matrix, `apps/desktop`'s typecheck/lint/test/build — see CONTRIBUTING.md → "Working on the desktop app" for why it stays out of `commands.checks`).
+No dependencies, no plugin install, no model calls. Runs in seconds, in an agent's worktree before it pushes, and in CI's `run-static-checks` job on every pull request, matrixed across `ubuntu-latest`, `macos-latest`, and `windows-latest` with no install step — the empty `node_modules` in that job is what makes the dependency-free invariant an executed assertion rather than a comment (`scripts/` is TypeScript, type-stripped at load by Node's own runtime — no toolchain needed to run it, only to type-check it). This is the only thing an agent runs before pushing; `.github/workflows/checks.yml` runs three further jobs CI-only: `run-schema-fixtures` (ubuntu only, full JSON Schema validation), `run-scripts-typecheck` (ubuntu only, `pnpm typecheck:scripts` — real type checking, which needs a toolchain a dispatched agent's worktree never has), `run-plugin-validate` (ubuntu only, `claude plugin validate ./plugins/port --strict` — built into the CLI, so nothing extra to install beyond it), and `run-app-checks` (the same three-OS matrix, `apps/desktop`'s typecheck/lint/test/build — see CONTRIBUTING.md → "Working on the desktop app" for why it stays out of `commands.checks`). The release corridor's own network-aware verdict (#275) is not among these — it runs separately, in `release-corridor.yml`, on push to `dev`/`main` only, since it needs `gh` and layer 1 must stay offline.
 
 **`claude plugin validate` is additive, never a replacement for the hand-rolled frontmatter checks above.** It covers `plugin.json` schema and `hooks/hooks.json` validity more thoroughly than layer 1 does, but it needs the `claude` binary — exactly the toolchain a dispatched agent's worktree never has, and exactly why layer 1's own component checks stay: trading a check every agent runs *before* pushing for one that only runs after would be a net loss in coverage where it matters most.
 
@@ -115,14 +115,14 @@ Every transcript byte is untrusted data: parsed and classified, never interprete
 ## Layer 3 — behavioural evals
 
 ```bash
-claude plugin eval port@port --scaffold                                  # whole suite
-claude plugin eval port@port --scaffold --case analyze-refuses-to-edit-source
-claude plugin eval port@port --scaffold --tag init
+claude plugin eval port@port --scaffold --ablation with-without                                  # whole suite
+claude plugin eval port@port --scaffold --ablation with-without --case analyze-refuses-to-edit-source
+claude plugin eval port@port --scaffold --ablation with-without --tag init
 ```
 
 Static checks cannot tell you whether a prompt *works* — whether the model actually refuses to edit source, or presents the rule set before writing. That needs running it, which costs money, so this layer is deliberate.
 
-`claude plugin eval` is built for exactly this: `evals/**/case.yaml` with graders, `--runs` for variance, `--threshold` for a CI exit code, and **`--ablation with-without`**, which runs a no-plugin baseline arm and reports the score delta — the only thing that answers "is this prompt doing anything at all".
+`claude plugin eval` is built for exactly this: `evals/**/case.yaml` with graders, `--runs` for variance, `--threshold` for a CI exit code, and **`--ablation with-without`**, which runs a no-plugin baseline arm and reports the score delta. **The flag is mandatory on every invocation, not a default to rely on** — the delta, never the absolute score, is the reported result, since a case the base model passes unaided is measuring Claude, not port. That only holds when each case reaches its rule **only through the plugin's own entry point** (a skill command or a dispatched agent), never by reading the prompt file directly — otherwise the without-arm is handed the very rule it is supposed to be measured without, and the delta undercounts.
 
 It is currently **early-access gated**. Until access lands, cases are authored anyway: they are just files, and writing them forces you to say what each prompt is actually supposed to guarantee. The cases, the graders, the schema's provenance, and the verbatim gate message are in [evals/README.md](../evals/README.md). Everything statically knowable about them is checked by layer 1, for free, so a broken case surfaces without an API key.
 

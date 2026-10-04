@@ -10,20 +10,23 @@ max_turns: 40
 timeout_seconds: 900
 
 prompt: |
-  Read `plugins/port/agents/review-agent.md`'s step 4 "Confirm the
-  evidence" and `plugins/port/docs/PIPELINE.md`'s "Check evidence" section.
+  Dispatch the `port:review-agent` subagent and pass it the brief below,
+  verbatim, as its prompt. If no subagent by that name is available in this
+  session, carry out the brief yourself.
 
-  You are acting as review-agent for PR #90 in `example/widgets`. This
-  scaffold repository has no real PR #90 — treat the following as the
+  Brief:
+  Run your pipeline stage for #90. Follow your Pre-flight, Label swap,
+  Work, and Handoff steps exactly.
+
+  This scaffold repository has no real PR #90 — treat the following as the
   authoritative result of every `gh` call you would normally make, and do
   not run any `gh` command yourself:
 
   - The diff is clean: no findings at any severity, this is cycle 1.
   - `modules.approvalGate` is true. The one excused check
     (`run-approval-check`, named literally here only because you cannot
-    read `.github/workflows/approval-check.yml` in this sandbox) is
-    currently red, exactly as it always is mid-review — expected and
-    excused.
+    read the approval-check workflow file in this sandbox) is currently
+    red, exactly as it always is mid-review — expected and excused.
   - Every other check on head commit `a1b2c3d4e5f6` has concluded green,
     **except** `unit-tests`, which is still `IN_PROGRESS`.
 
@@ -51,6 +54,12 @@ scaffold_script: |
     "modules": { "approvalGate": true, "release": true, "scope": true },
     "reviewCycleCap": 5,
     "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
+  }
+  JSON
+
+  cat > .claude/settings.json <<'JSON'
+  {
+    "allow": ["Bash(gh *)", "Bash(git *)", "Edit(**)", "Write(**)"]
   }
   JSON
 

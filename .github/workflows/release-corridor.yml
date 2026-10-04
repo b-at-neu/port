@@ -1,0 +1,39 @@
+# Answers "is a release in flight?" from GitHub, so a legitimate release
+# corridor (#224) never shows the same check name red and green for the same
+# commit depending on which trigger GitHub happened to schedule (#275).
+#
+# `push` only — deliberately no `pull_request` and no `workflow_dispatch`.
+# Either would put a second run-release-corridor result on the release pull
+# request's own head SHA, which is also dev's tip, recreating the exact
+# two-readers-of-the-same-state race this workflow exists to remove.
+# checks.yml's own `pull_request` trigger is the only other reader of this
+# commit, and it never runs this job — see scripts/checks/release.ts's
+# "One authoritative result per check name and commit" for the layer 1 pin
+# that keeps both files' triggers this way.
+#
+# Fails closed: an unreadable manifest or a failed `gh` read is never treated
+# as a release in flight (scripts/release-corridor.ts).
+
+name: Release Corridor
+
+on:
+  push:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  run-release-corridor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Release corridor
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/release-corridor.ts

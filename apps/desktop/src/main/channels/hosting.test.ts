@@ -4,11 +4,19 @@ import type { SessionKey } from '../../shared/hosting/types'
 import type { RegistryDeps } from '../registry'
 import type { HostedStore } from '../hosting'
 import {
+  MAX_INVOKE_ARGS_CHARS,
   resolveSessionAttach,
+  resolveSessionCapacity,
+  resolveSessionCapacitySet,
   resolveSessionClose,
+  resolveSessionDismiss,
   resolveSessionInterrupt,
+  resolveSessionInvoke,
   resolveSessionList,
   resolveSessionPermissionAnswer,
+  resolveSessionRestore,
+  resolveSessionRestoreDiscard,
+  resolveSessionRestoreList,
   resolveSessionSend,
   resolveSessionStart,
 } from './hosting'
@@ -39,8 +47,10 @@ const READY_ENTRY = {
     modules: { approvalGate: true, release: true, scope: true },
     reviewCycleCap: 3,
     vocabulary: {} as never,
-    commands: { worktrees: null },
+    commands: { worktrees: null, budget: null },
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
+    checkDispositions: {},
+    overrides: [],
   },
   diagnostics: [],
 }
@@ -72,6 +82,33 @@ function storeStub(overrides: Partial<HostedStore> = {}): HostedStore {
     },
     answerPermission: () => {
       throw new Error('answerPermission should not be invoked in this case')
+    },
+    invoke: () => {
+      throw new Error('invoke should not be invoked in this case')
+    },
+    dismiss: () => {
+      throw new Error('dismiss should not be invoked in this case')
+    },
+    stopTask: () => {
+      throw new Error('stopTask should not be invoked in this case')
+    },
+    snapshotOf: () => {
+      throw new Error('snapshotOf should not be invoked in this case')
+    },
+    capacity: () => {
+      throw new Error('capacity should not be invoked in this case')
+    },
+    setLimit: () => {
+      throw new Error('setLimit should not be invoked in this case')
+    },
+    restorable: () => {
+      throw new Error('restorable should not be invoked in this case')
+    },
+    restore: () => {
+      throw new Error('restore should not be invoked in this case')
+    },
+    discardRestorable: () => {
+      throw new Error('discardRestorable should not be invoked in this case')
     },
     ...overrides,
   }
@@ -176,6 +213,30 @@ describe('resolveSessionList', () => {
   })
 })
 
+describe('resolveSessionInvoke', () => {
+  it('rejects a missing sessionKey', () => {
+    expect(() => resolveSessionInvoke({ sessionKey: '' as SessionKey, name: 'pipeline', args: '' }, depsWith())).toThrow(
+      "'session:invoke' requires a non-empty 'sessionKey'",
+    )
+  })
+
+  it('rejects an empty name', () => {
+    expect(() => resolveSessionInvoke({ sessionKey: SESSION_KEY, name: '', args: '' }, depsWith())).toThrow("'session:invoke' requires a non-empty 'name'")
+  })
+
+  it('rejects args over the character cap', () => {
+    expect(() => resolveSessionInvoke({ sessionKey: SESSION_KEY, name: 'pipeline', args: 'x'.repeat(MAX_INVOKE_ARGS_CHARS + 1) }, depsWith())).toThrow(
+      `'session:invoke' requires 'args' to be a string of at most ${MAX_INVOKE_ARGS_CHARS} characters`,
+    )
+  })
+
+  it('delegates to the store, never validating the name itself here', () => {
+    const invoke = vi.fn(() => ({ ok: true as const, uuid: 'u', queued: true }))
+    resolveSessionInvoke({ sessionKey: SESSION_KEY, name: '/not-canonical', args: 'hi' }, depsWith({ store: storeStub({ invoke }) }))
+    expect(invoke).toHaveBeenCalledWith(SESSION_KEY, '/not-canonical', 'hi')
+  })
+})
+
 describe('resolveSessionPermissionAnswer', () => {
   const base = { sessionKey: SESSION_KEY, permissionId: 'perm-1', decision: 'deny' as const, message: null }
 
@@ -219,5 +280,126 @@ describe('resolveSessionPermissionAnswer', () => {
     const answerPermission = vi.fn(() => ({ ok: true as const }))
     resolveSessionPermissionAnswer({ ...base, message: 'no thanks' }, depsWith({ store: storeStub({ answerPermission }) }))
     expect(answerPermission).toHaveBeenCalledWith(SESSION_KEY, 'perm-1', 'deny', 'no thanks')
+  })
+})
+
+describe('resolveSessionDismiss', () => {
+  it('rejects a missing sessionKey', () => {
+    expect(() => resolveSessionDismiss({ sessionKey: '' as SessionKey }, depsWith())).toThrow("'session:dismiss' requires a non-empty 'sessionKey'")
+  })
+
+  it('delegates to the store', () => {
+    const dismiss = vi.fn(() => ({ ok: true as const }))
+    resolveSessionDismiss({ sessionKey: SESSION_KEY }, depsWith({ store: storeStub({ dismiss }) }))
+    expect(dismiss).toHaveBeenCalledWith(SESSION_KEY)
+  })
+})
+
+describe('resolveSessionCapacity', () => {
+  it('rejects a payload', () => {
+    expect(() => resolveSessionCapacity({} as unknown as void, depsWith())).toThrow("'session:capacity' takes no payload")
+  })
+
+  it('delegates to the store', async () => {
+    const capacity = vi.fn(() => Promise.resolve({ limit: 4, ceiling: 8 }))
+    await resolveSessionCapacity(undefined, depsWith({ store: storeStub({ capacity }) }))
+    expect(capacity).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('resolveSessionCapacitySet', () => {
+  it('rejects a non-integer limit', () => {
+    expect(() => resolveSessionCapacitySet({ limit: 1.5 }, depsWith())).toThrow("'session:capacity:set' requires 'limit' to be an integer from 1 to 8")
+  })
+
+  it('rejects a limit below 1', () => {
+    expect(() => resolveSessionCapacitySet({ limit: 0 }, depsWith())).toThrow("'session:capacity:set' requires 'limit' to be an integer from 1 to 8")
+  })
+
+  it('rejects a limit above the ceiling', () => {
+    expect(() => resolveSessionCapacitySet({ limit: 9 }, depsWith())).toThrow("'session:capacity:set' requires 'limit' to be an integer from 1 to 8")
+  })
+
+  it('delegates to the store', () => {
+    const setLimit = vi.fn(() => Promise.resolve({ limit: 3, ceiling: 8 }))
+    void resolveSessionCapacitySet({ limit: 3 }, depsWith({ store: storeStub({ setLimit }) }))
+    expect(setLimit).toHaveBeenCalledWith(3)
+  })
+})
+
+describe('resolveSessionRestoreList', () => {
+  it('rejects a payload', async () => {
+    await expect(resolveSessionRestoreList(registryDeps, {} as unknown as void, depsWith())).rejects.toThrow("'session:restore:list' takes no payload")
+  })
+
+  it('marks a ready repository available', async () => {
+    const restorable = vi.fn(() =>
+      Promise.resolve([{ restoreId: 'restore-1', repoId: REPO_ID, claudeSessionId: 'session-1', title: 'Title', startedAt: 't1' }]),
+    )
+    const result = await resolveSessionRestoreList(registryDeps, undefined, depsWith({ store: storeStub({ restorable }) }))
+    expect(result.entries).toEqual([
+      { restoreId: 'restore-1', repoId: REPO_ID, title: 'Title', origin: { kind: 'resumed', from: 'session-1' }, startedAt: 't1', availability: { ok: true } },
+    ])
+  })
+
+  it('marks a not-ready repository unavailable with its problem reason', async () => {
+    const restorable = vi.fn(() =>
+      Promise.resolve([{ restoreId: 'restore-1', repoId: REPO_ID, claudeSessionId: 'session-1', title: null, startedAt: 't1' }]),
+    )
+    const deps = depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [NOT_READY_ENTRY] }), store: storeStub({ restorable }) })
+    const result = await resolveSessionRestoreList(registryDeps, undefined, deps)
+    expect(result.entries[0]?.availability).toEqual({ ok: false, reason: 'its folder is gone' })
+  })
+
+  it('marks every entry unavailable when the listing itself fails', async () => {
+    const restorable = vi.fn(() =>
+      Promise.resolve([{ restoreId: 'restore-1', repoId: REPO_ID, claudeSessionId: 'session-1', title: null, startedAt: 't1' }]),
+    )
+    const deps = depsWith({ listRepositories: () => Promise.resolve({ ok: false, kind: 'registry-unreadable', message: 'nope' }), store: storeStub({ restorable }) })
+    const result = await resolveSessionRestoreList(registryDeps, undefined, deps)
+    expect(result.entries[0]?.availability).toEqual({ ok: false, reason: 'nope' })
+  })
+})
+
+describe('resolveSessionRestore', () => {
+  it('rejects a missing restoreId', async () => {
+    await expect(resolveSessionRestore(registryDeps, { restoreId: '' }, depsWith())).rejects.toThrow("'session:restore' requires a non-empty 'restoreId'")
+  })
+
+  it('reports unknown-restore for an id no entry carries', async () => {
+    const deps = depsWith({ store: storeStub({ restorable: () => Promise.resolve([]) }) })
+    await expect(resolveSessionRestore(registryDeps, { restoreId: 'restore-1' }, deps)).resolves.toEqual({ ok: false, kind: 'unknown-restore' })
+  })
+
+  it('reports repo-unavailable rather than throwing when the repository is not ready', async () => {
+    const restorable = () => Promise.resolve([{ restoreId: 'restore-1', repoId: REPO_ID, claudeSessionId: 'session-1', title: null, startedAt: 't1' }])
+    const deps = depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [NOT_READY_ENTRY] }), store: storeStub({ restorable }) })
+    await expect(resolveSessionRestore(registryDeps, { restoreId: 'restore-1' }, deps)).resolves.toEqual({ ok: false, kind: 'repo-unavailable', reason: 'its folder is gone' })
+  })
+
+  it('resolves the ready path itself and delegates to the store', async () => {
+    const restorable = () => Promise.resolve([{ restoreId: 'restore-1', repoId: REPO_ID, claudeSessionId: 'session-1', title: null, startedAt: 't1' }])
+    const restore = vi.fn(() => Promise.resolve({ ok: true as const, snapshot: {} as never }))
+    const deps = depsWith({ store: storeStub({ restorable, restore }) })
+    await resolveSessionRestore(registryDeps, { restoreId: 'restore-1' }, deps)
+    expect(restore).toHaveBeenCalledWith('restore-1', '/repo')
+  })
+})
+
+describe('resolveSessionRestoreDiscard', () => {
+  it('rejects an empty-string restoreId', () => {
+    expect(() => resolveSessionRestoreDiscard({ restoreId: '' }, depsWith())).toThrow("'session:restore:discard' requires 'restoreId' to be null or a non-empty string")
+  })
+
+  it('delegates null through to discard every entry', () => {
+    const discardRestorable = vi.fn(() => Promise.resolve({ ok: true as const }))
+    void resolveSessionRestoreDiscard({ restoreId: null }, depsWith({ store: storeStub({ discardRestorable }) }))
+    expect(discardRestorable).toHaveBeenCalledWith(null)
+  })
+
+  it('delegates a specific restoreId', () => {
+    const discardRestorable = vi.fn(() => Promise.resolve({ ok: true as const }))
+    void resolveSessionRestoreDiscard({ restoreId: 'restore-1' }, depsWith({ store: storeStub({ discardRestorable }) }))
+    expect(discardRestorable).toHaveBeenCalledWith('restore-1')
   })
 })

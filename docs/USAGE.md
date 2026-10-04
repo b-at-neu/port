@@ -37,7 +37,7 @@ From approval onward it runs on its own: implementation in an isolated worktree,
 
 Then the pull request is labeled `approved` and the cockpit tells you which checks it's asserting are green — a pending check is announced as not merge-ready yet, never glossed over. **You merge on GitHub.** The pipeline never merges — that gate is absolute.
 
-If a check on an approved pull request goes red afterward — the base moved, or the check re-ran — the cockpit routes it back to `needs revision` on its own, comments naming the check, and revision dispatches automatically. That's the one case the pipeline touches an approved pull request without you asking; everything else about one is left alone until you merge it.
+If a check on an approved pull request goes red afterward — the base moved, or the check re-ran — the cockpit routes it back to `needs revision` on its own, comments naming the check, and revision dispatches automatically. That's one case the pipeline touches an approved pull request without you asking first; the other is you asking directly — `revise #142: <the change>` sends it back with your request posted and revision dispatched in the same breath. Everything else about an approved pull request is left alone until you merge it.
 
 ## Talking to the cockpit
 
@@ -50,6 +50,7 @@ Intent, not syntax. These all work:
 | `pause #142` | Drop its trigger label; nothing more happens to it |
 | `retry #142` | Re-apply the right trigger for wherever it stalled |
 | `unblock #142` | Clear a `needs human` gate deliberately; nothing else can |
+| `revise #142: <the change>` | Send an approved pull request back with your change; it stays approved otherwise |
 | `drain` | Finish what is in flight, start nothing new |
 | `resume` | Start ticking again |
 | `stop #142` | Halt one item and reset it so it can be retried |
@@ -126,7 +127,7 @@ What it deliberately never force-removes on its own: a **locked** worktree, a **
 /port:worktree-clean
 ```
 
-This skill drives the same reclamation script interactively — review the classified table, then unlock, force-clear dirty candidates, and force-delete orphan directories, each with its own confirmation. On Windows especially, a populated dependency tree can defeat even a forced remove; this skill is what recovers those.
+This skill drives the same reclamation script interactively — review the classified table, then unlock, force-clear dirty candidates, and purge orphan directories, each with its own confirmation. The script falls back to a plain filesystem delete whenever `git worktree remove` itself fails partway (a long path or a file still held open, both common on Windows), so a populated dependency tree that used to defeat even a forced remove no longer needs a separate manual recipe.
 
 ## Releasing
 

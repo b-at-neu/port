@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { root, readJson } from '../lib/files.ts';
+import { root, readJson, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
 // The guard hook's classifier tests live in scripts/checks/hooks-classifier.ts,
@@ -59,6 +59,58 @@ export default async function ({ fail, ok }: Reporter) {
     if (!coversBash) fail('hook-wiring', 'PreToolUse declares no matcher covering Bash');
     if (!coversWrites) fail('hook-wiring', 'PreToolUse declares no matcher covering the write tools (Edit/Write/NotebookEdit)');
     ok();
+  }
+
+  // --- No shell-string child-process spawning in shipped hook code -----------
+  // guard(#114): shipped hook code spawning a child through a shell string,
+  // which parses differently under cmd.exe than under sh. Comment-only lines
+  // are stripped first, the same way worktrees.ts strips its own docstring
+  // before scanning — this file's own disclaimer above must not trip itself.
+  {
+    const stripComments = (text: string) =>
+      text
+        .split('\n')
+        .filter((l) => !/^\s*(\/\/|\*)/.test(l))
+        .join('\n');
+
+    // Self-test first — a check that cannot be made to fail is not a check
+    // (docs/ENGINEERING.md §7).
+    if (!/\bexecSync\b/.test(stripComments("const out = execSync('x');"))) {
+      fail('hooks-shell', "self-test: a synthetic execSync('x') call did not trip the pattern");
+    } else {
+      ok();
+    }
+    if (/\bexecSync\b/.test(stripComments("const out = execFileSync('x', []);"))) {
+      fail('hooks-shell', "self-test: execFileSync('x', []) must not trip the execSync pattern");
+    } else {
+      ok();
+    }
+    if (!/shell:\s*true/.test(stripComments("spawn('x', [], { shell: true });"))) {
+      fail('hooks-shell', "self-test: a synthetic { shell: true } call did not trip the pattern");
+    } else {
+      ok();
+    }
+    if (/shell:\s*true/.test(stripComments("spawn('x', [], { shell: false });"))) {
+      fail('hooks-shell', "self-test: { shell: false } must not trip the shell: true pattern");
+    } else {
+      ok();
+    }
+
+    const hookFiles = walk(join(root, 'plugins/port/hooks')).filter((f) => f.endsWith('.mjs'));
+    for (const f of hookFiles) {
+      const rel = relOf(f);
+      const codeOnly = stripComments(readFileSync(f, 'utf8'));
+      if (/\bexecSync\b/.test(codeOnly)) {
+        fail('hooks-shell', `${rel} uses execSync — every child process must spawn with an explicit argv array (execFileSync/spawnSync), never a shell string`);
+      } else {
+        ok();
+      }
+      if (/shell:\s*true/.test(codeOnly)) {
+        fail('hooks-shell', `${rel} passes shell: true to a child process — every call must be an explicit argv array, never a shell string`);
+      } else {
+        ok();
+      }
+    }
   }
 
   // --- Guard hook end-to-end wiring -------------------------------------------
@@ -131,6 +183,50 @@ export default async function ({ fail, ok }: Reporter) {
       if (readLog().length !== 2) fail('guard-hook-fixture', 'an allowed command should not append a line');
       ok();
 
+      // guard(#288): the real hook reading a real transcript_path for the
+      // approval arm — a wiring bug the decide()-only cases in
+      // hooks-gate-rule.ts cannot see. A transcript naming the pull request
+      // makes the approval arm log 'gate-clear' for an operator-named
+      // 'approved' removal.
+      const transcriptNamed = join(fixture, 'transcript-named.jsonl');
+      writeFileSync(
+        transcriptNamed,
+        `${JSON.stringify({ type: 'user', message: { content: [{ type: 'text', text: 'revise #300: rename the --limit flag to --max' }] } })}\n`,
+      );
+      run({
+        cwd: fixture,
+        session_id: 'sess-5',
+        tool_name: 'Bash',
+        tool_input: { command: 'gh pr edit 300 --repo b-at-neu/port --remove-label "approved" --add-label "needs revision"' },
+        transcript_path: transcriptNamed,
+      });
+      lines = readLog();
+      if (lines.length !== 3) fail('guard-hook-fixture', `expected a gate-clear line for an operator-named approval removal, got ${lines.length} lines`);
+      else if (!lines[2].includes('\tgate-clear\t')) fail('guard-hook-fixture', `expected a 'gate-clear' line, got ${JSON.stringify(lines[2])}`);
+      ok();
+
+      // Same command, a transcript naming a different item → never a
+      // gate-clear line. The command still misses this fixture's own narrow
+      // allowlist (`Bash(git *)` only), so it logs 'miss' as it always would
+      // — the point is that this arm never mistakes an unnamed removal for
+      // an authorised one.
+      const transcriptOther = join(fixture, 'transcript-other.jsonl');
+      writeFileSync(
+        transcriptOther,
+        `${JSON.stringify({ type: 'user', message: { content: [{ type: 'text', text: 'unblock #134' }] } })}\n`,
+      );
+      run({
+        cwd: fixture,
+        session_id: 'sess-6',
+        tool_name: 'Bash',
+        tool_input: { command: 'gh pr edit 300 --repo b-at-neu/port --remove-label "approved" --add-label "needs revision"' },
+        transcript_path: transcriptOther,
+      });
+      lines = readLog();
+      if (lines.length !== 4) fail('guard-hook-fixture', `expected exactly one new line (a 'miss', not a 'gate-clear'), got ${lines.length} lines total`);
+      else if (lines[3].includes('\tgate-clear\t')) fail('guard-hook-fixture', 'a removal naming a different item must never log gate-clear');
+      ok();
+
       // No port.config.json in cwd → silent, nothing written.
       const unmanaged = mkdtempSync(join(tmpdir(), 'port-guard-hook-unmanaged-'));
       try {
@@ -154,8 +250,8 @@ export default async function ({ fail, ok }: Reporter) {
         stdio: ['pipe', 'ignore', 'ignore'],
       });
       lines = readLog();
-      if (lines.length !== 3) fail('guard-hook-fixture', `expected a hook-error line for a malformed payload, got ${lines.length} lines`);
-      else if (!lines[2].includes('\thook-error\t')) fail('guard-hook-fixture', `expected a 'hook-error' line, got ${JSON.stringify(lines[2])}`);
+      if (lines.length !== 5) fail('guard-hook-fixture', `expected a hook-error line for a malformed payload, got ${lines.length} lines`);
+      else if (!lines[4].includes('\thook-error\t')) fail('guard-hook-fixture', `expected a 'hook-error' line, got ${JSON.stringify(lines[4])}`);
       ok();
     } catch (e: any) {
       if (e.status !== undefined) fail('guard-hook-fixture', `hook exited non-zero: ${e.message}`);

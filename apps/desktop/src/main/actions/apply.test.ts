@@ -23,8 +23,10 @@ function entry(overrides: Partial<ReadyEntry> = {}): ReadyEntry {
       owner: 'o',
       name: 'a',
       branches: { integration: 'dev', production: 'main' },
-      commands: { worktrees: null },
+      commands: { worktrees: null, budget: null },
       concurrency: { sharedFiles: [], overlapThreshold: 2 },
+      checkDispositions: {},
+      overrides: [],
       models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
       modules: { approvalGate: true, release: true, scope: true },
       reviewCycleCap: 5,
@@ -64,9 +66,11 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     sources: ['github'],
     claimedFiles: null,
     headRefOid: null,
+    mergeable: null,
     reviews: null,
     comments: null,
     reviewCycleCount: null,
+    checkRollup: null,
     ...overrides,
   }
 }
@@ -112,6 +116,7 @@ function snapshotOf(repositories: readonly RepositoryState[]): BoardSnapshot {
     drain: { gate: 'open' },
     nextWakeupAt: null,
     emittedAt: '2026-01-01T00:00:00Z',
+    dispatch: [],
   }
 }
 

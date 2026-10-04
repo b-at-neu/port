@@ -43,7 +43,10 @@ const ISSUE_FRAGMENT = `fragment IssueFields on Issue {
 // purpose (the cycle cap and the zero-diff gate), so a repository's own
 // review/comment history never needs a second round trip larger than the
 // cockpit's own. `headRefOid` is the head this app's own gates compare a
-// review's `commit.oid` against.
+// review's `commit.oid` against. `mergeable` (#265) is the mergeability
+// precondition `main/tick/gates.ts`'s `mergeabilityRoute` reads — GitHub's
+// own `MERGEABLE`/`CONFLICTING`/`UNKNOWN` enum, mapped to that same union at
+// the edge (`map.ts`), never re-derived from anything else.
 const PULL_REQUEST_FRAGMENT = `fragment PullRequestFields on PullRequest {
   number
   title
@@ -52,10 +55,36 @@ const PULL_REQUEST_FRAGMENT = `fragment PullRequestFields on PullRequest {
   state
   mergedAt
   headRefOid
+  mergeable
   assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } }
   labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }
   reviews(first: 30) { totalCount nodes { body submittedAt commit { oid } } }
   comments(last: 20) { totalCount nodes { body createdAt } }
+}`
+
+// #292: the `statusCheckRollup` selection the approval-withdrawal
+// observation reads — byte-identical (modulo formatting) to
+// `scripts/port-tick/query.ts`'s own `ROLLUP` constant, pinned both
+// directions by `scripts/checks/desktop-github.ts`. Spread only into the
+// pull-request alias whose label key is `approved` (the cockpit's own cost
+// shape): every other alias never selects it.
+const CHECK_ROLLUP_FRAGMENT = `fragment CheckRollupFields on PullRequest {
+  commits(last: 1) {
+    nodes {
+      commit {
+        statusCheckRollup {
+          state
+          contexts(first: 50) {
+            nodes {
+              __typename
+              ... on CheckRun { name conclusion status startedAt completedAt detailsUrl }
+              ... on StatusContext { context state createdAt targetUrl }
+            }
+          }
+        }
+      }
+    }
+  }
 }`
 
 export interface PipelineQuery {
@@ -74,14 +103,24 @@ export interface PipelineQuery {
 export function buildPipelineQuery(vocabulary: LabelVocabulary): PipelineQuery {
   const aliases: QueriedLabel[] = []
   const connections: string[] = []
+  // #292: GraphQL rejects a document declaring a fragment nothing spreads
+  // ("Fragments Must Be Used") — tracked so `CHECK_ROLLUP_FRAGMENT` is only
+  // appended below when an `approved` label actually exists this pass (a
+  // repository can have it absent — the `approvalGate` module gates it off).
+  let usesCheckRollup = false
 
   vocabulary.labels.forEach((label: ResolvedLabel, idx: number) => {
     const issueAlias = `i${idx}`
     const prAlias = `p${idx}`
     const literal = graphqlStringLiteral(label.name)
+    // #292: the `approved` alias alone also spreads `CheckRollupFields` —
+    // the cockpit's own cost shape (every other alias never selects it).
+    const isApproved = label.key === 'approved'
+    if (isApproved) usesCheckRollup = true
+    const prFields = isApproved ? '...PullRequestFields ...CheckRollupFields' : '...PullRequestFields'
     connections.push(
       `  ${issueAlias}: issues(states: OPEN, first: ${PAGE_SIZE}, labels: [${literal}]) { totalCount nodes { ...IssueFields } }`,
-      `  ${prAlias}: pullRequests(states: OPEN, first: ${PAGE_SIZE}, labels: [${literal}]) { totalCount nodes { ...PullRequestFields } }`,
+      `  ${prAlias}: pullRequests(states: OPEN, first: ${PAGE_SIZE}, labels: [${literal}]) { totalCount nodes { ${prFields} } }`,
     )
     aliases.push({ key: label.key, name: label.name, source: label.source, issueAlias, prAlias })
   })
@@ -102,6 +141,7 @@ export function buildPipelineQuery(vocabulary: LabelVocabulary): PipelineQuery {
     ISSUE_FRAGMENT,
     '',
     PULL_REQUEST_FRAGMENT,
+    ...(usesCheckRollup ? ['', CHECK_ROLLUP_FRAGMENT] : []),
   ].join('\n')
 
   return { document, aliases }

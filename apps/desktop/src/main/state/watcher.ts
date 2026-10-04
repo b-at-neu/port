@@ -11,9 +11,10 @@ import type { RepoId } from '../../shared/repos'
 import type { RepositoryEntry } from '../../shared/repos'
 import { DEFAULT_POLL_POLICY, SOURCE_KINDS, initialHealth } from '../../shared/board/types'
 import type { BoardSnapshot, RepositoryHealth, SourceHealth, SourceKind } from '../../shared/board/types'
-import type { DrainState } from '../../shared/dispatch/types'
+import type { DrainState, RepoDispatchStatus } from '../../shared/dispatch/types'
 import type { RelayScan } from '../../shared/relay/types'
-import { createDispatchLedger, planTick } from '../tick'
+import { createDispatchLedger, createRefreshMemo, createUnknownStreaks, planTick } from '../tick'
+import type { DispatchLedger, RefreshMemo, UnknownStreaks } from '../tick'
 import { buildDesktopTickEvent, recordTick as defaultRecordTick } from '../trajectory'
 import type { DesktopTickEvent, RecordTickDeps } from '../trajectory'
 import { isReady, projectFromCache } from './read'
@@ -60,12 +61,40 @@ export interface CreatePipelineWatcherParams {
    *  visible on the very next snapshot. Defaults to `{ gate: 'open' }`, the
    *  same default a repository with no drain source at all reads as. */
   readonly drain?: () => DrainState
+  /** Injectable the same way `drain` is (#265) — a dispatcher built after
+   *  the watcher needs the *same* ledger/streak memo this watcher's own
+   *  `planTick` calls read and write, never a second instance that would
+   *  disagree with what the board just reported. Defaulting to a fresh one
+   *  keeps every existing caller (and test) unchanged. */
+  readonly ledger?: DispatchLedger
+  readonly unknownStreaks?: UnknownStreaks
+  /** #292: the app's own process-scoped refresh memo, shared with the
+   *  dispatcher's own observation pass the same way `ledger`/`unknownStreaks`
+   *  already are — never a second instance that would disagree with what the
+   *  dispatcher just wrote. */
+  readonly refreshMemo?: RefreshMemo
+  /** #292: `dispatcher.startedTasks` — this repository's own dispatcher
+   *  session's `started` tasks, as descriptions. `undefined` (every caller
+   *  until `main/ipc.ts` wires one) reads as `[]` for every repository. */
+  readonly startedTasks?: (repoId: RepoId) => readonly string[]
+  /** #265: the dispatcher's own `status()` — read fresh inside
+   *  `buildSnapshot()`, the same "never cached" rule `drain` above follows,
+   *  so a claim taken or released mid-session is reflected on the very next
+   *  snapshot. `undefined` (every caller until `main/ipc.ts` wires one)
+   *  reads as `[]`. */
+  readonly dispatchStatus?: () => readonly RepoDispatchStatus[]
 }
 
 export interface PipelineWatcher {
   readonly refresh: (request?: RefreshRequest) => Promise<BoardSnapshot>
   readonly snapshot: () => BoardSnapshot
   readonly stop: () => void
+  /** #265: re-reads `dispatchStatus()` onto the existing snapshot and pushes
+   *  it through `onSnapshot` — never a second `buildSnapshot()` call, so the
+   *  dispatcher's own `onChange` (firing between ticks, as its state moves)
+   *  never produces a duplicate trajectory-record line or re-runs a poll.
+   *  `emittedAt` still advances, since this is a real, newly-observed state. */
+  readonly republish: () => void
 }
 
 function repoRefOf(entry: Extract<RepositoryEntry, { status: 'ready' }>): { readonly owner: string; readonly name: string } {
@@ -94,7 +123,14 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
   // One process-scoped ledger, this watcher's whole lifetime (#105) — a
   // restarted app gets a fresh one, so every in-flight item reads
   // `no-record` on the first tick after a restart, never a false reset.
-  const ledger = createDispatchLedger()
+  const ledger = params.ledger ?? createDispatchLedger()
+  // This app's own process-scoped mergeability-UNKNOWN memo (#265) — same
+  // lifetime and restart behaviour as `ledger` above.
+  const unknownStreaks = params.unknownStreaks ?? createUnknownStreaks()
+  // The app's own process-scoped refresh memo (#292) — same lifetime and
+  // restart behaviour as `ledger`/`unknownStreaks` above.
+  const refreshMemo = params.refreshMemo ?? createRefreshMemo()
+  const startedTasks = params.startedTasks ?? ((): readonly string[] => [])
   // The trajectory record's one appender for this watcher's whole lifetime
   // (#111) — injectable the same way `gh`/`git`/`sessionReader` already are,
   // so a test never touches a real filesystem for it.
@@ -120,6 +156,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     drain: drain(),
     nextWakeupAt: null,
     emittedAt: now().toISOString(),
+    dispatch: params.dispatchStatus?.() ?? [],
   }
 
   function ensureHealth(repoId: RepoId): RepositoryHealth {
@@ -161,12 +198,25 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     // is in `plan.ts`: `readyIds`/`cycleCapByRepo` are built from the same
     // `readyEntries`, so a miss here is a defect, not a runtime case.
     const cycleCapByRepo = new Map(readyEntries.map((entry) => [entry.id, entry.config.reviewCycleCap]))
+    const checkDispositionsByRepo = new Map(readyEntries.map((entry) => [entry.id, entry.config.checkDispositions]))
     const tick = state.repositories
       .filter((repository) => readyIds.has(repository.repoId))
       .map((repository) => {
         const reviewCycleCap = cycleCapByRepo.get(repository.repoId)
         if (reviewCycleCap === undefined) throw new Error(`no reviewCycleCap for ready repository ${String(repository.repoId)}`)
-        return planTick({ repository, ledger, nextDecisionAt: nextDueAt(ensureHealth(repository.repoId).github, now()), now, reviewCycleCap })
+        const checkDispositions = checkDispositionsByRepo.get(repository.repoId)
+        if (checkDispositions === undefined) throw new Error(`no checkDispositions for ready repository ${String(repository.repoId)}`)
+        return planTick({
+          repository,
+          ledger,
+          unknownStreaks,
+          nextDecisionAt: nextDueAt(ensureHealth(repository.repoId).github, now()),
+          now,
+          reviewCycleCap,
+          startedTasks: startedTasks(repository.repoId),
+          refreshMemo,
+          checkDispositions,
+        })
       })
 
     // The trajectory record's desktop-side twin (#111) — fire-and-forget,
@@ -184,7 +234,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     }
 
     const nextWakeupAt = stopped ? null : earliestDueAt().toISOString()
-    latest = { state, health: healthList, policy: DEFAULT_POLL_POLICY, tick, relay, drain: drain(), nextWakeupAt, emittedAt: now().toISOString() }
+    latest = { state, health: healthList, policy: DEFAULT_POLL_POLICY, tick, relay, drain: drain(), nextWakeupAt, emittedAt: now().toISOString(), dispatch: params.dispatchStatus?.() ?? [] }
     return latest
   }
 
@@ -317,6 +367,11 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       // The honest rendering of "no wakeup scheduled" (#62) — applied to the
       // cached snapshot directly, since a stopped watcher never rebuilds one.
       latest = { ...latest, nextWakeupAt: null }
+    },
+    republish(): void {
+      if (stopped) return
+      latest = { ...latest, dispatch: params.dispatchStatus?.() ?? [], emittedAt: now().toISOString() }
+      params.onSnapshot(latest)
     },
   }
 }

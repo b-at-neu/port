@@ -1,6 +1,7 @@
 ---
 name: implement
-description: Run pipeline stage 2 or 4 yourself, in your own session, for a ticket marked SESSION REQUIRED — one that cannot be handed to a dispatched agent because it touches a path the harness blocks subagents from editing. Resolves the stage from the item's labels, works in a dedicated worktree, and follows the existing impl-agent and revise-agent definitions unchanged. Manual only. Usage: /port:implement <issue-or-pr-number>
+description: Run pipeline stage 2 or 4 yourself, in your own session, for a ticket marked SESSION REQUIRED — one that cannot be handed to a dispatched agent because it touches a path the harness blocks subagents from editing. Resolves the stage from the item's labels, works in a dedicated worktree, and follows the existing impl-agent and revise-agent definitions unchanged. Manual only. Usage: /port:implement <issue number (or its pull request's)>
+argument-hint: "<issue number (or its pull request's)>"
 disable-model-invocation: true
 allowed-tools: Read, Edit, Write, Glob, Grep, Bash, AskUserQuestion
 ---
@@ -52,6 +53,17 @@ gh pr view <n> --repo <repo> --json labels,headRefName,baseRefName,title,body
 
   At `<labels.planApproved>` → **impl mode** (`${CLAUDE_PLUGIN_ROOT}/agents/impl-agent.md`). **Record the issue's assignee login** (`@me` if none) — the pull request must carry it.
 
+  **At `<labels.prOpened>`** (`<n>` is the ticket, not a pull request number — `gh pr view <n>` above found nothing at `<labels.needsRevision>` because `<n>` is not itself a pull request) — look up its open pull request:
+
+  ```bash
+  gh pr list --repo <repo> --state open --base <integration> --json number,headRefName,body,labels
+  ```
+
+  filtered (by `--jq`, or by reading the result) to a pull request whose `body` contains `Closes #<n>` (case-insensitive) or whose `headRefName` starts with `<n>-`.
+
+  - **Exactly one, at `<labels.needsRevision>`** → **revise mode** on that pull request. The worktree stays `impl-<pr>` (its own number), never `impl-<n>` — that name is reserved for the ticket's own impl-mode worktree, and the two must never collide.
+  - **Zero, or two or more** → stop, name each pull request found by its own number, change nothing: `#<n> has no single open pull request at needs revision (found: …). Nothing was changed.`
+
 - Anything else → stop, report the current labels, change nothing: `#<n> is not awaiting an operator (labels: …). Nothing was changed.`
 
 **If the item carries the trigger label but its marker slot does not hold `SESSION REQUIRED`** (see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Detection" — a mention elsewhere in the body, in prose or inline code, does not count), ask first (AskUserQuestion): *"#412 isn't marked `SESSION REQUIRED`, so the cockpit will dispatch an agent for it too. Proceed anyway / Cancel."* A double dispatch — cockpit and operator on the same item — is the hazard this guards.
@@ -61,6 +73,8 @@ Then report the resolved mode, worktree path, and branch **before** the slow ste
 ## 4. Create the worktree
 
 Never work in the main checkout: editing configuration from the session using it mutates your live setup mid-task. Never touch another worktree, and never `--force`.
+
+**On Windows only, before the first `git worktree add` below:** `git config --type=bool --get core.longpaths` must print `true`. If it does not, ask the operator, then run `git config core.longpaths true` — this is the repository's own config, so every worktree shares it, including the ones the harness creates. Without it, git can neither check out nor later remove a path over 260 characters, which a populated `node_modules` under `.claude/worktrees/` can exceed.
 
 **impl mode** — branch straight off the integration branch; this replaces the agent's checkout-then-rebase, so it is the one route that would otherwise ignore a resume branch and then need a force push to reconcile. Run the same resume-branch lookup `impl-agent.md`'s Pre-flight does before creating anything:
 
@@ -81,11 +95,11 @@ git worktree add --detach .claude/worktrees/impl-<n> origin/<branch>
 git worktree add -b <n>-ticket-name-in-kebab-case .claude/worktrees/impl-<n> origin/<integration>
 ```
 
-**revise mode** — detached at the pull request's head, rebased onto its own base:
+**revise mode** — detached at the pull request's head, rebased onto its own base. Use the pull request's **own** number here, never the ticket's — `<pr>` is `<n>` itself when the operator named the pull request directly, or the number step 3's ticket lookup resolved when they named the ticket instead:
 
 ```bash
 git fetch origin
-git worktree add --detach .claude/worktrees/impl-<n> origin/<headRefName>
+git worktree add --detach .claude/worktrees/impl-<pr> origin/<headRefName>
 ```
 
 Then work inside the worktree and run each entry in `commands.bootstrap` in order. In revise mode, rebase onto the base branch from inside the worktree: `git rebase origin/<baseRefName>` — the pull request's **own** base, not an assumed one. In impl mode on an adopted branch, rebase onto the integration branch the same way: `git rebase origin/<integration>` — the same reachable-for-the-first-time rebase-conflict handling `impl-agent.md` states applies here too.
@@ -127,4 +141,4 @@ Per the agent file's own handoff step:
 - **impl** — issue `<labels.inProgress>` → `<labels.prOpened>`; pull request gets `<labels.readyForReview>`.
 - **revise** — pull request `<labels.revising>` → `<labels.readyForReview>`.
 
-The cockpit picks up review on its next tick. Finish by telling the operator the pull request URL, the labels applied, and that `/port:worktree-clean` reclaims `.claude/worktrees/impl-<n>` once it merges.
+The cockpit picks up review on its next tick. Finish by telling the operator the pull request URL, the labels applied, and that `/port:worktree-clean` reclaims the worktree (`.claude/worktrees/impl-<n>` in impl mode, `.claude/worktrees/impl-<pr>` in revise mode) once it merges.

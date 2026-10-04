@@ -52,7 +52,7 @@ Follow the shared **Operating rules (all stage agents)** in `${CLAUDE_PLUGIN_ROO
 - **One command per call.** No `;`, `&&`, `||`, `for`/`while`, `if`/`[`, subshells, multi-line scripts, or a pipe into a non-allowlisted binary. Never `sh -c '…'` or `bash -c '…'`.
 - **Start with an allowlisted binary, bare.** No `cd …` prefix and no `ENV=val` prefix — `GIT_EDITOR=true git …` misses `Bash(git *)`; use `git -c core.editor=true …`.
 - **Never allowlisted, in any repository** — `echo`, `cat`, `head`, `tail`, `cut`, `diff`, `which`, `tee`, `xargs`, `base64`, `jq`, `sed`, `awk`, `python3`, `node -e`, `perl`. A denial there means *use a tool*, not retry with different flags. Probing the host or the Claude install is never part of a stage's job; if you genuinely need an unlisted binary that is a `BLOCKED:`, not something to route around.
-- **Read, search, and list with Read, Grep, and Glob.** `grep`, `find`, `ls`, and `wc` *are* in the base allowlist, but the tools are cheaper and gitignore-aware. List a directory → **Glob**, scoped to source directories, never a root-level `**/*`; read or count a file → **Read**; search or test for text → **Grep**.
+- **Read, search, and list with Read, Grep, and Glob.** `grep`, `find`, `ls`, and `wc` *are* in the base allowlist, but the tools are cheaper and gitignore-aware. List a directory → **Glob**, scoped to source directories, never a root-level `**/*`; read or count a file → **Read**; search or test for text → **Grep**. **A session with no Grep or Glob tool** searches through Bash instead — `grep` for Grep, `find` for Glob, one bare command each, same scoping.
 - **Quote every path argument**, cwd-relative with forward slashes. **Write files with Write and Edit** — never a redirect or heredoc; delete tracked files with `git rm "<path>"`.
 - **Sanctioned recipes** for what the tools cannot reach:
   - filter JSON → `gh … --json … --jq '…'`, never `| jq` or a piped interpreter.
@@ -110,16 +110,16 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
 ## Work
 
-1. **Read the latest review — or the withdrawn check.** Reviews are real GitHub pull request reviews — read the most recent one's body **and** its inline comments, and the pull request's comments for a newer `## Approval withdrawn`:
+1. **Read the latest review — or the withdrawn check — or the operator's own request.** Reviews are real GitHub pull request reviews — read the most recent one's body **and** its inline comments, and the pull request's comments for a newer `## Approval withdrawn` or `## Changes requested`:
 
    ```bash
    gh pr view <pr-number> --repo <repo> --json reviews,comments --jq '{review: (.reviews // [] | max_by(.submittedAt) | {body, submittedAt}), comments: (.comments // [] | map({body, createdAt}))}'
    gh api repos/<repo>/pulls/<pr-number>/comments --jq '.[] | "\(.path):\(.line) — \(.body)"'
    ```
 
-   **Mode is decided by whichever of two signals is newest** — the latest `## Code Review` and `## Approval withdrawn` comment:
+   **Mode is decided by whichever of three signals is newest** — the latest `## Code Review`, `## Approval withdrawn`, and `## Changes requested` comment:
 
-   **Check-fix mode.** When the newest `## Approval withdrawn` comment is newer than the newest `## Code Review`, the work item is the named check, not a findings list:
+   **Check-fix mode.** When the newest `## Approval withdrawn` comment is the newest of the three, the work item is the named check, not a findings list:
 
    ```bash
    gh run list --repo <repo> --branch <headRefName> --json databaseId,name,conclusion,workflowName
@@ -127,6 +127,15 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
    ```
 
    Read the failing check's log, fix the underlying cause, and push (step 4 onward) — there are no review threads to resolve. The revision note's detail line is `check <name> · <sha>` (step 7). **Never "fix" the excused approval-gate check** — its conclusion is a function of the pipeline's own labels, exactly as a quota-red deployment is infrastructure never to be chased.
+
+   **Operator-request mode.** When the newest `## Changes requested` comment is the newest of the three — the cockpit's `revise #N` route off an approved pull request — the work item is that comment's request text, applied **exactly**, and nothing beyond it:
+
+   - **Skip step 3 entirely** (there is no findings list) **and skip step 6 entirely** (there are no threads to resolve).
+   - **Commit subject:** `#<issue> address requested changes`.
+   - **Revision note detail line:** `fixed changes requested · <sha>` (step 7) — the existing `REVISION_DETAIL` pattern already accepts it.
+   - **`<n>` is the prior review count** (step 7), the same rule check-fix mode uses — no new review ran, so the count is unchanged.
+   - **No-op case:** if the requested change is already present at head, follow step 5's existing no-op path (`git status --porcelain` empty → skip the commit and push, report `no new commit (already present)`).
+   - **Two readings, no safe default.** If the request admits two reasonable but different implementations, do not guess: emit `BLOCKED:` naming both readings and the decision needed, leaving `<labels.revising>` in place for the relay loop to pick up the operator's answer — the same shape any other blocker uses.
 
    **Otherwise**, the latest review, titled `## Code Review — Cycle <n>`, is what you address — note its cycle.
 
@@ -162,9 +171,9 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
      If `<labels.revising>` is no longer present on the re-read, apply the label-cas contract's step 3 instead of issuing that edit. End with: `BLOCKED: rebase of <branch> onto origin/<base> needs <b> decision(s) — see the escalation comment.`
 
-   **Only now read standards** — before the rebase the checkout was not evidence of anything. When `docs.engineering` is set, read it. When `docs.design` is set and the ticket touches an interface, read it too. Read the worktree's `CLAUDE.md` if one is present, at the precedence this file's "standards-precedence" block states. **In both modes** — check-fix mode skips step 3 below entirely, but it still edits code, so it needs the same read.
+   **Only now read standards** — before the rebase the checkout was not evidence of anything. When `docs.engineering` is set, read it. When `docs.design` is set and the ticket touches an interface, read it too. Read the worktree's `CLAUDE.md` if one is present, at the precedence this file's "standards-precedence" block states. **In every mode** — check-fix mode and operator-request mode both skip step 3 below entirely, but both still edit code, so both need the same read.
 
-3. **Apply fixes** per the review's findings — **skip this step entirely in check-fix mode**, where step 1 already named the one thing to fix (a check). Fix **every finding flagged at this cycle's bar** — the review uses an escalating bar, so an early cycle includes Low and Nit; fix them rather than deferring. All should be issues **introduced in this pull request**. Skip a flagged item only if it is genuinely not an issue, and explain the skip. **Preexisting** findings of any severity: do not fix, but note them as suggested follow-up tickets. No scope creep beyond the review.
+3. **Apply fixes** per the review's findings — **skip this step entirely in check-fix mode and in operator-request mode**, where step 1 already named the one thing to fix (a check, or the operator's own request). Fix **every finding flagged at this cycle's bar** — the review uses an escalating bar, so an early cycle includes Low and Nit; fix them rather than deferring. All should be issues **introduced in this pull request**. Skip a flagged item only if it is genuinely not an issue, and explain the skip. **Preexisting** findings of any severity: do not fix, but note them as suggested follow-up tickets. No scope creep beyond the review.
 
 4. **Run the checks.** Work through `commands.checks` **in order**, each as its own Bash call — never prefixed with `cd`, never concatenated, never with an extra command appended: no `2>&1`, no pipe into `tail`/`head`/`grep` (#205 — the reporter prints one `ok` line or one `FAIL` line per failure, so there is nothing to truncate), and no expansion to an absolute path (the harness preamble's "use absolute file paths" is wrong for a `commands.*` invocation specifically — the allowlist entry is the repo-relative string, run it exactly as configured). For each entry: run its `run` command; if it fails and the entry has a `fix`, run `fix` and re-run; if it still fails, fix the underlying code.
 
@@ -180,11 +189,11 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
    git push --force-with-lease origin HEAD:<branch>
    ```
 
-   The push is by refspec from a detached HEAD, and force-with-lease because the branch was rebased. **Message format:** subject `#<issue-number> address review feedback`, under 80 characters, no trailing period, a co-authorship trailer naming the model from `models.revise` — the validator is authoritative on the exact shape. **When `commands.artifacts` is set**, run the `check commit` command above before every commit; a non-zero exit means rewrite `.temp/commit-msg.txt` and re-run it — never `git commit` past a failing check. Skip when `commands.artifacts` is null. Note the pushed SHA (`git rev-parse HEAD`) for the next step.
+   The push is by refspec from a detached HEAD, and force-with-lease because the branch was rebased. **Message format:** subject `#<issue-number> address review feedback` — or, in **operator-request mode**, `#<issue-number> address requested changes` — under 80 characters, no trailing period, a co-authorship trailer naming the model from `models.revise` — the validator is authoritative on the exact shape. **When `commands.artifacts` is set**, run the `check commit` command above before every commit; a non-zero exit means rewrite `.temp/commit-msg.txt` and re-run it — never `git commit` past a failing check. Skip when `commands.artifacts` is null. Note the pushed SHA (`git rev-parse HEAD`) for the next step.
 
-   **No-op case:** if step 3 skipped every flagged item as genuinely not an issue, there is nothing staged. **`git status --porcelain` empty** → skip the commit and the push entirely — report `no new commit (every finding skipped)` rather than committing nothing or forcing an empty commit.
+   **No-op case:** if step 3 skipped every flagged item as genuinely not an issue, there is nothing staged — or, in operator-request mode, the requested change is already present at head. **`git status --porcelain` empty** → skip the commit and the push entirely — report `no new commit (every finding skipped)`, or `no new commit (already present)` in operator-request mode, rather than committing nothing or forcing an empty commit.
 
-6. **Resolve the addressed review threads** so they do not block merge — **skip this step entirely in check-fix mode**, where there are no threads to resolve. Inline comments live on **threads** that only a GraphQL mutation can resolve. The query takes owner and name **separately**:
+6. **Resolve the addressed review threads** so they do not block merge — **skip this step entirely in check-fix mode and in operator-request mode**, where there are no threads to resolve. Inline comments live on **threads** that only a GraphQL mutation can resolve. The query takes owner and name **separately**:
 
    ```bash
    # List unresolved threads, with the finding ID in each first comment:
@@ -197,7 +206,7 @@ Compare-and-swap: the pre-flight read above is the immediately-preceding read fo
 
    Match threads to findings by the **finding ID** (`R<c>-<id>`) the review agent put in each inline comment. **Resolve only what you actually fixed** — a genuinely-skipped thread gets a one-line reason and stays open.
 
-7. **Post one short revision note**, or none. The resolved threads are the log, so do not re-summarize findings. Write `.temp/revision-<pr>.md` — the validator is authoritative on the exact shape (heading `## Revision — Cycle <n>` plus one `fixed … · skipped … · <sha>` line, or `check <name> · <sha>` in check-fix mode). Append `· rebase: <file> (<strategy>)` for each reapplied or newly auto-resolved conflict, and `· decisions: D1 B, D2 C` for any recorded rebase decisions step 1b applied. A hunk whose recorded decision no longer matched gets its own one-line note (`D1 dropped — hunk no longer present`). No Fixed, Skipped, or Preexisting sections — those live on the threads. A preexisting issue worth tracking gets a one-line `follow-up:` note here, or a new issue. `<n>` is the cycle of the review you addressed, or — in check-fix mode — the cycle whose approval was withdrawn (the count of prior reviews, unchanged — no new review happened).
+7. **Post one short revision note**, or none. The resolved threads are the log, so do not re-summarize findings. Write `.temp/revision-<pr>.md` — the validator is authoritative on the exact shape (heading `## Revision — Cycle <n>` plus one `fixed … · skipped … · <sha>` line, `check <name> · <sha>` in check-fix mode, or `fixed changes requested · <sha>` in operator-request mode). Append `· rebase: <file> (<strategy>)` for each reapplied or newly auto-resolved conflict, and `· decisions: D1 B, D2 C` for any recorded rebase decisions step 1b applied. A hunk whose recorded decision no longer matched gets its own one-line note (`D1 dropped — hunk no longer present`). No Fixed, Skipped, or Preexisting sections — those live on the threads. A preexisting issue worth tracking gets a one-line `follow-up:` note here, or a new issue. `<n>` is the cycle of the review you addressed, or — in check-fix mode and in operator-request mode alike — the count of prior reviews, unchanged (no new review happened).
 
    **When `commands.artifacts` is set**, before `gh pr comment` run:
 

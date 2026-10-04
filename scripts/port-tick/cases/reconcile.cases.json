@@ -101,6 +101,51 @@
       "expected": []
     },
     {
+      "function": "ticketsByPullRequest",
+      "name": "#281 — linked via Closes only: branch is null when the branch is unprefixed",
+      "input": {
+        "prs": [{ "number": 100, "baseRefName": "dev", "body": "Closes #40", "headRefName": "some-branch" }],
+        "integration": "dev"
+      },
+      "expected": { "100": { "issue": 40, "branch": null } }
+    },
+    {
+      "function": "ticketsByPullRequest",
+      "name": "#281 — linked via the branch's leading N- only",
+      "input": {
+        "prs": [{ "number": 101, "baseRefName": "dev", "body": "no closing line here", "headRefName": "41-fix-thing" }],
+        "integration": "dev"
+      },
+      "expected": { "101": { "issue": 41, "branch": "41-fix-thing" } }
+    },
+    {
+      "function": "ticketsByPullRequest",
+      "name": "#281 — Closes and the branch's leading N- agree",
+      "input": {
+        "prs": [{ "number": 102, "baseRefName": "dev", "body": "Closes #42", "headRefName": "42-fix" }],
+        "integration": "dev"
+      },
+      "expected": { "102": { "issue": 42, "branch": "42-fix" } }
+    },
+    {
+      "function": "ticketsByPullRequest",
+      "name": "#281 — Closes #1 plus a branch prefixed 2- names two issues, omitted",
+      "input": {
+        "prs": [{ "number": 103, "baseRefName": "dev", "body": "Closes #1", "headRefName": "2-x" }],
+        "integration": "dev"
+      },
+      "expected": {}
+    },
+    {
+      "function": "ticketsByPullRequest",
+      "name": "#281 — a release pull request with a foreign base is omitted",
+      "input": {
+        "prs": [{ "number": 104, "baseRefName": "main", "body": "Closes #43", "headRefName": "43-fix" }],
+        "integration": "dev"
+      },
+      "expected": {}
+    },
+    {
       "function": "duplicatePullRequests",
       "name": "Route 1 — #207 by branch prefix and #208 by Closes line both link #89, one duplicate",
       "input": {

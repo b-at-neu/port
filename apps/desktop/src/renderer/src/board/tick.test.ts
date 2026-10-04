@@ -6,9 +6,9 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../../../shared/repos'
 import type { RepositoryHealth } from '../../../shared/board/types'
 import { initialHealth } from '../../../shared/board/types'
-import type { TickActionable, TickClaim, TickHeld, TickReport } from '../../../shared/tick/types'
+import type { TickActionable, TickClaim, TickHeld, TickObservation, TickReport } from '../../../shared/tick/types'
 import type { DrainState } from '../../../shared/dispatch/types'
-import { clockLineCopy, cycleDetailCopy, drainLineFor, heldDetailCopy, repositoryLineCopy, stalledDetailCopy, uncheckedDetailCopy } from './tick'
+import { clockLineCopy, cycleDetailCopy, drainLineFor, heldDetailCopy, observationDetailCopy, repositoryLineCopy, stalledDetailCopy, uncheckedDetailCopy } from './tick'
 
 const NOW = new Date('2026-01-01T00:00:00.000Z')
 const OPEN: DrainState = { gate: 'open' }
@@ -18,7 +18,7 @@ function health(overrides: Partial<RepositoryHealth> = {}): RepositoryHealth {
 }
 
 function report(overrides: Partial<TickReport> = {}): TickReport {
-  return { repoId: 'repo-a' as RepoId, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: NOW.toISOString(), ...overrides }
+  return { repoId: 'repo-a' as RepoId, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: NOW.toISOString(), observations: [], ...overrides }
 }
 
 describe('clockLineCopy', () => {
@@ -93,6 +93,19 @@ describe('repositoryLineCopy', () => {
     })
     expect(repositoryLineCopy(rep, draining)).toBe('o/a — draining: 2 would dispatch, held back (plan #105, impl #112) · Liveness: nothing in flight.')
   })
+
+  it('#265: "would dispatch" becomes "dispatched" when this app owns dispatch for the repository', () => {
+    const rep = report({ actionable: [{ number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null }] })
+    expect(repositoryLineCopy(rep, OPEN, 'app')).toBe('o/a — dispatched impl #52 · Liveness: nothing in flight.')
+    expect(repositoryLineCopy(rep, OPEN, 'cockpit')).toBe('o/a — would dispatch impl #52 · Liveness: nothing in flight.')
+    expect(repositoryLineCopy(rep, OPEN)).toBe('o/a — would dispatch impl #52 · Liveness: nothing in flight.')
+  })
+
+  it('#265: draining still says "would dispatch", even when this app owns dispatch', () => {
+    const draining: DrainState = { gate: 'draining', reason: 'operator', since: '2026-01-01T00:00:00Z' }
+    const rep = report({ actionable: [{ number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null }] })
+    expect(repositoryLineCopy(rep, draining, 'app')).toBe('o/a — draining: 1 would dispatch, held back (impl #52) · Liveness: nothing in flight.')
+  })
 })
 
 describe('drainLineFor', () => {
@@ -166,6 +179,23 @@ describe('heldDetailCopy', () => {
     const held: TickHeld = { number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } }
     expect(heldDetailCopy(held)).toBe('#157 would escalate to needs human — the latest review already covers the current head.')
   })
+
+  it('#292: owner "app" reads cycle-cap and zero-diff in the present tense, since this app is the one escalating', () => {
+    const capped: TickHeld = { number: 204, kind: 'pull-request', trigger: 'needsRevision', reason: 'cycle-cap', contention: null, escalation: { kind: 'cycle-cap', count: 5, cap: 5 } }
+    expect(heldDetailCopy(capped, 'app')).toBe('#204 escalating to needs human — cycle 5 reached the cap of 5.')
+    expect(heldDetailCopy(capped, 'cockpit')).toBe('#204 would escalate to needs human — cycle 5 reached the cap of 5.')
+
+    const zeroDiff: TickHeld = { number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } }
+    expect(heldDetailCopy(zeroDiff, 'app')).toBe('#157 escalating to needs human — the latest review already covers the current head.')
+    expect(heldDetailCopy(zeroDiff, 'cockpit')).toBe('#157 would escalate to needs human — the latest review already covers the current head.')
+  })
+
+  it('#292: a conflicting hold reads as this app actively refreshing it, instead of naming the cockpit\'s sweep', () => {
+    const held: TickHeld = { number: 88, kind: 'pull-request', trigger: 'readyForReview', reason: 'conflicting', contention: null, escalation: null }
+    expect(heldDetailCopy(held, 'app')).toBe('#88 conflicts — this app is refreshing it (rebase + force-push).')
+    expect(heldDetailCopy(held, 'cockpit')).toBe("#88 held — GitHub reports merge conflicts. The cockpit's refresh sweep rebases it; this app doesn't.")
+    expect(heldDetailCopy(held)).toBe("#88 held — GitHub reports merge conflicts. The cockpit's refresh sweep rebases it; this app doesn't.")
+  })
 })
 
 describe('uncheckedDetailCopy', () => {
@@ -202,5 +232,32 @@ describe('stalledDetailCopy', () => {
   it('matched and session-required claims have no stalled detail at all', () => {
     expect(stalledDetailCopy({ ...base, class: 'matched' })).toBeNull()
     expect(stalledDetailCopy({ ...base, class: 'session-required' })).toBeNull()
+  })
+
+  it('#292: owner "app" reads a confirmed stall as this app resetting it, rather than asking the operator to retry', () => {
+    const confirmed: TickClaim = { ...base, class: 'stalled-confirmed', retryKey: 'readyForReview' }
+    expect(stalledDetailCopy(confirmed, 'app')).toBe('#146 reviewing — no agent, and this app dispatched it. Resetting to ready for review.')
+    expect(stalledDetailCopy(confirmed, 'cockpit')).toBe('#146 reviewing — no claim, and this app dispatched it. Retry re-applies "ready for review".')
+  })
+
+  it('#292: owner "app" makes no difference when there is no retry key to apply', () => {
+    const confirmed: TickClaim = { ...base, class: 'stalled-confirmed', retryKey: null }
+    expect(stalledDetailCopy(confirmed, 'app')).toBe('#146 reviewing — no claim, and this app dispatched it.')
+  })
+})
+
+describe('observationDetailCopy', () => {
+  it('names a deferred refresh as conflicting too, capped for this pass', () => {
+    const observation: TickObservation = { kind: 'refresh-deferred', number: 73, itemKind: 'pull-request' }
+    expect(observationDetailCopy(observation)).toBe('#73 conflicts too — refreshes are capped this poll; it goes next.')
+  })
+
+  it('every write-bearing kind has no detail line of its own here — it already has one from held/stalled above', () => {
+    expect(observationDetailCopy({ kind: 'liveness-reset', number: 1, itemKind: 'issue', inFlight: 'inProgress', retryKey: 'ready' })).toBeNull()
+    expect(observationDetailCopy({ kind: 'cycle-cap', number: 2, itemKind: 'pull-request', count: 5, cap: 5 })).toBeNull()
+    expect(observationDetailCopy({ kind: 'zero-diff', number: 3, itemKind: 'pull-request', count: 1, headRefOid: 'abc' })).toBeNull()
+    expect(observationDetailCopy({ kind: 'refresh', number: 4, itemKind: 'pull-request', sourceLabel: 'readyForReview', headRefOid: 'abc', count: 1 })).toBeNull()
+    expect(observationDetailCopy({ kind: 'refresh-stuck', number: 5, itemKind: 'pull-request', sourceLabel: 'readyForReview', reason: 'same-sha', sha: 'abc', count: 2 })).toBeNull()
+    expect(observationDetailCopy({ kind: 'withdraw-approval', number: 6, itemKind: 'pull-request', red: [], headRefOid: 'abc' })).toBeNull()
   })
 })

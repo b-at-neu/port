@@ -4,7 +4,7 @@
 
 ## The decision
 
-**Split ownership by what authorises the write, not by repository.** The cockpit keeps every write a *machine observation* authorises — liveness resets, escalations, approval withdrawal, refresh — because it is the only thing that observes them. A *human decision* write is transferred, scope by scope, through a durable claim file that an external gate owner writes and only a human releases. Exactly one scope needs the transfer today: `plan-gate`. It is the only divergent decision in this epic, and the only one the cockpit takes unprompted — `auto plan` swaps `plan review` → `plan approved` with no interaction, so there is no race window to narrow there; the cockpit simply always wins it.
+**Split ownership by what authorises the write, not by repository.** Every write a *machine observation* authorises — liveness resets, cycle-cap/zero-diff escalation, approval withdrawal, the refresh sweep — is made by whichever side's own tick actually observed it: the cockpit by default, or the app itself while it holds the `dispatch` claim (#292, extending #265's own dispatch-call transfer to these four writes too) — liveness resets stay the one exception, since each side only ever resets an item its own dispatch record names, never the other's. A *human decision* write is transferred, scope by scope, through a durable claim file that an external gate owner writes and only a human releases. Exactly one scope needs that transfer today: `plan-gate`. It is the only divergent decision in this epic, and the only one the cockpit takes unprompted — `auto plan` swaps `plan review` → `plan approved` with no interaction, so there is no race window to narrow there; the cockpit simply always wins it.
 
 ## Why not the other three
 
@@ -24,17 +24,18 @@ Every write the cockpit makes today, classified:
 | `pause`, `resume`, `retry`, `stop #N`, `gate #N`, `refresh #N` | human | either — convergent |
 | drain, `stop #N`, halt (the desktop app's own dispatch gate, #110) | human | either — convergent, but scoped to the app: draining stands the app's own dispatcher down, never the cockpit's |
 | removing `needsHuman` (`unblock #N`) | human, guarded | cockpit only — see "Risks" below |
-| liveness reset, usage-limit park | machine observation | cockpit only |
-| cycle-cap and zero-diff escalation to `needsHuman` | machine observation | cockpit only |
-| approval withdrawal on a red check | machine observation | cockpit only |
-| refresh sweep adding `refreshBranch` | machine observation | cockpit only |
-| dispatch | machine | cockpit only, for the whole of this epic |
+| liveness reset | machine observation | whichever side's dispatch record names the item |
+| usage-limit park | machine observation | cockpit only |
+| cycle-cap and zero-diff escalation to `needsHuman` | machine observation | the app under a `dispatch` claim, else the cockpit (#292) |
+| approval withdrawal on a red check | machine observation | the app under a `dispatch` claim, else the cockpit (#292) |
+| refresh sweep adding `refreshBranch` | machine observation | the app under a `dispatch` claim, else the cockpit (#292) |
+| dispatch | operator action, taking/releasing the `dispatch` claim | the app under a `dispatch` claim, else the cockpit (#265) |
 
 **"Either — convergent" is safe without exclusion.** Both writers reach the same label state, and the cockpit re-derives everything from live labels each tick, so a duplicate write is a no-op. The one residual is the pause/dispatch race, and it is not silenced — it is presented (`dispatch-overtook-pause`, below).
 
 Answering the ticket's three problem bullets against this table:
 
-- **A duplicated dispatch.** The UI does not dispatch anywhere in this epic, so an approval in the UI makes the cockpit's next tick dispatch exactly once. Dispatch becomes two-writer only at #105/#106 — that is deferred, not solved, by this decision.
+- **A duplicated dispatch.** Within this ticket's own scope (#90–#96), the UI does not dispatch at all, so an approval in the UI makes the cockpit's next tick dispatch exactly once. #265 is what makes dispatch itself a second writer, and the `dispatch` claim — the same coordination shape this section already establishes for `plan-gate` — is what prevents both writers from launching the same `Agent()` call: at most one side holds it at a time, and the guard hook denies the `Agent` call on whichever side does not.
 - **A stale announced set.** Already closed by the tick collapse: the announced set is `.temp/tick-state.md`'s `Announced approved`, re-verified every tick against a live per-number `pullRequest(number:)` alias and dropped once the state is no longer `OPEN` (`SKILL.md` → "Merged-pull-request reconciliation"). Neither writer may merge, so no coordination is needed here.
 - **A same-window double write.** Never write from a list read; re-read the single item authoritatively immediately before writing. GitHub has no compare-and-set on labels, so this narrows the window to one round trip and does not close it — the claim below is what prevents the collision, and read-verify-write is what makes the losing writer abort instead of clobbering.
 
@@ -46,7 +47,7 @@ Answering the ticket's three problem bullets against this table:
 {
   "repo": "b-at-neu/port",
   "owner": "port-desktop",
-  "scopes": ["plan-gate"],
+  "scopes": ["plan-gate", "dispatch"],
   "claimedAt": "2026-09-05T14:02:11Z"
 }
 ```
@@ -55,14 +56,16 @@ Answering the ticket's three problem bullets against this table:
 | --- | --- | --- |
 | `repo` | the `<repo>` slug this claim is about | a value that is not this repository's `repo` reads as **absent** — a positive determination, not ambiguity, the same rule `.temp/tick-state.md`'s `Repo` header already follows |
 | `owner` | free text, for the cockpit's report only | **never** a pid, port, or heartbeat: nothing in this file may be read as liveness (`docs/ENGINEERING.md` §4) |
-| `scopes` | the claimed scopes | one recognized value today, `plan-gate`; an unrecognized entry is reported, never silently ignored |
+| `scopes` | the claimed scopes | two recognized values, `plan-gate` and `dispatch` (#265) — independent of each other, taken and released separately; an unrecognized entry is reported, never silently ignored |
 | `claimedAt` | ISO 8601 | reported so the operator sees how long the claim has stood; **never** compared against a clock to expire it |
 
 **`plan-gate` denies the cockpit** adding or removing the resolved names for `planReview`, `planApproved`, and `planChangesRequested`. `autoPlan` is deliberately outside the set — the cockpit's opt-in path still sets it, and its auto-plan *swap* is already denied by `planApproved` being in the set.
 
-**Lifecycle.** A claim is created only by an explicit operator action in the app and released only by an explicit operator action or by deleting the file. **The cockpit never writes or deletes it** — the guard hook denies a write to that path from any caller it can see, exactly because a machine that can release its own constraint is the #138 failure again. Known gap, stated rather than tolerated: the hook only sees `Edit`/`Write`/`NotebookEdit` and the Bash allowlist, so a shell deletion through some future allowlisted binary is not covered.
+**`dispatch` (#265) denies the cockpit making an `Agent` call at all** — the app dispatches for this checkout instead. No label set to name, since the cockpit launches nothing else through that tool. **The claim moves three further writes too (#292):** the app also makes the cycle-cap/zero-diff escalation, the refresh sweep, and approval withdrawal while it holds `dispatch` — the cockpit's own tick runs none of the three while this scope is held or unreadable, reporting **Dispatch claimed** in their place. Liveness resets are the one exception that never moves: each side only resets an item its own dispatch record names.
 
-**Feasibility.** `plugins/port/hooks/lib/guard-rules.mjs`'s `gateClearAttempt` already tokenizes `gh issue edit` / `gh pr edit` quote-aware and reads `--remove-label` values against a configured label name, and `decide` already applies cockpit-class rules to a non-subagent caller; `agent-guard.mjs` already resolves `configRoot` and a base-repository root (`git rev-parse --git-common-dir`) for `.agents/`. The claim rule is a fourth rule of the same shape, extended to `--add-label`, matching a set rather than one name. That rule, and the cockpit's own stand-down, are the follow-up's job — not this ticket's.
+**Lifecycle.** A claim is created only by an explicit operator action in the app and released only by an explicit operator action or by deleting the file — true of each scope independently. **The cockpit never writes or deletes the file** — the guard hook denies a write to that path from any caller it can see, exactly because a machine that can release its own constraint is the #138 failure again. Known gap, stated rather than tolerated: the hook only sees `Edit`/`Write`/`NotebookEdit` and the Bash allowlist, so a shell deletion through some future allowlisted binary is not covered.
+
+**Implemented.** `plugins/port/hooks/lib/guard-rules.mjs`'s `gateClearAttempt` tokenizes `gh issue edit` / `gh pr edit` quote-aware and reads `--remove-label` values against a configured label name, and `decide` applies cockpit-class rules to a non-subagent caller; `agent-guard.mjs` resolves `configRoot` and a base-repository root (`git rev-parse --git-common-dir`) for `.agents/`. The claim rule's two label-editing arms (`plan-gate`) and its `Agent`-call arm (`dispatch`) all live in `plugins/port/hooks/lib/claim-rules.mjs`; the cockpit's own stand-down is the prose half of the same rail, in `PIPELINE.md` and `pipeline/SKILL.md`/`PREFLIGHT.md`/`TICK-PROSE.md`.
 
 ## Detecting and presenting a conflict
 
@@ -100,9 +103,13 @@ Three rules govern every one of them: **abort, never resolve** · **show both re
 
   > **`.agents/gate-claim.json` can't be read.** Until it is valid or removed, this app and the cockpit both stand down from the plan gate — nothing will answer #148. Fix or delete the file.
 
-**The cockpit's stand-down report** (the follow-up implements it; the copy is decided here, so it is one line per tick and never a silent omission):
+**The cockpit's stand-down report** (implemented in `PREFLIGHT.md`/`SKILL.md`; one line per tick, never a silent omission):
 
 > 🖥️ **Plan gate claimed by `port-desktop`** since 2026-09-05T14:02Z. 2 issues wait at `plan review`: #148, #151 — I won't approve or bounce them. Release the claim in the app, or delete `.agents/gate-claim.json`, to take the gate back.
+
+**The same report for `dispatch`** (#265 — reported independently, since a repository can hold neither, either, or both scopes):
+
+> 🖥️ **Dispatch claimed by `port-desktop`** since 2026-09-05T14:02Z. 2 items are actionable this tick: plan #105, impl #52 — I won't launch a stage agent for either, and the app makes the refresh, escalation, and approval-withdrawal writes here. Release the claim in the app, or delete `.agents/gate-claim.json`, to take dispatch back.
 
 ## Failure directions
 
@@ -119,7 +126,7 @@ Every direction below is chosen deliberately; neither side of any of them is a d
 
 **`unblock #N` cannot move to the UI at all yet, and that bounds the epic.** The guard hook's gate rule authorises the removal from the *calling Claude session's own transcript* (`recentOperatorMessages`). The app has no transcript, so it structurally cannot clear `needsHuman` until it hosts a session itself (#99). Out of this epic's scope either way, but it should be known rather than discovered in #94.
 
-**One scope, not a framework.** `scopes` is an array with exactly one legal member today. That is the natural shape for the question and avoids a format migration when #93 or #94 wants one, but no scope is defined that no ticket implements (`docs/ENGINEERING.md` §7's rule against scaffolding).
+**Two scopes, not a framework.** `scopes` is an array with exactly two legal members, `plan-gate` and `dispatch` (#265) — the array shape was chosen precisely so adding the second was a data change, never a format migration, but no third scope is defined that no ticket implements (`docs/ENGINEERING.md` §7's rule against scaffolding).
 
 ## Follow-up
 

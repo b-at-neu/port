@@ -23,15 +23,23 @@ export function headingText(permission: PendingPermission): string {
   return `Claude wants to use ${permission.displayName ?? permission.toolName}`
 }
 
-/** `<repo> · <sessionKey>`, plus ` · subagent <agentId>` when a subagent
- *  asked, plus a `<index> of <total> waiting` counter once more than one
- *  request is queued across every hosted session. */
-export function contextLine(repoLabel: string, sessionKey: string, agentId: string | null, index: number, total: number): string {
-  const parts = [`${repoLabel} · ${sessionKey}`]
+/** `<sessionDisplayLabel> · started 14:02`, plus ` · subagent <agentId>` when
+ *  a subagent asked, plus a `<index> of <total> waiting` counter once more
+ *  than one request is queued across every hosted session. The raw
+ *  `sessionKey` is never shown — `sessionLabel` is `sessionDisplayLabel`'s
+ *  own output (`shared/hosting/label.ts`), the same label the rail shows. */
+export function contextLine(sessionLabel: string, started: string, agentId: string | null, index: number, total: number): string {
+  const parts = [`${sessionLabel} · started ${started}`]
   if (agentId !== null) parts.push(`subagent ${agentId}`)
   if (total > 1) parts.push(`${String(index)} of ${String(total)} waiting`)
   return parts.join(' · ')
 }
+
+/** #103: the warning row shown above the heading when the prompt's own
+ *  session differs from the one currently selected in Sessions — the
+ *  operator's only defence against answering a prompt meant for a session
+ *  they are not looking at. */
+export const OTHER_SESSION_LINE = '⚠ This request is from a different session than the one selected in Sessions.'
 
 export function decisionReasonLine(decisionReason: string): string {
   return `Why you're being asked: ${decisionReason}`

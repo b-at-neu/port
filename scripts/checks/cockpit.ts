@@ -52,6 +52,36 @@ export default async function ({ fail, ok }: Reporter) {
     } else {
       ok();
     }
+
+    // guard(#288): the revise #N route's own precondition phrase, and the
+    // comment-before-swap ordering inside its own bullet (so the request is
+    // durable even when the swap's own compare-and-swap then fails).
+    if (!text.includes("only when an operator's own message names that pull request and states the change it wants")) {
+      fail(
+        'cockpit-rails',
+        `${skillRel} is missing the revise #N precondition phrase "only when an operator's own message names that pull request and states the change it wants"`,
+      );
+    } else {
+      ok();
+    }
+
+    const reviseBulletStart = text.indexOf('**"revise #N:');
+    if (reviseBulletStart === -1) {
+      fail('cockpit-rails', `${skillRel} has no "revise #N: <the change>" conversational command bullet`);
+    } else {
+      const reviseBulletEnd = text.indexOf('\n- **"refresh #N"', reviseBulletStart);
+      const reviseBullet = reviseBulletEnd === -1 ? text.slice(reviseBulletStart) : text.slice(reviseBulletStart, reviseBulletEnd);
+      const commentIdx = reviseBullet.indexOf('gh pr comment');
+      const swapIdx = reviseBullet.indexOf('--remove-label "<labels.approved>"');
+      if (commentIdx === -1 || swapIdx === -1 || commentIdx > swapIdx) {
+        fail(
+          'cockpit-rails',
+          `${skillRel}'s "revise #N" bullet must post 'gh pr comment' before '--remove-label "<labels.approved>"', so the request survives a failed swap`,
+        );
+      } else {
+        ok();
+      }
+    }
   }
 
   // --- Liveness reset — the cockpit resets only what it can prove it dispatched
@@ -306,6 +336,46 @@ export default async function ({ fail, ok }: Reporter) {
           ok();
         }
       }
+    }
+  }
+
+  // --- Operator-facing copy names the ticket, never a bare PR number ---------
+  // guard(#281): the cockpit's own report prose mixing the issue (ticket)
+  // number and the pull request's own GitHub-assigned number for one piece of
+  // pipeline work — a bare `PR #<n>` is always the pull request's own
+  // number, silently divergent from the ticket number the rest of the report
+  // names, with nothing marking it as such.
+  {
+    const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
+    const pipelineRel = 'plugins/port/docs/PIPELINE.md';
+    const unionRel = 'plugins/port/skills/pipeline/*.md';
+    const skillText = readFileSync(join(root, skillRel), 'utf8');
+    const pipelineText = readFileSync(join(root, pipelineRel), 'utf8');
+    const unionText = pipelineSkillText();
+
+    const bareNumberMatch = /\bPR #/.exec(unionText);
+    if (bareNumberMatch) {
+      const line = unionText.slice(0, bareNumberMatch.index).split('\n').length;
+      fail('cockpit-numbering', `${unionRel} still carries a bare 'PR #' at or near line ${line} — operator-facing copy names the ticket number, never the pull request's own`);
+    } else {
+      ok();
+    }
+
+    if (!skillText.includes("names the ticket number, never the pull request's own")) {
+      fail('cockpit-numbering', `${skillRel} is missing the literal rule phrase 'names the ticket number, never the pull request's own'`);
+    } else {
+      ok();
+    }
+
+    if (pipelineText.includes('the command takes the pull request number')) {
+      fail('cockpit-numbering', `${pipelineRel} still carries the stale caveat 'the command takes the pull request number' — /port:implement now resolves a ticket to its pull request (#281)`);
+    } else {
+      ok();
+    }
+    if (unionText.includes('the command takes the pull request number')) {
+      fail('cockpit-numbering', `${unionRel} still carries the stale caveat 'the command takes the pull request number' — /port:implement now resolves a ticket to its pull request (#281)`);
+    } else {
+      ok();
     }
   }
 }

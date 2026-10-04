@@ -7,6 +7,8 @@ import { resolveVocabulary } from '../../shared/labels/vocabulary'
 import type { RepoDiagnostic, RepoId, RepoProblem, RepositoryEntry, ResolvedRepoConfig, SchemaViolation } from '../../shared/repos'
 import { currentBranch, permissionsState, refsCarryingConfig } from './harness'
 import type { GitRunner } from './harness'
+import { resolveEffectiveConfig } from './effective'
+import type { PortResolved } from './effective'
 import { CONFIG_DEFAULTS, validateConfig } from './schema'
 
 export interface InspectDeps {
@@ -51,8 +53,9 @@ interface LooseConfig {
     readonly scope?: unknown
   }
   readonly reviewCycleCap?: unknown
-  readonly commands?: { readonly worktrees?: unknown }
+  readonly commands?: { readonly worktrees?: unknown; readonly budget?: unknown }
   readonly concurrency?: { readonly sharedFiles?: unknown; readonly overlapThreshold?: unknown }
+  readonly sessionRequiredPaths?: unknown
 }
 
 function asLooseConfig(value: unknown): LooseConfig {
@@ -140,20 +143,48 @@ export async function inspectRepository(path: string, deps: InspectDeps): Promis
   const reviewCycleCap = resolveField(cfg.reviewCycleCap, '/reviewCycleCap', violatedPaths, CONFIG_DEFAULTS.reviewCycleCap)
   const commands = {
     worktrees: resolveField(cfg.commands?.worktrees, '/commands/worktrees', violatedPaths, CONFIG_DEFAULTS.commands.worktrees),
+    budget: resolveField(cfg.commands?.budget, '/commands/budget', violatedPaths, CONFIG_DEFAULTS.commands.budget),
   }
   const concurrency = {
     sharedFiles: resolveField(cfg.concurrency?.sharedFiles, '/concurrency/sharedFiles', violatedPaths, CONFIG_DEFAULTS.concurrency.sharedFiles),
     overlapThreshold: resolveField(cfg.concurrency?.overlapThreshold, '/concurrency/overlapThreshold', violatedPaths, CONFIG_DEFAULTS.concurrency.overlapThreshold),
   }
-  const vocabulary = resolveVocabulary({ labels: cfg.labels, modules })
+  const sessionRequiredPaths = resolveField(cfg.sessionRequiredPaths, '/sessionRequiredPaths', violatedPaths, CONFIG_DEFAULTS.sessionRequiredPaths)
 
-  const config: ResolvedRepoConfig = { repo, owner: owner ?? '', name: name ?? '', branches, models, modules, reviewCycleCap, vocabulary, commands, concurrency }
+  // #300: fold a root CLAUDE.md's port-overrides block over the
+  // port-resolved values above — never a second, hand-rolled resolution.
+  // An unreadable CLAUDE.md or approval-check.yml fails the whole repository
+  // closed (effective-config-unreadable): either file can rename a label or
+  // change a gate, so this app refuses to act on it rather than silently
+  // running on port defaults for a block it could not actually read.
+  const portResolved: PortResolved = { branches, models, modules, reviewCycleCap, concurrency, sessionRequiredPaths }
+  const effective = await resolveEffectiveConfig(root, portResolved, cfg.labels ?? {})
+  if (!effective.ok) {
+    return problemEntry(root, effective.problem, branchDiagnostics)
+  }
+
+  const vocabulary = resolveVocabulary({ labels: cfg.labels, modules: effective.modules, overrides: effective.labelOverrides })
+
+  const config: ResolvedRepoConfig = {
+    repo,
+    owner: owner ?? '',
+    name: name ?? '',
+    branches: effective.branches,
+    models: effective.models,
+    modules: effective.modules,
+    reviewCycleCap: effective.reviewCycleCap,
+    vocabulary,
+    commands,
+    concurrency: effective.concurrency,
+    checkDispositions: effective.checkDispositions,
+    overrides: effective.applied,
+  }
 
   const diagnostics: RepoDiagnostic[] = [...branchDiagnostics]
   if (branchInfo.kind === 'detached') {
     diagnostics.push({ kind: 'detached-head', sha: branchInfo.sha })
-  } else if (branchInfo.kind === 'branch' && branchInfo.name !== branches.integration) {
-    diagnostics.push({ kind: 'off-integration-branch', branch: branchInfo.name, integration: branches.integration })
+  } else if (branchInfo.kind === 'branch' && branchInfo.name !== effective.branches.integration) {
+    diagnostics.push({ kind: 'off-integration-branch', branch: branchInfo.name, integration: effective.branches.integration })
   }
 
   const permissions = await permissionsState(root)
@@ -162,6 +193,10 @@ export async function inspectRepository(path: string, deps: InspectDeps): Promis
 
   if (nonRepoViolations.length > 0) {
     diagnostics.push({ kind: 'schema-violations', violations: nonRepoViolations })
+  }
+
+  for (const refused of effective.refused) {
+    diagnostics.push({ kind: 'override-refused', path: refused.path, line: refused.line, reason: refused.reason })
   }
 
   return { id: toRepoId(root), path: root, displayName: repo, status: 'ready', config, diagnostics }

@@ -62,6 +62,7 @@ export const REVIEW_HEADING = /^## Code Review — Cycle (\d+) · (approved|need
 export const REVISION_HEADING = /^## Revision — Cycle (\d+)$/;
 export const APPROVAL_WITHDRAWN_HEADING = '## Approval withdrawn';
 export const REBASE_REQUIRED_HEADING = '## Rebase required';
+export const CHANGES_REQUESTED_HEADING = '## Changes requested';
 export const SHA_RE = /\b[0-9a-f]{7,40}\b/;
 // `fixed <ids> · skipped <ids> · <sha>`, with either segment dropped when empty
 // (revise-agent.md), and an optional `· rebase: <file> (<strategy>)` after the
@@ -282,6 +283,35 @@ function checkShaAnnotated(heading, missingNoun) {
   };
 }
 
+/** `## Changes requested` (#288) — the cockpit's `revise #N` comment, posted
+ *  on an approved pull request before the label swap so the request is
+ *  durable even if the swap's compare-and-swap then fails. Three checks:
+ *  line 1 is exactly the heading; a 7-40 character hex SHA appears below it;
+ *  and at least one non-empty line below the heading is not the SHA itself —
+ *  the operator's request, never a SHA-only comment that forgot it. Unlike
+ *  `checkShaAnnotated`'s withdrawn/rebase-required pair, there is no
+ *  backtick-quoted fact to find beside the SHA — the request itself is free
+ *  text, so the test is simply "something besides the SHA is here". */
+function checkChangesRequested(text) {
+  const ls = lines(text);
+  const first = (ls[0] ?? '').trim();
+  if (first !== CHANGES_REQUESTED_HEADING) {
+    return fail(`line 1 must be exactly '${CHANGES_REQUESTED_HEADING}', got ${JSON.stringify(first)}`, `'${CHANGES_REQUESTED_HEADING}'`);
+  }
+  const rest = ls.slice(1);
+  const restText = rest.join('\n');
+  const shaMatch = SHA_RE.exec(restText);
+  if (!shaMatch) {
+    return fail(`'${CHANGES_REQUESTED_HEADING}' carries no 7-40 character hex SHA`, `'${CHANGES_REQUESTED_HEADING}' followed by a 7-40 character hex SHA`);
+  }
+  const sha = shaMatch[0];
+  const hasRequestText = rest.some((l) => l.trim() !== '' && !l.includes(sha));
+  if (!hasRequestText) {
+    return fail(`'${CHANGES_REQUESTED_HEADING}' carries only the SHA — no request text`, "a non-empty line besides the SHA (the operator's request, verbatim)");
+  }
+  return ok();
+}
+
 // One registry for both modes — kind -> { run, heading }, `heading` the
 // exported constant itself so the layer 1 pin can assert identity; `null`
 // marks the two kinds `audit` matches by shape, not heading (#204).
@@ -292,6 +322,7 @@ export const CHECKS = {
   revision: { run: checkRevision, heading: REVISION_HEADING },
   withdrawn: { run: checkShaAnnotated(APPROVAL_WITHDRAWN_HEADING, 'check'), heading: APPROVAL_WITHDRAWN_HEADING },
   'rebase-required': { run: checkShaAnnotated(REBASE_REQUIRED_HEADING, 'base branch'), heading: REBASE_REQUIRED_HEADING },
+  'changes-requested': { run: checkChangesRequested, heading: CHANGES_REQUESTED_HEADING },
 };
 
 function runCheck(argv) {
@@ -507,11 +538,13 @@ function runAudit(argv) {
       }
     }
 
-    // --- Approval withdrawn / Rebase required ---
-    // Both are a fixed heading on line 1, a SHA below it, and a backtick-
-    // quoted fact beside the SHA (a check name, or a base branch) — one loop
-    // over the registry's string headings checks both, replacing the two
-    // near-identical blocks that only differed in which constant they named (#204).
+    // --- Approval withdrawn / Rebase required / Changes requested ---
+    // Each is a fixed heading on line 1 with a SHA below it — two of the
+    // three (withdrawn, rebase-required) also carry a backtick-quoted fact
+    // beside the SHA (a check name, or a base branch); the third (changes
+    // requested, #288) carries free-text request instead. One loop over the
+    // registry's string headings checks all three, replacing the near-
+    // identical blocks that only differed in which constant they named (#204).
     const shaAnnotated = Object.entries(CHECKS).filter(([, e]) => typeof e.heading === 'string');
     for (const c of pr.comments) {
       const first = (lines(c.body)[0] ?? '').trim();

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../../shared/repos'
-import { createDispatchLedger } from './ledger'
+import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from './ledger'
 import { classifyUnmatched } from './liveness'
 
 const REPO = 'repo-1' as RepoId
@@ -47,5 +47,76 @@ describe('createDispatchLedger', () => {
 
     ledger.record(REPO, 9)
     expect(ledger.rowFor(REPO, 9)).toEqual({ state: 'dispatched', resets: 1 })
+  })
+})
+
+describe('observeUnmatched', () => {
+  it('advances at most once per distinct readAt, memoizing a repeated snapshot', () => {
+    const ledger = createDispatchLedger()
+    ledger.record(REPO, 105)
+    const first = ledger.observeUnmatched(REPO, 105, '2026-01-01T00:00:00Z')
+    expect(first.class).toBe('suspect')
+    expect(ledger.rowFor(REPO, 105)).toEqual({ state: 'suspect', resets: 0 })
+
+    // Same read — never advances again, even though the row would now
+    // classify as 'reset' if re-run.
+    const repeated = ledger.observeUnmatched(REPO, 105, '2026-01-01T00:00:00Z')
+    expect(repeated).toEqual(first)
+    expect(ledger.rowFor(REPO, 105)).toEqual({ state: 'suspect', resets: 0 })
+
+    // A genuinely new read advances again.
+    const second = ledger.observeUnmatched(REPO, 105, '2026-01-02T00:00:00Z')
+    expect(second.class).toBe('reset')
+    expect(ledger.rowFor(REPO, 105)).toEqual({ state: 'reset', resets: 1 })
+  })
+
+  it('a null readAt classifies without ever advancing or memoizing', () => {
+    const ledger = createDispatchLedger()
+    ledger.record(REPO, 7)
+    expect(ledger.observeUnmatched(REPO, 7, null)).toEqual({ class: 'suspect', nextState: 'suspect', nextResets: 0 })
+    expect(ledger.rowFor(REPO, 7)).toEqual({ state: 'dispatched', resets: 0 })
+    expect(ledger.observeUnmatched(REPO, 7, null)).toEqual({ class: 'suspect', nextState: 'suspect', nextResets: 0 })
+  })
+})
+
+describe('createRefreshMemo', () => {
+  it('a never-set entry reads undefined', () => {
+    const memo = createRefreshMemo()
+    expect(memo.get(REPO, 1)).toBeUndefined()
+  })
+
+  it('set then get round-trips, scoped per repo', () => {
+    const memo = createRefreshMemo()
+    memo.set(REPO, 42, { sha: 'abc123', count: 1 })
+    expect(memo.get(REPO, 42)).toEqual({ sha: 'abc123', count: 1 })
+    expect(memo.get(OTHER, 42)).toBeUndefined()
+  })
+
+  it('clear removes the entry', () => {
+    const memo = createRefreshMemo()
+    memo.set(REPO, 42, { sha: 'abc123', count: 1 })
+    memo.clear(REPO, 42)
+    expect(memo.get(REPO, 42)).toBeUndefined()
+  })
+})
+
+describe('createUnknownStreaks', () => {
+  it('a never-recorded item reads 0', () => {
+    const streaks = createUnknownStreaks()
+    expect(streaks.get(REPO, 1)).toBe(0)
+  })
+
+  it('set then get round-trips, scoped per repo', () => {
+    const streaks = createUnknownStreaks()
+    streaks.set(REPO, 42, 1)
+    expect(streaks.get(REPO, 42)).toBe(1)
+    expect(streaks.get(OTHER, 42)).toBe(0)
+  })
+
+  it('clear resets back to 0', () => {
+    const streaks = createUnknownStreaks()
+    streaks.set(REPO, 42, 1)
+    streaks.clear(REPO, 42)
+    expect(streaks.get(REPO, 42)).toBe(0)
   })
 })

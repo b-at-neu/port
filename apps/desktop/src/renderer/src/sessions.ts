@@ -65,6 +65,34 @@ function buildAgentRow(agent: AgentRecord, sessionId: string): HTMLElement {
   return row
 }
 
+/** #103: only a repository-root session row (`worktreePath === null`) gets
+ *  Resume/Fork — the SDK resolves a session by `cwd`, and a hosted session
+ *  always starts at the repository root, so resuming a worktree session
+ *  would fail. */
+function buildResumeForkButtons(session: SessionRecord): HTMLElement | null {
+  if (session.repoId === null || session.worktreePath !== null) return null
+  const wrapper = document.createElement('div')
+  wrapper.className = 'session-row__hosted-actions'
+
+  const resume = document.createElement('button')
+  resume.className = 'session-row__hosted-button'
+  resume.textContent = 'Resume'
+  resume.dataset.action = 'session-resume'
+  resume.dataset.sessionId = session.sessionId
+  resume.dataset.repoId = session.repoId
+  wrapper.appendChild(resume)
+
+  const fork = document.createElement('button')
+  fork.className = 'session-row__hosted-button'
+  fork.textContent = 'Fork'
+  fork.dataset.action = 'session-fork'
+  fork.dataset.sessionId = session.sessionId
+  fork.dataset.repoId = session.repoId
+  wrapper.appendChild(fork)
+
+  return wrapper
+}
+
 function buildSessionRow(session: SessionRecord, agentsById: ReadonlyMap<string, AgentRecord>): HTMLElement {
   const wrapper = document.createElement('div')
   wrapper.className = 'session-item'
@@ -84,6 +112,9 @@ function buildSessionRow(session: SessionRecord, agentsById: ReadonlyMap<string,
   ].filter((part): part is string => part !== null && part !== '')
   button.appendChild(text('span', 'session-row__meta', metaParts.join(' · ')))
   wrapper.appendChild(button)
+
+  const hostedActions = buildResumeForkButtons(session)
+  if (hostedActions !== null) wrapper.appendChild(hostedActions)
 
   if (session.agentIds.length > 0) {
     const agentsList = document.createElement('div')

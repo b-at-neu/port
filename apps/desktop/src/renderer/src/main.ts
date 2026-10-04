@@ -5,6 +5,9 @@ import './claim.css'
 import './gate.css'
 import './permission.css'
 import './search.css'
+import './session.css'
+import './session-rail.css'
+import './commands-strip.css'
 import type { AppInfo } from '../../shared/ipc'
 import type { RepoId, RepositoryEntry } from '../../shared/repos'
 import type { BoardSnapshot, GroupBy } from '../../shared/board/types'
@@ -28,7 +31,7 @@ import { changeSearchScope, openSearch, registerSearchRedraw, renderSearch, sear
 import { render as renderBoard } from './board/view'
 import type { BoardViewState } from './board/view'
 import { handleItemAction, pruneItemActionStates } from './board/actions'
-import { handleDrainToggle, handleHaltCancel, handleHaltClick } from './board/dispatch'
+import { handleDispatchClick } from './board/dispatch'
 import { handleRelayCopy, pruneRelayStates, relayKeyOf, setRelayAnswer, toggleRelayExpanded } from './board/relay'
 import type { OperatorAction } from '../../shared/actions/types'
 import type { LabelKey } from '../../shared/labels/vocabulary'
@@ -37,12 +40,14 @@ import { initClaim, openClaimDialog } from './claim/controller'
 import { initGate, openGateDialog, openReviewDialog } from './gate/controller'
 import { initPermissions } from './permission/controller'
 import { initRuntime } from './runtime'
+import { initSession, sessionsTabText } from './session/controller'
 
 const app = document.querySelector<HTMLDivElement>('#app')
 const runtimeStrip = document.querySelector<HTMLDivElement>('#runtime-strip')
 const nav = document.querySelector<HTMLDivElement>('#nav')
 const boardContainer = document.querySelector<HTMLDivElement>('#board-view')
 const reposContainer = document.querySelector<HTMLDivElement>('#repositories-view')
+const sessionContainer = document.querySelector<HTMLDivElement>('#session-view')
 
 /** Which screen is on top. `board` (#80) and `repos` are the nav bar's two
  *  tabs; `sessions` and `transcript` are #83's picker and viewer, reached
@@ -57,11 +62,14 @@ type View =
    *  the search screen (already in memory, no requery) when a hit opened
    *  this transcript. */
   | { readonly screen: 'transcript'; readonly sessionId: string; readonly agentId: string | null; readonly title: string; readonly from: 'sessions' | 'search'; readonly focusIndex: number | null }
+  /** #219: a hosted live session — its own nav tab, never nested under
+   *  'Repositories', since it renders independently of the repositories list. */
+  | { readonly screen: 'session' }
 
-/** Every screen except `board` lives under the 'Repositories' tab — drilling
- *  into a session or transcript never looks like it left that tab. */
-function tabFor(view: View): 'board' | 'repositories' {
-  return view.screen === 'board' ? 'board' : 'repositories'
+function tabFor(view: View): 'board' | 'repositories' | 'session' {
+  if (view.screen === 'board') return 'board'
+  if (view.screen === 'session') return 'session'
+  return 'repositories'
 }
 
 let state: RendererState = { status: 'loading', repositories: [] }
@@ -70,14 +78,15 @@ let view: View = { screen: 'board' }
 let boardState: BoardViewState = { status: 'loading', snapshot: null, groupBy: 'stage', refreshing: false, now: new Date() }
 let sessionsState: SessionsPickerState = { status: 'loading' }
 
+const TAB_LABELS: Readonly<Record<'board' | 'repositories', string>> = { board: 'Board', repositories: 'Repositories' }
 function drawNav(): void {
   if (!nav) return
   const active = tabFor(view)
   nav.textContent = ''
-  for (const tab of ['board', 'repositories'] as const) {
+  for (const tab of ['board', 'repositories', 'session'] as const) {
     const button = document.createElement('button')
     button.className = tab === active ? 'nav-tab nav-tab--active' : 'nav-tab'
-    button.textContent = tab === 'board' ? 'Board' : 'Repositories'
+    button.textContent = tab === 'session' ? sessionsTabText() : TAB_LABELS[tab]
     button.dataset.action = 'view-switch'
     button.dataset.view = tab
     nav.appendChild(button)
@@ -88,6 +97,9 @@ function drawViews(): void {
   const active = tabFor(view)
   if (boardContainer) boardContainer.hidden = active !== 'board'
   if (reposContainer) reposContainer.hidden = active !== 'repositories'
+  // The session container is hidden rather than cleared on a tab switch, so
+  // the stream keeps rendering in the background.
+  if (sessionContainer) sessionContainer.hidden = active !== 'session'
 }
 
 function drawRepositories(): void {
@@ -309,11 +321,12 @@ function toggleGroupBy(): void {
   drawBoard()
 }
 
-/** Switching tabs always lands on that tab's top screen — 'board', or the
- *  repositories list — rather than trying to preserve a drill-down (a
- *  session/transcript screen) across a tab the operator explicitly left. */
-function switchTab(tab: 'board' | 'repositories'): void {
-  view = tab === 'board' ? { screen: 'board' } : { screen: 'repos' }
+/** Switching tabs always lands on that tab's top screen — 'board', the
+ *  repositories list, or the session view — rather than trying to preserve a
+ *  drill-down (a sessions-picker/transcript screen) across a tab the
+ *  operator explicitly left. */
+function switchTab(tab: 'board' | 'repositories' | 'session'): void {
+  view = tab === 'board' ? { screen: 'board' } : tab === 'session' ? { screen: 'session' } : { screen: 'repos' }
   draw()
 }
 
@@ -420,7 +433,7 @@ app?.addEventListener('click', (event) => {
   if (!(target instanceof HTMLElement)) return
   const action = target.dataset.action
   if (action === 'view-switch' && target.dataset.view) {
-    switchTab(target.dataset.view as 'board' | 'repositories')
+    switchTab(target.dataset.view as 'board' | 'repositories' | 'session')
     return
   }
   if (action === 'add') void handleAdd()
@@ -448,9 +461,7 @@ app?.addEventListener('click', (event) => {
   else if (action === 'relay-toggle') handleRelayToggleClick(target)
   else if (action === 'relay-copy') handleRelayCopyClick(target)
   else if (action?.startsWith('item-')) handleItemActionClick(target)
-  else if (action === 'dispatch-toggle') handleDrainToggle(boardState.snapshot?.drain ?? { gate: 'open' }, drawBoard)
-  else if (action === 'dispatch-halt') handleHaltClick(drawBoard)
-  else if (action === 'dispatch-halt-cancel') handleHaltCancel(drawBoard)
+  else if (action?.startsWith('dispatch-')) handleDispatchClick(target, boardState.snapshot, drawBoard)
   else {
     const row = target.closest<HTMLElement>('.board-row')
     if (row?.dataset.url) window.open(row.dataset.url, '_blank')
@@ -484,3 +495,4 @@ if (app) initClaim(app)
 if (app) initGate(app)
 if (app) initPermissions(app)
 if (runtimeStrip) initRuntime(runtimeStrip)
+if (sessionContainer) initSession(sessionContainer, { show: () => switchTab('session'), onNavChange: drawNav })

@@ -14,12 +14,15 @@ max_turns: 40
 timeout_seconds: 900
 
 prompt: |
-  Read `plugins/port/agents/review-agent.md` end to end, in particular its
-  "standards-precedence" block and step 3's disposition-resolution
-  paragraph.
+  Dispatch the `port:review-agent` subagent and pass it the brief below,
+  verbatim, as its prompt. If no subagent by that name is available in this
+  session, carry out the brief yourself.
 
-  You are acting as review-agent for PR #77 in `example/widgets`. This
-  scaffold repository has no real PR #77 — treat the following as the
+  Brief:
+  Run your pipeline stage for #77. Follow your Pre-flight, Label swap,
+  Work, and Handoff steps exactly.
+
+  This scaffold repository has no real PR #77 — treat the following as the
   authoritative result of every `gh` call you would normally make, and do
   not run any `gh` command yourself.
 
@@ -66,6 +69,12 @@ scaffold_script: |
     "modules": { "approvalGate": false, "release": true, "scope": true },
     "reviewCycleCap": 5,
     "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
+  }
+  JSON
+
+  cat > .claude/settings.json <<'JSON'
+  {
+    "allow": ["Bash(gh *)", "Bash(git *)", "Edit(**)", "Write(**)"]
   }
   JSON
 

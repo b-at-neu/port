@@ -1,0 +1,72 @@
+{
+  "$comment": "Authoritative decision-case table for scripts/port-tick/checks.ts, asserted by scripts/checks/tick.ts (family 14, #292) and ported against by apps/desktop/src/main/tick/checks.test.ts.",
+  "cases": [
+    {
+      "function": "reduceRollup",
+      "name": "the latest entry per name wins",
+      "input": [
+        { "__typename": "CheckRun", "name": "build", "conclusion": "FAILURE", "status": "COMPLETED", "startedAt": "2026-01-01T00:00:00Z" },
+        { "__typename": "CheckRun", "name": "build", "conclusion": "SUCCESS", "status": "COMPLETED", "startedAt": "2026-01-02T00:00:00Z" }
+      ],
+      "expected": [{ "__typename": "CheckRun", "name": "build", "conclusion": "SUCCESS", "status": "COMPLETED", "startedAt": "2026-01-02T00:00:00Z", "t": "2026-01-02T00:00:00Z" }]
+    },
+    {
+      "function": "isConcluded",
+      "name": "a still-running CheckRun is not concluded",
+      "input": { "__typename": "CheckRun", "status": "IN_PROGRESS" },
+      "expected": false
+    },
+    {
+      "function": "rollupVerdict",
+      "name": "an empty rollup is pending",
+      "input": [{ "contexts": { "nodes": [] } }, {}],
+      "expected": { "pending": true, "red": [], "green": [], "excused": [], "unmatched": [] }
+    },
+    {
+      "function": "rollupVerdict",
+      "name": "a red blocking check",
+      "input": [{ "contexts": { "nodes": [{ "__typename": "CheckRun", "name": "build", "conclusion": "FAILURE", "status": "COMPLETED" }] } }, {}],
+      "expected": { "pending": false, "red": [{ "name": "build", "conclusion": "FAILURE" }], "green": [], "excused": [], "unmatched": [] }
+    },
+    {
+      "function": "rollupVerdict",
+      "name": "an excused infrastructure red check never blocks",
+      "input": [
+        {
+          "contexts": {
+            "nodes": [
+              { "__typename": "CheckRun", "name": "build", "conclusion": "FAILURE", "status": "COMPLETED" },
+              { "__typename": "CheckRun", "name": "approval-gate", "conclusion": "FAILURE", "status": "COMPLETED" }
+            ]
+          }
+        },
+        { "approval-gate": { "disposition": "infrastructure", "source": "approval-gate" } }
+      ],
+      "expected": {
+        "pending": false,
+        "red": [{ "name": "build", "conclusion": "FAILURE" }],
+        "green": [],
+        "excused": [{ "name": "approval-gate", "conclusion": "FAILURE", "source": "approval-gate" }],
+        "unmatched": []
+      }
+    },
+    {
+      "function": "rollupVerdict",
+      "name": "zero evidence — every entry excused",
+      "input": [
+        { "contexts": { "nodes": [{ "__typename": "CheckRun", "name": "approval-gate", "conclusion": "FAILURE", "status": "COMPLETED" }] } },
+        { "approval-gate": { "disposition": "infrastructure", "source": "approval-gate" } }
+      ],
+      "expected": { "pending": true, "zeroEvidence": true, "red": [], "green": [], "excused": [{ "name": "approval-gate", "conclusion": "FAILURE", "source": "approval-gate" }], "unmatched": [] }
+    },
+    {
+      "function": "rollupVerdict",
+      "name": "an unmatched disposition is reported, never satisfied",
+      "input": [
+        { "contexts": { "nodes": [{ "__typename": "CheckRun", "name": "build", "conclusion": "SUCCESS", "status": "COMPLETED" }] } },
+        { "deploy": { "disposition": "infrastructure", "source": "CLAUDE.md" } }
+      ],
+      "expected": { "pending": false, "red": [], "green": ["build"], "excused": [], "unmatched": ["deploy"] }
+    }
+  ]
+}

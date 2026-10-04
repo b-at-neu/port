@@ -3,9 +3,9 @@ import { join } from 'node:path';
 import { root, readJson, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// #98/#99: apps/desktop/src/main/hosting/ owns the full lifecycle of a
-// hosted session in the main process. Thirteen assertions pin its plan's
-// decisions mechanically, in the shape desktop-runtime.ts's and
+// #98/#99/#103/#265: apps/desktop/src/main/hosting/ owns the full lifecycle
+// of a hosted session in the main process. Seventeen assertions pin its
+// plan's decisions mechanically, in the shape desktop-runtime.ts's and
 // desktop-sessions.ts's own guards already use.
 export default async function ({ fail, ok }: Reporter) {
   const hostingDir = 'apps/desktop/src/main/hosting';
@@ -301,6 +301,189 @@ export default async function ({ fail, ok }: Reporter) {
       } else {
         ok();
       }
+    }
+  }
+
+  // --- project.ts's live projection goes through createDeriver ------------
+  // guard(#219): the live projector must reuse issue 83/issue 84's own
+  // pairing state, never a second implementation — the whole point of "one
+  // normalizer, one renderer" (the plan's own framing, and the fix for the
+  // issue 123 three-renderers trap).
+  {
+    const projectFile = allFiles.find((f) => relOf(f) === `${hostingDir}/project.ts`);
+    if (!projectFile) {
+      fail('desktop-hosting', `${hostingDir}/project.ts does not exist`);
+    } else {
+      const text = readFileSync(projectFile, 'utf8');
+      if (!/createDeriver/.test(text) || !/from\s+['"]\.\.\/sessions['"]/.test(text)) {
+        fail('desktop-hosting', `${hostingDir}/project.ts does not import 'createDeriver' from '../sessions'`);
+      } else {
+        ok();
+      }
+    }
+  }
+
+  // --- No second tool_use_id pairing implementation -----------------------
+  // guard(#219): `\btool_use_id\b` may appear in exactly one production file
+  // — `main/sessions/transcript-entries.ts`'s own deriver. A second match
+  // anywhere else under apps/desktop/src/ (project.ts included) would be a
+  // competing pairing implementation, the same trap the createDeriver guard
+  // above exists to prevent from the other direction.
+  {
+    const allowedFile = 'apps/desktop/src/main/sessions/transcript-entries.ts';
+    const prodFiles = allFiles.filter((f) => !relOf(f).endsWith('.test.ts'));
+    const stray = prodFiles.filter((f) => relOf(f) !== allowedFile).filter((f) => /\btool_use_id\b/.test(readFileSync(f, 'utf8')));
+    if (stray.length > 0) {
+      fail('desktop-hosting', `'tool_use_id' appears outside ${allowedFile}, in: ${stray.map(relOf).join(', ')} — a second pairing implementation is the three-renderers trap #123 flagged`);
+    } else {
+      ok();
+    }
+  }
+
+  // --- options.ts sets settingSources to exactly the three explicit sources ---
+  // guard(#101): an omitted or empty settingSources silently drops the
+  // repository's own permissions.deny, its enabledPlugins (so no installed
+  // port), and CLAUDE.md — this must never regress to the SDK's own
+  // unstated default.
+  {
+    const optionsFile = allFiles.find((f) => relOf(f) === `${hostingDir}/options.ts`);
+    if (!optionsFile) {
+      fail('desktop-hosting', `${hostingDir}/options.ts does not exist`);
+    } else {
+      const text = stripComments(readFileSync(optionsFile, 'utf8'));
+      if (!/SETTING_SOURCES[^=]*=\s*\[\s*'user'\s*,\s*'project'\s*,\s*'local'\s*\]/.test(text)) {
+        fail('desktop-hosting', `${hostingDir}/options.ts does not assign settingSources to exactly ['user', 'project', 'local']`);
+      } else if (!/settingSources/.test(text)) {
+        fail('desktop-hosting', `${hostingDir}/options.ts declares SETTING_SOURCES but never assigns it to 'settingSources'`);
+      } else {
+        ok();
+      }
+    }
+  }
+
+  // --- No production file under main/hosting/ passes a skills: option key ---
+  // guard(#101): a command runs as a typed slash command in the live
+  // session, never through the Skill-tool filter — `skills` only hides
+  // every unlisted skill and cannot target an already-running session, so
+  // this option key must never appear here at all. `ExpectedComponents`'s
+  // own `readonly skills: readonly string[]` field (plugin.ts/verify.ts) is
+  // an unrelated shape naming the same word — excluded by requiring the
+  // match not be a `readonly skills:` type declaration.
+  {
+    let found = false;
+    for (const f of hostingProdFiles) {
+      const rel = relOf(f);
+      const code = stripComments(readFileSync(f, 'utf8'));
+      for (const line of code.split('\n')) {
+        if (/\bskills\s*:/.test(line) && !/readonly\s+skills\s*:/.test(line)) {
+          found = true;
+          fail('desktop-hosting', `${rel} passes a 'skills:' option key — commands must run as typed slash commands, never through the Skill-tool filter`);
+        }
+      }
+    }
+    if (!found) ok();
+  }
+
+  // --- options.ts's dispatcher branch sets allowedTools to exactly ['Agent', 'SendMessage'] ---
+  // guard(#265): a third tool slipping into this list would let the
+  // dispatcher session do work of its own rather than only dispatch/relay —
+  // exactly what `DISPATCHER_INSTRUCTIONS` tells it never to do, now also
+  // enforced mechanically.
+  {
+    const optionsFile = allFiles.find((f) => relOf(f) === `${hostingDir}/options.ts`);
+    if (!optionsFile) {
+      fail('desktop-hosting', `${hostingDir}/options.ts does not exist`);
+    } else {
+      const text = stripComments(readFileSync(optionsFile, 'utf8'));
+      if (!/allowedTools:\s*\[\s*'Agent'\s*,\s*'SendMessage'\s*\]/.test(text)) {
+        fail('desktop-hosting', `${hostingDir}/options.ts does not set allowedTools to exactly ['Agent', 'SendMessage'] for the dispatcher role`);
+      } else {
+        ok();
+      }
+    }
+  }
+
+  // --- No production file under main/hosting/ names a tools: option key ----
+  // guard(#265): `tools:` restricts the built-in set for the whole session,
+  // including subagents — it would strip `Bash`/`Write` from the stage
+  // agents the dispatcher's own `Agent()` calls spawn. `allowedTools:` (the
+  // additive, narrower option this ticket actually uses) names the same word
+  // but is never mistaken for a bare `tools:` match: the pattern requires a
+  // non-word character (or line start) immediately before `tools`, which the
+  // camelCase `d` in `allowedTools` never is — unlike a whole-line exclusion,
+  // this still catches a stray `tools:` sharing a line with `allowedTools:`.
+  {
+    let found = false;
+    for (const f of hostingProdFiles) {
+      const rel = relOf(f);
+      const code = stripComments(readFileSync(f, 'utf8'));
+      for (const line of code.split('\n')) {
+        if (/(?:^|[^A-Za-z0-9_])tools\s*:/.test(line)) {
+          found = true;
+          fail('desktop-hosting', `${rel} passes a 'tools:' option key — this restricts the whole session's built-in set, including subagents; use 'allowedTools:' instead`);
+        }
+      }
+    }
+    if (!found) ok();
+  }
+
+  // --- capabilities.ts reads both supportedCommands() and supportedAgents() ---
+  // guard(#101): the inventory is read back, never assumed — a plugin flag
+  // silently doing nothing must surface as 'missing'/'unavailable', not an
+  // empty command strip nobody investigates.
+  {
+    const capabilitiesFile = allFiles.find((f) => relOf(f) === `${hostingDir}/capabilities.ts`);
+    if (!capabilitiesFile) {
+      fail('desktop-hosting', `${hostingDir}/capabilities.ts does not exist`);
+    } else {
+      const text = readFileSync(capabilitiesFile, 'utf8');
+      if (!/supportedCommands\(/.test(text) || !/supportedAgents\(/.test(text)) {
+        fail('desktop-hosting', `${hostingDir}/capabilities.ts does not call both supportedCommands() and supportedAgents()`);
+      } else {
+        ok();
+      }
+    }
+  }
+
+  // --- Only persist.ts names writeJsonFileAtomic or hosting.json under main/hosting/ ---
+  // guard(#103): hosting.json is recoverable app state, not an operator-
+  // curated list — a second writer could persist a set that skipped
+  // freeze() on quit, silently restoring a session the operator already
+  // closed.
+  {
+    const stray = hostingProdFiles.filter((f) => relOf(f) !== `${hostingDir}/persist.ts`).filter((f) => {
+      const code = stripComments(readFileSync(f, 'utf8'));
+      return code.includes('writeJsonFileAtomic') || code.includes('hosting.json');
+    });
+    if (stray.length > 0) {
+      fail('desktop-hosting', `writeJsonFileAtomic or 'hosting.json' appears outside ${hostingDir}/persist.ts, in: ${stray.map(relOf).join(', ')} — a second writer could skip freeze() on quit`);
+    } else {
+      ok();
+    }
+  }
+
+  // --- shared/hosting/label.ts's sessionDisplayLabel is declared once and used by both consumers ---
+  // guard(#103) / pin: shared/hosting/label.ts's sessionDisplayLabel ↔ its
+  // two consumers (renderer/src/session/rail.ts, renderer/src/permission/
+  // controller.ts). If the dialog and the rail named a session differently,
+  // the operator would have no reliable way to tell which session a prompt
+  // belongs to.
+  {
+    const declarations = allFiles.filter((f) => !relOf(f).endsWith('.test.ts')).filter((f) => /export function sessionDisplayLabel\(/.test(readFileSync(f, 'utf8')));
+    const declaredOnlyInLabel = declarations.length === 1 && relOf(declarations[0] ?? '') === `${sharedHostingDir}/label.ts`;
+    const railFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/renderer/src/session/rail.ts');
+    const controllerFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/renderer/src/permission/controller.ts');
+    const copyFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/renderer/src/permission/copy.ts');
+    if (!declaredOnlyInLabel) {
+      fail('desktop-hosting', `sessionDisplayLabel must be declared only in ${sharedHostingDir}/label.ts, found in: ${declarations.map(relOf).join(', ') || '(nowhere)'}`);
+    } else if (!railFile || !/sessionDisplayLabel/.test(readFileSync(railFile, 'utf8'))) {
+      fail('desktop-hosting', 'apps/desktop/src/renderer/src/session/rail.ts does not import sessionDisplayLabel');
+    } else if (!controllerFile || !/sessionDisplayLabel/.test(readFileSync(controllerFile, 'utf8'))) {
+      fail('desktop-hosting', 'apps/desktop/src/renderer/src/permission/controller.ts does not import sessionDisplayLabel');
+    } else if (!copyFile || /function contextLine\([^)]*sessionKey/.test(readFileSync(copyFile, 'utf8'))) {
+      fail('desktop-hosting', "apps/desktop/src/renderer/src/permission/copy.ts's contextLine must take no 'sessionKey' parameter");
+    } else {
+      ok();
     }
   }
 }

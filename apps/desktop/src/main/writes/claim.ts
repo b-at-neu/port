@@ -1,4 +1,4 @@
-// readGateClaim / takeGateClaim / releaseGateClaim over
+// readGateClaim / takeClaimScope / releaseClaimScope over
 // `<base repo root>/.agents/gate-claim.json` (docs/COORDINATION.md → "The
 // claim contract"), resolving the base root with the same
 // `git rev-parse --git-common-dir` helper `main/local/denials.ts` already
@@ -23,7 +23,7 @@ export type GitRunner = (args: readonly string[], cwd: string) => Promise<Comman
 type FileFailureKindExcludingUnparseable = Exclude<FileFailureKind, 'unparseable'>
 export const _kindsCoverFileFailureKind: AssertEqual<ClaimWriteFailureKind, FileFailureKindExcludingUnparseable> = true
 
-const RECOGNIZED_SCOPES: ReadonlySet<string> = new Set<ClaimScope>(['plan-gate'])
+const RECOGNIZED_SCOPES: ReadonlySet<string> = new Set<ClaimScope>(['plan-gate', 'dispatch'])
 
 interface ClaimFileShape {
   readonly repo?: unknown
@@ -119,16 +119,27 @@ function toClaimWriteFailureKind(kind: FileFailureKind): ClaimWriteFailureKind {
   return kind === 'unparseable' ? 'io' : kind
 }
 
-export interface TakeGateClaimParams extends ClaimDeps {
+export interface TakeClaimScopeParams extends ClaimDeps {
   readonly repo: string
   readonly owner: string
-  readonly scopes: readonly ClaimScope[]
+  readonly scope: ClaimScope
   readonly now?: () => Date
 }
 
-/** Created only by an explicit operator action in the app (#92 wires the
- *  button) — nothing here is called on any machine-observed condition. */
-export async function takeGateClaim(params: TakeGateClaimParams): Promise<ClaimWriteResult> {
+/**
+ * Read-modify-write, atomically: adds `scope` to whatever the file already
+ * holds, keeping every other scope — recognized or not — and the existing
+ * `claimedAt`, verbatim (so taking `dispatch` can never drop a held
+ * `plan-gate`, or vice versa). A new or repo-mismatched file starts fresh at
+ * `now()`. An unreadable file is overwritten with the one requested scope,
+ * discarding whatever malformed content was there — today's behaviour from
+ * before a second scope existed, now stated explicitly rather than merely
+ * implied by there being nothing else to preserve.
+ *
+ * Created only by an explicit operator action in the app (#92/#265 wire the
+ * buttons) — nothing here is called on any machine-observed condition.
+ */
+export async function takeClaimScope(params: TakeClaimScopeParams): Promise<ClaimWriteResult> {
   const pathOps = params.pathOps ?? defaultPathOps
   const now = params.now ?? (() => new Date())
   const path = await resolveClaimPath(params)
@@ -139,24 +150,58 @@ export async function takeGateClaim(params: TakeGateClaimParams): Promise<ClaimW
   const ensured = await ensureDirectory(pathOps.dirname(path))
   if (!ensured.ok) return { ok: false, kind: toClaimWriteFailureKind(ensured.kind), message: ensured.message, path }
 
-  const value = { repo: params.repo, owner: params.owner, scopes: params.scopes, claimedAt: now().toISOString() }
+  const current = await readGateClaim(params)
+  let scopes: string[]
+  let claimedAt: string
+  if (current.state === 'held') {
+    scopes = [...current.scopes, ...current.unknownScopes]
+    claimedAt = current.claimedAt
+  } else {
+    scopes = []
+    claimedAt = now().toISOString()
+  }
+  if (!scopes.includes(params.scope)) scopes = [...scopes, params.scope]
+
+  const value = { repo: params.repo, owner: params.owner, scopes, claimedAt }
   const written = await writeJsonFileAtomic(path, value)
   if (!written.ok) return { ok: false, kind: toClaimWriteFailureKind(written.kind), message: written.message, path }
   return { ok: true, path }
 }
 
-export type ReleaseGateClaimParams = ClaimDeps
+export interface ReleaseClaimScopeParams extends ClaimDeps {
+  readonly repo: string
+  readonly scope: ClaimScope
+}
 
-/** Released only by an explicit operator action or by deleting the file by
- *  hand — an already-absent claim is treated as success, since the caller's
- *  intent ("the claim should not exist") is already satisfied. */
-export async function releaseGateClaim(params: ReleaseGateClaimParams): Promise<ClaimWriteResult> {
+/**
+ * Read-modify-write: removes `scope`, keeping every other scope —
+ * recognized or not — verbatim, and deletes the file once none remain.
+ * Released only by an explicit operator action or by deleting the file by
+ * hand — an already-absent claim is treated as success, since the caller's
+ * intent ("the claim should not exist") is already satisfied. An unreadable
+ * file is deleted outright regardless of `scope`, the same "both today's
+ * behaviour" carve-out `takeClaimScope` documents.
+ */
+export async function releaseClaimScope(params: ReleaseClaimScopeParams): Promise<ClaimWriteResult> {
   const path = await resolveClaimPath(params)
+  const current = await readGateClaim(params)
 
-  const removed = await removeFile(path)
-  if (!removed.ok) {
-    if (removed.kind === 'not-found') return { ok: true, path }
-    return { ok: false, kind: toClaimWriteFailureKind(removed.kind), message: removed.message, path }
+  if (current.state === 'absent') return { ok: true, path }
+  if (current.state === 'unreadable') {
+    const removed = await removeFile(path)
+    if (!removed.ok && removed.kind !== 'not-found') return { ok: false, kind: toClaimWriteFailureKind(removed.kind), message: removed.message, path }
+    return { ok: true, path }
   }
+
+  const remaining = [...current.scopes, ...current.unknownScopes].filter((s) => s !== params.scope)
+  if (remaining.length === 0) {
+    const removed = await removeFile(path)
+    if (!removed.ok && removed.kind !== 'not-found') return { ok: false, kind: toClaimWriteFailureKind(removed.kind), message: removed.message, path }
+    return { ok: true, path }
+  }
+
+  const value = { repo: params.repo, owner: current.owner, scopes: remaining, claimedAt: current.claimedAt }
+  const written = await writeJsonFileAtomic(path, value)
+  if (!written.ok) return { ok: false, kind: toClaimWriteFailureKind(written.kind), message: written.message, path }
   return { ok: true, path }
 }

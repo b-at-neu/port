@@ -43,4 +43,42 @@ export default async function ({ fail, ok }: Reporter) {
     }
   }
   if (!violated) ok();
+
+  // --- The renderer never subscribes to the opaque session:event ---------
+  // guard(#219): `session:event` forwards the raw SDK envelope untouched
+  // (`message: unknown`) precisely so no renderer code narrows a 37-variant
+  // union on its own — #219's own live projector (main/hosting/project.ts)
+  // is the one place that narrows it, over `session:entries` instead.
+  {
+    let found = false;
+    for (const f of files) {
+      const rel = relOf(f);
+      const text = readFileSync(f, 'utf8');
+      if (/\bonSessionEvent\b/.test(text)) {
+        found = true;
+        fail('desktop-renderer', `${rel} names 'onSessionEvent' — the renderer must never subscribe to the opaque session:event; consume session:entries instead`);
+      }
+    }
+    if (!found) ok();
+  }
+
+  // --- The TranscriptEntry row builder is declared only in entry-rows.ts --
+  // guard(#219): the transcript view and the live session view share one
+  // row renderer over TranscriptEntry — a second declaration of it anywhere
+  // else under renderer/ is the issue 123 "three renderers" trap
+  // reappearing. Scoped to this exact signature, never a bare `buildRow` —
+  // board/rows.ts and worktrees.ts each already declare their own unrelated
+  // `buildRow` over a different row type.
+  {
+    const signature = /function buildRow\(entry:\s*TranscriptEntry\)/;
+    const declarations = files.filter((f) => signature.test(readFileSync(f, 'utf8')));
+    const declaredElsewhere = declarations.filter((f) => relOf(f) !== 'apps/desktop/src/renderer/src/entry-rows.ts');
+    if (declarations.length === 0) {
+      fail('desktop-renderer', 'no file under apps/desktop/src/renderer/ declares function buildRow(entry: TranscriptEntry) — entry-rows.ts should');
+    } else if (declaredElsewhere.length > 0) {
+      fail('desktop-renderer', `function buildRow(entry: TranscriptEntry) is declared outside entry-rows.ts, in: ${declaredElsewhere.map(relOf).join(', ')}`);
+    } else {
+      ok();
+    }
+  }
 }

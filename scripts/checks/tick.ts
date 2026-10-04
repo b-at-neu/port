@@ -11,12 +11,14 @@ async function importEngine(rel: string): Promise<any> {
 }
 
 export default async function ({ fail, note, ok }: Reporter) {
-  // --- Every decision case resolves, and the table covers all thirteen families
-  // guard(#203, #246, #220): a second implementation (apps/desktop's, when issue
-  // 105 converges) silently diverging from the engine's own recorded
-  // behaviour. #187 adds three families for the trajectory record: events,
-  // denials, report. #246 adds the twelfth: the CLAUDE.md override resolver.
-  // #220 adds the thirteenth: label-state reconciliation.
+  // --- Every decision case resolves, and the table covers all fourteen families
+  // guard(#203, #246, #220, #292): a second implementation (apps/desktop's) silently
+  // diverging from the engine's own recorded behaviour. #187 adds three
+  // families for the trajectory record: events, denials, report. #246 adds
+  // the twelfth: the CLAUDE.md override resolver. #220 adds the thirteenth:
+  // label-state reconciliation. #292 adds the fourteenth: the
+  // statusCheckRollup reduction contract (`checks.ts`), until now ported into
+  // `apps/desktop` with no case table of its own asserting either side.
   // pin: `scripts/port-tick/cases/*.json` ↔ every pure function in `scripts/port-tick/` it names
   {
     const families: Record<string, string> = {
@@ -33,11 +35,12 @@ export default async function ({ fail, note, ok }: Reporter) {
       'report.cases.json': 'report.ts',
       'overrides.cases.json': 'overrides.ts',
       'reconcile.cases.json': 'reconcile.ts',
+      'checks.cases.json': 'checks.ts',
     };
     const casesDir = join(root, TICK_DIR, 'cases');
     const present = walk(casesDir).map((f) => relOf(f).split('/').pop());
     for (const file of Object.keys(families)) {
-      if (!present.includes(file)) fail('tick-cases', `${TICK_DIR}/cases/${file} is missing — the twelve decision families must all have a case table`);
+      if (!present.includes(file)) fail('tick-cases', `${TICK_DIR}/cases/${file} is missing — all fourteen decision families must have a case table`);
       else ok();
     }
 
@@ -82,11 +85,16 @@ export default async function ({ fail, note, ok }: Reporter) {
       contradictions: modules['reconcile.ts'].contradictions,
       actionablePartitions: modules['reconcile.ts'].actionablePartitions,
       linkedIssues: modules['reconcile.ts'].linkedIssues,
+      ticketsByPullRequest: modules['reconcile.ts'].ticketsByPullRequest,
       duplicatePullRequests: modules['reconcile.ts'].duplicatePullRequests,
       ungatedPullRequests: modules['reconcile.ts'].ungatedPullRequests,
       reportDelta: modules['reconcile.ts'].reportDelta,
       reportOrphans: modules['reconcile.ts'].reportOrphans,
       reconcileTick: modules['reconcile.ts'].reconcileTick,
+      reduceRollup: modules['checks.ts'].reduceRollup,
+      isConcluded: modules['checks.ts'].isConcluded,
+      conclusionOf: modules['checks.ts'].conclusionOf,
+      rollupVerdict: modules['checks.ts'].rollupVerdict,
     };
 
     for (const [file] of Object.entries(families)) {
@@ -454,6 +462,8 @@ function runCase(fn: string, impl: any, input: any): any {
       return impl(input.partitions, input.contradictory);
     case 'linkedIssues':
       return impl(input);
+    case 'ticketsByPullRequest':
+      return impl(input.prs, input.integration);
     case 'duplicatePullRequests':
       return impl(input.prs, input.integration, input.labels);
     case 'ungatedPullRequests':
@@ -464,6 +474,12 @@ function runCase(fn: string, impl: any, input: any): any {
       return impl(input.liveness, input.orphansReported);
     case 'reconcileTick':
       return impl(input);
+    case 'reduceRollup':
+    case 'isConcluded':
+    case 'conclusionOf':
+      return impl(input);
+    case 'rollupVerdict':
+      return impl(...input);
     default:
       throw new Error(`no case runner wired for function '${fn}'`);
   }

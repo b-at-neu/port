@@ -23,14 +23,46 @@ export interface PullRequestCommentNode {
   readonly createdAt: string
 }
 
-/** The field list is exactly the ticket's, plus `matchedKeys`. `mergeable`
- *  and `updatedAt` remain deliberately absent — each belongs to a later
- *  ticket that has a use for it (ENGINEERING §7: no field shipped in
- *  anticipation); `headRefOid` has landed (#108). The viewer's own login is
- *  no longer absent: #94 needs it at the repository level (see
- *  `PipelineFetch.viewer` below), one alias reused for every item rather
- *  than a per-item field. `headRefOid`/`reviews`/`comments` are `null` for
- *  an issue — only a pull request carries any of the three. */
+/** GitHub's own mergeability enum (#265), mapped verbatim — `null` for
+ *  anything else the API returns, and for every issue (only a pull request
+ *  carries mergeability at all). `UNKNOWN` never blocks the caller: GitHub
+ *  has not computed it yet, which is normal right after a push, and reading
+ *  it is itself what triggers the computation (PIPELINE.md → "Check
+ *  evidence" → "Mergeability precondition"). */
+export type Mergeable = 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN' | null
+
+/** One reduced `statusCheckRollup` context (#292) — a CheckRun or a
+ *  StatusContext, flattened to the one shape `main/tick/checks.ts`'s
+ *  `rollupVerdict` reads, the same `(.name // .context)`/`(.conclusion //
+ *  .state)` fallback `scripts/port-tick/checks.ts` already establishes.
+ *  `startedAt`/`completedAt`/`createdAt` are kept distinct rather than
+ *  pre-reduced to one `at` field, since `reduceRollup` itself needs all
+ *  three to pick the latest entry per name. */
+export interface CheckContext {
+  readonly __typename: 'CheckRun' | 'StatusContext' | null
+  readonly name: string | null
+  readonly conclusion: string | null
+  readonly status: string | null
+  readonly state: string | null
+  readonly startedAt: string | null
+  readonly completedAt: string | null
+  readonly createdAt: string | null
+  /** A CheckRun's `detailsUrl`, or a StatusContext's `targetUrl` — never read
+   *  by `main/tick/checks.ts`'s own `rollupVerdict` (a verbatim port of the
+   *  cockpit's own shape, which carries neither), only by
+   *  `main/tick/observe.ts`'s approval-withdrawal observation, to compose
+   *  the `## Approval withdrawn` comment's own link. */
+  readonly url: string | null
+}
+
+/** The field list is exactly the ticket's, plus `matchedKeys`. `updatedAt`
+ *  remains deliberately absent — it belongs to a later ticket that has a use
+ *  for it (ENGINEERING §7: no field shipped in anticipation); `headRefOid`
+ *  landed at #108, `mergeable` at #265. The viewer's own login is no longer
+ *  absent: #94 needs it at the repository level (see `PipelineFetch.viewer`
+ *  below), one alias reused for every item rather than a per-item field.
+ *  `headRefOid`/`mergeable`/`reviews`/`comments` are `null` for an issue —
+ *  only a pull request carries any of the four. */
 export interface PipelineItem {
   readonly repo: string
   readonly kind: PipelineItemKind
@@ -44,8 +76,15 @@ export interface PipelineItem {
   readonly labels: readonly string[]
   readonly matchedKeys: readonly LabelKey[]
   readonly headRefOid: string | null
+  readonly mergeable: Mergeable
   readonly reviews: readonly ReviewNode[] | null
   readonly comments: readonly PullRequestCommentNode[] | null
+  /** The `approved` alias's own `statusCheckRollup` selection (#292) — `null`
+   *  means this alias did not select it (every alias but `approved`, and
+   *  every issue); `[]` means it was selected but GitHub returned no rollup
+   *  at all. The cross-alias merge (`map.ts`) keeps whichever copy is
+   *  non-null, since `approved` is the last alias in vocabulary order. */
+  readonly checkRollup: readonly CheckContext[] | null
 }
 
 /** One entry per enabled label — the names actually queried, reported

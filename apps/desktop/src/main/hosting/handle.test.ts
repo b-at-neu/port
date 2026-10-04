@@ -1,17 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createHostedHandle, REPLAY_LIMIT } from './handle'
 import type { HostedQuery } from './handle'
-import type { SessionEventEnvelope, SessionKey } from '../../shared/hosting/types'
+import type { PluginRequest, SessionEntriesDelta, SessionEventEnvelope, SessionKey } from '../../shared/hosting/types'
 import type { RepoId } from '../../shared/repos'
 
 const SESSION_KEY = 'hosted-1' as SessionKey
 const REPO_ID = 'repo-1' as RepoId
+const INSTALLED_PLUGIN: PluginRequest = { source: 'installed' }
 
 /** A fake `HostedQuery` driven entirely from the test — `push` delivers the
  *  next message to whichever `next()` is currently waiting, `end`/`fail`
  *  finish the generator, and `interrupt`/`close` are spies the assertions
  *  read back. */
-function fakeQuery() {
+function fakeQuery(options: { readonly commands?: readonly { name: string; description: string; argumentHint: string }[]; readonly agents?: readonly { name: string; description: string; model?: string }[] } = {}) {
   let pendingResolve: ((result: IteratorResult<unknown>) => void) | null = null
   let pendingReject: ((error: Error) => void) | null = null
   const queue: unknown[] = []
@@ -20,10 +21,16 @@ function fakeQuery() {
 
   const interrupt = vi.fn((): Promise<{ still_queued: string[] } | undefined> => Promise.resolve({ still_queued: ['a', 'b'] }))
   const close = vi.fn()
+  const supportedCommands = vi.fn(() => Promise.resolve(options.commands ?? []))
+  const supportedAgents = vi.fn(() => Promise.resolve(options.agents ?? []))
+  const stopTask = vi.fn(() => Promise.resolve())
 
   const query: HostedQuery = {
     interrupt,
     close,
+    supportedCommands,
+    supportedAgents,
+    stopTask,
     [Symbol.asyncIterator]() {
       return {
         next(): Promise<IteratorResult<unknown>> {
@@ -43,6 +50,9 @@ function fakeQuery() {
     query,
     interrupt,
     close,
+    supportedCommands,
+    supportedAgents,
+    stopTask,
     push(message: unknown) {
       if (pendingResolve) {
         const resolve = pendingResolve
@@ -85,6 +95,10 @@ function baseParams(overrides: Partial<Parameters<typeof createHostedHandle>[0]>
     now: () => 1_000,
     onEvent: vi.fn(),
     onStatus: vi.fn(),
+    plugin: INSTALLED_PLUGIN,
+    readExpectedComponents: () => Promise.resolve(null),
+    samePath: (a: string, b: string) => a === b,
+    initialTitle: null,
     ...overrides,
   }
 }
@@ -122,20 +136,99 @@ describe('createHostedHandle', () => {
     expect(onSessionId).toHaveBeenCalledTimes(1)
   })
 
-  it('a user message moves ready to streaming, and a result moves it back to ready', async () => {
+  it('send() moves ready to streaming, and a result moves it back to ready', async () => {
     const fake = fakeQuery()
     const handle = createHostedHandle(baseParams(), () => fake.query)
     fake.push({ type: 'system', subtype: 'init', session_id: 'sdk-session-1' })
     await flush()
     expect(handle.snapshot().phase).toBe('ready')
 
-    fake.push({ type: 'user', message: { role: 'user', content: 'hi' } })
-    await flush()
+    handle.send('hi')
     expect(handle.snapshot().phase).toBe('streaming')
 
     fake.push({ type: 'result', subtype: 'success' })
     await flush()
     expect(handle.snapshot().phase).toBe('ready')
+  })
+
+  it('send() moves starting to streaming, before init has even reported ready', () => {
+    const fake = fakeQuery()
+    const handle = createHostedHandle(baseParams(), () => fake.query)
+    expect(handle.snapshot().phase).toBe('starting')
+    handle.send('hi')
+    expect(handle.snapshot().phase).toBe('streaming')
+  })
+
+  it('a later init leaves streaming — it never demotes a send that raced it', async () => {
+    const fake = fakeQuery()
+    const handle = createHostedHandle(baseParams(), () => fake.query)
+    handle.send('hi')
+    expect(handle.snapshot().phase).toBe('streaming')
+
+    fake.push({ type: 'system', subtype: 'init', session_id: 'sdk-session-1' })
+    await flush()
+    expect(handle.snapshot().phase).toBe('streaming')
+  })
+
+  it('a result with a positive queued_turn_count stays streaming', async () => {
+    const fake = fakeQuery()
+    const handle = createHostedHandle(baseParams(), () => fake.query)
+    handle.send('hi')
+    expect(handle.snapshot().phase).toBe('streaming')
+
+    fake.push({ type: 'result', subtype: 'success', queued_turn_count: 1 })
+    await flush()
+    expect(handle.snapshot().phase).toBe('streaming')
+  })
+
+  it('onEntries fires for send() and for an assistant message, never for one the projector ignores', async () => {
+    const onEntries = vi.fn((delta: SessionEntriesDelta): void => {
+      void delta
+    })
+    const fake = fakeQuery()
+    const handle = createHostedHandle(baseParams({ onEntries }), () => fake.query)
+    handle.send('hi')
+    expect(onEntries).toHaveBeenCalledTimes(1)
+    expect(onEntries.mock.calls[0]?.[0]?.sessionKey).toBe(SESSION_KEY)
+
+    fake.push({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] }, uuid: 'a-1', parent_tool_use_id: null })
+    await flush()
+    expect(onEntries).toHaveBeenCalledTimes(2)
+
+    // A message type the projector never renders (live-edge ephemera) fires
+    // no further onEntries call.
+    fake.push({ type: 'system', subtype: 'init', session_id: 'sdk-session-1' })
+    await flush()
+    expect(onEntries).toHaveBeenCalledTimes(2)
+  })
+
+  it('a throwing onEntries/projector never stops the pump — the message is still forwarded to onEvent', async () => {
+    const onEvent = vi.fn()
+    const fake = fakeQuery()
+    // `onEntries` throwing exercises the same "never stops the pump" rail as
+    // a projector throw — handle.ts wraps the whole `projector.push(...)` +
+    // `emitEntries(...)` pair in one try/catch.
+    const onEntries = vi.fn(() => {
+      throw new Error('boom')
+    })
+    const handle = createHostedHandle(baseParams({ onEvent, onEntries }), () => fake.query)
+    fake.push({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] }, uuid: 'a-1', parent_tool_use_id: null })
+    await flush()
+    expect(onEvent).toHaveBeenCalledTimes(1)
+    fake.push({ type: 'result', subtype: 'success' })
+    await flush()
+    expect(onEvent).toHaveBeenCalledTimes(2)
+    expect(handle.snapshot().phase).not.toBe('ended')
+  })
+
+  it('entriesWindow() reflects what the projector has derived so far', () => {
+    const fake = fakeQuery()
+    const handle = createHostedHandle(baseParams(), () => fake.query)
+    handle.send('hi')
+    const window = handle.entriesWindow()
+    expect(window.entries).toHaveLength(1)
+    expect(window.entries[0]).toMatchObject({ type: 'user-text' })
+    expect(window.pendingSends).toEqual([expect.any(String)])
   })
 
   it('every pushed message is forwarded to onEvent with a monotonic seq', async () => {
@@ -305,5 +398,90 @@ describe('createHostedHandle', () => {
 
     const forked = createHostedHandle(baseParams({ mode: { kind: 'fork', sessionId: 'parent' } }), () => fakeQuery().query)
     expect(forked.snapshot().origin).toEqual({ kind: 'forked', from: 'parent', atMessageUuid: null })
+  })
+
+  describe('invoke()', () => {
+    async function readyHandle(commands: readonly { name: string; description: string; argumentHint: string }[] = [{ name: 'port:pipeline', description: 'Cockpit', argumentHint: '' }]) {
+      const fake = fakeQuery({ commands })
+      const handle = createHostedHandle(baseParams(), () => fake.query)
+      await flush()
+      return { fake, handle }
+    }
+
+    it('refuses a leading-slash name as invalid-command, without sending anything', async () => {
+      const { fake, handle } = await readyHandle()
+      const result = handle.invoke('/port:pipeline', '')
+      expect(result.ok).toBe(false)
+      if (result.ok) return
+      expect(result.kind).toBe('invalid-command')
+      expect(fake).toBeDefined()
+      expect(handle.entriesWindow().pendingSends).toEqual([])
+    })
+
+    it('refuses a name outside this session\'s reported command list as unknown-command', async () => {
+      const { handle } = await readyHandle()
+      const result = handle.invoke('nope', '')
+      expect(result).toEqual({ ok: false, kind: 'unknown-command', name: 'nope' })
+    })
+
+    it('composes and sends a known, valid command, queuing it like any other send', async () => {
+      const { handle } = await readyHandle()
+      const result = handle.invoke('pipeline', 'status')
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(result.queued).toBe(true)
+      expect(handle.entriesWindow().pendingSends).toEqual([result.uuid])
+    })
+
+    it('reports unknown-session once the handle is closing', async () => {
+      const fake = fakeQuery({ commands: [{ name: 'port:pipeline', description: '', argumentHint: '' }] })
+      const handle = createHostedHandle(baseParams(), () => fake.query)
+      await flush()
+      const closePromise = handle.close()
+      const result = handle.invoke('pipeline', '')
+      expect(result).toEqual({ ok: false, kind: 'unknown-session' })
+      fake.finish()
+      await closePromise
+    })
+  })
+
+  describe('role and tasks (#265)', () => {
+    it('defaults to the operator role, with no tasks', () => {
+      const fake = fakeQuery()
+      const handle = createHostedHandle(baseParams(), () => fake.query)
+      expect(handle.snapshot().role).toBe('operator')
+      expect(handle.snapshot().tasks).toEqual([])
+    })
+
+    it('a dispatcher-role handle reports it on the snapshot', () => {
+      const fake = fakeQuery()
+      const handle = createHostedHandle(baseParams({ role: { kind: 'dispatcher', model: 'haiku', instructions: 'x', title: 'Port dispatcher · o/r' } }), () => fake.query)
+      expect(handle.snapshot().role).toBe('dispatcher')
+    })
+
+    it('task_started/task_notification feed the snapshot, keyed by taskId', async () => {
+      const fake = fakeQuery()
+      const handle = createHostedHandle(baseParams(), () => fake.query)
+      fake.push({ type: 'system', subtype: 'task_started', task_id: 't1', description: 'impl #52', subagent_type: 'port:impl-agent' })
+      await flush()
+      expect(handle.snapshot().tasks).toEqual([expect.objectContaining({ taskId: 't1', status: 'started', description: 'impl #52' })])
+
+      fake.push({ type: 'system', subtype: 'task_notification', task_id: 't1', status: 'completed' })
+      await flush()
+      expect(handle.snapshot().tasks).toEqual([expect.objectContaining({ taskId: 't1', status: 'completed' })])
+    })
+
+    it('stopTask delegates to the stream for a known task, and refuses an unknown one', async () => {
+      const fake = fakeQuery()
+      const handle = createHostedHandle(baseParams(), () => fake.query)
+      fake.push({ type: 'system', subtype: 'task_started', task_id: 't1', description: 'impl #52' })
+      await flush()
+
+      expect(await handle.stopTask('nope')).toEqual({ ok: false, kind: 'unknown-task' })
+      expect(fake.stopTask).not.toHaveBeenCalled()
+
+      expect(await handle.stopTask('t1')).toEqual({ ok: true })
+      expect(fake.stopTask).toHaveBeenCalledWith('t1')
+    })
   })
 })

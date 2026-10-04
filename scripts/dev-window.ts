@@ -13,9 +13,10 @@
 // integration branch to the next patch version with a prerelease suffix,
 // which no released install can ever occupy.
 //
-// Decision logic (parseVersion, nextDevWindow, decide) is pure and exported,
-// so the layer 1 check in scripts/checks/release.ts can assert every case
-// without a git subprocess (docs/ENGINEERING.md §1's guard-rules.mjs split).
+// Decision logic (parseVersion, nextDevWindow, decide, devWindowSubject) is
+// pure and exported, so the layer 1 check in scripts/checks/release.ts can
+// assert every case without a git subprocess (docs/ENGINEERING.md §1's
+// guard-rules.mjs split).
 // The I/O — reading config, talking to git and gh — lives in this same
 // file's thin CLI wrapper below.
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -51,6 +52,19 @@ export function nextDevWindow(productionVersion: string, suffix = DEV_SUFFIX): s
   return `${v.major}.${v.minor}.${v.patch + 1}-${suffix}`;
 }
 
+/** The one constructor for a dev-window branch name, e.g.
+ *  `devWindowBranch('0.2.1-dev')` → `'devwindow/v0.2.1-dev'` — used here and
+ *  by `scripts/release-corridor.ts` (#275), so there is never a second copy
+ *  of this string shape to drift from this one. */
+export function devWindowBranch(next: string): string {
+  return `devwindow/v${next}`;
+}
+
+/** No ticket-number prefix — matches the release skill's bump subject. */
+export function devWindowSubject(next: string): string {
+  return `open dev window for v${next}`;
+}
+
 /** The pure decision: given the integration branch's current version, the
  *  next dev-window version (already computed from production's version by
  *  the caller), and whether that window's branch already exists on origin —
@@ -58,7 +72,7 @@ export function nextDevWindow(productionVersion: string, suffix = DEV_SUFFIX): s
 export function decide({ integrationVersion, next, devWindowBranchExists }: { integrationVersion: string; next: string; devWindowBranchExists: boolean }): any {
   const integration = parseVersion(integrationVersion);
   if (!integration) throw new Error(`decide: integration version '${integrationVersion}' is not well-formed semver`);
-  const branch = `devwindow/v${next}`;
+  const branch = devWindowBranch(next);
   if (integration.suffix) return { action: 'nothing-to-do', version: integrationVersion };
   if (devWindowBranchExists) return { action: 'pr-exists', version: next, branch };
   return { action: 'open', version: next, branch };
@@ -149,7 +163,7 @@ function openDevWindow({ root, cfg, next, branch }: { root: string; cfg: any; ne
     const commitMsgPath = join(root, '.temp/commit-msg.txt');
     writeFileSync(
       commitMsgPath,
-      `#0 open dev window for v${next}\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n`,
+      `${devWindowSubject(next)}\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n`,
     );
     git(['add', cfg.versionFile]);
     git(['commit', '-F', commitMsgPath]);
@@ -178,7 +192,7 @@ function openDevWindow({ root, cfg, next, branch }: { root: string; cfg: any; ne
   );
   const url = execFileSync(
     'gh',
-    ['pr', 'create', '--repo', cfg.repo, '--base', cfg.integration, '--head', branch, '--title', `#0 open dev window for v${next}`, '--body-file', bodyPath],
+    ['pr', 'create', '--repo', cfg.repo, '--base', cfg.integration, '--head', branch, '--title', devWindowSubject(next), '--body-file', bodyPath],
     { encoding: 'utf8' },
   ).trim();
   console.log(url);
@@ -195,7 +209,7 @@ function main(): void {
   const productionVersion = readVersionAt(`origin/${cfg.production}`, cfg.versionFile);
   const integrationVersion = readVersionAt(`origin/${cfg.integration}`, cfg.versionFile);
   const next = nextDevWindow(productionVersion);
-  const branch = `devwindow/v${next}`;
+  const branch = devWindowBranch(next);
   const devWindowBranchExists = remoteBranchExists(branch);
 
   const result = decide({ integrationVersion, next, devWindowBranchExists });

@@ -17,7 +17,7 @@ import { appendAudit } from './audit'
 import { buildCommand, resolveKeys } from './command'
 import type { GitRunner as ClaimGitRunner } from './claim'
 import { readGateClaim } from './claim'
-import { evaluate, scopeFor, wouldChangeNothing } from './scope'
+import { evaluate, scopesFor, wouldChangeNothing } from './scope'
 
 /** The same injectable seam `main/github/adapter.ts` declares for `GhRunner`
  *  — reused here rather than redeclared, so a fake in `apply.test.ts` needs
@@ -133,24 +133,30 @@ export async function applyLabels(params: ApplyLabelsParams): Promise<WriteOutco
 
   const precondition: AuditEntry['precondition'] = { present: expectPresent.names, absent: expectAbsent.names, assignees: request.expect.assignees }
 
-  // --- Derive the required claim scope, and read it when one is needed --
-  const scope = scopeFor(request)
+  // --- Derive every required claim scope, and read the claim once when any -
+  // are needed (#292: scopesFor unions scopeFor's own derived requirement
+  // with the request's own requiredScopes — one read, then refuse on the
+  // first scope that is unheld or unreadable).
+  const scopes = scopesFor(request)
   let claimStatus: AuditEntry['claim'] = 'not-required'
+  let scope: ClaimScope | null = null
 
-  if (scope !== null) {
+  if (scopes.length > 0) {
     const claimRead = await readGateClaim({ repoRoot: params.repoRoot, repo: request.repo, git: params.git, pathOps, now })
     if (claimRead.state === 'unreadable') {
-      const outcome: WriteOutcome = { kind: 'claim-unreadable', scope, claimPath: claimRead.path, message: claimRead.message }
-      await recordLabelAudit(auditDir, { ...baseCtx, scope, claim: 'unreadable', precondition }, outcome, now)
+      const firstScope = scopes[0] as ClaimScope
+      const outcome: WriteOutcome = { kind: 'claim-unreadable', scope: firstScope, claimPath: claimRead.path, message: claimRead.message }
+      await recordLabelAudit(auditDir, { ...baseCtx, scope: firstScope, claim: 'unreadable', precondition }, outcome, now)
       return outcome
     }
-    const held = claimRead.state === 'held' && claimRead.scopes.includes(scope)
     claimStatus = claimRead.state
-    if (!held) {
-      const outcome: WriteOutcome = { kind: 'unclaimed-scope', scope, claimPath: claimRead.path, keys: [...request.remove, ...request.add] }
-      await recordLabelAudit(auditDir, { ...baseCtx, scope, claim: claimStatus, precondition }, outcome, now)
+    const unheldScope = scopes.find((s) => !(claimRead.state === 'held' && claimRead.scopes.includes(s)))
+    if (unheldScope !== undefined) {
+      const outcome: WriteOutcome = { kind: 'unclaimed-scope', scope: unheldScope, claimPath: claimRead.path, keys: [...request.remove, ...request.add] }
+      await recordLabelAudit(auditDir, { ...baseCtx, scope: unheldScope, claim: claimStatus, precondition }, outcome, now)
       return outcome
     }
+    scope = scopes[0] as ClaimScope
   }
 
   // --- The authoritative read, never a cached list ----------------------

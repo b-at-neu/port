@@ -63,8 +63,9 @@ describe('mapPipelineItems', () => {
   })
 
   // #108: headRefOid/reviews/comments feed the cycle-cap and zero-diff
-  // gates — populated only for a pull request, null for an issue.
-  it('a pull request node carries headRefOid, reviews, and comments', () => {
+  // gates — populated only for a pull request, null for an issue. #265:
+  // mergeable feeds the mergeability gate the same way.
+  it('a pull request node carries headRefOid, mergeable, reviews, and comments', () => {
     const node = {
       number: 5,
       title: 'PR',
@@ -75,6 +76,7 @@ describe('mapPipelineItems', () => {
       assignees: { nodes: [] },
       labels: { nodes: [] },
       headRefOid: 'sha123',
+      mergeable: 'CONFLICTING',
       reviews: { totalCount: 1, nodes: [{ body: '## Code Review — Cycle 1', submittedAt: '2026-01-01T00:00:00Z', commit: { oid: 'sha123' } }] },
       comments: { totalCount: 1, nodes: [{ body: '## Gate cleared', createdAt: '2026-01-02T00:00:00Z' }] },
     }
@@ -82,16 +84,36 @@ describe('mapPipelineItems', () => {
     const repository = { i0: { totalCount: 0, nodes: [] }, p0: { totalCount: 1, nodes: [node] } }
     const items = mapPipelineItems(repository, aliases, 'r')
     expect(items[0]?.headRefOid).toBe('sha123')
+    expect(items[0]?.mergeable).toBe('CONFLICTING')
     expect(items[0]?.reviews).toEqual([{ body: '## Code Review — Cycle 1', submittedAt: '2026-01-01T00:00:00Z', commitOid: 'sha123' }])
     expect(items[0]?.comments).toEqual([{ body: '## Gate cleared', createdAt: '2026-01-02T00:00:00Z' }])
   })
 
-  it('an issue node carries null for headRefOid, reviews, and comments — only a pull request has them', () => {
+  it('an unrecognized mergeable value maps to null, never guessed', () => {
+    const node = {
+      number: 5,
+      title: 'PR',
+      url: 'u',
+      body: '',
+      state: 'OPEN',
+      mergedAt: null,
+      assignees: { nodes: [] },
+      labels: { nodes: [] },
+      mergeable: 'something-new',
+    }
+    const aliases = [queriedLabel('readyForReview', 0)]
+    const repository = { i0: { totalCount: 0, nodes: [] }, p0: { totalCount: 1, nodes: [node] } }
+    const items = mapPipelineItems(repository, aliases, 'r')
+    expect(items[0]?.mergeable).toBeNull()
+  })
+
+  it('an issue node carries null for headRefOid, mergeable, reviews, and comments — only a pull request has them', () => {
     const node = { number: 1, title: 'T', url: 'u', body: '', state: 'OPEN', assignees: { nodes: [] }, labels: { nodes: [] } }
     const aliases = [queriedLabel('ready', 0)]
     const repository = { i0: { totalCount: 1, nodes: [node] }, p0: { totalCount: 0, nodes: [] } }
     const items = mapPipelineItems(repository, aliases, 'r')
     expect(items[0]?.headRefOid).toBeNull()
+    expect(items[0]?.mergeable).toBeNull()
     expect(items[0]?.reviews).toBeNull()
     expect(items[0]?.comments).toBeNull()
   })

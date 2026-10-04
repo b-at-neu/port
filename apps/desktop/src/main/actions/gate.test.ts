@@ -35,8 +35,10 @@ const READY_ENTRY = {
     modules: { approvalGate: true, release: true, scope: true },
     reviewCycleCap: 3,
     vocabulary: VOCABULARY,
-    commands: { worktrees: null },
+    commands: { worktrees: null, budget: null },
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
+    checkDispositions: {},
+    overrides: [],
   },
   diagnostics: [],
 }
@@ -50,11 +52,11 @@ function depsWith(overrides: Partial<GateDeps>): GateDeps {
       throw new Error('fetchGatePreflight should not be invoked in this case')
     },
     readGateClaim: () => Promise.resolve(ABSENT_CLAIM),
-    takeGateClaim: () => {
-      throw new Error('takeGateClaim should not be invoked in this case')
+    takeClaimScope: () => {
+      throw new Error('takeClaimScope should not be invoked in this case')
     },
-    releaseGateClaim: () => {
-      throw new Error('releaseGateClaim should not be invoked in this case')
+    releaseClaimScope: () => {
+      throw new Error('releaseClaimScope should not be invoked in this case')
     },
     applyLabels: () => {
       throw new Error('applyLabels should not be invoked in this case')
@@ -146,10 +148,10 @@ describe('gateClaimSet', () => {
     let took = false
     const held: ClaimRead = { state: 'held', owner: 'port-desktop', scopes: ['plan-gate'], unknownScopes: [], claimedAt: '2026-01-01T00:00:00.000Z', path: 'p', readAt: 'r' }
     const deps = depsWith({
-      takeGateClaim: (p) => {
+      takeClaimScope: (p) => {
         took = true
         expect(p.owner).toBe('port-desktop')
-        expect(p.scopes).toEqual(['plan-gate'])
+        expect(p.scope).toBe('plan-gate')
         return Promise.resolve({ ok: true, path: 'p' })
       },
       readGateClaim: () => Promise.resolve(held),
@@ -160,7 +162,7 @@ describe('gateClaimSet', () => {
   })
 
   it('releases the claim and re-reads afterwards', async () => {
-    const deps = depsWith({ releaseGateClaim: () => Promise.resolve({ ok: true, path: 'p' }), readGateClaim: () => Promise.resolve(ABSENT_CLAIM) })
+    const deps = depsWith({ releaseClaimScope: () => Promise.resolve({ ok: true, path: 'p' }), readGateClaim: () => Promise.resolve(ABSENT_CLAIM) })
     const result = await gateClaimSet({ registryDeps, repoId: REPO_ID, held: false }, deps)
     expect(result).toEqual({ kind: 'ok', claim: ABSENT_CLAIM })
   })
@@ -168,7 +170,7 @@ describe('gateClaimSet', () => {
   it('reports failed without re-reading when the write itself fails', async () => {
     let reread = false
     const deps = depsWith({
-      takeGateClaim: () => Promise.resolve({ ok: false, kind: 'permission-denied', message: 'nope', path: 'p' }),
+      takeClaimScope: () => Promise.resolve({ ok: false, kind: 'permission-denied', message: 'nope', path: 'p' }),
       readGateClaim: () => {
         reread = true
         return Promise.resolve(ABSENT_CLAIM)

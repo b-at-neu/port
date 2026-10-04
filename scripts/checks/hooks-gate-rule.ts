@@ -5,15 +5,16 @@ import { resolveMatchers, subagentPayload, plainPayload, makeCheck } from '../li
 import type { Reporter } from '../lib/report.ts';
 
 export default async function ({ fail, ok }: Reporter) {
-  const { decide, recentOperatorMessages, operatorNamed } =
-    await import(pathToFileURL(join(root, 'plugins/port/hooks/lib/guard-rules.mjs')).href);
+  const { decide } = await import(pathToFileURL(join(root, 'plugins/port/hooks/lib/guard-rules.mjs')).href);
+  const { recentOperatorMessages, operatorNamed } =
+    await import(pathToFileURL(join(root, 'plugins/port/hooks/lib/operator-rules.mjs')).href);
   const { gateClearAttempt } = await import(pathToFileURL(join(root, 'plugins/port/hooks/lib/command-rules.mjs')).href);
 
   const matchers = resolveMatchers(fail);
   const check = makeCheck(fail, ok);
 
   // --- Cockpit rules: gate rule ------------------------------------------------
-  // guard(#138, #142): the cockpit clearing its own needs-human gate under throughput pressure, unverified.
+  // guard(#138, #142, #281): the cockpit clearing its own needs-human gate under throughput pressure, unverified; #281 adds the gh pr edit branch-selector rung so `unblock #<ticket>` clears via the pull request's own branch too.
   const needsHumanLabel = 'needs human';
 
   // A gate-clear attempt with operator messages naming a different item →
@@ -68,13 +69,93 @@ export default async function ({ fail, ok }: Reporter) {
   );
 
   // #142/R1-C1 — a gate-clear attempt with no bare digit and no issues/pull
-  // URL (a branch-name identifier, which `gh` accepts) must be denied
-  // outright, never fall through to operatorNamed's vacuously-true
-  // `[].every(...)` on an empty numbers array. Even an operator message that
-  // would otherwise satisfy some *other* item must not let this through —
-  // there is nothing here for it to have named.
+  // URL, and a branch with no leading N- (which `gh` still accepts as an
+  // identifier), must be denied outright, never fall through to
+  // operatorNamed's vacuously-true `[].every(...)` on an empty numbers
+  // array. Even an operator message that would otherwise satisfy some
+  // *other* item must not let this through — there is nothing here for it
+  // to have named.
   check(
-    '#142 gate clear denied — command names no item number (branch form)',
+    '#142 gate clear denied — command names no item number (branch form, no leading N-)',
+    decide({
+      payload: plainPayload({
+        tool_input: { command: 'gh pr edit my-feature-branch --repo b-at-neu/port --remove-label "needs human"' },
+      }),
+      matchers,
+      sessionRequiredPaths: [],
+      root,
+      needsHumanLabel,
+      operatorMessages: ['unblock #134'],
+    }),
+    'deny',
+  );
+
+  // #281 — a branch selector with a leading N- names N for `gh pr edit`
+  // (never for `gh issue edit`, which has no branch selector at all), so
+  // `unblock #<ticket>` now clears the gate through the pull request's own
+  // branch, not only through its numeric id. Once this branch rung is in
+  // play, the 139-guard-… case below is denied because 139 was not named,
+  // not because nothing was named — reworded from its prior comment.
+  check(
+    '#281 gate clear allowed — branch selector names the ticket the operator named',
+    decide({
+      payload: plainPayload({
+        tool_input: {
+          command: 'gh pr edit "281-cockpit-ticket-numbers" --repo b-at-neu/port --remove-label "needs human" --add-label "needs revision"',
+        },
+      }),
+      matchers,
+      sessionRequiredPaths: [],
+      root,
+      needsHumanLabel,
+      operatorMessages: ['unblock #281'],
+    }),
+    'gate-clear',
+  );
+
+  // Same command, operator named a different item — denied: naming the
+  // pull request's own number never substitutes for naming the ticket the
+  // branch selector resolves to.
+  check(
+    '#281 gate clear denied — branch selector names a ticket the operator did not name',
+    decide({
+      payload: plainPayload({
+        tool_input: {
+          command: 'gh pr edit "281-cockpit-ticket-numbers" --repo b-at-neu/port --remove-label "needs human" --add-label "needs revision"',
+        },
+      }),
+      matchers,
+      sessionRequiredPaths: [],
+      root,
+      needsHumanLabel,
+      operatorMessages: ['unblock #290'],
+    }),
+    'deny',
+  );
+
+  // No prefix collision: a branch numbered 2810 never satisfies "the
+  // operator named #281" merely because '281' is a leading substring of
+  // '2810'.
+  check(
+    '#281 gate clear denied — no prefix collision between 281 and 2810',
+    decide({
+      payload: plainPayload({
+        tool_input: { command: 'gh pr edit 2810-x --repo b-at-neu/port --remove-label "needs human"' },
+      }),
+      matchers,
+      sessionRequiredPaths: [],
+      root,
+      needsHumanLabel,
+      operatorMessages: ['unblock #281'],
+    }),
+    'deny',
+  );
+
+  // The pre-existing 139-guard-… case stays deny, now for a different
+  // reason: the branch rung extracts 139, so this is "operator named a
+  // different item", not "command names no item number".
+  check(
+    '#142 gate clear denied — operator named a different item (139-guard-… branch names 139)',
     decide({
       payload: plainPayload({
         tool_input: { command: 'gh pr edit 139-guard-cockpit-loop-and-gate-rules --repo b-at-neu/port --remove-label "needs human"' },
@@ -172,6 +253,31 @@ export default async function ({ fail, ok }: Reporter) {
     } else {
       ok();
     }
+
+    // #281 — a `gh pr edit` branch selector with a leading N- names N.
+    const branchSelector = gateClearAttempt('gh pr edit 281-x --remove-label "needs human"', 'needs human');
+    if (!branchSelector.isAttempt || !branchSelector.hasNumbers || branchSelector.numbers.length !== 1 || branchSelector.numbers[0] !== 281) {
+      fail('guard-classifier', `gateClearAttempt: expected isAttempt with numbers [281] for a branch selector, got ${JSON.stringify(branchSelector)}`);
+    } else {
+      ok();
+    }
+
+    // #281 — `gh issue edit` gets no branch rung at all: an issue has no
+    // branch selector, so a dash-shaped argument is never read as one.
+    const issueEditBranchShaped = gateClearAttempt('gh issue edit 281-x --remove-label "needs human"', 'needs human');
+    if (!issueEditBranchShaped.isAttempt || issueEditBranchShaped.hasNumbers) {
+      fail('guard-classifier', `gateClearAttempt: expected isAttempt with hasNumbers false for 'gh issue edit 281-x', got ${JSON.stringify(issueEditBranchShaped)}`);
+    } else {
+      ok();
+    }
+
+    // #281 — no dash after the leading digits is not a branch selector.
+    const noDash = gateClearAttempt('gh pr edit 281x-branch --remove-label "needs human"', 'needs human');
+    if (!noDash.isAttempt || noDash.hasNumbers) {
+      fail('guard-classifier', `gateClearAttempt: expected isAttempt with hasNumbers false for '281x-branch', got ${JSON.stringify(noDash)}`);
+    } else {
+      ok();
+    }
   }
 
   // --- recentOperatorMessages / operatorNamed --------------------------------
@@ -228,5 +334,143 @@ export default async function ({ fail, ok }: Reporter) {
     } else {
       ok();
     }
+  }
+
+  // --- Approval arm (#288): audit-only, the revise #N route off `approved` ---
+  // guard(#288): the hook denying an unnamed `approved` removal, which would
+  // also block the cockpit's own automatic red-check withdrawal and stuck-
+  // refresh escalation — both run from the same cockpit session with the
+  // same command shape, and the hook cannot tell them apart from an
+  // unprompted removal. The arm must therefore only ever add a 'gate-clear'
+  // audit line on top of whatever the allowlist already decided, never
+  // substitute a deny for it.
+  {
+    const approvedLabel = 'approved';
+    const removeApproved = 'gh pr edit 300 --repo b-at-neu/port --remove-label "approved" --add-label "needs revision"';
+
+    // Named → gate-clear (allowed and logged as the audit record).
+    check(
+      '#288 approval arm — gate-clear when the operator names the pull request',
+      decide({
+        payload: plainPayload({ tool_input: { command: removeApproved } }),
+        matchers,
+        sessionRequiredPaths: [],
+        root,
+        approvedLabel,
+        operatorMessages: ['revise #300: rename the --limit flag to --max'],
+      }),
+      'gate-clear',
+    );
+
+    // A different item named → allow, never deny: an automatic withdrawal
+    // (a red check, a stuck refresh loop) runs from this same cockpit
+    // session and command shape, and must never be blocked by a message
+    // that merely happens to name something else.
+    check(
+      '#288 approval arm — allow (never deny) when the operator named a different item',
+      decide({
+        payload: plainPayload({ tool_input: { command: removeApproved } }),
+        matchers,
+        sessionRequiredPaths: [],
+        root,
+        approvedLabel,
+        operatorMessages: ['unblock #134'],
+      }),
+      'allow',
+    );
+
+    // Unreadable transcript → allow, never deny — unverifiable is not
+    // unauthorised, and this arm has no authority to block regardless.
+    check(
+      '#288 approval arm — allow with an unreadable transcript',
+      decide({
+        payload: plainPayload({ tool_input: { command: removeApproved } }),
+        matchers,
+        sessionRequiredPaths: [],
+        root,
+        approvedLabel,
+        operatorMessages: null,
+      }),
+      'allow',
+    );
+
+    // Subagent (e.g. revise-agent's own refresh-mode withdrawal) → allow —
+    // this arm is inert for `who.isSubagent`, same as the gate rule.
+    check(
+      '#288 approval arm — allow for a subagent (refresh mode)',
+      decide({
+        payload: subagentPayload({ tool_input: { command: removeApproved } }),
+        matchers,
+        sessionRequiredPaths: [],
+        root,
+        approvedLabel,
+        operatorMessages: ['revise #300: rename the --limit flag to --max'],
+      }),
+      'allow',
+    );
+
+    // No number in the command (`gh` defaults to the current branch's PR) →
+    // allow — nothing to check an operator message against, so this must
+    // never fall through to operatorNamed's vacuously-true `[].every(...)`.
+    check(
+      '#288 approval arm — allow when the command names no item number',
+      decide({
+        payload: plainPayload({ tool_input: { command: 'gh pr edit --repo b-at-neu/port --remove-label "approved"' } }),
+        matchers,
+        sessionRequiredPaths: [],
+        root,
+        approvedLabel,
+        operatorMessages: ['revise #300: rename the --limit flag to --max'],
+      }),
+      'allow',
+    );
+
+    // Adding, not removing, 'approved' is not a gate-clear attempt at all.
+    check(
+      '#288 approval arm — adding the approved label is not guarded',
+      decide({
+        payload: plainPayload({ tool_input: { command: 'gh pr edit 300 --repo b-at-neu/port --add-label "approved"' } }),
+        matchers,
+        sessionRequiredPaths: [],
+        root,
+        approvedLabel,
+        operatorMessages: null,
+      }),
+      'allow',
+    );
+
+    // A looped named removal is still denied by the loop rule, which runs
+    // before this arm — proving the rule order (gate → claim → install →
+    // branch → loop → approval → allowlist) rather than merely asserting it.
+    check(
+      '#288 approval arm — a looped removal is still denied by the loop rule',
+      decide({
+        payload: plainPayload({
+          tool_input: {
+            command: 'for n in 300; do gh pr edit $n --repo b-at-neu/port --remove-label "approved"; done',
+          },
+        }),
+        matchers,
+        sessionRequiredPaths: [],
+        root,
+        approvedLabel,
+        operatorMessages: ['revise #300: rename the --limit flag to --max'],
+      }),
+      'deny',
+    );
+
+    // approvedLabel omitted → the arm is inert, matching needsHumanLabel's
+    // own pattern for a caller with no gate to guard.
+    check(
+      '#288 approval arm — inert when approvedLabel is omitted',
+      decide({
+        payload: plainPayload({ tool_input: { command: removeApproved } }),
+        matchers,
+        sessionRequiredPaths: [],
+        root,
+        operatorMessages: ['revise #300: rename the --limit flag to --max'],
+      }),
+      'allow',
+    );
   }
 }

@@ -8,10 +8,12 @@
 import type { LabelKey, LabelVocabulary } from '../labels/vocabulary'
 import type { RepoId } from '../repos'
 
-/** One recognized claim scope today — `docs/COORDINATION.md`'s own rule
- *  ("one scope, not a framework"): the array shape is the natural fit for
- *  the question, but no second scope is defined that no ticket implements. */
-export type ClaimScope = 'plan-gate'
+/** Two recognized claim scopes — `docs/COORDINATION.md`'s own rule ("two
+ *  scopes, not a framework"): the array shape is the natural fit for the
+ *  question, but no third scope is defined that no ticket implements.
+ *  `plan-gate` transfers the plan-review gate (#206); `dispatch` transfers
+ *  the `Agent()` call itself (#265), the same coordination shape. */
+export type ClaimScope = 'plan-gate' | 'dispatch'
 
 export type AssigneeExpectation = { readonly kind: 'any' } | { readonly kind: 'unassigned' } | { readonly kind: 'exactly'; readonly logins: readonly string[] }
 
@@ -38,6 +40,12 @@ export interface LabelWriteRequest {
   readonly expect: LabelPrecondition
   /** The operator-facing verb, recorded verbatim in the audit log. */
   readonly action: string
+  /** #292: a scope this write needs beyond whatever `scopeFor` derives from
+   *  `add`/`remove` — `scopesFor` unions it in, never drops the derived
+   *  requirement. Every observation write names `['dispatch']` here, since
+   *  none of the four families touches a `plan-gate` key but every one of
+   *  them must still run only while this app actually holds dispatch. */
+  readonly requiredScopes?: readonly ClaimScope[]
 }
 
 export interface CommentRequest {
@@ -97,7 +105,7 @@ export type ClaimRead =
   | { readonly state: 'absent'; readonly path: string; readonly readAt: string }
   | { readonly state: 'unreadable'; readonly message: string; readonly path: string; readonly readAt: string }
 
-/** Every failure kind a claim-file write (`takeGateClaim`/`releaseGateClaim`)
+/** Every failure kind a claim-file write (`takeClaimScope`/`releaseClaimScope`)
  *  can report — hand-maintained rather than derived from the platform
  *  layer's `FileFailureKind` (`main/platform/files.ts`), for the same reason
  *  every other shared failure union here is: the renderer cannot import

@@ -108,6 +108,25 @@
   opacity: 0.65;
 }
 
+/* #103: Resume/Fork on a repository-root session row — both open the
+   Sessions tab on the new hosted session. */
+.session-row__hosted-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0.3rem 0 0 0;
+}
+
+.session-row__hosted-button {
+  font-family: inherit;
+  font-size: 0.72rem;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #2a2a2a;
+  color: inherit;
+  cursor: pointer;
+}
+
 .session-agents {
   display: flex;
   flex-direction: column;

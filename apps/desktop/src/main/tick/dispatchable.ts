@@ -7,10 +7,21 @@
 // one consumer this exists for — it must never read `report.actionable`
 // directly.
 import type { DrainState } from '../../shared/dispatch/types'
-import type { TickActionable, TickReport } from '../../shared/tick/types'
+import type { TickActionable, TickObservation, TickReport } from '../../shared/tick/types'
 
 export function dispatchableFrom(report: TickReport, drain: DrainState): readonly TickActionable[] {
   if (drain.gate !== 'open') return []
   if (report.blind !== null) return []
   return report.actionable
+}
+
+/** The write-bearing subset of `report.observations` (#292) — the same gate
+ *  `dispatchableFrom` already is for `.actionable`, and the only function
+ *  under `main/` allowed to read `.observations` at all. `refresh-deferred`
+ *  authorises no write of its own (the board's hover state is its only
+ *  consumer), so it never reaches the observation pass. */
+export function observableFrom(report: TickReport, drain: DrainState): readonly TickObservation[] {
+  if (drain.gate !== 'open') return []
+  if (report.blind !== null) return []
+  return report.observations.filter((o) => o.kind !== 'refresh-deferred')
 }

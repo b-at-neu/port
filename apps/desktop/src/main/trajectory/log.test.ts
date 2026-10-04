@@ -22,6 +22,7 @@ function makeReport(overrides: Partial<TickReport> = {}): TickReport {
     claims: [],
     disabledStages: [],
     nextTickAt: null,
+    observations: [],
     ...overrides,
   }
 }

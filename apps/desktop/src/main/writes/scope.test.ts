@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PLAN_GATE_KEYS, evaluate, scopeFor, wouldChangeNothing } from './scope'
+import { PLAN_GATE_KEYS, evaluate, scopeFor, scopesFor, wouldChangeNothing } from './scope'
 
 describe('scopeFor', () => {
   it('requires plan-gate when add touches a plan-gate key', () => {
@@ -21,6 +21,24 @@ describe('scopeFor', () => {
   it('PLAN_GATE_KEYS excludes autoPlan', () => {
     expect(PLAN_GATE_KEYS).not.toContain('autoPlan')
     expect(scopeFor({ add: ['autoPlan'], remove: [] })).toBe(null)
+  })
+})
+
+describe('scopesFor', () => {
+  it('unions requiredScopes with the derived scope, never dropping the derived one', () => {
+    expect(scopesFor({ add: ['planApproved'], remove: [], requiredScopes: ['dispatch'] })).toEqual(['plan-gate', 'dispatch'])
+  })
+
+  it('is just the required scopes when nothing is derived', () => {
+    expect(scopesFor({ add: ['ready'], remove: [], requiredScopes: ['dispatch'] })).toEqual(['dispatch'])
+  })
+
+  it('is empty when neither derives nor requires anything', () => {
+    expect(scopesFor({ add: [], remove: [] })).toEqual([])
+  })
+
+  it('never duplicates a scope present in both', () => {
+    expect(scopesFor({ add: ['planApproved'], remove: [], requiredScopes: ['plan-gate'] })).toEqual(['plan-gate'])
   })
 })
 

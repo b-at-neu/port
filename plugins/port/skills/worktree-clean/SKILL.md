@@ -11,7 +11,7 @@ Pipeline agents run in isolated worktrees under `.claude/worktrees/`; operator-r
 
 `bin/worktrees.mjs` (addressed via `commands.worktrees`) is the one classifier and reclaimer this skill, the cockpit's own per-tick hygiene, and #109's worktree report all share — see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Worktree lifecycle". This skill drives it **interactively**, for the four cases the cockpit's automatic pass deliberately never touches on its own: a **locked** worktree, a **dirty** one, an **unresolved** one, and an **orphan directory** git does not track at all.
 
-> **Scope guard:** the script only ever removes a path `git worktree list` itself reports, fenced to inside the main checkout — never the main checkout, never a path outside it. This skill's own force-delete step (below) only ever targets a directory **directly under** the parent of a registered worktree, and only after the script has classified it `orphan-dir`.
+> **Scope guard:** the script enforces its own fence now — `reclaim` only ever removes a path `git worktree list` itself reports, and `purge --orphan` only ever deletes a path this run's own scan just classified `orphan-dir`, refusing anything else (exit `2`, nothing touched). This skill drives `purge` interactively; it no longer holds any deletion logic of its own.
 
 **If `commands.worktrees` is null** — the repository has not installed the script (`/port:init` skips it when Node is unavailable, or it predates #144). Say so plainly and stop; there is nothing to drive.
 
@@ -23,7 +23,7 @@ Pipeline agents run in isolated worktrees under `.claude/worktrees/`; operator-r
    <commands.worktrees> report --json
    ```
 
-   Show the human the classified table — path, state, reason, and size where useful (`du -sh <path>` per candidate). **Confirm before doing anything destructive.**
+   If the JSON carries any `advisories`, show each one first — a Windows repository with `core.longpaths` still off is the one that explains most of what follows. Then show the human the classified table — path, state, reason. **Confirm before doing anything destructive.**
 
 2. **Reclaim what is plainly safe**, no confirmation needed beyond step 1's overview — this mirrors exactly what a tick would do on its own:
 
@@ -49,19 +49,13 @@ Pipeline agents run in isolated worktrees under `.claude/worktrees/`; operator-r
 
 5. **Unresolved candidates.** The report names the reason (no upstream branch, no `#N` subject, HEAD not on the integration branch). Resolve by hand — check `gh issue list` / `gh pr list` for the likely number, or ask the human — then either `reclaim --issue <n>` once you know it is done, or leave it: the script never guesses.
 
-6. **Orphan directories — force-delete, interactively, one at a time.** The report lists any directory beside a registered worktree that git does not track at all (`orphan-dir`); the script never deletes these itself. Show the human the list with sizes, confirm, then:
+6. **Orphan directories — purge, interactively, one at a time.** The report lists any directory beside a registered worktree that git does not track at all (`orphan-dir`); `report`/`reclaim` never delete these themselves. Show the human the list, confirm, then delete through the script, one path per confirmation:
 
    ```bash
-   rm -rf "<exact orphan-dir path from the report>"
+   <commands.worktrees> purge --orphan "<exact orphan-dir path from the report>"
    ```
 
-   On Windows, where a locked dependency tree or a long path defeats `rm -rf`:
-
-   ```bash
-   powershell -NoProfile -Command "Remove-Item -LiteralPath '<path>' -Recurse -Force"
-   # fallback if PowerShell balks on the path:
-   cmd //c rmdir /s /q "<path, backslashes>"
-   ```
+   `purge` re-derives the orphan set itself and refuses (exit `2`, nothing deleted) any path that is not a member — the scope guard above is enforced by the script now, not by this skill's own care. It uses the same `fs` fallback `reclaim` does, so a populated, long-path, or read-only dependency tree that used to defeat a plain forced delete on Windows is handled the same way here, on every OS.
 
 7. **Final report**, to confirm the state after every action above:
 

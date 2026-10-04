@@ -8,6 +8,7 @@
 // against this file's own guess at the SDK's 37-variant union.
 import type { RepoId } from '../repos'
 import type { RuntimeDiagnosis } from '../runtime/types'
+import type { EntryPatch, TranscriptEntry } from '../sessions/transcript'
 
 declare const sessionKeyBrand: unique symbol
 
@@ -22,6 +23,32 @@ export type SessionKey = string & { readonly [sessionKeyBrand]: true }
  *  what the stream itself says (`init` → `ready`, a turn accepted →
  *  `streaming`, `result` → `ready`, terminal → `ended`) — never a guess. */
 export type SessionPhase = 'starting' | 'ready' | 'streaming' | 'interrupting' | 'closing' | 'ended'
+
+/** #265: an operator's ordinary hosted session, or this app's own dispatcher
+ *  session — the one real difference `hosting/options.ts`'s `buildSessionOptions`
+ *  reads: a dispatcher gets `allowedTools: ['Agent', 'SendMessage']` and a
+ *  system-prompt append naming its instructions, everything else about a
+ *  hosted session unchanged. Never a third role: a future automated session
+ *  kind reuses `dispatcher`'s shape or adds its own, it never widens this
+ *  one's meaning. */
+export type SessionRole = 'operator' | 'dispatcher'
+
+/** #265: one background task a dispatcher session's own `Agent()` calls
+ *  started, tracked from the SDK's `task_started`/`task_notification`
+ *  messages (`hosting/tasks.ts`) — `taskId`/`toolUseId` never cross into
+ *  anything this app writes back to GitHub, they exist only to join a
+ *  `task_started` to its eventual `task_notification` and to a
+ *  `dispatch/select.ts` `confirmStarted` match. `endedAt` is `null` while
+ *  `status` is `'started'`. */
+export interface HostedTask {
+  readonly taskId: string
+  readonly toolUseId: string | null
+  readonly description: string
+  readonly subagentType: string | null
+  readonly status: 'started' | 'completed' | 'failed' | 'stopped'
+  readonly startedAt: string
+  readonly endedAt: string | null
+}
 
 /** The four start modes the ticket names, uniform because of the one rule
  *  that makes them so: `sessionId` is minted at spawn, `claudeSessionId` is
@@ -89,6 +116,29 @@ export interface HostedSessionSnapshot {
   readonly end: SessionEnd | null
   readonly titled: boolean | null
   readonly pendingPermissions: readonly PendingPermission[]
+  /** #101: the Pipeline strip's own state — rides this snapshot rather than
+   *  a second event stream, the same reasoning `pendingPermissions` already
+   *  states for itself. */
+  readonly capabilities: SessionCapabilities
+  /** #103: the session's own display title — set once from the first
+   *  prompt (or, for a resume/fork, resolved before spawn) and never
+   *  changed after it goes non-null, so a label never shifts under the
+   *  operator. `null` until then; `sessionDisplayLabel` (`shared/hosting/
+   *  label.ts`) is what turns this into what the rail and the permission
+   *  dialog actually show. */
+  readonly title: string | null
+  /** #103: the newest reading `main/hosting/rate-limit.ts` narrowed off a
+   *  `rate_limit_event` message — `null` until the first one arrives, never
+   *  synthesized. */
+  readonly rateLimit: SessionRateLimit | null
+  /** #265: `'operator'` unless this handle was started with
+   *  `role: { kind: 'dispatcher' }`. */
+  readonly role: SessionRole
+  /** #265: this session's own background tasks (`hosting/tasks.ts`'s
+   *  `createTaskTracker`), bounded to the newest 50 — populated for every
+   *  role, though only a dispatcher session's own `Agent()` calls produce
+   *  any today. */
+  readonly tasks: readonly HostedTask[]
 }
 
 /** `session:event`'s payload — the SDK message crosses the boundary opaque
@@ -110,6 +160,12 @@ export type SessionStartResult =
   | { readonly ok: true; readonly snapshot: HostedSessionSnapshot }
   | { readonly ok: false; readonly kind: 'at-capacity'; readonly limit: number }
   | { readonly ok: false; readonly kind: 'runtime'; readonly diagnosis: RuntimeDiagnosis; readonly detail: string | null }
+  /** #103: a `resume`/`resume-at` whose `sessionId` already names a live
+   *  handle — fails closed, since two `claude` processes appending to one
+   *  transcript is unrecoverable. `sessionKey` is that existing handle's, so
+   *  a caller (the rail, the restore banner, the Transcripts picker) can
+   *  switch to it rather than merely reporting the refusal. */
+  | { readonly ok: false; readonly kind: 'already-open'; readonly sessionKey: SessionKey }
 
 /** `'session:send'`'s response — always `queued` rather than refusing
  *  mid-turn (the SDK owns the queue), or `unknown-session` when the key
@@ -126,10 +182,73 @@ export type SessionCloseResult = { readonly ok: true } | { readonly ok: false; r
  *  reload; handles are main-process-owned and survive it. `replay` is a
  *  bounded window (`REPLAY_LIMIT`), never the whole session; `droppedBefore`
  *  is how a consumer knows to fall back to the transcript reader instead of
- *  trusting the replay as complete. */
+ *  trusting the replay as complete.
+ *
+ *  #219's own window rides alongside `replay`, never replacing it —
+ *  `entries`/`firstIndex` are the projector's own bounded ring
+ *  (`ENTRY_RETAIN_LIMIT`), `partial` is the live streaming block's current
+ *  state (`null` when nothing is mid-stream), `pendingSends` the sent-but-
+ *  unacknowledged prompt uuids, and `revision` the projector's own monotonic
+ *  counter — a gap between this and a later `session:entries` push is the
+ *  renderer's own re-attach signal (`session/sequence.ts`). */
 export type SessionAttachResult =
-  | { readonly ok: true; readonly snapshot: HostedSessionSnapshot; readonly replay: readonly SessionEventEnvelope[]; readonly droppedBefore: number }
+  | {
+      readonly ok: true
+      readonly snapshot: HostedSessionSnapshot
+      readonly replay: readonly SessionEventEnvelope[]
+      readonly droppedBefore: number
+      readonly entries: readonly TranscriptEntry[]
+      readonly firstIndex: number
+      readonly partial: LiveBlock | null
+      readonly pendingSends: readonly string[]
+      readonly revision: number
+    }
   | { readonly ok: false; readonly kind: 'unknown-session' }
+
+/** #219: a streaming text/thinking block's own kind — never a third value,
+ *  since a tool call's input JSON is never streamed (see `main/hosting/
+ *  project.ts`'s own "Tool-input JSON deltas are not streamed" rule). */
+export type LiveBlockKind = 'text' | 'thinking'
+
+/** #219: one streaming block's accumulated state, as reconnect
+ *  (`session:attach`) and the renderer's own live row both need it —
+ *  `blockId` is `<messageId>:<contentBlockIndex>`, never a tool call's own
+ *  id, so it stays stable across a block that has no tool call at all.
+ *  `omittedChars` mirrors `Payload`'s own
+ *  truncation signal once the block's accumulated text reaches
+ *  `MAX_PAYLOAD_CHARS` — best-effort during the stream itself; the eventual
+ *  on-disk-shaped entry the deriver produces from the completed message is
+ *  the exact count. */
+export interface LiveBlock {
+  readonly blockId: string
+  readonly kind: LiveBlockKind
+  readonly text: string
+  readonly omittedChars: number
+}
+
+/** #219: the operation `session:entries`' own `partial` field carries —
+ *  never the whole accumulated block (that would repeat every prior chunk on
+ *  every delta). `append` both opens a new block (an empty `text`, on the
+ *  block's first appearance) and grows an existing one; `clear` is every
+ *  place project.ts's own "clears" rules fire — a stopped block's matching
+ *  `assistant` message, or any `result`. */
+export type PartialUpdate = { readonly op: 'append'; readonly blockId: string; readonly kind: LiveBlockKind; readonly text: string } | { readonly op: 'clear' }
+
+/** `'session:entries'`'s push payload (#219) — the live projection's own
+ *  delta, in the same `appended`/`patched` shape #84's tail poll already
+ *  gives a transcript reader, so the renderer's `entry-list.ts` applies both
+ *  through one code path. `revision` is monotonic per session; a gap means
+ *  re-attach (`session/sequence.ts`). `partial` is `null` when no streaming
+ *  block changed this delta; `pendingSends` is `null` when the sent-but-
+ *  unacknowledged uuid set did not change, never re-sent unchanged. */
+export interface SessionEntriesDelta {
+  readonly sessionKey: SessionKey
+  readonly revision: number
+  readonly appended: readonly TranscriptEntry[]
+  readonly patched: readonly EntryPatch[]
+  readonly partial: PartialUpdate | null
+  readonly pendingSends: readonly string[] | null
+}
 
 /** #99: the three decisions the operator can send back for a pending
  *  permission request. `allow-session` is offered only when the request's
@@ -174,3 +293,129 @@ export interface PendingPermission {
  *  `no-session-grant` is `allow-session` sent for a request whose
  *  `sessionGrant` is `null`; nothing is settled in either case. */
 export type SessionPermissionAnswerResult = { readonly ok: true } | { readonly ok: false; readonly kind: 'unknown-session' | 'unknown-permission' | 'no-session-grant' }
+
+/** #101: which plugin path a session asked for — the repository's own
+ *  `plugins/port/` (this checkout, self-hosting) or the operator's installed
+ *  copy (`port@port` from `enabledPlugins`). Resolved once, before spawn
+ *  (`main/hosting/plugin.ts`'s `resolvePluginRequest`), and carried on the
+ *  snapshot so the operator can see which copy a session asked for even
+ *  before `init` confirms what actually loaded. */
+export type PluginRequest = { readonly source: 'repository'; readonly path: string } | { readonly source: 'installed' }
+
+/** #101: what actually loaded, read back from the SDK rather than assumed —
+ *  "a malformed component is *absent* from the inventory rather than
+ *  reported as an error" (ENGINEERING §7) is exactly the failure mode this
+ *  guards against for the plugin load itself. `unconfirmed` is the state
+ *  before any `init` has arrived — the repository copy's own component
+ *  check can already run by then (`readExpectedComponents` reads from
+ *  `request.path` directly), but the load state itself waits for the wire. */
+export type PluginLoad =
+  | { readonly kind: 'unconfirmed' }
+  | { readonly kind: 'loaded'; readonly path: string; readonly version: string | null }
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'shadowed'; readonly path: string; readonly version: string | null }
+  | { readonly kind: 'duplicate'; readonly paths: readonly string[] }
+
+/** #101: whether the loaded plugin's skills/agents match what the plugin
+ *  directory itself declares — `unchecked` when the directory could not be
+ *  read (never reported as `complete`, ENGINEERING's "fails closed on
+ *  complete" direction), `complete` when everything expected showed up in
+ *  the reported commands/agents, `incomplete` naming exactly what did not. */
+export type ComponentCheck =
+  | { readonly kind: 'unchecked'; readonly reason: 'no-plugin-path' | 'unreadable' }
+  | { readonly kind: 'complete' }
+  | { readonly kind: 'incomplete'; readonly missingSkills: readonly string[]; readonly missingAgents: readonly string[] }
+
+/** #101: one `port:` slash command, renderer-safe — `description` goes
+ *  through `sanitize` (author-controlled plugin text) before it ever
+ *  reaches this shape. */
+export interface CommandSummary {
+  readonly name: string
+  readonly description: string
+  readonly argumentHint: string
+}
+
+/** #101: one `port:` agent, renderer-safe — `model` is `null` when the
+ *  agent's own frontmatter names none (inherits the parent's). */
+export interface AgentSummary {
+  readonly name: string
+  readonly description: string
+  readonly model: string | null
+}
+
+/** #101: the Pipeline strip's own state, read back from the session rather
+ *  than assumed the moment a plugin request is resolved — `pending` before
+ *  the capability read settles, `unavailable` when it timed out or the SDK
+ *  call rejected (never an empty list standing in for either), `ready`
+ *  otherwise, carrying the plugin load and component check alongside the
+ *  filtered, sorted `port:` command/agent lists. */
+export type SessionCapabilities =
+  | { readonly kind: 'pending'; readonly request: PluginRequest }
+  | { readonly kind: 'unavailable'; readonly request: PluginRequest; readonly message: string }
+  | {
+      readonly kind: 'ready'
+      readonly request: PluginRequest
+      readonly commands: readonly CommandSummary[]
+      readonly agents: readonly AgentSummary[]
+      readonly plugin: PluginLoad
+      readonly components: ComponentCheck
+    }
+
+/** #101: `'session:invoke'`'s response — a typed refusal for a name that
+ *  fails the SDK's own canonical-name rules or that this session's current
+ *  command list does not carry, alongside `SessionSendResult`'s own ok
+ *  branch and `unknown-session` (the same reading a gone key already gets
+ *  everywhere else in this file). */
+export type SessionInvokeResult =
+  | { readonly ok: true; readonly uuid: string; readonly queued: boolean }
+  | { readonly ok: false; readonly kind: 'unknown-session' }
+  | { readonly ok: false; readonly kind: 'invalid-command'; readonly reason: string }
+  | { readonly ok: false; readonly kind: 'unknown-command'; readonly name: string }
+
+/** #103: a `rate_limit_event` narrowed structurally by `main/hosting/
+ *  rate-limit.ts` — `utilization` is deliberately not read, since its unit
+ *  is undocumented in SDK 0.3.261 and a percentage in the wrong unit is
+ *  misinformation. `observedAt` is this process's own clock, never the
+ *  SDK's. */
+export interface SessionRateLimit {
+  readonly status: 'allowed' | 'warning' | 'rejected'
+  readonly window: 'five-hour' | 'weekly' | 'weekly-opus' | 'weekly-sonnet' | 'overage' | null
+  readonly resetsAt: string | null
+  readonly observedAt: string
+}
+
+/** #103: `'session:capacity'`/`'session:capacity:set'`'s own shape —
+ *  `ceiling` (`SESSION_LIMIT_CEILING`) never changes, `limit` is the
+ *  operator's own setting, persisted. */
+export interface HostingCapacity {
+  readonly limit: number
+  readonly ceiling: number
+}
+
+/** #103: one entry offered by the restore banner at boot — app-minted
+ *  (`restoreId`), never the persisted `claudeSessionId` itself, so the
+ *  renderer can never send that id back verbatim. `availability` is the
+ *  registry's own read, resolved by `main/channels/hosting.ts`. */
+export interface RestorableSession {
+  readonly restoreId: string
+  readonly repoId: RepoId
+  readonly title: string | null
+  readonly origin: { readonly kind: 'resumed'; readonly from: string }
+  readonly startedAt: string
+  readonly availability: { readonly ok: true } | { readonly ok: false; readonly reason: string }
+}
+
+/** `'session:dismiss'`'s response — an ended handle's row leaving the rail. */
+export type SessionDismissResult = { readonly ok: true } | { readonly ok: false; readonly kind: 'unknown-session' | 'still-open' }
+
+/** `'session:restore'`'s response — `SessionStartResult`'s own branches plus
+ *  the two ways a restore entry itself can fail to resolve. */
+export type SessionRestoreResult =
+  | SessionStartResult
+  | { readonly ok: false; readonly kind: 'unknown-restore' }
+  | { readonly ok: false; readonly kind: 'repo-unavailable'; readonly reason: string }
+
+/** `'session:restore:discard'`'s response — always `{ ok: true }`, since
+ *  discarding an already-gone entry (or every entry with `null`) is
+ *  idempotent by design. */
+export type SessionRestoreDiscardResult = { readonly ok: true }

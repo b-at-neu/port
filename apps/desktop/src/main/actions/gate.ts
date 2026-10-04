@@ -15,7 +15,7 @@ import { fetchGatePreflight } from '../github'
 import { IMPLEMENTATION_PLAN_HEADING, sessionRequiredMarkerAt } from '../state'
 import { listRepositories } from '../registry'
 import type { RegistryDeps } from '../registry'
-import { applyLabels, postComment, readGateClaim, releaseGateClaim, takeGateClaim } from '../writes'
+import { applyLabels, postComment, readGateClaim, releaseClaimScope, takeClaimScope } from '../writes'
 import type { ApplyLabelsParams, PostCommentParams } from '../writes'
 
 type ReadyEntry = Extract<RepositoryEntry, { readonly status: 'ready' }>
@@ -28,8 +28,8 @@ export interface GateDeps {
   readonly listRepositories: typeof listRepositories
   readonly fetchGatePreflight: typeof fetchGatePreflight
   readonly readGateClaim: typeof readGateClaim
-  readonly takeGateClaim: typeof takeGateClaim
-  readonly releaseGateClaim: typeof releaseGateClaim
+  readonly takeClaimScope: typeof takeClaimScope
+  readonly releaseClaimScope: typeof releaseClaimScope
   readonly applyLabels: (params: ApplyLabelsParams) => Promise<WriteOutcome>
   readonly postComment: (params: PostCommentParams) => Promise<WriteOutcome>
   readonly now: () => Date
@@ -39,8 +39,8 @@ export const defaultGateDeps: GateDeps = {
   listRepositories,
   fetchGatePreflight,
   readGateClaim,
-  takeGateClaim,
-  releaseGateClaim,
+  takeClaimScope,
+  releaseClaimScope,
   applyLabels,
   postComment,
   now: () => new Date(),
@@ -146,13 +146,16 @@ export interface GateClaimSetParams {
  * this explicit operator action (`docs/COORDINATION.md`'s own lifecycle
  * rule) — nothing here takes or releases a claim on any machine-observed
  * condition. Always re-reads afterwards, so the response carries the state
- * as it now is rather than as it was asked to be.
+ * as it now is rather than as it was asked to be. Goes through the
+ * scope-preserving pair with `scope: 'plan-gate'` — taking the plan gate
+ * must never drop a held `dispatch` scope, and releasing it must never
+ * drop one either.
  */
 export async function gateClaimSet(params: GateClaimSetParams, deps: GateDeps = defaultGateDeps): Promise<GateClaimResponse> {
   const entry = await resolveReadyEntry(params.registryDeps, params.repoId, deps)
   const result = params.held
-    ? await deps.takeGateClaim({ repoRoot: entry.path, repo: entry.config.repo, owner: GATE_CLAIM_OWNER, scopes: ['plan-gate'], now: deps.now })
-    : await deps.releaseGateClaim({ repoRoot: entry.path })
+    ? await deps.takeClaimScope({ repoRoot: entry.path, repo: entry.config.repo, owner: GATE_CLAIM_OWNER, scope: 'plan-gate', now: deps.now })
+    : await deps.releaseClaimScope({ repoRoot: entry.path, repo: entry.config.repo, scope: 'plan-gate' })
   if (!result.ok) return { kind: 'failed', result }
   const claim = await deps.readGateClaim({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
   return { kind: 'ok', claim }

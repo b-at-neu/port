@@ -21,6 +21,20 @@ export function scopeFor(request: Pick<LabelWriteRequest, 'add' | 'remove'>): Cl
   return PLAN_GATE_KEYS.some((key) => touched.has(key)) ? 'plan-gate' : null
 }
 
+/** #292: every scope `applyLabels` must hold before it writes — `scopeFor`'s
+ *  own derived requirement, unioned with the request's own `requiredScopes`.
+ *  It can only ever add a requirement, never drop the derived one: a caller
+ *  cannot understate what its own label keys already demand. Order is
+ *  derived-first, so `applyLabels` checks the two known scopes
+ *  (`'plan-gate'`, `'dispatch'`) in a stable, predictable order when a
+ *  request happens to need both. */
+export function scopesFor(request: Pick<LabelWriteRequest, 'add' | 'remove' | 'requiredScopes'>): readonly ClaimScope[] {
+  const derived = scopeFor(request)
+  const required = request.requiredScopes ?? []
+  const scopes = derived !== null ? [derived, ...required] : [...required]
+  return [...new Set(scopes)]
+}
+
 export type PreconditionVerdict = { readonly satisfied: true } | { readonly satisfied: false; readonly expected: readonly string[]; readonly observed: readonly string[] }
 
 function assigneesSatisfied(expectation: AssigneeExpectation, observedAssignees: readonly string[]): boolean {

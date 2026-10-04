@@ -17,6 +17,15 @@ async function writeConfig(root: string, content: string): Promise<void> {
   await writeFile(join(root, '.claude', 'port.config.json'), content)
 }
 
+async function writeClaudeMd(root: string, content: string): Promise<void> {
+  await writeFile(join(root, 'CLAUDE.md'), content)
+}
+
+async function writeApprovalWorkflow(root: string, jobName: string): Promise<void> {
+  await mkdir(join(root, '.github', 'workflows'), { recursive: true })
+  await writeFile(join(root, '.github', 'workflows', 'approval-check.yml'), `name: approval gate\non: pull_request\njobs:\n  ${jobName}:\n    runs-on: ubuntu-latest\n`)
+}
+
 function ok(stdout: string): CommandResult {
   return { ok: true, stdout, stderr: '' }
 }
@@ -71,7 +80,7 @@ describe('inspectRepository', () => {
     expect(entry.config.models).toEqual({ plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' })
     expect(entry.config.modules).toEqual({ approvalGate: true, release: true, scope: true })
     expect(entry.config.reviewCycleCap).toBe(5)
-    expect(entry.config.commands).toEqual({ worktrees: null })
+    expect(entry.config.commands).toEqual({ worktrees: null, budget: null })
     expect(entry.config.concurrency).toEqual({ sharedFiles: [], overlapThreshold: 2 })
   })
 
@@ -80,7 +89,7 @@ describe('inspectRepository', () => {
     await writeConfig(root, JSON.stringify({ repo: 'o/n', commands: { worktrees: 'node scripts/port-worktrees.mjs' } }))
     const entry = await inspectRepository(root, { git: fakeGit(root) })
     if (!('config' in entry)) throw new Error('unreachable')
-    expect(entry.config.commands).toEqual({ worktrees: 'node scripts/port-worktrees.mjs' })
+    expect(entry.config.commands).toEqual({ worktrees: 'node scripts/port-worktrees.mjs', budget: null })
   })
 
   it('falls back to null for a wrong-shaped commands.worktrees rather than carrying it through', async () => {
@@ -88,7 +97,7 @@ describe('inspectRepository', () => {
     await writeConfig(root, JSON.stringify({ repo: 'o/n', commands: { worktrees: 42 } }))
     const entry = await inspectRepository(root, { git: fakeGit(root) })
     if (!('config' in entry)) throw new Error('unreachable')
-    expect(entry.config.commands).toEqual({ worktrees: null })
+    expect(entry.config.commands).toEqual({ worktrees: null, budget: null })
     const schemaDiagnostic = entry.diagnostics.find((d) => d.kind === 'schema-violations')
     expect(schemaDiagnostic).toBeDefined()
   })
@@ -197,5 +206,97 @@ describe('inspectRepository', () => {
     const entry = await inspectRepository(root, { git })
     if (!('problem' in entry)) throw new Error('unreachable')
     expect(entry.problem.kind).toBe('not-a-git-repository')
+  })
+})
+
+describe('inspectRepository — CLAUDE.md port-overrides (#300)', () => {
+  it('applies a labels.<key> override onto the vocabulary, with source CLAUDE.md, and lists it', async () => {
+    const root = await makeRepoDir()
+    await writeConfig(root, JSON.stringify({ repo: 'o/n' }))
+    await writeClaudeMd(root, '<!-- port-overrides:begin -->\n```port-overrides\nlabels.ready = go  # this repo already used this word\n```\n<!-- port-overrides:end -->\n')
+    const entry = await inspectRepository(root, { git: fakeGit(root) })
+    if (!('config' in entry)) throw new Error('unreachable')
+    const readyLabel = entry.config.vocabulary.labels.find((l) => l.key === ('ready' satisfies LabelKey))
+    expect(readyLabel).toEqual({ key: 'ready', name: 'go', source: 'CLAUDE.md', module: 'core', role: 'trigger' })
+    expect(entry.config.overrides).toEqual([{ path: 'labels.ready', value: 'go', reason: 'this repo already used this word', portDefault: 'ready', source: 'CLAUDE.md' }])
+  })
+
+  it('applies a reviewCycleCap override onto the config', async () => {
+    const root = await makeRepoDir()
+    await writeConfig(root, JSON.stringify({ repo: 'o/n' }))
+    await writeClaudeMd(root, '<!-- port-overrides:begin -->\n```port-overrides\nreviewCycleCap = 2  # test\n```\n<!-- port-overrides:end -->\n')
+    const entry = await inspectRepository(root, { git: fakeGit(root) })
+    if (!('config' in entry)) throw new Error('unreachable')
+    expect(entry.config.reviewCycleCap).toBe(2)
+  })
+
+  it('reports a refused line as an override-refused diagnostic, without disturbing the rest of the card', async () => {
+    const root = await makeRepoDir()
+    await writeConfig(root, JSON.stringify({ repo: 'o/n' }))
+    await writeClaudeMd(root, '<!-- port-overrides:begin -->\n```port-overrides\ncommands.checks = node x.ts  # different runner\n```\n<!-- port-overrides:end -->\n')
+    const entry = await inspectRepository(root, { git: fakeGit(root) })
+    if (!('config' in entry)) throw new Error('unreachable')
+    expect(entry.status).toBe('ready')
+    const refused = entry.diagnostics.find((d) => d.kind === 'override-refused')
+    expect(refused).toEqual({ kind: 'override-refused', path: 'commands.checks', line: 'commands.checks = node x.ts  # different runner', reason: "'commands.checks' is the permission surface the guard hook allowlists from — never overridable, no exception" })
+  })
+
+  it('no block at all leaves the card byte-identical to today, with no overrides listed', async () => {
+    const root = await makeRepoDir()
+    await writeConfig(root, JSON.stringify({ repo: 'o/n' }))
+    const entry = await inspectRepository(root, { git: fakeGit(root) })
+    if (!('config' in entry)) throw new Error('unreachable')
+    expect(entry.config.overrides).toEqual([])
+    expect(entry.diagnostics.some((d) => d.kind === 'override-refused')).toBe(false)
+  })
+
+  it('folds the approval-check.yml job name in as an infrastructure disposition', async () => {
+    const root = await makeRepoDir()
+    await writeConfig(root, JSON.stringify({ repo: 'o/n' }))
+    await writeApprovalWorkflow(root, 'approval-check')
+    const entry = await inspectRepository(root, { git: fakeGit(root) })
+    if (!('config' in entry)) throw new Error('unreachable')
+    expect(entry.config.checkDispositions).toEqual({ 'approval-check': { disposition: 'infrastructure', source: 'approval-gate' } })
+  })
+
+  it('a modules.approvalGate = false override turns the carve-out off — no excused check at all', async () => {
+    const root = await makeRepoDir()
+    await writeConfig(root, JSON.stringify({ repo: 'o/n' }))
+    await writeApprovalWorkflow(root, 'approval-check')
+    await writeClaudeMd(root, '<!-- port-overrides:begin -->\n```port-overrides\nmodules.approvalGate = false  # test\n```\n<!-- port-overrides:end -->\n')
+    const entry = await inspectRepository(root, { git: fakeGit(root) })
+    if (!('config' in entry)) throw new Error('unreachable')
+    expect(entry.config.modules.approvalGate).toBe(false)
+    expect(entry.config.checkDispositions).toEqual({})
+  })
+
+  it('a checks.<name> override folds in as a CLAUDE.md-sourced disposition', async () => {
+    const root = await makeRepoDir()
+    await writeConfig(root, JSON.stringify({ repo: 'o/n' }))
+    await writeClaudeMd(root, '<!-- port-overrides:begin -->\n```port-overrides\nchecks.deploy-preview = infrastructure  # org preview-DB pool; red at capacity\n```\n<!-- port-overrides:end -->\n')
+    const entry = await inspectRepository(root, { git: fakeGit(root) })
+    if (!('config' in entry)) throw new Error('unreachable')
+    expect(entry.config.checkDispositions['deploy-preview']).toEqual({ disposition: 'infrastructure', source: 'CLAUDE.md' })
+  })
+
+  it('reports effective-config-unreadable when CLAUDE.md cannot be read as a file', async () => {
+    const root = await makeRepoDir()
+    await writeConfig(root, JSON.stringify({ repo: 'o/n' }))
+    // A directory named CLAUDE.md fails every platform's readFile the same
+    // way (EISDIR), the cross-platform stand-in for a permission failure
+    // this suite cannot portably arrange otherwise.
+    await mkdir(join(root, 'CLAUDE.md'), { recursive: true })
+    const entry = await inspectRepository(root, { git: fakeGit(root) })
+    if (!('problem' in entry) || entry.problem.kind !== 'effective-config-unreadable') throw new Error('unreachable')
+    expect(entry.problem.file).toBe('CLAUDE.md')
+  })
+
+  it('reports effective-config-unreadable when approval-check.yml cannot be read as a file', async () => {
+    const root = await makeRepoDir()
+    await writeConfig(root, JSON.stringify({ repo: 'o/n' }))
+    await mkdir(join(root, '.github', 'workflows', 'approval-check.yml'), { recursive: true })
+    const entry = await inspectRepository(root, { git: fakeGit(root) })
+    if (!('problem' in entry) || entry.problem.kind !== 'effective-config-unreadable') throw new Error('unreachable')
+    expect(entry.problem.file).toBe('.github/workflows/approval-check.yml')
   })
 })

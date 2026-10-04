@@ -29,8 +29,10 @@ const READY_ENTRY = {
     modules: { approvalGate: true, release: true, scope: true },
     reviewCycleCap: 3,
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
+    checkDispositions: {},
+    overrides: [],
     vocabulary: {} as never,
-    commands: { worktrees: null },
+    commands: { worktrees: null, budget: null },
   },
   diagnostics: [],
 }

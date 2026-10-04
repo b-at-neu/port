@@ -6,11 +6,12 @@
 // `resolveClaimPreflight` already use; an unresolvable executable returns
 // #97's own diagnosis rather than a new error kind (that is `HostedStore`'s
 // own job, not this file's).
-import type { IpcMap } from '../../shared/ipc'
-import type { RepositoryEntry } from '../../shared/repos'
+import type { IpcMap, ReposListResponse } from '../../shared/ipc'
+import type { RepoId, RepoProblem, RepositoryEntry } from '../../shared/repos'
 import { PERMISSION_DECISIONS } from '../../shared/hosting/types'
-import type { SessionStartMode } from '../../shared/hosting/types'
+import type { RestorableSession, SessionStartMode } from '../../shared/hosting/types'
 import type { HostedStore } from '../hosting'
+import { SESSION_LIMIT_CEILING } from '../hosting'
 import { listRepositories } from '../registry'
 import type { RegistryDeps } from '../registry'
 
@@ -111,6 +112,19 @@ export function resolveSessionList(request: IpcMap['session:list']['request'], d
  *  one of these can only come from a stale or buggy renderer, so each
  *  throws rather than reaching `HostedStore.answerPermission` with a shape
  *  it was never built to defend against. */
+/** #101: the shape rail every channel uses. `name`'s content is **not**
+ *  validated here — that is a typed result from `HostedStore.invoke`
+ *  (`invalid-command`/`unknown-command`), so the UI can show it rather than
+ *  the channel throwing on a name the operator might legitimately click. */
+export const MAX_INVOKE_ARGS_CHARS = 8_000
+
+export function resolveSessionInvoke(request: IpcMap['session:invoke']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['invoke']> {
+  if (typeof request?.sessionKey !== 'string' || request.sessionKey === '') throw new Error("'session:invoke' requires a non-empty 'sessionKey'")
+  if (typeof request.name !== 'string' || request.name === '') throw new Error("'session:invoke' requires a non-empty 'name'")
+  if (typeof request.args !== 'string' || request.args.length > MAX_INVOKE_ARGS_CHARS) throw new Error(`'session:invoke' requires 'args' to be a string of at most ${MAX_INVOKE_ARGS_CHARS} characters`)
+  return deps.store.invoke(request.sessionKey, request.name, request.args)
+}
+
 export function resolveSessionPermissionAnswer(
   request: IpcMap['session:permission:answer']['request'],
   deps: HostingChannelDeps,
@@ -128,4 +142,101 @@ export function resolveSessionPermissionAnswer(
     throw new Error("'session:permission:answer' requires 'message' to be null when 'decision' is not 'deny'")
   }
   return deps.store.answerPermission(request.sessionKey, request.permissionId, request.decision, message)
+}
+
+/** #103: `session:dismiss` — removes an ended handle from the rail. */
+export function resolveSessionDismiss(request: IpcMap['session:dismiss']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['dismiss']> {
+  if (typeof request?.sessionKey !== 'string' || request.sessionKey === '') throw new Error("'session:dismiss' requires a non-empty 'sessionKey'")
+  return deps.store.dismiss(request.sessionKey)
+}
+
+export function resolveSessionCapacity(request: IpcMap['session:capacity']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['capacity']> {
+  if (request !== undefined) throw new Error("'session:capacity' takes no payload")
+  return deps.store.capacity()
+}
+
+export function resolveSessionCapacitySet(request: IpcMap['session:capacity:set']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['setLimit']> {
+  if (typeof request?.limit !== 'number' || !Number.isInteger(request.limit) || request.limit < 1 || request.limit > SESSION_LIMIT_CEILING) {
+    throw new Error(`'session:capacity:set' requires 'limit' to be an integer from 1 to ${String(SESSION_LIMIT_CEILING)}`)
+  }
+  return deps.store.setLimit(request.limit)
+}
+
+/** A short, main-process-only reason string for a repository that cannot
+ *  host a restore — never the renderer's own `problemCopy`
+ *  (`renderer/src/repositories.ts`), which is written for the repository
+ *  card rather than a one-line restore-banner reason. */
+function problemReason(problem: RepoProblem): string {
+  switch (problem.kind) {
+    case 'directory-missing':
+      return 'its folder is gone'
+    case 'not-a-git-repository':
+      return "it isn't a git repository anymore"
+    case 'not-port-managed':
+      return "it's no longer port-managed"
+    case 'config-malformed':
+      return '.claude/port.config.json is not valid JSON'
+    case 'config-invalid':
+      return '.claude/port.config.json has no usable repo'
+    case 'config-unreadable':
+      return "its config can't be read"
+    case 'effective-config-unreadable':
+      return `${problem.file} can't be read`
+  }
+}
+
+function availabilityFor(repoId: RepoId, list: ReposListResponse): RestorableSession['availability'] {
+  if (!list.ok) return { ok: false, reason: list.message }
+  const found = list.repositories.find((repository) => repository.id === repoId)
+  if (found === undefined) return { ok: false, reason: 'This repository is no longer registered.' }
+  if (!isReadyEntry(found)) return { ok: false, reason: problemReason(found.problem) }
+  return { ok: true }
+}
+
+/** #103: `session:restore:list` — joins every restorable entry with
+ *  `listRepositories` for availability. A listing failure marks every entry
+ *  unavailable with its message, rather than ever returning an empty list
+ *  for a read that failed. */
+export async function resolveSessionRestoreList(registryDeps: RegistryDeps, request: IpcMap['session:restore:list']['request'], deps: HostingChannelDeps): Promise<IpcMap['session:restore:list']['response']> {
+  if (request !== undefined) throw new Error("'session:restore:list' takes no payload")
+  const [entries, list] = await Promise.all([deps.store.restorable(), deps.listRepositories(registryDeps)])
+  return {
+    entries: entries.map((entry) => ({
+      restoreId: entry.restoreId,
+      repoId: entry.repoId,
+      title: entry.title,
+      origin: { kind: 'resumed' as const, from: entry.claudeSessionId },
+      startedAt: entry.startedAt,
+      availability: availabilityFor(entry.repoId, list),
+    })),
+  }
+}
+
+/** #103: `session:restore` — resolves the ready entry's own path itself and
+ *  returns `repo-unavailable` as a value rather than throwing, since an
+ *  operator can hit that state in normal use (the registered repository
+ *  moved, or was removed, since the entry was offered). */
+export async function resolveSessionRestore(registryDeps: RegistryDeps, request: IpcMap['session:restore']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['restore']> {
+  if (typeof request?.restoreId !== 'string' || request.restoreId === '') throw new Error("'session:restore' requires a non-empty 'restoreId'")
+
+  const entries = await deps.store.restorable()
+  const entry = entries.find((candidate) => candidate.restoreId === request.restoreId)
+  if (entry === undefined) return { ok: false, kind: 'unknown-restore' }
+
+  const list = await deps.listRepositories(registryDeps)
+  if (!list.ok) return { ok: false, kind: 'repo-unavailable', reason: list.message }
+  const repository = list.repositories.find((candidate) => candidate.id === entry.repoId)
+  if (repository === undefined) return { ok: false, kind: 'repo-unavailable', reason: 'This repository is no longer registered.' }
+  if (!isReadyEntry(repository)) return { ok: false, kind: 'repo-unavailable', reason: problemReason(repository.problem) }
+
+  return deps.store.restore(request.restoreId, repository.path)
+}
+
+/** #103: `session:restore:discard` — `restoreId: null` discards every
+ *  entry, idempotently either way. */
+export function resolveSessionRestoreDiscard(request: IpcMap['session:restore:discard']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['discardRestorable']> {
+  if (request === undefined || (request.restoreId !== null && (typeof request.restoreId !== 'string' || request.restoreId === ''))) {
+    throw new Error("'session:restore:discard' requires 'restoreId' to be null or a non-empty string")
+  }
+  return deps.store.discardRestorable(request.restoreId)
 }
