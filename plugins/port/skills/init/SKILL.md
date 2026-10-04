@@ -2,7 +2,7 @@
 name: init
 description: Install the port agent pipeline into this repository — detect its toolchain, choose which subsystems to enable, write port.config.json, merge the permission lists into .claude/settings.json, create the label vocabulary, optionally install the CI merge gate, and offer to generate engineering standards from the codebase. Idempotent; nothing is written without confirmation. Manual only. Usage: /port:init
 disable-model-invocation: true
-allowed-tools: Read, Write, Edit, Glob, Grep, AskUserQuestion, Bash(gh label *) Bash(gh api repos/*) Bash(gh repo view *) Bash(git branch *) Bash(git remote *) Bash(git rev-parse *) Bash(node --version)
+allowed-tools: Read, Write, Edit, Glob, Grep, AskUserQuestion, Bash(gh label *) Bash(gh api repos/*) Bash(gh repo view *) Bash(git branch *) Bash(git remote *) Bash(git rev-parse *) Bash(node --version) Bash(claude plugin marketplace remove *) Bash(claude plugin marketplace add *) Bash(claude plugin install *)
 ---
 
 # Initialize a repository for the port pipeline
@@ -14,7 +14,7 @@ Run this once, from inside the repository you are adopting.
 ## Ground rules
 
 - **Nothing is written without confirmation.** This touches permissions, CI, and repository labels — all things the operator should see before they change.
-- **Idempotent.** Re-running reconciles rather than duplicating: no doubled permission entries, no duplicate labels, no second copy of the workflow.
+- **Idempotent.** Re-running on a configured repository only **verifies** by default — read-only, nothing written. Rewriting needs the explicit **Reconcile** choice, and even then reconciles rather than duplicating: no doubled permission entries, no duplicate labels, no second copy of the workflow.
 - **Report honestly.** Say what changed, what was left alone because it already existed, and what the operator must still do themselves.
 - **Never invent configuration.** If detection cannot determine something, ask. A guessed check command produces an agent that fails every run for a reason nobody can see.
 
@@ -27,9 +27,21 @@ gh repo view --json nameWithOwner,defaultBranchRef
 
 Stop if this is not a git repository, or has no GitHub remote.
 
-If `.claude/port.config.json` already exists, this is a **reconcile**: read it, say so, and ask whether to continue. Do not silently overwrite an existing configuration.
+**If a `port.config.json` exists at the repository root instead**, it predates the move into `.claude/`. Migrate it with `git mv port.config.json .claude/port.config.json` so history follows the file, say that you did, and continue into the **verify-only** pass below from the migrated config. Nothing reads the root location any more, so leaving it there would silently break every agent.
 
-**If a `port.config.json` exists at the repository root instead**, it predates the move into `.claude/`. Migrate it with `git mv port.config.json .claude/port.config.json` so history follows the file, say that you did, and continue as a reconcile from the migrated config. Nothing reads the root location any more, so leaving it there would silently break every agent.
+**If `.claude/port.config.json` already exists, this repository is already configured — run verify-only.** Read-only, writes nothing, and stops unless the operator chooses otherwise. Report three facts:
+
+- **The committed marketplace entry** — `.claude/settings.json`'s `extraKnownMarketplaces.port`: present, `source.ref` set, `autoUpdate: true`.
+- **The committed `ref` against the newest release** — resolve the newest published tag with step 4's own `gh api repos/b-at-neu/port/releases/latest --jq .tag_name` and its fallback rules, and compare it to the committed `ref`.
+- **This machine against the committed pin** — §9.5's machine facts, read-only; nothing is written from here.
+
+Then ask one `AskUserQuestion` (header `Already configured`):
+
+- **Stop here** *(recommended unless the machine drifted)* — ends the run; nothing is written.
+- **Fix this machine only** *(offered only when the machine disagrees with the committed pin and that pin is `main` or a `v<semver>` tag; recommended whenever offered)* — runs §9.5 against the committed ref and writes nothing in the repository.
+- **Reconcile, rewrite settings** — continues into step 1, exactly like today's full run.
+
+Do not silently overwrite an existing configuration — writing anything still needs the explicit **Reconcile** choice.
 
 ## 1. Detect
 
@@ -145,7 +157,7 @@ Write it even when reconciling an entry that already exists but is missing `ref`
 **A `ref` change is called out in words, too, naming both values — the settings diff below is not enough on its own.** Never write a ref change silently. Use, verbatim, substituting `<tag>` (the ref just resolved) and `<old-tag>` (the ref already in the file):
 
 - narrowed → `Marketplace pin: port ref main → <tag>. main tracks the release branch; the tag pins you to exactly what was published.`
-- moved → `Marketplace pin: port ref <old-tag> → <tag>. This changes which version of the pipeline this repository runs; it takes effect on your next session.`
+- moved → `Marketplace pin: port ref <old-tag> → <tag>. This changes which version of the pipeline this repository runs; §9.5 applies it to this machine; it loads on your next session.`
 - first pin → `Marketplace pin: port ref unset → <tag>. Unset tracked b-at-neu/port's default branch; this pins you to its last published release.`
 - no release yet → `b-at-neu/port has no published release yet — pinning ref to main, its release branch. Marketplace pin: port ref unset → main.`
 - unchanged → `Marketplace pin: port ref <tag> (unchanged).`
@@ -257,6 +269,43 @@ Ask whether to run it now.
 
 **Declining is a genuinely supported path.** The analysis is slow and asks real questions, and an operator who just wants the pipeline running would rush exactly the decisions that matter most. State the consequence once and move on — do not press it.
 
+## 9.5. Apply and verify the pin
+
+Placed last on purpose. `claude plugin marketplace remove` uninstalls, which can replace or delete the `${CLAUDE_PLUGIN_ROOT}` this skill reads templates and `analyze/SKILL.md` from. Nothing after this step reads `${CLAUDE_PLUGIN_ROOT}`, and step 10 only reports.
+
+**Machine facts** (also used by step 0's verify-only pass) are read from the plugins directory four directory levels above `${CLAUDE_PLUGIN_ROOT}`, the same derivation PREFLIGHT step 3 uses:
+
+- (a) `known_marketplaces.json`'s `port` record has `source.source == "github"`, a `source.repo` equal to `b-at-neu/port` (case-insensitive), and a `source.ref` equal to `<ref>`.
+- (b) `installed_plugins.json` has a `port@port` record at `project` scope whose `projectPath` is the repository root.
+- (c) That record's `gitCommitSha` equals `gh api repos/b-at-neu/port/commits/<ref> --jq .sha`.
+
+**Skip this step and state the reason** in any of these cases:
+
+- The cwd is under `.claude/worktrees/`. The install rule would deny the calls below, so print the commands to run from the main checkout instead.
+- `<root>/.claude-plugin/marketplace.json` declares `port` and the registered source is a `directory` at `<root>`. That is the self-hosting dev loop, and repointing it would break it.
+- `${CLAUDE_PLUGIN_ROOT}` is not a cache install, or the registry is unreadable. There is nothing verifiable to repoint.
+- All three facts already hold. Say `matches, nothing to apply` and stop here.
+
+Otherwise ask (header `Plugin pin`): **Apply to this machine now** *(recommended)* or **Skip, print the commands**.
+
+**To apply:**
+
+- Read a snapshot of `.claude/settings.json`.
+- From the repository root, one call each: `claude plugin marketplace remove port`, then `claude plugin marketplace add b-at-neu/port@<ref> --scope project`, then `claude plugin install port@port --scope project`.
+- A non-zero exit from `remove` is noted, not fatal — `add` repoints the name regardless. A non-zero exit from `add` or `install` stops the sequence and reports the remaining commands.
+- Re-read `.claude/settings.json`. If it differs from the snapshot, Write the snapshot back and say so: `the CLI rewrote .claude/settings.json; restored what I wrote in step 4`. The CLI never decides the committed entry's shape.
+- Re-check the three machine facts. **Never report the pin applied until all three hold.** On a mismatch, name the fact, show expected against found, and print the commands. This fails closed on the success claim: a fact that cannot be checked is reported as unverified, never as applied.
+
+**Report, exact copy, substituting `<…>`:**
+
+- Applied: `Applied: this machine now runs b-at-neu/port@<ref> (<sha>), project scope. Start a new session to load it.`
+- Not applied:
+  > ⚠️ Pin not applied: `<registered ref | install record commit | project-scope record>` is `<found>`, expected `<expected>`. Run these from `<root>` yourself, then start a new session:
+  > `claude plugin marketplace remove port` · `claude plugin marketplace add b-at-neu/port@<ref> --scope project` · `claude plugin install port@port --scope project`
+- Skipped: `Not applying the pin here: <you're in a managed worktree, so run the commands below from the main checkout | this repository is the plugin's own source and your local dev loop is registered, and repointing it would replace that | the running copy isn't a cache install, so there's nothing to repoint>.`
+
+Frontmatter `allowed-tools` grants exactly `Bash(claude plugin marketplace remove *)`, `Bash(claude plugin marketplace add *)` and `Bash(claude plugin install *)` — these narrow forms only, nothing broader.
+
 ## 10. Report, including what you did not do
 
 Summarize: the config written, permissions added versus already present, labels created versus skipped, whether the workflow was installed, and files touched.
@@ -283,7 +332,7 @@ Never let the operator walk away believing they have a merge gate they do not ha
 
 > ⚠️ You're on `<branch>`, not `<integration>`. Everything I just wrote — the config, the permission lists, and the plugin declaration — reaches dispatched agents only once it merges to `<integration>`, because their worktrees are checkouts of that branch and carry the committed files. Until then the cockpit works and dispatch does not.
 
-**Plugin updates land on the next session, not mid-session.** Say that once. Under a tag pin, an immutable `ref` never advances on its own — the supported way to move to a newer release is **re-running `/port:init`**, which re-resolves the newest published tag and reports the move in words, as above. Note also that `DISABLE_AUTOUPDATER` suppresses plugin updates entirely unless `FORCE_AUTOUPDATE_PLUGINS=1` is also set.
+**Plugin updates land on the next session, not mid-session.** Say that once. Under a tag pin, an immutable `ref` never advances on its own — the supported way to move to a newer release is **re-running `/port:init` and choosing Reconcile**, which re-resolves the newest published tag, reports the move in words, as above, and applies it to this machine through §9.5. Note also that `DISABLE_AUTOUPDATER` suppresses plugin updates entirely unless `FORCE_AUTOUPDATE_PLUGINS=1` is also set.
 
 **The config just written must reach this repository's default branch — `<default branch>`, from step 0's `gh repo view --json defaultBranchRef` — before any dispatched agent can read it.** `impl-agent` and `revise-agent` bootstrap from `git show origin/HEAD:.claude/port.config.json`, which resolves the default branch, not `branches.integration`. If the default branch and the integration branch differ, say so here and be explicit (single-branch mode never reaches this, since the two are the same by construction): a config change merged only to `<integration>` does not reach dispatched agents until it also reaches `<default branch>`.
 
