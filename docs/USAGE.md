@@ -127,7 +127,7 @@ What it deliberately never force-removes on its own: a **locked** worktree, a **
 /port:worktree-clean
 ```
 
-This skill drives the same reclamation script interactively — review the classified table, then unlock, force-clear dirty candidates, and force-delete orphan directories, each with its own confirmation. On Windows especially, a populated dependency tree can defeat even a forced remove; this skill is what recovers those.
+This skill drives the same reclamation script interactively — review the classified table, then unlock, force-clear dirty candidates, and purge orphan directories, each with its own confirmation. The script falls back to a plain filesystem delete whenever `git worktree remove` itself fails partway (a long path or a file still held open, both common on Windows), so a populated dependency tree that used to defeat even a forced remove no longer needs a separate manual recipe.
 
 ## Releasing
 

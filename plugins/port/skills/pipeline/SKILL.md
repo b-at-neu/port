@@ -202,9 +202,13 @@ Parse its JSON `summary` and `candidates` — never re-derive them by hand. The 
 
   > **Worktrees:** skipped this tick — `<commands.worktrees> reclaim` exited 1 (`<first line of stderr>`); nothing removed, and I'm not calling this clear.
 
-- A removal itself failed (script exit `2` — a populated dependency tree defeating even `--force`, common on Windows):
+- A removal itself failed (script exit `2` — both routes failed: `git worktree remove`, then the `fs` fallback it falls back to, commonly a file still held open on Windows):
 
-  > `failed` `.claude/worktrees/agent-a9fccca6…` — `git worktree remove` refused (`Invalid argument`). A later prune will **not** clear this; run `/port:worktree-clean`.
+  > `failed` `.claude/worktrees/agent-a9fccca6…` — a file under it is still open (`EBUSY: resource busy or locked`). Close whatever holds it (an editor, a dev server, an antivirus scan), then run `/port:worktree-clean`.
+
+- A moved `HEAD` kept a candidate rather than deleting it (its classification changed mid-removal):
+
+  > `kept` `.claude/worktrees/agent-b2c3d4e5…` — HEAD moved while it was being removed; not deleted.
 
 **Tie removal to the merge, in step 1.** For every number this tick confirmed merged or closed (see "Merged-pull-request reconciliation" above), run `<commands.worktrees> reclaim --issue <n> --json` and report the line it printed — this is the acceptance criterion "removed when its pull request merges or closes," with an exact known number rather than a correlation guess:
 

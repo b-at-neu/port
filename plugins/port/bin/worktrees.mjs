@@ -13,19 +13,28 @@
 //           [--json] [--unlock] [--force-dirty]
 //     Classify, then remove what is reclaimable, capped at --max (default 5).
 //
+//   purge --orphan <path>... [--json]
+//     Delete a directory this run's own orphan scan classifies `orphan-dir`.
+//     Any other path is refused, never deleted. Needs only git — no config
+//     read, no integration ref, no `gh`.
+//
 // Self-contained — no relative imports, so an adopting repository can copy
 // this file alone. Every path is built with node:path; every child process is
 // invoked with an explicit argv array via node:child_process.spawnSync, never
 // a shell string — cross-platform by construction, and testable by importing
 // its pure functions directly (the port repository's own layer 1 checks do).
 //
-// Never in this script: `git fetch`, `git worktree add`, a write to the main
-// checkout, deletion of an untracked directory, or removal of a path not
-// reported by `git worktree list`.
+// Never in this script: `git fetch`, `git worktree add`, or a write to the
+// main checkout. An untracked directory is deleted only through `purge`, and
+// only when this run classified it `orphan-dir` — never by `report`/
+// `reclaim`, and never a path not reported by `git worktree list` or this
+// run's own orphan scan.
 import { spawnSync } from 'node:child_process';
-import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, statSync, rmSync } from 'node:fs';
 import { join, dirname, basename, relative, resolve, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
+
+const USAGE = "usage: node worktrees.mjs <report|reclaim> [--issue N] [--max K] [--protect <path>]... [--offline] [--json] [--unlock] [--force-dirty]\n       node worktrees.mjs purge --orphan <path>... [--json]";
 
 /** One clear line, no stack trace. */
 const die = (msg) => {
@@ -44,7 +53,14 @@ function run(cmd, args, opts = {}) {
   return { ok: res.status === 0, stdout: res.stdout ?? '', stderr: res.stderr ?? '', status: res.status };
 }
 
-const git = (args, opts) => run('git', args, opts);
+// Every git call runs with `-c core.longpaths=true` — Git for Windows needs
+// it to create or delete a path over 260 characters, and non-Windows git
+// silently ignores the key, so this is one code path on all three OSes
+// rather than a win32-only branch. `readLongpaths` below is the one
+// exception: it reads the repository's *actual* persisted setting, so it
+// bypasses this helper deliberately (prepending `-c` would always read back
+// `true`, masking the real value).
+const git = (args, opts) => run('git', ['-c', 'core.longpaths=true', ...args], opts);
 const gitOut = (args, opts) => {
   const res = git(args, opts);
   return res.ok ? res.stdout.trim() : null;
@@ -130,6 +146,136 @@ export function classifyCandidate({ isOutside, isProtected, locked, dirty, itemS
   if (locked) return { state: 'locked', removable: false, otherwiseRemovable };
   if (otherwiseRemovable && dirty) return { state: 'dirty', removable: false, otherwiseRemovable: true };
   return { state: base, removable: otherwiseRemovable };
+}
+
+/** Resolves a path to the key its identity is compared by: `resolve(p)`,
+ *  lowercased on `win32` only. A protect path from `TaskList`, a registered
+ *  worktree path, or a `purge --orphan` argument must still match its
+ *  counterpart when the two differ only in case or separator style —
+ *  Windows paths are case-insensitive, POSIX paths are not. */
+export function pathKey(p) {
+  const r = resolve(p);
+  return process.platform === 'win32' ? r.toLowerCase() : r;
+}
+
+/** Decides what `removeWorktree` does after `git worktree remove` has
+ *  already been attempted once. Every input is a fact the caller already
+ *  gathered — no I/O here. Precedence:
+ *  - the directory is gone → `done` (`git worktree prune` still runs once,
+ *    at the end of the whole reclaim pass, to clear the registration);
+ *  - the directory remains but git already deregistered it → `fallback`
+ *    (the half-removal case this script exists to recover: git's own
+ *    `remove_worktree` deletes the registration even when it fails to
+ *    delete the files);
+ *  - the directory remains, still registered, and `HEAD` has not moved →
+ *    `fallback` too;
+ *  - still registered with a moved `HEAD` → `abort` — the classification
+ *    this removal was based on no longer holds, so this fails toward
+ *    keeping the files rather than deleting something that changed under
+ *    it mid-run. */
+export function fallbackDecision({ dirExists, stillRegistered, headNow, headClassified }) {
+  if (!dirExists) return { action: 'done' };
+  if (!stillRegistered) return { action: 'fallback' };
+  if (headNow === headClassified) return { action: 'fallback' };
+  return { action: 'abort', reason: 'changed during removal' };
+}
+
+/** Classifies a filesystem error code from the `fs.rmSync` fallback into one
+ *  of three causes a human can act on. `EBUSY`/`EPERM`/`EACCES`/`ENOTEMPTY`
+ *  are all "something still has a file under this directory open" in
+ *  practice (an editor, a dev server, an antivirus scan); `ENAMETOOLONG`
+ *  names the other known Windows cause this ticket investigated (though
+ *  Node's own `\\?\` long-form paths make it rare); anything else is
+ *  reported as `unknown` rather than guessed. */
+export function classifyRemovalFailure(code) {
+  if (code === 'EBUSY' || code === 'EPERM' || code === 'EACCES' || code === 'ENOTEMPTY') return 'file-in-use';
+  if (code === 'ENAMETOOLONG') return 'long-path';
+  return 'unknown';
+}
+
+/** Removes one already-classified, already-removable, non-`isOutside`
+ *  candidate: `git worktree remove` first, then `fallbackDecision`, then
+ *  (only on `fallback`) `fs.rmSync` as the recovery route `git worktree
+ *  remove` itself cannot take — Node's `fs` clears a read-only attribute and
+ *  retries on `EPERM`, and its `\\?\` long-form paths carry no 260-character
+ *  limit, which is why the fallback can succeed where git's own call just
+ *  failed. `deps` is the injectable seam this repository's own checks use to
+ *  exercise every branch without a real git repository. Returns
+ *  `{ removed, removedBy: 'git' | 'fallback' | null, gitError, error, cause }`
+ *  — `cause` is set only when both routes failed; `error` carries the
+ *  user-facing reason either way (the HEAD-moved message, or the fallback's
+ *  own error message). Never runs `git worktree prune` itself — the caller
+ *  runs that once, after the whole reclaim pass. */
+export function removeWorktree(mainRoot, candidate, deps = {}) {
+  const d = {
+    git,
+    rmSync,
+    existsSync,
+    listPorcelain: () => parsePorcelain(gitOut(['worktree', 'list', '--porcelain'], { cwd: mainRoot }) ?? ''),
+    ...deps,
+  };
+
+  // stdio: ['ignore', ...] so Git for Windows' own "Unlink of file … failed.
+  // Should I try again?" retry prompt can never wait on stdin — this call
+  // must never block on a confirmation nothing will ever answer.
+  const removeRes = d.git(['-C', mainRoot, 'worktree', 'remove', '--force', candidate.path], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const gitError = removeRes.ok ? null : (removeRes.stderr.trim().split('\n')[0] || 'git worktree remove failed');
+
+  const dirExists = d.existsSync(candidate.path);
+  const records = d.listPorcelain();
+  const match = records.find((r) => pathKey(r.path) === pathKey(candidate.path));
+
+  const decision = fallbackDecision({
+    dirExists,
+    stillRegistered: !!match,
+    headNow: match ? match.head : null,
+    headClassified: candidate.head,
+  });
+
+  if (decision.action === 'done') {
+    return { removed: true, removedBy: 'git', gitError, error: null, cause: null };
+  }
+
+  if (decision.action === 'abort') {
+    return { removed: false, removedBy: null, gitError, error: 'HEAD moved while it was being removed; not deleted.', cause: null };
+  }
+
+  // decision.action === 'fallback'
+  try {
+    d.rmSync(candidate.path, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    return { removed: true, removedBy: 'fallback', gitError, error: null, cause: null };
+  } catch (err) {
+    return { removed: false, removedBy: null, gitError, error: err.message, cause: classifyRemovalFailure(err.code) };
+  }
+}
+
+/** Classifies one directory beside a registered worktree, given facts
+ *  already gathered by the caller — no I/O here, mirroring every other pure
+ *  classifier in this file. Replaces the bare `existsSync(join(full,
+ *  '.git'))` skip this script used to apply: that test could not tell a
+ *  live independent repository (a `.git` directory) from a worktree's own
+ *  `.git` *file* whose target the main checkout has since forgotten (a
+ *  stale half-removal — exactly the thing this ticket's reclaim fix now
+ *  prevents from recurring, but which already-accumulated directories may
+ *  still carry). An unreadable `.git` fails toward `skip`, the same
+ *  direction every uncertain fact in this file already fails toward never
+ *  deleting something this run cannot actually account for. */
+export function orphanVerdict({ gitEntry, gitdirTargetExists }) {
+  if (gitEntry === 'dir') return 'skip';
+  if (gitEntry === 'unreadable') return 'skip';
+  if (gitEntry === 'file') return gitdirTargetExists ? 'skip' : 'orphan';
+  return 'orphan'; // gitEntry === 'none'
+}
+
+/** The Windows advisory copy, or `null` when it does not apply. Only ever
+ *  fires on `win32` with `core.longpaths` not already `'true'` — every other
+ *  platform, and a Windows repository that already enabled it, gets `null`.
+ *  Exported so this repository's own checks can assert the exact three
+ *  cases without faking a platform-dependent git config read. */
+export function longPathAdvisory({ platform, longpaths }) {
+  if (platform !== 'win32') return null;
+  if (longpaths === 'true') return null;
+  return 'core.longpaths is off — git on Windows cannot create or delete paths over 260 characters, which a populated node_modules under .claude/worktrees/ can exceed. Enable it once for this repository: git config core.longpaths true';
 }
 
 // --- gh -----------------------------------------------------------------------
@@ -219,22 +365,62 @@ function isDirty(path) {
   return { dirty: files > 0, files };
 }
 
+/** Reads the repository's own persisted `core.longpaths`, bypassing the
+ *  `git` helper's own `-c core.longpaths=true` deliberately — that override
+ *  would make this read always come back `'true'`, masking whatever the
+ *  repository's committed config actually says. Returns `null` when unset
+ *  (git exits non-zero and prints nothing) or on any other read failure. */
+function readLongpaths(mainRoot) {
+  const res = run('git', ['-C', mainRoot, 'config', '--type=bool', '--get', 'core.longpaths']);
+  return res.ok ? res.stdout.trim() : null;
+}
+
 // --- Orphan directories -------------------------------------------------------
+/** Gathers the one fact `orphanVerdict` needs about a candidate directory's
+ *  `.git` entry — the only I/O `findOrphanDirs` defers to this helper. */
+function gitEntryOf(full) {
+  const gitPath = join(full, '.git');
+  let stat;
+  try {
+    stat = statSync(gitPath);
+  } catch (e) {
+    return e.code === 'ENOENT' ? { gitEntry: 'none', gitdirTargetExists: false } : { gitEntry: 'unreadable', gitdirTargetExists: false };
+  }
+  if (stat.isDirectory()) return { gitEntry: 'dir', gitdirTargetExists: false };
+  try {
+    const content = readFileSync(gitPath, 'utf8');
+    const m = /^gitdir:\s*(.+?)\s*$/m.exec(content);
+    const target = m ? m[1] : null;
+    return { gitEntry: 'file', gitdirTargetExists: !!target && existsSync(resolve(full, target)) };
+  } catch {
+    return { gitEntry: 'unreadable', gitdirTargetExists: false };
+  }
+}
+
 /** Directories that sit beside a registered worktree but that git does not
- *  track at all — never deleted here, only reported for `/port:worktree-clean`.
- *  Scanning is derived from the registered worktrees' own parent directories,
- *  never a hard-coded `.claude/worktrees/` — a repository with no registered
- *  worktrees has no parent directories to scan and no-ops cleanly. */
+ *  track at all — never deleted here, only reported for `/port:worktree-
+ *  clean` (or `purge`, this script's own deletion route). Scanning covers
+ *  every registered worktree's own parent directory **plus**
+ *  `.claude/worktrees/` itself whenever it exists: a repository with zero
+ *  registered linked worktrees used to scan nothing at all, making every
+ *  orphan there invisible, even though `.claude/worktrees/` is the
+ *  conventional location both producers (the harness and `/port:implement`)
+ *  write to. */
 function findOrphanDirs(mainRoot, candidates) {
-  const registered = new Set(candidates.map((c) => resolve(c.path)));
-  registered.add(resolve(mainRoot));
+  const registered = new Set(candidates.map((c) => pathKey(c.path)));
+  registered.add(pathKey(mainRoot));
+
   const parents = new Set(candidates.map((c) => dirname(resolve(c.path))));
-  const orphans = [];
+  const worktreesDir = resolve(join(mainRoot, '.claude', 'worktrees'));
+  if (existsSync(worktreesDir)) parents.add(worktreesDir);
+
+  const found = new Map();
   for (const parent of parents) {
     if (!existsSync(parent)) continue;
     for (const entry of readdirSync(parent)) {
       const full = resolve(join(parent, entry));
-      if (registered.has(full)) continue;
+      const key = pathKey(full);
+      if (registered.has(key) || found.has(key)) continue;
       let stat;
       try {
         stat = statSync(full);
@@ -242,11 +428,11 @@ function findOrphanDirs(mainRoot, candidates) {
         continue;
       }
       if (!stat.isDirectory()) continue;
-      if (existsSync(join(full, '.git'))) continue; // git tracks it under some other name
-      orphans.push(full);
+      if (orphanVerdict(gitEntryOf(full)) !== 'orphan') continue;
+      found.set(key, full);
     }
   }
-  return orphans;
+  return [...found.values()];
 }
 
 // --- CLI ----------------------------------------------------------------------
@@ -261,20 +447,88 @@ function parseArgs(argv) {
     else if (a === '--json') opts.json = true;
     else if (a === '--unlock') opts.unlock = true;
     else if (a === '--force-dirty') opts.forceDirty = true;
-    else die(`unrecognized argument '${a}'. usage: node worktrees.mjs <report|reclaim> [--issue N] [--max K] [--protect <path>]... [--offline] [--json] [--unlock] [--force-dirty]`);
+    else die(`unrecognized argument '${a}'. ${USAGE}`);
   }
   return opts;
 }
 
+/** `purge --orphan <path>... [--json]` — needs only git: no config read, no
+ *  integration ref, no `gh`. Re-derives this run's own orphan set and
+ *  deletes a requested path only when it is a member; anything else is
+ *  refused and never deleted, regardless of what it actually is. */
+function runPurge(argv) {
+  const paths = [];
+  let json = false;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--orphan') paths.push(argv[++i]);
+    else if (a === '--json') json = true;
+    else die(`unrecognized argument '${a}'. ${USAGE}`);
+  }
+  if (paths.length === 0) die(`purge requires at least one --orphan <path>. ${USAGE}`);
+
+  const mainRoot = configRepoRoot(process.cwd());
+  if (!mainRoot) die('not a git repository (git rev-parse --show-toplevel failed).');
+
+  const porcelain = worktreeList(mainRoot);
+  if (porcelain === null) die('`git worktree list --porcelain` failed.');
+  const records = parsePorcelain(porcelain);
+  if (records.length === 0) die('`git worktree list --porcelain` produced no entries — not a git repository?');
+
+  const mainResolved = resolve(records[0].path);
+  const candidates = records.slice(1).map((r) => {
+    const relPath = relative(mainResolved, resolve(r.path));
+    const isOutside = relPath === '' || relPath.startsWith('..') || isAbsolute(relPath);
+    return { ...r, isOutside };
+  });
+  const orphanKeys = new Set(findOrphanDirs(mainRoot, candidates.filter((c) => !c.isOutside)).map(pathKey));
+
+  const results = [];
+  let anyFailed = false;
+  for (const p of paths) {
+    if (!orphanKeys.has(pathKey(p))) {
+      results.push({ path: p, deleted: false, refused: "not an orphan directory in this run's report; never deleted", error: null, cause: null });
+      anyFailed = true;
+      continue;
+    }
+    try {
+      rmSync(p, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+      results.push({ path: p, deleted: true, refused: null, error: null, cause: null });
+    } catch (err) {
+      results.push({ path: p, deleted: false, refused: null, error: err.message, cause: classifyRemovalFailure(err.code) });
+      anyFailed = true;
+    }
+  }
+
+  if (json) {
+    console.log(JSON.stringify({ mainRoot, results }, null, 2));
+  } else {
+    for (const r of results) {
+      if (r.deleted) console.log(`deleted\t${r.path}`);
+      else if (r.refused) console.log(`refused\t${r.path} — ${r.refused}`);
+      else console.log(`failed\t${r.path} — ${r.error}`);
+    }
+  }
+  process.exit(anyFailed ? 2 : 0);
+}
+
 function main() {
   const [mode, ...rest] = process.argv.slice(2);
+  if (mode === 'purge') {
+    runPurge(rest);
+    return;
+  }
   if (mode !== 'report' && mode !== 'reclaim') {
-    die("unrecognized mode. usage: node worktrees.mjs <report|reclaim> [--issue N] [--max K] [--protect <path>]... [--offline] [--json] [--unlock] [--force-dirty]");
+    die(`unrecognized mode. ${USAGE}`);
   }
   const opts = parseArgs(rest);
 
   const mainRoot = configRepoRoot(process.cwd());
   if (!mainRoot) die('not a git repository (git rev-parse --show-toplevel failed).');
+
+  const advisories = [];
+  const advisory = longPathAdvisory({ platform: process.platform, longpaths: readLongpaths(mainRoot) });
+  if (advisory) advisories.push(advisory);
 
   const cfg = readConfig(mainRoot);
   if (!cfg) die('.claude/port.config.json was not found, or does not parse, at the repository root — this repository is not port-managed.');
@@ -297,7 +551,7 @@ function main() {
   if (records.length === 0) die('`git worktree list --porcelain` produced no entries — not a git repository?');
 
   const mainResolved = resolve(records[0].path);
-  const protectedSet = new Set(opts.protect.map((p) => resolve(p)));
+  const protectedSet = new Set(opts.protect.map((p) => pathKey(p)));
 
   const candidates = records.slice(1).map((r) => {
     const relPath = relative(mainResolved, resolve(r.path));
@@ -362,7 +616,7 @@ function main() {
     c.dirtyFiles = dirtyInfo.files;
     const classified = classifyCandidate({
       isOutside: c.isOutside,
-      isProtected: protectedSet.has(resolve(c.path)),
+      isProtected: protectedSet.has(pathKey(c.path)),
       locked: c.locked && !opts.unlock,
       dirty: dirtyInfo.dirty && !opts.forceDirty,
       itemState,
@@ -387,22 +641,29 @@ function main() {
         const unlockRes = git(['-C', mainRoot, 'worktree', 'unlock', c.path]);
         if (!unlockRes.ok) {
           c.error = `unlock failed: ${unlockRes.stderr.trim()}`;
+          c.failureKind = 'unlock';
           removalFailed = true;
           continue;
         }
       }
-      const removeRes = git(['-C', mainRoot, 'worktree', 'remove', '--force', c.path]);
-      if (!removeRes.ok) {
-        c.error = removeRes.stderr.trim().split('\n')[0] || 'git worktree remove failed';
+      const result = removeWorktree(mainRoot, c);
+      c.removedBy = result.removedBy;
+      c.gitError = result.gitError;
+      c.cause = result.cause;
+      if (result.removed) {
+        c.removed = true;
+        removedCount++;
+        // Runs after either route, `git` or `fallback` — not only after a
+        // clean `git worktree remove`.
+        if (c.branch) {
+          const branchRes = git(['-C', mainRoot, 'branch', '-d', c.branch]);
+          c.branchDeleted = branchRes.ok;
+          if (!branchRes.ok) c.branchRetainedReason = branchRes.stderr.trim().split('\n')[0] || 'unmerged';
+        }
+      } else {
+        c.error = result.error;
+        c.failureKind = result.cause ? 'failed' : 'kept';
         removalFailed = true;
-        continue;
-      }
-      c.removed = true;
-      removedCount++;
-      if (c.branch) {
-        const branchRes = git(['-C', mainRoot, 'branch', '-d', c.branch]);
-        c.branchDeleted = branchRes.ok;
-        if (!branchRes.ok) c.branchRetainedReason = branchRes.stderr.trim().split('\n')[0] || 'unmerged';
       }
     }
     git(['-C', mainRoot, 'worktree', 'prune']);
@@ -410,7 +671,7 @@ function main() {
 
   const orphanDirs = findOrphanDirs(mainRoot, candidates.filter((c) => !c.isOutside));
 
-  report({ mode, mainRoot, integrationRef, candidates, orphanDirs, opts });
+  report({ mode, mainRoot, integrationRef, candidates, orphanDirs, opts, advisories });
   process.exit(removalFailed ? 2 : 0);
 }
 
@@ -463,7 +724,7 @@ function describeReason(c) {
   }
 }
 
-function report({ mode, mainRoot, integrationRef, candidates, orphanDirs, opts }) {
+function report({ mode, mainRoot, integrationRef, candidates, orphanDirs, opts, advisories }) {
   const visible = candidates;
   const removed = visible.filter((c) => c.removed).length;
   const kept = visible.length - removed;
@@ -474,6 +735,7 @@ function report({ mode, mainRoot, integrationRef, candidates, orphanDirs, opts }
     console.log(JSON.stringify({
       mainRoot,
       integrationRef,
+      advisories,
       candidates: visible.map((c) => ({
         path: c.path,
         branch: c.branch,
@@ -486,6 +748,9 @@ function report({ mode, mainRoot, integrationRef, candidates, orphanDirs, opts }
         lockReason: c.lockReason,
         dirtyFiles: c.dirtyFiles ?? 0,
         removed: !!c.removed,
+        removedBy: c.removedBy ?? null,
+        gitError: c.gitError ?? null,
+        cause: c.cause ?? null,
         branchDeleted: c.branchDeleted ?? null,
         error: c.error ?? null,
       })),
@@ -495,11 +760,26 @@ function report({ mode, mainRoot, integrationRef, candidates, orphanDirs, opts }
     return;
   }
 
+  for (const a of advisories) console.log(`advisory  ${a}`);
+
   console.log(`Worktrees: ${visible.length} registered · removed ${removed} · kept ${kept}.`);
   for (const c of visible) {
-    const tag = c.removed ? 'removed' : c.state;
-    const suffix = c.error ? ` — FAILED: ${c.error}` : '';
-    console.log(`${tag}\t${c.path} — ${c.reason}${suffix}`);
+    if (c.removed) {
+      const suffix = c.removedBy === 'fallback'
+        ? ` · git worktree remove failed (${c.gitError ?? 'unknown error'}); removed by the filesystem fallback`
+        : '';
+      console.log(`removed\t${c.path} — ${c.reason}${suffix}`);
+    } else if (c.failureKind === 'kept') {
+      console.log(`kept\t${c.path} — ${c.error}`);
+    } else if (c.failureKind === 'failed') {
+      const msg = c.cause === 'file-in-use'
+        ? `a file under it is still open (${c.error}). Close whatever holds it (an editor, a dev server, an antivirus scan), then run /port:worktree-clean.`
+        : `${c.error}. Run /port:worktree-clean to retry.`;
+      console.log(`failed\t${c.path} — ${msg}`);
+    } else {
+      const suffix = c.error ? ` — FAILED: ${c.error}` : '';
+      console.log(`${c.state}\t${c.path} — ${c.reason}${suffix}`);
+    }
     if (c.removed && c.branch && c.branchDeleted === false) {
       console.log(`  branch '${c.branch}' retained — ${c.branchRetainedReason}`);
     }
