@@ -30,7 +30,7 @@
 // `reclaim`, and never a path not reported by `git worktree list` or this
 // run's own orphan scan.
 import { spawnSync } from 'node:child_process';
-import { readFileSync, existsSync, readdirSync, statSync, rmSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, statSync, rmSync, realpathSync } from 'node:fs';
 import { join, dirname, basename, relative, resolve, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -148,13 +148,27 @@ export function classifyCandidate({ isOutside, isProtected, locked, dirty, itemS
   return { state: base, removable: otherwiseRemovable };
 }
 
-/** Resolves a path to the key its identity is compared by: `resolve(p)`,
- *  lowercased on `win32` only. A protect path from `TaskList`, a registered
- *  worktree path, or a `purge --orphan` argument must still match its
- *  counterpart when the two differ only in case or separator style —
- *  Windows paths are case-insensitive, POSIX paths are not. */
+/** Resolves a path to the key its identity is compared by: canonicalized
+ *  with `fs.realpathSync` (falling back to `resolve(p)` only when the path
+ *  does not exist yet, e.g. a `purge --orphan` argument whose directory this
+ *  same run is about to delete), lowercased on `win32` only. A plain
+ *  `resolve(p)` is not enough — it collapses `.`/`..` and normalizes
+ *  separators, but leaves a symlinked or substituted ancestor (macOS's
+ *  `/var` → `/private/var` `mkdtemp` symlink, a Windows `subst` drive)
+ *  unresolved, while `mainRoot` comes from `git rev-parse --show-toplevel`,
+ *  which git itself canonicalizes. Two paths naming the same directory
+ *  through a different ancestor spelling must still compare equal — a
+ *  protect path from `TaskList`, a registered worktree path, or a `purge
+ *  --orphan` argument must match its counterpart regardless of which side
+ *  derived it, or which differ only in case or separator style (Windows
+ *  paths are case-insensitive, POSIX paths are not). */
 export function pathKey(p) {
-  const r = resolve(p);
+  let r;
+  try {
+    r = realpathSync(p);
+  } catch {
+    r = resolve(p);
+  }
   return process.platform === 'win32' ? r.toLowerCase() : r;
 }
 

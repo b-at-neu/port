@@ -6,14 +6,14 @@ import { pathToFileURL } from 'node:url';
 import { root } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// #115's own Windows-removal fix: longpaths on every git call, an `fs.rmSync`
-// fallback for a `git worktree remove` that half-succeeds (deregisters
-// without deleting), an explicit `.claude/worktrees/` orphan scan, and a
-// `purge --orphan` mode that replaces worktree-clean's old rm -rf/
-// PowerShell recipe. Split out from scripts/checks/worktrees.ts (which keeps
-// the pre-existing template/classifier/hygiene assertions) so this ticket's
-// new surface gets its own topic module rather than growing that one past
-// its own shape.
+// Checks cross-platform worktree removal: longpaths on every git call, an
+// `fs.rmSync` fallback for a `git worktree remove` that half-succeeds
+// (deregisters without deleting), an explicit `.claude/worktrees/` orphan
+// scan, and a `purge --orphan` mode that replaces worktree-clean's old
+// rm -rf/PowerShell recipe (#115). Split out from scripts/checks/worktrees.ts
+// (which keeps the pre-existing template/classifier/hygiene assertions) so
+// this ticket's new surface gets its own topic module rather than growing
+// that one past its own shape.
 export default async function ({ fail, ok, note }: Reporter) {
   const scriptPath = join(root, 'plugins/port/bin/worktrees.mjs');
   const { fallbackDecision, classifyRemovalFailure, orphanVerdict, longPathAdvisory, pathKey, removeWorktree } =
