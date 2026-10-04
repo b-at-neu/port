@@ -22,6 +22,7 @@ import { onRepoLabelsChange, readyRepos, repoLabelFor, reloadRepoLabels } from '
 import { onSelectionChange, selectedSession, setSelectedSession } from './selection'
 import { capacityState, decrementLimit, incrementLimit, loadCapacity } from './capacity-controller'
 import { dismissBanner, forget, loadRestoreList, resumeAll, resumeOne, restoreState, toggleReviewing } from './restore-controller'
+import { sharedSubscriptions } from '../data/subscriptions'
 
 let refs: SessionRefs | null = null
 let showCallback: (() => void) | null = null
@@ -349,8 +350,8 @@ export function initSession(container: HTMLElement, params: InitSessionParams): 
   onNavChange = params.onNavChange ?? null
   draw()
 
-  window.port.onSessionStatus(onStatusPush)
-  window.port.onSessionEntries(onEntriesPush)
+  sharedSubscriptions().subscribe('session:status', onStatusPush)
+  sharedSubscriptions().subscribe('session:entries', onEntriesPush)
   onRepoLabelsChange(draw)
   onSelectionChange(draw)
   void reloadRepoLabels()

@@ -4,14 +4,15 @@ import { root, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
 // --- No HTML-injection sink in the renderer ---------------------------------
-// guard(#83): a transcript's or a repository's untrusted text reaching the
-// DOM through an HTML-injection sink instead of createElement/textContent.
+// guard(#83, #316): a transcript's or a repository's untrusted text reaching
+// the DOM through an HTML-injection sink instead of createElement/textContent.
 // apps/desktop/src/renderer/ never builds a node from a string it does not
 // fully control — a tool result or a diff line is untrusted text from the
 // network and from repositories. One assertion pins the absence of every
 // sink, in the shape of desktop-platform.ts's own shell/fs-primitive
 // guards: broken deliberately once (a real `innerHTML` assignment) before
-// being trusted to pass.
+// being trusted to pass. `dangerouslySetInnerHTML` (#316) is React's own
+// version of the same sink.
 const FORBIDDEN = [
   { pattern: /\.innerHTML\s*=/, label: '.innerHTML =' },
   { pattern: /\.outerHTML\s*=/, label: '.outerHTML =' },
@@ -19,6 +20,7 @@ const FORBIDDEN = [
   { pattern: /document\.write\s*\(/, label: 'document.write(' },
   { pattern: /\beval\s*\(/, label: 'eval(' },
   { pattern: /new\s+Function\s*\(/, label: 'new Function(' },
+  { pattern: /dangerouslySetInnerHTML/, label: 'dangerouslySetInnerHTML' },
 ];
 
 export default async function ({ fail, ok }: Reporter) {
@@ -45,11 +47,16 @@ export default async function ({ fail, ok }: Reporter) {
   if (!violated) ok();
 
   // --- The renderer never subscribes to the opaque session:event ---------
-  // guard(#219): `session:event` forwards the raw SDK envelope untouched
-  // (`message: unknown`) precisely so no renderer code narrows a 37-variant
-  // union on its own — #219's own live projector (main/hosting/project.ts)
-  // is the one place that narrows it, over `session:entries` instead.
+  // guard(#219, #316): `session:event` forwards the raw SDK envelope
+  // untouched (`message: unknown`) precisely so no renderer code narrows a
+  // 37-variant union on its own — issue 219's own live projector
+  // (main/hosting/project.ts) is the one place that narrows it, over
+  // `session:entries` instead. The literal string, not just the
+  // `onSessionEvent` identifier, is banned too (#316) — `data/subscriptions.ts`
+  // names it once, as `Exclude<IpcEvent, 'session:event'>`, a type-level
+  // exclusion and the one sanctioned occurrence.
   {
+    const subscriptionsRel = 'apps/desktop/src/renderer/src/data/subscriptions.ts';
     let found = false;
     for (const f of files) {
       const rel = relOf(f);
@@ -57,6 +64,10 @@ export default async function ({ fail, ok }: Reporter) {
       if (/\bonSessionEvent\b/.test(text)) {
         found = true;
         fail('desktop-renderer', `${rel} names 'onSessionEvent' — the renderer must never subscribe to the opaque session:event; consume session:entries instead`);
+      }
+      if (rel !== subscriptionsRel && /session:event/.test(text)) {
+        found = true;
+        fail('desktop-renderer', `${rel} names the literal 'session:event' — the renderer must never subscribe to the opaque session:event; consume session:entries instead`);
       }
     }
     if (!found) ok();

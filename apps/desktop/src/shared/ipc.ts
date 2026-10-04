@@ -384,3 +384,24 @@ export const IPC_EVENTS = ['board:update', 'session:event', 'session:status', 's
 export type IpcEvent = (typeof IPC_EVENTS)[number]
 
 export const _eventsMatchIpcEventMap: AssertEqual<IpcEvent, keyof IpcEventMap> = true
+
+/**
+ * The bridge's own name derivation (#316) — moved out of the preload so
+ * `renderer/src/data/invoke.ts` can resolve `window.port[bridgeMethodName(channel)]`
+ * without a second, copied implementation. `preload/index.ts` imports both
+ * functions below rather than redeclaring them, so there is exactly one
+ * `channel:name` → `camelCase` mapping to pin.
+ */
+type CamelCase<S extends string> = S extends `${infer Head}:${infer Rest}` ? `${Head}${Capitalize<CamelCase<Rest>>}` : S
+
+export type BridgeMethod<C extends string> = CamelCase<C>
+export type BridgeListener<E extends string> = `on${Capitalize<CamelCase<E>>}`
+
+export function bridgeMethodName<C extends string>(channel: C): BridgeMethod<C> {
+  return channel.replace(/:([a-z])/g, (_match, letter: string) => letter.toUpperCase()) as BridgeMethod<C>
+}
+
+export function bridgeListenerName<E extends string>(event: E): BridgeListener<E> {
+  const camel = bridgeMethodName(event)
+  return `on${camel.charAt(0).toUpperCase()}${camel.slice(1)}` as BridgeListener<E>
+}
