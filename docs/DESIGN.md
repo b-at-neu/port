@@ -8,7 +8,7 @@ Every stage agent working on interface work reads this document, because `docs.d
 
 **Stack:** React · Tailwind · shadcn/ui (components added through its CLI, so their source is in the tree) · lucide icons · Inter and JetBrains Mono, bundled with the app so it works offline. Tokens are declared once, as CSS custom properties on shadcn's own role names, in the renderer's Tailwind theme stylesheet. That stylesheet is the only place a colour value appears.
 
-**Identity.** The layout and spacing follow Claude Code's desktop app on purpose. The identity is port's own: blue accent, Inter, the sailboat mark (§8). The app must never look like an Anthropic product. No coral or cream palette, no Claude or Claude Code logo or wordmark, and never the name "Claude Code" for the app itself.
+**Identity.** The layout and spacing follow Claude Code's desktop app on purpose. The identity is port's own: navy accent, Inter, the sailboat mark (§8). The app must never look like an Anthropic product. No coral or cream palette, no Claude or Claude Code logo or wordmark, and never the name "Claude Code" for the app itself.
 
 ## 1. Tokens
 
@@ -28,12 +28,14 @@ Components use roles, never values. Tailwind arbitrary colour values (`bg-[#…]
 | `foreground-secondary` | `#3f3f46` | `#d4d4d8` | Sidebar items, secondary labels |
 | `muted-foreground` | `#71717a` | `#a1a1aa` | Metadata, ticket numbers, section labels, timestamps |
 | `faint` | `#a1a1aa` | `#71717a` | **Non-text only**: idle dots, disabled glyphs, decorative strokes |
-| `primary` | `#2563eb` | `#2563eb` | Primary button fill, the app icon |
-| `primary-foreground` | `#ffffff` | `#ffffff` | Text on `primary` |
-| `ring` | `#2563eb` | `#3b82f6` | Focus ring, selection outline, progress fill |
-| `primary-soft` | `#dbeafe` | `#172554` | "Working" pill background, finished phase segments |
-| `primary-text` | `#1d4ed8` | `#93c5fd` | Links, "working" pill text, row actions |
-| `selection` | `#eff6ff` | `#0f1a33` | The selected row in a list |
+| `primary` | `#172554` | `#e2e8f5` | Primary button fill and the send button. Dark mode inverts it to a pale navy tint, because navy fill on a near-black background does not read as a button |
+| `primary-foreground` | `#ffffff` | `#172554` | Text and icons on `primary` |
+| `primary-text` | `#172554` | `#a5b8e3` | Links, row actions, `ContextMeter` fill |
+| `ring` | `#172554` | `#a5b8e3` | Focus ring, selection outline |
+| `selection` | `#eef1f8` | `#121a2e` | The selected row in a list |
+| `brand` | `#172554` | `#172554`, with a 1px `#4b5f8f` border | The mark's tile (§8), never anything else |
+
+**Navy is the brand; blue is a status.** Navy marks what you can act on and port's own identity. Blue appears only as the `working` status below. The two never stand in for each other.
 
 ### Status roles
 
@@ -41,7 +43,7 @@ Status colour is separate from the accent and means the same thing on every scre
 
 | Status | Means | Pill background / text (light) | Pill background / text (dark) | Dot (light / dark) |
 | --- | --- | --- | --- | --- |
-| `working` | Claude is doing something | `#dbeafe` / `#1d4ed8` | `#172554` / `#93c5fd` | `#2563eb` / `#3b82f6` |
+| `working` | Claude is doing something | `#dbeafe` / `#1d4ed8` | `#0f2a5c` / `#93c5fd` | `#2563eb` / `#3b82f6` |
 | `attention` | **Needs you**, or draining | `#fef3c7` / `#92400e` | `#3b2506` / `#fcd34d` | `#d97706` / `#f59e0b` |
 | `success` | Done, passing, running pipeline | `#dcfce7` / `#166534` | `#052e16` / `#86efac` | `#16a34a` / `#22c55e` |
 | `danger` | Failed, conflict, red check | `#fee2e2` / `#991b1b` | `#3b0d0d` / `#fca5a5` | `#dc2626` / `#ef4444` |
@@ -62,8 +64,10 @@ WCAG ratios for the pairings the interface uses. The requirement itself is in `E
 | `muted-foreground` on `background` / `sidebar` | 4.8 / 4.6 | 7.8 / 7.4 |
 | `muted-foreground` on `muted` / `accent` | **4.4 / 3.8: fails** | 6.6 / 5.8 |
 | `faint` on `background` | **2.6: fails** | **4.1: fails** |
-| `primary-foreground` on `primary` | 5.2 | 5.2 |
-| `primary-text` on `background` / `primary-soft` | 6.7 / 5.5 | 11.0 / 8.2 |
+| `primary-foreground` on `primary` | 14.7 | 12.0 |
+| `primary-text` on `background` / `sidebar` | 14.7 / 14.0 | 10.0 / 9.5 |
+| `primary-text` on `selection` | 13.0 | 10.1 |
+| `working` pill text on its background | 5.5 | 7.7 |
 | Status pill text on its background | 6.4 – 6.8 | 8.9 – 10.6 |
 | Diff text on its background | 6.8 / 7.6 | 11.8 / 9.6 |
 
@@ -71,7 +75,7 @@ Two rules follow from the failures:
 - **Text on `muted` or `accent` surfaces uses `foreground` or `foreground-secondary`,** never `muted-foreground`.
 - **`faint` is never used for text.**
 
-The dark `primary` stays `#2563eb`, because white text on the lighter `#3b82f6` measures 3.7.
+The dark `brand` tile's `#4b5f8f` border measures 3.0 against `sidebar`, enough to keep the mark from disappearing.
 
 ### Spacing, size and shape
 
@@ -178,7 +182,7 @@ Scoping epics, releases and analytics are out of scope for the first release.
 | Component | Treatment |
 | --- | --- |
 | `StatusPill` | Dot, then label, using the status roles. With a menu it shows a chevron: the repo run state is `● Running ▾` with Run, Pause and Drain, each with a one-line hint ("finish in-flight") |
-| `PhaseBar` | Six 10×4px segments with a 2px gap, for plan, plan review, implement, review, revision, merge. Finished segments `primary-soft`, the current one `primary`, waiting-on-you `attention`, complete `success`, the rest `accent`. Tooltip names the phase |
+| `PhaseBar` | Six 10×4px segments with a 2px gap, for plan, plan review, implement, review, revision, merge. Finished segments use the `working` pill background, the current one the `working` dot, waiting-on-you `attention`, complete `success`, the rest `accent`. Tooltip names the phase |
 | `PhaseList` | Vertical version for the detail pane: an 8px dot per phase, with who and when ("Plan approved by you · 2h ago") and live cost and time on the current phase |
 | `TicketRow`, `RepoPipelineRow`, `SessionRow`, `NeedsYouItem` | The list rows (§3) |
 | `ToolCallRow`, `DiffView`, `Markdown`, `Composer`, `ContextMeter` | Session pieces. `ContextMeter` is a 56×4px bar plus a percentage |
@@ -277,6 +281,6 @@ The markers `marker` and `autoPlan` are never shown as phases; `autoPlan` appear
 
 port's mark is a minimal outline sailboat. The sail is one closed shape, joined to the hull only by a short stretch of mast, so its foot floats above the deck.
 
-- **`docs/design/port-mark.svg`** is the canonical mark: a 24×24 view box, stroke-width 2.2, round caps and joins, drawn in `currentColor`. In the sidebar it sits in a 20px `primary` rounded square (5px radius), white, at 70% of the square.
-- **`docs/design/port-app-icon.svg`** is the canonical app icon: a 1024px `primary` square with a 230px corner radius, and the mark in white filling 70% of it. Platform icon files are generated from this file and never edited by hand.
-- **Don't** outline-fill the mark, recolour it outside `primary`/`primary-foreground`/`currentColor`, add a wave or scenery to it, or set it next to any Anthropic mark.
+- **`docs/design/port-mark.svg`** is the canonical mark: a 24×24 view box, stroke-width 1.6, round caps and joins, drawn in `currentColor`. In the sidebar it sits in a 20px `brand` rounded square (5px radius), white, at 70% of the square. In dark mode the square gets its 1px `#4b5f8f` border.
+- **`docs/design/port-app-icon.svg`** is the canonical app icon: a 1024px `brand` (`#172554`) square with a 230px corner radius, and the mark in white filling 70% of it. Platform icon files are generated from this file and never edited by hand.
+- **Don't** fill the mark in, thicken its line, recolour it outside white, `brand` and `currentColor`, add a wave or scenery to it, or set it next to any Anthropic mark.
