@@ -55,23 +55,23 @@ function override(overrides: Partial<AppliedOverride> = {}): AppliedOverride {
 
 describe('overrideLineCopy', () => {
   it('renders a scalar override', () => {
-    expect(overrideLineCopy(override())).toBe('override: reviewCycleCap = 3 (port default: 5) — we converge in three or it needs a human')
+    expect(overrideLineCopy(override())).toBe('override: reviewCycleCap = 3 (port default: 5) — we converge in three or it needs a human — source: CLAUDE.md')
   })
 
   it('renders a labels.<key> override', () => {
     expect(overrideLineCopy(override({ path: 'labels.ready', value: 'go', portDefault: 'ready', reason: 'this repo already used "ready" for triage' }))).toBe(
-      'override: labels.ready = go (port default: ready) — this repo already used "ready" for triage',
+      'override: labels.ready = go (port default: ready) — this repo already used "ready" for triage — source: CLAUDE.md',
     )
   })
 
   it('renders an append-only override whose port default is an array, comma-joined', () => {
     expect(overrideLineCopy(override({ path: 'sessionRequiredPaths', value: 'infra/**', portDefault: ['CLAUDE.md', '.claude/**'], reason: 'terraform is operator-only here' }))).toBe(
-      'override: sessionRequiredPaths = infra/** (port default: CLAUDE.md, .claude/**) — terraform is operator-only here',
+      'override: sessionRequiredPaths = infra/** (port default: CLAUDE.md, .claude/**) — terraform is operator-only here — source: CLAUDE.md',
     )
   })
 
   it('renders a null port default as none', () => {
-    expect(overrideLineCopy(override({ path: 'branches.production', value: null, portDefault: null, reason: 'single branch' }))).toBe('override: branches.production = null (port default: none) — single branch')
+    expect(overrideLineCopy(override({ path: 'branches.production', value: null, portDefault: null, reason: 'single branch' }))).toBe('override: branches.production = null (port default: none) — single branch — source: CLAUDE.md')
   })
 
   it('renders an unset port default as unset, never the literal word undefined', () => {

@@ -105,7 +105,7 @@ function portDefaultCopy(portDefault: AppliedOverride['portDefault']): string {
  *  cockpit's own startup preflight already prints, so an operator sees the
  *  same override described identically in both places. */
 export function overrideLineCopy(override: AppliedOverride): string {
-  return `override: ${override.path} = ${String(override.value)} (port default: ${portDefaultCopy(override.portDefault)}) — ${override.reason}`
+  return `override: ${override.path} = ${String(override.value)} (port default: ${portDefaultCopy(override.portDefault)}) — ${override.reason} — source: ${override.source}`
 }
 
 /** The repository card's own summary line, as parts to join with ` · ` —
