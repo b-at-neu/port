@@ -1,7 +1,4 @@
-// Pure character-level comment scanner: finds the citation lines and
-// over-long comment blocks the "Comment ratchet" check rates against each
-// area's ceiling. No I/O and no imports, so it type-strips standalone and a
-// later sweep can reuse it without pulling in the rest of scripts/lib/.
+// Pure character-level comment scanner for the comment ratchet. No I/O or imports, so it type-strips standalone.
 
 const OPERATOR_CHARS = new Set([
   '(', ',', '=', ':', '[', '!', '&', '|', '?', '{', '}', ';', '+', '-', '*', '%', '<', '>', '~', '^',
@@ -38,11 +35,8 @@ export interface ScanResult {
   longBlocks: number[];
 }
 
-/** Scans one file's already-read source for the two things the comment
- *  ratchet rates. A character-level state machine, not a regex sweep over
- *  the raw text — a string, template, or regex literal that merely contains
- *  `//`, `/*`, or a `#N`-looking substring must never read as a real
- *  comment. No I/O: the caller reads the file, this only classifies text. */
+/** A character-level state machine, not a regex sweep — a string, template,
+ *  or regex literal that merely contains `//`/`/*`/`#N` is never a comment. */
 export function scanComments(text: string): ScanResult {
   const lines = text.split('\n');
   const citationLines: number[] = [];
@@ -51,9 +45,8 @@ export function scanComments(text: string): ScanResult {
   let state: State = 'code';
   let stringQuote = '';
   let inCharClass = false;
-  // One entry per open `${…}` interpolation, holding that interpolation's
-  // own unmatched `{` count — what tells its closing `}` apart from a
-  // nested object literal's.
+  // One unmatched-`{` count per open `${…}` interpolation, so its closing
+  // `}` is told apart from a nested object literal's.
   const templateDepth: number[] = [];
   let lastChar: string | undefined;
   let lastWord: string | undefined;
@@ -216,10 +209,8 @@ export function scanComments(text: string): ScanResult {
       atStart = false;
     }
 
-    // Strings and regexes never cross a physical line in this scanner's own
-    // model (`'`/`"`/regex "end at the closing quote or the end of the
-    // line" — a template literal is the one exception, and a block comment
-    // or line comment are expected to continue or reset on their own terms).
+    // A string or regex never crosses a physical line here; a template
+    // literal and a block comment legitimately do.
     if (state === 'string' || state === 'regex') state = 'code';
     if (state === 'line-comment') state = 'code';
     flushWord();

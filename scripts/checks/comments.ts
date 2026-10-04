@@ -1,8 +1,5 @@
-// The "Comment ratchet": docs/ENGINEERING.md §7 asks for rare, one-line
-// comments that cite no ticket number. This is the mechanical enforcement —
-// a per-area ceiling on issue-citing comment lines and over-long comment
-// blocks that may only be lowered, with every non-grandfathered file held
-// to zero of either.
+// The "Comment ratchet": a per-area ceiling on issue-citing comments and
+// over-long comment blocks, which may only be lowered.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import { extname, join } from 'node:path';
@@ -30,10 +27,7 @@ export interface FileScan {
   longBlocks: number[];
 }
 
-/** The area whose `path` is the longest prefix of `filePath`, or `null` when
- *  none matches. Longest-prefix, never first-match, so a nested area (e.g.
- *  `apps/desktop/src/main/`) wins over its own broader parent
- *  (`apps/desktop/`). */
+/** Longest-prefix match, so a nested area wins over its broader parent. */
 export function areaFor(filePath: string, areas: readonly AreaConfig[]): AreaConfig | null {
   let best: AreaConfig | null = null;
   for (const a of areas) {
@@ -54,9 +48,7 @@ export interface RatchetVerdict {
   notes: string[];
 }
 
-/** Rates every scanned file against the config's per-area ceilings and
- *  grandfather list. Pure — no file I/O, so a fixture exercises it directly
- *  before it is trusted against the real tree. */
+/** Pure — no file I/O, so a fixture exercises it before the real tree does. */
 export function evaluateRatchet(files: readonly FileScan[], config: CommentsConfig): RatchetVerdict {
   const failures: string[] = [];
   const notes: string[] = [];
