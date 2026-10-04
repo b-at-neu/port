@@ -3,6 +3,9 @@ out/
 dist/
 *.tsbuildinfo
 
+# Generated packaging icon (docs/design/port-app-icon.svg is the source)
+apps/desktop/build/
+
 # Pipeline scratch space
 .agents/
 .temp/

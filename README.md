@@ -81,6 +81,12 @@ The plan gate comes back to you in the terminal: approve it, or give feedback an
 
 Full walkthrough: [docs/USAGE.md](docs/USAGE.md). Reference for the label lifecycle and permission model: [plugins/port/docs/PIPELINE.md](plugins/port/docs/PIPELINE.md); for output formats: [FORMATS.md](plugins/port/docs/FORMATS.md).
 
+## Desktop app
+
+A native cockpit, built on your own `claude` install and your own account — port never handles login. "Powered by Claude": `apps/desktop` runs your own installed Claude Code under your own account, the same as the terminal cockpit above.
+
+Installers are unsigned, built by the **Package desktop app** CI workflow; there is no release yet. Full install steps, building your own, and development: [apps/desktop/README.md](apps/desktop/README.md).
+
 ## Skills
 
 | Skill | What it does |

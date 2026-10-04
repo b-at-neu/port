@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "pnpm --filter @port/desktop dev",
     "build": "pnpm -r build",
+    "dist": "pnpm --filter @port/desktop dist",
     "typecheck": "pnpm -r typecheck",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "lint": "pnpm -r lint",
