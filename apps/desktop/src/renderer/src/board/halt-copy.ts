@@ -54,13 +54,16 @@ export function haltItemLine(outcome: HaltItemOutcome, now: Date): string {
 
 /** The heading line for a `completed` report — `N stopped, M skipped`, plus
  *  a `, K not stopped` clause only when a refusal actually happened, so the
- *  ordinary case stays exactly the two-count example the plan itself gives. */
-export function haltHeadingCopy(report: Extract<HaltReport, { readonly kind: 'completed' }>): string {
+ *  ordinary case stays exactly the two-count example the plan itself gives.
+ *  `leadingWord` defaults to `Halted` (`Halt everything`'s own report);
+ *  `run-state.ts`'s per-repository Pause passes `'Paused'`, since the plan's
+ *  own **UX states** table gives Pause a distinct heading word. */
+export function haltHeadingCopy(report: Extract<HaltReport, { readonly kind: 'completed' }>, leadingWord = 'Halted'): string {
   const stopped = report.items.filter((item) => item.kind === 'stopped').length
   const skipped = report.items.filter((item) => item.kind === 'skipped').length
   const refused = report.items.filter((item) => item.kind === 'refused').length
   const refusedPart = refused > 0 ? `, ${String(refused)} not stopped` : ''
-  return `Halted · ${String(stopped)} stopped, ${String(skipped)} skipped${refusedPart}`
+  return `${leadingWord} · ${String(stopped)} stopped, ${String(skipped)} skipped${refusedPart}`
 }
 
 /** The one line an `aborted` report ever shows — the run-state write itself

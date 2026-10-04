@@ -170,7 +170,7 @@ export function buildRunStateRow(repoRunState: RepoRunState, store: RunStatesSna
   pauseButton.dataset.action = 'dispatch-pause'
   pauseButton.dataset.repoId = String(repoId)
   pauseButton.textContent = pauseButtonLabel(repoId, inFlightCount)
-  pauseButton.disabled = runStatePending(repoId)
+  pauseButton.disabled = runStatePending(repoId) || store.kind === 'unread'
   row.appendChild(pauseButton)
 
   if (isPauseConfirmArmed(repoId)) {
@@ -190,7 +190,7 @@ export function buildRunStateRow(repoRunState: RepoRunState, store: RunStatesSna
       if (result.report.kind === 'aborted') {
         pauseNote.textContent = pauseAbortedCopy(result.report)
       } else {
-        const heading = haltHeadingCopy(result.report)
+        const heading = haltHeadingCopy(result.report, 'Paused')
         const lines = result.report.items.map((item) => haltItemLine(item, new Date()))
         pauseNote.textContent = [heading, pauseReportNote(result.report, repoName), ...lines].join(' — ')
       }
