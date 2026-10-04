@@ -59,7 +59,7 @@ function snapshotWith(tick: readonly TickReport[]): BoardSnapshot {
     policy: { baseIntervalMs: { github: 60_000, sessions: 15_000, worktrees: 15_000, denials: 15_000 }, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: 30_000 },
     tick,
     relay: { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: '2026-01-01T00:00:00Z' },
-    drain: { gate: 'open' },
+    runStates: { store: { kind: 'loaded' }, repositories: [] },
     nextWakeupAt: null,
     emittedAt: '2026-01-01T00:00:00Z',
     dispatch: [],
@@ -152,7 +152,7 @@ function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispat
     writeObservation: () => {
       throw new Error('writeObservation should not be invoked unless a test wires its own')
     },
-    drain: () => ({ gate: 'open' }),
+    runState: () => 'dispatching',
     readGateClaim: () => Promise.resolve(HELD_CLAIM),
     fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [], unavailable: [], fetchedAt: 'r' }),
     listRepositories: () => Promise.resolve({ ok: true, repositories: [entry()] }),

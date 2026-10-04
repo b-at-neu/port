@@ -1,44 +1,75 @@
-// Renderer-safe contract for operator control over dispatch (#110): drain,
-// resume, and halt. No import here may reach a Node builtin — the header
-// controls (`renderer/src/board/dispatch.ts`) are this ticket's own
-// consumer, the same rule `shared/actions/types.ts` and
-// `shared/writes/types.ts` already state for themselves.
+// Renderer-safe contract for operator control over dispatch (#110, #314):
+// per-repository run state (run/drain/pause) and halt everything. No import
+// here may reach a Node builtin — the header controls (`renderer/src/board/
+// dispatch.ts`, `renderer/src/board/run-state.ts`) are this ticket's own
+// consumer, the same rule `shared/actions/types.ts` and `shared/writes/
+// types.ts` already state for themselves.
 import type { PipelineItemKind } from '../github/types'
 import type { ItemActionResult } from '../actions/types'
 import type { RepoId } from '../repos'
 import type { StageAgent, TickObservationKind } from '../tick/types'
 import type { ClaimScope, ClaimWriteResult, WriteOutcome } from '../writes/types'
 
-export const DISPATCH_COMMANDS = ['drain', 'resume', 'halt'] as const
+/**
+ * #314: `dispatch.json`'s own per-repository run state — `dispatching`
+ * (today's "open"), `draining` (today's global drain, scoped to one
+ * repository) or `paused` (the hard stop: nothing dispatches or writes, and
+ * the *transition* into it also stops every in-flight agent for that
+ * repository). The renderer's own display copy capitalizes this first state
+ * as a proper noun; the persisted and typed value stays `'dispatching'`
+ * everywhere else (`desktop-dispatch`'s own naming rail).
+ */
+export const RUN_STATES = ['dispatching', 'draining', 'paused'] as const
+export type RunState = (typeof RUN_STATES)[number]
+
+/** The three per-repository operator commands — `run`/`drain`/`pause` map
+ *  onto `RUN_TARGET` 1:1, which is what `resolveDispatchControl` writes. */
+export const RUN_COMMANDS = ['run', 'drain', 'pause'] as const
+export type RunCommand = (typeof RUN_COMMANDS)[number]
+
+export const RUN_TARGET: Readonly<Record<RunCommand, RunState>> = {
+  run: 'dispatching',
+  drain: 'draining',
+  pause: 'paused',
+}
+
+/** `halt` joins the three per-repository commands as the one command that
+ *  carries no `repoId` at all — it pauses every registered repository. */
+export const DISPATCH_COMMANDS = [...RUN_COMMANDS, 'halt'] as const
 export type DispatchCommand = (typeof DISPATCH_COMMANDS)[number]
 
-/**
- * The app's one drain switch (`<userData>/dispatch.json`) —
- * `main/tick/dispatchable.ts`'s own gate reads this, never a per-repository
- * fact. One `open` arm, three draining arms: `unread` before the on-disk
- * file has ever been read (so `registerIpc()` stays synchronous and a
- * not-yet-read file never reads as open), `unreadable` for a malformed file,
- * an unsupported version, or one this app could not read at all, and
- * `operator` for a deliberate drain — `since` is the persisted instant it
- * started, never re-derived from `Date.now()` on every read.
- */
-export type DrainState =
-  | { readonly gate: 'open' }
-  | { readonly gate: 'draining'; readonly reason: 'operator'; readonly since: string }
-  | { readonly gate: 'draining'; readonly reason: 'unread' }
-  | { readonly gate: 'draining'; readonly reason: 'unreadable'; readonly message: string; readonly path: string }
+/** The run-state store's own read status — `unread` before the on-disk file
+ *  has ever been read (so a not-yet-loaded store answers every repository as
+ *  paused, never silently as open), `unreadable` for a malformed file, an
+ *  unsupported version, or one this app could not read at all, `loaded`
+ *  otherwise (including when the file is simply absent — no entries, every
+ *  repository paused). */
+export type RunStateStoreStatus = { readonly kind: 'unread' } | { readonly kind: 'loaded' } | { readonly kind: 'unreadable'; readonly message: string; readonly path: string }
 
-/**
- * One in-flight item's own halt outcome. `stopped` mirrors `stopPlan`'s own
- * `applied` write — `removedLabel` is the in-flight label's resolved name,
- * `attachedAgent` names an agent or session this app found attached (never
- * `null` standing in for "checked and found none" vs "did not check" — an
- * item with no attachment simply reports `null`, since this app cannot stop
- * one either way, #106's job). `skipped` never reached `applyItemAction` at
- * all. `refused` is any other `ItemActionResult` the write chokepoint itself
- * returned — a stale read, an unclaimed scope, a precondition that no
- * longer holds — rendered with the same copy an ordinary row's action note
- * already uses.
+/** One repository's own persisted run state — `since: null` means no saved
+ *  entry for this repository at all, which reads as paused the same as an
+ *  explicit `paused` entry would. */
+export interface RepoRunState {
+  readonly repoId: RepoId
+  readonly state: RunState
+  readonly since: string | null
+}
+
+export interface RunStatesSnapshot {
+  readonly store: RunStateStoreStatus
+  readonly repositories: readonly RepoRunState[]
+}
+
+/** One in-flight item's own halt outcome. `stopped` mirrors `stopPlan`'s own
+ *  `applied` write — `removedLabel` is the in-flight label's resolved name,
+ *  `attachedAgent` names an agent or session this app found attached (never
+ *  `null` standing in for "checked and found none" vs "did not check" — an
+ *  item with no attachment simply reports `null`, since this app cannot stop
+ *  one either way, #106's job). `skipped` never reached `applyItemAction` at
+ *  all. `refused` is any other `ItemActionResult` the write chokepoint itself
+ *  returned — a stale read, an unclaimed scope, a precondition that no
+ *  longer holds — rendered with the same copy an ordinary row's action note
+ *  already uses.
  */
 export type HaltItemOutcome =
   | {
@@ -68,31 +99,34 @@ export type HaltItemOutcome =
 
 /**
  * `haltDispatch`'s own report. `aborted` is the one outcome that never
- * touched a single item's labels — the drain write itself failed, and
+ * touched a single item's labels — the run-state write itself failed, and
  * resetting labels with the gate not durably closed would only re-dispatch
  * everything this call was meant to stop. `completed` always ran, even when
  * it stopped nothing at all (an empty `items` list is a real "nothing was
  * in flight", never conflated with the aborted case above).
  */
 export type HaltReport =
-  | { readonly kind: 'aborted'; readonly reason: 'drain-unwritable'; readonly message: string; readonly path: string }
+  | { readonly kind: 'aborted'; readonly reason: 'run-state-unwritable'; readonly message: string; readonly path: string }
   | { readonly kind: 'completed'; readonly items: readonly HaltItemOutcome[] }
 
 /**
- * `'dispatch:control'`'s response. `drain` always carries what
- * `DrainStore.current()` reads right after the command ran, no matter which
- * arm below fired — this app's header line renders straight off it. `resume`
- * is the one command that can be refused outright (plan's own **Data &
- * contracts**: "Resume is refused when its write fails; drain is not") —
- * `drain`'s own write failure is instead visible as `persisted: false`,
- * since the gate still closed in memory and the operator got the stop they
- * asked for.
+ * `'dispatch:control'`'s response (#314). `run`/`drain`/`pause` all carry the
+ * repository they acted on and the `RepoRunState` the write left behind —
+ * `run` is refused outright on any write failure (fail closed toward
+ * dispatching nothing); `drain`'s own write failure is instead visible as
+ * `persisted: false`, since the gate still closed in memory and the operator
+ * got the stop they asked for, refused outright only when the store itself
+ * is unreadable; `pause` is never refused outright — a failed run-state write
+ * surfaces inside its own `report` as `{ kind: 'aborted' }` instead. `halt`
+ * carries no `repoId` at all.
  */
 export type DispatchControlResult =
-  | { readonly ok: true; readonly command: 'drain'; readonly drain: DrainState; readonly persisted: boolean }
-  | { readonly ok: true; readonly command: 'resume'; readonly drain: DrainState }
-  | { readonly ok: false; readonly command: 'resume'; readonly reason: 'drain-unwritable'; readonly message: string; readonly path: string }
-  | { readonly ok: true; readonly command: 'halt'; readonly drain: DrainState; readonly report: HaltReport }
+  | { readonly ok: true; readonly command: 'run'; readonly repoId: RepoId; readonly runState: RepoRunState }
+  | { readonly ok: false; readonly command: 'run'; readonly repoId: RepoId; readonly reason: 'unwritable' | 'unreadable'; readonly message: string; readonly path: string }
+  | { readonly ok: true; readonly command: 'drain'; readonly repoId: RepoId; readonly runState: RepoRunState; readonly persisted: boolean }
+  | { readonly ok: false; readonly command: 'drain'; readonly repoId: RepoId; readonly reason: 'unreadable'; readonly message: string; readonly path: string }
+  | { readonly ok: true; readonly command: 'pause'; readonly repoId: RepoId; readonly runState: RepoRunState; readonly report: HaltReport }
+  | { readonly ok: true; readonly command: 'halt'; readonly report: HaltReport }
 
 /**
  * #265: who dispatches for one ready repository, read fresh off the claim
@@ -190,11 +224,11 @@ export interface RepoDispatchStatus {
   readonly repoId: RepoId
   readonly owner: DispatchOwner
   readonly state: DispatcherState
-  /** `true` while this repository's dispatcher session is itself draining
-   *  (the app-wide drain switch) — the owner line appends " · draining",
+  /** #314: this repository's own persisted run state — the owner line
+   *  appends " · draining"/" · paused" for the two non-dispatching values,
    *  never a fifth `DispatcherState` member for what is really an
    *  orthogonal fact. */
-  readonly draining: boolean
+  readonly runState: RunState
   /** The live dispatcher session's own adopted id (`HostedSessionSnapshot.
    *  claudeSessionId`) — `null` before `init` arrives, or whenever no
    *  dispatcher session is live. `board/relay.ts` compares a pending

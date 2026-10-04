@@ -23,37 +23,37 @@ function report(overrides: Partial<TickReport> = {}): TickReport {
 }
 
 describe('dispatchableFrom', () => {
-  it('returns the report\'s own actionable set when the gate is open and the tick is not blind', () => {
-    expect(dispatchableFrom(report(), { gate: 'open' })).toEqual([ACTIONABLE])
+  it('returns the report\'s own actionable set when dispatching and the tick is not blind', () => {
+    expect(dispatchableFrom(report(), 'dispatching')).toEqual([ACTIONABLE])
   })
 
-  it('returns nothing while draining, operator reason', () => {
-    expect(dispatchableFrom(report(), { gate: 'draining', reason: 'operator', since: '2026-01-01T00:00:00Z' })).toEqual([])
+  it('returns nothing while draining', () => {
+    expect(dispatchableFrom(report(), 'draining')).toEqual([])
   })
 
-  it('returns nothing while draining, unread reason', () => {
-    expect(dispatchableFrom(report(), { gate: 'draining', reason: 'unread' })).toEqual([])
+  it('returns nothing while paused', () => {
+    expect(dispatchableFrom(report(), 'paused')).toEqual([])
   })
 
-  it('returns nothing while draining, unreadable reason', () => {
-    expect(dispatchableFrom(report(), { gate: 'draining', reason: 'unreadable', message: 'boom', path: '/dispatch.json' })).toEqual([])
-  })
-
-  it('returns nothing for a blind report even when the gate is open', () => {
-    expect(dispatchableFrom(report({ blind: { reason: 'not-ready' }, actionable: [] }), { gate: 'open' })).toEqual([])
+  it('returns nothing for a blind report even while dispatching', () => {
+    expect(dispatchableFrom(report({ blind: { reason: 'not-ready' }, actionable: [] }), 'dispatching')).toEqual([])
   })
 })
 
 describe('observableFrom', () => {
-  it('returns only the write-bearing observations when the gate is open and the tick is not blind', () => {
-    expect(observableFrom(report(), { gate: 'open' })).toEqual([WRITE_OBSERVATION])
+  it('returns only the write-bearing observations when dispatching and the tick is not blind', () => {
+    expect(observableFrom(report(), 'dispatching')).toEqual([WRITE_OBSERVATION])
   })
 
   it('returns nothing while draining', () => {
-    expect(observableFrom(report(), { gate: 'draining', reason: 'operator', since: '2026-01-01T00:00:00Z' })).toEqual([])
+    expect(observableFrom(report(), 'draining')).toEqual([])
   })
 
-  it('returns nothing for a blind report even when the gate is open', () => {
-    expect(observableFrom(report({ blind: { reason: 'not-ready' }, observations: [] }), { gate: 'open' })).toEqual([])
+  it('returns nothing while paused', () => {
+    expect(observableFrom(report(), 'paused')).toEqual([])
+  })
+
+  it('returns nothing for a blind report even while dispatching', () => {
+    expect(observableFrom(report({ blind: { reason: 'not-ready' }, observations: [] }), 'dispatching')).toEqual([])
   })
 })

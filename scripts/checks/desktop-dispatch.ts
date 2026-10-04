@@ -94,59 +94,67 @@ export default async function ({ fail, ok }: Reporter) {
     else if (!found) ok();
   }
 
-  // --- The literal gate: 'open' appears exactly once under main/dispatch/ ----
-  // guard(#110): a second failure path constructing its own open state
-  // instead of reusing the one place it is defined, so a new arm added later
-  // cannot quietly fail open by copying the literal.
+  // --- The literal 'dispatching' appears exactly once under main/dispatch/ --
+  // guard(#314): a second place constructing the one open run-state value
+  // instead of reusing shared/dispatch/types.ts's own RUN_TARGET, so a new
+  // arm added later cannot quietly fail open by retyping the literal.
   {
     let count = 0;
     for (const f of mainDispatchFiles) {
       if (relOf(f).endsWith('.test.ts')) continue;
       const text = readFileSync(f, 'utf8');
-      count += (text.match(/gate:\s*'open'/g) ?? []).length;
+      count += (text.match(/'dispatching'/g) ?? []).length;
     }
     if (count !== 1) {
-      fail('desktop-dispatch', `the literal "gate: 'open'" appears ${count} times under ${mainDispatchDir} — expected exactly 1`);
+      fail('desktop-dispatch', `the literal 'dispatching' appears ${count} times under ${mainDispatchDir} — expected exactly 1 (the v1 migration in store.ts)`);
     } else {
       ok();
     }
   }
 
   // --- resolve.ts validates against DISPATCH_COMMANDS by name ----------------
-  // guard(#110): a retyped command list silently drifting from
+  // guard(#110, #314): a retyped command list silently drifting from
   // shared/dispatch/types.ts's own DISPATCH_COMMANDS.
   {
     const text = readFileSync(join(root, resolveFile), 'utf8');
     if (!/DISPATCH_COMMANDS/.test(text)) {
       fail('desktop-dispatch', `${resolveFile} never references DISPATCH_COMMANDS — command validation must resolve it by name, never a retyped list`);
-    } else if (/\[\s*'drain'\s*,\s*'resume'\s*,\s*'halt'\s*\]/.test(text)) {
+    } else if (/\[\s*'run'\s*,\s*'drain'\s*,\s*'pause'\s*,\s*'halt'\s*\]/.test(text)) {
       fail('desktop-dispatch', `${resolveFile} retypes the command list as a literal array instead of validating against DISPATCH_COMMANDS`);
     } else {
       ok();
     }
   }
 
-  // --- In halt.ts, drain.set( precedes stopFor(, which precedes applyItemAction( --
-  // guard(#110, #265): the ordering the feature's correctness rests on —
-  // resetting labels before the drain write is confirmed would only
-  // re-dispatch everything this call was meant to stop, and resetting a
-  // label before the dispatcher's own agent is asked to stop would leave an
-  // app-dispatched agent running past the point its label says it is gone.
+  // --- In halt.ts, runStates.set( precedes stopFor(, which precedes ----------
+  // applyItemAction(, which precedes standDown(
+  // guard(#110, #265, #314): the ordering the feature's correctness rests
+  // on — resetting labels before the run-state write is confirmed would only
+  // re-dispatch everything this call was meant to stop, resetting a label
+  // before the dispatcher's own agent is asked to stop would leave an
+  // app-dispatched agent running past the point its label says it is gone,
+  // and standing a session down before its per-item stops have run would
+  // never let `stopFor` find the task it is looking for.
   {
     const text = readFileSync(join(root, haltFile), 'utf8');
-    const setIdx = text.indexOf('drain.set(');
-    // `stopFor?.(` (optional chaining) counts the same as a bare `stopFor(`.
+    const setIdx = text.indexOf('runStates.set(');
+    // `stopFor?.(`/`standDown?.(` (optional chaining) count the same as a
+    // bare `stopFor(`/`standDown(`.
     const stopForMatch = /stopFor\??\.?\(/.exec(text);
     const stopForIdx = stopForMatch ? stopForMatch.index : -1;
     const applyIdx = text.indexOf('applyItemAction(');
+    const standDownMatch = /standDown\??\.?\(/.exec(text);
+    const standDownIdx = standDownMatch ? standDownMatch.index : -1;
     if (setIdx === -1) {
-      fail('desktop-dispatch', `${haltFile} never calls drain.set( — halt must drain before it stops anything`);
+      fail('desktop-dispatch', `${haltFile} never calls runStates.set( — halt must pause before it stops anything`);
     } else if (stopForIdx === -1) {
       fail('desktop-dispatch', `${haltFile} never calls stopFor( — the dispatcher's own per-item stop must run before each label reset`);
     } else if (applyIdx === -1) {
       fail('desktop-dispatch', `${haltFile} never calls applyItemAction( — the guard cannot compare an ordering that isn't there`);
-    } else if (!(setIdx < stopForIdx && stopForIdx < applyIdx)) {
-      fail('desktop-dispatch', `${haltFile}'s own drain.set(/stopFor(/applyItemAction( calls are out of order — expected drain.set( before stopFor( before applyItemAction(`);
+    } else if (standDownIdx === -1) {
+      fail('desktop-dispatch', `${haltFile} never calls standDown( — the dispatcher's own whole-session stand-down must run after the item loop`);
+    } else if (!(setIdx < stopForIdx && stopForIdx < applyIdx && applyIdx < standDownIdx)) {
+      fail('desktop-dispatch', `${haltFile}'s own runStates.set(/stopFor(/applyItemAction(/standDown( calls are out of order — expected runStates.set( before stopFor( before applyItemAction( before standDown(`);
     } else {
       ok();
     }

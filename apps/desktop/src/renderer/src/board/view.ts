@@ -10,7 +10,7 @@ import type { RepoId } from '../../../shared/repos'
 import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
 import { actionsFingerprint } from './actions'
 import { notReadyCopy, planGateHeaderButtonLabel, rateLimitCopy, sourceHealthCopy } from './copy'
-import { buildHaltReport, currentDrainResult, currentHaltReport, drainResultNote, drainTogglePending, drainToggleLabel, haltButtonLabel, haltPending, isHaltConfirmArmed } from './dispatch'
+import { buildHaltReport, currentHaltReport, haltButtonLabel, haltPending, isHaltConfirmArmed } from './dispatch'
 import { buildRelayBanner, relayFingerprint, relayLineCopy } from './relay'
 import { buildRow } from './rows'
 import { buildTickStrip } from './tick'
@@ -74,17 +74,12 @@ function buildHeader(state: BoardViewState): HTMLElement {
   refreshButton.disabled = state.refreshing
   actions.appendChild(refreshButton)
 
-  // Operator control over dispatch (#110), after Refresh: a single Drain/
-  // Resume toggle plus Halt everything, the latter rendered only once at
-  // least one repository reports an in-flight claim.
+  // Operator control over dispatch (#110, #314), after Refresh: per-repository
+  // run/drain/pause now lives under each repository's own tick line
+  // (`tick.ts`'s `buildTickStrip`, via `run-state.ts`) — the header itself
+  // keeps only Halt everything, rendered once at least one repository
+  // reports an in-flight claim.
   if (state.snapshot !== null) {
-    const drainButton = document.createElement('button')
-    drainButton.className = 'board-header__drain'
-    drainButton.dataset.action = 'dispatch-toggle'
-    drainButton.textContent = drainToggleLabel(state.snapshot.drain)
-    drainButton.disabled = drainTogglePending()
-    actions.appendChild(drainButton)
-
     const inFlightCount = totalInFlightClaims(state.snapshot)
     if (inFlightCount > 0) {
       const haltButton = document.createElement('button')
@@ -106,17 +101,6 @@ function buildHeader(state: BoardViewState): HTMLElement {
 
   top.appendChild(actions)
   header.appendChild(top)
-
-  // The last drain/resume command's own result (#110 R1-M1), directly under
-  // the row that holds the drain toggle — unconditional on `health` below,
-  // since the toggle itself renders regardless of whether health data has
-  // arrived yet. `null` for an ordinary success; `tick.ts`'s own
-  // `drainLineFor` covers the persisted state on every later read.
-  if (state.snapshot !== null) {
-    const drainResult = currentDrainResult()
-    const note = drainResult !== null ? drainResultNote(drainResult) : null
-    if (note !== null) header.appendChild(text('div', 'board-header__drain-note', note))
-  }
 
   const health = state.snapshot?.health ?? []
   if (state.snapshot !== null && health.length > 0) {

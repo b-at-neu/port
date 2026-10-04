@@ -253,10 +253,11 @@ export function buildOwnerLine(status: RepoDispatchStatus): HTMLElement {
   line.className = 'board-header__owner-line'
 
   const observationPart = status.owner === 'app' ? observationClause(status.observed) : ''
+  const runStatePart = status.runState === 'draining' ? ' · draining' : status.runState === 'paused' ? ' · paused' : ''
 
   const text = document.createElement('span')
   text.className = 'board-header__owner-text'
-  text.textContent = ownerLineCopy(status) + (status.draining ? ' · draining' : '') + observationPart
+  text.textContent = ownerLineCopy(status) + runStatePart + observationPart
   line.appendChild(text)
 
   const observationTitleText = status.owner === 'app' ? observationTitle(status.observed) : null

@@ -5,11 +5,12 @@
 // `buildHeader`, so both re-render on every draw and the countdown stays
 // live.
 import type { BoardSnapshot, RepositoryHealth } from '../../../shared/board/types'
-import type { DispatchOwner, DrainState } from '../../../shared/dispatch/types'
+import type { DispatchOwner, RunState, RunStatesSnapshot } from '../../../shared/dispatch/types'
 import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
 import type { LabelKey } from '../../../shared/labels/vocabulary'
 import type { TickActionable, TickBlind, TickClaim, TickHeld, TickObservation, TickReport } from '../../../shared/tick/types'
 import { buildOwnerLine } from './owner'
+import { buildRunStateRow } from './run-state'
 
 function labelNameOf(key: LabelKey): string {
   return LABEL_DEFAULTS.find((def) => def.key === key)?.name ?? key
@@ -38,23 +39,21 @@ export function clockLineCopy(nextWakeupAt: string | null, health: readonly Repo
   return `Next wakeup in ${String(minutes)}:${String(seconds).padStart(2, '0')}`
 }
 
-/** The drain line, directly above the clock line (#110's own **UX states**)
- *  — `null` while the gate is open, since the clock line already carries
- *  the countdown and nothing more needs saying. `title` is the full
+/** The store line, directly above the clock line (#110, #314's own **UX
+ *  states**) — `null` once the run-state store has actually loaded, since
+ *  the clock line already carries the countdown and nothing more needs
+ *  saying; the two store-level problems both apply regardless of what any
+ *  individual repository's own run state is. `title` is the full
  *  dispatch.json path, set only for the `unreadable` reason, so the line
  *  itself stays one sentence while the path is still reachable on hover. */
-export function drainLineFor(drain: DrainState): { readonly text: string; readonly title: string | null } | null {
-  if (drain.gate === 'open') return null
-  switch (drain.reason) {
-    case 'operator': {
-      const since = new Date(drain.since)
-      const label = Number.isNaN(since.getTime()) ? drain.since : since.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      return { text: `Draining since ${label} — nothing will be dispatched. Still reading every 60s, so in-flight work keeps reporting.`, title: null }
-    }
+export function storeLineFor(store: RunStatesSnapshot['store']): { readonly text: string; readonly title: string | null } | null {
+  switch (store.kind) {
+    case 'loaded':
+      return null
     case 'unread':
-      return { text: 'Draining — reading the saved dispatch state…', title: null }
+      return { text: 'Reading the saved pipeline state…', title: null }
     case 'unreadable':
-      return { text: `Draining — dispatch.json can't be read (${drain.message}). Fix or delete it to resume.`, title: drain.path }
+      return { text: `Every pipeline is paused — dispatch.json can't be read (${store.message}). Fix or delete it, then run each repository again.`, title: store.path }
   }
 }
 
@@ -87,24 +86,26 @@ function livenessSummary(claims: readonly TickClaim[]): string {
   return `Liveness: ${parts.join(', ')}`
 }
 
-/** `draining` never renders as "nothing to dispatch" (#110's own **UX
- *  states**) — a held set and an empty one are different facts, so a
- *  drained repository still names what it would have dispatched. #265:
- *  "would dispatch" becomes "dispatched" when this app itself owns dispatch
- *  for this repository — the cockpit is no longer the one deciding. */
-function dispatchPartOf(report: TickReport, draining: boolean, dispatchedByApp: boolean): string {
-  if (report.actionable.length === 0) return draining ? 'draining: nothing would dispatch' : 'nothing to dispatch'
+/** Draining or paused never renders as "nothing to dispatch" (#110, #314's
+ *  own **UX states**) — a held set and an empty one are different facts, so
+ *  a non-dispatching repository still names what it would have dispatched.
+ *  #265: "would dispatch" becomes "dispatched" when this app itself owns
+ *  dispatch for this repository — the cockpit is no longer the one
+ *  deciding. */
+function dispatchPartOf(report: TickReport, runState: RunState, dispatchedByApp: boolean): string {
+  const verb = runState === 'draining' ? 'draining' : 'paused'
+  if (report.actionable.length === 0) return runState !== 'dispatching' ? `${verb}: nothing would dispatch` : 'nothing to dispatch'
   const named = report.actionable.map((a) => `${a.agent} #${String(a.number)}`).join(', ')
-  if (draining) return `draining: ${String(report.actionable.length)} would dispatch, held back (${named})`
+  if (runState !== 'dispatching') return `${verb}: ${String(report.actionable.length)} would dispatch, held back (${named})`
   return dispatchedByApp ? `dispatched ${named}` : `would dispatch ${named}`
 }
 
 /** `owner` defaults to `'cockpit'` — every pre-#265 caller (and test) reads
  *  exactly as before. */
-export function repositoryLineCopy(report: TickReport, drain: DrainState, owner: DispatchOwner = 'cockpit'): string {
+export function repositoryLineCopy(report: TickReport, runState: RunState, owner: DispatchOwner = 'cockpit'): string {
   if (report.blind !== null) return `${report.displayName} — ${blindCopy(report.blind)}`
 
-  const dispatchPart = dispatchPartOf(report, drain.gate !== 'open', owner === 'app')
+  const dispatchPart = dispatchPartOf(report, runState, owner === 'app')
   const uncheckedCount = report.actionable.filter((a) => a.unchecked).length
   // Never omitted: an unchecked dispatch is exactly the case an operator may
   // want to look at (plan's own **UX states**).
@@ -244,12 +245,12 @@ export function buildTickStrip(snapshot: BoardSnapshot, now: Date): HTMLElement 
   const strip = document.createElement('div')
   strip.className = 'board-header__tick'
 
-  const drainLine = drainLineFor(snapshot.drain)
-  if (drainLine !== null) {
+  const storeLine = storeLineFor(snapshot.runStates.store)
+  if (storeLine !== null) {
     const line = document.createElement('div')
     line.className = 'board-header__tick-drain'
-    line.textContent = drainLine.text
-    if (drainLine.title !== null) line.title = drainLine.title
+    line.textContent = storeLine.text
+    if (storeLine.title !== null) line.title = storeLine.title
     strip.appendChild(line)
   }
 
@@ -261,10 +262,11 @@ export function buildTickStrip(snapshot: BoardSnapshot, now: Date): HTMLElement 
   for (const report of snapshot.tick) {
     const dispatchStatus = snapshot.dispatch.find((d) => d.repoId === report.repoId)
     const owner = dispatchStatus?.owner ?? 'cockpit'
+    const repoRunState = snapshot.runStates.repositories.find((r) => r.repoId === report.repoId) ?? { repoId: report.repoId, state: 'paused' as const, since: null }
 
     const line = document.createElement('div')
     line.className = 'board-header__tick-line'
-    line.textContent = repositoryLineCopy(report, snapshot.drain, dispatchStatus?.owner)
+    line.textContent = repositoryLineCopy(report, repoRunState.state, dispatchStatus?.owner)
 
     if (report.blind === null) {
       const details = [
@@ -279,10 +281,15 @@ export function buildTickStrip(snapshot: BoardSnapshot, now: Date): HTMLElement 
 
     strip.appendChild(line)
 
-    // #265: the owner line, directly under this repository's own tick line
-    // — rendered only once a `RepoDispatchStatus` exists for it (every
-    // ready repository, once `main/ipc.ts`'s dispatcher has considered it
-    // at least once).
+    // #314: this repository's own run-state row, directly under its tick
+    // line — rendered for every ready repository, regardless of whether a
+    // `RepoDispatchStatus` exists for it yet.
+    strip.appendChild(buildRunStateRow(repoRunState, snapshot.runStates.store, report.displayName, report.claims.length))
+
+    // #265: the owner line, directly under the run-state row — rendered
+    // only once a `RepoDispatchStatus` exists for it (every ready
+    // repository, once `main/ipc.ts`'s dispatcher has considered it at
+    // least once).
     if (dispatchStatus !== undefined) strip.appendChild(buildOwnerLine(dispatchStatus))
   }
 

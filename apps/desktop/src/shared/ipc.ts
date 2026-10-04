@@ -9,7 +9,7 @@ import type { ClaimApplyResponse, ClaimPreflightResponse, PlanGateChoice } from 
 import type { GateAnswerResponse, GateClaimResponse, GateDecision, GatePreflightResponse } from './gate/types'
 import type { LabelKey } from './labels/vocabulary'
 import type { ItemActionResult, OperatorAction } from './actions/types'
-import type { DispatchClaimSetResult, DispatchCommand, DispatchControlResult, DispatchRelayResult } from './dispatch/types'
+import type { DispatchClaimSetResult, DispatchControlResult, DispatchRelayResult } from './dispatch/types'
 import type { RuntimePreflight, RuntimeProbe } from './runtime/types'
 import type { ClaimRead } from './writes/types'
 import type { RelayCopyResponse } from './relay/types'
@@ -144,12 +144,12 @@ export interface IpcMap {
     request: { repoId: RepoId; kind: 'issue' | 'pull-request'; number: number; action: OperatorAction; expectedStage: LabelKey | null }
     response: ItemActionResult
   }
-  /** Operator control over dispatch (#110) — drain, resume, halt. No
-   *  repository context: drain is app-wide, one switch (PIPELINE.md's own
-   *  scarce-resource rule, ENGINEERING §7), and halt sweeps every ready
-   *  repository this app knows about. */
+  /** Operator control over dispatch (#110, #314) — run/drain/pause one
+   *  repository, or halt everything. `repoId` is required for `run`/`drain`/
+   *  `pause` (a registered repository, any status) and must be omitted for
+   *  `halt`, which sweeps every ready repository this app knows about. */
   'dispatch:control': {
-    request: { command: DispatchCommand }
+    request: { command: 'halt' } | { command: 'run' | 'drain' | 'pause'; repoId: RepoId }
     response: DispatchControlResult
   }
   /** #265: takes or releases the `dispatch` claim scope for one repository —

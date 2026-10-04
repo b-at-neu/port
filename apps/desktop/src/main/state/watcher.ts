@@ -11,7 +11,7 @@ import type { RepoId } from '../../shared/repos'
 import type { RepositoryEntry } from '../../shared/repos'
 import { DEFAULT_POLL_POLICY, SOURCE_KINDS, initialHealth } from '../../shared/board/types'
 import type { BoardSnapshot, RepositoryHealth, SourceHealth, SourceKind } from '../../shared/board/types'
-import type { DrainState, RepoDispatchStatus } from '../../shared/dispatch/types'
+import type { RepoDispatchStatus, RunStatesSnapshot } from '../../shared/dispatch/types'
 import type { RelayScan } from '../../shared/relay/types'
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks, planTick } from '../tick'
 import type { DispatchLedger, RefreshMemo, UnknownStreaks } from '../tick'
@@ -56,11 +56,12 @@ export interface CreatePipelineWatcherParams {
   readonly now?: () => Date
   readonly setTimer?: TimerFactory
   readonly recordTick?: RecordTickFn
-  /** The app's own drain switch (#110) — read fresh on every
-   *  `buildSnapshot()`, never cached, so a drain applied mid-session is
-   *  visible on the very next snapshot. Defaults to `{ gate: 'open' }`, the
-   *  same default a repository with no drain source at all reads as. */
-  readonly drain?: () => DrainState
+  /** #314: every registered repository's own run state — read fresh on
+   *  every `buildSnapshot()`, never cached, so a run-state change applied
+   *  mid-session is visible on the very next snapshot. Defaults to every
+   *  named repository reading paused, the same default a repository with
+   *  no run-state source at all reads as. */
+  readonly runStates?: (repoIds: readonly RepoId[]) => RunStatesSnapshot
   /** Injectable the same way `drain` is (#265) — a dispatcher built after
    *  the watcher needs the *same* ledger/streak memo this watcher's own
    *  `planTick` calls read and write, never a second instance that would
@@ -141,7 +142,9 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
   // `SourceKind`: it never schedules its own cadence, only rides the
   // sessions source's.
   const relayReader = createRelayReader()
-  const drain = params.drain ?? ((): DrainState => ({ gate: 'open' }))
+  const runStatesOf =
+    params.runStates ??
+    ((repoIds: readonly RepoId[]): RunStatesSnapshot => ({ store: { kind: 'loaded' }, repositories: repoIds.map((repoId) => ({ repoId, state: 'paused', since: null })) }))
   let relay: RelayScan = { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: now().toISOString() }
   let latest: BoardSnapshot = {
     state: {
@@ -153,7 +156,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     policy: DEFAULT_POLL_POLICY,
     tick: [],
     relay,
-    drain: drain(),
+    runStates: runStatesOf(repositories.map((entry) => entry.id)),
     nextWakeupAt: null,
     emittedAt: now().toISOString(),
     dispatch: params.dispatchStatus?.() ?? [],
@@ -234,7 +237,17 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     }
 
     const nextWakeupAt = stopped ? null : earliestDueAt().toISOString()
-    latest = { state, health: healthList, policy: DEFAULT_POLL_POLICY, tick, relay, drain: drain(), nextWakeupAt, emittedAt: now().toISOString(), dispatch: params.dispatchStatus?.() ?? [] }
+    latest = {
+      state,
+      health: healthList,
+      policy: DEFAULT_POLL_POLICY,
+      tick,
+      relay,
+      runStates: runStatesOf(repositories.map((entry) => entry.id)),
+      nextWakeupAt,
+      emittedAt: now().toISOString(),
+      dispatch: params.dispatchStatus?.() ?? [],
+    }
     return latest
   }
 

@@ -8,17 +8,17 @@ import type { BoardSnapshot } from '../shared/board/types'
 import { PLAN_GATE_CHOICES } from '../shared/claim/types'
 import { OPERATOR_ACTIONS } from '../shared/actions/types'
 import type { ItemActionResult } from '../shared/actions/types'
-import type { RuntimeProbe } from '../shared/runtime/types'
 import { chooseDirectory } from './dialogs'
 import { claimApply, claimPreflight, defaultClaimDeps } from './claim'
 import type { ClaimDeps } from './claim'
 import { applyItemAction, gateAnswer, gateClaimRead, gateClaimSet, gatePreflight } from './actions'
 import type { ApplyItemActionParams, ReadyEntry } from './actions'
-import { createDispatchRuntime, createDrainStore, defaultHaltDispatchDeps, haltDispatch, resolveDispatchClaimSet, resolveDispatchControl, resolveDispatchRelay } from './dispatch'
+import { createDispatchRuntime, createRunStateStore, defaultHaltDispatchDeps, haltDispatch, registeredRepoIds, resolveDispatchClaimSet, resolveDispatchControl, resolveDispatchRelay } from './dispatch'
 import { fetchItemsByNumber } from './github'
 import { readGateClaim } from './writes'
 import { resolveGateAnswer, resolveGateClaimRead, resolveGateClaimSet, resolveGatePreflight } from './channels/gate'
 import type { GateChannelDeps } from './channels/gate'
+import { resolveRuntimeProbe } from './channels/runtime'
 import { copyRelayReply, MAX_REPLY_CHARS } from './relay'
 import { resolveSearchQuery, resolveSessionsScan, resolveTranscriptRead, resolveTranscriptTailClose, resolveTranscriptTailOpen, resolveTranscriptTailPoll } from './channels/sessions'
 import {
@@ -45,7 +45,7 @@ import { addRepository, listRepositories, removeRepository } from './registry'
 import type { RegistryDeps } from './registry'
 import { createPipelineWatcher } from './state'
 import type { PipelineWatcher } from './state'
-import { runtimePreflight, runtimeProbe } from './runtime'
+import { runtimePreflight } from './runtime'
 import { createHostedStore, createHostingPersistence, defaultHostedStoreDeps } from './hosting'
 import type { HostedStore } from './hosting'
 
@@ -274,12 +274,6 @@ export async function resolveItemAction(registryDeps: RegistryDeps, request: Ipc
   return result
 }
 
-/** `'runtime:probe'`'s validation — `runtimeProbe` (`./runtime`) resolves the registry lookup itself, same as `resolveClaimPreflight`/`main/claim.ts`. */
-export async function resolveRuntimeProbe(registryDeps: RegistryDeps, request: IpcMap['runtime:probe']['request']): Promise<RuntimeProbe> {
-  if (typeof request?.repoId !== 'string' || request.repoId === '') throw new Error("'runtime:probe' requires a non-empty 'repoId'")
-  return runtimeProbe({ registryDeps, repoId: request.repoId })
-}
-
 export interface RegisteredIpc {
   readonly watcher: PipelineWatcher
   readonly hostedStore: HostedStore
@@ -296,6 +290,12 @@ export function registerIpc(): RegisteredIpc {
     chooseDirectory,
   }
 
+  // #314: the per-repository run-state store, created before `repos:add`/
+  // `repos:remove` so their handlers can forget a stale entry; `current()`
+  // stays synchronous and starts every repository paused.
+  const runStates = createRunStateStore(app.getPath('userData'))
+  void runStates.load(() => registeredRepoIds(registryDeps))
+
   handle('app:info', (_event, request) => {
     if (request !== undefined) {
       throw new Error("'app:info' takes no payload")
@@ -310,18 +310,26 @@ export function registerIpc(): RegisteredIpc {
     return listRepositories(registryDeps)
   })
 
-  handle('repos:add', (_event, request) => {
-    if (request !== undefined) {
-      throw new Error("'repos:add' takes no payload")
-    }
-    return addRepository(registryDeps)
+  // #314: forgetting a run-state entry never fails the registry call itself,
+  // only logs — so a stale entry can never silently revive a re-added repo.
+  function forgetRunState(channel: string, repoId: Parameters<typeof runStates.forget>[0]): void {
+    void runStates.forget(repoId).then((f) => {
+      if (!f.ok) console.error(`'${channel}' could not forget the run-state entry for '${String(repoId)}':`, f.message)
+    })
+  }
+
+  handle('repos:add', async (_event, request) => {
+    if (request !== undefined) throw new Error("'repos:add' takes no payload")
+    const result = await addRepository(registryDeps)
+    if (result.ok && result.outcome === 'added') forgetRunState('repos:add', result.added)
+    return result
   })
 
-  handle('repos:remove', (_event, request) => {
-    if (typeof request?.id !== 'string' || request.id === '') {
-      throw new Error("'repos:remove' requires a non-empty 'id'")
-    }
-    return removeRepository(registryDeps, request.id)
+  handle('repos:remove', async (_event, request) => {
+    if (typeof request?.id !== 'string' || request.id === '') throw new Error("'repos:remove' requires a non-empty 'id'")
+    const result = await removeRepository(registryDeps, request.id)
+    if (result.ok) forgetRunState('repos:remove', request.id)
+    return result
   })
 
   handle('worktrees:report', (_event, request) => resolveWorktreesReport(registryDeps, request))
@@ -343,14 +351,6 @@ export function registerIpc(): RegisteredIpc {
 
   handle('search:query', (_event, request) => resolveSearchQuery(registryDeps, request, app.getPath('userData')))
 
-  // The app-wide drain switch (#110) — one store for the process lifetime,
-  // read fresh by every `buildSnapshot()` so a drain applied mid-session is
-  // visible on the very next snapshot. `load()` resolves the on-disk state
-  // asynchronously; `current()` stays synchronous and starts `unread` so
-  // `registerIpc()` itself never blocks on it.
-  const drain = createDrainStore(app.getPath('userData'))
-  void drain.load()
-
   // #98: one hosted-session store for the process lifetime, broadcasting
   // over `session:event`/`session:status`. Created before the watcher
   // (#265): the dispatcher sits between the two and needs this store first.
@@ -367,7 +367,7 @@ export function registerIpc(): RegisteredIpc {
   // `main/dispatch/runtime.ts` for why `bindWatcher` exists.
   const { watcherDeps, dispatcher, bindWatcher } = createDispatchRuntime({
     store: hostedStore,
-    drain: drain.current,
+    runState: (repoId) => runStates.current(repoId).state,
     readGateClaim,
     fetchItemsByNumber,
     listRepositories,
@@ -386,7 +386,7 @@ export function registerIpc(): RegisteredIpc {
       return list.ok ? list.repositories : []
     },
     git: (args, cwd) => git(args, { cwd }),
-    drain: drain.current,
+    runStates: (repoIds) => runStates.snapshot(repoIds),
     ...watcherDeps,
     onSnapshot: (snapshot) => {
       broadcast('board:update', snapshot)
@@ -412,14 +412,14 @@ export function registerIpc(): RegisteredIpc {
     resolveItemAction(registryDeps, request, app.getPath('userData'), { listRepositories, applyItemAction, snapshot: watcher.snapshot, refresh: watcher.refresh }),
   )
 
-  // Operator control over dispatch (#110) — all branching in
-  // `resolveDispatchControl` itself. #265: `halt` also stops this app's own
-  // dispatched agents first; `stopFor` is a no-op for anything else.
+  // Operator control over dispatch (#110, #314): run/drain/pause one
+  // repository, or halt everything — all branching in `resolveDispatchControl`.
   handle('dispatch:control', (_event, request) =>
     resolveDispatchControl(registryDeps, request, {
       listRepositories,
-      drain,
-      haltDispatch: (params) => haltDispatch(params, { ...defaultHaltDispatchDeps, stopFor: (repoId, number) => dispatcher.stopFor(repoId, number) }),
+      runStates,
+      haltDispatch: (params) =>
+        haltDispatch(params, { ...defaultHaltDispatchDeps, stopFor: (repoId, number) => dispatcher.stopFor(repoId, number), standDown: (repoId) => dispatcher.standDown(repoId) }),
       snapshot: watcher.snapshot,
       refresh: watcher.refresh,
       auditDir: app.getPath('userData'),

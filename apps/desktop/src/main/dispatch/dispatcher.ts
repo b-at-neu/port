@@ -6,7 +6,7 @@
 // reads and writes.
 import type { BoardSnapshot } from '../../shared/board/types'
 import type { BudgetNote, BudgetStatus, DispatchOwner, DispatchRecord, DispatchRelayResult, DispatcherState, ObservationRecord, RepoDispatchStatus } from '../../shared/dispatch/types'
-import type { DrainState } from '../../shared/dispatch/types'
+import type { RunState } from '../../shared/dispatch/types'
 import type { RepoId } from '../../shared/repos'
 import type { AgentSummary, HostedSessionSnapshot, HostedStore, SessionKey } from '../hosting'
 import type { ReadyEntry } from '../actions'
@@ -37,9 +37,9 @@ const NOTE_LIMIT = 20
 export interface CreateDispatcherParams {
   readonly store: HostedStore
   readonly ledger: DispatchLedger
-  /** The app-wide drain switch's own `current()` — read fresh every pass,
-   *  never cached, the same rule the claim read below follows. */
-  readonly drain: () => DrainState
+  /** #314: this repository's own persisted run state — read fresh every
+   *  pass, never cached, the same rule the claim read below follows. */
+  readonly runState: (repoId: RepoId) => RunState
   readonly readGateClaim: (params: ReadGateClaimParams) => Promise<ClaimRead>
   readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
   readonly listRepositories: (registryDeps: RegistryDeps) => Promise<ReposListResponse>
@@ -75,6 +75,9 @@ export interface Dispatcher {
    *  `started` task for `(repoId, number)` and the SDK call itself did not
    *  throw. */
   stopFor(repoId: RepoId, number: number): Promise<boolean>
+  /** #314: the halt composition's own whole-session stand-down — closes
+   *  this repository's live dispatcher session and clears its `sessionKey`. */
+  standDown(repoId: RepoId): Promise<boolean>
   /** #292: this repository's own live dispatcher session's `tasks` with
    *  `status: 'started'`, as descriptions (`"<stage> #<n>"`) — `[]` when no
    *  dispatcher session is live. `main/state/watcher.ts` passes this into
@@ -89,7 +92,7 @@ interface RepoDispatcherState {
   recent: DispatchRecord[]
   owner: DispatchOwner
   dispatcherState: DispatcherState
-  draining: boolean
+  runState: RunState
   claimedAt: string | null
   /** #293: `reset` runs at most once per process per repository — set once
    *  the attempt actually succeeds, never before, so a failing script keeps
@@ -117,7 +120,7 @@ function emptyRepoState(): RepoDispatcherState {
     recent: [],
     owner: 'cockpit',
     dispatcherState: { kind: 'idle' },
-    draining: false,
+    runState: 'paused',
     claimedAt: null,
     budgetReset: false,
     budgetHolds: new Map(),
@@ -178,15 +181,15 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     state.recent = recent.length > RECENT_LIMIT ? recent.slice(recent.length - RECENT_LIMIT) : [...recent]
   }
 
-  function report(repoId: RepoId, owner: DispatchOwner, dispatcherState: DispatcherState, draining: boolean): void {
+  function report(repoId: RepoId, owner: DispatchOwner, dispatcherState: DispatcherState, runState: RunState): void {
     const state = stateFor(repoId)
     state.owner = owner
     state.dispatcherState = dispatcherState
-    state.draining = draining
+    state.runState = runState
     deps.onChange()
   }
 
-  async function ensureSession(entry: ReadyEntry, repoId: RepoId, draining: boolean): Promise<HostedSessionSnapshot | null> {
+  async function ensureSession(entry: ReadyEntry, repoId: RepoId, runState: RunState): Promise<HostedSessionSnapshot | null> {
     const state = stateFor(repoId)
     if (state.sessionKey !== null) {
       const existing = deps.store.snapshotOf(state.sessionKey)
@@ -199,7 +202,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       role: { kind: 'dispatcher', model: DISPATCHER_MODEL, instructions: DISPATCHER_INSTRUCTIONS, title: `Port dispatcher · ${entry.config.repo}` },
     })
     if (!started.ok) {
-      report(repoId, 'app', started.kind === 'at-capacity' ? { kind: 'dispatcher-failed', reason: 'at-capacity', limit: started.limit } : { kind: 'dispatcher-failed', reason: 'runtime' }, draining)
+      report(repoId, 'app', started.kind === 'at-capacity' ? { kind: 'dispatcher-failed', reason: 'at-capacity', limit: started.limit } : { kind: 'dispatcher-failed', reason: 'runtime' }, runState)
       return null
     }
     state.sessionKey = started.snapshot.sessionKey
@@ -219,7 +222,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     try {
       const claim = await deps.readGateClaim({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
       const owner = ownerOf(claim)
-      const draining = deps.drain().gate !== 'open'
+      const runState = deps.runState(entry.id)
       stateFor(entry.id).claimedAt = claim.state === 'held' ? claim.claimedAt : null
 
       const state = stateFor(entry.id)
@@ -257,7 +260,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
             state.budgetReset = true
           } else if (owner === 'app') {
             // This fails closed: a gate that can't run dispatches nothing.
-            report(entry.id, owner, { kind: 'budget-unavailable', message: resetResult.message }, draining)
+            report(entry.id, owner, { kind: 'budget-unavailable', message: resetResult.message }, runState)
             return
           }
         }
@@ -269,13 +272,13 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       }
 
       if (owner !== 'app') {
-        report(entry.id, owner, { kind: 'idle' }, draining)
+        report(entry.id, owner, { kind: 'idle' }, runState)
         return
       }
 
       if (tick === undefined || tick.blind !== null || viewer === null) {
         const recent = stateFor(entry.id).recent
-        report(entry.id, owner, recent.length > 0 ? { kind: 'active', recent } : { kind: 'idle' }, draining)
+        report(entry.id, owner, recent.length > 0 ? { kind: 'active', recent } : { kind: 'idle' }, runState)
         return
       }
 
@@ -283,7 +286,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       // below, so it still runs on a repository with nothing else to
       // dispatch this pass.
       if (repository !== undefined) {
-        const observable = observableFrom(tick, deps.drain())
+        const observable = observableFrom(tick, runState)
         if (observable.length > 0) {
           await runObservationPass(entry, observable, repository, state, {
             writeObservation: deps.writeObservation,
@@ -295,24 +298,24 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
         }
       }
 
-      const dispatchable = dispatchableFrom(tick, deps.drain())
+      const dispatchable = dispatchableFrom(tick, runState)
       const candidates = selectDispatches({ dispatchable, recent: stateFor(entry.id).recent, now: deps.now() })
       if (candidates.length === 0) {
         const recent = stateFor(entry.id).recent
-        report(entry.id, owner, recent.length > 0 ? { kind: 'active', recent } : { kind: 'idle' }, draining)
+        report(entry.id, owner, recent.length > 0 ? { kind: 'active', recent } : { kind: 'idle' }, runState)
         return
       }
 
-      const snapshot = await ensureSession(entry, entry.id, draining)
+      const snapshot = await ensureSession(entry, entry.id, runState)
       if (snapshot === null) return // ensureSession already reported dispatcher-failed
       if (snapshot.capabilities.kind === 'pending') return // next pass re-checks, never a busy-wait here
       if (snapshot.capabilities.kind === 'unavailable') {
-        report(entry.id, owner, { kind: 'dispatcher-failed', reason: 'runtime' }, draining)
+        report(entry.id, owner, { kind: 'dispatcher-failed', reason: 'runtime' }, runState)
         return
       }
       const plugin = snapshot.capabilities.plugin
       if (plugin.kind === 'missing' || plugin.kind === 'shadowed' || plugin.kind === 'duplicate') {
-        report(entry.id, owner, { kind: 'dispatcher-failed', reason: 'plugin' }, draining)
+        report(entry.id, owner, { kind: 'dispatcher-failed', reason: 'plugin' }, runState)
         return
       }
 
@@ -326,7 +329,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       })
       if (survivors.length === 0) {
         const recent = stateFor(entry.id).recent
-        report(entry.id, owner, recent.length > 0 ? { kind: 'active', recent } : { kind: 'idle' }, draining)
+        report(entry.id, owner, recent.length > 0 ? { kind: 'active', recent } : { kind: 'idle' }, runState)
         return
       }
 
@@ -335,7 +338,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       const specs = survivors.map((c) => specFor(c, entry.config.models, agents)).filter((s) => s !== null)
 
       if (specs.length === 0) {
-        report(entry.id, owner, missing !== null ? { kind: 'agents-missing', agent: missing } : { kind: 'idle' }, draining)
+        report(entry.id, owner, missing !== null ? { kind: 'agents-missing', agent: missing } : { kind: 'idle' }, runState)
         return
       }
 
@@ -407,7 +410,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       }
 
       if (gatedSpecs.length === 0) {
-        report(entry.id, owner, missing !== null ? { kind: 'agents-missing', agent: missing } : { kind: 'idle' }, draining)
+        report(entry.id, owner, missing !== null ? { kind: 'agents-missing', agent: missing } : { kind: 'idle' }, runState)
         return
       }
 
@@ -418,7 +421,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       const sent: DispatchRecord[] = sentCandidates.map((c) => ({ agent: c.agent, number: c.number, kind: c.kind, state: 'sent', at }))
       pushRecent(entry.id, [...stateFor(entry.id).recent, ...sent])
 
-      report(entry.id, owner, missing !== null ? { kind: 'agents-missing', agent: missing } : { kind: 'active', recent: stateFor(entry.id).recent }, draining)
+      report(entry.id, owner, missing !== null ? { kind: 'agents-missing', agent: missing } : { kind: 'active', recent: stateFor(entry.id).recent }, runState)
     } finally {
       inFlight.delete(entry.id)
     }
@@ -439,7 +442,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       repoId,
       owner: s.owner,
       state: s.dispatcherState,
-      draining: s.draining,
+      runState: s.runState,
       claudeSessionId: s.sessionKey !== null ? (deps.store.snapshotOf(s.sessionKey)?.claudeSessionId ?? null) : null,
       claimedAt: s.claimedAt,
       budget: s.budget,
@@ -479,5 +482,17 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     return result.ok
   }
 
-  return { consider, status, relay, stopFor, startedTasks }
+  // #314: closes any `Agent()` turn already sent but not yet confirmed,
+  // which `stopFor` (above, per-task) cannot reach.
+  async function standDown(repoId: RepoId): Promise<boolean> {
+    const state = repoStates.get(repoId)
+    if (state === undefined || state.sessionKey === null) return false
+    const key = state.sessionKey
+    state.sessionKey = null
+    const result = await deps.store.close(key)
+    deps.onChange()
+    return result.ok
+  }
+
+  return { consider, status, relay, stopFor, standDown, startedTasks }
 }
