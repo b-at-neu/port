@@ -1,0 +1,71 @@
+# Builds the desktop app's unsigned installers on all three OSes (#335's
+# own "done when"). Path-filtered because a packaging run is expensive and
+# almost every pull request never touches packaging — but this must never
+# become a *required* check: a pull request it skips would then wait on a
+# check run that was never scheduled, forever.
+
+name: Package desktop app
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'apps/desktop/**'
+      - 'docs/design/port-app-icon.svg'
+      - 'plugins/port/.claude-plugin/plugin.json'
+      - '.claude/port.config.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+      - '.github/workflows/desktop-package.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-installers:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+      # Same caches as checks.yml's run-app-checks, plus electron-builder's
+      # own download cache — both keyed on OS and lockfile, rooted under
+      # runner.temp so neither can ever appear in a diff.
+      - name: Cache Electron download
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/electron-cache
+          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Cache electron-builder download
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/electron-builder-cache
+          key: electron-builder-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
+      - name: Build installers
+        run: pnpm --filter @port/desktop dist
+        env:
+          ELECTRON_BUILDER_CACHE: ${{ runner.temp }}/electron-builder-cache
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: port-desktop-${{ runner.os }}
+          path: apps/desktop/dist/*.{AppImage,deb,dmg,exe}
+          if-no-files-found: error
+          retention-days: 7
