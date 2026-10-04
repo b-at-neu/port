@@ -1,0 +1,191 @@
+/* DESIGN.md §1 — the renderer's only source of colour values. Every rule here
+ * is unlayered (no `@layer`) and holds only custom properties and
+ * `color-scheme`, so it always wins over the layered Tailwind resets without
+ * needing `!important`. Components reach these only through the `@theme
+ * inline` role names below, never a literal hex value. */
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  /* Surfaces and structure */
+  --background: #ffffff;
+  --sidebar: #fafafa;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --muted: #f4f4f5;
+  --accent: #e4e4e7;
+  --border: #e4e4e7;
+
+  /* Text */
+  --foreground: #18181b;
+  --foreground-secondary: #3f3f46;
+  --muted-foreground: #71717a;
+  --faint: #a1a1aa;
+
+  /* Brand and interaction */
+  --primary: #172554;
+  --primary-foreground: #ffffff;
+  --primary-text: #172554;
+  --ring: #172554;
+  --selection: #eef1f8;
+  --brand: #172554;
+  --brand-border: transparent;
+
+  /* Status: working, attention, success, danger, idle */
+  --working-pill: #dbeafe;
+  --working-pill-foreground: #1d4ed8;
+  --working-dot: #2563eb;
+  --attention-pill: #fef3c7;
+  --attention-pill-foreground: #92400e;
+  --attention-dot: #d97706;
+  --success-pill: #dcfce7;
+  --success-pill-foreground: #166534;
+  --success-dot: #16a34a;
+  --danger-pill: #fee2e2;
+  --danger-pill-foreground: #991b1b;
+  --danger-dot: #dc2626;
+  --idle-pill: var(--muted);
+  --idle-pill-foreground: var(--foreground-secondary);
+  --idle-dot: var(--faint);
+
+  /* Diffs */
+  --diff-added: #f0fdf4;
+  --diff-added-foreground: #166534;
+  --diff-removed: #fef2f2;
+  --diff-removed-foreground: #991b1b;
+
+  /* Names shadcn needs that §1 does not separately list — aliases of a §1
+   * role, never a new value. */
+  --card-foreground: var(--foreground);
+  --popover-foreground: var(--foreground);
+  --accent-foreground: var(--foreground);
+  --secondary: var(--muted);
+  --secondary-foreground: var(--foreground);
+  --input: var(--border);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --background: #09090b;
+  --sidebar: #111113;
+  --card: #18181b;
+  --popover: #18181b;
+  --muted: #1c1c1f;
+  --accent: #27272a;
+  --border: #27272a;
+
+  --foreground: #fafafa;
+  --foreground-secondary: #d4d4d8;
+  --muted-foreground: #a1a1aa;
+  --faint: #71717a;
+
+  /* Dark mode inverts `primary` to a pale navy tint (DESIGN §1): navy fill on
+   * a near-black background does not read as a button. */
+  --primary: #e2e8f5;
+  --primary-foreground: #172554;
+  --primary-text: #a5b8e3;
+  --ring: #a5b8e3;
+  --selection: #121a2e;
+  --brand: #172554;
+  --brand-border: #4b5f8f;
+
+  --working-pill: #0f2a5c;
+  --working-pill-foreground: #93c5fd;
+  --working-dot: #3b82f6;
+  --attention-pill: #3b2506;
+  --attention-pill-foreground: #fcd34d;
+  --attention-dot: #f59e0b;
+  --success-pill: #052e16;
+  --success-pill-foreground: #86efac;
+  --success-dot: #22c55e;
+  --danger-pill: #3b0d0d;
+  --danger-pill-foreground: #fca5a5;
+  --danger-dot: #ef4444;
+  --idle-pill: var(--muted);
+  --idle-pill-foreground: var(--foreground-secondary);
+  --idle-dot: var(--faint);
+
+  --diff-added: #06240f;
+  --diff-added-foreground: #86efac;
+  --diff-removed: #2a0b0b;
+  --diff-removed-foreground: #fca5a5;
+
+  --card-foreground: var(--foreground);
+  --popover-foreground: var(--foreground);
+  --accent-foreground: var(--foreground);
+  --secondary: var(--muted);
+  --secondary-foreground: var(--foreground);
+  --input: var(--border);
+}
+
+@theme inline {
+  /* Drops Tailwind's default palette so every colour utility resolves to a
+   * §1 role or fails to compile — there is no bg-blue-500 to fall back to. */
+  --color-*: initial;
+
+  --color-background: var(--background);
+  --color-sidebar: var(--sidebar);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-foreground: var(--foreground);
+  --color-foreground-secondary: var(--foreground-secondary);
+  --color-faint: var(--faint);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-text: var(--primary-text);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-ring: var(--ring);
+  --color-selection: var(--selection);
+  --color-brand: var(--brand);
+  --color-brand-border: var(--brand-border);
+
+  --color-working-pill: var(--working-pill);
+  --color-working-pill-foreground: var(--working-pill-foreground);
+  --color-working-dot: var(--working-dot);
+  --color-attention-pill: var(--attention-pill);
+  --color-attention-pill-foreground: var(--attention-pill-foreground);
+  --color-attention-dot: var(--attention-dot);
+  --color-success-pill: var(--success-pill);
+  --color-success-pill-foreground: var(--success-pill-foreground);
+  --color-success-dot: var(--success-dot);
+  --color-danger-pill: var(--danger-pill);
+  --color-danger-pill-foreground: var(--danger-pill-foreground);
+  --color-danger-dot: var(--danger-dot);
+  --color-idle-pill: var(--idle-pill);
+  --color-idle-pill-foreground: var(--idle-pill-foreground);
+  --color-idle-dot: var(--idle-dot);
+
+  --color-diff-added: var(--diff-added);
+  --color-diff-added-foreground: var(--diff-added-foreground);
+  --color-diff-removed: var(--diff-removed);
+  --color-diff-removed-foreground: var(--diff-removed-foreground);
+
+  /* Fonts */
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+
+  /* Type sizes — DESIGN §2 */
+  --text-meta: 11px;
+  --text-meta--line-height: 1.4;
+  --text-small: 12px;
+  --text-small--line-height: 1.4;
+  --text-body: 13px;
+  --text-body--line-height: 1.5;
+  --text-title: 15px;
+  --text-title--line-height: 1.3;
+
+  /* Radii — DESIGN §1 */
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+}
