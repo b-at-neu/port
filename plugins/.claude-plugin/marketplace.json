@@ -1,5 +1,6 @@
 {
   "name": "port-dev",
+  "description": "Dev-loop marketplace for the port plugin — installable into any repository.",
   "owner": {
     "name": "Benedikt Winkler",
     "url": "https://github.com/b-at-neu"
