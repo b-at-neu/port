@@ -1,0 +1,85 @@
+<style>
+  .s3 { font-family: Inter, system-ui, sans-serif; font-size: 12px; color: #18181b; background: #fafafa; border: 1px solid #e4e4e7; border-radius: 10px; padding: 10px 8px; display: flex; flex-direction: column; gap: 2px; width: 250px; }
+  .s3 .sec { font-size: 10px; color: #a1a1aa; text-transform: uppercase; letter-spacing: .06em; padding: 4px 8px 3px; }
+  .s3 .repo { padding: 6px 8px; border-radius: 6px; display: flex; align-items: center; gap: 8px; font-weight: 600; min-height: 22px; }
+  .s3 .ses { padding: 3px 8px 3px 24px; display: flex; align-items: center; gap: 7px; color: #3f3f46; font-size: 11.5px; }
+  .s3 .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: #2563eb; }
+  .s3 .r { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .s3 svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .s3 .gb { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 500; padding: 2px 7px; border-radius: 6px; color: #52525b; border: 1px solid transparent; }
+  .s3 .gb.hover { border-color: #e4e4e7; background: #fff; }
+  .s3 .gb.run { color: #1d4ed8; }
+  /* switch */
+  .s3 .sw { width: 26px; height: 15px; border-radius: 8px; background: #d4d4d8; position: relative; flex: none; }
+  .s3 .sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%; background: #fff; }
+  .s3 .sw.on { background: #2563eb; } .s3 .sw.on::after { left: 13px; }
+  .s3 .sw.half { background: #d97706; } .s3 .sw.half::after { left: 13px; }
+  .s3 .st { font-weight: 400; font-size: 10.5px; color: #71717a; }
+  /* status menu */
+  .s3 .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 500; padding: 1px 6px 1px 7px; border-radius: 9px; }
+  .s3 .pill.g { background: #dcfce7; color: #166534; } .s3 .pill.y { background: #fef3c7; color: #92400e; } .s3 .pill.n { background: #f4f4f5; color: #52525b; }
+  .s3 .pill i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .s3 .menu { margin: 2px 8px 4px auto; width: 150px; background: #fff; border: 1px solid #e4e4e7; border-radius: 8px; box-shadow: 0 6px 16px rgba(0,0,0,.08); padding: 4px; font-size: 11.5px; }
+  .s3 .menu div { padding: 4px 8px; border-radius: 5px; display: flex; align-items: center; gap: 7px; color: #3f3f46; }
+  .s3 .menu .hl { background: #f4f4f5; }
+  .s3 .menu .k { margin-left: auto; color: #a1a1aa; font-size: 10px; }
+</style>
+
+<h2>A clearer run/pause control, with collapsible repos</h2>
+<p class="subtitle">Same three repos in each. The caret collapses a repo; portfolio is collapsed here, and its amber dot says one of its sessions is asking you something.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="display:flex;justify-content:center;padding:12px">
+      <div class="s3">
+        <div class="sec">Pipelines</div>
+        <div class="repo"><svg viewBox="0 0 24 24" style="color:#a1a1aa"><polyline points="6 9 12 15 18 9"/></svg>port<span class="r"><span class="st">2 busy</span><span class="gb hover"><svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>Pause</span></span></div>
+        <div class="ses"><span class="dot"></span>#300 implementing</div>
+        <div class="repo"><svg viewBox="0 0 24 24" style="color:#a1a1aa"><polyline points="9 6 15 12 9 18"/></svg>portfolio <span style="width:6px;height:6px;border-radius:50%;background:#d97706;display:inline-block"></span><span class="r"><span class="st">draining</span><span class="gb"><svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>Pause</span></span></div>
+        <div class="repo"><svg viewBox="0 0 24 24" style="color:#a1a1aa"><polyline points="9 6 15 12 9 18"/></svg>aplio<span class="r"><span class="st">paused</span><span class="gb run"><svg viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg>Run</span></span></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A · Labelled ghost button</h3>
+      <p>Icon plus a word ("Run" / "Pause"), borderless until you hover. Says exactly what it does; drain and stop sit in a right-click menu.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="display:flex;justify-content:center;padding:12px">
+      <div class="s3">
+        <div class="sec">Pipelines</div>
+        <div class="repo"><svg viewBox="0 0 24 24" style="color:#a1a1aa"><polyline points="6 9 12 15 18 9"/></svg>port <span class="st">running · 2 busy</span><span class="r"><span class="sw on"></span></span></div>
+        <div class="ses"><span class="dot"></span>#300 implementing</div>
+        <div class="repo"><svg viewBox="0 0 24 24" style="color:#a1a1aa"><polyline points="9 6 15 12 9 18"/></svg>portfolio <span style="width:6px;height:6px;border-radius:50%;background:#d97706;display:inline-block"></span> <span class="st">draining</span><span class="r"><span class="sw half"></span></span></div>
+        <div class="repo"><svg viewBox="0 0 24 24" style="color:#a1a1aa"><polyline points="9 6 15 12 9 18"/></svg>aplio <span class="st">paused</span><span class="r"><span class="sw"></span></span></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B · Switch</h3>
+      <p>An on/off toggle per repo, like a settings switch. Instantly readable at a glance; amber while draining. Feels like a setting more than an action.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="display:flex;justify-content:center;padding:12px">
+      <div class="s3">
+        <div class="sec">Pipelines</div>
+        <div class="repo"><svg viewBox="0 0 24 24" style="color:#a1a1aa"><polyline points="6 9 12 15 18 9"/></svg>port<span class="r"><span class="st">2 busy</span><span class="pill g"><i></i>Running<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></span></div>
+        <div class="menu">
+          <div><svg viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg>Run</div>
+          <div class="hl"><svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>Pause<span class="k">finish nothing</span></div>
+          <div><svg viewBox="0 0 24 24"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><line x1="5" y1="21" x2="19" y2="21"/></svg>Drain<span class="k">finish in-flight</span></div>
+        </div>
+        <div class="repo"><svg viewBox="0 0 24 24" style="color:#a1a1aa"><polyline points="9 6 15 12 9 18"/></svg>portfolio <span style="width:6px;height:6px;border-radius:50%;background:#d97706;display:inline-block"></span><span class="r"><span class="pill y"><i></i>Draining<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></span></div>
+        <div class="repo"><svg viewBox="0 0 24 24" style="color:#a1a1aa"><polyline points="9 6 15 12 9 18"/></svg>aplio<span class="r"><span class="pill n"><i></i>Paused<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></span></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C · Status pill with a menu</h3>
+      <p>The state itself is the control: click "Running ▾" to pick Run, Pause or Drain. One quiet element shows state and offers all three choices.</p>
+    </div>
+  </div>
+
+</div>

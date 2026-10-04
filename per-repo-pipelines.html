@@ -1,0 +1,62 @@
+<style>
+  .s2 { font-family: Inter, system-ui, sans-serif; font-size: 12px; color: #18181b; width: 260px; background: #fafafa; border: 1px solid #e4e4e7; border-radius: 10px; padding: 10px 8px; display: flex; flex-direction: column; gap: 2px; }
+  .s2 .nav { padding: 5px 8px; border-radius: 6px; display: flex; align-items: center; gap: 8px; color: #3f3f46; }
+  .s2 .nav.on { background: #e4e4e7; color: #18181b; font-weight: 600; }
+  .s2 .cnt { margin-left: auto; font-size: 10px; color: #71717a; }
+  .s2 .cnt.hot { background: #2563eb; color: #fff; border-radius: 9px; padding: 0 6px; }
+  .s2 .sec { font-size: 10px; color: #a1a1aa; text-transform: uppercase; letter-spacing: .06em; padding: 10px 8px 3px; display: flex; }
+  .s2 .sec span { margin-left: auto; text-transform: none; letter-spacing: 0; color: #71717a; }
+  .s2 .repo { padding: 6px 8px; border-radius: 6px; display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .s2 .repo:hover { background: #f4f4f5; }
+  .s2 .st { font-weight: 400; font-size: 10.5px; color: #71717a; }
+  .s2 .tg { margin-left: auto; width: 22px; height: 22px; border-radius: 6px; border: 1px solid #e4e4e7; background: #fff; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #3f3f46; }
+  .s2 .live { width: 7px; height: 7px; border-radius: 50%; background: #16a34a; box-shadow: 0 0 0 3px #dcfce7; flex: none; }
+  .s2 .paused { width: 7px; height: 7px; border-radius: 50%; background: #a1a1aa; flex: none; }
+  .s2 .drain { width: 7px; height: 7px; border-radius: 50%; background: #d97706; flex: none; }
+  .s2 .ses { padding: 3px 8px 3px 24px; border-radius: 6px; display: flex; align-items: center; gap: 7px; color: #3f3f46; font-size: 11.5px; }
+  .s2 .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: #2563eb; }
+  .s2 .slots { margin-top: 8px; border-top: 1px solid #e4e4e7; padding: 8px; color: #71717a; font-size: 10.5px; display: flex; gap: 6px; align-items: center; }
+  .s2 .bar { flex: 1; height: 4px; background: #e4e4e7; border-radius: 2px; overflow: hidden; } .s2 .bar i { display: block; width: 66%; height: 100%; background: #2563eb; }
+  .note { font-size: 13px; line-height: 1.6; }
+</style>
+
+<h2>One pipeline per repo</h2>
+<p class="subtitle">The single pipeline box becomes a Pipelines section: each repo has its own run state and play/pause button, with its stage sessions nested under it.</p>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">Sidebar</div>
+    <div class="mockup-body">
+      <div class="s2">
+        <div class="nav">Needs you<span class="cnt hot">3</span></div>
+        <div class="nav on">Board<span class="cnt">7</span></div>
+        <div class="nav">Backlog<span class="cnt">14</span></div>
+
+        <div class="sec">Pipelines</div>
+        <div class="repo"><span class="live"></span>port <span class="st">running · 2 busy</span><span class="tg">❚❚</span></div>
+        <div class="ses"><span class="dot"></span>#300 implementing</div>
+        <div class="ses"><span class="dot"></span>#312 reviewing</div>
+        <div class="repo"><span class="drain"></span>portfolio <span class="st">draining · 1 busy</span><span class="tg">❚❚</span></div>
+        <div class="ses"><span class="dot" style="background:#d97706"></span>#24 planning · asks you</div>
+        <div class="repo"><span class="paused"></span>aplio <span class="st">paused</span><span class="tg">▶</span></div>
+
+        <div class="sec">Your sessions</div>
+        <div class="ses" style="padding-left:8px"><span class="dot"></span>Fix tick pacing</div>
+        <div class="ses" style="padding-left:8px"><span class="dot" style="background:#a1a1aa"></span>Design spec</div>
+
+        <div class="slots">Slots <span class="bar"><i></i></span> 3 / 4 shared</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">How it behaves</div>
+    <div class="mockup-body note">
+      <p><b>Per repo:</b> each repo is <i>running</i>, <i>draining</i> (finish what's in flight, start nothing new) or <i>paused</i>. The button toggles run/pause; drain and stop live in the repo's menu.</p>
+      <p><b>New repos start paused.</b> Nothing dispatches on a repo until you press play.</p>
+      <p><b>Slots are shared:</b> one machine-wide limit on concurrent sessions (your own sessions don't count), so three running repos can't start nine sessions at once. A repo can optionally get its own lower cap.</p>
+      <p><b>The board</b> shows every repo by default, with a repo filter in its header, so you can look at just one pipeline.</p>
+      <p><b>Clicking a repo</b> opens the board filtered to it.</p>
+    </div>
+  </div>
+</div>

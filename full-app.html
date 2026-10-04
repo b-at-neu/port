@@ -1,0 +1,244 @@
+<style>
+  .app { --bg:#ffffff; --side:#fafafa; --raise:#ffffff; --muted:#f4f4f5; --hover:#e4e4e7; --border:#e4e4e7; --fg:#18181b; --fg2:#3f3f46; --fg3:#71717a; --fg4:#a1a1aa;
+         --accent:#2563eb; --primary:#172554; --primary-fg:#ffffff; --link:#172554; --logo:#172554; --accent-fg:#ffffff; --accent-soft:#dbeafe; --accent-text:#1d4ed8; --sel:#eef1f8;
+         --ok-bg:#dcfce7; --ok:#166534; --ok-dot:#16a34a; --warn-bg:#fef3c7; --warn:#92400e; --warn-dot:#d97706; --bad-bg:#fee2e2; --bad:#991b1b;
+         --add-bg:#f0fdf4; --add:#166534; --del-bg:#fef2f2; --del:#991b1b; --shadow: 0 8px 24px rgba(0,0,0,.10); }
+  .app.dark { --bg:#09090b; --side:#111113; --raise:#18181b; --muted:#1c1c1f; --hover:#27272a; --border:#27272a; --fg:#fafafa; --fg2:#d4d4d8; --fg3:#a1a1aa; --fg4:#71717a;
+         --accent:#3b82f6; --primary:#e2e8f5; --primary-fg:#172554; --link:#a5b8e3; --logo:#172554; --accent-fg:#ffffff; --accent-soft:#172554; --accent-text:#93c5fd; --sel:#121a2e;
+         --ok-bg:#052e16; --ok:#86efac; --ok-dot:#22c55e; --warn-bg:#3b2506; --warn:#fcd34d; --warn-dot:#f59e0b; --bad-bg:#3b0d0d; --bad:#fca5a5;
+         --add-bg:#06240f; --add:#86efac; --del-bg:#2a0b0b; --del:#fca5a5; --shadow: 0 8px 24px rgba(0,0,0,.6); }
+  .app { font-family: Inter, system-ui, sans-serif; font-size: 13px; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; display: flex; height: 620px; }
+  .app svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .app .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; }
+  .side { width: 248px; background: var(--side); border-right: 1px solid var(--border); padding: 8px; display: flex; flex-direction: column; gap: 1px; }
+  .brand { height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 8px; font-weight: 600; color: var(--fg); }
+  .brand .logo { width: 20px; height: 20px; border-radius: 5px; background: var(--logo); display: flex; align-items: center; justify-content: center; }
+  .nav { height: 28px; padding: 0 8px; border-radius: 6px; display: flex; align-items: center; gap: 8px; color: var(--fg2); }
+  .nav.on { background: var(--hover); color: var(--fg); font-weight: 500; }
+  .cnt { margin-left: auto; font-size: 11px; color: var(--fg3); font-variant-numeric: tabular-nums; }
+  .cnt.hot { background: var(--warn-bg); color: var(--warn); border-radius: 9px; padding: 0 6px; font-weight: 500; }
+  .sec { font-size: 11px; color: var(--fg4); padding: 14px 8px 4px; font-weight: 500; }
+  .repo { height: 28px; padding: 0 6px 0 4px; border-radius: 6px; display: flex; align-items: center; gap: 4px; font-weight: 500; color: var(--fg); }
+  .repo svg { color: var(--fg4); }
+  .pill { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 500; padding: 1px 4px 1px 7px; border-radius: 9px; }
+  .pill i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .pill svg { width: 11px; height: 11px; color: inherit; }
+  .pill.g { background: var(--ok-bg); color: var(--ok); } .pill.y { background: var(--warn-bg); color: var(--warn); } .pill.n { background: var(--muted); color: var(--fg3); }
+  .ses { height: 26px; padding: 0 8px 0 26px; border-radius: 6px; display: flex; align-items: center; gap: 8px; color: var(--fg2); font-size: 12px; }
+  .ses.top { padding-left: 8px; } .ses.on { background: var(--hover); color: var(--fg); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--fg4); }
+  .dot.b { background: var(--accent); } .dot.y { background: var(--warn-dot); box-shadow: 0 0 0 3px var(--warn-bg); } .dot.g { background: var(--ok-dot); }
+  .side .foot { margin-top: auto; display: flex; align-items: center; gap: 8px; padding: 8px; color: var(--fg3); font-size: 12px; border-top: 1px solid var(--border); }
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .hd { height: 44px; border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 16px; gap: 10px; flex: none; }
+  .hd b { font-size: 15px; font-weight: 600; }
+  .seg { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; font-size: 12px; }
+  .seg span { padding: 2px 9px; color: var(--fg3); } .seg .on { background: var(--muted); color: var(--fg); }
+  .btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--raise); border-radius: 6px; height: 26px; padding: 0 10px; font-size: 12px; color: var(--fg2); }
+  .btn.p { background: var(--primary); border-color: var(--primary); color: var(--primary-fg); }
+  .grp { height: 32px; padding: 0 16px; font-weight: 500; color: var(--fg2); background: var(--side); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .grp .n { color: var(--fg4); }
+  .row { height: 36px; display: flex; align-items: center; gap: 12px; padding: 0 16px; border-bottom: 1px solid var(--border); }
+  .row.sel { background: var(--sel); }
+  .num { color: var(--fg4); width: 38px; font-variant-numeric: tabular-nums; font-size: 12px; }
+  .ttl { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rp { color: var(--fg3); font-size: 11px; border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
+  .steps { display: flex; gap: 2px; } .steps i { width: 10px; height: 4px; border-radius: 2px; background: var(--hover); }
+  .steps i.d { background: var(--accent-soft); } .steps i.c { background: var(--accent); } .steps i.w { background: var(--warn-dot); } .steps i.ok { background: var(--ok-dot); }
+  .tag { font-size: 11px; border-radius: 9px; padding: 1px 8px; font-weight: 500; white-space: nowrap; }
+  .tag.a { background: var(--accent-soft); color: var(--accent-text); } .tag.y { background: var(--warn-bg); color: var(--warn); } .tag.g { background: var(--ok-bg); color: var(--ok); } .tag.n { background: var(--muted); color: var(--fg3); }
+  .lnk { color: var(--link); font-size: 12px; white-space: nowrap; }
+  .det { width: 290px; border-left: 1px solid var(--border); padding: 16px; display: flex; flex-direction: column; gap: 12px; flex: none; }
+  .det h3 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.35; }
+  .k { font-size: 11px; color: var(--fg4); font-weight: 500; }
+  .vstep { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+  .vstep div { display: flex; gap: 8px; align-items: center; color: var(--fg4); }
+  .vstep .d { color: var(--fg3); } .vstep .c { color: var(--fg); font-weight: 500; }
+  .vstep b { width: 8px; height: 8px; border-radius: 50%; background: var(--hover); flex: none; }
+  .vstep .d b { background: var(--accent-soft); } .vstep .c b { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .acts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .conv { flex: 1; overflow: hidden; padding: 20px 0; display: flex; justify-content: center; }
+  .col { width: 100%; max-width: 680px; padding: 0 24px; display: flex; flex-direction: column; gap: 12px; }
+  .you { background: var(--muted); border-radius: 8px; padding: 10px 12px; color: var(--fg); }
+  .txt { line-height: 1.6; color: var(--fg); }
+  .txt code { font-family: 'JetBrains Mono', monospace; font-size: 12px; background: var(--muted); padding: 1px 4px; border-radius: 4px; }
+  .tool { display: flex; align-items: center; gap: 8px; color: var(--fg3); font-size: 12px; height: 24px; }
+  .tool .mono { color: var(--fg2); }
+  .add { color: var(--add); } .del { color: var(--del); }
+  .diff { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .diff div { padding: 2px 10px; } .diff .p { background: var(--add-bg); color: var(--add); } .diff .m { background: var(--del-bg); color: var(--del); }
+  .comp { padding: 12px 24px 16px; display: flex; justify-content: center; flex: none; }
+  .comp .in { width: 100%; max-width: 680px; border: 1px solid var(--border); background: var(--raise); border-radius: 10px; padding: 10px 12px; }
+  .comp .ph { color: var(--fg4); height: 36px; }
+  .ctl { display: flex; gap: 6px; align-items: center; color: var(--fg3); font-size: 12px; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; border-radius: 6px; padding: 2px 7px; color: var(--fg2); }
+  .chip:hover { background: var(--muted); }
+  .meter { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .bar { width: 56px; height: 4px; background: var(--hover); border-radius: 2px; overflow: hidden; } .bar i { display: block; width: 42%; height: 100%; background: var(--accent); }
+  .send { width: 26px; height: 26px; border-radius: 6px; background: var(--primary); color: var(--primary-fg); display: inline-flex; align-items: center; justify-content: center; }
+  .shd { height: 44px; border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 16px; gap: 10px; flex: none; }
+  .shd .meta { color: var(--fg3); font-size: 12px; }
+</style>
+
+<h2>Navy as the accent, light-line logo</h2>
+<p class="subtitle">Primary buttons, links, selection and the logo use navy. Blue stays only as the "working" status colour, so status and brand never mix. In dark mode, navy is too dark to read as a button, so the primary button flips to a pale navy tint with navy text.</p>
+
+<!-- ============ BOARD, DARK ============ -->
+<div class="mockup">
+  <div class="mockup-header">Dark · Board, with #300 selected</div>
+  <div class="mockup-body" style="padding:0">
+    <div class="app dark">
+      <div class="side">
+        <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:#fff;stroke-width:1.6;fill:none"><path d="M12 3c3.6 2.7 5.5 6 5.9 9.2H12z"/><path d="M12 12.2V15"/><path d="M3.5 15h17c-1 3-4 5-8.5 5s-7.5-2-8.5-5z"/></svg></span>port</div>
+        <div class="nav"><svg viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>Needs you<span class="cnt hot">3</span></div>
+        <div class="nav on"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Board<span class="cnt">7</span></div>
+        <div class="nav"><svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>Backlog<span class="cnt">14</span></div>
+        <div class="nav"><svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Repositories</div>
+
+        <div class="sec">Pipelines</div>
+        <div class="repo"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>port<span class="pill g"><i></i>Running<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></div>
+        <div class="ses"><span class="dot b"></span>#300 implementing</div>
+        <div class="ses"><span class="dot b"></span>#312 reviewing</div>
+        <div class="repo"><svg viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18"/></svg>portfolio&nbsp;<span class="dot y"></span><span class="pill y"><i></i>Draining<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></div>
+        <div class="repo"><svg viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18"/></svg>aplio<span class="pill n"><i></i>Paused<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></div>
+
+        <div class="sec">Your sessions</div>
+        <div class="ses top"><span class="dot b"></span>Fix tick pacing</div>
+        <div class="ses top"><span class="dot"></span>Design spec</div>
+
+        <div class="foot"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings<span style="margin-left:auto" class="dot g"></span>claude · gh</div>
+      </div>
+
+      <div class="main">
+        <div class="hd"><b>Board</b><span class="seg"><span class="on">By phase</span><span>By repo</span></span><span class="btn">All repos <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span><span style="margin-left:auto" class="btn p"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Work on ticket</span></div>
+        <div style="flex:1;overflow:hidden">
+          <div class="grp">Waiting on you <span class="n">2</span></div>
+          <div class="row"><span class="num">#305</span><span class="ttl">Honour auto plan at the plan gate</span><span class="rp">port</span><span class="steps"><i class="d"></i><i class="w"></i><i></i><i></i><i></i><i></i></span><span class="tag y">Plan review</span><span class="lnk">Review plan</span></div>
+          <div class="row"><span class="num">#298</span><span class="ttl">POSIX command portability</span><span class="rp">port</span><span class="steps"><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="ok"></i></span><span class="tag g">Ready to merge</span><span class="lnk">Open PR</span></div>
+          <div class="grp">In progress <span class="n">3</span></div>
+          <div class="row sel"><span class="num">#300</span><span class="ttl">Apply CLAUDE.md overrides in the desktop app</span><span class="rp">port</span><span class="steps"><i class="d"></i><i class="d"></i><i class="c"></i><i></i><i></i><i></i></span><span class="tag a">Implementing · 12m</span></div>
+          <div class="row"><span class="num">#312</span><span class="ttl">Denial inspector miscount</span><span class="rp">port</span><span class="steps"><i class="d"></i><i class="d"></i><i class="d"></i><i class="c"></i><i></i><i></i></span><span class="tag a">Reviewing · 2m</span></div>
+          <div class="row"><span class="num">#24</span><span class="ttl">Hero section redesign</span><span class="rp">portfolio</span><span class="steps"><i class="w"></i><i></i><i></i><i></i><i></i><i></i></span><span class="tag y">Planning · asks you</span></div>
+          <div class="grp">Queued <span class="n">2</span></div>
+          <div class="row"><span class="num">#301</span><span class="ttl">Repository health panel</span><span class="rp">port</span><span class="steps"><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="tag n">Ready</span></div>
+          <div class="row"><span class="num">#31</span><span class="ttl">Contact form validation</span><span class="rp">portfolio</span><span class="steps"><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="tag n">Ready</span></div>
+        </div>
+      </div>
+
+      <div class="det">
+        <div style="display:flex;gap:8px;align-items:center"><span class="num">#300</span><span class="rp">port</span><span style="margin-left:auto;color:var(--fg4)"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></div>
+        <h3>Apply CLAUDE.md overrides in the desktop app</h3>
+        <div class="k">Phase</div>
+        <div class="vstep">
+          <div class="d"><b></b>Planned</div>
+          <div class="d"><b></b>Plan approved by you · 2h ago</div>
+          <div class="c"><b></b>Implementing · 12m · $0.92</div>
+          <div><b></b>Review</div>
+          <div><b></b>Revision · 0 of 3 cycles</div>
+          <div><b></b>Ready to merge</div>
+        </div>
+        <div class="k">Actions</div>
+        <div class="acts"><span class="btn p"><svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>Open session</span><span class="btn">Pause</span><span class="btn">Stop</span><span class="btn">View plan</span><span class="btn">Issue <svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SESSION, DARK ============ -->
+<div class="mockup" style="margin-top:24px">
+  <div class="mockup-header">Dark · A session open (your "Fix tick pacing" session)</div>
+  <div class="mockup-body" style="padding:0">
+    <div class="app dark">
+      <div class="side">
+        <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:#fff;stroke-width:1.6;fill:none"><path d="M12 3c3.6 2.7 5.5 6 5.9 9.2H12z"/><path d="M12 12.2V15"/><path d="M3.5 15h17c-1 3-4 5-8.5 5s-7.5-2-8.5-5z"/></svg></span>port</div>
+        <div class="nav"><svg viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>Needs you<span class="cnt hot">3</span></div>
+        <div class="nav"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Board<span class="cnt">7</span></div>
+        <div class="nav"><svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>Backlog<span class="cnt">14</span></div>
+        <div class="nav"><svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Repositories</div>
+        <div class="sec">Pipelines</div>
+        <div class="repo"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>port<span class="pill g"><i></i>Running<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></div>
+        <div class="ses"><span class="dot b"></span>#300 implementing</div>
+        <div class="ses"><span class="dot b"></span>#312 reviewing</div>
+        <div class="repo"><svg viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18"/></svg>portfolio&nbsp;<span class="dot y"></span><span class="pill y"><i></i>Draining<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></div>
+        <div class="repo"><svg viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18"/></svg>aplio<span class="pill n"><i></i>Paused<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></div>
+        <div class="sec">Your sessions</div>
+        <div class="ses top on"><span class="dot b"></span>Fix tick pacing</div>
+        <div class="ses top"><span class="dot"></span>Design spec</div>
+        <div class="foot"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></svg>Settings<span style="margin-left:auto" class="dot g"></span>claude · gh</div>
+      </div>
+
+      <div class="main">
+        <div class="shd"><b style="font-size:15px">Fix tick pacing</b><span class="meta mono">port · claude/fix-pacing</span><span class="tag a">Working</span><span style="margin-left:auto" class="meta">$1.84 · 18m</span><span class="btn">Changes · 3</span></div>
+        <div class="conv"><div class="col">
+          <div class="you">Why does the wakeup never back off past 540?</div>
+          <div class="txt">The ladder resets whenever <code>observedChange</code> is true, and the label read flags a change on every tick because it compares against an empty snapshot. I'll compare against the previous snapshot instead.</div>
+          <div class="tool"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Read <span class="mono">main/tick/pacing.ts</span></div>
+          <div class="tool"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>Edit <span class="mono">main/tick/pacing.ts</span><span class="add">+12</span><span class="del">−4</span></div>
+          <div class="diff mono"><div class="m">-  if (observedChange) return FLOOR</div><div class="p">+  if (changed(previous, next)) return FLOOR</div></div>
+          <div class="tool"><svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span class="mono">pnpm --filter @port/desktop test</span><span class="add">✓ 1750 passed</span></div>
+          <div class="txt">Fixed. The ladder now backs off 270 → 540 → 1080 → 1800 when nothing changes, and the test that covers it passes.</div>
+        </div></div>
+        <div class="comp"><div class="in">
+          <div class="ph">Reply to Claude…</div>
+          <div class="ctl"><span class="chip">Sonnet <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span><span class="chip">Accept edits <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span><span class="chip">Effort: high</span><span class="meter">Context<span class="bar"><i></i></span>42%</span><span class="send"><svg viewBox="0 0 24 24"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg></span></div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ BOARD, LIGHT ============ -->
+<div class="mockup" style="margin-top:24px">
+  <div class="mockup-header">Light · Board, for comparison</div>
+  <div class="mockup-body" style="padding:0">
+    <div class="app">
+      <div class="side">
+        <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:#fff;stroke-width:1.6;fill:none"><path d="M12 3c3.6 2.7 5.5 6 5.9 9.2H12z"/><path d="M12 12.2V15"/><path d="M3.5 15h17c-1 3-4 5-8.5 5s-7.5-2-8.5-5z"/></svg></span>port</div>
+        <div class="nav"><svg viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>Needs you<span class="cnt hot">3</span></div>
+        <div class="nav on"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Board<span class="cnt">7</span></div>
+        <div class="nav"><svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>Backlog<span class="cnt">14</span></div>
+        <div class="nav"><svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Repositories</div>
+        <div class="sec">Pipelines</div>
+        <div class="repo"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>port<span class="pill g"><i></i>Running<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></div>
+        <div class="ses"><span class="dot b"></span>#300 implementing</div>
+        <div class="ses"><span class="dot b"></span>#312 reviewing</div>
+        <div class="repo"><svg viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18"/></svg>portfolio&nbsp;<span class="dot y"></span><span class="pill y"><i></i>Draining<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></div>
+        <div class="repo"><svg viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18"/></svg>aplio<span class="pill n"><i></i>Paused<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></div>
+        <div class="sec">Your sessions</div>
+        <div class="ses top"><span class="dot b"></span>Fix tick pacing</div>
+        <div class="ses top"><span class="dot"></span>Design spec</div>
+        <div class="foot"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></svg>Settings<span style="margin-left:auto" class="dot g"></span>claude · gh</div>
+      </div>
+      <div class="main">
+        <div class="hd"><b>Board</b><span class="seg"><span class="on">By phase</span><span>By repo</span></span><span class="btn">All repos <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span><span style="margin-left:auto" class="btn p"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Work on ticket</span></div>
+        <div style="flex:1;overflow:hidden">
+          <div class="grp">Waiting on you <span class="n">2</span></div>
+          <div class="row"><span class="num">#305</span><span class="ttl">Honour auto plan at the plan gate</span><span class="rp">port</span><span class="steps"><i class="d"></i><i class="w"></i><i></i><i></i><i></i><i></i></span><span class="tag y">Plan review</span><span class="lnk">Review plan</span></div>
+          <div class="row"><span class="num">#298</span><span class="ttl">POSIX command portability</span><span class="rp">port</span><span class="steps"><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="ok"></i></span><span class="tag g">Ready to merge</span><span class="lnk">Open PR</span></div>
+          <div class="grp">In progress <span class="n">3</span></div>
+          <div class="row sel"><span class="num">#300</span><span class="ttl">Apply CLAUDE.md overrides in the desktop app</span><span class="rp">port</span><span class="steps"><i class="d"></i><i class="d"></i><i class="c"></i><i></i><i></i><i></i></span><span class="tag a">Implementing · 12m</span></div>
+          <div class="row"><span class="num">#312</span><span class="ttl">Denial inspector miscount</span><span class="rp">port</span><span class="steps"><i class="d"></i><i class="d"></i><i class="d"></i><i class="c"></i><i></i><i></i></span><span class="tag a">Reviewing · 2m</span></div>
+          <div class="row"><span class="num">#24</span><span class="ttl">Hero section redesign</span><span class="rp">portfolio</span><span class="steps"><i class="w"></i><i></i><i></i><i></i><i></i><i></i></span><span class="tag y">Planning · asks you</span></div>
+          <div class="grp">Queued <span class="n">2</span></div>
+          <div class="row"><span class="num">#301</span><span class="ttl">Repository health panel</span><span class="rp">port</span><span class="steps"><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="tag n">Ready</span></div>
+          <div class="row"><span class="num">#31</span><span class="ttl">Contact form validation</span><span class="rp">portfolio</span><span class="steps"><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="tag n">Ready</span></div>
+        </div>
+      </div>
+      <div class="det">
+        <div style="display:flex;gap:8px;align-items:center"><span class="num">#300</span><span class="rp">port</span></div>
+        <h3>Apply CLAUDE.md overrides in the desktop app</h3>
+        <div class="k">Phase</div>
+        <div class="vstep">
+          <div class="d"><b></b>Planned</div>
+          <div class="d"><b></b>Plan approved by you · 2h ago</div>
+          <div class="c"><b></b>Implementing · 12m · $0.92</div>
+          <div><b></b>Review</div>
+          <div><b></b>Revision · 0 of 3 cycles</div>
+          <div><b></b>Ready to merge</div>
+        </div>
+        <div class="k">Actions</div>
+        <div class="acts"><span class="btn p">Open session</span><span class="btn">Pause</span><span class="btn">Stop</span><span class="btn">View plan</span></div>
+      </div>
+    </div>
+  </div>
+</div>

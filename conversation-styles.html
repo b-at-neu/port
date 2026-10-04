@@ -1,0 +1,106 @@
+<style>
+  .sv { font-family: Inter, system-ui, sans-serif; font-size: 11.5px; color: #18181b; background: #fff; border: 1px solid #e4e4e7; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; height: 430px; }
+  .sv .hd { height: 34px; border-bottom: 1px solid #e4e4e7; display: flex; align-items: center; padding: 0 12px; gap: 8px; }
+  .sv .hd b { font-weight: 600; }
+  .sv .meta { color: #71717a; font-size: 10.5px; }
+  .sv .pill { font-size: 9.5px; padding: 1px 7px; border-radius: 9px; background: #dbeafe; color: #1d4ed8; font-weight: 500; }
+  .sv .r { margin-left: auto; color: #71717a; font-size: 10.5px; }
+  .sv .bd { flex: 1; overflow: hidden; padding: 12px 16px; display: flex; flex-direction: column; gap: 9px; }
+  .sv .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10.5px; }
+  .sv .t { line-height: 1.5; color: #27272a; }
+  .sv code { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; background: #f4f4f5; padding: 0 3px; border-radius: 3px; }
+  .sv .row { display: flex; align-items: center; gap: 7px; color: #52525b; }
+  .sv .ic { width: 14px; height: 14px; border-radius: 3px; background: #e4e4e7; display: inline-flex; align-items: center; justify-content: center; font-size: 8px; color: #52525b; flex: none; }
+  .sv .add { color: #16a34a; } .sv .del { color: #dc2626; }
+  .sv .diff { border: 1px solid #e4e4e7; border-radius: 6px; overflow: hidden; }
+  .sv .diff div { padding: 1px 8px; }
+  .sv .diff .p { background: #f0fdf4; color: #166534; } .sv .diff .m { background: #fef2f2; color: #991b1b; }
+  .sv .ft { border-top: 1px solid #e4e4e7; padding: 8px 12px; }
+  .sv .box { border: 1px solid #d4d4d8; border-radius: 8px; padding: 8px 10px; color: #a1a1aa; }
+  .sv .ctl { display: flex; gap: 6px; margin-top: 6px; align-items: center; color: #52525b; font-size: 10.5px; }
+  .sv .chip { border: 1px solid #e4e4e7; border-radius: 5px; padding: 1px 6px; }
+  .sv .meter { margin-left: auto; display: flex; align-items: center; gap: 5px; color: #71717a; }
+  .sv .bar { width: 50px; height: 4px; background: #e4e4e7; border-radius: 2px; overflow: hidden; }
+  .sv .bar i { display: block; width: 42%; height: 100%; background: #2563eb; }
+  .sv .send { background: #2563eb; color: #fff; border-radius: 5px; padding: 1px 8px; }
+  /* A */
+  .sv .you { background: #f4f4f5; border-radius: 8px; padding: 7px 10px; color: #27272a; }
+  /* B */
+  .sv .bub-u { align-self: flex-end; max-width: 70%; background: #2563eb; color: #fff; border-radius: 12px 12px 3px 12px; padding: 7px 10px; }
+  .sv .bub-a { align-self: flex-start; max-width: 85%; background: #f4f4f5; border-radius: 12px 12px 12px 3px; padding: 7px 10px; }
+  /* C */
+  .sv .tl { display: flex; gap: 10px; }
+  .sv .gut { width: 44px; flex: none; color: #a1a1aa; font-size: 9.5px; text-align: right; padding-top: 1px; }
+  .sv .line { border-left: 2px solid #e4e4e7; padding-left: 10px; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .sv .line.u { border-color: #2563eb; }
+</style>
+
+<h2>How should a conversation read?</h2>
+<p class="subtitle">Same moment in each: you ask a question, Claude reads a file, edits it, and runs the checks. The header and composer controls are the same in all three; only the conversation changes.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="sv">
+        <div class="hd"><b>Fix tick pacing</b><span class="meta">port · claude/fix-pacing</span><span class="pill">working</span><span class="r">$1.84</span></div>
+        <div class="bd">
+          <div class="you">Why does the wakeup never back off past 540?</div>
+          <div class="t">The ladder resets whenever <code>observedChange</code> is true, and the label read flags a change every tick. I'll compare against the previous snapshot instead.</div>
+          <div class="row"><span class="ic">R</span>Read <span class="mono">main/tick/pacing.ts</span></div>
+          <div class="row"><span class="ic">E</span>Edit <span class="mono">main/tick/pacing.ts</span><span class="add">+12</span><span class="del">−4</span></div>
+          <div class="diff mono"><div class="m">- if (observedChange) return FLOOR</div><div class="p">+ if (changed(prev, next)) return FLOOR</div></div>
+          <div class="row"><span class="ic">$</span><span class="mono">pnpm --filter @port/desktop test</span><span class="add">✓ 1750 passed</span></div>
+        </div>
+        <div class="ft"><div class="box">Message…</div><div class="ctl"><span class="chip">Sonnet</span><span class="chip">Accept edits</span><span class="chip">Effort: high</span><span class="meter">Context<span class="bar"><i></i></span>42%</span><span class="send">Send</span></div></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A · Document flow (recommended)</h3>
+      <p>No bubbles. Your messages are subtle grey blocks, Claude's text runs full width, and each tool call is a one-line row that expands; edits show their diff inline. Reads like a document; densest of the three.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="sv">
+        <div class="hd"><b>Fix tick pacing</b><span class="meta">port · claude/fix-pacing</span><span class="pill">working</span><span class="r">$1.84</span></div>
+        <div class="bd">
+          <div class="bub-u">Why does the wakeup never back off past 540?</div>
+          <div class="bub-a">The ladder resets whenever <code>observedChange</code> is true, and the label read flags a change every tick. I'll compare against the previous snapshot instead.</div>
+          <div class="row"><span class="ic">R</span>Read <span class="mono">main/tick/pacing.ts</span></div>
+          <div class="row"><span class="ic">E</span>Edit <span class="mono">main/tick/pacing.ts</span><span class="add">+12</span><span class="del">−4</span></div>
+          <div class="row"><span class="ic">$</span><span class="mono">pnpm test</span><span class="add">✓ 1750 passed</span></div>
+        </div>
+        <div class="ft"><div class="box">Message…</div><div class="ctl"><span class="chip">Sonnet</span><span class="chip">Accept edits</span><span class="chip">Effort: high</span><span class="meter">Context<span class="bar"><i></i></span>42%</span><span class="send">Send</span></div></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B · Chat bubbles</h3>
+      <p>Messenger-style: yours right in blue, Claude's left in grey, tool calls between them. Familiar and easy to tell who said what, but wastes width and long answers feel cramped.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="sv">
+        <div class="hd"><b>Fix tick pacing</b><span class="meta">port · claude/fix-pacing</span><span class="pill">working</span><span class="r">$1.84</span></div>
+        <div class="bd">
+          <div class="tl"><div class="gut">14:02<br>you</div><div class="line u"><div class="t">Why does the wakeup never back off past 540?</div></div></div>
+          <div class="tl"><div class="gut">14:02<br>claude</div><div class="line">
+            <div class="t">The ladder resets whenever <code>observedChange</code> is true… I'll compare against the previous snapshot.</div>
+            <div class="row"><span class="ic">R</span>Read <span class="mono">pacing.ts</span></div>
+            <div class="row"><span class="ic">E</span>Edit <span class="mono">pacing.ts</span><span class="add">+12</span><span class="del">−4</span></div>
+            <div class="row"><span class="ic">$</span><span class="mono">pnpm test</span><span class="add">✓ 1750 passed</span></div>
+          </div></div>
+        </div>
+        <div class="ft"><div class="box">Message…</div><div class="ctl"><span class="chip">Sonnet</span><span class="chip">Accept edits</span><span class="chip">Effort: high</span><span class="meter">Context<span class="bar"><i></i></span>42%</span><span class="send">Send</span></div></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C · Timeline log</h3>
+      <p>A left gutter with time and speaker, each turn a coloured rail with its steps nested. Best for auditing what a pipeline stage did; heavier for casual chat.</p>
+    </div>
+  </div>
+
+</div>
