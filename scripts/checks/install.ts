@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { root, readJson, walk, relOf } from '../lib/files.ts';
+import { root, readJson, walk, relOf, frontmatter } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
 // Structural equality for the small, JSON-shaped values this module compares
@@ -244,6 +244,139 @@ export default async function ({ fail, ok }: Reporter) {
         }
         if (!anyBadAt) ok();
       }
+    }
+  }
+
+  // --- Pin agreement: init applies and verifies, PREFLIGHT reports drift ------
+  // guard(#341): a committed ref change that relied entirely on background
+  // reconciliation to actually move the install, and a startup line that
+  // printed an unflagged 'current with' even when this machine's registered
+  // source disagreed with the committed pin.
+  {
+    const initRel = 'plugins/port/skills/init/SKILL.md';
+    const initPath = join(root, initRel);
+    const initText = readFileSync(initPath, 'utf8');
+    const initAllowedTools = frontmatter(initPath)?.['allowed-tools'] ?? '';
+
+    for (const entry of ['Bash(claude plugin marketplace remove *)', 'Bash(claude plugin marketplace add *)', 'Bash(claude plugin install *)']) {
+      if (!initAllowedTools.includes(entry)) {
+        fail('pin-agreement', `${initRel}'s frontmatter allowed-tools is missing '${entry}'`);
+      } else {
+        ok();
+      }
+    }
+
+    const removeIdx = initText.indexOf('claude plugin marketplace remove');
+    const addIdx = initText.indexOf('claude plugin marketplace add');
+    const installIdx = initText.indexOf('claude plugin install');
+    if (removeIdx === -1 || addIdx === -1 || installIdx === -1) {
+      fail(
+        'pin-agreement',
+        `${initRel} is missing one of 'claude plugin marketplace remove'/'claude plugin marketplace add'/'claude plugin install'`,
+      );
+    } else if (!(removeIdx < addIdx && addIdx < installIdx)) {
+      fail(
+        'pin-agreement',
+        `${initRel} does not name 'claude plugin marketplace remove', then 'claude plugin marketplace add', then 'claude plugin install', in that order`,
+      );
+    } else {
+      ok();
+    }
+
+    for (const literal of ['Never report the pin applied until', 'verify-only']) {
+      if (!initText.includes(literal)) {
+        fail('pin-agreement', `${initRel} is missing the literal '${literal}'`);
+      } else {
+        ok();
+      }
+    }
+
+    const preflightRel = 'plugins/port/skills/pipeline/PREFLIGHT.md';
+    const preflightText = readFileSync(join(root, preflightRel), 'utf8');
+
+    for (const phrase of ['extraKnownMarketplaces', 'aheadBy']) {
+      if (!preflightText.includes(phrase)) {
+        fail('pin-agreement', `${preflightRel} never names '${phrase}'`);
+      } else {
+        ok();
+      }
+    }
+
+    const uxHeadingIdx = preflightText.indexOf('## UX states (startup preflight)');
+    if (uxHeadingIdx === -1) {
+      fail('pin-agreement', `${preflightRel} is missing the '## UX states (startup preflight)' heading`);
+    } else {
+      const uxSection = preflightText.slice(uxHeadingIdx);
+      const driftMarker = "- **Running plugin doesn't match the committed pin**";
+      const misconfigMarker = '- **Committed pin misconfigured**';
+      const driftIdx = uxSection.indexOf(driftMarker);
+      const misconfigIdx = uxSection.indexOf(misconfigMarker);
+
+      if (driftIdx === -1) {
+        fail('pin-agreement', `${preflightRel}'s UX states are missing "${driftMarker}"`);
+      } else {
+        ok();
+      }
+      if (misconfigIdx === -1) {
+        fail('pin-agreement', `${preflightRel}'s UX states are missing "${misconfigMarker}"`);
+      } else {
+        ok();
+      }
+
+      // Each entry's own text is bounded by the next top-level '- **' bullet,
+      // never the whole section — the misconfiguration entry legitimately
+      // names '/port:init' and the drift entry legitimately must not.
+      if (driftIdx !== -1) {
+        const nextBulletIdx = uxSection.indexOf('\n- **', driftIdx + driftMarker.length);
+        const driftEntry = nextBulletIdx === -1 ? uxSection.slice(driftIdx) : uxSection.slice(driftIdx, nextBulletIdx);
+        if (!driftEntry.includes('claude plugin marketplace remove')) {
+          fail('pin-agreement', `${preflightRel}'s drift UX state is missing 'claude plugin marketplace remove'`);
+        } else {
+          ok();
+        }
+        if (driftEntry.includes('/port:init')) {
+          fail(
+            'pin-agreement',
+            `${preflightRel}'s drift UX state names '/port:init' — this is the operator's own machine, never the repository maintainer's fix`,
+          );
+        } else {
+          ok();
+        }
+      }
+
+      if (misconfigIdx !== -1) {
+        const nextBulletIdx = uxSection.indexOf('\n- **', misconfigIdx + misconfigMarker.length);
+        const misconfigEntry = nextBulletIdx === -1 ? uxSection.slice(misconfigIdx) : uxSection.slice(misconfigIdx, nextBulletIdx);
+        if (!misconfigEntry.includes('/port:init')) {
+          fail('pin-agreement', `${preflightRel}'s misconfiguration UX state is missing '/port:init'`);
+        } else {
+          ok();
+        }
+      }
+    }
+  }
+
+  // --- The accepted ref forms stay pinned between init and PREFLIGHT ---------
+  // pin: scripts/checks/install.ts's MARKETPLACE_REF_PATTERN ↔ the prose in
+  // plugins/port/skills/init/SKILL.md and plugins/port/skills/pipeline/PREFLIGHT.md
+  // stating what it accepts — a drift here means an operator is told a ref
+  // form is fine (or rejected) that the actual validator disagrees with.
+  {
+    const refFormPhrase = '`main` or a `v<semver>` tag';
+    const initRel = 'plugins/port/skills/init/SKILL.md';
+    const preflightRel = 'plugins/port/skills/pipeline/PREFLIGHT.md';
+    const initText = readFileSync(join(root, initRel), 'utf8');
+    const preflightText = readFileSync(join(root, preflightRel), 'utf8');
+
+    if (!initText.includes(refFormPhrase)) {
+      fail('pin-agreement', `${initRel} never states the accepted ref forms as '${refFormPhrase}'`);
+    } else {
+      ok();
+    }
+    if (!preflightText.includes(refFormPhrase)) {
+      fail('pin-agreement', `${preflightRel} never states the accepted ref forms as '${refFormPhrase}'`);
+    } else {
+      ok();
     }
   }
 }

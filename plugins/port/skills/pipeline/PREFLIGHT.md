@@ -16,7 +16,7 @@ git cat-file -e <ref>:.claude/port.config.json
 
 A literal `HEAD` from the first command means detached — report the short sha instead. Take the **first 10** refs from the second command and test each directly with the third — one command per call, never a shell loop — rather than asking where the file was last *edited*, which answers a different question and breaks across a rebase. Emit the matching **UX states** message, naming the actual bound checked (`none of the <n> local branches I checked`, never "every ref I can see"), and **stop — no tick, no dispatch, no `ScheduleWakeup`,** with the checked-out branch unchanged: the guard hook denies `git checkout`/`git switch` from this session (see `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Cockpit rules"), so switching branches is never a route out — the only exits are checking out a branch that carries the config, or `/port:init`.
 
-**Step 2 — permissions.** Read `<root>/.claude/settings.json`. Missing, unparseable, or `permissions.allow` absent or empty → warn with the matching **UX states** message and ask (`AskUserQuestion`): **Stop (recommended)** / **Start anyway**. Stop → end the session with no wakeup. Start anyway → continue, and never re-ask this session. The override exists because permissions can legitimately be granted at user scope, in `~/.claude/settings.json`, which this session cannot read — a hard stop would strand a valid setup on evidence it cannot gather.
+**Step 2 — permissions.** Read `<root>/.claude/settings.json`. Missing, unparseable, or `permissions.allow` absent or empty → warn with the matching **UX states** message and ask (`AskUserQuestion`): **Stop (recommended)** / **Start anyway**. Stop → end the session with no wakeup. Start anyway → continue, and never re-ask this session. The override exists because permissions can legitimately be granted at user scope, in `~/.claude/settings.json`, which this session cannot read — a hard stop would strand a valid setup on evidence it cannot gather. **Keep this read's `extraKnownMarketplaces`** — step 4's pin-agreement check compares against it, so there is no second read of this file.
 
 Read `permissions.defaultMode` from the same file, for step 3's report. **Warn only when it is `acceptEdits`, `bypassPermissions`, or `auto`** — see the matching **UX states** message — and say in the same clause that a launch flag overrides this setting and cannot be read from inside the session. `default`, or the key absent (the harness's own default is `default`), needs no warning.
 
@@ -54,18 +54,32 @@ Then check for self-host drift. Read `<root>/.claude-plugin/marketplace.json`:
 - `source.source == "directory"` whose `path` is this working tree or a directory inside it (the self-hosting case) → `<po>`/`<pn>` is `<owner>`/`<name>`; `<target-ref>` is `<integration>`.
 - Anything else (a directory source pointing elsewhere, no marketplace record, no resolvable owner/name) → **not computable** — say so once at startup (see **UX states**) and omit the `pluginRepo` alias below for the rest of the session; never print a number.
 
+**Pin agreement.** A third, independent question from staleness above — not "how far behind the source I update from" but "does that source match what this repository commits". Report-only, it never blocks startup, and it runs here, at startup only; the per-tick staleness alias is unchanged.
+
+`<committed>` is `extraKnownMarketplaces.<marketplace>` from the `.claude/settings.json` step 2 already read, keyed by the same `<marketplace>` segment step 3 derived — never a literal name.
+
+- **Repo misconfiguration** fires when `<committed>` is absent, its `source.source` is not `github`, or its `source.ref` is absent or does not match one of the accepted forms — `main` or a `v<semver>` tag. Show the **Committed pin misconfigured** UX state once, naming which case. When it fires, skip the personal-drift check below — there is no valid pin to compare a machine against, and telling someone to move their machine onto a broken pin is the wrong advice.
+- **Personal drift**: otherwise, compare `<committed>` with the same `known_marketplaces.json` record the staleness target above was resolved from. Drift means that record is absent, its `source.source` is not `github`, or its `source.repo` (case-insensitive) or `source.ref` differs from `<committed>`'s — an unset registered ref differs from every committed one. **Exempt**: a `directory` source whose `path` is this working tree, in a repository step 3 already found to be the plugin's own source — the deliberate dev loop, already covered by step 3's self-host check.
+- **Install drift**: add `aheadBy` to the `pluginRepo` compare selection and its `--jq` projection below (REST fallback: `.ahead_by`). The registration agrees, the source is `github`, but `aheadBy` is non-zero — the installed commit is not contained in the committed ref. Show the same drift state, with reason `installed <sha> carries <n> commits <ref> doesn't`.
+
+**Precedence for the identity line's trailing clause**: drift, then stale, then `current with`, then not computable. The line never renders `current with` while drift holds.
+
+The drift remediation runs from `<root>` and substitutes `<committed repo>@<committed ref>`, `<plugin>@<marketplace>`, and `--scope <scope of the resolved install record>` (or `project` when unresolved — a `local` record outranks a project-scope fix, so the scope has to match).
+
+Neither check asks whether a newer release exists — moving the pin stays the operator's call, through `/port:init`. An unreadable registry or settings file reports the check as **not run**, with the reason; it never produces a silent all-clear.
+
 When a target resolved, fold a second aliased root selection into the same query:
 
 ```bash
 gh api graphql --include -f query='query {
   repository(owner: "<owner>", name: "<name>") { object(expression: "<integration>:.claude/settings.json") { ... on Blob { text } } }
   pluginRepo: repository(owner: "<po>", name: "<pn>") {
-    ref(qualifiedName: "<target-ref>") { compare(headRef: "<installed-sha>") { behindBy } }
+    ref(qualifiedName: "<target-ref>") { compare(headRef: "<installed-sha>") { behindBy aheadBy } }
   }
-}' --jq '{settings: .data.repository.object.text, behindBy: .data.pluginRepo.ref.compare.behindBy}'
+}' --jq '{settings: .data.repository.object.text, behindBy: .data.pluginRepo.ref.compare.behindBy, aheadBy: .data.pluginRepo.ref.compare.aheadBy}'
 ```
 
-Verify the field names against a live call during implementation; if `Ref.compare` is unavailable, fall back to `gh api "repos/<po>/<pn>/compare/<target-ref>...<installed-sha>" --jq '.behind_by'` and widen `allowed-tools` from `Bash(gh api graphql *)` to `Bash(gh api *)` — the repository allowlist already grants `Bash(gh *)`, so no settings change either way.
+Verify the field names against a live call during implementation; if `Ref.compare` is unavailable, fall back to `gh api "repos/<po>/<pn>/compare/<target-ref>...<installed-sha>" --jq '{behindBy: .behind_by, aheadBy: .ahead_by}'` and widen `allowed-tools` from `Bash(gh api graphql *)` to `Bash(gh api *)` — the repository allowlist already grants `Bash(gh *)`, so no settings change either way.
 
 Compare the `settings` half's returned `enabledPlugins` keys against the local file's, and warn on either direction of difference, or on `object` being null (`<integration>` carries no settings file at all) — see **UX states**. **If the call errors, say so in one line and continue.** Never block a tick on it.
 
@@ -257,6 +271,18 @@ Exact copy, one message per state, `<…>` substituted:
 - **Staleness not computable** (substitute the reason: no install record matched this directory · the record has no `gitCommitSha` · no marketplace record for `<marketplace>` · the source is a directory outside this working tree · GitHub can't resolve `<sha>`, so it was probably never pushed):
 
   > `port` `v<version>` · `4634fc1` (project scope, installed 2026-08-23) · staleness not computable — `<reason>` · model `claude-haiku-4-5` · mode `default`
+
+- **Running plugin doesn't match the committed pin** (warn, in place of the staleness clause — personal drift or install drift, per "Pin agreement" above):
+
+  > ⚠️ `port` `v<version>` · `1a12608` (project scope, installed 2026-10-01) · **not the committed pin**. This repository commits `b-at-neu/port@<tag>`, but this machine registered `b-at-neu/port@dev`, so that's what I'm running. That's this machine, not the repository. Run these from `/home/you/widgets` (never a worktree), then start a new session:
+  > `claude plugin marketplace remove port` · `claude plugin marketplace add b-at-neu/port@<tag> --scope project` · `claude plugin install port@port --scope project`
+  > `.claude/settings.json` should be unchanged afterwards. Discard anything the CLI rewrote there. · model `claude-haiku-4-5` · mode `default`
+
+  The install-drift variant replaces the "registered" clause: `the registration matches, but installed 1a12608 carries 7 commits <tag> doesn't`.
+
+- **Committed pin misconfigured** (warn once, continue):
+
+  > ⚠️ This repository's committed plugin pin is wrong: `.claude/settings.json` `<declares port with no ref | declares port at dev, a branch, not a release tag | declares port from a directory source | doesn't declare port at all>`. Every machine that clones this repository runs whatever that resolves to. Whoever maintains this repository should re-run `/port:init` and choose **Reconcile**.
 
 - **Install record pinned to a worktree** (warn once):
 
