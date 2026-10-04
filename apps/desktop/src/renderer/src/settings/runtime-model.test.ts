@@ -61,6 +61,16 @@ describe('runtimeDiagnosisModel', () => {
     expect(model.action?.disabledReason).toBe('Register a repository to test the connection.')
   })
 
+  it('withholds the action entirely while repos:list is still pending, rather than reading it as no ready repo', () => {
+    const model = runtimeDiagnosisModel(preflight({ diagnosis: 'unverified' }), null, null, false, true)
+    expect(model.action).toBeNull()
+  })
+
+  it('a pending repos query never withholds Retry for diagnoses that do not need a repo', () => {
+    const model = runtimeDiagnosisModel(preflight({ diagnosis: 'cli-missing' }), null, null, false, true)
+    expect(model.action).toEqual({ label: 'Retry', kind: 'retry', disabledReason: null })
+  })
+
   it('every other actionable diagnosis never disables Retry for a missing repo', () => {
     const model = runtimeDiagnosisModel(preflight({ diagnosis: 'cli-missing' }), null, null, false)
     expect(model.action).toEqual({ label: 'Retry', kind: 'retry', disabledReason: null })

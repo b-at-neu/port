@@ -68,7 +68,13 @@ function versionLineFor(preflight: RuntimePreflight): string | null {
   return `Claude Code ${preflight.version.raw}${path}`
 }
 
-export function runtimeDiagnosisModel(preflight: RuntimePreflight, probe: RuntimeProbe | null, readyRepo: ReadyRepo | null, probeError: boolean): RuntimeDiagnosisModel {
+export function runtimeDiagnosisModel(
+  preflight: RuntimePreflight,
+  probe: RuntimeProbe | null,
+  readyRepo: ReadyRepo | null,
+  probeError: boolean,
+  reposPending = false,
+): RuntimeDiagnosisModel {
   const diagnosis = probe?.diagnosis ?? preflight.diagnosis
   const detail = probe?.detail ?? preflight.detail
 
@@ -91,8 +97,12 @@ export function runtimeDiagnosisModel(preflight: RuntimePreflight, probe: Runtim
   if (preflight.version?.belowMinimum ?? false) notes.push(CLI_OUTDATED_COPY.title)
 
   const label = runtimeActionLabel(diagnosis)
+  // `repos:list` resolving after `runtime:preflight` is a real race (#340
+  // review) — a still-pending repos query is not evidence of "no ready
+  // repo", so withhold the action entirely rather than flashing the
+  // disabled-with-reason state for a repo that is actually registered.
   const action: RuntimeAction | null =
-    label === null
+    label === null || (diagnosis === 'unverified' && readyRepo === null && reposPending)
       ? null
       : {
           label,

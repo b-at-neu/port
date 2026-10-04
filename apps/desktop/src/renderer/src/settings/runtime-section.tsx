@@ -53,7 +53,7 @@ export function RuntimeSection() {
   }
 
   const readyRepo = firstReadyRepo(reposQuery.data)
-  const model = runtimeDiagnosisModel(preflightQuery.data, probe, readyRepo, probeError)
+  const model = runtimeDiagnosisModel(preflightQuery.data, probe, readyRepo, probeError, reposQuery.status === 'pending')
 
   // Mirrors the runtime strip's own `handleAction` exactly: a ready
   // repository always runs a real probe turn, whatever the button's own

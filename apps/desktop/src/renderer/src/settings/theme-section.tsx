@@ -19,9 +19,11 @@ export function ThemeSection() {
     <section className="flex flex-col gap-3">
       <h2 className="text-meta font-medium text-muted-foreground">Appearance</h2>
       <div className="flex h-9 items-center justify-between">
-        <span className="text-body text-foreground">Theme</span>
+        <span id="theme-select-label" className="text-body text-foreground">
+          Theme
+        </span>
         <Select value={preference} onValueChange={(value) => setPreference(value as ThemePreference)}>
-          <SelectTrigger className="w-32">
+          <SelectTrigger className="w-32" aria-labelledby="theme-select-label">
             <SelectValue>{LABEL[preference]}</SelectValue>
           </SelectTrigger>
           <SelectContent>
