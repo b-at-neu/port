@@ -4,12 +4,12 @@
 export { planTick } from './plan'
 export type { PlanTickParams } from './plan'
 
-export { dispatchableFrom } from './dispatchable'
+export { dispatchableFrom, observableFrom } from './dispatchable'
 
-export { createDispatchLedger, createUnknownStreaks } from './ledger'
-export type { DispatchLedger, UnknownStreaks } from './ledger'
+export { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from './ledger'
+export type { DispatchLedger, RefreshMemo, UnknownStreaks } from './ledger'
 
-export { AGENT_FOR_TRIGGER } from './routing'
+export { AGENT_FOR_IN_FLIGHT, AGENT_FOR_TRIGGER, REFRESH_PAIR } from './routing'
 
 export { classifyUnmatched, RETRY_TRIGGER } from './liveness'
 export type { LedgerRow, LedgerState, UnmatchedClass, UnmatchedResult } from './liveness'
@@ -20,5 +20,11 @@ export type { OwnershipItem, OwnershipPartition } from './ownership'
 export { parseFilesBlock, gateCandidates } from './contention'
 export type { ClaimedItem, OccupiedEntry, GateHeld, GateResult } from './contention'
 
-export { cycleCapExceeded, zeroDiffGate, codeReviewCount, mergeabilityRoute, refreshWins } from './gates'
-export type { ReviewNode, CommentNode, ZeroDiffAction, MergeabilityAction, RefreshWinsResult } from './gates'
+export { approvedReverify, capRefreshes, cycleCapExceeded, zeroDiffGate, codeReviewCount, mergeabilityRoute, refreshDecision, refreshWins } from './gates'
+export type { ApprovedReverifyResult, ApprovedReverifyVerdict, CommentNode, MergeabilityAction, RefreshCandidate, RefreshDecisionResult, RefreshMemoEntry, RefreshWinsResult, ReviewNode, ZeroDiffAction } from './gates'
+
+export { conclusionOf, isConcluded, reduceRollup, rollupVerdict } from './checks'
+export type { Disposition, RollupVerdict } from './checks'
+
+export { observationsOf } from './observe'
+export type { ObservationsOfParams } from './observe'

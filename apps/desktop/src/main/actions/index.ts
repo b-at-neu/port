@@ -15,3 +15,6 @@ export type { GateAnswerParams, GateClaimReadParams, GateClaimSetParams, GateDep
 
 export { defaultEscalateDeps, escalateToHuman } from './escalate'
 export type { EscalateToHumanDeps, EscalateToHumanParams, EscalateToHumanResult } from './escalate'
+
+export { applyObservation, defaultApplyObservationDeps } from './observe'
+export type { ApplyObservationDeps, ApplyObservationParams, ApplyObservationResult } from './observe'

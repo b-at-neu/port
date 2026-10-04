@@ -13,8 +13,8 @@ import { DEFAULT_POLL_POLICY, SOURCE_KINDS, initialHealth } from '../../shared/b
 import type { BoardSnapshot, RepositoryHealth, SourceHealth, SourceKind } from '../../shared/board/types'
 import type { DrainState, RepoDispatchStatus } from '../../shared/dispatch/types'
 import type { RelayScan } from '../../shared/relay/types'
-import { createDispatchLedger, createUnknownStreaks, planTick } from '../tick'
-import type { DispatchLedger, UnknownStreaks } from '../tick'
+import { createDispatchLedger, createRefreshMemo, createUnknownStreaks, planTick } from '../tick'
+import type { DispatchLedger, RefreshMemo, UnknownStreaks } from '../tick'
 import { buildDesktopTickEvent, recordTick as defaultRecordTick } from '../trajectory'
 import type { DesktopTickEvent, RecordTickDeps } from '../trajectory'
 import { isReady, projectFromCache } from './read'
@@ -68,6 +68,15 @@ export interface CreatePipelineWatcherParams {
    *  keeps every existing caller (and test) unchanged. */
   readonly ledger?: DispatchLedger
   readonly unknownStreaks?: UnknownStreaks
+  /** #292: the app's own process-scoped refresh memo, shared with the
+   *  dispatcher's own observation pass the same way `ledger`/`unknownStreaks`
+   *  already are — never a second instance that would disagree with what the
+   *  dispatcher just wrote. */
+  readonly refreshMemo?: RefreshMemo
+  /** #292: `dispatcher.startedTasks` — this repository's own dispatcher
+   *  session's `started` tasks, as descriptions. `undefined` (every caller
+   *  until `main/ipc.ts` wires one) reads as `[]` for every repository. */
+  readonly startedTasks?: (repoId: RepoId) => readonly string[]
   /** #265: the dispatcher's own `status()` — read fresh inside
    *  `buildSnapshot()`, the same "never cached" rule `drain` above follows,
    *  so a claim taken or released mid-session is reflected on the very next
@@ -118,6 +127,10 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
   // This app's own process-scoped mergeability-UNKNOWN memo (#265) — same
   // lifetime and restart behaviour as `ledger` above.
   const unknownStreaks = params.unknownStreaks ?? createUnknownStreaks()
+  // The app's own process-scoped refresh memo (#292) — same lifetime and
+  // restart behaviour as `ledger`/`unknownStreaks` above.
+  const refreshMemo = params.refreshMemo ?? createRefreshMemo()
+  const startedTasks = params.startedTasks ?? ((): readonly string[] => [])
   // The trajectory record's one appender for this watcher's whole lifetime
   // (#111) — injectable the same way `gh`/`git`/`sessionReader` already are,
   // so a test never touches a real filesystem for it.
@@ -185,12 +198,25 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     // is in `plan.ts`: `readyIds`/`cycleCapByRepo` are built from the same
     // `readyEntries`, so a miss here is a defect, not a runtime case.
     const cycleCapByRepo = new Map(readyEntries.map((entry) => [entry.id, entry.config.reviewCycleCap]))
+    const checkDispositionsByRepo = new Map(readyEntries.map((entry) => [entry.id, entry.config.checkDispositions]))
     const tick = state.repositories
       .filter((repository) => readyIds.has(repository.repoId))
       .map((repository) => {
         const reviewCycleCap = cycleCapByRepo.get(repository.repoId)
         if (reviewCycleCap === undefined) throw new Error(`no reviewCycleCap for ready repository ${String(repository.repoId)}`)
-        return planTick({ repository, ledger, unknownStreaks, nextDecisionAt: nextDueAt(ensureHealth(repository.repoId).github, now()), now, reviewCycleCap })
+        const checkDispositions = checkDispositionsByRepo.get(repository.repoId)
+        if (checkDispositions === undefined) throw new Error(`no checkDispositions for ready repository ${String(repository.repoId)}`)
+        return planTick({
+          repository,
+          ledger,
+          unknownStreaks,
+          nextDecisionAt: nextDueAt(ensureHealth(repository.repoId).github, now()),
+          now,
+          reviewCycleCap,
+          startedTasks: startedTasks(repository.repoId),
+          refreshMemo,
+          checkDispositions,
+        })
       })
 
     // The trajectory record's desktop-side twin (#111) — fire-and-forget,

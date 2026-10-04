@@ -25,6 +25,7 @@ function entry(overrides: Partial<ReadyEntry['config']> = {}): ReadyEntry {
       branches: { integration: 'dev', production: 'main' },
       commands: { worktrees: null, budget: null },
       concurrency: { sharedFiles: [], overlapThreshold: 2 },
+      checkDispositions: { excusedCheck: null, unverifiable: null },
       models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
       modules: { approvalGate: true, release: true, scope: true },
       reviewCycleCap: 5,
@@ -36,7 +37,7 @@ function entry(overrides: Partial<ReadyEntry['config']> = {}): ReadyEntry {
 }
 
 function tickReport(overrides: Partial<TickReport> = {}): TickReport {
-  return { repoId: REPO_ID, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, ...overrides }
+  return { repoId: REPO_ID, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [], ...overrides }
 }
 
 function snapshotWith(tick: readonly TickReport[]): BoardSnapshot {
@@ -126,7 +127,11 @@ function fakeStore(overrides: Partial<HostedStore> = {}): HostedStore {
 function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispatcherParams {
   return {
     store: fakeStore(),
-    ledger: { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined },
+    ledger: { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined, observeUnmatched: () => ({ class: 'no-record' }) },
+    refreshMemo: { get: () => undefined, set: vi.fn(), clear: vi.fn() },
+    writeObservation: () => {
+      throw new Error('writeObservation should not be invoked unless a test wires its own')
+    },
     drain: () => ({ gate: 'open' }),
     readGateClaim: () => Promise.resolve(ABSENT_CLAIM),
     fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [], unavailable: [], fetchedAt: 'r' }),
@@ -158,13 +163,13 @@ describe('createDispatcher — ownership', () => {
     const store = fakeStore()
     const dispatcher = createDispatcher(baseDeps({ store }))
     await dispatcher.consider(snapshotWith([tickReport()]))
-    expect(dispatcher.status()).toEqual([{ repoId: REPO_ID, owner: 'cockpit', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null, budget: null }])
+    expect(dispatcher.status()).toEqual([{ repoId: REPO_ID, owner: 'cockpit', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null, budget: null, observed: [] }])
   })
 
   it('reports nobody for an unreadable claim', async () => {
     const dispatcher = createDispatcher(baseDeps({ readGateClaim: () => Promise.resolve(UNREADABLE_CLAIM) }))
     await dispatcher.consider(snapshotWith([tickReport()]))
-    expect(dispatcher.status()).toEqual([{ repoId: REPO_ID, owner: 'nobody', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null, budget: null }])
+    expect(dispatcher.status()).toEqual([{ repoId: REPO_ID, owner: 'nobody', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null, budget: null, observed: [] }])
   })
 
   it('reports app for a claim naming dispatch', async () => {
@@ -283,7 +288,7 @@ describe('createDispatcher — app ownership', () => {
   it('confirms a sent record as started once a matching task appears, and calls ledger.record', async () => {
     const snap = baseSessionSnapshot({ tasks: [{ taskId: 't1', toolUseId: 'tu1', description: 'impl #52', subagentType: 'port:impl-agent', status: 'started', startedAt: 'a', endedAt: null }] })
     const store = fakeStore({ start: () => Promise.resolve({ ok: true, snapshot: baseSessionSnapshot() }), snapshotOf: () => snap })
-    const ledger = { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined }
+    const ledger = { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined, observeUnmatched: () => ({ class: 'no-record' as const }) }
     const dispatcher = createDispatcher(
       baseDeps({
         store,

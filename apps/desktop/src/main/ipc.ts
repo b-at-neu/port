@@ -365,7 +365,7 @@ export function registerIpc(): RegisteredIpc {
 
   // #265: the ledger, streak memo, and dispatcher, bundled — see
   // `main/dispatch/runtime.ts` for why `bindWatcher` exists.
-  const { ledger: dispatchLedger, unknownStreaks, dispatcher, bindWatcher } = createDispatchRuntime({
+  const { watcherDeps, dispatcher, bindWatcher } = createDispatchRuntime({
     store: hostedStore,
     drain: drain.current,
     readGateClaim,
@@ -387,9 +387,7 @@ export function registerIpc(): RegisteredIpc {
     },
     git: (args, cwd) => git(args, { cwd }),
     drain: drain.current,
-    ledger: dispatchLedger,
-    unknownStreaks,
-    dispatchStatus: () => dispatcher.status(),
+    ...watcherDeps,
     onSnapshot: (snapshot) => {
       broadcast('board:update', snapshot)
       void dispatcher.consider(snapshot)

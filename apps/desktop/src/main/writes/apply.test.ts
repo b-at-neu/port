@@ -119,6 +119,46 @@ describe('applyLabels — the plan-gate claim', () => {
   })
 })
 
+describe('applyLabels — requiredScopes (#292)', () => {
+  it('refuses with unclaimed-scope for a convergent write naming a required scope that is not held', async () => {
+    const { repoRoot, auditDir, git } = await makeDirs()
+    const req = request({ add: ['needsHuman'], remove: ['needsRevision'], requiredScopes: ['dispatch'] })
+    const gh = neverCalledGh()
+
+    const outcome = await applyLabels({ request: req, repoRoot, auditDir, git, gh, now })
+    expect(outcome.kind).toBe('unclaimed-scope')
+    if (outcome.kind !== 'unclaimed-scope') throw new Error('unreachable')
+    expect(outcome.scope).toBe('dispatch')
+  })
+
+  it('refuses on the first unheld scope when both plan-gate and dispatch are required', async () => {
+    const { repoRoot, auditDir, git } = await makeDirs()
+    await takeClaimScope({ repoRoot, repo: 'o/r', owner: 'port-desktop', scope: 'dispatch', git, now })
+    const req = request({ add: ['planApproved'], remove: ['planReview'], requiredScopes: ['dispatch'], expect: { present: ['planReview'], absent: [], assignees: { kind: 'any' } } })
+    const gh = neverCalledGh()
+
+    const outcome = await applyLabels({ request: req, repoRoot, auditDir, git, gh, now })
+    expect(outcome.kind).toBe('unclaimed-scope')
+    if (outcome.kind !== 'unclaimed-scope') throw new Error('unreachable')
+    expect(outcome.scope).toBe('plan-gate')
+  })
+
+  it('proceeds once every required scope is held, with one claim read', async () => {
+    const { repoRoot, auditDir, git } = await makeDirs()
+    await takeClaimScope({ repoRoot, repo: 'o/r', owner: 'port-desktop', scope: 'dispatch', git, now })
+    const req = request({ add: ['needsHuman'], remove: ['readyForReview'], requiredScopes: ['dispatch'], expect: { present: ['readyForReview'], absent: [], assignees: { kind: 'any' } } })
+    const fetcher = fetcherReturning({ ok: true, resolved: [resolvedItem({ labels: ['ready for review'] })], unavailable: [], fetchedAt: now().toISOString() })
+    const gh: GhRunner = () => Promise.resolve({ ok: true, stdout: '', stderr: '' } satisfies GhResult)
+
+    const outcome = await applyLabels({ request: req, repoRoot, auditDir, git, gh, fetchItemsByNumber: fetcher.fn, now })
+    expect(outcome.kind).toBe('applied')
+
+    const log = await readAuditLog(auditDir)
+    if (!log.ok) throw new Error('unreachable')
+    expect(log.entries[0]?.scope).toBe('dispatch')
+  })
+})
+
 describe('applyLabels — convergent writes need no claim', () => {
   it('applies a ready/blocked swap with no claim file present', async () => {
     const { repoRoot, auditDir, git } = await makeDirs()

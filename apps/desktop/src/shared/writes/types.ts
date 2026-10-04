@@ -40,6 +40,12 @@ export interface LabelWriteRequest {
   readonly expect: LabelPrecondition
   /** The operator-facing verb, recorded verbatim in the audit log. */
   readonly action: string
+  /** #292: a scope this write needs beyond whatever `scopeFor` derives from
+   *  `add`/`remove` — `scopesFor` unions it in, never drops the derived
+   *  requirement. Every observation write names `['dispatch']` here, since
+   *  none of the four families touches a `plan-gate` key but every one of
+   *  them must still run only while this app actually holds dispatch. */
+  readonly requiredScopes?: readonly ClaimScope[]
 }
 
 export interface CommentRequest {

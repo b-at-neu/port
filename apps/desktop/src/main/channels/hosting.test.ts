@@ -49,6 +49,7 @@ const READY_ENTRY = {
     vocabulary: {} as never,
     commands: { worktrees: null, budget: null },
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
+    checkDispositions: { excusedCheck: null, unverifiable: null },
   },
   diagnostics: [],
 }
