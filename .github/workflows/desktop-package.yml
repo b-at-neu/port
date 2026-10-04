@@ -66,6 +66,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: port-desktop-${{ runner.os }}
-          path: apps/desktop/dist/*.{AppImage,deb,dmg,exe}
+          path: |
+            apps/desktop/dist/*.AppImage
+            apps/desktop/dist/*.deb
+            apps/desktop/dist/*.dmg
+            apps/desktop/dist/*.exe
           if-no-files-found: error
           retention-days: 7
