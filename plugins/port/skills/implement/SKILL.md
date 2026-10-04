@@ -74,6 +74,8 @@ Then report the resolved mode, worktree path, and branch **before** the slow ste
 
 Never work in the main checkout: editing configuration from the session using it mutates your live setup mid-task. Never touch another worktree, and never `--force`.
 
+**On Windows only, before the first `git worktree add` below:** `git config --type=bool --get core.longpaths` must print `true`. If it does not, ask the operator, then run `git config core.longpaths true` — this is the repository's own config, so every worktree shares it, including the ones the harness creates. Without it, git can neither check out nor later remove a path over 260 characters, which a populated `node_modules` under `.claude/worktrees/` can exceed.
+
 **impl mode** — branch straight off the integration branch; this replaces the agent's checkout-then-rebase, so it is the one route that would otherwise ignore a resume branch and then need a force push to reconcile. Run the same resume-branch lookup `impl-agent.md`'s Pre-flight does before creating anything:
 
 ```bash
