@@ -132,6 +132,8 @@ pnpm test
 pnpm build                            # produces apps/desktop/out/{main,preload,renderer}
 ```
 
+Installers: `apps/desktop/README.md` → Building installers.
+
 The IPC contract between the main and renderer processes lives in `apps/desktop/src/shared/ipc.ts`: a request/response type map plus a runtime channel list, checked against each other at compile time. Add a channel to both, or `pnpm typecheck` fails.
 
 The label vocabulary the app resolves lives in `apps/desktop/src/shared/labels/`, which imports the shipped `plugins/port/data/labels.json` directly (`defaults.ts`) rather than carrying its own copy — this repository is the one consumer structurally able to, since it is bundled at build time from the same checkout. That import is the app's only copy of the vocabulary. Adding a label means editing the template plus `vocabulary.ts`'s `LABEL_KEYS`, or the `desktop-label-defaults` check in layer 1 fails (`docs/TESTING.md` → "Layer 1 — static checks").
