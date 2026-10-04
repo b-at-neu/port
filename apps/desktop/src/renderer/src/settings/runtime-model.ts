@@ -97,10 +97,10 @@ export function runtimeDiagnosisModel(
   if (preflight.version?.belowMinimum ?? false) notes.push(CLI_OUTDATED_COPY.title)
 
   const label = runtimeActionLabel(diagnosis)
-  // `repos:list` resolving after `runtime:preflight` is a real race (#340
-  // review) — a still-pending repos query is not evidence of "no ready
-  // repo", so withhold the action entirely rather than flashing the
-  // disabled-with-reason state for a repo that is actually registered.
+  // `repos:list` resolving after `runtime:preflight` is a real race — a
+  // still-pending repos query is not evidence of "no ready repo", so
+  // withhold the action entirely rather than flashing the disabled-with-
+  // reason state for a repo that is actually registered.
   const action: RuntimeAction | null =
     label === null || (diagnosis === 'unverified' && readyRepo === null && reposPending)
       ? null
