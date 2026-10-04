@@ -149,16 +149,15 @@ export function classifyCandidate({ isOutside, isProtected, locked, dirty, itemS
 }
 
 /** Strips the Windows extended-length path prefix (`\\?\`, or its UNC form
- *  `\\?\UNC\`) that `fs.realpathSync` adds to *some* resolved paths and not
- *  others on win32 — observed in CI (#115 R2-C1) as a residual mismatch
- *  between a `mainRoot` derived through `git rev-parse --show-toplevel` and
- *  a sibling path built from the same ancestor directly: one realpath call
- *  comes back prefixed and the other does not, even though both name the
- *  same directory, because the prefix depends on the exact call Node's
- *  implementation takes (it is not purely a function of path length). A no-op
- *  on a string that already lacks the prefix, so it is always safe to apply
- *  before the final case-fold. Exported so this repository's own checks can
- *  assert both prefix forms without a real Windows filesystem. */
+ *  `\\?\UNC\`) that a realpath call adds to *some* resolved paths and not
+ *  others on win32: a `mainRoot` derived through `git rev-parse --show-toplevel`
+ *  and a sibling path built from the same ancestor directly can come back one
+ *  prefixed and one not, even though both name the same directory, because the
+ *  prefix depends on the exact call Node's implementation takes (it is not
+ *  purely a function of path length). A no-op on a string that already lacks
+ *  the prefix, so it is always safe to apply before the final case-fold.
+ *  Exported so this repository's own checks can assert both prefix forms
+ *  without a real Windows filesystem. */
 export function stripExtendedPrefix(p) {
   if (p.startsWith('\\\\?\\UNC\\')) return '\\\\' + p.slice('\\\\?\\UNC\\'.length);
   if (p.startsWith('\\\\?\\')) return p.slice('\\\\?\\'.length);
@@ -166,26 +165,36 @@ export function stripExtendedPrefix(p) {
 }
 
 /** Resolves a path to the key its identity is compared by: canonicalized
- *  with `fs.realpathSync` (falling back to `resolve(p)` only when the path
- *  does not exist yet, e.g. a `purge --orphan` argument whose directory this
- *  same run is about to delete), then — on `win32` only — stripped of
- *  `realpathSync`'s own extended-length prefix (`stripExtendedPrefix`) and
- *  lowercased. A plain `resolve(p)` is not enough — it collapses `.`/`..`
- *  and normalizes separators, but leaves a symlinked or substituted ancestor
- *  (macOS's `/var` → `/private/var` `mkdtemp` symlink, a Windows `subst`
- *  drive, or a Windows runner's own temp-directory junction) unresolved,
- *  while `mainRoot` comes from `git rev-parse --show-toplevel`, which git
- *  itself canonicalizes. Two paths naming the same directory through a
+ *  with `fs.realpathSync.native` (falling back to `resolve(p)` only when the
+ *  path does not exist yet, e.g. a `purge --orphan` argument whose directory
+ *  this same run is about to delete), then — on `win32` only — stripped of
+ *  its own extended-length prefix (`stripExtendedPrefix`) and lowercased. A
+ *  plain `resolve(p)` is not enough — it collapses `.`/`..` and normalizes
+ *  separators, but leaves a symlinked or substituted ancestor (macOS's
+ *  `/var` → `/private/var` `mkdtemp` symlink, a Windows `subst` drive, or a
+ *  Windows runner's own temp-directory junction) unresolved, while `mainRoot`
+ *  comes from `git rev-parse --show-toplevel`, which git itself canonicalizes.
+ *  **`.native` specifically, never the plain JS `realpathSync`**: on a
+ *  Windows runner, `os.tmpdir()` resolves through the 8.3 short-name alias
+ *  Windows assigns the profile directory (`C:\Users\RUNNER~1\...`), while
+ *  `git rev-parse --show-toplevel` reports the long form
+ *  (`C:\Users\runneradmin\...`) for the identical directory. The plain
+ *  `fs.realpathSync` walks components via `lstat`/`readlink` and never
+ *  queries the OS for the canonical long name, so a short-alias path and its
+ *  long-form sibling resolve to two different strings for one real directory.
+ *  `fs.realpathSync.native` opens a handle and calls `GetFinalPathNameByHandleW`
+ *  on win32 (`uv_fs_realpath`), which does expand the short alias — at the
+ *  cost of also prefixing the result with `\\?\`, which `stripExtendedPrefix`
+ *  already exists to remove. Two paths naming the same directory through a
  *  different ancestor spelling must still compare equal — a protect path
  *  from `TaskList`, a registered worktree path, or a `purge --orphan`
  *  argument must match its counterpart regardless of which side derived it,
- *  which differ only in case or separator style (Windows paths are
- *  case-insensitive, POSIX paths are not), or which realpath call happened
- *  to come back with the extended-length prefix. */
+ *  which differ only in case, separator style, a short-name alias, or which
+ *  realpath call happened to come back with the extended-length prefix. */
 export function pathKey(p) {
   let r;
   try {
-    r = realpathSync(p);
+    r = realpathSync.native(p);
   } catch {
     r = resolve(p);
   }
@@ -516,14 +525,7 @@ function runPurge(argv) {
     const isOutside = relPath === '' || relPath.startsWith('..') || isAbsolute(relPath);
     return { ...r, isOutside };
   });
-  const orphans = findOrphanDirs(mainRoot, candidates.filter((c) => !c.isOutside));
-  const orphanKeys = new Set(orphans.map(pathKey));
-
-  if (process.env.PORT_WT_DEBUG) {
-    console.error(`[PORT_WT_DEBUG] mainRoot=${JSON.stringify(mainRoot)}`);
-    for (const o of orphans) console.error(`[PORT_WT_DEBUG] orphan raw=${JSON.stringify(o)} key=${JSON.stringify(pathKey(o))}`);
-    for (const p of paths) console.error(`[PORT_WT_DEBUG] requested raw=${JSON.stringify(p)} key=${JSON.stringify(pathKey(p))}`);
-  }
+  const orphanKeys = new Set(findOrphanDirs(mainRoot, candidates.filter((c) => !c.isOutside)).map(pathKey));
 
   const results = [];
   let anyFailed = false;

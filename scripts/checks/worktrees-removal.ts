@@ -88,8 +88,7 @@ export default async function ({ fail, ok, note }: Reporter) {
     }
 
     // stripExtendedPrefix is pure string manipulation, independent of the
-    // host OS, so it is asserted on every platform rather than gated to
-    // win32 (#115 R2-C1 — the residual Windows-only pathKey mismatch).
+    // host OS, so it is asserted on every platform rather than gated to win32.
     const sepCases: [string, string, string][] = [
       ['UNC extended prefix', '\\\\?\\UNC\\server\\share\\dir', '\\\\server\\share\\dir'],
       ['local extended prefix', '\\\\?\\C:\\Users\\x\\dir', 'C:\\Users\\x\\dir'],
@@ -280,13 +279,9 @@ export default async function ({ fail, ok, note }: Reporter) {
       }
 
       // Purge: the actual orphan is deleted.
-      const purgeEnv = { ...fixtureEnv(), PORT_WT_DEBUG: '1' };
-      const purgeRes = spawnSync(process.execPath, [scriptPath, 'purge', '--orphan', orphanDir], { cwd: fixture, env: purgeEnv, encoding: 'utf8' });
+      const purgeRes = spawnSync(process.execPath, [scriptPath, 'purge', '--orphan', orphanDir], { cwd: fixture, env: fixtureEnv(), encoding: 'utf8' });
       if (purgeRes.status !== 0 || existsSync(orphanDir)) {
-        fail(
-          'worktrees-removal-e2e',
-          `purge on the actual orphan: expected exit 0 and the directory gone, got exit ${purgeRes.status}, exists=${existsSync(orphanDir)}\n${purgeRes.stderr}\n${purgeRes.stdout}`,
-        );
+        fail('worktrees-removal-e2e', `purge on the actual orphan: expected exit 0 and the directory gone, got exit ${purgeRes.status}, exists=${existsSync(orphanDir)}`);
       } else {
         ok();
       }
