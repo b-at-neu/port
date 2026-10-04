@@ -75,6 +75,8 @@ export function repoProblemCopy(problem: RepoProblem): string {
       return `.claude/port.config.json has no usable repo: ${problem.violations[0]?.message ?? 'invalid'}.`
     case 'config-unreadable':
       return `Can't read .claude/port.config.json — ${problem.message}.`
+    case 'effective-config-unreadable':
+      return `Can't read ${problem.file} — ${problem.message}.`
   }
 }
 

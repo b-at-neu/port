@@ -151,7 +151,6 @@ describe('observationClause', () => {
     expect(observationClause([record({ kind: 'refresh-stuck', number: 14 })])).toContain('still conflicting after a refresh')
     expect(observationClause([record({ kind: 'withdraw-approval', number: 15 })])).toContain('withdrew approval on #15')
     expect(observationClause([record({ kind: 'refresh-deferred', number: 16 })])).toContain('updated #16')
-    expect(observationClause([record({ kind: 'withdraw-unverifiable', number: 17 })])).toContain('updated #17')
   })
 
   it('already / moved / failed outcomes', () => {

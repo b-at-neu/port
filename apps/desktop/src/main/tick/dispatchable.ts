@@ -18,11 +18,10 @@ export function dispatchableFrom(report: TickReport, drain: DrainState): readonl
 /** The write-bearing subset of `report.observations` (#292) — the same gate
  *  `dispatchableFrom` already is for `.actionable`, and the only function
  *  under `main/` allowed to read `.observations` at all. `refresh-deferred`
- *  and `withdraw-unverifiable` authorise no write of their own (the board's
- *  hover state is the only consumer of either), so they never reach the
- *  observation pass. */
+ *  authorises no write of its own (the board's hover state is its only
+ *  consumer), so it never reaches the observation pass. */
 export function observableFrom(report: TickReport, drain: DrainState): readonly TickObservation[] {
   if (drain.gate !== 'open') return []
   if (report.blind !== null) return []
-  return report.observations.filter((o) => o.kind !== 'refresh-deferred' && o.kind !== 'withdraw-unverifiable')
+  return report.observations.filter((o) => o.kind !== 'refresh-deferred')
 }

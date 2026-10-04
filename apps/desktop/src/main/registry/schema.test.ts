@@ -60,6 +60,7 @@ describe('CONFIG_DEFAULTS', () => {
       reviewCycleCap: 5,
       commands: { worktrees: null, budget: null },
       concurrency: { sharedFiles: [], overlapThreshold: 2 },
+      sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
     })
   })
 })

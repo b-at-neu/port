@@ -347,9 +347,9 @@ export default async function ({ fail, ok }: Reporter) {
   // --- #292: .observations is read under main/ only by dispatchable.ts's -----
   // observableFrom
   // guard(#292): a future caller reading report.observations directly,
-  // bypassing observableFrom — the one function that strips the two
-  // report-only kinds (refresh-deferred, withdraw-unverifiable) before
-  // anything may act on the rest.
+  // bypassing observableFrom — the one function that strips the one
+  // report-only kind (refresh-deferred) before anything may act on the
+  // rest.
   {
     let sawObservableFrom = false;
     let found = false;

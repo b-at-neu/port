@@ -27,7 +27,10 @@ export interface ObservationsOfParams {
   readonly held: readonly TickHeld[]
   readonly viewer: string
   readonly refreshMemo: RefreshMemo
-  readonly checkDispositions: { readonly excusedCheck: string | null; readonly unverifiable: 'claude-md-overrides' | 'unreadable' | null }
+  /** #300: the cockpit's own disposition map, straight off
+   *  `ResolvedRepoConfig.checkDispositions` — passed directly to
+   *  `rollupVerdict`, never folded a second way here. */
+  readonly checkDispositions: Readonly<Record<string, Disposition>>
 }
 
 /** At most one role-bearing key outside `REFRESH_PAIR`, or both at once —
@@ -138,12 +141,7 @@ function refreshObservations(held: readonly TickHeld[], items: readonly Reconcil
   return out
 }
 
-function withdrawApprovalObservations(
-  items: readonly ReconciledItem[],
-  viewer: string,
-  checkDispositions: ObservationsOfParams['checkDispositions'],
-  dispositions: Readonly<Record<string, Disposition>>,
-): readonly TickObservation[] {
+function withdrawApprovalObservations(items: readonly ReconciledItem[], viewer: string, dispositions: Readonly<Record<string, Disposition>>): readonly TickObservation[] {
   const out: TickObservation[] = []
   for (const item of items) {
     if (!carries(item, 'approved') || !eligible(item, viewer)) continue
@@ -152,10 +150,6 @@ function withdrawApprovalObservations(
     const verdict = rollupVerdict(item.checkRollup, dispositions)
     const reverify = approvedReverify({ verdict, mergeable: item.mergeable })
     if (reverify.action !== 'withdraw') continue
-    if (checkDispositions.unverifiable !== null) {
-      out.push({ kind: 'withdraw-unverifiable', number: item.number, itemKind: item.kind, reason: checkDispositions.unverifiable })
-      continue
-    }
     // Enriches each red check with its own `url` (`main/tick/checks.ts`'s
     // `rollupVerdict` stays a verbatim port of the cockpit's own shape, which
     // carries neither) — looked up from the item's own rollup by name, so
@@ -181,15 +175,13 @@ function clearResolvedRefreshMemos(items: readonly ReconciledItem[], repoId: Rep
 export function observationsOf(params: ObservationsOfParams): readonly TickObservation[] {
   const { repoId, items, claims, held, viewer, refreshMemo, checkDispositions } = params
   const itemByNumber = new Map(items.map((item) => [item.number, item] as const))
-  const dispositions: Record<string, Disposition> =
-    checkDispositions.excusedCheck !== null ? { [checkDispositions.excusedCheck]: { disposition: 'infrastructure', source: 'approval-gate' } } : {}
 
   clearResolvedRefreshMemos(items, repoId, refreshMemo)
 
   return [
     ...livenessResetObservations(claims, itemByNumber, viewer),
     ...escalationObservations(held, itemByNumber, viewer),
-    ...refreshObservations(held, items, viewer, repoId, refreshMemo, dispositions),
-    ...withdrawApprovalObservations(items, viewer, checkDispositions, dispositions),
+    ...refreshObservations(held, items, viewer, repoId, refreshMemo, checkDispositions),
+    ...withdrawApprovalObservations(items, viewer, checkDispositions),
   ]
 }

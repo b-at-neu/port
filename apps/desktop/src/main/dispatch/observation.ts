@@ -13,10 +13,9 @@ import type { ReconciledItem } from '../../shared/state/types'
 import type { TickObservation } from '../../shared/tick/types'
 
 /** Every `TickObservation` kind this module writes — `observableFrom` never
- *  yields the two report-only kinds (`refresh-deferred`,
- *  `withdraw-unverifiable`), so this is the type `main/dispatch/dispatcher.ts`
- *  actually passes through. */
-export type WriteObservation = Exclude<TickObservation, { readonly kind: 'refresh-deferred' } | { readonly kind: 'withdraw-unverifiable' }>
+ *  yields the one report-only kind (`refresh-deferred`), so this is the type
+ *  `main/dispatch/dispatcher.ts` actually passes through. */
+export type WriteObservation = Exclude<TickObservation, { readonly kind: 'refresh-deferred' }>
 
 export interface ObservationWritePlan {
   readonly add: readonly LabelKey[]

@@ -55,7 +55,7 @@ sessionRequiredPaths += infra/**        # terraform is operator-only here
 
 **Fails closed on the entry, open on the run.** A line that fails to parse, names a non-overridable or unknown path, carries a bad value type, uses `+=` where it is not allowed, or omits its reason is refused: the port value stands for that one entry, the refusal is reported, and nothing else in the block is affected. An absent block reports nothing at all — every category behaves byte-identically to today.
 
-**Never silent.** Every applied override is named wherever the pipeline reports state — the cockpit's startup preflight, a review body, `run-start` — with the port default it replaced and `CLAUDE.md` as the source. `/port:init` reconciles a repository's pre-existing conventions against the port defaults at import time and writes each contradiction into the block with its own stated reason, so nothing is negotiated in prose (#121, #125).
+**Never silent.** Every applied override is named wherever the pipeline reports state — the cockpit's startup preflight, a review body, `run-start`, the desktop app's own repository card (#300) — with the port default it replaced and `CLAUDE.md` as the source. `/port:init` reconciles a repository's pre-existing conventions against the port defaults at import time and writes each contradiction into the block with its own stated reason, so nothing is negotiated in prose (#121, #125).
 
 ## Quick start
 

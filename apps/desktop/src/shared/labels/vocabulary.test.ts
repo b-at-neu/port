@@ -98,6 +98,23 @@ describe('resolveVocabulary', () => {
     })
   }
 
+  it('a CLAUDE.md override wins over port.config.json\'s own labels map, with source CLAUDE.md (#300)', () => {
+    const vocabulary = resolveVocabulary({ labels: { ready: 'todo' }, overrides: { ready: 'go' } })
+    const ready = vocabulary.labels.find((l) => l.key === 'ready')
+    expect(ready?.name).toBe('go')
+    expect(ready?.source).toBe('CLAUDE.md')
+  })
+
+  it('a key with no CLAUDE.md override falls through to labels, then the default, unaffected', () => {
+    const vocabulary = resolveVocabulary({ labels: { ready: 'todo' }, overrides: { blocked: 'stuck' } })
+    const ready = vocabulary.labels.find((l) => l.key === 'ready')
+    expect(ready?.name).toBe('todo')
+    expect(ready?.source).toBe('config')
+    const blocked = vocabulary.labels.find((l) => l.key === 'blocked')
+    expect(blocked?.name).toBe('stuck')
+    expect(blocked?.source).toBe('CLAUDE.md')
+  })
+
   it('flags a collision when two keys resolve to the same name', () => {
     const vocabulary = resolveVocabulary({ labels: { ready: 'shared', blocked: 'shared' } })
     const collision = vocabulary.problems.find((p) => p.kind === 'collision')

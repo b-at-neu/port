@@ -28,10 +28,10 @@ function activeLine(state: Extract<DispatcherState, { readonly kind: 'active' }>
 /** #292: per-kind phrasing for the owner line's "newest observation" clause
  *  (plan's own **UX states**, "Owner line clause") — every
  *  `TickObservationKind` is covered so a new member is a compile error here,
- *  even though `refresh-deferred` and `withdraw-unverifiable` are
- *  report-only and never actually reach `RepoDispatchStatus.observed`
- *  (`main/tick/dispatchable.ts`'s `observableFrom` never emits either as a
- *  write — covered here only to keep this table exhaustive). */
+ *  even though `refresh-deferred` is report-only and never actually reaches
+ *  `RepoDispatchStatus.observed` (`main/tick/dispatchable.ts`'s
+ *  `observableFrom` never emits it as a write — covered here only to keep
+ *  this table exhaustive). */
 interface ObservationCopy {
   readonly written: (n: string, at: string) => string
   readonly already: (n: string) => string
@@ -98,15 +98,6 @@ const OBSERVATION_COPY: Record<TickObservationKind, ObservationCopy> = {
     commentFailed: (n) => `withdrew approval on #${n}, but its explanation comment didn't post.`,
   },
   'refresh-deferred': {
-    written: (n, at) => `updated #${n} at ${at}.`,
-    already: (n) => `#${n} was already up to date.`,
-    moved: (n) => `#${n} moved before this app could act on it — nothing was written.`,
-    refusedPlanGate: null,
-    refusedDispatch: (n) => `didn't act on #${n} — dispatch was released mid-pass.`,
-    failed: (n) => `⚠ couldn't act on #${n} — GitHub refused the write. The next poll decides again.`,
-    commentFailed: (n) => `acted on #${n}, but its explanation comment didn't post.`,
-  },
-  'withdraw-unverifiable': {
     written: (n, at) => `updated #${n} at ${at}.`,
     already: (n) => `#${n} was already up to date.`,
     moved: (n) => `#${n} moved before this app could act on it — nothing was written.`,
