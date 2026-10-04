@@ -4,10 +4,13 @@
 // needs no test of its own, the same as `'app:info'`/`'repos:list'`/
 // `'repos:add'`/`'sessions:scan'`/`'board:snapshot'` — none of those trivial
 // "takes no payload" handlers are unit tested either, since there is no
-// exported `resolveX` wrapper to call.
+// exported `resolveX` wrapper to call. #314: `resolveRuntimeProbe` itself
+// moved to `main/channels/runtime.ts` to keep `ipc.ts` under its own
+// 500-line limit — a pure relocation, this file's own import is the only
+// thing that changed.
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../shared/repos'
-import { resolveRuntimeProbe } from './ipc'
+import { resolveRuntimeProbe } from './channels/runtime'
 import type { RegistryDeps } from './registry'
 
 const REPO_ID = 'repo-1' as unknown as RepoId

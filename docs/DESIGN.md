@@ -181,7 +181,7 @@ Scoping epics, releases and analytics are out of scope for the first release.
 
 | Component | Treatment |
 | --- | --- |
-| `StatusPill` | Dot, then label, using the status roles. With a menu it shows a chevron: the repo run state is `● Running ▾` with Run, Pause and Drain, each with a one-line hint ("finish in-flight") |
+| `StatusPill` | Dot, then label, using the status roles. With a menu it shows a chevron: the repo run state is `● Running ▾` with Run, Drain and Pause, each with a one-line hint (Drain "finish in-flight", Pause "stop now") |
 | `PhaseBar` | Six 10×4px segments with a 2px gap, for plan, plan review, implement, review, revision, merge. Finished segments use the `working` pill background, the current one the `working` dot, waiting-on-you `attention`, complete `success`, the rest `accent`. Tooltip names the phase |
 | `PhaseList` | Vertical version for the detail pane: an 8px dot per phase, with who and when ("Plan approved by you · 2h ago") and live cost and time on the current phase |
 | `TicketRow`, `RepoPipelineRow`, `SessionRow`, `NeedsYouItem` | The list rows (§3) |
@@ -202,8 +202,8 @@ Scoping epics, releases and analytics are out of scope for the first release.
 - **Stale:** when a source stops refreshing, the screen header shows "Updated 3m ago" in `attention`.
 
 **Actions:**
-- **Reversible actions apply immediately with a toast:** run, pause, drain, retry. The toast offers Undo where possible.
-- **Actions with consequences open an `AlertDialog`:** stopping a session, clearing needs-human, sending an approved PR back, removing a worktree. The dialog states the consequence, and its confirm button names the action ("Stop session", never "OK").
+- **Reversible actions apply immediately with a toast:** run, drain, retry. The toast offers Undo where possible.
+- **Actions with consequences open an `AlertDialog`:** stopping a session, pausing a pipeline (it stops its running agents), clearing needs-human, sending an approved PR back, removing a worktree. The dialog states the consequence, and its confirm button names the action ("Stop session", never "OK").
 - **A running action shows its pending state on its own button.** A failure produces a toast with the reason. Nothing retries on its own, and nothing offers to overwrite a conflicting write.
 
 ## 5. Motion and feedback

@@ -1,47 +1,14 @@
 // Covers the header controls' pure copy functions — `buildHaltReport` itself
 // needs a DOM, which this workspace's vitest config does not provide
 // (`environment: 'node'`), the same gap `tick.test.ts` already documents.
-// `handleDrainToggle`/`handleHaltClick` reach `window.port`, so — like
-// `board/actions.ts`'s own `handleItemAction` — they are left untested here
-// too; only the derived copy is asserted.
+// `handleHaltClick` reaches `window.port`, so — like `board/actions.ts`'s
+// own `handleItemAction` — it is left untested here too; only the derived
+// copy is asserted. Per-repository run/drain/pause copy moved to
+// `run-state.test.ts` (#314).
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../../../shared/repos'
-import type { DispatchControlResult, HaltItemOutcome, HaltReport } from '../../../shared/dispatch/types'
-import { drainResultNote, drainToggleLabel, haltButtonLabel, haltAbortedCopy, haltHeadingCopy, haltItemLine } from './dispatch'
-
-describe('drainToggleLabel', () => {
-  it('reads Drain while the gate is open', () => {
-    expect(drainToggleLabel({ gate: 'open' })).toBe('Drain')
-  })
-
-  it('reads Resume dispatch while draining, whatever the reason', () => {
-    expect(drainToggleLabel({ gate: 'draining', reason: 'operator', since: '2026-01-01T00:00:00Z' })).toBe('Resume dispatch')
-    expect(drainToggleLabel({ gate: 'draining', reason: 'unread' })).toBe('Resume dispatch')
-    expect(drainToggleLabel({ gate: 'draining', reason: 'unreadable', message: 'boom', path: '/dispatch.json' })).toBe('Resume dispatch')
-  })
-})
-
-describe('drainResultNote', () => {
-  it('says nothing for an ordinary persisted drain', () => {
-    const result: Extract<DispatchControlResult, { readonly command: 'drain' }> = { ok: true, command: 'drain', drain: { gate: 'draining', reason: 'operator', since: '2026-01-01T00:00:00Z' }, persisted: true }
-    expect(drainResultNote(result)).toBeNull()
-  })
-
-  it('warns once a drain write fails to persist, since the gate still closed in memory', () => {
-    const result: Extract<DispatchControlResult, { readonly command: 'drain' }> = { ok: true, command: 'drain', drain: { gate: 'draining', reason: 'operator', since: '2026-01-01T00:00:00Z' }, persisted: false }
-    expect(drainResultNote(result)).toBe("Drain applied, but wasn't saved to disk — it won't survive a restart.")
-  })
-
-  it('says nothing for an ordinary successful resume', () => {
-    const result: Extract<DispatchControlResult, { readonly command: 'resume' }> = { ok: true, command: 'resume', drain: { gate: 'open' } }
-    expect(drainResultNote(result)).toBeNull()
-  })
-
-  it('names the path and message for a refused resume', () => {
-    const result: Extract<DispatchControlResult, { readonly command: 'resume' }> = { ok: false, command: 'resume', reason: 'drain-unwritable', message: 'disk full', path: '/userData/dispatch.json' }
-    expect(drainResultNote(result)).toBe("Resume refused — /userData/dispatch.json couldn't be written (disk full). Dispatch is still draining.")
-  })
-})
+import type { HaltItemOutcome, HaltReport } from '../../../shared/dispatch/types'
+import { haltButtonLabel, haltAbortedCopy, haltHeadingCopy, haltItemLine } from './dispatch'
 
 describe('haltButtonLabel', () => {
   it('reads Halt everything before any confirm step is armed', () => {
@@ -102,13 +69,24 @@ describe('haltHeadingCopy', () => {
     }
     expect(haltHeadingCopy(report)).toBe('Halted · 0 stopped, 0 skipped, 1 not stopped')
   })
+
+  it('takes a leading word override — run-state.ts\'s per-repository Pause passes "Paused" (#357 R1-M2)', () => {
+    const report: Extract<HaltReport, { readonly kind: 'completed' }> = {
+      kind: 'completed',
+      items: [
+        { kind: 'stopped', number: 1, itemKind: 'issue', repoId: 'repo-a' as RepoId, removedLabel: 'reviewing', attachedAgent: null, stoppedTask: false },
+        { kind: 'stopped', number: 2, itemKind: 'issue', repoId: 'repo-a' as RepoId, removedLabel: 'in progress', attachedAgent: null, stoppedTask: false },
+      ],
+    }
+    expect(haltHeadingCopy(report, 'Paused')).toBe('Paused · 2 stopped, 0 skipped')
+  })
 })
 
 describe('haltAbortedCopy', () => {
-  it('names the path and the message, and why labels were left alone', () => {
-    const report: Extract<HaltReport, { readonly kind: 'aborted' }> = { kind: 'aborted', reason: 'drain-unwritable', message: 'disk full', path: '/userData/dispatch.json' }
+  it('names the run-state file and the message, and why labels were left alone', () => {
+    const report: Extract<HaltReport, { readonly kind: 'aborted' }> = { kind: 'aborted', reason: 'run-state-unwritable', message: 'disk full', path: '/userData/dispatch.json' }
     expect(haltAbortedCopy(report)).toBe(
-      "Nothing was halted — /userData/dispatch.json couldn't be written (disk full). Labels were left alone, because resetting them with dispatch still open would just start everything again.",
+      "Nothing was halted — /userData/dispatch.json couldn't be written (disk full). Labels were left alone, because resetting them before /userData/dispatch.json actually closed would just start everything again.",
     )
   })
 })

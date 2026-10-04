@@ -7,7 +7,7 @@ import type { ItemStatus, PipelineState, ReconciledItem, RepositoryState, StageL
 import type { ActionAvailability, OperatorAction } from '../actions/types'
 import type { TickReport } from '../tick/types'
 import type { RelayPending, RelayScan } from '../relay/types'
-import type { DrainState, RepoDispatchStatus } from '../dispatch/types'
+import type { RepoDispatchStatus, RunStatesSnapshot } from '../dispatch/types'
 
 /**
  * The four sources the watcher polls independently. Deliberately not five:
@@ -113,11 +113,14 @@ export interface BoardSnapshot {
    *  refreshed. No new `SourceKind`: it rides the `sessions` source's own
    *  cadence and freshness rather than scheduling a second one. */
   readonly relay: RelayScan
-  /** The app's one drain switch (#110) — `main/tick/dispatchable.ts`'s own
-   *  gate, stamped onto every snapshot so the board's header controls and
-   *  drain line never need a second read channel. Defaults to `{ gate:
-   *  'open' }` when the watcher was built with no drain source at all. */
-  readonly drain: DrainState
+  /** #314: every registered repository's own run state (`dispatching`,
+   *  `draining` or `paused`), stamped onto every snapshot so the board's
+   *  per-repository run-state row and the store line never need a second
+   *  read channel. Defaults to `{ store: { kind: 'loaded' }, repositories:
+   *  [] }` when the watcher was built with no run-state source at all —
+   *  every repository then reads paused through `RUN_STATES`'s own default,
+   *  never a silently-open gate. */
+  readonly runStates: RunStatesSnapshot
   /** The earliest instant the watcher's one timer (`main/state/watcher.ts`)
    *  is next due to fire — `null` once `stop()` has run, the honest
    *  rendering of "no wakeup scheduled" (#62). Shares the same expression

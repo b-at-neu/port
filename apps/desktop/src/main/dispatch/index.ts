@@ -2,13 +2,13 @@
 // `./store`, `./halt`, `./resolve`, `./dispatcher`, `./turn`, or `./select`
 // directly, the same rail `main/writes/index.ts` and `main/actions/index.ts`
 // already follow.
-export { createDrainStore } from './store'
-export type { DrainStore, SetDrainResult } from './store'
+export { createRunStateStore } from './store'
+export type { RunStateStore, SetRunStateResult } from './store'
 
 export { defaultHaltDispatchDeps, haltDispatch } from './halt'
 export type { HaltDispatchDeps, HaltDispatchParams } from './halt'
 
-export { resolveDispatchClaimSet, resolveDispatchControl, resolveDispatchRelay } from './resolve'
+export { registeredRepoIds, resolveDispatchClaimSet, resolveDispatchControl, resolveDispatchRelay } from './resolve'
 export type { ResolveDispatchClaimSetDeps, ResolveDispatchControlDeps, ResolveDispatchRelayDeps } from './resolve'
 
 export { createDispatcher } from './dispatcher'

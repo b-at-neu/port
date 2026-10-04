@@ -52,7 +52,7 @@ function snapshotWith(tick: readonly TickReport[]): BoardSnapshot {
     policy: { baseIntervalMs: { github: 60_000, sessions: 15_000, worktrees: 15_000, denials: 15_000 }, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: 30_000 },
     tick,
     relay: { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: '2026-01-01T00:00:00Z' },
-    drain: { gate: 'open' },
+    runStates: { store: { kind: 'loaded' }, repositories: [] },
     nextWakeupAt: null,
     emittedAt: '2026-01-01T00:00:00Z',
     dispatch: [],
@@ -133,7 +133,7 @@ function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispat
     writeObservation: () => {
       throw new Error('writeObservation should not be invoked unless a test wires its own')
     },
-    drain: () => ({ gate: 'open' }),
+    runState: () => 'dispatching',
     readGateClaim: () => Promise.resolve(ABSENT_CLAIM),
     fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [], unavailable: [], fetchedAt: 'r' }),
     listRepositories: () => Promise.resolve({ ok: true, repositories: [entry()] }),
@@ -164,13 +164,13 @@ describe('createDispatcher — ownership', () => {
     const store = fakeStore()
     const dispatcher = createDispatcher(baseDeps({ store }))
     await dispatcher.consider(snapshotWith([tickReport()]))
-    expect(dispatcher.status()).toEqual([{ repoId: REPO_ID, owner: 'cockpit', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null, budget: null, observed: [] }])
+    expect(dispatcher.status()).toEqual([{ repoId: REPO_ID, owner: 'cockpit', state: { kind: 'idle' }, runState: 'dispatching', claudeSessionId: null, claimedAt: null, budget: null, observed: [] }])
   })
 
   it('reports nobody for an unreadable claim', async () => {
     const dispatcher = createDispatcher(baseDeps({ readGateClaim: () => Promise.resolve(UNREADABLE_CLAIM) }))
     await dispatcher.consider(snapshotWith([tickReport()]))
-    expect(dispatcher.status()).toEqual([{ repoId: REPO_ID, owner: 'nobody', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null, budget: null, observed: [] }])
+    expect(dispatcher.status()).toEqual([{ repoId: REPO_ID, owner: 'nobody', state: { kind: 'idle' }, runState: 'dispatching', claudeSessionId: null, claimedAt: null, budget: null, observed: [] }])
   })
 
   it('reports app for a claim naming dispatch', async () => {
@@ -319,5 +319,70 @@ describe('createDispatcher — relay and stopFor', () => {
   it('stopFor returns false when there is no started task for that item', async () => {
     const dispatcher = createDispatcher(baseDeps())
     expect(await dispatcher.stopFor(REPO_ID, 999)).toBe(false)
+  })
+
+  it('standDown returns false when no session is live for that repository', async () => {
+    const dispatcher = createDispatcher(baseDeps())
+    expect(await dispatcher.standDown(REPO_ID)).toBe(false)
+  })
+})
+
+describe('createDispatcher — #314 run state', () => {
+  const actionable = [{ number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }]
+
+  it('draining dispatches nothing — the candidate is reported idle, never sent', async () => {
+    const send = vi.fn(() => ({ ok: true as const, uuid: 'u1', queued: true }))
+    const store = fakeStore({ start: () => Promise.resolve({ ok: true, snapshot: baseSessionSnapshot() }), snapshotOf: () => baseSessionSnapshot(), send })
+    const dispatcher = createDispatcher(
+      baseDeps({
+        store,
+        runState: () => 'draining',
+        readGateClaim: () => Promise.resolve(HELD_CLAIM),
+        fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
+      }),
+    )
+    await dispatcher.consider(snapshotWith([tickReport({ actionable })]))
+    expect(send).not.toHaveBeenCalled()
+    expect(dispatcher.status()[0]).toMatchObject({ runState: 'draining', state: { kind: 'idle' } })
+  })
+
+  it('paused dispatches nothing — same as draining', async () => {
+    const send = vi.fn(() => ({ ok: true as const, uuid: 'u1', queued: true }))
+    const store = fakeStore({ start: () => Promise.resolve({ ok: true, snapshot: baseSessionSnapshot() }), snapshotOf: () => baseSessionSnapshot(), send })
+    const dispatcher = createDispatcher(baseDeps({ store, runState: () => 'paused', readGateClaim: () => Promise.resolve(HELD_CLAIM) }))
+    await dispatcher.consider(snapshotWith([tickReport({ actionable })]))
+    expect(send).not.toHaveBeenCalled()
+    expect(dispatcher.status()[0]).toMatchObject({ runState: 'paused', state: { kind: 'idle' } })
+  })
+
+  it('status() reports this repository\'s own current run state even for the cockpit owner', async () => {
+    const dispatcher = createDispatcher(baseDeps({ runState: () => 'paused' }))
+    await dispatcher.consider(snapshotWith([tickReport()]))
+    expect(dispatcher.status()[0]).toMatchObject({ owner: 'cockpit', runState: 'paused' })
+  })
+})
+
+describe('createDispatcher — standDown (#314)', () => {
+  it('closes a live session, clears its key, and calls onChange', async () => {
+    const send = vi.fn(() => ({ ok: true as const, uuid: 'u1', queued: true }))
+    const close = vi.fn(() => Promise.resolve({ ok: true as const }))
+    const onChange = vi.fn()
+    const store = fakeStore({ start: () => Promise.resolve({ ok: true, snapshot: baseSessionSnapshot() }), snapshotOf: () => baseSessionSnapshot(), send, close })
+    const dispatcher = createDispatcher(
+      baseDeps({
+        store,
+        onChange,
+        readGateClaim: () => Promise.resolve(HELD_CLAIM),
+        fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
+      }),
+    )
+    const actionable = [{ number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }]
+    await dispatcher.consider(snapshotWith([tickReport({ actionable })])) // starts the session
+
+    const result = await dispatcher.standDown(REPO_ID)
+    expect(result).toBe(true)
+    expect(close).toHaveBeenCalledWith('hosted-1')
+    expect(onChange).toHaveBeenCalled()
+    expect(await dispatcher.stopFor(REPO_ID, 52)).toBe(false) // no session left to stop a task on
   })
 })
