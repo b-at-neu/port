@@ -5,8 +5,18 @@
 // call. Every node is built with `createElement`/`textContent` —
 // `desktop-renderer` denies every HTML-injection sink.
 import type { RepoId } from '../../shared/repos'
-import type { RuntimeDiagnosis, RuntimePreflight, RuntimeProbe } from '../../shared/runtime/types'
-import { CLI_OUTDATED_COPY, RUNTIME_COPY } from '../../shared/runtime/copy'
+import type { RuntimePreflight, RuntimeProbe } from '../../shared/runtime/types'
+import {
+  CLI_OUTDATED_COPY,
+  RUNTIME_API_KEY_NOTE,
+  RUNTIME_COPY,
+  RUNTIME_NO_READY_REPO_NOTE,
+  RUNTIME_PROBE_ERROR,
+  RUNTIME_STRIP_ERROR,
+  RUNTIME_STRIP_LOADING,
+  RUNTIME_UNVERIFIED_STRIP_NOTE,
+  runtimeActionLabel,
+} from '../../shared/runtime/copy'
 
 interface ReadyRepo {
   readonly id: RepoId
@@ -30,15 +40,6 @@ function appendLine(className: string, value: string): void {
   text.append(el)
 }
 
-/** `'Test connection'` for the honest resting state, `'Retry'` for every
- *  other actionable diagnosis, and no button at all for `verified`/
- *  `policy-refused` — neither names a next step the app can offer. */
-function buttonLabelFor(diagnosis: RuntimeDiagnosis): string | null {
-  if (diagnosis === 'verified' || diagnosis === 'policy-refused') return null
-  if (diagnosis === 'unverified') return 'Test connection'
-  return 'Retry'
-}
-
 function draw(): void {
   if (!strip || !text) return
   text.textContent = ''
@@ -46,11 +47,11 @@ function draw(): void {
   existingButton?.remove()
 
   if (state.status === 'loading') {
-    appendLine('runtime-strip__line', 'Checking the Claude Code runtime…')
+    appendLine('runtime-strip__line', RUNTIME_STRIP_LOADING)
     return
   }
   if (state.status === 'error') {
-    appendLine('runtime-strip__line', "Couldn't reach the main process to check the Claude Code runtime.")
+    appendLine('runtime-strip__line', RUNTIME_STRIP_ERROR)
     return
   }
 
@@ -61,16 +62,16 @@ function draw(): void {
   const versionSuffix = preflight.version !== null && preflight.version.raw !== null ? ` ${preflight.version.raw}` : ''
 
   if (probeError) {
-    appendLine('runtime-strip__line', "Couldn't reach the main process to test the connection.")
+    appendLine('runtime-strip__line', RUNTIME_PROBE_ERROR)
   }
 
   if (diagnosis === 'unverified' && preflight.executable !== null) {
     appendLine('runtime-strip__line', `Claude Code${versionSuffix} · ${preflight.executable.path}`)
-    appendLine('runtime-strip__sub', 'Not verified yet — a test runs one short turn.')
+    appendLine('runtime-strip__sub', RUNTIME_UNVERIFIED_STRIP_NOTE)
   } else if (diagnosis === 'verified' && probe !== null) {
     appendLine('runtime-strip__line', `Claude Code${versionSuffix} · verified against ${probe.repo} in ${(probe.elapsedMs / 1000).toFixed(1)}s`)
     if (probe.apiKeyInEnvironment) {
-      appendLine('runtime-strip__sub', 'An ANTHROPIC_API_KEY is set in this environment — this turn may not have used your subscription.')
+      appendLine('runtime-strip__sub', RUNTIME_API_KEY_NOTE)
     }
   } else {
     appendLine('runtime-strip__line', copy.title)
@@ -81,7 +82,7 @@ function draw(): void {
     appendLine('runtime-strip__sub', CLI_OUTDATED_COPY.title)
   }
 
-  const label = buttonLabelFor(diagnosis)
+  const label = runtimeActionLabel(diagnosis)
   if (label === null) return
 
   // The one disabling case the UX spec names: 'Test connection' with no
@@ -89,7 +90,7 @@ function draw(): void {
   // still works with no repository registered — it just re-runs the cheap
   // preflight rather than a probe (`handleAction`'s own branch).
   const disabledForNoRepo = diagnosis === 'unverified' && repo === null
-  if (disabledForNoRepo) appendLine('runtime-strip__sub', 'Register a repository to test the connection.')
+  if (disabledForNoRepo) appendLine('runtime-strip__sub', RUNTIME_NO_READY_REPO_NOTE)
 
   const button = document.createElement('button')
   button.className = 'runtime-strip__action'

@@ -89,3 +89,29 @@ export const CLI_OUTDATED_COPY: RuntimeCopy = {
   body: 'It may still work — this is advisory only.',
   action: 'update',
 }
+
+/**
+ * The runtime strip's (and, since #316, the Settings screen's) own inline
+ * strings — shared by `renderer/src/runtime.ts` and
+ * `renderer/src/settings/runtime-model.ts` so there is one copy of each,
+ * never a second one drifting inside the Settings screen. Deliberately
+ * **not** entries on `RUNTIME_COPY`: that record's keys are pinned
+ * one-for-one against `RuntimeDiagnosis` (`desktop-runtime.ts`), and these
+ * strings are not per-diagnosis — the API-key note, for one, can appear
+ * beside any diagnosis at all.
+ */
+export const RUNTIME_STRIP_LOADING = 'Checking the Claude Code runtime…'
+export const RUNTIME_STRIP_ERROR = "Couldn't reach the main process to check the Claude Code runtime."
+export const RUNTIME_UNVERIFIED_STRIP_NOTE = 'Not verified yet — a test runs one short turn.'
+export const RUNTIME_PROBE_ERROR = "Couldn't reach the main process to test the connection."
+export const RUNTIME_API_KEY_NOTE = 'An ANTHROPIC_API_KEY is set in this environment — this turn may not have used your subscription.'
+export const RUNTIME_NO_READY_REPO_NOTE = 'Register a repository to test the connection.'
+
+/** `'Test connection'` for the honest resting state, `'Retry'` for every
+ *  other actionable diagnosis, and no button at all for `verified`/
+ *  `policy-refused` — neither names a next step the app can offer. */
+export function runtimeActionLabel(diagnosis: RuntimeDiagnosis): string | null {
+  if (diagnosis === 'verified' || diagnosis === 'policy-refused') return null
+  if (diagnosis === 'unverified') return 'Test connection'
+  return 'Retry'
+}
