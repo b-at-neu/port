@@ -16,7 +16,7 @@ import type { Reporter } from '../lib/report.ts';
 // that one past its own shape.
 export default async function ({ fail, ok, note }: Reporter) {
   const scriptPath = join(root, 'plugins/port/bin/worktrees.mjs');
-  const { fallbackDecision, classifyRemovalFailure, orphanVerdict, longPathAdvisory, pathKey, removeWorktree } =
+  const { fallbackDecision, classifyRemovalFailure, orphanVerdict, longPathAdvisory, pathKey, stripExtendedPrefix, removeWorktree } =
     await import(pathToFileURL(scriptPath).href);
 
   // --- Pure cases --------------------------------------------------------------
@@ -85,6 +85,24 @@ export default async function ({ fail, ok, note }: Reporter) {
       fail('worktrees-removal-pure', `pathKey: expected case-fold=${expectEqual} on ${process.platform}, got ${equalHere}`);
     } else {
       ok();
+    }
+
+    // stripExtendedPrefix is pure string manipulation, independent of the
+    // host OS, so it is asserted on every platform rather than gated to
+    // win32 (#115 R2-C1 — the residual Windows-only pathKey mismatch).
+    const sepCases: [string, string, string][] = [
+      ['UNC extended prefix', '\\\\?\\UNC\\server\\share\\dir', '\\\\server\\share\\dir'],
+      ['local extended prefix', '\\\\?\\C:\\Users\\x\\dir', 'C:\\Users\\x\\dir'],
+      ['already plain → no-op', 'C:\\Users\\x\\dir', 'C:\\Users\\x\\dir'],
+      ['POSIX path → no-op', '/repo/path', '/repo/path'],
+    ];
+    for (const [label, input, expected] of sepCases) {
+      const got = stripExtendedPrefix(input);
+      if (got !== expected) {
+        fail('worktrees-removal-pure', `stripExtendedPrefix — ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(got)}`);
+      } else {
+        ok();
+      }
     }
   }
 
