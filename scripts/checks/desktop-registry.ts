@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { root, readJson, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
@@ -76,75 +75,10 @@ export default async function ({ fail, ok }: Reporter) {
     ok();
   }
 
-  // #300: main/registry/overrides.ts is a typed, verbatim port of
-  // scripts/port-tick/overrides.ts — the same constants and exported
-  // function names, both directions.
-
-  const appOverridesPath = join(root, 'apps/desktop/src/main/registry/overrides.ts');
-  const engineOverridesPath = join(root, 'scripts/port-tick/overrides.ts');
-  const appOverridesModule = await import(pathToFileURL(appOverridesPath).href);
-  const engineOverridesModule = await import(pathToFileURL(engineOverridesPath).href);
-
-  // --- Port constants and exports agree, both directions ----------------------
-  // guard(#300): the app's own port silently drifting from the engine it
-  // copies — a refused category the engine added never reaching the app, or
-  // the app inventing a category the engine does not recognize.
-  // pin: `apps/desktop/src/main/registry/overrides.ts`'s `BEGIN`/`END`/`OVERRIDABLE`/`NEVER_OVERRIDABLE`/`[...PERMISSION_SURFACE]` ↔ `scripts/port-tick/overrides.ts`'s own, both directions
-  {
-    if (appOverridesModule.BEGIN !== engineOverridesModule.BEGIN || appOverridesModule.END !== engineOverridesModule.END) {
-      fail('desktop-registry', "main/registry/overrides.ts's BEGIN/END markers disagree with scripts/port-tick/overrides.ts's own");
-    } else {
-      ok();
-    }
-
-    const arraysAgree = (a: string[], b: string[]): boolean => a.length === b.length && a.every((v) => b.includes(v)) && b.every((v) => a.includes(v));
-    if (!arraysAgree(appOverridesModule.OVERRIDABLE, engineOverridesModule.OVERRIDABLE)) {
-      fail('desktop-registry', "main/registry/overrides.ts's OVERRIDABLE disagrees with scripts/port-tick/overrides.ts's own");
-    } else {
-      ok();
-    }
-    if (!arraysAgree(appOverridesModule.NEVER_OVERRIDABLE, engineOverridesModule.NEVER_OVERRIDABLE)) {
-      fail('desktop-registry', "main/registry/overrides.ts's NEVER_OVERRIDABLE disagrees with scripts/port-tick/overrides.ts's own");
-    } else {
-      ok();
-    }
-    if (!arraysAgree([...appOverridesModule.PERMISSION_SURFACE], [...engineOverridesModule.PERMISSION_SURFACE])) {
-      fail('desktop-registry', "main/registry/overrides.ts's PERMISSION_SURFACE disagrees with scripts/port-tick/overrides.ts's own");
-    } else {
-      ok();
-    }
-
-    const appFunctions = new Set(Object.keys(appOverridesModule).filter((k) => typeof appOverridesModule[k] === 'function'));
-    const engineFunctions = new Set(Object.keys(engineOverridesModule).filter((k) => typeof engineOverridesModule[k] === 'function'));
-    const allNames = new Set([...appFunctions, ...engineFunctions]);
-    const mismatches = [...allNames].filter((name) => appFunctions.has(name) !== engineFunctions.has(name));
-    if (mismatches.length > 0) {
-      fail('desktop-registry', `main/registry/overrides.ts's exported functions and scripts/port-tick/overrides.ts's disagree on: ${mismatches.join(', ')}`);
-    } else {
-      ok();
-    }
-  }
-
-  // --- Case-table pin: overrides.test.ts names a real case table --------------
-  // guard(#300): a test silently drifting off the shared table it exists to
-  // be asserted against, so the two implementations could disagree with
-  // nothing to catch it.
-  // pin: `scripts/port-tick/cases/overrides.cases.json` ↔ `apps/desktop/src/main/registry/overrides.ts`'s ported `parseOverrides`/`applyOverrides`, the same table `tick-cases` already asserts the engine's own exports against
-  {
-    const testPath = join(root, 'apps/desktop/src/main/registry/overrides.test.ts');
-    const tablePath = join(root, 'scripts/port-tick/cases/overrides.cases.json');
-    const testText = readFileSync(testPath, 'utf8');
-    if (!testText.includes('overrides.cases.json')) {
-      fail('desktop-registry', `${relOf(testPath)} does not import overrides.cases.json at all`);
-    } else {
-      try {
-        readFileSync(tablePath, 'utf8');
-        ok();
-      } catch {
-        fail('desktop-registry', `${relOf(testPath)} names scripts/port-tick/cases/overrides.cases.json, which does not resolve to a real file`);
-      }
-    }
-  }
+  // #348: main/registry/effective.ts imports scripts/port-tick/overrides.ts
+  // directly — there is no app-owned copy left to drift, so the former
+  // port/case-table pins above are gone with it (desktop-tick's (3)/(4)/(8)/
+  // (11) retired the same way for the tick decision families).
 
   // --- Excused-check pin: effective.ts and config.ts share the same anchor ----
   // guard(#300): a prior ticket's comment claimed this pin existed before

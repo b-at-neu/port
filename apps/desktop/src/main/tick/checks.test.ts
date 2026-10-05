@@ -1,14 +1,10 @@
-// Runs the ported `reduceRollup`/`isConcluded`/`rollupVerdict` over the tick
-// engine's own shared case table (`scripts/port-tick/cases/checks.cases.json`,
-// #292) — the same idiom `gates.test.ts` already uses for its own four
-// ported functions. `reduceRollup`'s own cockpit implementation spreads an
-// internal `t` memo field onto its result for its own `rollupVerdict` to
-// read; this app's port never materializes that field, so the one
-// `reduceRollup` case strips it before comparing.
+// Runs `reduceRollup`/`isConcluded`/`rollupVerdict` over the tick engine's
+// own shared case table (`scripts/port-tick/cases/checks.cases.json`, #292) —
+// the same idiom `gates.test.ts` already uses. #348 made this module itself
+// the engine's own (`apps/desktop` imports it directly, no local copy).
 import { describe, expect, it } from 'vitest'
-import { conclusionOf, isConcluded, reduceRollup, rollupVerdict } from './checks'
-import type { Disposition } from './checks'
-import type { CheckContext } from '../../shared/github/types'
+import { conclusionOf, isConcluded, reduceRollup, rollupVerdict } from '../../../../../scripts/port-tick/checks'
+import type { CheckContext, Disposition } from '../../../../../scripts/port-tick/checks'
 import cases from '../../../../../scripts/port-tick/cases/checks.cases.json'
 
 interface RawContext {

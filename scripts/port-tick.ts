@@ -21,15 +21,12 @@ import { loadConfig } from './port-tick/config.ts';
 import { buildQuery } from './port-tick/query.ts';
 import { runGraphql } from './port-tick/gh.ts';
 import { classifyEnvelope, truncatedAliases } from './port-tick/envelope.ts';
-import { partitionOwnership, issueSessionRequiredReason, prSessionRequiredReason } from './port-tick/classify.ts';
 import { labelsByItem, contradictions, actionablePartitions, reconcileTick, ungatedPullRequests, reportOrphans, ticketsByPullRequest } from './port-tick/reconcile.ts';
-import { rollupVerdict } from './port-tick/checks.ts';
-import { mergeabilityRoute, refreshDecision, capRefreshes, zeroDiffGate, cycleCapExceeded, approvedReverify, refreshWins } from './port-tick/gates.ts';
-import { parseFilesBlock, gateCandidates } from './port-tick/contention.ts';
 import { classifyUnmatched, descriptionOf, RETRY_TRIGGER, isUsageLimitMessage, buildLivenessExpected } from './port-tick/liveness.ts';
 import { nextDelay } from './port-tick/pacing.ts';
+import { freshAccumulator, partitionAliases, planTriggers, planReadyForReview, planNeedsRevision, planApproved, planRefreshSweep, planHumanGates } from './port-tick/plan.ts';
 import { readState, writeState, freshTickState, freshDispatchLog, newRunId, TICK_STATE_PATH, DISPATCH_LOG_PATH } from './port-tick/state.ts';
-import { refreshSweepWrite, zeroDiffWrite, cycleCapWrite, approvalWithdrawnWrite, livenessResetWrite, gateResolveWrite } from './port-tick/writes.ts';
+import { livenessResetWrite, gateResolveWrite } from './port-tick/writes.ts';
 import { formatEvent, appendEvent, rotateIfNeeded, envelopeFor, runStartPayload, tickEventPayload } from './port-tick/events.ts';
 import { summarizeDelta } from './port-tick/denials.ts';
 import { runReport } from './port-tick/report.ts';
@@ -92,14 +89,7 @@ function cmdPlan(root: string, cfg: any): void {
   const truncated = truncatedAliases(repository);
   const viewer = res.body.data.viewer?.login ?? null;
 
-  const dispatch: any[] = [];
-  const gates: any[] = [];
-  const held: any[] = [];
-  const announce: any[] = [];
-  const writes: any[] = [];
-
   // --- Ownership partition, every trigger/gate/in-flight alias --------------
-  const partitions: Record<string, any> = {};
   const aliasSpecs: [string, string | null][] = [
     ['ready', 'planAgent'], ['planChangesRequested', 'planAgent'], ['planApproved', 'implAgent'],
     ['readyForReview', 'reviewAgent'], ['needsRevision', 'reviseAgent'], ['refreshBranch', 'reviseAgent'],
@@ -107,10 +97,7 @@ function cmdPlan(root: string, cfg: any): void {
     ['planning', null], ['inProgress', null], ['reviewing', null], ['revising', null], ['refreshing', null],
     ['prOpened', null],
   ];
-  for (const [alias] of aliasSpecs) {
-    const set = repository[alias];
-    partitions[alias] = set ? partitionOwnership(set.nodes, viewer) : { mine: [], others: [], unowned: [] };
-  }
+  const partitions = partitionAliases(repository, viewer, aliasSpecs);
 
   // Reconcile (#209/#220): flag any item holding more than one role-bearing
   // label and exclude it from every action below, reported, never repaired.
@@ -121,174 +108,30 @@ function cmdPlan(root: string, cfg: any): void {
   const contradictionsList = contradictions(byItem, viewer, cfg.labels);
   const actionable = actionablePartitions(partitions, contradictionsList.map((c) => c.item));
 
-  // --- Session-required filtering + dispatch: plan/impl/revise triggers ----
-  for (const item of actionable.ready.mine) dispatch.push({ stage: 'plan-agent', item: item.number, kind: 'plan', model: cfg.models.plan, reason: 'ready' });
-  for (const item of actionable.planChangesRequested.mine) dispatch.push({ stage: 'plan-agent', item: item.number, kind: 'plan-revision', model: cfg.models.plan, reason: 'plan changes requested' });
-
-  // planApproved: session-required check, then file contention gate
-  const inFlightClaims: any[] = [];
-  for (const item of partitions.inProgress.mine) {
-    inFlightClaims.push({ item: item.number, label: 'in progress', paths: parseFilesBlock(item.body) ?? [] });
-  }
-  for (const item of partitions.prOpened.mine) {
-    inFlightClaims.push({ item: item.number, label: 'pr opened', paths: parseFilesBlock(item.body) ?? [] });
-  }
-
-  const structuredCandidates: any[] = [];
-  for (const item of actionable.planApproved.mine) {
-    const reason = issueSessionRequiredReason(item.body);
-    if (reason) {
-      announce.push({ kind: 'session-required-issue', item: item.number, facts: { reason } });
-      continue;
-    }
-    const paths = parseFilesBlock(item.body);
-    if (paths === null) {
-      dispatch.push({ stage: 'impl-agent', item: item.number, kind: 'impl', model: cfg.models.impl, reason: 'unstructured plan — dispatched unchecked' });
-      continue;
-    }
-    structuredCandidates.push({ item: item.number, paths });
-  }
-  const gated = gateCandidates(structuredCandidates, inFlightClaims, cfg.concurrency.sharedFiles, cfg.concurrency.overlapThreshold);
-  for (const n of gated.dispatch) dispatch.push({ stage: 'impl-agent', item: n, kind: 'impl', model: cfg.models.impl, reason: 'plan approved' });
-  for (const h of gated.held) held.push(h);
-
-  // refreshBranch trigger: always revise-agent in refresh mode
-  for (const item of actionable.refreshBranch.mine) {
-    dispatch.push({ stage: 'revise-agent', item: item.number, kind: 'refresh', model: cfg.models.revise, reason: 'refresh branch' });
-  }
-
   // --- Refresh sweep state: readyForReview ∪ approved reading CONFLICTING ---
-  // Collected here and resolved together below via gates.ts's
-  // mergeabilityRoute/refreshDecision/capRefreshes — an automatic rebase +
-  // force-push, never a human gate. `refreshedUpdates`/`unknownStreakUpdates`
-  // are applied to tickState by `commit`, since `plan` itself never persists.
+  // `refreshedUpdates`/`unknownStreakUpdates` are applied to tickState by
+  // `commit`, since `plan` itself never persists.
   const refreshedState: Record<string, any> = tickState.refreshed ?? {};
   const unknownStreakState: Record<string, any> = tickState.unknownStreak ?? {};
-  const refreshedUpdates: any[] = [];
-  const unknownStreakUpdates: any[] = [];
-  const refreshCandidates: any[] = [];
 
   // Refresh wins: a pull request already claimed by a refresh
   // (<labels.refreshBranch>) or mid-refresh (<labels.refreshing>) is never
   // dispatched to review or revision in the same tick (PIPELINE.md → "Tick
   // engine" / SKILL.md's "Refresh wins"). All owners, never `.mine` —
   // carrying the label is an ownership-independent fact. The refreshBranch
-  // trigger loop above is the refresh itself and is never vetoed.
+  // trigger loop in planTriggers is the refresh itself and is never vetoed.
   const refreshBranchNumbers = (repository.refreshBranch?.nodes ?? []).map((n: any) => n.number);
   const refreshingNumbers = (repository.refreshing?.nodes ?? []).map((n: any) => n.number);
 
-  // readyForReview: mergeability routing, zero-diff gate, then dispatch
-  for (const item of actionable.readyForReview.mine) {
-    const veto = refreshWins({ number: item.number, refreshBranch: refreshBranchNumbers, refreshing: refreshingNumbers });
-    if (veto.action === 'veto') {
-      announce.push({ kind: 'refresh-in-flight', item: item.number, facts: { label: veto.label } });
-      continue;
-    }
+  const acc = freshAccumulator();
+  planTriggers(cfg, actionable, partitions, acc);
+  planReadyForReview(cfg, actionable, refreshBranchNumbers, refreshingNumbers, unknownStreakState, acc);
+  planNeedsRevision(cfg, actionable, refreshBranchNumbers, refreshingNumbers, acc);
+  planApproved(cfg, actionable, refreshBranchNumbers, refreshingNumbers, acc);
+  planRefreshSweep(cfg, refreshedState, acc);
+  planHumanGates(actionable, acc);
 
-    if (item.mergeable === 'CONFLICTING') {
-      refreshCandidates.push({ number: item.number, headRefOid: item.headRefOid, sourceLabelKey: 'readyForReview' });
-      continue;
-    }
-
-    if (item.mergeable === 'UNKNOWN') {
-      const route = mergeabilityRoute('UNKNOWN', unknownStreakState[item.number] ?? 0);
-      if (route.action === 'hold') {
-        announce.push({ kind: 'mergeability-unknown', item: item.number, facts: {} });
-        unknownStreakUpdates.push({ item: item.number, streak: route.unknownStreak });
-        continue;
-      }
-      unknownStreakUpdates.push({ item: item.number, remove: true });
-    } else if (unknownStreakState[item.number] != null) {
-      unknownStreakUpdates.push({ item: item.number, remove: true });
-    }
-
-    const zd = zeroDiffGate({ reviews: item.reviews?.nodes, comments: item.comments?.nodes, headRefOid: item.headRefOid });
-    if (zd.action === 'escalate') {
-      writes.push(zeroDiffWrite({ repo: cfg.repo, labels: cfg.labels, number: item.number }));
-      announce.push({ kind: 'zero-diff', item: item.number, facts: {} });
-      continue;
-    }
-    dispatch.push({ stage: 'review-agent', item: item.number, kind: 'review', model: cfg.models.review, reason: 'ready for review' });
-  }
-
-  // needsRevision: refresh-wins veto, session-required, then cycle cap
-  for (const item of actionable.needsRevision.mine) {
-    const veto = refreshWins({ number: item.number, refreshBranch: refreshBranchNumbers, refreshing: refreshingNumbers });
-    if (veto.action === 'veto') {
-      announce.push({ kind: 'refresh-in-flight', item: item.number, facts: { label: veto.label } });
-      continue;
-    }
-
-    const reason = prSessionRequiredReason(item.body);
-    if (reason) {
-      announce.push({ kind: 'session-required-pr', item: item.number, facts: { reason } });
-      continue;
-    }
-    if (cycleCapExceeded(item.reviews?.nodes, cfg.reviewCycleCap)) {
-      writes.push(cycleCapWrite({ repo: cfg.repo, labels: cfg.labels, number: item.number }));
-      announce.push({ kind: 'cycle-cap', item: item.number, facts: { cap: cfg.reviewCycleCap } });
-      continue;
-    }
-    dispatch.push({ stage: 'revise-agent', item: item.number, kind: 'revise', model: cfg.models.revise, reason: 'needs revision' });
-  }
-
-  // approved: refresh-wins veto, then re-verify against the two authorising facts
-  const dispositions = cfg.checkDispositions;
-  for (const item of actionable.approved.mine) {
-    const veto = refreshWins({ number: item.number, refreshBranch: refreshBranchNumbers, refreshing: refreshingNumbers });
-    if (veto.action === 'veto') {
-      announce.push({ kind: 'refresh-in-flight', item: item.number, facts: { label: veto.label } });
-      continue;
-    }
-
-    const rollup = item.commits?.nodes?.[0]?.commit?.statusCheckRollup;
-    const verdict = rollupVerdict(rollup, dispositions);
-    const result = approvedReverify({ verdict, mergeable: item.mergeable });
-    if (result.action === 'withdraw') {
-      writes.push(approvalWithdrawnWrite({ repo: cfg.repo, labels: cfg.labels, number: item.number }));
-      announce.push({ kind: 'approval-withdrawn', item: item.number, facts: { red: result.red } });
-    } else if (result.action === 'refresh-in-place') {
-      refreshCandidates.push({ number: item.number, headRefOid: item.headRefOid, sourceLabelKey: 'approved' });
-    } else if (result.action === 'announce-ready') {
-      announce.push({ kind: 'approved-ready', item: item.number, facts: { green: result.green } });
-    }
-  }
-
-  // Bound to 5 per tick, oldest first — deferred candidates stay CONFLICTING
-  // and are reconsidered next tick with no state lost meanwhile.
-  const { toRefresh, deferred } = capRefreshes(refreshCandidates, 5);
-  for (const c of deferred) {
-    announce.push({ kind: 'refresh-deferred', item: c.number, facts: {} });
-  }
-  for (const c of toRefresh) {
-    const decision = refreshDecision(refreshedState[c.number], c.headRefOid);
-    writes.push(refreshSweepWrite({ repo: cfg.repo, labels: cfg.labels, candidate: c, decision }));
-    if (decision.action === 'escalate') {
-      announce.push({ kind: 'refresh-stuck', item: c.number, facts: { reason: decision.reason, headRefOid: c.headRefOid } });
-      refreshedUpdates.push({ item: c.number, remove: true });
-      continue;
-    }
-    dispatch.push({ stage: 'revise-agent', item: c.number, kind: 'refresh', model: cfg.models.revise, reason: 'refresh sweep' });
-    announce.push({ kind: 'rebase-required', item: c.number, facts: { headRefOid: c.headRefOid, base: cfg.integration, approvalStands: c.sourceLabelKey === 'approved' } });
-    refreshedUpdates.push({ item: c.number, sha: c.headRefOid, count: decision.count });
-  }
-
-  // plan review / blocked / needs-human — the only three partitions the
-  // engine had computed and then silently never surfaced (R1-C1). Only
-  // plan-review and needs-human are real human gates (resolve --decision
-  // already has both pairs of decisions); blocked resolves by relaying the
-  // issue's own blocker comment and resuming the *same* dispatched agent via
-  // SendMessage — a conversation the tick engine has no handle for, so it is
-  // report-only here rather than a fabricated resolve path.
-  for (const item of actionable.planReview.mine) {
-    gates.push({ kind: 'plan-review', item: item.number, facts: {} });
-  }
-  for (const item of actionable.needsHuman.mine) {
-    gates.push({ kind: 'needs-human', item: item.number, facts: {} });
-  }
-  for (const item of actionable.blocked.mine) {
-    announce.push({ kind: 'blocked', item: item.number, facts: {} });
-  }
+  const { dispatch, gates, held, announce, writes, refreshedUpdates, unknownStreakUpdates } = acc;
 
   // Ungated sweep (module-gated, never assignee-filtered): the raw set, for
   // Housekeeping's own change-only dedup/report. `allOpenPRs` is unconditional

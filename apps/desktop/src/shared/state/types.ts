@@ -158,11 +158,11 @@ export interface ReconciledItem {
   readonly claimedFiles: readonly string[] | null
   /** Copied straight off `PipelineItem`, pull-request only (#108) — `null`
    *  for an issue, the same direction `claimedFiles` takes in reverse. Feed
-   *  `main/tick/gates.ts`'s `cycleCapExceeded`/`zeroDiffGate`. */
+   *  `scripts/port-tick/gates.ts`'s `cycleCapExceeded`/`zeroDiffGate`. */
   readonly headRefOid: string | null
   /** Copied straight off `PipelineItem`, pull-request only (#265) — `null`
    *  for an issue, same direction as `headRefOid`. Feeds
-   *  `main/tick/gates.ts`'s `mergeabilityRoute`. */
+   *  `scripts/port-tick/gates.ts`'s `mergeabilityRoute`. */
   readonly mergeable: Mergeable
   readonly reviews: readonly ReviewNode[] | null
   readonly comments: readonly PullRequestCommentNode[] | null
@@ -172,7 +172,7 @@ export interface ReconciledItem {
   readonly reviewCycleCount: number | null
   /** Copied straight off `PipelineItem`, pull-request only (#292) — `null`
    *  for an issue, same direction as `headRefOid`/`mergeable`. Feeds
-   *  `main/tick/checks.ts`'s `rollupVerdict` for the approval-withdrawal
+   *  `scripts/port-tick/checks.ts`'s `rollupVerdict` for the approval-withdrawal
    *  observation. */
   readonly checkRollup: readonly CheckContext[] | null
 }

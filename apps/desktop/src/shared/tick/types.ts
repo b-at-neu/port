@@ -45,7 +45,7 @@ export type TickHeldReason =
  *  write, so they carry no escalation either. */
 export type TickEscalation = { readonly kind: 'cycle-cap'; readonly count: number; readonly cap: number } | { readonly kind: 'zero-diff' }
 
-/** The file-contention gate's own held detail (`main/tick/contention.ts`'s
+/** The file-contention gate's own held detail (`scripts/port-tick/contention.ts`'s
  *  `gateCandidates`) — populated only for `reason: 'contended'`, `null` for
  *  the other three reasons, since none of them names a blocker or a path
  *  list. */

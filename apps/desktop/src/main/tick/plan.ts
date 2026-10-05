@@ -15,14 +15,14 @@ import type { RepoId } from '../../shared/repos'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '../../shared/board/types'
 import type { ReconciledItem, RepositoryState } from '../../shared/state/types'
 import type { TickActionable, TickBlind, TickClaim, TickHeld, TickHeldReason, TickObservation, TickReport } from '../../shared/tick/types'
-import type { ClaimedItem, OccupiedEntry } from './contention'
-import { gateCandidates } from './contention'
-import type { Disposition } from './checks'
-import { cycleCapExceeded, mergeabilityRoute, refreshWins, zeroDiffGate } from './gates'
+import type { ClaimedItem, OccupiedEntry } from '../../../../../scripts/port-tick/contention'
+import { gateCandidates } from '../../../../../scripts/port-tick/contention'
+import type { Disposition } from '../../../../../scripts/port-tick/checks'
+import { cycleCapExceeded, mergeabilityRoute, refreshWins, zeroDiffGate } from '../../../../../scripts/port-tick/gates'
 import type { DispatchLedger, RefreshMemo, UnknownStreaks } from './ledger'
-import { RETRY_TRIGGER } from './liveness'
+import { RETRY_TRIGGER } from '../../../../../scripts/port-tick/liveness'
 import { observationsOf } from './observe'
-import { partitionOwnership } from './ownership'
+import { partitionOwnership } from '../../../../../scripts/port-tick/classify'
 import { AGENT_FOR_IN_FLIGHT, AGENT_FOR_TRIGGER } from './routing'
 
 export interface PlanTickParams {
@@ -185,7 +185,7 @@ function actionableAndHeld(
       // module's ranking stays exactly as ordered today.
       !item.stages.some((label) => label.role === 'in-flight'),
   )
-  const { unowned, others } = partitionOwnership(triggerItems, viewer)
+  const { unowned, others } = partitionOwnership(triggerItems, viewer, (item) => item.assignees)
   const unownedNumbers = new Set(unowned.map((i) => i.number))
   const othersNumbers = new Set(others.map((i) => i.number))
 
@@ -334,7 +334,11 @@ function claimsOf(items: readonly ReconciledItem[], repoId: RepoId, ledger: Disp
 
     const result = ledger.observeUnmatched(repoId, item.number, readAt)
     const cls = result.class === 'reset' ? 'stalled-confirmed' : result.class
-    const retryKey = cls === 'stalled-confirmed' ? (RETRY_TRIGGER[inFlight] ?? null) : null
+    // RETRY_TRIGGER's engine type is a bare Record<string, string> — every
+    // value is a real LabelKey by construction (the vocabulary pin in
+    // scripts/checks/desktop-tick.ts), so the app's own in-flight caller
+    // narrows it here rather than widening the engine's own export.
+    const retryKey = cls === 'stalled-confirmed' ? ((RETRY_TRIGGER[inFlight] as LabelKey | undefined) ?? null) : null
     claims.push({ number: item.number, kind: item.kind, inFlight, class: cls, retryKey })
   }
   return claims

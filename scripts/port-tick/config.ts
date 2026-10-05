@@ -178,7 +178,9 @@ export function loadConfig(repoRoot: string): any {
   const checkDispositions: Record<string, { disposition: 'blocking' | 'infrastructure'; source: 'approval-gate' | 'CLAUDE.md' }> = {};
   if (excusedCheckName) checkDispositions[excusedCheckName] = { disposition: 'infrastructure', source: 'approval-gate' };
   for (const a of applied) {
-    if (a.path.startsWith('checks.')) {
+    // `validate` already restricted a 'checks.*' entry's value to 'blocking'
+    // or 'infrastructure' before it could ever reach `applied`.
+    if (a.path.startsWith('checks.') && (a.value === 'blocking' || a.value === 'infrastructure')) {
       checkDispositions[a.path.slice('checks.'.length)] = { disposition: a.value, source: 'CLAUDE.md' };
     }
   }

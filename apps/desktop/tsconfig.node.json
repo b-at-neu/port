@@ -5,5 +5,17 @@
     "rootDir": "../..",
     "types": ["node"]
   },
-  "include": ["src/main/**/*", "src/preload/**/*", "src/shared/**/*", "visual/**/*"]
+  "include": [
+    "src/main/**/*",
+    "src/preload/**/*",
+    "src/shared/**/*",
+    "visual/**/*",
+    "../../scripts/port-tick/gates.ts",
+    "../../scripts/port-tick/contention.ts",
+    "../../scripts/port-tick/checks.ts",
+    "../../scripts/port-tick/liveness.ts",
+    "../../scripts/port-tick/classify.ts",
+    "../../scripts/port-tick/overrides.ts",
+    "../../scripts/port-tick/wire.ts"
+  ]
 }

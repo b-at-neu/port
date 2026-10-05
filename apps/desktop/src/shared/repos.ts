@@ -5,6 +5,8 @@
 // types, and no logic — inspection and persistence live in
 // src/main/registry/.
 import type { LabelVocabulary } from './labels/vocabulary'
+import type { AppliedOverride, OverrideValue } from '../../../../scripts/port-tick/overrides'
+export type { AppliedOverride, OverrideValue }
 
 declare const repoIdBrand: unique symbol
 
@@ -60,29 +62,8 @@ export type RepoDiagnostic =
   /** One refused `CLAUDE.md` override-block line (#300) — `path` is `null`
    *  for a block-level parse problem (no entry to name), the overridden path
    *  otherwise; `line` is the offending source line or marker, `reason` is
-   *  `main/registry/overrides.ts`'s own refusal wording. */
+   *  `scripts/port-tick/overrides.ts`'s own refusal wording. */
   | { readonly kind: 'override-refused'; readonly path: string | null; readonly line: string; readonly reason: string }
-
-/** A `CLAUDE.md` `port-overrides` value, as `main/registry/overrides.ts`'s
- *  `validate` coerces it (#300) — a string for most categories, a number for
- *  `reviewCycleCap`/`concurrency.overlapThreshold`, a boolean for
- *  `modules.*`, or `null` for `branches.production = null`. */
-export type OverrideValue = string | number | boolean | null
-
-/** One applied `CLAUDE.md` override (#300) — `portDefault` is whatever the
- *  port-resolved value was *before* this entry applied, so the repository
- *  card can show both sides; `readonly string[]` covers the two append-only
- *  categories (`sessionRequiredPaths`, `concurrency.sharedFiles`), and
- *  `undefined` only ever appears for a field a schema addition left
- *  unclassified (rendered `unset`, never `undefined` verbatim). `source` is
- *  always `'CLAUDE.md'` — the only origin this mechanism has today. */
-export interface AppliedOverride {
-  readonly path: string
-  readonly value: OverrideValue
-  readonly reason: string
-  readonly portDefault: OverrideValue | readonly string[] | undefined
-  readonly source: 'CLAUDE.md'
-}
 
 /** One check's disposition (#246, #292, generalized to the app in #300):
  *  `blocking` (default — a red conclusion forms a finding and blocks) or

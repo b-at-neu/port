@@ -8,7 +8,7 @@
         { "__typename": "CheckRun", "name": "build", "conclusion": "FAILURE", "status": "COMPLETED", "startedAt": "2026-01-01T00:00:00Z" },
         { "__typename": "CheckRun", "name": "build", "conclusion": "SUCCESS", "status": "COMPLETED", "startedAt": "2026-01-02T00:00:00Z" }
       ],
-      "expected": [{ "__typename": "CheckRun", "name": "build", "conclusion": "SUCCESS", "status": "COMPLETED", "startedAt": "2026-01-02T00:00:00Z", "t": "2026-01-02T00:00:00Z" }]
+      "expected": [{ "__typename": "CheckRun", "name": "build", "conclusion": "SUCCESS", "status": "COMPLETED", "startedAt": "2026-01-02T00:00:00Z" }]
     },
     {
       "function": "isConcluded",

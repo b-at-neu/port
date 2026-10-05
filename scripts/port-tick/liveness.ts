@@ -1,7 +1,9 @@
 // Pure: the liveness diff against the dispatch log, per
 // plugins/port/docs/RECOVERY.md → "Liveness". `TaskList` itself is a model-
 // only call (this engine cannot make it), so the model calls it and passes
-// the live `description` strings in; this module only classifies.
+// the live `description` strings in; this module only classifies. The app
+// imports this directly (docs/ENGINEERING.md §1): no relative import, a leaf
+// module.
 
 /** The dispatch-log `description` the harness records verbatim for an
  *  in-flight item. */
@@ -13,11 +15,25 @@ export function isLive(description: string, liveDescriptions: string[]): boolean
   return liveDescriptions.includes(description);
 }
 
+export type LedgerState = 'dispatched' | 'suspect' | 'reset';
+
+export interface LedgerRow {
+  readonly state: LedgerState;
+  readonly resets: number;
+}
+
+export type UnmatchedClass = 'no-record' | 'suspect' | 'reset' | 'capped';
+
+export interface UnmatchedResult {
+  readonly class: UnmatchedClass;
+  readonly nextState?: LedgerState;
+  readonly nextResets?: number;
+}
+
 /** Classifies one in-flight item with no live `TaskList` match against its
- *  dispatch-log row (`{ state: 'dispatched'|'suspect'|'reset', resets }`, or
- *  `undefined` for an item this session never dispatched). At most one
- *  automatic reset per item per session — a crash loop reports instead of
- *  resetting forever:
+ *  dispatch-log row, or `undefined` for an item this session never
+ *  dispatched. At most one automatic reset per item per session — a crash
+ *  loop reports instead of resetting forever:
  *
  *  - No row at all → `no-record`: this session cannot prove anything about
  *    it, report-only forever.
@@ -27,7 +43,7 @@ export function isLive(description: string, liveDescriptions: string[]): boolean
  *    safe to auto-reset. Redispatches next tick, never this one.
  *  - Already reset once and stalled again (`resets >= 1`) → `capped`:
  *    report, never reset a second time. */
-export function classifyUnmatched(logRow: any): any {
+export function classifyUnmatched(logRow: LedgerRow | undefined): UnmatchedResult {
   if (!logRow) return { class: 'no-record' };
   if (logRow.state === 'dispatched') return { class: 'suspect', nextState: 'suspect', nextResets: logRow.resets ?? 0 };
   if (logRow.state === 'suspect' && (logRow.resets ?? 0) === 0) {
@@ -41,7 +57,7 @@ export function classifyUnmatched(logRow: any): any {
  *  in-flight item is never cross-checked or auto-reset. `label` is resolved
  *  through `labels`, never the default string literal. Moved out of
  *  `port-tick.ts` for line-budget headroom (#220); behaviour-identical. */
-export function buildLivenessExpected(actionable: Record<string, { mine: any[] }>, labels: Record<string, string>): any[] {
+export function buildLivenessExpected(actionable: Record<string, { mine: { readonly number: number }[] }>, labels: Record<string, string>): { readonly item: number; readonly labelKey: string; readonly label: string; readonly stage: string }[] {
   const specs: Array<[string, string, string]> = [
     ['planning', 'planning', 'plan-agent'],
     ['inProgress', 'inProgress', 'impl-agent'],
@@ -50,14 +66,14 @@ export function buildLivenessExpected(actionable: Record<string, { mine: any[] }
     ['refreshing', 'refreshing', 'revise-agent'],
   ];
   return specs.flatMap(([alias, labelKey, stage]) =>
-    actionable[alias].mine.map((n: any) => ({ item: n.number, labelKey, label: labels[labelKey], stage })),
+    (actionable[alias]?.mine ?? []).map((n) => ({ item: n.number, labelKey, label: labels[labelKey] ?? labelKey, stage })),
   );
 }
 
 /** The retry mapping from an in-flight label back to its trigger label,
  *  keyed by the config label key (never the resolved name — the caller
  *  substitutes the resolved name). */
-export const RETRY_TRIGGER = {
+export const RETRY_TRIGGER: Readonly<Record<string, string>> = {
   planning: 'ready',
   inProgress: 'planApproved',
   reviewing: 'readyForReview',

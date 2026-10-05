@@ -8,21 +8,16 @@ import type { LabelKey, LabelVocabulary } from '../labels/vocabulary'
 import type { AssigneeExpectation, AuditEntry, LabelPrecondition } from '../writes/types'
 import type { ReconciledItem } from '../state/types'
 import type { ActionAvailability, ActionPlan, ActionRefusal, OperatorAction } from './types'
+import { RETRY_TRIGGER as ENGINE_RETRY_TRIGGER } from '../../../../../scripts/port-tick/liveness'
 
-/** The retry mapping from an in-flight label back to its trigger label,
- *  transcribed byte-for-byte from `scripts/port-tick/liveness.mjs`'s own
- *  `RETRY_TRIGGER` — `scripts/checks/desktop-actions.mjs` pins this against
- *  that file, both directions, keys and values. Used in both directions:
- *  retry reads it forward, pause reads it inverted (`IN_FLIGHT_FOR_TRIGGER`
- *  below) to derive the one in-flight label whose presence means a stage
- *  already claimed the item. */
-export const RETRY_TRIGGER: Readonly<Record<string, LabelKey>> = {
-  planning: 'ready',
-  inProgress: 'planApproved',
-  reviewing: 'readyForReview',
-  revising: 'needsRevision',
-  refreshing: 'refreshBranch',
-}
+/** The retry mapping from an in-flight label back to its trigger label —
+ *  `scripts/port-tick/liveness.ts`'s own `RETRY_TRIGGER` directly (#348),
+ *  so there is no second copy to drift. The assignment itself typechecks the
+ *  engine's bare `Record<string, string>` keys and values against
+ *  `LabelKey`. Used in both directions: retry reads it forward, pause reads
+ *  it inverted (`IN_FLIGHT_FOR_TRIGGER` below) to derive the one in-flight
+ *  label whose presence means a stage already claimed the item. */
+export const RETRY_TRIGGER: Readonly<Partial<Record<LabelKey, LabelKey>>> = ENGINE_RETRY_TRIGGER
 
 /** The inverse of `RETRY_TRIGGER` — not every trigger has an entry here
  *  (`planChangesRequested` dispatches into `planning` too, but `planning`'s

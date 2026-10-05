@@ -70,7 +70,7 @@ function mergeableOf(value: unknown): Mergeable {
 
 /** Reads `{ nodes: [{ body, submittedAt, commit: { oid } }] }` — the
  *  review's own `commit.oid` is flattened to `commitOid` here so nothing
- *  downstream (`main/tick/gates.ts`) ever reaches into a nested GraphQL
+ *  downstream (`scripts/port-tick/gates.ts`) ever reaches into a nested GraphQL
  *  shape. Filters out anything that is not string-shaped the same way
  *  `fieldListOf` does. */
 function reviewNodesOf(value: unknown): readonly ReviewNode[] {

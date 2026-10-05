@@ -1,10 +1,10 @@
-// Runs the ported `classifyUnmatched` over the tick engine's own shared case
-// table — the same file `scripts/checks/tick.mjs` runs
-// `scripts/port-tick/liveness.mjs`'s own export over, so the two ladders can
-// never silently disagree.
+// Runs `classifyUnmatched` over the tick engine's own shared case table —
+// the same file `scripts/checks/tick.ts` runs this same export over. #348
+// made this module itself the engine's own (`apps/desktop` imports it
+// directly, no local copy).
 import { describe, expect, it } from 'vitest'
-import { classifyUnmatched } from './liveness'
-import type { LedgerRow, UnmatchedResult } from './liveness'
+import { classifyUnmatched } from '../../../../../scripts/port-tick/liveness'
+import type { LedgerRow, UnmatchedResult } from '../../../../../scripts/port-tick/liveness'
 import cases from '../../../../../scripts/port-tick/cases/liveness.cases.json'
 
 interface Case {

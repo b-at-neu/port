@@ -4,9 +4,9 @@
 // reads `no-record` and is report-only, never a false reset. No timer, no
 // filesystem — `main/state/watcher.ts` owns exactly one of each already.
 import type { RepoId } from '../../shared/repos'
-import type { LedgerRow, LedgerState, UnmatchedResult } from './liveness'
-import { classifyUnmatched } from './liveness'
-import type { RefreshMemoEntry } from './gates'
+import type { LedgerRow, LedgerState, UnmatchedResult } from '../../../../../scripts/port-tick/liveness'
+import { classifyUnmatched } from '../../../../../scripts/port-tick/liveness'
+import type { RefreshMemoEntry } from '../../../../../scripts/port-tick/gates'
 
 export interface DispatchLedger {
   /** #106's own call, once it actually dispatches — records the claim at

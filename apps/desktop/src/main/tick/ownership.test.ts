@@ -1,11 +1,11 @@
-// Runs the ported `partitionOwnership` over the tick engine's own shared
-// case table — the same file `scripts/checks/tick.mjs` runs
-// `scripts/port-tick/classify.mjs`'s own export over, so the two partitions
-// can never silently disagree. The cases are GraphQL-shaped
+// Runs `partitionOwnership` over the tick engine's own shared case table —
+// the same file `scripts/checks/tick.ts` runs this same export over. #348
+// made this function itself the engine's own (`apps/desktop` imports it
+// directly, no local copy). The cases are GraphQL-shaped
 // (`assignees: { nodes: [{ login }] }`); this test adapts that wire shape at
 // its edges only, never the decision (plan's own **Data & contracts**).
 import { describe, expect, it } from 'vitest'
-import { partitionOwnership } from './ownership'
+import { partitionOwnership } from '../../../../../scripts/port-tick/classify'
 import cases from '../../../../../scripts/port-tick/cases/ownership.cases.json'
 
 interface GraphQLNode {
@@ -38,7 +38,7 @@ describe('partitionOwnership — shared case table', () => {
     it(row.name, () => {
       const viewer = row.input[VIEWER_FIELD] as string
       const items = row.input.nodes.map((node) => ({ number: node.number, assignees: node.assignees.nodes.map((a) => a.login) }))
-      const result = partitionOwnership(items, viewer)
+      const result = partitionOwnership(items, viewer, (item) => item.assignees)
       const actual = { mine: result.mine.map((i) => i.number), others: result.others.map((i) => i.number), unowned: result.unowned.map((i) => i.number) }
       expect(actual).toEqual(row.expected)
     })

@@ -14,8 +14,8 @@ import { LABEL_DEFAULTS } from '../../shared/labels/defaults'
 import { LABEL_KEYS } from '../../shared/labels/vocabulary'
 import type { LabelKey } from '../../shared/labels/vocabulary'
 import type { AppliedOverride, CheckDisposition, RepoConfigReadFailureKind, RepoProblem } from '../../shared/repos'
-import { applyOverrides, parseOverrides } from './overrides'
-import type { EffectiveConfigShape } from './overrides'
+import { applyOverrides, parseOverrides } from '../../../../../scripts/port-tick/overrides'
+import type { EffectiveConfigShape } from '../../../../../scripts/port-tick/overrides'
 
 /** The port-resolved values `inspect.ts` has already defaulted off the
  *  schema, before any `CLAUDE.md` override applies — this module's only

@@ -1,12 +1,10 @@
-// Runs the ported `parseFilesBlock`/`gateCandidates` over the tick engine's
-// own shared case table — the same file `scripts/checks/tick.mjs` runs
-// `scripts/port-tick/contention.ts`'s own exports over, so the two gates
-// can never silently disagree. Each row dispatches on its own `function`
-// field, adapting the wire shape at the edges only, exactly as
-// `ownership.test.ts` does.
+// Runs `parseFilesBlock`/`gateCandidates` over the tick engine's own shared
+// case table — the same file `scripts/checks/tick.ts` runs these same
+// exports over. #348 made this module itself the engine's own
+// (`apps/desktop` imports it directly, no local copy).
 import { describe, expect, it } from 'vitest'
-import { gateCandidates, parseFilesBlock } from './contention'
-import type { ClaimedItem, OccupiedEntry } from './contention'
+import { gateCandidates, parseFilesBlock } from '../../../../../scripts/port-tick/contention'
+import type { ClaimedItem, OccupiedEntry } from '../../../../../scripts/port-tick/contention'
 import cases from '../../../../../scripts/port-tick/cases/contention.cases.json'
 
 interface ParseFilesBlockCase {
