@@ -24,14 +24,12 @@ function fakeQuery(options: { readonly commands?: readonly { name: string; descr
   const close = vi.fn()
   const supportedCommands = vi.fn(() => Promise.resolve(options.commands ?? []))
   const supportedAgents = vi.fn(() => Promise.resolve(options.agents ?? []))
-  const stopTask = vi.fn(() => Promise.resolve())
 
   const query: HostedQuery = {
     interrupt,
     close,
     supportedCommands,
     supportedAgents,
-    stopTask,
     [Symbol.asyncIterator]() {
       return {
         next(): Promise<IteratorResult<unknown>> {
@@ -53,7 +51,6 @@ function fakeQuery(options: { readonly commands?: readonly { name: string; descr
     close,
     supportedCommands,
     supportedAgents,
-    stopTask,
     push(message: unknown) {
       if (pendingResolve) {
         const resolve = pendingResolve
@@ -447,43 +444,4 @@ describe('createHostedHandle', () => {
     })
   })
 
-  describe('role and tasks (#265)', () => {
-    it('defaults to the operator role, with no tasks', () => {
-      const fake = fakeQuery()
-      const handle = createHostedHandle(baseParams(), () => fake.query)
-      expect(handle.snapshot().role).toBe('operator')
-      expect(handle.snapshot().tasks).toEqual([])
-    })
-
-    it('a dispatcher-role handle reports it on the snapshot', () => {
-      const fake = fakeQuery()
-      const handle = createHostedHandle(baseParams({ role: { kind: 'dispatcher', model: 'haiku', instructions: 'x', title: 'Port dispatcher · o/r' } }), () => fake.query)
-      expect(handle.snapshot().role).toBe('dispatcher')
-    })
-
-    it('task_started/task_notification feed the snapshot, keyed by taskId', async () => {
-      const fake = fakeQuery()
-      const handle = createHostedHandle(baseParams(), () => fake.query)
-      fake.push({ type: 'system', subtype: 'task_started', task_id: 't1', description: 'impl #52', subagent_type: 'port:impl-agent' })
-      await flush()
-      expect(handle.snapshot().tasks).toEqual([expect.objectContaining({ taskId: 't1', status: 'started', description: 'impl #52' })])
-
-      fake.push({ type: 'system', subtype: 'task_notification', task_id: 't1', status: 'completed' })
-      await flush()
-      expect(handle.snapshot().tasks).toEqual([expect.objectContaining({ taskId: 't1', status: 'completed' })])
-    })
-
-    it('stopTask delegates to the stream for a known task, and refuses an unknown one', async () => {
-      const fake = fakeQuery()
-      const handle = createHostedHandle(baseParams(), () => fake.query)
-      fake.push({ type: 'system', subtype: 'task_started', task_id: 't1', description: 'impl #52' })
-      await flush()
-
-      expect(await handle.stopTask('nope')).toEqual({ ok: false, kind: 'unknown-task' })
-      expect(fake.stopTask).not.toHaveBeenCalled()
-
-      expect(await handle.stopTask('t1')).toEqual({ ok: true })
-      expect(fake.stopTask).toHaveBeenCalledWith('t1')
-    })
-  })
 })

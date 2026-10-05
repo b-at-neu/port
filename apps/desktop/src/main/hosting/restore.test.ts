@@ -20,8 +20,6 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     capabilities: { kind: 'pending', request: { source: 'installed' } },
     title: 'Fix the thing',
     rateLimit: null,
-    role: 'operator',
-    tasks: [],
     ...overrides,
   }
 }
