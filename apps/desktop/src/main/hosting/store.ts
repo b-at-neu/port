@@ -9,12 +9,14 @@
 // each handle is a real child process with real memory, so refusing one
 // start costs one message while not refusing costs an unbounded spawn loop.
 import type { RepoId } from '../../shared/repos'
+import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
 import type {
   HostedSessionSnapshot,
   HostingCapacity,
   PermissionDecision,
   SessionAttachResult,
   SessionCloseResult,
+  SessionDefaults,
   SessionDismissResult,
   SessionEntriesDelta,
   SessionEventEnvelope,
@@ -22,6 +24,7 @@ import type {
   SessionInvokeResult,
   SessionKey,
   SessionPermissionAnswerResult,
+  SessionRenameResult,
   SessionRestoreDiscardResult,
   SessionRestoreResult,
   SessionSendResult,
@@ -136,6 +139,15 @@ export interface HostedStore {
   /** Persists the new limit and never closes a session, even when it drops
    *  below the current open count — that only refuses new starts. */
   setLimit(limit: number): Promise<HostingCapacity>
+  /** An operator's persisted session defaults — never touches an open
+   *  session; applied only at the next operator-role `start()`/`restore()`. */
+  defaults(): Promise<SessionDefaults>
+  setDefaults(next: SessionDefaults): Promise<SessionDefaults>
+  /** `unknown-session` for a key that names no live handle, `not-ready`
+   *  before `init` has reported a `claudeSessionId`, otherwise
+   *  renames on disk first and only then applies it to the handle — a
+   *  rejection leaves the title unchanged. */
+  rename(sessionKey: SessionKey, title: string): Promise<SessionRenameResult>
   restorable(): Promise<readonly MintedRestorable[]>
   /** Starts `{ kind: 'resume', sessionId }` through the normal `start` path,
    *  so capacity and `already-open` still apply. The entry is removed only
@@ -152,6 +164,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
   const handles = new Map<SessionKey, HostedHandle>()
   let nextId = 1
   let limit = DEFAULT_SESSION_LIMIT
+  let defaults: SessionDefaults = DEFAULT_SESSION_DEFAULTS
   let restorable: readonly MintedRestorable[] = []
   const endedOrder: SessionKey[] = []
   const endedSeen = new Set<SessionKey>()
@@ -162,6 +175,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
       loaded = deps.persistence.load().then((state) => {
         limit = state.limit
         restorable = mintRestorable(state.open)
+        defaults = state.defaults
       })
     }
     return loaded
@@ -181,7 +195,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
 
   function persistSave(): void {
     const live = persistedOpen(list())
-    deps.persistence.save(nextPersisted({ limit, live, restorable }))
+    deps.persistence.save({ ...nextPersisted({ limit, live, restorable }), defaults })
   }
 
   function forgetHandle(sessionKey: SessionKey): void {
@@ -258,6 +272,11 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
       persistSave()
     }
 
+    // A dispatcher role never takes the operator's own defaults — its options
+    // are fully determined by `role` regardless, but this keeps the handle
+    // from ever seeing a setting it was not supposed to apply.
+    const defaultsForHandle = params.role === undefined || params.role.kind === 'operator' ? defaults : DEFAULT_SESSION_DEFAULTS
+
     const handle = createHostedHandle(
       {
         sessionKey,
@@ -276,6 +295,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
         samePath: deps.samePath,
         initialTitle,
         role: params.role,
+        defaults: defaultsForHandle,
       },
       queryFn,
     )
@@ -370,6 +390,33 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     return { limit, ceiling: SESSION_LIMIT_CEILING }
   }
 
+  async function getDefaults(): Promise<SessionDefaults> {
+    await ensureLoaded()
+    return defaults
+  }
+
+  async function setDefaults(next: SessionDefaults): Promise<SessionDefaults> {
+    await ensureLoaded()
+    defaults = next
+    persistSave()
+    return defaults
+  }
+
+  async function rename(sessionKey: SessionKey, title: string): Promise<SessionRenameResult> {
+    const handle = handles.get(sessionKey)
+    if (!handle) return { ok: false, kind: 'unknown-session' }
+    const claudeSessionId = handle.snapshot().claudeSessionId
+    if (claudeSessionId === null) return { ok: false, kind: 'not-ready' }
+    try {
+      const sdk = await deps.getSdk()
+      await sdk.renameSession(claudeSessionId, title, { dir: handle.cwd })
+      handle.rename(title)
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, kind: 'rename-failed', message: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
   async function restorableList(): Promise<readonly MintedRestorable[]> {
     await ensureLoaded()
     return restorable
@@ -409,6 +456,9 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     snapshotOf,
     capacity,
     setLimit,
+    defaults: getDefaults,
+    setDefaults,
+    rename,
     restorable: restorableList,
     restore,
     discardRestorable,

@@ -32,6 +32,9 @@ function fakeStore(): HostedStore {
     restorable: () => Promise.resolve([]),
     restore: () => Promise.reject(new Error('unused')),
     discardRestorable: () => Promise.resolve({ ok: true }),
+    defaults: () => Promise.reject(new Error('unused')),
+    setDefaults: () => Promise.reject(new Error('unused')),
+    rename: () => Promise.reject(new Error('unused')),
   }
 }
 

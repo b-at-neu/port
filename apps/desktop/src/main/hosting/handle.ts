@@ -13,6 +13,7 @@ import type {
   HostedSessionSnapshot,
   PermissionDecision,
   PluginRequest,
+  SessionDefaults,
   SessionEnd,
   SessionEntriesDelta,
   SessionEventEnvelope,
@@ -76,6 +77,9 @@ export interface CreateHostedHandleParams {
    *  dispatcher — forwarded verbatim to `buildSessionOptions`, and its
    *  `.kind` alone is what the snapshot's own `role` field reports. */
   readonly role?: SessionOptionsRole
+  /** An operator's persisted session defaults — forwarded verbatim to
+   *  `buildSessionOptions`, never re-derived here. */
+  readonly defaults: SessionDefaults
   /** Fired exactly once, the first time `init` reports the real
    *  `claudeSessionId` — `main/hosting/store.ts` uses this to kick off
    *  `fork.ts`'s titling for a `fork`-mode handle, never fired synchronously
@@ -102,6 +106,11 @@ export interface HostedHandle {
   /** #103: `mode.sessionId` for `resume`/`resume-at`, `null` otherwise — the
    *  `already-open` refusal's own comparison target. */
   readonly resumeTarget: string | null
+  /** The ready registry entry's own path this handle was started with —
+   *  `rename`'s own `renameSession` call scopes its search to this
+   *  project rather than every project on disk, the same reasoning
+   *  `fork.ts`'s `TitleForkParams.cwd` already states. */
+  readonly cwd: string
   snapshot(): HostedSessionSnapshot
   replay(): HostedHandleReplay
   /** Always accepts and returns `{ uuid, queued: true }` — the SDK owns the
@@ -122,6 +131,10 @@ export interface HostedHandle {
    *  asynchronous `resolveStartTitle` lookup races nothing, since a first
    *  `send()` on the same handle would already have set it. */
   setTitle(title: string): void
+  /** The rename dialog's own write, applied only after
+   *  `store.rename`'s own on-disk rename lands — unlike `setTitle`, sets
+   *  `title` unconditionally rather than fill-only-when-null. */
+  rename(title: string): void
   /** #99: delegates to this handle's own permission broker — the id is
    *  resolved only within this handle, so a permissionId from another
    *  session's broker can never settle a prompt here. */
@@ -177,12 +190,12 @@ function grace(ms: number): Promise<void> {
 
 export function createHostedHandle(params: CreateHostedHandleParams, query: HostedQueryFn): HostedHandle {
   const input = createHostedInput()
-  // #99: created before buildSessionOptions, whose 'default' permissionMode
+  // #99: created before buildSessionOptions, whose allowlisted permissionMode
   // (never 'dontAsk') routes an un-preapproved tool call through this
   // broker's own canUseTool rather than a silent auto-deny.
   const broker = createPermissionBroker({ now: params.now, onChange: () => emitStatus() })
   const role: SessionOptionsRole = params.role ?? { kind: 'operator' }
-  const options = buildSessionOptions({ mode: params.mode, cwd: params.cwd, executablePath: params.executablePath, canUseTool: broker.canUseTool, plugin: params.plugin, role })
+  const options = buildSessionOptions({ mode: params.mode, cwd: params.cwd, executablePath: params.executablePath, canUseTool: broker.canUseTool, plugin: params.plugin, role, defaults: params.defaults })
   const startedAt = new Date(params.now()).toISOString()
   const projector = createSessionProjector({ cwd: params.cwd })
   const capabilities = createCapabilityTracker({
@@ -342,6 +355,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
   return {
     sessionKey: params.sessionKey,
     resumeTarget: resumeTargetFor(params.mode),
+    cwd: params.cwd,
     snapshot,
     replay() {
       return { events: [...ring], droppedBefore }
@@ -374,6 +388,10 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     },
     setTitle(value) {
       if (title !== null) return
+      title = value
+      emitStatus()
+    },
+    rename(value) {
       title = value
       emitStatus()
     },

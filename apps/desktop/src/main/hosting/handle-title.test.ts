@@ -4,6 +4,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createHostedHandle } from './handle'
 import type { HostedQuery } from './handle'
+import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
 import type { PluginRequest, SessionKey } from '../../shared/hosting/types'
 import type { RepoId } from '../../shared/repos'
 
@@ -59,6 +60,7 @@ function baseParams(overrides: Partial<Parameters<typeof createHostedHandle>[0]>
     readExpectedComponents: () => Promise.resolve(null),
     samePath: (a: string, b: string) => a === b,
     initialTitle: null,
+    defaults: DEFAULT_SESSION_DEFAULTS,
     ...overrides,
   }
 }
@@ -146,5 +148,23 @@ describe('resumeTarget (#103)', () => {
     const fake = fakeQuery()
     const handle = createHostedHandle(baseParams({ mode: { kind: 'fork', sessionId: 'parent-1' } }), () => fake.query)
     expect(handle.resumeTarget).toBeNull()
+  })
+})
+
+describe('cwd and rename (#364)', () => {
+  it('exposes the cwd it was started with', () => {
+    const fake = fakeQuery()
+    const handle = createHostedHandle(baseParams({ cwd: '/repos/widgets' }), () => fake.query)
+    expect(handle.cwd).toBe('/repos/widgets')
+  })
+
+  it('rename() sets the title unconditionally, unlike setTitle()', () => {
+    const fake = fakeQuery()
+    const handle = createHostedHandle(baseParams({ initialTitle: 'Original title' }), () => fake.query)
+    expect(handle.snapshot().title).toBe('Original title')
+    handle.setTitle('ignored — title is already set')
+    expect(handle.snapshot().title).toBe('Original title')
+    handle.rename('Renamed title')
+    expect(handle.snapshot().title).toBe('Renamed title')
   })
 })

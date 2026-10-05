@@ -9,11 +9,14 @@ import {
   resolveSessionCapacity,
   resolveSessionCapacitySet,
   resolveSessionClose,
+  resolveSessionDefaults,
+  resolveSessionDefaultsSet,
   resolveSessionDismiss,
   resolveSessionInterrupt,
   resolveSessionInvoke,
   resolveSessionList,
   resolveSessionPermissionAnswer,
+  resolveSessionRename,
   resolveSessionRestore,
   resolveSessionRestoreDiscard,
   resolveSessionRestoreList,
@@ -100,6 +103,15 @@ function storeStub(overrides: Partial<HostedStore> = {}): HostedStore {
     },
     setLimit: () => {
       throw new Error('setLimit should not be invoked in this case')
+    },
+    defaults: () => {
+      throw new Error('defaults should not be invoked in this case')
+    },
+    setDefaults: () => {
+      throw new Error('setDefaults should not be invoked in this case')
+    },
+    rename: () => {
+      throw new Error('rename should not be invoked in this case')
     },
     restorable: () => {
       throw new Error('restorable should not be invoked in this case')
@@ -401,5 +413,61 @@ describe('resolveSessionRestoreDiscard', () => {
     const discardRestorable = vi.fn(() => Promise.resolve({ ok: true as const }))
     void resolveSessionRestoreDiscard({ restoreId: 'restore-1' }, depsWith({ store: storeStub({ discardRestorable }) }))
     expect(discardRestorable).toHaveBeenCalledWith('restore-1')
+  })
+})
+
+describe('resolveSessionDefaults', () => {
+  it('rejects a payload', () => {
+    expect(() => resolveSessionDefaults({} as unknown as undefined, depsWith())).toThrow("'session:defaults' takes no payload")
+  })
+
+  it('delegates to store.defaults()', () => {
+    const defaults = vi.fn(() => Promise.resolve({ model: null, permissionMode: 'default' as const }))
+    void resolveSessionDefaults(undefined, depsWith({ store: storeStub({ defaults }) }))
+    expect(defaults).toHaveBeenCalled()
+  })
+})
+
+describe('resolveSessionDefaultsSet', () => {
+  it('rejects an out-of-list model', () => {
+    expect(() => resolveSessionDefaultsSet({ model: 'gpt-5', permissionMode: 'default' } as never, depsWith())).toThrow(
+      "'session:defaults:set' requires 'model' to be null or one of opus, sonnet, haiku",
+    )
+  })
+
+  it('rejects an out-of-list permissionMode', () => {
+    expect(() => resolveSessionDefaultsSet({ model: null, permissionMode: 'bypassPermissions' } as never, depsWith())).toThrow(
+      "'session:defaults:set' requires 'permissionMode' to be one of default, acceptEdits, plan",
+    )
+  })
+
+  it('delegates a valid payload', () => {
+    const setDefaults = vi.fn(() => Promise.resolve({ model: 'opus' as const, permissionMode: 'acceptEdits' as const }))
+    void resolveSessionDefaultsSet({ model: 'opus', permissionMode: 'acceptEdits' }, depsWith({ store: storeStub({ setDefaults }) }))
+    expect(setDefaults).toHaveBeenCalledWith({ model: 'opus', permissionMode: 'acceptEdits' })
+  })
+})
+
+describe('resolveSessionRename', () => {
+  it('rejects an empty-string sessionKey', () => {
+    expect(() => resolveSessionRename({ sessionKey: '' as SessionKey, title: 'New title' }, depsWith())).toThrow("'session:rename' requires a non-empty 'sessionKey'")
+  })
+
+  it('rejects an empty or whitespace-only title', () => {
+    expect(() => resolveSessionRename({ sessionKey: SESSION_KEY, title: '   ' }, depsWith())).toThrow(
+      "'session:rename' requires 'title' to be non-empty and at most 80 characters once trimmed",
+    )
+  })
+
+  it('rejects a title over SESSION_TITLE_MAX once trimmed', () => {
+    expect(() => resolveSessionRename({ sessionKey: SESSION_KEY, title: 'x'.repeat(81) }, depsWith())).toThrow(
+      "'session:rename' requires 'title' to be non-empty and at most 80 characters once trimmed",
+    )
+  })
+
+  it('delegates the trimmed title', () => {
+    const rename = vi.fn(() => Promise.resolve({ ok: true as const }))
+    void resolveSessionRename({ sessionKey: SESSION_KEY, title: '  New title  ' }, depsWith({ store: storeStub({ rename }) }))
+    expect(rename).toHaveBeenCalledWith(SESSION_KEY, 'New title')
   })
 })

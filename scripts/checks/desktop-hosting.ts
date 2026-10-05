@@ -3,10 +3,12 @@ import { join } from 'node:path';
 import { root, readJson, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// #98/#99/#103/#265: apps/desktop/src/main/hosting/ owns the full lifecycle
-// of a hosted session in the main process. Seventeen assertions pin its
-// plan's decisions mechanically, in the shape desktop-runtime.ts's and
-// desktop-sessions.ts's own guards already use.
+// #98/#99/#103/#265/#364: apps/desktop/src/main/hosting/ owns the full
+// lifecycle of a hosted session in the main process. These assertions pin
+// its plan's decisions mechanically, in the shape desktop-runtime.ts's and
+// desktop-sessions.ts's own guards already use — desktop-hosting-defaults.ts
+// holds the #364 operator-defaults assertions, split out to stay under this
+// file's own 500-line ceiling.
 export default async function ({ fail, ok }: Reporter) {
   const hostingDir = 'apps/desktop/src/main/hosting';
   const sharedHostingDir = 'apps/desktop/src/shared/hosting';
@@ -14,6 +16,8 @@ export default async function ({ fail, ok }: Reporter) {
   const allFiles = walk(srcDir).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
   const hostingFiles = allFiles.filter((f) => relOf(f).startsWith(`${hostingDir}/`));
   const hostingProdFiles = hostingFiles.filter((f) => !relOf(f).endsWith('.test.ts'));
+  const sharedHostingFiles = allFiles.filter((f) => relOf(f).startsWith(`${sharedHostingDir}/`));
+  const sharedHostingProdFiles = sharedHostingFiles.filter((f) => !relOf(f).endsWith('.test.ts'));
 
   // --- No string prompt anywhere under main/hosting/ -----------------------
   // guard(#98): streaming input mode, always — `interrupt()`/
@@ -225,20 +229,18 @@ export default async function ({ fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- No bypass/dontAsk escape hatch under main/hosting/ -------------------
-  // guard(#99): options.ts must name both canUseTool and permissionMode:
-  // 'default' — nothing under main/hosting/ may silently widen past the
-  // host prompt this ticket builds.
+  // --- No bypass/dontAsk escape hatch under main/hosting/ or shared/hosting/ ---
+  // guard(#99): nothing under either tree may silently widen past the host prompt.
   {
     const forbidden = ['bypassPermissions', 'allowDangerouslySkipPermissions', "'dontAsk'"];
     let found = false;
-    for (const f of hostingProdFiles) {
+    for (const f of [...hostingProdFiles, ...sharedHostingProdFiles]) {
       const rel = relOf(f);
       const code = stripComments(readFileSync(f, 'utf8'));
       for (const term of forbidden) {
         if (code.includes(term)) {
           found = true;
-          fail('desktop-hosting', `${rel} contains '${term}' — main/hosting/ must never bypass the operator's own permission prompt`);
+          fail('desktop-hosting', `${rel} contains '${term}' — main/hosting/ and shared/hosting/ must never bypass the operator's own permission prompt`);
         }
       }
     }
@@ -246,16 +248,9 @@ export default async function ({ fail, ok }: Reporter) {
     if (!optionsFile) {
       found = true;
       fail('desktop-hosting', `${hostingDir}/options.ts does not exist`);
-    } else {
-      const text = readFileSync(optionsFile, 'utf8');
-      if (!/canUseTool/.test(text)) {
-        found = true;
-        fail('desktop-hosting', `${hostingDir}/options.ts does not name 'canUseTool'`);
-      }
-      if (!/permissionMode:\s*'default'/.test(text)) {
-        found = true;
-        fail('desktop-hosting', `${hostingDir}/options.ts does not set permissionMode: 'default'`);
-      }
+    } else if (!/canUseTool/.test(readFileSync(optionsFile, 'utf8'))) {
+      found = true;
+      fail('desktop-hosting', `${hostingDir}/options.ts does not name 'canUseTool'`);
     }
     if (!found) ok();
   }

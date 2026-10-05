@@ -1,12 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import { buildSessionOptions, SETTING_SOURCES } from './options'
 import type { CanUseTool } from './sdk'
+import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
 import type { PluginRequest } from '../../shared/hosting/types'
 
 const canUseTool = vi.fn() as unknown as CanUseTool
 const INSTALLED: PluginRequest = { source: 'installed' }
 const REPOSITORY: PluginRequest = { source: 'repository', path: '/repo/plugins/port' }
-const BASE = { cwd: '/repo', executablePath: '/home/operator/.local/bin/claude', canUseTool, plugin: INSTALLED }
+const BASE = { cwd: '/repo', executablePath: '/home/operator/.local/bin/claude', canUseTool, plugin: INSTALLED, defaults: DEFAULT_SESSION_DEFAULTS }
 
 describe('buildSessionOptions', () => {
   it('every mode carries the shared constants', () => {
@@ -128,5 +129,30 @@ describe('buildSessionOptions — dispatcher role (#265)', () => {
     expect(options.canUseTool).toBe(canUseTool)
     expect(options.settingSources).toEqual([...SETTING_SOURCES])
     expect(options.plugins).toEqual([{ type: 'local', path: '/repo/plugins/port' }])
+  })
+
+  it("the dispatcher role always takes 'default', regardless of the operator's own defaults.permissionMode", () => {
+    const options = buildSessionOptions({
+      ...BASE,
+      mode: { kind: 'fresh' },
+      defaults: { model: null, permissionMode: 'plan' },
+      role: { kind: 'dispatcher', model: 'haiku', instructions: 'x', title: 'y' },
+    })
+    expect(options.permissionMode).toBe('default')
+  })
+})
+
+describe('buildSessionOptions — operator session defaults (#364)', () => {
+  it("the operator role reads permissionMode from defaults, never a bare 'default'", () => {
+    const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, defaults: { model: null, permissionMode: 'acceptEdits' } })
+    expect(options.permissionMode).toBe('acceptEdits')
+  })
+
+  it('model is set only when defaults.model is non-null', () => {
+    const withNull = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, defaults: { model: null, permissionMode: 'default' } })
+    expect(withNull.model).toBeUndefined()
+
+    const withModel = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, defaults: { model: 'opus', permissionMode: 'default' } })
+    expect(withModel.model).toBe('opus')
   })
 })

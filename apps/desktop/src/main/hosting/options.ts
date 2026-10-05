@@ -3,7 +3,7 @@
 // `init` message stays the single source of the id (see shared/hosting/
 // types.ts's "Two identifiers, never one").
 import type { CanUseTool, Options } from './sdk'
-import type { PluginRequest, SessionStartMode } from '../../shared/hosting/types'
+import type { PluginRequest, SessionDefaults, SessionStartMode } from '../../shared/hosting/types'
 
 /** #101: explicit, never omitted — omitting it matches today's CLI default,
  *  but that is an SDK default this app does not own. `[]` would drop the
@@ -40,24 +40,32 @@ export interface BuildSessionOptionsParams {
   readonly plugin: PluginRequest
   /** #265: defaults to `{ kind: 'operator' }` — every existing caller is
    *  unaffected. The dispatcher role adds `model`, a `systemPrompt` append,
-   *  `allowedTools: ['Agent', 'SendMessage']`, and `title`. **Never
+   *  `allowedTools: ['Agent', 'SendMessage']`, and `title`, and always takes
+   *  `permissionMode: 'default'` regardless of `defaults` below. **Never
    *  `tools:`** — that restricts the built-in set for the whole session,
    *  including subagents, and would strip `Bash`/`Write` from the stage
    *  agents the dispatcher's own `Agent()` calls spawn. Everything else
-   *  (`permissionMode: 'default'`, `canUseTool`, `settingSources`,
-   *  `plugins`) is unchanged, and the stage agents' own `dontAsk`
-   *  frontmatter still overrides the parent session's `permissionMode`. */
+   *  (`canUseTool`, `settingSources`, `plugins`) is unchanged, and the stage
+   *  agents' own `dontAsk` frontmatter still overrides the parent session's
+   *  `permissionMode`. */
   readonly role?: SessionOptionsRole
+  /** An operator's persisted session defaults — `permissionMode` is
+   *  read for an operator role (ignored for a dispatcher, which always gets
+   *  `'default'`), and `model` is set only when non-null, so leaving it
+   *  `null` matches Claude Code's own default rather than naming one. */
+  readonly defaults: SessionDefaults
 }
 
 /** `includePartialMessages: true` now, not later — #219's "text appears as
- *  it arrives" is impossible without it. `permissionMode: 'default'` is set
- *  explicitly rather than omitted (#99) — the CLI flag outranks a
- *  `defaultMode` in the user's own settings, so leaving it out would let a
- *  `bypassPermissions` default silently skip the host prompt entirely.
- *  `permissionPromptToolName` is never set: the SDK throws when both it and
- *  `canUseTool` are present. `settingSources` is always the three sources
- *  above (#101). */
+ *  it arrives" is impossible without it. `permissionMode` is set explicitly
+ *  rather than omitted (#99) — the CLI flag outranks a `defaultMode` in the
+ *  user's own settings, so leaving it out would let a `bypassPermissions`
+ *  default silently skip the host prompt entirely. It names `'default'` for
+ *  the dispatcher role always, and an operator's own `defaults.permissionMode`
+ *  otherwise — the allowlisted value `session:defaults:set` validated
+ *  on the way in. `permissionPromptToolName` is never set: the SDK throws
+ *  when both it and `canUseTool` are present. `settingSources` is always the
+ *  three sources above (#101). */
 export function buildSessionOptions(params: BuildSessionOptionsParams): Options {
   const role = params.role ?? { kind: 'operator' as const }
   const base: Options = {
@@ -65,13 +73,15 @@ export function buildSessionOptions(params: BuildSessionOptionsParams): Options 
     pathToClaudeCodeExecutable: params.executablePath,
     persistSession: true,
     includePartialMessages: true,
-    permissionMode: 'default',
+    permissionMode: role.kind === 'dispatcher' ? 'default' : params.defaults.permissionMode,
     canUseTool: params.canUseTool,
     settingSources: [...SETTING_SOURCES],
     ...(params.plugin.source === 'repository' ? { plugins: [{ type: 'local' as const, path: params.plugin.path }] } : {}),
     ...(role.kind === 'dispatcher'
       ? { model: role.model, systemPrompt: { type: 'preset' as const, preset: 'claude_code' as const, append: role.instructions }, allowedTools: ['Agent', 'SendMessage'], title: role.title }
-      : {}),
+      : params.defaults.model !== null
+        ? { model: params.defaults.model }
+        : {}),
   }
 
   switch (params.mode.kind) {

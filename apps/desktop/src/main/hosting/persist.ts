@@ -7,6 +7,8 @@
 // `main/hosting/` names `writeJsonFileAtomic` or `hosting.json` — a second
 // writer could persist a set that skipped `freeze()` on quit.
 import type { RepoId } from '../../shared/repos'
+import { DEFAULT_SESSION_DEFAULTS, SESSION_MODELS, SESSION_PERMISSION_MODES } from '../../shared/hosting/types'
+import type { SessionDefaults, SessionModel, SessionPermissionMode } from '../../shared/hosting/types'
 import { ensureDirectory, pathOps, readJsonFile, writeJsonFileAtomic } from '../platform'
 
 const HOSTING_FILE = 'hosting.json'
@@ -30,12 +32,35 @@ export interface PersistedOpenEntry {
 export interface HostingPersistedState {
   readonly limit: number
   readonly open: readonly PersistedOpenEntry[]
+  readonly defaults: SessionDefaults
 }
 
 interface HostingFileShape {
   readonly version: number
   readonly limit: number
   readonly open: readonly unknown[]
+  readonly defaults?: unknown
+}
+
+// `model: null` is itself valid (Claude Code's own default); anything else
+// not in the allowlist falls back to DEFAULT_SESSION_DEFAULTS.model alone.
+function resolveModel(value: unknown): SessionModel | null {
+  if (value === null) return null
+  if (typeof value === 'string' && (SESSION_MODELS as readonly string[]).includes(value)) return value as SessionModel
+  return DEFAULT_SESSION_DEFAULTS.model
+}
+
+function resolvePermissionMode(value: unknown): SessionPermissionMode {
+  if (typeof value === 'string' && (SESSION_PERMISSION_MODES as readonly string[]).includes(value)) return value as SessionPermissionMode
+  return DEFAULT_SESSION_DEFAULTS.permissionMode
+}
+
+// Each field falls back to DEFAULT_SESSION_DEFAULTS on its own — a malformed
+// 'model' never drops a valid 'permissionMode' alongside it, or vice versa.
+function resolveDefaults(value: unknown): SessionDefaults {
+  if (typeof value !== 'object' || value === null) return DEFAULT_SESSION_DEFAULTS
+  const defaults = value as Record<string, unknown>
+  return { model: resolveModel(defaults.model), permissionMode: resolvePermissionMode(defaults.permissionMode) }
 }
 
 function isValidOpenEntry(value: unknown): value is PersistedOpenEntry {
@@ -57,7 +82,7 @@ function isValidLimit(value: unknown): value is number {
 }
 
 function emptyState(): HostingPersistedState {
-  return { limit: DEFAULT_SESSION_LIMIT, open: [] }
+  return { limit: DEFAULT_SESSION_LIMIT, open: [], defaults: DEFAULT_SESSION_DEFAULTS }
 }
 
 export interface CreateHostingPersistenceParams {
@@ -103,7 +128,8 @@ export function createHostingPersistence(params: CreateHostingPersistenceParams)
     }
     const limit = isValidLimit(value.limit) ? value.limit : DEFAULT_SESSION_LIMIT
     const open = Array.isArray(value.open) ? value.open.filter(isValidOpenEntry) : []
-    return { limit, open }
+    const defaults = resolveDefaults(value.defaults)
+    return { limit, open, defaults }
   }
 
   function startWrite(state: HostingPersistedState, json: string): void {
@@ -124,7 +150,7 @@ export function createHostingPersistence(params: CreateHostingPersistenceParams)
   }
 
   function enqueue(state: HostingPersistedState): void {
-    const json = JSON.stringify({ version: CURRENT_VERSION, limit: state.limit, open: state.open })
+    const json = JSON.stringify({ version: CURRENT_VERSION, limit: state.limit, open: state.open, defaults: state.defaults })
     if (json === lastWrittenJson) return
     if (writing !== null) {
       pending = state

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createHostedHandle, REPLAY_LIMIT } from './handle'
 import type { HostedQuery } from './handle'
+import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
 import type { PluginRequest, SessionEntriesDelta, SessionEventEnvelope, SessionKey } from '../../shared/hosting/types'
 import type { RepoId } from '../../shared/repos'
 
@@ -99,6 +100,7 @@ function baseParams(overrides: Partial<Parameters<typeof createHostedHandle>[0]>
     readExpectedComponents: () => Promise.resolve(null),
     samePath: (a: string, b: string) => a === b,
     initialTitle: null,
+    defaults: DEFAULT_SESSION_DEFAULTS,
     ...overrides,
   }
 }

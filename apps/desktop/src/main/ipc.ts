@@ -8,6 +8,7 @@ import { chooseDirectory } from './dialogs'
 import { applyItemAction, applyItemDecision, gateAnswer, gateClaimRead, gateClaimSet, gatePreflight } from './actions'
 import { resolveClaimApply, resolveClaimPreflight } from './channels/claim'
 import { resolveBacklogList } from './channels/backlog'
+import { resolveGhStatus } from './channels/gh'
 import { createDispatchRuntime, createRunStateStore, defaultHaltDispatchDeps, haltDispatch, registeredRepoIds, resolveDispatchClaimSet, resolveDispatchControl, resolveDispatchRelay } from './dispatch'
 import { fetchItemsByNumber } from './github'
 import { readGateClaim } from './writes'
@@ -24,11 +25,14 @@ import {
   resolveSessionCapacity,
   resolveSessionCapacitySet,
   resolveSessionClose,
+  resolveSessionDefaults,
+  resolveSessionDefaultsSet,
   resolveSessionDismiss,
   resolveSessionInterrupt,
   resolveSessionInvoke,
   resolveSessionList,
   resolveSessionPermissionAnswer,
+  resolveSessionRename,
   resolveSessionRestore,
   resolveSessionRestoreDiscard,
   resolveSessionRestoreList,
@@ -289,6 +293,14 @@ export function registerIpc(): RegisteredIpc {
   handle('claim:apply', (_event, request) => resolveClaimApply(registryDeps, request, app.getPath('userData')))
 
   handle('backlog:list', (_event, request) => resolveBacklogList(registryDeps, request))
+
+  handle('gh:status', (_event, request) => resolveGhStatus(request))
+
+  handle('session:defaults', (_event, request) => resolveSessionDefaults(request, hostingChannelDeps))
+
+  handle('session:defaults:set', (_event, request) => resolveSessionDefaultsSet(request, hostingChannelDeps))
+
+  handle('session:rename', (_event, request) => resolveSessionRename(request, hostingChannelDeps))
 
   handle('item:action', (_event, request) =>
     resolveItemAction(registryDeps, request, app.getPath('userData'), { listRepositories, applyItemAction, snapshot: watcher.snapshot, refresh: watcher.refresh }),

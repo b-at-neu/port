@@ -4,6 +4,7 @@ import type { HostedStoreDeps } from './store'
 import { createInMemoryHostingPersistence } from './persist'
 import type { HostedQuery } from './handle'
 import type { RepoId } from '../../shared/repos'
+import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
 
 const REPO_ID = 'repo-1' as RepoId
 
@@ -346,7 +347,7 @@ describe('createHostedStore', () => {
 
   it('restore() removes the entry on a successful start, but keeps it when at-capacity', async () => {
     const persistence = createInMemoryHostingPersistence()
-    persistence.save({ limit: 1, open: [{ repoId: REPO_ID, claudeSessionId: 'parent-1', title: 'Old title', startedAt: 't0' }] })
+    persistence.save({ limit: 1, open: [{ repoId: REPO_ID, claudeSessionId: 'parent-1', title: 'Old title', startedAt: 't0' }], defaults: DEFAULT_SESSION_DEFAULTS })
     const store = createHostedStore(baseDeps({ persistence }))
     await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
 
@@ -372,6 +373,7 @@ describe('createHostedStore', () => {
         { repoId: REPO_ID, claudeSessionId: 'a', title: null, startedAt: 't1' },
         { repoId: REPO_ID, claudeSessionId: 'b', title: null, startedAt: 't2' },
       ],
+      defaults: DEFAULT_SESSION_DEFAULTS,
     })
     const store = createHostedStore(baseDeps({ persistence }))
     const entries = await store.restorable()
@@ -414,4 +416,67 @@ describe('createHostedStore', () => {
     },
     10_000,
   )
+
+  it('defaults()/setDefaults() persist and never touch an open session', async () => {
+    const store = createHostedStore(baseDeps())
+    await expect(store.defaults()).resolves.toEqual(DEFAULT_SESSION_DEFAULTS)
+    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    if (!started.ok) throw new Error('unreachable')
+    const next = { model: 'opus' as const, permissionMode: 'acceptEdits' as const }
+    await expect(store.setDefaults(next)).resolves.toEqual(next)
+    await expect(store.defaults()).resolves.toEqual(next)
+    expect(store.attach(started.snapshot.sessionKey)).toMatchObject({ ok: true })
+  })
+
+  it('rename() reports unknown-session and not-ready before renaming on disk', async () => {
+    const store = createHostedStore(baseDeps())
+    const key = 'hosted-999' as import('../../shared/hosting/types').SessionKey
+    await expect(store.rename(key, 'New title')).resolves.toEqual({ ok: false, kind: 'unknown-session' })
+    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    if (!started.ok) throw new Error('unreachable')
+    await expect(store.rename(started.snapshot.sessionKey, 'New title')).resolves.toEqual({ ok: false, kind: 'not-ready' })
+  })
+
+  it('rename() renames on disk then applies the title to the handle', async () => {
+    const renameSession = vi.fn(() => Promise.resolve(undefined))
+    const box: { deliver: ((message: unknown) => void) | null } = { deliver: null }
+    const query = (): HostedQuery =>
+      ({
+        interrupt: vi.fn(),
+        close: vi.fn(),
+        [Symbol.asyncIterator]() {
+          return { next: () => new Promise<IteratorResult<unknown>>((resolve) => (box.deliver = (message) => resolve({ done: false, value: message }))) }
+        },
+      }) as unknown as HostedQuery
+    const store = createHostedStore(baseDeps({ getSdk: () => Promise.resolve({ query, renameSession }) }))
+    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    if (!started.ok) throw new Error('unreachable')
+    box.deliver?.({ type: 'system', subtype: 'init', session_id: 'claude-1' })
+    await flush()
+    const result = await store.rename(started.snapshot.sessionKey, 'New title')
+    expect(result).toEqual({ ok: true })
+    expect(renameSession).toHaveBeenCalledWith('claude-1', 'New title', { dir: '/repo' })
+    expect(store.attach(started.snapshot.sessionKey)).toMatchObject({ snapshot: { title: 'New title' } })
+  })
+
+  it('rename() reports rename-failed and leaves the title unchanged on a rejection', async () => {
+    const renameSession = vi.fn(() => Promise.reject(new Error('disk full')))
+    const box: { deliver: ((message: unknown) => void) | null } = { deliver: null }
+    const query = (): HostedQuery =>
+      ({
+        interrupt: vi.fn(),
+        close: vi.fn(),
+        [Symbol.asyncIterator]() {
+          return { next: () => new Promise<IteratorResult<unknown>>((resolve) => (box.deliver = (message) => resolve({ done: false, value: message }))) }
+        },
+      }) as unknown as HostedQuery
+    const store = createHostedStore(baseDeps({ getSdk: () => Promise.resolve({ query, renameSession }) }))
+    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    if (!started.ok) throw new Error('unreachable')
+    box.deliver?.({ type: 'system', subtype: 'init', session_id: 'claude-1' })
+    await flush()
+    const result = await store.rename(started.snapshot.sessionKey, 'New title')
+    expect(result).toEqual({ ok: false, kind: 'rename-failed', message: 'disk full' })
+    expect(store.attach(started.snapshot.sessionKey)).toMatchObject({ snapshot: { title: null } })
+  })
 })
