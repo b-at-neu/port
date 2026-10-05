@@ -28,6 +28,15 @@ async function resolveReadyEntry(registryDeps: RegistryDeps, repoId: unknown, de
   return requireReadyRepo(registryDeps, `'${channel}'`, repoId, deps.listRepositories)
 }
 
+/** The one validation `session:send`/`session:interrupt`/`session:close`/
+ *  `session:attach`/`session:dismiss`/`session:invoke`/
+ *  `session:permission:answer` all open with — a stale or buggy renderer is
+ *  the only way `sessionKey` is ever missing or empty. */
+function requireSessionKey(sessionKey: unknown, channel: string): string {
+  if (typeof sessionKey !== 'string' || sessionKey === '') throw new Error(`'${channel}' requires a non-empty 'sessionKey'`)
+  return sessionKey
+}
+
 /** `mode.kind` one of `fresh | resume | resume-at | fork`, with `sessionId`
  *  a non-empty string for the latter three and `messageUuid` required for
  *  `resume-at`; `resumeDropsTurn` is optional there and, when present, a
@@ -71,24 +80,21 @@ export async function resolveSessionStart(registryDeps: RegistryDeps, request: I
 }
 
 export function resolveSessionSend(request: IpcMap['session:send']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['send']> {
-  if (typeof request?.sessionKey !== 'string' || request.sessionKey === '') throw new Error("'session:send' requires a non-empty 'sessionKey'")
+  const sessionKey = requireSessionKey(request?.sessionKey, 'session:send')
   if (typeof request.text !== 'string' || request.text === '') throw new Error("'session:send' requires a non-empty 'text'")
-  return deps.store.send(request.sessionKey, request.text)
+  return deps.store.send(sessionKey, request.text)
 }
 
 export function resolveSessionInterrupt(request: IpcMap['session:interrupt']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['interrupt']> {
-  if (typeof request?.sessionKey !== 'string' || request.sessionKey === '') throw new Error("'session:interrupt' requires a non-empty 'sessionKey'")
-  return deps.store.interrupt(request.sessionKey)
+  return deps.store.interrupt(requireSessionKey(request?.sessionKey, 'session:interrupt'))
 }
 
 export function resolveSessionClose(request: IpcMap['session:close']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['close']> {
-  if (typeof request?.sessionKey !== 'string' || request.sessionKey === '') throw new Error("'session:close' requires a non-empty 'sessionKey'")
-  return deps.store.close(request.sessionKey)
+  return deps.store.close(requireSessionKey(request?.sessionKey, 'session:close'))
 }
 
 export function resolveSessionAttach(request: IpcMap['session:attach']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['attach']> {
-  if (typeof request?.sessionKey !== 'string' || request.sessionKey === '') throw new Error("'session:attach' requires a non-empty 'sessionKey'")
-  return deps.store.attach(request.sessionKey)
+  return deps.store.attach(requireSessionKey(request?.sessionKey, 'session:attach'))
 }
 
 export function resolveSessionList(request: IpcMap['session:list']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['list']> {
@@ -109,17 +115,17 @@ export function resolveSessionList(request: IpcMap['session:list']['request'], d
 export const MAX_INVOKE_ARGS_CHARS = 8_000
 
 export function resolveSessionInvoke(request: IpcMap['session:invoke']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['invoke']> {
-  if (typeof request?.sessionKey !== 'string' || request.sessionKey === '') throw new Error("'session:invoke' requires a non-empty 'sessionKey'")
+  const sessionKey = requireSessionKey(request?.sessionKey, 'session:invoke')
   if (typeof request.name !== 'string' || request.name === '') throw new Error("'session:invoke' requires a non-empty 'name'")
   if (typeof request.args !== 'string' || request.args.length > MAX_INVOKE_ARGS_CHARS) throw new Error(`'session:invoke' requires 'args' to be a string of at most ${MAX_INVOKE_ARGS_CHARS} characters`)
-  return deps.store.invoke(request.sessionKey, request.name, request.args)
+  return deps.store.invoke(sessionKey, request.name, request.args)
 }
 
 export function resolveSessionPermissionAnswer(
   request: IpcMap['session:permission:answer']['request'],
   deps: HostingChannelDeps,
 ): ReturnType<HostedStore['answerPermission']> {
-  if (typeof request?.sessionKey !== 'string' || request.sessionKey === '') throw new Error("'session:permission:answer' requires a non-empty 'sessionKey'")
+  const sessionKey = requireSessionKey(request?.sessionKey, 'session:permission:answer')
   if (typeof request.permissionId !== 'string' || request.permissionId === '') throw new Error("'session:permission:answer' requires a non-empty 'permissionId'")
   if (!(PERMISSION_DECISIONS as readonly string[]).includes(request.decision)) {
     throw new Error(`'session:permission:answer' requires 'decision' to be one of ${PERMISSION_DECISIONS.join(', ')}`)
@@ -131,13 +137,12 @@ export function resolveSessionPermissionAnswer(
   if (message !== null && request.decision !== 'deny') {
     throw new Error("'session:permission:answer' requires 'message' to be null when 'decision' is not 'deny'")
   }
-  return deps.store.answerPermission(request.sessionKey, request.permissionId, request.decision, message)
+  return deps.store.answerPermission(sessionKey, request.permissionId, request.decision, message)
 }
 
 /** #103: `session:dismiss` — removes an ended handle from the rail. */
 export function resolveSessionDismiss(request: IpcMap['session:dismiss']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['dismiss']> {
-  if (typeof request?.sessionKey !== 'string' || request.sessionKey === '') throw new Error("'session:dismiss' requires a non-empty 'sessionKey'")
-  return deps.store.dismiss(request.sessionKey)
+  return deps.store.dismiss(requireSessionKey(request?.sessionKey, 'session:dismiss'))
 }
 
 export function resolveSessionCapacity(request: IpcMap['session:capacity']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['capacity']> {
@@ -254,10 +259,10 @@ export function resolveSessionDefaultsSet(request: IpcMap['session:defaults:set'
 /** The rename dialog's own write — `sessionKey` non-empty, `title` non-empty
  *  and at most `SESSION_TITLE_MAX` once trimmed. */
 export function resolveSessionRename(request: IpcMap['session:rename']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['rename']> {
-  if (typeof request?.sessionKey !== 'string' || request.sessionKey === '') throw new Error("'session:rename' requires a non-empty 'sessionKey'")
+  const sessionKey = requireSessionKey(request?.sessionKey, 'session:rename')
   const title = typeof request.title === 'string' ? request.title.trim() : ''
   if (title === '' || title.length > SESSION_TITLE_MAX) {
     throw new Error(`'session:rename' requires 'title' to be non-empty and at most ${String(SESSION_TITLE_MAX)} characters once trimmed`)
   }
-  return deps.store.rename(request.sessionKey, title)
+  return deps.store.rename(sessionKey, title)
 }
