@@ -5,7 +5,7 @@
 // second `git worktree` caller (this directory calls no `git` itself; the
 // join is the only reader).
 import { node as defaultNode, pathOps as defaultPathOps } from '../platform'
-import type { CommandResult, NodeOptions, PathOps } from '../platform'
+import type { CommandResult, NodeRunner, PathOps } from '../platform'
 import { readWorktrees } from '../local'
 import type { WorktreesGitRunner } from '../local'
 import type { AssertEqual } from '../../shared/assert-type'
@@ -30,7 +30,7 @@ export const _kindsCoverCommandResult: AssertEqual<ReclaimerFailureKind, Command
 export const SCRIPT_FAIL_PREFIX = 'FAIL  '
 export const GH_RESOLUTION_FAILED_SENTINEL = 'gh issueOrPullRequest resolution failed'
 
-export type NodeRunner = (args: readonly string[], options: NodeOptions) => Promise<CommandResult>
+export type { NodeRunner }
 
 export interface ReadWorktreeReportParams {
   readonly repoRoot: string

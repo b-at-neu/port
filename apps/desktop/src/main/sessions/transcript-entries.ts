@@ -6,6 +6,7 @@
 // `result: null` rather than being dropped.
 import type { DiffHunk, DiffLine, DiffSign, EntryPatch, FileDiff, MetaEntry, Payload, ToolCallEntry, TranscriptEntry } from '../../shared/sessions/transcript'
 import { MAX_PAYLOAD_CHARS } from '../../shared/sessions/transcript'
+import { isRecord } from '../../shared/guards'
 
 export interface DeriveEntriesOptions {
   /** The session's own `cwd`, used only to shorten a headline path -- never
@@ -81,10 +82,6 @@ export function capPayload(text: string, cap: number = MAX_PAYLOAD_CHARS): Paylo
   const rawRemainder = text.length - read
   if (sanitized.length > cap) return { text: sanitized.slice(0, cap), omittedChars: rawRemainder + (sanitized.length - cap) }
   return { text: sanitized, omittedChars: rawRemainder }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function stringOr(value: unknown, fallback: string): string {

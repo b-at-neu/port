@@ -90,3 +90,9 @@ export async function ghAuthStatus(options?: GhOptions): Promise<GhAuthStatusRes
   if (result.kind === 'nonzero') return { ok: true, authenticated: false }
   return result
 }
+
+/** The seam `main/github/adapter.ts`, `main/github/gate.ts`,
+ *  `main/github/backlog.ts` and `main/writes/apply.ts` each used to declare
+ *  separately — an injectable `gh` invocation, so a test runs against a
+ *  fake runner and needs no real `gh` binary. */
+export type GhRunner = (args: readonly string[], options?: GhOptions) => Promise<GhResult>

@@ -5,15 +5,12 @@
 // uses, so every worktree of a checkout sees the one claim. Reads `scopes`
 // and never `owner` as anything but report-only text — treating it as
 // identity would make it the liveness field the doc forbids.
-import { ensureDirectory, git as defaultGit, pathOps as defaultPathOps, readJsonFile, removeFile, writeJsonFileAtomic } from '../platform'
-import type { CommandResult, FileFailureKind, PathOps } from '../platform'
+import { defaultGitRunner, ensureDirectory, pathOps as defaultPathOps, readJsonFile, removeFile, resolveGitBaseRoot, writeJsonFileAtomic } from '../platform'
+import type { FileFailureKind, GitRunner, PathOps } from '../platform'
 import type { AssertEqual } from '../../shared/assert-type'
 import type { ClaimRead, ClaimScope, ClaimWriteFailureKind, ClaimWriteResult } from '../../shared/writes/types'
 
-/** The same seam `main/local/denials.ts` declares — a `git` invocation is
- *  needed here only to resolve the base repository root, never to read or
- *  write the claim's own content. */
-export type GitRunner = (args: readonly string[], cwd: string) => Promise<CommandResult>
+export type { GitRunner }
 
 /** Fails to compile if the platform layer's `FileFailureKind` changes
  *  without `ClaimWriteFailureKind` (`shared/writes/types.ts`) growing to
@@ -32,27 +29,6 @@ interface ClaimFileShape {
   readonly claimedAt?: unknown
 }
 
-/** Identical in shape to `main/local/denials.ts`'s own `resolveBaseRoot` —
- *  duplicated rather than shared, since neither directory imports from the
- *  other and each is a single-purpose adapter. Degrades to `repoRoot` on any
- *  failure — the common case is a plain checkout where the two are
- *  identical. */
-async function resolveBaseRoot(git: GitRunner, repoRoot: string, pathOps: PathOps): Promise<string> {
-  const result = await git(['rev-parse', '--git-common-dir'], repoRoot)
-  if (!result.ok) return repoRoot
-  const common = result.stdout.trim()
-  if (common === '') return repoRoot
-  try {
-    return pathOps.dirname(pathOps.resolveFrom(repoRoot, common))
-  } catch {
-    return repoRoot
-  }
-}
-
-function defaultGitRunner(): GitRunner {
-  return (args, cwd) => defaultGit(args, { cwd })
-}
-
 interface ClaimDeps {
   readonly repoRoot: string
   readonly git?: GitRunner
@@ -62,7 +38,7 @@ interface ClaimDeps {
 async function resolveClaimPath(deps: ClaimDeps): Promise<string> {
   const pathOps = deps.pathOps ?? defaultPathOps
   const git = deps.git ?? defaultGitRunner()
-  const baseRoot = await resolveBaseRoot(git, deps.repoRoot, pathOps)
+  const baseRoot = await resolveGitBaseRoot(git, deps.repoRoot, pathOps)
   return pathOps.join(baseRoot, '.agents', 'gate-claim.json')
 }
 

@@ -6,6 +6,7 @@
 // nothing to offer"). Pure decision logic lives in `verify.ts`; this file
 // is only the I/O and timing shell around it (ENGINEERING §1).
 import type { AgentSummary, CommandSummary, PluginRequest, SessionCapabilities } from '../../shared/hosting/types'
+import { isRecord } from '../../shared/guards'
 import { sanitize } from '../sessions'
 import { checkComponents, checkPluginLoad, PLUGIN_NAME } from './verify'
 import type { InitPlugin } from './verify'
@@ -46,10 +47,6 @@ export interface CapabilityTracker {
    *  own membership check, so a renderer can never run a command the
    *  session did not itself report. */
   has(name: string): boolean
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
 }
 
 function isPortQualified(name: string): boolean {

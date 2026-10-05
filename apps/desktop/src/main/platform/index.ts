@@ -13,13 +13,13 @@ export { createWhich, which } from './which'
 export type { CommandResult, KnownCommand, RunCommandOptions, Spawner, SpawnOutcome, SpawnParams } from './run'
 export { KNOWN_COMMANDS, runCommand } from './run'
 
-export type { GitLinesResult, GitOptions, GitRepoRootResult } from './git'
-export { git, gitLines, gitRepoRoot, parsePorcelainStanzas, splitNul } from './git'
+export type { GitLinesResult, GitOptions, GitRepoRootResult, GitRunner } from './git'
+export { defaultGitRunner, git, gitLines, gitRepoRoot, parsePorcelainStanzas, resolveGitBaseRoot, splitNul } from './git'
 
-export type { GhAuthStatusResult, GhClassification, GhExitOutcome, GhJsonResult, GhOptions, GhResult } from './gh'
+export type { GhAuthStatusResult, GhClassification, GhExitOutcome, GhJsonResult, GhOptions, GhResult, GhRunner } from './gh'
 export { classifyGhExit, gh, ghAuthStatus, ghJson } from './gh'
 
-export type { NodeOptions } from './node'
+export type { NodeOptions, NodeRunner } from './node'
 export { node } from './node'
 
 export type { ClaudeOptions } from './claude'

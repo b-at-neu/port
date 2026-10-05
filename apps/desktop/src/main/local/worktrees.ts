@@ -6,16 +6,12 @@
 // for every upstream at once, one `log --no-walk=unsorted` for every head at
 // once.
 import { git as defaultGit, parsePorcelainStanzas, pathOps as defaultPathOps } from '../platform'
-import type { CommandResult, PathOps } from '../platform'
+import type { CommandResult, GitRunner, PathOps } from '../platform'
 import type { AssertEqual } from '../../shared/assert-type'
 import type { LocalFailureKind, WorktreeEntry, WorktreeProducer, WorktreesRead } from '../../shared/local/types'
 import { correlate } from './correlate'
 
-/** The injectable seam every function below takes instead of importing `git`
- *  directly — the same idiom `GhRunner` (`main/github/adapter.ts`) and
- *  `GitRunner` (`main/registry/harness.ts`) already use, so `worktrees.test.ts`
- *  runs against a fake runner and needs no real repository. */
-export type GitRunner = (args: readonly string[], cwd: string) => Promise<CommandResult>
+export type { GitRunner }
 
 export interface ReadWorktreesParams {
   readonly repoRoot: string

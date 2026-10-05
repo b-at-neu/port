@@ -6,45 +6,19 @@
 // itself stays read-only per its own pinned rail (`desktop-tick`'s check
 // 2) — this module is a separate sibling the watcher calls *after*
 // `planTick` returns, never a write reachable from inside the tick
-// computation. The base root is resolved the same
-// `git rev-parse --git-common-dir` way `main/local/denials.ts` and
-// `main/writes/claim.ts` already each carry their own copy of — a third
-// copy, on the same precedent ("neither directory imports from the other
-// and each is a single-purpose adapter").
-import { appendTextFile, ensureDirectory, git as defaultGit, pathOps as defaultPathOps, renamePath, statPath } from '../platform'
-import type { CommandResult, PathOps } from '../platform'
+// computation. The base root is resolved with `main/platform/git.ts`'s
+// shared `resolveGitBaseRoot`, the same helper `main/local/denials.ts` and
+// `main/writes/claim.ts` use.
+import { appendTextFile, defaultGitRunner, ensureDirectory, pathOps as defaultPathOps, renamePath, resolveGitBaseRoot, statPath } from '../platform'
+import type { GitRunner, PathOps } from '../platform'
 import type { TickReport } from '../../shared/tick/types'
 import type { DesktopTickEvent } from './types'
+
+export type { GitRunner }
 
 const LOG_FILE = 'desktop-events.jsonl'
 const PREV_LOG_FILE = 'desktop-events.prev.jsonl'
 const ROTATE_AT_BYTES = 8 * 1024 * 1024
-
-/** The same seam `main/local/denials.ts`/`main/writes/claim.ts` declare — a
- *  `git` invocation is needed here only to resolve the base repository root,
- *  never to read or write the trajectory record itself. */
-export type GitRunner = (args: readonly string[], cwd: string) => Promise<CommandResult>
-
-/** Identical in shape to `main/local/denials.ts`'s and `main/writes/claim.ts`'s
- *  own `resolveBaseRoot` — duplicated rather than shared, on the same
- *  precedent those two already establish. Degrades to `repoRoot` on any
- *  failure — the common case is a plain checkout where the two are
- *  identical. */
-async function resolveBaseRoot(git: GitRunner, repoRoot: string, pathOps: PathOps): Promise<string> {
-  const result = await git(['rev-parse', '--git-common-dir'], repoRoot)
-  if (!result.ok) return repoRoot
-  const common = result.stdout.trim()
-  if (common === '') return repoRoot
-  try {
-    return pathOps.dirname(pathOps.resolveFrom(repoRoot, common))
-  } catch {
-    return repoRoot
-  }
-}
-
-function defaultGitRunner(): GitRunner {
-  return (args, cwd) => defaultGit(args, { cwd })
-}
 
 export interface RecordTickDeps {
   readonly git?: GitRunner
@@ -81,7 +55,7 @@ export async function recordTick(repoRoot: string, event: DesktopTickEvent, deps
   try {
     const pathOps = deps.pathOps ?? defaultPathOps
     const git = deps.git ?? defaultGitRunner()
-    const baseRoot = await resolveBaseRoot(git, repoRoot, pathOps)
+    const baseRoot = await resolveGitBaseRoot(git, repoRoot, pathOps)
     const path = pathOps.join(baseRoot, '.agents', LOG_FILE)
     const prevPath = pathOps.join(baseRoot, '.agents', PREV_LOG_FILE)
 

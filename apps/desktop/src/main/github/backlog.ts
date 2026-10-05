@@ -1,13 +1,13 @@
 // fetchBacklog: every open issue, dropping anything carrying a vocabulary label.
 import { gh as defaultGh } from '../platform/gh'
-import type { GhOptions, GhResult } from '../platform/gh'
+import type { GhOptions, GhResult, GhRunner } from '../platform/gh'
 import type { LabelVocabulary } from '../../shared/labels/vocabulary'
 import type { BacklogItem, BacklogResponse } from '../../shared/backlog/types'
 import { classifyFailure, parseEnvelope } from './envelope'
 import { fieldListOf } from './map'
 import type { RepoRef } from './adapter'
 
-export type GhRunner = (args: readonly string[], options?: GhOptions) => Promise<GhResult>
+export type { GhRunner }
 
 const PAGE_SIZE = 100
 const ASSIGNEE_PAGE_SIZE = 10
