@@ -11,6 +11,7 @@
     "src/shared/**/*",
     "src/testing/**/*",
     "visual/**/*",
+    "smoke/**/*",
     "../../scripts/port-tick/gates.ts",
     "../../scripts/port-tick/contention.ts",
     "../../scripts/port-tick/checks.ts",

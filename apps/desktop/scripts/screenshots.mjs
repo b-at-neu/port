@@ -55,6 +55,9 @@ async function main() {
     process.exit(code)
   }
 
+  // `smoke:packaged` forwards its own `--config` and produces no screenshot directory — nothing to list.
+  if (forwardedArgs.includes('--config')) return
+
   const outDir = join(appRoot, 'out', 'screenshots')
   console.log(`Screenshots: ${outDir}`)
   if (existsSync(outDir)) {
