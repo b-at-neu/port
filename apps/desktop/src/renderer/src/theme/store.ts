@@ -112,3 +112,11 @@ export function useThemePreference(): readonly [ThemePreference, (preference: Th
   const preference = useSyncExternalStore(store.subscribe, store.getPreference)
   return [preference, store.setPreference]
 }
+
+/** The resolved light/dark value, reactive to both a preference change and
+ *  an OS change while the preference is `system` — `sonner.tsx`'s Toaster
+ *  reads this instead of `next-themes`, which this app does not use. */
+export function useResolvedTheme(): ResolvedTheme {
+  const store = themeStore()
+  return useSyncExternalStore(store.subscribe, store.getResolved)
+}
