@@ -8,10 +8,7 @@ const HAS_PIN_ROW = /^\|.*↔.*\|.*\|\s*$/m;
 
 export default async function ({ expect }: Reporter) {
   // --- (a) docs/TESTING.md's Layer 1 section names no file under scripts/checks/ ---
-  // guard: the regression #255 fixed — a "Guards for X, in
-  // scripts/checks/Y.ts:" prose block restating marker descriptions already
-  // colocated, regrowing the hub issue 217 tried to retire. The section may
-  // still name the directory itself, just never a file under it.
+  // Restating a check's description in prose here is the hub this guards against.
   {
     const fixtureRegrown = 'Guards for X, in `scripts/checks/labels.ts`:\n\n- some restated marker description.';
     expect(NAMES_CHECKS_FILE.test(fixtureRegrown), 'docs-anti-regrowth', 'did not flag a synthetic Layer 1 section naming scripts/checks/labels.ts');
@@ -29,8 +26,7 @@ export default async function ({ expect }: Reporter) {
   }
 
   // --- (b) docs/ENGINEERING.md carries no table row with '↔' ---
-  // guard: §2's 30-row copy-pin table growing back — every row in that
-  // table joined its two copies with '↔', so a fresh row is the tell.
+  // A pin lives on the check that enforces it, never gathered into a table.
   {
     const fixtureRow = '| `a` ↔ `b` | "some check" |';
     expect(HAS_PIN_ROW.test(fixtureRow), 'docs-anti-regrowth', 'did not flag a synthetic table row containing ↔');
