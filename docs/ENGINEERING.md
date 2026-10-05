@@ -72,6 +72,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `store.ts`'s `Map<sessionKey, Handle>` is bounded by an operator-settable, persisted session limit; `start()`'s already-open refusal fails closed on a live `sessionId`, since two `claude` processes must never append to one transcript
 - `plugin.ts`'s `resolvePluginRequest` (#101) prefers the repository's own `plugins/port/` over the installed cache, and fails loud — an unreadable manifest still resolves to `repository`, never a silent fallback
 - `capabilities.ts`'s per-session tracker races `supportedCommands()`/`supportedAgents()` against a timeout, going `unavailable` rather than ever reading either as an empty list
+- an operator's own session defaults (`options.ts`'s `defaults` param) apply only to an operator-role start — the dispatcher role always keeps its own `model` and `permissionMode: 'default'`, never bypass/dontAsk/auto
 
 **`apps/desktop/src/main/local/`**
 - only reader of worktrees and the denial log

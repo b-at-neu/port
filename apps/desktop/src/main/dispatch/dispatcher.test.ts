@@ -121,6 +121,15 @@ function fakeStore(overrides: Partial<HostedStore> = {}): HostedStore {
       throw new Error('restore should not be invoked in this case')
     },
     discardRestorable: () => Promise.resolve({ ok: true }),
+    defaults: () => {
+      throw new Error('defaults should not be invoked in this case')
+    },
+    setDefaults: () => {
+      throw new Error('setDefaults should not be invoked in this case')
+    },
+    rename: () => {
+      throw new Error('rename should not be invoked in this case')
+    },
     ...overrides,
   }
 }

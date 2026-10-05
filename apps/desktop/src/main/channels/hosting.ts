@@ -8,8 +8,8 @@
 // own job, not this file's).
 import type { IpcMap, ReposListResponse } from '../../shared/ipc'
 import type { RepoId, RepoProblem, RepositoryEntry } from '../../shared/repos'
-import { PERMISSION_DECISIONS } from '../../shared/hosting/types'
-import type { RestorableSession, SessionStartMode } from '../../shared/hosting/types'
+import { PERMISSION_DECISIONS, SESSION_MODELS, SESSION_PERMISSION_MODES, SESSION_TITLE_MAX } from '../../shared/hosting/types'
+import type { RestorableSession, SessionModel, SessionPermissionMode, SessionStartMode } from '../../shared/hosting/types'
 import type { HostedStore } from '../hosting'
 import { SESSION_LIMIT_CEILING } from '../hosting'
 import { listRepositories } from '../registry'
@@ -239,4 +239,35 @@ export function resolveSessionRestoreDiscard(request: IpcMap['session:restore:di
     throw new Error("'session:restore:discard' requires 'restoreId' to be null or a non-empty string")
   }
   return deps.store.discardRestorable(request.restoreId)
+}
+
+/** The Settings screen's own read of an operator's persisted session defaults. */
+export function resolveSessionDefaults(request: IpcMap['session:defaults']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['defaults']> {
+  if (request !== undefined) throw new Error("'session:defaults' takes no payload")
+  return deps.store.defaults()
+}
+
+/** The Settings screen's own write — each field must name an allowlisted
+ *  value, `model` or `null`, before it ever reaches the store. */
+export function resolveSessionDefaultsSet(request: IpcMap['session:defaults:set']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['setDefaults']> {
+  const model: unknown = request?.model
+  if (model !== null && (typeof model !== 'string' || !(SESSION_MODELS as readonly string[]).includes(model))) {
+    throw new Error(`'session:defaults:set' requires 'model' to be null or one of ${SESSION_MODELS.join(', ')}`)
+  }
+  const permissionMode: unknown = request?.permissionMode
+  if (typeof permissionMode !== 'string' || !(SESSION_PERMISSION_MODES as readonly string[]).includes(permissionMode)) {
+    throw new Error(`'session:defaults:set' requires 'permissionMode' to be one of ${SESSION_PERMISSION_MODES.join(', ')}`)
+  }
+  return deps.store.setDefaults({ model: model as SessionModel | null, permissionMode: permissionMode as SessionPermissionMode })
+}
+
+/** The rename dialog's own write — `sessionKey` non-empty, `title` non-empty
+ *  and at most `SESSION_TITLE_MAX` once trimmed. */
+export function resolveSessionRename(request: IpcMap['session:rename']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['rename']> {
+  if (typeof request?.sessionKey !== 'string' || request.sessionKey === '') throw new Error("'session:rename' requires a non-empty 'sessionKey'")
+  const title = typeof request.title === 'string' ? request.title.trim() : ''
+  if (title === '' || title.length > SESSION_TITLE_MAX) {
+    throw new Error(`'session:rename' requires 'title' to be non-empty and at most ${String(SESSION_TITLE_MAX)} characters once trimmed`)
+  }
+  return deps.store.rename(request.sessionKey, title)
 }
