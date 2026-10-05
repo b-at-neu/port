@@ -1,4 +1,4 @@
-// Pure `GhStatus → pill, body, footer-dot contribution` for the Settings screen.
+// Pure `GhStatus → pill, body` for the Settings screen.
 import type { GhStatus } from '../../../shared/gh/types'
 import type { PillStatus } from '../components/status-pill'
 
