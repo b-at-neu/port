@@ -110,6 +110,35 @@ export default async function ({ fail, ok }: Reporter) {
     }
   }
 
+  // --- Joining section precedes the adopter section and never says to run ----
+  // --- `/port:init` -------------------------------------------------------------
+  // guard: the joining section's heading dropping out, or the
+  // adopter-facing install section silently moving ahead of it again, routing
+  // a joining teammate through `/port:init` with nothing telling them not to.
+  {
+    const readme = readFileSync(join(root, 'README.md'), 'utf8');
+    const joiningHeading = '## Joining a repository that already has port';
+    const adopterHeading = '## Adopting port in a repository';
+    const joiningIndex = readme.indexOf(joiningHeading);
+    const adopterIndex = readme.indexOf(adopterHeading);
+    if (joiningIndex === -1) {
+      fail('install-docs', 'README.md: "## Joining a repository that already has port" heading not found');
+    } else if (adopterIndex === -1) {
+      fail('install-docs', 'README.md: "## Adopting port in a repository" heading not found');
+    } else if (joiningIndex > adopterIndex) {
+      fail('install-docs', 'README.md: the joining section must precede the adopter section, so a joining teammate meets it first');
+    } else {
+      const section = readme.slice(joiningIndex, adopterIndex);
+      if (!section.includes('/port:init')) {
+        fail('install-docs', "README.md's joining section no longer mentions `/port:init`");
+      } else if (!/Do not run/.test(section)) {
+        fail('install-docs', "README.md's joining section no longer says \"Do not run\" `/port:init`");
+      } else {
+        ok();
+      }
+    }
+  }
+
   // --- Dev-loop marketplace stays apart from the consumer one (#343) ---------
   // guard(#343): a dev-loop registration sharing the consumer-facing
   // marketplace name, so the most recently added source silently wins for

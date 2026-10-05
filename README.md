@@ -6,7 +6,23 @@ GitHub labels are the state machine. A cockpit session polls them, dispatches fo
 
 This repository is both the plugin and its own marketplace.
 
-## Install and adopt
+## Joining a repository that already has port
+
+If the repository already has a committed `.claude/port.config.json`, someone has adopted it already. You do not install or adopt anything.
+
+1. Clone it and start `claude` in it.
+2. Accept the workspace trust dialog. That is what lets Claude Code load the project-scoped plugin and permissions the repository commits.
+3. Run `/port:pipeline` when you want the cockpit (see [Day to day](#day-to-day)).
+
+**Do not run `/port:init`.** It is an adopter action, run once per repository by whoever installs the pipeline. Its result is already committed.
+
+If the cockpit warns that the running plugin doesn't match the committed pin, that is your machine's marketplace registration, not the repository. Run the `claude plugin marketplace remove` / `add` / `install` commands the warning prints, from the main checkout, then start a new session. If it instead warns the committed pin itself is misconfigured, tell whoever maintains the repository.
+
+To run the cockpit you also need `gh` authenticated and `default` permission mode — see [Before you start](#before-you-start).
+
+## Adopting port in a repository
+
+This is for the one person bringing port into a repository for the first time. Joining one that already has it? See [above](#joining-a-repository-that-already-has-port).
 
 Everything here is **per-repository**. Nothing is installed globally.
 
@@ -21,13 +37,13 @@ claude plugin install port@port --scope project
 
 The `@main` pin is the release branch, so this installs a released version regardless of which branch happens to be default. Step 3's `/port:init` then narrows the install to the exact published release, pinning it in place.
 
-Both write to that repository's `.claude/settings.json`, which is committed. So the pipeline **travels with the repository**: anyone who clones it gets the same plugin from the same source, with no separate setup, and nothing leaks into your other projects.
+Both write to that repository's `.claude/settings.json`, which is committed. So the pipeline **travels with the repository**: anyone who clones it gets the same plugin from the same source, with nothing to run beyond accepting the trust dialog — see [Joining a repository that already has port](#joining-a-repository-that-already-has-port) — and nothing leaks into your other projects.
 
 **The marketplace name, though, is shared by the whole machine.** `--scope` decides which settings file *declares* the `port` marketplace, not what the name resolves to: there is one live source per marketplace name, and the most recent `claude plugin marketplace add` for that name wins, at any scope. Installs already pinned in other repositories keep running what they pinned; only a later install or update against `port` fetches from the new source. This repository's own dev loop registers its local checkout under a different marketplace name for exactly this reason, so the collision only matters if you yourself add some other source under the name `port` — see [CONTRIBUTING.md](CONTRIBUTING.md) → "Working on the plugin".
 
 **Step 2 — load it into a session.** Installing does not load the plugin into the session you installed from — that session resolved its plugins at startup, before the install existed. **Start a new session** in the same directory. Skipping this makes the next step fail with `Unknown skill: port:init`, an error that says nothing about reloading.
 
-**Step 3 — run `/port:init`.** This is the verification and the adoption in one: it either resolves or it does not, and that is the only question worth asking at this point.
+**Step 3 — run `/port:init` (once per repository).** This is the verification and the adoption in one: it either resolves or it does not, and that is the only question worth asking at this point.
 
 ```
 /port:init
@@ -51,7 +67,7 @@ Five things, each of which otherwise fails confusingly:
 
 ### Why project scope
 
-A repository that declares its own tooling is self-describing: the pipeline, its version, and the plugins chosen for its stack are all recorded in the repository rather than in one person's machine state. Clone it and you have the same setup.
+A repository that declares its own tooling is self-describing: the pipeline, its version, and the plugins chosen for its stack are all recorded in the repository rather than in one person's machine state. Clone it and you have the same setup — see [Joining a repository that already has port](#joining-a-repository-that-already-has-port).
 
 The alternative — installing once at user scope — is fewer keystrokes and makes `/port:init` available everywhere, but it means the pipeline exists only on the machine that installed it, and every plugin picked for one repository's stack loads in all your others. `/port:analyze` scopes its plugin recommendations to the repository for the same reason.
 
@@ -91,7 +107,7 @@ Installers are unsigned, built by the **Package desktop app** CI workflow; there
 
 | Skill | What it does |
 | --- | --- |
-| `/port:init` | Adopt a repository |
+| `/port:init` | Adopt a repository — once, by whoever installs port; teammates never run it |
 | `/port:analyze` | Read the codebase, propose engineering standards, recommend plugins, generate repository-specific skills |
 | `/port:pipeline` | The cockpit — poll, dispatch, run the gates |
 | `/port:scope` | Break a feature into an epic with dependency-ordered sub-issues |
