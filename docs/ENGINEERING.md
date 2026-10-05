@@ -129,6 +129,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - the renderer's one TanStack Query composition root
 - `data/subscriptions.ts` is the only caller of a `window.port.on*` push listener
 - a typed `{ ok: false }` response is data, not an error — only a rejected invoke is
+- `session:status` upserts the `session:list` cache by `sessionKey` when it already holds an entry and nothing is mid-fetch; otherwise it invalidates
 
 **`apps/desktop/src/renderer/src/entry-rows.ts`/`entry-list.ts`**
 - the one row renderer and the one append/patch/pin-to-bottom list model
@@ -138,6 +139,13 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `controller.ts` is the rail/switch/re-attach composition root — the same module-closure idiom as `permission/controller.ts`, no framework, no class
 - `sequence.ts`'s `accept`/`drainBuffered` apply a `session:entries` delta only in revision order, never papering over a gap
 - `attach.ts`/`capacity-controller.ts`/`restore-controller.ts` split out of `controller.ts` to stay under the file-size limit (§7), each taking its `onChange`/callbacks as a parameter rather than importing back into the controller
+
+**`apps/desktop/src/renderer/src/shell/`**
+- the one React root: `layout.tsx`'s `ShellLayout` renders the sidebar and portals the route `<Outlet/>` into `#react-root`; legacy containers stay outside it
+- no `data-action` anywhere under it — legacy `#app` click delegation matches on it, and a shell row would fire a real legacy action
+- `keyboard.ts` installs one module-level listener, never `useEffect`
+- `prefs.ts` fails toward defaults on a malformed `localStorage` value, never throws
+- `lib/phase.ts`'s `PHASE_NAMES` and `key-bindings.ts`'s `KEY_BINDINGS` are pinned against `docs/DESIGN.md` §6 and §3 by the `desktop-shell` check, both directions
 
 **`apps/desktop/src/shared/local/inspect.ts`**
 - the app's only aggregation of the denial log; pure, reader-free
