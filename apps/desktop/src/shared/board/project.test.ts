@@ -74,6 +74,7 @@ function readyRepo(overrides: Partial<Extract<RepositoryState, { ok: true }>> = 
     approvalGate: true,
     disabled: [],
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
+    reviewCycleCap: 5,
     ...overrides,
   }
 }

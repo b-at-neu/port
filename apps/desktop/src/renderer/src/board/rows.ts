@@ -4,10 +4,10 @@
 import type { BoardItemRow } from '../../../shared/board/types'
 import type { AttachedAgent, AttachedSession } from '../../../shared/state/types'
 import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
-import { OPERATOR_ACTIONS } from '../../../shared/actions/types'
+import { OPERATOR_ACTIONS, OPERATOR_DECISIONS } from '../../../shared/actions/types'
 import type { ActionAvailability, OperatorAction } from '../../../shared/actions/types'
 import { itemActionState } from './actions'
-import { actionButtonLabel, actionPendingLabel, actionRefusalNote, actionResultCopy, reviewPlanButtonLabel, statusWord, subLineFor } from './copy'
+import { actionButtonLabel, actionPendingLabel, actionRefusalNote, actionResultCopy, decisionButtonLabel, decisionRefusalNote, reviewPlanButtonLabel, statusWord, subLineFor } from './copy'
 
 function text(tag: string, className: string, value: string): HTMLElement {
   const el = document.createElement(tag)
@@ -63,6 +63,43 @@ function buildActionStrip(row: BoardItemRow): HTMLElement | null {
     strip.appendChild(button)
   }
   return strip
+}
+
+/** One `<button data-action="decide-<decision>">` per available decision —
+ *  never disables for a pending action, since it opens a dialog instead. */
+function buildDecisionStrip(row: BoardItemRow): HTMLElement | null {
+  const available = OPERATOR_DECISIONS.filter((decision) => row.decisions[decision].available)
+  if (available.length === 0) return null
+
+  const strip = document.createElement('div')
+  strip.className = 'board-row__actions'
+  for (const decision of available) {
+    const availability = row.decisions[decision]
+    if (!availability.available) continue
+    const button = document.createElement('button')
+    button.className = 'board-row__action'
+    button.dataset.action = `decide-${decision}`
+    button.dataset.repoId = row.item.repoId
+    button.dataset.number = String(row.item.number)
+    button.dataset.kind = row.item.kind
+    button.dataset.stage = row.stageLabel?.key ?? ''
+    button.dataset.context = JSON.stringify(availability.context)
+    button.textContent = decisionButtonLabel(decision)
+    strip.appendChild(button)
+  }
+  return strip
+}
+
+/** A decision refusal the operator can act on (`cycle-cap`/
+ *  `rebase-decisions`) — `null` when neither decision carries one. */
+function decisionNoteFor(row: BoardItemRow): string | null {
+  for (const decision of OPERATOR_DECISIONS) {
+    const availability = row.decisions[decision]
+    if (!availability.available && (availability.reason === 'cycle-cap' || availability.reason === 'rebase-decisions')) {
+      return decisionRefusalNote(decision, availability.reason, row.item.number)
+    }
+  }
+  return null
 }
 
 /** The first pause/resume/retry/stop ownership refusal this item carries —
@@ -151,6 +188,8 @@ export function buildRow(row: BoardItemRow): HTMLElement {
 
   const strip = buildActionStrip(row)
   if (strip !== null) headline.appendChild(strip)
+  const decisionStrip = buildDecisionStrip(row)
+  if (decisionStrip !== null) headline.appendChild(decisionStrip)
   el.appendChild(headline)
 
   const worktreeCount = row.item.worktrees.length
@@ -167,6 +206,8 @@ export function buildRow(row: BoardItemRow): HTMLElement {
 
   const note = actionNoteFor(row)
   if (note !== null) el.appendChild(text('div', 'board-row__action-note', note))
+  const decisionNote = decisionNoteFor(row)
+  if (decisionNote !== null) el.appendChild(text('div', 'board-row__action-note', decisionNote))
 
   return el
 }

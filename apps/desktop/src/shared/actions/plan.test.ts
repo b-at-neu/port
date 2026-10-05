@@ -180,6 +180,54 @@ describe('actionsFor — gate', () => {
   })
 })
 
+describe('actionsFor — refresh', () => {
+  function pr(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
+    return item({ kind: 'pull-request', assignees: ['op'], ...overrides })
+  }
+
+  it('offers refresh on a trigger-labelled pull request', () => {
+    const it1 = pr({ stage: 'trigger', stages: [stageLabel('readyForReview', 'trigger')] })
+    const result = actionsFor({ item: it1, viewer: 'op', approvalGate: true })
+    expect(result.refresh).toEqual({
+      available: true,
+      plan: {
+        add: ['refreshBranch'],
+        remove: [],
+        addAssignees: [],
+        removeAssignees: [],
+        expect: { present: ['readyForReview'], absent: ['refreshBranch', 'refreshing'], assignees: { kind: 'exactly', logins: ['op'] } },
+        action: 'refresh',
+      },
+    })
+  })
+
+  it('offers refresh on a terminal-labelled pull request', () => {
+    const it1 = pr({ stage: 'terminal', stages: [stageLabel('approved', 'terminal')] })
+    expect(actionsFor({ item: it1, viewer: 'op', approvalGate: true }).refresh.available).toBe(true)
+  })
+
+  it('is not-applicable on an issue', () => {
+    const it1 = item({ stage: 'trigger', stages: [stageLabel('ready', 'trigger')], assignees: ['op'] })
+    expect(actionsFor({ item: it1, viewer: 'op', approvalGate: true }).refresh).toEqual({ available: false, reason: 'not-applicable' })
+  })
+
+  it('is not-applicable while in-flight, gated, carrying refreshBranch, or carrying refreshing', () => {
+    const inFlight = pr({ stage: 'in-flight', stages: [stageLabel('reviewing', 'in-flight')] })
+    expect(actionsFor({ item: inFlight, viewer: 'op', approvalGate: true }).refresh).toEqual({ available: false, reason: 'not-applicable' })
+
+    const gated = pr({ stage: 'gate', stages: [stageLabel('needsHuman', 'gate')] })
+    expect(actionsFor({ item: gated, viewer: 'op', approvalGate: true }).refresh).toEqual({ available: false, reason: 'not-applicable' })
+
+    const refreshing = pr({ stage: 'terminal', stages: [stageLabel('approved', 'terminal'), stageLabel('refreshing', 'in-flight')] })
+    expect(actionsFor({ item: refreshing, viewer: 'op', approvalGate: true }).refresh).toEqual({ available: false, reason: 'not-applicable' })
+  })
+
+  it('refuses not-owned the same as pause/resume/retry/stop', () => {
+    const it1 = pr({ stage: 'trigger', stages: [stageLabel('readyForReview', 'trigger')], assignees: ['other'] })
+    expect(actionsFor({ item: it1, viewer: 'op', approvalGate: true }).refresh).toEqual({ available: false, reason: 'not-owned' })
+  })
+})
+
 describe('actionsFor — ownership', () => {
   const triggerItem = item({ stage: 'trigger', stages: [stageLabel('ready', 'trigger')] })
 

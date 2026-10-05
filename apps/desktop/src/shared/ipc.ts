@@ -8,7 +8,7 @@ import type { BoardSnapshot, SourceKind } from './board/types'
 import type { ClaimApplyResponse, ClaimPreflightResponse, PlanGateChoice } from './claim/types'
 import type { GateAnswerResponse, GateClaimResponse, GateDecision, GatePreflightResponse } from './gate/types'
 import type { LabelKey } from './labels/vocabulary'
-import type { ItemActionResult, OperatorAction } from './actions/types'
+import type { ItemActionResult, ItemDecisionResult, OperatorAction, OperatorDecision, UnblockRoute } from './actions/types'
 import type { DispatchClaimSetResult, DispatchControlResult, DispatchRelayResult } from './dispatch/types'
 import type { RuntimePreflight, RuntimeProbe } from './runtime/types'
 import type { ClaimRead } from './writes/types'
@@ -143,6 +143,12 @@ export interface IpcMap {
   'item:action': {
     request: { repoId: RepoId; kind: 'issue' | 'pull-request'; number: number; action: OperatorAction; expectedStage: LabelKey | null }
     response: ItemActionResult
+  }
+  /** The board's two operator decisions — unblock and revise. `skipComment`
+   *  can only ever suppress the comment on a retry, never widen the write. */
+  'item:decide': {
+    request: { repoId: RepoId; number: number; decision: OperatorDecision; expectedStage: LabelKey | null; route: UnblockRoute | null; note: string | null; skipComment: boolean }
+    response: ItemDecisionResult
   }
   /** Operator control over dispatch (#110, #314) — run/drain/pause one
    *  repository, or halt everything. `repoId` is required for `run`/`drain`/
@@ -324,6 +330,7 @@ export const IPC_CHANNELS = [
   'claim:preflight',
   'claim:apply',
   'item:action',
+  'item:decide',
   'dispatch:control',
   'dispatch:claim:set',
   'dispatch:relay',

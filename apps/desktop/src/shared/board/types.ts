@@ -4,7 +4,7 @@
 // `typecheck:web` exactly like the other `shared/` adapters it draws from.
 import type { RepoId } from '../repos'
 import type { ItemStatus, PipelineState, ReconciledItem, RepositoryState, StageLabel } from '../state/types'
-import type { ActionAvailability, OperatorAction } from '../actions/types'
+import type { ActionAvailability, DecisionAvailability, OperatorAction, OperatorDecision } from '../actions/types'
 import type { TickReport } from '../tick/types'
 import type { RelayPending, RelayScan } from '../relay/types'
 import type { RepoDispatchStatus, RunStatesSnapshot } from '../dispatch/types'
@@ -156,6 +156,9 @@ export interface BoardItemRow {
    *  or not, so the row can render its strip and its refusal note from one
    *  already-computed value, never a second derivation client-side. */
   readonly actions: Readonly<Record<OperatorAction, ActionAvailability>>
+  /** `decisionsFor`'s own result for this item, the same already-computed
+   *  rule `actions` above follows. */
+  readonly decisions: Readonly<Record<OperatorDecision, DecisionAvailability>>
   /** This row's own pending relay (#107), matched on `repoId`+`number` —
    *  `null` when nothing dispatched against this item is waiting on a human.
    *  Drives the row's `Waiting on you` badge. */

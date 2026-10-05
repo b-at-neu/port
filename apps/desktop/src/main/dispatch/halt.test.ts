@@ -101,6 +101,7 @@ function repoState(items: readonly ReconciledItem[], overrides: Partial<Extract<
     approvalGate: true,
     disabled: [],
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
+    reviewCycleCap: 5,
     ...overrides,
   }
 }

@@ -89,6 +89,8 @@ export function fixtureHandlers(now: Date): FixtureHandlers {
 
     'item:action': () => ({ ok: true, outcome: { kind: 'no-op' } }),
 
+    'item:decide': () => ({ ok: true, comment: null, labels: { kind: 'no-op' } }),
+
     'dispatch:control': (request) => {
       if (request.command === 'halt') return { ok: true, command: 'halt', report: { kind: 'completed', items: [] } }
       const runState: RepoRunState = { repoId: request.repoId, state: RUN_TARGET[request.command], since: now.toISOString() }

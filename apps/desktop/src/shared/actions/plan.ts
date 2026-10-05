@@ -3,6 +3,7 @@
 // is; `main/actions/apply.ts` is the only caller that turns a plan into a
 // `LabelWriteRequest` and actually writes.
 import { LABEL_DEFAULTS } from '../labels/defaults'
+import type { LabelRole } from '../labels/defaults'
 import type { LabelKey, LabelVocabulary } from '../labels/vocabulary'
 import type { AssigneeExpectation, AuditEntry, LabelPrecondition } from '../writes/types'
 import type { ReconciledItem } from '../state/types'
@@ -129,6 +130,18 @@ function gatePlan(item: ReconciledItem, approvalGate: boolean): ActionAvailabili
   return { available: true, plan: recoveryPlan('gate', precondition, ['marker'], [], []) }
 }
 
+/** Available only for a pull request at a trigger or terminal stage, with
+ *  no in-flight label, gate label, `refreshBranch` or `refreshing` present. */
+function refreshPlan(item: ReconciledItem, viewer: string): ActionAvailability {
+  if (item.kind !== 'pull-request') return notApplicable()
+  if (item.stage !== 'trigger' && item.stage !== 'terminal') return notApplicable()
+  const blocking: LabelRole[] = ['in-flight', 'gate']
+  if (item.stages.some((label) => blocking.includes(label.role) || label.key === 'refreshBranch' || label.key === 'refreshing')) return notApplicable()
+  const { addAssignees, assignees } = assigneeHalf(item, viewer)
+  const precondition: LabelPrecondition = { present: item.stages.map((label) => label.key), absent: ['refreshBranch', 'refreshing'], assignees }
+  return { available: true, plan: recoveryPlan('refresh', precondition, ['refreshBranch'], [], addAssignees) }
+}
+
 export interface ActionsForParams {
   readonly item: ReconciledItem
   readonly viewer: string | null
@@ -140,17 +153,25 @@ export interface ActionsForParams {
  *  refuses all four `viewer-unknown`; an assignee set that is neither empty
  *  nor exactly `[viewer]` refuses all four `not-owned` (PIPELINE.md's
  *  "exactly one assignee per in-flight pipeline item" — viewer-among-several
- *  is refused, not accepted). `gate` runs its own, ownership-free check. */
+ *  is refused, not accepted). `gate` runs its own, ownership-free check;
+ *  `refresh` shares pause/resume/retry/stop's own ownership gate. */
 function refusedRecovery(reason: ActionRefusal, item: ReconciledItem, approvalGate: boolean): Readonly<Record<OperatorAction, ActionAvailability>> {
   const refused: ActionAvailability = { available: false, reason }
-  return { pause: refused, resume: refused, retry: refused, stop: refused, gate: gatePlan(item, approvalGate) }
+  return { pause: refused, resume: refused, retry: refused, stop: refused, gate: gatePlan(item, approvalGate), refresh: refused }
 }
 
 export function actionsFor(params: ActionsForParams): Readonly<Record<OperatorAction, ActionAvailability>> {
   const { item, viewer, approvalGate } = params
   if (viewer === null) return refusedRecovery('viewer-unknown', item, approvalGate)
   if (!(item.assignees.length === 0 || (item.assignees.length === 1 && item.assignees[0] === viewer))) return refusedRecovery('not-owned', item, approvalGate)
-  return { pause: pausePlan(item, viewer), resume: resumePlan(item, viewer), retry: retryPlan(item, viewer), stop: stopPlan(item, viewer), gate: gatePlan(item, approvalGate) }
+  return {
+    pause: pausePlan(item, viewer),
+    resume: resumePlan(item, viewer),
+    retry: retryPlan(item, viewer),
+    stop: stopPlan(item, viewer),
+    gate: gatePlan(item, approvalGate),
+    refresh: refreshPlan(item, viewer),
+  }
 }
 
 /** The inverse of `pausePlan`'s own `expect.present` — given a pause's own

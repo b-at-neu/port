@@ -40,13 +40,15 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - release version only from `release.versionFiles[0]`, never desktop's own `package.json`
 
 **`apps/desktop/src/main/actions/`**
-- only `applyLabels` caller across pause/resume/retry/gate/claim/escalate/observe
+- only `applyLabels` caller across pause/resume/retry/gate/refresh/claim/escalate/observe/decide
 - never trusts a renderer-supplied `expectedStage` to widen a write, only to refuse
 - `gate.ts` comments before the label swap; `escalate.ts`/`observe.ts` swap first
+- `decide.ts`'s `applyItemDecision` (#312) is the fifth comment-then-swap composition: check → re-read → comment → swap, `gateAnswer`'s own direction — pinned by `desktop-gate`/`desktop-actions`
 
 **`apps/desktop/src/main/channels/<topic>.ts`**
 - one topic's IPC validation and composition; `main/ipc.ts` stays the registrar
 - a new channel follows the existing `*Deps` injectable-seam idiom
+- `items.ts` (#312) holds `item:action` and `item:decide` — moved out of `main/ipc.ts` verbatim, the same split every other topic here already follows
 
 **`apps/desktop/src/main/claim.ts`**
 - the claim dialog's only composition root

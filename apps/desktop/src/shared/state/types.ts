@@ -251,6 +251,9 @@ export type RepositoryState =
        *  needs a second config read to know this repository's own
        *  `sharedFiles`/`overlapThreshold`. */
       readonly concurrency: { readonly sharedFiles: readonly string[]; readonly overlapThreshold: number }
+      /** `entry.config.reviewCycleCap`, copied the same way `approvalGate`
+       *  already is — so `decisionsFor` never needs a second config read. */
+      readonly reviewCycleCap: number
     }
   | {
       readonly ok: false

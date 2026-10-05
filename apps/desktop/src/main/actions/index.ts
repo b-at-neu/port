@@ -2,8 +2,11 @@
 // plan gate/claim composition roots (#92) — no consumer imports `./apply`,
 // `./resume`, `./claim`, or `./gate` directly, the mirror of
 // `main/writes/index.ts`'s own re-export rail.
-export { applyItemAction, defaultApplyItemActionDeps } from './apply'
+export { applyItemAction, defaultApplyItemActionDeps, findRepoState, movedResult } from './apply'
 export type { ApplyItemActionDeps, ApplyItemActionParams, ItemActionRequest, ReadyEntry } from './apply'
+
+export { applyItemDecision, defaultApplyItemDecisionDeps } from './decide'
+export type { ApplyItemDecisionDeps, ApplyItemDecisionParams, ItemDecisionRequest } from './decide'
 
 export { recoverPausedTrigger } from './resume'
 export type { RecoverPausedTriggerParams, RecoverPausedTriggerResult } from './resume'
