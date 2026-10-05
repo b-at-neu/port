@@ -5,6 +5,7 @@ import type { IpcMap } from '../../shared/ipc'
 import { claimApply, claimPreflight, defaultClaimDeps } from '../claim'
 import type { ClaimDeps } from '../claim'
 import type { RegistryDeps } from '../registry'
+import { requireRepoId } from '../registry'
 
 // `repoId` must name a currently registered repository, `number` a positive integer.
 export async function resolveClaimPreflight(
@@ -12,13 +13,11 @@ export async function resolveClaimPreflight(
   request: IpcMap['claim:preflight']['request'],
   deps: ClaimDeps = defaultClaimDeps,
 ): ReturnType<typeof claimPreflight> {
-  if (typeof request?.repoId !== 'string' || request.repoId === '') {
-    throw new Error("'claim:preflight' requires a non-empty 'repoId'")
-  }
+  const repoId = requireRepoId(request?.repoId, "'claim:preflight'")
   if (!Number.isInteger(request.number) || request.number <= 0) {
     throw new Error("'claim:preflight' requires 'number' to be a positive integer")
   }
-  return claimPreflight({ registryDeps, repoId: request.repoId, number: request.number }, deps)
+  return claimPreflight({ registryDeps, repoId, number: request.number }, deps)
 }
 
 // The same `repoId`/`number` rail, plus `planGate`/`confirmedAssignees` shape checks.
@@ -28,9 +27,7 @@ export async function resolveClaimApply(
   auditDir: string,
   deps: ClaimDeps = defaultClaimDeps,
 ): ReturnType<typeof claimApply> {
-  if (typeof request?.repoId !== 'string' || request.repoId === '') {
-    throw new Error("'claim:apply' requires a non-empty 'repoId'")
-  }
+  const repoId = requireRepoId(request?.repoId, "'claim:apply'")
   if (!Number.isInteger(request.number) || request.number <= 0) {
     throw new Error("'claim:apply' requires 'number' to be a positive integer")
   }
@@ -41,7 +38,7 @@ export async function resolveClaimApply(
     throw new Error("'claim:apply' requires 'confirmedAssignees' to be an array of strings")
   }
   return claimApply(
-    { registryDeps, repoId: request.repoId, number: request.number, planGate: request.planGate, confirmedAssignees: request.confirmedAssignees, auditDir },
+    { registryDeps, repoId, number: request.number, planGate: request.planGate, confirmedAssignees: request.confirmedAssignees, auditDir },
     deps,
   )
 }

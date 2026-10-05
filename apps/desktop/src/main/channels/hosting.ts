@@ -12,7 +12,7 @@ import { PERMISSION_DECISIONS, SESSION_MODELS, SESSION_PERMISSION_MODES, SESSION
 import type { RestorableSession, SessionModel, SessionPermissionMode, SessionStartMode } from '../../shared/hosting/types'
 import type { HostedStore } from '../hosting/store'
 import { SESSION_LIMIT_CEILING } from '../hosting/store'
-import { isReadyEntry, listRepositories, requireReadyRepo } from '../registry'
+import { isReadyEntry, listRepositories, requireReadyRepo, requireRepoId } from '../registry'
 import type { RegistryDeps } from '../registry'
 import type { ReadyEntry } from '../actions/apply'
 
@@ -23,9 +23,8 @@ export interface HostingChannelDeps {
 
 export const defaultHostingChannelDeps = (store: HostedStore): HostingChannelDeps => ({ listRepositories, store })
 
-async function resolveReadyEntry(registryDeps: RegistryDeps, repoId: unknown, deps: HostingChannelDeps, channel: string): Promise<ReadyEntry> {
-  if (typeof repoId !== 'string' || repoId === '') throw new Error(`'${channel}' requires a non-empty 'repoId'`)
-  return requireReadyRepo(registryDeps, `'${channel}'`, repoId, deps.listRepositories)
+function resolveReadyEntry(registryDeps: RegistryDeps, repoId: unknown, deps: HostingChannelDeps, channel: string): Promise<ReadyEntry> {
+  return requireReadyRepo(registryDeps, `'${channel}'`, requireRepoId(repoId, `'${channel}'`), deps.listRepositories)
 }
 
 /** The one validation `session:send`/`session:interrupt`/`session:close`/

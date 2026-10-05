@@ -2,7 +2,7 @@
 import type { BacklogResponse } from '../../shared/backlog/types'
 import type { IpcMap } from '../../shared/ipc'
 import { fetchBacklog } from '../github/backlog'
-import { listRepositories, requireReadyRepo } from '../registry'
+import { listRepositories, requireReadyRepo, requireRepoId } from '../registry'
 import type { RegistryDeps } from '../registry'
 
 export interface BacklogListDeps {
@@ -18,10 +18,8 @@ export async function resolveBacklogList(
   request: IpcMap['backlog:list']['request'],
   deps: BacklogListDeps = defaultBacklogListDeps,
 ): Promise<BacklogResponse> {
-  if (typeof request?.repoId !== 'string' || request.repoId === '') {
-    throw new Error("'backlog:list' requires a non-empty 'repoId'")
-  }
-  const entry = await requireReadyRepo(registryDeps, "'backlog:list'", request.repoId, deps.listRepositories)
+  const repoId = requireRepoId(request?.repoId, "'backlog:list'")
+  const entry = await requireReadyRepo(registryDeps, "'backlog:list'", repoId, deps.listRepositories)
 
   return deps.fetchBacklog({ repo: { owner: entry.config.owner, name: entry.config.name }, vocabulary: entry.config.vocabulary })
 }

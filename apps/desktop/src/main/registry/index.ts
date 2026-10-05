@@ -70,6 +70,15 @@ export function isReadyEntry(entry: RepositoryEntry): entry is ReadyEntry {
   return 'config' in entry
 }
 
+/** The non-empty-string check every channel that takes a `repoId` opens
+ *  with, before ever reaching `requireReadyRepo` — `channel` is quoted
+ *  exactly as each channel's own thrown text already was (e.g.
+ *  `"'item:action'"`). */
+export function requireRepoId(repoId: unknown, channel: string): string {
+  if (typeof repoId !== 'string' || repoId === '') throw new Error(`${channel} requires a non-empty 'repoId'`)
+  return repoId
+}
+
 /** The "find a registered, ready repository by id, or throw" lookup every
  *  repository-scoped channel composes — `subject` is the caller's own
  *  error-message prefix (e.g. `"'item:action'"` or `"claim"`), so each

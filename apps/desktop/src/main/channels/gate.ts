@@ -12,6 +12,7 @@ import type { BoardSnapshot } from '../../shared/board/types'
 import type { ClaimRead } from '../../shared/writes/types'
 import type { IpcMap } from '../../shared/ipc'
 import type { RegistryDeps } from '../registry'
+import { requireRepoId } from '../registry'
 import type { GateAnswerParams, GateClaimReadParams, GateClaimSetParams, GatePreflightParams } from '../actions/gate'
 
 /** One binding per composed function, plus the board's own `refresh` —
@@ -33,32 +34,26 @@ export interface GateChannelDeps {
  *  id names a currently-registered, `ready` repository is `main/actions/
  *  gate.ts`'s own `resolveReadyEntry` to decide, never duplicated here. */
 export async function resolveGatePreflight(registryDeps: RegistryDeps, request: IpcMap['gate:preflight']['request'], deps: GateChannelDeps): Promise<GatePreflightResponse> {
-  if (typeof request?.repoId !== 'string' || request.repoId === '') {
-    throw new Error("'gate:preflight' requires a non-empty 'repoId'")
-  }
+  const repoId = requireRepoId(request?.repoId, "'gate:preflight'")
   if (!Number.isInteger(request.number) || request.number <= 0) {
     throw new Error("'gate:preflight' requires 'number' to be a positive integer")
   }
-  return deps.gatePreflight({ registryDeps, repoId: request.repoId, number: request.number })
+  return deps.gatePreflight({ registryDeps, repoId, number: request.number })
 }
 
 export async function resolveGateClaimRead(registryDeps: RegistryDeps, request: IpcMap['gate:claim:read']['request'], deps: GateChannelDeps): Promise<ClaimRead> {
-  if (typeof request?.repoId !== 'string' || request.repoId === '') {
-    throw new Error("'gate:claim:read' requires a non-empty 'repoId'")
-  }
-  return deps.gateClaimRead({ registryDeps, repoId: request.repoId })
+  const repoId = requireRepoId(request?.repoId, "'gate:claim:read'")
+  return deps.gateClaimRead({ registryDeps, repoId })
 }
 
 /** `held` is the target state the operator's own button named — `true` to
  *  take, `false` to release — never a toggle this channel infers. */
 export async function resolveGateClaimSet(registryDeps: RegistryDeps, request: IpcMap['gate:claim:set']['request'], deps: GateChannelDeps): Promise<GateClaimResponse> {
-  if (typeof request?.repoId !== 'string' || request.repoId === '') {
-    throw new Error("'gate:claim:set' requires a non-empty 'repoId'")
-  }
+  const repoId = requireRepoId(request?.repoId, "'gate:claim:set'")
   if (typeof request.held !== 'boolean') {
     throw new Error("'gate:claim:set' requires 'held' to be a boolean")
   }
-  return deps.gateClaimSet({ registryDeps, repoId: request.repoId, held: request.held })
+  return deps.gateClaimSet({ registryDeps, repoId, held: request.held })
 }
 
 function isGateDecision(value: unknown): value is GateDecision {
@@ -80,9 +75,7 @@ export async function resolveGateAnswer(
   scratchDir: string,
   deps: GateChannelDeps,
 ): Promise<GateAnswerResponse> {
-  if (typeof request?.repoId !== 'string' || request.repoId === '') {
-    throw new Error("'gate:answer' requires a non-empty 'repoId'")
-  }
+  const repoId = requireRepoId(request?.repoId, "'gate:answer'")
   if (!Number.isInteger(request.number) || request.number <= 0) {
     throw new Error("'gate:answer' requires 'number' to be a positive integer")
   }
@@ -99,7 +92,7 @@ export async function resolveGateAnswer(
 
   const result = await deps.gateAnswer({
     registryDeps,
-    repoId: request.repoId,
+    repoId,
     number: request.number,
     decision: request.decision,
     feedback: request.feedback ?? null,
@@ -110,9 +103,9 @@ export async function resolveGateAnswer(
 
   if (result.kind === 'answered' && result.labels.kind === 'applied') {
     try {
-      await deps.refresh({ repoId: request.repoId, source: 'github' })
+      await deps.refresh({ repoId, source: 'github' })
     } catch (error) {
-      console.error(`'gate:answer' post-write refresh failed for '${request.repoId}':`, error)
+      console.error(`'gate:answer' post-write refresh failed for '${repoId}':`, error)
     }
   }
   return result
