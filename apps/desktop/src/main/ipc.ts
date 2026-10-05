@@ -9,7 +9,7 @@ import { applyItemAction, applyItemDecision, gateAnswer, gateClaimRead, gateClai
 import { resolveClaimApply, resolveClaimPreflight } from './channels/claim'
 import { resolveBacklogList } from './channels/backlog'
 import { resolveGhStatus } from './channels/gh'
-import { createDispatchRuntime, createRunStateStore, defaultHaltDispatchDeps, haltDispatch, registeredRepoIds, resolveDispatchClaimSet, resolveDispatchControl, resolveDispatchRelay } from './dispatch'
+import { createDispatchRuntime, createRunStateStore, defaultHaltDispatchDeps, haltDispatch, registeredRepoIds, resolveDispatchClaimSet, resolveDispatchControl } from './dispatch'
 import type { Dispatcher } from './dispatch'
 import { fetchItemsByNumber } from './github'
 import { readGateClaim } from './writes'
