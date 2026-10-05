@@ -23,13 +23,18 @@ export type View =
   | { readonly screen: 'transcript'; readonly sessionId: string; readonly agentId: string | null; readonly title: string; readonly from: 'sessions' | 'search'; readonly focusIndex: number | null }
   | { readonly screen: 'session' }
   | { readonly screen: 'settings' }
+  | { readonly screen: 'backlog' }
 
-export type Tab = 'board' | 'repositories' | 'session' | 'settings'
+/** Which legacy container a screen draws into — `main.ts`'s `drawViews`
+ *  shows exactly one of the four and hides the rest. `backlog` and
+ *  `settings` both map to `react`, since both are React screens mounted
+ *  into the same portaled `#react-root` (#316, replacing `Tab`). */
+export type LegacyContainer = 'board' | 'repositories' | 'session' | 'react'
 
-export function tabFor(view: View): Tab {
+export function containerFor(view: View): LegacyContainer {
   if (view.screen === 'board') return 'board'
   if (view.screen === 'session') return 'session'
-  if (view.screen === 'settings') return 'settings'
+  if (view.screen === 'settings' || view.screen === 'backlog') return 'react'
   return 'repositories'
 }
 
@@ -37,6 +42,7 @@ export function tabFor(view: View): Tab {
  *  both that file and this one read, so the two can never drift. */
 export const ROUTE_IDS = {
   board: '/board',
+  backlog: '/backlog',
   repos: '/repositories',
   sessions: '/repositories/$repoId/sessions',
   search: '/repositories/$repoId/search',
@@ -44,6 +50,10 @@ export const ROUTE_IDS = {
   session: '/session',
   settings: '/settings',
 } as const
+
+/** Every route a launch or `shell/prefs.ts`'s `trackLastRoute` may restore
+ *  onto — screens whose state survives a quit/relaunch. */
+export const RESTORABLE_ROUTES: readonly string[] = [ROUTE_IDS.board, ROUTE_IDS.repos, ROUTE_IDS.session, ROUTE_IDS.settings, ROUTE_IDS.backlog]
 
 export interface TranscriptSearch {
   readonly agentId: string | null
@@ -88,6 +98,8 @@ export function viewFromMatch(routeId: string, params: Readonly<Record<string, s
       return { screen: 'session' }
     case ROUTE_IDS.settings:
       return { screen: 'settings' }
+    case ROUTE_IDS.backlog:
+      return { screen: 'backlog' }
     default:
       return { screen: 'board' }
   }
@@ -124,5 +136,7 @@ export function routeForView(view: View): RouteDescriptor {
       return { to: ROUTE_IDS.session }
     case 'settings':
       return { to: ROUTE_IDS.settings }
+    case 'backlog':
+      return { to: ROUTE_IDS.backlog }
   }
 }

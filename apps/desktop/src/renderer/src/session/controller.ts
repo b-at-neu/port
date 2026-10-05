@@ -23,10 +23,10 @@ import { onSelectionChange, selectedSession, setSelectedSession } from './select
 import { capacityState, decrementLimit, incrementLimit, loadCapacity } from './capacity-controller'
 import { dismissBanner, forget, loadRestoreList, resumeAll, resumeOne, restoreState, toggleReviewing } from './restore-controller'
 import { sharedSubscriptions } from '../data/subscriptions'
+import { setSelectedSession as persistSelectedSession, shellPrefs } from '../shell/prefs'
 
 let refs: SessionRefs | null = null
 let showCallback: (() => void) | null = null
-let onNavChange: (() => void) | null = null
 
 let sessions = new Map<SessionKey, HostedSessionSnapshot>()
 const perSession = new Map<SessionKey, PerSessionState>()
@@ -62,10 +62,6 @@ function liveScreen(snapshot: HostedSessionSnapshot): SessionScreenState {
     busyBanner: null,
     sessionGone: state.sessionGone,
   }
-}
-
-function notifyNavChange(): void {
-  onNavChange?.()
 }
 
 function draw(): void {
@@ -107,10 +103,11 @@ function onStatusPush(snapshot: HostedSessionSnapshot): void {
   const previous = sessions.get(snapshot.sessionKey)
   sessions.set(snapshot.sessionKey, snapshot)
   if (snapshot.phase !== 'ended') stateFor(snapshot.sessionKey).closeConfirming = false
-  if (previous === undefined || previous.phase !== snapshot.phase) notifyNavChange()
 
   if (snapshot.sessionKey === selectedSession()) {
     screen = liveScreen(snapshot)
+    // `claudeSessionId` arrives after `init` — persisted as soon as known.
+    if (snapshot.claudeSessionId !== null && previous?.claudeSessionId !== snapshot.claudeSessionId) persistSelectedSession(snapshot.claudeSessionId)
   }
   draw()
 }
@@ -156,6 +153,7 @@ function switchTo(key: SessionKey): void {
   resetCommandsState(key)
   const snapshot = sessions.get(key)
   screen = snapshot !== undefined ? liveScreen(snapshot) : { kind: 'reconnecting' }
+  if (snapshot?.claudeSessionId !== null && snapshot?.claudeSessionId !== undefined) persistSelectedSession(snapshot.claudeSessionId)
   draw()
   void reattach(key)
 }
@@ -170,7 +168,6 @@ function selectAfterStart(snapshot: HostedSessionSnapshot): void {
   void reattach(snapshot.sessionKey)
   focusComposer()
   showCallback?.()
-  notifyNavChange()
 }
 
 function handleStartResult(result: SessionStartResult): void {
@@ -314,11 +311,15 @@ async function dismiss(sessionKey: SessionKey): Promise<void> {
   }
 }
 
+/** Prefers a live session matching the persisted `claudeSessionId`, never
+ *  the session *key* — a `hosted-N` key is reused across relaunches. */
 async function bootFromExistingSessions(): Promise<void> {
   try {
     const snapshots = await window.port.sessionList()
     sessions = new Map(snapshots.map((snapshot) => [snapshot.sessionKey, snapshot]))
-    const candidate = [...sessions.values()].reverse().find((snapshot) => snapshot.phase !== 'ended')
+    const live = [...sessions.values()].reverse().filter((snapshot) => snapshot.phase !== 'ended')
+    const savedId = shellPrefs().selectedSession
+    const candidate = (savedId !== null ? live.find((snapshot) => snapshot.claudeSessionId === savedId) : undefined) ?? live[0]
     draw()
     if (candidate !== undefined) switchTo(candidate.sessionKey)
   } catch (error) {
@@ -332,22 +333,29 @@ function isComposingKeyEvent(event: KeyboardEvent): boolean {
 
 export interface InitSessionParams {
   readonly show: () => void
-  /** Called whenever the open session count changes, so `main.ts` can
-   *  refresh the nav tab's own label (`Sessions`, `Sessions · 2`). */
-  readonly onNavChange?: () => void
 }
 
-/** `Sessions`, or `Sessions · <open count>` while sessions are open — read
- *  by `main.ts`'s own nav label. */
-export function sessionsTabText(): string {
-  const open = snapshotList().filter((snapshot) => snapshot.phase !== 'ended').length
-  return open === 0 ? 'Sessions' : `Sessions · ${String(open)}`
+/** The keyboard map's `Ctrl/Cmd+Tab`/`1…9` source. */
+export function liveSessionKeys(): readonly SessionKey[] {
+  return snapshotList()
+    .filter((snapshot) => snapshot.phase !== 'ended')
+    .map((snapshot) => snapshot.sessionKey)
+}
+
+/** The sidebar's own session row click — selects and shows the Session screen. */
+export function selectSession(key: SessionKey): void {
+  switchTo(key)
+  showCallback?.()
+}
+
+/** The sidebar's **New session** row and the keyboard map's `N`. */
+export function startNewSession(repoId: RepoId): void {
+  void startSession(repoId, repoLabelFor(repoId))
 }
 
 export function initSession(container: HTMLElement, params: InitSessionParams): void {
   refs = buildSessionView(container)
   showCallback = params.show
-  onNavChange = params.onNavChange ?? null
   draw()
 
   sharedSubscriptions().subscribe('session:status', onStatusPush)
@@ -473,6 +481,18 @@ export function initSession(container: HTMLElement, params: InitSessionParams): 
   })
 
   currentRefs.composerTextarea.addEventListener('keydown', (event) => {
+    // DESIGN §3: Esc stops the turn here first, never bubbling to the
+    // keyboard map's own close-pane-or-dialog Esc.
+    if (event.key === 'Escape') {
+      const selected = selectedSession()
+      const snapshot = selected !== null ? sessions.get(selected) : undefined
+      if (snapshot !== undefined && (snapshot.phase === 'streaming' || snapshot.phase === 'interrupting')) {
+        event.preventDefault()
+        event.stopPropagation()
+        void stop()
+      }
+      return
+    }
     if (event.key !== 'Enter' || event.shiftKey || isComposingKeyEvent(event)) return
     event.preventDefault()
     void send()

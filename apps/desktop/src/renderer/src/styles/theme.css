@@ -30,6 +30,9 @@
   --selection: #eef1f8;
   --brand: #172554;
   --brand-border: transparent;
+  /* DESIGN §8: the mark is white inside its `brand` tile in both themes —
+   * the tile's own background never inverts, so this never does either. */
+  --brand-foreground: #ffffff;
 
   /* Status: working, attention, success, danger, idle */
   --working-pill: #dbeafe;
@@ -62,6 +65,11 @@
   --secondary: var(--muted);
   --secondary-foreground: var(--foreground);
   --input: var(--border);
+
+  /* The Dialog/AlertDialog/CommandDialog scrim (#316) — black at 50% in
+   * both modes, since a scrim dims whatever is behind it rather than
+   * reading as a surface of its own. */
+  --overlay: rgb(0 0 0 / 50%);
 }
 
 :root[data-theme='dark'] {
@@ -89,6 +97,7 @@
   --selection: #121a2e;
   --brand: #172554;
   --brand-border: #4b5f8f;
+  --brand-foreground: #ffffff;
 
   --working-pill: #0f2a5c;
   --working-pill-foreground: #93c5fd;
@@ -117,6 +126,7 @@
   --secondary: var(--muted);
   --secondary-foreground: var(--foreground);
   --input: var(--border);
+  --overlay: rgb(0 0 0 / 50%);
 }
 
 @theme inline {
@@ -148,6 +158,8 @@
   --color-selection: var(--selection);
   --color-brand: var(--brand);
   --color-brand-border: var(--brand-border);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-overlay: var(--overlay);
 
   --color-working-pill: var(--working-pill);
   --color-working-pill-foreground: var(--working-pill-foreground);

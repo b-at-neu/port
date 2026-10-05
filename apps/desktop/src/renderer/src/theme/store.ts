@@ -31,7 +31,7 @@ export interface ThemeStore {
   // `unbound-method` rule see that rather than assume the worst.
   getPreference(this: void): ThemePreference
   setPreference(this: void, preference: ThemePreference): void
-  getResolved(): ResolvedTheme
+  getResolved(this: void): ResolvedTheme
   /** Sets `root.dataset.theme` to the resolved theme. Called once by
    *  `main.ts` before any paint, and again on every preference or OS change. */
   apply(): void
@@ -111,4 +111,12 @@ export function useThemePreference(): readonly [ThemePreference, (preference: Th
   const store = themeStore()
   const preference = useSyncExternalStore(store.subscribe, store.getPreference)
   return [preference, store.setPreference]
+}
+
+/** The resolved light/dark value, reactive to both a preference change and
+ *  an OS change while the preference is `system` — `sonner.tsx`'s Toaster
+ *  reads this instead of `next-themes`, which this app does not use. */
+export function useResolvedTheme(): ResolvedTheme {
+  const store = themeStore()
+  return useSyncExternalStore(store.subscribe, store.getResolved)
 }

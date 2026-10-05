@@ -7,6 +7,7 @@
 // own projector exists to narrow, never consumed here.
 import type { QueryClient } from '@tanstack/react-query'
 import type { BridgeListener, IpcEvent, IpcEventMap } from '../../../shared/ipc'
+import type { HostedSessionSnapshot } from '../../../shared/hosting/types'
 import { ipcQueryOptions } from './query'
 
 export type SubscribableEvent = Exclude<IpcEvent, 'session:event'>
@@ -93,10 +94,40 @@ export function sharedSubscriptions(): Subscriptions {
  *  (and any future React consumer) reads one source of truth. Cancels any
  *  in-flight `board:snapshot` invoke first, so an older fetch resolving after
  *  a newer push can never clobber it. */
+/** Feeds `session:status` into the `session:list` cache (#316) so the
+ *  sidebar's own session list stays live without polling. Upserts by
+ *  `sessionKey` only while the cache already holds an entry and nothing is
+ *  mid-fetch — a push landing before the first `session:list` read, or
+ *  mid-fetch, invalidates instead, so a race can never drop or stale-patch
+ *  the eventual real list. */
+function connectSessionListCache(client: QueryClient, subscriptions: Subscriptions): () => void {
+  const key = ipcQueryOptions('session:list').queryKey
+  return subscriptions.subscribe('session:status', (snapshot: HostedSessionSnapshot) => {
+    const state = client.getQueryState(key)
+    if (state === undefined || state.fetchStatus === 'fetching') {
+      void client.invalidateQueries({ queryKey: key })
+      return
+    }
+    const existing = client.getQueryData<readonly HostedSessionSnapshot[]>(key)
+    if (existing === undefined) {
+      void client.invalidateQueries({ queryKey: key })
+      return
+    }
+    const found = existing.some((entry) => entry.sessionKey === snapshot.sessionKey)
+    const next = found ? existing.map((entry) => (entry.sessionKey === snapshot.sessionKey ? snapshot : entry)) : [...existing, snapshot]
+    client.setQueryData(key, next)
+  })
+}
+
 export function connectQueryCache(client: QueryClient, subscriptions: Subscriptions = sharedSubscriptions()): () => void {
   const key = ipcQueryOptions('board:snapshot').queryKey
-  return subscriptions.subscribe('board:update', (snapshot) => {
+  const detachBoard = subscriptions.subscribe('board:update', (snapshot) => {
     void client.cancelQueries({ queryKey: key })
     client.setQueryData(key, snapshot)
   })
+  const detachSessions = connectSessionListCache(client, subscriptions)
+  return () => {
+    detachBoard()
+    detachSessions()
+  }
 }

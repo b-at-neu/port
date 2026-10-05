@@ -9,7 +9,6 @@ import type { BoardSnapshot } from '../../../shared/board/types'
 import type { HaltReport } from '../../../shared/dispatch/types'
 import type { RepoId } from '../../../shared/repos'
 import { haltAbortedCopy, haltHeadingCopy, haltItemLine } from './halt-copy'
-import { handleRunStateClick } from './run-state'
 
 type PendingCommand = 'halt' | null
 
@@ -138,21 +137,15 @@ async function runClaimSet(repoId: RepoId, held: boolean, redraw: () => void): P
 
 /**
  * The one `dispatch-*` click branch `main.ts` delegates every such action
- * to — the per-repository run/drain/pause row (#314), halt, halt-cancel, and
- * the claim's own take/release (#265). A click naming a repository this app
- * cannot resolve from `target.dataset` and `snapshot` is silently ignored,
- * the same fail-safe every other board control already applies to a stale
- * render.
+ * to — halt and halt-cancel. Per-repository run/drain/pause moved to the
+ * sidebar's `StatusPillMenu` (#316), driven by `shell/run-state-command.ts`
+ * instead of this click-delegation path. A click naming a repository this
+ * app cannot resolve from `target.dataset` and `snapshot` is silently
+ * ignored, the same fail-safe every other board control already applies to
+ * a stale render.
  */
 export function handleDispatchClick(target: HTMLElement, snapshot: BoardSnapshot | null, redraw: () => void): void {
   const action = target.dataset.action
-  if (action === 'dispatch-run' || action === 'dispatch-drain' || action === 'dispatch-pause' || action === 'dispatch-pause-cancel') {
-    const repoId = target.dataset.repoId
-    if (repoId === undefined) return
-    const inFlightCount = snapshot?.tick.find((report) => String(report.repoId) === repoId)?.claims.length ?? 0
-    handleRunStateClick(action, repoId as RepoId, inFlightCount, redraw)
-    return
-  }
   if (action === 'dispatch-halt') {
     handleHaltClick(redraw)
     return
