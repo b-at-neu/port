@@ -1,6 +1,5 @@
-// `'gh:status'`'s composition — the footer's status dot. `ghAuthStatus` is
-// the only call made, and this file never throws for a gh failure itself;
-// every outcome, including one neither signed-in nor signed-out, is a value.
+// `'gh:status'`'s composition — the footer's status dot. This file never
+// throws for a gh failure itself; every outcome is a value.
 import type { GhStatus } from '../../shared/gh/types'
 import type { IpcMap } from '../../shared/ipc'
 import { ghAuthStatus } from '../platform'
@@ -27,9 +26,8 @@ function messageFor(result: Exclude<GhAuthStatusResult, { ok: true } | { ok: fal
       return 'gh produced more output than this app will buffer'
     case 'spawn-failed':
       return result.message
-    // `ghAuthStatus` never classifies through `classifyGhExit` (it reads its
-    // own exit code directly), so these can never actually occur — handled
-    // only because the type is shared with `gh()`'s own classified failures.
+    // `ghAuthStatus` never classifies through `classifyGhExit`, so these can
+    // never actually occur — handled only because the type is shared.
     case 'rate-limited':
     case 'forbidden':
     case 'http-not-found':
