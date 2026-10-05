@@ -14,6 +14,7 @@ import { RUN_TARGET } from '../../shared/dispatch/types'
 import type { TranscriptSource } from '../../shared/sessions/transcript'
 import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
 import { fixtureBoardSnapshot } from './board'
+import { fixtureBacklog } from './backlog'
 import { FIXTURE_REPOSITORIES } from './repos'
 
 /** Exhaustive by construction: a new `IpcChannel` fails `pnpm typecheck` in
@@ -123,7 +124,7 @@ export function fixtureHandlers(now: Date): FixtureHandlers {
     'session:restore:discard': () => ({ ok: true }),
 
     'gh:status': () => ({ kind: 'signed-in', checkedAt: now.toISOString() }),
-    'backlog:list': () => ({ ok: true, items: [], scanned: 0, total: 0, viewer: 'octo-dev', fetchedAt: now.toISOString() }),
+    'backlog:list': (request) => fixtureBacklog(now, request.repoId),
     'session:defaults': () => DEFAULT_SESSION_DEFAULTS,
     'session:defaults:set': (request) => request,
     'session:rename': () => ({ ok: false, kind: 'unknown-session' }),
