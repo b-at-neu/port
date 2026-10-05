@@ -3,7 +3,8 @@
 // routing through `main.ts`'s delegated board/repositories handler, so the
 // entry point there stays exactly one branch (`action?.startsWith('claim-')`
 // opening it).
-import type { RepoId, RepositoryEntry } from '../../../shared/repos'
+import { isReadyRepo } from '../../../shared/repos'
+import type { RepoId } from '../../../shared/repos'
 import type { ClaimPreflight, ClaimVerdict, PlanGateChoice } from '../../../shared/claim/types'
 import type { WriteOutcome } from '../../../shared/writes/types'
 import { buildClaimDialog, renderClaimDialog } from './view'
@@ -57,14 +58,10 @@ function getState(): ClaimState {
   return state
 }
 
-function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { status: 'ready' }> {
-  return 'config' in entry
-}
-
 async function loadRepos(): Promise<readonly ReadyRepo[]> {
   const result = await window.port.reposList()
   if (!result.ok) return []
-  return result.repositories.filter(isReady).map((entry) => ({ id: entry.id, repo: entry.config.repo }))
+  return result.repositories.filter(isReadyRepo).map((entry) => ({ id: entry.id, repo: entry.config.repo }))
 }
 
 export function openClaimDialog(): void {

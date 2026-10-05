@@ -18,15 +18,12 @@ import { ROUTE_IDS } from '../router/legacy-view'
 import { buildBacklogGroup, relativeAge, exactTime, staleSinceAt } from './group'
 import type { BacklogGroupView, BacklogRowView } from './group'
 import { backlogEmptyGroupCopy, backlogNotReadyCopy } from './copy'
-import type { RepoId, RepositoryEntry } from '../../../shared/repos'
+import { isReadyRepo } from '../../../shared/repos'
+import type { RepoId } from '../../../shared/repos'
 
 interface ReadyRepo {
   readonly id: RepoId
   readonly repo: string
-}
-
-function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { readonly status: 'ready' }> {
-  return 'config' in entry
 }
 
 function rowKey(repoId: RepoId, number: number): string {
@@ -158,8 +155,8 @@ export function BacklogScreen() {
   const [menuOpenKey, setMenuOpenKey] = useState<string | null>(null)
   const now = new Date()
 
-  const readyRepos: readonly ReadyRepo[] = reposQuery.data?.ok === true ? reposQuery.data.repositories.filter(isReady).map((e) => ({ id: e.id, repo: e.config.repo })) : []
-  const notReadyRepos = reposQuery.data?.ok === true ? reposQuery.data.repositories.filter((e) => !isReady(e)) : []
+  const readyRepos: readonly ReadyRepo[] = reposQuery.data?.ok === true ? reposQuery.data.repositories.filter(isReadyRepo).map((e) => ({ id: e.id, repo: e.config.repo })) : []
+  const notReadyRepos = reposQuery.data?.ok === true ? reposQuery.data.repositories.filter((e) => !isReadyRepo(e)) : []
 
   const queries = useQueries({ queries: readyRepos.map((r) => ipcQueryOptions('backlog:list', { repoId: r.id })) })
 
@@ -199,7 +196,7 @@ export function BacklogScreen() {
       <ScreenHeader className="justify-between">
         <span>Backlog</span>
         <div className="flex items-center gap-2">
-          {stale !== null ? <span className="text-meta font-normal text-muted-foreground">Couldn&apos;t refresh — showing data from {relativeAge(new Date(stale).toISOString(), now)}</span> : null}
+          {stale !== null ? <span className="text-meta font-normal text-attention-dot">Updated {relativeAge(new Date(stale).toISOString(), now)}</span> : null}
           <Button variant="ghost" size="small" onClick={refreshAll} disabled={isFetching}>
             <RefreshCw aria-hidden="true" className={isFetching ? 'size-3.5 animate-spin' : 'size-3.5'} />
             Refresh

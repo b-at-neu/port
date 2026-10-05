@@ -146,3 +146,10 @@ export type RepositoryEntry =
       readonly problem: RepoProblem
       readonly diagnostics: readonly RepoDiagnostic[]
     }
+
+/** Narrows a `RepositoryEntry` to its `ready` variant — shared so the
+ *  renderer's backlog screen and claim controller apply the same test
+ *  rather than each carrying its own copy. */
+export function isReadyRepo(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { readonly status: 'ready' }> {
+  return 'config' in entry
+}
