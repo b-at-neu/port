@@ -14,19 +14,13 @@ No dependencies, no plugin install, no model calls. Runs in seconds, in an agent
 
 **These guard against silence.** A skill or agent whose frontmatter is malformed is *absent* from Claude Code's component inventory rather than reported as an error, so nothing complains — the component simply is not there. Same for a hook.
 
-**Guards live in their topic module under the checks directory, colocated on the check block they describe, never a shared registry file.** Existing `guard(#N)`/`pin:` markers already in the tree are still indexed by the commands below; a new check carries none (see `docs/ENGINEERING.md` §7).
-
-```bash
-node scripts/checks.ts --guards               # the whole guard index, one section per check module
-node scripts/checks.ts --guards --issue 149    # is there a guard for this fix? at least one row, or exit 1
-node scripts/checks.ts --pins                  # the whole copy-pin index, one section per check module
-```
+**Guards live in their topic module, on the check block they describe, never a shared registry file.**
 
 Each rule is worth testing by breaking it deliberately. If a check cannot be made to fail, it is not a check.
 
 The script reports full schema validation as **skipped**, because a draft 2020-12 validator is a dependency and the script must run where none is installed. CI does that part.
 
-**Every guard-adding pull request stays out of this file.** A guard's own description lives on the check block that pins it (`--guards` above), and a duplicated-content pin lives the same way (`--pins`, `docs/ENGINEERING.md` §2) — never restated here in prose, which is what regrew `docs/TESTING.md` into a hub after #217 first relieved it (#255).
+**Every guard-adding pull request stays out of this file.** A guard's own description lives on the check block that pins it, and a duplicated-content pin lives the same way (`docs/ENGINEERING.md` §2) — never restated here in prose, which is what regrew `docs/TESTING.md` into a hub after #217 first relieved it (#255).
 
 ## Layer 2 — artifact assertions on real runs
 

@@ -287,7 +287,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     const selfTestCases: [string, string[]][] = [
       ['pnpm install', []],
       ['node scripts/checks.ts', ['scripts/checks.ts']],
-      ['node scripts/checks.ts --guards', ['scripts/checks.ts']],
+      ['node scripts/checks.ts --verbose', ['scripts/checks.ts']],
       ['Bash(node scripts/checks.ts *)', ['scripts/checks.ts']],
       ['node scripts/checks-<topic>.ts', []],
     ];

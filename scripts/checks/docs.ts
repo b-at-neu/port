@@ -11,7 +11,7 @@ import { message } from '../lib/errors.ts';
 // to the exact form every other file's example is meant to match.
 const SESSION_MARKER_LINE = /^>\s*\*\*SESSION REQUIRED:\*\*\s+\S/;
 
-export default async function ({ fail, note, ok }: Reporter) {
+export default async function ({ fail, note, ok, expect }: Reporter) {
   // --- Stale references -------------------------------------------------------
   // guard: docs naming things that were renamed or moved. Each of these named
   // something real that was renamed or moved.
