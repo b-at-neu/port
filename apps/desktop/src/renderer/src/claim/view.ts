@@ -5,7 +5,7 @@
 // `board/view.ts` already establishes — no framework, no `innerHTML`.
 import type { ClaimVerdict } from '../../../shared/claim/types'
 import type { ClaimState } from './controller'
-import { assigneeCopy, blockersCopy, closedCopy, movedCopy, preflightFailedCopy, primaryButtonLabel, refusalCopy, writeOutcomeCopy } from './copy'
+import { PLAN_GATE_OPTIONS, assigneeCopy, blockersCopy, closedCopy, movedCopy, preflightFailedCopy, primaryButtonLabel, refusalCopy, writeOutcomeCopy } from './copy'
 
 function el(tag: string, className: string, content?: string): HTMLElement {
   const node = document.createElement(tag)
@@ -114,11 +114,7 @@ function buildReviewStep(state: Extract<ClaimState, { readonly step: 'reviewing'
 
   const fieldset = el('div', 'claim-dialog__plan-gate')
   fieldset.appendChild(el('span', 'claim-dialog__label', 'Plan gate'))
-  const options: { readonly value: 'review' | 'auto'; readonly label: string; readonly hint: string }[] = [
-    { value: 'review', label: 'Review the plan', hint: 'You approve or bounce the plan before any code is written. The default for features.' },
-    { value: 'auto', label: 'Auto-approve the plan', hint: 'Skips the plan gate. For small or bug-fix tickets.' },
-  ]
-  for (const option of options) {
+  for (const option of PLAN_GATE_OPTIONS) {
     const row = el('label', 'claim-dialog__radio-row')
     const radio = document.createElement('input')
     radio.type = 'radio'
