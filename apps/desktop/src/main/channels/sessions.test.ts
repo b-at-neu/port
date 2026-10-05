@@ -1,18 +1,9 @@
 // Relocated verbatim from `main/ipc.test.ts` (#92) alongside the resolvers
 // they cover — no behaviour change in this move.
 import { describe, expect, it } from 'vitest'
-import type { TranscriptRead, TranscriptTailOpen, TranscriptTailPoll } from '../../shared/sessions/transcript'
-import { resolveTranscriptRead, resolveTranscriptTailClose, resolveTranscriptTailOpen, resolveTranscriptTailPoll } from './sessions'
-import type { TranscriptReadDeps, TranscriptTailDeps } from './sessions'
-
-function transcriptReadDepsWith(overrides: Partial<TranscriptReadDeps>): TranscriptReadDeps {
-  return {
-    openTranscript: () => {
-      throw new Error('openTranscript should not be invoked in this case')
-    },
-    ...overrides,
-  }
-}
+import type { TranscriptTailOpen, TranscriptTailPoll } from '../../shared/sessions/transcript'
+import { resolveTranscriptTailClose, resolveTranscriptTailOpen, resolveTranscriptTailPoll } from './sessions'
+import type { TranscriptTailDeps } from './sessions'
 
 function tailDepsWith(overrides: Partial<TranscriptTailDeps>): TranscriptTailDeps {
   return {
@@ -28,49 +19,6 @@ function tailDepsWith(overrides: Partial<TranscriptTailDeps>): TranscriptTailDep
     ...overrides,
   }
 }
-
-describe('resolveTranscriptRead', () => {
-  it('rejects a missing sessionId', async () => {
-    await expect(resolveTranscriptRead({ sessionId: undefined as unknown as string, agentId: null }, transcriptReadDepsWith({}))).rejects.toThrow(
-      "'transcript:read' requires a non-empty 'sessionId'",
-    )
-  })
-
-  it('rejects an empty sessionId', async () => {
-    await expect(resolveTranscriptRead({ sessionId: '', agentId: null }, transcriptReadDepsWith({}))).rejects.toThrow(
-      "'transcript:read' requires a non-empty 'sessionId'",
-    )
-  })
-
-  it('rejects an agentId that is neither a string nor null', async () => {
-    await expect(resolveTranscriptRead({ sessionId: 's1', agentId: 42 as unknown as string }, transcriptReadDepsWith({}))).rejects.toThrow(
-      "'transcript:read' requires 'agentId' to be a string or null",
-    )
-  })
-
-  it('opens a cursor through openTranscript, returns its read, and discards the cursor', async () => {
-    const read: TranscriptRead = { ok: true, source: {} as never, entries: [] }
-    let received: unknown
-    const deps = transcriptReadDepsWith({
-      openTranscript: (params) => {
-        received = params
-        return Promise.resolve({ read, cursor: { path: '/t', sessionId: 's1', agentId: null, offset: 10, nextIndex: 0, recordCount: 0, malformedLines: 0, deriver: {} as never } })
-      },
-    })
-    const result = await resolveTranscriptRead({ sessionId: 's1', agentId: null }, deps)
-    expect(result).toBe(read)
-    expect(received).toEqual({ sessionId: 's1', agentId: null })
-  })
-
-  it('surfaces a failed read as-is, with no cursor to discard', async () => {
-    const read: TranscriptRead = { ok: false, kind: 'not-found', message: 'No transcript file at /t.', path: '/t' }
-    const deps = transcriptReadDepsWith({
-      openTranscript: () => Promise.resolve({ read, cursor: null }),
-    })
-    const result = await resolveTranscriptRead({ sessionId: 's1', agentId: null }, deps)
-    expect(result).toBe(read)
-  })
-})
 
 describe('resolveTranscriptTailOpen', () => {
   it('rejects a missing sessionId', async () => {

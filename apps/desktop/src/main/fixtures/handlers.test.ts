@@ -8,7 +8,6 @@ import { fixtureHandlers } from './handlers'
 const SAMPLE_REQUESTS: Partial<Record<IpcChannel, unknown>> = {
   'repos:remove': { id: 'fixture-acme-widgets' },
   'worktrees:report': { id: 'fixture-acme-widgets' },
-  'transcript:read': { sessionId: 'fixture-session', agentId: null },
   'transcript:tail:open': { sessionId: 'fixture-session', agentId: null },
   'transcript:tail:poll': { tailId: 'fixture-tail' },
   'transcript:tail:close': { tailId: 'fixture-tail' },

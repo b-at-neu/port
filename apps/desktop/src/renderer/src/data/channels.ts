@@ -12,7 +12,6 @@ export const QUERY_CHANNELS = [
   'repos:list',
   'worktrees:report',
   'sessions:scan',
-  'transcript:read',
   'search:query',
   'board:snapshot',
   'claim:preflight',

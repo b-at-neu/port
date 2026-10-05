@@ -24,7 +24,7 @@ import { resolveItemAction, resolveItemDecision } from './channels/items'
 import type { ItemDecisionDeps } from './channels/items'
 import { resolveRuntimeProbe } from './channels/runtime'
 import { copyRelayReply } from './relay/clipboard'
-import { resolveSearchQuery, resolveSessionsScan, resolveTranscriptRead, resolveTranscriptTailClose, resolveTranscriptTailOpen, resolveTranscriptTailPoll } from './channels/sessions'
+import { resolveSearchQuery, resolveSessionsScan, resolveTranscriptTailClose, resolveTranscriptTailOpen, resolveTranscriptTailPoll } from './channels/sessions'
 import {
   defaultHostingChannelDeps,
   resolveSessionAttach,
@@ -230,8 +230,6 @@ export function registerIpc(): RegisteredIpc {
     return resolveSessionsScan(registryDeps)
   })
 
-  handle('transcript:read', (_event, request) => resolveTranscriptRead(request))
-
   handle('transcript:tail:open', (_event, request) => resolveTranscriptTailOpen(request))
 
   handle('transcript:tail:poll', (_event, request) => resolveTranscriptTailPoll(request))
@@ -241,11 +239,13 @@ export function registerIpc(): RegisteredIpc {
   handle('search:query', (_event, request) => resolveSearchQuery(registryDeps, request, app.getPath('userData')))
 
   // #98: one hosted-session store for the process lifetime, broadcasting
-  // over `session:event`/`session:status`. Created before the watcher
+  // over `session:status`/`session:entries`. Created before the watcher
   // (#265): the dispatcher sits between the two and needs this store first.
+  // `onEvent` stays at its no-op default — nothing broadcasts the raw SDK
+  // envelope over IPC any more (#350); it is still forwarded internally for
+  // `session:attach`'s own replay ring (`main/hosting/handle.ts`).
   const hostedStore = createHostedStore({
     ...defaultHostedStoreDeps,
-    onEvent: (envelope) => broadcast('session:event', envelope),
     onStatus: (snapshot) => broadcast('session:status', snapshot),
     onEntries: (delta) => broadcast('session:entries', delta),
     persistence: createHostingPersistence({ dir: app.getPath('userData') }),

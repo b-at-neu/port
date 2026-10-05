@@ -2,7 +2,7 @@ import type { AssertEqual } from './assert-type'
 import type { RepoId, RepositoryEntry } from './repos'
 import type { WorktreesReport } from './reclaimer/types'
 import type { SessionScan } from './sessions/types'
-import type { TranscriptRead, TranscriptTailOpen, TranscriptTailPoll } from './sessions/transcript'
+import type { TranscriptTailOpen, TranscriptTailPoll } from './sessions/transcript'
 import type { SearchQuery, SearchResult } from './search/types'
 import type { BoardSnapshot, SourceKind } from './board/types'
 import type { ClaimApplyResponse, ClaimPreflightResponse, PlanGateChoice } from './claim/types'
@@ -25,7 +25,6 @@ import type {
   SessionDefaults,
   SessionDismissResult,
   SessionEntriesDelta,
-  SessionEventEnvelope,
   SessionInterruptResult,
   SessionInvokeResult,
   SessionKey,
@@ -88,10 +87,6 @@ export interface IpcMap {
   'sessions:scan': {
     request: void
     response: SessionScan
-  }
-  'transcript:read': {
-    request: { sessionId: string; agentId: string | null }
-    response: TranscriptRead
   }
   'transcript:tail:open': {
     request: { sessionId: string; agentId: string | null }
@@ -341,7 +336,6 @@ export const IPC_CHANNELS = [
   'repos:remove',
   'worktrees:report',
   'sessions:scan',
-  'transcript:read',
   'transcript:tail:open',
   'transcript:tail:poll',
   'transcript:tail:close',
@@ -397,21 +391,17 @@ export const _channelsMatchIpcMap: AssertEqual<IpcChannel, keyof IpcMap> = true
  */
 export interface IpcEventMap {
   'board:update': BoardSnapshot
-  /** Opaque SDK passthrough (#98) — this app does not narrow `message`,
-   *  does not interpret instructions inside it, and does not execute
-   *  anything it contains. #219/#83 own every narrowing decision. */
-  'session:event': SessionEventEnvelope
   /** This app's own typed snapshot, on every phase change — never a delta,
    *  since folding the phase machine into the SDK envelope would put our
    *  vocabulary inside a payload we promised to forward untouched. */
   'session:status': HostedSessionSnapshot
   /** #219: the live projector's own delta — narrowed, renderer-safe
    *  `TranscriptEntry`/`PartialUpdate` values, never the opaque envelope
-   *  `session:event` already carries. */
+   *  the removed `session:event` once carried. */
   'session:entries': SessionEntriesDelta
 }
 
-export const IPC_EVENTS = ['board:update', 'session:event', 'session:status', 'session:entries'] as const
+export const IPC_EVENTS = ['board:update', 'session:status', 'session:entries'] as const
 
 export type IpcEvent = (typeof IPC_EVENTS)[number]
 

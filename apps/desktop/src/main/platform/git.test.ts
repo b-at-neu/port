@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { gitRepoRoot, parsePorcelainStanzas, splitNul } from './git'
+import { gitRepoRoot, parsePorcelainStanzas } from './git'
 import { pathOps } from './paths'
 
 // A captured `git worktree list --porcelain` fixture covering the main
@@ -59,20 +59,6 @@ describe('parsePorcelainStanzas', () => {
 
   it('returns an empty array for empty stdout', () => {
     expect(parsePorcelainStanzas('')).toEqual([])
-  })
-})
-
-describe('splitNul', () => {
-  it('splits on NUL and drops the trailing separator', () => {
-    expect(splitNul('a\0b\0c\0')).toEqual(['a', 'b', 'c'])
-  })
-
-  it('preserves a newline inside a path', () => {
-    expect(splitNul('a\nb\0c\0')).toEqual(['a\nb', 'c'])
-  })
-
-  it('returns an empty array for empty stdout', () => {
-    expect(splitNul('')).toEqual([])
   })
 })
 

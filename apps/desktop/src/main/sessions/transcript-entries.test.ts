@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { capPayload, createDeriver, deriveEntries, headlineFor, sanitize } from './transcript-entries'
+import { capPayload, createDeriver, headlineFor, sanitize } from './transcript-entries'
+import type { DeriveEntriesOptions } from './transcript-entries'
 import type { TranscriptEntry } from '../../shared/sessions/transcript'
 import sharedCaseTable from './transcript.cases.json'
+
+/** Not part of `transcript-entries.ts`'s own public surface — this test
+ *  suite's only caller wants "push the whole record set once, apply the
+ *  patches, hand back the final array" rather than `createDeriver`'s own
+ *  incremental `push()`, so the batching stays local to the suite that
+ *  needs it. */
+function deriveEntries(records: readonly unknown[], options?: DeriveEntriesOptions): TranscriptEntry[] {
+  const deriver = createDeriver(options)
+  const { appended, patched } = deriver.push(records)
+  const entries = appended.slice()
+  for (const patch of patched) entries[patch.index] = patch.entry
+  return entries
+}
 
 function toolUseRecord(uuid: string, id: string, name: string, input: unknown): unknown {
   return {

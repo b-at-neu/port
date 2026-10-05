@@ -72,7 +72,6 @@ export function fixtureHandlers(now: Date): FixtureHandlers {
       readAt: now.toISOString(),
     }),
 
-    'transcript:read': (request) => ({ ok: true, source: transcriptSourceFor(request.sessionId, request.agentId, now), entries: [] }),
     'transcript:tail:open': (request) => ({ ok: true, tailId: 'fixture-tail', source: transcriptSourceFor(request.sessionId, request.agentId, now), entries: [] }),
     'transcript:tail:poll': () => ({ ok: true, source: transcriptSourceFor('fixture-session', null, now), appended: [], patched: [], hasMore: false }),
     'transcript:tail:close': () => undefined,

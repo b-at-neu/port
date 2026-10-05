@@ -403,14 +403,3 @@ export function createDeriver(options: DeriveEntriesOptions = DEFAULT_OPTIONS): 
   return { push }
 }
 
-/** Behaviourally identical to the pre-#84 walker: creates a deriver, pushes
- *  the whole record set once, and applies the patches into the returned
- *  array -- a `tool_use` and its `tool_result` are always in the same call
- *  here, so every patch lands on a row `appended` just produced. */
-export function deriveEntries(records: readonly unknown[], options: DeriveEntriesOptions = DEFAULT_OPTIONS): TranscriptEntry[] {
-  const deriver = createDeriver(options)
-  const { appended, patched } = deriver.push(records)
-  const entries = appended.slice()
-  for (const patch of patched) entries[patch.index] = patch.entry
-  return entries
-}

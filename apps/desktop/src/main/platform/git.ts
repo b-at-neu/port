@@ -67,13 +67,6 @@ export function parsePorcelainStanzas(stdout: string): ReadonlyArray<ReadonlyMap
     })
 }
 
-/** For `-z` output — the only correct handling of a path that itself
- *  contains a newline, which a plain line split would corrupt. */
-export function splitNul(stdout: string): readonly string[] {
-  const trimmed = stdout.endsWith('\0') ? stdout.slice(0, -1) : stdout
-  return trimmed === '' ? [] : trimmed.split('\0')
-}
-
 export type GitRepoRootResult =
   | { readonly ok: true; readonly root: string }
   | { readonly ok: false; readonly kind: 'not-a-repository' }
