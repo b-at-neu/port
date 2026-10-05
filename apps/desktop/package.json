@@ -9,6 +9,7 @@
     "build": "electron-vite build",
     "dist": "node scripts/icon.mjs && electron-vite build && electron-builder --config electron-builder.config.mjs --publish never && node scripts/audit-bundle.mjs",
     "screenshots": "electron-vite build && node scripts/screenshots.mjs",
+    "smoke:packaged": "node scripts/screenshots.mjs --config playwright.packaged.config.mts",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck": "pnpm typecheck:node && pnpm typecheck:web",
