@@ -5,6 +5,7 @@
 import { LABEL_DEFAULTS } from '../labels/defaults'
 import { inspectDenials } from '../local/inspect'
 import { actionsFor } from '../actions/plan'
+import { decisionsFor } from '../actions/decide'
 import type { RepoId } from '../repos'
 import type { RelayPending } from '../relay/types'
 import type { RepositoryFreshness, RepositoryState, StageLabel } from '../state/types'
@@ -118,7 +119,8 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
     const health = healthByRepo.get(repo.repoId)
     for (const item of repo.items) {
       const actions = actionsFor({ item, viewer: repo.viewer, approvalGate: repo.approvalGate })
-      rows.push({ item, displayStatus: displayStatus(item, health, repo.freshness, now), stageLabel: stageLabelOf(item), actions, relay: relayFor(item.repoId, item.number) })
+      const decisions = decisionsFor({ item, viewer: repo.viewer, reviewCycleCap: repo.reviewCycleCap })
+      rows.push({ item, displayStatus: displayStatus(item, health, repo.freshness, now), stageLabel: stageLabelOf(item), actions, decisions, relay: relayFor(item.repoId, item.number) })
     }
   }
   rows.sort((a, b) => compareRows(a, b, displayNameOf))

@@ -44,7 +44,9 @@ export interface ApplyItemActionDeps {
 
 export const defaultApplyItemActionDeps: ApplyItemActionDeps = { applyLabels, recoverPausedTrigger }
 
-function findRepoState(snapshot: BoardSnapshot, repoId: RepoId): Extract<RepositoryState, { readonly ok: true }> | null {
+/** Exported so `main/actions/decide.ts` reuses this rather than a second
+ *  copy of the watcher-snapshot lookup. */
+export function findRepoState(snapshot: BoardSnapshot, repoId: RepoId): Extract<RepositoryState, { readonly ok: true }> | null {
   const state = snapshot.state.repositories.find((repository) => repository.repoId === repoId)
   return state !== undefined && state.ok ? state : null
 }
@@ -61,7 +63,13 @@ function stageDisplayName(vocabulary: ReadyEntry['config']['vocabulary'], key: L
   return labelName(vocabulary, key) ?? key
 }
 
-function movedResult(vocabulary: ReadyEntry['config']['vocabulary'], expected: LabelKey | null, observed: LabelKey | null | 'gone'): ItemActionResult {
+/** Exported so `main/actions/decide.ts` reuses this. Returns the bare
+ *  `moved` shape, structurally assignable to either caller's own union. */
+export function movedResult(
+  vocabulary: ReadyEntry['config']['vocabulary'],
+  expected: LabelKey | null,
+  observed: LabelKey | null | 'gone',
+): { readonly ok: false; readonly reason: 'moved'; readonly expected: string; readonly observed: string } {
   return {
     ok: false,
     reason: 'moved',

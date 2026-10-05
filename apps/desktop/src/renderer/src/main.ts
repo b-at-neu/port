@@ -4,6 +4,7 @@ import './transcript.css'
 import './board.css'
 import './claim.css'
 import './gate.css'
+import './decision.css'
 import './permission.css'
 import './search.css'
 import './session.css'
@@ -28,13 +29,12 @@ import {
 import { agentLabel, sessionLabel } from '../../shared/sessions/label'
 import { changeSearchScope, openSearch, registerSearchRedraw, renderSearch, searchScreenState, submitSearch } from './search'
 import { render as renderBoard, type BoardViewState } from './board/view'
-import { handleItemAction, pruneItemActionStates } from './board/actions'
+import { handleItemActionClick, pruneItemActionStates } from './board/actions'
 import { handleDispatchClick } from './board/dispatch'
 import { handleRelayCopy, pruneRelayStates, relayKeyOf, setRelayAnswer, toggleRelayExpanded } from './board/relay'
-import type { OperatorAction } from '../../shared/actions/types'
-import type { LabelKey } from '../../shared/labels/vocabulary'
 import type { RelayPending } from '../../shared/relay/types'
 import { initClaim, openClaimDialog } from './claim/controller'
+import { initDecision, openDecisionDialog } from './decision/controller'
 import { initGate, openGateDialog, openReviewDialog } from './gate/controller'
 import { initPermissions } from './permission/controller'
 import { initRuntime } from './runtime'
@@ -298,14 +298,6 @@ async function handleBoardRefresh(client: ReturnType<typeof createQueryClient>):
   }
 }
 
-// The action controller's own click entry point (rows.ts's own buttons).
-function handleItemActionClick(target: HTMLElement): void {
-  const action = target.dataset.action?.slice('item-'.length) as OperatorAction | undefined
-  const { repoId, number, kind, stage } = target.dataset
-  if (!action || !repoId || !number || !kind) return
-  void handleItemAction({ repoId: repoId as RepoId, kind: kind as 'issue' | 'pull-request', number: Number(number), action, expectedStage: (stage || null) as LabelKey | null, redraw: drawBoard })
-}
-
 // The plan gate's own row entry point (board/rows.ts's Review plan button).
 function handleGateReviewClick(target: HTMLElement): void {
   const { repoId, number } = target.dataset
@@ -449,7 +441,8 @@ app?.addEventListener('click', (event) => {
   else if (action === 'gate-review') handleGateReviewClick(target)
   else if (action === 'relay-toggle') handleRelayToggleClick(target)
   else if (action === 'relay-copy') handleRelayCopyClick(target)
-  else if (action?.startsWith('item-')) handleItemActionClick(target)
+  else if (action?.startsWith('item-')) handleItemActionClick(target, drawBoard)
+  else if (action?.startsWith('decide-')) openDecisionDialog(target)
   else if (action?.startsWith('dispatch-')) handleDispatchClick(target, boardState.snapshot, drawBoard)
   else {
     const row = target.closest<HTMLElement>('.board-row')
@@ -492,6 +485,7 @@ async function boot(): Promise<void> {
   void refreshRepositories()
   initBoard(queryClient)
   if (app) initClaim(app)
+  if (app) initDecision(app, queryClient)
   if (app) initGate(app)
   if (app) initPermissions(app)
   if (runtimeStrip) initRuntime(runtimeStrip)

@@ -8,7 +8,7 @@ import type { RepoProblem } from '../../../shared/repos'
 import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
 import type { LabelKey } from '../../../shared/labels/vocabulary'
 import { RETRY_TRIGGER } from '../../../shared/actions/plan'
-import type { ActionPlan, ActionRefusal, ItemActionResult, OperatorAction } from '../../../shared/actions/types'
+import type { ActionPlan, ActionRefusal, ItemActionResult, OperatorAction, OperatorDecision } from '../../../shared/actions/types'
 import type { Conflict } from '../../../shared/writes/types'
 
 export function statusWord(status: ItemStatus): string {
@@ -129,6 +129,26 @@ export function planGateHeaderButtonLabel(): string {
   return 'Plan gate'
 }
 
+// --- The operator decisions --------------------------------------------
+
+export function decisionButtonLabel(decision: OperatorDecision): string {
+  return decision === 'unblock' ? 'Unblock' : 'Request changes'
+}
+
+/** The row's own note for a `cycle-cap`/`rebase-decisions` refusal — every
+ *  other refusal is silent, the same as `actionRefusalNote`'s own rule. */
+export function decisionRefusalNote(decision: OperatorDecision, reason: string, number: number): string | null {
+  const n = String(number)
+  if (reason === 'cycle-cap') {
+    return `PR #${n} has used all its review cycles. Sending it back would escalate straight to "${labelNameOf('needsHuman')}". Merge it and open a follow-up, or raise reviewCycleCap.`
+  }
+  if (reason === 'rebase-decisions') {
+    return `PR #${n} is waiting on rebase decisions. port can't record them yet — answer them with unblock #${n} in the cockpit.`
+  }
+  void decision
+  return null
+}
+
 // --- The single-label operator actions (#94) -------------------------------
 
 export function actionButtonLabel(action: OperatorAction): string {
@@ -143,6 +163,8 @@ export function actionButtonLabel(action: OperatorAction): string {
       return 'Stop'
     case 'gate':
       return 'Add gate label'
+    case 'refresh':
+      return 'Refresh'
   }
 }
 
@@ -158,6 +180,8 @@ export function actionPendingLabel(action: OperatorAction): string {
       return 'Stopping…'
     case 'gate':
       return 'Adding…'
+    case 'refresh':
+      return 'Refreshing…'
   }
 }
 
@@ -211,6 +235,8 @@ function appliedCopy(action: OperatorAction, number: number, plan: ActionPlan | 
     }
     case 'gate':
       return `Gate label added to #${n}. The "labeled" event re-runs the approval check, so the gate is live on that run.`
+    case 'refresh':
+      return `Refreshing #${n} — added "${labelNameOf('refreshBranch')}". The next tick rebases it onto its base and force-pushes.`
   }
 }
 
@@ -231,7 +257,7 @@ function preconditionFailedCopy(action: OperatorAction, number: number, conflict
   return `#${n} moved while you were deciding. Nothing was written.`
 }
 
-const ACTION_PAST_TENSE: Readonly<Record<OperatorAction, string>> = { pause: 'paused', resume: 'resumed', retry: 'retried', stop: 'stopped', gate: 'gated' }
+const ACTION_PAST_TENSE: Readonly<Record<OperatorAction, string>> = { pause: 'paused', resume: 'resumed', retry: 'retried', stop: 'stopped', gate: 'gated', refresh: 'refreshed' }
 
 /** `outcome.keys` is the request `applyLabels` actually evaluated — built
  *  server-side, after resume's own recovered trigger is known — so it names

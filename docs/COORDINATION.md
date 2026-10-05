@@ -23,7 +23,8 @@ Every write the cockpit makes today, classified:
 | opt-in (`work on #N`): add marker, `ready`, optional `autoPlan`, assignee | human | either — convergent |
 | `pause`, `resume`, `retry`, `stop #N`, `gate #N`, `refresh #N` | human | either — convergent |
 | per-repository run state (run/drain/pause), `stop #N`, halt (the desktop app's own dispatch gate, #110, #314) | human | either — convergent, but scoped to the app: draining or pausing a repository stands the app's own dispatcher down for it, never the cockpit's |
-| removing `needsHuman` (`unblock #N`) | human, guarded | cockpit only — see "Risks" below |
+| removing `needsHuman` (`unblock #N`) | human, guarded | either — see "Risks" below |
+| `approved` → `needsRevision` with `## Changes requested` (`revise #N`, the app's Request changes) | human | either |
 | liveness reset | machine observation | whichever side's dispatch record names the item |
 | usage-limit park | machine observation | cockpit only |
 | cycle-cap and zero-diff escalation to `needsHuman` | machine observation | the app under a `dispatch` claim, else the cockpit (#292) |
@@ -124,7 +125,7 @@ Every direction below is chosen deliberately; neither side of any of them is a d
 
 **Why a prose rail is not enough, and the hook is.** Both cockpit-class guard rules exist because the cockpit violated a prose rail under throughput pressure — the shell loop (#120) and clearing its own `needsHuman` gate thirteen minutes after setting it (#138). `docs/ENGINEERING.md` §7 turns that into a rule: a rail is a checkable precondition, never "never do X". The claim is therefore enforced twice — the cockpit reads it and skips the gate, and the hook denies it if the model does not. Only the second half is load-bearing.
 
-**`unblock #N` cannot move to the UI at all yet, and that bounds the epic.** The guard hook's gate rule authorises the removal from the *calling Claude session's own transcript* (`recentOperatorMessages`). The app has no transcript, so it structurally cannot clear `needsHuman` until it hosts a session itself (#99). Out of this epic's scope either way, but it should be known rather than discovered in #94.
+**The app's own click plus its audit entry authorises `unblock`/`revise` (#312).** The guard hook's gate rule authorises the cockpit's own `unblock #N` from the *calling Claude session's own transcript* (`recentOperatorMessages`) — the app has no transcript, so that rule never applies to it. Instead, the app writes these two labels from its main process through `gh`, never through a Claude tool call, so the guard hook never sees them at all; the operator's own click in the app, recorded in `writes.jsonl`, is the authorisation. The hook still guards every Claude session, including the app's own hosted dispatcher and operator sessions — this changes nothing about the hook, it only documents a write path the hook was never positioned to see.
 
 **Two scopes, not a framework.** `scopes` is an array with exactly two legal members, `plan-gate` and `dispatch` (#265) — the array shape was chosen precisely so adding the second was a data change, never a format migration, but no third scope is defined that no ticket implements (`docs/ENGINEERING.md` §7's rule against scaffolding).
 

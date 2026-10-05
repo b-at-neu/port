@@ -38,6 +38,7 @@ export const MUTATION_CHANNELS = [
   'board:refresh',
   'claim:apply',
   'item:action',
+  'item:decide',
   'dispatch:control',
   'dispatch:claim:set',
   'dispatch:relay',

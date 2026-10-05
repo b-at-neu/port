@@ -250,5 +250,6 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     approvalGate: entry.config.modules.approvalGate,
     disabled: pipelineFetch.disabled,
     concurrency: entry.config.concurrency,
+    reviewCycleCap: entry.config.reviewCycleCap,
   }
 }

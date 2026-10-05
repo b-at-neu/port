@@ -16,6 +16,7 @@ export default async function ({ fail, ok }: Reporter) {
   const typesFile = `${sharedGateDir}/types.ts`;
   const inlineFile = `${sharedMarkdownDir}/inline.ts`;
   const gateActionFile = `${mainActionsDir}/gate.ts`;
+  const decideActionFile = `${mainActionsDir}/decide.ts`;
   const escalateActionFile = `${mainActionsDir}/escalate.ts`;
   const observeActionFile = `${mainActionsDir}/observe.ts`;
   const scopeFile = 'apps/desktop/src/main/writes/scope.ts';
@@ -93,11 +94,14 @@ export default async function ({ fail, ok }: Reporter) {
   }
 
   // --- postComment( is called under apps/desktop/src/ only from -----------
-  // main/actions/gate.ts, main/actions/escalate.ts (#293), and
-  // main/actions/observe.ts (#292) — each in its own fixed order.
+  // main/actions/gate.ts, main/actions/decide.ts, main/actions/
+  // escalate.ts (#293), and main/actions/observe.ts (#292) — each in its own
+  // fixed order.
   // guard(#92): the comment-then-swap ordering (issue 90 left it to this
   // ticket) silently reverting, or a second postComment caller diffusing the
-  // chokepoint main/writes/apply.ts defines it in.
+  // chokepoint main/writes/apply.ts defines it in. decide.ts shares gate.ts's
+  // own direction, for the same reason: a label swap with no comment behind
+  // it would misrepresent what authorised it.
   // guard(#293): escalate.ts's own swap-then-comment ordering (the opposite
   // of gate.ts's) silently reverting — a failed comment must still leave the
   // item stopped, and a failed swap must never post a comment that would
@@ -109,6 +113,7 @@ export default async function ({ fail, ok }: Reporter) {
   {
     let found = false;
     let sawGateFile = false;
+    let sawDecideFile = false;
     let sawEscalateFile = false;
     let sawObserveFile = false;
     for (const f of allFiles) {
@@ -116,13 +121,14 @@ export default async function ({ fail, ok }: Reporter) {
       if (rel.endsWith('.test.ts') || rel === writesApplyFile) continue; // the function's own definition site
       const text = readFileSync(f, 'utf8');
       if (!/\bpostComment\(/.test(text)) continue;
-      if (rel === gateActionFile) {
-        sawGateFile = true;
+      if (rel === gateActionFile || rel === decideActionFile) {
+        if (rel === gateActionFile) sawGateFile = true;
+        else sawDecideFile = true;
         const commentIdx = text.indexOf('postComment(');
         const labelsIdx = text.indexOf('applyLabels(');
         if (labelsIdx === -1 || commentIdx > labelsIdx) {
           found = true;
-          fail('desktop-gate', `${gateActionFile}'s postComment( call must precede its applyLabels( call in source order — the comment-then-swap ordering`);
+          fail('desktop-gate', `${rel}'s postComment( call must precede its applyLabels( call in source order — the comment-then-swap ordering`);
         }
       } else if (rel === escalateActionFile || rel === observeActionFile) {
         if (rel === escalateActionFile) sawEscalateFile = true;
@@ -135,10 +141,11 @@ export default async function ({ fail, ok }: Reporter) {
         }
       } else {
         found = true;
-        fail('desktop-gate', `${rel} calls postComment( — only ${gateActionFile}, ${escalateActionFile}, and ${observeActionFile} may`);
+        fail('desktop-gate', `${rel} calls postComment( — only ${gateActionFile}, ${decideActionFile}, ${escalateActionFile}, and ${observeActionFile} may`);
       }
     }
     if (!sawGateFile) fail('desktop-gate', `${gateActionFile} does not call postComment( — the guard cannot pass vacuously`);
+    else if (!sawDecideFile) fail('desktop-gate', `${decideActionFile} does not call postComment( — the guard cannot pass vacuously`);
     else if (!sawEscalateFile) fail('desktop-gate', `${escalateActionFile} does not call postComment( — the guard cannot pass vacuously`);
     else if (!sawObserveFile) fail('desktop-gate', `${observeActionFile} does not call postComment( — the guard cannot pass vacuously`);
     else if (!found) ok();

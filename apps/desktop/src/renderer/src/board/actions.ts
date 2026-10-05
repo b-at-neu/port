@@ -79,3 +79,11 @@ export async function handleItemAction(params: HandleItemActionParams): Promise<
   }
   redraw()
 }
+
+/** The action controller's own click entry point (`rows.ts`'s own buttons). */
+export function handleItemActionClick(target: HTMLElement, redraw: () => void): void {
+  const action = target.dataset.action?.slice('item-'.length) as OperatorAction | undefined
+  const { repoId, number, kind, stage } = target.dataset
+  if (!action || !repoId || !number || !kind) return
+  void handleItemAction({ repoId: repoId as RepoId, kind: kind as 'issue' | 'pull-request', number: Number(number), action, expectedStage: (stage || null) as LabelKey | null, redraw })
+}
