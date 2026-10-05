@@ -183,9 +183,9 @@ export default async function ({ fail, ok }: Reporter) {
       fail('desktop-hosting', 'apps/desktop/src/main/index.ts does not exist');
     } else {
       const text = readFileSync(indexFile, 'utf8');
-      const beforeQuitMatch = /before-quit'\s*,\s*\(\)\s*=>\s*\{([\s\S]*?)\n\s*\}\s*\)/.exec(text);
+      const beforeQuitMatch = /before-quit'\s*,\s*\(\s*\w*\s*\)\s*=>\s*\{([\s\S]*?)\n\s*\}\s*\)/.exec(text);
       if (!beforeQuitMatch) {
-        fail('desktop-hosting', "apps/desktop/src/main/index.ts has no \"app.on('before-quit', () => { ... })\" handler");
+        fail('desktop-hosting', "apps/desktop/src/main/index.ts has no \"app.on('before-quit', (...) => { ... })\" handler");
       } else if (!/closeAll/.test(beforeQuitMatch[1])) {
         fail('desktop-hosting', "apps/desktop/src/main/index.ts's before-quit handler does not call the hosted store's closeAll()");
       } else {
@@ -379,34 +379,12 @@ export default async function ({ fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- options.ts's dispatcher branch sets allowedTools to exactly ['Agent', 'SendMessage'] ---
-  // guard(#265): a third tool slipping into this list would let the
-  // dispatcher session do work of its own rather than only dispatch/relay —
-  // exactly what `DISPATCHER_INSTRUCTIONS` tells it never to do, now also
-  // enforced mechanically.
-  {
-    const optionsFile = allFiles.find((f) => relOf(f) === `${hostingDir}/options.ts`);
-    if (!optionsFile) {
-      fail('desktop-hosting', `${hostingDir}/options.ts does not exist`);
-    } else {
-      const text = stripComments(readFileSync(optionsFile, 'utf8'));
-      if (!/allowedTools:\s*\[\s*'Agent'\s*,\s*'SendMessage'\s*\]/.test(text)) {
-        fail('desktop-hosting', `${hostingDir}/options.ts does not set allowedTools to exactly ['Agent', 'SendMessage'] for the dispatcher role`);
-      } else {
-        ok();
-      }
-    }
-  }
-
   // --- No production file under main/hosting/ names a tools: option key ----
-  // guard(#265): `tools:` restricts the built-in set for the whole session,
-  // including subagents — it would strip `Bash`/`Write` from the stage
-  // agents the dispatcher's own `Agent()` calls spawn. `allowedTools:` (the
-  // additive, narrower option this ticket actually uses) names the same word
-  // but is never mistaken for a bare `tools:` match: the pattern requires a
-  // non-word character (or line start) immediately before `tools`, which the
-  // camelCase `d` in `allowedTools` never is — unlike a whole-line exclusion,
-  // this still catches a stray `tools:` sharing a line with `allowedTools:`.
+  // guard(#265, #326): `tools:` restricts the built-in set for the whole
+  // session, including subagents — it would strip `Bash`/`Write` from a
+  // stage session. The pattern requires a non-word character (or line
+  // start) immediately before `tools`, so a stray `tools:` is still caught
+  // even sharing a line with another identifier ending in "tools".
   {
     let found = false;
     for (const f of hostingProdFiles) {

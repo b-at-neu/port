@@ -24,32 +24,6 @@ export type SessionKey = string & { readonly [sessionKeyBrand]: true }
  *  `streaming`, `result` → `ready`, terminal → `ended`) — never a guess. */
 export type SessionPhase = 'starting' | 'ready' | 'streaming' | 'interrupting' | 'closing' | 'ended'
 
-/** #265: an operator's ordinary hosted session, or this app's own dispatcher
- *  session — the one real difference `hosting/options.ts`'s `buildSessionOptions`
- *  reads: a dispatcher gets `allowedTools: ['Agent', 'SendMessage']` and a
- *  system-prompt append naming its instructions, everything else about a
- *  hosted session unchanged. Never a third role: a future automated session
- *  kind reuses `dispatcher`'s shape or adds its own, it never widens this
- *  one's meaning. */
-export type SessionRole = 'operator' | 'dispatcher'
-
-/** #265: one background task a dispatcher session's own `Agent()` calls
- *  started, tracked from the SDK's `task_started`/`task_notification`
- *  messages (`hosting/tasks.ts`) — `taskId`/`toolUseId` never cross into
- *  anything this app writes back to GitHub, they exist only to join a
- *  `task_started` to its eventual `task_notification` and to a
- *  `dispatch/select.ts` `confirmStarted` match. `endedAt` is `null` while
- *  `status` is `'started'`. */
-export interface HostedTask {
-  readonly taskId: string
-  readonly toolUseId: string | null
-  readonly description: string
-  readonly subagentType: string | null
-  readonly status: 'started' | 'completed' | 'failed' | 'stopped'
-  readonly startedAt: string
-  readonly endedAt: string | null
-}
-
 /** The four start modes the ticket names, uniform because of the one rule
  *  that makes them so: `sessionId` is minted at spawn, `claudeSessionId` is
  *  adopted only from the SDK's own `system`/`init` message — a fresh session
@@ -131,14 +105,6 @@ export interface HostedSessionSnapshot {
    *  `rate_limit_event` message — `null` until the first one arrives, never
    *  synthesized. */
   readonly rateLimit: SessionRateLimit | null
-  /** #265: `'operator'` unless this handle was started with
-   *  `role: { kind: 'dispatcher' }`. */
-  readonly role: SessionRole
-  /** #265: this session's own background tasks (`hosting/tasks.ts`'s
-   *  `createTaskTracker`), bounded to the newest 50 — populated for every
-   *  role, though only a dispatcher session's own `Agent()` calls produce
-   *  any today. */
-  readonly tasks: readonly HostedTask[]
 }
 
 /** `session:event`'s payload — the SDK message crosses the boundary opaque
@@ -420,7 +386,7 @@ export type SessionRestoreResult =
  *  idempotent by design. */
 export type SessionRestoreDiscardResult = { readonly ok: true }
 
-// The model aliases an operator's session default may name, the same alias style DISPATCHER_MODEL uses.
+// The model aliases an operator's session default may name.
 export const SESSION_MODELS = ['opus', 'sonnet', 'haiku'] as const
 
 export type SessionModel = (typeof SESSION_MODELS)[number]

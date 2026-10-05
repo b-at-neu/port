@@ -1,14 +1,16 @@
-// #265: the app's own dispatcher — the composition root that turns a
-// `BoardSnapshot` into real `Agent()` calls, the same way the cockpit's own
-// tick does, through a hosted dispatcher session rather than a Claude Code
+// #326: the app's own dispatch loop — the composition root that turns a
+// `BoardSnapshot` into real stage-session launches, through a
+// `StageLauncher` seam (#327 implements it) rather than a hosted Claude
 // session of its own. `consider` is the one entry point `main/ipc.ts` wires
-// to `onSnapshot`; `status`/`relay`/`stopFor` serve the renderer's own
-// reads and writes.
+// to `onTick`; `status`/`stopFor`/`standDown`/`liveStages`/
+// `liveStageSessions`/`shutdown` serve the renderer's own reads and the quit
+// guard.
 import type { BoardSnapshot } from '../../shared/board/types'
-import type { BudgetNote, BudgetStatus, DispatchOwner, DispatchRecord, DispatchRelayResult, DispatcherState, ObservationRecord, RepoDispatchStatus } from '../../shared/dispatch/types'
+import type { BudgetNote, BudgetStatus, DispatchOwner, DispatcherState, ObservationRecord, RepoDispatchStatus } from '../../shared/dispatch/types'
+import { RUN_TARGET } from '../../shared/dispatch/types'
 import type { RunState } from '../../shared/dispatch/types'
 import type { RepoId } from '../../shared/repos'
-import type { AgentSummary, HostedSessionSnapshot, HostedStore, SessionKey } from '../hosting'
+import type { HostedStore, SessionKey } from '../hosting'
 import type { ReadyEntry } from '../actions'
 import type { ApplyObservationParams, ApplyObservationResult, EscalateToHumanParams, EscalateToHumanResult } from '../actions'
 import type { RegistryDeps } from '../registry'
@@ -18,18 +20,17 @@ import { dispatchableFrom, observableFrom } from '../tick'
 import type { ReadGateClaimParams } from '../writes'
 import type { ClaimRead } from '../writes'
 import type { FetchItemsByNumberParams } from '../github'
-import type { ItemsByNumberFetch, ResolvedItem } from '../../shared/github/types'
+import type { ItemsByNumberFetch } from '../../shared/github/types'
 import { labelName } from '../../shared/labels/vocabulary'
-import type { LabelVocabulary } from '../../shared/labels/vocabulary'
-import type { RepositoryState } from '../../shared/state/types'
-import type { WriteOutcome } from '../../shared/writes/types'
-import type { TickActionable, TickReport } from '../../shared/tick/types'
 import { runObservationPass } from './observe-pass'
-import { confirmStarted, markUnconfirmed, selectDispatches } from './select'
+import { commentFailureMessage, selectDispatches, survived } from './select'
 import { budgetLiveSets, budgetRoute, escalationBody } from './budget'
 import type { BudgetGate } from './budget-gate'
-import { composeDispatchTurn, composeRelayTurn, DISPATCHER_INSTRUCTIONS, DISPATCHER_MODEL, missingAgentOf, specFor } from './turn'
-import type { DispatchSpec } from './turn'
+import { boundRecords, freeSlots, refreshRecords } from './launch'
+import type { StageLauncher, StageRecord } from './launch'
+import type { StageSessionSummary } from './quit'
+import { promptFor } from './turn'
+import type { TickActionable, TickReport } from '../../shared/tick/types'
 
 const RECENT_LIMIT = 20
 const NOTE_LIMIT = 20
@@ -37,6 +38,9 @@ const NOTE_LIMIT = 20
 export interface CreateDispatcherParams {
   readonly store: HostedStore
   readonly ledger: DispatchLedger
+  /** #327 implements the real one; `null` is the honest state until then —
+   *  a candidate sits visibly at `no-launcher` rather than silently idle. */
+  readonly launch: StageLauncher | null
   /** #314: this repository's own persisted run state — read fresh every
    *  pass, never cached, the same rule the claim read below follows. */
   readonly runState: (repoId: RepoId) => RunState
@@ -44,18 +48,9 @@ export interface CreateDispatcherParams {
   readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
   readonly listRepositories: (registryDeps: RegistryDeps) => Promise<ReposListResponse>
   readonly registryDeps: RegistryDeps
-  /** #293: runs `commands.budget`'s reset/sweep/dispatch modes and
-   *  classifies the result — `budget-gate.ts`'s own composition. */
   readonly budget: BudgetGate
   readonly escalate: (params: EscalateToHumanParams) => Promise<EscalateToHumanResult>
-  /** #292: writes one machine observation — defaults to
-   *  `main/actions/observe.ts`'s `applyObservation` (`runtime.ts`'s own
-   *  composition), injectable the same way `escalate` already is. */
   readonly writeObservation: (params: ApplyObservationParams) => Promise<ApplyObservationResult>
-  /** #292: the app's own process-scoped refresh memo
-   *  (`main/tick/ledger.ts`'s `createRefreshMemo`) — the *same* instance
-   *  `main/state/watcher.ts`'s own `planTick` calls read and write, never a
-   *  second one that would disagree with what the tick just reported. */
   readonly refreshMemo: RefreshMemo
   readonly dirs: { readonly audit: string; readonly scratch: string }
   readonly onChange: () => void
@@ -63,61 +58,46 @@ export interface CreateDispatcherParams {
 }
 
 export interface Dispatcher {
-  /** Called once per `BoardSnapshot` (`main/ipc.ts`'s own
-   *  `onSnapshot`) — considers every ready repository, at most one pass
-   *  each at a time. Never throws: a failure in one repository's pass is
-   *  reported on its own status, never allowed to stop the others. */
+  /** Called once per fresh snapshot (`main/ipc.ts`'s own `onTick`) —
+   *  considers every ready repository, at most one pass each at a time.
+   *  Never throws: a failure in one repository's pass is reported on its
+   *  own status, never allowed to stop the others. */
   consider(snapshot: BoardSnapshot): Promise<void>
   status(): readonly RepoDispatchStatus[]
-  relay(params: { readonly repoId: RepoId; readonly agentId: string; readonly text: string }): Promise<DispatchRelayResult>
   /** The halt composition's own per-item stop (`dispatch/halt.ts`'s
-   *  `HaltDispatchDeps.stopFor`) — `true` only when this dispatcher found a
-   *  `started` task for `(repoId, number)` and the SDK call itself did not
-   *  throw. */
+   *  `HaltDispatchDeps.stopFor`) — `true` only when this loop found a
+   *  `started` record for `(repoId, number)` and closing its session did
+   *  not throw. */
   stopFor(repoId: RepoId, number: number): Promise<boolean>
-  /** #314: the halt composition's own whole-session stand-down — closes
-   *  this repository's live dispatcher session and clears its `sessionKey`. */
+  /** Closes every remaining live stage session in a repository. */
   standDown(repoId: RepoId): Promise<boolean>
-  /** #292: this repository's own live dispatcher session's `tasks` with
-   *  `status: 'started'`, as descriptions (`"<stage> #<n>"`) — `[]` when no
-   *  dispatcher session is live. `main/state/watcher.ts` passes this into
-   *  `planTick`'s own `startedTasks` param, so a reset never fires against an
-   *  agent this app itself just started, even before the session scan has
-   *  caught up to it. */
-  startedTasks(repoId: RepoId): readonly string[]
+  /** This repository's own live stage sessions, as `"<agent> #<n>"` —
+   *  `main/state/watcher.ts` passes this into `planTick`'s own
+   *  `startedTasks` param. */
+  liveStages(repoId: RepoId): readonly string[]
+  /** Every live stage session across every repository, for the quit
+   *  guard. */
+  liveStageSessions(): readonly StageSessionSummary[]
+  /** Stops new launches — called before `closeAll()` on quit. */
+  shutdown(): void
 }
 
 interface RepoDispatcherState {
-  sessionKey: SessionKey | null
-  recent: DispatchRecord[]
+  records: readonly StageRecord[]
   owner: DispatchOwner
   dispatcherState: DispatcherState
   runState: RunState
   claimedAt: string | null
-  /** #293: `reset` runs at most once per process per repository — set once
-   *  the attempt actually succeeds, never before, so a failing script keeps
-   *  retrying on every pass rather than wedging the gate shut forever. */
   budgetReset: boolean
-  /** #293: consecutive `hold` verdicts per candidate number, process-scoped
-   *  like `main/tick/ledger.ts`'s own `createUnknownStreaks` — a restart
-   *  starts every item back at 0, never a false second-strike dispatch. */
   budgetHolds: Map<number, number>
   budget: BudgetStatus | null
-  /** #292: every observation write this process has attempted, newest last,
-   *  bounded to `OBSERVED_LIMIT`. */
   observed: ObservationRecord[]
-  /** #292: the instant (this process's own clock) each item number's most
-   *  recent observation write attempt happened — the stale-read guard reads
-   *  this against the repository's current GitHub `fetchedAt`, so an item
-   *  this process already wrote is skipped until a fresher read has caught
-   *  up to it, never decided again from a read that predates the write. */
   observedWriteAt: Map<number, string>
 }
 
 function emptyRepoState(): RepoDispatcherState {
   return {
-    sessionKey: null,
-    recent: [],
+    records: [],
     owner: 'cockpit',
     dispatcherState: { kind: 'idle' },
     runState: 'paused',
@@ -136,37 +116,23 @@ function ownerOf(claim: ClaimRead): DispatchOwner {
   return 'cockpit'
 }
 
-/** The re-read survivor test (PIPELINE.md → "The dispatcher" step 5): the
- *  trigger's own resolved name is still present, no other role-bearing
- *  label (anything but a marker) is present alongside it, and the viewer is
- *  still among the assignees. Anything else is "moved" — dropped, never
- *  dispatched this pass. */
-function survived(resolved: ResolvedItem, candidate: TickActionable, vocabulary: LabelVocabulary, viewer: string): boolean {
-  const triggerLabel = vocabulary.labels.find((l) => l.key === candidate.trigger)
-  if (triggerLabel === undefined || !resolved.labels.includes(triggerLabel.name)) return false
-  const roleBearingNames = new Set(vocabulary.labels.filter((l) => l.role !== 'marker').map((l) => l.name))
-  const others = resolved.labels.filter((name) => name !== triggerLabel.name && roleBearingNames.has(name))
-  // #292: a `refreshBranch` candidate tolerates exactly one co-present
-  // role-bearing label — the sanctioned pair `main/tick/plan.ts`'s own
-  // `actionableAndHeld` already allows (a refresh trigger sitting beside
-  // another trigger it does not strand). Every other trigger keeps the
-  // original single-label rule.
-  const tolerance = candidate.trigger === 'refreshBranch' ? 1 : 0
-  if (others.length > tolerance) return false
-  return resolved.assignees.includes(viewer)
-}
-
-/** #293: `null` for a comment that was never attempted or that itself
- *  applied — a short description otherwise, for the 'escalated' note's own
- *  "comment explaining why didn't post (<message>)" clause. */
-function commentFailureMessage(comment: WriteOutcome | null): string | null {
-  if (comment === null || comment.kind === 'applied') return null
-  return comment.kind === 'write-failed' ? comment.stderr : comment.kind
-}
-
 export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
   const repoStates = new Map<RepoId, RepoDispatcherState>()
+  const repoNames = new Map<RepoId, string>()
   const inFlight = new Set<RepoId>()
+  let stopped = false
+  // Serializes every repository's own launch section into one promise
+  // chain, so two repositories never race for the same free slot.
+  let launchQueue: Promise<void> = Promise.resolve()
+
+  function serialize<T>(fn: () => Promise<T>): Promise<T> {
+    const result = launchQueue.then(fn)
+    launchQueue = result.then(
+      () => undefined,
+      () => undefined,
+    )
+    return result
+  }
 
   function stateFor(repoId: RepoId): RepoDispatcherState {
     const existing = repoStates.get(repoId)
@@ -176,9 +142,9 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     return created
   }
 
-  function pushRecent(repoId: RepoId, recent: readonly DispatchRecord[]): void {
+  function pushRecord(repoId: RepoId, record: StageRecord): void {
     const state = stateFor(repoId)
-    state.recent = recent.length > RECENT_LIMIT ? recent.slice(recent.length - RECENT_LIMIT) : [...recent]
+    state.records = boundRecords([...state.records, record], RECENT_LIMIT)
   }
 
   function report(repoId: RepoId, owner: DispatchOwner, dispatcherState: DispatcherState, runState: RunState): void {
@@ -189,83 +155,37 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     deps.onChange()
   }
 
-  async function ensureSession(entry: ReadyEntry, repoId: RepoId, runState: RunState): Promise<HostedSessionSnapshot | null> {
-    const state = stateFor(repoId)
-    if (state.sessionKey !== null) {
-      const existing = deps.store.snapshotOf(state.sessionKey)
-      if (existing !== null && existing.phase !== 'ended') return existing
-    }
-    const started = await deps.store.start({
-      repoId,
-      mode: { kind: 'fresh' },
-      cwd: entry.path,
-      role: { kind: 'dispatcher', model: DISPATCHER_MODEL, instructions: DISPATCHER_INSTRUCTIONS, title: `Port dispatcher · ${entry.config.repo}` },
-    })
-    if (!started.ok) {
-      report(repoId, 'app', started.kind === 'at-capacity' ? { kind: 'dispatcher-failed', reason: 'at-capacity', limit: started.limit } : { kind: 'dispatcher-failed', reason: 'runtime' }, runState)
-      return null
-    }
-    state.sessionKey = started.snapshot.sessionKey
-    return started.snapshot
+  function activeOrIdle(repoId: RepoId): DispatcherState {
+    const records = stateFor(repoId).records
+    return records.length > 0 ? { kind: 'active', recent: records.map((r) => ({ agent: r.agent, number: r.number, kind: r.kind, state: r.state, at: r.at, detail: r.detail })) } : { kind: 'idle' }
   }
 
-  /** `agents` off the live snapshot's own capabilities — `[]` while still
-   *  `pending`, since nothing may be dispatched before the session's own
-   *  report of what it can address. */
-  function agentsOf(snapshot: HostedSessionSnapshot): readonly AgentSummary[] {
-    return snapshot.capabilities.kind === 'ready' ? snapshot.capabilities.agents : []
-  }
-
-  async function considerRepo(entry: ReadyEntry, tick: TickReport | undefined, viewer: string | null, repository: Extract<RepositoryState, { readonly ok: true }> | undefined): Promise<void> {
+  async function considerRepo(entry: ReadyEntry, tick: TickReport | undefined, viewer: string | null): Promise<void> {
+    if (stopped) return
     if (inFlight.has(entry.id)) return
     inFlight.add(entry.id)
+    repoNames.set(entry.id, entry.config.repo)
     try {
       const claim = await deps.readGateClaim({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
       const owner = ownerOf(claim)
       const runState = deps.runState(entry.id)
-      stateFor(entry.id).claimedAt = claim.state === 'held' ? claim.claimedAt : null
-
       const state = stateFor(entry.id)
+      state.claimedAt = claim.state === 'held' ? claim.claimedAt : null
+      state.records = refreshRecords(state.records, (sessionKey) => deps.store.snapshotOf(sessionKey))
 
-      // Confirm any already-sent records against the live session's own
-      // task view, before computing new candidates — the floor (below)
-      // reads each record's own `at`, regardless of state. #293: moved
-      // ahead of the owner early-return below — the budget sweep's live set
-      // must stay current even after the claim is released while this
-      // app's own agents are still working through their tasks.
-      let snap: HostedSessionSnapshot | null = null
-      if (state.sessionKey !== null) {
-        snap = deps.store.snapshotOf(state.sessionKey)
-        if (snap !== null) {
-          const { updated, newlyStarted } = confirmStarted(state.recent, snap.tasks)
-          let next = updated
-          for (const r of newlyStarted) deps.ledger.record(entry.id, r.number)
-          // The turn that sent it has itself finished (back to 'ready')
-          // with nothing matching — never left at 'sent' forever.
-          if (snap.phase === 'ready') next = markUnconfirmed(next)
-          pushRecent(entry.id, next)
-        }
-      }
-
-      // #293: budget bookkeeping — runs whenever a ceiling is configured and
-      // either this app currently owns dispatch, or it once started a
-      // session here and that session's agents may still be live. `reset`
-      // runs at most once per process per repository; `sweep` runs on every
-      // pass so the ledger comment and the owner line stay current even
-      // while nothing is being dispatched.
-      if (entry.config.commands.budget !== null && (owner === 'app' || state.sessionKey !== null)) {
+      const anyLive = state.records.some((r) => r.state === 'started')
+      if (entry.config.commands.budget !== null && (owner === 'app' || anyLive)) {
         if (!state.budgetReset) {
           const resetResult = await deps.budget.reset(entry)
           if (resetResult.ok) {
             state.budgetReset = true
           } else if (owner === 'app') {
-            // This fails closed: a gate that can't run dispatches nothing.
             report(entry.id, owner, { kind: 'budget-unavailable', message: resetResult.message }, runState)
             return
           }
         }
         if (state.budgetReset) {
-          const sets = budgetLiveSets(snap?.tasks ?? [], state.recent)
+          const sets = budgetLiveSets(state.records)
           const sweepResult = await deps.budget.sweep(entry, sets)
           state.budget = { line: sweepResult.line, problem: sweepResult.problem, notes: state.budget?.notes ?? [] }
         }
@@ -277,18 +197,18 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       }
 
       if (tick === undefined || tick.blind !== null || viewer === null) {
-        const recent = stateFor(entry.id).recent
-        report(entry.id, owner, recent.length > 0 ? { kind: 'active', recent } : { kind: 'idle' }, runState)
+        report(entry.id, owner, activeOrIdle(entry.id), runState)
         return
       }
 
       // #292: the observation pass — independent of whatever dispatches
       // below, so it still runs on a repository with nothing else to
       // dispatch this pass.
-      if (repository !== undefined) {
-        const observable = observableFrom(tick, runState)
-        if (observable.length > 0) {
-          await runObservationPass(entry, observable, repository, state, {
+      const observable = observableFrom(tick, runState)
+      if (observable.length > 0) {
+        const repoState = snapshotRepoState(entry.id)
+        if (repoState !== undefined) {
+          await runObservationPass(entry, observable, repoState, state, {
             writeObservation: deps.writeObservation,
             refreshMemo: deps.refreshMemo,
             dirs: deps.dirs,
@@ -299,23 +219,16 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       }
 
       const dispatchable = dispatchableFrom(tick, runState)
-      const candidates = selectDispatches({ dispatchable, recent: stateFor(entry.id).recent, now: deps.now() })
+      const liveNumbers = new Set(state.records.filter((r) => r.state === 'started').map((r) => r.number))
+      const notAlreadyLive = dispatchable.filter((c) => !liveNumbers.has(c.number))
+      const candidates = selectDispatches({ dispatchable: notAlreadyLive, recent: state.records, now: deps.now() })
       if (candidates.length === 0) {
-        const recent = stateFor(entry.id).recent
-        report(entry.id, owner, recent.length > 0 ? { kind: 'active', recent } : { kind: 'idle' }, runState)
+        report(entry.id, owner, activeOrIdle(entry.id), runState)
         return
       }
 
-      const snapshot = await ensureSession(entry, entry.id, runState)
-      if (snapshot === null) return // ensureSession already reported dispatcher-failed
-      if (snapshot.capabilities.kind === 'pending') return // next pass re-checks, never a busy-wait here
-      if (snapshot.capabilities.kind === 'unavailable') {
-        report(entry.id, owner, { kind: 'dispatcher-failed', reason: 'runtime' }, runState)
-        return
-      }
-      const plugin = snapshot.capabilities.plugin
-      if (plugin.kind === 'missing' || plugin.kind === 'shadowed' || plugin.kind === 'duplicate') {
-        report(entry.id, owner, { kind: 'dispatcher-failed', reason: 'plugin' }, runState)
+      if (deps.launch === null) {
+        report(entry.id, owner, { kind: 'no-launcher' }, runState)
         return
       }
 
@@ -328,113 +241,135 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
         return resolved !== undefined && !reread.unavailable.includes(c.number) && survived(resolved, c, entry.config.vocabulary, viewer)
       })
       if (survivors.length === 0) {
-        const recent = stateFor(entry.id).recent
-        report(entry.id, owner, recent.length > 0 ? { kind: 'active', recent } : { kind: 'idle' }, runState)
+        report(entry.id, owner, activeOrIdle(entry.id), runState)
         return
       }
 
-      const agents = agentsOf(snapshot)
-      const missing = missingAgentOf(survivors, agents)
-      const specs = survivors.map((c) => specFor(c, entry.config.models, agents)).filter((s) => s !== null)
-
-      if (specs.length === 0) {
-        report(entry.id, owner, missing !== null ? { kind: 'agents-missing', agent: missing } : { kind: 'idle' }, runState)
-        return
-      }
-
-      const resolvableNumbers = new Set(specs.map((s) => s.name))
-      let gatedSpecs: readonly DispatchSpec[] = specs
-      let sentCandidates: readonly TickActionable[] = survivors.filter((c) => resolvableNumbers.has(`${c.agent}-${String(c.number)}`))
-
-      // #293: the budget gate — the last pre-dispatch veto, only when a
-      // ceiling is configured, run once every other veto above has already
-      // filtered `survivors`/`specs` down. An `allow` starts a row's clock,
-      // so anything evaluated after this would charge a whole sweep
-      // interval to a ticket that never dispatched.
-      if (entry.config.commands.budget !== null) {
-        const specByName = new Map(specs.map((s) => [s.name, s] as const))
-        const keptSpecs: DispatchSpec[] = []
-        const keptCandidates: TickActionable[] = []
-        const notes: BudgetNote[] = []
-
-        for (const candidate of sentCandidates) {
-          const spec = specByName.get(`${candidate.agent}-${String(candidate.number)}`)
-          if (spec === undefined) continue // this agent was already dropped — nothing here to gate
-
-          const result = await deps.budget.check(entry, candidate, entry.config.models[candidate.agent])
-          if (!result.ok) {
-            notes.push({ kind: 'gate-failed', number: candidate.number, message: result.message })
-            continue
-          }
-
-          const priorHolds = state.budgetHolds.get(candidate.number) ?? 0
-          const route = budgetRoute(result.verdict, priorHolds)
-          if (route.holds === 0) state.budgetHolds.delete(candidate.number)
-          else state.budgetHolds.set(candidate.number, route.holds)
-
-          if (route.action === 'dispatch') {
-            keptSpecs.push(spec)
-            keptCandidates.push(candidate)
-            if (priorHolds > 0) notes.push({ kind: 'held-dispatched', number: candidate.number })
-            continue
-          }
-          if (route.action === 'hold') {
-            notes.push({ kind: 'held', number: candidate.number, line: result.line })
-            continue
-          }
-
-          // route.action === 'escalate'
-          const needsHumanLabel = labelName(entry.config.vocabulary, 'needsHuman') ?? 'needsHuman'
-          const triggerLabel = labelName(entry.config.vocabulary, candidate.trigger) ?? candidate.trigger
-          const escalation = await deps.escalate({
-            entry,
-            kind: candidate.kind,
-            number: candidate.number,
-            trigger: candidate.trigger,
-            viewer,
-            body: escalationBody(result.line),
-            action: 'budget-escalate',
-            auditDir: deps.dirs.audit,
-            scratchDir: deps.dirs.scratch,
-          })
-          if (escalation.labels.kind === 'applied') {
-            notes.push({ kind: 'escalated', number: candidate.number, needsHumanLabel, commentFailedMessage: commentFailureMessage(escalation.comment) })
-          } else {
-            notes.push({ kind: 'escalation-failed', number: candidate.number, needsHumanLabel, triggerLabel, outcome: escalation.labels })
-          }
-        }
-
-        gatedSpecs = keptSpecs
-        sentCandidates = keptCandidates
-        state.budget = { line: state.budget?.line ?? null, problem: state.budget?.problem ?? null, notes: notes.length > NOTE_LIMIT ? notes.slice(notes.length - NOTE_LIMIT) : notes }
-      }
-
-      if (gatedSpecs.length === 0) {
-        report(entry.id, owner, missing !== null ? { kind: 'agents-missing', agent: missing } : { kind: 'idle' }, runState)
-        return
-      }
-
-      if (state.sessionKey === null) return // defensive: ensureSession always sets this on success
-      deps.store.send(state.sessionKey, composeDispatchTurn(gatedSpecs))
-
-      const at = deps.now().toISOString()
-      const sent: DispatchRecord[] = sentCandidates.map((c) => ({ agent: c.agent, number: c.number, kind: c.kind, state: 'sent', at }))
-      pushRecent(entry.id, [...stateFor(entry.id).recent, ...sent])
-
-      report(entry.id, owner, missing !== null ? { kind: 'agents-missing', agent: missing } : { kind: 'active', recent: stateFor(entry.id).recent }, runState)
+      await launchSurvivors(entry, survivors, state, owner, runState, viewer)
     } finally {
       inFlight.delete(entry.id)
     }
   }
 
+  async function launchSurvivors(entry: ReadyEntry, survivors: readonly TickActionable[], state: RepoDispatcherState, owner: DispatchOwner, runState: RunState, viewer: string): Promise<void> {
+    const launch = deps.launch
+    if (launch === null) return
+
+    let gated: readonly TickActionable[] = survivors
+    const notes: BudgetNote[] = []
+    if (entry.config.commands.budget !== null) {
+      const kept: TickActionable[] = []
+      for (const candidate of survivors) {
+        const result = await deps.budget.check(entry, candidate, entry.config.models[candidate.agent])
+        if (!result.ok) {
+          notes.push({ kind: 'gate-failed', number: candidate.number, message: result.message })
+          continue
+        }
+        const priorHolds = state.budgetHolds.get(candidate.number) ?? 0
+        const route = budgetRoute(result.verdict, priorHolds)
+        if (route.holds === 0) state.budgetHolds.delete(candidate.number)
+        else state.budgetHolds.set(candidate.number, route.holds)
+
+        if (route.action === 'dispatch') {
+          kept.push(candidate)
+          if (priorHolds > 0) notes.push({ kind: 'held-dispatched', number: candidate.number })
+          continue
+        }
+        if (route.action === 'hold') {
+          notes.push({ kind: 'held', number: candidate.number, line: result.line })
+          continue
+        }
+        await escalateOverBudget(entry, candidate, result.line, notes, viewer)
+      }
+      gated = kept
+      state.budget = { line: state.budget?.line ?? null, problem: state.budget?.problem ?? null, notes: notes.length > NOTE_LIMIT ? notes.slice(notes.length - NOTE_LIMIT) : notes }
+    }
+
+    if (gated.length === 0) {
+      report(entry.id, owner, activeOrIdle(entry.id), runState)
+      return
+    }
+
+    let waiting = 0
+    await serialize(async () => {
+      const limit = (await deps.store.capacity()).limit
+      for (const candidate of gated) {
+        if (stopped) break
+        if (deps.runState(entry.id) !== RUN_TARGET.run) {
+          waiting += 1
+          continue
+        }
+        const free = freeSlots(limit, deps.store.list())
+        if (free <= 0) {
+          waiting += 1
+          continue
+        }
+        try {
+          const result = await launch.launch({ entry, agent: candidate.agent, number: candidate.number, kind: candidate.kind, trigger: candidate.trigger, model: entry.config.models[candidate.agent], prompt: promptFor(candidate) })
+          const at = deps.now().toISOString()
+          if (result.ok) {
+            if (stopped) {
+              void deps.store.close(result.sessionKey)
+              continue
+            }
+            pushRecord(entry.id, { sessionKey: result.sessionKey, agent: candidate.agent, number: candidate.number, kind: candidate.kind, trigger: candidate.trigger, state: 'started', at, detail: null })
+            deps.ledger.record(entry.id, candidate.number)
+          } else if (result.kind === 'at-capacity') {
+            waiting += 1
+          } else {
+            pushRecord(entry.id, { sessionKey: null, agent: candidate.agent, number: candidate.number, kind: candidate.kind, trigger: candidate.trigger, state: 'failed', at, detail: result.message })
+          }
+        } catch (error) {
+          const at = deps.now().toISOString()
+          const message = error instanceof Error ? error.message : String(error)
+          pushRecord(entry.id, { sessionKey: null, agent: candidate.agent, number: candidate.number, kind: candidate.kind, trigger: candidate.trigger, state: 'failed', at, detail: message })
+        }
+      }
+    })
+
+    const limit = (await deps.store.capacity()).limit
+    if (waiting > 0) report(entry.id, owner, { kind: 'at-capacity', limit, waiting }, runState)
+    else report(entry.id, owner, activeOrIdle(entry.id), runState)
+  }
+
+  async function escalateOverBudget(entry: ReadyEntry, candidate: TickActionable, line: string, notes: BudgetNote[], viewer: string): Promise<void> {
+    const needsHumanLabel = labelName(entry.config.vocabulary, 'needsHuman') ?? 'needsHuman'
+    const triggerLabel = labelName(entry.config.vocabulary, candidate.trigger) ?? candidate.trigger
+    const escalation = await deps.escalate({
+      entry,
+      kind: candidate.kind,
+      number: candidate.number,
+      trigger: candidate.trigger,
+      viewer,
+      body: escalationBody(line),
+      action: 'budget-escalate',
+      auditDir: deps.dirs.audit,
+      scratchDir: deps.dirs.scratch,
+    })
+    if (escalation.labels.kind === 'applied') {
+      notes.push({ kind: 'escalated', number: candidate.number, needsHumanLabel, commentFailedMessage: commentFailureMessage(escalation.comment) })
+    } else {
+      notes.push({ kind: 'escalation-failed', number: candidate.number, needsHumanLabel, triggerLabel, outcome: escalation.labels })
+    }
+  }
+
+  // Resolved lazily from the most recent `consider()` call's own snapshot —
+  // kept as a tiny cache rather than threaded through every helper above.
+  let lastRepoStates: BoardSnapshot['state']['repositories'] = []
+  function snapshotRepoState(repoId: RepoId): Extract<BoardSnapshot['state']['repositories'][number], { readonly ok: true }> | undefined {
+    const found = lastRepoStates.find((r) => r.ok && r.repoId === repoId)
+    return found?.ok ? found : undefined
+  }
+
   async function consider(snapshot: BoardSnapshot): Promise<void> {
+    if (stopped) return
+    lastRepoStates = snapshot.state.repositories
     const list = await deps.listRepositories(deps.registryDeps)
     if (!list.ok) return
     const readyEntries = list.repositories.filter((entry): entry is ReadyEntry => 'config' in entry)
     const tickByRepo = new Map(snapshot.tick.map((t) => [t.repoId, t] as const))
-    const repoByRepo = new Map(snapshot.state.repositories.filter((r): r is Extract<typeof r, { readonly ok: true }> => r.ok).map((r) => [r.repoId, r] as const))
-    const viewerByRepo = new Map([...repoByRepo.entries()].map(([repoId, r]) => [repoId, r.viewer] as const))
-    await Promise.all(readyEntries.map((entry) => considerRepo(entry, tickByRepo.get(entry.id), viewerByRepo.get(entry.id) ?? null, repoByRepo.get(entry.id))))
+    const viewerByRepo = new Map(snapshot.state.repositories.filter((r): r is Extract<typeof r, { readonly ok: true }> => r.ok).map((r) => [r.repoId, r.viewer] as const))
+    await Promise.all(readyEntries.map((entry) => considerRepo(entry, tickByRepo.get(entry.id), viewerByRepo.get(entry.id) ?? null)))
   }
 
   function status(): readonly RepoDispatchStatus[] {
@@ -443,56 +378,56 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       owner: s.owner,
       state: s.dispatcherState,
       runState: s.runState,
-      claudeSessionId: s.sessionKey !== null ? (deps.store.snapshotOf(s.sessionKey)?.claudeSessionId ?? null) : null,
       claimedAt: s.claimedAt,
       budget: s.budget,
       observed: s.observed,
     }))
   }
 
-  function startedTasks(repoId: RepoId): readonly string[] {
+  function liveStages(repoId: RepoId): readonly string[] {
     const state = repoStates.get(repoId)
-    if (state === undefined || state.sessionKey === null) return []
-    const snap = deps.store.snapshotOf(state.sessionKey)
-    return snap?.tasks.filter((t) => t.status === 'started').map((t) => t.description) ?? []
+    if (state === undefined) return []
+    return state.records.filter((r) => r.state === 'started').map((r) => `${r.agent} #${String(r.number)}`)
   }
 
-  function relay(params: { readonly repoId: RepoId; readonly agentId: string; readonly text: string }): Promise<DispatchRelayResult> {
-    const state = repoStates.get(params.repoId)
-    if (state === undefined || state.owner !== 'app' || state.sessionKey === null) return Promise.resolve({ ok: false, kind: 'not-owner' })
-    const snap = deps.store.snapshotOf(state.sessionKey)
-    if (snap === null) return Promise.resolve({ ok: false, kind: 'no-dispatcher' })
-    const known = snap.tasks.some((t) => t.taskId === params.agentId || t.toolUseId === params.agentId)
-    if (!known) return Promise.resolve({ ok: false, kind: 'unknown-agent' })
-    deps.store.send(state.sessionKey, composeRelayTurn(params.agentId, params.text))
-    return Promise.resolve({ ok: true })
+  function liveStageSessions(): readonly StageSessionSummary[] {
+    const summaries: StageSessionSummary[] = []
+    for (const [repoId, state] of repoStates.entries()) {
+      const repoName = repoNames.get(repoId) ?? String(repoId)
+      for (const record of state.records) {
+        if (record.state === 'started') summaries.push({ agent: record.agent, number: record.number, trigger: record.trigger, repoName })
+      }
+    }
+    return summaries
   }
 
   async function stopFor(repoId: RepoId, number: number): Promise<boolean> {
     const state = repoStates.get(repoId)
-    if (state === undefined || state.sessionKey === null) return false
-    const record = state.recent.find((r) => r.number === number && r.state === 'started')
-    if (record === undefined) return false
-    const snap = deps.store.snapshotOf(state.sessionKey)
-    const description = `${record.agent} #${String(number)}`
-    const subagentType = `port:${record.agent}-agent`
-    const task = snap?.tasks.find((t) => t.description === description && t.subagentType === subagentType && t.status === 'started')
-    if (task === undefined) return false
-    const result = await deps.store.stopTask(state.sessionKey, task.taskId)
+    if (state === undefined) return false
+    const record = state.records.find((r) => r.number === number && r.state === 'started' && r.sessionKey !== null)
+    if (record === undefined || record.sessionKey === null) return false
+    const result = await deps.store.close(record.sessionKey)
+    if (result.ok) deps.onChange()
     return result.ok
   }
 
-  // #314: closes any `Agent()` turn already sent but not yet confirmed,
-  // which `stopFor` (above, per-task) cannot reach.
   async function standDown(repoId: RepoId): Promise<boolean> {
     const state = repoStates.get(repoId)
-    if (state === undefined || state.sessionKey === null) return false
-    const key = state.sessionKey
-    state.sessionKey = null
-    const result = await deps.store.close(key)
+    if (state === undefined) return false
+    const live = state.records.filter((r): r is StageRecord & { sessionKey: SessionKey } => r.state === 'started' && r.sessionKey !== null)
+    if (live.length === 0) return false
+    let allOk = true
+    for (const record of live) {
+      const result = await deps.store.close(record.sessionKey)
+      if (!result.ok) allOk = false
+    }
     deps.onChange()
-    return result.ok
+    return allOk
   }
 
-  return { consider, status, relay, stopFor, standDown, startedTasks }
+  function shutdown(): void {
+    stopped = true
+  }
+
+  return { consider, status, stopFor, standDown, liveStages, liveStageSessions, shutdown }
 }

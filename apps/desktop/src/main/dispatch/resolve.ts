@@ -1,9 +1,10 @@
 // The 'dispatch:control' channel's own validation and composition (#110,
 // #314) — all the branching lives here, not in `main/ipc.ts`, the same split
 // every other multi-call channel in this app already follows. #265 adds
-// 'dispatch:claim:set' and 'dispatch:relay' alongside it, same shape.
+// 'dispatch:claim:set' alongside it, same shape; #326 removes 'dispatch:relay'
+// along with the hosted dispatcher session it relayed through.
 import { DISPATCH_COMMANDS, RUN_TARGET } from '../../shared/dispatch/types'
-import type { DispatchClaimSetResult, DispatchCommand, DispatchControlResult, DispatchRelayResult, HaltReport, RepoDispatchStatus } from '../../shared/dispatch/types'
+import type { DispatchClaimSetResult, DispatchCommand, DispatchControlResult, HaltReport, RepoDispatchStatus } from '../../shared/dispatch/types'
 import type { BoardSnapshot } from '../../shared/board/types'
 import type { RefreshRequest } from '../state'
 import type { RepoId, RepositoryEntry } from '../../shared/repos'
@@ -151,35 +152,9 @@ export async function resolveDispatchClaimSet(
     owner: request.held ? 'app' : 'cockpit',
     state: { kind: 'idle' },
     runState: 'paused',
-    claudeSessionId: null,
     claimedAt: null,
     budget: null,
     observed: [],
   }
   return { kind: 'ok', status }
-}
-
-export interface ResolveDispatchRelayDeps {
-  readonly listRepositories: typeof listRepositories
-  readonly dispatcher: Dispatcher
-  readonly maxReplyChars: number
-}
-
-/**
- * `'dispatch:relay'`'s composition (#265) — validates the request shape
- * itself (a bad shape throws, the same rail every other channel in this
- * app follows), resolves the repository is actually `ready`, then delegates
- * to `dispatcher.relay`, which itself refuses `not-owner`/`unknown-agent`/
- * `no-dispatcher`.
- */
-export async function resolveDispatchRelay(
-  registryDeps: RegistryDeps,
-  request: { readonly repoId: RepoId; readonly agentId: string; readonly text: string },
-  deps: ResolveDispatchRelayDeps,
-): Promise<DispatchRelayResult> {
-  if (typeof request?.repoId !== 'string' || typeof request.agentId !== 'string' || request.agentId === '' || typeof request.text !== 'string' || request.text === '' || request.text.length > deps.maxReplyChars) {
-    throw new Error("'dispatch:relay' requires a ready repoId, a non-empty agentId, and non-empty text within MAX_REPLY_CHARS")
-  }
-  await resolveReadyRepoRoot(registryDeps, request.repoId, deps)
-  return deps.dispatcher.relay({ repoId: request.repoId, agentId: request.agentId, text: request.text })
 }

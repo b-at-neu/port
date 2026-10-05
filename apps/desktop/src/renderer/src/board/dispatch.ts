@@ -9,7 +9,6 @@ import type { BoardSnapshot } from '../../../shared/board/types'
 import type { HaltReport } from '../../../shared/dispatch/types'
 import type { RepoId } from '../../../shared/repos'
 import { haltAbortedCopy, haltHeadingCopy, haltItemLine } from './halt-copy'
-import { handleRelaySend, relayKeyOf } from './relay'
 import { handleRunStateClick } from './run-state'
 
 type PendingCommand = 'halt' | null
@@ -139,11 +138,11 @@ async function runClaimSet(repoId: RepoId, held: boolean, redraw: () => void): P
 
 /**
  * The one `dispatch-*` click branch `main.ts` delegates every such action
- * to — the per-repository run/drain/pause row (#314), halt, halt-cancel, the
- * claim's own take/release (#265), and the relay's own "Send to agent"
- * (#265). A click naming a repository or a relay this app cannot resolve
- * from `target.dataset` and `snapshot` is silently ignored, the same
- * fail-safe every other board control already applies to a stale render.
+ * to — the per-repository run/drain/pause row (#314), halt, halt-cancel, and
+ * the claim's own take/release (#265). A click naming a repository this app
+ * cannot resolve from `target.dataset` and `snapshot` is silently ignored,
+ * the same fail-safe every other board control already applies to a stale
+ * render.
  */
 export function handleDispatchClick(target: HTMLElement, snapshot: BoardSnapshot | null, redraw: () => void): void {
   const action = target.dataset.action
@@ -166,14 +165,5 @@ export function handleDispatchClick(target: HTMLElement, snapshot: BoardSnapshot
     const repoId = target.dataset.repoId
     if (repoId === undefined) return
     void runClaimSet(repoId as RepoId, action === 'dispatch-claim-take', redraw)
-    return
-  }
-  if (action === 'dispatch-relay-send') {
-    const key = target.dataset.key
-    const repoId = target.dataset.repoId
-    if (key === undefined || repoId === undefined || snapshot === null || !snapshot.relay.ok) return
-    const pending = snapshot.relay.pending.find((p) => relayKeyOf(p) === key)
-    if (pending === undefined) return
-    void handleRelaySend(pending, repoId as RepoId, redraw)
   }
 }

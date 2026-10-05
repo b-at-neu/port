@@ -25,7 +25,6 @@ function fakeStore(): HostedStore {
     dismiss: () => {
       throw new Error('unused')
     },
-    stopTask: () => Promise.resolve({ ok: true }),
     snapshotOf: () => null,
     capacity: () => Promise.resolve({ limit: 4, ceiling: 8 }),
     setLimit: () => Promise.reject(new Error('unused')),
@@ -42,6 +41,7 @@ describe('createDispatchRuntime', () => {
   it('a dispatcher onChange before bindWatcher is a silent no-op, never a throw', () => {
     const runtime = createDispatchRuntime({
       store: fakeStore(),
+      launch: null,
       runState: () => 'dispatching',
       readGateClaim: () => Promise.resolve({ state: 'absent', path: 'p', readAt: 'r' }),
       fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [], unavailable: [], fetchedAt: 'r' }),
@@ -57,6 +57,7 @@ describe('createDispatchRuntime', () => {
     let called = false
     const runtime = createDispatchRuntime({
       store: fakeStore(),
+      launch: null,
       runState: () => 'dispatching',
       readGateClaim: () => Promise.resolve({ state: 'held', owner: 'port-desktop', scopes: ['dispatch'], unknownScopes: [], claimedAt: '2026-01-01T00:00:00Z', path: 'p', readAt: 'r' }),
       fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [], unavailable: [], fetchedAt: 'r' }),

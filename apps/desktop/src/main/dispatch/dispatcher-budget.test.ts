@@ -1,4 +1,4 @@
-// #293: dispatcher-level budget-gate cases — reset-once/sweep-every-pass
+// #293/#326: dispatcher-level budget-gate cases — reset-once/sweep-every-pass
 // bookkeeping, the fail-closed `budget-unavailable` refusal, and the gate's
 // own per-candidate routing (allow/hold/escalate/failed). `dispatcher.test.ts`
 // covers everything else; this file is additive, not a duplicate.
@@ -11,6 +11,7 @@ import type { HostedSessionSnapshot, HostedStore, SessionKey } from '../hosting'
 import type { TickReport } from '../../shared/tick/types'
 import type { EscalateToHumanParams } from '../actions'
 import type { ReadyEntry } from '../actions'
+import type { StageLaunchResult, StageLauncher } from './launch'
 import { createDispatcher } from './dispatcher'
 import type { CreateDispatcherParams } from './dispatcher'
 import type { BudgetCheckResult, BudgetGate, BudgetResetResult, BudgetSweepResult } from './budget-gate'
@@ -71,7 +72,7 @@ const ABSENT_CLAIM: ClaimRead = { state: 'absent', path: '/repo/.agents/gate-cla
 
 const IMPL_CANDIDATE = { number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }
 
-function baseSessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSessionSnapshot {
+function sessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSessionSnapshot {
   return {
     sessionKey: 'hosted-1' as SessionKey,
     claudeSessionId: 'sdk-1',
@@ -83,11 +84,9 @@ function baseSessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): Ho
     end: null,
     titled: null,
     pendingPermissions: [],
-    capabilities: { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [{ name: 'impl-agent', description: '', model: null }], plugin: { kind: 'loaded', path: 'p', version: null }, components: { kind: 'complete' } },
-    title: 'Port dispatcher · o/a',
+    capabilities: { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [], plugin: { kind: 'loaded', path: 'p', version: null }, components: { kind: 'complete' } },
+    title: null,
     rateLimit: null,
-    role: 'dispatcher',
-    tasks: [],
     ...overrides,
   }
 }
@@ -101,9 +100,7 @@ function fakeStore(overrides: Partial<HostedStore> = {}): HostedStore {
     interrupt: () => {
       throw new Error('interrupt should not be invoked in this case')
     },
-    close: () => {
-      throw new Error('close should not be invoked in this case')
-    },
+    close: () => Promise.resolve({ ok: true }),
     attach: () => {
       throw new Error('attach should not be invoked in this case')
     },
@@ -118,7 +115,6 @@ function fakeStore(overrides: Partial<HostedStore> = {}): HostedStore {
     dismiss: () => {
       throw new Error('dismiss should not be invoked in this case')
     },
-    stopTask: () => Promise.resolve({ ok: true }),
     snapshotOf: () => null,
     capacity: () => Promise.resolve({ limit: 4, ceiling: 8 }),
     setLimit: () => {
@@ -153,9 +149,14 @@ function fakeBudget(overrides: Partial<BudgetGate> = {}): BudgetGate {
   }
 }
 
+function fakeLauncher(result: StageLaunchResult = { ok: true, sessionKey: 'hosted-1' as SessionKey }): StageLauncher {
+  return { launch: () => Promise.resolve(result) }
+}
+
 function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispatcherParams {
   return {
     store: fakeStore(),
+    launch: null,
     ledger: { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined, observeUnmatched: () => ({ class: 'no-record' }) },
     refreshMemo: { get: () => undefined, set: vi.fn(), clear: vi.fn() },
     writeObservation: () => {
@@ -210,8 +211,8 @@ describe('createDispatcher — budget bookkeeping', () => {
   })
 
   it('sweeps even after ownership moves away from this app, while a session is still live', async () => {
-    const send = vi.fn(() => ({ ok: true as const, uuid: 'u1', queued: true }))
-    const store = fakeStore({ start: () => Promise.resolve({ ok: true, snapshot: baseSessionSnapshot() }), snapshotOf: () => baseSessionSnapshot(), send })
+    const launch = fakeLauncher()
+    const store = fakeStore({ snapshotOf: () => sessionSnapshot() })
     let sweepCalls = 0
     const budget = fakeBudget({
       check: () => Promise.resolve({ ok: true, verdict: 'allow', line: 'allowed' } satisfies BudgetCheckResult),
@@ -221,61 +222,61 @@ describe('createDispatcher — budget bookkeeping', () => {
       },
     })
     let claim: ClaimRead = HELD_CLAIM
-    const dispatcher = createDispatcher(baseDeps({ store, budget, readGateClaim: () => Promise.resolve(claim), fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }) }))
+    const dispatcher = createDispatcher(baseDeps({ store, launch, budget, readGateClaim: () => Promise.resolve(claim), fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }) }))
 
-    await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })])) // owner app, dispatches, starts the session
+    await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })])) // owner app, launches, starts the session
     expect(dispatcher.status()[0]?.owner).toBe('app')
     expect(sweepCalls).toBe(1)
 
     claim = ABSENT_CLAIM // the claim moves back to the cockpit
     await dispatcher.consider(snapshotWith([tickReport()]))
     expect(dispatcher.status()[0]?.owner).toBe('cockpit')
-    expect(sweepCalls).toBe(2) // still sweeping — this app's own agent may still be live
+    expect(sweepCalls).toBe(2) // still sweeping — this app's own session may still be live
     expect(dispatcher.status()[0]?.budget?.line).toBe('sweep 2')
   })
 })
 
 describe('createDispatcher — the budget gate itself', () => {
   function readyToDispatch(overrides: Partial<CreateDispatcherParams> = {}) {
-    const send = vi.fn(() => ({ ok: true as const, uuid: 'u1', queued: true }))
-    const store = fakeStore({ start: () => Promise.resolve({ ok: true, snapshot: baseSessionSnapshot() }), snapshotOf: () => baseSessionSnapshot(), send })
+    const launch = fakeLauncher()
+    const store = fakeStore({ snapshotOf: () => sessionSnapshot() })
     const deps = baseDeps({
       store,
+      launch,
       fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
       ...overrides,
     })
-    return { dispatcher: createDispatcher(deps), send }
+    return { dispatcher: createDispatcher(deps) }
   }
 
-  it('allow dispatches the candidate — no notes', async () => {
+  it('allow launches the candidate — no notes', async () => {
     const budget = fakeBudget({ check: () => Promise.resolve({ ok: true, verdict: 'allow', line: 'allowed' }) })
-    const { dispatcher, send } = readyToDispatch({ budget })
+    const { dispatcher } = readyToDispatch({ budget })
     await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })]))
-    expect(send).toHaveBeenCalledTimes(1)
     expect(dispatcher.status()[0]?.budget?.notes).toEqual([])
     expect(dispatcher.status()[0]?.state.kind).toBe('active')
   })
 
-  it('a first hold holds — no dispatch, a held note carrying the script line', async () => {
+  it('a first hold holds — no launch, a held note carrying the script line', async () => {
     const line = "⏳ Couldn't read #52's cost ledger (unparseable table) — holding its dispatch one tick rather than dispatching blind."
     const budget = fakeBudget({ check: () => Promise.resolve({ ok: true, verdict: 'hold', line }) })
-    const { dispatcher, send } = readyToDispatch({ budget })
+    const { dispatcher } = readyToDispatch({ budget })
     await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })]))
-    expect(send).not.toHaveBeenCalled()
     expect(dispatcher.status()[0]?.budget?.notes).toEqual([{ kind: 'held', number: 52, line }])
+    expect(dispatcher.status()[0]?.state).toEqual({ kind: 'idle' })
   })
 
-  it('a second consecutive hold dispatches anyway, with a held-dispatched note', async () => {
+  it('a second consecutive hold launches anyway, with a held-dispatched note', async () => {
     const line = "⏳ Couldn't read #52's cost ledger (unparseable table) — holding its dispatch one tick rather than dispatching blind."
     const budget = fakeBudget({ check: () => Promise.resolve({ ok: true, verdict: 'hold', line }) })
-    const { dispatcher, send } = readyToDispatch({ budget })
+    const { dispatcher } = readyToDispatch({ budget })
     await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })])) // first hold
-    await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })])) // second hold — dispatches
-    expect(send).toHaveBeenCalledTimes(1)
+    await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })])) // second hold — launches
     expect(dispatcher.status()[0]?.budget?.notes).toEqual([{ kind: 'held-dispatched', number: 52 }])
+    expect(dispatcher.status()[0]?.state.kind).toBe('active')
   })
 
-  it('exceeded escalates instead of dispatching, with an escalated note', async () => {
+  it('exceeded escalates instead of launching, with an escalated note', async () => {
     const line = '⛔ #52 has consumed 2h 00m of agent wall-clock against a 120m ceiling — escalate instead of dispatching impl #52.'
     const budget = fakeBudget({ check: () => Promise.resolve({ ok: true, verdict: 'exceeded', line }) })
     const calls: EscalateToHumanParams[] = []
@@ -283,9 +284,8 @@ describe('createDispatcher — the budget gate itself', () => {
       calls.push(params)
       return Promise.resolve({ labels: { kind: 'applied', argv: [] }, comment: { kind: 'applied', argv: [] } })
     }
-    const { dispatcher, send } = readyToDispatch({ budget, escalate })
+    const { dispatcher } = readyToDispatch({ budget, escalate })
     await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })]))
-    expect(send).not.toHaveBeenCalled()
     expect(calls).toHaveLength(1)
     const escalateParams = calls[0]
     if (escalateParams === undefined) throw new Error('unreachable')
@@ -294,24 +294,24 @@ describe('createDispatcher — the budget gate itself', () => {
     expect(escalateParams.body).toContain('## Pipeline Escalation')
     expect(escalateParams.body).toContain(line)
     expect(dispatcher.status()[0]?.budget?.notes).toEqual([{ kind: 'escalated', number: 52, needsHumanLabel: 'needs human', commentFailedMessage: null }])
+    expect(dispatcher.status()[0]?.state).toEqual({ kind: 'idle' })
   })
 
   it('escalation-failed carries the outcome, for the renderer to classify', async () => {
     const budget = fakeBudget({ check: () => Promise.resolve({ ok: true, verdict: 'exceeded', line: 'over budget' }) })
     const escalate: CreateDispatcherParams['escalate'] = () => Promise.resolve({ labels: { kind: 'unclaimed-scope', scope: 'plan-gate', claimPath: '/x', keys: ['planApproved'] }, comment: null })
-    const { dispatcher, send } = readyToDispatch({ budget, escalate })
+    const { dispatcher } = readyToDispatch({ budget, escalate })
     await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })]))
-    expect(send).not.toHaveBeenCalled()
     const notes = dispatcher.status()[0]?.budget?.notes
     expect(notes).toEqual([{ kind: 'escalation-failed', number: 52, needsHumanLabel: 'needs human', triggerLabel: 'plan approved', outcome: { kind: 'unclaimed-scope', scope: 'plan-gate', claimPath: '/x', keys: ['planApproved'] } }])
   })
 
-  it('a failed gate check drops the candidate — gate-failed note, never a dispatch', async () => {
+  it('a failed gate check drops the candidate — gate-failed note, never a launch', async () => {
     const budget = fakeBudget({ check: () => Promise.resolve({ ok: false, kind: 'failed', message: 'FAIL  something broke' }) })
-    const { dispatcher, send } = readyToDispatch({ budget })
+    const { dispatcher } = readyToDispatch({ budget })
     await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })]))
-    expect(send).not.toHaveBeenCalled()
     expect(dispatcher.status()[0]?.budget?.notes).toEqual([{ kind: 'gate-failed', number: 52, message: 'FAIL  something broke' }])
+    expect(dispatcher.status()[0]?.state).toEqual({ kind: 'idle' })
   })
 
   it('notes are kept when a later pass has nothing to gate', async () => {

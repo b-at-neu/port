@@ -423,22 +423,6 @@
   cursor: default;
 }
 
-.relay-banner__send {
-  font-family: inherit;
-  font-size: 0.75rem;
-  padding: 0.25rem 0.6rem;
-  border: 1px solid #3a6b3a;
-  border-radius: 4px;
-  background: #1f3a1f;
-  color: inherit;
-  cursor: pointer;
-}
-
-.relay-banner__send:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
 .relay-banner__incomplete {
   font-size: 0.7rem;
   opacity: 0.6;

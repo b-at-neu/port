@@ -11,8 +11,8 @@ import type { RegistryDeps } from '../registry'
 import type { ReadyEntry } from '../actions'
 import type { Dispatcher } from './dispatcher'
 import type { RunStateStore, SetRunStateResult } from './store'
-import { registeredRepoIds, resolveDispatchClaimSet, resolveDispatchControl, resolveDispatchRelay } from './resolve'
-import type { ResolveDispatchClaimSetDeps, ResolveDispatchControlDeps, ResolveDispatchRelayDeps } from './resolve'
+import { registeredRepoIds, resolveDispatchClaimSet, resolveDispatchControl } from './resolve'
+import type { ResolveDispatchClaimSetDeps, ResolveDispatchControlDeps } from './resolve'
 
 const registryDeps: RegistryDeps = {
   registryDir: '/registry',
@@ -245,10 +245,11 @@ function fakeDispatcher(overrides: Partial<Dispatcher> = {}): Dispatcher {
   return {
     consider: () => Promise.resolve(),
     status: () => [],
-    relay: () => Promise.resolve({ ok: false, kind: 'no-dispatcher' }),
     stopFor: () => Promise.resolve(false),
     standDown: () => Promise.resolve(false),
-    startedTasks: () => [],
+    liveStages: () => [],
+    liveStageSessions: () => [],
+    shutdown: () => undefined,
     ...overrides,
   }
 }
@@ -262,7 +263,7 @@ describe('resolveDispatchClaimSet (#265)', () => {
   it('takes the claim, refreshes once, and reports the dispatcher status it then reads back', async () => {
     let refreshed = 0
     const entry = await readyEntry()
-    const dispatcher = fakeDispatcher({ status: () => [{ repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, runState: 'dispatching', claudeSessionId: null, claimedAt: null, budget: null, observed: [] }] })
+    const dispatcher = fakeDispatcher({ status: () => [{ repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, runState: 'dispatching', claimedAt: null, budget: null, observed: [] }] })
     const deps: ResolveDispatchClaimSetDeps = {
       listRepositories: () => Promise.resolve({ ok: true, repositories: [entry] }),
       dispatcher,
@@ -270,34 +271,7 @@ describe('resolveDispatchClaimSet (#265)', () => {
       now: () => new Date('2026-01-01T00:00:00Z'),
     }
     const result = await resolveDispatchClaimSet(registryDeps, { repoId: REPO_ID, held: true }, deps)
-    expect(result).toEqual({ kind: 'ok', status: { repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, runState: 'dispatching', claudeSessionId: null, claimedAt: null, budget: null, observed: [] } })
+    expect(result).toEqual({ kind: 'ok', status: { repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, runState: 'dispatching', claimedAt: null, budget: null, observed: [] } })
     expect(refreshed).toBe(1)
-  })
-})
-
-describe('resolveDispatchRelay (#265)', () => {
-  it('throws on a bad shape — empty agentId — before ever listing repositories', async () => {
-    const deps: ResolveDispatchRelayDeps = { listRepositories: () => Promise.resolve({ ok: true, repositories: [] }), dispatcher: fakeDispatcher(), maxReplyChars: 100 }
-    await expect(resolveDispatchRelay(registryDeps, { repoId: REPO_ID, agentId: '', text: 'x' }, deps)).rejects.toThrow()
-  })
-
-  it('throws on text over maxReplyChars', async () => {
-    const deps: ResolveDispatchRelayDeps = { listRepositories: () => Promise.resolve({ ok: true, repositories: [] }), dispatcher: fakeDispatcher(), maxReplyChars: 3 }
-    await expect(resolveDispatchRelay(registryDeps, { repoId: REPO_ID, agentId: 'a1', text: 'xxxx' }, deps)).rejects.toThrow()
-  })
-
-  it('delegates to dispatcher.relay for a well-formed, ready request', async () => {
-    let seen: { repoId: RepoId; agentId: string; text: string } | null = null
-    const dispatcher = fakeDispatcher({
-      relay: (params) => {
-        seen = params
-        return Promise.resolve({ ok: true })
-      },
-    })
-    const entry = await readyEntry()
-    const deps: ResolveDispatchRelayDeps = { listRepositories: () => Promise.resolve({ ok: true, repositories: [entry] }), dispatcher, maxReplyChars: 100 }
-    const result = await resolveDispatchRelay(registryDeps, { repoId: REPO_ID, agentId: 'a1', text: 'go' }, deps)
-    expect(result).toEqual({ ok: true })
-    expect(seen).toEqual({ repoId: REPO_ID, agentId: 'a1', text: 'go' })
   })
 })

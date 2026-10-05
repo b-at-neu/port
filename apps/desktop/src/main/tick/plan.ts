@@ -42,12 +42,11 @@ export interface PlanTickParams {
    *  never hardcoded; `main/state/watcher.ts` passes it through the same way
    *  it already does `repository.concurrency`. */
   readonly reviewCycleCap: number
-  /** #292: this repository's own dispatcher session's `tasks` with `status:
-   *  'started'`, as descriptions (`dispatcher.ts`'s own `startedTasks`) —
-   *  `[]` when no dispatcher session is live. An in-flight claim matches
-   *  when either the session scan (`item.status === 'in-flight'`) or this
-   *  app's own dispatcher record says so, so a reset never fires against an
-   *  agent this app itself just started. */
+  /** #292, #326: this repository's own live stage sessions, as descriptions
+   *  (`dispatcher.ts`'s own `liveStages`) — `[]` when none are live. An
+   *  in-flight claim matches when either the session scan (`item.status ===
+   *  'in-flight'`) or this app's own dispatch loop record says so, so a
+   *  reset never fires against a session this app itself just launched. */
   readonly startedTasks: readonly string[]
   /** #292: the app's own process-scoped refresh memo
    *  (`main/tick/ledger.ts`'s `createRefreshMemo`) — read and written only

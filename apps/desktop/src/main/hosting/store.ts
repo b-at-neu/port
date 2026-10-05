@@ -33,7 +33,6 @@ import type {
 } from '../../shared/hosting/types'
 import { createHostedHandle } from './handle'
 import type { HostedHandle, HostedQueryFn } from './handle'
-import type { SessionOptionsRole } from './options'
 import { createHostedSdk } from './sdk'
 import type { HostedSdk } from './sdk'
 import { defaultForkListSessions, titleFork } from './fork'
@@ -105,10 +104,6 @@ export interface StartSessionParams {
   /** #103: the restore path's own resolved title — `null`/omitted for every
    *  other start path, which instead runs `resolveStartTitle` itself. */
   readonly initialTitle?: string | null
-  /** #265: defaults to `{ kind: 'operator' }` — forwarded verbatim to
-   *  `createHostedHandle`. The dispatcher (`dispatch/dispatcher.ts`) is the
-   *  one caller that ever passes `{ kind: 'dispatcher', ... }`. */
-  readonly role?: SessionOptionsRole
 }
 
 export interface HostedStore {
@@ -127,10 +122,6 @@ export interface HostedStore {
   invoke(sessionKey: SessionKey, name: string, args: string): SessionInvokeResult
   /** #103: removes an ended handle — `still-open` for any other phase. */
   dismiss(sessionKey: SessionKey): SessionDismissResult
-  /** #265: the dispatcher's own per-item stop — `unknown-session` for a key
-   *  that names no live handle, delegating to that handle's own `stopTask`
-   *  (which itself answers `unknown-task` for an id not among its tasks). */
-  stopTask(sessionKey: SessionKey, taskId: string): Promise<{ readonly ok: true } | { readonly ok: false; readonly kind: 'unknown-session' | 'unknown-task' }>
   /** #265: one handle's own snapshot, `null` for a key that names no live
    *  handle — the dispatcher's own `confirmStarted`/`relay` reads, never a
    *  second index into `list()`. */
@@ -272,10 +263,6 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
       persistSave()
     }
 
-    // A dispatcher role never takes the operator's own defaults — its options
-    // are fully determined by `role` regardless, but this keeps the handle
-    // from ever seeing a setting it was not supposed to apply.
-    const defaultsForHandle = params.role === undefined || params.role.kind === 'operator' ? defaults : DEFAULT_SESSION_DEFAULTS
 
     const handle = createHostedHandle(
       {
@@ -294,8 +281,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
         readExpectedComponents: deps.readExpectedComponents,
         samePath: deps.samePath,
         initialTitle,
-        role: params.role,
-        defaults: defaultsForHandle,
+        defaults,
       },
       queryFn,
     )
@@ -366,12 +352,6 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     forgetHandle(sessionKey)
     persistSave()
     return { ok: true }
-  }
-
-  async function stopTask(sessionKey: SessionKey, taskId: string): Promise<{ readonly ok: true } | { readonly ok: false; readonly kind: 'unknown-session' | 'unknown-task' }> {
-    const handle = handles.get(sessionKey)
-    if (!handle) return { ok: false, kind: 'unknown-session' }
-    return handle.stopTask(taskId)
   }
 
   function snapshotOf(sessionKey: SessionKey): HostedSessionSnapshot | null {
@@ -452,7 +432,6 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     answerPermission,
     invoke,
     dismiss,
-    stopTask,
     snapshotOf,
     capacity,
     setLimit,

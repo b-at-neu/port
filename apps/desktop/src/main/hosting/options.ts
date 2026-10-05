@@ -12,14 +12,6 @@ import type { PluginRequest, SessionDefaults, SessionStartMode } from '../../sha
  *  this pipeline, a session with no allow rules can do nothing. */
 export const SETTING_SOURCES: readonly ('user' | 'project' | 'local')[] = ['user', 'project', 'local']
 
-/** #265: the one real difference between an operator's ordinary hosted
- *  session and this app's own dispatcher session. `model`/`instructions`/
- *  `title` are the dispatcher's own (`dispatch/turn.ts`'s
- *  `DISPATCHER_MODEL`/`DISPATCHER_INSTRUCTIONS`, and `Port dispatcher ·
- *  <repo>`) — never re-derived here, this file only maps them onto
- *  `Options`. */
-export type SessionOptionsRole = { readonly kind: 'operator' } | { readonly kind: 'dispatcher'; readonly model: string; readonly instructions: string; readonly title: string }
-
 export interface BuildSessionOptionsParams {
   readonly mode: SessionStartMode
   /** The ready registry entry's own path — never a second-guessed cwd. */
@@ -38,20 +30,8 @@ export interface BuildSessionOptionsParams {
    *  in the live session, never through the Skill-tool filter (see
    *  `capabilities.ts`'s own header). */
   readonly plugin: PluginRequest
-  /** #265: defaults to `{ kind: 'operator' }` — every existing caller is
-   *  unaffected. The dispatcher role adds `model`, a `systemPrompt` append,
-   *  `allowedTools: ['Agent', 'SendMessage']`, and `title`, and always takes
-   *  `permissionMode: 'default'` regardless of `defaults` below. **Never
-   *  `tools:`** — that restricts the built-in set for the whole session,
-   *  including subagents, and would strip `Bash`/`Write` from the stage
-   *  agents the dispatcher's own `Agent()` calls spawn. Everything else
-   *  (`canUseTool`, `settingSources`, `plugins`) is unchanged, and the stage
-   *  agents' own `dontAsk` frontmatter still overrides the parent session's
-   *  `permissionMode`. */
-  readonly role?: SessionOptionsRole
   /** An operator's persisted session defaults — `permissionMode` is
-   *  read for an operator role (ignored for a dispatcher, which always gets
-   *  `'default'`), and `model` is set only when non-null, so leaving it
+   *  read directly, and `model` is set only when non-null, so leaving it
    *  `null` matches Claude Code's own default rather than naming one. */
   readonly defaults: SessionDefaults
 }
@@ -60,28 +40,22 @@ export interface BuildSessionOptionsParams {
  *  it arrives" is impossible without it. `permissionMode` is set explicitly
  *  rather than omitted (#99) — the CLI flag outranks a `defaultMode` in the
  *  user's own settings, so leaving it out would let a `bypassPermissions`
- *  default silently skip the host prompt entirely. It names `'default'` for
- *  the dispatcher role always, and an operator's own `defaults.permissionMode`
- *  otherwise — the allowlisted value `session:defaults:set` validated
- *  on the way in. `permissionPromptToolName` is never set: the SDK throws
+ *  default silently skip the host prompt entirely. It names the operator's
+ *  own `defaults.permissionMode` — the allowlisted value `session:defaults:set`
+ *  validated on the way in. `permissionPromptToolName` is never set: the SDK throws
  *  when both it and `canUseTool` are present. `settingSources` is always the
  *  three sources above (#101). */
 export function buildSessionOptions(params: BuildSessionOptionsParams): Options {
-  const role = params.role ?? { kind: 'operator' as const }
   const base: Options = {
     cwd: params.cwd,
     pathToClaudeCodeExecutable: params.executablePath,
     persistSession: true,
     includePartialMessages: true,
-    permissionMode: role.kind === 'dispatcher' ? 'default' : params.defaults.permissionMode,
+    permissionMode: params.defaults.permissionMode,
     canUseTool: params.canUseTool,
     settingSources: [...SETTING_SOURCES],
     ...(params.plugin.source === 'repository' ? { plugins: [{ type: 'local' as const, path: params.plugin.path }] } : {}),
-    ...(role.kind === 'dispatcher'
-      ? { model: role.model, systemPrompt: { type: 'preset' as const, preset: 'claude_code' as const, append: role.instructions }, allowedTools: ['Agent', 'SendMessage'], title: role.title }
-      : params.defaults.model !== null
-        ? { model: params.defaults.model }
-        : {}),
+    ...(params.defaults.model !== null ? { model: params.defaults.model } : {}),
   }
 
   switch (params.mode.kind) {

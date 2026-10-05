@@ -4,10 +4,10 @@ import { pathToFileURL } from 'node:url';
 import { pipelineDocsText, pipelineSkillText, root, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// Operator control over dispatch (issue 110) and the app's own dispatcher
-// (#265) — thirteen mechanical rails, dependency-free and regex-based, in
-// the shape of desktop-actions.ts's and desktop-writes.ts's own guards.
-// #293 adds the budget gate's own rails alongside them.
+// Operator control over dispatch (issue 110) and the app's own dispatch loop
+// (#265, #326) — mechanical rails, dependency-free and regex-based, in the
+// shape of desktop-actions.ts's and desktop-writes.ts's own guards. #293
+// adds the budget gate's own rails alongside them.
 export default async function ({ fail, ok }: Reporter) {
   const sharedDispatchDir = 'apps/desktop/src/shared/dispatch';
   const mainDispatchDir = 'apps/desktop/src/main/dispatch';
@@ -195,11 +195,11 @@ export default async function ({ fail, ok }: Reporter) {
     const text = readFileSync(join(root, dispatcherFile), 'utf8');
     const fetchIdx = text.indexOf('fetchItemsByNumber(');
     const checkIdx = text.indexOf('budget.check(');
-    const sendIdx = text.indexOf('store.send(');
-    if (fetchIdx === -1 || checkIdx === -1 || sendIdx === -1) {
-      fail('desktop-dispatch', `${dispatcherFile} is missing fetchItemsByNumber(, budget.check(, or store.send( — the guard cannot compare an ordering that isn't there`);
-    } else if (!(fetchIdx < checkIdx && checkIdx < sendIdx)) {
-      fail('desktop-dispatch', `${dispatcherFile}'s own fetchItemsByNumber(/budget.check(/store.send( calls are out of order — expected fetchItemsByNumber( before budget.check( before store.send(`);
+    const launchIdx = text.indexOf('launch.launch(');
+    if (fetchIdx === -1 || checkIdx === -1 || launchIdx === -1) {
+      fail('desktop-dispatch', `${dispatcherFile} is missing fetchItemsByNumber(, budget.check(, or launch.launch( — the guard cannot compare an ordering that isn't there`);
+    } else if (!(fetchIdx < checkIdx && checkIdx < launchIdx)) {
+      fail('desktop-dispatch', `${dispatcherFile}'s own fetchItemsByNumber(/budget.check(/launch.launch( calls are out of order — expected fetchItemsByNumber( before budget.check( before launch.launch(`);
     } else {
       ok();
     }
@@ -287,8 +287,9 @@ export default async function ({ fail, ok }: Reporter) {
   }
 
   // --- ledger.record( is called under main/ only from dispatch/dispatcher.ts -
-  // guard(#265): a second caller recording a dispatch before confirmStarted
-  // actually saw the task — the whole point of confirm-before-record.
+  // guard(#265, #326): a second caller recording a dispatch — this must run
+  // only after a launch returns ok, never before a session is actually
+  // confirmed to exist.
   {
     let found = false;
     let sawDispatcher = false;
@@ -306,24 +307,11 @@ export default async function ({ fail, ok }: Reporter) {
         sawDispatcher = true;
       } else {
         found = true;
-        fail('desktop-dispatch', `${rel} calls ledger.record( — only ${dispatcherFile} may, after confirmStarted actually sees the task`);
+        fail('desktop-dispatch', `${rel} calls ledger.record( — only ${dispatcherFile} may, after a launch actually returns ok`);
       }
     }
     if (!sawDispatcher) fail('desktop-dispatch', `${dispatcherFile} never calls ledger.record( — the guard cannot pass vacuously`);
     else if (!found) ok();
-  }
-
-  // --- DISPATCHER_MODEL is declared once --------------------------------------
-  // guard(#265): a second declaration drifting from the first — the model
-  // every dispatch turn uses must come from exactly one place.
-  {
-    const text = readFileSync(join(root, turnFile), 'utf8');
-    const count = (text.match(/\bDISPATCHER_MODEL\s*=/g) ?? []).length;
-    if (count !== 1) {
-      fail('desktop-dispatch', `${turnFile} declares DISPATCHER_MODEL ${String(count)} times — expected exactly 1`);
-    } else {
-      ok();
-    }
   }
 
   // --- pin: turn.ts's two prompts ↔ SKILL.md's Dispatching block -------------

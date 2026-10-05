@@ -97,51 +97,6 @@ describe('buildSessionOptions', () => {
   })
 })
 
-describe('buildSessionOptions — dispatcher role (#265)', () => {
-  it('defaults to the operator role, adding none of the four dispatcher-only fields', () => {
-    const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' } })
-    expect(options.model).toBeUndefined()
-    expect(options.systemPrompt).toBeUndefined()
-    expect(options.allowedTools).toBeUndefined()
-    expect(options.title).toBeUndefined()
-  })
-
-  it('the dispatcher role sets model, systemPrompt append, allowedTools, and title', () => {
-    const options = buildSessionOptions({
-      ...BASE,
-      mode: { kind: 'fresh' },
-      role: { kind: 'dispatcher', model: 'haiku', instructions: 'Make only the calls named, verbatim.', title: 'Port dispatcher · acme/widgets' },
-    })
-    expect(options.model).toBe('haiku')
-    expect(options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code', append: 'Make only the calls named, verbatim.' })
-    expect(options.allowedTools).toEqual(['Agent', 'SendMessage'])
-    expect(options.title).toBe('Port dispatcher · acme/widgets')
-  })
-
-  it('never sets a tools option key — that would strip Bash/Write from the stage agents it spawns', () => {
-    const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, role: { kind: 'dispatcher', model: 'haiku', instructions: 'x', title: 'y' } })
-    expect((options as Record<string, unknown>)['tools']).toBeUndefined()
-  })
-
-  it('the dispatcher role still carries permissionMode/canUseTool/settingSources/plugins unchanged', () => {
-    const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, plugin: REPOSITORY, role: { kind: 'dispatcher', model: 'haiku', instructions: 'x', title: 'y' } })
-    expect(options.permissionMode).toBe('default')
-    expect(options.canUseTool).toBe(canUseTool)
-    expect(options.settingSources).toEqual([...SETTING_SOURCES])
-    expect(options.plugins).toEqual([{ type: 'local', path: '/repo/plugins/port' }])
-  })
-
-  it("the dispatcher role always takes 'default', regardless of the operator's own defaults.permissionMode", () => {
-    const options = buildSessionOptions({
-      ...BASE,
-      mode: { kind: 'fresh' },
-      defaults: { model: null, permissionMode: 'plan' },
-      role: { kind: 'dispatcher', model: 'haiku', instructions: 'x', title: 'y' },
-    })
-    expect(options.permissionMode).toBe('default')
-  })
-})
-
 describe('buildSessionOptions — operator session defaults (#364)', () => {
   it("the operator role reads permissionMode from defaults, never a bare 'default'", () => {
     const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, defaults: { model: null, permissionMode: 'acceptEdits' } })

@@ -1,17 +1,11 @@
-// #265: bundles the dispatcher's own process-lifetime state — the ledger,
-// the mergeability-streak memo, the refresh memo (#292), and the dispatcher
-// itself — so `main/ipc.ts` creates one thing instead of wiring several by
-// hand. `bindWatcher` exists because the dispatcher's own `onChange` must
-// call `watcher.republish()`, and the watcher cannot be built until after the
-// dispatcher (it needs `dispatcher.status` for its own `dispatchStatus`).
-// #293: also builds the budget gate and the escalation writer itself, so
-// `main/ipc.ts` passes only `dirs` rather than wiring both by hand. #292:
-// defaults `writeObservation` to `main/actions/observe.ts`'s own
-// `applyObservation`, and exposes `watcherDeps` — the `ledger`/
-// `unknownStreaks`/`refreshMemo`/`startedTasks`/`dispatchStatus` bundle
-// `main/state/watcher.ts`'s own `createPipelineWatcher` spreads, in place of
-// `main/ipc.ts` wiring each by hand (keeping that file at or under the
-// 500-line limit).
+// #326: bundles the dispatch loop's own process-lifetime state — the
+// ledger, the refresh memo, and the loop itself — so `main/ipc.ts` creates
+// one thing instead of wiring several by hand. `bindWatcher` exists because
+// the loop's own `onChange` must call `watcher.republish()`, and the watcher
+// cannot be built until after the loop (it needs `dispatcher.liveStages` for
+// its own `watcherDeps`). Also builds the budget gate and the escalation
+// writer itself, so `main/ipc.ts` passes only `dirs` rather than wiring both
+// by hand, and exposes `watcherDeps` and `shutdown`.
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '../tick'
 import type { DispatchLedger, RefreshMemo, UnknownStreaks } from '../tick'
 import type { RepoId } from '../../shared/repos'
@@ -39,6 +33,9 @@ export interface DispatchRuntime {
   readonly watcherDeps: WatcherDeps
   /** Called once, right after the watcher that owns `republish()` is built. */
   readonly bindWatcher: (republish: () => void) => void
+  /** Stops new launches and is called before `hostedStore.closeAll()` on
+   *  quit — `main/index.ts`'s own quit guard. */
+  readonly shutdown: () => void
 }
 
 export function createDispatchRuntime(deps: Omit<CreateDispatcherParams, 'ledger' | 'onChange' | 'budget' | 'escalate' | 'writeObservation' | 'refreshMemo'>): DispatchRuntime {
@@ -56,11 +53,12 @@ export function createDispatchRuntime(deps: Omit<CreateDispatcherParams, 'ledger
       ledger,
       unknownStreaks,
       refreshMemo,
-      startedTasks: (repoId) => dispatcher.startedTasks(repoId),
+      startedTasks: (repoId) => dispatcher.liveStages(repoId),
       dispatchStatus: () => dispatcher.status(),
     },
     bindWatcher: (republish) => {
       republishFn = republish
     },
+    shutdown: () => dispatcher.shutdown(),
   }
 }
