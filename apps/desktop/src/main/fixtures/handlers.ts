@@ -12,6 +12,7 @@ import type { RepoId } from '../../shared/repos'
 import type { RepoDispatchStatus, RepoRunState } from '../../shared/dispatch/types'
 import { RUN_TARGET } from '../../shared/dispatch/types'
 import type { TranscriptSource } from '../../shared/sessions/transcript'
+import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
 import { fixtureBoardSnapshot } from './board'
 import { FIXTURE_REPOSITORIES } from './repos'
 
@@ -120,5 +121,11 @@ export function fixtureHandlers(now: Date): FixtureHandlers {
     'session:dismiss': () => ({ ok: false, kind: 'unknown-session' }),
     'session:restore': () => ({ ok: false, kind: 'unknown-restore' }),
     'session:restore:discard': () => ({ ok: true }),
+
+    'gh:status': () => ({ kind: 'signed-in', checkedAt: now.toISOString() }),
+    'backlog:list': () => ({ ok: true, items: [], scanned: 0, total: 0, viewer: 'octo-dev', fetchedAt: now.toISOString() }),
+    'session:defaults': () => DEFAULT_SESSION_DEFAULTS,
+    'session:defaults:set': (request) => request,
+    'session:rename': () => ({ ok: false, kind: 'unknown-session' }),
   }
 }
