@@ -11,11 +11,8 @@ import type { Reporter } from '../lib/report.ts';
 export default async function ({ fail, ok }: Reporter) {
   const sharedActionsDir = 'apps/desktop/src/shared/actions';
   const mainActionsDir = 'apps/desktop/src/main/actions';
-  const planFile = `${sharedActionsDir}/plan.ts`;
   const bodiesFile = `${sharedActionsDir}/bodies.ts`;
-  const livenessFile = 'scripts/port-tick/liveness.ts';
   const projectFile = 'apps/desktop/src/shared/board/project.ts';
-  const mainTickGatesFile = 'apps/desktop/src/main/tick/gates.ts';
   const scriptsPortTickGatesFile = 'scripts/port-tick/gates.ts';
   const observationFile = 'apps/desktop/src/main/dispatch/observation.ts';
   const formatsFile = 'plugins/port/docs/FORMATS.md';
@@ -33,40 +30,10 @@ export default async function ({ fail, ok }: Reporter) {
     return;
   }
 
-  // --- RETRY_TRIGGER matches scripts/port-tick/liveness.ts, both directions
-  // guard(#94): the operator retry button and the tick engine's own
-  // automatic reset silently recovering to two different trigger labels —
-  // checked both directions, keys and values, against
-  // scripts/port-tick/liveness.ts's own RETRY_TRIGGER.
-  // pin: `shared/actions/plan.ts`'s `RETRY_TRIGGER` ↔ `scripts/port-tick/liveness.ts`'s own `RETRY_TRIGGER`, both directions, keys and values
-  {
-    const planText = readFileSync(join(root, planFile), 'utf8');
-    const livenessText = readFileSync(join(root, livenessFile), 'utf8');
-    const planMatch = /RETRY_TRIGGER[^{]*\{([^}]*)\}/.exec(planText);
-    const livenessMatch = /RETRY_TRIGGER\s*=\s*\{([^}]*)\}/.exec(livenessText);
-
-    function pairsOf(body: string): Map<string, string> {
-      const pairs = new Map<string, string>();
-      for (const m of body.matchAll(/(\w+)\s*:\s*'([^']+)'/g)) pairs.set(m[1], m[2]);
-      return pairs;
-    }
-
-    if (!planMatch) {
-      fail('desktop-actions', `${planFile} has no 'RETRY_TRIGGER = {...}' object to compare`);
-    } else if (!livenessMatch) {
-      fail('desktop-actions', `${livenessFile} has no 'RETRY_TRIGGER = {...}' object to compare against`);
-    } else {
-      const planPairs = pairsOf(planMatch[1]);
-      const livenessPairs = pairsOf(livenessMatch[1]);
-      const allKeys = new Set([...planPairs.keys(), ...livenessPairs.keys()]);
-      const mismatches = [...allKeys].filter((key) => planPairs.get(key) !== livenessPairs.get(key));
-      if (mismatches.length > 0) {
-        fail('desktop-actions', `${planFile}'s RETRY_TRIGGER and ${livenessFile}'s disagree on: ${mismatches.join(', ')}`);
-      } else {
-        ok();
-      }
-    }
-  }
+  // #348: shared/actions/plan.ts's own RETRY_TRIGGER now derives from
+  // scripts/port-tick/liveness.ts's own export directly (ENGINE_RETRY_TRIGGER),
+  // so there is no second copy left for this pin to compare — the assignment
+  // itself typechecks the keys and values against LabelKey.
 
   // --- No file under shared/actions/ imports a node: builtin or a main/ path
   // guard(#94): the pure action-derivation layer losing its
@@ -203,17 +170,12 @@ export default async function ({ fail, ok }: Reporter) {
       ok();
     }
 
-    const gatesText = readFileSync(join(root, mainTickGatesFile), 'utf8');
     const portTickGatesText = readFileSync(join(root, scriptsPortTickGatesFile), 'utf8');
-    const gatesMatch = /GATE_CLEARED_PREFIX\s*=\s*'([^']+)'/.exec(gatesText);
     const portTickGatesMatch = /GATE_CLEARED_PREFIX\s*=\s*'([^']+)'/.exec(portTickGatesText);
-    if (!gatesMatch || !portTickGatesMatch) {
-      fail('desktop-actions', `${mainTickGatesFile} or ${scriptsPortTickGatesFile} has no 'GATE_CLEARED_PREFIX = ...' literal to compare`);
-    } else if (bodies.GATE_CLEARED_HEADING !== gatesMatch[1] || bodies.GATE_CLEARED_HEADING !== portTickGatesMatch[1]) {
-      fail(
-        'desktop-actions',
-        `${bodiesFile}'s GATE_CLEARED_HEADING ('${bodies.GATE_CLEARED_HEADING}') disagrees with ${mainTickGatesFile}'s ('${gatesMatch[1]}') or ${scriptsPortTickGatesFile}'s ('${portTickGatesMatch[1]}')`,
-      );
+    if (!portTickGatesMatch) {
+      fail('desktop-actions', `${scriptsPortTickGatesFile} has no 'GATE_CLEARED_PREFIX = ...' literal to compare`);
+    } else if (bodies.GATE_CLEARED_HEADING !== portTickGatesMatch[1]) {
+      fail('desktop-actions', `${bodiesFile}'s GATE_CLEARED_HEADING ('${bodies.GATE_CLEARED_HEADING}') disagrees with ${scriptsPortTickGatesFile}'s ('${portTickGatesMatch[1]}')`);
     } else {
       ok();
     }

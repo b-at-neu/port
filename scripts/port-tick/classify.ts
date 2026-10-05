@@ -1,20 +1,33 @@
 // Pure: ownership partition against the viewer, and the SESSION REQUIRED
 // marker-slot read. Per plugins/port/docs/PIPELINE.md → "Multi-operator
-// partitioning" and "Session-required tickets" → "Detection".
+// partitioning" and "Session-required tickets" → "Detection". The app
+// imports `partitionOwnership` directly (docs/ENGINEERING.md §1): no
+// relative import for that export, a leaf.
 
-/** Splits `nodes` (one alias's issues or pull requests) into `mine` (acted
- *  on), `others` (another operator's — never acted on), and `unowned` (no
- *  assignee — reported, never acted on). "An item whose assignees do not
- *  include the viewer is never acted on, only reported." */
-export function partitionOwnership(nodes: any[] | undefined, viewerLogin: string | null): { mine: any[]; others: any[]; unowned: any[] } {
-  const mine: any[] = [];
-  const others: any[] = [];
-  const unowned: any[] = [];
-  for (const n of nodes ?? []) {
-    const logins = (n.assignees?.nodes ?? []).map((a: any) => a.login);
-    if (logins.length === 0) unowned.push(n);
-    else if (logins.includes(viewerLogin)) mine.push(n);
-    else others.push(n);
+export interface OwnershipPartition<T> {
+  readonly mine: readonly T[];
+  readonly others: readonly T[];
+  readonly unowned: readonly T[];
+}
+
+/** Splits `items` (one alias's issues or pull requests, or any other
+ *  assignable node) into `mine` (acted on), `others` (another operator's —
+ *  never acted on), and `unowned` (no assignee — reported, never acted on).
+ *  "An item whose assignees do not include the viewer is never acted on,
+ *  only reported." `assigneesOf` reads each item's own assignee logins —
+ *  the caller's raw GraphQL nodes for the cockpit (`wire.ts`'s
+ *  `assigneeLoginsOf`), the app's already-flattened `assignees: string[]`
+ *  for apps/desktop — so this returns the caller's own nodes, never a
+ *  reshaped copy. */
+export function partitionOwnership<T>(items: readonly T[] | undefined, viewerLogin: string | null, assigneesOf: (item: T) => readonly string[]): OwnershipPartition<T> {
+  const mine: T[] = [];
+  const others: T[] = [];
+  const unowned: T[] = [];
+  for (const item of items ?? []) {
+    const logins = assigneesOf(item);
+    if (logins.length === 0) unowned.push(item);
+    else if (viewerLogin !== null && logins.includes(viewerLogin)) mine.push(item);
+    else others.push(item);
   }
   return { mine, others, unowned };
 }
@@ -42,7 +55,7 @@ function firstNonEmptyAfter(body: string | null | undefined, heading: string): s
 export function issueSessionRequiredReason(body: string | null | undefined): string | null {
   const line = firstNonEmptyAfter(body, '## Implementation Plan');
   const m = line ? MARKER_RE.exec(line) : null;
-  return m ? m[1] : null;
+  return m ? m[1] ?? null : null;
 }
 
 /** Returns the reason string when the pull request body carries the marker
@@ -57,7 +70,7 @@ export function prSessionRequiredReason(body: string | null | undefined): string
     const trimmed = line.trim();
     if (trimmed !== '') {
       const m = MARKER_RE.exec(trimmed);
-      return m ? m[1] : null;
+      return m ? m[1] ?? null : null;
     }
   }
   return null;

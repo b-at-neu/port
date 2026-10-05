@@ -1,23 +1,20 @@
-// Runs the ported `zeroDiffGate`/`cycleCapExceeded` over the tick engine's
-// own shared case table (`scripts/port-tick/cases/gates.cases.json`) —
-// filtered to the two functions this app ports, the same idiom
-// `contention.test.ts` already uses. The table's own review shape nests
-// `commit.oid`; this app's `ReviewNode` flattens it to `commitOid`
-// (`main/github/map.ts`'s own `reviewNodesOf`) — adapted at the edge here,
-// never inside `gates.ts` itself.
+// Runs `zeroDiffGate`/`cycleCapExceeded`/etc over the tick engine's own
+// shared case table (`scripts/port-tick/cases/gates.cases.json`) — the same
+// idiom `contention.test.ts` already uses. #348 made these functions
+// themselves the engine's own (`apps/desktop` imports them directly, no
+// local copy); the table's own review shape still nests `commit.oid`, so
+// `wire.ts`'s `toReviewNode` adapts it at the edge, the same adapter the
+// cockpit's own call sites use.
 import { describe, expect, it } from 'vitest'
-import { approvedReverify, capRefreshes, codeReviewCount, cycleCapExceeded, mergeabilityRoute, refreshDecision, refreshWins, zeroDiffGate } from './gates'
-import type { ReviewNode } from './gates'
+import { approvedReverify, capRefreshes, codeReviewCount, cycleCapExceeded, mergeabilityRoute, refreshDecision, refreshWins, zeroDiffGate } from '../../../../../scripts/port-tick/gates'
+import type { ReviewNode } from '../../../../../scripts/port-tick/gates'
+import { toReviewNode } from '../../../../../scripts/port-tick/wire'
 import cases from '../../../../../scripts/port-tick/cases/gates.cases.json'
 
 interface RawReview {
   readonly body: string
   readonly submittedAt?: string
   readonly commit?: { readonly oid: string }
-}
-
-function toReviewNode(raw: RawReview): ReviewNode {
-  return { body: raw.body, submittedAt: raw.submittedAt, commitOid: raw.commit?.oid ?? null }
 }
 
 interface ZeroDiffCase {

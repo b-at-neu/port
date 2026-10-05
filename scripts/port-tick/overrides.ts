@@ -55,6 +55,32 @@ export const PERMISSION_SURFACE = new Set(['commands', 'extraAllow']);
  *  harness boundary settings cannot grant back. */
 const APPEND_ONLY = new Set(['sessionRequiredPaths', 'concurrency.sharedFiles']);
 
+/** The effective-config shape every `readPath`/`writePath` dotted path
+ *  resolves against — the cockpit's own `config.ts`'s `loadConfig` return at
+ *  minimum. `applyOverrides` is generic over `C extends EffectiveConfigShape`
+ *  so a caller (the app's own `ResolvedRepoConfig`) can carry further fields
+ *  through untouched. */
+export interface EffectiveConfigShape {
+  integration: string;
+  production: string | null;
+  labels: Record<string, string>;
+  models: { plan: string; impl: string; review: string; revise: string };
+  modules: { approvalGate: boolean; release: boolean; scope: boolean };
+  reviewCycleCap: number;
+  concurrency: { sharedFiles: readonly string[]; overlapThreshold: number };
+  sessionRequiredPaths: readonly string[];
+}
+
+export type OverrideValue = string | number | boolean | null;
+
+export interface AppliedOverride {
+  readonly path: string;
+  readonly value: OverrideValue;
+  readonly reason: string;
+  readonly portDefault: OverrideValue | readonly string[] | undefined;
+  readonly source: 'CLAUDE.md';
+}
+
 export interface OverrideEntry {
   path: string;
   op: '=' | '+=';
@@ -166,7 +192,7 @@ export function parseOverrides(text: string): { entries: OverrideEntry[]; proble
  *  port default every unlisted check name carries, so that is the real
  *  `portDefault` an applied `checks.*` override replaced, never
  *  `undefined`. */
-function readPath(cfg: any, path: string): any {
+function readPath(cfg: EffectiveConfigShape, path: string): OverrideValue | readonly string[] | undefined {
   switch (path) {
     case 'branches.integration':
       return cfg.integration;
@@ -175,12 +201,16 @@ function readPath(cfg: any, path: string): any {
     case 'models.plan':
     case 'models.impl':
     case 'models.review':
-    case 'models.revise':
-      return cfg.models[path.slice('models.'.length)];
+    case 'models.revise': {
+      const key = path.slice('models.'.length) as keyof EffectiveConfigShape['models'];
+      return cfg.models[key];
+    }
     case 'modules.approvalGate':
     case 'modules.release':
-    case 'modules.scope':
-      return cfg.modules[path.slice('modules.'.length)];
+    case 'modules.scope': {
+      const key = path.slice('modules.'.length) as keyof EffectiveConfigShape['modules'];
+      return cfg.modules[key];
+    }
     case 'reviewCycleCap':
       return cfg.reviewCycleCap;
     case 'concurrency.overlapThreshold':
@@ -197,42 +227,42 @@ function readPath(cfg: any, path: string): any {
 }
 
 /** The mirror of `readPath` — writes `value` into the same field, appending
- *  rather than assigning for the two `+=`-only paths. `checks.*` writes
- *  nothing here; the caller folds `applied` checks.* entries into
- *  `checkDispositions` itself, since there is no cfg field for it. */
-function writePath(cfg: any, path: string, value: any): void {
+ *  rather than assigning for the two `+=`-only paths. `typeof`-narrows
+ *  before every write — a mismatched type writes nothing, unreachable since
+ *  `validate` already produced the value. */
+function writePath(cfg: EffectiveConfigShape, path: string, value: OverrideValue): void {
   switch (path) {
     case 'branches.integration':
-      cfg.integration = value;
+      if (typeof value === 'string') cfg.integration = value;
       return;
     case 'branches.production':
-      cfg.production = value;
+      if (typeof value === 'string' || value === null) cfg.production = value;
       return;
     case 'models.plan':
     case 'models.impl':
     case 'models.review':
     case 'models.revise':
-      cfg.models[path.slice('models.'.length)] = value;
+      if (typeof value === 'string') cfg.models[path.slice('models.'.length) as keyof EffectiveConfigShape['models']] = value;
       return;
     case 'modules.approvalGate':
     case 'modules.release':
     case 'modules.scope':
-      cfg.modules[path.slice('modules.'.length)] = value;
+      if (typeof value === 'boolean') cfg.modules[path.slice('modules.'.length) as keyof EffectiveConfigShape['modules']] = value;
       return;
     case 'reviewCycleCap':
-      cfg.reviewCycleCap = value;
+      if (typeof value === 'number') cfg.reviewCycleCap = value;
       return;
     case 'concurrency.overlapThreshold':
-      cfg.concurrency.overlapThreshold = value;
+      if (typeof value === 'number') cfg.concurrency.overlapThreshold = value;
       return;
     case 'concurrency.sharedFiles':
-      cfg.concurrency.sharedFiles = [...cfg.concurrency.sharedFiles, value];
+      if (typeof value === 'string') cfg.concurrency.sharedFiles = [...cfg.concurrency.sharedFiles, value];
       return;
     case 'sessionRequiredPaths':
-      cfg.sessionRequiredPaths = [...cfg.sessionRequiredPaths, value];
+      if (typeof value === 'string') cfg.sessionRequiredPaths = [...cfg.sessionRequiredPaths, value];
       return;
     default:
-      if (path.startsWith('labels.')) cfg.labels[path.slice('labels.'.length)] = value;
+      if (path.startsWith('labels.') && typeof value === 'string') cfg.labels[path.slice('labels.'.length)] = value;
   }
 }
 
@@ -240,10 +270,10 @@ function writePath(cfg: any, path: string, value: any): void {
  *  returning either the coerced `value` to apply or a refusal `reason`.
  *  `labelKeys` is `config.ts`'s `LABEL_DEFAULTS` key set — the only category
  *  whose valid values depend on more than the entry itself. */
-function validate(entry: OverrideEntry, labelKeys: string[]): { value: any } | { reason: string } {
+function validate(entry: OverrideEntry, labelKeys: readonly string[]): { value: OverrideValue } | { reason: string } {
   const { path, op, rawValue } = entry;
 
-  const top = path.split('.')[0];
+  const top = path.split('.')[0] ?? path;
   if (NEVER_OVERRIDABLE.includes(top) || NEVER_OVERRIDABLE.includes(path)) {
     return {
       reason: PERMISSION_SURFACE.has(top)
@@ -298,14 +328,14 @@ function validate(entry: OverrideEntry, labelKeys: string[]): { value: any } | {
  *  reported; nothing else in the block is affected, and a wholly malformed
  *  block never aborts config loading. `cfg` is never mutated — a fresh
  *  object is returned. */
-export function applyOverrides(
-  cfg: any,
-  parsed: { entries: OverrideEntry[]; problems: OverrideProblem[] },
-  opts: { labelKeys: string[] },
-): { cfg: any; applied: any[]; refused: any[] } {
-  const out = structuredClone(cfg);
-  const applied: any[] = [];
-  const refused: any[] = parsed.problems.map((p) => ({ path: null, line: p.line, reason: p.reason }));
+export function applyOverrides<C extends EffectiveConfigShape>(
+  cfg: C,
+  parsed: { entries: readonly OverrideEntry[]; problems: readonly OverrideProblem[] },
+  opts: { labelKeys: readonly string[] },
+): { cfg: C; applied: AppliedOverride[]; refused: { path: string | null; line: string; reason: string }[] } {
+  const out: C = structuredClone(cfg);
+  const applied: AppliedOverride[] = [];
+  const refused: { path: string | null; line: string; reason: string }[] = parsed.problems.map((p) => ({ path: null, line: p.line, reason: p.reason }));
 
   for (const entry of parsed.entries) {
     const result = validate(entry, opts.labelKeys);

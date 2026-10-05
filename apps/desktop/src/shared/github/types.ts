@@ -32,7 +32,7 @@ export interface PullRequestCommentNode {
 export type Mergeable = 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN' | null
 
 /** One reduced `statusCheckRollup` context (#292) — a CheckRun or a
- *  StatusContext, flattened to the one shape `main/tick/checks.ts`'s
+ *  StatusContext, flattened to the one shape `scripts/port-tick/checks.ts`'s
  *  `rollupVerdict` reads, the same `(.name // .context)`/`(.conclusion //
  *  .state)` fallback `scripts/port-tick/checks.ts` already establishes.
  *  `startedAt`/`completedAt`/`createdAt` are kept distinct rather than
@@ -48,7 +48,7 @@ export interface CheckContext {
   readonly completedAt: string | null
   readonly createdAt: string | null
   /** A CheckRun's `detailsUrl`, or a StatusContext's `targetUrl` — never read
-   *  by `main/tick/checks.ts`'s own `rollupVerdict` (a verbatim port of the
+   *  by `scripts/port-tick/checks.ts`'s own `rollupVerdict` (imported by the
    *  cockpit's own shape, which carries neither), only by
    *  `main/tick/observe.ts`'s approval-withdrawal observation, to compose
    *  the `## Approval withdrawn` comment's own link. */

@@ -70,7 +70,7 @@ export interface VocabularyInput {
   /** `CLAUDE.md` `labels.<key>` overrides (#300) — an entry here wins over
    *  the same key in `labels`, with `source: 'CLAUDE.md'`. Keyed by the
    *  already-validated `LabelKey`, unlike `labels` itself: these came off
-   *  `main/registry/overrides.ts`'s own `validate`, which already refused
+   *  `scripts/port-tick/overrides.ts`'s own `validate`, which already refused
    *  anything outside the known key set, so there is no second
    *  `unknown-key`/`invalid-override` check to run here. */
   readonly overrides?: Readonly<Partial<Record<LabelKey, string>>>

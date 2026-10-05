@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { root, readJson, walk, relOf, pipelineSkillText } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
+import { toCheckContexts, toReviewNode } from '../port-tick/wire.ts';
 
 const TICK_DIR = 'scripts/port-tick';
 
@@ -396,7 +397,7 @@ function runCase(fn: string, impl: any, input: any): any {
     case 'classifyEnvelope':
       return impl(input);
     case 'partitionOwnership': {
-      const result = impl(input.nodes, input.viewerLogin);
+      const result = impl(input.nodes, input.viewerLogin, (n: any) => (n.assignees?.nodes ?? []).map((a: any) => a.login));
       return { mine: result.mine.map((n: any) => n.number), others: result.others.map((n: any) => n.number), unowned: result.unowned.map((n: any) => n.number) };
     }
     case 'issueSessionRequiredReason':
@@ -418,9 +419,11 @@ function runCase(fn: string, impl: any, input: any): any {
       return { toRefreshNumbers: result.toRefresh.map((c: any) => c.number), deferredNumbers: result.deferred.map((c: any) => c.number) };
     }
     case 'zeroDiffGate':
-      return impl(input);
-    case 'cycleCapExceeded':
-      return impl(...input);
+      return impl({ reviews: (input.reviews ?? []).map(toReviewNode), comments: input.comments, headRefOid: input.headRefOid });
+    case 'cycleCapExceeded': {
+      const [reviews, cap] = input;
+      return impl((reviews ?? []).map(toReviewNode), cap);
+    }
     case 'approvedReverify':
       return impl(input);
     case 'refreshWins':
@@ -478,8 +481,10 @@ function runCase(fn: string, impl: any, input: any): any {
     case 'isConcluded':
     case 'conclusionOf':
       return impl(input);
-    case 'rollupVerdict':
-      return impl(...input);
+    case 'rollupVerdict': {
+      const [rollup, dispositions] = input;
+      return impl(toCheckContexts(rollup), dispositions);
+    }
     default:
       throw new Error(`no case runner wired for function '${fn}'`);
   }

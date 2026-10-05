@@ -1,12 +1,13 @@
-// Runs the ported `parseOverrides`/`applyOverrides` over the tick engine's
-// own shared case table (`scripts/port-tick/cases/overrides.cases.json`,
-// #246/#300) — the same idiom `main/tick/checks.test.ts` already uses for its
-// own ported functions, and the same projection `scripts/checks/tick.ts`'s
-// `runCase` applies to the engine's own exports, so a desktop-only wrapper
-// shape can never let the two implementations quietly disagree.
+// Runs `parseOverrides`/`applyOverrides` over the tick engine's own shared
+// case table (`scripts/port-tick/cases/overrides.cases.json`, #246/#300) —
+// the same idiom the app's other ported-function tests already use, and the
+// same projection `scripts/checks/tick.ts`'s `runCase` applies to the
+// engine's own exports. #348 made these functions themselves the engine's
+// own (`apps/desktop` imports them directly, no local copy), so this is now
+// a direct import rather than a wrapper-shape comparison.
 import { describe, expect, it } from 'vitest'
-import { applyOverrides, parseOverrides } from './overrides'
-import type { EffectiveConfigShape, OverrideEntry } from './overrides'
+import { applyOverrides, parseOverrides } from '../../../../../scripts/port-tick/overrides'
+import type { EffectiveConfigShape, OverrideEntry } from '../../../../../scripts/port-tick/overrides'
 import cases from '../../../../../scripts/port-tick/cases/overrides.cases.json'
 
 interface ParseCase {
@@ -49,8 +50,8 @@ describe('overrides — shared case table', () => {
 })
 
 // The cockpit's own self-test trio (`scripts/checks/overrides.ts`), reused
-// here so the app's port is held to the same bar: a good block, a missing
-// reason, and the permission surface's own refusal.
+// here so the app's use of the engine is held to the same bar: a good block,
+// a missing reason, and the permission surface's own refusal.
 describe('overrides — self-test trio', () => {
   const baseCfg: EffectiveConfigShape = {
     integration: 'dev',

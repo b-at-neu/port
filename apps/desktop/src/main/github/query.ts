@@ -44,7 +44,7 @@ const ISSUE_FRAGMENT = `fragment IssueFields on Issue {
 // review/comment history never needs a second round trip larger than the
 // cockpit's own. `headRefOid` is the head this app's own gates compare a
 // review's `commit.oid` against. `mergeable` (#265) is the mergeability
-// precondition `main/tick/gates.ts`'s `mergeabilityRoute` reads — GitHub's
+// precondition `scripts/port-tick/gates.ts`'s `mergeabilityRoute` reads — GitHub's
 // own `MERGEABLE`/`CONFLICTING`/`UNKNOWN` enum, mapped to that same union at
 // the edge (`map.ts`), never re-derived from anything else.
 const PULL_REQUEST_FRAGMENT = `fragment PullRequestFields on PullRequest {

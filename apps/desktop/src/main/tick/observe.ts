@@ -14,10 +14,10 @@ import type { LabelKey } from '../../shared/labels/vocabulary'
 import type { RepoId } from '../../shared/repos'
 import type { ReconciledItem } from '../../shared/state/types'
 import type { TickClaim, TickHeld, TickObservation } from '../../shared/tick/types'
-import { approvedReverify, capRefreshes, refreshDecision } from './gates'
+import { approvedReverify, capRefreshes, refreshDecision } from '../../../../../scripts/port-tick/gates'
 import type { RefreshMemo } from './ledger'
-import { rollupVerdict } from './checks'
-import type { Disposition } from './checks'
+import { rollupVerdict } from '../../../../../scripts/port-tick/checks'
+import type { Disposition } from '../../../../../scripts/port-tick/checks'
 import { REFRESH_PAIR } from './routing'
 
 export interface ObservationsOfParams {
@@ -150,7 +150,7 @@ function withdrawApprovalObservations(items: readonly ReconciledItem[], viewer: 
     const verdict = rollupVerdict(item.checkRollup, dispositions)
     const reverify = approvedReverify({ verdict, mergeable: item.mergeable })
     if (reverify.action !== 'withdraw') continue
-    // Enriches each red check with its own `url` (`main/tick/checks.ts`'s
+    // Enriches each red check with its own `url` (`scripts/port-tick/checks.ts`'s
     // `rollupVerdict` stays a verbatim port of the cockpit's own shape, which
     // carries neither) — looked up from the item's own rollup by name, so
     // the `## Approval withdrawn` comment can carry the link FORMATS.md's

@@ -88,7 +88,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 **`apps/desktop/src/main/registry/effective.ts`**
 - resolves effective config: `CLAUDE.md` overrides folded over port-resolved values
 - fails closed (`effective-config-unreadable`) rather than silently running on port defaults
-- `overrides.ts` is a verbatim typed port of `scripts/port-tick/overrides.ts`
+- imports `scripts/port-tick/overrides.ts` directly — no app-owned copy
 
 **`apps/desktop/src/main/registry/schema.ts`**
 - the only reader of `schema/port.config.schema.json`'s shape and defaults
@@ -105,7 +105,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 
 **`apps/desktop/src/main/tick/`**
 - `RepositoryState` → `TickReport`; computes, never writes
-- decision families ported from `scripts/port-tick/`, checked against shared case tables
+- imports `scripts/port-tick/`'s own decision modules directly, checked against shared case tables
 - blind read → no actionable, held or claim counts at all
 
 **`apps/desktop/src/main/trajectory/`**
