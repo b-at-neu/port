@@ -275,7 +275,8 @@ The markers `marker` and `autoPlan` are never shown as phases; `autoPlan` appear
 - [ ] Reversible actions toast; consequential ones confirm with a named-action `AlertDialog`.
 - [ ] Phase names come from the role map in §6, never a label string.
 - [ ] Copy is sentence case, verb-first buttons, no exclamation marks; messages that need the operator lead with the action.
-- [ ] Screenshots of the screen in light and dark are attached to the pull request.
+- [ ] Screenshots in light and dark: run `pnpm screenshots`, Read the screen's PNGs in `apps/desktop/out/screenshots/`, and link the `screenshots` artifact of the pull request's Visual run in its testing plan. A new route gets a capture target in `apps/desktop/visual/targets.mts`.
+  - Without a toolchain, download the CI copy: `gh run download <run-id> --repo <owner>/<name> --name screenshots --dir .temp/screenshots`.
 
 ## 8. The mark
 
