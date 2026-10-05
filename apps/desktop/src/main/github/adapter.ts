@@ -2,7 +2,7 @@
 // the document, calling the injected `gh`, then composing `envelope.ts` and
 // `map.ts`. Never reads a config and never calls `resolveVocabulary` itself;
 // the caller supplies #75's `LabelVocabulary`.
-import type { GhOptions, GhResult, GhRunner } from '../platform/gh'
+import type { GhResult, GhRunner } from '../platform/gh'
 import { gh as defaultGh } from '../platform/gh'
 
 export type { GhRunner }
