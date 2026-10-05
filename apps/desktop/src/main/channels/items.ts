@@ -4,11 +4,10 @@ import { OPERATOR_ACTIONS, OPERATOR_DECISIONS, UNBLOCK_ROUTES } from '../../shar
 import type { ItemActionResult, ItemDecisionResult, OperatorDecision, UnblockRoute } from '../../shared/actions/types'
 import { MAX_REVISE_NOTE_CHARS } from '../../shared/actions/types'
 import type { BoardSnapshot } from '../../shared/board/types'
-import type { RepositoryEntry } from '../../shared/repos'
 import type { IpcMap } from '../../shared/ipc'
 import type { RegistryDeps } from '../registry'
-import { listRepositories } from '../registry'
-import type { ApplyItemActionParams, ReadyEntry } from '../actions/apply'
+import { listRepositories, requireReadyRepo } from '../registry'
+import type { ApplyItemActionParams } from '../actions/apply'
 import type { ApplyItemDecisionParams } from '../actions/decide'
 
 export interface ItemActionDeps {
@@ -16,10 +15,6 @@ export interface ItemActionDeps {
   readonly applyItemAction: (params: ApplyItemActionParams) => Promise<ItemActionResult>
   readonly snapshot: () => BoardSnapshot
   readonly refresh: (request: IpcMap['board:refresh']['request']) => Promise<BoardSnapshot>
-}
-
-export function isReadyEntry(entry: RepositoryEntry): entry is ReadyEntry {
-  return 'config' in entry
 }
 
 /** Validates the request, then forces one refresh after an applied outcome
@@ -42,11 +37,7 @@ export async function resolveItemAction(registryDeps: RegistryDeps, request: Ipc
     throw new Error("'item:action' requires 'expectedStage' to be a non-empty string or null")
   }
 
-  const list = await deps.listRepositories(registryDeps)
-  if (!list.ok) throw new Error(`'item:action' could not list repositories: ${list.message}`)
-  const found = list.repositories.find((repository) => repository.id === request.repoId)
-  if (!found) throw new Error(`'item:action' found no repository registered with id '${request.repoId}'`)
-  if (!isReadyEntry(found)) throw new Error(`'item:action' requires a 'ready' repository, got '${found.problem.kind}'`)
+  const found = await requireReadyRepo(registryDeps, "'item:action'", request.repoId, deps.listRepositories)
 
   const result = await deps.applyItemAction({
     request: { repoId: request.repoId, kind: request.kind, number: request.number, action: request.action, expectedStage: request.expectedStage },
@@ -112,11 +103,7 @@ export async function resolveItemDecision(registryDeps: RegistryDeps, request: I
     }
   }
 
-  const list = await deps.listRepositories(registryDeps)
-  if (!list.ok) throw new Error(`'item:decide' could not list repositories: ${list.message}`)
-  const found = list.repositories.find((repository) => repository.id === request.repoId)
-  if (!found) throw new Error(`'item:decide' found no repository registered with id '${request.repoId}'`)
-  if (!isReadyEntry(found)) throw new Error(`'item:decide' requires a 'ready' repository, got '${found.problem.kind}'`)
+  const found = await requireReadyRepo(registryDeps, "'item:decide'", request.repoId, deps.listRepositories)
 
   const result = await deps.applyItemDecision({
     request: { repoId: request.repoId, number: request.number, decision: request.decision, expectedStage: request.expectedStage, route: request.route, note: request.note, skipComment: request.skipComment },

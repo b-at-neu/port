@@ -2,7 +2,7 @@
 import type { BacklogResponse } from '../../shared/backlog/types'
 import type { IpcMap } from '../../shared/ipc'
 import { fetchBacklog } from '../github/backlog'
-import { listRepositories } from '../registry'
+import { listRepositories, requireReadyRepo } from '../registry'
 import type { RegistryDeps } from '../registry'
 
 export interface BacklogListDeps {
@@ -21,11 +21,7 @@ export async function resolveBacklogList(
   if (typeof request?.repoId !== 'string' || request.repoId === '') {
     throw new Error("'backlog:list' requires a non-empty 'repoId'")
   }
-  const list = await deps.listRepositories(registryDeps)
-  if (!list.ok) throw new Error(`'backlog:list' could not list repositories: ${list.message}`)
-  const entry = list.repositories.find((repository) => repository.id === request.repoId)
-  if (!entry) throw new Error(`'backlog:list' found no repository registered with id '${request.repoId}'`)
-  if (!('config' in entry)) throw new Error(`'backlog:list' requires a 'ready' repository, got '${entry.problem.kind}'`)
+  const entry = await requireReadyRepo(registryDeps, "'backlog:list'", request.repoId, deps.listRepositories)
 
   return deps.fetchBacklog({ repo: { owner: entry.config.owner, name: entry.config.name }, vocabulary: entry.config.vocabulary })
 }

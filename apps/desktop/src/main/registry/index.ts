@@ -4,7 +4,8 @@
 // returns, rather than reading a config itself.
 import { pathOps } from '../platform/paths'
 import type { ReposAddResponse, ReposListResponse, ReposRemoveResponse } from '../../shared/ipc'
-import type { RepoId } from '../../shared/repos'
+import type { RepoId, RepositoryEntry } from '../../shared/repos'
+import type { ReadyEntry } from '../actions/apply'
 import type { GitRunner } from './harness'
 import { inspectRepository, resolveGitRoot } from './inspect'
 import { readRegistry, writeRegistry } from './store'
@@ -59,6 +60,30 @@ export async function addRepository(deps: RegistryDeps): Promise<ReposAddRespons
   const repositories = await inspectAll(newPaths, deps.git)
   const added = repositories.find((entry) => pathOps.samePath(entry.path, effectivePath))
   return { ok: true, outcome: 'added', added: added?.id ?? (pathOps.pathKey(effectivePath) as unknown as RepoId), repositories }
+}
+
+/** The one `RepositoryEntry` -> `ReadyEntry` narrowing every channel that
+ *  resolves a repository by id needs — previously declared separately in
+ *  `main/channels/hosting.ts`, `main/channels/items.ts`, and
+ *  `main/dispatch/resolve.ts`. */
+export function isReadyEntry(entry: RepositoryEntry): entry is ReadyEntry {
+  return 'config' in entry
+}
+
+/** The "find a registered, ready repository by id, or throw" lookup every
+ *  repository-scoped channel composes — `subject` is the caller's own
+ *  error-message prefix (e.g. `"'item:action'"` or `"claim"`), so each
+ *  channel's thrown text keeps naming itself exactly as it did before this
+ *  lookup was shared. `list` is the caller's own injected
+ *  `listRepositories`, the same test seam every `*Deps` interface already
+ *  gives its channel. */
+export async function requireReadyRepo(registryDeps: RegistryDeps, subject: string, repoId: string, list: typeof listRepositories): Promise<ReadyEntry> {
+  const result = await list(registryDeps)
+  if (!result.ok) throw new Error(`${subject} could not list repositories: ${result.message}`)
+  const entry = result.repositories.find((repository) => repository.id === repoId)
+  if (!entry) throw new Error(`${subject} found no repository registered with id '${repoId}'`)
+  if (!isReadyEntry(entry)) throw new Error(`${subject} requires a 'ready' repository, got '${entry.problem.kind}'`)
+  return entry
 }
 
 export async function removeRepository(deps: RegistryDeps, id: RepoId): Promise<ReposRemoveResponse> {

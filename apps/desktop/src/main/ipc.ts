@@ -48,7 +48,7 @@ import {
 import { git } from './platform/git'
 import { readWorktreeReport } from './reclaimer/report'
 import type { ReadWorktreeReportParams } from './reclaimer/report'
-import { addRepository, listRepositories, removeRepository } from './registry'
+import { addRepository, listRepositories, removeRepository, requireReadyRepo } from './registry'
 import type { RegistryDeps } from './registry'
 import { createPipelineWatcher } from './state/watcher'
 import type { PipelineWatcher } from './state/watcher'
@@ -120,11 +120,7 @@ export async function resolveWorktreesReport(
   if (typeof request?.id !== 'string' || request.id === '') {
     throw new Error("'worktrees:report' requires a non-empty 'id'")
   }
-  const list = await deps.listRepositories(registryDeps)
-  if (!list.ok) throw new Error(`'worktrees:report' could not list repositories: ${list.message}`)
-  const entry = list.repositories.find((repository) => repository.id === request.id)
-  if (!entry) throw new Error(`'worktrees:report' found no repository registered with id '${request.id}'`)
-  if (!('config' in entry)) throw new Error(`'worktrees:report' requires a 'ready' repository, got '${entry.problem.kind}'`)
+  const entry = await requireReadyRepo(registryDeps, "'worktrees:report'", request.id, deps.listRepositories)
   return deps.readWorktreeReport({
     repoRoot: entry.path,
     worktreesCommand: entry.config.commands.worktrees,

@@ -7,13 +7,14 @@
 // #97's own diagnosis rather than a new error kind (that is `HostedStore`'s
 // own job, not this file's).
 import type { IpcMap, ReposListResponse } from '../../shared/ipc'
-import type { RepoId, RepoProblem, RepositoryEntry } from '../../shared/repos'
+import type { RepoId, RepoProblem } from '../../shared/repos'
 import { PERMISSION_DECISIONS, SESSION_MODELS, SESSION_PERMISSION_MODES, SESSION_TITLE_MAX } from '../../shared/hosting/types'
 import type { RestorableSession, SessionModel, SessionPermissionMode, SessionStartMode } from '../../shared/hosting/types'
 import type { HostedStore } from '../hosting/store'
 import { SESSION_LIMIT_CEILING } from '../hosting/store'
-import { listRepositories } from '../registry'
+import { isReadyEntry, listRepositories, requireReadyRepo } from '../registry'
 import type { RegistryDeps } from '../registry'
+import type { ReadyEntry } from '../actions/apply'
 
 export interface HostingChannelDeps {
   readonly listRepositories: typeof listRepositories
@@ -22,20 +23,9 @@ export interface HostingChannelDeps {
 
 export const defaultHostingChannelDeps = (store: HostedStore): HostingChannelDeps => ({ listRepositories, store })
 
-type ReadyEntry = Extract<RepositoryEntry, { readonly status: 'ready' }>
-
-function isReadyEntry(entry: RepositoryEntry): entry is ReadyEntry {
-  return 'config' in entry
-}
-
 async function resolveReadyEntry(registryDeps: RegistryDeps, repoId: unknown, deps: HostingChannelDeps, channel: string): Promise<ReadyEntry> {
   if (typeof repoId !== 'string' || repoId === '') throw new Error(`'${channel}' requires a non-empty 'repoId'`)
-  const list = await deps.listRepositories(registryDeps)
-  if (!list.ok) throw new Error(`'${channel}' could not list repositories: ${list.message}`)
-  const entry = list.repositories.find((repository) => repository.id === repoId)
-  if (!entry) throw new Error(`'${channel}' found no repository registered with id '${repoId}'`)
-  if (!isReadyEntry(entry)) throw new Error(`'${channel}' requires a 'ready' repository, got '${entry.problem.kind}'`)
-  return entry
+  return requireReadyRepo(registryDeps, `'${channel}'`, repoId, deps.listRepositories)
 }
 
 /** `mode.kind` one of `fresh | resume | resume-at | fork`, with `sessionId`
