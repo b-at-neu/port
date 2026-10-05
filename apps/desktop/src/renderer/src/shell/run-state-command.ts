@@ -1,6 +1,4 @@
-// Run/Drain/Pause for one repository (#314/#316), as a React mutation
-// instead of `board/run-state.ts`'s own click-handler/pending-map pair,
-// which this ticket deletes. Toasts replace that file's inline result note.
+// Run/Drain/Pause for one repository, as a React mutation with toasts.
 import { toast } from 'sonner'
 import type { RepoId } from '../../../shared/repos'
 import type { DispatchControlResult } from '../../../shared/dispatch/types'

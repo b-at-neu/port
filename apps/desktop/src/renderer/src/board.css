@@ -4,7 +4,9 @@
 #board-view {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 2.5rem);
+  /* #main-area's own 1.5rem top+bottom padding, now that the removed
+     runtime strip and nav no longer sit above this view (#316). */
+  height: calc(100vh - 3rem);
   box-sizing: border-box;
   padding: 1rem 2rem 1.5rem;
 }

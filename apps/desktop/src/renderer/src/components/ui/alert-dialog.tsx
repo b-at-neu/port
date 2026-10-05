@@ -15,8 +15,7 @@ export function AlertDialogPortal(props: ComponentProps<typeof AlertDialogPrimit
   return <AlertDialogPrimitive.Portal data-slot="alert-dialog-portal" {...props} />
 }
 
-/** DESIGN §5 motion variant (#316): 150ms ease-out fade plus a 4px slide,
- *  never a zoom. */
+/** Motion variant: 150ms ease-out fade plus a 4px slide, never a zoom. */
 export function AlertDialogOverlay({ className, ...props }: ComponentProps<typeof AlertDialogPrimitive.Overlay>) {
   return (
     <AlertDialogPrimitive.Overlay

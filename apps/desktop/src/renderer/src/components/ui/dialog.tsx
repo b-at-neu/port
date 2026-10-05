@@ -19,9 +19,7 @@ export function DialogClose(props: ComponentProps<typeof DialogPrimitive.Close>)
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />
 }
 
-/** DESIGN §5 motion variant (#316): 150ms ease-out fade plus a 4px slide,
- *  never a zoom — shadcn's shipped zoom classes are dropped everywhere in
- *  this file. */
+/** Motion variant: 150ms ease-out fade plus a 4px slide, never a zoom. */
 export function DialogOverlay({ className, ...props }: ComponentProps<typeof DialogPrimitive.Overlay>) {
   return (
     <DialogPrimitive.Overlay

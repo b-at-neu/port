@@ -1,8 +1,7 @@
-// `localStorage['port.shell']` — the sidebar's collapsed state, the last
-// route, and the selected session (#316). Pure parsing: a malformed field
-// falls back to its default (expanded, no route, no selection) rather than
-// throwing, since a hand-edited or stale value must never crash the app on
-// launch.
+// A malformed field falls back to its default rather than throwing — a
+// hand-edited or stale value must never crash the app on launch.
+import { RESTORABLE_ROUTES } from '../router/legacy-view'
+
 export interface ShellPrefs {
   readonly v: 1
   readonly sidebarCollapsed: boolean
@@ -20,10 +19,6 @@ const DEFAULT_PREFS: ShellPrefs = {
   lastRoute: null,
   selectedSession: null,
 }
-
-/** Every route a launch or `trackLastRoute` may restore onto — screens whose
- *  state survives a quit/relaunch. */
-export const RESTORABLE_ROUTES: readonly string[] = ['/board', '/repositories', '/session', '/settings', '/backlog']
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
@@ -69,9 +64,7 @@ export function setSelectedSession(claudeSessionId: string | null): void {
   writePrefs({ ...shellPrefs(), selectedSession: claudeSessionId })
 }
 
-/** Called on `router`'s `onResolved` — only a `RESTORABLE_ROUTES` pathname
- *  is persisted, so a transient route (a dialog param, a drill-down) never
- *  becomes the restore target. */
+/** Only a `RESTORABLE_ROUTES` pathname is persisted — a transient route never becomes the restore target. */
 export function trackLastRoute(pathname: string): void {
   if (!RESTORABLE_ROUTES.includes(pathname)) return
   writePrefs({ ...shellPrefs(), lastRoute: pathname })

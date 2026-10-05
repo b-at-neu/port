@@ -37,18 +37,24 @@ import { initClaim, openClaimDialog } from './claim/controller'
 import { initDecision, openDecisionDialog } from './decision/controller'
 import { initGate, openGateDialog, openReviewDialog } from './gate/controller'
 import { initPermissions } from './permission/controller'
-import { initRuntime } from './runtime'
-import { initSession, sessionsTabText } from './session/controller'
+import { initSession } from './session/controller'
 import { router } from './router/router'
-import { routeForView, tabFor, viewFromMatch, type Tab, type View } from './router/legacy-view'
+import { routeForView, containerFor, viewFromMatch, type View } from './router/legacy-view'
 import { createQueryClient, ipcQueryOptions, observeIpcQuery } from './data/query'
 import { connectQueryCache } from './data/subscriptions'
 import { mountReact } from './react/mount'
 import { themeStore } from './theme/store'
+import { registerLegacyActions } from './shell/legacy-actions'
+import { trackLastRoute } from './shell/prefs'
+import { initSidebarCollapsed, listNavigatorFor, openPalette, setRenaming, toggleSidebarCollapsed } from './shell/stores'
+import { shellPrefs, setSidebarCollapsed } from './shell/prefs'
+import { installKeyboardMap } from './shell/keyboard'
+import { liveSessionKeys, selectSession, startNewSession } from './session/controller'
+import { selectedSession } from './session/selection'
+import { toast } from 'sonner'
 
 const app = document.querySelector<HTMLDivElement>('#app')
-const runtimeStrip = document.querySelector<HTMLDivElement>('#runtime-strip')
-const nav = document.querySelector<HTMLDivElement>('#nav')
+const shellRoot = document.querySelector<HTMLDivElement>('#shell-root')
 const boardContainer = document.querySelector<HTMLDivElement>('#board-view')
 const reposContainer = document.querySelector<HTMLDivElement>('#repositories-view')
 const sessionContainer = document.querySelector<HTMLDivElement>('#session-view')
@@ -68,31 +74,15 @@ function currentView(): View {
   return viewFromMatch(leaf.routeId, leaf.params, leaf.search as Record<string, unknown>)
 }
 
-const TAB_LABELS: Readonly<Record<'board' | 'repositories' | 'settings', string>> = { board: 'Board', repositories: 'Repositories', settings: 'Settings' }
-
-function drawNav(view: View): void {
-  if (!nav) return
-  const active = tabFor(view)
-  nav.textContent = ''
-  for (const tab of ['board', 'repositories', 'session', 'settings'] as const) {
-    const button = document.createElement('button')
-    button.className = tab === active ? 'nav-tab nav-tab--active' : 'nav-tab'
-    button.textContent = tab === 'session' ? sessionsTabText() : TAB_LABELS[tab]
-    button.dataset.action = 'view-switch'
-    button.dataset.view = tab
-    nav.appendChild(button)
-  }
-}
-
 function drawViews(view: View): void {
-  const active = tabFor(view)
+  const active = containerFor(view)
   if (boardContainer) boardContainer.hidden = active !== 'board'
   if (reposContainer) reposContainer.hidden = active !== 'repositories'
-  // The session container is hidden rather than cleared on a tab switch, so
-  // the stream keeps rendering in the background.
+  // The session container is hidden rather than cleared on a route switch,
+  // so the stream keeps rendering in the background.
   if (sessionContainer) sessionContainer.hidden = active !== 'session'
-  // #react-root shows only for the one React screen this ticket ships.
-  if (reactRootContainer) reactRootContainer.hidden = active !== 'settings'
+  // #react-root shows for every React screen (Settings, Backlog).
+  if (reactRootContainer) reactRootContainer.hidden = active !== 'react'
 }
 
 function drawRepositories(view: View): void {
@@ -115,7 +105,6 @@ function drawBoard(): void {
 
 function draw(): void {
   const view = currentView()
-  drawNav(view)
   drawViews(view)
   drawRepositories(view)
   drawBoard()
@@ -311,13 +300,6 @@ function toggleGroupBy(): void {
   drawBoard()
 }
 
-// Switching tabs always lands on that tab's top screen rather than
-// preserving a drill-down the operator explicitly left.
-async function switchTab(tab: Tab): Promise<void> {
-  const next: View = tab === 'board' ? { screen: 'board' } : tab === 'session' ? { screen: 'session' } : tab === 'settings' ? { screen: 'settings' } : { screen: 'repos' }
-  await navigateTo(next)
-}
-
 function repoLabelFor(id: RepoId): string {
   const entry = state.repositories.find((repository) => repository.id === id)
   if (entry === undefined) return id
@@ -413,10 +395,6 @@ app?.addEventListener('click', (event) => {
   const target = event.target
   if (!(target instanceof HTMLElement)) return
   const action = target.dataset.action
-  if (action === 'view-switch' && target.dataset.view) {
-    void switchTab(target.dataset.view as Tab)
-    return
-  }
   if (action === 'add') void handleAdd()
   else if (action === 'rescan') void refreshRepositories()
   else if (action === 'remove' && target.dataset.repoId) void handleRemove(target.dataset.repoId as RepoId)
@@ -471,15 +449,43 @@ app?.addEventListener('submit', (event) => {
 registerSearchRedraw(draw)
 registerTranscriptRedraw(draw)
 
-// Boot order (#316): theme, query client, push-cache wiring, React mount,
-// then the legacy screens' own init.
+// Boot order: theme, query client, push-cache wiring, React mount, legacy init.
 themeStore().apply()
 const queryClient = createQueryClient()
 connectQueryCache(queryClient)
-if (reactRootContainer) mountReact(reactRootContainer, queryClient)
+initSidebarCollapsed(shellPrefs().sidebarCollapsed)
+if (shellRoot && reactRootContainer) mountReact(shellRoot, reactRootContainer, queryClient)
+
+installKeyboardMap({
+  openPalette,
+  readyRepoIds: () => state.repositories.filter((r) => 'config' in r).map((r) => r.id),
+  startNewSession,
+  liveSessionKeys,
+  currentSessionKey: () => selectedSession(),
+  selectSession,
+  toggleSidebar: () => setSidebarCollapsed(toggleSidebarCollapsed()),
+  startRename: () => {
+    const key = selectedSession()
+    if (key === null) return
+    if (shellPrefs().sidebarCollapsed) setSidebarCollapsed(toggleSidebarCollapsed())
+    setRenaming(key)
+  },
+  currentListNavigator: () => {
+    const view = currentView()
+    const screen = view.screen === 'board' ? 'board' : view.screen === 'backlog' ? 'backlog' : null
+    return screen !== null ? listNavigatorFor(screen) : undefined
+  },
+  noReadyRepoToast: () => toast('Register a repository to start a session.'),
+})
 
 async function boot(): Promise<void> {
-  router.subscribe('onResolved', draw)
+  router.subscribe('onResolved', () => {
+    draw()
+    trackLastRoute(router.state.location.pathname)
+  })
+  // Restores the last screen on a fresh launch; an explicit deep link wins.
+  const lastRoute = shellPrefs().lastRoute
+  if (lastRoute !== null && (location.hash === '' || location.hash === '#/')) router.history.replace(`#${lastRoute}`)
   await router.load()
   draw()
   void refreshRepositories()
@@ -488,7 +494,7 @@ async function boot(): Promise<void> {
   if (app) initDecision(app, queryClient)
   if (app) initGate(app)
   if (app) initPermissions(app)
-  if (runtimeStrip) initRuntime(runtimeStrip)
-  if (sessionContainer) initSession(sessionContainer, { show: () => void switchTab('session'), onNavChange: () => drawNav(currentView()) })
+  registerLegacyActions({ openSessions: (repoId) => void handleOpenSessions(repoId) })
+  if (sessionContainer) initSession(sessionContainer, { show: () => void navigateTo({ screen: 'session' }) })
 }
 void boot()

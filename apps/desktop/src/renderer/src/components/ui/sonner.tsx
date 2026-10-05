@@ -3,8 +3,7 @@ import { CircleCheckIcon, InfoIcon, Loader2Icon, OctagonXIcon, TriangleAlertIcon
 import { Toaster as Sonner, type ToasterProps } from 'sonner'
 import { useResolvedTheme } from '@/theme/store'
 
-/** The resolved theme store (#316), never `next-themes` — this app has no
- *  such provider, and the shell owns theme resolution on its own. */
+/** The resolved theme store, never `next-themes` — this app has no such provider. */
 export function Toaster(props: ToasterProps) {
   const theme = useResolvedTheme()
   return (

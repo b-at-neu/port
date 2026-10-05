@@ -1,6 +1,4 @@
-// DESIGN §8 — the sailboat mark, in a 20px `brand` tile. `markPaths` reads
-// the canonical SVG's own `<path d>` values rather than a second
-// hand-copied shape, so the two can never drift (ENGINEERING §2).
+// `markPaths` reads the canonical SVG's own path data, never a hand-copied shape.
 import { cn } from '@/lib/utils'
 import portMarkSvg from '../../../../../../docs/design/port-mark.svg?raw'
 

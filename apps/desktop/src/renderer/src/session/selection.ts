@@ -2,6 +2,7 @@
 // (`permission/controller.ts`) to flag a prompt from a session other than
 // the one on screen. `session/controller.ts` is the only writer; anything
 // else only reads through `selectedSession()`/`onSelectionChange()`.
+import { useSyncExternalStore } from 'react'
 import type { SessionKey } from '../../../shared/hosting/types'
 
 let current: SessionKey | null = null
@@ -20,4 +21,10 @@ export function setSelectedSession(key: SessionKey | null): void {
 export function onSelectionChange(listener: () => void): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)
+}
+
+/** The sidebar's own reactive read (#316) — `main.ts`'s legacy rail still
+ *  reads `selectedSession()`/`onSelectionChange()` directly. */
+export function useSelectedSession(): SessionKey | null {
+  return useSyncExternalStore(onSelectionChange, selectedSession)
 }

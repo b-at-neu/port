@@ -8,8 +8,9 @@ import { createHashHistory, createRootRoute, createRoute, createRouter, redirect
 import { ROUTE_IDS, transcriptSearchFromRaw } from './legacy-view'
 import type { TranscriptSearch } from './legacy-view'
 import { SettingsScreen } from '../settings/screen'
+import { ShellLayout } from '../shell/layout'
 
-const rootRoute = createRootRoute()
+const rootRoute = createRootRoute({ component: ShellLayout })
 
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -33,6 +34,9 @@ const transcriptRoute = createRoute({
 
 const sessionRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.session, component: () => null })
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.settings, component: SettingsScreen })
+// Backlog's real screen content ships separately; this placeholder carries
+// the route and sidebar entry only.
+const backlogRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.backlog, component: () => <p className="p-4 text-small text-muted-foreground">Backlog is coming soon.</p> })
 
 // Any unknown path redirects to /board (ticket's own route table) — a
 // bare `*` route is TanStack Router's own catch-all.
@@ -44,7 +48,7 @@ const catchAllRoute = createRoute({
   },
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, boardRoute, reposRoute, sessionsRoute, searchRoute, transcriptRoute, sessionRoute, settingsRoute, catchAllRoute])
+const routeTree = rootRoute.addChildren([indexRoute, boardRoute, reposRoute, sessionsRoute, searchRoute, transcriptRoute, sessionRoute, settingsRoute, backlogRoute, catchAllRoute])
 
 export const router = createRouter({ routeTree, history: createHashHistory() })
 

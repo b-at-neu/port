@@ -11,8 +11,7 @@ export function DropdownMenuTrigger(props: ComponentProps<typeof DropdownMenuPri
   return <DropdownMenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />
 }
 
-/** DESIGN §5 motion variant (#316): 150ms ease-out fade plus a 4px slide,
- *  never a zoom. */
+/** Motion variant: 150ms ease-out fade plus a 4px slide, never a zoom. */
 export function DropdownMenuContent({ className, sideOffset = 4, ...props }: ComponentProps<typeof DropdownMenuPrimitive.Content>) {
   return (
     <DropdownMenuPrimitive.Portal>

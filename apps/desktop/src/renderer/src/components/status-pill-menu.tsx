@@ -1,7 +1,5 @@
-// DESIGN §4 StatusPill with a menu — a DropdownMenuTrigger button carrying
-// the pill look plus a 14px chevron. Used by the sidebar's per-repository
-// run-state pill (shell/sidebar-pipelines.tsx); generic over its own item
-// set so a second menu-bearing pill never re-derives this shape.
+// A StatusPill with a menu — generic over its item set, so a second
+// menu-bearing pill never re-derives this shape.
 import type { ReactNode } from 'react'
 import { ChevronDown, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'

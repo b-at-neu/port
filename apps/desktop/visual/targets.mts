@@ -7,7 +7,7 @@
 // list, and `router/legacy-view.ts` belongs to the renderer's web project,
 // not this one. `scripts/checks/desktop-visual.ts` pins the two key sets
 // against each other, both directions.
-export const ROUTE_KEYS = ['board', 'repos', 'sessions', 'search', 'transcript', 'session', 'settings'] as const
+export const ROUTE_KEYS = ['board', 'repos', 'sessions', 'search', 'transcript', 'session', 'settings', 'backlog'] as const
 
 // Resolved against `process.cwd()` at the point of use (`screens.spec.mts`),
 // never here — this stays the bare, pinned literal `scripts/checks/
@@ -57,6 +57,8 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
   // keeps hidden until a session is selected.
   session: { kind: 'capture', hash: '#/session', container: '#session-view', ready: '.session-view__empty' },
   settings: { kind: 'capture', hash: '#/settings', container: '#react-root', ready: '#react-root h2' },
+  // Backlog's real screen content ships separately; this is its placeholder.
+  backlog: { kind: 'capture', hash: '#/backlog', container: '#react-root', ready: '#react-root p' },
   sessions: { kind: 'skip', hash: '#/repositories/fixture-acme-widgets/sessions', reason: LEGACY_SCREEN_REASON },
   search: { kind: 'skip', hash: '#/repositories/fixture-acme-widgets/search', reason: LEGACY_SCREEN_REASON },
   transcript: { kind: 'skip', hash: '#/transcript/fixture-session', reason: LEGACY_SCREEN_REASON },

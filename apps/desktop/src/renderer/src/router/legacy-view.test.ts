@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ROUTE_IDS, routeForView, tabFor, transcriptSearchFromRaw, viewFromMatch } from './legacy-view'
+import { ROUTE_IDS, containerFor, routeForView, transcriptSearchFromRaw, viewFromMatch } from './legacy-view'
 import type { View } from './legacy-view'
 import type { RepoId } from '../../../shared/repos'
 
@@ -14,6 +14,7 @@ const VIEWS: readonly View[] = [
   { screen: 'transcript', sessionId: 'sess-2', agentId: null, title: 'Other', from: 'sessions', focusIndex: null },
   { screen: 'session' },
   { screen: 'settings' },
+  { screen: 'backlog' },
 ]
 
 describe('routeForView / viewFromMatch round trip', () => {
@@ -59,14 +60,15 @@ describe('transcriptSearchFromRaw', () => {
   })
 })
 
-describe('tabFor', () => {
-  it('maps every screen to its nav tab', () => {
-    expect(tabFor({ screen: 'board' })).toBe('board')
-    expect(tabFor({ screen: 'repos' })).toBe('repositories')
-    expect(tabFor({ screen: 'sessions', repoId: REPO_ID })).toBe('repositories')
-    expect(tabFor({ screen: 'search', repoId: REPO_ID })).toBe('repositories')
-    expect(tabFor({ screen: 'transcript', sessionId: 's', agentId: null, title: '', from: 'sessions', focusIndex: null })).toBe('repositories')
-    expect(tabFor({ screen: 'session' })).toBe('session')
-    expect(tabFor({ screen: 'settings' })).toBe('settings')
+describe('containerFor', () => {
+  it('maps every screen to its legacy container', () => {
+    expect(containerFor({ screen: 'board' })).toBe('board')
+    expect(containerFor({ screen: 'repos' })).toBe('repositories')
+    expect(containerFor({ screen: 'sessions', repoId: REPO_ID })).toBe('repositories')
+    expect(containerFor({ screen: 'search', repoId: REPO_ID })).toBe('repositories')
+    expect(containerFor({ screen: 'transcript', sessionId: 's', agentId: null, title: '', from: 'sessions', focusIndex: null })).toBe('repositories')
+    expect(containerFor({ screen: 'session' })).toBe('session')
+    expect(containerFor({ screen: 'settings' })).toBe('react')
+    expect(containerFor({ screen: 'backlog' })).toBe('react')
   })
 })

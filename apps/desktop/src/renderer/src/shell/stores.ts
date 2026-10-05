@@ -1,8 +1,5 @@
-// Small `useSyncExternalStore` stores for shell-wide UI state that several
-// unrelated components need to read or set (#316) — the same module-level
-// closure idiom `theme/store.ts` and `session/controller.ts` already use.
-// No `useEffect` anywhere: every writer calls `set`/`update` directly from an
-// event handler.
+// Small `useSyncExternalStore` stores for shell-wide UI state. No `useEffect`
+// anywhere: every writer calls `set` directly from an event handler.
 import { useSyncExternalStore } from 'react'
 import type { RepoId } from '../../../shared/repos'
 
@@ -82,9 +79,24 @@ export function useRenaming(): string | null {
   return useSyncExternalStore(renamingStore.subscribe, renamingStore.get)
 }
 
-/** A registry of per-screen list navigators (#316's J/K/Enter), filled in by
- *  each screen's own ref callback. `keyboard.ts` reads the current route's
- *  entry, never holding a reference of its own. */
+/** A shared store, not a local `useState` — the palette and the keyboard
+ *  map both flip it from outside the `Sidebar` component. */
+const sidebarCollapsedStore = createStore(false)
+
+export function initSidebarCollapsed(collapsed: boolean): void {
+  sidebarCollapsedStore.set(collapsed)
+}
+
+export function toggleSidebarCollapsed(): boolean {
+  const next = !sidebarCollapsedStore.get()
+  sidebarCollapsedStore.set(next)
+  return next
+}
+
+export function useSidebarCollapsed(): boolean {
+  return useSyncExternalStore(sidebarCollapsedStore.subscribe, sidebarCollapsedStore.get)
+}
+
 export interface ListNavigator {
   next(): void
   prev(): void

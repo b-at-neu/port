@@ -1,8 +1,5 @@
-// Pure projection from the repository registry and the board snapshot onto
-// the sidebar's Pipelines section (#316) — one row per registered
-// repository, DESIGN §3. No runtime imports: `sidebar-pipelines.tsx` is the
-// one consumer, the same split `shared/board/project.ts` already draws
-// between pure derivation and its own renderer.
+// Pure projection onto the sidebar's Pipelines section — one row per
+// registered repository.
 import type { RepoId, RepositoryEntry } from '../../../shared/repos'
 import type { BoardSnapshot } from '../../../shared/board/types'
 import type { ReconciledItem } from '../../../shared/state/types'
@@ -64,11 +61,8 @@ function pillFor(snapshot: BoardSnapshot | undefined, repoId: RepoId): { readonl
   return { status: 'idle', label: 'Paused' }
 }
 
-/** One row per registered repository (DESIGN §3's Pipelines section) — a
- *  not-`ready` repository gets a bare not-ready row with no menu, per the
- *  plan's **UX states**. `snapshot` may be `undefined` while `board:snapshot`
- *  has not resolved yet; every ready row then falls back to a paused pill
- *  with no sessions, rather than waiting on a second loading state. */
+/** A not-`ready` repository gets a bare row with no menu. `snapshot` may be
+ *  `undefined` before the first read; a ready row then falls back to paused. */
 export function pipelinesModel(repos: readonly RepositoryEntry[], snapshot: BoardSnapshot | undefined): readonly PipelineRow[] {
   const needsYou = snapshot !== undefined ? needsYouItems(snapshot) : []
   const needsYouNumbers = new Map<RepoId, Set<number>>()

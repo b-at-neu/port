@@ -1,9 +1,4 @@
-// Pure formatting helpers for the shell (#316). No runtime imports — kept
-// trivially unit-testable and safe for anything to import.
-
-/** DESIGN §6's relative-time format: "just now" under a minute, then
- *  `<n>m ago` / `<n>h ago` / `<n>d ago`. The caller supplies `now` so this
- *  stays pure and testable against a fixed clock. */
+/** "just now" under a minute, then `<n>m ago` / `<n>h ago` / `<n>d ago`. */
 export function relativeAge(iso: string, now: Date): string {
   const then = new Date(iso).getTime()
   const diffMs = now.getTime() - then

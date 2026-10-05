@@ -1,8 +1,5 @@
-// The sidebar footer's own read of `claude`/`gh` status (#316) — replaces
-// the deleted `runtime.ts` strip with one status dot. Pure over the two
-// queries' own result shape, so it is testable with a plain object rather
-// than a real `QueryObserverResult`. The Settings screen's own richer
-// "Check again" re-fetch is a separate ticket (#318-E); this is read-only.
+// The sidebar footer's one status dot — pure over the two queries' result
+// shape, so it is testable with a plain object. Read-only.
 import type { QueryObserverResult } from '@tanstack/react-query'
 import type { RuntimePreflight } from '../../../shared/runtime/types'
 import type { GhStatus } from '../../../shared/gh/types'
@@ -14,9 +11,7 @@ export interface FooterStatus {
   readonly tooltip: string
 }
 
-/** A check that could not run is never shown as passing (ENGINEERING §4) —
- *  `idle` while either query is still loading or has no data yet, never a
- *  default `success`. */
+/** A check that could not run is never shown as passing — `idle`, never `success`. */
 export function footerStatus(preflightQuery: Pick<QueryObserverResult<RuntimePreflight>, 'status' | 'data'>, ghQuery: Pick<QueryObserverResult<GhStatus>, 'status' | 'data'>): FooterStatus {
   if (preflightQuery.status === 'pending' || ghQuery.status === 'pending') {
     return { status: 'idle', tooltip: 'Checking Claude Code and gh…' }

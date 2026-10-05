@@ -1,7 +1,4 @@
-// DESIGN §3's keyboard table, as data (#316). `keys` is copied verbatim from
-// the table so the `desktop-shell` pin can check this file against that
-// table in both directions. No runtime imports — the pin imports this
-// module directly.
+// `keys` is copied verbatim so a pin can check this against the design doc.
 export interface KeyBinding {
   readonly keys: string
   readonly action: string
