@@ -33,13 +33,13 @@ export default async function ({ fail, ok }: Reporter) {
     }
   }
 
-  // guard: the dispatcher/operator ternary must stay one permissionMode: line naming 'default'.
+  // guard: exactly one permissionMode: line, reading the operator's own defaults — never a bare literal.
   {
     const lines = stripComments(readFileSync(optionsFile, 'utf8'))
       .split('\n')
       .filter((line) => /\bpermissionMode\s*:/.test(line));
-    if (lines.length !== 1 || !/'default'/.test(lines[0] ?? '')) {
-      fail('desktop-hosting-defaults', `${hostingDir}/options.ts must name 'permissionMode:' on exactly one line, which also names 'default'`);
+    if (lines.length !== 1 || !/defaults\.permissionMode/.test(lines[0] ?? '')) {
+      fail('desktop-hosting-defaults', `${hostingDir}/options.ts must name 'permissionMode:' on exactly one line, reading 'defaults.permissionMode'`);
     } else {
       ok();
     }
