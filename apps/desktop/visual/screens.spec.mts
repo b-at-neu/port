@@ -64,7 +64,7 @@ for (const [key, target] of Object.entries(SCREENSHOT_TARGETS)) {
         return
       }
 
-      await setTheme(fixture.app, fixture.page, theme)
+      await setTheme(fixture.page, theme)
       await settle(fixture.page, target)
 
       if (pageErrors.length > 0) {

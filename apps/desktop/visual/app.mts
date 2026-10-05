@@ -80,14 +80,17 @@ export async function launchFixtureApp(): Promise<FixtureApp> {
   }
 }
 
-/** Sets `nativeTheme.themeSource` from the main process, then waits for the
- *  renderer's own `apply()` (`theme/store.ts`) to catch up — this exercises
- *  the real System path, since a fresh profile's own preference is
- *  `'system'` and resolves off this same native signal. */
-export async function setTheme(app: ElectronApplication, page: Page, theme: Theme): Promise<void> {
-  await app.evaluate(({ nativeTheme }: typeof import('electron'), value: Theme) => {
-    nativeTheme.themeSource = value
-  }, theme)
+/** Forces the renderer's `prefers-color-scheme` media feature directly
+ *  (Playwright's Electron `Page` exposes the same CDP emulation a browser
+ *  `Page` does), then waits for `theme/store.ts`'s own `apply()` to catch
+ *  up. Chromium fires the `MediaQueryList` `'change'` listener `apply()`
+ *  is subscribed through, the same as a real OS theme change would — but
+ *  this never depends on `nativeTheme.themeSource` actually reaching the
+ *  renderer, which CI's `xvfb` runner has no GTK/theme-portal to carry
+ *  (#317 review: `board · dark` timed out here under real CI, not just an
+ *  implementer's sandbox). */
+export async function setTheme(page: Page, theme: Theme): Promise<void> {
+  await page.emulateMedia({ colorScheme: theme })
 
   try {
     await page.waitForFunction((value: Theme) => document.documentElement.dataset.theme === value, theme, { timeout: WAIT_TIMEOUT_MS })
