@@ -1,13 +1,10 @@
-// Covers the per-repository run-state row's pure copy functions (#314) —
-// `buildRunStateRow` itself needs a DOM, which this workspace's vitest
-// config does not provide (`environment: 'node'`), the same gap
-// `tick.test.ts`/`dispatch.test.ts` already document. `handleRunStateClick`
-// reaches `window.port` for the actual commands, so only its pure
-// confirm-arming branch is asserted here.
+// Covers the per-repository run-state row's pure copy functions (#314,
+// #316) — the row and its buttons live in `shell/sidebar-pipelines.tsx` now,
+// driven by `shell/run-state-command.ts`'s mutation.
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../../../shared/repos'
 import type { RepoRunState, RunStatesSnapshot } from '../../../shared/dispatch/types'
-import { pauseButtonLabel, runStateLineCopy, runStateResultNote } from './run-state'
+import { runStateLineCopy, runStateResultNote } from './run-state'
 
 const REPO_ID = 'repo-a' as RepoId
 
@@ -45,16 +42,6 @@ describe('runStateLineCopy', () => {
   it('names the message when the store cannot be read, regardless of this repository\'s own state', () => {
     const line = runStateLineCopy(runState(), { kind: 'unreadable', message: 'boom', path: '/dispatch.json' })
     expect(line).toContain("can't be read (boom)")
-  })
-})
-
-describe('pauseButtonLabel', () => {
-  it('reads Pause with no in-flight claims', () => {
-    expect(pauseButtonLabel(REPO_ID, 0)).toBe('Pause')
-  })
-
-  it('reads Pause with in-flight claims too, before any click arms the confirm step', () => {
-    expect(pauseButtonLabel(REPO_ID, 2)).toBe('Pause')
   })
 })
 

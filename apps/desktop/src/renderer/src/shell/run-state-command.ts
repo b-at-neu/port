@@ -1,0 +1,84 @@
+// Run/Drain/Pause for one repository (#314/#316), as a React mutation
+// instead of `board/run-state.ts`'s own click-handler/pending-map pair,
+// which this ticket deletes. Toasts replace that file's inline result note.
+import { toast } from 'sonner'
+import type { RepoId } from '../../../shared/repos'
+import type { DispatchControlResult } from '../../../shared/dispatch/types'
+import { useIpcMutation, ipcQueryOptions } from '../data/query'
+import { useQueryClient } from '@tanstack/react-query'
+import type { BoardSnapshot } from '../../../shared/board/types'
+import { haltHeadingCopy, haltItemLine } from '../board/halt-copy'
+import { runStateResultNote, pauseReportNote, pauseAbortedCopy } from '../board/run-state'
+import { setPauseRequest } from './stores'
+
+function applyRunState(client: ReturnType<typeof useQueryClient>, repoId: RepoId, result: Extract<DispatchControlResult, { readonly command: 'run' | 'drain' | 'pause' }>): void {
+  if (!result.ok) return
+  client.setQueryData(ipcQueryOptions('board:snapshot').queryKey, (snapshot: BoardSnapshot | undefined) => {
+    if (snapshot === undefined) return snapshot
+    const repositories = snapshot.runStates.repositories.map((entry) => (entry.repoId === repoId ? result.runState : entry))
+    return { ...snapshot, runStates: { ...snapshot.runStates, repositories } }
+  })
+}
+
+export function useRunStateCommand() {
+  const mutation = useIpcMutation('dispatch:control')
+  const client = useQueryClient()
+
+  async function send(command: 'run' | 'drain' | 'pause', repoId: RepoId, repoName: string): Promise<void> {
+    try {
+      const result = await mutation.mutateAsync({ command, repoId })
+      if (result.command === 'run') {
+        if (!result.ok) {
+          toast.error(runStateResultNote(result) ?? `Couldn't run ${repoName}.`)
+          return
+        }
+        applyRunState(client, repoId, result)
+        toast.success(`${repoName} is running`)
+      } else if (result.command === 'drain') {
+        if (!result.ok) {
+          toast.error(runStateResultNote(result) ?? `Couldn't drain ${repoName}.`)
+          return
+        }
+        applyRunState(client, repoId, result)
+        const note = runStateResultNote(result)
+        if (note !== null) toast.error(note)
+        else toast('Work in progress finishes; nothing new starts.', { description: `${repoName} is draining` })
+      } else if (result.command === 'pause') {
+        applyRunState(client, repoId, result)
+        if (result.report.kind === 'aborted') {
+          toast.error(pauseAbortedCopy(result.report))
+        } else {
+          const heading = haltHeadingCopy(result.report, 'Paused')
+          const lines = result.report.items.map((item) => haltItemLine(item, new Date()))
+          toast(heading, { description: [pauseReportNote(result.report, repoName), ...lines].join(' — ') })
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to reach the main process for dispatch ${command}`, error)
+      toast.error("Couldn't reach the main process. Restart port to try again.")
+    }
+  }
+
+  return {
+    run(repoId: RepoId, repoName: string): void {
+      void send('run', repoId, repoName)
+    },
+    drain(repoId: RepoId, repoName: string): void {
+      void send('drain', repoId, repoName)
+    },
+    /** Applies at once with zero in flight; otherwise arms the pause-confirm
+     *  dialog (DESIGN §4: a consequential action opens an `AlertDialog`). */
+    requestPause(repoId: RepoId, repoName: string, inFlight: number): void {
+      if (inFlight === 0) {
+        void send('pause', repoId, repoName)
+        return
+      }
+      setPauseRequest({ repoId, name: repoName, inFlight })
+    },
+    confirmPause(repoId: RepoId, repoName: string): void {
+      setPauseRequest(null)
+      void send('pause', repoId, repoName)
+    },
+    pending: mutation.isPending,
+  }
+}

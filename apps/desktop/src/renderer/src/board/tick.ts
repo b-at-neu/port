@@ -10,7 +10,6 @@ import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
 import type { LabelKey } from '../../../shared/labels/vocabulary'
 import type { TickActionable, TickBlind, TickClaim, TickHeld, TickObservation, TickReport } from '../../../shared/tick/types'
 import { buildOwnerLine } from './owner'
-import { buildRunStateRow } from './run-state'
 
 function labelNameOf(key: LabelKey): string {
   return LABEL_DEFAULTS.find((def) => def.key === key)?.name ?? key
@@ -281,12 +280,7 @@ export function buildTickStrip(snapshot: BoardSnapshot, now: Date): HTMLElement 
 
     strip.appendChild(line)
 
-    // #314: this repository's own run-state row, directly under its tick
-    // line — rendered for every ready repository, regardless of whether a
-    // `RepoDispatchStatus` exists for it yet.
-    strip.appendChild(buildRunStateRow(repoRunState, snapshot.runStates.store, report.displayName, report.claims.length))
-
-    // #265: the owner line, directly under the run-state row — rendered
+    // #265: the owner line, directly under the tick line — rendered
     // only once a `RepoDispatchStatus` exists for it (every ready
     // repository, once `main/ipc.ts`'s dispatcher has considered it at
     // least once).
