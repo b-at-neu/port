@@ -3,9 +3,8 @@ import { join } from 'node:path';
 import { root, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// #326's own rails, split out of desktop-dispatch.ts to stay under the
-// 500-line limit (docs/ENGINEERING.md §7): no hosted dispatcher session, the
-// onTick pacing, and the quit guard's ordering.
+// Split out of desktop-dispatch.ts to stay under the file-size limit: no
+// hosted dispatcher session, the onTick pacing, and the quit guard's ordering.
 export default function ({ fail, ok }: Reporter) {
   const mainDispatchDir = 'apps/desktop/src/main/dispatch';
   const ipcFile = 'apps/desktop/src/main/ipc.ts';

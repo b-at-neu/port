@@ -1,7 +1,5 @@
-// #326: the seam between the main-process dispatch loop and whatever
-// actually starts a stage session — #327 implements the real launcher (a
-// worktree, agent files, and a hand-back); this file only owns the contract
-// and the pure helpers around it. No I/O, no SDK import.
+// The seam between the main-process dispatch loop and whatever actually
+// starts a stage session — no I/O, no SDK import.
 import type { ReadyEntry } from '../actions'
 import type { HostedSessionSnapshot, SessionKey } from '../hosting'
 import type { PipelineItemKind } from '../../shared/github/types'
@@ -18,21 +16,16 @@ export interface StageLaunchRequest {
   readonly prompt: string
 }
 
-/** `ok: true` promises the store holds a non-`ended` handle for
- *  `sessionKey` — the loop treats a throw as `failed`, and one failure
- *  never stops the remaining candidates. */
+// `ok: true` promises the store holds a non-`ended` handle for `sessionKey`.
 export type StageLaunchResult = { readonly ok: true; readonly sessionKey: SessionKey } | { readonly ok: false; readonly kind: 'at-capacity'; readonly limit: number } | { readonly ok: false; readonly kind: 'failed'; readonly message: string }
 
 export interface StageLauncher {
   launch(request: StageLaunchRequest): Promise<StageLaunchResult>
 }
 
-/** This app's own per-item launch record, kept internally by the dispatch
- *  loop — `DispatchRecord` (the renderer-safe shape) plus the handle key and
- *  the repository/trigger the loop needs to act on it later (`stopFor`,
- *  `standDown`, the quit guard). */
+// This app's own per-item launch record, kept internally by the loop.
 export interface StageRecord {
-  /** `null` for a `failed` record — no session was ever created to key. */
+  // `null` for a `failed` record — no session was ever created to key.
   readonly sessionKey: SessionKey | null
   readonly agent: StageAgent
   readonly number: number
@@ -43,8 +36,8 @@ export interface StageRecord {
   readonly detail: string | null
 }
 
-/** Hosted snapshots whose `phase !== 'ended'` — operator and stage sessions
- *  alike, since stage sessions share the hosted cap (epic decision 2). */
+// Hosted snapshots whose `phase !== 'ended'` — operator and stage sessions
+// alike; stage sessions share the hosted cap.
 export function liveCount(snapshots: readonly HostedSessionSnapshot[]): number {
   return snapshots.filter((s) => s.phase !== 'ended').length
 }
@@ -53,8 +46,7 @@ export function freeSlots(limit: number, snapshots: readonly HostedSessionSnapsh
   return Math.max(0, limit - liveCount(snapshots))
 }
 
-/** A `started` record whose handle is `null` or `ended` becomes `ended` —
- *  derived on every read, never cached. */
+// A `started` record whose handle is `null` or `ended` becomes `ended`.
 export function refreshRecords(records: readonly StageRecord[], snapshotOf: (sessionKey: SessionKey) => HostedSessionSnapshot | null): readonly StageRecord[] {
   return records.map((record) => {
     if (record.state !== 'started' || record.sessionKey === null) return record
@@ -64,9 +56,7 @@ export function refreshRecords(records: readonly StageRecord[], snapshotOf: (ses
   })
 }
 
-/** Drops the oldest non-live records first, never a live one — bounded to
- *  `limit` per repository, the same idiom `hosting/persist.ts`'s own retain
- *  limits establish. */
+// Drops the oldest non-live records first, never a live one, down to `limit`.
 export function boundRecords(records: readonly StageRecord[], limit: number): readonly StageRecord[] {
   if (records.length <= limit) return records
   const live = records.filter((r) => r.state === 'started')
