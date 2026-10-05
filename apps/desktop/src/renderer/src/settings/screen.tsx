@@ -1,6 +1,5 @@
-// The Settings screen (#316, #367) — the renderer's first React screen,
-// proving the router/data/theme path end to end. Four sections: Appearance,
-// Claude Code, GitHub CLI, New sessions.
+// The Settings screen — four sections: Appearance, Claude Code, GitHub CLI,
+// New sessions.
 import { ScreenHeader } from '../components/screen-header'
 import { ThemeSection } from './theme-section'
 import { RuntimeSection } from './runtime-section'

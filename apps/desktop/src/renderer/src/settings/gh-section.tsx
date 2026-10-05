@@ -1,7 +1,4 @@
-// The Settings screen's GitHub CLI status (#367). Reads `gh:status` as a
-// query; `gh-model.ts` decides everything about what to show, this
-// component only renders it and wires "Check again" to a refetch. No
-// `useEffect`: data arrives through `useIpcQuery` alone.
+// Reads `gh:status` as a query; `gh-model.ts` decides what to show.
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'

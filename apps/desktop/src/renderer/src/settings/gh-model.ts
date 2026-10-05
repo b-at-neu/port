@@ -1,6 +1,4 @@
-// The Settings screen's GitHub CLI section (#367) — pure `GhStatus → pill,
-// body, footer-dot contribution`, so `gh-section.tsx` only ever renders what
-// this function returns and every UX-state decision is unit-tested here.
+// Pure `GhStatus → pill, body, footer-dot contribution` for the Settings screen.
 import type { GhStatus } from '../../../shared/gh/types'
 import type { PillStatus } from '../components/status-pill'
 

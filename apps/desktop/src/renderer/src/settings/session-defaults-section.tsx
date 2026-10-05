@@ -1,9 +1,4 @@
-// The Settings screen's New sessions section (#367) — an operator's default
-// model and permission mode for a session they start or restore. Reads
-// `session:defaults` as a query, writes through `session:defaults:set` as a
-// mutation: a successful set is written straight into the query cache with
-// `setQueryData`, a rejected one raises a toast and invalidates the query so
-// the Select snaps back to the last-known-good value. No `useEffect`.
+// An operator's default model and permission mode for a new session.
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
