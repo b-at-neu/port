@@ -5,11 +5,13 @@
 // exactly one audit entry per attempt, aborts included.
 import { randomUUID } from 'node:crypto'
 import { gh as defaultGh } from '../platform/gh'
-import type { GhOptions, GhResult } from '../platform/gh'
-import { pathOps as defaultPathOps, removeFile, writeTextFile } from '../platform'
-import type { PathOps } from '../platform'
-import { fetchItemsByNumber } from '../github'
-import type { FetchItemsByNumberParams, ItemsByNumberFetch, RepoRef } from '../github'
+import type { GhResult, GhRunner } from '../platform/gh'
+import { pathOps as defaultPathOps } from '../platform/paths'
+import { removeFile, writeTextFile } from '../platform/files'
+import type { PathOps } from '../platform/paths'
+import { fetchItemsByNumber } from '../github/adapter'
+import type { FetchItemsByNumberParams, RepoRef } from '../github/adapter'
+import type { ItemsByNumberFetch } from '../../shared/github/types'
 import type { LabelKey } from '../../shared/labels/vocabulary'
 import type { AssertEqual } from '../../shared/assert-type'
 import type { AuditEntry, ClaimScope, CommentRequest, GhWriteFailureKind, LabelWriteRequest, ObservedItem, WriteOutcome } from '../../shared/writes/types'
@@ -19,10 +21,7 @@ import type { GitRunner as ClaimGitRunner } from './claim'
 import { readGateClaim } from './claim'
 import { evaluate, scopesFor, wouldChangeNothing } from './scope'
 
-/** The same injectable seam `main/github/adapter.ts` declares for `GhRunner`
- *  — reused here rather than redeclared, so a fake in `apply.test.ts` needs
- *  no real `gh` binary either. */
-export type GhRunner = (args: readonly string[], options?: GhOptions) => Promise<GhResult>
+export type { GhRunner }
 
 /** Fails to compile if the platform layer's `GhResult` grows a failure kind
  *  without `GhWriteFailureKind` (`shared/writes/types.ts`) growing to

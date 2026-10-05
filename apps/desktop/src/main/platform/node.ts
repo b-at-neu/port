@@ -16,3 +16,7 @@ const DEFAULT_NODE_TIMEOUT_MS = 60_000
 export function node(args: readonly string[], options: NodeOptions = {}): Promise<CommandResult> {
   return runCommand('node', args, { timeoutMs: DEFAULT_NODE_TIMEOUT_MS, ...options })
 }
+
+/** The seam `main/reclaimer/report.ts` and `main/dispatch/budget-gate.ts`
+ *  each used to declare separately — an injectable `node` invocation. */
+export type NodeRunner = (args: readonly string[], options: NodeOptions) => Promise<CommandResult>

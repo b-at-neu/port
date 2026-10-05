@@ -6,14 +6,14 @@
 import { DISPATCH_COMMANDS, RUN_TARGET } from '../../shared/dispatch/types'
 import type { DispatchClaimSetResult, DispatchCommand, DispatchControlResult, HaltReport, RepoDispatchStatus } from '../../shared/dispatch/types'
 import type { BoardSnapshot } from '../../shared/board/types'
-import type { RefreshRequest } from '../state'
-import type { RepoId, RepositoryEntry } from '../../shared/repos'
-import { listRepositories } from '../registry'
+import type { RefreshRequest } from '../state/watcher'
+import type { RepoId } from '../../shared/repos'
+import { isReadyEntry, listRepositories, requireReadyRepo } from '../registry'
 import type { RegistryDeps } from '../registry'
-import type { ReadyEntry } from '../actions'
+import type { ReadyEntry } from '../actions/apply'
 import { GATE_CLAIM_OWNER } from '../../shared/gate/types'
-import { releaseClaimScope, takeClaimScope } from '../writes'
-import type { ClaimWriteResult } from '../writes'
+import { releaseClaimScope, takeClaimScope } from '../writes/claim'
+import type { ClaimWriteResult } from '../../shared/writes/types'
 import type { Dispatcher } from './dispatcher'
 import type { HaltDispatchDeps, HaltDispatchParams } from './halt'
 import type { RunStateStore } from './store'
@@ -26,10 +26,6 @@ export interface ResolveDispatchControlDeps {
   readonly refresh: (request?: RefreshRequest) => Promise<BoardSnapshot>
   readonly auditDir: string
   readonly now: () => Date
-}
-
-function isReadyEntry(entry: RepositoryEntry): entry is ReadyEntry {
-  return 'config' in entry
 }
 
 /** Every currently registered repository's id, any status — `null` when the
@@ -116,13 +112,14 @@ export interface ResolveDispatchClaimSetDeps {
   readonly now: () => Date
 }
 
-async function resolveReadyRepoRoot(registryDeps: RegistryDeps, repoId: RepoId, deps: Pick<ResolveDispatchClaimSetDeps, 'listRepositories'>): Promise<ReadyEntry> {
-  const list = await deps.listRepositories(registryDeps)
-  if (!list.ok) throw new Error(`dispatch claim requires the registry, which could not be listed: ${list.message}`)
-  const entry = list.repositories.find((repository) => repository.id === repoId)
-  if (entry === undefined) throw new Error(`dispatch claim found no repository registered with id '${String(repoId)}'`)
-  if (!isReadyEntry(entry)) throw new Error(`dispatch claim requires a 'ready' repository, got '${entry.problem.kind}'`)
-  return entry
+function resolveReadyRepoRoot(registryDeps: RegistryDeps, repoId: RepoId, deps: Pick<ResolveDispatchClaimSetDeps, 'listRepositories'>): Promise<ReadyEntry> {
+  return requireReadyRepo(
+    registryDeps,
+    'dispatch claim',
+    repoId,
+    deps.listRepositories,
+    (message) => `dispatch claim requires the registry, which could not be listed: ${message}`,
+  )
 }
 
 /**

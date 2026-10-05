@@ -5,21 +5,26 @@ import type { WorktreesReport } from '../shared/reclaimer/types'
 import { SOURCE_KINDS } from '../shared/board/types'
 import type { BoardSnapshot } from '../shared/board/types'
 import { chooseDirectory } from './dialogs'
-import { applyItemAction, applyItemDecision, gateAnswer, gateClaimRead, gateClaimSet, gatePreflight } from './actions'
+import { applyItemAction } from './actions/apply'
+import { applyItemDecision } from './actions/decide'
+import { gateAnswer, gateClaimRead, gateClaimSet, gatePreflight } from './actions/gate'
 import { resolveClaimApply, resolveClaimPreflight } from './channels/claim'
 import { resolveBacklogList } from './channels/backlog'
 import { resolveGhStatus } from './channels/gh'
-import { createDispatchRuntime, createRunStateStore, defaultHaltDispatchDeps, haltDispatch, registeredRepoIds, resolveDispatchClaimSet, resolveDispatchControl } from './dispatch'
-import type { Dispatcher } from './dispatch'
-import { fetchItemsByNumber } from './github'
-import { readGateClaim } from './writes'
+import { createDispatchRuntime } from './dispatch/runtime'
+import { createRunStateStore } from './dispatch/store'
+import { defaultHaltDispatchDeps, haltDispatch } from './dispatch/halt'
+import { registeredRepoIds, resolveDispatchClaimSet, resolveDispatchControl } from './dispatch/resolve'
+import type { Dispatcher } from './dispatch/dispatcher'
+import { fetchItemsByNumber } from './github/adapter'
+import { readGateClaim } from './writes/claim'
 import { resolveGateAnswer, resolveGateClaimRead, resolveGateClaimSet, resolveGatePreflight } from './channels/gate'
 import type { GateChannelDeps } from './channels/gate'
 import { resolveItemAction, resolveItemDecision } from './channels/items'
 import type { ItemDecisionDeps } from './channels/items'
 import { resolveRuntimeProbe } from './channels/runtime'
-import { copyRelayReply } from './relay'
-import { resolveSearchQuery, resolveSessionsScan, resolveTranscriptRead, resolveTranscriptTailClose, resolveTranscriptTailOpen, resolveTranscriptTailPoll } from './channels/sessions'
+import { copyRelayReply } from './relay/clipboard'
+import { resolveSearchQuery, resolveSessionsScan, resolveTranscriptTailClose, resolveTranscriptTailOpen, resolveTranscriptTailPoll } from './channels/sessions'
 import {
   defaultHostingChannelDeps,
   resolveSessionAttach,
@@ -40,16 +45,17 @@ import {
   resolveSessionSend,
   resolveSessionStart,
 } from './channels/hosting'
-import { git } from './platform'
-import { readWorktreeReport } from './reclaimer'
-import type { ReadWorktreeReportParams } from './reclaimer'
-import { addRepository, listRepositories, removeRepository } from './registry'
+import { git } from './platform/git'
+import { readWorktreeReport } from './reclaimer/report'
+import type { ReadWorktreeReportParams } from './reclaimer/report'
+import { addRepository, listRepositories, removeRepository, requireReadyRepo } from './registry'
 import type { RegistryDeps } from './registry'
-import { createPipelineWatcher } from './state'
-import type { PipelineWatcher } from './state'
-import { runtimePreflight } from './runtime'
-import { createHostedStore, createHostingPersistence, defaultHostedStoreDeps } from './hosting'
-import type { HostedStore } from './hosting'
+import { createPipelineWatcher } from './state/watcher'
+import type { PipelineWatcher } from './state/watcher'
+import { runtimePreflight } from './runtime/preflight'
+import { createHostedStore, defaultHostedStoreDeps } from './hosting/store'
+import { createHostingPersistence } from './hosting/persist'
+import type { HostedStore } from './hosting/store'
 
 type AppInfo = IpcMap['app:info']['response']
 
@@ -114,11 +120,7 @@ export async function resolveWorktreesReport(
   if (typeof request?.id !== 'string' || request.id === '') {
     throw new Error("'worktrees:report' requires a non-empty 'id'")
   }
-  const list = await deps.listRepositories(registryDeps)
-  if (!list.ok) throw new Error(`'worktrees:report' could not list repositories: ${list.message}`)
-  const entry = list.repositories.find((repository) => repository.id === request.id)
-  if (!entry) throw new Error(`'worktrees:report' found no repository registered with id '${request.id}'`)
-  if (!('config' in entry)) throw new Error(`'worktrees:report' requires a 'ready' repository, got '${entry.problem.kind}'`)
+  const entry = await requireReadyRepo(registryDeps, "'worktrees:report'", request.id, deps.listRepositories)
   return deps.readWorktreeReport({
     repoRoot: entry.path,
     worktreesCommand: entry.config.commands.worktrees,
@@ -228,8 +230,6 @@ export function registerIpc(): RegisteredIpc {
     return resolveSessionsScan(registryDeps)
   })
 
-  handle('transcript:read', (_event, request) => resolveTranscriptRead(request))
-
   handle('transcript:tail:open', (_event, request) => resolveTranscriptTailOpen(request))
 
   handle('transcript:tail:poll', (_event, request) => resolveTranscriptTailPoll(request))
@@ -239,11 +239,13 @@ export function registerIpc(): RegisteredIpc {
   handle('search:query', (_event, request) => resolveSearchQuery(registryDeps, request, app.getPath('userData')))
 
   // #98: one hosted-session store for the process lifetime, broadcasting
-  // over `session:event`/`session:status`. Created before the watcher
+  // over `session:status`/`session:entries`. Created before the watcher
   // (#265): the dispatcher sits between the two and needs this store first.
+  // `onEvent` stays at its no-op default — nothing broadcasts the raw SDK
+  // envelope over IPC any more (#350); it is still forwarded internally for
+  // `session:attach`'s own replay ring (`main/hosting/handle.ts`).
   const hostedStore = createHostedStore({
     ...defaultHostedStoreDeps,
-    onEvent: (envelope) => broadcast('session:event', envelope),
     onStatus: (snapshot) => broadcast('session:status', snapshot),
     onEntries: (delta) => broadcast('session:entries', delta),
     persistence: createHostingPersistence({ dir: app.getPath('userData') }),

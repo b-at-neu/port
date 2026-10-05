@@ -10,6 +10,7 @@ import type { Reporter } from '../lib/report.ts';
 // desktop-label-defaults guard in labels.ts.
 export default async function ({ fail, ok }: Reporter) {
   const platformDir = 'apps/desktop/src/main/platform';
+  const testingDir = 'apps/desktop/src/testing';
   const runRel = `${platformDir}/run.ts`;
   const srcDir = join(root, 'apps/desktop/src');
   const files = walk(srcDir).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
@@ -115,9 +116,17 @@ export default async function ({ fail, ok }: Reporter) {
       // Issue 74: a *.test.ts file is exempt — it verifies an adapter's behaviour
       // rather than being one, and setting up a realistic fixture (a real
       // mkdtemp directory, same as platform/'s own files.test.ts/paths.test.ts)
-      // needs the real async fs API. Production code stays fully gated.
-      if (/from\s*'node:fs(?:\/promises)?'/.test(text) && !rel.startsWith(`${platformDir}/`) && !rel.endsWith('.test.ts')) {
-        fail('desktop-platform-layer', `${rel} imports 'node:fs' directly — only files under ${platformDir}/ (or a *.test.ts fixture) may`);
+      // needs the real async fs API. apps/desktop/src/testing/ is the same
+      // exemption for the shared fixture helpers *.test.ts files import it
+      // from (#350) — it ships no production code. Production code stays
+      // fully gated.
+      if (
+        /from\s*'node:fs(?:\/promises)?'/.test(text) &&
+        !rel.startsWith(`${platformDir}/`) &&
+        !rel.startsWith(`${testingDir}/`) &&
+        !rel.endsWith('.test.ts')
+      ) {
+        fail('desktop-platform-layer', `${rel} imports 'node:fs' directly — only files under ${platformDir}/, ${testingDir}/, or a *.test.ts fixture may`);
       }
     }
     ok();

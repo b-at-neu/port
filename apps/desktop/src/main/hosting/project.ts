@@ -16,7 +16,8 @@
 // absolute index space the deriver's own `appended`/`patched` occupy.
 import type { EntryPatch, MetaEntry, TranscriptEntry } from '../../shared/sessions/transcript'
 import { MAX_PAYLOAD_CHARS } from '../../shared/sessions/transcript'
-import { createDeriver, sanitize } from '../sessions'
+import { isRecord } from '../../shared/guards'
+import { createDeriver, sanitize } from '../sessions/transcript-entries'
 import type { LiveBlock, LiveBlockKind, PartialUpdate, SessionEntriesDelta } from '../../shared/hosting/types'
 
 export interface CreateSessionProjectorParams {
@@ -61,10 +62,6 @@ export interface SessionProjector {
   /** The current bounded state — what `session:attach` hands a reconnecting
    *  renderer. */
   window(): SessionProjectorWindow
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /** `user_message_uuids ?? [user_message_uuid]`, the exact fallback the plan

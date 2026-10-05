@@ -7,14 +7,13 @@
 import { classifyPreflight, buildClaimRequest } from '../shared/claim/classify'
 import type { ClaimApplyResponse, ClaimPreflight, ClaimPreflightResponse, PlanGateChoice } from '../shared/claim/types'
 import type { ClaimPreflightFetch } from '../shared/github/types'
-import type { RepoId, RepositoryEntry } from '../shared/repos'
-import { fetchClaimPreflight } from './github'
-import { listRepositories } from './registry'
+import type { RepoId } from '../shared/repos'
+import { fetchClaimPreflight } from './github/adapter'
+import { listRepositories, requireReadyRepo } from './registry'
 import type { RegistryDeps } from './registry'
 import { applyClaimLabels } from './actions/claim'
-import type { ApplyLabelsParams, WriteOutcome } from './writes'
-
-type ReadyEntry = Extract<RepositoryEntry, { readonly status: 'ready' }>
+import type { ApplyLabelsParams } from './writes/apply'
+import type { WriteOutcome } from '../shared/writes/types'
 
 /** The two calls both channels compose — injected so the registry-lookup and
  *  classification branching below is testable without Electron, a real
@@ -30,13 +29,14 @@ export interface ClaimDeps {
 
 export const defaultClaimDeps: ClaimDeps = { listRepositories, fetchClaimPreflight, applyClaimLabels }
 
-async function resolveReadyEntry(registryDeps: RegistryDeps, repoId: RepoId, deps: ClaimDeps): Promise<ReadyEntry> {
-  const list = await deps.listRepositories(registryDeps)
-  if (!list.ok) throw new Error(`claim requires the registry, which could not be listed: ${list.message}`)
-  const entry = list.repositories.find((repository) => repository.id === repoId)
-  if (!entry) throw new Error(`claim found no repository registered with id '${repoId}'`)
-  if (!('config' in entry)) throw new Error(`claim requires a 'ready' repository, got '${entry.problem.kind}'`)
-  return entry
+function resolveReadyEntry(registryDeps: RegistryDeps, repoId: RepoId, deps: ClaimDeps) {
+  return requireReadyRepo(
+    registryDeps,
+    'claim',
+    repoId,
+    deps.listRepositories,
+    (message) => `claim requires the registry, which could not be listed: ${message}`,
+  )
 }
 
 /** Flattens `ClaimPreflightFetch`'s `item`/`viewer`/`fetchedAt` into the one

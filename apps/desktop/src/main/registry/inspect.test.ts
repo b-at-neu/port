@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { labelName } from '../../shared/labels/vocabulary'
 import type { LabelKey } from '../../shared/labels/vocabulary'
-import type { CommandResult } from '../platform'
+import type { CommandResult } from '../platform/run'
 import { inspectRepository } from './inspect'
 import type { GitRunner } from './harness'
 

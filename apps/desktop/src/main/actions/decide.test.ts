@@ -7,13 +7,14 @@ import type { LabelVocabulary } from '../../shared/labels/vocabulary'
 import type { RepoId } from '../../shared/repos'
 import type { BoardSnapshot } from '../../shared/board/types'
 import type { ReconciledItem, RepositoryState, StageLabel } from '../../shared/state/types'
-import type { ItemsByNumberFetch, ResolvedItem } from '../github'
+import type { ItemsByNumberFetch, ResolvedItem } from '../../shared/github/types'
 import type { WriteOutcome } from '../../shared/writes/types'
-import { readAuditLog } from '../writes'
-import type { GhRunner } from '../writes'
+import { readAuditLog } from '../writes/audit'
+import type { GhRunner } from '../writes/apply'
 import type { GitRunner } from '../writes/claim'
 import { applyItemDecision, defaultApplyItemDecisionDeps } from './decide'
-import type { ApplyItemDecisionDeps, ReadyEntry } from '.'
+import type { ApplyItemDecisionDeps } from './decide'
+import type { ReadyEntry } from './apply'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 const VOCABULARY: LabelVocabulary = resolveVocabulary({})

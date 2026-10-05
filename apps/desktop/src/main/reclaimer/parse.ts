@@ -4,10 +4,11 @@
 // `state` outside `WORKTREE_STATES` fails the whole payload as
 // `report-unparseable`, naming the field — never a partial list (ENGINEERING
 // §4: an absent signal is never read as a passing one).
-import type { PathOps } from '../platform'
+import type { PathOps } from '../platform/paths'
 import type { CorrelationRung } from '../../shared/local/types'
 import type { WorktreeState } from '../../shared/reclaimer/types'
 import { WORKTREE_STATES } from '../../shared/reclaimer/types'
+import { isRecord } from '../../shared/guards'
 
 const RUNGS: ReadonlySet<string> = new Set<CorrelationRung>(['upstream-branch', 'branch-name', 'directory-basename', 'head-subject'])
 const STATES: ReadonlySet<string> = new Set<string>(WORKTREE_STATES)
@@ -39,10 +40,6 @@ export type ParsedReport =
 
 function fail(message: string): ParsedReport {
   return { ok: false, message }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
 }
 
 function stringOrNull(value: unknown): value is string | null {

@@ -38,21 +38,28 @@ export default async function ({ fail, ok }: Reporter) {
   {
     let sawGithub = false;
     let sawWrites = false;
+    // '../platform/gh' also exports `ghAuthStatus`/`classifyGhExit`/
+    // `GhAuthStatusResult`, legitimately imported anywhere (e.g.
+    // `main/channels/gh.ts`'s status check) now that every adapter imports
+    // the platform layer's defining files directly instead of its deleted
+    // barrel — only an import of `gh` or `ghJson` themselves is this rail's
+    // concern.
+    const importsGhOrGhJson = /import\s*(?:type\s*)?\{[^}]*\b(?:gh|ghJson)\b[^}]*\}\s*from\s*'\.\.\/platform\/gh'/;
     for (const f of allFiles) {
       const rel = relOf(f);
       if (rel.startsWith(`${platformDir}/`) || rel.endsWith('.test.ts')) continue;
       const text = readFileSync(f, 'utf8');
-      if (!text.includes("from '../platform/gh'")) continue;
+      if (!importsGhOrGhJson.test(text)) continue;
       if (rel.startsWith(`${githubDir}/`)) {
         sawGithub = true;
       } else if (rel.startsWith(`${writesDir}/`)) {
         sawWrites = true;
       } else {
-        fail('desktop-writes', `${rel} imports '../platform/gh' — only main/github/ and main/writes/ may call gh/ghJson`);
+        fail('desktop-writes', `${rel} imports 'gh'/'ghJson' from '../platform/gh' — only main/github/ and main/writes/ may call gh/ghJson`);
       }
     }
-    if (!sawGithub) fail('desktop-writes', `no file under ${githubDir} imports '../platform/gh' — the guard cannot pass vacuously`);
-    if (!sawWrites) fail('desktop-writes', `no file under ${writesDir} imports '../platform/gh' — the guard cannot pass vacuously`);
+    if (!sawGithub) fail('desktop-writes', `no file under ${githubDir} imports 'gh'/'ghJson' from '../platform/gh' — the guard cannot pass vacuously`);
+    if (!sawWrites) fail('desktop-writes', `no file under ${writesDir} imports 'gh'/'ghJson' from '../platform/gh' — the guard cannot pass vacuously`);
     if (sawGithub && sawWrites) ok();
   }
 

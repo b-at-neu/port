@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { CommandResult } from '../platform'
+import type { CommandResult } from '../platform/run'
 import { readGateClaim, releaseClaimScope, takeClaimScope } from './claim'
 import type { GitRunner } from './claim'
 

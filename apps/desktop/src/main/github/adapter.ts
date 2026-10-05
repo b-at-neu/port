@@ -2,8 +2,10 @@
 // the document, calling the injected `gh`, then composing `envelope.ts` and
 // `map.ts`. Never reads a config and never calls `resolveVocabulary` itself;
 // the caller supplies #75's `LabelVocabulary`.
-import type { GhOptions, GhResult } from '../platform/gh'
+import type { GhResult, GhRunner } from '../platform/gh'
 import { gh as defaultGh } from '../platform/gh'
+
+export type { GhRunner }
 import { verifyVocabulary } from '../../shared/labels/vocabulary'
 import type { LabelVocabulary, RepoLabels } from '../../shared/labels/vocabulary'
 import type { AssertEqual } from '../../shared/assert-type'
@@ -26,12 +28,6 @@ import { classifyFailure, collectTruncated, collectUnavailable, parseEnvelope } 
 import type { AliasInfo, EnvelopeFailureKind, GraphQLErrorEntry } from './envelope'
 import { applyItemStates, fieldListOf, mapPipelineItems } from './map'
 import { buildClaimPreflightQuery, buildItemStatesQuery, buildItemsByNumberQuery, buildPipelineQuery } from './query'
-
-/** The injectable seam every call below takes instead of importing `gh`
- *  directly — the same idiom `Spawner` (`platform/run.ts`) and `resolve`
- *  (`platform/run.ts`'s `RunCommandOptions`) already use, so `adapter.test.ts`
- *  runs against a fake `GhRunner` and needs no real `gh` binary. */
-export type GhRunner = (args: readonly string[], options?: GhOptions) => Promise<GhResult>
 
 /** Fails to compile if a failure kind is added to the platform layer (a new
  *  `CommandResult`/`GhClassification` member) or to `envelope.ts`'s own

@@ -1,16 +1,12 @@
-import { mkdtemp, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../../shared/repos'
+import { makeTempDir } from '../../testing/fixtures'
 import { createRunStateStore } from './store'
 
 const REPO_A = 'repo-a' as RepoId
 const REPO_B = 'repo-b' as RepoId
-
-async function makeTempDir(): Promise<string> {
-  return mkdtemp(join(tmpdir(), 'port-dispatch-store-'))
-}
 
 const registeredBoth = () => Promise.resolve([REPO_A, REPO_B] as readonly RepoId[])
 

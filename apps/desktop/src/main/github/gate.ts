@@ -4,14 +4,14 @@
 // exported `fieldListOf`/`kindOfTypename`-shaped helpers rather than
 // hand-rolling a second reader.
 import { gh as defaultGh } from '../platform/gh'
-import type { GhOptions, GhResult } from '../platform/gh'
+import type { GhResult, GhRunner } from '../platform/gh'
 import type { GatePreflightFetch, GatePreflightItem } from '../../shared/github/types'
 import { classifyFailure, parseEnvelope } from './envelope'
 import { fieldListOf } from './map'
 import { buildGatePreflightQuery } from './query'
 import type { RepoRef } from './adapter'
 
-export type GhRunner = (args: readonly string[], options?: GhOptions) => Promise<GhResult>
+export type { GhRunner }
 
 function stdoutOf(result: GhResult): string | undefined {
   return 'stdout' in result ? result.stdout : undefined

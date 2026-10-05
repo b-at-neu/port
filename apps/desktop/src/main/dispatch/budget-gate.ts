@@ -5,15 +5,17 @@
 // rail `commands.worktrees` already goes through, `main/reclaimer/`) and
 // runs `node <tokenized args…> <mode args…>` with `cwd: entry.path`, since
 // the script resolves its own root from the working directory.
-import { node as defaultNode } from '../platform'
-import type { CommandResult, NodeOptions } from '../platform'
-import { parseNodeCommand, SCRIPT_FAIL_PREFIX } from '../reclaimer'
-import type { ReadyEntry } from '../actions'
+import { node as defaultNode } from '../platform/node'
+import type { CommandResult } from '../platform/run'
+import type { NodeRunner } from '../platform/node'
+import { parseNodeCommand } from '../reclaimer/command'
+import { SCRIPT_FAIL_PREFIX } from '../reclaimer/report'
+import type { ReadyEntry } from '../actions/apply'
 import type { TickActionable } from '../../shared/tick/types'
 import { dispatchArgs, OUTDATED_SCRIPT_SENTINEL, parseSweepLine, parseVerdict, resetArgs, sweepArgs } from './budget'
 import type { BudgetVerdict } from './budget'
 
-export type NodeRunner = (args: readonly string[], options: NodeOptions) => Promise<CommandResult>
+export type { NodeRunner }
 
 /** `unavailable`: the script can't be run at all, or is too old to accept
  *  `--session` — both fail the whole repository's gate, since the ceiling

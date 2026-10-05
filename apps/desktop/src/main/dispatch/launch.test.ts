@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { boundRecords, freeSlots, liveCount, refreshRecords } from './launch'
 import type { StageRecord } from './launch'
-import type { HostedSessionSnapshot, SessionKey } from '../hosting'
+import type { HostedSessionSnapshot, SessionKey } from '../../shared/hosting/types'
 import type { RepoId } from '../../shared/repos'
 
 function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSessionSnapshot {

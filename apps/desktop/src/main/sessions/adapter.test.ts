@@ -1,11 +1,12 @@
-import { mkdir, mkdtemp, stat, writeFile } from 'node:fs/promises'
-import { homedir, tmpdir } from 'node:os'
+import { mkdir, stat, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { pathOps } from '../platform'
+import { pathOps } from '../platform/paths'
 import type { RepoRef } from './classify'
 import { readSessionState } from './adapter'
 import type { RawSession } from './sdk'
+import { makeTempDir } from '../../testing/fixtures'
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -14,10 +15,6 @@ async function pathExists(path: string): Promise<boolean> {
   } catch {
     return false
   }
-}
-
-async function makeTempDir(prefix: string): Promise<string> {
-  return mkdtemp(join(tmpdir(), prefix))
 }
 
 // The locate ladder only recognizes a real UUID-shaped `<id>.jsonl` — these

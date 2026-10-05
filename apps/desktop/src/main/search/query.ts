@@ -3,9 +3,10 @@
 // scanning: a transcript with no fresh signature is a candidate, read
 // through `openTranscript` (the barrel, never a deep `../sessions/*`
 // import), matched, and its signature rebuilt from the same entries.
-import { statPath } from '../platform'
-import { buildProjectIndex, defaultClaudeHome, openTranscript, resolveTranscriptPath } from '../sessions'
-import type { ProjectIndex } from '../sessions'
+import { statPath } from '../platform/files'
+import { buildProjectIndex, defaultClaudeHome, resolveTranscriptPath } from '../sessions/locate'
+import { openTranscript } from '../sessions/transcript'
+import type { ProjectIndex } from '../sessions/locate'
 import type { AgentRecord, SessionRecord, SessionScan } from '../../shared/sessions/types'
 import { agentLabel, sessionLabel } from '../../shared/sessions/label'
 import { MAX_HITS_PER_TRANSCRIPT, MAX_TOTAL_HITS, SCAN_BUDGET_MS } from '../../shared/search/types'

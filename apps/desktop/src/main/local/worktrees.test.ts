@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { createPathOps, pathOps as hostPathOps } from '../platform'
-import type { CommandResult } from '../platform'
+import { createPathOps, pathOps as hostPathOps } from '../platform/paths'
+import type { CommandResult } from '../platform/run'
 import { readWorktrees } from './worktrees'
 import type { GitRunner } from './worktrees'
 

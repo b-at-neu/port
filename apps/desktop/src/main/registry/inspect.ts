@@ -2,7 +2,8 @@
 // logic. `index.ts` is the only caller; everything here is pure given its
 // injected `git` runner, so tests need no real repository.
 import { basename } from 'node:path'
-import { pathOps, readJsonFile, statPath } from '../platform'
+import { pathOps } from '../platform/paths'
+import { readJsonFile, statPath } from '../platform/files'
 import { resolveVocabulary } from '../../shared/labels/vocabulary'
 import type { RepoDiagnostic, RepoId, RepoProblem, RepositoryEntry, ResolvedRepoConfig, SchemaViolation } from '../../shared/repos'
 import { currentBranch, permissionsState, refsCarryingConfig } from './harness'

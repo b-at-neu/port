@@ -1,4 +1,5 @@
 import { pathOps } from './paths'
+import type { PathOps } from './paths'
 import { runCommand } from './run'
 import type { CommandResult, RunCommandOptions } from './run'
 
@@ -66,13 +67,6 @@ export function parsePorcelainStanzas(stdout: string): ReadonlyArray<ReadonlyMap
     })
 }
 
-/** For `-z` output — the only correct handling of a path that itself
- *  contains a newline, which a plain line split would corrupt. */
-export function splitNul(stdout: string): readonly string[] {
-  const trimmed = stdout.endsWith('\0') ? stdout.slice(0, -1) : stdout
-  return trimmed === '' ? [] : trimmed.split('\0')
-}
-
 export type GitRepoRootResult =
   | { readonly ok: true; readonly root: string }
   | { readonly ok: false; readonly kind: 'not-a-repository' }
@@ -91,4 +85,34 @@ export async function gitRepoRoot(cwd: string, options?: Omit<GitOptions, 'cwd'>
   }
   const root = result.stdout.replace(/\r?\n$/, '')
   return { ok: true, root: pathOps.toNative(root) }
+}
+
+/** The seam `main/local/worktrees.ts`, `main/registry/harness.ts`,
+ *  `main/local/denials.ts`, `main/writes/claim.ts` and
+ *  `main/trajectory/log.ts` each used to declare separately — a `cwd`-scoped
+ *  `git` invocation, injectable for tests. */
+export type GitRunner = (args: readonly string[], cwd: string) => Promise<CommandResult>
+
+export function defaultGitRunner(): GitRunner {
+  return (args, cwd) => git(args, { cwd })
+}
+
+/** `git rev-parse --git-common-dir` then `pathOps.dirname` of its resolved
+ *  value — the base root is one level up from the shared `.git` directory,
+ *  so every worktree of a repository resolves to the same root (used by
+ *  `main/local/denials.ts`'s denials log, `main/writes/claim.ts`'s gate
+ *  claim, and `main/trajectory/log.ts`'s trajectory record, which all write
+ *  to `<base repo root>/.agents/…`). Degrades to `repoRoot` itself on any
+ *  failure — the common case is a plain checkout where the two are
+ *  identical, so this is never a failure of the whole caller. */
+export async function resolveGitBaseRoot(gitRunner: GitRunner, repoRoot: string, ops: PathOps): Promise<string> {
+  const result = await gitRunner(['rev-parse', '--git-common-dir'], repoRoot)
+  if (!result.ok) return repoRoot
+  const common = result.stdout.trim()
+  if (common === '') return repoRoot
+  try {
+    return ops.dirname(ops.resolveFrom(repoRoot, common))
+  } catch {
+    return repoRoot
+  }
 }

@@ -7,6 +7,7 @@ import type { SessionRecord, SessionScan } from '../../shared/sessions/types'
 import { MAX_HITS_PER_TRANSCRIPT, MAX_TOTAL_HITS, SCAN_BUDGET_MS } from '../../shared/search/types'
 import type { SearchScope } from '../../shared/search/types'
 import { runSearch } from './query'
+import { makeClaudeHome } from '../../testing/fixtures'
 
 const REPO_A = 'repo-a' as RepoId
 const REPO_B = 'repo-b' as RepoId
@@ -16,10 +17,6 @@ const SESSION_B = '22222222-2222-2222-2222-222222222222'
 
 function uuidFor(n: number): string {
   return `${n.toString(16).padStart(8, '0')}-1111-1111-1111-111111111111`
-}
-
-async function makeClaudeHome(): Promise<string> {
-  return mkdtemp(join(tmpdir(), 'port-search-query-claude-home-'))
 }
 
 async function makeIndexDir(): Promise<string> {

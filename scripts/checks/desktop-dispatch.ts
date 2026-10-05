@@ -14,7 +14,6 @@ export default async function ({ fail, ok }: Reporter) {
   const resolveFile = `${mainDispatchDir}/resolve.ts`;
   const haltFile = `${mainDispatchDir}/halt.ts`;
   const dispatcherFile = `${mainDispatchDir}/dispatcher.ts`;
-  const turnFile = `${mainDispatchDir}/turn.ts`;
   const budgetFile = `${mainDispatchDir}/budget.ts`;
   const budgetGateFile = `${mainDispatchDir}/budget-gate.ts`;
   const budgetScriptPath = join(root, 'plugins/port/bin/budget.mjs');
@@ -314,26 +313,26 @@ export default async function ({ fail, ok }: Reporter) {
     else if (!found) ok();
   }
 
-  // --- pin: turn.ts's two prompts ↔ SKILL.md's Dispatching block -------------
+  // --- pin: dispatcher.ts's two prompts ↔ SKILL.md's Dispatching block -------
   // guard(#265): the dispatcher's own prompt text drifting from the cockpit's
   // — both must send the identical instruction to a stage agent regardless
   // of which one dispatched it.
-  // pin: `main/dispatch/turn.ts`'s `DISPATCH_PROMPT`/`REFRESH_PROMPT` ↔ `pipeline/SKILL.md`'s "Dispatching" block, both directions
+  // pin: `main/dispatch/dispatcher.ts`'s `DISPATCH_PROMPT`/`REFRESH_PROMPT` ↔ `pipeline/SKILL.md`'s "Dispatching" block, both directions
   {
-    const turnText = readFileSync(join(root, turnFile), 'utf8');
-    const dispatchPromptMatch = /DISPATCH_PROMPT\s*=\s*'([^']*)'/.exec(turnText);
-    const refreshPromptMatch = /REFRESH_PROMPT\s*=\s*'([^']*)'/.exec(turnText);
+    const dispatcherText = readFileSync(join(root, dispatcherFile), 'utf8');
+    const dispatchPromptMatch = /DISPATCH_PROMPT\s*=\s*'([^']*)'/.exec(dispatcherText);
+    const refreshPromptMatch = /REFRESH_PROMPT\s*=\s*'([^']*)'/.exec(dispatcherText);
     if (!dispatchPromptMatch || !refreshPromptMatch) {
-      fail('desktop-dispatch', `${turnFile} is missing DISPATCH_PROMPT or REFRESH_PROMPT as a single-quoted string literal`);
+      fail('desktop-dispatch', `${dispatcherFile} is missing DISPATCH_PROMPT or REFRESH_PROMPT as a single-quoted string literal`);
     } else {
       const skillText = pipelineSkillText();
       if (!skillText.includes(dispatchPromptMatch[1])) {
-        fail('desktop-dispatch', `${turnFile}'s DISPATCH_PROMPT is not byte-identical to any text in pipeline/SKILL.md's Dispatching block`);
+        fail('desktop-dispatch', `${dispatcherFile}'s DISPATCH_PROMPT is not byte-identical to any text in pipeline/SKILL.md's Dispatching block`);
       } else {
         ok();
       }
       if (!skillText.includes(refreshPromptMatch[1])) {
-        fail('desktop-dispatch', `${turnFile}'s REFRESH_PROMPT is not byte-identical to any text in pipeline/SKILL.md's Dispatching block`);
+        fail('desktop-dispatch', `${dispatcherFile}'s REFRESH_PROMPT is not byte-identical to any text in pipeline/SKILL.md's Dispatching block`);
       } else {
         ok();
       }

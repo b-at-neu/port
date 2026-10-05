@@ -1,14 +1,10 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { CommandResult } from '../platform'
+import type { CommandResult } from '../platform/run'
 import { currentBranch, permissionsState, refsCarryingConfig } from './harness'
 import type { GitRunner } from './harness'
-
-async function makeTempDir(): Promise<string> {
-  return mkdtemp(join(tmpdir(), 'port-registry-harness-'))
-}
+import { makeTempDir } from '../../testing/fixtures'
 
 function ok(stdout: string): CommandResult {
   return { ok: true, stdout, stderr: '' }

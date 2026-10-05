@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createPathOps } from '../platform'
+import { createPathOps } from '../platform/paths'
 import { parseReportPayload } from './parse'
 
 const posixPathOps = createPathOps('posix', { home: '/home/op' })

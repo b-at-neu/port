@@ -15,7 +15,8 @@ import { DEFAULT_POLL_POLICY, SOURCE_BASE_INTERVAL_MS } from '../../shared/board
 import type { BoardSnapshot, RepositoryHealth, SourceKind } from '../../shared/board/types'
 import type { RepositoryState } from '../../shared/state/types'
 import { reconcileRepository } from '../state/reconcile'
-import { createDispatchLedger, createRefreshMemo, createUnknownStreaks, planTick } from '../tick'
+import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '../tick/ledger'
+import { planTick } from '../tick/plan'
 import { FIXTURE_REPOSITORIES, LEGACY_SITE_ID, WIDGETS_ID, WIDGETS_VOCABULARY_REPORT } from './repos'
 
 const VIEWER = 'octo-dev'

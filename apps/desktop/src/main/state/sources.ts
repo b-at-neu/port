@@ -3,12 +3,13 @@
 // attempt. `watcher.ts` decides *when* to call these; `read.ts`'s
 // `projectFromCache` is the only reader of what they leave behind. No file
 // here names a timer.
-import { fetchItemsByNumber, fetchPipelineItems } from '../github'
-import type { GhRunner } from '../github'
+import { fetchItemsByNumber, fetchPipelineItems } from '../github/adapter'
+import type { GhRunner } from '../github/adapter'
 import { collectOrphanNumbers } from './attach'
-import { readDenials, readWorktrees } from '../local'
-import type { WorktreesGitRunner as GitRunner } from '../local'
-import { readSessionState } from '../sessions'
+import { readDenials } from '../local/denials'
+import { readWorktrees } from '../local/worktrees'
+import type { GitRunner } from '../local/worktrees'
+import { readSessionState } from '../sessions/adapter'
 import type { RepoId } from '../../shared/repos'
 import type { LabelVocabulary } from '../../shared/labels/vocabulary'
 import type { DenialsRead, WorktreeEntry, WorktreesRead } from '../../shared/local/types'

@@ -13,9 +13,9 @@ import { classifyPreflight } from './classify'
 import { createRuntimeProbe } from './sdk'
 import type { RuntimeProbeFn } from './sdk'
 import type { RuntimePreflight, RuntimeProbe } from '../../shared/runtime/types'
-import { listRepositories } from '../registry'
+import { listRepositories, requireReadyRepo } from '../registry'
 import type { RegistryDeps } from '../registry'
-import type { RepoId, RepositoryEntry } from '../../shared/repos'
+import type { RepoId } from '../../shared/repos'
 
 function apiKeyInEnvironment(env: NodeJS.ProcessEnv): boolean {
   const value = env['ANTHROPIC_API_KEY']
@@ -71,8 +71,6 @@ export async function runtimePreflight(deps: RuntimePreflightDeps = defaultPrefl
   }
 }
 
-type ReadyEntry = Extract<RepositoryEntry, { readonly status: 'ready' }>
-
 export interface RuntimeProbeDeps {
   readonly listRepositories: typeof listRepositories
   readonly resolveClaudeExecutable: typeof resolveClaudeExecutable
@@ -93,17 +91,8 @@ const defaultRuntimeProbeDeps: RuntimeProbeDeps = {
   now: () => Date.now(),
 }
 
-/** The same registry-lookup rail every repository-scoped channel applies
- *  (`resolveWorktreesReport`/`resolveItemAction` in `main/ipc.ts`,
- *  `resolveReadyEntry` in `main/claim.ts`) — one more copy rather than a
- *  shared helper, since each caller's error text names its own channel. */
-async function resolveReadyEntry(registryDeps: RegistryDeps, repoId: RepoId, list: typeof listRepositories): Promise<ReadyEntry> {
-  const result = await list(registryDeps)
-  if (!result.ok) throw new Error(`'runtime:probe' could not list repositories: ${result.message}`)
-  const entry = result.repositories.find((repository) => repository.id === repoId)
-  if (!entry) throw new Error(`'runtime:probe' found no repository registered with id '${repoId}'`)
-  if (!('config' in entry)) throw new Error(`'runtime:probe' requires a 'ready' repository, got '${entry.problem.kind}'`)
-  return entry
+function resolveReadyEntry(registryDeps: RegistryDeps, repoId: RepoId, list: typeof listRepositories) {
+  return requireReadyRepo(registryDeps, "'runtime:probe'", repoId, list)
 }
 
 export interface RunRuntimeProbeParams {

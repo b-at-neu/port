@@ -9,7 +9,8 @@
 //   4. Fold the checks.* entries into one disposition map.
 // Composition only — `overrides.ts`'s `parseOverrides`/`applyOverrides` do
 // the actual parsing and validation; this module never duplicates either.
-import { pathOps, readTextFile } from '../platform'
+import { pathOps } from '../platform/paths'
+import { readTextFile } from '../platform/files'
 import { LABEL_DEFAULTS } from '../../shared/labels/defaults'
 import { LABEL_KEYS } from '../../shared/labels/vocabulary'
 import type { LabelKey } from '../../shared/labels/vocabulary'

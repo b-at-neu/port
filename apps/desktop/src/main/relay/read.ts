@@ -8,10 +8,11 @@
 // (`buildProjectIndex`/`resolveTranscriptPath`/`createDeriver`), never a deep
 // `../sessions/*` import (ENGINEERING §1) — the same rail `main/search/
 // query.ts` already follows for the same reason.
-import { readLinesFrom, statPath } from '../platform'
-import type { ReadLinesFromResult } from '../platform'
-import { buildProjectIndex, createDeriver, defaultClaudeHome, resolveTranscriptPath } from '../sessions'
-import type { ProjectIndex } from '../sessions'
+import { readLinesFrom, statPath } from '../platform/files'
+import type { ReadLinesFromResult } from '../platform/files'
+import { buildProjectIndex, defaultClaudeHome, resolveTranscriptPath } from '../sessions/locate'
+import { createDeriver } from '../sessions/transcript-entries'
+import type { ProjectIndex } from '../sessions/locate'
 import { classifyFinalMessage, relayPayloadOf } from '../../shared/relay/classify'
 import type { RelayPending, RelayScan } from '../../shared/relay/types'
 import type { RelayKind } from '../../shared/relay/types'

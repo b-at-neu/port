@@ -4,7 +4,7 @@
 // shows a bare session id while `init` is still in flight. `sanitize` comes
 // through the `../sessions` barrel (#219's own rule for this directory),
 // never a second control/bidi stripper.
-import { sanitize } from '../sessions'
+import { sanitize } from '../sessions/transcript-entries'
 import type { RawSession, SessionReader } from '../sessions/sdk'
 import { forkTitle } from './fork'
 import type { SessionStartMode } from '../../shared/hosting/types'

@@ -2,9 +2,10 @@
 // Every later adapter (#76-#81) takes its owner/name, branches, modules,
 // reviewCycleCap and resolved label vocabulary from the entries this
 // returns, rather than reading a config itself.
-import { pathOps } from '../platform'
+import { pathOps } from '../platform/paths'
 import type { ReposAddResponse, ReposListResponse, ReposRemoveResponse } from '../../shared/ipc'
-import type { RepoId } from '../../shared/repos'
+import type { RepoId, RepositoryEntry } from '../../shared/repos'
+import type { ReadyEntry } from '../actions/apply'
 import type { GitRunner } from './harness'
 import { inspectRepository, resolveGitRoot } from './inspect'
 import { readRegistry, writeRegistry } from './store'
@@ -59,6 +60,49 @@ export async function addRepository(deps: RegistryDeps): Promise<ReposAddRespons
   const repositories = await inspectAll(newPaths, deps.git)
   const added = repositories.find((entry) => pathOps.samePath(entry.path, effectivePath))
   return { ok: true, outcome: 'added', added: added?.id ?? (pathOps.pathKey(effectivePath) as unknown as RepoId), repositories }
+}
+
+/** The one `RepositoryEntry` -> `ReadyEntry` narrowing every channel that
+ *  resolves a repository by id needs — previously declared separately in
+ *  `main/channels/hosting.ts`, `main/channels/items.ts`, and
+ *  `main/dispatch/resolve.ts`. */
+export function isReadyEntry(entry: RepositoryEntry): entry is ReadyEntry {
+  return 'config' in entry
+}
+
+/** The non-empty-string check every channel that takes a `repoId` opens
+ *  with, before ever reaching `requireReadyRepo` — `channel` is quoted
+ *  exactly as each channel's own thrown text already was (e.g.
+ *  `"'item:action'"`). */
+export function requireRepoId(repoId: unknown, channel: string): RepoId {
+  if (typeof repoId !== 'string' || repoId === '') throw new Error(`${channel} requires a non-empty 'repoId'`)
+  return repoId as RepoId
+}
+
+/** The "find a registered, ready repository by id, or throw" lookup every
+ *  repository-scoped channel composes — `subject` is the caller's own
+ *  error-message prefix (e.g. `"'item:action'"` or `"claim"`), so each
+ *  channel's thrown text keeps naming itself exactly as it did before this
+ *  lookup was shared. `list` is the caller's own injected
+ *  `listRepositories`, the same test seam every `*Deps` interface already
+ *  gives its channel. `notListableMessage` lets a caller that predates this
+ *  shared lookup keep its own original "list failed" wording (`gate`,
+ *  `claim`, `dispatch claim` all said "requires the registry, which could
+ *  not be listed" before this helper existed) rather than silently
+ *  switching every caller to the new default phrasing. */
+export async function requireReadyRepo(
+  registryDeps: RegistryDeps,
+  subject: string,
+  repoId: RepoId,
+  list: typeof listRepositories,
+  notListableMessage: (message: string) => string = (message) => `${subject} could not list repositories: ${message}`,
+): Promise<ReadyEntry> {
+  const result = await list(registryDeps)
+  if (!result.ok) throw new Error(notListableMessage(result.message))
+  const entry = result.repositories.find((repository) => repository.id === repoId)
+  if (!entry) throw new Error(`${subject} found no repository registered with id '${repoId}'`)
+  if (!isReadyEntry(entry)) throw new Error(`${subject} requires a 'ready' repository, got '${entry.problem.kind}'`)
+  return entry
 }
 
 export async function removeRepository(deps: RegistryDeps, id: RepoId): Promise<ReposRemoveResponse> {

@@ -10,16 +10,18 @@ import type { BudgetNote, BudgetStatus, DispatchOwner, DispatcherState, Observat
 import { RUN_TARGET } from '../../shared/dispatch/types'
 import type { RunState } from '../../shared/dispatch/types'
 import type { RepoId } from '../../shared/repos'
-import type { HostedStore, SessionKey } from '../hosting'
-import type { ReadyEntry } from '../actions'
-import type { ApplyObservationParams, ApplyObservationResult, EscalateToHumanParams, EscalateToHumanResult } from '../actions'
+import type { HostedStore } from '../hosting/store'
+import type { SessionKey } from '../../shared/hosting/types'
+import type { ReadyEntry } from '../actions/apply'
+import type { ApplyObservationParams, ApplyObservationResult } from '../actions/observe'
+import type { EscalateToHumanParams, EscalateToHumanResult } from '../actions/escalate'
 import type { RegistryDeps } from '../registry'
 import type { ReposListResponse } from '../../shared/ipc'
-import type { DispatchLedger, RefreshMemo } from '../tick'
-import { dispatchableFrom, observableFrom } from '../tick'
-import type { ReadGateClaimParams } from '../writes'
-import type { ClaimRead } from '../writes'
-import type { FetchItemsByNumberParams } from '../github'
+import type { DispatchLedger, RefreshMemo } from '../tick/ledger'
+import { dispatchableFrom, observableFrom } from '../tick/dispatchable'
+import type { ReadGateClaimParams } from '../writes/claim'
+import type { ClaimRead } from '../../shared/writes/types'
+import type { FetchItemsByNumberParams } from '../github/adapter'
 import type { ItemsByNumberFetch } from '../../shared/github/types'
 import { labelName } from '../../shared/labels/vocabulary'
 import { runObservationPass } from './observe-pass'
@@ -29,11 +31,25 @@ import type { BudgetGate } from './budget-gate'
 import { boundRecords, freeSlots, refreshRecords } from './launch'
 import type { StageLauncher, StageRecord } from './launch'
 import type { StageSessionSummary } from './quit'
-import { promptFor } from './turn'
 import type { TickActionable, TickReport } from '../../shared/tick/types'
 
 const RECENT_LIMIT = 20
 const NOTE_LIMIT = 20
+
+/** Byte-identical to `plugins/port/skills/pipeline/SKILL.md`'s own
+ *  "Dispatching" block — a pin (`scripts/checks/desktop-dispatch.ts`), since
+ *  both the cockpit and this app's loop must send the exact same
+ *  instruction to a stage agent regardless of which one dispatched it. */
+export const DISPATCH_PROMPT = 'Run your pipeline stage for #<n>. Follow your Pre-flight, Label swap, Work, and Handoff steps exactly.'
+export const REFRESH_PROMPT = 'Run your pipeline stage for pull request #<n> in refresh mode.'
+
+/** `model` comes from `entry.config.models[agent]`; `prompt` comes from this
+ *  function — `launch.ts`'s own `StageLaunchRequest.prompt` is filled from
+ *  it, never re-derived at the launcher. */
+export function promptFor(actionable: Pick<TickActionable, 'trigger' | 'number'>): string {
+  const n = String(actionable.number)
+  return actionable.trigger === 'refreshBranch' ? REFRESH_PROMPT.replace('<n>', n) : DISPATCH_PROMPT.replace('<n>', n)
+}
 
 export interface CreateDispatcherParams {
   readonly store: HostedStore

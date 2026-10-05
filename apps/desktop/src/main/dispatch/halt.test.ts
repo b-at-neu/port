@@ -4,7 +4,7 @@ import type { RepoId } from '../../shared/repos'
 import type { BoardSnapshot } from '../../shared/board/types'
 import type { ReconciledItem, RepositoryState } from '../../shared/state/types'
 import type { ItemActionResult } from '../../shared/actions/types'
-import type { ReadyEntry } from '../actions'
+import type { ReadyEntry } from '../actions/apply'
 import type { RunStateStore, SetRunStateResult } from './store'
 import { haltDispatch } from './halt'
 

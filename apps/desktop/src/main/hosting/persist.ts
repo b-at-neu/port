@@ -9,7 +9,8 @@
 import type { RepoId } from '../../shared/repos'
 import { DEFAULT_SESSION_DEFAULTS, SESSION_MODELS, SESSION_PERMISSION_MODES } from '../../shared/hosting/types'
 import type { SessionDefaults, SessionModel, SessionPermissionMode } from '../../shared/hosting/types'
-import { ensureDirectory, pathOps, readJsonFile, writeJsonFileAtomic } from '../platform'
+import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '../platform/files'
+import { pathOps } from '../platform/paths'
 
 const HOSTING_FILE = 'hosting.json'
 const CURRENT_VERSION = 1

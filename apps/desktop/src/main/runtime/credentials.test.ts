@@ -1,16 +1,6 @@
-import { mkdtemp, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { readCredentialsTell } from './credentials'
-
-async function makeClaudeHome(credentials: unknown): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), 'port-runtime-credentials-'))
-  if (credentials !== undefined) {
-    await writeFile(join(dir, '.credentials.json'), typeof credentials === 'string' ? credentials : JSON.stringify(credentials), 'utf8')
-  }
-  return dir
-}
+import { makeClaudeHome } from '../../testing/fixtures'
 
 describe('readCredentialsTell', () => {
   it('a healthy token reports present, its expiresAt, and hasRefreshToken', async () => {

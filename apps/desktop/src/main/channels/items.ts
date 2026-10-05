@@ -4,11 +4,11 @@ import { OPERATOR_ACTIONS, OPERATOR_DECISIONS, UNBLOCK_ROUTES } from '../../shar
 import type { ItemActionResult, ItemDecisionResult, OperatorDecision, UnblockRoute } from '../../shared/actions/types'
 import { MAX_REVISE_NOTE_CHARS } from '../../shared/actions/types'
 import type { BoardSnapshot } from '../../shared/board/types'
-import type { RepositoryEntry } from '../../shared/repos'
 import type { IpcMap } from '../../shared/ipc'
 import type { RegistryDeps } from '../registry'
-import { listRepositories } from '../registry'
-import type { ApplyItemActionParams, ApplyItemDecisionParams, ReadyEntry } from '../actions'
+import { listRepositories, requireReadyRepo, requireRepoId } from '../registry'
+import type { ApplyItemActionParams } from '../actions/apply'
+import type { ApplyItemDecisionParams } from '../actions/decide'
 
 export interface ItemActionDeps {
   readonly listRepositories: typeof listRepositories
@@ -17,16 +17,10 @@ export interface ItemActionDeps {
   readonly refresh: (request: IpcMap['board:refresh']['request']) => Promise<BoardSnapshot>
 }
 
-export function isReadyEntry(entry: RepositoryEntry): entry is ReadyEntry {
-  return 'config' in entry
-}
-
 /** Validates the request, then forces one refresh after an applied outcome
  *  so the row updates immediately rather than after the next poll. */
 export async function resolveItemAction(registryDeps: RegistryDeps, request: IpcMap['item:action']['request'], auditDir: string, deps: ItemActionDeps): Promise<ItemActionResult> {
-  if (typeof request?.repoId !== 'string' || request.repoId === '') {
-    throw new Error("'item:action' requires a non-empty 'repoId'")
-  }
+  const repoId = requireRepoId(request?.repoId, "'item:action'")
   if (request.kind !== 'issue' && request.kind !== 'pull-request') {
     throw new Error("'item:action' requires 'kind' to be 'issue' or 'pull-request'")
   }
@@ -41,14 +35,10 @@ export async function resolveItemAction(registryDeps: RegistryDeps, request: Ipc
     throw new Error("'item:action' requires 'expectedStage' to be a non-empty string or null")
   }
 
-  const list = await deps.listRepositories(registryDeps)
-  if (!list.ok) throw new Error(`'item:action' could not list repositories: ${list.message}`)
-  const found = list.repositories.find((repository) => repository.id === request.repoId)
-  if (!found) throw new Error(`'item:action' found no repository registered with id '${request.repoId}'`)
-  if (!isReadyEntry(found)) throw new Error(`'item:action' requires a 'ready' repository, got '${found.problem.kind}'`)
+  const found = await requireReadyRepo(registryDeps, "'item:action'", repoId, deps.listRepositories)
 
   const result = await deps.applyItemAction({
-    request: { repoId: request.repoId, kind: request.kind, number: request.number, action: request.action, expectedStage: request.expectedStage },
+    request: { repoId, kind: request.kind, number: request.number, action: request.action, expectedStage: request.expectedStage },
     snapshot: deps.snapshot(),
     entry: found,
     auditDir,
@@ -58,9 +48,9 @@ export async function resolveItemAction(registryDeps: RegistryDeps, request: Ipc
     // A refresh failure here is logged and swallowed, never left to mask
     // the write's own already-successful result.
     try {
-      await deps.refresh({ repoId: request.repoId, source: 'github' })
+      await deps.refresh({ repoId, source: 'github' })
     } catch (error) {
-      console.error(`'item:action' post-write refresh failed for '${request.repoId}':`, error)
+      console.error(`'item:action' post-write refresh failed for '${repoId}':`, error)
     }
   }
   return result
@@ -85,9 +75,7 @@ function isUnblockRoute(value: unknown): value is UnblockRoute {
 // Validates the request and its route/note pair, then forces one refresh
 // on an applied label outcome, the same rule `resolveItemAction` follows.
 export async function resolveItemDecision(registryDeps: RegistryDeps, request: IpcMap['item:decide']['request'], auditDir: string, scratchDir: string, deps: ItemDecisionDeps): Promise<ItemDecisionResult> {
-  if (typeof request?.repoId !== 'string' || request.repoId === '') {
-    throw new Error("'item:decide' requires a non-empty 'repoId'")
-  }
+  const repoId = requireRepoId(request?.repoId, "'item:decide'")
   if (!Number.isInteger(request.number) || request.number <= 0) {
     throw new Error("'item:decide' requires 'number' to be a positive integer")
   }
@@ -111,14 +99,10 @@ export async function resolveItemDecision(registryDeps: RegistryDeps, request: I
     }
   }
 
-  const list = await deps.listRepositories(registryDeps)
-  if (!list.ok) throw new Error(`'item:decide' could not list repositories: ${list.message}`)
-  const found = list.repositories.find((repository) => repository.id === request.repoId)
-  if (!found) throw new Error(`'item:decide' found no repository registered with id '${request.repoId}'`)
-  if (!isReadyEntry(found)) throw new Error(`'item:decide' requires a 'ready' repository, got '${found.problem.kind}'`)
+  const found = await requireReadyRepo(registryDeps, "'item:decide'", repoId, deps.listRepositories)
 
   const result = await deps.applyItemDecision({
-    request: { repoId: request.repoId, number: request.number, decision: request.decision, expectedStage: request.expectedStage, route: request.route, note: request.note, skipComment: request.skipComment },
+    request: { repoId, number: request.number, decision: request.decision, expectedStage: request.expectedStage, route: request.route, note: request.note, skipComment: request.skipComment },
     snapshot: deps.snapshot(),
     entry: found,
     auditDir,
@@ -128,9 +112,9 @@ export async function resolveItemDecision(registryDeps: RegistryDeps, request: I
   const labelsApplied = result.ok && result.labels.kind === 'applied'
   if (labelsApplied) {
     try {
-      await deps.refresh({ repoId: request.repoId, source: 'github' })
+      await deps.refresh({ repoId, source: 'github' })
     } catch (error) {
-      console.error(`'item:decide' post-write refresh failed for '${request.repoId}':`, error)
+      console.error(`'item:decide' post-write refresh failed for '${repoId}':`, error)
     }
   }
   return result

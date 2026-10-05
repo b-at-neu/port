@@ -4,10 +4,13 @@
 // (`prunable`) — never a second classification implementation, and never a
 // second `git worktree` caller (this directory calls no `git` itself; the
 // join is the only reader).
-import { node as defaultNode, pathOps as defaultPathOps } from '../platform'
-import type { CommandResult, NodeOptions, PathOps } from '../platform'
-import { readWorktrees } from '../local'
-import type { WorktreesGitRunner } from '../local'
+import { node as defaultNode } from '../platform/node'
+import { pathOps as defaultPathOps } from '../platform/paths'
+import type { CommandResult } from '../platform/run'
+import type { NodeRunner } from '../platform/node'
+import type { PathOps } from '../platform/paths'
+import { readWorktrees } from '../local/worktrees'
+import type { GitRunner as WorktreesGitRunner } from '../local/worktrees'
 import type { AssertEqual } from '../../shared/assert-type'
 import type { GithubResolutionState, InspectedWorktree, PorcelainJoinState, ReclaimerFailureKind, WorktreesReport } from '../../shared/reclaimer/types'
 import { isReclaimableState } from '../../shared/reclaimer/types'
@@ -30,7 +33,7 @@ export const _kindsCoverCommandResult: AssertEqual<ReclaimerFailureKind, Command
 export const SCRIPT_FAIL_PREFIX = 'FAIL  '
 export const GH_RESOLUTION_FAILED_SENTINEL = 'gh issueOrPullRequest resolution failed'
 
-export type NodeRunner = (args: readonly string[], options: NodeOptions) => Promise<CommandResult>
+export type { NodeRunner }
 
 export interface ReadWorktreeReportParams {
   readonly repoRoot: string

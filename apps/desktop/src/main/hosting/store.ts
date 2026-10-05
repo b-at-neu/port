@@ -43,8 +43,9 @@ import type { HostingPersistence } from './persist'
 import { dropAdopted, mintRestorable, nextPersisted, persistedOpen } from './restore'
 import type { MintedRestorable } from './restore'
 import type { SessionReader } from '../sessions/sdk'
-import { readCredentialsTell, resolveClaudeExecutable } from '../runtime'
-import { pathOps } from '../platform'
+import { readCredentialsTell } from '../runtime/credentials'
+import { resolveClaudeExecutable } from '../runtime/locate'
+import { pathOps } from '../platform/paths'
 
 export { DEFAULT_SESSION_LIMIT, SESSION_LIMIT_CEILING } from './persist'
 

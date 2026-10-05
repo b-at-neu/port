@@ -10,8 +10,8 @@
 // authorization.
 import type { ReconciledItem } from '../../shared/state/types'
 import type { LabelWriteRequest, WriteOutcome } from '../../shared/writes/types'
-import { applyLabels, postComment } from '../writes'
-import type { ApplyLabelsParams, PostCommentParams } from '../writes'
+import { applyLabels, postComment } from '../writes/apply'
+import type { ApplyLabelsParams, PostCommentParams } from '../writes/apply'
 import { observationWrite } from '../dispatch/observation'
 import type { WriteObservation } from '../dispatch/observation'
 import type { ReadyEntry } from './apply'

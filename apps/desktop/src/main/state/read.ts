@@ -5,9 +5,9 @@
 // `watcher.ts` calls the same two primitives (`refreshGithub` and friends,
 // `projectFromCache`) on its own cadence rather than a second copy of this
 // composition.
-import type { GhRunner } from '../github'
-import { readSessionState } from '../sessions'
-import type { WorktreesGitRunner as GitRunner } from '../local'
+import type { GhRunner } from '../github/adapter'
+import { readSessionState } from '../sessions/adapter'
+import type { GitRunner } from '../local/worktrees'
 import type { RepositoryEntry } from '../../shared/repos'
 import type { FreshnessEntry, PipelineState, RepositoryState } from '../../shared/state/types'
 import { reconcileRepository } from './reconcile'

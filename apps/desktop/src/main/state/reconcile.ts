@@ -27,7 +27,8 @@ import type {
 import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers } from './attach'
 import { closingReference, sessionRequiredAt } from './link'
 import { stageOf } from './stage'
-import { codeReviewCount, parseFilesBlock } from '../tick'
+import { codeReviewCount } from '../../../../../scripts/port-tick/gates'
+import { parseFilesBlock } from '../../../../../scripts/port-tick/contention'
 
 /** The repository-scoped slice of #78's whole-machine `SessionScan` — never
  *  a second scan. `available` is `false` only when the scan itself failed

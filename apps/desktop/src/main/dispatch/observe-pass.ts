@@ -5,10 +5,10 @@
 // has not caught up to that write yet), otherwise build and run the write. A
 // throw from the write itself becomes `outcome: 'failed'`, never a pass that
 // stops partway through the rest of the list.
-import type { ReadyEntry } from '../actions'
-import type { ApplyObservationParams, ApplyObservationResult } from '../actions'
+import type { ReadyEntry } from '../actions/apply'
+import type { ApplyObservationParams, ApplyObservationResult } from '../actions/observe'
 import type { ObservationRecord } from '../../shared/dispatch/types'
-import type { RefreshMemo } from '../tick'
+import type { RefreshMemo } from '../tick/ledger'
 import type { RepositoryState } from '../../shared/state/types'
 import type { TickObservation } from '../../shared/tick/types'
 import type { WriteOutcome } from '../../shared/writes/types'

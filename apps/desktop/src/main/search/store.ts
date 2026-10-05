@@ -2,7 +2,8 @@
 // userData -- same shape as `main/registry/store.ts`: takes its directory as
 // a parameter so nothing here imports Electron, and every test passes a
 // `mkdtemp`.
-import { ensureDirectory, pathOps, readJsonFile, writeJsonFileAtomic } from '../platform'
+import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '../platform/files'
+import { pathOps } from '../platform/paths'
 
 const SEARCH_INDEX_FILE = 'search-index.json'
 const CURRENT_VERSION = 1

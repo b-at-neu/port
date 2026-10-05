@@ -9,6 +9,7 @@
     "src/main/**/*",
     "src/preload/**/*",
     "src/shared/**/*",
+    "src/testing/**/*",
     "visual/**/*",
     "../../scripts/port-tick/gates.ts",
     "../../scripts/port-tick/contention.ts",

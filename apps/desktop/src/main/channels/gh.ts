@@ -2,8 +2,8 @@
 // throws for a gh failure itself; every outcome is a value.
 import type { GhStatus } from '../../shared/gh/types'
 import type { IpcMap } from '../../shared/ipc'
-import { ghAuthStatus } from '../platform'
-import type { GhAuthStatusResult } from '../platform'
+import { ghAuthStatus } from '../platform/gh'
+import type { GhAuthStatusResult } from '../platform/gh'
 
 export interface GhStatusDeps {
   readonly ghAuthStatus: typeof ghAuthStatus

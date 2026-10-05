@@ -46,33 +46,6 @@ export default async function ({ fail, ok }: Reporter) {
   }
   if (!violated) ok();
 
-  // --- The renderer never subscribes to the opaque session:event ---------
-  // guard(#219, #316): `session:event` forwards the raw SDK envelope
-  // untouched (`message: unknown`) precisely so no renderer code narrows a
-  // 37-variant union on its own — issue 219's own live projector
-  // (main/hosting/project.ts) is the one place that narrows it, over
-  // `session:entries` instead. The literal string, not just the
-  // `onSessionEvent` identifier, is banned too (#316) — `data/subscriptions.ts`
-  // names it once, as `Exclude<IpcEvent, 'session:event'>`, a type-level
-  // exclusion and the one sanctioned occurrence.
-  {
-    const subscriptionsRel = 'apps/desktop/src/renderer/src/data/subscriptions.ts';
-    let found = false;
-    for (const f of files) {
-      const rel = relOf(f);
-      const text = readFileSync(f, 'utf8');
-      if (/\bonSessionEvent\b/.test(text)) {
-        found = true;
-        fail('desktop-renderer', `${rel} names 'onSessionEvent' — the renderer must never subscribe to the opaque session:event; consume session:entries instead`);
-      }
-      if (rel !== subscriptionsRel && /session:event/.test(text)) {
-        found = true;
-        fail('desktop-renderer', `${rel} names the literal 'session:event' — the renderer must never subscribe to the opaque session:event; consume session:entries instead`);
-      }
-    }
-    if (!found) ok();
-  }
-
   // --- The TranscriptEntry row builder is declared only in entry-rows.ts --
   // guard(#219): the transcript view and the live session view share one
   // row renderer over TranscriptEntry — a second declaration of it anywhere

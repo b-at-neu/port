@@ -9,16 +9,16 @@ import { GATE_CLAIM_OWNER } from '../../shared/gate/types'
 import type { GateAction, GateAnswerResponse, GateClaimResponse, GateDecision, GatePreflight, GatePreflightResponse } from '../../shared/gate/types'
 import type { GatePreflightFetch } from '../../shared/github/types'
 import { labelName } from '../../shared/labels/vocabulary'
-import type { RepoId, RepositoryEntry } from '../../shared/repos'
+import type { RepoId } from '../../shared/repos'
 import type { ClaimRead, LabelWriteRequest, WriteOutcome } from '../../shared/writes/types'
-import { fetchGatePreflight } from '../github'
-import { IMPLEMENTATION_PLAN_HEADING, sessionRequiredMarkerAt } from '../state'
-import { listRepositories } from '../registry'
+import { fetchGatePreflight } from '../github/gate'
+import { IMPLEMENTATION_PLAN_HEADING, sessionRequiredMarkerAt } from '../state/link'
+import { listRepositories, requireReadyRepo } from '../registry'
 import type { RegistryDeps } from '../registry'
-import { applyLabels, postComment, readGateClaim, releaseClaimScope, takeClaimScope } from '../writes'
-import type { ApplyLabelsParams, PostCommentParams } from '../writes'
-
-type ReadyEntry = Extract<RepositoryEntry, { readonly status: 'ready' }>
+import type { ReadyEntry } from './apply'
+import { applyLabels, postComment } from '../writes/apply'
+import { readGateClaim, releaseClaimScope, takeClaimScope } from '../writes/claim'
+import type { ApplyLabelsParams, PostCommentParams } from '../writes/apply'
 
 /** The seam every composition below is testable through, without Electron,
  *  a real registry, or a real `gh`/`git` — the same idiom `main/claim.ts`'s
@@ -46,13 +46,14 @@ export const defaultGateDeps: GateDeps = {
   now: () => new Date(),
 }
 
-async function resolveReadyEntry(registryDeps: RegistryDeps, repoId: RepoId, deps: Pick<GateDeps, 'listRepositories'>): Promise<ReadyEntry> {
-  const list = await deps.listRepositories(registryDeps)
-  if (!list.ok) throw new Error(`gate requires the registry, which could not be listed: ${list.message}`)
-  const entry = list.repositories.find((repository) => repository.id === repoId)
-  if (!entry) throw new Error(`gate found no repository registered with id '${repoId}'`)
-  if (!('config' in entry)) throw new Error(`gate requires a 'ready' repository, got '${entry.problem.kind}'`)
-  return entry
+function resolveReadyEntry(registryDeps: RegistryDeps, repoId: RepoId, deps: Pick<GateDeps, 'listRepositories'>) {
+  return requireReadyRepo(
+    registryDeps,
+    'gate',
+    repoId,
+    deps.listRepositories,
+    (message) => `gate requires the registry, which could not be listed: ${message}`,
+  )
 }
 
 /** Splits the fetched issue body at `IMPLEMENTATION_PLAN_HEADING` — the

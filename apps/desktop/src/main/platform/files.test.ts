@@ -1,5 +1,4 @@
-import { appendFile, chmod, mkdir, mkdtemp, readdir, readFile, symlink, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { appendFile, chmod, mkdir, readdir, readFile, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { platform } from 'node:process'
 import { describe, expect, it } from 'vitest'
@@ -16,12 +15,7 @@ import {
   writeJsonFileAtomic,
   writeTextFile,
 } from './files'
-
-// Vitest runs each test's temp directory through the OS's own tmpdir
-// cleanup; nothing here needs a teardown step.
-async function makeTempDir(): Promise<string> {
-  return mkdtemp(join(tmpdir(), 'port-platform-files-'))
-}
+import { makeTempDir } from '../../testing/fixtures'
 
 describe('readTextFile', () => {
   it('reads an existing file', async () => {

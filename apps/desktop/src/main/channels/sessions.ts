@@ -7,15 +7,18 @@
 // wiring are unchanged from what left `main/ipc.ts`.
 import type { RepositoryEntry } from '../../shared/repos'
 import type { SessionScan } from '../../shared/sessions/types'
-import type { TranscriptRead, TranscriptTailOpen, TranscriptTailPoll } from '../../shared/sessions/transcript'
+import type { TranscriptTailOpen, TranscriptTailPoll } from '../../shared/sessions/transcript'
 import type { SearchResult, SearchScope } from '../../shared/search/types'
 import type { IpcMap } from '../../shared/ipc'
 import { listRepositories } from '../registry'
 import type { RegistryDeps } from '../registry'
-import { openTranscript, readSessionState, tailStore } from '../sessions'
-import type { OpenTranscriptParams, OpenTranscriptResult, ReadSessionStateParams, RepoRef, TailStore } from '../sessions'
-import { runSearch } from '../search'
-import type { RunSearchParams } from '../search'
+import { readSessionState } from '../sessions/adapter'
+import { tailStore } from '../sessions/tail'
+import type { ReadSessionStateParams } from '../sessions/adapter'
+import type { RepoRef } from '../sessions/classify'
+import type { TailStore } from '../sessions/tail'
+import { runSearch } from '../search/query'
+import type { RunSearchParams } from '../search/query'
 
 /** `'sessions:scan'`'s only composition: the ready repository list becomes
  *  `readSessionState`'s `repos`, never a second config or worktree reader —
@@ -36,37 +39,6 @@ export async function resolveSessionsScan(registryDeps: RegistryDeps, deps: Sess
   if (!list.ok) throw new Error(`'sessions:scan' could not list repositories: ${list.message}`)
   const repos: readonly RepoRef[] = list.repositories.filter(isReady).map((entry) => ({ id: entry.id, root: entry.path }))
   return deps.readSessionState({ repos })
-}
-
-/** `'transcript:read'`'s only composition (#83, kept behind #84's byte-cursor
- *  primitive): a thin shim over `openTranscript` — open, read once through to
- *  EOF, then discard the cursor, since a one-shot caller never advances it.
- *  Same validation order and return shape #83's now-deleted `readTranscript`
- *  gave this channel; no second parallel line-reading code path lives beside
- *  the tail channels' `TailStore`.
- *
- *  Preserved but currently unused: no renderer code calls `'transcript:read'`
- *  any more — `main.ts`'s `handleOpenTranscript` goes exclusively through
- *  `transcriptTailOpen`. Kept per the rebase's own D1/D2 decision rather than
- *  removed, in case a one-shot caller returns. */
-export interface TranscriptReadDeps {
-  readonly openTranscript: (params: OpenTranscriptParams) => Promise<OpenTranscriptResult>
-}
-
-const defaultTranscriptReadDeps: TranscriptReadDeps = { openTranscript }
-
-export async function resolveTranscriptRead(
-  request: IpcMap['transcript:read']['request'],
-  deps: TranscriptReadDeps = defaultTranscriptReadDeps,
-): Promise<TranscriptRead> {
-  if (typeof request?.sessionId !== 'string' || request.sessionId === '') {
-    throw new Error("'transcript:read' requires a non-empty 'sessionId'")
-  }
-  if (request.agentId !== null && typeof request.agentId !== 'string') {
-    throw new Error("'transcript:read' requires 'agentId' to be a string or null")
-  }
-  const { read } = await deps.openTranscript({ sessionId: request.sessionId, agentId: request.agentId })
-  return read
 }
 
 /** The three tail channels' only composition: each request's own validation,

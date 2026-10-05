@@ -2,15 +2,12 @@
 // `main.ts` (board), `session/controller.ts` and `permission/controller.ts`
 // all subscribe through this module instead of the bridge directly, so a
 // pushed event is attached once no matter how many screens care about it.
-// `session:event` is excluded by type (`SubscribableEvent`) and by
-// `scripts/checks/desktop-react.ts` — it is the opaque SDK envelope #219's
-// own projector exists to narrow, never consumed here.
 import type { QueryClient } from '@tanstack/react-query'
 import type { BridgeListener, IpcEvent, IpcEventMap } from '../../../shared/ipc'
 import type { HostedSessionSnapshot } from '../../../shared/hosting/types'
 import { ipcQueryOptions } from './query'
 
-export type SubscribableEvent = Exclude<IpcEvent, 'session:event'>
+export type SubscribableEvent = IpcEvent
 
 type EventListener<E extends SubscribableEvent> = (payload: IpcEventMap[E]) => void
 

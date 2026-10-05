@@ -23,20 +23,26 @@ export default async function ({ fail, ok }: Reporter) {
     return;
   }
 
-  // --- main/search/ imports the sessions barrel only, never a deep path ----
+  // --- main/search/ imports only the named sessions files it needs --------
   // guard(#87): a second transcript parser or a second Agent SDK seam,
   // growing back the exact drift `main/sessions/` exists to prevent
-  // (ENGINEERING §1) -- `../sessions` (the barrel) is fine; `../sessions/*`
-  // is not.
+  // (ENGINEERING §1). The sessions barrel is gone, so this is now an
+  // allowlist of the defining files `query.ts` actually needs
+  // (`./locate`, the project index and path resolver; `./transcript`, the
+  // on-disk reader) — any other deep `../sessions/*` import is still the
+  // same drift the barrel rail used to catch.
   {
     let found = false;
-    const deepImport = /from\s+['"]\.\.\/sessions\/[^'"]+['"]/;
+    const allowedDeepImports = new Set(['../sessions/locate', '../sessions/transcript']);
+    const deepImport = /from\s+['"](\.\.\/sessions\/[^'"]+)['"]/g;
     for (const f of searchFiles) {
       const rel = relOf(f);
       const text = readFileSync(f, 'utf8');
-      if (deepImport.test(text)) {
-        found = true;
-        fail('desktop-search', `${rel} imports a deep '../sessions/*' path — main/search/ may only import the barrel ('../sessions')`);
+      for (const m of text.matchAll(deepImport)) {
+        if (!allowedDeepImports.has(m[1])) {
+          found = true;
+          fail('desktop-search', `${rel} imports '${m[1]}' — main/search/ may only import '../sessions/locate' or '../sessions/transcript'`);
+        }
       }
       if (text.includes('@anthropic-ai/claude-agent-sdk')) {
         found = true;

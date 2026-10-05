@@ -8,8 +8,10 @@
 // here under `apps/desktop/src/` — one appender, so no second path can write
 // an entry that skipped the chokepoint (`scripts/checks/desktop-writes.mjs`
 // pins this).
-import { appendTextFile, pathOps as defaultPathOps, readLinesFrom, renamePath, statPath } from '../platform'
-import type { FileFailureKind, PathOps } from '../platform'
+import { appendTextFile, readLinesFrom, renamePath, statPath } from '../platform/files'
+import { pathOps as defaultPathOps } from '../platform/paths'
+import type { FileFailureKind } from '../platform/files'
+import type { PathOps } from '../platform/paths'
 import type { AuditEntry, AuditRead, AuditReadFailureKind, ReadAuditLogParams } from '../../shared/writes/types'
 
 const LOG_FILE = 'writes.jsonl'

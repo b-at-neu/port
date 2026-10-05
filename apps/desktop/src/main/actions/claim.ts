@@ -5,8 +5,8 @@
 // a direct pass-through to `main/writes/`'s own chokepoint, with no logic of
 // its own. `main/claim.ts`'s preflight, verdict, and `moved` logic are
 // untouched; only the write call itself moved.
-import { applyLabels } from '../writes'
-import type { ApplyLabelsParams } from '../writes'
+import { applyLabels } from '../writes/apply'
+import type { ApplyLabelsParams } from '../writes/apply'
 import type { WriteOutcome } from '../../shared/writes/types'
 
 export async function applyClaimLabels(params: ApplyLabelsParams): Promise<WriteOutcome> {

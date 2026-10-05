@@ -1,10 +1,10 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../../shared/repos'
 import type { AuditEntry } from '../../shared/writes/types'
 import { appendAudit, readAuditLog } from './audit'
+import { makeTempDir } from '../../testing/fixtures'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 
@@ -25,10 +25,6 @@ function makeEntry(overrides: Partial<AuditEntry> = {}): AuditEntry {
     result: { kind: 'no-op' },
     ...overrides,
   }
-}
-
-async function makeTempDir(): Promise<string> {
-  return mkdtemp(join(tmpdir(), 'port-writes-audit-'))
 }
 
 describe('appendAudit / readAuditLog', () => {

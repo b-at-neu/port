@@ -3,13 +3,11 @@
 // degrades to a diagnostic rather than a failure — `git` absent or failing
 // never invalidates a repository, since the config read inspect.ts does is
 // filesystem-only and stands on its own.
-import { pathOps, readJsonFile } from '../platform'
-import type { CommandResult } from '../platform'
+import { pathOps } from '../platform/paths'
+import { readJsonFile } from '../platform/files'
+import type { GitRunner } from '../platform/git'
 
-/** The seam every function below takes instead of importing `git` directly,
- *  so `harness.test.ts` runs against a fake runner and needs no real
- *  repository. */
-export type GitRunner = (args: readonly string[], cwd: string) => Promise<CommandResult>
+export type { GitRunner }
 
 export type CurrentBranch =
   | { readonly kind: 'branch'; readonly name: string }

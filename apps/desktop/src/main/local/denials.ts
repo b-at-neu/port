@@ -3,15 +3,16 @@
 // and the legacy three-field form coexist in a real file (this repository's
 // own log measured 322 current-form lines against ~444 legacy), so both are
 // parsed rather than one being treated as noise.
-import { git as defaultGit, pathOps as defaultPathOps, readTextFile } from '../platform'
-import type { CommandResult, FileFailureKind, PathOps } from '../platform'
+import { defaultGitRunner, resolveGitBaseRoot } from '../platform/git'
+import { pathOps as defaultPathOps } from '../platform/paths'
+import { readTextFile } from '../platform/files'
+import type { FileFailureKind } from '../platform/files'
+import type { GitRunner } from '../platform/git'
+import type { PathOps } from '../platform/paths'
 import type { AssertEqual } from '../../shared/assert-type'
 import type { DenialActor, DenialDecision, DenialEntry, DenialsFailureKind, DenialSummary, DenialsRead } from '../../shared/local/types'
 
-/** The same seam `worktrees.ts` declares — a `git` invocation is needed here
- *  only to resolve the base repository root (Decision 4), never to read the
- *  log itself. */
-export type GitRunner = (args: readonly string[], cwd: string) => Promise<CommandResult>
+export type { GitRunner }
 
 export interface ReadDenialsParams {
   readonly repoRoot: string
@@ -32,24 +33,6 @@ const DEFAULT_LIMIT = 500
  *  `unparseable`, so both are excluded here. */
 type FileFailureKindExcludingHandled = Exclude<FileFailureKind, 'not-found' | 'unparseable'>
 export const _kindsCoverFileFailureKind: AssertEqual<DenialsFailureKind, FileFailureKindExcludingHandled> = true
-
-/** `git rev-parse --git-common-dir` then `pathOps.dirname` of its resolved
- *  value — the hook writes to `<base repo root>/.agents/denials.log`, where
- *  the base root is one level up from the shared `.git` directory, so every
- *  worktree of a repository logs to the same file. Degrades to `repoRoot`
- *  itself on any failure — the common case is a plain checkout where the two
- *  are identical, so this is never a failure of the whole read. */
-async function resolveBaseRoot(git: GitRunner, repoRoot: string, pathOps: PathOps): Promise<string> {
-  const result = await git(['rev-parse', '--git-common-dir'], repoRoot)
-  if (!result.ok) return repoRoot
-  const common = result.stdout.trim()
-  if (common === '') return repoRoot
-  try {
-    return pathOps.dirname(pathOps.resolveFrom(repoRoot, common))
-  } catch {
-    return repoRoot
-  }
-}
 
 const CURRENT_DECISIONS: ReadonlySet<DenialDecision> = new Set(['deny', 'miss', 'gate-clear', 'hook-error'])
 
@@ -153,13 +136,13 @@ function buildSummary(entries: readonly DenialEntry[]): DenialSummary {
  *  empty `entries` list that reads as "no denials" — the whole point of a
  *  dedicated `present` flag. */
 export async function readDenials(params: ReadDenialsParams): Promise<DenialsRead> {
-  const git = params.git ?? ((args, cwd) => defaultGit(args, { cwd }))
+  const git = params.git ?? defaultGitRunner()
   const pathOps = params.pathOps ?? defaultPathOps
   const now = params.now ?? (() => new Date())
   const limit = params.limit ?? DEFAULT_LIMIT
   const readAt = now().toISOString()
 
-  const baseRoot = await resolveBaseRoot(git, params.repoRoot, pathOps)
+  const baseRoot = await resolveGitBaseRoot(git, params.repoRoot, pathOps)
   const path = pathOps.join(baseRoot, '.agents', 'denials.log')
 
   const fileResult = await readTextFile(path)

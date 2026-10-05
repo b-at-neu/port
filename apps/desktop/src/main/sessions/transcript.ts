@@ -8,8 +8,8 @@
 // and pushes it through the same Deriver the cursor already holds, so a
 // tool_use at the end of one chunk still pairs with its tool_result at the
 // start of the next.
-import { readLinesFrom, statPath } from '../platform'
-import type { ReadLinesFromResult } from '../platform'
+import { readLinesFrom, statPath } from '../platform/files'
+import type { ReadLinesFromResult } from '../platform/files'
 import type { EntryPatch, TranscriptEntry, TranscriptRead, TranscriptSource } from '../../shared/sessions/transcript'
 import { buildProjectIndex, defaultClaudeHome, resolveTranscriptPath, SESSION_ID_RE } from './locate'
 import type { ProjectIndex } from './locate'

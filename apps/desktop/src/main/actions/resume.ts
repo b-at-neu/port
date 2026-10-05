@@ -7,7 +7,7 @@ import { RETRY_TRIGGER, pausedTriggerFrom } from '../../shared/actions/plan'
 import { LABEL_DEFAULTS } from '../../shared/labels/defaults'
 import type { LabelKey, LabelVocabulary } from '../../shared/labels/vocabulary'
 import type { AuditEntry, AuditRead } from '../../shared/writes/types'
-import { readAuditLog } from '../writes'
+import { readAuditLog } from '../writes/audit'
 
 export type RecoverPausedTriggerResult = { readonly kind: 'recovered'; readonly trigger: LabelKey } | { readonly kind: 'no-record' } | { readonly kind: 'unresolvable' }
 

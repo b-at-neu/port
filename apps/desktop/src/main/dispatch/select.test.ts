@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { REDISPATCH_FLOOR_MS, selectDispatches } from './select'
 import type { StageRecord } from './launch'
-import type { SessionKey } from '../hosting'
+import type { SessionKey } from '../../shared/hosting/types'
 import type { TickActionable } from '../../shared/tick/types'
 
 function actionable(overrides: Partial<TickActionable> = {}): TickActionable {
