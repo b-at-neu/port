@@ -14,7 +14,7 @@ No dependencies, no plugin install, no model calls. Runs in seconds, in an agent
 
 **These guard against silence.** A skill or agent whose frontmatter is malformed is *absent* from Claude Code's component inventory rather than reported as an error, so nothing complains — the component simply is not there. Same for a hook.
 
-**Each guard is declared on the check that pins it, in `scripts/checks/`** — a `// guard(#N): <one line>` marker colocated on the block it describes, never a shared registry file every guard-adding pull request has to touch (#217; see `docs/ENGINEERING.md` §7).
+**Guards live in their topic module under the checks directory, colocated on the check block they describe, never a shared registry file.** Existing `guard(#N)`/`pin:` markers already in the tree are still indexed by the commands below; a new check carries none (see `docs/ENGINEERING.md` §7).
 
 ```bash
 node scripts/checks.ts --guards               # the whole guard index, one section per check module
