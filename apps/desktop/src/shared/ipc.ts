@@ -13,6 +13,8 @@ import type { DispatchClaimSetResult, DispatchControlResult, DispatchRelayResult
 import type { RuntimePreflight, RuntimeProbe } from './runtime/types'
 import type { ClaimRead } from './writes/types'
 import type { RelayCopyResponse } from './relay/types'
+import type { GhStatus } from './gh/types'
+import type { BacklogResponse } from './backlog/types'
 import type {
   HostedSessionSnapshot,
   HostingCapacity,
@@ -20,6 +22,7 @@ import type {
   RestorableSession,
   SessionAttachResult,
   SessionCloseResult,
+  SessionDefaults,
   SessionDismissResult,
   SessionEntriesDelta,
   SessionEventEnvelope,
@@ -27,6 +30,7 @@ import type {
   SessionInvokeResult,
   SessionKey,
   SessionPermissionAnswerResult,
+  SessionRenameResult,
   SessionRestoreDiscardResult,
   SessionRestoreResult,
   SessionSendResult,
@@ -311,6 +315,31 @@ export interface IpcMap {
     request: { restoreId: string | null }
     response: SessionRestoreDiscardResult
   }
+  /** The footer's gh status dot — no payload; never throws for a gh failure itself. */
+  'gh:status': {
+    request: void
+    response: GhStatus
+  }
+  /** The Backlog screen's own read — open issues carrying no vocabulary label. */
+  'backlog:list': {
+    request: { repoId: RepoId }
+    response: BacklogResponse
+  }
+  /** The Settings screen's own read of an operator's persisted session defaults. */
+  'session:defaults': {
+    request: void
+    response: SessionDefaults
+  }
+  /** The Settings screen's own write; `model`/`permissionMode` must each name an allowlisted value. */
+  'session:defaults:set': {
+    request: SessionDefaults
+    response: SessionDefaults
+  }
+  /** The rename dialog's own write; the title changes only after the on-disk rename lands. */
+  'session:rename': {
+    request: { sessionKey: SessionKey; title: string }
+    response: SessionRenameResult
+  }
 }
 
 export const IPC_CHANNELS = [
@@ -355,6 +384,11 @@ export const IPC_CHANNELS = [
   'session:restore:list',
   'session:restore',
   'session:restore:discard',
+  'gh:status',
+  'backlog:list',
+  'session:defaults',
+  'session:defaults:set',
+  'session:rename',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]

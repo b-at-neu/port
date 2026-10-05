@@ -22,6 +22,8 @@ export const QUERY_CHANNELS = [
   'session:list',
   'session:capacity',
   'session:restore:list',
+  'gh:status',
+  'session:defaults',
 ] as const
 
 export type QueryChannel = (typeof QUERY_CHANNELS)[number]
@@ -57,6 +59,9 @@ export const MUTATION_CHANNELS = [
   'session:capacity:set',
   'session:restore',
   'session:restore:discard',
+  'backlog:list',
+  'session:defaults:set',
+  'session:rename',
 ] as const
 
 export type MutationChannel = (typeof MUTATION_CHANNELS)[number]

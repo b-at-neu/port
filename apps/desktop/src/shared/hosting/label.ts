@@ -32,11 +32,15 @@ export interface SessionLabelInput {
   readonly origin: SessionOrigin
 }
 
+// A session's own display title, with no repo label in front of it.
+export function sessionTitle(session: SessionLabelInput): string {
+  return session.title ?? fallbackLabel(session.origin)
+}
+
 /** `<repo> · <title>` — the one label function every consumer of a hosted
  *  session's display name imports, rather than assembling its own version. */
 export function sessionDisplayLabel(session: SessionLabelInput, repoLabel: string): string {
-  const title = session.title ?? fallbackLabel(session.origin)
-  return `${repoLabel} · ${title}`
+  return `${repoLabel} · ${sessionTitle(session)}`
 }
 
 /** `14:02` for a `startedAt` that falls on the same calendar day as `now`,
