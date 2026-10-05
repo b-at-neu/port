@@ -1,10 +1,4 @@
-// fetchBacklog — the Backlog screen's one round trip (#365): every open
-// issue, dropping anything carrying a vocabulary label. Follows `gate.ts`'s
-// own shape (`parseEnvelope`/`classifyFailure`, never GraphQL's index-backed
-// text lookup or a result-side gh filter flag — `query.ts`'s own Decision 2
-// applies here too: that lookup carries ingestion lag, so a label applied
-// seconds ago would not be excluded yet; `repository.issues` is
-// read-your-writes consistent).
+// fetchBacklog: every open issue, dropping anything carrying a vocabulary label.
 import { gh as defaultGh } from '../platform/gh'
 import type { GhOptions, GhResult } from '../platform/gh'
 import type { LabelVocabulary } from '../../shared/labels/vocabulary'
@@ -51,18 +45,7 @@ export interface FetchBacklogParams {
   readonly now?: () => Date
 }
 
-/**
- * One `gh api graphql` round trip returning every open issue, newest-updated
- * first, alongside the signed-in account's own login. Any issue carrying a
- * label name in `vocabulary.labels` (the marker or any stage label) is
- * dropped — the pipeline already owns it. `scanned` counts every node
- * actually returned, `total` the connection's own `totalCount`; the two
- * diverging means the page was truncated, reported rather than silently
- * hidden (`total > scanned` renders as truncated, never as complete). A
- * viewer-query error leaves `viewer: null` and is never itself a failure —
- * unlike `fetchClaimPreflight`'s own `viewer.login`, nothing here depends on
- * knowing who "me" is.
- */
+// `scanned`/`total` diverging means the page was truncated; a viewer-query error is never itself a failure.
 export async function fetchBacklog(params: FetchBacklogParams): Promise<BacklogResponse> {
   const runner = params.gh ?? defaultGh
   const now = params.now ?? (() => new Date())

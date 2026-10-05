@@ -1,6 +1,4 @@
-// `'backlog:list'`'s composition (#365): registry lookup, then the one
-// round trip `fetchBacklog` makes — the same `resolveWorktreesReport`
-// id/ready rail every other channel here already applies.
+// `'backlog:list'`'s composition: registry lookup, then the one round trip `fetchBacklog` makes.
 import type { BacklogResponse } from '../../shared/backlog/types'
 import type { IpcMap } from '../../shared/ipc'
 import { fetchBacklog } from '../github'
@@ -14,10 +12,7 @@ export interface BacklogListDeps {
 
 export const defaultBacklogListDeps: BacklogListDeps = { listRepositories, fetchBacklog }
 
-/** `repoId` must name a registered, `ready` repository — otherwise this
- *  throws, matching the stale-renderer rail every channel uses. The repo ref
- *  and vocabulary both come from that entry's own resolved config, never a
- *  second config read. */
+// `repoId` must name a registered, `ready` repository; the repo ref and vocabulary come from its own config.
 export async function resolveBacklogList(
   registryDeps: RegistryDeps,
   request: IpcMap['backlog:list']['request'],

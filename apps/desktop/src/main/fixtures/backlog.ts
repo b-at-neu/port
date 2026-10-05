@@ -1,7 +1,4 @@
-// Fixture mode's own canned backlog (#365) — one populated scenario for
-// `acme/widgets`, the same single-scenario rule `board.ts` already follows.
-// Every timestamp is `now` minus a fixed offset, so "3h ago"/"1d ago" render
-// the same on every run, never "just now".
+// Fixture mode's own canned backlog: one populated scenario for `acme/widgets`.
 import type { BacklogResponse } from '../../shared/backlog/types'
 import type { RepoId } from '../../shared/repos'
 import { WIDGETS_ID } from './repos'
@@ -12,9 +9,7 @@ function offsetHours(now: Date, hours: number): string {
   return new Date(now.getTime() - hours * 60 * 60_000).toISOString()
 }
 
-/** Only `acme/widgets` carries canned backlog items — any other registered
- *  repository id (including `acme/legacy-site`) gets an empty, ok result,
- *  since nothing in this ticket's scope gives it its own scenario. */
+// Any other registered repository id gets an empty, ok result.
 export function fixtureBacklog(now: Date, repoId: RepoId): BacklogResponse {
   if (repoId !== WIDGETS_ID) {
     return { ok: true, items: [], scanned: 0, total: 0, viewer: VIEWER, fetchedAt: now.toISOString() }

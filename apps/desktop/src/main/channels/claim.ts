@@ -1,15 +1,12 @@
-// `'claim:preflight'`/`'claim:apply'`'s own validation — moved out of
-// `main/ipc.ts` verbatim (#365), the same split every other topic there
-// already follows.
+// `'claim:preflight'`/`'claim:apply'`'s own validation, the same per-topic
+// split every other channel here follows.
 import { PLAN_GATE_CHOICES } from '../../shared/claim/types'
 import type { IpcMap } from '../../shared/ipc'
 import { claimApply, claimPreflight, defaultClaimDeps } from '../claim'
 import type { ClaimDeps } from '../claim'
 import type { RegistryDeps } from '../registry'
 
-/** `'claim:preflight'`'s validation: `repoId` must name a currently
- *  registered repository (the same rail `resolveWorktreesReport` already
- *  applies) and `number` a positive integer. */
+// `repoId` must name a currently registered repository, `number` a positive integer.
 export async function resolveClaimPreflight(
   registryDeps: RegistryDeps,
   request: IpcMap['claim:preflight']['request'],
@@ -24,12 +21,7 @@ export async function resolveClaimPreflight(
   return claimPreflight({ registryDeps, repoId: request.repoId, number: request.number }, deps)
 }
 
-/** `'claim:apply'`'s validation — the same `repoId`/`number` rail
- *  `resolveClaimPreflight` applies, plus `planGate` restricted to
- *  `PLAN_GATE_CHOICES` and `confirmedAssignees` restricted to an array of
- *  strings: everything a human or the renderer's own state could get wrong
- *  is a thrown error here, never a value `claimApply` has to defend against
- *  (#72's rule). */
+// The same `repoId`/`number` rail, plus `planGate`/`confirmedAssignees` shape checks.
 export async function resolveClaimApply(
   registryDeps: RegistryDeps,
   request: IpcMap['claim:apply']['request'],
