@@ -8,7 +8,6 @@
 // all — the CLI loads `port@port` from `enabledPlugins` exactly as it does
 // today.
 import { listDirectory, readJsonFile } from '../platform/files'
-import type { PathOps } from '../platform/paths'
 import { pathOps } from '../platform/paths'
 import type { PluginRequest } from '../../shared/hosting/types'
 
@@ -18,10 +17,9 @@ export interface PluginManifest {
 
 export interface ResolvePluginRequestDeps {
   readonly readJsonFile: typeof readJsonFile
-  readonly join: PathOps['join']
 }
 
-export const defaultResolvePluginRequestDeps: ResolvePluginRequestDeps = { readJsonFile, join: (base, ...segments) => pathOps.join(base, ...segments) }
+export const defaultResolvePluginRequestDeps: ResolvePluginRequestDeps = { readJsonFile }
 
 /** `repoRoot` is the ready registry entry's own path — never re-derived or
  *  second-guessed. `not-found`, or a readable manifest naming anything but
@@ -31,8 +29,8 @@ export const defaultResolvePluginRequestDeps: ResolvePluginRequestDeps = { readJ
  *  back to a different plugin than the one this repository actually
  *  declares. */
 export async function resolvePluginRequest(repoRoot: string, deps: ResolvePluginRequestDeps = defaultResolvePluginRequestDeps): Promise<PluginRequest> {
-  const pluginPath = deps.join(repoRoot, 'plugins', 'port')
-  const manifestPath = deps.join(pluginPath, '.claude-plugin', 'plugin.json')
+  const pluginPath = pathOps.join(repoRoot, 'plugins', 'port')
+  const manifestPath = pathOps.join(pluginPath, '.claude-plugin', 'plugin.json')
   const result = await deps.readJsonFile<PluginManifest>(manifestPath)
   if (!result.ok) {
     if (result.kind === 'not-found') return { source: 'installed' }
@@ -49,10 +47,9 @@ export interface ExpectedComponents {
 
 export interface ReadExpectedComponentsDeps {
   readonly listDirectory: typeof listDirectory
-  readonly join: PathOps['join']
 }
 
-export const defaultReadExpectedComponentsDeps: ReadExpectedComponentsDeps = { listDirectory, join: (base, ...segments) => pathOps.join(base, ...segments) }
+export const defaultReadExpectedComponentsDeps: ReadExpectedComponentsDeps = { listDirectory }
 
 const MARKDOWN_EXTENSION = '.md'
 
@@ -61,7 +58,7 @@ const MARKDOWN_EXTENSION = '.md'
  *  direction, ENGINEERING §4). Skills are directory names under `skills/`;
  *  agents are `.md` basenames under `agents/`, extension dropped. */
 export async function readExpectedComponents(pluginPath: string, deps: ReadExpectedComponentsDeps = defaultReadExpectedComponentsDeps): Promise<ExpectedComponents | null> {
-  const [skillsResult, agentsResult] = await Promise.all([deps.listDirectory(deps.join(pluginPath, 'skills')), deps.listDirectory(deps.join(pluginPath, 'agents'))])
+  const [skillsResult, agentsResult] = await Promise.all([deps.listDirectory(pathOps.join(pluginPath, 'skills')), deps.listDirectory(pathOps.join(pluginPath, 'agents'))])
   if (!skillsResult.ok || !agentsResult.ok) return null
   const skills = skillsResult.value.filter((entry) => entry.kind === 'directory').map((entry) => entry.name)
   const agents = agentsResult.value.filter((entry) => entry.kind === 'file' && entry.name.endsWith(MARKDOWN_EXTENSION)).map((entry) => entry.name.slice(0, -MARKDOWN_EXTENSION.length))

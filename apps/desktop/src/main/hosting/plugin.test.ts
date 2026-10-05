@@ -5,7 +5,7 @@ import { pathOps } from '../platform/paths'
 import type { DirEntry, FileResult } from '../platform/files'
 
 function jsonDeps(result: FileResult<unknown>): ResolvePluginRequestDeps {
-  return { readJsonFile: () => Promise.resolve(result as never), join: (base, ...segments) => pathOps.join(base, ...segments) }
+  return { readJsonFile: () => Promise.resolve(result as never) }
 }
 
 describe('resolvePluginRequest', () => {
@@ -37,7 +37,6 @@ describe('resolvePluginRequest', () => {
 
 function dirDeps(skills: FileResult<readonly DirEntry[]>, agents: FileResult<readonly DirEntry[]>): ReadExpectedComponentsDeps {
   return {
-    join: (base, ...segments) => pathOps.join(base, ...segments),
     listDirectory: (path: string) => Promise.resolve(path.endsWith('skills') ? skills : agents),
   }
 }
