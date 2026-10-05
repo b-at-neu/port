@@ -36,11 +36,15 @@ test('packaged app launches, mounts and quits cleanly', async () => {
     })
 
     try {
-      const page = await app.firstWindow()
-      page.on('pageerror', (error: Error) => errors.push(error.message))
-      page.on('console', (message: ConsoleMessage) => {
-        if (message.type() === 'error') errors.push(message.text())
+      // Bind on the 'window' event, not after `firstWindow()` resolves — the latter awaits the
+      // page's load state first, so an error thrown during that very early load would be missed.
+      app.on('window', (window) => {
+        window.on('pageerror', (error: Error) => errors.push(error.message))
+        window.on('console', (message: ConsoleMessage) => {
+          if (message.type() === 'error') errors.push(message.text())
+        })
       })
+      const page = await app.firstWindow()
 
       // `#app` is the always-present shell element, unlike `#react-root`, which stays hidden until a React-only screen mounts.
       await page.locator('#app').waitFor({ state: 'visible', timeout: WAIT_TIMEOUT_MS })
