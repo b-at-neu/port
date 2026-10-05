@@ -111,8 +111,8 @@ export default async function ({ fail, ok }: Reporter) {
   }
 
   // --- Joining section precedes the adopter section and never says to run ----
-  // --- `/port:init` (#342) -----------------------------------------------------
-  // guard(#342): the joining section's heading dropping out, or the
+  // --- `/port:init` -------------------------------------------------------------
+  // guard: the joining section's heading dropping out, or the
   // adopter-facing install section silently moving ahead of it again, routing
   // a joining teammate through `/port:init` with nothing telling them not to.
   {
