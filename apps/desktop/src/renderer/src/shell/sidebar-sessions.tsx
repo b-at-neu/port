@@ -1,6 +1,4 @@
-// DESIGN §3's "Your sessions" section — live sessions, New session, History…
-// (#316). Selecting or starting a session delegates to `session/controller.ts`,
-// since the legacy Session screen still owns the live conversation itself.
+// "Your sessions" — selecting or starting one delegates to session/controller.ts.
 import { useState } from 'react'
 import { History, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'

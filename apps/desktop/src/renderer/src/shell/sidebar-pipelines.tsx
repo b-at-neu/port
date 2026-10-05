@@ -1,6 +1,4 @@
-// DESIGN §3's Pipelines section — one collapsible row per registered repo,
-// its run-state `StatusPillMenu`, and its live stage sessions nested under
-// it (#316). No `useEffect`: every read goes through `useIpcQuery`.
+// The Pipelines section — one collapsible row per repo, its run-state menu, its nested sessions.
 import { useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { ChevronDown, ChevronRight } from 'lucide-react'

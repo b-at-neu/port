@@ -1,5 +1,4 @@
-// DESIGN §3's sidebar frame — expanded (248px) or a 48px collapsed rail,
-// remembered across launches (#316).
+// The sidebar frame — expanded (248px) or a 48px collapsed rail.
 import { Link } from '@tanstack/react-router'
 import { useSidebarCollapsed, toggleSidebarCollapsed } from './stores'
 import { FolderGit2, Inbox, LayoutList, ListTodo, PanelLeftClose, PanelLeftOpen, Settings } from 'lucide-react'

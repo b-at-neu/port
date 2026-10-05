@@ -1,5 +1,4 @@
-// DESIGN §4: a consequential action opens an `AlertDialog` — the pause
-// pipeline confirmation, only shown while in-flight is above 0 (#316).
+// The pause-pipeline confirmation — shown only while in-flight is above 0.
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { usePauseRequest, setPauseRequest } from './stores'
 import { useRunStateCommand } from './run-state-command'

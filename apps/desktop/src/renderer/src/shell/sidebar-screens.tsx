@@ -1,5 +1,4 @@
-// DESIGN §3's Screens section — Needs you (amber count), Board, Backlog,
-// Repositories (#316).
+// The Screens section — Needs you (amber count), Board, Backlog, Repositories.
 import { Link } from '@tanstack/react-router'
 import { FolderGit2, Inbox, LayoutList, ListTodo } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'

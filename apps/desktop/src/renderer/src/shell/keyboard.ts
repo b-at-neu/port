@@ -1,7 +1,5 @@
-// DESIGN §3's keyboard map (#316) — one module-level `keydown` listener, no
-// `useEffect`. `resolveKey` is pure and unit-testable against a plain
-// `KeyboardContext`; `installKeyboardMap` is the one place that wires its
-// result to real effects.
+// One module-level `keydown` listener, no `useEffect`. `resolveKey` is pure;
+// `installKeyboardMap` wires its result to real effects.
 import type { RepoId } from '../../../shared/repos'
 import type { SessionKey } from '../../../shared/hosting/types'
 
@@ -24,12 +22,7 @@ export type KeyboardAction =
 
 const DIGIT_RE = /^[1-9]$/
 
-/** Pure: never touches `event.preventDefault` or any store. `J`/`K`/`Enter`
- *  (list navigation) and `F2` (rename) resolve only when no editable
- *  element has focus and no dialog is open — the composer and every text
- *  field must keep those keys as ordinary input. The mod-chorded bindings
- *  (`Ctrl/Cmd+…`) resolve regardless, since a modifier key is never ordinary
- *  text input. */
+/** Pure. Bare `J`/`K`/`Enter`/`F2` resolve only outside editable focus and a dialog; mod-chorded keys always resolve. */
 export function resolveKey(key: string, ctx: KeyboardContext): KeyboardAction | null {
   if (ctx.mod && key.toLowerCase() === 'k') return { kind: 'palette' }
   if (ctx.mod && key.toLowerCase() === 'n') return { kind: 'new-session' }

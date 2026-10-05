@@ -1,5 +1,4 @@
-// The one React root (#316) — sidebar, the route `<Outlet/>` portaled into
-// `#react-root`, the command palette, the pause dialog, and the toaster.
+// The one React root — sidebar, the portaled route, the palette, the pause dialog, the toaster.
 import { Outlet } from '@tanstack/react-router'
 import { createPortal } from 'react-dom'
 import { Sidebar } from './sidebar'

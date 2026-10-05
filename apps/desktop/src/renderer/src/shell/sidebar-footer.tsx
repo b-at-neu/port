@@ -1,5 +1,4 @@
-// DESIGN §3's footer — Settings, plus the `claude`/`gh` status dot (#316,
-// replacing the deleted `runtime.ts` strip).
+// The sidebar footer — Settings, plus the claude/gh status dot.
 import { Link } from '@tanstack/react-router'
 import { Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'

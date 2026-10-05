@@ -1,5 +1,4 @@
-// DESIGN §3's command palette (Ctrl/Cmd+K) — Go to, Sessions, Pipelines,
-// Tickets, View (#316).
+// The command palette (Ctrl/Cmd+K) — Go to, Sessions, Pipelines, Tickets, View.
 import { useNavigate } from '@tanstack/react-router'
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut } from '@/components/ui/command'
 import { needsYouItems } from '../../../shared/board/needs-you'
