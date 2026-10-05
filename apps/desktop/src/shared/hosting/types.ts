@@ -386,7 +386,7 @@ export type SessionRestoreResult =
  *  idempotent by design. */
 export type SessionRestoreDiscardResult = { readonly ok: true }
 
-// The model aliases an operator's session default may name, the same alias style DISPATCHER_MODEL uses.
+// The model aliases an operator's session default may name.
 export const SESSION_MODELS = ['opus', 'sonnet', 'haiku'] as const
 
 export type SessionModel = (typeof SESSION_MODELS)[number]
