@@ -420,20 +420,17 @@ export type SessionRestoreResult =
  *  idempotent by design. */
 export type SessionRestoreDiscardResult = { readonly ok: true }
 
-// The model aliases an operator's session default may name — the same alias
-// style DISPATCHER_MODEL already uses, never a dated model id.
+// The model aliases an operator's session default may name, the same alias style DISPATCHER_MODEL uses.
 export const SESSION_MODELS = ['opus', 'sonnet', 'haiku'] as const
 
 export type SessionModel = (typeof SESSION_MODELS)[number]
 
-// The exact permissionMode allowlist for an operator session — bypass,
-// dontAsk, and auto stay unreachable through this type.
+// The exact permissionMode allowlist for an operator session — bypass, dontAsk, and auto are unreachable.
 export const SESSION_PERMISSION_MODES = ['default', 'acceptEdits', 'plan'] as const
 
 export type SessionPermissionMode = (typeof SESSION_PERMISSION_MODES)[number]
 
-// An operator's persisted session defaults. `model: null` means Claude
-// Code's own default, never a stand-in for any one alias.
+// An operator's persisted session defaults; `model: null` means Claude Code's own default.
 export interface SessionDefaults {
   readonly model: SessionModel | null
   readonly permissionMode: SessionPermissionMode
@@ -444,6 +441,5 @@ export const DEFAULT_SESSION_DEFAULTS: SessionDefaults = { model: null, permissi
 // A session's rename title ceiling, once trimmed.
 export const SESSION_TITLE_MAX = 80
 
-// `not-ready` is a handle with no claudeSessionId yet; the title changes
-// only after the on-disk rename lands.
+// `not-ready` is a handle with no claudeSessionId yet; the title changes only after the rename lands.
 export type SessionRenameResult = { readonly ok: true } | { readonly ok: false; readonly kind: 'unknown-session' | 'not-ready' } | { readonly ok: false; readonly kind: 'rename-failed'; readonly message: string }

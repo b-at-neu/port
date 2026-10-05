@@ -1,6 +1,4 @@
-// The pure "Needs you" derivation — the sidebar count and the dedicated
-// screen both consume it unchanged. No import here may reach a Node
-// builtin or src/main/.
+// Pure "needs you" derivation — no import here may reach a Node builtin or src/main/.
 import type { RepoId } from '../repos'
 import type { RepositoryState } from '../state/types'
 import { stageLabelOf } from './project'
