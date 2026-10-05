@@ -49,6 +49,13 @@ export interface CreatePipelineWatcherParams {
    *  board without a restart. */
   readonly repositories: readonly RepositoryEntry[] | (() => Promise<readonly RepositoryEntry[]>)
   readonly onSnapshot: (snapshot: BoardSnapshot) => void
+  /** #326: fired right after `buildSnapshot()` on the timer path and in
+   *  `refresh()` — never in `republish()`, so a dispatch pass considers
+   *  every *fresh* snapshot (a real poll) and never re-triggers itself off
+   *  its own state change. This is the one fix that collapses the old
+   *  "every pass ends with onChange → republish() → consider() again" loop
+   *  into a single clock. */
+  readonly onTick?: (snapshot: BoardSnapshot) => void
   readonly gh?: GhRunner
   readonly git?: GitRunner
   readonly sessionReader?: Parameters<typeof readSessionState>[0]['reader']
@@ -353,7 +360,9 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     const delay = Math.max(0, earliestDueAt().getTime() - now().getTime())
     timer = setTimer(() => {
       void tick().then(() => {
-        params.onSnapshot(buildSnapshot())
+        const snap = buildSnapshot()
+        params.onSnapshot(snap)
+        params.onTick?.(snap)
         scheduleNext()
       })
     }, delay)
@@ -367,6 +376,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       await tick(request)
       const snap = buildSnapshot()
       params.onSnapshot(snap)
+      params.onTick?.(snap)
       scheduleNext()
       return snap
     },

@@ -5,6 +5,9 @@ import { registerFixtureIpc } from './fixtures'
 import { fixtureMode } from './fixtures/mode'
 import type { PipelineWatcher } from './state'
 import type { HostedStore } from './hosting'
+import { createQuitGuard } from './dispatch'
+import type { Dispatcher } from './dispatch'
+import { confirmQuit } from './dialogs'
 import { applyNavigationGuards } from './navigation'
 
 // A dev-only `pnpm install` never runs as root, so the SUID sandbox helper
@@ -40,6 +43,8 @@ if (fixture.kind === 'invalid') {
     let mainWindow: BrowserWindow | null = null
     let watcher: PipelineWatcher | null = null
     let hostedStore: HostedStore | null = null
+    let dispatcher: Dispatcher | null = null
+    let shutdownDispatch: (() => void) | null = null
 
     app.on('second-instance', () => {
       if (!mainWindow) return
@@ -67,6 +72,16 @@ if (fixture.kind === 'invalid') {
 
       applyNavigationGuards(window.webContents)
 
+      // #326: on Windows/Linux, closing the last window quits the app — the
+      // same quit guard `before-quit` uses, so closing the window prompts
+      // exactly like quitting does. On macOS, closing the window never
+      // quits the app (the dock-icon convention), so this never applies.
+      if (process.platform !== 'darwin') {
+        window.on('close', (event) => {
+          if (quitGuard.intercept(() => event.preventDefault())) return
+        })
+      }
+
       window.on('ready-to-show', () => {
         window.show()
       })
@@ -93,12 +108,23 @@ if (fixture.kind === 'invalid') {
         const registered = registerIpc()
         watcher = registered.watcher
         hostedStore = registered.hostedStore
+        dispatcher = registered.dispatcher
+        shutdownDispatch = registered.shutdownDispatch
       }
       createWindow()
 
       app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) createWindow()
       })
+    })
+
+    // #326: the quit warning — intercepts `before-quit` and (off darwin)
+    // the main window's own `close` while any stage session is still live,
+    // naming each one before the operator confirms.
+    const quitGuard = createQuitGuard({
+      sessions: () => dispatcher?.liveStageSessions() ?? [],
+      confirm: (copy) => confirmQuit(mainWindow, copy),
+      quit: () => app.quit(),
     })
 
     app.on('window-all-closed', () => {
@@ -108,8 +134,13 @@ if (fixture.kind === 'invalid') {
     // Stop the watcher's timer and close every hosted session on quit, so a
     // closing app leaves no `gh`/`git` spawn (#80) or `claude` child (#98)
     // behind — `before-quit` fires on every platform, unlike
-    // `window-all-closed`, which macOS's dock-icon convention skips.
-    app.on('before-quit', () => {
+    // `window-all-closed`, which macOS's dock-icon convention skips. The
+    // quit guard runs first: `intercept` prevents the default when it needs
+    // to prompt, and the real shutdown sequence below runs only once that
+    // resolves (or there was nothing to guard).
+    app.on('before-quit', (event) => {
+      if (quitGuard.intercept(() => event.preventDefault())) return
+      shutdownDispatch?.()
       watcher?.stop()
       void hostedStore?.closeAll()
     })

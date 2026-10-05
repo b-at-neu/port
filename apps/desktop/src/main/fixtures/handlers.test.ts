@@ -19,7 +19,6 @@ const SAMPLE_REQUESTS: Partial<Record<IpcChannel, unknown>> = {
   'item:action': { repoId: 'fixture-acme-widgets', kind: 'issue', number: 44, action: 'retry', expectedStage: null },
   'dispatch:control': { command: 'drain' },
   'dispatch:claim:set': { repoId: 'fixture-acme-widgets', held: true },
-  'dispatch:relay': { repoId: 'fixture-acme-widgets', agentId: 'fixture-agent', text: 'hello' },
   'runtime:probe': { repoId: 'fixture-acme-widgets' },
   'gate:preflight': { repoId: 'fixture-acme-widgets', number: 41 },
   'gate:claim:read': { repoId: 'fixture-acme-widgets' },

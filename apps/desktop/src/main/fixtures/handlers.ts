@@ -28,7 +28,7 @@ function transcriptSourceFor(sessionId: string, agentId: string | null, now: Dat
 }
 
 function idleDispatchStatus(repoId: RepoId): RepoDispatchStatus {
-  return { repoId, owner: 'cockpit', state: { kind: 'idle' }, runState: 'dispatching', claudeSessionId: null, claimedAt: null, budget: null, observed: [] }
+  return { repoId, owner: 'cockpit', state: { kind: 'idle' }, runState: 'dispatching', claimedAt: null, budget: null, observed: [] }
 }
 
 export function fixtureHandlers(now: Date): FixtureHandlers {
@@ -101,7 +101,6 @@ export function fixtureHandlers(now: Date): FixtureHandlers {
       return { ok: true, command: 'pause', repoId: request.repoId, runState, report: { kind: 'completed', items: [] } }
     },
     'dispatch:claim:set': (request) => ({ kind: 'ok', status: idleDispatchStatus(request.repoId) }),
-    'dispatch:relay': () => ({ ok: false, kind: 'no-dispatcher' }),
 
     'claim:apply': () => ({ kind: 'refused', verdict: { kind: 'not-found' } }),
 

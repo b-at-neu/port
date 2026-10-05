@@ -10,6 +10,7 @@ import { resolveClaimApply, resolveClaimPreflight } from './channels/claim'
 import { resolveBacklogList } from './channels/backlog'
 import { resolveGhStatus } from './channels/gh'
 import { createDispatchRuntime, createRunStateStore, defaultHaltDispatchDeps, haltDispatch, registeredRepoIds, resolveDispatchClaimSet, resolveDispatchControl, resolveDispatchRelay } from './dispatch'
+import type { Dispatcher } from './dispatch'
 import { fetchItemsByNumber } from './github'
 import { readGateClaim } from './writes'
 import { resolveGateAnswer, resolveGateClaimRead, resolveGateClaimSet, resolveGatePreflight } from './channels/gate'
@@ -17,7 +18,7 @@ import type { GateChannelDeps } from './channels/gate'
 import { resolveItemAction, resolveItemDecision } from './channels/items'
 import type { ItemDecisionDeps } from './channels/items'
 import { resolveRuntimeProbe } from './channels/runtime'
-import { copyRelayReply, MAX_REPLY_CHARS } from './relay'
+import { copyRelayReply } from './relay'
 import { resolveSearchQuery, resolveSessionsScan, resolveTranscriptRead, resolveTranscriptTailClose, resolveTranscriptTailOpen, resolveTranscriptTailPoll } from './channels/sessions'
 import {
   defaultHostingChannelDeps,
@@ -161,6 +162,8 @@ export async function resolveBoardRefresh(
 export interface RegisteredIpc {
   readonly watcher: PipelineWatcher
   readonly hostedStore: HostedStore
+  readonly dispatcher: Dispatcher
+  readonly shutdownDispatch: () => void
 }
 
 export function registerIpc(): RegisteredIpc {
@@ -247,10 +250,13 @@ export function registerIpc(): RegisteredIpc {
   })
   const hostingChannelDeps = defaultHostingChannelDeps(hostedStore)
 
-  // #265: the ledger, streak memo, and dispatcher, bundled — see
-  // `main/dispatch/runtime.ts` for why `bindWatcher` exists.
-  const { watcherDeps, dispatcher, bindWatcher } = createDispatchRuntime({
+  // #326: the ledger, refresh memo, and dispatch loop, bundled — see
+  // `main/dispatch/runtime.ts` for why `bindWatcher` exists. `launch: null`
+  // is the honest state until #327 passes a real `StageLauncher` — a
+  // candidate sits visibly at `no-launcher` rather than silently idle.
+  const { watcherDeps, dispatcher, bindWatcher, shutdown } = createDispatchRuntime({
     store: hostedStore,
+    launch: null,
     runState: (repoId) => runStates.current(repoId).state,
     readGateClaim,
     fetchItemsByNumber,
@@ -261,9 +267,10 @@ export function registerIpc(): RegisteredIpc {
   })
 
   // The board's own clock (#80) — one watcher for the process lifetime,
-  // broadcasting every snapshot over `board:update`. #265: `onSnapshot` also
-  // hands the snapshot to the dispatcher, never awaited — a dispatch pass
-  // must never block the broadcast the renderer is waiting on.
+  // broadcasting every snapshot over `board:update`. #326: `onTick` fires
+  // only on a fresh poll (never on `republish()`), considering the dispatch
+  // loop against it, never awaited — a pass must never block the broadcast
+  // the renderer is waiting on.
   const watcher = createPipelineWatcher({
     repositories: async () => {
       const list = await listRepositories(registryDeps)
@@ -274,6 +281,8 @@ export function registerIpc(): RegisteredIpc {
     ...watcherDeps,
     onSnapshot: (snapshot) => {
       broadcast('board:update', snapshot)
+    },
+    onTick: (snapshot) => {
       void dispatcher.consider(snapshot)
     },
   })
@@ -330,11 +339,10 @@ export function registerIpc(): RegisteredIpc {
     }),
   )
 
-  // #265: the dispatch claim take/release and the "Send to agent" relay —
-  // both delegate to the one dispatcher instance above.
+  // #265: the dispatch claim take/release — delegates to the one dispatcher
+  // instance above. #326: 'dispatch:relay' is removed along with the hosted
+  // dispatcher session it relayed through.
   handle('dispatch:claim:set', (_event, request) => resolveDispatchClaimSet(registryDeps, request, { listRepositories, dispatcher, refresh: watcher.refresh, now: () => new Date() }))
-
-  handle('dispatch:relay', (_event, request) => resolveDispatchRelay(registryDeps, request, { listRepositories, dispatcher, maxReplyChars: MAX_REPLY_CHARS }))
 
   handle('runtime:preflight', (_event, request) => {
     if (request !== undefined) throw new Error("'runtime:preflight' takes no payload")
@@ -396,5 +404,5 @@ export function registerIpc(): RegisteredIpc {
     }
   }
 
-  return { watcher, hostedStore }
+  return { watcher, hostedStore, dispatcher, shutdownDispatch: shutdown }
 }
