@@ -22,9 +22,9 @@ function RunStateMenu({ row }: { readonly row: Extract<PipelineRow, { readonly r
       label={row.pill.label}
       pending={runState.pending}
       items={[
-        { key: 'run', label: 'Run', hint: 'start dispatching', current: row.pill.label === 'Running', disabledReason: null, onSelect: () => runState.run(row.repoId, row.name) },
-        { key: 'drain', label: 'Drain', hint: 'finish in-flight', current: row.pill.label === 'Draining', disabledReason: null, onSelect: () => runState.drain(row.repoId, row.name) },
-        { key: 'pause', label: 'Pause', hint: 'stop now', current: row.pill.label === 'Paused', disabledReason: null, onSelect: () => runState.requestPause(row.repoId, row.name, row.inFlight) },
+        { key: 'run', label: 'Run', hint: 'start dispatching', current: row.pill.label === 'Running', disabledReason: row.pill.label === 'Running' ? 'Already running' : null, onSelect: () => runState.run(row.repoId, row.name) },
+        { key: 'drain', label: 'Drain', hint: 'finish in-flight', current: row.pill.label === 'Draining', disabledReason: row.pill.label === 'Draining' ? 'Already draining' : null, onSelect: () => runState.drain(row.repoId, row.name) },
+        { key: 'pause', label: 'Pause', hint: 'stop now', current: row.pill.label === 'Paused', disabledReason: row.pill.label === 'Paused' ? 'Already paused' : null, onSelect: () => runState.requestPause(row.repoId, row.name, row.inFlight) },
       ]}
     />
   )

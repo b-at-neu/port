@@ -34,6 +34,8 @@ Components use roles, never values. Tailwind arbitrary colour values (`bg-[#…]
 | `ring` | `#172554` | `#a5b8e3` | Focus ring, selection outline |
 | `selection` | `#eef1f8` | `#121a2e` | The selected row in a list |
 | `brand` | `#172554` | `#172554`, with a 1px `#4b5f8f` border | The mark's tile (§8), never anything else |
+| `brand-foreground` | `#ffffff` | `#ffffff` | The mark's own strokes inside its `brand` tile (§8) — never inverts, since the tile's background does not either |
+| `overlay` | `rgb(0 0 0 / 50%)` | `rgb(0 0 0 / 50%)` | The Dialog/AlertDialog/CommandDialog scrim — dims what is behind it rather than reading as a surface of its own |
 
 **Navy is the brand; blue is a status.** Navy marks what you can act on and port's own identity. Blue appears only as the `working` status below. The two never stand in for each other.
 
