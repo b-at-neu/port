@@ -31,7 +31,7 @@ export interface ThemeStore {
   // `unbound-method` rule see that rather than assume the worst.
   getPreference(this: void): ThemePreference
   setPreference(this: void, preference: ThemePreference): void
-  getResolved(): ResolvedTheme
+  getResolved(this: void): ResolvedTheme
   /** Sets `root.dataset.theme` to the resolved theme. Called once by
    *  `main.ts` before any paint, and again on every preference or OS change. */
   apply(): void

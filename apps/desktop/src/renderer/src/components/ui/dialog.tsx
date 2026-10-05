@@ -27,7 +27,7 @@ export function DialogOverlay({ className, ...props }: ComponentProps<typeof Dia
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        'fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 duration-150 ease-out',
+        'fixed inset-0 z-50 bg-overlay data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 duration-150 ease-out',
         className,
       )}
       {...props}
@@ -54,7 +54,7 @@ export function DialogContent({ className, children, showCloseButton = true, ...
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            className="absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 outline-none disabled:pointer-events-none [&_svg]:size-4"
+            className="absolute top-4 right-4 rounded-xs text-foreground opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 outline-none disabled:pointer-events-none [&_svg]:size-4"
           >
             <XIcon />
             <span className="sr-only">Close</span>
