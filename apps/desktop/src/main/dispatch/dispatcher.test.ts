@@ -5,10 +5,10 @@ import type { BoardSnapshot } from '../../shared/board/types'
 import type { ClaimRead } from '../../shared/writes/types'
 import type { HostedSessionSnapshot, SessionKey } from '../../shared/hosting/types'
 import type { HostedStore } from '../hosting/store'
-import type { TickReport } from '../../shared/tick/types'
+import type { TickActionable, TickReport } from '../../shared/tick/types'
 import type { ReadyEntry } from '../actions/apply'
 import type { StageLaunchRequest, StageLaunchResult, StageLauncher } from './launch'
-import { createDispatcher } from './dispatcher'
+import { createDispatcher, DISPATCH_PROMPT, promptFor, REFRESH_PROMPT } from './dispatcher'
 import type { CreateDispatcherParams } from './dispatcher'
 
 const REPO_ID = 'repo-a' as RepoId
@@ -343,5 +343,19 @@ describe('createDispatcher — shutdown', () => {
     dispatcher.shutdown()
     await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
     expect(dispatcher.status()).toEqual([])
+  })
+})
+
+function promptForActionable(overrides: Partial<TickActionable> = {}): TickActionable {
+  return { number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null, ...overrides }
+}
+
+describe('promptFor', () => {
+  it('uses DISPATCH_PROMPT for an ordinary trigger, filling in the number', () => {
+    expect(promptFor(promptForActionable())).toBe(DISPATCH_PROMPT.replace('<n>', '52'))
+  })
+
+  it('uses REFRESH_PROMPT for a refreshBranch trigger', () => {
+    expect(promptFor(promptForActionable({ trigger: 'refreshBranch', agent: 'revise' }))).toBe(REFRESH_PROMPT.replace('<n>', '52'))
   })
 })
