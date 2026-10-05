@@ -1,9 +1,4 @@
-// Packaged-binary smoke test (#336) — launches the real electron-builder
-// output, never the dev build, with fixtures deliberately off: a packaged
-// build ignores `PORT_FIXTURES` by design (`src/main/fixtures/mode.ts`), so
-// this exercises the app's real (unregistered-repository) startup path.
-// `.mts`, matching the visual harness's own ESM-extension rule
-// (`visual/app.mts`'s header note applies here identically).
+// Packaged-binary smoke test — launches the real electron-builder output, never the dev build, with fixtures deliberately off (a packaged build ignores `PORT_FIXTURES` by design, `src/main/fixtures/mode.ts`).
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -21,9 +16,7 @@ test('packaged app launches, mounts and quits cleanly', async () => {
   const executablePath = packagedExecutable()
   const userDataDir = await mkdtemp(join(tmpdir(), 'port-smoke-'))
 
-  // `process.env` minus the fixture flags plus two dev-only variables a CI
-  // runner's own environment could otherwise leak in — the run must not
-  // depend on anything but the packaged binary itself.
+  // The run must not depend on anything but the packaged binary itself.
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries(process.env)) {
     if (value !== undefined) env[key] = value
@@ -49,9 +42,7 @@ test('packaged app launches, mounts and quits cleanly', async () => {
         if (message.type() === 'error') errors.push(message.text())
       })
 
-      // `#app` is the always-present shell element (`index.html`) — present
-      // whatever the live data state is, unlike `#react-root`, which stays
-      // hidden until a React-only screen mounts.
+      // `#app` is the always-present shell element, unlike `#react-root`, which stays hidden until a React-only screen mounts.
       await page.locator('#app').waitFor({ state: 'visible', timeout: WAIT_TIMEOUT_MS })
 
       const isPackaged = await app.evaluate(({ app: electronApp }) => electronApp.isPackaged)

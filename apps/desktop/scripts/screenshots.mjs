@@ -55,9 +55,7 @@ async function main() {
     process.exit(code)
   }
 
-  // `smoke:packaged` forwards its own `--config`, reusing this runner for a
-  // spec that produces no screenshot directory at all — the listing below
-  // is the visual harness's own report, not this script's.
+  // `smoke:packaged` forwards its own `--config` and produces no screenshot directory — nothing to list.
   if (forwardedArgs.includes('--config')) return
 
   const outDir = join(appRoot, 'out', 'screenshots')

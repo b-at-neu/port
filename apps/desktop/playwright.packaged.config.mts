@@ -1,6 +1,4 @@
-// The packaged-binary smoke harness's own Playwright config (#336) — a
-// separate config from `playwright.config.mts` so `pnpm screenshots` never
-// picks up `smoke/packaged.spec.mts`, and vice versa.
+// The packaged-binary smoke harness's own Playwright config — a separate config from `playwright.config.mts` so `pnpm screenshots` never picks up `smoke/packaged.spec.mts`, and vice versa.
 import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
