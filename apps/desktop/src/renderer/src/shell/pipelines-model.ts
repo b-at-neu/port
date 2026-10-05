@@ -8,8 +8,7 @@ import type { BoardSnapshot } from '../../../shared/board/types'
 import type { ReconciledItem } from '../../../shared/state/types'
 import { needsYouItems, repoNeedsYou } from '../../../shared/board/needs-you'
 import { PHASE_NAMES } from '../lib/phase'
-
-export type PillStatus = 'success' | 'attention' | 'idle' | 'danger'
+import type { PillStatus } from '../components/status-pill'
 
 export interface PipelineSessionRow {
   readonly key: string
