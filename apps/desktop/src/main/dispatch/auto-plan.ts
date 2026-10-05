@@ -1,9 +1,4 @@
-// #313: the auto-plan swap's own snapshot consumer — honours the cockpit's
-// unprompted `autoPlan` swap while this app holds the `plan-gate` claim
-// instead of `dispatch`. `main/ipc.ts`'s `onSnapshot` is the one caller,
-// mirroring the dispatcher's own `onTick` wiring but gated on a different
-// claim scope: the planner needs only `plan-gate`, never `dispatch`, so it
-// lives beside the dispatcher rather than inside it.
+// Honours the cockpit's unprompted `autoPlan` swap while this app holds the `plan-gate` claim, not `dispatch`.
 import type { BoardSnapshot } from '../../shared/board/types'
 import type { RunState } from '../../shared/dispatch/types'
 import type { RepoId } from '../../shared/repos'
@@ -20,9 +15,7 @@ export interface AutoPlannerDeps {
   readonly listRepositories: typeof defaultListRepositories
   readonly registryDeps: RegistryDeps
   readonly readGateClaim: (params: ReadGateClaimParams) => Promise<ClaimRead>
-  /** This repository's own persisted run state — the same per-repository
-   *  source `main/dispatch/dispatcher.ts`'s own `CreateDispatcherParams.runState`
-   *  reads, never a second store. */
+  /** The same per-repository run state `main/dispatch/dispatcher.ts` reads, never a second store. */
   readonly runState: (repoId: RepoId) => RunState
   readonly autoApprove: (params: AutoApprovePlanParams) => Promise<WriteOutcome>
   readonly auditDir: string
@@ -35,10 +28,7 @@ export interface AutoPlanner {
 
 export function createAutoPlanner(deps: AutoPlannerDeps): AutoPlanner {
   const inFlight = new Set<RepoId>()
-  // `(repoId, number) -> at` the last write this process attempted, so a
-  // snapshot the GitHub read has not caught up to yet never re-fires the
-  // same write — the same guard `observe-pass.ts` uses for the four
-  // machine-observation families.
+  // `(repoId, number) -> at` the last write attempted, so a stale snapshot never re-fires it.
   const attemptedAt = new Map<RepoId, Map<number, string>>()
 
   function attempted(repoId: RepoId): Map<number, string> {
@@ -78,10 +68,7 @@ export function createAutoPlanner(deps: AutoPlannerDeps): AutoPlanner {
         try {
           await deps.autoApprove({ entry, item: { number: candidate.number, assignees: item.assignees }, auditDir: deps.auditDir })
         } catch {
-          // Swallowed, like `observe-pass.ts`'s own write attempts — a throw
-          // here is reattempted on the next fresher GitHub read, never
-          // surfaced as a toast or dialog, since the operator did not start
-          // this write.
+          // Swallowed; reattempted on the next fresher GitHub read, never surfaced to the operator.
         }
         writeAt.set(candidate.number, at)
       }
