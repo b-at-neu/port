@@ -37,6 +37,7 @@ const SAMPLE_REQUESTS: Partial<Record<IpcChannel, unknown>> = {
   'session:capacity:set': { limit: 4 },
   'session:restore': { restoreId: 'r1' },
   'session:restore:discard': { restoreId: null },
+  'backlog:list': { repoId: 'fixture-acme-widgets' },
 }
 
 describe('fixtureHandlers', () => {

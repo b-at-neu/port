@@ -8,6 +8,9 @@ export { applyItemStates, fetchClaimPreflight, fetchItemsByNumber, fetchItemStat
 export { fetchGatePreflight } from './gate'
 export type { FetchGatePreflightParams } from './gate'
 
+export { fetchBacklog } from './backlog'
+export type { FetchBacklogParams } from './backlog'
+
 export type {
   BlockerRead,
   ClaimBlocker,
