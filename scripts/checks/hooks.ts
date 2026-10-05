@@ -10,7 +10,7 @@ import type { Reporter } from '../lib/report.ts';
 // (issue 181, splitting this module's own file-size ratchet entry) — this module
 // keeps the hook as a declared artifact: its command shape, its PreToolUse
 // wiring, and the end-to-end stdin/stdout/exit-code spawn.
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   // --- hooks.json command shape ----------------------------------------------
   // guard: the hook loading as Hooks (0) — no error, just absent. Regression
   // test for the argv-array form.
@@ -44,11 +44,7 @@ export default async function ({ fail, ok }: Reporter) {
         for (const h of matcher.hooks ?? []) {
           const m = /\$\{CLAUDE_PLUGIN_ROOT\}\/(.+?)"/.exec(h.command ?? '');
           const rel = m?.[1];
-          if (!rel || !existsSync(join(root, 'plugins/port', rel))) {
-            fail('hook-wiring', `${event}/${matcher.matcher}: command references a missing file (${JSON.stringify(h.command)})`);
-          } else {
-            ok();
-          }
+          expect(!(!rel || !existsSync(join(root, 'plugins/port', rel))), 'hook-wiring', `${event}/${matcher.matcher}: command references a missing file (${JSON.stringify(h.command)})`);
         }
       }
     }
@@ -75,41 +71,17 @@ export default async function ({ fail, ok }: Reporter) {
 
     // Self-test first — a check that cannot be made to fail is not a check
     // (docs/ENGINEERING.md §7).
-    if (!/\bexecSync\b/.test(stripComments("const out = execSync('x');"))) {
-      fail('hooks-shell', "self-test: a synthetic execSync('x') call did not trip the pattern");
-    } else {
-      ok();
-    }
-    if (/\bexecSync\b/.test(stripComments("const out = execFileSync('x', []);"))) {
-      fail('hooks-shell', "self-test: execFileSync('x', []) must not trip the execSync pattern");
-    } else {
-      ok();
-    }
-    if (!/shell:\s*true/.test(stripComments("spawn('x', [], { shell: true });"))) {
-      fail('hooks-shell', "self-test: a synthetic { shell: true } call did not trip the pattern");
-    } else {
-      ok();
-    }
-    if (/shell:\s*true/.test(stripComments("spawn('x', [], { shell: false });"))) {
-      fail('hooks-shell', "self-test: { shell: false } must not trip the shell: true pattern");
-    } else {
-      ok();
-    }
+    expect(/\bexecSync\b/.test(stripComments("const out = execSync('x');")), 'hooks-shell', "self-test: a synthetic execSync('x') call did not trip the pattern");
+    expect(!/\bexecSync\b/.test(stripComments("const out = execFileSync('x', []);")), 'hooks-shell', "self-test: execFileSync('x', []) must not trip the execSync pattern");
+    expect(/shell:\s*true/.test(stripComments("spawn('x', [], { shell: true });")), 'hooks-shell', "self-test: a synthetic { shell: true } call did not trip the pattern");
+    expect(!/shell:\s*true/.test(stripComments("spawn('x', [], { shell: false });")), 'hooks-shell', "self-test: { shell: false } must not trip the shell: true pattern");
 
     const hookFiles = walk(join(root, 'plugins/port/hooks')).filter((f) => f.endsWith('.mjs'));
     for (const f of hookFiles) {
       const rel = relOf(f);
       const codeOnly = stripComments(readFileSync(f, 'utf8'));
-      if (/\bexecSync\b/.test(codeOnly)) {
-        fail('hooks-shell', `${rel} uses execSync — every child process must spawn with an explicit argv array (execFileSync/spawnSync), never a shell string`);
-      } else {
-        ok();
-      }
-      if (/shell:\s*true/.test(codeOnly)) {
-        fail('hooks-shell', `${rel} passes shell: true to a child process — every call must be an explicit argv array, never a shell string`);
-      } else {
-        ok();
-      }
+      expect(!/\bexecSync\b/.test(codeOnly), 'hooks-shell', `${rel} uses execSync — every child process must spawn with an explicit argv array (execFileSync/spawnSync), never a shell string`);
+      expect(!/shell:\s*true/.test(codeOnly), 'hooks-shell', `${rel} passes shell: true to a child process — every call must be an explicit argv array, never a shell string`);
     }
   }
 

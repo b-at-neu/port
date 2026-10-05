@@ -27,7 +27,7 @@ const ALLOWED_FIXTURE_IMPORTS: readonly RegExp[] = [
 
 const IMPORT_RE = /^\s*import\s+(?:type\s+)?[\s\S]*?\bfrom\s+['"]([^'"]+)['"]/gm;
 
-export default async function ({ fail, ok, note }: Reporter) {
+export default async function ({ expect, fail, note, ok }: Reporter) {
   // --- main/fixtures/ imports stay inside the allowlist --------------------
   // guard(#317): the one rail that keeps fixture mode unable to reach `gh`
   // or `claude` — tested against both a good and a bad import before being
@@ -74,11 +74,7 @@ export default async function ({ fail, ok, note }: Reporter) {
     const bad = assignments.filter((p) => p !== "'/'" && p !== "'*'" && !/^ROUTE_IDS\.\w+$/.test(p));
     if (assignments.length === 0) {
       fail('desktop-visual', "router.tsx carries no 'path:' assignment at all — the guard cannot pass vacuously if the router is rewritten");
-    } else if (bad.length > 0) {
-      fail('desktop-visual', `router.tsx names a route path outside ROUTE_IDS/'/'/'*' : ${bad.join(', ')}`);
-    } else {
-      ok();
-    }
+    } else expect(!(bad.length > 0), 'desktop-visual', `router.tsx names a route path outside ROUTE_IDS/'/'/'*' : ${bad.join(', ')}`);
   }
 
   // --- commands.checks never names "screenshots" ---------------------------
@@ -90,11 +86,7 @@ export default async function ({ fail, ok, note }: Reporter) {
     const names = Array.isArray(checksList)
       ? checksList.some((entry) => typeof entry === 'object' && entry !== null && typeof (entry as { run?: unknown }).run === 'string' && (entry as { run: string }).run.includes('screenshots'))
       : false;
-    if (names) {
-      fail('desktop-visual', '.claude/port.config.json commands.checks names "screenshots" — that list runs on every dispatched agent');
-    } else {
-      ok();
-    }
+    expect(!names, 'desktop-visual', '.claude/port.config.json commands.checks names "screenshots" — that list runs on every dispatched agent');
   }
 
   // --- visual/targets.mts's ROUTE_KEYS matches the real ROUTE_IDS, both ways
@@ -110,14 +102,7 @@ export default async function ({ fail, ok, note }: Reporter) {
     const onlyInRoutes = [...routeKeys].filter((k) => !targetKeys.has(k));
     if (targetKeys.size === 0 || routeKeys.size === 0) {
       fail('desktop-visual', 'could not read SCREENSHOT_TARGETS or ROUTE_IDS as a non-empty object — the pin cannot pass vacuously if either export is removed');
-    } else if (onlyInTargets.length > 0 || onlyInRoutes.length > 0) {
-      fail(
-        'desktop-visual',
-        `visual/targets.mts's ROUTE_KEYS and router/legacy-view.ts's ROUTE_IDS disagree — only in targets: [${onlyInTargets.join(', ')}], only in ROUTE_IDS: [${onlyInRoutes.join(', ')}]`,
-      );
-    } else {
-      ok();
-    }
+    } else expect(!(onlyInTargets.length > 0 || onlyInRoutes.length > 0), 'desktop-visual', `visual/targets.mts's ROUTE_KEYS and router/legacy-view.ts's ROUTE_IDS disagree — only in targets: [${onlyInTargets.join(', ')}], only in ROUTE_IDS: [${onlyInRoutes.join(', ')}]`);
   }
 
   // --- pin: the command and output directory, across four surfaces --------

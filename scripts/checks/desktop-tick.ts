@@ -11,7 +11,7 @@ import type { Reporter } from '../lib/report.ts';
 // family, so the report's own actionable order is the real dispatch order
 // once a dispatcher exists. Ten assertions pin its decisions mechanically,
 // in the shape of desktop-actions.ts's and desktop-local.ts's own guards.
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const mainDir = 'apps/desktop/src/main/tick';
   const sharedDir = 'apps/desktop/src/shared/tick';
   const mainFiles = walk(join(root, mainDir)).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
@@ -178,11 +178,7 @@ export default async function ({ fail, ok }: Reporter) {
       const body = concurrencyMatch[1];
       if (/:\s*\d/.test(body) || /:\s*\[/.test(body)) {
         fail('desktop-tick', `${schemaFile}'s CONFIG_DEFAULTS.concurrency carries a literal number or array rather than reading off the schema import`);
-      } else if (!/schema\.properties\.concurrency/.test(body)) {
-        fail('desktop-tick', `${schemaFile}'s CONFIG_DEFAULTS.concurrency does not read off 'schema.properties.concurrency'`);
-      } else {
-        ok();
-      }
+      } else expect(/schema\.properties\.concurrency/.test(body), 'desktop-tick', `${schemaFile}'s CONFIG_DEFAULTS.concurrency does not read off 'schema.properties.concurrency'`);
     }
   }
 
@@ -211,11 +207,7 @@ export default async function ({ fail, ok }: Reporter) {
       );
       const allKeys = new Set([...appPairs.keys(), ...enginePairs.keys()]);
       const mismatches = [...allKeys].filter((key) => appPairs.get(key) !== enginePairs.get(key));
-      if (mismatches.length > 0) {
-        fail('desktop-tick', `${routingFile}'s AGENT_FOR_IN_FLIGHT and scripts/port-tick/liveness.ts's buildLivenessExpected disagree on: ${mismatches.join(', ')}`);
-      } else {
-        ok();
-      }
+      expect(!(mismatches.length > 0), 'desktop-tick', `${routingFile}'s AGENT_FOR_IN_FLIGHT and scripts/port-tick/liveness.ts's buildLivenessExpected disagree on: ${mismatches.join(', ')}`);
     }
   }
 
@@ -239,11 +231,7 @@ export default async function ({ fail, ok }: Reporter) {
     } else {
       const appKeys = [...appMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
       const engineKeys = [...engineMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
-      if (appKeys.length !== engineKeys.length || appKeys.some((k, i) => k !== engineKeys[i])) {
-        fail('desktop-tick', `${routingFile}'s REFRESH_PAIR (${appKeys.join(', ')}) and scripts/port-tick/reconcile.ts's (${engineKeys.join(', ')}) disagree`);
-      } else {
-        ok();
-      }
+      expect(!(appKeys.length !== engineKeys.length || appKeys.some((k, i) => k !== engineKeys[i])), 'desktop-tick', `${routingFile}'s REFRESH_PAIR (${appKeys.join(', ')}) and scripts/port-tick/reconcile.ts's (${engineKeys.join(', ')}) disagree`);
     }
   }
 

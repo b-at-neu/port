@@ -9,7 +9,7 @@ import type { Reporter } from '../lib/report.ts';
 // dependency-free and regex-based, in the shape of desktop-github.ts's own
 // guards — reading these directories by explicit path (never walk('apps/'),
 // which descends into node_modules).
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const stateDir = 'apps/desktop/src/main/state';
   const sharedStateDir = 'apps/desktop/src/shared/state';
   const files = walk(join(root, stateDir)).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
@@ -68,14 +68,7 @@ export default async function ({ fail, ok }: Reporter) {
         fail('desktop-state', `plugins/port/docs/PIPELINE.md's "The marker" section has no canonical fenced rendering to compare against`);
       } else {
         const canonical = `${pipelineMatch[1]} `;
-        if (linkMatch[1] !== canonical) {
-          fail(
-            'desktop-state',
-            `${linkRel}'s SESSION_REQUIRED_PREFIX is ${JSON.stringify(linkMatch[1])}, but PIPELINE.md's canonical rendering is ${JSON.stringify(canonical)}`,
-          );
-        } else {
-          ok();
-        }
+        expect(!(linkMatch[1] !== canonical), 'desktop-state', `${linkRel}'s SESSION_REQUIRED_PREFIX is ${JSON.stringify(linkMatch[1])}, but PIPELINE.md's canonical rendering is ${JSON.stringify(canonical)}`);
       }
     }
   }

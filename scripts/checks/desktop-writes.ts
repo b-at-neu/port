@@ -9,7 +9,7 @@ import type { Reporter } from '../lib/report.ts';
 // desktop-github.ts's and desktop-platform.ts's own guards — reading these
 // directories by explicit path (never walk('apps/'), which descends into
 // node_modules).
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const platformDir = 'apps/desktop/src/main/platform';
   const githubDir = 'apps/desktop/src/main/github';
   const writesDir = 'apps/desktop/src/main/writes';
@@ -147,14 +147,7 @@ export default async function ({ fail, ok }: Reporter) {
       const coordinationSet = new Set(coordinationKeys);
       const onlyInScope = scopeKeys.filter((k) => !coordinationSet.has(k));
       const onlyInDoc = coordinationKeys.filter((k) => !scopeSet.has(k));
-      if (onlyInScope.length > 0 || onlyInDoc.length > 0) {
-        fail(
-          'desktop-writes',
-          `${scopeFile}'s PLAN_GATE_KEYS (${JSON.stringify(scopeKeys)}) and ${coordinationFile}'s claim contract (${JSON.stringify(coordinationKeys)}) disagree`,
-        );
-      } else {
-        ok();
-      }
+      expect(!(onlyInScope.length > 0 || onlyInDoc.length > 0), 'desktop-writes', `${scopeFile}'s PLAN_GATE_KEYS (${JSON.stringify(scopeKeys)}) and ${coordinationFile}'s claim contract (${JSON.stringify(coordinationKeys)}) disagree`);
     }
   }
 
@@ -194,11 +187,7 @@ export default async function ({ fail, ok }: Reporter) {
     const coordinationText = readFileSync(join(root, coordinationFile), 'utf8');
     if (!claimText.includes('.agents/gate-claim.json') && !claimText.includes("'.agents', 'gate-claim.json'")) {
       fail('desktop-writes', `${claimFile} does not reference the gate-claim.json path`);
-    } else if (!coordinationText.includes('.agents/gate-claim.json')) {
-      fail('desktop-writes', `${coordinationFile} does not reference '.agents/gate-claim.json'`);
-    } else {
-      ok();
-    }
+    } else expect(coordinationText.includes('.agents/gate-claim.json'), 'desktop-writes', `${coordinationFile} does not reference '.agents/gate-claim.json'`);
   }
 
   // --- appendTextFile( is called under apps/desktop/src/ only from ----------

@@ -57,7 +57,7 @@ function docExclusions(text: string): string[] {
   return globs;
 }
 
-export default async function ({ fail, note, ok }: Reporter) {
+export default async function ({ expect, fail, note, ok }: Reporter) {
   const configPath = join(root, CONFIG_REL);
   if (!existsSync(configPath)) {
     note(`file-size: ${CONFIG_REL} does not exist — no file-size limit configured`);
@@ -196,19 +196,8 @@ export default async function ({ fail, note, ok }: Reporter) {
           'file-size',
           `\`${relPath}\` is ${lines} lines, above its recorded ${allow.lines} — the allowlist is a ratchet: a listed file may shrink, never grow`,
         );
-      } else if (lines < allow.lines) {
-        fail(
-          'file-size',
-          `\`${relPath}\` is ${lines} lines, below its recorded ${allow.lines} — lower its entry to ${lines} so the ratchet tightens`,
-        );
-      } else {
-        ok();
-      }
-    } else if (allow) {
-      fail('file-size', `\`${relPath}\` is ${lines} lines, at or under the limit — remove its allowlist entry`);
-    } else {
-      ok();
-    }
+      } else expect(!(lines < allow.lines), 'file-size', `\`${relPath}\` is ${lines} lines, below its recorded ${allow.lines} — lower its entry to ${lines} so the ratchet tightens`);
+    } else expect(!allow, 'file-size', `\`${relPath}\` is ${lines} lines, at or under the limit — remove its allowlist entry`);
   }
 
   if (trackedFiles) {
@@ -241,14 +230,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     fail('file-size', `${standardsDocRel} states no limit while ${CONFIG_REL} sets ${limit} — the two must agree`);
   } else if (matches.length > 1) {
     fail('file-size', `${standardsDocRel} states the line limit more than once — it must appear exactly once, citably`);
-  } else if (Number(matches[0][1]) !== limit) {
-    fail(
-      'file-size',
-      `${standardsDocRel} states ${matches[0][1]} while ${CONFIG_REL} sets ${limit} — the two must agree`,
-    );
-  } else {
-    ok();
-  }
+  } else expect(!(Number(matches[0][1]) !== limit), 'file-size', `${standardsDocRel} states ${matches[0][1]} while ${CONFIG_REL} sets ${limit} — the two must agree`);
 
   // --- Stated exclusions must agree with the configured ones --------------
   // guard(#183): an exemption stated in prose with nothing tying it to the
@@ -272,18 +254,10 @@ export default async function ({ fail, note, ok }: Reporter) {
     'An unrelated paragraph that follows.\n';
 
   const fixtureGlobs = docExclusions(FIXTURE_GOOD);
-  if (fixtureGlobs.length !== 2 || fixtureGlobs[0] !== 'foo/**' || fixtureGlobs[1] !== 'bar/**') {
-    fail('file-size', 'self-test: docExclusions did not parse a known-good bullet list to its exact glob set');
-  } else {
-    ok();
-  }
+  expect(!(fixtureGlobs.length !== 2 || fixtureGlobs[0] !== 'foo/**' || fixtureGlobs[1] !== 'bar/**'), 'file-size', 'self-test: docExclusions did not parse a known-good bullet list to its exact glob set');
 
   const missingBulletGlobs = docExclusions(FIXTURE_MISSING_BULLET);
-  if (JSON.stringify(missingBulletGlobs) === JSON.stringify(fixtureGlobs)) {
-    fail('file-size', 'self-test: docExclusions did not notice a bullet missing from the list');
-  } else {
-    ok();
-  }
+  expect(!(JSON.stringify(missingBulletGlobs) === JSON.stringify(fixtureGlobs)), 'file-size', 'self-test: docExclusions did not notice a bullet missing from the list');
 
   // Now the real comparison, only once the doc is known to exist (the two
   // `return`s above already skip this when it is unset or missing).
@@ -291,17 +265,9 @@ export default async function ({ fail, note, ok }: Reporter) {
   const configGlobs = new Set(excludeRes.map((e) => e.glob));
 
   for (const g of configGlobs) {
-    if (!docGlobs.has(g)) {
-      fail('file-size', `exclude glob \`${g}\` is not named in ${standardsDocRel}'s exclusion list`);
-    } else {
-      ok();
-    }
+    expect(docGlobs.has(g), 'file-size', `exclude glob \`${g}\` is not named in ${standardsDocRel}'s exclusion list`);
   }
   for (const g of docGlobs) {
-    if (!configGlobs.has(g)) {
-      fail('file-size', `${standardsDocRel} names exclusion \`${g}\`, which has no exclude entry`);
-    } else {
-      ok();
-    }
+    expect(configGlobs.has(g), 'file-size', `${standardsDocRel} names exclusion \`${g}\`, which has no exclude entry`);
   }
 }

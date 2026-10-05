@@ -8,7 +8,7 @@ import type { Reporter } from '../lib/report.ts';
 // mechanical rails, dependency-free and regex-based, in the shape of
 // desktop-claim.ts's own guards. Reading these directories by explicit path
 // (never walk('apps/'), which descends into node_modules).
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const sharedActionsDir = 'apps/desktop/src/shared/actions';
   const mainActionsDir = 'apps/desktop/src/main/actions';
   const bodiesFile = `${sharedActionsDir}/bodies.ts`;
@@ -118,11 +118,7 @@ export default async function ({ fail, ok }: Reporter) {
       fail('desktop-actions', `${projectFile} has no 'ungated = ...' selection to check`);
     } else {
       const window = lines.slice(Math.max(0, ungatedLine - 15), ungatedLine + 1).join('\n');
-      if (!window.includes('approvalGate')) {
-        fail('desktop-actions', `${projectFile}'s ungated selection does not name 'approvalGate' nearby — the module gate could be dropped silently`);
-      } else {
-        ok();
-      }
+      expect(window.includes('approvalGate'), 'desktop-actions', `${projectFile}'s ungated selection does not name 'approvalGate' nearby — the module gate could be dropped silently`);
     }
   }
 
@@ -130,11 +126,7 @@ export default async function ({ fail, ok }: Reporter) {
   {
     const text = readFileSync(join(root, bodiesFile), 'utf8');
     const badImport = text.split('\n').some((line) => /^import\b/.test(line.trim()) && !/^import\s+type\b/.test(line.trim()));
-    if (badImport) {
-      fail('desktop-actions', `${bodiesFile} has a non-'import type' import — it must stay zero-runtime-dependency`);
-    } else {
-      ok();
-    }
+    expect(!badImport, 'desktop-actions', `${bodiesFile} has a non-'import type' import — it must stay zero-runtime-dependency`);
   }
 
   // --- The comment bodies pass their own validators and pin their headings --
@@ -151,43 +143,23 @@ export default async function ({ fail, ok }: Reporter) {
     };
 
     const rendered = bodies.changesRequestedBody('a'.repeat(40), 'rename X');
-    if (!artifacts.CHECKS['changes-requested'].run(rendered).ok) {
-      fail('desktop-actions', `${bodiesFile}'s changesRequestedBody output fails artifacts.mjs's own 'changes-requested' validator`);
-    } else {
-      ok();
-    }
+    expect(artifacts.CHECKS['changes-requested'].run(rendered).ok, 'desktop-actions', `${bodiesFile}'s changesRequestedBody output fails artifacts.mjs's own 'changes-requested' validator`);
 
-    if (bodies.CHANGES_REQUESTED_HEADING !== artifacts.CHANGES_REQUESTED_HEADING) {
-      fail('desktop-actions', `${bodiesFile}'s CHANGES_REQUESTED_HEADING ('${bodies.CHANGES_REQUESTED_HEADING}') disagrees with artifacts.mjs's ('${artifacts.CHANGES_REQUESTED_HEADING}')`);
-    } else {
-      ok();
-    }
+    expect(!(bodies.CHANGES_REQUESTED_HEADING !== artifacts.CHANGES_REQUESTED_HEADING), 'desktop-actions', `${bodiesFile}'s CHANGES_REQUESTED_HEADING ('${bodies.CHANGES_REQUESTED_HEADING}') disagrees with artifacts.mjs's ('${artifacts.CHANGES_REQUESTED_HEADING}')`);
 
     const formatsText = readFileSync(join(root, formatsFile), 'utf8');
-    if (!formatsText.includes('Requested by the operator on `<head-sha>`, after approval:')) {
-      fail('desktop-actions', `${formatsFile}'s "Changes requested" fence no longer names the exact line ${bodiesFile}'s changesRequestedBody renders`);
-    } else {
-      ok();
-    }
+    expect(formatsText.includes('Requested by the operator on `<head-sha>`, after approval:'), 'desktop-actions', `${formatsFile}'s "Changes requested" fence no longer names the exact line ${bodiesFile}'s changesRequestedBody renders`);
 
     const portTickGatesText = readFileSync(join(root, scriptsPortTickGatesFile), 'utf8');
     const portTickGatesMatch = /GATE_CLEARED_PREFIX\s*=\s*'([^']+)'/.exec(portTickGatesText);
     if (!portTickGatesMatch) {
       fail('desktop-actions', `${scriptsPortTickGatesFile} has no 'GATE_CLEARED_PREFIX = ...' literal to compare`);
-    } else if (bodies.GATE_CLEARED_HEADING !== portTickGatesMatch[1]) {
-      fail('desktop-actions', `${bodiesFile}'s GATE_CLEARED_HEADING ('${bodies.GATE_CLEARED_HEADING}') disagrees with ${scriptsPortTickGatesFile}'s ('${portTickGatesMatch[1]}')`);
-    } else {
-      ok();
-    }
+    } else expect(!(bodies.GATE_CLEARED_HEADING !== portTickGatesMatch[1]), 'desktop-actions', `${bodiesFile}'s GATE_CLEARED_HEADING ('${bodies.GATE_CLEARED_HEADING}') disagrees with ${scriptsPortTickGatesFile}'s ('${portTickGatesMatch[1]}')`);
 
     const observationText = readFileSync(join(root, observationFile), 'utf8');
     const observationMatch = /PIPELINE_ESCALATION\s*=\s*'([^']+)'/.exec(observationText);
     if (!observationMatch) {
       fail('desktop-actions', `${observationFile} has no 'PIPELINE_ESCALATION = ...' literal to compare`);
-    } else if (bodies.PIPELINE_ESCALATION_HEADING !== observationMatch[1]) {
-      fail('desktop-actions', `${bodiesFile}'s PIPELINE_ESCALATION_HEADING ('${bodies.PIPELINE_ESCALATION_HEADING}') disagrees with ${observationFile}'s ('${observationMatch[1]}')`);
-    } else {
-      ok();
-    }
+    } else expect(!(bodies.PIPELINE_ESCALATION_HEADING !== observationMatch[1]), 'desktop-actions', `${bodiesFile}'s PIPELINE_ESCALATION_HEADING ('${bodies.PIPELINE_ESCALATION_HEADING}') disagrees with ${observationFile}'s ('${observationMatch[1]}')`);
   }
 }

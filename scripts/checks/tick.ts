@@ -11,7 +11,7 @@ async function importEngine(rel: string): Promise<any> {
   return import(pathToFileURL(join(root, rel)).href);
 }
 
-export default async function ({ fail, note, ok }: Reporter) {
+export default async function ({ expect, fail, note, ok }: Reporter) {
   // --- Every decision case resolves, and the table covers all fourteen families
   // guard(#203, #246, #220, #292): a second implementation (apps/desktop's) silently
   // diverging from the engine's own recorded behaviour. #187 adds three
@@ -41,8 +41,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     const casesDir = join(root, TICK_DIR, 'cases');
     const present = walk(casesDir).map((f) => relOf(f).split('/').pop());
     for (const file of Object.keys(families)) {
-      if (!present.includes(file)) fail('tick-cases', `${TICK_DIR}/cases/${file} is missing — all fourteen decision families must have a case table`);
-      else ok();
+      expect(present.includes(file), 'tick-cases', `${TICK_DIR}/cases/${file} is missing — all fourteen decision families must have a case table`);
     }
 
     const modules: Record<string, any> = {};
@@ -110,11 +109,7 @@ export default async function ({ fail, note, ok }: Reporter) {
         const got = runCase(fn, impl, c.input);
         const gotStr = JSON.stringify(got);
         const expStr = JSON.stringify(c.expected);
-        if (gotStr !== expStr) {
-          fail('tick-cases', `${file} — '${c.name}': expected ${expStr}, got ${gotStr}`);
-        } else {
-          ok();
-        }
+        expect(!(gotStr !== expStr), 'tick-cases', `${file} — '${c.name}': expected ${expStr}, got ${gotStr}`);
       }
     }
   }
@@ -132,28 +127,19 @@ export default async function ({ fail, note, ok }: Reporter) {
     // specifically "no mutating gh subcommand under the engine"), and its
     // one call must be 'gh api graphql', never an editing subcommand.
     const engineFiles = walk(join(root, TICK_DIR)).filter((f) => f.endsWith('.ts'));
-    if (engineFiles.length === 0) fail('tick-readonly', `${TICK_DIR}/*.ts matched zero files — the read-only scan itself is broken`);
-    else ok();
+    expect(!(engineFiles.length === 0), 'tick-readonly', `${TICK_DIR}/*.ts matched zero files — the read-only scan itself is broken`);
     const files = [join(root, 'scripts/port-tick.ts'), ...engineFiles];
     const ghSpawnRe = /\b(?:spawnSync|spawn|execFileSync|execFile|execSync|exec)\(\s*['"]gh['"]/;
     const allowedCall = join(root, TICK_DIR, 'gh.ts');
     for (const f of files) {
       const text = readFileSync(f, 'utf8');
-      if (ghSpawnRe.test(text) && f !== allowedCall) {
-        fail('tick-readonly', `${relOf(f)} spawns 'gh' directly — every write must be emitted as a 'writes' string, never issued by the engine itself`);
-      } else {
-        ok();
-      }
+      expect(!(ghSpawnRe.test(text) && f !== allowedCall), 'tick-readonly', `${relOf(f)} spawns 'gh' directly — every write must be emitted as a 'writes' string, never issued by the engine itself`);
     }
     const ghText = readFileSync(allowedCall, 'utf8');
     const mutatingGhRe = /\bgh['"]?,\s*\[\s*['"](issue|pr|label)['"]\s*,\s*['"](?!api\b)(edit|comment|create|merge|close)['"]/;
     if (!ghText.includes("'api'") || !ghText.includes("'graphql'")) {
       fail('tick-readonly', `${TICK_DIR}/gh.ts must call 'gh api graphql', not a different subcommand`);
-    } else if (mutatingGhRe.test(ghText)) {
-      fail('tick-readonly', `${TICK_DIR}/gh.ts appears to call a mutating gh subcommand — its one call must be 'gh api graphql'`);
-    } else {
-      ok();
-    }
+    } else expect(!mutatingGhRe.test(ghText), 'tick-readonly', `${TICK_DIR}/gh.ts appears to call a mutating gh subcommand — its one call must be 'gh api graphql'`);
   }
 
   // --- Defaults table matches labels.json, both directions --------------------
@@ -167,20 +153,11 @@ export default async function ({ fail, note, ok }: Reporter) {
     const engineKeys = new Set(Object.keys(LABEL_DEFAULTS));
 
     for (const l of labelsJson.labels) {
-      if (LABEL_DEFAULTS[l.key] !== l.name) {
-        fail('tick-labels', `config.ts's LABEL_DEFAULTS.${l.key} is '${LABEL_DEFAULTS[l.key]}', labels.json says '${l.name}'`);
-      } else {
-        ok();
-      }
-      if (LABEL_ROLES[l.key] !== l.role) {
-        fail('tick-labels', `config.ts's LABEL_ROLES.${l.key} is '${LABEL_ROLES[l.key]}', labels.json says '${l.role}'`);
-      } else {
-        ok();
-      }
+      expect(!(LABEL_DEFAULTS[l.key] !== l.name), 'tick-labels', `config.ts's LABEL_DEFAULTS.${l.key} is '${LABEL_DEFAULTS[l.key]}', labels.json says '${l.name}'`);
+      expect(!(LABEL_ROLES[l.key] !== l.role), 'tick-labels', `config.ts's LABEL_ROLES.${l.key} is '${LABEL_ROLES[l.key]}', labels.json says '${l.role}'`);
     }
     for (const key of engineKeys) {
-      if (!jsonKeys.has(key)) fail('tick-labels', `config.ts's LABEL_DEFAULTS names '${key}', which labels.json does not carry at all`);
-      else ok();
+      expect(jsonKeys.has(key), 'tick-labels', `config.ts's LABEL_DEFAULTS names '${key}', which labels.json does not carry at all`);
     }
 
     // --- LABEL_SURFACE covers exactly the same key set, both directions
@@ -191,28 +168,18 @@ export default async function ({ fail, note, ok }: Reporter) {
     // layer-1 failure instead of a runtime default.
     const surfaceKeys = new Set(Object.keys(LABEL_SURFACE));
     for (const key of engineKeys) {
-      if (!surfaceKeys.has(key)) fail('tick-labels', `config.ts's LABEL_SURFACE is missing key '${key}', which LABEL_DEFAULTS carries`);
-      else ok();
+      expect(surfaceKeys.has(key), 'tick-labels', `config.ts's LABEL_SURFACE is missing key '${key}', which LABEL_DEFAULTS carries`);
     }
     for (const key of surfaceKeys) {
-      if (!engineKeys.has(key)) fail('tick-labels', `config.ts's LABEL_SURFACE names '${key}', which LABEL_DEFAULTS does not carry`);
-      else ok();
+      expect(engineKeys.has(key), 'tick-labels', `config.ts's LABEL_SURFACE names '${key}', which LABEL_DEFAULTS does not carry`);
     }
     const bothKeys: string[] = [];
     for (const [key, value] of Object.entries<string>(LABEL_SURFACE)) {
-      if (!['issue', 'pr', 'both'].includes(value)) {
-        fail('tick-labels', `config.ts's LABEL_SURFACE.${key} is '${value}', must be 'issue', 'pr', or 'both'`);
-      } else {
-        ok();
-      }
+      expect(['issue', 'pr', 'both'].includes(value), 'tick-labels', `config.ts's LABEL_SURFACE.${key} is '${value}', must be 'issue', 'pr', or 'both'`);
       if (value === 'both') bothKeys.push(key);
     }
     const expectedBoth = new Set(['marker']);
-    if (bothKeys.length !== expectedBoth.size || !bothKeys.every((k) => expectedBoth.has(k))) {
-      fail('tick-labels', `config.ts's LABEL_SURFACE 'both' entries are [${bothKeys.join(', ')}], expected exactly [marker]`);
-    } else {
-      ok();
-    }
+    expect(!(bothKeys.length !== expectedBoth.size || !bothKeys.every((k) => expectedBoth.has(k))), 'tick-labels', `config.ts's LABEL_SURFACE 'both' entries are [${bothKeys.join(', ')}], expected exactly [marker]`);
   }
 
   // --- LABEL_SURFACE pinned against query.ts's issueSet/prSet call sites, and the cross-surface/no-target-literal rails (#236) ---
@@ -237,17 +204,9 @@ export default async function ({ fail, note, ok }: Reporter) {
       callCount += 1;
       const [, fn, key] = match;
       const expected = fn === 'issueSet' ? 'issue' : 'pr';
-      if (LABEL_SURFACE[key] !== expected) {
-        fail('tick-surface', `query.ts calls ${fn}(..., labels.${key}), so LABEL_SURFACE.${key} must be '${expected}', but it is '${LABEL_SURFACE[key]}'`);
-      } else {
-        ok();
-      }
+      expect(!(LABEL_SURFACE[key] !== expected), 'tick-surface', `query.ts calls ${fn}(..., labels.${key}), so LABEL_SURFACE.${key} must be '${expected}', but it is '${LABEL_SURFACE[key]}'`);
     }
-    if (callCount < 16) {
-      fail('tick-surface', `query.ts: only ${callCount} issueSet/prSet call sites parsed, expected at least 16 — the pattern may no longer match query.ts's shape`);
-    } else {
-      ok();
-    }
+    expect(!(callCount < 16), 'tick-surface', `query.ts: only ${callCount} issueSet/prSet call sites parsed, expected at least 16 — the pattern may no longer match query.ts's shape`);
 
     // Every RETRY_TRIGGER pair maps to exactly one surface: a future trigger
     // mapping that crosses surfaces (issue in-flight label resetting to a PR
@@ -255,11 +214,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     // guard(#236): a liveness reset crossing surfaces, or a future write
     // hardcoding the target the way livenessResetWrite did before this fix.
     for (const [fromKey, toKey] of Object.entries<string>(RETRY_TRIGGER)) {
-      if (LABEL_SURFACE[fromKey] !== LABEL_SURFACE[toKey]) {
-        fail('tick-surface', `RETRY_TRIGGER.${fromKey} → ${toKey} crosses surfaces: LABEL_SURFACE.${fromKey}='${LABEL_SURFACE[fromKey]}', LABEL_SURFACE.${toKey}='${LABEL_SURFACE[toKey]}'`);
-      } else {
-        ok();
-      }
+      expect(!(LABEL_SURFACE[fromKey] !== LABEL_SURFACE[toKey]), 'tick-surface', `RETRY_TRIGGER.${fromKey} → ${toKey} crosses surfaces: LABEL_SURFACE.${fromKey}='${LABEL_SURFACE[fromKey]}', LABEL_SURFACE.${toKey}='${LABEL_SURFACE[toKey]}'`);
     }
 
     // The #236 guard itself: no non-comment line of writes.ts may contain an
@@ -269,11 +224,7 @@ export default async function ({ fail, note, ok }: Reporter) {
       .split('\n')
       .filter((l) => !/^\s*(\/\/|\*)/.test(l))
       .join('\n');
-    if (/'issue'|"issue"|'pr'|"pr"/.test(writesText)) {
-      fail('tick-surface', `writes.ts contains an 'issue'/'pr' string literal outside a comment — every target must derive from LABEL_SURFACE`);
-    } else {
-      ok();
-    }
+    expect(!/'issue'|"issue"|'pr'|"pr"/.test(writesText), 'tick-surface', `writes.ts contains an 'issue'/'pr' string literal outside a comment — every target must derive from LABEL_SURFACE`);
 
     // Every function writes.ts exports is named by at least one case in
     // writes.cases.json, so a future write with a wrong-surface key cannot
@@ -285,8 +236,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     const casesTable = readJson(`${TICK_DIR}/cases/writes.cases.json`);
     const namedFns = new Set(casesTable.cases.map((c: any) => c.function));
     for (const fn of exported) {
-      if (!namedFns.has(fn)) fail('tick-surface', `writes.ts exports '${fn}', which no case in writes.cases.json names`);
-      else ok();
+      expect(namedFns.has(fn), 'tick-surface', `writes.ts exports '${fn}', which no case in writes.cases.json names`);
     }
   }
 
@@ -297,14 +247,12 @@ export default async function ({ fail, note, ok }: Reporter) {
   {
     const text = readFileSync(join(root, TICK_DIR, 'pacing.ts'), 'utf8');
     for (const n of ['270', '540', '1080', '1800']) {
-      if (!text.includes(n)) fail('tick-pacing', `pacing.ts is missing the ladder constant '${n}'`);
-      else ok();
+      expect(text.includes(n), 'tick-pacing', `pacing.ts is missing the ladder constant '${n}'`);
     }
     const { nextDelay } = await importEngine(`${TICK_DIR}/pacing.ts`);
     for (const step of [0, 1, 2, 3]) {
       const result = nextDelay(step, { willMoveWithoutHuman: false, observedChange: false });
-      if (typeof result.delay !== 'number') fail('tick-pacing', `nextDelay(${step}, ...) returned a non-numeric delay: ${JSON.stringify(result)}`);
-      else ok();
+      expect(!(typeof result.delay !== 'number'), 'tick-pacing', `nextDelay(${step}, ...) returned a non-numeric delay: ${JSON.stringify(result)}`);
     }
   }
 
@@ -313,8 +261,7 @@ export default async function ({ fail, note, ok }: Reporter) {
   // read the model can no longer audit.
   {
     const engineFiles = walk(join(root, TICK_DIR)).filter((f) => f.endsWith('.ts'));
-    if (engineFiles.length === 0) fail('tick-io', `${TICK_DIR}/*.ts matched zero files — the io scan itself is broken`);
-    else ok();
+    expect(!(engineFiles.length === 0), 'tick-io', `${TICK_DIR}/*.ts matched zero files — the io scan itself is broken`);
     const files = [join(root, 'scripts/port-tick.ts'), ...engineFiles];
     for (const f of files) {
       const rel = relOf(f);
@@ -324,14 +271,10 @@ export default async function ({ fail, note, ok }: Reporter) {
         .split('\n')
         .filter((l) => !/^\s*(\/\/|\*)/.test(l))
         .join('\n');
-      if (/--jq\b/.test(text)) fail('tick-io', `${rel} uses --jq — a GraphQL call must always be parsed in full, never filtered`);
-      else ok();
-      if (/\bexecSync\b/.test(text)) fail('tick-io', `${rel} uses execSync — every child process must use an explicit argv array (execFileSync/spawnSync)`);
-      else ok();
-      if (/shell:\s*true/.test(text)) fail('tick-io', `${rel} passes shell: true to a child process`);
-      else ok();
-      if (/--search\b/.test(text)) fail('tick-io', `${rel} uses gh's --search — the engine reads from the one collapsed query, never a second search call`);
-      else ok();
+      expect(!/--jq\b/.test(text), 'tick-io', `${rel} uses --jq — a GraphQL call must always be parsed in full, never filtered`);
+      expect(!/\bexecSync\b/.test(text), 'tick-io', `${rel} uses execSync — every child process must use an explicit argv array (execFileSync/spawnSync)`);
+      expect(!/shell:\s*true/.test(text), 'tick-io', `${rel} passes shell: true to a child process`);
+      expect(!/--search\b/.test(text), 'tick-io', `${rel} uses gh's --search — the engine reads from the one collapsed query, never a second search call`);
     }
   }
 
@@ -347,8 +290,7 @@ export default async function ({ fail, note, ok }: Reporter) {
   {
     const writesPath = join(root, TICK_DIR, 'writes.ts');
     const engineFiles = walk(join(root, TICK_DIR)).filter((f) => f.endsWith('.ts') && f !== writesPath);
-    if (engineFiles.length === 0) fail('tick-writes', `${TICK_DIR}/*.ts (excluding writes.ts) matched zero files — the write-composition scan itself is broken`);
-    else ok();
+    expect(!(engineFiles.length === 0), 'tick-writes', `${TICK_DIR}/*.ts (excluding writes.ts) matched zero files — the write-composition scan itself is broken`);
     const files = [join(root, 'scripts/port-tick.ts'), ...engineFiles];
     for (const f of files) {
       const rel = relOf(f);
@@ -356,12 +298,9 @@ export default async function ({ fail, note, ok }: Reporter) {
         .split('\n')
         .filter((l) => !/^\s*(\/\/|\*)/.test(l))
         .join('\n');
-      if (/--add-label\b/.test(text)) fail('tick-writes', `${rel} composes '--add-label' inline — every gh label write must go through writes.ts's exported functions`);
-      else ok();
-      if (/--remove-label\b/.test(text)) fail('tick-writes', `${rel} composes '--remove-label' inline — every gh label write must go through writes.ts's exported functions`);
-      else ok();
-      if (/\bgh (issue|pr) edit\b/.test(text)) fail('tick-writes', `${rel} spells out a 'gh issue/pr edit' command literal — that composition belongs in writes.ts alone`);
-      else ok();
+      expect(!/--add-label\b/.test(text), 'tick-writes', `${rel} composes '--add-label' inline — every gh label write must go through writes.ts's exported functions`);
+      expect(!/--remove-label\b/.test(text), 'tick-writes', `${rel} composes '--remove-label' inline — every gh label write must go through writes.ts's exported functions`);
+      expect(!/\bgh (issue|pr) edit\b/.test(text), 'tick-writes', `${rel} spells out a 'gh issue/pr edit' command literal — that composition belongs in writes.ts alone`);
     }
   }
 
@@ -376,19 +315,13 @@ export default async function ({ fail, note, ok }: Reporter) {
     const skillRel = 'plugins/port/skills/pipeline/*.md';
     const skillText = pipelineSkillText();
     for (const phrase of ['tickId', 'TICK-PROSE.md', 'commands.tick', '<commands.tick> start', '--live']) {
-      if (!skillText.includes(phrase)) fail('tick-skill', `${skillRel} never names '${phrase}'`);
-      else ok();
+      expect(skillText.includes(phrase), 'tick-skill', `${skillRel} never names '${phrase}'`);
     }
-    if (!/verbatim/i.test(skillText)) {
-      fail('tick-skill', `${skillRel} never states the verbatim-execution rail`);
-    } else {
-      ok();
-    }
+    expect(/verbatim/i.test(skillText), 'tick-skill', `${skillRel} never states the verbatim-execution rail`);
 
     const proseRel = 'plugins/port/skills/pipeline/TICK-PROSE.md';
     const proseText = readFileSync(join(root, proseRel), 'utf8');
-    if (!proseText.includes('Denials consumed')) fail('tick-skill', `${proseRel} never names 'Denials consumed' — the moved offset-read procedure`);
-    else ok();
+    expect(proseText.includes('Denials consumed'), 'tick-skill', `${proseRel} never names 'Denials consumed' — the moved offset-read procedure`);
   }
 }
 

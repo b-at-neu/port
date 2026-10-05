@@ -7,7 +7,7 @@ import type { Reporter } from '../lib/report.ts';
 // shape #181 gives SKILL.md/PIPELINE.md — a split prose hub whose companion
 // nobody reads is the documentation analogue of the unimported check module
 // scripts/checks/harness.ts already guards.
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   // --- A split companion stays reachable from its hub -------------------------
   // guard(#181): a companion document nobody reads. It runs nothing and
   // reports nothing, and a reader following the hub never learns it exists.
@@ -23,14 +23,7 @@ export default async function ({ fail, ok }: Reporter) {
       const hubText = readFileSync(hub, 'utf8');
       const companions = readdirSync(dir).filter((f) => f.endsWith('.md') && f !== 'SKILL.md');
       for (const companion of companions) {
-        if (!hubText.includes(companion)) {
-          fail(
-            'companions',
-            `${relOf(join(dir, companion))} exists but is never named by ${relOf(hub)} — a reader following the hub never learns it exists`,
-          );
-        } else {
-          ok();
-        }
+        expect(hubText.includes(companion), 'companions', `${relOf(join(dir, companion))} exists but is never named by ${relOf(hub)} — a reader following the hub never learns it exists`);
       }
     }
 
@@ -39,14 +32,7 @@ export default async function ({ fail, ok }: Reporter) {
     const docsHubText = readFileSync(docsHub, 'utf8');
     const docsCompanions = readdirSync(docsDir).filter((f) => f.endsWith('.md') && f !== 'PIPELINE.md');
     for (const companion of docsCompanions) {
-      if (!docsHubText.includes(companion)) {
-        fail(
-          'companions',
-          `${relOf(join(docsDir, companion))} exists but is never named by ${relOf(docsHub)} — a reader following the hub never learns it exists`,
-        );
-      } else {
-        ok();
-      }
+      expect(docsHubText.includes(companion), 'companions', `${relOf(join(docsDir, companion))} exists but is never named by ${relOf(docsHub)} — a reader following the hub never learns it exists`);
     }
   }
 
@@ -66,29 +52,11 @@ export default async function ({ fail, ok }: Reporter) {
       .join('\n');
 
     for (const fn of ['pipelineSkillText', 'pipelineDocsText']) {
-      if (!codeOnly.includes(fn)) {
-        fail('companions', `${rel} no longer exports '${fn}'`);
-      } else {
-        ok();
-      }
+      expect(codeOnly.includes(fn), 'companions', `${rel} no longer exports '${fn}'`);
     }
 
-    if (!/readdirSync/.test(codeOnly)) {
-      fail(
-        'companions',
-        `${rel}'s companion-union helper no longer lists a directory with readdirSync — it must derive its file list from disk, not a hard-coded array`,
-      );
-    } else {
-      ok();
-    }
+    expect(/readdirSync/.test(codeOnly), 'companions', `${rel}'s companion-union helper no longer lists a directory with readdirSync — it must derive its file list from disk, not a hard-coded array`);
 
-    if (/['"][A-Za-z][A-Za-z-]*\.md['"]/.test(codeOnly)) {
-      fail(
-        'companions',
-        `${rel} hard-codes a companion filename in code — the union must be derived from the directory listing, not a literal list`,
-      );
-    } else {
-      ok();
-    }
+    expect(!/['"][A-Za-z][A-Za-z-]*\.md['"]/.test(codeOnly), 'companions', `${rel} hard-codes a companion filename in code — the union must be derived from the directory listing, not a literal list`);
   }
 }

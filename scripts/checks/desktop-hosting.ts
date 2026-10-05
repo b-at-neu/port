@@ -9,7 +9,7 @@ import type { Reporter } from '../lib/report.ts';
 // desktop-sessions.ts's own guards already use — desktop-hosting-defaults.ts
 // holds the #364 operator-defaults assertions, split out to stay under this
 // file's own 500-line ceiling.
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const hostingDir = 'apps/desktop/src/main/hosting';
   const sharedHostingDir = 'apps/desktop/src/shared/hosting';
   const srcDir = join(root, 'apps/desktop/src');
@@ -74,11 +74,7 @@ export default async function ({ fail, ok }: Reporter) {
       const text = readFileSync(typesFile, 'utf8');
       if (/\bSDK[A-Za-z]+Message\b/.test(text)) {
         fail('desktop-hosting', `${sharedHostingDir}/types.ts names an SDK message variant type — the envelope must stay opaque (message: unknown)`);
-      } else if (!/message:\s*unknown/.test(text)) {
-        fail('desktop-hosting', `${sharedHostingDir}/types.ts's event envelope does not carry 'message: unknown'`);
-      } else {
-        ok();
-      }
+      } else expect(/message:\s*unknown/.test(text), 'desktop-hosting', `${sharedHostingDir}/types.ts's event envelope does not carry 'message: unknown'`);
     }
   }
 
@@ -115,11 +111,7 @@ export default async function ({ fail, ok }: Reporter) {
     const classifyFile = allFiles.find((f) => relOf(f) === `${hostingDir}/classify.ts`);
     if (!classifyFile) {
       fail('desktop-hosting', `${hostingDir}/classify.ts does not exist`);
-    } else if (!/export function classifyEnd\(/.test(readFileSync(classifyFile, 'utf8'))) {
-      fail('desktop-hosting', `${hostingDir}/classify.ts does not export 'classifyEnd'`);
-    } else {
-      ok();
-    }
+    } else expect(/export function classifyEnd\(/.test(readFileSync(classifyFile, 'utf8')), 'desktop-hosting', `${hostingDir}/classify.ts does not export 'classifyEnd'`);
   }
 
   // --- SessionPhase's members match the phases handle.ts assigns, both directions ---
@@ -186,11 +178,7 @@ export default async function ({ fail, ok }: Reporter) {
       const beforeQuitMatch = /before-quit'\s*,\s*\(\s*\w*\s*\)\s*=>\s*\{([\s\S]*?)\n\s*\}\s*\)/.exec(text);
       if (!beforeQuitMatch) {
         fail('desktop-hosting', "apps/desktop/src/main/index.ts has no \"app.on('before-quit', (...) => { ... })\" handler");
-      } else if (!/closeAll/.test(beforeQuitMatch[1])) {
-        fail('desktop-hosting', "apps/desktop/src/main/index.ts's before-quit handler does not call the hosted store's closeAll()");
-      } else {
-        ok();
-      }
+      } else expect(/closeAll/.test(beforeQuitMatch[1]), 'desktop-hosting', "apps/desktop/src/main/index.ts's before-quit handler does not call the hosted store's closeAll()");
     }
   }
 
@@ -205,11 +193,7 @@ export default async function ({ fail, ok }: Reporter) {
       const text = readFileSync(liveFile, 'utf8');
       if (!text.includes('PORT_LIVE_SDK')) {
         fail('desktop-hosting', `${hostingDir}/live.test.ts does not reference PORT_LIVE_SDK`);
-      } else if (!/skipIf/.test(text)) {
-        fail('desktop-hosting', `${hostingDir}/live.test.ts has no 'skipIf' guard — it must stay opt-in`);
-      } else {
-        ok();
-      }
+      } else expect(/skipIf/.test(text), 'desktop-hosting', `${hostingDir}/live.test.ts has no 'skipIf' guard — it must stay opt-in`);
     }
   }
 
@@ -269,11 +253,7 @@ export default async function ({ fail, ok }: Reporter) {
       const stray = destinations.filter((d) => d !== 'session');
       if (destinations.length === 0) {
         fail('desktop-hosting', `${hostingDir}/grant.ts names no 'destination:' literal at all`);
-      } else if (stray.length > 0) {
-        fail('desktop-hosting', `${hostingDir}/grant.ts names a 'destination:' other than 'session': ${stray.join(', ')}`);
-      } else {
-        ok();
-      }
+      } else expect(!(stray.length > 0), 'desktop-hosting', `${hostingDir}/grant.ts names a 'destination:' other than 'session': ${stray.join(', ')}`);
     }
   }
 
@@ -291,11 +271,7 @@ export default async function ({ fail, ok }: Reporter) {
       const text = readFileSync(permissionsFile, 'utf8');
       if (!/readonly canUseTool:\s*CanUseTool/.test(text)) {
         fail('desktop-hosting', `${hostingDir}/permissions.ts's PermissionBroker does not declare 'canUseTool: CanUseTool'`);
-      } else if (/Promise<PermissionResult\s*\|\s*null>/.test(text)) {
-        fail('desktop-hosting', `${hostingDir}/permissions.ts's canUseTool is typed to allow '| null' — this broker must never answer out of band`);
-      } else {
-        ok();
-      }
+      } else expect(!/Promise<PermissionResult\s*\|\s*null>/.test(text), 'desktop-hosting', `${hostingDir}/permissions.ts's canUseTool is typed to allow '| null' — this broker must never answer out of band`);
     }
   }
 
@@ -310,11 +286,7 @@ export default async function ({ fail, ok }: Reporter) {
       fail('desktop-hosting', `${hostingDir}/project.ts does not exist`);
     } else {
       const text = readFileSync(projectFile, 'utf8');
-      if (!/createDeriver/.test(text) || !/from\s+['"]\.\.\/sessions\/transcript-entries['"]/.test(text)) {
-        fail('desktop-hosting', `${hostingDir}/project.ts does not import 'createDeriver' from '../sessions/transcript-entries'`);
-      } else {
-        ok();
-      }
+      expect(!(!/createDeriver/.test(text) || !/from\s+['"]\.\.\/sessions\/transcript-entries['"]/.test(text)), 'desktop-hosting', `${hostingDir}/project.ts does not import 'createDeriver' from '../sessions/transcript-entries'`);
     }
   }
 
@@ -328,11 +300,7 @@ export default async function ({ fail, ok }: Reporter) {
     const allowedFile = 'apps/desktop/src/main/sessions/transcript-entries.ts';
     const prodFiles = allFiles.filter((f) => !relOf(f).endsWith('.test.ts'));
     const stray = prodFiles.filter((f) => relOf(f) !== allowedFile).filter((f) => /\btool_use_id\b/.test(readFileSync(f, 'utf8')));
-    if (stray.length > 0) {
-      fail('desktop-hosting', `'tool_use_id' appears outside ${allowedFile}, in: ${stray.map(relOf).join(', ')} — a second pairing implementation is the three-renderers trap #123 flagged`);
-    } else {
-      ok();
-    }
+    expect(!(stray.length > 0), 'desktop-hosting', `'tool_use_id' appears outside ${allowedFile}, in: ${stray.map(relOf).join(', ')} — a second pairing implementation is the three-renderers trap #123 flagged`);
   }
 
   // --- options.ts sets settingSources to exactly the three explicit sources ---
@@ -348,11 +316,7 @@ export default async function ({ fail, ok }: Reporter) {
       const text = stripComments(readFileSync(optionsFile, 'utf8'));
       if (!/SETTING_SOURCES[^=]*=\s*\[\s*'user'\s*,\s*'project'\s*,\s*'local'\s*\]/.test(text)) {
         fail('desktop-hosting', `${hostingDir}/options.ts does not assign settingSources to exactly ['user', 'project', 'local']`);
-      } else if (!/settingSources/.test(text)) {
-        fail('desktop-hosting', `${hostingDir}/options.ts declares SETTING_SOURCES but never assigns it to 'settingSources'`);
-      } else {
-        ok();
-      }
+      } else expect(/settingSources/.test(text), 'desktop-hosting', `${hostingDir}/options.ts declares SETTING_SOURCES but never assigns it to 'settingSources'`);
     }
   }
 
@@ -410,11 +374,7 @@ export default async function ({ fail, ok }: Reporter) {
       fail('desktop-hosting', `${hostingDir}/capabilities.ts does not exist`);
     } else {
       const text = readFileSync(capabilitiesFile, 'utf8');
-      if (!/supportedCommands\(/.test(text) || !/supportedAgents\(/.test(text)) {
-        fail('desktop-hosting', `${hostingDir}/capabilities.ts does not call both supportedCommands() and supportedAgents()`);
-      } else {
-        ok();
-      }
+      expect(!(!/supportedCommands\(/.test(text) || !/supportedAgents\(/.test(text)), 'desktop-hosting', `${hostingDir}/capabilities.ts does not call both supportedCommands() and supportedAgents()`);
     }
   }
 
@@ -428,11 +388,7 @@ export default async function ({ fail, ok }: Reporter) {
       const code = stripComments(readFileSync(f, 'utf8'));
       return code.includes('writeJsonFileAtomic') || code.includes('hosting.json');
     });
-    if (stray.length > 0) {
-      fail('desktop-hosting', `writeJsonFileAtomic or 'hosting.json' appears outside ${hostingDir}/persist.ts, in: ${stray.map(relOf).join(', ')} — a second writer could skip freeze() on quit`);
-    } else {
-      ok();
-    }
+    expect(!(stray.length > 0), 'desktop-hosting', `writeJsonFileAtomic or 'hosting.json' appears outside ${hostingDir}/persist.ts, in: ${stray.map(relOf).join(', ')} — a second writer could skip freeze() on quit`);
   }
 
   // --- shared/hosting/label.ts's sessionDisplayLabel is declared once and used by both consumers ---
@@ -453,11 +409,7 @@ export default async function ({ fail, ok }: Reporter) {
       fail('desktop-hosting', 'apps/desktop/src/renderer/src/session/rail.ts does not import sessionDisplayLabel');
     } else if (!controllerFile || !/sessionDisplayLabel/.test(readFileSync(controllerFile, 'utf8'))) {
       fail('desktop-hosting', 'apps/desktop/src/renderer/src/permission/controller.ts does not import sessionDisplayLabel');
-    } else if (!copyFile || /function contextLine\([^)]*sessionKey/.test(readFileSync(copyFile, 'utf8'))) {
-      fail('desktop-hosting', "apps/desktop/src/renderer/src/permission/copy.ts's contextLine must take no 'sessionKey' parameter");
-    } else {
-      ok();
-    }
+    } else expect(!(!copyFile || /function contextLine\([^)]*sessionKey/.test(readFileSync(copyFile, 'utf8'))), 'desktop-hosting', "apps/desktop/src/renderer/src/permission/copy.ts's contextLine must take no 'sessionKey' parameter");
   }
 }
 

@@ -23,7 +23,7 @@ function stripComments(text: string): string {
  *  the calling convention this table's own file fixes per function — the
  *  same "a case names its function, the runner knows how to call it" shape
  *  scripts/checks/tick.ts uses. */
-function runCases(table: any, engine: any, callConventions: Record<string, boolean>, fail: Reporter['fail'], ok: Reporter['ok'], tableRel: string): void {
+function runCases(table: any, engine: any, callConventions: Record<string, boolean>, expect: Reporter['expect'], fail: Reporter['fail'], tableRel: string): void {
   for (const c of table.cases) {
     const impl = engine[c.function];
     if (!impl) {
@@ -34,15 +34,11 @@ function runCases(table: any, engine: any, callConventions: Record<string, boole
     const got = spread ? impl(...c.input) : impl(c.input);
     const gotStr = JSON.stringify(got === undefined ? null : got);
     const expStr = JSON.stringify(c.expected === undefined ? null : c.expected);
-    if (gotStr !== expStr) {
-      fail('forensics-cases', `${tableRel} — '${c.name}': expected ${expStr}, got ${gotStr}`);
-    } else {
-      ok();
-    }
+    expect(!(gotStr !== expStr), 'forensics-cases', `${tableRel} — '${c.name}': expected ${expStr}, got ${gotStr}`);
   }
 }
 
-export default async function ({ fail, note, ok }: Reporter) {
+export default async function ({ expect, fail, note, ok }: Reporter) {
   const transcript = await importEngine(TRANSCRIPT_REL);
   const classify = await importEngine(`${FORENSICS_DIR}/classify.ts`);
 
@@ -58,8 +54,8 @@ export default async function ({ fail, note, ok }: Reporter) {
       transcriptTable,
       transcript,
       { excerpt: true }, // every other transcript.ts case passes its input as the one positional arg
+      expect,
       fail,
-      ok,
       `${FORENSICS_DIR}/cases/transcript.cases.json`,
     );
 
@@ -67,7 +63,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     const spreadEverything = Object.fromEntries(
       ['classifyTermination', 'notificationGaps', 'orphans', 'shellLoopHits', 'bashTimeouts', 'blockedAfterDenial', 'quotaClass', 'usesShellLoop', 'targetsGhOrGit', 'stageOf', 'itemNumberOf'].map((f) => [f, true]),
     );
-    runCases(classifyTable, classify, spreadEverything, fail, ok, `${FORENSICS_DIR}/cases/classify.cases.json`);
+    runCases(classifyTable, classify, spreadEverything, expect, fail, `${FORENSICS_DIR}/cases/classify.cases.json`);
 
     note(`forensics: ${transcriptTable.cases.length} transcript.ts cases, ${classifyTable.cases.length} classify.ts cases`);
   }
@@ -78,11 +74,7 @@ export default async function ({ fail, note, ok }: Reporter) {
   // directly rather than via the shared table.
   {
     const withControl = `a${String.fromCharCode(7)}b`;
-    if (transcript.sanitize(withControl) !== 'ab') {
-      fail('forensics-cases', 'sanitize did not strip a C0 control character (0x07)');
-    } else {
-      ok();
-    }
+    expect(!(transcript.sanitize(withControl) !== 'ab'), 'forensics-cases', 'sanitize did not strip a C0 control character (0x07)');
   }
 
   // --- (1c) The shared record-classification table also passes against
@@ -101,11 +93,7 @@ export default async function ({ fail, note, ok }: Reporter) {
       const gotPaired = paired.map((p: any) => ({ index: p.index, isError: p.isError, text: p.text }));
       const gotStr = JSON.stringify({ emitted: gotEmitted, paired: gotPaired });
       const expStr = JSON.stringify(c.expect);
-      if (gotStr !== expStr) {
-        fail('forensics-shared-table', `${sharedTableRel} — '${c.name}': scripts/lib/transcript.ts produced ${gotStr}, expected ${expStr}`);
-      } else {
-        ok();
-      }
+      expect(!(gotStr !== expStr), 'forensics-shared-table', `${sharedTableRel} — '${c.name}': scripts/lib/transcript.ts produced ${gotStr}, expected ${expStr}`);
     }
   }
 
@@ -130,10 +118,8 @@ export default async function ({ fail, note, ok }: Reporter) {
     for (const cmd of battery) {
       const loopMatch = classify.usesShellLoop(cmd) === original.usesShellLoop(cmd);
       const targetMatch = classify.targetsGhOrGit(cmd) === original.targetsGhOrGit(cmd);
-      if (!loopMatch) fail('forensics-shell-rules', `usesShellLoop disagrees between classify.ts and command-rules.mjs for ${JSON.stringify(cmd)}`);
-      else ok();
-      if (!targetMatch) fail('forensics-shell-rules', `targetsGhOrGit disagrees between classify.ts and command-rules.mjs for ${JSON.stringify(cmd)}`);
-      else ok();
+      expect(loopMatch, 'forensics-shell-rules', `usesShellLoop disagrees between classify.ts and command-rules.mjs for ${JSON.stringify(cmd)}`);
+      expect(targetMatch, 'forensics-shell-rules', `targetsGhOrGit disagrees between classify.ts and command-rules.mjs for ${JSON.stringify(cmd)}`);
     }
   }
 
@@ -146,12 +132,10 @@ export default async function ({ fail, note, ok }: Reporter) {
     const agentBasenames = new Set(readdirSync(join(root, 'plugins/port/agents')).filter((f) => f.endsWith('.md')).map((f) => basename(f, '.md')));
     const engineSet = new Set<string>(classify.STAGE_AGENTS);
     for (const name of agentBasenames) {
-      if (!engineSet.has(name)) fail('forensics-stages', `plugins/port/agents/${name}.md exists, but classify.ts's STAGE_AGENTS does not name '${name}'`);
-      else ok();
+      expect(engineSet.has(name), 'forensics-stages', `plugins/port/agents/${name}.md exists, but classify.ts's STAGE_AGENTS does not name '${name}'`);
     }
     for (const name of engineSet) {
-      if (!agentBasenames.has(name)) fail('forensics-stages', `classify.ts's STAGE_AGENTS names '${name}', which plugins/port/agents/ does not carry`);
-      else ok();
+      expect(agentBasenames.has(name), 'forensics-stages', `classify.ts's STAGE_AGENTS names '${name}', which plugins/port/agents/ does not carry`);
     }
 
     const desktopRel = 'apps/desktop/src/main/sessions/classify.ts';
@@ -162,12 +146,10 @@ export default async function ({ fail, note, ok }: Reporter) {
     } else {
       const desktopStages = new Set([...m[1].matchAll(/'([^']+)'/g)].map((mm) => mm[1]));
       for (const name of engineSet) {
-        if (!desktopStages.has(name)) fail('forensics-stages', `classify.ts's STAGE_AGENTS names '${name}', which ${desktopRel}'s PORT_STAGE_AGENTS does not`);
-        else ok();
+        expect(desktopStages.has(name), 'forensics-stages', `classify.ts's STAGE_AGENTS names '${name}', which ${desktopRel}'s PORT_STAGE_AGENTS does not`);
       }
       for (const name of desktopStages) {
-        if (!engineSet.has(name)) fail('forensics-stages', `${desktopRel}'s PORT_STAGE_AGENTS names '${name}', which classify.ts's STAGE_AGENTS does not`);
-        else ok();
+        expect(engineSet.has(name), 'forensics-stages', `${desktopRel}'s PORT_STAGE_AGENTS names '${name}', which classify.ts's STAGE_AGENTS does not`);
       }
     }
   }
@@ -197,22 +179,12 @@ export default async function ({ fail, note, ok }: Reporter) {
       }
       ok();
 
-      if (/--jq\b/.test(text)) fail('forensics-io', `${rel} uses --jq — the GraphQL call must always be parsed in full, never filtered`);
-      else ok();
-      if (/shell:\s*true/.test(text)) fail('forensics-io', `${rel} passes shell: true to a child process`);
-      else ok();
-      if (/\bgh (issue|pr|label) (edit|comment|create|merge|close)\b/.test(text) || /--add-label\b|--remove-label\b/.test(text)) {
-        fail('forensics-io', `${rel} spells out a mutating 'gh' subcommand or label-write flag literal — this engine is read-only, with no write path at all`);
-      } else {
-        ok();
-      }
+      expect(!/--jq\b/.test(text), 'forensics-io', `${rel} uses --jq — the GraphQL call must always be parsed in full, never filtered`);
+      expect(!/shell:\s*true/.test(text), 'forensics-io', `${rel} passes shell: true to a child process`);
+      expect(!(/\bgh (issue|pr|label) (edit|comment|create|merge|close)\b/.test(text) || /--add-label\b|--remove-label\b/.test(text)), 'forensics-io', `${rel} spells out a mutating 'gh' subcommand or label-write flag literal — this engine is read-only, with no write path at all`);
       // A whole-transcript dump: any flag literal that looks like it would
       // print raw records instead of findings.
-      if (/--dump\b|--raw\b|--full\b/.test(text)) {
-        fail('forensics-io', `${rel} names a flag that reads like a whole-transcript dump — the CLI has no such mode`);
-      } else {
-        ok();
-      }
+      expect(!/--dump\b|--raw\b|--full\b/.test(text), 'forensics-io', `${rel} names a flag that reads like a whole-transcript dump — the CLI has no such mode`);
     }
   }
 
@@ -225,11 +197,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     for (const f of files) {
       const rel = relOf(f);
       const text = stripComments(readFileSync(f, 'utf8'));
-      if (/0x00|0x1f|0x7f|202a|2066/.test(text)) {
-        fail('forensics-excerpt', `${rel} appears to reimplement sanitize's control/bidi ranges — every sanitizer lives in ${TRANSCRIPT_REL} alone`);
-      } else {
-        ok();
-      }
+      expect(!/0x00|0x1f|0x7f|202a|2066/.test(text), 'forensics-excerpt', `${rel} appears to reimplement sanitize's control/bidi ranges — every sanitizer lives in ${TRANSCRIPT_REL} alone`);
     }
   }
 
@@ -243,11 +211,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     const identifierRe = /\b(?:const|let|var|function)\s+(running|isLive|alive)\b|\.(running|isLive|alive)\s*=/;
     for (const f of files) {
       const text = stripComments(readFileSync(f, 'utf8'));
-      if (identifierRe.test(text)) {
-        fail('forensics-liveness', `${relOf(f)} declares a 'running'/'isLive'/'alive'-named identifier — a transcript's recency is never liveness`);
-      } else {
-        ok();
-      }
+      expect(!identifierRe.test(text), 'forensics-liveness', `${relOf(f)} declares a 'running'/'isLive'/'alive'-named identifier — a transcript's recency is never liveness`);
     }
   }
 
@@ -278,17 +242,9 @@ export default async function ({ fail, note, ok }: Reporter) {
   {
     const schema = readJson('schema/port.config.schema.json');
     const forensicsSchema = schema.properties?.commands?.properties?.forensics;
-    if (!forensicsSchema || JSON.stringify(forensicsSchema.type) !== JSON.stringify(['string', 'null']) || forensicsSchema.default !== null) {
-      fail('forensics-scope', "schema/port.config.schema.json's commands.forensics must be type ['string','null'] with default null");
-    } else {
-      ok();
-    }
+    expect(!(!forensicsSchema || JSON.stringify(forensicsSchema.type) !== JSON.stringify(['string', 'null']) || forensicsSchema.default !== null), 'forensics-scope', "schema/port.config.schema.json's commands.forensics must be type ['string','null'] with default null");
     const template = readJson('plugins/port/templates/port.config.json');
-    if (template.commands?.forensics !== null) {
-      fail('forensics-scope', `plugins/port/templates/port.config.json's commands.forensics must be null, got ${JSON.stringify(template.commands?.forensics)}`);
-    } else {
-      ok();
-    }
+    expect(!(template.commands?.forensics !== null), 'forensics-scope', `plugins/port/templates/port.config.json's commands.forensics must be null, got ${JSON.stringify(template.commands?.forensics)}`);
   }
 
   // --- (7c) No hardcoded ~/.claude — the Claude home is always resolved -------
@@ -296,11 +252,7 @@ export default async function ({ fail, note, ok }: Reporter) {
   // CLAUDE_CONFIG_DIR, breaking for any operator whose home is elsewhere.
   {
     const text = stripComments(readFileSync(join(root, FORENSICS_DIR, 'scan.ts'), 'utf8'));
-    if (/['"]~\/\.claude['"]/.test(text)) {
-      fail('forensics-scope', 'scan.ts hardcodes a literal ~/.claude path — the Claude home must be resolved via CLAUDE_CONFIG_DIR then os.homedir()');
-    } else {
-      ok();
-    }
+    expect(!/['"]~\/\.claude['"]/.test(text), 'forensics-scope', 'scan.ts hardcodes a literal ~/.claude path — the Claude home must be resolved via CLAUDE_CONFIG_DIR then os.homedir()');
   }
 
   // --- (8) The fixture tree exercises scan.ts's resolve and degrade paths ---
@@ -320,32 +272,22 @@ export default async function ({ fail, note, ok }: Reporter) {
         fail('forensics-fixtures', `expected exactly 1 fixture session, found ${ids.length}`);
       } else {
         const session = scan.readSession(ids[0], index.index.get(ids[0]));
-        if (session.malformed !== 1) fail('forensics-fixtures', `expected 1 malformed line in the fixture session, got ${session.malformed}`);
-        else ok();
+        expect(!(session.malformed !== 1), 'forensics-fixtures', `expected 1 malformed line in the fixture session, got ${session.malformed}`);
         if (session.agents.length !== 1) {
           fail('forensics-fixtures', `expected 1 readable agent transcript (the malformed-meta sidecar must degrade, not crash), got ${session.agents.length}`);
         } else {
           ok();
           const term = classify.classifyTermination(session.agents[0].records);
-          if (term.class !== 'terminal') fail('forensics-fixtures', `expected the fixture agent to classify 'terminal', got '${term.class}'`);
-          else ok();
+          expect(!(term.class !== 'terminal'), 'forensics-fixtures', `expected the fixture agent to classify 'terminal', got '${term.class}'`);
         }
-        if (session.problems.length === 0) {
-          fail('forensics-fixtures', 'expected at least one degraded problem (the malformed-meta sidecar) in the fixture session, got none');
-        } else {
-          ok();
-        }
+        expect(!(session.problems.length === 0), 'forensics-fixtures', 'expected at least one degraded problem (the malformed-meta sidecar) in the fixture session, got none');
       }
     }
 
     // Absent tree: a directory that does not exist degrades to a named
     // result, never a thrown error.
     const missing = scan.buildProjectIndex(join(root, FORENSICS_DIR, 'fixtures-does-not-exist'));
-    if (missing.ok || missing.kind !== 'claude-home-missing') {
-      fail('forensics-fixtures', `buildProjectIndex over an absent tree must report 'claude-home-missing', got ${JSON.stringify(missing)}`);
-    } else {
-      ok();
-    }
+    expect(!(missing.ok || missing.kind !== 'claude-home-missing'), 'forensics-fixtures', `buildProjectIndex over an absent tree must report 'claude-home-missing', got ${JSON.stringify(missing)}`);
   }
 
   // --- (9) report.ts's own orchestration runs end to end, without a `gh`
@@ -363,36 +305,27 @@ export default async function ({ fail, note, ok }: Reporter) {
       const result = reportMod.runReport({ claudeHome: fixtureHome });
       if (![0, 1].includes(result.exitCode)) {
         fail('forensics-report', `runReport over the fixture tree returned exitCode ${result.exitCode}, expected 0 or 1`);
-      } else if (result.notes.length === 0) {
-        fail('forensics-report', 'runReport over the fixture tree produced no notes at all');
-      } else {
-        ok();
-      }
+      } else expect(!(result.notes.length === 0), 'forensics-report', 'runReport over the fixture tree produced no notes at all');
       const text = reportMod.renderText(result);
       const jsonBody = reportMod.renderJson(result);
-      if (typeof text !== 'string' || text.length === 0) fail('forensics-report', 'renderText produced no text');
-      else ok();
-      if (!Array.isArray(jsonBody.notes) || !Array.isArray(jsonBody.findings)) fail('forensics-report', 'renderJson did not produce { notes, findings } arrays');
-      else ok();
+      expect(!(typeof text !== 'string' || text.length === 0), 'forensics-report', 'renderText produced no text');
+      expect(!(!Array.isArray(jsonBody.notes) || !Array.isArray(jsonBody.findings)), 'forensics-report', 'renderJson did not produce { notes, findings } arrays');
     } catch (e: any) {
       fail('forensics-report', `runReport threw over the fixture tree: ${e?.message ?? e}`);
     }
 
     try {
       const missingResult = reportMod.runReport({ claudeHome: join(root, FORENSICS_DIR, 'fixtures-does-not-exist') });
-      if (missingResult.exitCode !== 2) fail('forensics-report', `runReport over an absent claude-home must exit 2, got ${missingResult.exitCode}`);
-      else ok();
+      expect(!(missingResult.exitCode !== 2), 'forensics-report', `runReport over an absent claude-home must exit 2, got ${missingResult.exitCode}`);
     } catch (e: any) {
       fail('forensics-report', `runReport threw over an absent claude-home instead of degrading: ${e?.message ?? e}`);
     }
 
     try {
       const invalidSession = reportMod.runReport({ claudeHome: fixtureHome, session: 'not-a-uuid' });
-      if (invalidSession.exitCode !== 1) fail('forensics-report', `runReport with an invalid --session must exit 1, got ${invalidSession.exitCode}`);
-      else ok();
+      expect(!(invalidSession.exitCode !== 1), 'forensics-report', `runReport with an invalid --session must exit 1, got ${invalidSession.exitCode}`);
       const invalidSince = reportMod.runReport({ claudeHome: fixtureHome, since: 'yesterday' });
-      if (invalidSince.exitCode !== 1) fail('forensics-report', `runReport with an unparseable --since must exit 1, got ${invalidSince.exitCode}`);
-      else ok();
+      expect(!(invalidSince.exitCode !== 1), 'forensics-report', `runReport with an unparseable --since must exit 1, got ${invalidSince.exitCode}`);
     } catch (e: any) {
       fail('forensics-report', `runReport threw on a malformed argument instead of exiting 1: ${e?.message ?? e}`);
     }
@@ -401,11 +334,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     // reported as a note, exit 0, distinguished from "read nothing".
     try {
       const noneMatched = reportMod.runReport({ claudeHome: fixtureHome, since: '2099-01-01T00:00:00.000Z' });
-      if (noneMatched.exitCode !== 0 || noneMatched.findings.length !== 0 || !noneMatched.notes.some((n: string) => n.includes('0 sessions matched'))) {
-        fail('forensics-report', `runReport with a --since matching no session must exit 0 with a '0 sessions matched' note, got ${JSON.stringify(noneMatched)}`);
-      } else {
-        ok();
-      }
+      expect(!(noneMatched.exitCode !== 0 || noneMatched.findings.length !== 0 || !noneMatched.notes.some((n: string) => n.includes('0 sessions matched'))), 'forensics-report', `runReport with a --since matching no session must exit 0 with a '0 sessions matched' note, got ${JSON.stringify(noneMatched)}`);
     } catch (e: any) {
       fail('forensics-report', `runReport threw on a --since matching no session: ${e?.message ?? e}`);
     }

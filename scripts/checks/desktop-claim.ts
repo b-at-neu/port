@@ -7,7 +7,7 @@ import type { Reporter } from '../lib/report.ts';
 // dependency-free and regex-based, in the shape of desktop-writes.ts's and
 // desktop-github.ts's own guards. Reading directories by explicit path
 // (never walk('apps/'), which descends into node_modules).
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const githubDir = 'apps/desktop/src/main/github';
   const queryFile = `${githubDir}/query.ts`;
   const adapterFile = `${githubDir}/adapter.ts`;
@@ -96,11 +96,7 @@ export default async function ({ fail, ok }: Reporter) {
   // in-pipeline issue being quietly dropped.
   {
     const text = readFileSync(join(root, classifyFile), 'utf8');
-    if (!/absent:\s*\['marker'\]/.test(text)) {
-      fail('desktop-claim', `${classifyFile} does not set 'absent: ['marker']' — the two-stage-label guard must not be quietly dropped`);
-    } else {
-      ok();
-    }
+    expect(/absent:\s*\['marker'\]/.test(text), 'desktop-claim', `${classifyFile} does not set 'absent: ['marker']' — the two-stage-label guard must not be quietly dropped`);
   }
 
   // --- shared/claim/'s opt-in key set matches SKILL.md's opt-in paragraph, -
@@ -127,14 +123,7 @@ export default async function ({ fail, ok }: Reporter) {
       const paragraphSet = new Set(paragraphKeys);
       const onlyInApp = appKeys.filter((k) => !paragraphSet.has(k));
       const onlyInParagraph = paragraphKeys.filter((k) => !appSet.has(k));
-      if (onlyInApp.length > 0 || onlyInParagraph.length > 0) {
-        fail(
-          'desktop-claim',
-          `${classifyFile}'s opt-in key set (${JSON.stringify(appKeys)}) and ${skillFile}'s "work on #N" paragraph (${JSON.stringify(paragraphKeys)}) disagree`,
-        );
-      } else {
-        ok();
-      }
+      expect(!(onlyInApp.length > 0 || onlyInParagraph.length > 0), 'desktop-claim', `${classifyFile}'s opt-in key set (${JSON.stringify(appKeys)}) and ${skillFile}'s "work on #N" paragraph (${JSON.stringify(paragraphKeys)}) disagree`);
     }
   }
 }

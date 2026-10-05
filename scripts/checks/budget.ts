@@ -7,7 +7,7 @@ import type { Reporter } from '../lib/report.ts';
 // Issue 188: per-ticket dispatch cost accounting. A new topic module rather
 // than growing scripts/checks/cockpit.ts (already at its recorded 610-line
 // cap) — scripts/checks.ts wires it in directly.
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const templateRel = 'plugins/port/bin/budget.mjs';
   const templatePath = join(root, templateRel);
   const templateText = readFileSync(templatePath, 'utf8');
@@ -19,16 +19,8 @@ export default async function ({ fail, ok }: Reporter) {
   // via a POSIX-only string. Self-containment itself is now the
   // directory-wide `layout.ts` check (issue 171).
   {
-    if (/\bexecSync\b/.test(templateText)) {
-      fail('budget-template', `${templateRel} uses execSync — every child process must use spawnSync with an explicit argv array`);
-    } else {
-      ok();
-    }
-    if (/shell:\s*true/.test(templateText)) {
-      fail('budget-template', `${templateRel} passes shell: true to a child process — every call must be an explicit argv array, never a shell string`);
-    } else {
-      ok();
-    }
+    expect(!/\bexecSync\b/.test(templateText), 'budget-template', `${templateRel} uses execSync — every child process must use spawnSync with an explicit argv array`);
+    expect(!/shell:\s*true/.test(templateText), 'budget-template', `${templateRel} passes shell: true to a child process — every call must be an explicit argv array, never a shell string`);
   }
 
   // --- ghGraphQL reads stdout unconditionally, one round trip, no --jq -------
@@ -44,44 +36,24 @@ export default async function ({ fail, ok }: Reporter) {
       fail('budget-template', `${templateRel} no longer defines ghGraphQL — the partial-error contract has nothing to pin`);
     } else if (/if\s*\(!res\.ok\)/.test(graphql)) {
       fail('budget-template', `${templateRel}'s ghGraphQL branches on 'res.ok' — a non-zero gh exit is not evidence of no data (docs/ENGINEERING.md §4)`);
-    } else if (!/parseJsonObject\(res\.stdout\)/.test(graphql)) {
-      fail('budget-template', `${templateRel}'s ghGraphQL must parse res.stdout regardless of exit status`);
-    } else {
-      ok();
-    }
+    } else expect(/parseJsonObject\(res\.stdout\)/.test(graphql), 'budget-template', `${templateRel}'s ghGraphQL must parse res.stdout regardless of exit status`);
     // §6: the ledger read is one round trip, not a viewer query plus a
     // comments query.
-    if (!/viewer \{ login \} repository\(/.test(templateText)) {
-      fail('budget-template', `${templateRel} must fetch 'viewer' and the issue's comments in one aliased query, not two round trips`);
-    } else {
-      ok();
-    }
+    expect(/viewer \{ login \} repository\(/.test(templateText), 'budget-template', `${templateRel} must fetch 'viewer' and the issue's comments in one aliased query, not two round trips`);
     // Matches a quoted argv entry, not the word in a comment — the header
     // and ghGraphQL's docstring both name `--jq` to say it is never used.
-    if (/['"]--jq['"]/.test(templateText)) {
-      fail('budget-template', `${templateRel} passes --jq to gh — it silently skips that filter on the partial-error response the ledger read exists to handle`);
-    } else {
-      ok();
-    }
+    expect(!/['"]--jq['"]/.test(templateText), 'budget-template', `${templateRel} passes --jq to gh — it silently skips that filter on the partial-error response the ledger read exists to handle`);
 
     // #188 (R1-L2): `reset` used to truncate the session log unconditionally,
     // discarding the wall-clock of any row whose ledger write had just failed
     // — an under-count, i.e. a failure toward dispatch.
     const reset = /function runReset\([\s\S]*?\n}/.exec(templateText)?.[0] ?? '';
-    if (!/state === 'pending'/.test(reset)) {
-      fail('budget-template', `${templateRel}'s runReset must keep the rows it could not flush, not truncate the session log unconditionally`);
-    } else {
-      ok();
-    }
+    expect(/state === 'pending'/.test(reset), 'budget-template', `${templateRel}'s runReset must keep the rows it could not flush, not truncate the session log unconditionally`);
 
     // #188 (R1-M2): the gate commits an `open` row as it returns `allow`, so
     // it is only correct as the last pre-dispatch check. Both the header
     // contract here and the cockpit's own procedure must say so.
-    if (!/runs `dispatch` last/.test(templateText)) {
-      fail('budget-template', `${templateRel}'s header must state that the caller runs 'dispatch' last, after every other pre-dispatch veto`);
-    } else {
-      ok();
-    }
+    expect(/runs `dispatch` last/.test(templateText), 'budget-template', `${templateRel}'s header must state that the caller runs 'dispatch' last, after every other pre-dispatch veto`);
 
     // #188 (R2-M1): the row the gate commits must record the number the
     // cockpit dispatched with, or `--live` can never match a review/revise
@@ -89,11 +61,7 @@ export default async function ({ fail, ok }: Reporter) {
     const dispatch = /function runDispatch\([\s\S]*?\n}/.exec(templateText)?.[0] ?? '';
     if (!/dispatchNumber = opts\.pr != null \? Number\(opts\.pr\) : issue/.test(dispatch)) {
       fail('budget-template', `${templateRel}'s runDispatch must record dispatchNumber as --pr's value when given and the ticket otherwise`);
-    } else if (!/\{ issue, dispatchNumber,/.test(dispatch)) {
-      fail('budget-template', `${templateRel}'s runDispatch must store dispatchNumber on the session-log row alongside issue`);
-    } else {
-      ok();
-    }
+    } else expect(/\{ issue, dispatchNumber,/.test(dispatch), 'budget-template', `${templateRel}'s runDispatch must store dispatchNumber on the session-log row alongside issue`);
   }
 
   const mod = await import(pathToFileURL(templatePath).href);
@@ -114,22 +82,10 @@ export default async function ({ fail, ok }: Reporter) {
     ];
     const rendered = renderLedger(rows, 7200);
     const parsed = parseLedger(rendered);
-    if (!parsed || JSON.stringify(parsed.rows) !== JSON.stringify(rows)) {
-      fail('budget-roundtrip', `renderLedger → parseLedger did not round-trip: ${JSON.stringify(parsed)}`);
-    } else {
-      ok();
-    }
+    expect(!(!parsed || JSON.stringify(parsed.rows) !== JSON.stringify(rows)), 'budget-roundtrip', `renderLedger → parseLedger did not round-trip: ${JSON.stringify(parsed)}`);
     // An unparseable ledger is absent, never zero.
-    if (parseLedger('not a ledger at all') !== null) {
-      fail('budget-roundtrip', 'parseLedger accepted text with no "## Pipeline Cost" heading');
-    } else {
-      ok();
-    }
-    if (parseLedger('## Pipeline Cost\n\n| Stage | Model | Started (UTC) | Seconds | Outcome |\n| --- | --- | --- | --- | --- |\n| plan | opus | x | not-a-number | completed |') !== null) {
-      fail('budget-roundtrip', 'parseLedger accepted a non-integer Seconds cell');
-    } else {
-      ok();
-    }
+    expect(!(parseLedger('not a ledger at all') !== null), 'budget-roundtrip', 'parseLedger accepted text with no "## Pipeline Cost" heading');
+    expect(!(parseLedger('## Pipeline Cost\n\n| Stage | Model | Started (UTC) | Seconds | Outcome |\n| --- | --- | --- | --- | --- |\n| plan | opus | x | not-a-number | completed |') !== null), 'budget-roundtrip', 'parseLedger accepted a non-integer Seconds cell');
   }
 
   // --- verdict: exceeded at/over the ceiling, allow under it, allow when null -
@@ -145,8 +101,7 @@ export default async function ({ fail, ok }: Reporter) {
     ];
     for (const [input, want] of cases) {
       const got = verdict(input);
-      if (got !== want) fail('budget-verdict', `verdict(${JSON.stringify(input)}) = ${got}, expected ${want}`);
-      else ok();
+      expect(!(got !== want), 'budget-verdict', `verdict(${JSON.stringify(input)}) = ${got}, expected ${want}`);
     }
   }
 
@@ -165,8 +120,7 @@ export default async function ({ fail, ok }: Reporter) {
     ];
     for (const [input, want] of cases) {
       const got = formatDuration(input);
-      if (got !== want) fail('budget-duration', `formatDuration(${input}) = '${got}', expected '${want}'`);
-      else ok();
+      expect(!(got !== want), 'budget-duration', `formatDuration(${input}) = '${got}', expected '${want}'`);
     }
   }
 
@@ -179,25 +133,13 @@ export default async function ({ fail, ok }: Reporter) {
     const unbounded = [{}, { budget: {} }, { budget: { wallClockMinutes: null } }];
     for (const cfg of unbounded) {
       const got = ceilingSecondsFrom(cfg);
-      if (got.ok !== true || got.ceilingSeconds !== null) {
-        fail('budget-ceiling', `ceilingSecondsFrom(${JSON.stringify(cfg)}) must be unbounded, got ${JSON.stringify(got)}`);
-      } else {
-        ok();
-      }
+      expect(!(got.ok !== true || got.ceilingSeconds !== null), 'budget-ceiling', `ceilingSecondsFrom(${JSON.stringify(cfg)}) must be unbounded, got ${JSON.stringify(got)}`);
     }
     const good = ceilingSecondsFrom({ budget: { wallClockMinutes: 120 } });
-    if (good.ok !== true || good.ceilingSeconds !== 7200) {
-      fail('budget-ceiling', `ceilingSecondsFrom(120) must be 7200s, got ${JSON.stringify(good)}`);
-    } else {
-      ok();
-    }
+    expect(!(good.ok !== true || good.ceilingSeconds !== 7200), 'budget-ceiling', `ceilingSecondsFrom(120) must be 7200s, got ${JSON.stringify(good)}`);
     for (const bad of ['120', 0, -1, 1.5, true, {}]) {
       const got = ceilingSecondsFrom({ budget: { wallClockMinutes: bad } });
-      if (got.ok !== false) {
-        fail('budget-ceiling', `ceilingSecondsFrom(${JSON.stringify(bad)}) must be rejected as malformed, got ${JSON.stringify(got)}`);
-      } else {
-        ok();
-      }
+      expect(!(got.ok !== false), 'budget-ceiling', `ceilingSecondsFrom(${JSON.stringify(bad)}) must be rejected as malformed, got ${JSON.stringify(got)}`);
     }
   }
 
@@ -208,16 +150,8 @@ export default async function ({ fail, ok }: Reporter) {
   // not become a hold.
   {
     const got = unavailableAliases([{ path: ['repository', 'issue'] }, { path: [] }, { message: 'no path' }]);
-    if (!(got instanceof Set) || got.size !== 2 || !got.has('repository') || !got.has('issue')) {
-      fail('budget-graphql', `unavailableAliases did not collect exactly the named paths: ${JSON.stringify([...(got ?? [])])}`);
-    } else {
-      ok();
-    }
-    if (unavailableAliases(undefined).size !== 0) {
-      fail('budget-graphql', 'unavailableAliases must treat a missing errors array as nothing unavailable');
-    } else {
-      ok();
-    }
+    expect(!(!(got instanceof Set) || got.size !== 2 || !got.has('repository') || !got.has('issue')), 'budget-graphql', `unavailableAliases did not collect exactly the named paths: ${JSON.stringify([...(got ?? [])])}`);
+    expect(!(unavailableAliases(undefined).size !== 0), 'budget-graphql', 'unavailableAliases must treat a missing errors array as nothing unavailable');
   }
 
   // --- closeRows: lost by default, completed only when told -------------------
@@ -229,27 +163,14 @@ export default async function ({ fail, ok }: Reporter) {
     const startedAt = new Date(Date.now() - 5000).toISOString();
     const row = () => [{ issue: 1, stage: 'plan', model: 'opus', startedAt }];
     const { closed, stillOpen } = closeRows(row(), [], Date.now());
-    if (closed.length !== 1 || closed[0].outcome !== 'lost' || !(closed[0].seconds >= 4) || closed[0].state !== 'pending') {
-      fail('budget-close', `closeRows did not close, time and mark an unmatched row pending: ${JSON.stringify(closed)}`);
-    } else {
-      ok();
-    }
-    if (stillOpen.length !== 0) fail('budget-close', 'closeRows left an unmatched row open');
-    else ok();
+    expect(!(closed.length !== 1 || closed[0].outcome !== 'lost' || !(closed[0].seconds >= 4) || closed[0].state !== 'pending'), 'budget-close', `closeRows did not close, time and mark an unmatched row pending: ${JSON.stringify(closed)}`);
+    expect(!(stillOpen.length !== 0), 'budget-close', 'closeRows left an unmatched row open');
 
     const stillLive = closeRows(row(), ['plan #1'], Date.now());
-    if (stillLive.closed.length !== 0 || stillLive.stillOpen.length !== 1) {
-      fail('budget-close', 'closeRows closed a row whose description is in the live list');
-    } else {
-      ok();
-    }
+    expect(!(stillLive.closed.length !== 0 || stillLive.stillOpen.length !== 1), 'budget-close', 'closeRows closed a row whose description is in the live list');
 
     const graceful = closeRows(row(), [], Date.now(), ['plan #1']);
-    if (graceful.closed.length !== 1 || graceful.closed[0].outcome !== 'completed') {
-      fail('budget-close', `closeRows must mark a --completed row 'completed', got ${JSON.stringify(graceful.closed)}`);
-    } else {
-      ok();
-    }
+    expect(!(graceful.closed.length !== 1 || graceful.closed[0].outcome !== 'completed'), 'budget-close', `closeRows must mark a --completed row 'completed', got ${JSON.stringify(graceful.closed)}`);
 
     // Issue 188 (R2-M1): correlation is on the number the cockpit
     // *dispatched* with, not the ticket the ledger is keyed on. A
@@ -261,24 +182,12 @@ export default async function ({ fail, ok }: Reporter) {
     // That is a systematic under-count on half the stages.
     const prRow = () => [{ issue: 188, dispatchNumber: 213, stage: 'review', model: 'sonnet', startedAt }];
     const liveByPr = closeRows(prRow(), ['review #213'], Date.now());
-    if (liveByPr.stillOpen.length !== 1 || liveByPr.closed.length !== 0) {
-      fail('budget-close', `closeRows must keep a row live by its dispatch number, not its ticket: ${JSON.stringify(liveByPr)}`);
-    } else {
-      ok();
-    }
+    expect(!(liveByPr.stillOpen.length !== 1 || liveByPr.closed.length !== 0), 'budget-close', `closeRows must keep a row live by its dispatch number, not its ticket: ${JSON.stringify(liveByPr)}`);
     // The ticket number must not match: it is not what the cockpit dispatched.
     const liveByIssue = closeRows(prRow(), ['review #188'], Date.now());
-    if (liveByIssue.closed.length !== 1) {
-      fail('budget-close', `closeRows must not correlate a pull-request dispatch by its ticket number: ${JSON.stringify(liveByIssue)}`);
-    } else {
-      ok();
-    }
+    expect(!(liveByIssue.closed.length !== 1), 'budget-close', `closeRows must not correlate a pull-request dispatch by its ticket number: ${JSON.stringify(liveByIssue)}`);
     const donePr = closeRows(prRow(), [], Date.now(), ['review #213']);
-    if (donePr.closed.length !== 1 || donePr.closed[0].outcome !== 'completed' || donePr.closed[0].issue !== 188) {
-      fail('budget-close', `closeRows must match --completed by dispatch number while keeping the row on its ticket: ${JSON.stringify(donePr.closed)}`);
-    } else {
-      ok();
-    }
+    expect(!(donePr.closed.length !== 1 || donePr.closed[0].outcome !== 'completed' || donePr.closed[0].issue !== 188), 'budget-close', `closeRows must match --completed by dispatch number while keeping the row on its ticket: ${JSON.stringify(donePr.closed)}`);
   }
 
   // --- The session log round-trips, and its aggregate needs no ledger --------
@@ -295,46 +204,22 @@ export default async function ({ fail, ok }: Reporter) {
       { issue: 7, dispatchNumber: 118, stage: 'review', model: 'sonnet', startedAt: '2026-09-07T14:19:08Z', state: 'pending', seconds: 1448, outcome: 'lost' },
     ];
     const parsed = parseSessionLog(renderSessionLog(rows));
-    if (JSON.stringify(parsed) !== JSON.stringify(rows)) {
-      fail('budget-session', `renderSessionLog → parseSessionLog did not round-trip: ${JSON.stringify(parsed)}`);
-    } else {
-      ok();
-    }
-    if (parsed[1]?.dispatchNumber !== 118 || parsed[1]?.issue !== 7) {
-      fail('budget-session', `the session log must keep a pull-request dispatch's number distinct from its ticket: ${JSON.stringify(parsed[1])}`);
-    } else {
-      ok();
-    }
+    expect(!(JSON.stringify(parsed) !== JSON.stringify(rows)), 'budget-session', `renderSessionLog → parseSessionLog did not round-trip: ${JSON.stringify(parsed)}`);
+    expect(!(parsed[1]?.dispatchNumber !== 118 || parsed[1]?.issue !== 7), 'budget-session', `the session log must keep a pull-request dispatch's number distinct from its ticket: ${JSON.stringify(parsed[1])}`);
     // A legacy four-field line still parses, so a session in flight survives
     // an upgrade of the script rather than losing its open rows; an absent
     // dispatchNumber falls back to the ticket, which is correct for the
     // issue-keyed stages that were the only ones it could have recorded.
     const legacy = parseSessionLog('7\tplan\topus\t2026-09-07T14:02:31Z\n');
-    if (legacy.length !== 1 || legacy[0].state !== 'open' || legacy[0].seconds !== 0 || legacy[0].dispatchNumber !== 7) {
-      fail('budget-session', `a legacy four-field session line must read as an open row keyed on its ticket: ${JSON.stringify(legacy)}`);
-    } else {
-      ok();
-    }
+    expect(!(legacy.length !== 1 || legacy[0].state !== 'open' || legacy[0].seconds !== 0 || legacy[0].dispatchNumber !== 7), 'budget-session', `a legacy four-field session line must read as an open row keyed on its ticket: ${JSON.stringify(legacy)}`);
     const totals = sessionTotals(rows, Date.parse('2026-09-07T15:00:00Z'));
-    if (totals.dispatches !== 2 || totals.seconds !== 1849) {
-      fail('budget-session', `sessionTotals must sum closed and pending rows without any ledger read: ${JSON.stringify(totals)}`);
-    } else {
-      ok();
-    }
+    expect(!(totals.dispatches !== 2 || totals.seconds !== 1849), 'budget-session', `sessionTotals must sum closed and pending rows without any ledger read: ${JSON.stringify(totals)}`);
     // The session half is always producible; a no-close tick still gets a
     // clause, which is what the cockpit folds into its closing line.
     const noClose = renderTickClause(totals, []);
-    if (!noClose.startsWith('**Budget:** session 2 dispatches · ') || !noClose.includes('agent wall-clock')) {
-      fail('budget-session', `renderTickClause must print the session half with no tickets: ${noClose}`);
-    } else {
-      ok();
-    }
+    expect(!(!noClose.startsWith('**Budget:** session 2 dispatches · ') || !noClose.includes('agent wall-clock')), 'budget-session', `renderTickClause must print the session half with no tickets: ${noClose}`);
     const withTicket = renderTickClause(totals, [{ issue: 158, secondsUsed: 2041, ceilingSeconds: 7200 }]);
-    if (!withTicket.includes('#158 at 34m 01s of its 120m ceiling (28%)')) {
-      fail('budget-session', `renderTickClause must append the per-ticket half for a ledger it read: ${withTicket}`);
-    } else {
-      ok();
-    }
+    expect(withTicket.includes('#158 at 34m 01s of its 120m ceiling (28%)'), 'budget-session', `renderTickClause must append the per-ticket half for a ledger it read: ${withTicket}`);
   }
 
   // --- issueFromPrBody extracts Closes #N, null without one ------------------
@@ -342,16 +227,8 @@ export default async function ({ fail, ok }: Reporter) {
   // the docs promise — issueFromPrBody is how a pull-request dispatch
   // resolves its ticket at all.
   {
-    if (issueFromPrBody('Closes #188\n\n## Summary') !== 188) {
-      fail('budget-issue-from-pr', 'issueFromPrBody did not extract #188 from a well-formed body');
-    } else {
-      ok();
-    }
-    if (issueFromPrBody('no closing line here') !== null) {
-      fail('budget-issue-from-pr', 'issueFromPrBody returned non-null for a body with no Closes line');
-    } else {
-      ok();
-    }
+    expect(!(issueFromPrBody('Closes #188\n\n## Summary') !== 188), 'budget-issue-from-pr', 'issueFromPrBody did not extract #188 from a well-formed body');
+    expect(!(issueFromPrBody('no closing line here') !== null), 'budget-issue-from-pr', 'issueFromPrBody returned non-null for a body with no Closes line');
   }
 
   // --- Schema and template carry both new keys with documented defaults ------
@@ -360,40 +237,20 @@ export default async function ({ fail, ok }: Reporter) {
   {
     const schema = readJson('schema/port.config.schema.json');
     const budgetCommand = schema.properties?.commands?.properties?.budget;
-    if (!budgetCommand || budgetCommand.default !== null) {
-      fail('budget-schema', "schema/port.config.schema.json's commands.budget must exist with default null");
-    } else {
-      ok();
-    }
+    expect(!(!budgetCommand || budgetCommand.default !== null), 'budget-schema', "schema/port.config.schema.json's commands.budget must exist with default null");
     const ceiling = schema.properties?.budget?.properties?.wallClockMinutes;
-    if (!ceiling || ceiling.default !== null || ceiling.minimum !== 1) {
-      fail('budget-schema', "schema/port.config.schema.json's budget.wallClockMinutes must exist with default null and minimum 1");
-    } else {
-      ok();
-    }
+    expect(!(!ceiling || ceiling.default !== null || ceiling.minimum !== 1), 'budget-schema', "schema/port.config.schema.json's budget.wallClockMinutes must exist with default null and minimum 1");
 
     const template = readJson('plugins/port/templates/port.config.json');
-    if (template.commands?.budget !== null) {
-      fail('budget-schema', "plugins/port/templates/port.config.json's commands.budget must default to null");
-    } else {
-      ok();
-    }
-    if (!('budget' in template) || template.budget.wallClockMinutes !== null) {
-      fail('budget-schema', "plugins/port/templates/port.config.json's budget.wallClockMinutes must default to null");
-    } else {
-      ok();
-    }
+    expect(!(template.commands?.budget !== null), 'budget-schema', "plugins/port/templates/port.config.json's commands.budget must default to null");
+    expect(!(!('budget' in template) || template.budget.wallClockMinutes !== null), 'budget-schema', "plugins/port/templates/port.config.json's budget.wallClockMinutes must default to null");
   }
 
   // --- A zero ceiling is rejected by the invalid fixture ----------------------
   // guard(#188): a malformed ceiling silently disabling the rail.
   {
     const invalid = readJson('schema/fixtures/invalid.bad-budget.json');
-    if (invalid.budget?.wallClockMinutes !== 0) {
-      fail('budget-fixtures', 'schema/fixtures/invalid.bad-budget.json must set budget.wallClockMinutes to 0');
-    } else {
-      ok();
-    }
+    expect(!(invalid.budget?.wallClockMinutes !== 0), 'budget-fixtures', 'schema/fixtures/invalid.bad-budget.json must set budget.wallClockMinutes to 0');
   }
 
   // --- SKILL.md and PIPELINE.md name both config keys and the rail's phrases -
@@ -409,75 +266,37 @@ export default async function ({ fail, ok }: Reporter) {
     const docsText = pipelineDocsText();
 
     for (const key of ['commands.budget', 'budget.wallClockMinutes']) {
-      if (!skillText.includes(key)) fail('budget-docs', `${skillRel} never names '${key}'`);
-      else ok();
-      if (!docsText.includes(key)) fail('budget-docs', `${docsRel} never names '${key}'`);
-      else ok();
+      expect(skillText.includes(key), 'budget-docs', `${skillRel} never names '${key}'`);
+      expect(docsText.includes(key), 'budget-docs', `${docsRel} never names '${key}'`);
     }
 
-    if (!docsText.includes('cumulative agent wall-clock')) {
-      fail('budget-docs', `${docsRel} does not state the ceiling is cumulative agent wall-clock per ticket`);
-    } else {
-      ok();
-    }
-    if (!skillText.includes('skip silently, say nothing')) {
-      fail('budget-docs', `${skillRel} does not state commands.budget's null-means-skip-silently rule`);
-    } else {
-      ok();
-    }
+    expect(docsText.includes('cumulative agent wall-clock'), 'budget-docs', `${docsRel} does not state the ceiling is cumulative agent wall-clock per ticket`);
+    expect(skillText.includes('skip silently, say nothing'), 'budget-docs', `${skillRel} does not state commands.budget's null-means-skip-silently rule`);
 
     // #188 (R2-L1): `--completed` used to be sourced from "every description
     // TaskList reports finished", which no other contract in this repository
     // says it returns — every one of them infers termination from *absence*.
     // If that were the source, `completed` would be unreachable and the
     // Outcome column would be back to one value (the R1-L3 regression).
-    if (/--completed "<every description TaskList/.test(skillText)) {
-      fail('budget-docs', `${skillRel} sources --completed from TaskList, which reports live agents only — a finished agent is absent from it, so 'completed' would be unreachable`);
-    } else {
-      ok();
-    }
-    if (!skillText.includes('**`--completed` never comes from `TaskList`**')) {
-      fail('budget-docs', `${skillRel} must state that --completed comes from the relay loop's classification, not TaskList`);
-    } else {
-      ok();
-    }
+    expect(!/--completed "<every description TaskList/.test(skillText), 'budget-docs', `${skillRel} sources --completed from TaskList, which reports live agents only — a finished agent is absent from it, so 'completed' would be unreachable`);
+    expect(skillText.includes('**`--completed` never comes from `TaskList`**'), 'budget-docs', `${skillRel} must state that --completed comes from the relay loop's classification, not TaskList`);
     // Issue 203 moved the liveness cross-check itself into TICK-PROSE.md
     // (followed when commands.tick is null) — this phrase now lives there,
     // not in SKILL.md, so the skill union is what this assertion must read.
-    if (!/`TaskList` reports live agents only:/.test(pipelineSkillText())) {
-      fail('budget-docs', `${skillRel}'s liveness cross-check must state that TaskList reports live agents only, since every class there infers termination from absence`);
-    } else {
-      ok();
-    }
+    expect(/`TaskList` reports live agents only:/.test(pipelineSkillText()), 'budget-docs', `${skillRel}'s liveness cross-check must state that TaskList reports live agents only, since every class there infers termination from absence`);
 
     // #188 (R3-M1): the hold fail-open could not fire — nothing recorded the
     // first hold, so the rail collapsed to hold-forever on any ledger a
     // human comment edit made unparseable. `Budget holds:` is the cross-tick
     // memory, the same shape the Refresh sweep's `Refreshed:` already uses.
-    if (!/Budget holds:/.test(skillText)) {
-      fail('budget-docs', `${skillRel} must carry a 'Budget holds:' field in the tick-state template, or the second-hold dispatch has no cross-tick memory`);
-    } else {
-      ok();
-    }
-    if (!skillText.includes('dispatch anyway') || !/second or later consecutive hold/.test(skillText)) {
-      fail('budget-docs', `${skillRel} must branch the second consecutive 'hold' on the same item into dispatching anyway`);
-    } else {
-      ok();
-    }
-    if (!skillText.includes("Still can't read #158's cost ledger after two ticks")) {
-      fail('budget-docs', `${skillRel} is missing the plan's second-tick UX copy for a ledger still unreadable after two ticks`);
-    } else {
-      ok();
-    }
+    expect(/Budget holds:/.test(skillText), 'budget-docs', `${skillRel} must carry a 'Budget holds:' field in the tick-state template, or the second-hold dispatch has no cross-tick memory`);
+    expect(!(!skillText.includes('dispatch anyway') || !/second or later consecutive hold/.test(skillText)), 'budget-docs', `${skillRel} must branch the second consecutive 'hold' on the same item into dispatching anyway`);
+    expect(skillText.includes("Still can't read #158's cost ledger after two ticks"), 'budget-docs', `${skillRel} is missing the plan's second-tick UX copy for a ledger still unreadable after two ticks`);
 
     // #188 (R3-L1): the R2-M1 correlation fix is pinned script-side
     // (budget-close, budget-session above) but the caller must also name
     // which flag each dispatched row uses — a review/revise row called with
     // --issue instead of --pr reintroduces the same under-count.
-    if (!/`--issue N` for the three issue-triggered rows.*`--pr N` for the three pull-request-triggered rows/.test(skillText)) {
-      fail('budget-docs', `${skillRel}'s Budget gate must name --issue vs --pr per stage row, or a caller can rebuild the R2-M1 ticket-keyed miss`);
-    } else {
-      ok();
-    }
+    expect(/`--issue N` for the three issue-triggered rows.*`--pr N` for the three pull-request-triggered rows/.test(skillText), 'budget-docs', `${skillRel}'s Budget gate must name --issue vs --pr per stage row, or a caller can rebuild the R2-M1 ticket-keyed miss`);
   }
 }

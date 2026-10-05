@@ -10,7 +10,7 @@ import type { Reporter } from '../lib/report.ts';
 // wildcard, so an agent limiting output (`2>&1 | tail -100`) missed the
 // allowlist outright. This module makes that coverage mechanically checkable
 // instead of a convention nobody re-verifies.
-export default async function ({ fail, note, ok }: Reporter) {
+export default async function ({ expect, fail, note, ok }: Reporter) {
   const { allowMatchers, decide, bashPatternMatches, repoRelative } = await import(
     pathToFileURL(join(root, 'plugins/port/hooks/lib/guard-rules.mjs')).href
   );
@@ -28,14 +28,10 @@ export default async function ({ fail, note, ok }: Reporter) {
     const bare = 'node scripts/checks.ts';
     const suffixed = 'node scripts/checks.ts 2>&1 | tail -100';
 
-    if (!bashPatternMatches(narrowPattern, bare)) fail('allowlist-selftest', 'narrow entry should match the bare command');
-    else ok();
-    if (bashPatternMatches(narrowPattern, suffixed)) fail('allowlist-selftest', 'narrow entry should NOT match a suffixed command — self-test is broken');
-    else ok();
-    if (!bashPatternMatches(wildcardPattern, bare)) fail('allowlist-selftest', 'wildcarded entry should match the bare command');
-    else ok();
-    if (!bashPatternMatches(wildcardPattern, suffixed)) fail('allowlist-selftest', 'wildcarded entry should match a suffixed command');
-    else ok();
+    expect(bashPatternMatches(narrowPattern, bare), 'allowlist-selftest', 'narrow entry should match the bare command');
+    expect(!bashPatternMatches(narrowPattern, suffixed), 'allowlist-selftest', 'narrow entry should NOT match a suffixed command — self-test is broken');
+    expect(bashPatternMatches(wildcardPattern, bare), 'allowlist-selftest', 'wildcarded entry should match the bare command');
+    expect(bashPatternMatches(wildcardPattern, suffixed), 'allowlist-selftest', 'wildcarded entry should match a suffixed command');
   }
 
   // --- Check A — commands.* coverage ------------------------------------------
@@ -66,14 +62,7 @@ export default async function ({ fail, note, ok }: Reporter) {
         }
         ok();
         const suffixMatch = matchers.some((m: any) => m.test(`${command} ${probe}`));
-        if (!suffixMatch) {
-          fail(
-            'allowlist-coverage',
-            `'${command}' matches only the bare form — its allow entry needs a trailing ' *': "Bash(${command} *)"`,
-          );
-        } else {
-          ok();
-        }
+        expect(suffixMatch, 'allowlist-coverage', `'${command}' matches only the bare form — its allow entry needs a trailing ' *': "Bash(${command} *)"`);
       }
     }
   }
@@ -99,16 +88,8 @@ export default async function ({ fail, note, ok }: Reporter) {
       const wildcardEntry = `"Bash(${checkCommand} *)"`;
       for (const rel of ['.claude/settings.json', '.claude/port.config.json']) {
         const text = readFileSync(join(root, rel), 'utf8');
-        if (!text.includes(bareEntry)) {
-          fail('allowlist-paired-entry', `${rel} is missing the bare entry ${bareEntry} — the wildcard must never replace it (#212)`);
-        } else {
-          ok();
-        }
-        if (!text.includes(wildcardEntry)) {
-          fail('allowlist-paired-entry', `${rel} is missing the wildcard entry ${wildcardEntry}`);
-        } else {
-          ok();
-        }
+        expect(text.includes(bareEntry), 'allowlist-paired-entry', `${rel} is missing the bare entry ${bareEntry} — the wildcard must never replace it (#212)`);
+        expect(text.includes(wildcardEntry), 'allowlist-paired-entry', `${rel} is missing the wildcard entry ${wildcardEntry}`);
       }
     }
   }
@@ -131,11 +112,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     });
 
     const check = (label: string, result: any, expected: string): void => {
-      if (result.decision !== expected) {
-        fail('allowlist-normalization', `${label}: expected '${expected}', got '${result.decision}'`);
-      } else {
-        ok();
-      }
+      expect(!(result.decision !== expected), 'allowlist-normalization', `${label}: expected '${expected}', got '${result.decision}'`);
     };
 
     // (1) A subagent's absolute in-worktree invocation of the configured
@@ -213,11 +190,7 @@ export default async function ({ fail, note, ok }: Reporter) {
   {
     const rel = (label: string, command: string, configRoot: string, expected: string): void => {
       const actual = repoRelative(command, configRoot);
-      if (actual !== expected) {
-        fail('allowlist-reporelative', `${label}: expected '${expected}', got '${actual}'`);
-      } else {
-        ok();
-      }
+      expect(!(actual !== expected), 'allowlist-reporelative', `${label}: expected '${expected}', got '${actual}'`);
     };
 
     const r = '/w/repo';
@@ -275,29 +248,13 @@ export default async function ({ fail, note, ok }: Reporter) {
   {
     const skillRel = 'plugins/port/skills/init/SKILL.md';
     const skillText = readFileSync(join(root, skillRel), 'utf8');
-    if (!skillText.includes('carries a trailing ` *`, never the bare form')) {
-      fail('allowlist-phrase-pin', `${skillRel} no longer states the trailing-wildcard rule`);
-    } else {
-      ok();
-    }
+    expect(skillText.includes('carries a trailing ` *`, never the bare form'), 'allowlist-phrase-pin', `${skillRel} no longer states the trailing-wildcard rule`);
 
     const pipelineRel = 'plugins/port/docs/PIPELINE.md';
     const pipelineText = readFileSync(join(root, pipelineRel), 'utf8');
-    if (!pipelineText.includes('carries a trailing ` *`')) {
-      fail('allowlist-phrase-pin', `${pipelineRel} no longer states the trailing-wildcard rule`);
-    } else {
-      ok();
-    }
-    if (!pipelineText.includes('resolves an in-repo absolute invocation to its repo-relative form')) {
-      fail('allowlist-phrase-pin', `${pipelineRel} no longer names the root-normalization behaviour`);
-    } else {
-      ok();
-    }
-    if (!pipelineText.includes('fails toward availability')) {
-      fail('allowlist-phrase-pin', `${pipelineRel} no longer states which direction the wildcard fails toward (ENGINEERING §4)`);
-    } else {
-      ok();
-    }
+    expect(pipelineText.includes('carries a trailing ` *`'), 'allowlist-phrase-pin', `${pipelineRel} no longer states the trailing-wildcard rule`);
+    expect(pipelineText.includes('resolves an in-repo absolute invocation to its repo-relative form'), 'allowlist-phrase-pin', `${pipelineRel} no longer names the root-normalization behaviour`);
+    expect(pipelineText.includes('fails toward availability'), 'allowlist-phrase-pin', `${pipelineRel} no longer states which direction the wildcard fails toward (ENGINEERING §4)`);
   }
 
   // --- Check E — the prompt arm's own copies ------------------------------------
@@ -315,11 +272,7 @@ export default async function ({ fail, note, ok }: Reporter) {
 
     for (const phrase of ['no pipe into `tail`/`head`/`grep`', 'no expansion to an absolute path']) {
       for (const rel of allThree) {
-        if (!texts.get(rel)?.includes(phrase)) {
-          fail('allowlist-prompt-pin', `${rel} no longer says "${phrase}" — the #205 prompt arm was reverted`);
-        } else {
-          ok();
-        }
+        expect(texts.get(rel)?.includes(phrase), 'allowlist-prompt-pin', `${rel} no longer says "${phrase}" — the #205 prompt arm was reverted`);
       }
     }
 
@@ -329,11 +282,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     const CLAUSE =
       ': no `2>&1`, no pipe into `tail`/`head`/`grep` (#205 — the reporter prints one `ok` line or one `FAIL` line per failure, so there is nothing to truncate), and no expansion to an absolute path (the harness preamble\'s "use absolute file paths" is wrong for a `commands.*` invocation specifically — the allowlist entry is the repo-relative string, run it exactly as configured).';
     for (const rel of runners) {
-      if (!texts.get(rel)?.includes(CLAUSE)) {
-        fail('allowlist-prompt-pin', `${rel}'s commands.checks clause has drifted from its byte-identical counterpart`);
-      } else {
-        ok();
-      }
+      expect(texts.get(rel)?.includes(CLAUSE), 'allowlist-prompt-pin', `${rel}'s commands.checks clause has drifted from its byte-identical counterpart`);
     }
   }
 
@@ -365,20 +314,9 @@ export default async function ({ fail, note, ok }: Reporter) {
       .filter((line) => !line.trimStart().startsWith('//'))
       .join('\n');
     const emitted = [...hookCode.matchAll(/permissionDecision:\s*['"]([^'"]*)['"]/g)].map((m) => m[1]);
-    if (emitted.length === 0) {
-      fail('allowlist-deny-only', `${hookRel} emits no permissionDecision at all — the deny-only property is unverifiable`);
-    } else {
-      ok();
-    }
+    expect(!(emitted.length === 0), 'allowlist-deny-only', `${hookRel} emits no permissionDecision at all — the deny-only property is unverifiable`);
     for (const value of emitted) {
-      if (value !== 'deny') {
-        fail(
-          'allowlist-deny-only',
-          `${hookRel} emits permissionDecision '${value}' — the hook must stay deny-only, or the trailing wildcard (#205) starts granting rather than merely not objecting`,
-        );
-      } else {
-        ok();
-      }
+      expect(!(value !== 'deny'), 'allowlist-deny-only', `${hookRel} emits permissionDecision '${value}' — the hook must stay deny-only, or the trailing wildcard (#205) starts granting rather than merely not objecting`);
     }
 
     const copies: [string, string[]][] = [
@@ -388,11 +326,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     for (const [rel, phrases] of copies) {
       const text = readFileSync(join(root, rel), 'utf8');
       for (const phrase of phrases) {
-        if (!text.includes(phrase)) {
-          fail('allowlist-deny-only', `${rel} no longer says "${phrase}" — #212's correction to what bounds the wildcard was reverted`);
-        } else {
-          ok();
-        }
+        expect(text.includes(phrase), 'allowlist-deny-only', `${rel} no longer says "${phrase}" — #212's correction to what bounds the wildcard was reverted`);
       }
     }
   }
@@ -440,11 +374,7 @@ export default async function ({ fail, note, ok }: Reporter) {
 
     const pipelineRel = 'plugins/port/docs/PIPELINE.md';
     const pipelineText = readFileSync(join(root, pipelineRel), 'utf8');
-    if (!pipelineText.includes('the repository itself declares')) {
-      fail('allowlist-skill-delivery', `${pipelineRel} no longer states the Skill grant's bound ("...the repository itself declares")`);
-    } else {
-      ok();
-    }
+    expect(pipelineText.includes('the repository itself declares'), 'allowlist-skill-delivery', `${pipelineRel} no longer states the Skill grant's bound ("...the repository itself declares")`);
   }
 
   note('allowlist: commands.* coverage, normalization cases, repoRelative cases, phrase pins (#205), the deny-only bound (#212), and the Skill delivery path (#50)');

@@ -9,7 +9,7 @@ import type { Reporter } from '../lib/report.ts';
 // dependency-free and regex-based, in the shape of desktop-state.ts's own
 // guards — reading these directories by explicit path (never walk('apps/'),
 // which descends into node_modules).
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const boardDir = 'apps/desktop/src/shared/board';
   const rendererBoardDir = 'apps/desktop/src/renderer/src/board';
   const stateTypesFile = 'apps/desktop/src/shared/state/types.ts';
@@ -69,11 +69,7 @@ export default async function ({ fail, ok }: Reporter) {
       const text = readFileSync(f, 'utf8');
       if (timerWords.some((word) => text.includes(word))) offenders.push(rel);
     }
-    if (offenders.length > 0) {
-      fail('desktop-board', `${offenders.join(', ')} name a timer — main/state/watcher.ts is the only file under src/main/ allowed to (#80 Decision 2)`);
-    } else {
-      ok();
-    }
+    expect(!(offenders.length > 0), 'desktop-board', `${offenders.join(', ')} name a timer — main/state/watcher.ts is the only file under src/main/ allowed to (#80 Decision 2)`);
   }
 
   // --- SOURCE_KINDS and RepositoryFreshness's keys agree, itemStates excepted ---
@@ -102,11 +98,7 @@ export default async function ({ fail, ok }: Reporter) {
         fail('desktop-board', `SOURCE_KINDS names ${missingFromFreshness.join(', ')}, absent from RepositoryFreshness's keys`);
       } else if (extraNonItemStates.length > 0) {
         fail('desktop-board', `RepositoryFreshness carries ${extraNonItemStates.join(', ')} outside SOURCE_KINDS and 'itemStates'`);
-      } else if (!freshnessKeys.includes('itemStates')) {
-        fail('desktop-board', `RepositoryFreshness is missing 'itemStates', the one key deliberately outside SOURCE_KINDS`);
-      } else {
-        ok();
-      }
+      } else expect(freshnessKeys.includes('itemStates'), 'desktop-board', `RepositoryFreshness is missing 'itemStates', the one key deliberately outside SOURCE_KINDS`);
     }
   }
 
@@ -145,11 +137,7 @@ export default async function ({ fail, ok }: Reporter) {
     const designText = readFileSync(join(root, 'docs/DESIGN.md'), 'utf8');
     if (!labelMatch) {
       fail('desktop-board', `${rendererBoardDir}/copy.ts has no autoPlanTagLabel() returning a string literal`);
-    } else if (!designText.includes(`"${labelMatch[1]}" tag`)) {
-      fail('desktop-board', `docs/DESIGN.md §6 no longer names the "${labelMatch[1]}" tag — ${rendererBoardDir}/copy.ts's autoPlanTagLabel() has drifted from it`);
-    } else {
-      ok();
-    }
+    } else expect(designText.includes(`"${labelMatch[1]}" tag`), 'desktop-board', `docs/DESIGN.md §6 no longer names the "${labelMatch[1]}" tag — ${rendererBoardDir}/copy.ts's autoPlanTagLabel() has drifted from it`);
   }
 }
 

@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { root, readJson } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   // --- Artifact validator's LABELS table matches labels.json ------------------
   // guard(#149): audit's label resolution drifting from the source of truth
   // now that it can't import the file directly. The template can't import
@@ -53,26 +53,11 @@ export default async function ({ fail, ok }: Reporter) {
       const claimed = registryHeadings.filter((h) => h === mod[name]);
       if (claimed.length === 0) {
         fail('artifacts-registry', `${name} is exported but claimed by no CHECKS entry`);
-      } else if (claimed.length > 1) {
-        fail(
-          'artifacts-registry',
-          `${name} is claimed by ${claimed.length} CHECKS entries — one artifact must have exactly one kind name`,
-        );
-      } else {
-        ok();
-      }
+      } else expect(!(claimed.length > 1), 'artifacts-registry', `${name} is claimed by ${claimed.length} CHECKS entries — one artifact must have exactly one kind name`);
     }
     for (const [kind, entry] of Object.entries<any>(mod.CHECKS)) {
-      if (entry.heading != null && !headingExports.some((name) => mod[name] === entry.heading)) {
-        fail('artifacts-registry', `CHECKS.${kind}'s heading is not one of artifacts.mjs's own *_HEADING exports`);
-      } else {
-        ok();
-      }
-      if (typeof entry.run !== 'function') {
-        fail('artifacts-registry', `CHECKS.${kind}.run is not a function — an entry cannot be half-wired`);
-      } else {
-        ok();
-      }
+      expect(!(entry.heading != null && !headingExports.some((name) => mod[name] === entry.heading)), 'artifacts-registry', `CHECKS.${kind}'s heading is not one of artifacts.mjs's own *_HEADING exports`);
+      expect(!(typeof entry.run !== 'function'), 'artifacts-registry', `CHECKS.${kind}.run is not a function — an entry cannot be half-wired`);
     }
   }
 
@@ -98,19 +83,14 @@ export default async function ({ fail, ok }: Reporter) {
     ];
     for (const [name, re, good, bad] of cases) {
       if (!re.test(good)) fail('artifacts-patterns', `${name} rejects its own good example ${JSON.stringify(good)}`);
-      else if (re.test(bad)) fail('artifacts-patterns', `${name} accepts its bad example ${JSON.stringify(bad)}`);
-      else ok();
+      else expect(!re.test(bad), 'artifacts-patterns', `${name} accepts its bad example ${JSON.stringify(bad)}`);
     }
 
     const goodDetail = 'fixed R1-C1 · abc1234';
     const badDetail = 'Fixed the critical issue in the commit abc1234';
     if (!(REVISION_OPENS.test(goodDetail) && REVISION_DETAIL.test(goodDetail))) {
       fail('artifacts-patterns', `REVISION_DETAIL rejects its own good example ${JSON.stringify(goodDetail)}`);
-    } else if (REVISION_OPENS.test(badDetail) && REVISION_DETAIL.test(badDetail)) {
-      fail('artifacts-patterns', `REVISION_DETAIL accepts its bad example ${JSON.stringify(badDetail)}`);
-    } else {
-      ok();
-    }
+    } else expect(!(REVISION_OPENS.test(badDetail) && REVISION_DETAIL.test(badDetail)), 'artifacts-patterns', `REVISION_DETAIL accepts its bad example ${JSON.stringify(badDetail)}`);
 
     // withdrawn / rebase-required return { ok } from a closure, not a regex,
     // so they're exercised against FORMATS.md's canonical bodies (good), the
@@ -134,8 +114,7 @@ export default async function ({ fail, ok }: Reporter) {
       const run = CHECKS[kind].run;
       if (!run(good).ok) fail('artifacts-patterns', `${kind} rejects its own good example`);
       else if (run(badFact).ok) fail('artifacts-patterns', `${kind} accepts a body naming only a SHA`);
-      else if (run(badHeading).ok) fail('artifacts-patterns', `${kind} accepts a renamed heading`);
-      else ok();
+      else expect(!run(badHeading).ok, 'artifacts-patterns', `${kind} accepts a renamed heading`);
     }
 
     // guard(#288): the revise #N route's own artifact — a 'changes-requested'
@@ -153,8 +132,7 @@ export default async function ({ fail, ok }: Reporter) {
       if (!run(good).ok) fail('artifacts-patterns', 'changes-requested rejects its own good example');
       else if (run(headingAndShaOnly).ok) fail('artifacts-patterns', 'changes-requested accepts a body with only the heading and SHA, no request text');
       else if (run(renamedHeading).ok) fail('artifacts-patterns', 'changes-requested accepts a renamed heading');
-      else if (run(noSha).ok) fail('artifacts-patterns', 'changes-requested accepts a body with no SHA');
-      else ok();
+      else expect(!run(noSha).ok, 'artifacts-patterns', 'changes-requested accepts a body with no SHA');
     }
 
     // pin: `CHANGES_REQUESTED_HEADING` ↔ its literal rendering in
@@ -167,11 +145,7 @@ export default async function ({ fail, ok }: Reporter) {
         'plugins/port/skills/pipeline/SKILL.md',
         'plugins/port/docs/FORMATS.md',
       ]) {
-        if (!readFileSync(join(root, rel), 'utf8').includes(CHANGES_REQUESTED_HEADING)) {
-          fail('artifacts-patterns', `${rel} never names the literal '${CHANGES_REQUESTED_HEADING}'`);
-        } else {
-          ok();
-        }
+        expect(readFileSync(join(root, rel), 'utf8').includes(CHANGES_REQUESTED_HEADING), 'artifacts-patterns', `${rel} never names the literal '${CHANGES_REQUESTED_HEADING}'`);
       }
     }
   }
@@ -193,11 +167,7 @@ export default async function ({ fail, ok }: Reporter) {
       [[], []],
     ];
     for (const [stages, refresh] of legal) {
-      if (stageViolation(stages, refresh) != null) {
-        fail('artifacts-stage-legality', `stageViolation(${JSON.stringify(stages)}, ${JSON.stringify(refresh)}) reported a violation for a legal state`);
-      } else {
-        ok();
-      }
+      expect(!(stageViolation(stages, refresh) != null), 'artifacts-stage-legality', `stageViolation(${JSON.stringify(stages)}, ${JSON.stringify(refresh)}) reported a violation for a legal state`);
     }
     const violating = [
       { stages: ['ready for review', 'needs human'], refresh: ['refresh branch'], offending: ['ready for review', 'needs human'] },
@@ -207,11 +177,7 @@ export default async function ({ fail, ok }: Reporter) {
       const msg = stageViolation(stages, refresh);
       if (msg == null) {
         fail('artifacts-stage-legality', `stageViolation(${JSON.stringify(stages)}, ${JSON.stringify(refresh)}) reported no violation for an illegal state`);
-      } else if (!offending.every((name) => msg.includes(name))) {
-        fail('artifacts-stage-legality', `stageViolation's message ${JSON.stringify(msg)} does not name every offending label in ${JSON.stringify(offending)}`);
-      } else {
-        ok();
-      }
+      } else expect(offending.every((name) => msg.includes(name)), 'artifacts-stage-legality', `stageViolation's message ${JSON.stringify(msg)} does not name every offending label in ${JSON.stringify(offending)}`);
     }
   }
 
@@ -234,12 +200,10 @@ export default async function ({ fail, ok }: Reporter) {
       Object.keys(LABEL_ROLES).filter((k) => LABEL_ROLES[k] !== 'marker' && LABEL_SURFACE[k] === 'issue'),
     );
     for (const key of ISSUE_STAGE_KEYS) {
-      if (!issueKeys.has(key)) fail('artifacts-stage-keys', `artifacts.mjs's ISSUE_STAGE_KEYS names '${key}', which labels.json does not mark as a non-marker issue-surface key`);
-      else ok();
+      expect(issueKeys.has(key), 'artifacts-stage-keys', `artifacts.mjs's ISSUE_STAGE_KEYS names '${key}', which labels.json does not mark as a non-marker issue-surface key`);
     }
     for (const key of issueKeys) {
-      if (!ISSUE_STAGE_KEYS.includes(key)) fail('artifacts-stage-keys', `labels.json marks '${key}' as a non-marker issue-surface key, which artifacts.mjs's ISSUE_STAGE_KEYS omits`);
-      else ok();
+      expect(ISSUE_STAGE_KEYS.includes(key), 'artifacts-stage-keys', `labels.json marks '${key}' as a non-marker issue-surface key, which artifacts.mjs's ISSUE_STAGE_KEYS omits`);
     }
 
     const prKeys = new Set(
@@ -247,27 +211,17 @@ export default async function ({ fail, ok }: Reporter) {
     );
     const prUnion = new Set([...PR_STAGE_KEYS, ...PR_REFRESH_KEYS]);
     for (const key of prUnion) {
-      if (!prKeys.has(key)) fail('artifacts-stage-keys', `artifacts.mjs's PR_STAGE_KEYS/PR_REFRESH_KEYS names '${key}', which labels.json does not mark as a non-marker pr-surface key`);
-      else ok();
+      expect(prKeys.has(key), 'artifacts-stage-keys', `artifacts.mjs's PR_STAGE_KEYS/PR_REFRESH_KEYS names '${key}', which labels.json does not mark as a non-marker pr-surface key`);
     }
     for (const key of prKeys) {
-      if (!prUnion.has(key)) fail('artifacts-stage-keys', `labels.json marks '${key}' as a non-marker pr-surface key, which artifacts.mjs's PR_STAGE_KEYS/PR_REFRESH_KEYS omits`);
-      else ok();
+      expect(prUnion.has(key), 'artifacts-stage-keys', `labels.json marks '${key}' as a non-marker pr-surface key, which artifacts.mjs's PR_STAGE_KEYS/PR_REFRESH_KEYS omits`);
     }
 
     const issueLabel = (key: string) => readJson('plugins/port/data/labels.json').labels.find((l: any) => l.key === key)?.name;
     const flagged = stageViolation([issueLabel('planApproved'), issueLabel('prOpened')], []);
-    if (flagged == null || !flagged.includes(issueLabel('planApproved')) || !flagged.includes(issueLabel('prOpened'))) {
-      fail('artifacts-stage-keys', `stageViolation(['plan approved', 'pr opened'], []) must name both offending labels — got ${JSON.stringify(flagged)}`);
-    } else {
-      ok();
-    }
+    expect(!(flagged == null || !flagged.includes(issueLabel('planApproved')) || !flagged.includes(issueLabel('prOpened'))), 'artifacts-stage-keys', `stageViolation(['plan approved', 'pr opened'], []) must name both offending labels — got ${JSON.stringify(flagged)}`);
     const legal = stageViolation([issueLabel('prOpened')], []);
-    if (legal != null) {
-      fail('artifacts-stage-keys', `stageViolation(['pr opened'], []) reported a violation for a legal single issue-stage label`);
-    } else {
-      ok();
-    }
+    expect(!(legal != null), 'artifacts-stage-keys', `stageViolation(['pr opened'], []) reported a violation for a legal single issue-stage label`);
   }
 
   // --- Artifact workflow's trigger widened, narrowing moved to the step -------
@@ -287,8 +241,7 @@ export default async function ({ fail, ok }: Reporter) {
     const typesLine = /^\s*types:\s*\[([^\]]*)\]/m.exec(text);
     const types = typesLine ? typesLine[1].split(',').map((t) => t.trim()) : [];
     for (const t of ['labeled', 'opened', 'synchronize']) {
-      if (!types.includes(t)) fail('artifacts-trigger', `${rel}'s pull_request 'types:' is missing '${t}'`);
-      else ok();
+      expect(types.includes(t), 'artifacts-trigger', `${rel}'s pull_request 'types:' is missing '${t}'`);
     }
 
     const ifLines = [...text.matchAll(/^( *)if:/gm)];
@@ -298,19 +251,11 @@ export default async function ({ fail, ok }: Reporter) {
     const jobAttrIndent = /^( *)runs-on:/m.exec(text)?.[1]?.length;
     if (ifLines.length !== 1 || jobAttrIndent == null) {
       fail('artifacts-trigger', `${rel} must carry exactly one 'if:' key and a 'runs-on:' job field`);
-    } else if (ifLines[0][1].length <= jobAttrIndent) {
-      fail('artifacts-trigger', `${rel}'s 'if:' sits at job indentation — it must be a step condition, or a 'labeled' event with no matching label leaves the whole job, and any required check on it, unreported`);
-    } else {
-      ok();
-    }
+    } else expect(!(ifLines[0][1].length <= jobAttrIndent), 'artifacts-trigger', `${rel}'s 'if:' sits at job indentation — it must be a step condition, or a 'labeled' event with no matching label leaves the whole job, and any required check on it, unreported`);
 
     const retired = 'NEVER register this as a required status check';
     for (const p of [rel, 'docs/TESTING.md']) {
-      if (readFileSync(join(root, p), 'utf8').includes(retired)) {
-        fail('artifacts-trigger', `${p} still carries the retired '${retired}' warning`);
-      } else {
-        ok();
-      }
+      expect(!readFileSync(join(root, p), 'utf8').includes(retired), 'artifacts-trigger', `${p} still carries the retired '${retired}' warning`);
     }
   }
 }

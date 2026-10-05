@@ -18,7 +18,7 @@ import type { Reporter } from '../lib/report.ts';
 // - Decision 3: the envelope is parsed, never `--jq`'d — `gh api graphql`
 //   silently skips the `--jq` filter on the exact partial-error response
 //   this adapter most needs to read.
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const dir = 'apps/desktop/src/main/github';
   const files = walk(join(root, dir)).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
 
@@ -80,14 +80,7 @@ export default async function ({ fail, ok }: Reporter) {
       const engineTokens = tokenize(rollupMatch[1]);
       const onlyInApp = [...appTokens].filter((t) => !engineTokens.has(t));
       const onlyInEngine = [...engineTokens].filter((t) => !appTokens.has(t));
-      if (onlyInApp.length > 0 || onlyInEngine.length > 0) {
-        fail(
-          'desktop-github-adapter',
-          `${queryFile}'s CheckRollupFields selection and scripts/port-tick/query.ts's ROLLUP disagree — only in the app: ${onlyInApp.join(', ') || '(none)'}; only in the engine: ${onlyInEngine.join(', ') || '(none)'}`,
-        );
-      } else {
-        ok();
-      }
+      expect(!(onlyInApp.length > 0 || onlyInEngine.length > 0), 'desktop-github-adapter', `${queryFile}'s CheckRollupFields selection and scripts/port-tick/query.ts's ROLLUP disagree — only in the app: ${onlyInApp.join(', ') || '(none)'}; only in the engine: ${onlyInEngine.join(', ') || '(none)'}`);
     }
   }
 }

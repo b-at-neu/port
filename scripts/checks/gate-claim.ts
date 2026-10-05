@@ -278,11 +278,7 @@ export default async function ({ fail, ok, expect, note }: Reporter) {
       } catch {
         fail('gate-claim-wiring', `expected JSON deny output against a held claim, got ${JSON.stringify(stdout)}`);
       }
-      if (parsed && parsed.hookSpecificOutput?.permissionDecision !== 'deny') {
-        fail('gate-claim-wiring', `expected permissionDecision 'deny' against a held claim, got ${JSON.stringify(parsed)}`);
-      } else {
-        ok();
-      }
+      expect(!(parsed && parsed.hookSpecificOutput?.permissionDecision !== 'deny'), 'gate-claim-wiring', `expected permissionDecision 'deny' against a held claim, got ${JSON.stringify(parsed)}`);
 
       // A command that does not touch a plan-gate label proceeds normally,
       // even with the claim held — proof the claim read is scoped, not a
@@ -293,8 +289,7 @@ export default async function ({ fail, ok, expect, note }: Reporter) {
         tool_name: 'Bash',
         tool_input: { command: 'gh issue edit 148 --repo example/widgets --add-label "ready"' },
       });
-      if (untouched.trim() !== '') fail('gate-claim-wiring', `expected no deny for a non-plan-gate label edit, got ${JSON.stringify(untouched)}`);
-      else ok();
+      expect(!(untouched.trim() !== ''), 'gate-claim-wiring', `expected no deny for a non-plan-gate label edit, got ${JSON.stringify(untouched)}`);
     } catch (e: any) {
       if (e.status !== undefined) fail('gate-claim-wiring', `hook exited non-zero: ${e.message}`);
       else throw e;

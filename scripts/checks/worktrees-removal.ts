@@ -14,7 +14,7 @@ import type { Reporter } from '../lib/report.ts';
 // (which keeps the pre-existing template/classifier/hygiene assertions) so
 // this ticket's new surface gets its own topic module rather than growing
 // that one past its own shape.
-export default async function ({ fail, ok, note }: Reporter) {
+export default async function ({ expect, fail, note, ok }: Reporter) {
   const scriptPath = join(root, 'plugins/port/bin/worktrees.mjs');
   const { fallbackDecision, classifyRemovalFailure, orphanVerdict, longPathAdvisory, pathKey, stripExtendedPrefix, removeWorktree } =
     await import(pathToFileURL(scriptPath).href);
@@ -33,11 +33,7 @@ export default async function ({ fail, ok, note }: Reporter) {
     ];
     for (const [label, input, expected] of fdCases) {
       const got = fallbackDecision(input);
-      if (got.action !== expected.action || (expected.reason !== undefined && got.reason !== expected.reason)) {
-        fail('worktrees-removal-pure', `fallbackDecision — ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(got)}`);
-      } else {
-        ok();
-      }
+      expect(!(got.action !== expected.action || (expected.reason !== undefined && got.reason !== expected.reason)), 'worktrees-removal-pure', `fallbackDecision — ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(got)}`);
     }
 
     const crfCases: [string, string][] = [
@@ -47,8 +43,7 @@ export default async function ({ fail, ok, note }: Reporter) {
     ];
     for (const [code, expected] of crfCases) {
       const got = classifyRemovalFailure(code);
-      if (got !== expected) fail('worktrees-removal-pure', `classifyRemovalFailure(${code}): expected ${expected}, got ${got}`);
-      else ok();
+      expect(!(got !== expected), 'worktrees-removal-pure', `classifyRemovalFailure(${code}): expected ${expected}, got ${got}`);
     }
 
     const ovCases: [string, Record<string, unknown>, string][] = [
@@ -60,8 +55,7 @@ export default async function ({ fail, ok, note }: Reporter) {
     ];
     for (const [label, input, expected] of ovCases) {
       const got = orphanVerdict(input);
-      if (got !== expected) fail('worktrees-removal-pure', `orphanVerdict — ${label}: expected ${expected}, got ${got}`);
-      else ok();
+      expect(!(got !== expected), 'worktrees-removal-pure', `orphanVerdict — ${label}: expected ${expected}, got ${got}`);
     }
 
     const lpaCases: [string, Record<string, unknown>, 'advisory' | null][] = [
@@ -72,8 +66,7 @@ export default async function ({ fail, ok, note }: Reporter) {
     for (const [label, input, expected] of lpaCases) {
       const got = longPathAdvisory(input);
       const matches = expected === 'advisory' ? typeof got === 'string' && got.length > 0 : got === null;
-      if (!matches) fail('worktrees-removal-pure', `longPathAdvisory — ${label}: got ${JSON.stringify(got)}`);
-      else ok();
+      expect(matches, 'worktrees-removal-pure', `longPathAdvisory — ${label}: got ${JSON.stringify(got)}`);
     }
 
     // pathKey case-folds only on win32 — asserted against this run's own
@@ -81,11 +74,7 @@ export default async function ({ fail, ok, note }: Reporter) {
     // matrix (ENGINEERING §6) and each leg exercises its own branch.
     const equalHere = pathKey('/Repo/Path') === pathKey('/repo/path');
     const expectEqual = process.platform === 'win32';
-    if (equalHere !== expectEqual) {
-      fail('worktrees-removal-pure', `pathKey: expected case-fold=${expectEqual} on ${process.platform}, got ${equalHere}`);
-    } else {
-      ok();
-    }
+    expect(!(equalHere !== expectEqual), 'worktrees-removal-pure', `pathKey: expected case-fold=${expectEqual} on ${process.platform}, got ${equalHere}`);
 
     // stripExtendedPrefix is pure string manipulation, independent of the
     // host OS, so it is asserted on every platform rather than gated to win32.
@@ -97,11 +86,7 @@ export default async function ({ fail, ok, note }: Reporter) {
     ];
     for (const [label, input, expected] of sepCases) {
       const got = stripExtendedPrefix(input);
-      if (got !== expected) {
-        fail('worktrees-removal-pure', `stripExtendedPrefix — ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(got)}`);
-      } else {
-        ok();
-      }
+      expect(!(got !== expected), 'worktrees-removal-pure', `stripExtendedPrefix — ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(got)}`);
     }
   }
 
@@ -119,11 +104,7 @@ export default async function ({ fail, ok, note }: Reporter) {
       rmSync: (p: string) => { calls.push(p); },
       listPorcelain: () => [],
     });
-    if (calls.length !== 1 || calls[0] !== '/main/.claude/worktrees/x' || result.removedBy !== 'fallback' || !result.removed || !result.gitError) {
-      fail('worktrees-removal-orchestration', `git fails, dir remains: expected one rmSync call on the exact path and removedBy 'fallback', got calls=${JSON.stringify(calls)} result=${JSON.stringify(result)}`);
-    } else {
-      ok();
-    }
+    expect(!(calls.length !== 1 || calls[0] !== '/main/.claude/worktrees/x' || result.removedBy !== 'fallback' || !result.removed || !result.gitError), 'worktrees-removal-orchestration', `git fails, dir remains: expected one rmSync call on the exact path and removedBy 'fallback', got calls=${JSON.stringify(calls)} result=${JSON.stringify(result)}`);
   }
   {
     const err = Object.assign(new Error('resource busy or locked'), { code: 'EBUSY' });
@@ -133,11 +114,7 @@ export default async function ({ fail, ok, note }: Reporter) {
       rmSync: () => { throw err; },
       listPorcelain: () => [],
     });
-    if (result.removed !== false || result.cause !== 'file-in-use') {
-      fail('worktrees-removal-orchestration', `rmSync EBUSY: expected removed:false, cause:'file-in-use', got ${JSON.stringify(result)}`);
-    } else {
-      ok();
-    }
+    expect(!(result.removed !== false || result.cause !== 'file-in-use'), 'worktrees-removal-orchestration', `rmSync EBUSY: expected removed:false, cause:'file-in-use', got ${JSON.stringify(result)}`);
   }
   {
     let rmCalled = false;
@@ -147,11 +124,7 @@ export default async function ({ fail, ok, note }: Reporter) {
       rmSync: () => { rmCalled = true; },
       listPorcelain: () => [],
     });
-    if (rmCalled || !result.removed || result.removedBy !== 'git') {
-      fail('worktrees-removal-orchestration', `git succeeds, dir gone: expected rmSync never called and removedBy 'git', got rmCalled=${rmCalled} result=${JSON.stringify(result)}`);
-    } else {
-      ok();
-    }
+    expect(!(rmCalled || !result.removed || result.removedBy !== 'git'), 'worktrees-removal-orchestration', `git succeeds, dir gone: expected rmSync never called and removedBy 'git', got rmCalled=${rmCalled} result=${JSON.stringify(result)}`);
   }
   {
     let rmCalled = false;
@@ -161,11 +134,7 @@ export default async function ({ fail, ok, note }: Reporter) {
       rmSync: () => { rmCalled = true; },
       listPorcelain: () => [{ path: '/x', head: 'def' }],
     });
-    if (rmCalled || result.removed !== false || result.cause !== null) {
-      fail('worktrees-removal-orchestration', `HEAD moved: expected rmSync never called and removed:false, cause:null, got rmCalled=${rmCalled} result=${JSON.stringify(result)}`);
-    } else {
-      ok();
-    }
+    expect(!(rmCalled || result.removed !== false || result.cause !== null), 'worktrees-removal-orchestration', `HEAD moved: expected rmSync never called and removed:false, cause:null, got rmCalled=${rmCalled} result=${JSON.stringify(result)}`);
   }
 
   // --- Real-git end-to-end fixture ----------------------------------------------
@@ -242,28 +211,19 @@ export default async function ({ fail, ok, note }: Reporter) {
 
       if (parsed) {
         const candidate = (parsed.candidates ?? []).find((c: any) => c.path === wt || String(c.path).endsWith('agent-fixture'));
-        if (!candidate?.removed) fail('worktrees-removal-e2e', `expected the fixture worktree removed, got ${JSON.stringify(candidate)}`);
-        else ok();
+        expect(candidate?.removed, 'worktrees-removal-e2e', `expected the fixture worktree removed, got ${JSON.stringify(candidate)}`);
 
-        if (existsSync(wt)) fail('worktrees-removal-e2e', `expected ${wt} to be gone after reclaim, it still exists`);
-        else ok();
+        expect(!existsSync(wt), 'worktrees-removal-e2e', `expected ${wt} to be gone after reclaim, it still exists`);
 
         const remaining = (runGit(['worktree', 'list', '--porcelain'], fixture).stdout.match(/^worktree /gm) ?? []).length;
-        if (remaining !== 1) fail('worktrees-removal-e2e', `expected only the main worktree registered after reclaim, got ${remaining}`);
-        else ok();
+        expect(!(remaining !== 1), 'worktrees-removal-e2e', `expected only the main worktree registered after reclaim, got ${remaining}`);
 
-        if (!existsSync(sentinel)) fail('worktrees-removal-e2e', "the junction target's sentinel file was deleted — removal followed the junction out of the worktree");
-        else ok();
+        expect(existsSync(sentinel), 'worktrees-removal-e2e', "the junction target's sentinel file was deleted — removal followed the junction out of the worktree");
 
-        if (!(parsed.orphanDirs ?? []).some((p: string) => p.endsWith('orphan-fixture'))) {
-          fail('worktrees-removal-e2e', `expected orphanDirs to include orphan-fixture even with nothing registered there any more, got ${JSON.stringify(parsed.orphanDirs)}`);
-        } else {
-          ok();
-        }
+        expect((parsed.orphanDirs ?? []).some((p: string) => p.endsWith('orphan-fixture')), 'worktrees-removal-e2e', `expected orphanDirs to include orphan-fixture even with nothing registered there any more, got ${JSON.stringify(parsed.orphanDirs)}`);
 
         const advisoriesOk = process.platform === 'win32' ? (parsed.advisories ?? []).length > 0 : (parsed.advisories ?? []).length === 0;
-        if (!advisoriesOk) fail('worktrees-removal-e2e', `advisories: expected ${process.platform === 'win32' ? 'non-empty' : 'empty'} on ${process.platform}, got ${JSON.stringify(parsed.advisories)}`);
-        else ok();
+        expect(advisoriesOk, 'worktrees-removal-e2e', `advisories: expected ${process.platform === 'win32' ? 'non-empty' : 'empty'} on ${process.platform}, got ${JSON.stringify(parsed.advisories)}`);
 
         // The root-cause evidence this ticket exists to produce: which route
         // actually recovered the fixture, on whichever OS this leg is.
@@ -272,19 +232,11 @@ export default async function ({ fail, ok, note }: Reporter) {
 
       // Purge: a real, but non-orphan, path is refused.
       const refusedRes = spawnSync(process.execPath, [scriptPath, 'purge', '--orphan', join(fixture, '.claude')], { cwd: fixture, env: fixtureEnv(), encoding: 'utf8' });
-      if (refusedRes.status !== 2 || !existsSync(join(fixture, '.claude'))) {
-        fail('worktrees-removal-e2e', `purge on a non-orphan path: expected exit 2 and the path left intact, got exit ${refusedRes.status}, exists=${existsSync(join(fixture, '.claude'))}`);
-      } else {
-        ok();
-      }
+      expect(!(refusedRes.status !== 2 || !existsSync(join(fixture, '.claude'))), 'worktrees-removal-e2e', `purge on a non-orphan path: expected exit 2 and the path left intact, got exit ${refusedRes.status}, exists=${existsSync(join(fixture, '.claude'))}`);
 
       // Purge: the actual orphan is deleted.
       const purgeRes = spawnSync(process.execPath, [scriptPath, 'purge', '--orphan', orphanDir], { cwd: fixture, env: fixtureEnv(), encoding: 'utf8' });
-      if (purgeRes.status !== 0 || existsSync(orphanDir)) {
-        fail('worktrees-removal-e2e', `purge on the actual orphan: expected exit 0 and the directory gone, got exit ${purgeRes.status}, exists=${existsSync(orphanDir)}`);
-      } else {
-        ok();
-      }
+      expect(!(purgeRes.status !== 0 || existsSync(orphanDir)), 'worktrees-removal-e2e', `purge on the actual orphan: expected exit 0 and the directory gone, got exit ${purgeRes.status}, exists=${existsSync(orphanDir)}`);
     } catch (e: any) {
       fail('worktrees-removal-e2e', `fixture setup or assertion threw: ${e.message}`);
     } finally {
@@ -301,16 +253,8 @@ export default async function ({ fail, ok, note }: Reporter) {
     const text = readFileSync(join(root, rel), 'utf8');
     const forbidden = [/\brm -rf\b/, /\bpowershell\b/i, /\bcmd\s+\/\/c\b/, /\bdu -sh\b/];
     const hit = forbidden.find((re) => re.test(text));
-    if (hit) {
-      fail('worktree-clean-skill-guard', `${rel} still names ${hit} — the manual escape hatch must drive 'purge --orphan', never a POSIX/PowerShell-only recipe`);
-    } else {
-      ok();
-    }
-    if (!text.includes('purge --orphan')) {
-      fail('worktree-clean-skill-guard', `${rel} never names 'purge --orphan' — the script's own deletion route`);
-    } else {
-      ok();
-    }
+    expect(!hit, 'worktree-clean-skill-guard', `${rel} still names ${hit} — the manual escape hatch must drive 'purge --orphan', never a POSIX/PowerShell-only recipe`);
+    expect(text.includes('purge --orphan'), 'worktree-clean-skill-guard', `${rel} never names 'purge --orphan' — the script's own deletion route`);
   }
 
   note('worktrees-removal: pure cases, injected-failure orchestration, a real-git end-to-end fixture, and the worktree-clean skill guard');

@@ -8,7 +8,7 @@ import type { Reporter } from '../lib/report.ts';
 // dependency-free and regex-based, in the shape of desktop-registry.ts's own
 // guards — reading these directories by explicit path (never walk('apps/'),
 // which descends into node_modules).
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const sessionsDir = 'apps/desktop/src/main/sessions';
   const sharedSessionsDir = 'apps/desktop/src/shared/sessions';
   const srcDir = join(root, 'apps/desktop/src');
@@ -143,11 +143,7 @@ export default async function ({ fail, ok }: Reporter) {
         const hasEntries = /\bentries\s*:/.test(block);
         if (!hasAppended || !hasPatched) {
           fail('desktop-sessions', "TranscriptTailPoll's ok branch must carry both 'appended' and 'patched' -- a poll response is a delta, never a full list (#84)");
-        } else if (hasEntries) {
-          fail('desktop-sessions', "TranscriptTailPoll carries an 'entries' field -- a poll response must stay a delta (appended/patched), never the whole transcript (#84)");
-        } else {
-          ok();
-        }
+        } else expect(!hasEntries, 'desktop-sessions', "TranscriptTailPoll carries an 'entries' field -- a poll response must stay a delta (appended/patched), never the whole transcript (#84)");
       }
     }
   }

@@ -14,7 +14,7 @@ async function importEngine(rel: string): Promise<any> {
 // split out of tick.ts
 // for its own line budget (docs/ENGINEERING.md §1, §7) — same shape
 // cockpit-tick.ts was split out of cockpit.ts.
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   // --- allOpenPRs is unconditional and carries the duplicate sweep's fields,
   // and REFRESH_PAIR ↔ artifacts.mjs's PR_REFRESH_KEYS, both directions
   // guard(#220): the duplicate-pull-request sweep and the ungated report
@@ -24,37 +24,21 @@ export default async function ({ fail, ok }: Reporter) {
   // pin: `scripts/port-tick/reconcile.ts`'s `REFRESH_PAIR` ↔ `plugins/port/bin/artifacts.mjs`'s exported `PR_REFRESH_KEYS`
   const queryText = readFileSync(join(root, TICK_DIR, 'query.ts'), 'utf8');
   const buildQuerySrc = queryText.slice(queryText.indexOf('export function buildQuery'), queryText.indexOf('): string {'));
-  if (/\bmodules\b/.test(buildQuerySrc)) {
-    fail('tick-reconcile', `${TICK_DIR}/query.ts still names a 'modules' parameter on buildQuery — allOpenPRs must be unconditional (#220)`);
-  } else {
-    ok();
-  }
+  expect(!/\bmodules\b/.test(buildQuerySrc), 'tick-reconcile', `${TICK_DIR}/query.ts still names a 'modules' parameter on buildQuery — allOpenPRs must be unconditional (#220)`);
   const allOpenPrMatch = /allOpenPRs:\s*pullRequests\(states:\s*OPEN,\s*first:\s*100\)\s*\{([^]*?)\}\s*\}\s*\}/.exec(queryText);
   if (!allOpenPrMatch) {
     fail('tick-reconcile', `${TICK_DIR}/query.ts's allOpenPRs alias no longer matches the expected shape`);
   } else {
     for (const field of ['totalCount', 'body', 'headRefName', 'baseRefName']) {
-      if (!allOpenPrMatch[1].includes(field)) {
-        fail('tick-reconcile', `${TICK_DIR}/query.ts's allOpenPRs alias is missing '${field}' — the duplicate-pull-request sweep needs it`);
-      } else {
-        ok();
-      }
+      expect(allOpenPrMatch[1].includes(field), 'tick-reconcile', `${TICK_DIR}/query.ts's allOpenPRs alias is missing '${field}' — the duplicate-pull-request sweep needs it`);
     }
   }
-  if (/if\s*\(\s*modules\.approvalGate\s*\)\s*\{\s*parts\.push\(\s*['"`]allOpenPRs/.test(queryText)) {
-    fail('tick-reconcile', `${TICK_DIR}/query.ts still gates the allOpenPRs alias behind modules.approvalGate — it must be unconditional (#220)`);
-  } else {
-    ok();
-  }
+  expect(!/if\s*\(\s*modules\.approvalGate\s*\)\s*\{\s*parts\.push\(\s*['"`]allOpenPRs/.test(queryText), 'tick-reconcile', `${TICK_DIR}/query.ts still gates the allOpenPRs alias behind modules.approvalGate — it must be unconditional (#220)`);
 
   const { REFRESH_PAIR } = await importEngine(`${TICK_DIR}/reconcile.ts`);
   const artifactsText = readFileSync(join(root, 'plugins/port/bin/artifacts.mjs'), 'utf8');
   const m = /PR_REFRESH_KEYS\s*=\s*\[([^\]]*)\]/.exec(artifactsText);
   const artifactsPair = m ? m[1].split(',').map((s) => s.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean) : [];
   const sameSet = REFRESH_PAIR.length === artifactsPair.length && REFRESH_PAIR.every((k: string) => artifactsPair.includes(k));
-  if (!sameSet) {
-    fail('tick-reconcile', `reconcile.ts's REFRESH_PAIR is [${REFRESH_PAIR.join(', ')}], artifacts.mjs's PR_REFRESH_KEYS is [${artifactsPair.join(', ')}] — the two must agree, both directions`);
-  } else {
-    ok();
-  }
+  expect(sameSet, 'tick-reconcile', `reconcile.ts's REFRESH_PAIR is [${REFRESH_PAIR.join(', ')}], artifacts.mjs's PR_REFRESH_KEYS is [${artifactsPair.join(', ')}] — the two must agree, both directions`);
 }

@@ -8,7 +8,7 @@ import type { Reporter } from '../lib/report.ts';
 // so the cockpit's own sweep never closes rows this app's agents are still
 // working through, and vice versa. A new topic module rather than growing
 // scripts/checks/budget.ts further.
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const scriptRel = 'plugins/port/bin/budget.mjs';
   const scriptPath = join(root, scriptRel);
   const scriptText = readFileSync(scriptPath, 'utf8');
@@ -31,8 +31,7 @@ export default async function ({ fail, ok }: Reporter) {
     ];
     for (const [input, want] of cases) {
       const got = sessionLogName(input);
-      if (got !== want) fail('budget-session-name', `sessionLogName(${JSON.stringify(input)}) = ${JSON.stringify(got)}, expected ${JSON.stringify(want)}`);
-      else ok();
+      expect(!(got !== want), 'budget-session-name', `sessionLogName(${JSON.stringify(input)}) = ${JSON.stringify(got)}, expected ${JSON.stringify(want)}`);
     }
   }
 
@@ -52,11 +51,7 @@ export default async function ({ fail, ok }: Reporter) {
         continue;
       }
       const body = scriptText.slice(start, scriptText.indexOf('\n}', start));
-      if (!body.includes("'--session'")) {
-        fail('budget-session-cli', `${scriptRel}'s ${mode.name} mode never lists '--session' in its parseCommonArgs spec`);
-      } else {
-        ok();
-      }
+      expect(body.includes("'--session'"), 'budget-session-cli', `${scriptRel}'s ${mode.name} mode never lists '--session' in its parseCommonArgs spec`);
     }
   }
 }

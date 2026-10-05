@@ -23,7 +23,7 @@ const FORBIDDEN = [
   { pattern: /dangerouslySetInnerHTML/, label: 'dangerouslySetInnerHTML' },
 ];
 
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const dir = 'apps/desktop/src/renderer';
   const files = walk(join(root, dir)).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
 
@@ -59,10 +59,6 @@ export default async function ({ fail, ok }: Reporter) {
     const declaredElsewhere = declarations.filter((f) => relOf(f) !== 'apps/desktop/src/renderer/src/entry-rows.ts');
     if (declarations.length === 0) {
       fail('desktop-renderer', 'no file under apps/desktop/src/renderer/ declares function buildRow(entry: TranscriptEntry) — entry-rows.ts should');
-    } else if (declaredElsewhere.length > 0) {
-      fail('desktop-renderer', `function buildRow(entry: TranscriptEntry) is declared outside entry-rows.ts, in: ${declaredElsewhere.map(relOf).join(', ')}`);
-    } else {
-      ok();
-    }
+    } else expect(!(declaredElsewhere.length > 0), 'desktop-renderer', `function buildRow(entry: TranscriptEntry) is declared outside entry-rows.ts, in: ${declaredElsewhere.map(relOf).join(', ')}`);
   }
 }

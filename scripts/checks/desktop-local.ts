@@ -8,7 +8,7 @@ import type { Reporter } from '../lib/report.ts';
 // local sources the pipeline writes (`git worktree list --porcelain` and
 // `.agents/denials.log`). Four assertions pin its decisions mechanically, in
 // the shape of desktop-github.ts's/desktop-registry.ts's own guards.
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const dir = 'apps/desktop/src/main/local';
   const files = walk(join(root, dir)).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
 
@@ -121,11 +121,7 @@ export default async function ({ fail, ok }: Reporter) {
     fail('desktop-local-inspector', `${inspectRel} does not exist — the guards below cannot pass vacuously if the file is deleted`);
   } else {
     const text = readFileSync(inspectPath, 'utf8');
-    if (!/\bexport function inspectDenials\b/.test(text)) {
-      fail('desktop-local-inspector', `${inspectRel} does not export 'inspectDenials'`);
-    } else {
-      ok();
-    }
+    expect(/\bexport function inspectDenials\b/.test(text), 'desktop-local-inspector', `${inspectRel} does not export 'inspectDenials'`);
 
     let literalMissing = false;
     for (const literal of ["'attributed'", "'unknown-session'", "'attribution-unavailable'"]) {

@@ -11,7 +11,7 @@ import type { Reporter } from '../lib/report.ts';
 // it actually has in context can silently fall behind the ones it was
 // reviewed against.
 // pin: The shell-discipline block ↔ its canonical copy in PIPELINE.md
-export default async function ({ fail, note, ok }: Reporter) {
+export default async function ({ expect, fail, note, ok }: Reporter) {
   const BEGIN = '<!-- shell-discipline:begin -->';
   const END = '<!-- shell-discipline:end -->';
   const extractBlock = (text: string): string | null => {
@@ -23,11 +23,7 @@ export default async function ({ fail, note, ok }: Reporter) {
 
   const pipelineRel = 'plugins/port/docs/PIPELINE.md';
   const canonical = extractBlock(readFileSync(join(root, pipelineRel), 'utf8'));
-  if (canonical === null) {
-    fail('shell-discipline', `canonical shell-discipline block missing from ${pipelineRel}`);
-  } else {
-    ok();
-  }
+  expect(!(canonical === null), 'shell-discipline', `canonical shell-discipline block missing from ${pipelineRel}`);
 
   const agentFiles = walk(join(root, 'plugins/port/agents')).filter((f) => f.endsWith('.md'));
   let matched = 0;
@@ -44,15 +40,7 @@ export default async function ({ fail, note, ok }: Reporter) {
       fail('shell-discipline', `${rel} grants Bash but is missing the shell-discipline markers`);
     } else if (canonical === null) {
       note(`${rel}: skipped comparison — no canonical block to compare against`);
-    } else if (block !== canonical) {
-      fail('shell-discipline', `${rel}'s shell-discipline block has drifted from ${pipelineRel}'s canonical text`);
-    } else {
-      ok();
-    }
+    } else expect(!(block !== canonical), 'shell-discipline', `${rel}'s shell-discipline block has drifted from ${pipelineRel}'s canonical text`);
   }
-  if (matched < 4) {
-    fail('shell-discipline', `only ${matched} agent(s) granting Bash matched under plugins/port/agents — expected at least 4`);
-  } else {
-    ok();
-  }
+  expect(!(matched < 4), 'shell-discipline', `only ${matched} agent(s) granting Bash matched under plugins/port/agents — expected at least 4`);
 }

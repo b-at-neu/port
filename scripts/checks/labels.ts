@@ -75,7 +75,7 @@ export function normalizeYaml(text: string): string[] {
   return out;
 }
 
-export default async function ({ fail, note, ok }: Reporter) {
+export default async function ({ expect, fail, note, ok }: Reporter) {
   // --- Label vocabulary matches the schema -----------------------------------
   // guard: two files listing the same vocabulary and drifting. Two files
   // independently list the same label keys. They have drifted before.
@@ -261,40 +261,21 @@ export default async function ({ fail, note, ok }: Reporter) {
     {
       const a = normalizeYaml('# one\n# two three\ncode: here');
       const b = normalizeYaml('# one two\n# three\ncode: here');
-      if (JSON.stringify(a) !== JSON.stringify(b)) {
-        fail('workflow-templates', 'normalizeYaml: reflowing a comment across a line break must compare equal');
-      } else {
-        ok();
-      }
+      expect(!(JSON.stringify(a) !== JSON.stringify(b)), 'workflow-templates', 'normalizeYaml: reflowing a comment across a line break must compare equal');
     }
     {
       const a = normalizeYaml('code: here');
       const b = normalizeYaml('code: there');
-      if (JSON.stringify(a) === JSON.stringify(b)) {
-        fail('workflow-templates', 'normalizeYaml: a changed word on a non-comment line must compare unequal');
-      } else {
-        ok();
-      }
+      expect(!(JSON.stringify(a) === JSON.stringify(b)), 'workflow-templates', 'normalizeYaml: a changed word on a non-comment line must compare unequal');
     }
     {
       const a = normalizeYaml('  code: here');
       const b = normalizeYaml('    code: here');
-      if (JSON.stringify(a) === JSON.stringify(b)) {
-        fail('workflow-templates', 'normalizeYaml: a changed indent on a non-comment line must compare unequal');
-      } else {
-        ok();
-      }
+      expect(!(JSON.stringify(a) === JSON.stringify(b)), 'workflow-templates', 'normalizeYaml: a changed indent on a non-comment line must compare unequal');
     }
     {
       const rendered = renderTemplate('          X="{{v}}"', { v: 'a\nb\nc' });
-      if (rendered !== '          X="a\n          b\n          c"') {
-        fail(
-          'workflow-templates',
-          `renderTemplate: a multi-line value's continuation lines must indent to the placeholder's own column, got ${JSON.stringify(rendered)}`,
-        );
-      } else {
-        ok();
-      }
+      expect(!(rendered !== '          X="a\n          b\n          c"'), 'workflow-templates', `renderTemplate: a multi-line value's continuation lines must indent to the placeholder's own column, got ${JSON.stringify(rendered)}`);
     }
 
     const cfg = readJson('.claude/port.config.json');

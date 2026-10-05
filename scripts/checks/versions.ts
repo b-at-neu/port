@@ -93,7 +93,7 @@ function scanSet(): string[] {
   ].filter((f) => f.endsWith('.md') && existsSync(f));
 }
 
-export default async function ({ fail, note, ok }: Reporter) {
+export default async function ({ expect, fail, note, ok }: Reporter) {
   // --- versionLiterals self-test ----------------------------------------------
   // A check that cannot be made to fail is not a check (ENGINEERING §7):
   // prove the pattern catches what it exists to catch, and leaves alone what
@@ -103,19 +103,11 @@ export default async function ({ fail, note, ok }: Reporter) {
     const mustMatch = ['v0.2.0', '0.2.1-dev', '22.18.0', 'Node ≥22.18'];
     const mustNotMatch = ['v<semver>', 'v<version>', '<X.Y.Z>-dev', 'devwindow/v<next>', '~4.5 minutes', '2026-08-31', '/v2/widgets'];
     for (const line of mustMatch) {
-      if (versionLiterals(line).length === 0) {
-        fail('version-literal-selftest', `versionLiterals(${JSON.stringify(line)}) found nothing — must match`);
-      } else {
-        ok();
-      }
+      expect(!(versionLiterals(line).length === 0), 'version-literal-selftest', `versionLiterals(${JSON.stringify(line)}) found nothing — must match`);
     }
     for (const line of mustNotMatch) {
       const got = versionLiterals(line);
-      if (got.length > 0) {
-        fail('version-literal-selftest', `versionLiterals(${JSON.stringify(line)}) matched ${JSON.stringify(got)} — must not match`);
-      } else {
-        ok();
-      }
+      expect(!(got.length > 0), 'version-literal-selftest', `versionLiterals(${JSON.stringify(line)}) matched ${JSON.stringify(got)} — must not match`);
     }
   }
 
@@ -153,14 +145,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     // should drop its exemption in the same commit, not leave a licence
     // nothing uses.
     for (const exemption of EXEMPTIONS) {
-      if (!used.has(exemption)) {
-        fail(
-          'version-literal-exemption',
-          `${exemption.file}: exemption for ${JSON.stringify(exemption.literal)} matches nothing on disk — drop the exemption or the doc changed out from under it`,
-        );
-      } else {
-        ok();
-      }
+      expect(used.has(exemption), 'version-literal-exemption', `${exemption.file}: exemption for ${JSON.stringify(exemption.literal)} matches nothing on disk — drop the exemption or the doc changed out from under it`);
     }
   }
 
@@ -176,10 +161,6 @@ export default async function ({ fail, note, ok }: Reporter) {
       fail('node-floor-pin', `CONTRIBUTING.md: no "Node ≥X.Y.Z" floor statement found to parse`);
     } else if (!pkgMatch) {
       fail('node-floor-pin', `package.json: engines.node (${JSON.stringify(engines)}) does not parse as ">=X.Y.Z"`);
-    } else if (docMatch[1] !== pkgMatch[1]) {
-      fail('node-floor-pin', `CONTRIBUTING.md's Node floor (${docMatch[1]}) disagrees with package.json's engines.node (${pkgMatch[1]})`);
-    } else {
-      ok();
-    }
+    } else expect(!(docMatch[1] !== pkgMatch[1]), 'node-floor-pin', `CONTRIBUTING.md's Node floor (${docMatch[1]}) disagrees with package.json's engines.node (${pkgMatch[1]})`);
   }
 }

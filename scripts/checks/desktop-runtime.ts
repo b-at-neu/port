@@ -7,7 +7,7 @@ import type { Reporter } from '../lib/report.ts';
 // runtime adapter. Five assertions pin its plan's decisions mechanically, in
 // the shape desktop-registry.ts's and desktop-sessions.ts's own guards
 // already use.
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const srcDir = join(root, 'apps/desktop/src');
   const runtimeDir = 'apps/desktop/src/main/runtime';
   const allFiles = walk(srcDir).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
@@ -77,19 +77,11 @@ export default async function ({ fail, ok }: Reporter) {
   // instead of importing the one declared constant.
   {
     const declarations = allFiles.filter((f) => !f.endsWith('.test.ts') && /export const MINIMUM_CLAUDE_CODE_VERSION\s*=/.test(readFileSync(f, 'utf8')));
-    if (declarations.length !== 1) {
-      fail('desktop-runtime', `MINIMUM_CLAUDE_CODE_VERSION is declared ${declarations.length} times, expected exactly 1: ${declarations.map(relOf).join(', ') || '(none)'}`);
-    } else {
-      ok();
-    }
+    expect(!(declarations.length !== 1), 'desktop-runtime', `MINIMUM_CLAUDE_CODE_VERSION is declared ${declarations.length} times, expected exactly 1: ${declarations.map(relOf).join(', ') || '(none)'}`);
     const versionFile = allFiles.find((f) => relOf(f) === `${runtimeDir}/version.ts`);
     if (!versionFile) {
       fail('desktop-runtime', `${runtimeDir}/version.ts does not exist`);
-    } else if (!/MINIMUM_CLAUDE_CODE_VERSION/.test(readFileSync(versionFile, 'utf8'))) {
-      fail('desktop-runtime', `${runtimeDir}/version.ts does not reference MINIMUM_CLAUDE_CODE_VERSION`);
-    } else {
-      ok();
-    }
+    } else expect(/MINIMUM_CLAUDE_CODE_VERSION/.test(readFileSync(versionFile, 'utf8')), 'desktop-runtime', `${runtimeDir}/version.ts does not reference MINIMUM_CLAUDE_CODE_VERSION`);
   }
 
   // --- Every real query( call site passes pathToClaudeCodeExecutable -------

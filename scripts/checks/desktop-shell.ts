@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { root, walk, relOf, sectionText } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-export default async function ({ fail, ok, note }: Reporter) {
+export default async function ({ expect, fail, note, ok }: Reporter) {
   const designText = readFileSync(join(root, 'docs/DESIGN.md'), 'utf8');
   const shellDir = join(root, 'apps/desktop/src/renderer/src/shell');
 
@@ -47,11 +47,7 @@ export default async function ({ fail, ok, note }: Reporter) {
       .map((m) => m[1].trim())
       .filter((k) => k !== 'Keys' && !/^-+$/.test(k))
       .sort();
-    if (JSON.stringify(codeKeys) !== JSON.stringify(designKeys)) {
-      fail('desktop-shell', `shell/key-bindings.ts's KEY_BINDINGS and DESIGN.md §3's keyboard table disagree — only in code: ${codeKeys.filter((k) => !designKeys.includes(k)).join(', ') || 'none'}, only in design: ${designKeys.filter((k) => !codeKeys.includes(k)).join(', ') || 'none'}`);
-    } else {
-      ok();
-    }
+    expect(!(JSON.stringify(codeKeys) !== JSON.stringify(designKeys)), 'desktop-shell', `shell/key-bindings.ts's KEY_BINDINGS and DESIGN.md §3's keyboard table disagree — only in code: ${codeKeys.filter((k) => !designKeys.includes(k)).join(', ') || 'none'}, only in design: ${designKeys.filter((k) => !codeKeys.includes(k)).join(', ') || 'none'}`);
   }
 
   // --- guard: no data-action= under shell/, backlog/, components/ ---------
@@ -74,8 +70,7 @@ export default async function ({ fail, ok, note }: Reporter) {
     const file = join(root, 'apps/desktop/src/shared/board/needs-you.ts');
     const imports = Array.from(readFileSync(file, 'utf8').matchAll(/^import .* from '([^']+)'/gm)).map((m) => m[1]);
     const bad = imports.filter((spec) => spec.startsWith('node:') || spec.includes('/main/'));
-    if (bad.length > 0) fail('desktop-shell', `shared/board/needs-you.ts imports from ${bad.join(', ')} — it must stay renderer-safe`);
-    else ok();
+    expect(!(bad.length > 0), 'desktop-shell', `shared/board/needs-you.ts imports from ${bad.join(', ')} — it must stay renderer-safe`);
   }
 
   note(`desktop-shell: scanned ${walk(shellDir).length} shell files`);
