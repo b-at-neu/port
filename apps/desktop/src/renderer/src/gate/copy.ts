@@ -41,8 +41,16 @@ export function isClaimHeldForPlanGate(claim: ClaimRead): boolean {
   return claim.state === 'held' && claim.scopes.includes('plan-gate')
 }
 
-export function autoPlanNoteCopy(): string {
-  return 'Opted in with auto-approve. The cockpit would have approved this without asking — it is waiting because the plan gate is claimed here.'
+/** #313: the app now makes the `autoPlan` swap itself under a held
+ *  `plan-gate` claim, so the note no longer says this item is stuck waiting
+ *  for the claim — one arm per claim state, mirroring `claimLineCopy`'s own
+ *  split. */
+export function autoPlanNoteCopy(claim: ClaimRead): string {
+  if (claim.state === 'unreadable') return "Opted in with auto-approve, but nothing approves it until the claim file is fixed or removed."
+  if (claim.state === 'held' && claim.scopes.includes('plan-gate')) {
+    return 'Opted in with auto-approve. port approves it on its next poll, unless dispatch is drained. You can still answer it now.'
+  }
+  return 'Opted in with auto-approve. The cockpit approves it on its next tick.'
 }
 
 export function assigneeNoteCopy(login: string): string {

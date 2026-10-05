@@ -129,6 +129,16 @@ export function planGateHeaderButtonLabel(): string {
   return 'Plan gate'
 }
 
+/** #313: the row tag for an `autoPlan` issue, at any phase — `docs/DESIGN.md`
+ *  §6's own "Auto-plan" tag sentence, pinned by `scripts/checks/desktop-board.ts`. */
+export function autoPlanTagLabel(): string {
+  return 'Auto-plan'
+}
+
+export function autoPlanTagTitle(): string {
+  return 'Opted in with auto-approve: its plan is approved without a review.'
+}
+
 // --- The operator decisions --------------------------------------------
 
 export function decisionButtonLabel(decision: OperatorDecision): string {

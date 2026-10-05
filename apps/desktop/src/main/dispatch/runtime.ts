@@ -10,10 +10,12 @@ import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '.
 import type { DispatchLedger, RefreshMemo, UnknownStreaks } from '../tick'
 import type { RepoId } from '../../shared/repos'
 import type { RepoDispatchStatus } from '../../shared/dispatch/types'
-import { applyObservation, escalateToHuman } from '../actions'
+import { applyObservation, autoApprovePlan, escalateToHuman } from '../actions'
 import { createBudgetGate } from './budget-gate'
 import { createDispatcher } from './dispatcher'
 import type { CreateDispatcherParams, Dispatcher } from './dispatcher'
+import { createAutoPlanner } from './auto-plan'
+import type { AutoPlanner, AutoPlannerDeps } from './auto-plan'
 
 export interface WatcherDeps {
   readonly ledger: DispatchLedger
@@ -28,6 +30,9 @@ export interface DispatchRuntime {
   readonly unknownStreaks: UnknownStreaks
   readonly refreshMemo: RefreshMemo
   readonly dispatcher: Dispatcher
+  /** #313: the auto-plan swap's own snapshot consumer — built from the same
+   *  deps as `dispatcher`, gated on `plan-gate` rather than `dispatch`. */
+  readonly autoPlanner: AutoPlanner
   /** `main/state/watcher.ts`'s own `CreatePipelineWatcherParams` subset this
    *  runtime already owns — spread directly rather than wired field by field. */
   readonly watcherDeps: WatcherDeps
@@ -44,11 +49,22 @@ export function createDispatchRuntime(deps: Omit<CreateDispatcherParams, 'ledger
   const refreshMemo = createRefreshMemo()
   let republishFn: (() => void) | null = null
   const dispatcher = createDispatcher({ ...deps, ledger, refreshMemo, budget: createBudgetGate(), escalate: escalateToHuman, writeObservation: applyObservation, onChange: () => republishFn?.() })
+  const autoPlannerDeps: AutoPlannerDeps = {
+    listRepositories: deps.listRepositories,
+    registryDeps: deps.registryDeps,
+    readGateClaim: deps.readGateClaim,
+    runState: deps.runState,
+    autoApprove: autoApprovePlan,
+    auditDir: deps.dirs.audit,
+    now: deps.now,
+  }
+  const autoPlanner = createAutoPlanner(autoPlannerDeps)
   return {
     ledger,
     unknownStreaks,
     refreshMemo,
     dispatcher,
+    autoPlanner,
     watcherDeps: {
       ledger,
       unknownStreaks,

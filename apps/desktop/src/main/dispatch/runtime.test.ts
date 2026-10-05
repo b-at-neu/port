@@ -53,6 +53,21 @@ describe('createDispatchRuntime', () => {
     expect(() => runtime.dispatcher.consider({ state: { repositories: [], sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: 't' }, readAt: 't' }, health: [], policy: { baseIntervalMs: { github: 60_000, sessions: 15_000, worktrees: 15_000, denials: 15_000 }, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: 30_000 }, tick: [], relay: { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: 't' }, runStates: { store: { kind: 'loaded' }, repositories: [] }, nextWakeupAt: null, emittedAt: 't', dispatch: [] })).not.toThrow()
   })
 
+  it('exposes an autoPlanner alongside the dispatcher', () => {
+    const runtime = createDispatchRuntime({
+      store: fakeStore(),
+      launch: null,
+      runState: () => 'dispatching',
+      readGateClaim: () => Promise.resolve({ state: 'absent', path: 'p', readAt: 'r' }),
+      fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [], unavailable: [], fetchedAt: 'r' }),
+      listRepositories: () => Promise.resolve({ ok: true, repositories: [] }),
+      registryDeps: { registryDir: '/r', git: () => Promise.reject(new Error('unused')), chooseDirectory: () => Promise.resolve(null) },
+      dirs: { audit: '/audit', scratch: '/scratch' },
+      now: () => new Date('2026-01-01T00:00:00Z'),
+    })
+    expect(typeof runtime.autoPlanner.consider).toBe('function')
+  })
+
   it('once bound, onChange calls the republish function', async () => {
     let called = false
     const runtime = createDispatchRuntime({

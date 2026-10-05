@@ -14,6 +14,9 @@ export type { ResolveDispatchClaimSetDeps, ResolveDispatchControlDeps } from './
 export { createDispatcher } from './dispatcher'
 export type { CreateDispatcherParams, Dispatcher } from './dispatcher'
 
+export { createAutoPlanner } from './auto-plan'
+export type { AutoPlanner, AutoPlannerDeps } from './auto-plan'
+
 export { createDispatchRuntime } from './runtime'
 export type { DispatchRuntime } from './runtime'
 

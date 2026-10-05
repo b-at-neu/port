@@ -3,7 +3,7 @@
 // the ordered comment-then-swap write. No `gh` import here — the read comes
 // from `../github`, the write from `../writes`, exactly the `main/claim.ts`
 // idiom of composing rather than reaching into either directly.
-import { buildGatePlan, classifyGate } from '../../shared/gate/classify'
+import { buildAutoApprovePlan, buildGatePlan, classifyGate } from '../../shared/gate/classify'
 import type { GateClassifyItem, GatePlan } from '../../shared/gate/classify'
 import { GATE_CLAIM_OWNER } from '../../shared/gate/types'
 import type { GateAction, GateAnswerResponse, GateClaimResponse, GateDecision, GatePreflight, GatePreflightResponse } from '../../shared/gate/types'
@@ -232,4 +232,24 @@ export async function gateAnswer(params: GateAnswerParams, deps: GateDeps = defa
   const action: GateAction = params.decision === 'approve' ? 'approve-plan' : 'request-plan-changes'
   const labels = await deps.applyLabels({ request: buildWriteRequest(entry, params.number, plan, action), repoRoot: entry.path, auditDir: params.auditDir })
   return { kind: 'answered', comment, labels }
+}
+
+export interface AutoApprovePlanParams {
+  readonly entry: ReadyEntry
+  readonly item: { readonly number: number; readonly assignees: readonly string[] }
+  readonly auditDir: string
+}
+
+/**
+ * #313: `main/dispatch/auto-plan.ts`'s own write — the app's analogue of
+ * the cockpit's unprompted `autoPlan` swap (`docs/COORDINATION.md` → "The
+ * decision"), made only while this app holds the `plan-gate` claim. No
+ * claim read here — the caller already confirmed `held`/`'plan-gate'`
+ * before calling, and `applyLabels` re-checks at write time regardless, the
+ * same two-layer check every other claimed write follows. Posts no
+ * comment — unlike `gateAnswer`, there is no operator feedback to attach.
+ */
+export async function autoApprovePlan(params: AutoApprovePlanParams, deps: GateDeps = defaultGateDeps): Promise<WriteOutcome> {
+  const plan = buildAutoApprovePlan({ vocabulary: params.entry.config.vocabulary, assignees: params.item.assignees })
+  return deps.applyLabels({ request: buildWriteRequest(params.entry, params.item.number, plan, 'auto-approve-plan'), repoRoot: params.entry.path, auditDir: params.auditDir })
 }

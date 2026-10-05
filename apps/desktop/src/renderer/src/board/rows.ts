@@ -7,7 +7,19 @@ import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
 import { OPERATOR_ACTIONS, OPERATOR_DECISIONS } from '../../../shared/actions/types'
 import type { ActionAvailability, OperatorAction } from '../../../shared/actions/types'
 import { itemActionState } from './actions'
-import { actionButtonLabel, actionPendingLabel, actionRefusalNote, actionResultCopy, decisionButtonLabel, decisionRefusalNote, reviewPlanButtonLabel, statusWord, subLineFor } from './copy'
+import {
+  actionButtonLabel,
+  actionPendingLabel,
+  actionRefusalNote,
+  actionResultCopy,
+  autoPlanTagLabel,
+  autoPlanTagTitle,
+  decisionButtonLabel,
+  decisionRefusalNote,
+  reviewPlanButtonLabel,
+  statusWord,
+  subLineFor,
+} from './copy'
 
 function text(tag: string, className: string, value: string): HTMLElement {
   const el = document.createElement(tag)
@@ -168,6 +180,12 @@ export function buildRow(row: BoardItemRow): HTMLElement {
   headline.appendChild(text('span', 'board-row__repo', row.item.repo))
   headline.appendChild(text('span', 'board-row__title', row.item.title))
   if (row.item.assignees.length > 0) headline.appendChild(text('span', 'board-row__assignee', `@${row.item.assignees[0] ?? ''}`))
+  // #313: the Auto-plan tag — any phase, whoever holds the gate.
+  if (row.item.autoPlan) {
+    const tag = text('span', 'board-row__tag', autoPlanTagLabel())
+    tag.title = autoPlanTagTitle()
+    headline.appendChild(tag)
+  }
   // The relay loop's own row badge (#107) — readable without opening the
   // banner above the groups.
   if (row.relay !== null) headline.appendChild(text('span', 'board-row__relay-badge', 'Waiting on you'))

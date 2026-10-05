@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../../shared/repos'
-import type { TickActionable, TickObservation, TickReport } from '../../shared/tick/types'
-import { dispatchableFrom, observableFrom } from './dispatchable'
+import type { TickActionable, TickAutoApproval, TickObservation, TickReport } from '../../shared/tick/types'
+import { autoApprovableFrom, dispatchableFrom, observableFrom } from './dispatchable'
 
 const ACTIONABLE: TickActionable = { number: 1, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null }
 const WRITE_OBSERVATION: TickObservation = { kind: 'zero-diff', number: 2, itemKind: 'pull-request', count: 3, headRefOid: 'abc123' }
 const DEFERRED_OBSERVATION: TickObservation = { kind: 'refresh-deferred', number: 3, itemKind: 'pull-request' }
+const AUTO_APPROVAL: TickAutoApproval = { number: 4 }
 
 function report(overrides: Partial<TickReport> = {}): TickReport {
   return {
@@ -18,6 +19,7 @@ function report(overrides: Partial<TickReport> = {}): TickReport {
     disabledStages: [],
     nextTickAt: '2026-01-01T00:00:00Z',
     observations: [WRITE_OBSERVATION, DEFERRED_OBSERVATION],
+    autoApprovals: [AUTO_APPROVAL],
     ...overrides,
   }
 }
@@ -55,5 +57,23 @@ describe('observableFrom', () => {
 
   it('returns nothing for a blind report even while dispatching', () => {
     expect(observableFrom(report({ blind: { reason: 'not-ready' }, observations: [] }), 'dispatching')).toEqual([])
+  })
+})
+
+describe('autoApprovableFrom', () => {
+  it('returns the report\'s own autoApprovals set when dispatching and the tick is not blind', () => {
+    expect(autoApprovableFrom(report(), 'dispatching')).toEqual([AUTO_APPROVAL])
+  })
+
+  it('returns nothing while draining', () => {
+    expect(autoApprovableFrom(report(), 'draining')).toEqual([])
+  })
+
+  it('returns nothing while paused', () => {
+    expect(autoApprovableFrom(report(), 'paused')).toEqual([])
+  })
+
+  it('returns nothing for a blind report even while dispatching', () => {
+    expect(autoApprovableFrom(report({ blind: { reason: 'not-ready' }, autoApprovals: [] }), 'dispatching')).toEqual([])
   })
 })

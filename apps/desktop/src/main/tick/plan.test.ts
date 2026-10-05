@@ -329,3 +329,12 @@ describe('planTick — disabledStages', () => {
     expect(report.disabledStages).toEqual(['refreshBranch'])
   })
 })
+
+describe('planTick — autoApprovals (#313)', () => {
+  it('reports an autoPlan issue at planReview alone, assigned to the viewer', () => {
+    const autoPlanItem = item({ number: 7, autoPlan: true, stage: 'gate', stages: [{ key: 'planReview', name: 'plan review', role: 'gate' }] })
+    const repo = readyRepo([autoPlanItem])
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    expect(report.autoApprovals).toEqual([{ number: 7 }])
+  })
+})

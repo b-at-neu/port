@@ -444,4 +444,54 @@ export default async function ({ fail, ok }: Reporter) {
     }
     if (!violated) ok();
   }
+
+  // --- #313: .autoApprovals is read under main/ only by dispatchable.ts's ---
+  // autoApprovableFrom
+  // guard(#313): a future caller reading report.autoApprovals directly,
+  // bypassing autoApprovableFrom — the one function that gates the
+  // auto-plan swap on run state and a non-blind report, the same rail
+  // .actionable and .observations already hold.
+  {
+    const autoPlanFile = `${mainDispatchDir}/auto-plan.ts`;
+    let sawAutoApprovableFrom = false;
+    let found = false;
+    for (const f of allFiles) {
+      const rel = relOf(f);
+      if (!rel.startsWith('apps/desktop/src/main/') || rel.endsWith('.test.ts')) continue;
+      const text = readFileSync(f, 'utf8');
+      if (!/\.autoApprovals\b/.test(text)) continue;
+      if (rel === dispatchableFile) {
+        sawAutoApprovableFrom = true;
+      } else {
+        found = true;
+        fail('desktop-dispatch', `${rel} reads '.autoApprovals' directly — only ${dispatchableFile} (autoApprovableFrom) may`);
+      }
+    }
+    if (!sawAutoApprovableFrom) fail('desktop-dispatch', `${dispatchableFile} never reads '.autoApprovals' — the gate itself must`);
+    else if (!found) ok();
+
+    // --- auto-plan.ts calls readGateClaim( and names 'plan-gate', never ----
+    // 'dispatch'
+    // guard(#313): the planner reading the wrong claim scope, which would
+    // either never fire (reading 'dispatch') or fire alongside the
+    // dispatcher's own agent launches (reading nothing at all).
+    if (mainDispatchFiles.some((f) => relOf(f) === autoPlanFile)) {
+      const autoPlanText = readFileSync(join(root, autoPlanFile), 'utf8');
+      const claimIdx = autoPlanText.indexOf('readGateClaim(');
+      const approveIdx = autoPlanText.indexOf('deps.autoApprove(');
+      if (claimIdx === -1) {
+        fail('desktop-dispatch', `${autoPlanFile} never calls readGateClaim( — the owner resolution this whole module rests on is missing`);
+      } else if (!autoPlanText.includes("'plan-gate'")) {
+        fail('desktop-dispatch', `${autoPlanFile} never names the 'plan-gate' scope — it cannot be reading the claim for the right thing`);
+      } else if (autoPlanText.includes("'dispatch'")) {
+        fail('desktop-dispatch', `${autoPlanFile} names the 'dispatch' scope — the auto-plan swap must never gate on it`);
+      } else if (approveIdx === -1 || claimIdx > approveIdx) {
+        fail('desktop-dispatch', `${autoPlanFile}'s readGateClaim( call must precede its deps.autoApprove( call in source order`);
+      } else {
+        ok();
+      }
+    } else {
+      fail('desktop-dispatch', `${autoPlanFile} does not exist — the guard cannot pass vacuously`);
+    }
+  }
 }
