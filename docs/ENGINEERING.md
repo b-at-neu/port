@@ -54,7 +54,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - no `gh` import — reads via `./github`, writes via `./writes`
 
 **`apps/desktop/src/main/dispatch/`**
-- owns the app-wide drain switch and the halt composition over it
+- owns the per-repository run-state store (`Map<RepoId, RepoRunState>`) and the halt composition over it
 - `dispatcher.ts` is app-side dispatch's composition root; reads the gate claim for ownership
 - `ledger.record` only after `confirmStarted`; the budget gate is the last veto before send
 
@@ -123,6 +123,11 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 **`apps/desktop/src/renderer/src/entry-rows.ts`/`entry-list.ts`**
 - the one row renderer and the one append/patch/pin-to-bottom list model
 - shared by the on-disk transcript view and the live session view, never a second copy
+
+**`apps/desktop/src/renderer/src/session/`**
+- `controller.ts` is the rail/switch/re-attach composition root — the same module-closure idiom as `permission/controller.ts`, no framework, no class
+- `sequence.ts`'s `accept`/`drainBuffered` apply a `session:entries` delta only in revision order, never papering over a gap
+- `attach.ts`/`capacity-controller.ts`/`restore-controller.ts` split out of `controller.ts` to stay under the file-size limit (§7), each taking its `onChange`/callbacks as a parameter rather than importing back into the controller
 
 **`apps/desktop/src/shared/local/inspect.ts`**
 - the app's only aggregation of the denial log; pure, reader-free
