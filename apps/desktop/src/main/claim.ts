@@ -30,7 +30,13 @@ export interface ClaimDeps {
 export const defaultClaimDeps: ClaimDeps = { listRepositories, fetchClaimPreflight, applyClaimLabels }
 
 function resolveReadyEntry(registryDeps: RegistryDeps, repoId: RepoId, deps: ClaimDeps) {
-  return requireReadyRepo(registryDeps, 'claim', repoId, deps.listRepositories)
+  return requireReadyRepo(
+    registryDeps,
+    'claim',
+    repoId,
+    deps.listRepositories,
+    (message) => `claim requires the registry, which could not be listed: ${message}`,
+  )
 }
 
 /** Flattens `ClaimPreflightFetch`'s `item`/`viewer`/`fetchedAt` into the one

@@ -113,7 +113,13 @@ export interface ResolveDispatchClaimSetDeps {
 }
 
 function resolveReadyRepoRoot(registryDeps: RegistryDeps, repoId: RepoId, deps: Pick<ResolveDispatchClaimSetDeps, 'listRepositories'>): Promise<ReadyEntry> {
-  return requireReadyRepo(registryDeps, 'dispatch claim', repoId, deps.listRepositories)
+  return requireReadyRepo(
+    registryDeps,
+    'dispatch claim',
+    repoId,
+    deps.listRepositories,
+    (message) => `dispatch claim requires the registry, which could not be listed: ${message}`,
+  )
 }
 
 /**

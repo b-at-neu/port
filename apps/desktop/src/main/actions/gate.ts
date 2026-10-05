@@ -47,7 +47,13 @@ export const defaultGateDeps: GateDeps = {
 }
 
 function resolveReadyEntry(registryDeps: RegistryDeps, repoId: RepoId, deps: Pick<GateDeps, 'listRepositories'>) {
-  return requireReadyRepo(registryDeps, 'gate', repoId, deps.listRepositories)
+  return requireReadyRepo(
+    registryDeps,
+    'gate',
+    repoId,
+    deps.listRepositories,
+    (message) => `gate requires the registry, which could not be listed: ${message}`,
+  )
 }
 
 /** Splits the fetched issue body at `IMPLEMENTATION_PLAN_HEADING` — the

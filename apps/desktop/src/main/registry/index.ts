@@ -74,9 +74,9 @@ export function isReadyEntry(entry: RepositoryEntry): entry is ReadyEntry {
  *  with, before ever reaching `requireReadyRepo` — `channel` is quoted
  *  exactly as each channel's own thrown text already was (e.g.
  *  `"'item:action'"`). */
-export function requireRepoId(repoId: unknown, channel: string): string {
+export function requireRepoId(repoId: unknown, channel: string): RepoId {
   if (typeof repoId !== 'string' || repoId === '') throw new Error(`${channel} requires a non-empty 'repoId'`)
-  return repoId
+  return repoId as RepoId
 }
 
 /** The "find a registered, ready repository by id, or throw" lookup every
@@ -85,10 +85,20 @@ export function requireRepoId(repoId: unknown, channel: string): string {
  *  channel's thrown text keeps naming itself exactly as it did before this
  *  lookup was shared. `list` is the caller's own injected
  *  `listRepositories`, the same test seam every `*Deps` interface already
- *  gives its channel. */
-export async function requireReadyRepo(registryDeps: RegistryDeps, subject: string, repoId: string, list: typeof listRepositories): Promise<ReadyEntry> {
+ *  gives its channel. `notListableMessage` lets a caller that predates this
+ *  shared lookup keep its own original "list failed" wording (`gate`,
+ *  `claim`, `dispatch claim` all said "requires the registry, which could
+ *  not be listed" before this helper existed) rather than silently
+ *  switching every caller to the new default phrasing. */
+export async function requireReadyRepo(
+  registryDeps: RegistryDeps,
+  subject: string,
+  repoId: RepoId,
+  list: typeof listRepositories,
+  notListableMessage: (message: string) => string = (message) => `${subject} could not list repositories: ${message}`,
+): Promise<ReadyEntry> {
   const result = await list(registryDeps)
-  if (!result.ok) throw new Error(`${subject} could not list repositories: ${result.message}`)
+  if (!result.ok) throw new Error(notListableMessage(result.message))
   const entry = result.repositories.find((repository) => repository.id === repoId)
   if (!entry) throw new Error(`${subject} found no repository registered with id '${repoId}'`)
   if (!isReadyEntry(entry)) throw new Error(`${subject} requires a 'ready' repository, got '${entry.problem.kind}'`)

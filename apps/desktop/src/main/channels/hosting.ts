@@ -9,7 +9,7 @@
 import type { IpcMap, ReposListResponse } from '../../shared/ipc'
 import type { RepoId, RepoProblem } from '../../shared/repos'
 import { PERMISSION_DECISIONS, SESSION_MODELS, SESSION_PERMISSION_MODES, SESSION_TITLE_MAX } from '../../shared/hosting/types'
-import type { RestorableSession, SessionModel, SessionPermissionMode, SessionStartMode } from '../../shared/hosting/types'
+import type { RestorableSession, SessionKey, SessionModel, SessionPermissionMode, SessionStartMode } from '../../shared/hosting/types'
 import type { HostedStore } from '../hosting/store'
 import { SESSION_LIMIT_CEILING } from '../hosting/store'
 import { isReadyEntry, listRepositories, requireReadyRepo, requireRepoId } from '../registry'
@@ -31,9 +31,9 @@ function resolveReadyEntry(registryDeps: RegistryDeps, repoId: unknown, deps: Ho
  *  `session:attach`/`session:dismiss`/`session:invoke`/
  *  `session:permission:answer` all open with — a stale or buggy renderer is
  *  the only way `sessionKey` is ever missing or empty. */
-function requireSessionKey(sessionKey: unknown, channel: string): string {
+function requireSessionKey(sessionKey: unknown, channel: string): SessionKey {
   if (typeof sessionKey !== 'string' || sessionKey === '') throw new Error(`'${channel}' requires a non-empty 'sessionKey'`)
-  return sessionKey
+  return sessionKey as SessionKey
 }
 
 /** `mode.kind` one of `fresh | resume | resume-at | fork`, with `sessionId`
