@@ -51,7 +51,11 @@ const LEGACY_SCREEN_REASON = 'Legacy screen, reachable only through in-app click
 export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Target>> = {
   board: { kind: 'capture', hash: '#/board', container: '#board-view', ready: '.board-row' },
   repos: { kind: 'capture', hash: '#/repositories', container: '#repositories-view', ready: '.repo-card' },
-  session: { kind: 'capture', hash: '#/session', container: '#session-view', ready: '.session-view__composer' },
+  // No hosted session exists in fixture mode (`session:list` is always
+  // `[]`), so the screen's own empty state is what actually renders —
+  // `.session-view__empty`, never the composer, which `session/view.ts`
+  // keeps hidden until a session is selected.
+  session: { kind: 'capture', hash: '#/session', container: '#session-view', ready: '.session-view__empty' },
   settings: { kind: 'capture', hash: '#/settings', container: '#react-root', ready: '#react-root h2' },
   sessions: { kind: 'skip', hash: '#/repositories/fixture-acme-widgets/sessions', reason: LEGACY_SCREEN_REASON },
   search: { kind: 'skip', hash: '#/repositories/fixture-acme-widgets/search', reason: LEGACY_SCREEN_REASON },

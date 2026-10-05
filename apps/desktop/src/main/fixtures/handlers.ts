@@ -9,7 +9,8 @@
 // "nothing happened" variant where one exists, and otherwise the minimal ok.
 import type { IpcChannel, IpcMap } from '../../shared/ipc'
 import type { RepoId } from '../../shared/repos'
-import type { RepoDispatchStatus } from '../../shared/dispatch/types'
+import type { RepoDispatchStatus, RepoRunState } from '../../shared/dispatch/types'
+import { RUN_TARGET } from '../../shared/dispatch/types'
 import type { TranscriptSource } from '../../shared/sessions/transcript'
 import { fixtureBoardSnapshot } from './board'
 import { FIXTURE_REPOSITORIES } from './repos'
@@ -25,7 +26,7 @@ function transcriptSourceFor(sessionId: string, agentId: string | null, now: Dat
 }
 
 function idleDispatchStatus(repoId: RepoId): RepoDispatchStatus {
-  return { repoId, owner: 'cockpit', state: { kind: 'idle' }, draining: false, claudeSessionId: null, claimedAt: null, budget: null, observed: [] }
+  return { repoId, owner: 'cockpit', state: { kind: 'idle' }, runState: 'dispatching', claudeSessionId: null, claimedAt: null, budget: null, observed: [] }
 }
 
 export function fixtureHandlers(now: Date): FixtureHandlers {
@@ -89,10 +90,11 @@ export function fixtureHandlers(now: Date): FixtureHandlers {
     'item:action': () => ({ ok: true, outcome: { kind: 'no-op' } }),
 
     'dispatch:control': (request) => {
-      const drain = { gate: 'open' } as const
-      if (request.command === 'drain') return { ok: true, command: 'drain', drain, persisted: false }
-      if (request.command === 'resume') return { ok: true, command: 'resume', drain }
-      return { ok: true, command: 'halt', drain, report: { kind: 'completed', items: [] } }
+      if (request.command === 'halt') return { ok: true, command: 'halt', report: { kind: 'completed', items: [] } }
+      const runState: RepoRunState = { repoId: request.repoId, state: RUN_TARGET[request.command], since: now.toISOString() }
+      if (request.command === 'run') return { ok: true, command: 'run', repoId: request.repoId, runState }
+      if (request.command === 'drain') return { ok: true, command: 'drain', repoId: request.repoId, runState, persisted: false }
+      return { ok: true, command: 'pause', repoId: request.repoId, runState, report: { kind: 'completed', items: [] } }
     },
     'dispatch:claim:set': (request) => ({ kind: 'ok', status: idleDispatchStatus(request.repoId) }),
     'dispatch:relay': () => ({ ok: false, kind: 'no-dispatcher' }),

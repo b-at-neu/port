@@ -174,7 +174,9 @@ export function fixtureBoardSnapshot(now: Date): BoardSnapshot {
     policy: DEFAULT_POLL_POLICY,
     tick,
     relay: { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: now.toISOString() },
-    drain: { gate: 'open' },
+    // #314: acme/widgets reads `dispatching` — the ordinary, nothing-paused
+    // state a fresh registration starts in.
+    runStates: { store: { kind: 'loaded' }, repositories: [{ repoId: WIDGETS_ID, state: 'dispatching', since: now.toISOString() }] },
     nextWakeupAt: nextDecisionAt.toISOString(),
     emittedAt: now.toISOString(),
     dispatch: [],
