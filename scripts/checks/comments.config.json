@@ -237,7 +237,6 @@
     "apps/desktop/src/renderer/src/sessions.ts",
     "apps/desktop/src/renderer/src/settings/runtime-model.ts",
     "apps/desktop/src/renderer/src/settings/runtime-section.tsx",
-    "apps/desktop/src/renderer/src/settings/screen.tsx",
     "apps/desktop/src/renderer/src/settings/theme-section.tsx",
     "apps/desktop/src/renderer/src/theme/store.ts",
     "apps/desktop/src/renderer/src/transcript-banner.ts",
