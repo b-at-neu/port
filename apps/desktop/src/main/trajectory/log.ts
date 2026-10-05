@@ -9,8 +9,11 @@
 // computation. The base root is resolved with `main/platform/git.ts`'s
 // shared `resolveGitBaseRoot`, the same helper `main/local/denials.ts` and
 // `main/writes/claim.ts` use.
-import { appendTextFile, defaultGitRunner, ensureDirectory, pathOps as defaultPathOps, renamePath, resolveGitBaseRoot, statPath } from '../platform'
-import type { GitRunner, PathOps } from '../platform'
+import { appendTextFile, ensureDirectory, renamePath, statPath } from '../platform/files'
+import { defaultGitRunner, resolveGitBaseRoot } from '../platform/git'
+import { pathOps as defaultPathOps } from '../platform/paths'
+import type { GitRunner } from '../platform/git'
+import type { PathOps } from '../platform/paths'
 import type { TickReport } from '../../shared/tick/types'
 import type { DesktopTickEvent } from './types'
 

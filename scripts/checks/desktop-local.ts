@@ -39,7 +39,11 @@ export default async function ({ fail, ok }: Reporter) {
         violated = true;
         fail('desktop-local-adapter', `${relOf(f)} references gh(/ghJson(/main/github — this directory is local-only (Decision 1), never a second GitHub caller`);
       }
-      if (/import\s*\{[^}]*\bgit\b[^}]*\}\s*from\s*'\.\.\/platform'/.test(codeOnly)) {
+      // The platform layer's barrel is gone — every adapter imports its
+      // defining file directly, so `git` now arrives from `'../platform/git'`
+      // (or `'../platform'` still, for anything not yet re-pointed) rather
+      // than the barrel alone.
+      if (/import\s*\{[^}]*\bgit\b[^}]*\}\s*from\s*'\.\.\/platform(?:\/git)?'/.test(codeOnly)) {
         usesGit = true;
       }
     }

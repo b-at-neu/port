@@ -11,8 +11,8 @@ import type { BoardSnapshot } from '../../shared/board/types'
 import type { HaltItemOutcome, HaltReport } from '../../shared/dispatch/types'
 import type { ReconciledItem } from '../../shared/state/types'
 import type { RepoId } from '../../shared/repos'
-import { applyItemAction as defaultApplyItemAction } from '../actions'
-import type { ApplyItemActionParams, ReadyEntry } from '../actions'
+import { applyItemAction as defaultApplyItemAction } from '../actions/apply'
+import type { ApplyItemActionParams, ReadyEntry } from '../actions/apply'
 import type { RunStateStore } from './store'
 
 export interface HaltDispatchParams {

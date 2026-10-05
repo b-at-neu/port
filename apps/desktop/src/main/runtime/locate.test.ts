@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createPathOps } from '../platform'
+import { createPathOps } from '../platform/paths'
 import { bundledSdkPackageDir, resolveClaudeExecutable } from './locate'
 
 const posixOps = createPathOps('posix', { home: '/home/operator' })

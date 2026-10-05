@@ -4,10 +4,13 @@
 // (`prunable`) — never a second classification implementation, and never a
 // second `git worktree` caller (this directory calls no `git` itself; the
 // join is the only reader).
-import { node as defaultNode, pathOps as defaultPathOps } from '../platform'
-import type { CommandResult, NodeRunner, PathOps } from '../platform'
-import { readWorktrees } from '../local'
-import type { WorktreesGitRunner } from '../local'
+import { node as defaultNode } from '../platform/node'
+import { pathOps as defaultPathOps } from '../platform/paths'
+import type { CommandResult } from '../platform/run'
+import type { NodeRunner } from '../platform/node'
+import type { PathOps } from '../platform/paths'
+import { readWorktrees } from '../local/worktrees'
+import type { GitRunner as WorktreesGitRunner } from '../local/worktrees'
 import type { AssertEqual } from '../../shared/assert-type'
 import type { GithubResolutionState, InspectedWorktree, PorcelainJoinState, ReclaimerFailureKind, WorktreesReport } from '../../shared/reclaimer/types'
 import { isReclaimableState } from '../../shared/reclaimer/types'

@@ -2,7 +2,7 @@
 // number, and activity. Nothing here touches the filesystem or the SDK —
 // `adapter.ts` is the only orchestration layer, so every rule below is
 // testable without a real transcript on disk.
-import { pathOps } from '../platform'
+import { pathOps } from '../platform/paths'
 import type { RepoId } from '../../shared/repos'
 import { ACTIVE_WITHIN_MS, IDLE_WITHIN_MS } from '../../shared/sessions/types'
 import type { Activity, PortStageAgent, RoleEvidence, SessionRole } from '../../shared/sessions/types'

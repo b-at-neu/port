@@ -5,10 +5,12 @@
 // rail `commands.worktrees` already goes through, `main/reclaimer/`) and
 // runs `node <tokenized args…> <mode args…>` with `cwd: entry.path`, since
 // the script resolves its own root from the working directory.
-import { node as defaultNode } from '../platform'
-import type { CommandResult, NodeRunner } from '../platform'
-import { parseNodeCommand, SCRIPT_FAIL_PREFIX } from '../reclaimer'
-import type { ReadyEntry } from '../actions'
+import { node as defaultNode } from '../platform/node'
+import type { CommandResult } from '../platform/run'
+import type { NodeRunner } from '../platform/node'
+import { parseNodeCommand } from '../reclaimer/command'
+import { SCRIPT_FAIL_PREFIX } from '../reclaimer/report'
+import type { ReadyEntry } from '../actions/apply'
 import type { TickActionable } from '../../shared/tick/types'
 import { dispatchArgs, OUTDATED_SCRIPT_SENTINEL, parseSweepLine, parseVerdict, resetArgs, sweepArgs } from './budget'
 import type { BudgetVerdict } from './budget'

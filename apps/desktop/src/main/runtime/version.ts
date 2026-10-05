@@ -6,8 +6,9 @@
 // "update Claude Code" instead. A resolved path that does not spawn, or
 // whose output nothing parses out of, is `ok: false` here — the caller
 // (`classify.ts`) turns that into `cli-unusable`, never a silent `ready`.
-import { claude } from '../platform'
-import type { ClaudeOptions, CommandResult } from '../platform'
+import { claude } from '../platform/claude'
+import type { ClaudeOptions } from '../platform/claude'
+import type { CommandResult } from '../platform/run'
 import { MINIMUM_CLAUDE_CODE_VERSION } from '../../shared/runtime/types'
 
 const VERSION_RE = /(\d+)\.(\d+)\.(\d+)/

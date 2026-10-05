@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { budgetLiveSets, budgetRoute, dispatchArgs, escalationBody, parseSweepLine, parseVerdict, resetArgs, sweepArgs } from './budget'
 import type { StageRecord } from './launch'
-import type { SessionKey } from '../hosting'
+import type { SessionKey } from '../../shared/hosting/types'
 import type { TickActionable } from '../../shared/tick/types'
 
 function record(overrides: Partial<StageRecord> = {}): StageRecord {

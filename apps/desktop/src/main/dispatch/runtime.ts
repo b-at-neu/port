@@ -6,11 +6,13 @@
 // its own `watcherDeps`). Also builds the budget gate and the escalation
 // writer itself, so `main/ipc.ts` passes only `dirs` rather than wiring both
 // by hand, and exposes `watcherDeps` and `shutdown`.
-import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '../tick'
-import type { DispatchLedger, RefreshMemo, UnknownStreaks } from '../tick'
+import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '../tick/ledger'
+import type { DispatchLedger, RefreshMemo, UnknownStreaks } from '../tick/ledger'
 import type { RepoId } from '../../shared/repos'
 import type { RepoDispatchStatus } from '../../shared/dispatch/types'
-import { applyObservation, autoApprovePlan, escalateToHuman } from '../actions'
+import { applyObservation } from '../actions/observe'
+import { autoApprovePlan } from '../actions/gate'
+import { escalateToHuman } from '../actions/escalate'
 import { createBudgetGate } from './budget-gate'
 import { createDispatcher } from './dispatcher'
 import type { CreateDispatcherParams, Dispatcher } from './dispatcher'

@@ -2,7 +2,7 @@
 // Every later adapter (#76-#81) takes its owner/name, branches, modules,
 // reviewCycleCap and resolved label vocabulary from the entries this
 // returns, rather than reading a config itself.
-import { pathOps } from '../platform'
+import { pathOps } from '../platform/paths'
 import type { ReposAddResponse, ReposListResponse, ReposRemoveResponse } from '../../shared/ipc'
 import type { RepoId } from '../../shared/repos'
 import type { GitRunner } from './harness'

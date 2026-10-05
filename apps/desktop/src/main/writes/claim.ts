@@ -5,8 +5,12 @@
 // uses, so every worktree of a checkout sees the one claim. Reads `scopes`
 // and never `owner` as anything but report-only text — treating it as
 // identity would make it the liveness field the doc forbids.
-import { defaultGitRunner, ensureDirectory, pathOps as defaultPathOps, readJsonFile, removeFile, resolveGitBaseRoot, writeJsonFileAtomic } from '../platform'
-import type { FileFailureKind, GitRunner, PathOps } from '../platform'
+import { defaultGitRunner, resolveGitBaseRoot } from '../platform/git'
+import { ensureDirectory, readJsonFile, removeFile, writeJsonFileAtomic } from '../platform/files'
+import { pathOps as defaultPathOps } from '../platform/paths'
+import type { FileFailureKind } from '../platform/files'
+import type { GitRunner } from '../platform/git'
+import type { PathOps } from '../platform/paths'
 import type { AssertEqual } from '../../shared/assert-type'
 import type { ClaimRead, ClaimScope, ClaimWriteFailureKind, ClaimWriteResult } from '../../shared/writes/types'
 

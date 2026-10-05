@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { createPathOps } from '../platform'
-import type { CommandResult } from '../platform'
-import type { WorktreesGitRunner } from '../local'
+import { createPathOps } from '../platform/paths'
+import type { CommandResult } from '../platform/run'
+import type { GitRunner as WorktreesGitRunner } from '../local/worktrees'
 import { GH_RESOLUTION_FAILED_SENTINEL, readWorktreeReport, SCRIPT_FAIL_PREFIX } from './report'
 import type { NodeRunner } from './report'
 

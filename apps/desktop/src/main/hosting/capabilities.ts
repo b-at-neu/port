@@ -7,7 +7,7 @@
 // is only the I/O and timing shell around it (ENGINEERING §1).
 import type { AgentSummary, CommandSummary, PluginRequest, SessionCapabilities } from '../../shared/hosting/types'
 import { isRecord } from '../../shared/guards'
-import { sanitize } from '../sessions'
+import { sanitize } from '../sessions/transcript-entries'
 import { checkComponents, checkPluginLoad, PLUGIN_NAME } from './verify'
 import type { InitPlugin } from './verify'
 import type { ExpectedComponents } from './plugin'

@@ -8,11 +8,12 @@ import { classifyPreflight, buildClaimRequest } from '../shared/claim/classify'
 import type { ClaimApplyResponse, ClaimPreflight, ClaimPreflightResponse, PlanGateChoice } from '../shared/claim/types'
 import type { ClaimPreflightFetch } from '../shared/github/types'
 import type { RepoId, RepositoryEntry } from '../shared/repos'
-import { fetchClaimPreflight } from './github'
+import { fetchClaimPreflight } from './github/adapter'
 import { listRepositories } from './registry'
 import type { RegistryDeps } from './registry'
 import { applyClaimLabels } from './actions/claim'
-import type { ApplyLabelsParams, WriteOutcome } from './writes'
+import type { ApplyLabelsParams } from './writes/apply'
+import type { WriteOutcome } from '../shared/writes/types'
 
 type ReadyEntry = Extract<RepositoryEntry, { readonly status: 'ready' }>
 

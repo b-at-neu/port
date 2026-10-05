@@ -3,7 +3,8 @@
 // `main/registry/store.ts` already follows for `registry.json`. Takes its
 // directory as a parameter (main passes `app.getPath('userData')`, tests
 // pass a `mkdtemp`), so nothing in this module imports Electron.
-import { ensureDirectory, pathOps, readJsonFile, writeJsonFileAtomic } from '../platform'
+import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '../platform/files'
+import { pathOps } from '../platform/paths'
 import type { RepoId } from '../../shared/repos'
 import { RUN_STATES, RUN_TARGET } from '../../shared/dispatch/types'
 import type { RepoRunState, RunState, RunStatesSnapshot, RunStateStoreStatus } from '../../shared/dispatch/types'

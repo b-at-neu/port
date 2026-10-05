@@ -9,8 +9,8 @@
 // `applyLabels` + `postComment` pair.
 import type { LabelKey } from '../../shared/labels/vocabulary'
 import type { LabelWriteRequest, WriteOutcome } from '../../shared/writes/types'
-import { applyLabels, postComment } from '../writes'
-import type { ApplyLabelsParams, PostCommentParams } from '../writes'
+import { applyLabels, postComment } from '../writes/apply'
+import type { ApplyLabelsParams, PostCommentParams } from '../writes/apply'
 import type { ReadyEntry } from './apply'
 
 export interface EscalateToHumanParams {

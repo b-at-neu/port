@@ -8,7 +8,8 @@ import type { RepositoryEntry } from '../../shared/repos'
 import type { IpcMap } from '../../shared/ipc'
 import type { RegistryDeps } from '../registry'
 import { listRepositories } from '../registry'
-import type { ApplyItemActionParams, ApplyItemDecisionParams, ReadyEntry } from '../actions'
+import type { ApplyItemActionParams, ReadyEntry } from '../actions/apply'
+import type { ApplyItemDecisionParams } from '../actions/decide'
 
 export interface ItemActionDeps {
   readonly listRepositories: typeof listRepositories

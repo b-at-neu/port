@@ -3,8 +3,9 @@
 // repository is derived on read by inspect.ts. Takes its directory as a
 // parameter (main passes `app.getPath('userData')`, tests pass a
 // `mkdtemp`), so nothing in this module imports Electron.
-import { ensureDirectory, pathOps, readJsonFile, writeJsonFileAtomic } from '../platform'
-import type { PathOps } from '../platform'
+import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '../platform/files'
+import { pathOps } from '../platform/paths'
+import type { PathOps } from '../platform/paths'
 
 const REGISTRY_FILE = 'registry.json'
 const CURRENT_VERSION = 1

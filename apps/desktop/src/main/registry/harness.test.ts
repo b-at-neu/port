@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { CommandResult } from '../platform'
+import type { CommandResult } from '../platform/run'
 import { currentBranch, permissionsState, refsCarryingConfig } from './harness'
 import type { GitRunner } from './harness'
 import { makeTempDir } from '../../testing/fixtures'

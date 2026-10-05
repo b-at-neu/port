@@ -11,12 +11,13 @@ import type { GatePreflightFetch } from '../../shared/github/types'
 import { labelName } from '../../shared/labels/vocabulary'
 import type { RepoId, RepositoryEntry } from '../../shared/repos'
 import type { ClaimRead, LabelWriteRequest, WriteOutcome } from '../../shared/writes/types'
-import { fetchGatePreflight } from '../github'
-import { IMPLEMENTATION_PLAN_HEADING, sessionRequiredMarkerAt } from '../state'
+import { fetchGatePreflight } from '../github/gate'
+import { IMPLEMENTATION_PLAN_HEADING, sessionRequiredMarkerAt } from '../state/link'
 import { listRepositories } from '../registry'
 import type { RegistryDeps } from '../registry'
-import { applyLabels, postComment, readGateClaim, releaseClaimScope, takeClaimScope } from '../writes'
-import type { ApplyLabelsParams, PostCommentParams } from '../writes'
+import { applyLabels, postComment } from '../writes/apply'
+import { readGateClaim, releaseClaimScope, takeClaimScope } from '../writes/claim'
+import type { ApplyLabelsParams, PostCommentParams } from '../writes/apply'
 
 type ReadyEntry = Extract<RepositoryEntry, { readonly status: 'ready' }>
 

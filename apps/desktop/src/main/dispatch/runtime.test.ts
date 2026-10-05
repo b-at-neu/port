@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../../shared/repos'
-import type { HostedStore } from '../hosting'
+import type { HostedStore } from '../hosting/store'
 import { createDispatchRuntime } from './runtime'
 
 function fakeStore(): HostedStore {

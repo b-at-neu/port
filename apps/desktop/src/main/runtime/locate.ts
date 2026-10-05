@@ -3,8 +3,10 @@
 // (`@anthropic-ai/claude-agent-sdk-{platform}-{arch}/claude`, ~327MB) — a
 // silent fallback to that path is a bug to surface, never a degradation to
 // accept, since passing the override is what lets a shipped build avoid it.
-import { createPathOps, which as defaultWhich } from '../platform'
-import type { PathOps, WhichEnv, WhichOptions, WhichResult } from '../platform'
+import { createPathOps } from '../platform/paths'
+import { which as defaultWhich } from '../platform/which'
+import type { PathOps } from '../platform/paths'
+import type { WhichEnv, WhichOptions, WhichResult } from '../platform/which'
 
 export type LocateResult =
   | { readonly ok: true; readonly path: string }

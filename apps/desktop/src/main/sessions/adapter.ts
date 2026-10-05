@@ -4,7 +4,8 @@
 // `.jsonl`. A pure consumer of the caller's repository list: reads no
 // config (#74's), enumerates no worktrees (#77's), reconciles nothing
 // against labels (#79's).
-import { listDirectory, pathOps, readJsonFile, statPath } from '../platform'
+import { listDirectory, readJsonFile, statPath } from '../platform/files'
+import { pathOps } from '../platform/paths'
 import type { AgentRecord, MetaProblem, SessionRecord, SessionRef, SessionScan } from '../../shared/sessions/types'
 import { activityOf, attributeSession, itemNumberOf, parseAgentMeta, sessionRole, stageOf } from './classify'
 import type { RepoRef } from './classify'

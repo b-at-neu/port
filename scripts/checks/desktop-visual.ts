@@ -14,7 +14,16 @@ const FIXTURES_DIR = 'apps/desktop/src/main/fixtures';
 // use — anything else (../platform, ../github, ../writes, ../hosting,
 // ../runtime, ../sessions, a barrel) would let fixture mode reach `gh` or
 // `claude`.
-const ALLOWED_FIXTURE_IMPORTS: readonly RegExp[] = [/^electron$/, /^node:path$/, /^\.\//, /^\.\.\/\.\.\/shared\//, /^\.\.\/registry\/schema$/, /^\.\.\/state\/reconcile$/, /^\.\.\/tick$/];
+const ALLOWED_FIXTURE_IMPORTS: readonly RegExp[] = [
+  /^electron$/,
+  /^node:path$/,
+  /^\.\//,
+  /^\.\.\/\.\.\/shared\//,
+  /^\.\.\/registry\/schema$/,
+  /^\.\.\/state\/reconcile$/,
+  /^\.\.\/tick\/ledger$/,
+  /^\.\.\/tick\/plan$/,
+];
 
 const IMPORT_RE = /^\s*import\s+(?:type\s+)?[\s\S]*?\bfrom\s+['"]([^'"]+)['"]/gm;
 

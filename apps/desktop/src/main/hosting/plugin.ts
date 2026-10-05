@@ -7,9 +7,9 @@
 // repository this app hosts a session on passes no `plugins` option at
 // all — the CLI loads `port@port` from `enabledPlugins` exactly as it does
 // today.
-import { listDirectory, readJsonFile } from '../platform'
-import type { PathOps } from '../platform'
-import { pathOps } from '../platform'
+import { listDirectory, readJsonFile } from '../platform/files'
+import type { PathOps } from '../platform/paths'
+import { pathOps } from '../platform/paths'
 import type { PluginRequest } from '../../shared/hosting/types'
 
 export interface PluginManifest {

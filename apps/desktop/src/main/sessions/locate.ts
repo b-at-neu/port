@@ -7,7 +7,8 @@
 // project directory once, collecting `sessionId → projectDir` from each
 // `<uuid>.jsonl` filename — a session's own subdirectory is never the
 // source, since it does not exist for a session that spawned no subagents.
-import { listDirectory, pathOps } from '../platform'
+import { listDirectory } from '../platform/files'
+import { pathOps } from '../platform/paths'
 import type { SessionFailureKind } from '../../shared/sessions/types'
 
 /** The unanchored UUID shape shared by the two regexes below, so the bare-id

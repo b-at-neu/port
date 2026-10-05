@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { resolveGhStatus } from './gh'
 import type { GhStatusDeps } from './gh'
-import type { GhAuthStatusResult } from '../platform'
+import type { GhAuthStatusResult } from '../platform/gh'
 
 function depsWith(result: GhAuthStatusResult): GhStatusDeps {
   return { ghAuthStatus: () => Promise.resolve(result), now: () => 1_700_000_000_000 }

@@ -3,8 +3,12 @@
 // and the legacy three-field form coexist in a real file (this repository's
 // own log measured 322 current-form lines against ~444 legacy), so both are
 // parsed rather than one being treated as noise.
-import { defaultGitRunner, pathOps as defaultPathOps, readTextFile, resolveGitBaseRoot } from '../platform'
-import type { FileFailureKind, GitRunner, PathOps } from '../platform'
+import { defaultGitRunner, resolveGitBaseRoot } from '../platform/git'
+import { pathOps as defaultPathOps } from '../platform/paths'
+import { readTextFile } from '../platform/files'
+import type { FileFailureKind } from '../platform/files'
+import type { GitRunner } from '../platform/git'
+import type { PathOps } from '../platform/paths'
 import type { AssertEqual } from '../../shared/assert-type'
 import type { DenialActor, DenialDecision, DenialEntry, DenialsFailureKind, DenialSummary, DenialsRead } from '../../shared/local/types'
 

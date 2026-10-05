@@ -6,9 +6,9 @@
 // so a missing file is `unknown`, never `unauthenticated` — the caller's
 // classification ladder falls through to the probe rather than trusting
 // either reading of an absent file.
-import { readJsonFile } from '../platform'
-import { defaultClaudeHome } from '../sessions'
-import { pathOps } from '../platform'
+import { readJsonFile } from '../platform/files'
+import { defaultClaudeHome } from '../sessions/locate'
+import { pathOps } from '../platform/paths'
 import type { CredentialsTell } from '../../shared/runtime/types'
 
 /** The on-disk shape this file defends against being wrong about: any

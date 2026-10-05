@@ -2,8 +2,9 @@ import { mkdir, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { pathOps } from '../platform'
-import type { CommandResult, GhResult } from '../platform'
+import { pathOps } from '../platform/paths'
+import type { CommandResult } from '../platform/run'
+import type { GhResult } from '../platform/gh'
 import type { RepositoryEntry } from '../../shared/repos'
 import { resolveVocabulary } from '../../shared/labels/vocabulary'
 import { readPipelineState } from './read'
@@ -180,7 +181,7 @@ describe.skipIf(!hasRealProjects)('readPipelineState — live', () => {
   it(
     'every item carries a non-null status, every stalled item carries a statusEvidence, and freshness.github.at is populated',
     async (ctx) => {
-      const { ghAuthStatus, ghJson } = await import('../platform')
+      const { ghAuthStatus, ghJson } = await import('../platform/gh')
       const auth = await ghAuthStatus()
       if (!auth.ok || !auth.authenticated) {
         ctx.skip()

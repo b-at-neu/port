@@ -3,8 +3,9 @@
 // degrades to a diagnostic rather than a failure — `git` absent or failing
 // never invalidates a repository, since the config read inspect.ts does is
 // filesystem-only and stands on its own.
-import { pathOps, readJsonFile } from '../platform'
-import type { GitRunner } from '../platform'
+import { pathOps } from '../platform/paths'
+import { readJsonFile } from '../platform/files'
+import type { GitRunner } from '../platform/git'
 
 export type { GitRunner }
 

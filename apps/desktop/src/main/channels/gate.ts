@@ -12,7 +12,7 @@ import type { BoardSnapshot } from '../../shared/board/types'
 import type { ClaimRead } from '../../shared/writes/types'
 import type { IpcMap } from '../../shared/ipc'
 import type { RegistryDeps } from '../registry'
-import type { GateAnswerParams, GateClaimReadParams, GateClaimSetParams, GatePreflightParams } from '../actions'
+import type { GateAnswerParams, GateClaimReadParams, GateClaimSetParams, GatePreflightParams } from '../actions/gate'
 
 /** One binding per composed function, plus the board's own `refresh` —
  *  the same seam `main/ipc.ts`'s `ItemActionDeps` gives `resolveItemAction`,

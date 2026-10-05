@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { readExpectedComponents, resolvePluginRequest } from './plugin'
 import type { ReadExpectedComponentsDeps, ResolvePluginRequestDeps } from './plugin'
-import { pathOps } from '../platform'
-import type { DirEntry, FileResult } from '../platform'
+import { pathOps } from '../platform/paths'
+import type { DirEntry, FileResult } from '../platform/files'
 
 function jsonDeps(result: FileResult<unknown>): ResolvePluginRequestDeps {
   return { readJsonFile: () => Promise.resolve(result as never), join: (base, ...segments) => pathOps.join(base, ...segments) }

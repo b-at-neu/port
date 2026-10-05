@@ -3,7 +3,7 @@
 // out as each is next touched"), a pure relocation with no behaviour change.
 import type { IpcMap } from '../../shared/ipc'
 import type { RuntimeProbe } from '../../shared/runtime/types'
-import { runtimeProbe } from '../runtime'
+import { runtimeProbe } from '../runtime/preflight'
 import type { RegistryDeps } from '../registry'
 
 /** `runtimeProbe` (`../runtime`) resolves the registry lookup itself, same

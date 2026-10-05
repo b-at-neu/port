@@ -10,7 +10,7 @@
 // clean exit (same direction as #97's `probe-failed`).
 import type { CredentialsTell, RuntimeDiagnosis } from '../../shared/runtime/types'
 import type { SessionEndReason } from '../../shared/hosting/types'
-import { classifyProbeFailure } from '../runtime'
+import { classifyProbeFailure } from '../runtime/classify'
 
 /** The CLI's own deterministic refusal of a `resumeDropsTurn` fork point —
  *  checked first because its message also contains ordinary prose, never a

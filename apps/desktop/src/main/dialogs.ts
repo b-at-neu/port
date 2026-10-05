@@ -5,7 +5,7 @@
 // be a strictly worse boundary for no gain. `confirmQuit` (#326) is this
 // file's second native dialog, for `main/dispatch/quit.ts`'s own guard.
 import { dialog, type BrowserWindow } from 'electron'
-import type { QuitWarningCopy } from './dispatch'
+import type { QuitWarningCopy } from './dispatch/quit'
 
 /** Opens the native directory picker and returns the chosen path, or `null`
  *  on cancel. */

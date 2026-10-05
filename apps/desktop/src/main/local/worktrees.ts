@@ -5,8 +5,11 @@
 // (Decision 3): one `worktree list --porcelain`, one `config --get-regexp`
 // for every upstream at once, one `log --no-walk=unsorted` for every head at
 // once.
-import { git as defaultGit, parsePorcelainStanzas, pathOps as defaultPathOps } from '../platform'
-import type { CommandResult, GitRunner, PathOps } from '../platform'
+import { git as defaultGit, parsePorcelainStanzas } from '../platform/git'
+import { pathOps as defaultPathOps } from '../platform/paths'
+import type { CommandResult } from '../platform/run'
+import type { GitRunner } from '../platform/git'
+import type { PathOps } from '../platform/paths'
 import type { AssertEqual } from '../../shared/assert-type'
 import type { LocalFailureKind, WorktreeEntry, WorktreeProducer, WorktreesRead } from '../../shared/local/types'
 import { correlate } from './correlate'

@@ -17,7 +17,7 @@
 import type { EntryPatch, MetaEntry, TranscriptEntry } from '../../shared/sessions/transcript'
 import { MAX_PAYLOAD_CHARS } from '../../shared/sessions/transcript'
 import { isRecord } from '../../shared/guards'
-import { createDeriver, sanitize } from '../sessions'
+import { createDeriver, sanitize } from '../sessions/transcript-entries'
 import type { LiveBlock, LiveBlockKind, PartialUpdate, SessionEntriesDelta } from '../../shared/hosting/types'
 
 export interface CreateSessionProjectorParams {

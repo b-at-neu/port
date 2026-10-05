@@ -4,7 +4,7 @@
 // `state` outside `WORKTREE_STATES` fails the whole payload as
 // `report-unparseable`, naming the field — never a partial list (ENGINEERING
 // §4: an absent signal is never read as a passing one).
-import type { PathOps } from '../platform'
+import type { PathOps } from '../platform/paths'
 import type { CorrelationRung } from '../../shared/local/types'
 import type { WorktreeState } from '../../shared/reclaimer/types'
 import { WORKTREE_STATES } from '../../shared/reclaimer/types'

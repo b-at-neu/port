@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { RepoId } from '../../shared/repos'
 import type { SessionKey } from '../../shared/hosting/types'
 import type { RegistryDeps } from '../registry'
-import type { HostedStore } from '../hosting'
+import type { HostedStore } from '../hosting/store'
 import {
   MAX_INVOKE_ARGS_CHARS,
   resolveSessionAttach,

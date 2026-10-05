@@ -310,8 +310,8 @@ export default async function ({ fail, ok }: Reporter) {
       fail('desktop-hosting', `${hostingDir}/project.ts does not exist`);
     } else {
       const text = readFileSync(projectFile, 'utf8');
-      if (!/createDeriver/.test(text) || !/from\s+['"]\.\.\/sessions['"]/.test(text)) {
-        fail('desktop-hosting', `${hostingDir}/project.ts does not import 'createDeriver' from '../sessions'`);
+      if (!/createDeriver/.test(text) || !/from\s+['"]\.\.\/sessions\/transcript-entries['"]/.test(text)) {
+        fail('desktop-hosting', `${hostingDir}/project.ts does not import 'createDeriver' from '../sessions/transcript-entries'`);
       } else {
         ok();
       }
