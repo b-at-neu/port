@@ -79,12 +79,11 @@ export type HaltItemOutcome =
       readonly repoId: RepoId
       readonly removedLabel: string
       readonly attachedAgent: string | null
-      /** #265: `true` when this halt also called the dispatcher's own
-       *  `stopFor()` against an app-dispatched agent for this item —
-       *  `false` for every other case (the cockpit's own agent, or no
-       *  dispatcher at all), never omitted so the renderer can always
-       *  render `haltItemLine`'s own "Stopped <agent> #<n>" line
-       *  unconditionally. */
+      /** #326: `true` when this halt also closed an app-launched stage
+       *  session for this item — `false` for every other case (the
+       *  cockpit's own agent, or no app-launched session at all), never
+       *  omitted so the renderer can always render `haltItemLine`'s own
+       *  "Stopped <agent> #<n>" line unconditionally. */
       readonly stoppedTask: boolean
     }
   | {
@@ -138,25 +137,29 @@ export type DispatchControlResult =
  */
 export type DispatchOwner = 'cockpit' | 'app' | 'nobody'
 
-/** #265: one `Agent()` call this app's own dispatcher turn sent, tracked
- *  from `sent` (the turn landed, no confirming `task_started` yet) through
- *  `started` (confirmed, and `ledger.record` has run) or `not-started` (the
- *  dispatcher's turn reached `result` with no matching task — may redispatch
- *  after `REDISPATCH_FLOOR_MS`). Bounded to the newest 20 per repository,
- *  the same idiom `hosting/tasks.ts`'s own `MAX_TASKS` establishes. */
+/** #326: one stage-session launch this app's loop attempted, tracked from
+ *  `started` (the launch returned ok and the session has not ended) through
+ *  `ended` (the session's own handle reports `phase === 'ended'`, or it was
+ *  closed by `shutdown()`/`stopFor`/`standDown`) or `failed` (the launcher
+ *  itself refused or threw). `detail` is set only on `failed`. Bounded to
+ *  the newest 20 per repository, the same idiom `hosting/persist.ts`'s own
+ *  retain limits establish. */
 export interface DispatchRecord {
   readonly agent: StageAgent
   readonly number: number
   readonly kind: PipelineItemKind
-  readonly state: 'sent' | 'started' | 'not-started'
+  readonly state: 'started' | 'ended' | 'failed'
   readonly at: string
+  readonly detail: string | null
 }
 
-/** #265: this app's own dispatcher state for one ready repository — the
- *  owner line's own **UX states** table, rendered only while `owner ===
- *  'app'`. `idle` covers both "no dispatcher session yet" and "a live one
- *  with nothing currently to report"; `active` carries the per-dispatch
- *  detail `recent` feeds. */
+/** #326: this app's own dispatch state for one ready repository — the owner
+ *  line's own **UX states** table, rendered only while `owner === 'app'`.
+ *  `idle` covers both "nothing launched yet" and "nothing currently to
+ *  report"; `active` carries the per-launch detail `recent` feeds.
+ *  `no-launcher` holds visibly while candidates exist but no `StageLauncher`
+ *  is wired (the state between this ticket and #327); `at-capacity` reports
+ *  how many candidates are waiting for a free hosted-session slot. */
 export type DispatcherState =
   | { readonly kind: 'idle' }
   | { readonly kind: 'active'; readonly recent: readonly DispatchRecord[] }
@@ -167,9 +170,8 @@ export type DispatcherState =
    *  render). Nothing dispatches while this holds — the gate that can't run
    *  must fail closed. */
   | { readonly kind: 'budget-unavailable'; readonly message: string }
-  | { readonly kind: 'dispatcher-failed'; readonly reason: 'at-capacity'; readonly limit: number }
-  | { readonly kind: 'dispatcher-failed'; readonly reason: 'runtime' | 'plugin' }
-  | { readonly kind: 'agents-missing'; readonly agent: StageAgent }
+  | { readonly kind: 'no-launcher' }
+  | { readonly kind: 'at-capacity'; readonly limit: number; readonly waiting: number }
 
 /** #293: one candidate the budget gate acted on this pass, alongside an
  *  ordinary dispatch or hold — rendered as its own line under the owner
@@ -229,13 +231,6 @@ export interface RepoDispatchStatus {
    *  never a fifth `DispatcherState` member for what is really an
    *  orthogonal fact. */
   readonly runState: RunState
-  /** The live dispatcher session's own adopted id (`HostedSessionSnapshot.
-   *  claudeSessionId`) — `null` before `init` arrives, or whenever no
-   *  dispatcher session is live. `board/relay.ts` compares a pending
-   *  relay's own `sessionId` against this to decide "Send to agent" vs the
-   *  paste instruction (#265) — the one piece of `DispatcherState` cannot
-   *  express on its own, since it crosses every state the same way. */
-  readonly claudeSessionId: string | null
   /** The claim's own `claimedAt` (#265) — `null` unless `owner` is `'app'`.
    *  The owner line's own "claimed 14:02" clause reads this, never a second
    *  clock of its own. */
@@ -258,9 +253,3 @@ export interface RepoDispatchStatus {
  *  scope instead of `plan-gate`. Always re-reads and recomputes the owner
  *  after writing, the same "carries the state as it now is" rule. */
 export type DispatchClaimSetResult = { readonly kind: 'ok'; readonly status: RepoDispatchStatus } | { readonly kind: 'failed'; readonly result: ClaimWriteResult }
-
-/** `'dispatch:relay'`'s response (#265) — `not-owner` when this app no
- *  longer holds the `dispatch` claim for `repoId`, `unknown-agent` when
- *  `agentId` names no task this dispatcher started, `no-dispatcher` when no
- *  dispatcher session is live for this repository at all. */
-export type DispatchRelayResult = { readonly ok: true } | { readonly ok: false; readonly kind: 'not-owner' | 'unknown-agent' | 'no-dispatcher' }

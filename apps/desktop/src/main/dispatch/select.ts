@@ -1,8 +1,12 @@
-// #265: pure redispatch-floor filtering and sent-to-started confirmation —
-// no I/O, no SDK import. `dispatcher.ts` is the only caller.
-import type { HostedTask } from '../../shared/hosting/types'
-import type { DispatchRecord } from '../../shared/dispatch/types'
+// #326: pure redispatch-floor filtering, the re-read survivor test, and the
+// budget note's comment-failure clause — no I/O. `dispatcher.ts` is the only
+// caller; `survived`/`commentFailureMessage` moved here to keep that file
+// under the 500-line limit (docs/ENGINEERING.md §7).
+import type { StageRecord } from './launch'
+import type { ResolvedItem } from '../../shared/github/types'
+import type { LabelVocabulary } from '../../shared/labels/vocabulary'
 import type { TickActionable } from '../../shared/tick/types'
+import type { WriteOutcome } from '../../shared/writes/types'
 
 /** The cockpit's own tick floor (`PIPELINE.md` → "The pacing ladder") — a
  *  slow label swap (GitHub's own read-after-write lag) must never look like
@@ -12,16 +16,15 @@ export const REDISPATCH_FLOOR_MS = 270_000
 
 export interface SelectDispatchesParams {
   readonly dispatchable: readonly TickActionable[]
-  /** This repository's own bounded recent list — every state
-   *  (`sent`/`started`/`not-started`), never pre-filtered, since the floor
-   *  applies to all three: a confirmed `started` dispatch is exactly the
-   *  case that must never double-fire, and an unconfirmed `not-started` one
-   *  still waits out the same floor before trying again. */
-  readonly recent: readonly DispatchRecord[]
+  /** This repository's own bounded recent list, every state — the floor
+   *  applies to all three: a live launch is exactly the case that must
+   *  never double-fire, and a `failed` one still waits out the same floor
+   *  before trying again. */
+  readonly recent: readonly StageRecord[]
   readonly now: Date
 }
 
-/** Drops any candidate this process already dispatched (same `agent` +
+/** Drops any candidate this process already launched (same `agent` +
  *  `number`) within `REDISPATCH_FLOOR_MS`, by its most recent record for
  *  that pair. Everything else passes through in the candidates' own order —
  *  `dispatcher.ts` never re-sorts. */
@@ -35,40 +38,30 @@ export function selectDispatches(params: SelectDispatchesParams): readonly TickA
   })
 }
 
-export interface ConfirmStartedResult {
-  readonly updated: readonly DispatchRecord[]
-  /** Exactly the records this call moved from `sent` to `started` — the
-   *  caller's own cue to call `ledger.record` for each, never before a task
-   *  is actually seen. */
-  readonly newlyStarted: readonly DispatchRecord[]
+/** The re-read survivor test (PIPELINE.md → "The dispatcher" step 5): the
+ *  trigger's own resolved name is still present, no other role-bearing
+ *  label (anything but a marker) is present alongside it, and the viewer is
+ *  still among the assignees. Anything else is "moved" — dropped, never
+ *  dispatched this pass. */
+export function survived(resolved: ResolvedItem, candidate: TickActionable, vocabulary: LabelVocabulary, viewer: string): boolean {
+  const triggerLabel = vocabulary.labels.find((l) => l.key === candidate.trigger)
+  if (triggerLabel === undefined || !resolved.labels.includes(triggerLabel.name)) return false
+  const roleBearingNames = new Set(vocabulary.labels.filter((l) => l.role !== 'marker').map((l) => l.name))
+  const others = resolved.labels.filter((name) => name !== triggerLabel.name && roleBearingNames.has(name))
+  // #292: a `refreshBranch` candidate tolerates exactly one co-present
+  // role-bearing label — the sanctioned pair `main/tick/plan.ts`'s own
+  // `actionableAndHeld` already allows (a refresh trigger sitting beside
+  // another trigger it does not strand). Every other trigger keeps the
+  // original single-label rule.
+  const tolerance = candidate.trigger === 'refreshBranch' ? 1 : 0
+  if (others.length > tolerance) return false
+  return resolved.assignees.includes(viewer)
 }
 
-/** Matches a pending (`sent`) record to a `HostedTask` by `description` and
- *  `subagentType` (`port:<agent>-agent`) — the two fields `turn.ts`'s
- *  `specFor` set verbatim on the `Agent()` call, so a match here is proof
- *  the dispatcher's turn actually started the agent it was told to, not
- *  merely that the turn completed. Every other record passes through
- *  unchanged. */
-export function confirmStarted(recent: readonly DispatchRecord[], tasks: readonly HostedTask[]): ConfirmStartedResult {
-  const newlyStarted: DispatchRecord[] = []
-  const updated = recent.map((record) => {
-    if (record.state !== 'sent') return record
-    const description = `${record.agent} #${String(record.number)}`
-    const subagentType = `port:${record.agent}-agent`
-    const matched = tasks.some((t) => t.description === description && t.subagentType === subagentType)
-    if (!matched) return record
-    const started: DispatchRecord = { ...record, state: 'started' }
-    newlyStarted.push(started)
-    return started
-  })
-  return { updated, newlyStarted }
-}
-
-/** Once the dispatcher's own turn reaches `result` with no matching task for
- *  a still-`sent` record, that record becomes `not-started` — never left at
- *  `sent` forever, since nothing turns it `started` after the turn that was
- *  supposed to start it has already finished. It may redispatch after the
- *  floor, the same as any other candidate. */
-export function markUnconfirmed(recent: readonly DispatchRecord[]): readonly DispatchRecord[] {
-  return recent.map((record) => (record.state === 'sent' ? { ...record, state: 'not-started' } : record))
+/** `null` for a comment that was never attempted or that itself applied — a
+ *  short description otherwise, for the 'escalated' note's own "comment
+ *  explaining why didn't post (<message>)" clause. */
+export function commentFailureMessage(comment: WriteOutcome | null): string | null {
+  if (comment === null || comment.kind === 'applied') return null
+  return comment.kind === 'write-failed' ? comment.stderr : comment.kind
 }

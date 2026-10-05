@@ -6,6 +6,7 @@ import type { ClaimRead } from '../writes'
 import type { HostedSessionSnapshot, HostedStore, SessionKey } from '../hosting'
 import type { TickReport } from '../../shared/tick/types'
 import type { ReadyEntry } from '../actions'
+import type { StageLaunchRequest, StageLaunchResult, StageLauncher } from './launch'
 import { createDispatcher } from './dispatcher'
 import type { CreateDispatcherParams } from './dispatcher'
 
@@ -63,7 +64,7 @@ const HELD_CLAIM: ClaimRead = { state: 'held', owner: 'port-desktop', scopes: ['
 const ABSENT_CLAIM: ClaimRead = { state: 'absent', path: '/repo/.agents/gate-claim.json', readAt: 'r' }
 const UNREADABLE_CLAIM: ClaimRead = { state: 'unreadable', message: 'bad', path: '/repo/.agents/gate-claim.json', readAt: 'r' }
 
-function baseSessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSessionSnapshot {
+function sessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSessionSnapshot {
   return {
     sessionKey: 'hosted-1' as SessionKey,
     claudeSessionId: 'sdk-1',
@@ -75,11 +76,9 @@ function baseSessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): Ho
     end: null,
     titled: null,
     pendingPermissions: [],
-    capabilities: { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [{ name: 'impl-agent', description: '', model: null }], plugin: { kind: 'loaded', path: 'p', version: null }, components: { kind: 'complete' } },
-    title: 'Port dispatcher · o/a',
+    capabilities: { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [], plugin: { kind: 'loaded', path: 'p', version: null }, components: { kind: 'complete' } },
+    title: null,
     rateLimit: null,
-    role: 'dispatcher',
-    tasks: [],
     ...overrides,
   }
 }
@@ -93,9 +92,7 @@ function fakeStore(overrides: Partial<HostedStore> = {}): HostedStore {
     interrupt: () => {
       throw new Error('interrupt should not be invoked in this case')
     },
-    close: () => {
-      throw new Error('close should not be invoked in this case')
-    },
+    close: () => Promise.resolve({ ok: true }),
     attach: () => {
       throw new Error('attach should not be invoked in this case')
     },
@@ -110,7 +107,6 @@ function fakeStore(overrides: Partial<HostedStore> = {}): HostedStore {
     dismiss: () => {
       throw new Error('dismiss should not be invoked in this case')
     },
-    stopTask: () => Promise.resolve({ ok: true }),
     snapshotOf: () => null,
     capacity: () => Promise.resolve({ limit: 4, ceiling: 8 }),
     setLimit: () => {
@@ -134,9 +130,14 @@ function fakeStore(overrides: Partial<HostedStore> = {}): HostedStore {
   }
 }
 
+function fakeLauncher(launch: (request: StageLaunchRequest) => Promise<StageLaunchResult>): StageLauncher {
+  return { launch }
+}
+
 function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispatcherParams {
   return {
     store: fakeStore(),
+    launch: null,
     ledger: { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined, observeUnmatched: () => ({ class: 'no-record' }) },
     refreshMemo: { get: () => undefined, set: vi.fn(), clear: vi.fn() },
     writeObservation: () => {
@@ -168,18 +169,19 @@ function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispat
   }
 }
 
+const ACTIONABLE = [{ number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }]
+
 describe('createDispatcher — ownership', () => {
   it('reports cockpit for an absent claim, and never touches the store', async () => {
-    const store = fakeStore()
-    const dispatcher = createDispatcher(baseDeps({ store }))
+    const dispatcher = createDispatcher(baseDeps())
     await dispatcher.consider(snapshotWith([tickReport()]))
-    expect(dispatcher.status()).toEqual([{ repoId: REPO_ID, owner: 'cockpit', state: { kind: 'idle' }, runState: 'dispatching', claudeSessionId: null, claimedAt: null, budget: null, observed: [] }])
+    expect(dispatcher.status()).toEqual([{ repoId: REPO_ID, owner: 'cockpit', state: { kind: 'idle' }, runState: 'dispatching', claimedAt: null, budget: null, observed: [] }])
   })
 
   it('reports nobody for an unreadable claim', async () => {
     const dispatcher = createDispatcher(baseDeps({ readGateClaim: () => Promise.resolve(UNREADABLE_CLAIM) }))
     await dispatcher.consider(snapshotWith([tickReport()]))
-    expect(dispatcher.status()).toEqual([{ repoId: REPO_ID, owner: 'nobody', state: { kind: 'idle' }, runState: 'dispatching', claudeSessionId: null, claimedAt: null, budget: null, observed: [] }])
+    expect(dispatcher.status()).toEqual([{ repoId: REPO_ID, owner: 'nobody', state: { kind: 'idle' }, runState: 'dispatching', claimedAt: null, budget: null, observed: [] }])
   })
 
   it('reports app for a claim naming dispatch', async () => {
@@ -189,143 +191,97 @@ describe('createDispatcher — ownership', () => {
   })
 })
 
-describe('createDispatcher — app ownership', () => {
+describe('createDispatcher — no-launcher', () => {
+  it('holds visibly with candidates and no launcher, never fetching or budgeting', async () => {
+    let fetched = false
+    const dispatcher = createDispatcher(
+      baseDeps({ readGateClaim: () => Promise.resolve(HELD_CLAIM), fetchItemsByNumber: () => { fetched = true; return Promise.resolve({ ok: true, resolved: [], unavailable: [], fetchedAt: 'r' }) } }),
+    )
+    await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
+    expect(dispatcher.status()[0]?.state).toEqual({ kind: 'no-launcher' })
+    expect(fetched).toBe(false)
+  })
+
   it('stays idle with nothing dispatchable', async () => {
     const dispatcher = createDispatcher(baseDeps({ readGateClaim: () => Promise.resolve(HELD_CLAIM) }))
     await dispatcher.consider(snapshotWith([tickReport({ actionable: [] })]))
     expect(dispatcher.status()[0]?.state).toEqual({ kind: 'idle' })
   })
+})
 
-  it('reports dispatcher-failed: at-capacity when the session cannot start', async () => {
-    const store = fakeStore({ start: () => Promise.resolve({ ok: false, kind: 'at-capacity', limit: 4 }) })
-    const dispatcher = createDispatcher(
-      baseDeps({
-        store,
-        readGateClaim: () => Promise.resolve(HELD_CLAIM),
-      }),
-    )
-    const actionable = [{ number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }]
-    await dispatcher.consider(snapshotWith([tickReport({ actionable })]))
-    expect(dispatcher.status()[0]?.state).toEqual({ kind: 'dispatcher-failed', reason: 'at-capacity', limit: 4 })
-  })
-
-  it('waits (idle, unchanged) while capabilities are pending, never a busy-wait', async () => {
-    const send = vi.fn(() => ({ ok: true as const, uuid: 'u1', queued: true }))
-    const store = fakeStore({
-      start: () => Promise.resolve({ ok: true, snapshot: baseSessionSnapshot({ capabilities: { kind: 'pending', request: { source: 'installed' } } }) }),
-      snapshotOf: () => baseSessionSnapshot({ capabilities: { kind: 'pending', request: { source: 'installed' } } }),
-      send,
+describe('createDispatcher — launching', () => {
+  function readyToDispatch(overrides: Partial<CreateDispatcherParams> = {}) {
+    const launched: StageLaunchRequest[] = []
+    const launch = fakeLauncher((request) => {
+      launched.push(request)
+      return Promise.resolve({ ok: true, sessionKey: 'hosted-1' as SessionKey })
     })
-    const dispatcher = createDispatcher(baseDeps({ store, readGateClaim: () => Promise.resolve(HELD_CLAIM) }))
-    const actionable = [{ number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }]
-    await dispatcher.consider(snapshotWith([tickReport({ actionable })]))
-    expect(dispatcher.status()[0]?.state).toEqual({ kind: 'idle' })
-    expect(send).not.toHaveBeenCalled()
-  })
-
-  it('reports dispatcher-failed: plugin when the plugin load is missing', async () => {
-    const store = fakeStore({
-      start: () => Promise.resolve({ ok: true, snapshot: baseSessionSnapshot({ capabilities: { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [], plugin: { kind: 'missing' }, components: { kind: 'unchecked', reason: 'no-plugin-path' } } }) }),
-      snapshotOf: () => baseSessionSnapshot({ capabilities: { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [], plugin: { kind: 'missing' }, components: { kind: 'unchecked', reason: 'no-plugin-path' } } }),
+    const store = fakeStore({ snapshotOf: () => sessionSnapshot() })
+    const deps = baseDeps({
+      store,
+      launch,
+      readGateClaim: () => Promise.resolve(HELD_CLAIM),
+      fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
+      ...overrides,
     })
-    const dispatcher = createDispatcher(baseDeps({ store, readGateClaim: () => Promise.resolve(HELD_CLAIM) }))
-    const actionable = [{ number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }]
-    await dispatcher.consider(snapshotWith([tickReport({ actionable })]))
-    expect(dispatcher.status()[0]?.state).toEqual({ kind: 'dispatcher-failed', reason: 'plugin' })
-  })
+    return { dispatcher: createDispatcher(deps), launched }
+  }
 
-  it('a candidate that moved (label no longer present) is dropped — nothing dispatches', async () => {
-    const send = vi.fn(() => ({ ok: true as const, uuid: 'u1', queued: true }))
-    const store = fakeStore({ start: () => Promise.resolve({ ok: true, snapshot: baseSessionSnapshot() }), snapshotOf: () => baseSessionSnapshot(), send })
-    const dispatcher = createDispatcher(
-      baseDeps({
-        store,
-        readGateClaim: () => Promise.resolve(HELD_CLAIM),
-        fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['in progress'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
-      }),
-    )
-    const actionable = [{ number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }]
-    await dispatcher.consider(snapshotWith([tickReport({ actionable })]))
-    expect(send).not.toHaveBeenCalled()
+  it('a candidate that moved (label no longer present) is dropped — nothing launches', async () => {
+    const { dispatcher, launched } = readyToDispatch({ fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['in progress'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }) })
+    await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
+    expect(launched).toHaveLength(0)
     expect(dispatcher.status()[0]?.state).toEqual({ kind: 'idle' })
   })
 
-  it('reports agents-missing and sends nothing when the session lacks the needed agent', async () => {
-    const send = vi.fn(() => ({ ok: true as const, uuid: 'u1', queued: true }))
-    const store = fakeStore({
-      start: () => Promise.resolve({ ok: true, snapshot: baseSessionSnapshot({ capabilities: { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [], plugin: { kind: 'loaded', path: 'p', version: null }, components: { kind: 'complete' } } }) }),
-      snapshotOf: () => baseSessionSnapshot({ capabilities: { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [], plugin: { kind: 'loaded', path: 'p', version: null }, components: { kind: 'complete' } } }),
-      send,
-    })
-    const dispatcher = createDispatcher(
-      baseDeps({
-        store,
-        readGateClaim: () => Promise.resolve(HELD_CLAIM),
-        fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
-      }),
-    )
-    const actionable = [{ number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }]
-    await dispatcher.consider(snapshotWith([tickReport({ actionable })]))
-    expect(send).not.toHaveBeenCalled()
-    expect(dispatcher.status()[0]?.state).toEqual({ kind: 'agents-missing', agent: 'impl' })
-  })
-
-  it('sends a dispatch turn for a surviving candidate, recording it as sent', async () => {
-    const send = vi.fn<HostedStore['send']>(() => ({ ok: true as const, uuid: 'u1', queued: true }))
-    const store = fakeStore({ start: () => Promise.resolve({ ok: true, snapshot: baseSessionSnapshot() }), snapshotOf: () => baseSessionSnapshot(), send })
-    const dispatcher = createDispatcher(
-      baseDeps({
-        store,
-        readGateClaim: () => Promise.resolve(HELD_CLAIM),
-        fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
-      }),
-    )
-    const actionable = [{ number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }]
-    await dispatcher.consider(snapshotWith([tickReport({ actionable })]))
-    expect(send).toHaveBeenCalledTimes(1)
-    const call = send.mock.calls[0]
-    if (call === undefined) throw new Error('unreachable')
-    const [, text] = call
-    expect(text).toContain('Agent(')
-    expect(text).toContain('impl #52')
+  it('launches a surviving candidate, recording it as started', async () => {
+    const { dispatcher, launched } = readyToDispatch()
+    await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
+    expect(launched).toHaveLength(1)
+    expect(launched[0]).toMatchObject({ agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved' })
     const state = dispatcher.status()[0]?.state
     expect(state?.kind).toBe('active')
     if (state?.kind !== 'active') return
-    expect(state.recent).toEqual([{ agent: 'impl', number: 52, kind: 'issue', state: 'sent', at: '2026-01-01T00:00:00.000Z' }])
-    expect(dispatcher.status()[0]?.claudeSessionId).toBe('sdk-1') // baseSessionSnapshot's own claudeSessionId (#265)
+    expect(state.recent).toEqual([{ agent: 'impl', number: 52, kind: 'issue', state: 'started', at: '2026-01-01T00:00:00.000Z', detail: null }])
   })
 
-  it('confirms a sent record as started once a matching task appears, and calls ledger.record', async () => {
-    const snap = baseSessionSnapshot({ tasks: [{ taskId: 't1', toolUseId: 'tu1', description: 'impl #52', subagentType: 'port:impl-agent', status: 'started', startedAt: 'a', endedAt: null }] })
-    const store = fakeStore({ start: () => Promise.resolve({ ok: true, snapshot: baseSessionSnapshot() }), snapshotOf: () => snap })
+  it('calls ledger.record only after a launch returns ok', async () => {
     const ledger = { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined, observeUnmatched: () => ({ class: 'no-record' as const }) }
-    const dispatcher = createDispatcher(
-      baseDeps({
-        store,
-        ledger,
-        readGateClaim: () => Promise.resolve(HELD_CLAIM),
-        fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
-      }),
-    )
-    const actionable = [{ number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }]
-    await dispatcher.consider(snapshotWith([tickReport({ actionable })])) // sends it — recorded 'sent'
-    await dispatcher.consider(snapshotWith([tickReport({ actionable: [] })])) // confirms it — recorded 'started'
+    const { dispatcher } = readyToDispatch({ ledger })
+    await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
     expect(ledger.record).toHaveBeenCalledWith(REPO_ID, 52)
+  })
+
+  it('a launch that reports at-capacity holds the candidate as waiting', async () => {
+    const launch = fakeLauncher(() => Promise.resolve({ ok: false, kind: 'at-capacity', limit: 4 }))
+    const { dispatcher } = readyToDispatch({ launch })
+    await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
+    expect(dispatcher.status()[0]?.state).toEqual({ kind: 'at-capacity', limit: 4, waiting: 1 })
+  })
+
+  it('a launch that throws records a failed entry and never stops the loop', async () => {
+    const launch = fakeLauncher(() => Promise.reject(new Error('boom')))
+    const { dispatcher } = readyToDispatch({ launch })
+    await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
     const state = dispatcher.status()[0]?.state
     expect(state?.kind).toBe('active')
     if (state?.kind !== 'active') return
-    expect(state.recent[0]?.state).toBe('started')
+    expect(state.recent).toEqual([{ agent: 'impl', number: 52, kind: 'issue', state: 'failed', at: '2026-01-01T00:00:00.000Z', detail: 'boom' }])
+  })
+
+  it('never launches while zero slots are free', async () => {
+    const launch = fakeLauncher(() => {
+      throw new Error('launch should never be called with zero free slots')
+    })
+    const store = fakeStore({ snapshotOf: () => sessionSnapshot(), capacity: () => Promise.resolve({ limit: 1, ceiling: 8 }), list: () => [sessionSnapshot({ sessionKey: 'hosted-2' as SessionKey })] })
+    const { dispatcher } = readyToDispatch({ launch, store })
+    await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
+    expect(dispatcher.status()[0]?.state).toEqual({ kind: 'at-capacity', limit: 1, waiting: 1 })
   })
 })
 
-describe('createDispatcher — relay and stopFor', () => {
-  it('relay refuses not-owner when this app does not hold the claim', async () => {
-    const dispatcher = createDispatcher(baseDeps())
-    const result = await dispatcher.relay({ repoId: REPO_ID, agentId: 't1', text: 'x' })
-    expect(result).toEqual({ ok: false, kind: 'not-owner' })
-  })
-
-  it('stopFor returns false when there is no started task for that item', async () => {
+describe('createDispatcher — stopFor and standDown', () => {
+  it('stopFor returns false when there is no started record for that item', async () => {
     const dispatcher = createDispatcher(baseDeps())
     expect(await dispatcher.stopFor(REPO_ID, 999)).toBe(false)
   })
@@ -334,34 +290,43 @@ describe('createDispatcher — relay and stopFor', () => {
     const dispatcher = createDispatcher(baseDeps())
     expect(await dispatcher.standDown(REPO_ID)).toBe(false)
   })
-})
 
-describe('createDispatcher — #314 run state', () => {
-  const actionable = [{ number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }]
-
-  it('draining dispatches nothing — the candidate is reported idle, never sent', async () => {
-    const send = vi.fn(() => ({ ok: true as const, uuid: 'u1', queued: true }))
-    const store = fakeStore({ start: () => Promise.resolve({ ok: true, snapshot: baseSessionSnapshot() }), snapshotOf: () => baseSessionSnapshot(), send })
+  it('stopFor closes the live session and liveStages drops it', async () => {
+    const close = vi.fn(() => Promise.resolve({ ok: true as const }))
+    const launch = fakeLauncher(() => Promise.resolve({ ok: true, sessionKey: 'hosted-1' as SessionKey }))
+    const store = fakeStore({ snapshotOf: () => sessionSnapshot(), close })
     const dispatcher = createDispatcher(
       baseDeps({
         store,
+        launch,
+        readGateClaim: () => Promise.resolve(HELD_CLAIM),
+        fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
+      }),
+    )
+    await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
+    expect(dispatcher.liveStages(REPO_ID)).toEqual(['impl #52'])
+    expect(await dispatcher.stopFor(REPO_ID, 52)).toBe(true)
+    expect(close).toHaveBeenCalledWith('hosted-1')
+  })
+})
+
+describe('createDispatcher — run state (#314)', () => {
+  it('draining never launches — the candidate is reported idle', async () => {
+    const launch = fakeLauncher(() => {
+      throw new Error('launch should not be called while draining')
+    })
+    const store = fakeStore({ snapshotOf: () => sessionSnapshot() })
+    const dispatcher = createDispatcher(
+      baseDeps({
+        store,
+        launch,
         runState: () => 'draining',
         readGateClaim: () => Promise.resolve(HELD_CLAIM),
         fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
       }),
     )
-    await dispatcher.consider(snapshotWith([tickReport({ actionable })]))
-    expect(send).not.toHaveBeenCalled()
+    await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
     expect(dispatcher.status()[0]).toMatchObject({ runState: 'draining', state: { kind: 'idle' } })
-  })
-
-  it('paused dispatches nothing — same as draining', async () => {
-    const send = vi.fn(() => ({ ok: true as const, uuid: 'u1', queued: true }))
-    const store = fakeStore({ start: () => Promise.resolve({ ok: true, snapshot: baseSessionSnapshot() }), snapshotOf: () => baseSessionSnapshot(), send })
-    const dispatcher = createDispatcher(baseDeps({ store, runState: () => 'paused', readGateClaim: () => Promise.resolve(HELD_CLAIM) }))
-    await dispatcher.consider(snapshotWith([tickReport({ actionable })]))
-    expect(send).not.toHaveBeenCalled()
-    expect(dispatcher.status()[0]).toMatchObject({ runState: 'paused', state: { kind: 'idle' } })
   })
 
   it('status() reports this repository\'s own current run state even for the cockpit owner', async () => {
@@ -371,27 +336,11 @@ describe('createDispatcher — #314 run state', () => {
   })
 })
 
-describe('createDispatcher — standDown (#314)', () => {
-  it('closes a live session, clears its key, and calls onChange', async () => {
-    const send = vi.fn(() => ({ ok: true as const, uuid: 'u1', queued: true }))
-    const close = vi.fn(() => Promise.resolve({ ok: true as const }))
-    const onChange = vi.fn()
-    const store = fakeStore({ start: () => Promise.resolve({ ok: true, snapshot: baseSessionSnapshot() }), snapshotOf: () => baseSessionSnapshot(), send, close })
-    const dispatcher = createDispatcher(
-      baseDeps({
-        store,
-        onChange,
-        readGateClaim: () => Promise.resolve(HELD_CLAIM),
-        fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
-      }),
-    )
-    const actionable = [{ number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }]
-    await dispatcher.consider(snapshotWith([tickReport({ actionable })])) // starts the session
-
-    const result = await dispatcher.standDown(REPO_ID)
-    expect(result).toBe(true)
-    expect(close).toHaveBeenCalledWith('hosted-1')
-    expect(onChange).toHaveBeenCalled()
-    expect(await dispatcher.stopFor(REPO_ID, 52)).toBe(false) // no session left to stop a task on
+describe('createDispatcher — shutdown', () => {
+  it('consider is a no-op once shutdown has run', async () => {
+    const dispatcher = createDispatcher(baseDeps({ readGateClaim: () => Promise.resolve(HELD_CLAIM) }))
+    dispatcher.shutdown()
+    await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
+    expect(dispatcher.status()).toEqual([])
   })
 })

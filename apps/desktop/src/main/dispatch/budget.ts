@@ -4,8 +4,7 @@
 // case table exists for a decision this inseparable from the ledger I/O the
 // script itself owns). No I/O, no `node` import — `budget-gate.ts` is what
 // actually runs the script.
-import type { HostedTask } from '../../shared/hosting/types'
-import type { DispatchRecord } from '../../shared/dispatch/types'
+import type { StageRecord } from './launch'
 import type { TickActionable } from '../../shared/tick/types'
 
 /** One session log per dispatcher (`bin/budget.mjs`'s own `--session`) — a
@@ -78,23 +77,14 @@ export function budgetRoute(verdict: BudgetVerdict, priorHolds: number): { reado
   return priorHolds === 0 ? { action: 'hold', holds: 1 } : { action: 'dispatch', holds: 0 }
 }
 
-/** `live`: descriptions of every `started` `HostedTask`, plus `<agent>
- *  #<n>` for a `recent` record still at `sent` — without the latter, a
- *  sweep that happens before this turn's own `task_started` arrives would
- *  close a just-allowed row at ~0s. `completed`: descriptions whose newest
- *  task (by `startedAt`) is `completed` and that are not already in `live`. */
-export function budgetLiveSets(tasks: readonly HostedTask[], recent: readonly DispatchRecord[]): { readonly live: readonly string[]; readonly completed: readonly string[] } {
-  const sentDescriptions = recent.filter((r) => r.state === 'sent').map((r) => `${r.agent} #${String(r.number)}`)
-  const live = [...new Set([...tasks.filter((t) => t.status === 'started').map((t) => t.description), ...sentDescriptions])]
+/** `live`: descriptions of every `started` `StageRecord` — a live stage
+ *  session, one per launch. `completed`: descriptions of every `ended`
+ *  record not already in `live` (a `failed` record is in neither set — it
+ *  never opened a row for the script to close). */
+export function budgetLiveSets(records: readonly StageRecord[]): { readonly live: readonly string[]; readonly completed: readonly string[] } {
+  const live = [...new Set(records.filter((r) => r.state === 'started').map((r) => `${r.agent} #${String(r.number)}`))]
   const liveSet = new Set(live)
-
-  const newestByDescription = new Map<string, HostedTask>()
-  for (const task of tasks) {
-    const existing = newestByDescription.get(task.description)
-    if (existing === undefined || Date.parse(task.startedAt) > Date.parse(existing.startedAt)) newestByDescription.set(task.description, task)
-  }
-  const completed = [...newestByDescription.values()].filter((t) => t.status === 'completed' && !liveSet.has(t.description)).map((t) => t.description)
-
+  const completed = [...new Set(records.filter((r) => r.state === 'ended').map((r) => `${r.agent} #${String(r.number)}`).filter((d) => !liveSet.has(d)))]
   return { live, completed }
 }
 

@@ -1,15 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { budgetLiveSets, budgetRoute, dispatchArgs, escalationBody, parseSweepLine, parseVerdict, resetArgs, sweepArgs } from './budget'
-import type { DispatchRecord } from '../../shared/dispatch/types'
-import type { HostedTask } from '../../shared/hosting/types'
+import type { StageRecord } from './launch'
+import type { SessionKey } from '../hosting'
 import type { TickActionable } from '../../shared/tick/types'
 
-function task(overrides: Partial<HostedTask> = {}): HostedTask {
-  return { taskId: 't1', toolUseId: null, description: 'impl #52', subagentType: 'port:impl-agent', status: 'started', startedAt: '2026-09-05T14:00:05.000Z', endedAt: null, ...overrides }
-}
-
-function record(overrides: Partial<DispatchRecord> = {}): DispatchRecord {
-  return { agent: 'impl', number: 52, kind: 'issue', state: 'sent', at: '2026-09-05T14:00:00.000Z', ...overrides }
+function record(overrides: Partial<StageRecord> = {}): StageRecord {
+  return { sessionKey: 'hosted-1' as SessionKey, agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved', state: 'started', at: '2026-09-05T14:00:00.000Z', detail: null, ...overrides }
 }
 
 describe('resetArgs / sweepArgs / dispatchArgs', () => {
@@ -87,28 +83,26 @@ describe('budgetRoute', () => {
 })
 
 describe('budgetLiveSets', () => {
-  it('a started task is live', () => {
-    const { live } = budgetLiveSets([task({ status: 'started' })], [])
+  it('a started record is live', () => {
+    const { live } = budgetLiveSets([record({ state: 'started' })])
     expect(live).toContain('impl #52')
   })
 
-  it('a sent record with no confirming task yet is still live', () => {
-    const { live } = budgetLiveSets([], [record({ state: 'sent' })])
-    expect(live).toContain('impl #52')
-  })
-
-  it('a completed task not covered by a live record is completed', () => {
-    const { completed, live } = budgetLiveSets([task({ status: 'completed', startedAt: '2026-09-05T14:00:05.000Z' })], [])
+  it('an ended record not covered by a live record is completed', () => {
+    const { completed, live } = budgetLiveSets([record({ state: 'ended' })])
     expect(completed).toEqual(['impl #52'])
     expect(live).not.toContain('impl #52')
   })
 
-  it('only the newest task per description decides completed vs live', () => {
-    const tasks = [
-      task({ taskId: 't1', status: 'completed', startedAt: '2026-09-05T14:00:00.000Z' }),
-      task({ taskId: 't2', status: 'started', startedAt: '2026-09-05T14:05:00.000Z' }),
-    ]
-    const { live, completed } = budgetLiveSets(tasks, [])
+  it('a failed record is in neither set', () => {
+    const { completed, live } = budgetLiveSets([record({ state: 'failed', detail: 'boom' })])
+    expect(live).not.toContain('impl #52')
+    expect(completed).not.toContain('impl #52')
+  })
+
+  it('a live record for a description wins over an ended one for the same description', () => {
+    const records = [record({ sessionKey: 's1' as SessionKey, state: 'ended' }), record({ sessionKey: 's2' as SessionKey, state: 'started' })]
+    const { live, completed } = budgetLiveSets(records)
     expect(live).toContain('impl #52')
     expect(completed).not.toContain('impl #52')
   })

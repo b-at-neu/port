@@ -34,14 +34,15 @@ export interface HaltDispatchParams {
 
 export interface HaltDispatchDeps {
   readonly applyItemAction: (params: ApplyItemActionParams) => Promise<ItemActionResult>
-  /** #265: the dispatcher's own per-item stop — called before every
-   *  `applyItemAction`, same order as the run-state write before it, so the
-   *  agent is asked to stop before its label is ever touched. A no-op
-   *  default (`undefined`) for every caller that has no dispatcher at all. */
+  /** #326: this app's own per-item stop — closes an app-launched stage
+   *  session, called before every `applyItemAction`, same order as the
+   *  run-state write before it, so the session is asked to stop before its
+   *  label is ever touched. A no-op default (`undefined`) for every caller
+   *  that has no dispatch loop at all. */
   readonly stopFor?: (repoId: RepoId, number: number) => Promise<boolean>
-  /** #314: the dispatcher's own whole-session stand-down, called once per
-   *  in-scope ready entry after the per-item loop — closes any `Agent()`
-   *  turn already sent but not yet confirmed, which `stopFor` cannot reach. */
+  /** #326: this app's own whole-repository stand-down, called once per
+   *  in-scope ready entry after the per-item loop — closes every remaining
+   *  live stage session `stopFor` did not already reach. */
   readonly standDown?: (repoId: RepoId) => Promise<boolean>
 }
 
@@ -107,10 +108,9 @@ export async function haltDispatch(params: HaltDispatchParams, deps: HaltDispatc
         continue
       }
 
-      // #265: the dispatcher's own per-task stop, before the label write —
-      // same order as the run-state write before the loop, so an
-      // app-dispatched agent is asked to stop before its label is ever
-      // touched.
+      // #326: this app's own per-item stop, before the label write — same
+      // order as the run-state write before the loop, so an app-launched
+      // stage session is asked to stop before its label is ever touched.
       const stoppedTask = (await deps.stopFor?.(repoState.repoId, item.number)) ?? false
 
       const result = await deps.applyItemAction({
@@ -130,7 +130,7 @@ export async function haltDispatch(params: HaltDispatchParams, deps: HaltDispatc
     }
   }
 
-  // #314: the dispatcher's own whole-session stand-down, once per in-scope
+  // #326: this app's own whole-repository stand-down, once per in-scope
   // ready entry, after every item has been visited — `stopFor` above needs
   // the live session, so this must run after, never interleaved with it.
   for (const entry of entries) {
