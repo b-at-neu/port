@@ -245,4 +245,26 @@ export default async function ({ fail, ok }: Reporter) {
     }
     if (!found) ok();
   }
+
+  // --- #313: GATE_ACTIONS carries 'auto-approve-plan', and gate.ts never ----
+  // posts a comment for it
+  // guard(#313): the auto-plan swap losing its own audit-distinguishable
+  // action name, or gaining a comment it has no operator feedback to carry.
+  {
+    const typesText = readFileSync(join(root, typesFile), 'utf8');
+    const gateText = readFileSync(join(root, gateActionFile), 'utf8');
+    if (!typesText.includes("'auto-approve-plan'")) {
+      fail('desktop-gate', `${typesFile}'s GATE_ACTIONS is missing 'auto-approve-plan' — the auto-plan swap needs its own audit-distinguishable action`);
+    } else if (!gateText.includes('autoApprovePlan')) {
+      fail('desktop-gate', `${gateActionFile} has no autoApprovePlan export — the auto-plan swap's own write composition is missing`);
+    } else {
+      const fnStart = gateText.indexOf('export async function autoApprovePlan');
+      const fnBody = fnStart === -1 ? '' : gateText.slice(fnStart, gateText.indexOf('\n}', fnStart));
+      if (fnBody.includes('postComment(')) {
+        fail('desktop-gate', `${gateActionFile}'s autoApprovePlan calls postComment( — this write has no operator feedback to attach, it must post none`);
+      } else {
+        ok();
+      }
+    }
+  }
 }

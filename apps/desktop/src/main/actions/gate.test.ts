@@ -5,7 +5,7 @@ import type { RepoId } from '../../shared/repos'
 import type { GatePreflightFetch } from '../../shared/github/types'
 import type { ClaimRead, LabelWriteRequest, WriteOutcome } from '../../shared/writes/types'
 import type { ReposListResponse } from '../../shared/ipc'
-import { gateAnswer, gateClaimRead, gateClaimSet, gatePreflight } from './gate'
+import { autoApprovePlan, gateAnswer, gateClaimRead, gateClaimSet, gatePreflight } from './gate'
 import type { GateDeps } from './gate'
 import type { RegistryDeps } from '../registry'
 
@@ -291,5 +291,28 @@ describe('gateAnswer', () => {
     )
     expect(commentCalled).toBe(false)
     expect(result).toEqual({ kind: 'answered', comment: null, labels: labelOutcome })
+  })
+})
+
+describe('autoApprovePlan', () => {
+  it('writes planApproved/planReview with the auto-approve-plan action, posting no comment', async () => {
+    let received: LabelWriteRequest | undefined
+    const outcome: WriteOutcome = { kind: 'applied', argv: ['issue', 'edit', '148'] }
+    const deps = depsWith({
+      applyLabels: (p) => {
+        received = p.request
+        return Promise.resolve(outcome)
+      },
+    })
+    const result = await autoApprovePlan({ entry: READY_ENTRY, item: { number: 148, assignees: ['alice'] }, auditDir: '/audit' }, deps)
+    expect(result).toEqual(outcome)
+    expect(received?.add).toEqual(['planApproved'])
+    expect(received?.remove).toEqual(['planReview'])
+    expect(received?.action).toBe('auto-approve-plan')
+    expect(received?.expect).toEqual({
+      present: ['planReview', 'autoPlan'],
+      absent: VOCABULARY.labels.filter((l) => l.role !== 'marker' && l.key !== 'planReview').map((l) => l.key),
+      assignees: { kind: 'exactly', logins: ['alice'] },
+    })
   })
 })

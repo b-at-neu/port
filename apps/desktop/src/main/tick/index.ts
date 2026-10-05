@@ -7,7 +7,7 @@
 export { planTick } from './plan'
 export type { PlanTickParams } from './plan'
 
-export { dispatchableFrom, observableFrom } from './dispatchable'
+export { autoApprovableFrom, dispatchableFrom, observableFrom } from './dispatchable'
 
 export { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from './ledger'
 export type { DispatchLedger, RefreshMemo, UnknownStreaks } from './ledger'

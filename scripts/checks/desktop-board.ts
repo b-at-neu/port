@@ -133,6 +133,24 @@ export default async function ({ fail, ok }: Reporter) {
     }
     if (!found) ok();
   }
+
+  // --- pin: board/copy.ts's autoPlanTagLabel() literal ↔ docs/DESIGN.md §6 --
+  // guard(#313): the row's own Auto-plan tag drifting from the design
+  // system's own documented tag sentence.
+  // pin: `renderer/src/board/copy.ts`'s `autoPlanTagLabel()` ↔ `docs/DESIGN.md` §6's "Auto-plan" tag sentence
+  {
+    const copyFile = join(root, rendererBoardDir, 'copy.ts');
+    const copyText = readFileSync(copyFile, 'utf8');
+    const labelMatch = /function autoPlanTagLabel\(\): string \{\s*return '([^']+)'/.exec(copyText);
+    const designText = readFileSync(join(root, 'docs/DESIGN.md'), 'utf8');
+    if (!labelMatch) {
+      fail('desktop-board', `${rendererBoardDir}/copy.ts has no autoPlanTagLabel() returning a string literal`);
+    } else if (!designText.includes(`"${labelMatch[1]}" tag`)) {
+      fail('desktop-board', `docs/DESIGN.md §6 no longer names the "${labelMatch[1]}" tag — ${rendererBoardDir}/copy.ts's autoPlanTagLabel() has drifted from it`);
+    } else {
+      ok();
+    }
+  }
 }
 
 function stripComments(text: string): string {

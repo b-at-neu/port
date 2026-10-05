@@ -55,8 +55,24 @@ describe('primaryApproveLabel', () => {
 })
 
 describe('autoPlanNoteCopy', () => {
-  it('is a stable note', () => {
-    expect(autoPlanNoteCopy()).toContain('auto-approve')
+  it('held with plan-gate: the app approves it on its next poll', () => {
+    const claim: ClaimRead = { state: 'held', owner: 'port-desktop', scopes: ['plan-gate'], unknownScopes: [], claimedAt: 't', path: 'p', readAt: 'r' }
+    expect(autoPlanNoteCopy(claim)).toContain('port approves it on its next poll')
+  })
+
+  it('absent: the cockpit approves it on its next tick', () => {
+    const claim: ClaimRead = { state: 'absent', path: 'p', readAt: 'r' }
+    expect(autoPlanNoteCopy(claim)).toContain('cockpit approves it on its next tick')
+  })
+
+  it('held without plan-gate: the cockpit approves it on its next tick', () => {
+    const claim: ClaimRead = { state: 'held', owner: 'port-desktop', scopes: ['dispatch'], unknownScopes: [], claimedAt: 't', path: 'p', readAt: 'r' }
+    expect(autoPlanNoteCopy(claim)).toContain('cockpit approves it on its next tick')
+  })
+
+  it('unreadable: nothing approves it until the claim file is fixed or removed', () => {
+    const claim: ClaimRead = { state: 'unreadable', message: 'bad', path: 'p', readAt: 'r' }
+    expect(autoPlanNoteCopy(claim)).toContain("fixed or removed")
   })
 })
 

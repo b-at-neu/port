@@ -13,8 +13,10 @@ export const GATE_DECISIONS = ['approve', 'request-changes'] as const
 export type GateDecision = (typeof GATE_DECISIONS)[number]
 
 /** Recorded verbatim as `AuditEntry.action` — the verb in the log and the
- *  verb in the UI can never drift. */
-export const GATE_ACTIONS = ['approve-plan', 'request-plan-changes'] as const
+ *  verb in the UI can never drift. `auto-approve-plan` (#313) is never a
+ *  dialog decision — it is `main/dispatch/auto-plan.ts`'s own snapshot
+ *  consumer, so the audit log can tell an automatic approval from a click. */
+export const GATE_ACTIONS = ['approve-plan', 'request-plan-changes', 'auto-approve-plan'] as const
 export type GateAction = (typeof GATE_ACTIONS)[number]
 
 /** `docs/COORDINATION.md`'s own stand-down copy names this owner; pinned by

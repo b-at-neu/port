@@ -124,7 +124,7 @@ function buildReviewingStep(state: Extract<GateState, { readonly step: 'reviewin
     step.appendChild(wrap)
   }
 
-  if (preflight.autoPlan) step.appendChild(el('p', 'gate-dialog__note', autoPlanNoteCopy()))
+  if (preflight.autoPlan) step.appendChild(el('p', 'gate-dialog__note', autoPlanNoteCopy(claim)))
 
   if (verdict.assignedElsewhere.length > 0) {
     for (const login of verdict.assignedElsewhere) step.appendChild(el('p', 'gate-dialog__note', assigneeNoteCopy(login)))

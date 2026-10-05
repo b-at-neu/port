@@ -7,7 +7,7 @@
 // actions, never on reporting). #106's own dispatcher is the one consumer
 // this exists for — it must never read `report.actionable` directly.
 import type { RunState } from '../../shared/dispatch/types'
-import type { TickActionable, TickObservation, TickReport } from '../../shared/tick/types'
+import type { TickActionable, TickAutoApproval, TickObservation, TickReport } from '../../shared/tick/types'
 
 export function dispatchableFrom(report: TickReport, runState: RunState): readonly TickActionable[] {
   if (runState !== 'dispatching') return []
@@ -24,4 +24,15 @@ export function observableFrom(report: TickReport, runState: RunState): readonly
   if (runState !== 'dispatching') return []
   if (report.blind !== null) return []
   return report.observations.filter((o) => o.kind !== 'refresh-deferred')
+}
+
+/** The auto-plan swap's own gate (#313) — the only function under `main/`
+ *  allowed to read `.autoApprovals`. Held the same as `dispatchableFrom`'s
+ *  own `runState !== 'dispatching'` test: draining is the operator's own
+ *  "hold still" switch and must stand this down too, while a blind report
+ *  authorises nothing regardless. */
+export function autoApprovableFrom(report: TickReport, runState: RunState): readonly TickAutoApproval[] {
+  if (runState !== 'dispatching') return []
+  if (report.blind !== null) return []
+  return report.autoApprovals
 }

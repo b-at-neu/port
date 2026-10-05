@@ -44,6 +44,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - never trusts a renderer-supplied `expectedStage` to widen a write, only to refuse
 - `gate.ts` comments before the label swap; `escalate.ts`/`observe.ts` swap first
 - `decide.ts`'s `applyItemDecision` (#312) is the fifth comment-then-swap composition: check → re-read → comment → swap, `gateAnswer`'s own direction — pinned by `desktop-gate`/`desktop-actions`
+- `gate.ts`'s `autoApprovePlan` (#313) posts no comment — the click's own label plan, with an `autoPlan`-present, exact-assignee precondition in place of the click's `{ kind: 'any' }`
 
 **`apps/desktop/src/main/channels/<topic>.ts`**
 - one topic's IPC validation and composition; `main/ipc.ts` stays the registrar
@@ -63,6 +64,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - capacity comes from the hosted-session store (`launch.ts`'s `freeSlots`); launches across every repository are serialized into one promise chain so two repositories never race for a slot
 - `ledger.record` only after a launch returns `ok`; the budget gate is the last veto before it
 - `quit.ts` is the quit warning's own pure copy and guard; `main/dialogs.ts`'s `confirmQuit` is its one native dialog
+- `auto-plan.ts`'s `createAutoPlanner` (#313) is a snapshot consumer gated on a held `plan-gate` claim, never `dispatch`, and on the per-repository run state the same way `dispatchableFrom` is; kept out of `dispatcher.ts`, since the two need different claim scopes
 
 **`apps/desktop/src/main/fixtures/` is the visual harness's own adapter boundary (#317) — every screen read a fixture run serves comes from here, never from `main/github/`, `main/sessions/`, `main/local/`, or any other real adapter.** `mode.ts`'s `fixtureMode` is pure — `PORT_FIXTURES` must be exactly `'1'` in an unpackaged build, and a packaged build ignores the flag outright (`ignored`) rather than ever risking it reaching a real operator's install; an absolute `PORT_FIXTURES_USER_DATA` is required (`invalid` otherwise), since a fixture run against the real profile would take the operator's single-instance lock and write their theme preference. `main/index.ts` calls it before `requestSingleInstanceLock()`, and in `whenReady` calls `handlers/index.ts`'s `registerFixtureIpc()` in place of `registerIpc()` — no watcher, no hosted-session store, no drain store ever start. `handlers.ts`'s `FixtureHandlers` type is exhaustive over `IpcChannel`, so a channel added to `shared/ipc.ts` with no fixture fails `pnpm typecheck` here rather than crashing the one process an agent cannot see a stack trace from; every handler is pure, synchronous, and throws nothing, since a rejected invoke renders as an `ErrorBanner` and would misrepresent the screen under test. `board.ts`'s `fixtureBoardSnapshot` passes canned GitHub, session, worktree and denial reads through the real `reconcileRepository` (`main/state/reconcile`, never the `main/state` barrel, which pulls in the watcher) and `planTick` (`main/tick`), so a screenshot shows exactly what the real derivation produces — the fixtures replace the adapter boundary only, never the decision logic above it. A production file under this directory may import only `electron`, `node:path`, a sibling (`./*`), `shared/**`, `main/registry/schema`, `main/state/reconcile`, or `main/tick` — anything else would let fixture mode reach `gh` or `claude`, which the `desktop-visual` layer 1 check pins mechanically, alongside `main/index.ts` passing `app.isPackaged` to `fixtureMode(`, every `router.tsx` route path staying one of `ROUTE_IDS.<key>`/`'/'`/`'*'`, and `commands.checks` never naming `screenshots` (that list runs on every dispatched agent, and this command launches Electron).
 
@@ -112,6 +114,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `RepositoryState` → `TickReport`; computes, never writes
 - imports `scripts/port-tick/`'s own decision modules directly, checked against shared case tables
 - blind read → no actionable, held or claim counts at all
+- `auto-plan.ts`'s `autoApprovalsOf` (#313) ignores `sessionRequired` deliberately — the cockpit's own rule is that the swap still happens; `dispatchable.ts`'s `autoApprovableFrom` is the only reader of `.autoApprovals` under `main/`
 
 **`apps/desktop/src/main/trajectory/`**
 - the one write `main/tick/` itself never makes — computes there, writes here

@@ -24,6 +24,7 @@ import { RETRY_TRIGGER } from '../../../../../scripts/port-tick/liveness'
 import { observationsOf } from './observe'
 import { partitionOwnership } from '../../../../../scripts/port-tick/classify'
 import { AGENT_FOR_IN_FLIGHT, AGENT_FOR_TRIGGER } from './routing'
+import { autoApprovalsOf } from './auto-plan'
 
 export interface PlanTickParams {
   readonly repository: RepositoryState
@@ -59,7 +60,7 @@ export interface PlanTickParams {
 }
 
 function emptyReport(repoId: RepoId, displayName: string, blind: TickBlind): TickReport {
-  return { repoId, displayName, blind, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [] }
+  return { repoId, displayName, blind, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [], autoApprovals: [] }
 }
 
 /** The winning `StageLabel`'s own key — `null` only when `item.stage` is
@@ -388,5 +389,6 @@ export function planTick(params: PlanTickParams): TickReport {
     disabledStages: repository.disabled,
     nextTickAt: nextDecisionAt.toISOString(),
     observations,
+    autoApprovals: autoApprovalsOf(repository.items, repository.viewer),
   }
 }

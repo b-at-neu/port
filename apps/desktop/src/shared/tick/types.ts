@@ -159,6 +159,14 @@ export type TickObservation =
       readonly headRefOid: string
     })
 
+/** One `autoPlan` issue at `planReview` alone, assigned to the viewer (#313)
+ *  — the app's own auto-plan swap acts on this set while it holds the
+ *  `plan-gate` claim, mirroring the cockpit's own unprompted `autoPlan`
+ *  swap (`docs/COORDINATION.md` → "The decision"). */
+export interface TickAutoApproval {
+  readonly number: number
+}
+
 /** One repository's own tick — `planTick`'s whole result. `disabledStages`
  *  is always `[]` on a blind repository, the same direction as
  *  `actionable`/`held`/`claims`. */
@@ -169,6 +177,12 @@ export interface TickReport {
   readonly actionable: readonly TickActionable[]
   readonly held: readonly TickHeld[]
   readonly claims: readonly TickClaim[]
+  /** #313: every `autoPlan` issue at `planReview` alone, assigned to the
+   *  viewer — `[]` on a blind report, the same direction as
+   *  `actionable`/`held`/`claims`. `main/tick/dispatchable.ts`'s
+   *  `autoApprovableFrom` is the only function under `main/` allowed to
+   *  read this. */
+  readonly autoApprovals: readonly TickAutoApproval[]
   /** Every module-gated stage key this repository's config currently turns
    *  off (`LabelVocabulary.disabled`, carried onto `RepositoryState`) — a
    *  gated stage is absent from the UI, never a stage rendered at zero. */

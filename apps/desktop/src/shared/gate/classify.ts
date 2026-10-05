@@ -74,3 +74,20 @@ export function buildGatePlan(decision: GateDecision): GatePlan {
     expect: { present: ['planReview'], absent: ['planApproved', 'planChangesRequested'], assignees: { kind: 'any' } },
   }
 }
+
+/** #313: the auto-plan swap's own write plan — `add`/`remove` come from
+ *  `buildGatePlan('approve')` unchanged, so `desktop-gate`'s own key-set
+ *  pin still holds. The precondition is stricter than a click's: `present`
+ *  carries both `planReview` and `autoPlan` (an item that lost either
+ *  between the tick and the write is no longer this candidate), `absent`
+ *  is every role-bearing vocabulary key except `planReview` — the same
+ *  derivation `main/dispatch/observation.ts`'s own `precondition` uses —
+ *  and `assignees` requires exactly the snapshot's own assignee set, never
+ *  `{ kind: 'any' }`: a reassigned issue is no longer the candidate this
+ *  pass read. */
+export function buildAutoApprovePlan(params: { readonly vocabulary: LabelVocabulary; readonly assignees: readonly string[] }): GatePlan {
+  const { add, remove } = buildGatePlan('approve')
+  const allRoleBearing = params.vocabulary.labels.filter((l) => l.role !== 'marker').map((l) => l.key)
+  const absent = allRoleBearing.filter((key) => key !== 'planReview')
+  return { add, remove, expect: { present: ['planReview', 'autoPlan'], absent, assignees: { kind: 'exactly', logins: params.assignees } } }
+}

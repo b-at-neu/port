@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { resolveVocabulary } from '../labels/vocabulary'
 import type { LabelVocabulary } from '../labels/vocabulary'
-import { buildGatePlan, classifyGate } from './classify'
+import { buildAutoApprovePlan, buildGatePlan, classifyGate } from './classify'
 import type { GateClassifyItem } from './classify'
 
 const VOCABULARY: LabelVocabulary = resolveVocabulary({})
@@ -56,5 +56,22 @@ describe('buildGatePlan', () => {
     expect(plan.expect.present).toEqual(['planReview'])
     expect(plan.expect.absent).toEqual(['planApproved', 'planChangesRequested'])
     expect(plan.expect.assignees).toEqual({ kind: 'any' })
+  })
+})
+
+describe('buildAutoApprovePlan', () => {
+  it('reuses buildGatePlan(\'approve\')\'s own add/remove', () => {
+    const plan = buildAutoApprovePlan({ vocabulary: VOCABULARY, assignees: ['alice'] })
+    expect(plan.add).toEqual(['planApproved'])
+    expect(plan.remove).toEqual(['planReview'])
+  })
+
+  it('requires planReview and autoPlan present, every other role-bearing key absent, and the exact assignee set', () => {
+    const plan = buildAutoApprovePlan({ vocabulary: VOCABULARY, assignees: ['alice'] })
+    expect(plan.expect.present).toEqual(['planReview', 'autoPlan'])
+    expect(plan.expect.absent).not.toContain('planReview')
+    expect(plan.expect.absent).toContain('planApproved')
+    expect(plan.expect.absent).toContain('inProgress')
+    expect(plan.expect.assignees).toEqual({ kind: 'exactly', logins: ['alice'] })
   })
 })

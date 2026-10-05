@@ -254,7 +254,7 @@ export function registerIpc(): RegisteredIpc {
   // `main/dispatch/runtime.ts` for why `bindWatcher` exists. `launch: null`
   // is the honest state until #327 passes a real `StageLauncher` — a
   // candidate sits visibly at `no-launcher` rather than silently idle.
-  const { watcherDeps, dispatcher, bindWatcher, shutdown } = createDispatchRuntime({
+  const { watcherDeps, dispatcher, autoPlanner, bindWatcher, shutdown } = createDispatchRuntime({
     store: hostedStore,
     launch: null,
     runState: (repoId) => runStates.current(repoId).state,
@@ -281,6 +281,7 @@ export function registerIpc(): RegisteredIpc {
     ...watcherDeps,
     onSnapshot: (snapshot) => {
       broadcast('board:update', snapshot)
+      void autoPlanner.consider(snapshot)
     },
     onTick: (snapshot) => {
       void dispatcher.consider(snapshot)

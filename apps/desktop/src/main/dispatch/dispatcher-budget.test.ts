@@ -46,7 +46,7 @@ function entry(overrides: Partial<ReadyEntry['config']> = {}): ReadyEntry {
 }
 
 function tickReport(overrides: Partial<TickReport> = {}): TickReport {
-  return { repoId: REPO_ID, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [], ...overrides }
+  return { repoId: REPO_ID, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [], autoApprovals: [], ...overrides }
 }
 
 function snapshotWith(tick: readonly TickReport[]): BoardSnapshot {

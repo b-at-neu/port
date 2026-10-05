@@ -4,7 +4,7 @@
 
 ## The decision
 
-**Split ownership by what authorises the write, not by repository.** Every write a *machine observation* authorises — liveness resets, cycle-cap/zero-diff escalation, approval withdrawal, the refresh sweep — is made by whichever side's own tick actually observed it: the cockpit by default, or the app itself while it holds the `dispatch` claim (#292, extending #265's own dispatch-call transfer to these four writes too) — liveness resets stay the one exception, since each side only ever resets an item its own dispatch record names, never the other's. A *human decision* write is transferred, scope by scope, through a durable claim file that an external gate owner writes and only a human releases. Exactly one scope needs that transfer today: `plan-gate`. It is the only divergent decision in this epic, and the only one the cockpit takes unprompted — `auto plan` swaps `plan review` → `plan approved` with no interaction, so there is no race window to narrow there; the cockpit simply always wins it.
+**Split ownership by what authorises the write, not by repository.** Every write a *machine observation* authorises — liveness resets, cycle-cap/zero-diff escalation, approval withdrawal, the refresh sweep — is made by whichever side's own tick actually observed it: the cockpit by default, or the app itself while it holds the `dispatch` claim (#292, extending #265's own dispatch-call transfer to these four writes too) — liveness resets stay the one exception, since each side only ever resets an item its own dispatch record names, never the other's. A *human decision* write is transferred, scope by scope, through a durable claim file that an external gate owner writes and only a human releases. Exactly one scope needs that transfer today: `plan-gate`. It is the only divergent decision in this epic — `auto plan` swaps `plan review` → `plan approved` with no interaction, so there is no race window to narrow there. The cockpit always makes it unprompted when no one else is claimed for `plan-gate`; while the app holds that claim, it makes the swap itself on its own poll instead (#313), the same claim that already denies the cockpit's own answer to a human decision.
 
 ## Why not the other three
 
@@ -19,7 +19,7 @@ Every write the cockpit makes today, classified:
 
 | Write | Authorised by | Owner |
 | --- | --- | --- |
-| `planReview` → `planApproved` / `planChangesRequested`, including the `autoPlan` swap | a human answering the gate | **external gate owner**, under a `plan-gate` claim |
+| `planReview` → `planApproved` / `planChangesRequested`, including the `autoPlan` swap | a human answering the gate, or (for `autoPlan` alone) the external gate owner's own poll while it holds `plan-gate` (#313) | **external gate owner**, under a `plan-gate` claim |
 | opt-in (`work on #N`): add marker, `ready`, optional `autoPlan`, assignee | human | either — convergent |
 | `pause`, `resume`, `retry`, `stop #N`, `gate #N`, `refresh #N` | human | either — convergent |
 | per-repository run state (run/drain/pause), `stop #N`, halt (the desktop app's own dispatch gate, #110, #314) | human | either — convergent, but scoped to the app: draining or pausing a repository stands the app's own dispatcher down for it, never the cockpit's |
