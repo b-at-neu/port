@@ -57,7 +57,11 @@ export function decisionResultCopy(params: { readonly number: number; readonly d
       case 'repo-unavailable':
         return { line: "Can't read this repository right now. Nothing was written.", note: null, offerLabelOnly: false }
       case 'refused':
-        return { line: `PR #${n} can no longer be ${decision === 'unblock' ? 'unblocked' : 'sent back'} that way.`, note: response.problem ?? null, offerLabelOnly: false }
+        return {
+          line: `PR #${n} can no longer be ${decision === 'unblock' ? 'unblocked' : 'sent back'} that way.`,
+          note: response.refusal === 'note-invalid' ? reviseNoteHint(response.problem as Parameters<typeof reviseNoteHint>[0]) : null,
+          offerLabelOnly: false,
+        }
       case 'verify-failed':
         return { line: `Couldn't re-read PR #${n} before writing — ${response.message}. Nothing was written.`, note: null, offerLabelOnly: false }
       case 'comment-failed':
