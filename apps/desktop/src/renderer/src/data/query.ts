@@ -23,12 +23,15 @@ export function createQueryClient(): QueryClient {
 
 /** `board:snapshot` gets `staleTime: Infinity` because `data/subscriptions.ts`'s
  *  `connectQueryCache` keeps it fresh from the `board:update` push — a
- *  background refetch here would race that cache write. */
+ *  background refetch here would race that cache write. `backlog:list` gets
+ *  a 60s `staleTime` (the Backlog screen's own read) — open issues don't
+ *  move fast enough to justify refetching on every remount. */
 export function ipcQueryOptions<C extends QueryChannel>(channel: C, request?: IpcMap[C]['request']) {
   return queryOptions({
     queryKey: [channel, request ?? null] as const,
     queryFn: () => invoke(channel, request),
     ...(channel === 'board:snapshot' ? { staleTime: Infinity } : {}),
+    ...(channel === 'backlog:list' ? { staleTime: 60_000 } : {}),
   })
 }
 

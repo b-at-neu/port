@@ -57,8 +57,7 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
   // keeps hidden until a session is selected.
   session: { kind: 'capture', hash: '#/session', container: '#session-view', ready: '.session-view__empty' },
   settings: { kind: 'capture', hash: '#/settings', container: '#react-root', ready: '#react-root h2' },
-  // Backlog's real screen content ships separately; this is its placeholder.
-  backlog: { kind: 'capture', hash: '#/backlog', container: '#react-root', ready: '#react-root p' },
+  backlog: { kind: 'capture', hash: '#/backlog', container: '#react-root', ready: '[data-slot="backlog-row"]' },
   sessions: { kind: 'skip', hash: '#/repositories/fixture-acme-widgets/sessions', reason: LEGACY_SCREEN_REASON },
   search: { kind: 'skip', hash: '#/repositories/fixture-acme-widgets/search', reason: LEGACY_SCREEN_REASON },
   transcript: { kind: 'skip', hash: '#/transcript/fixture-session', reason: LEGACY_SCREEN_REASON },

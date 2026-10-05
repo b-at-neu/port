@@ -3,7 +3,8 @@
 // routing through `main.ts`'s delegated board/repositories handler, so the
 // entry point there stays exactly one branch (`action?.startsWith('claim-')`
 // opening it).
-import type { RepoId, RepositoryEntry } from '../../../shared/repos'
+import { isReadyRepo } from '../../../shared/repos'
+import type { RepoId } from '../../../shared/repos'
 import type { ClaimPreflight, ClaimVerdict, PlanGateChoice } from '../../../shared/claim/types'
 import type { WriteOutcome } from '../../../shared/writes/types'
 import { buildClaimDialog, renderClaimDialog } from './view'
@@ -34,6 +35,8 @@ export type ClaimState =
 
 let state: ClaimState = { step: 'closed' }
 let dialog: HTMLDialogElement | null = null
+// Set only by `openClaimDialogFor`; fires once on an `applied`/`no-op` write, cleared whenever the dialog closes or reopens.
+let onClaimed: (() => void) | null = null
 
 function draw(): void {
   if (dialog) renderClaimDialog(dialog, state)
@@ -55,17 +58,14 @@ function getState(): ClaimState {
   return state
 }
 
-function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { status: 'ready' }> {
-  return 'config' in entry
-}
-
 async function loadRepos(): Promise<readonly ReadyRepo[]> {
   const result = await window.port.reposList()
   if (!result.ok) return []
-  return result.repositories.filter(isReady).map((entry) => ({ id: entry.id, repo: entry.config.repo }))
+  return result.repositories.filter(isReadyRepo).map((entry) => ({ id: entry.id, repo: entry.config.repo }))
 }
 
 export function openClaimDialog(): void {
+  onClaimed = null
   setState({ step: 'picking', repos: [], repoId: null, number: '', error: null })
   void loadRepos().then((repos) => {
     if (state.step !== 'picking') return
@@ -75,6 +75,7 @@ export function openClaimDialog(): void {
 }
 
 function closeClaimDialog(): void {
+  onClaimed = null
   setState({ step: 'closed' })
 }
 
@@ -83,6 +84,31 @@ function parseNumber(raw: string): number | null {
   if (!/^\d+$/.test(trimmed)) return null
   const value = Number(trimmed)
   return Number.isInteger(value) && value > 0 ? value : null
+}
+
+// The preflight fetch and its classification, shared by the picker (`submitPick`) and a preset entry (`openClaimDialogFor`).
+async function runPreflight(repoId: RepoId, repo: string, number: number, planGate: PlanGateChoice): Promise<void> {
+  setState({ step: 'loading', repoId, repo, number })
+  try {
+    const response = await window.port.claimPreflight({ repoId, number })
+    if (getState().step !== 'loading') return
+    if (response.kind === 'failed') {
+      setState({ step: 'preflight-failed', repoId, repo, number, message: response.message })
+      return
+    }
+    if (response.kind === 'unresolved') {
+      setState({ step: 'refused', repo, number, verdict: { kind: 'not-found' }, url: null })
+      return
+    }
+    if (response.verdict.kind !== 'claimable') {
+      setState({ step: 'refused', repo, number, verdict: response.verdict, url: response.preflight.url })
+      return
+    }
+    setState({ step: 'reviewing', repoId, repo, preflight: response.preflight, verdict: response.verdict, planGate })
+  } catch (error) {
+    console.error('Failed to reach the main process while reading a claim preflight', error)
+    setState({ step: 'preflight-failed', repoId, repo, number, message: 'Failed to reach the main process.' })
+  }
 }
 
 async function submitPick(): Promise<void> {
@@ -98,27 +124,22 @@ async function submitPick(): Promise<void> {
     return
   }
   const repo = state.repos.find((r) => r.id === repoId)?.repo ?? repoId
-  setState({ step: 'loading', repoId, repo, number: parsed })
-  try {
-    const response = await window.port.claimPreflight({ repoId, number: parsed })
-    if (getState().step !== 'loading') return
-    if (response.kind === 'failed') {
-      setState({ step: 'preflight-failed', repoId, repo, number: parsed, message: response.message })
-      return
-    }
-    if (response.kind === 'unresolved') {
-      setState({ step: 'refused', repo, number: parsed, verdict: { kind: 'not-found' }, url: null })
-      return
-    }
-    if (response.verdict.kind !== 'claimable') {
-      setState({ step: 'refused', repo, number: parsed, verdict: response.verdict, url: response.preflight.url })
-      return
-    }
-    setState({ step: 'reviewing', repoId, repo, preflight: response.preflight, verdict: response.verdict, planGate: 'review' })
-  } catch (error) {
-    console.error('Failed to reach the main process while reading a claim preflight', error)
-    setState({ step: 'preflight-failed', repoId, repo, number: parsed, message: 'Failed to reach the main process.' })
-  }
+  await runPreflight(repoId, repo, parsed, 'review')
+}
+
+export interface OpenClaimDialogForParams {
+  readonly repoId: RepoId
+  readonly repo: string
+  readonly number: number
+  readonly planGate: PlanGateChoice
+  /** Fires once, on an `applied` or `no-op` write. */
+  readonly onClaimed: () => void
+}
+
+// Enters the dialog directly at `loading`, skipping the repo/number picker — the caller already knows both.
+export function openClaimDialogFor(params: OpenClaimDialogForParams): void {
+  onClaimed = params.onClaimed
+  void runPreflight(params.repoId, params.repo, params.number, params.planGate)
 }
 
 function backToPick(): void {
@@ -152,6 +173,7 @@ async function confirmClaim(): Promise<void> {
     setState({ step: 'write-result', repoId, repo, number: preflight.number, outcome: response.outcome })
     if (response.outcome.kind === 'applied' || response.outcome.kind === 'no-op') {
       void window.port.boardRefresh({ repoId, source: 'github' })
+      onClaimed?.()
     }
   } catch (error) {
     console.error('Failed to reach the main process while applying a claim', error)

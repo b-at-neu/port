@@ -2,8 +2,15 @@
 // a new variant is a compile error rather than a silently blank line, the
 // same rule `board/copy.ts`'s own header states. Pure string functions; no
 // DOM here.
-import type { ClaimVerdict } from '../../../shared/claim/types'
+import type { ClaimVerdict, PlanGateChoice } from '../../../shared/claim/types'
 import type { WriteOutcome } from '../../../shared/writes/types'
+
+/** Shared between the claim dialog's own review step and the Backlog
+ *  screen's Work on menu, so the two surfaces never drift on label or hint. */
+export const PLAN_GATE_OPTIONS: ReadonlyArray<{ readonly value: PlanGateChoice; readonly label: string; readonly hint: string }> = [
+  { value: 'review', label: 'Review the plan', hint: 'You approve or bounce the plan before any code is written. The default for features.' },
+  { value: 'auto', label: 'Auto-approve the plan', hint: 'Skips the plan gate. For small or bug-fix tickets.' },
+]
 
 export function blockersCopy(verdict: Extract<ClaimVerdict, { kind: 'claimable' }>): { readonly line: string; readonly note: string } | null {
   const { blockers } = verdict
