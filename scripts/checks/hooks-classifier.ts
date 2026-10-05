@@ -1,10 +1,10 @@
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { root } from '../lib/files.ts';
-import { resolveMatchers, subagentPayload, makeCheck } from '../lib/guard-fixtures.ts';
+import { resolveMatchers, subagentPayload, makeCheck, makeDecide } from '../lib/guard-fixtures.ts';
 import type { Reporter } from '../lib/report.ts';
 
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ fail, ok, expect }: Reporter) {
   // --- Guard hook classifier ---------------------------------------------------
   // guard(#67): the mechanism that actually denies, independent of
   // parent-session mode. Unit-tests the pure decision logic in isolation
@@ -14,13 +14,10 @@ export default async function ({ fail, ok }: Reporter) {
 
   const matchers = resolveMatchers(fail);
   const check = makeCheck(fail, ok);
+  const gate = makeDecide(decide, { matchers, sessionRequiredPaths: [], root });
 
   // Subagent + non-allowlisted Bash → deny.
-  check(
-    'subagent non-allowlisted bash',
-    decide({ payload: subagentPayload(), matchers, sessionRequiredPaths: [], root }),
-    'deny',
-  );
+  check('subagent non-allowlisted bash', gate({ payload: subagentPayload() }), 'deny');
 
   // Same command, no agent signal → miss, never deny. A fabricated cwd, not
   // this checkout's own path — this script may itself be running inside a
@@ -29,16 +26,13 @@ export default async function ({ fail, ok }: Reporter) {
   // wrong reason.
   check(
     'no-signal non-allowlisted bash',
-    decide({
+    gate({
       payload: {
         cwd: '/home/operator/some-other-project',
         session_id: 'sess-2',
         tool_name: 'Bash',
         tool_input: { command: 'which claude' },
       },
-      matchers,
-      sessionRequiredPaths: [],
-      root,
     }),
     'miss',
   );
@@ -46,26 +40,19 @@ export default async function ({ fail, ok }: Reporter) {
   // Allowlisted command with an agent signal → allow.
   check(
     'subagent allowlisted bash',
-    decide({
-      payload: subagentPayload({ tool_input: { command: 'git status' } }),
-      matchers,
-      sessionRequiredPaths: [],
-      root,
-    }),
+    gate({ payload: subagentPayload({ tool_input: { command: 'git status' } }) }),
     'allow',
   );
 
   // Subagent write to a sessionRequiredPaths path → deny.
   check(
     'subagent write to session-required path',
-    decide({
+    gate({
       payload: subagentPayload({
         tool_name: 'Write',
         tool_input: { file_path: join(root, '.claude/port.config.json') },
       }),
-      matchers,
       sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
-      root,
     }),
     'deny',
   );
@@ -73,14 +60,12 @@ export default async function ({ fail, ok }: Reporter) {
   // Subagent write outside sessionRequiredPaths → allow.
   check(
     'subagent write outside session-required paths',
-    decide({
+    gate({
       payload: subagentPayload({
         tool_name: 'Write',
         tool_input: { file_path: join(root, 'plugins/port/x.md') },
       }),
-      matchers,
       sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
-      root,
     }),
     'allow',
   );
@@ -89,7 +74,7 @@ export default async function ({ fail, ok }: Reporter) {
   // with no agent_type/agent_id present.
   check(
     'transcript signal alone',
-    decide({
+    gate({
       payload: {
         cwd: root,
         session_id: 'sess-3',
@@ -97,24 +82,18 @@ export default async function ({ fail, ok }: Reporter) {
         tool_name: 'Bash',
         tool_input: { command: 'which claude' },
       },
-      matchers,
-      sessionRequiredPaths: [],
-      root,
     }),
     'deny',
   );
   check(
     'worktree signal alone',
-    decide({
+    gate({
       payload: {
         cwd: join(root, '.claude/worktrees/agent-abc123'),
         session_id: 'sess-4',
         tool_name: 'Bash',
         tool_input: { command: 'which claude' },
       },
-      matchers,
-      sessionRequiredPaths: [],
-      root,
     }),
     'deny',
   );
