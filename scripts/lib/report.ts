@@ -13,6 +13,9 @@ export interface Reporter {
   note(text: string): void;
   /** One check passed. */
   ok(): void;
+  /** One assertion: truthy counts as a pass, falsy fails with `detail`
+   *  (a thunk is resolved only on the failure path). */
+  expect(cond: unknown, check: string, detail: string | (() => string)): void;
   /** Prints the collected notes/failures and sets `process.exitCode`. */
   report(): void;
 }
@@ -42,6 +45,14 @@ export function createReporter(): Reporter {
 
     ok() {
       checked++;
+    },
+
+    expect(cond, check, detail) {
+      if (cond) {
+        checked++;
+        return;
+      }
+      failures.push(`${check}: ${typeof detail === 'function' ? detail() : detail}`);
     },
 
     report() {
