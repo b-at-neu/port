@@ -1,13 +1,9 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { createPathOps } from '../platform/paths'
 import { dedupePaths, readRegistry, writeRegistry } from './store'
-
-async function makeTempDir(): Promise<string> {
-  return mkdtemp(join(tmpdir(), 'port-registry-store-'))
-}
+import { makeTempDir } from '../../testing/fixtures'
 
 describe('readRegistry', () => {
   it('returns empty when the file is absent', async () => {

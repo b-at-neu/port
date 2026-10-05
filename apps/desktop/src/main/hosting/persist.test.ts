@@ -1,14 +1,10 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { createHostingPersistence, DEFAULT_SESSION_LIMIT } from './persist'
 import type { RepoId } from '../../shared/repos'
 import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
-
-async function makeTempDir(): Promise<string> {
-  return mkdtemp(join(tmpdir(), 'port-hosting-persist-'))
-}
+import { makeTempDir } from '../../testing/fixtures'
 
 const ENTRY = { repoId: 'repo-1' as RepoId, claudeSessionId: 'session-1', title: 'Title', startedAt: '2026-01-01T00:00:00.000Z' }
 

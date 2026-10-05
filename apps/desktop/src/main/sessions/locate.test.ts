@@ -1,12 +1,8 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { buildProjectIndex, resolveSessionDir, resolveTranscriptPath } from './locate'
-
-async function makeClaudeHome(): Promise<string> {
-  return mkdtemp(join(tmpdir(), 'port-sessions-locate-'))
-}
+import { makeClaudeHome } from '../../testing/fixtures'
 
 async function makeProjectDir(claudeHome: string, name: string, sessionIds: readonly string[]): Promise<string> {
   const dir = join(claudeHome, 'projects', name)

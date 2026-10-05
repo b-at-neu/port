@@ -1,18 +1,14 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../../shared/repos'
 import type { AgentRecord, SessionRecord, SessionScan } from '../../shared/sessions/types'
 import { createRelayReader } from './read'
+import { makeClaudeHome } from '../../testing/fixtures'
 
 const REPO_ID = 'repo-a' as RepoId
 const SESSION_ID = '11111111-2222-3333-4444-555555555555'
 const AGENT_ID = 'a1b2c3d4e5'
-
-async function makeClaudeHome(): Promise<string> {
-  return mkdtemp(join(tmpdir(), 'port-relay-read-'))
-}
 
 function jsonl(records: readonly unknown[]): string {
   return records.map((record) => JSON.stringify(record)).join('\n') + '\n'

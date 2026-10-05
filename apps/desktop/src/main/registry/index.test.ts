@@ -1,5 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { CommandResult } from '../platform'
@@ -7,10 +6,7 @@ import { pathOps } from '../platform'
 import type { GitRunner } from './harness'
 import { addRepository, listRepositories, removeRepository } from './index'
 import { readRegistry } from './store'
-
-async function makeTempDir(prefix: string): Promise<string> {
-  return mkdtemp(join(tmpdir(), prefix))
-}
+import { makeTempDir } from '../../testing/fixtures'
 
 async function makeRepo(root: string, repo = 'acme/widgets'): Promise<void> {
   await mkdir(join(root, '.claude'), { recursive: true })
