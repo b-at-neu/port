@@ -5,7 +5,6 @@
 // Avoids `running`/`alive`/`isLive` entirely — already banned under
 // `renderer/src/board/`.
 import type { RepoId } from '../../../shared/repos'
-import type { DispatchRelayResult } from '../../../shared/dispatch/types'
 import type { PortStageAgent } from '../../../shared/sessions/types'
 import { composeReply } from '../../../shared/relay/compose'
 import type { RelayPending, RelayScan } from '../../../shared/relay/types'
@@ -25,14 +24,12 @@ function answerCountFor(pending: RelayPending): number {
 /** Per-pending UI state, held here rather than in `main.ts` (the same split
  *  `board/actions.ts` draws for the action controller) — expanded/collapsed,
  *  the answer text per question (or the single decision text for
- *  `blocked`), a transient "just copied" flag, and (#265) the last
- *  `dispatch:relay` result for the "Send to agent" footer. Keyed by
+ *  `blocked`), and a transient "just copied" flag. Keyed by
  *  `sessionId#agentId`, so a rebuild never loses what the operator already
  *  typed. */
 const expanded = new Set<string>()
 const answers = new Map<string, string[]>()
 const justCopied = new Set<string>()
-const sendResults = new Map<string, DispatchRelayResult>()
 
 export function isRelayExpanded(pending: RelayPending): boolean {
   return expanded.has(relayKeyOf(pending))
@@ -70,12 +67,11 @@ export function setRelayAnswer(pending: RelayPending, index: number, value: stri
  *  fresh snapshot, never per render. */
 export function pruneRelayStates(scan: RelayScan): void {
   const live = new Set(scan.ok ? scan.pending.map((p) => relayKeyOf(p)) : [])
-  for (const key of [...expanded, ...answers.keys(), ...justCopied, ...sendResults.keys()]) {
+  for (const key of [...expanded, ...answers.keys(), ...justCopied]) {
     if (!live.has(key)) {
       expanded.delete(key)
       answers.delete(key)
       justCopied.delete(key)
-      sendResults.delete(key)
     }
   }
 }
@@ -85,7 +81,7 @@ export function pruneRelayStates(scan: RelayScan): void {
  *  `actionsFingerprint` is — none of this state lives on the projection
  *  itself, so without it a toggle or a keystroke would never repaint. */
 export function relayFingerprint(): string {
-  return JSON.stringify([[...expanded].sort(), [...answers.entries()].sort(), [...justCopied].sort(), [...sendResults.entries()].sort()])
+  return JSON.stringify([[...expanded].sort(), [...answers.entries()].sort(), [...justCopied].sort()])
 }
 
 export async function handleRelayCopy(pending: RelayPending, redraw: () => void): Promise<void> {
@@ -103,50 +99,6 @@ export async function handleRelayCopy(pending: RelayPending, redraw: () => void)
     }
   } catch (error) {
     console.error('Failed to copy the relay reply', error)
-  }
-}
-
-/** #265: `true` when this pending relay's own dispatching session is this
- *  app's own dispatcher for its repository — the one fact that swaps the
- *  footer from "paste into the session that dispatched this agent" to a
- *  `Send to agent` button, since this app can resume that agent directly
- *  rather than asking the operator to find and paste into a cockpit. */
-export function isAppDispatched(pending: RelayPending, dispatcherSessionId: string | null): boolean {
-  return dispatcherSessionId !== null && pending.sessionId === dispatcherSessionId
-}
-
-/** #265: the `dispatch:relay` send — composes the same reply `handleRelayCopy`
- *  would, and relays it through this app's own dispatcher instead of the
- *  clipboard. `pending.agentId === null` (a description with no agent id
- *  parsed) never sends, the same guard `buildComposeForm`'s own disabled
- *  state already applies to the copy button. */
-export async function handleRelaySend(pending: RelayPending, repoId: RepoId, redraw: () => void): Promise<void> {
-  const text = composeReply(pending, answersFor(pending))
-  if (text === null || pending.agentId === null) return
-  try {
-    const result = await window.port.dispatchRelay({ repoId, agentId: pending.agentId, text })
-    sendResults.set(relayKeyOf(pending), result)
-  } catch (error) {
-    console.error('Failed to relay the reply to the dispatched agent', error)
-    sendResults.set(relayKeyOf(pending), { ok: false, kind: 'no-dispatcher' })
-  }
-  redraw()
-}
-
-/** The footer line under the `Send to agent` button once a send has been
- *  attempted — `null` before any attempt, so the footer shows only the
- *  button until then. */
-export function relaySendResultCopy(pending: RelayPending): string | null {
-  const result = sendResults.get(relayKeyOf(pending))
-  if (result === undefined) return null
-  if (result.ok) return `Sent — ${labelOf(pending)} resumes with your answers.`
-  switch (result.kind) {
-    case 'not-owner':
-      return 'This app no longer dispatches here — copy the answers into the cockpit instead.'
-    case 'unknown-agent':
-      return `The dispatcher that started this agent is gone, so it can't be resumed from here. Retry ${labelOf(pending)}.`
-    case 'no-dispatcher':
-      return "This app's dispatcher for this repository is no longer open — copy the answers into the cockpit instead."
   }
 }
 
@@ -202,7 +154,7 @@ function el(tag: string, className: string, content?: string): HTMLElement {
   return node
 }
 
-function buildComposeForm(pending: RelayPending, dispatcherSessionId: string | null): HTMLElement | null {
+function buildComposeForm(pending: RelayPending): HTMLElement | null {
   if (pending.kind === 'usage-limit') return null
 
   const form = el('div', 'relay-banner__form')
@@ -240,37 +192,21 @@ function buildComposeForm(pending: RelayPending, dispatcherSessionId: string | n
   copyButton.textContent = copied ? 'Copied' : pending.kind === 'questions' ? 'Copy answers' : 'Copy decision'
   footer.appendChild(copyButton)
 
-  // #265: an app-dispatched agent's own footer swaps the paste instruction
-  // for a direct resend — this app can reach that agent itself.
-  const appDispatched = isAppDispatched(pending, dispatcherSessionId)
-  if (appDispatched && pending.repoId !== null) {
-    const sendButton = document.createElement('button')
-    sendButton.className = 'relay-banner__send'
-    sendButton.dataset.action = 'dispatch-relay-send'
-    sendButton.dataset.key = key
-    sendButton.dataset.repoId = String(pending.repoId)
-    sendButton.disabled = composed === null
-    sendButton.textContent = 'Send to agent'
-    footer.appendChild(sendButton)
-  }
-
   if (composed === null && pending.kind === 'questions') {
     const total = pending.questions.length
     footer.appendChild(el('span', 'relay-banner__incomplete', `Answer all ${String(total)} to copy.`))
   }
   form.appendChild(footer)
 
-  if (appDispatched) {
-    const sendResult = relaySendResultCopy(pending)
-    if (sendResult !== null) form.appendChild(el('div', 'relay-banner__footnote', sendResult))
-  } else {
-    form.appendChild(el('div', 'relay-banner__footnote', `Paste into the session that dispatched this agent: "${pending.parentSessionLabel}".`))
-  }
+  // #326: no app-dispatched path left — every pending relay now shows the
+  // paste footnote, since nothing in this app can resume a stage session
+  // directly.
+  form.appendChild(el('div', 'relay-banner__footnote', `Paste into the session that dispatched this agent: "${pending.parentSessionLabel}".`))
 
   return form
 }
 
-function buildEntry(pending: RelayPending, repoName: string, now: Date, dispatcherSessionId: string | null): HTMLElement {
+function buildEntry(pending: RelayPending, repoName: string, now: Date): HTMLElement {
   const entry = el('div', 'relay-banner__entry')
   const header = el('div', 'relay-banner__entry-header', entryLineCopy(pending, repoName, now))
   header.dataset.action = 'relay-toggle'
@@ -278,7 +214,7 @@ function buildEntry(pending: RelayPending, repoName: string, now: Date, dispatch
   entry.appendChild(header)
 
   if (isRelayExpanded(pending)) {
-    const form = buildComposeForm(pending, dispatcherSessionId)
+    const form = buildComposeForm(pending)
     if (form !== null) entry.appendChild(form)
   }
 
@@ -287,14 +223,11 @@ function buildEntry(pending: RelayPending, repoName: string, now: Date, dispatch
 
 /** `null` when `relays` is empty — rendered above the groups, only then
  *  (`view.ts`'s own call site), the same "absent, not disabled" rule
- *  `board/view.ts`'s ungated section already follows. `dispatcherSessionIdOf`
- *  (#265) resolves each pending's own owning repository to this app's own
- *  live dispatcher session id, `null` for a repository this app does not
- *  dispatch for — `view.ts` supplies it from `BoardSnapshot.dispatch`. */
-export function buildRelayBanner(relays: readonly RelayPending[], repoNameOf: (repoId: RepoId | null) => string, now: Date, dispatcherSessionIdOf: (repoId: RepoId | null) => string | null): HTMLElement | null {
+ *  `board/view.ts`'s ungated section already follows. */
+export function buildRelayBanner(relays: readonly RelayPending[], repoNameOf: (repoId: RepoId | null) => string, now: Date): HTMLElement | null {
   if (relays.length === 0) return null
   const banner = el('div', 'relay-banner')
   banner.appendChild(el('div', 'relay-banner__heading', `Waiting on you · ${String(relays.length)}`))
-  for (const pending of relays) banner.appendChild(buildEntry(pending, repoNameOf(pending.repoId), now, dispatcherSessionIdOf(pending.repoId)))
+  for (const pending of relays) banner.appendChild(buildEntry(pending, repoNameOf(pending.repoId), now))
   return banner
 }

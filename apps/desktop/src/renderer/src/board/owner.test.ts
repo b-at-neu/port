@@ -16,7 +16,7 @@ const WRITE_FAILED = { kind: 'write-failed' as const, classification: 'unknown' 
 const REPO_ID = 'repo-a' as RepoId
 
 function status(overrides: Partial<RepoDispatchStatus> = {}): RepoDispatchStatus {
-  return { repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, runState: 'dispatching', claudeSessionId: null, claimedAt: null, budget: null, observed: [], ...overrides }
+  return { repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, runState: 'dispatching', claimedAt: null, budget: null, observed: [], ...overrides }
 }
 
 function record(overrides: Partial<ObservationRecord> = {}): ObservationRecord {
@@ -42,14 +42,14 @@ describe('ownerLineCopy', () => {
     expect(line).toContain('nothing to dispatch')
   })
 
-  it('app, active — names every sent/started record and the newest time', () => {
+  it('app, active — names every started record and the newest time', () => {
     const line = ownerLineCopy(
       status({
         state: {
           kind: 'active',
           recent: [
-            { agent: 'plan', number: 105, kind: 'issue', state: 'started', at: '2026-01-01T14:00:00Z' },
-            { agent: 'impl', number: 52, kind: 'issue', state: 'sent', at: '2026-01-01T14:07:00Z' },
+            { agent: 'plan', number: 105, kind: 'issue', state: 'started', at: '2026-01-01T14:00:00Z', detail: null },
+            { agent: 'impl', number: 52, kind: 'issue', state: 'started', at: '2026-01-01T14:07:00Z', detail: null },
           ],
         },
       }),
@@ -58,9 +58,10 @@ describe('ownerLineCopy', () => {
     expect(line).toContain('impl #52')
   })
 
-  it('app, active — a not-started record is never named', () => {
-    const line = ownerLineCopy(status({ state: { kind: 'active', recent: [{ agent: 'impl', number: 52, kind: 'issue', state: 'not-started', at: '2026-01-01T14:07:00Z' }] } }))
-    expect(line).toBe('▶ Dispatch: this app · nothing to dispatch.')
+  it('app, active — a failed record is never named as started, but appends its own clause', () => {
+    const line = ownerLineCopy(status({ state: { kind: 'active', recent: [{ agent: 'impl', number: 52, kind: 'issue', state: 'failed', at: '2026-01-01T14:07:00Z', detail: 'boom' }] } }))
+    expect(line).toContain('nothing to dispatch')
+    expect(line).toContain("couldn't start impl #52 (boom)")
   })
 
   it('budget-unavailable renders the pre-assembled message verbatim', () => {
@@ -79,16 +80,18 @@ describe('ownerLineCopy', () => {
     expect(ownerLineCopy(status())).not.toContain('Budget:')
   })
 
-  it('dispatcher-failed — at-capacity names the limit', () => {
-    expect(ownerLineCopy(status({ state: { kind: 'dispatcher-failed', reason: 'at-capacity', limit: 4 } }))).toContain('4 hosted sessions')
+  it('no-launcher holds visibly', () => {
+    expect(ownerLineCopy(status({ state: { kind: 'no-launcher' } }))).toContain("can't start stage sessions yet")
   })
 
-  it('dispatcher-failed — plugin', () => {
-    expect(ownerLineCopy(status({ state: { kind: 'dispatcher-failed', reason: 'plugin' } }))).toContain("plugin didn't load")
+  it('at-capacity names the limit and the waiting count, singular', () => {
+    expect(ownerLineCopy(status({ state: { kind: 'at-capacity', limit: 4, waiting: 1 } }))).toBe(
+      '⏸ Dispatch: this app · 1 waiting for a session slot — all 4 are in use. Close a session or raise the limit; they start on the next poll.',
+    )
   })
 
-  it('agents-missing names the dropped agent', () => {
-    expect(ownerLineCopy(status({ state: { kind: 'agents-missing', agent: 'impl' } }))).toContain('port:impl-agent')
+  it('at-capacity, plural waiting', () => {
+    expect(ownerLineCopy(status({ state: { kind: 'at-capacity', limit: 4, waiting: 2 } }))).toContain('2 waiting')
   })
 })
 

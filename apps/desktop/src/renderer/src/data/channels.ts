@@ -43,7 +43,6 @@ export const MUTATION_CHANNELS = [
   'item:decide',
   'dispatch:control',
   'dispatch:claim:set',
-  'dispatch:relay',
   'runtime:probe',
   'gate:claim:set',
   'gate:answer',

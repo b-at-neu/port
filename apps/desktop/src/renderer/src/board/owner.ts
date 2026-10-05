@@ -15,14 +15,16 @@ function timeOf(iso: string): string {
 }
 
 function activeLine(state: Extract<DispatcherState, { readonly kind: 'active' }>, claimedAt: string | null): string {
-  const live = state.recent.filter((r) => r.state === 'sent' || r.state === 'started')
+  const live = state.recent.filter((r) => r.state === 'started')
+  const claimedPart = claimedAt !== null ? ` · claimed ${timeOf(claimedAt)}` : ''
+  const newestFailed = [...state.recent].reverse().find((r) => r.state === 'failed')
+  const failedClause = newestFailed !== null && newestFailed !== undefined ? ` · couldn't start ${newestFailed.agent} #${String(newestFailed.number)} (${newestFailed.detail ?? 'unknown error'}).` : ''
   if (live.length === 0) {
-    const claimedPart = claimedAt !== null ? ` · claimed ${timeOf(claimedAt)}` : ''
-    return `▶ Dispatch: this app${claimedPart} · nothing to dispatch.`
+    return `▶ Dispatch: this app${claimedPart} · nothing to dispatch.${failedClause}`
   }
   const newest = live.reduce((a, b) => (Date.parse(a.at) > Date.parse(b.at) ? a : b))
   const named = live.map((r) => `${r.agent} #${String(r.number)}`).join(', ')
-  return `▶ Dispatch: this app · started ${named} at ${timeOf(newest.at)}.`
+  return `▶ Dispatch: this app · started ${named} at ${timeOf(newest.at)}.${failedClause}`
 }
 
 /** #292: per-kind phrasing for the owner line's "newest observation" clause
@@ -179,16 +181,12 @@ export function ownerLineCopy(status: RepoDispatchStatus): string {
       return activeLine(state, status.claimedAt) + clause
     case 'budget-unavailable':
       return `⏸ Dispatch: this app, but not dispatching — ${state.message}`
-    case 'dispatcher-failed':
-      if (state.reason === 'at-capacity') {
-        return `⚠ Dispatch: this app couldn't start its dispatcher — ${String(state.limit)} hosted sessions are already open, the limit. Close one and dispatch resumes on the next poll.`
-      }
-      if (state.reason === 'plugin') {
-        return "⚠ Dispatch: the dispatcher's port plugin didn't load (missing). Nothing dispatches until it does."
-      }
-      return "⚠ Dispatch: the dispatcher's session failed to start. Nothing dispatches until it recovers."
-    case 'agents-missing':
-      return `⚠ Dispatch: the dispatcher has no port:${state.agent}-agent — Claude Code dropped it. Dispatch waits.`
+    case 'no-launcher':
+      return "⏸ Dispatch: this app, but it can't start stage sessions yet — nothing dispatches here. Release dispatch to hand it back to your terminal cockpit."
+    case 'at-capacity': {
+      const waitingWord = state.waiting === 1 ? '1 waiting' : `${String(state.waiting)} waiting`
+      return `⏸ Dispatch: this app · ${waitingWord} for a session slot — all ${String(state.limit)} are in use. Close a session or raise the limit; they start on the next poll.`
+    }
   }
 }
 
