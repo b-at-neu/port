@@ -13,9 +13,15 @@ import { ErrorBanner } from '../components/error-banner'
 import { ipcQueryOptions, useIpcMutation, useIpcQuery } from '../data/query'
 import { ROUTE_IDS } from '../router/legacy-view'
 import { setupModel } from './model'
-import type { SetupStep } from './model'
+import type { SetupAction, SetupStep } from './model'
 import type { RuntimeProbe } from '../../../shared/runtime/types'
 import type { ReposListResponse } from '../../../shared/ipc'
+
+const PENDING_LABEL: Record<SetupAction['kind'], string> = {
+  test: 'Testing…',
+  'check-again': 'Checking…',
+  'add-repository': 'Adding…',
+}
 
 function StepRow({ label, step, loading, pending, onAction }: { readonly label: string; readonly step: SetupStep; readonly loading: boolean; readonly pending: boolean; readonly onAction: () => void }) {
   if (loading) {
@@ -33,14 +39,18 @@ function StepRow({ label, step, loading, pending, onAction }: { readonly label: 
         <p className="text-body text-foreground">{label}</p>
         <StatusPill status={step.pillStatus} label={step.pillLabel} />
       </div>
-      <p className="text-small text-foreground-secondary">{step.body}</p>
+      <p className="text-small text-foreground-secondary">
+        {step.body}
+        {step.bodyCommand !== null ? <span className="font-mono">{step.bodyCommand}</span> : null}
+        {step.bodySuffix}
+      </p>
       {step.detail !== null ? <p className="font-mono text-small text-muted-foreground">{step.detail}</p> : null}
       {step.action !== null ? (
         <Button variant="secondary" size="small" className="w-fit" disabled={pending} onClick={onAction}>
           {pending ? (
             <>
               <Loader2 aria-hidden="true" className="animate-spin" />
-              Testing…
+              {PENDING_LABEL[step.action.kind]}
             </>
           ) : (
             step.action.label

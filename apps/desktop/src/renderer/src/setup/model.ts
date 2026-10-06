@@ -27,6 +27,9 @@ export interface SetupStep {
   readonly pillLabel: string
   readonly title: string
   readonly body: string
+  /** A command embedded in `body`, rendered in mono between `body` and `bodySuffix`. */
+  readonly bodyCommand: string | null
+  readonly bodySuffix: string
   readonly detail: string | null
   readonly action: SetupAction | null
 }
@@ -39,11 +42,11 @@ export interface SetupModel {
   readonly complete: boolean
 }
 
-const LOADING_STEP: SetupStep = { state: 'loading', pillStatus: 'idle', pillLabel: '', title: '', body: '', detail: null, action: null }
+const LOADING_STEP: SetupStep = { state: 'loading', pillStatus: 'idle', pillLabel: '', title: '', body: '', bodyCommand: null, bodySuffix: '', detail: null, action: null }
 const UNREACHABLE_ACTION: SetupAction = { label: 'Check again', kind: 'check-again' }
 
 function unreachableStep(message: string): SetupStep {
-  return { state: 'unreachable', pillStatus: 'danger', pillLabel: "Couldn't check", title: "Couldn't check", body: message, detail: null, action: UNREACHABLE_ACTION }
+  return { state: 'unreachable', pillStatus: 'danger', pillLabel: "Couldn't check", title: "Couldn't check", body: message, bodyCommand: null, bodySuffix: '', detail: null, action: UNREACHABLE_ACTION }
 }
 
 function claudeStep(preflight: QueryState<RuntimePreflight>, probe: RuntimeProbe | null): SetupStep {
@@ -62,6 +65,8 @@ function claudeStep(preflight: QueryState<RuntimePreflight>, probe: RuntimeProbe
       pillLabel: PILL_LABEL.verified,
       title: PILL_LABEL.verified,
       body: `Signed in · verified in ${(probe.elapsedMs / 1000).toFixed(1)}s`,
+      bodyCommand: null,
+      bodySuffix: '',
       detail: null,
       action: null,
     }
@@ -77,6 +82,8 @@ function claudeStep(preflight: QueryState<RuntimePreflight>, probe: RuntimeProbe
       pillLabel: 'Found',
       title: 'Found',
       body: versionLine !== null ? `${versionLine}. Not verified yet.` : 'Not verified yet.',
+      bodyCommand: null,
+      bodySuffix: '',
       detail: null,
       action: { label: 'Test sign-in', kind: 'test' },
     }
@@ -90,6 +97,8 @@ function claudeStep(preflight: QueryState<RuntimePreflight>, probe: RuntimeProbe
     pillLabel: PILL_LABEL[diagnosis],
     title: copy.title,
     body: copy.body,
+    bodyCommand: null,
+    bodySuffix: '',
     detail,
     action: { label: 'Check again', kind: 'check-again' },
   }
@@ -101,7 +110,7 @@ function ghStep(gh: QueryState<GhStatus>): SetupStep {
 
   const status = gh.data
   if (status.kind === 'signed-in') {
-    return { state: 'done', pillStatus: 'success', pillLabel: 'Done', title: 'Done', body: 'Signed in to GitHub.', detail: null, action: null }
+    return { state: 'done', pillStatus: 'success', pillLabel: 'Done', title: 'Done', body: 'Signed in to GitHub.', bodyCommand: null, bodySuffix: '', detail: null, action: null }
   }
   if (status.kind === 'missing') {
     return {
@@ -110,6 +119,8 @@ function ghStep(gh: QueryState<GhStatus>): SetupStep {
       pillLabel: 'Needs you',
       title: 'Needs you',
       body: "gh isn't installed. Install it from cli.github.com, then check again.",
+      bodyCommand: null,
+      bodySuffix: '',
       detail: null,
       action: UNREACHABLE_ACTION,
     }
@@ -120,12 +131,14 @@ function ghStep(gh: QueryState<GhStatus>): SetupStep {
       pillStatus: 'attention',
       pillLabel: 'Needs you',
       title: 'Needs you',
-      body: 'gh is signed out. Run `gh auth login`.',
+      body: 'gh is signed out. Run ',
+      bodyCommand: 'gh auth login',
+      bodySuffix: '.',
       detail: null,
       action: UNREACHABLE_ACTION,
     }
   }
-  return { state: 'unreachable', pillStatus: 'danger', pillLabel: "Couldn't check", title: "Couldn't check", body: "Couldn't check gh.", detail: status.message, action: UNREACHABLE_ACTION }
+  return { state: 'unreachable', pillStatus: 'danger', pillLabel: "Couldn't check", title: "Couldn't check", body: "Couldn't check gh.", bodyCommand: null, bodySuffix: '', detail: status.message, action: UNREACHABLE_ACTION }
 }
 
 function repoSummary(repositories: readonly RepositoryEntry[]): string {
@@ -149,12 +162,14 @@ function repoStep(repos: QueryState<ReposListResponse>): SetupStep {
       pillLabel: 'Needs you',
       title: 'Needs you',
       body: 'Pick a folder that holds a port-managed repository.',
+      bodyCommand: null,
+      bodySuffix: '',
       detail: null,
       action: { label: 'Add repository', kind: 'add-repository' },
     }
   }
 
-  return { state: 'done', pillStatus: 'success', pillLabel: 'Done', title: 'Done', body: repoSummary(repos.data.repositories), detail: null, action: null }
+  return { state: 'done', pillStatus: 'success', pillLabel: 'Done', title: 'Done', body: repoSummary(repos.data.repositories), bodyCommand: null, bodySuffix: '', detail: null, action: null }
 }
 
 /** `complete` is every step at `done` — a query in `error` is never `done`. */
