@@ -4,7 +4,8 @@ import type { LabelKey } from '../labels/vocabulary'
 import type { AssigneeExpectation, LabelPrecondition } from '../writes/types'
 import type { PullRequestCommentNode } from '../github/types'
 import type { ReconciledItem } from '../state/types'
-import { PIPELINE_ESCALATION_HEADING } from './bodies'
+import { cycleGrantCount } from '../../../../../scripts/port-tick/gates'
+import { CYCLE_CAP_ESCALATION_MARKER, PIPELINE_ESCALATION_HEADING } from './bodies'
 import type { DecisionAvailability, DecisionRefusal, OperatorDecision, UnblockRoute } from './types'
 import { MAX_REVISE_NOTE_CHARS } from './types'
 
@@ -25,6 +26,13 @@ export function escalationOf(comments: readonly PullRequestCommentNode[] | null)
   const reason = lines.slice(1).find((line) => line.trim() !== '') ?? null
   const rebaseDecisions = lines.filter((line) => REBASE_DECISION_RE.test(line.trim())).length
   return { reason, rebaseDecisions }
+}
+
+// Whether the newest escalation was the cycle cap — the one "unblock #N"
+// applies its "Grant one more cycle" route to; detected off its own marker.
+export function isCycleCapEscalation(comments: readonly PullRequestCommentNode[] | null): boolean {
+  const { reason } = escalationOf(comments)
+  return reason !== null && reason.includes(CYCLE_CAP_ESCALATION_MARKER)
 }
 
 /** `'only-sha'` means every non-empty line merely names the commit. */
@@ -58,6 +66,7 @@ export function decisionsFor(params: DecisionsForParams): Readonly<Record<Operat
   if (!(item.assignees.length === 1 && item.assignees[0] === viewer)) return { unblock: refused('not-owned'), revise: refused('not-owned') }
 
   const cyclesUsed = item.reviewCycleCount ?? 0
+  const effectiveCap = reviewCycleCap + cycleGrantCount(item.comments ?? undefined)
 
   let unblock: DecisionAvailability
   if (item.kind !== 'pull-request' || !onlyStage(item, 'needsHuman')) {
@@ -67,14 +76,14 @@ export function decisionsFor(params: DecisionsForParams): Readonly<Record<Operat
     unblock =
       escalation.rebaseDecisions > 0
         ? refused('rebase-decisions')
-        : { available: true, context: { reason: escalation.reason, cyclesUsed, cap: reviewCycleCap } }
+        : { available: true, context: { reason: escalation.reason, cyclesUsed, cap: effectiveCap } }
   }
 
   let revise: DecisionAvailability
   if (item.kind !== 'pull-request' || !onlyStage(item, 'approved') || item.headRefOid === null) {
     revise = refused('not-applicable')
   } else {
-    revise = cyclesUsed >= reviewCycleCap ? refused('cycle-cap') : { available: true, context: { headRefOid: item.headRefOid, cyclesUsed, cap: reviewCycleCap } }
+    revise = cyclesUsed >= effectiveCap ? refused('cycle-cap') : { available: true, context: { headRefOid: item.headRefOid, cyclesUsed, cap: effectiveCap } }
   }
 
   return { unblock, revise }

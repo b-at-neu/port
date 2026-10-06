@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CHANGES_REQUESTED_HEADING, GATE_CLEARED_HEADING, changesRequestedBody, gateClearedBody } from './bodies'
+import { CHANGES_REQUESTED_HEADING, CYCLE_GRANT_LINE, GATE_CLEARED_HEADING, changesRequestedBody, gateClearedBody } from './bodies'
 
 describe('gateClearedBody', () => {
   it('names revision for the revision route', () => {
@@ -8,6 +8,17 @@ describe('gateClearedBody', () => {
 
   it('names review for the review route', () => {
     expect(gateClearedBody('review')).toBe(`${GATE_CLEARED_HEADING}\nCleared by the operator in port: back to review.`)
+  })
+
+  it('omits the cycle-grant block by default', () => {
+    expect(gateClearedBody('revision')).not.toContain(CYCLE_GRANT_LINE)
+  })
+
+  it('appends a Cycle grant block when cycleGrant is set', () => {
+    const body = gateClearedBody('revision', { cycleGrant: true })
+    expect(body).toBe(
+      `${GATE_CLEARED_HEADING}\nCleared by the operator in port: back to revision.\n\n${CYCLE_GRANT_LINE}\nOne extra review cycle for this PR only; reviewCycleCap is unchanged.`,
+    )
   })
 })
 

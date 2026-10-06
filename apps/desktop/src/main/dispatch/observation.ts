@@ -12,6 +12,10 @@ import type { LabelKey, LabelVocabulary } from '../../shared/labels/vocabulary'
 import type { ReconciledItem } from '../../shared/state/types'
 import type { TickObservation } from '../../shared/tick/types'
 
+// A literal, not an import — this module loads standalone and can't resolve
+// a relative import; pinned against `bodies.ts`'s own export, below.
+const CYCLE_CAP_ESCALATION_MARKER = 'review cycles reached the cap of'
+
 /** Every `TickObservation` kind this module writes — `observableFrom` never
  *  yields the one report-only kind (`refresh-deferred`), so this is the type
  *  `main/dispatch/dispatcher.ts` actually passes through. */
@@ -62,7 +66,7 @@ export function observationWrite(observation: WriteObservation, item: Reconciled
     }
     case 'cycle-cap': {
       const add: readonly LabelKey[] = ['needsHuman']
-      const comment = `${PIPELINE_ESCALATION}\n${String(observation.count)} review cycles reached the cap of ${String(observation.cap)} without merging.`
+      const comment = `${PIPELINE_ESCALATION}\n${String(observation.count)} ${CYCLE_CAP_ESCALATION_MARKER} ${String(observation.cap)} without merging.`
       return { add, remove: ['needsRevision'], expect: precondition(item, vocabulary, add), action: 'observe-cycle-cap', comment }
     }
     case 'zero-diff': {

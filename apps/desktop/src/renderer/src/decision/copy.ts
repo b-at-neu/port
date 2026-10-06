@@ -20,7 +20,7 @@ export function unblockConsequence(): string {
 
 export function unblockCapNote(context: UnblockContext): string | null {
   if (context.cyclesUsed < context.cap) return null
-  return `This PR has used all ${String(context.cap)} review cycles, so Send to revision escalates straight back here. Send it to review, or merge it yourself.`
+  return `This PR has used all ${String(context.cap)} review cycles. Send to revision grants it one more — only this PR; the cap elsewhere is unchanged.`
 }
 
 export function reviseConsequence(context: ReviseContext): string {
