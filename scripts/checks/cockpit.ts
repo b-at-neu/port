@@ -3,18 +3,11 @@ import { join } from 'node:path';
 import { root, pipelineSkillText } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// The worktree-reclamation blocks live in scripts/checks/worktrees.ts and
-// the tick-query/pacing/ownership blocks in scripts/checks/cockpit-tick.ts
-// (issue 181, splitting this module's own file-size ratchet entry) — this module
-// keeps the cockpit rails, the liveness reset, the cycle cap and zero-diff
-// gate, the TaskList liveness contract, and running-plugin staleness.
+// Keeps the cockpit rails, liveness reset, cycle cap and zero-diff gate, the TaskList
+// liveness contract, and running-plugin staleness.
 export default async function ({ expect, fail, ok }: Reporter) {
-  // --- Cockpit rails stay checkable preconditions, not bare prohibitions ------
-  // guard(#120, #138, #143): the cockpit looping gh and losing everything
-  // but the first iteration mid-loop, clearing its own needs-human gate
-  // unprompted under throughput pressure, or widening the terminal-state
-  // rail back into a general licence to revisit approved — each rail was
-  // "never do X" prose once, and the cockpit did X anyway.
+  // --- Cockpit rails stay checkable preconditions, not bare prohibitions — each was
+  // "never do X" prose once, and the cockpit did X anyway. ---
   {
     const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
     const text = readFileSync(join(root, skillRel), 'utf8');
@@ -26,16 +19,12 @@ export default async function ({ expect, fail, ok }: Reporter) {
 
     expect(text.includes('only when an operator instruction names that item'), 'cockpit-rails', `${skillRel} is missing the gate rail's precondition phrase 'only when an operator instruction names that item'`);
 
-    // Regression guard: the `<labels.approved>` never-touch rail is a
-    // precondition too, not a bare prohibition — and the announcement that
-    // claims a pull request is merge-ready has to show its work.
+    // The `<labels.approved>` never-touch rail is a precondition too, and the announcement claiming merge-ready has to show its work.
     expect(text.includes('only when a check on it has gone red, or a same-SHA refresh loop is stuck'), 'cockpit-rails', `${skillRel} is missing the approved-carve-out precondition phrase 'only when a check on it has gone red, or a same-SHA refresh loop is stuck'`);
 
     expect(/every check and its conclusion/.test(text), 'cockpit-rails', `${skillRel}'s approved-announcement copy never shows a check conclusion`);
 
-    // guard(#288): the revise #N route's own precondition phrase, and the
-    // comment-before-swap ordering inside its own bullet (so the request is
-    // durable even when the swap's own compare-and-swap then fails).
+    // The revise #N route's own precondition, and comment-before-swap ordering so the request survives a failed compare-and-swap.
     expect(text.includes("only when an operator's own message names that pull request and states the change it wants"), 'cockpit-rails', `${skillRel} is missing the revise #N precondition phrase "only when an operator's own message names that pull request and states the change it wants"`);
 
     const reviseBulletStart = text.indexOf('**"revise #N:');
@@ -50,13 +39,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- Liveness reset — the cockpit resets only what it can prove it dispatched
-  // guard(#150): a dead-agent reset firing on an item this session never
-  // dispatched, or firing more than once per crash loop — every no-match
-  // used to be treated identically (report, never act), leaving issues
-  // 66/67 parked at `in progress` with no way to tell a dead dispatch from
-  // someone else's live agent. This checks the split, its proof artifact,
-  // and its one-reset cap are all still named.
+  // --- Liveness reset — the cockpit resets only what it can prove it dispatched: checks the
+  // split, its proof artifact, and its one-reset cap are all still named. ---
   {
     const rel = 'plugins/port/skills/pipeline/*.md';
     const text = pipelineSkillText();
@@ -67,19 +51,12 @@ export default async function ({ expect, fail, ok }: Reporter) {
 
     expect(text.includes('at most one automatic reset per item per session'), 'liveness-reset', `${rel} is missing the literal phrase 'at most one automatic reset per item per session'`);
 
-    // Issue 189: CONFLICTING no longer removes '<labels.approved>' — it adds
-    // '<labels.refreshBranch>' instead, leaving the approval in place.
+    // CONFLICTING no longer removes '<labels.approved>' — it adds '<labels.refreshBranch>' instead, leaving the approval in place.
     expect(text.includes('adding `<labels.refreshBranch>` to an approved pull request when `mergeable` reads `CONFLICTING` is permitted'), 'liveness-reset', `${rel}'s '<labels.approved>' carve-out never documents the refresh-without-withdrawal fact`);
   }
 
-  // --- Unconditional cycle cap and the zero-diff review gate -----------------
-  // guard(#162): a review cycle cap that never fires on a clean-but-unmerged
-  // bounce, and a review dispatched twice against a diff it already graded.
-  // Pull request 157 ran 7 cycles because the cap only fired "and the latest
-  // review still produced Critical or Medium findings" — a condition every
-  // CI-only bounce arrives at clean, so it never fired. This checks the cap
-  // dropped that qualifier, and that the zero-diff gate names the fields
-  // and comment it reads.
+  // --- Unconditional cycle cap and the zero-diff review gate: the cap must never carry a
+  // "findings still exist" qualifier that a clean-but-unmerged bounce never trips. ---
   {
     const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
     const pipelineRel = 'plugins/port/docs/PIPELINE.md';
@@ -115,14 +92,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(pipelineText.includes('Zero-diff review'), 'zero-diff-review', `${pipelineRel} carries no 'Zero-diff review' rule`);
   }
 
-  // --- Liveness is a TaskList call, never a label inference -------------------
-  // guard(#158): TaskList was granted and referenced but never actually
-  // called across 96 ticks and 62 dispatches, and when asked a direct
-  // liveness question the cockpit answered from labels, then blamed the
-  // operator's own observation on a stale UI element. This checks the
-  // unconditional-call contract, the inverse-sign rail, the
-  // liveness-question recipe's three prohibitions, and that both stop paths
-  // name TaskList and TaskStop.
+  // --- Liveness is a TaskList call, never a label inference: checks the unconditional-call
+  // contract, the inverse-sign rail, and that both stop paths name TaskList and TaskStop. ---
   {
     const rel = 'plugins/port/skills/pipeline/*.md';
     const text = pipelineSkillText();
@@ -148,16 +119,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- Running-plugin staleness is resolved, not printed from a path ---------
-  // guard(#158, #127): the startup line used to report only a path,
-  // identical for a current and a days-stale copy. This checks the
-  // resolution mechanism is named (the registry, the marketplace record, the
-  // scope precedence), that the new tick-state field is written in both
-  // places that must stay in sync, that CONTRIBUTING.md carries the three-way
-  // ground-truth test and the corrected cache-path claim, and that the new
-  // staleness prose in PREFLIGHT.md never hard-codes this repository's own
-  // name — the generality requirement the feature is supposed to satisfy for
-  // every consumer, not just this one.
+  // --- Running-plugin staleness is resolved, not printed from a path: the resolution
+  // mechanism, the tick-state field, CONTRIBUTING.md's ground-truth test, and that staleness prose in PREFLIGHT.md never hard-codes this repository's own name. ---
   {
     const unionRel = 'plugins/port/skills/pipeline/*.md';
     const preflightRel = 'plugins/port/skills/pipeline/PREFLIGHT.md';
@@ -179,12 +142,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
 
     expect(/a cache path is not evidence of a stale copy/i.test(contributingText), 'plugin-staleness', `${contributingRel} is missing the literal correction 'a cache path is not evidence of a stale copy'`);
 
-    // Generality: the staleness prose (Startup preflight step 4 through the
-    // start of step 5, now in PREFLIGHT.md) must derive the marketplace,
-    // owner, and target ref from config/the plugin registry — never
-    // hard-code this repository's own name. UX-state blockquote lines are
-    // exempt, matching how the existing UX-state copy already shows
-    // concrete example names.
+    // The staleness prose must derive the marketplace, owner, and target ref from
+    // config/the plugin registry — never hard-code this repository's own name. UX-state blockquote lines are exempt.
     const start = preflightText.indexOf('**Step 4 — integration drift');
     const end = preflightText.indexOf('**Step 5 — label vocabulary');
     if (start === -1 || end === -1) {
@@ -201,12 +160,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- Operator-facing copy names the ticket, never a bare PR number ---------
-  // guard(#281): the cockpit's own report prose mixing the issue (ticket)
-  // number and the pull request's own GitHub-assigned number for one piece of
-  // pipeline work — a bare `PR #<n>` is always the pull request's own
-  // number, silently divergent from the ticket number the rest of the report
-  // names, with nothing marking it as such.
+  // --- Operator-facing copy names the ticket, never a bare PR number — a bare `PR #<n>` is
+  // always the pull request's own number, silently divergent from the ticket number. ---
   {
     const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
     const pipelineRel = 'plugins/port/docs/PIPELINE.md';

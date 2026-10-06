@@ -19,10 +19,8 @@ function stripComments(text: string): string {
     .join('\n');
 }
 
-/** Every function name a decision-case table names, run against `impl` with
- *  the calling convention this table's own file fixes per function — the
- *  same "a case names its function, the runner knows how to call it" shape
- *  scripts/checks/tick.ts uses. */
+/** Every function name a decision-case table names, run against `impl` with the calling
+ *  convention this table's own file fixes per function. */
 function runCases(table: any, engine: any, callConventions: Record<string, boolean>, expect: Reporter['expect'], fail: Reporter['fail'], tableRel: string): void {
   for (const c of table.cases) {
     const impl = engine[c.function];
@@ -42,12 +40,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   const transcript = await importEngine(TRANSCRIPT_REL);
   const classify = await importEngine(`${FORENSICS_DIR}/classify.ts`);
 
-  // --- (1) Every case in both decision tables resolves and passes ------------
-  // guard(#123): a second implementation (this module's own pin below, and
-  // any future one) silently diverging from the engine's recorded behaviour,
-  // the same "cases-table pinning" rail scripts/checks/tick.ts holds for
-  // the tick engine — mirrored here per the plan's own "Shape and rails
-  // follow the tick engine exactly".
+  // --- (1) Every case in both decision tables resolves and passes, so a second implementation never silently diverges from the engine's recorded behaviour. ---
   {
     const transcriptTable = readJson(`${FORENSICS_DIR}/cases/transcript.cases.json`);
     runCases(
@@ -68,21 +61,14 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     note(`forensics: ${transcriptTable.cases.length} transcript.ts cases, ${classifyTable.cases.length} classify.ts cases`);
   }
 
-  // --- (1b) sanitize strips a C0 control character -----------------------------
-  // guard(#123): a JSON case table cannot hold a raw U+0000-U+001F byte
-  // (JSON itself forbids it unescaped), so this one case is asserted
-  // directly rather than via the shared table.
+  // --- (1b) sanitize strips a C0 control character — JSON cannot hold a raw byte unescaped, so this case is asserted directly rather than via the shared table. ---
   {
     const withControl = `a${String.fromCharCode(7)}b`;
     expect(!(transcript.sanitize(withControl) !== 'ab'), 'forensics-cases', 'sanitize did not strip a C0 control character (0x07)');
   }
 
-  // --- (1c) The shared record-classification table also passes against
-  // scripts/lib/transcript.ts — the other half of the "two readers, one
-  // contract" pin, whose desktop half apps/desktop's own
-  // transcript-entries.test.ts asserts ---------------------------------------
-  // guard(#123): scripts/'s reader silently drifting from the desktop app's
-  // deriver on the record-classification/pairing slice both must agree on.
+  // --- (1c) The shared record-classification table also passes against scripts/lib/
+  // transcript.ts, so it never silently drifts from the desktop app's own deriver. ---
   {
     const sharedTableRel = 'apps/desktop/src/main/sessions/transcript.cases.json';
     const sharedTable = readJson(sharedTableRel);
@@ -97,12 +83,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- (2) usesShellLoop/targetsGhOrGit pinned against the guard hook's own
-  // originals, both directions -------------------------------------------------
-  // guard(#123): classify.ts's reimplementation (scripts/ may not depend on
-  // plugins/port/hooks/lib's internals) silently drifting from the guard
-  // hook's own predicate, so a command the hook would flag stops being
-  // detected here, or vice versa.
+  // --- (2) usesShellLoop/targetsGhOrGit pinned against the guard hook's own originals, both
+  // directions, so a command the hook would flag never stops being detected here. ---
   {
     const original = await importEngine('plugins/port/hooks/lib/command-rules.mjs');
     const battery = [
@@ -123,11 +105,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- (3) STAGE_AGENTS pinned against plugins/port/agents/'s real basenames
-  // and apps/desktop's own PORT_STAGE_AGENTS, both directions -----------------
-  // guard(#123): the item-correlation stage list drifting from either the
-  // shipped agent set or the desktop app's own copy, silently mis-attributing
-  // (or dropping) a finding's stage.
+  // --- (3) STAGE_AGENTS pinned against plugins/port/agents/'s real basenames and apps/
+  // desktop's own PORT_STAGE_AGENTS, both directions, so a finding's stage is never mis-attributed. ---
   {
     const agentBasenames = new Set(readdirSync(join(root, 'plugins/port/agents')).filter((f) => f.endsWith('.md')).map((f) => basename(f, '.md')));
     const engineSet = new Set<string>(classify.STAGE_AGENTS);
@@ -154,12 +133,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- (4) Read-only, no busy child process, no whole-transcript mode --------
-  // guard(#123): the engine silently gaining a write path, a filtered
-  // GraphQL read, a second spawn, or a flag that inlines a whole transcript
-  // — the ticket's own "never inline a transcript" and "one gh api graphql
-  // call" rails, mirrored from scripts/checks/tick.ts's own "tick-readonly"
-  // and "tick-io" checks.
+  // --- (4) Read-only, no busy child process, no whole-transcript mode — the engine must
+  // never gain a write path, a filtered GraphQL read, a second spawn, or an inlined transcript flag. ---
   {
     const files = [join(root, CLI_REL), join(root, TRANSCRIPT_REL), ...walk(join(root, FORENSICS_DIR)).filter((f) => f.endsWith('.ts'))];
     const spawnRe = /\b(?:spawnSync|spawn|execFileSync|execFile|execSync|exec)\(\s*['"](\w+)['"]/g;
@@ -171,9 +146,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       spawnRe.lastIndex = 0;
       while ((match = spawnRe.exec(text))) {
         const bin = match[1];
-        // 'git' is fine anywhere (the CLI's own repoRoot() helper); 'gh' is
-        // fine only inside the reused scripts/port-tick/gh.ts, which this
-        // walk never includes.
+        // 'git' is fine anywhere; 'gh' is fine only in scripts/port-tick/gh.ts, which this walk never includes.
         if (bin === 'git') continue;
         fail('forensics-io', `${rel} spawns '${bin}' directly — every GitHub read must go through the reused scripts/port-tick/gh.ts, and nothing else may shell out`);
       }
@@ -182,16 +155,13 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       expect(!/--jq\b/.test(text), 'forensics-io', `${rel} uses --jq — the GraphQL call must always be parsed in full, never filtered`);
       expect(!/shell:\s*true/.test(text), 'forensics-io', `${rel} passes shell: true to a child process`);
       expect(!(/\bgh (issue|pr|label) (edit|comment|create|merge|close)\b/.test(text) || /--add-label\b|--remove-label\b/.test(text)), 'forensics-io', `${rel} spells out a mutating 'gh' subcommand or label-write flag literal — this engine is read-only, with no write path at all`);
-      // A whole-transcript dump: any flag literal that looks like it would
-      // print raw records instead of findings.
+      // A whole-transcript dump: any flag literal that looks like printing raw records instead of findings.
       expect(!/--dump\b|--raw\b|--full\b/.test(text), 'forensics-io', `${rel} names a flag that reads like a whole-transcript dump — the CLI has no such mode`);
     }
   }
 
-  // --- (5) excerpt is the one chokepoint for transcript-derived text ---------
-  // guard(#123): a finding printing raw, unsanitized, uncapped transcript
-  // text — the ticket's own "one excerpt chokepoint" rule. Nothing outside
-  // scripts/lib/transcript.ts may reimplement the control/bidi sanitizer.
+  // --- (5) excerpt is the one chokepoint for transcript-derived text — nothing outside
+  // scripts/lib/transcript.ts may reimplement the control/bidi sanitizer. ---
   {
     const files = walk(join(root, FORENSICS_DIR)).filter((f) => f.endsWith('.ts'));
     for (const f of files) {
@@ -201,11 +171,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- (6) No running/alive/isLive identifier ----------------------------------
-  // guard(#123): recency read as liveness — the same rail
-  // docs/ENGINEERING.md §4 states for apps/desktop's own session adapter.
-  // Scoped to identifiers, never string literals: 'running' is a real
-  // task_status.status value the parser must still carry.
+  // --- (6) No running/alive/isLive identifier — recency must never read as liveness. Scoped
+  // to identifiers, never string literals: 'running' is a real task_status.status value. ---
   {
     const files = [join(root, CLI_REL), join(root, TRANSCRIPT_REL), ...walk(join(root, FORENSICS_DIR)).filter((f) => f.endsWith('.ts'))];
     const identifierRe = /\b(?:const|let|var|function)\s+(running|isLive|alive)\b|\.(running|isLive|alive)\s*=/;
@@ -215,12 +182,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- (7) commands.forensics never enters commands.checks --------------------
-  // guard(#123): every dispatched agent's worktree running the forensics
-  // engine before pushing — it reads a machine-local path outside the
-  // repository and shells out to gh, meaningless in CI. Pinned here as a
-  // second, engine-specific rail alongside scripts/checks/evals.ts's own
-  // general banned-commands check.
+  // --- (7) commands.forensics never enters commands.checks — it reads a machine-local path
+  // outside the repository and shells out to gh, meaningless in CI. ---
   {
     for (const rel of ['.claude/port.config.json', 'plugins/port/templates/port.config.json']) {
       const cfg = readJson(rel);
@@ -235,10 +198,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     ok();
   }
 
-  // --- (7b) schema/template both carry commands.forensics, defaulting null ---
-  // guard(#123): the new config key landing in one of the two and not the
-  // other, the same "config template matches its own schema's shape" rail
-  // scripts/checks/config.ts already holds for commands.checks.
+  // --- (7b) schema/template both carry commands.forensics, defaulting null, so the key never lands in one and not the other. ---
   {
     const schema = readJson('schema/port.config.schema.json');
     const forensicsSchema = schema.properties?.commands?.properties?.forensics;
@@ -247,18 +207,14 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     expect(!(template.commands?.forensics !== null), 'forensics-scope', `plugins/port/templates/port.config.json's commands.forensics must be null, got ${JSON.stringify(template.commands?.forensics)}`);
   }
 
-  // --- (7c) No hardcoded ~/.claude — the Claude home is always resolved -------
-  // guard(#123): a literal '~/.claude' or '.claude' home path bypassing
-  // CLAUDE_CONFIG_DIR, breaking for any operator whose home is elsewhere.
+  // --- (7c) No hardcoded ~/.claude — must always resolve via CLAUDE_CONFIG_DIR, never break for an operator whose home is elsewhere. ---
   {
     const text = stripComments(readFileSync(join(root, FORENSICS_DIR, 'scan.ts'), 'utf8'));
     expect(!/['"]~\/\.claude['"]/.test(text), 'forensics-scope', 'scan.ts hardcodes a literal ~/.claude path — the Claude home must be resolved via CLAUDE_CONFIG_DIR then os.homedir()');
   }
 
-  // --- (8) The fixture tree exercises scan.ts's resolve and degrade paths ---
-  // guard(#123): "absent or unreadable session directories degrade to one
-  // clear line, never a stack trace" (the plan's own acceptance criterion),
-  // regressing silently the next time scan.ts's shape changes.
+  // --- (8) The fixture tree exercises scan.ts's resolve and degrade paths — absent or
+  // unreadable session directories must degrade to one clear line, never a stack trace. ---
   {
     const scan = await importEngine(`${FORENSICS_DIR}/scan.ts`);
     const fixtureHome = join(root, FORENSICS_DIR, 'fixtures');
@@ -284,19 +240,13 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       }
     }
 
-    // Absent tree: a directory that does not exist degrades to a named
-    // result, never a thrown error.
+    // Absent tree: a directory that does not exist degrades to a named result, never a thrown error.
     const missing = scan.buildProjectIndex(join(root, FORENSICS_DIR, 'fixtures-does-not-exist'));
     expect(!(missing.ok || missing.kind !== 'claude-home-missing'), 'forensics-fixtures', `buildProjectIndex over an absent tree must report 'claude-home-missing', got ${JSON.stringify(missing)}`);
   }
 
-  // --- (9) report.ts's own orchestration runs end to end, without a `gh`
-  // call, over the fixture tree and over an absent one -------------------------
-  // guard(#123): a wiring bug in report.ts (an undefined field access, a
-  // thrown exception) that no per-function case table can catch, since each
-  // of those tests one function in isolation. No `args.repoRoot` is passed,
-  // so the orphan assertion degrades to "not computable" rather than
-  // shelling out to `gh` from a layer 1 check.
+  // --- (9) report.ts's own orchestration runs end to end, without a `gh` call, catching a
+  // wiring bug no per-function case table can see. No `args.repoRoot` is passed, so the orphan assertion degrades to "not computable" rather than shelling out. ---
   {
     const reportMod = await importEngine(`${FORENSICS_DIR}/report.ts`);
     const fixtureHome = join(root, FORENSICS_DIR, 'fixtures');

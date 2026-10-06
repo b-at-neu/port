@@ -35,11 +35,8 @@ export interface GateResult {
   readonly held: readonly GateHeld[];
 }
 
-/** One claimed path per non-blank line: the first whitespace-delimited
- *  token, everything after is a human-readable reason and never parsed.
- *  Returns `null` when the plan has no ` ```files ` fence at all — the
- *  caller dispatches that plan unchecked, per "Fail-open on an unstructured
- *  plan". */
+/** One claimed path per non-blank line: the first token, rest is a never-parsed reason.
+ *  `null` when the plan has no ` ```files ` fence — the caller dispatches it unchecked. */
 export function parseFilesBlock(planBody: string | null | undefined): readonly string[] | null {
   const m = /```files\n([\s\S]*?)```/.exec(planBody ?? '');
   if (!m) return null;
@@ -64,9 +61,7 @@ function claimsOverlap(a: string, b: string): boolean {
   return a === b;
 }
 
-/** Removes any path in `paths` that overlaps a `concurrency.sharedFiles`
- *  entry — a shared path is still claimed by its own plan, only never
- *  contended, in either direction. */
+/** Removes any path that overlaps a `concurrency.sharedFiles` entry — shared is still claimed, never contended. */
 export function excludeShared(paths: readonly string[], sharedFiles: readonly string[]): readonly string[] {
   return paths.filter((p) => !sharedFiles.some((s) => claimsOverlap(p, s)));
 }
@@ -76,10 +71,8 @@ export function overlapDepth(candidatePaths: readonly string[], otherPaths: read
   return candidatePaths.filter((cp) => otherPaths.some((op) => claimsOverlap(cp, op))).length;
 }
 
-/** Checks one candidate's non-shared claimed paths against every entry in
- *  `occupiedSet`, holding on the first in-flight item whose own non-shared
- *  claims overlap at or above `threshold` — never pooled across in-flight
- *  items. */
+/** Holds on the first in-flight item whose non-shared claims overlap at or above `threshold`
+ *  — never pooled across in-flight items. */
 export function contentionForCandidate(
   candidatePaths: readonly string[],
   occupiedSet: readonly OccupiedEntry[],
@@ -98,13 +91,8 @@ export function contentionForCandidate(
   return { held: false };
 }
 
-/** Orders and gates every structured candidate (unstructured ones already
- *  routed to `unchecked` by the caller) against the initial `occupiedSet`.
- *  Survivors are sorted ascending by how many *other survivors* they
- *  overlap at or above `threshold`, then dispatched in that order, growing
- *  the occupied set as each one dispatches — so a later survivor that now
- *  overlaps an earlier one's freshly-claimed files is held this same pass,
- *  never dispatched. */
+/** Orders and gates every structured candidate against the initial `occupiedSet`. Survivors
+ *  sort ascending by overlap count, dispatched in that order, growing the occupied set as each dispatches. */
 export function gateCandidates(
   candidates: readonly ClaimedItem[],
   occupiedSet: readonly OccupiedEntry[],

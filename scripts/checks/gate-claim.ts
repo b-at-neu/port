@@ -19,10 +19,8 @@ export default async function ({ fail, ok, expect, note }: Reporter) {
   const check = makeCheck(fail, ok);
   const gate = makeDecide(decide, { matchers, sessionRequiredPaths: [], root });
 
-  // --- classifyGateClaim: the three verdicts, mirroring the desktop app's readGateClaim ----
-  // guard(#206): a claim classifier that drifts from the desktop app's own
-  // reader would let the cockpit and the app disagree about whether the
-  // gate is claimed — the exact split-brain #206 exists to close.
+  // --- classifyGateClaim: the three verdicts, mirroring the desktop app's readGateClaim —
+  // drift here would let the cockpit and the app disagree about whether the gate is claimed. ---
   {
     const absent = classifyGateClaim(false, '', 'b-at-neu/port');
     expect(absent.state === 'absent', 'gate-claim-classifier', () => `expected 'absent' for a missing file, got ${JSON.stringify(absent)}`);
@@ -81,9 +79,7 @@ export default async function ({ fail, ok, expect, note }: Reporter) {
       () => `expected plan-gate NOT claimed when scopes names only an unrecognized entry, got ${JSON.stringify(otherScopeOnly)}`,
     );
 
-    // guard(#265): both scopes recognized together, with unknownScopes empty
-    // — a claim naming both plan-gate and dispatch must never misclassify
-    // either as unrecognized.
+    // A claim naming both plan-gate and dispatch must never misclassify either as unrecognized.
     const bothScopes = classifyGateClaim(
       true,
       JSON.stringify({ repo: 'b-at-neu/port', owner: 'port-desktop', scopes: ['plan-gate', 'dispatch'], claimedAt: '2026-09-05T14:02:11Z' }),
@@ -125,9 +121,7 @@ export default async function ({ fail, ok, expect, note }: Reporter) {
     expect(!quotedInBody.isAttempt, 'gate-claim-classifier', 'labelEditAttempt: a label name quoted inside -b must not match');
   }
 
-  // --- Claim rule, Bash arm ------------------------------------------------------------------
-  // guard(#206): the cockpit (or anyone else, cockpit-shaped or not) adding
-  // or removing a plan-gate label while an external claim holds it.
+  // --- Claim rule, Bash arm — never add or remove a plan-gate label while an external claim holds it. ---
   const held = { state: 'held', owner: 'port-desktop', scopes: ['plan-gate'], unknownScopes: [], claimedAt: '2026-09-05T14:02:11Z' };
   const unreadable = { state: 'unreadable', message: "missing 'owner' or 'claimedAt'" };
   const otherScope = { state: 'held', owner: 'port-desktop', scopes: [], unknownScopes: ['something-else'], claimedAt: '2026-09-05T14:02:11Z' };
@@ -212,11 +206,8 @@ export default async function ({ fail, ok, expect, note }: Reporter) {
     'allow',
   );
 
-  // --- Claim rule, write-tool arm -------------------------------------------------------------
-  // guard(#206, #138): a machine releasing its own constraint — the same
-  // shape #138 already named — by writing over the claim file directly. No
-  // exemption at all, unlike every other rule above: this one fires for a
-  // subagent, a plain session, and an impl-<n> operator worktree alike.
+  // --- Claim rule, write-tool arm — a machine must never release its own constraint by
+  // writing over the claim file directly. No exemption at all, unlike every other rule above. ---
   const claimFilePath = join(root, '.agents', 'gate-claim.json');
 
   for (const [label, payload] of [
@@ -228,10 +219,7 @@ export default async function ({ fail, ok, expect, note }: Reporter) {
   }
 
   {
-    // A write to .agents/denials.log — a different path — is unaffected by
-    // the claim rule; with no sessionRequiredPaths configured here, the
-    // ordinary write-tool arm allows it, so 'allow' is the proof this rule
-    // matched on path equality, not merely "any write, anywhere."
+    // A write to .agents/denials.log — a different path — must be unaffected, proving this rule matched on path equality, not "any write, anywhere".
     const result = gate({
       payload: subagentPayload({ tool_name: 'Write', tool_input: { file_path: join(root, '.agents', 'denials.log'), content: '' } }),
       claimFilePath,
@@ -239,9 +227,8 @@ export default async function ({ fail, ok, expect, note }: Reporter) {
     expect(result.decision === 'allow', 'gate-claim-rule', () => `a write to .agents/denials.log must not be denied by the claim rule, got ${JSON.stringify(result)}`);
   }
 
-  // --- End-to-end wiring: the real agent-guard.mjs against a temp fixture ---------------------
-  // guard(#206): the classifier's own import cannot see the hook's own claim
-  // read/resolve wiring (config.repo, config.labels, the base-root path).
+  // --- End-to-end wiring: the real agent-guard.mjs against a temp fixture, since the
+  // classifier's own import cannot see the hook's own claim read/resolve wiring. ---
   {
     const hookPath = join(root, 'plugins/port/hooks/agent-guard.mjs');
     const fixture = mkdtempSync(join(tmpdir(), 'port-guard-claim-'));
@@ -280,9 +267,7 @@ export default async function ({ fail, ok, expect, note }: Reporter) {
       }
       expect(!(parsed && parsed.hookSpecificOutput?.permissionDecision !== 'deny'), 'gate-claim-wiring', `expected permissionDecision 'deny' against a held claim, got ${JSON.stringify(parsed)}`);
 
-      // A command that does not touch a plan-gate label proceeds normally,
-      // even with the claim held — proof the claim read is scoped, not a
-      // blanket cockpit freeze.
+      // A command that does not touch a plan-gate label proceeds normally, even with the claim held — proof the read is scoped, not a blanket freeze.
       const untouched = run({
         cwd: fixture,
         session_id: 'sess-claim-2',
@@ -298,13 +283,8 @@ export default async function ({ fail, ok, expect, note }: Reporter) {
     }
   }
 
-  // --- Doc pins ---------------------------------------------------------------------------
-  // guard(#206): the hook's plan-gate key set, PIPELINE.md's claim section,
-  // and docs/COORDINATION.md's own claim-contract prose drifting apart —
-  // each names the same three label keys, and a fourth added to one without
-  // the others would silently narrow or widen what the hook actually denies.
   // pin: `hooks/agent-guard.mjs`'s plan-gate label key reads (`planReview`/`planApproved`/`planChangesRequested`) ↔ `PIPELINE.md`'s "External gate claim" section ↔ `docs/COORDINATION.md`'s claim-contract keys
-  // pin: `PIPELINE.md`'s "Cockpit rules" paragraph stating "five" ↔ its own bulleted list actually carrying five entries, so a sixth rule cannot land without the prose moving with it
+  // pin: `PIPELINE.md`'s "Cockpit rules" paragraph's stated count ↔ its own bulleted list actually carrying that many entries, so a new rule cannot land without the prose moving with it
   {
     const hookText = readFileSync(join(root, 'plugins/port/hooks/agent-guard.mjs'), 'utf8');
     const planGateLabelsBlock = /const planGateLabels = \[([\s\S]*?)\];/.exec(hookText)?.[1] ?? '';
@@ -323,9 +303,7 @@ export default async function ({ fail, ok, expect, note }: Reporter) {
     const claimSection = /### External gate claim([\s\S]*?)(?:\n## |\n### |$)/.exec(docsText)?.[1] ?? '';
     expect(claimSection, 'gate-claim-doc-pin', 'PIPELINE.md is missing an "External gate claim" section');
     if (claimSection) {
-      // The doc must name every hook key. `autoPlan` also appears here,
-      // deliberately, as the documented exclusion from the set — so this
-      // checks membership, not exact set equality, in this direction.
+      // The doc must name every hook key; `autoPlan` also appears, deliberately, as the documented exclusion, so this checks membership, not exact set equality.
       const docKeys = new Set([...claimSection.matchAll(/<labels\.(\w+)>/g)].map((m) => m[1]));
       const missingFromDoc = PLAN_GATE_KEYS.filter((k) => !docKeys.has(k));
       expect(
@@ -348,9 +326,7 @@ export default async function ({ fail, ok, expect, note }: Reporter) {
       () => `docs/COORDINATION.md no longer names ${missingFromCoordination.join(', ')} — the claim-contract keys drifted`,
     );
 
-    // The stand-down precondition and copy are literal, checkable phrases
-    // (docs/ENGINEERING.md §7), not "never do X" prose — pinned in the
-    // cockpit's own companion files.
+    // The stand-down precondition and copy are literal, checkable phrases, not "never do X" prose.
     const skillText = pipelineSkillText();
     expect(
       skillText.includes("this tick's claim verdict is"),
@@ -364,10 +340,7 @@ export default async function ({ fail, ok, expect, note }: Reporter) {
     );
     expect(skillText.includes('.agents/gate-claim.json'), 'gate-claim-doc-pin', 'the pipeline skill never names .agents/gate-claim.json');
 
-    // "Cockpit rules" now names six rules (#265 added the dispatch claim's
-    // Agent arm) — a seventh cannot land without the prose count moving with
-    // it, and this pin is what would catch a fifth silently added to the
-    // five-rule count that predated this ticket.
+    // A rule silently added or removed must never leave the stated count out of sync with the bulleted list.
     const cockpitRulesSection = /Cockpit rules\.([\s\S]*?)(?=\n### |\n## )/.exec(docsText)?.[1] ?? '';
     const bulletCount = [...cockpitRulesSection.matchAll(/\n- \*\*/g)].length;
     expect(

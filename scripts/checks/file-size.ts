@@ -1,12 +1,5 @@
-// guard(#177): a file growing past the bar with nothing to object, and the
-// debt list going stale in either direction. The operator's stated
-// 500-line-per-file maximum existed nowhere — not in docs/ENGINEERING.md,
-// not as a check — so nothing ever enforced it and three (later six)
-// shipped files grew past it unnoticed. This enforces the limit as a
-// shrinking ratchet: every over-limit file is enumerated here with its
-// exact, current line count, and any deviation from that count — up *or*
-// down — fails, so the debt list can only ever move toward zero and never
-// quietly drift out of sync with the tree it describes.
+// Enforces the per-file line limit as a shrinking ratchet: every over-limit file is
+// enumerated with its exact current line count, and any deviation — up or down — fails.
 import { readFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
@@ -17,9 +10,8 @@ import { message } from '../lib/errors.ts';
 
 const CONFIG_REL = 'scripts/checks/file-size.config.json';
 
-/** Identical to `wc -l` for a newline-terminated file. Stable across
- *  platforms because `.gitattributes` forces `eol=lf`, which is what makes a
- *  recorded count reproducible from one contributor's checkout to another's. */
+/** Identical to `wc -l` for a newline-terminated file. Stable across platforms since
+ *  `.gitattributes` forces `eol=lf`. */
 function countLines(text: string): number {
   return text.split('\n').length - (text.endsWith('\n') ? 1 : 0);
 }
@@ -30,12 +22,8 @@ function looksBinary(buf: Buffer): boolean {
   return buf.subarray(0, 8192).includes(0);
 }
 
-/** Pure text parse, no file I/O: finds the paragraph containing the "a
- *  source file is at most N lines" sentence, skips any blank lines after
- *  it, then collects the first backticked token of each consecutive
- *  `- \`…\`` line that follows — the doc's own stated exclusion list.
- *  Returns `[]` when no such list follows the paragraph, meaning the doc
- *  declares none. */
+/** Pure text parse: finds the "a source file is at most N lines" paragraph, then collects
+ *  the first backticked token of each consecutive `- \`…\`` line that follows. `[]` if none. */
 function docExclusions(text: string): string[] {
   const limitIdx = text.search(/a source file is at most \d+ lines/i);
   if (limitIdx === -1) return [];
@@ -88,8 +76,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   }
   ok();
 
-  // Resolve the standards document this ticket's own limit must agree with —
-  // read-only, and only to know which file to cite and later pin against.
+  // Resolve the standards document the limit must agree with — read-only, only to know which file to cite.
   let standardsDocRel = null;
   try {
     standardsDocRel = readJson('.claude/port.config.json').docs?.engineering ?? null;
@@ -98,10 +85,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   }
   const standardsDocLabel = standardsDocRel ?? 'the engineering standards document (docs.engineering not set)';
 
-  // --- Discover tracked files --------------------------------------------
-  // Fails open (a note, not a failure) when git is unavailable — the ratchet
-  // still runs over the allowlist itself, which names its paths explicitly
-  // and needs no discovery. Only "a new file crossed the limit" goes unseen.
+  // --- Discover tracked files: fails open (a note) when git is unavailable — the ratchet
+  // still runs over the allowlist itself; only "a new file crossed the limit" goes unseen. ---
   let trackedFiles = null;
   try {
     const out = execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' });
@@ -145,9 +130,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     if (trackedSet && !trackedSet.has(entry.path)) {
       fail('file-size', `allowlist entry \`${entry.path}\` is not a tracked file — remove it`);
     }
-    // guard(#183): checkFile below returns early for an excluded path, so a
-    // leftover allowlist entry for a now-exempt file would sit in the debt
-    // list forever, silently ignored rather than measured.
+    // checkFile below returns early for an excluded path, so a leftover entry for a now-exempt file would sit forever, silently ignored.
     const excludedBy = excludeRes.find((e) => e.re.test(entry.path));
     if (excludedBy) {
       fail(
@@ -232,17 +215,9 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     fail('file-size', `${standardsDocRel} states the line limit more than once — it must appear exactly once, citably`);
   } else expect(!(Number(matches[0][1]) !== limit), 'file-size', `${standardsDocRel} states ${matches[0][1]} while ${CONFIG_REL} sets ${limit} — the two must agree`);
 
-  // --- Stated exclusions must agree with the configured ones --------------
-  // guard(#183): an exemption stated in prose with nothing tying it to the
-  // config — docs.engineering's exclusion bullet list could drift from
-  // file-size.config.json's own `exclude` globs in either direction with
-  // nothing here to catch it, the same lesson §2 draws for every other
-  // duplicated copy.
   // pin: docs.engineering §7's exclusion bullet list ↔ file-size.config.json's `exclude` globs — both directions
 
-  // Self-test first (§7: "a check that cannot be made to fail is not a
-  // check"). One inline fixture must parse to its exact glob set; the same
-  // fixture with a bullet removed must parse to a different one.
+  // Self-test first: one inline fixture must parse to its exact glob set; the same fixture with a bullet removed must parse to a different one.
   const FIXTURE_GOOD =
     'A source file is at most 500 lines. Trailing prose in the same paragraph.\n\n' +
     '- `foo/**` — a reason.\n' +
@@ -259,8 +234,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   const missingBulletGlobs = docExclusions(FIXTURE_MISSING_BULLET);
   expect(!(JSON.stringify(missingBulletGlobs) === JSON.stringify(fixtureGlobs)), 'file-size', 'self-test: docExclusions did not notice a bullet missing from the list');
 
-  // Now the real comparison, only once the doc is known to exist (the two
-  // `return`s above already skip this when it is unset or missing).
+  // Now the real comparison, only once the doc is known to exist.
   const docGlobs = new Set(docExclusions(standardsText));
   const configGlobs = new Set(excludeRes.map((e) => e.glob));
 

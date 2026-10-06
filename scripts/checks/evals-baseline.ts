@@ -3,9 +3,7 @@ import { basename, dirname, join } from 'node:path';
 import { root, walk, relOf, sectionText } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-/** Every backtick-quoted case name in a table's first column, in source
- *  order — used against both "## The cases" and "## Baseline", which share
- *  this exact row shape (`| \`name\` | ... |`). */
+/** Every backtick-quoted case name in a table's first column, in source order. */
 function tableCaseNames(section: string): string[] {
   return [...section.matchAll(/^\|\s*`([a-z0-9-]+)`\s*\|/gm)].map((m) => m[1]);
 }
@@ -21,12 +19,8 @@ export default async function ({ fail, ok }: Reporter) {
       .map((f) => basename(dirname(f))),
   );
 
-  // --- "The cases" and "## Baseline" each cover exactly the case directories,
-  // --- both directions ---------------------------------------------------------
-  // guard(#124): a case added with no README row (or a stale row for a
-  // deleted case) is exactly the drift issue 181's directory-derived unions
-  // exist to prevent elsewhere — checked here for these two flat tables
-  // directly, since neither is a companion-doc union.
+  // --- "The cases" and "## Baseline" each cover exactly the case directories, both directions:
+  // a case with no README row, or a stale row for a deleted case, is exactly the drift to catch. ---
   {
     const casesSection = sectionText(readmeText, 'The cases');
     const baselineSection = sectionText(readmeText, 'Baseline');
@@ -50,11 +44,8 @@ export default async function ({ fail, ok }: Reporter) {
     }
   }
 
-  // --- Baseline cell grammar, including the delta arithmetic for numeric rows -
-  // guard(#124): a malformed or internally inconsistent baseline cell would be
-  // read as a real measurement by issue 125 — the one document this epic
-  // exists to produce evidence for — so the grammar is enforced the moment
-  // any row is filled in, not only once early access lands.
+  // --- Baseline cell grammar, including delta arithmetic: a malformed or inconsistent cell
+  // would be read as a real measurement, so the grammar is enforced the moment a row is filled in. ---
   {
     const baselineSection = sectionText(readmeText, 'Baseline');
     const rows = [...baselineSection.matchAll(/^\|(.+)\|\s*$/gm)]

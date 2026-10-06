@@ -4,10 +4,8 @@ import { pathToFileURL } from 'node:url';
 import { root, readJson, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// #335: electron-builder.config.mjs and apps/desktop/scripts/ are the
-// packaging boundary. These assertions pin the installer build's own
-// decisions mechanically, the same shape desktop-runtime.ts's own guards
-// already use.
+// electron-builder.config.mjs and apps/desktop/scripts/ are the packaging boundary. These
+// assertions pin the installer build's own decisions mechanically.
 export default async function ({ expect, fail, ok }: Reporter) {
   const appDir = join(root, 'apps/desktop');
   const noticePath = join(appDir, 'NOTICE.txt');
@@ -15,9 +13,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
   const packageJsonPath = join(appDir, 'package.json');
   const workflowPath = join(root, '.github/workflows/desktop-package.yml');
 
-  // --- NOTICE.txt's two lines ↔ DESIGN.md §6's About: line, both directions
-  // guard(#335): the installer notice drifting from the app's own "Powered
-  // by Claude" copy would ship two different postures in two places.
   // pin: `apps/desktop/NOTICE.txt` ↔ `docs/DESIGN.md` §6's `About:` line
   {
     const designText = readFileSync(join(root, 'docs/DESIGN.md'), 'utf8');
@@ -33,10 +28,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
         fail('desktop-packaging', `${relOf(noticePath)} must carry exactly two lines, found ${noticeLines.length}`);
       } else expect(!(noticeLines[0] !== designLine1 || noticeLines[1] !== designLine2), 'desktop-packaging', `${relOf(noticePath)} (${JSON.stringify(noticeLines)}) does not match docs/DESIGN.md §6's About: line (${JSON.stringify([designLine1, designLine2])})`);
 
-      // --- shared/about/copy.ts's two strings ↔ the same About: line, both
-      // directions (#337) — the in-app About screen and the native About
-      // panel both read this file, so it drifting from NOTICE.txt would ship
-      // a third, different posture.
       // pin: `apps/desktop/src/shared/about/copy.ts` ↔ `docs/DESIGN.md` §6's `About:` line
       const copyPath = join(appDir, 'src/shared/about/copy.ts');
       if (!existsSync(copyPath)) {
@@ -58,10 +49,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- bundle-audit.mjs's pure rules, exercised with no node_modules -------
-  // guard(#335): the audit passing vacuously on a clean listing, failing to
-  // flag a bundled SDK binary, or failing to report a missing positive
-  // control would all silently defeat the "no Claude binary ships" promise.
+  // --- bundle-audit.mjs's pure rules, exercised with no node_modules: must not pass
+  // vacuously on a clean listing, miss a bundled SDK binary, or miss a positive control. ---
   {
     const bundleAuditPath = join(appDir, 'scripts/bundle-audit.mjs');
     if (!existsSync(bundleAuditPath)) {
@@ -94,9 +83,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- electron-builder.config.mjs derives exclusions and excludes no asarUnpack
-  // guard(#335): a hand-typed exclusion list or a reintroduced asarUnpack
-  // would silently defeat the derive-from-the-manifest contract.
+  // --- electron-builder.config.mjs derives exclusions and excludes no asarUnpack: a
+  // hand-typed exclusion list would defeat the derive-from-the-manifest contract. ---
   {
     if (!existsSync(configPath)) {
       fail('desktop-packaging', `${relOf(configPath)} does not exist`);
@@ -106,9 +94,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
       expect(!/\basarUnpack\b/.test(text), 'desktop-packaging', `${relOf(configPath)} must not set asarUnpack — there are no native production dependencies`);
       expect(/extraResources:\s*\[\s*\{\s*from:\s*['"]NOTICE\.txt['"]/.test(text), 'desktop-packaging', `${relOf(configPath)} must copy NOTICE.txt through extraResources`);
 
-      // --- productName/appId/executableName name 'port', never 'Claude' ---
-      // guard(#335): DESIGN.md "Identity" — the installed app must never
-      // present itself as a Claude product.
+      // --- productName/appId/executableName name 'port', never 'Claude' — the installed app must never present itself as a Claude product. ---
       const productNameMatch = /productName:\s*['"]([^'"]+)['"]/.exec(text);
       expect(!(!productNameMatch || productNameMatch[1] !== 'port'), 'desktop-packaging', `${relOf(configPath)}'s productName must be exactly 'port'`);
       for (const field of ['productName', 'appId', 'executableName']) {
@@ -123,9 +109,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- dist script runs audit-bundle.mjs after electron-builder -----------
-  // guard(#335): an installer that skips the audit on some path ships
-  // unchecked, silently restoring the bundled-binary risk this ticket closes.
+  // --- dist script runs audit-bundle.mjs after electron-builder — an installer that skips
+  // the audit on some path ships unchecked. ---
   {
     if (!existsSync(packageJsonPath)) {
       fail('desktop-packaging', `${relOf(packageJsonPath)} does not exist`);
@@ -138,9 +123,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- the packaging workflow runs the three-OS matrix ---------------------
-  // guard(#335): a workflow that silently dropped an OS would stop proving
-  // the "unsigned installers build on all three OSes" done-when criterion.
+  // --- the packaging workflow runs the three-OS matrix, proving "unsigned installers build on all three OSes". ---
   {
     if (!existsSync(workflowPath)) {
       fail('desktop-packaging', `${relOf(workflowPath)} does not exist`);

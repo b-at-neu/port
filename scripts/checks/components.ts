@@ -2,9 +2,7 @@ import { basename, dirname, join } from 'node:path';
 import { root, walk, relOf, frontmatter } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// --- Components parse and declare what they must ---------------------------
-// guard: a skill or agent whose frontmatter is malformed is silently missing
-// from the component inventory. Nothing errors; it simply is not there.
+// --- Components parse and declare what they must: a malformed frontmatter is silently missing, never an error. ---
 export default async function ({ fail, ok }: Reporter) {
   for (const [dir, kind] of [
     ['plugins/port/agents', 'agent'],

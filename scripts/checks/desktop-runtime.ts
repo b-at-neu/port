@@ -3,10 +3,8 @@ import { join } from 'node:path';
 import { root, readJson, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// #97: apps/desktop/src/main/runtime/ is the composition root for the SDK
-// runtime adapter. Five assertions pin its plan's decisions mechanically, in
-// the shape desktop-registry.ts's and desktop-sessions.ts's own guards
-// already use.
+// apps/desktop/src/main/runtime/ is the composition root for the SDK runtime adapter. These
+// assertions pin its plan's decisions mechanically.
 export default async function ({ expect, fail, ok }: Reporter) {
   const srcDir = join(root, 'apps/desktop/src');
   const runtimeDir = 'apps/desktop/src/main/runtime';
@@ -15,9 +13,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
   const typesFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/shared/runtime/types.ts');
   const copyFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/shared/runtime/copy.ts');
 
-  // --- Every RuntimeDiagnosis member has a copy.ts entry, both directions ---
-  // guard(#97): a diagnosis added to the union with no operator-facing copy,
-  // or a copy entry left behind for a diagnosis that no longer exists.
   // pin: `shared/runtime/types.ts`'s `RuntimeDiagnosis` ↔ `shared/runtime/copy.ts`'s `RUNTIME_COPY`, both directions
   {
     if (!typesFile || !copyFile) {
@@ -42,9 +37,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
         }
         if (members.size > 0 && [...members].every((m) => keys.has(m)) && [...keys].every((k) => members.has(k))) ok();
 
-        // --- unauthenticated/token-stale: no 'API key' wording, both carry the login action ---
-        // guard(#97, #145): the two-week failure recorded there was exactly
-        // one of these being misread as an API key problem.
+        // --- unauthenticated/token-stale: no 'API key' wording, both carry the login action
+        // — a real failure was exactly one of these misread as an API key problem. ---
         let loginEntriesOk = true;
         const loginEntryPatterns: [string, RegExp][] = [
           ['unauthenticated', /unauthenticated:\s*\{([^}]*)\}/],
@@ -72,9 +66,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- MINIMUM_CLAUDE_CODE_VERSION is declared once, and version.ts imports it ---
-  // guard(#97): a second literal minimum retyped at the comparison site
-  // instead of importing the one declared constant.
+  // --- MINIMUM_CLAUDE_CODE_VERSION is declared once, and version.ts imports it, never a retyped literal. ---
   {
     const declarations = allFiles.filter((f) => !f.endsWith('.test.ts') && /export const MINIMUM_CLAUDE_CODE_VERSION\s*=/.test(readFileSync(f, 'utf8')));
     expect(!(declarations.length !== 1), 'desktop-runtime', `MINIMUM_CLAUDE_CODE_VERSION is declared ${declarations.length} times, expected exactly 1: ${declarations.map(relOf).join(', ') || '(none)'}`);
@@ -84,9 +76,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     } else expect(/MINIMUM_CLAUDE_CODE_VERSION/.test(readFileSync(versionFile, 'utf8')), 'desktop-runtime', `${runtimeDir}/version.ts does not reference MINIMUM_CLAUDE_CODE_VERSION`);
   }
 
-  // --- Every real query( call site passes pathToClaudeCodeExecutable -------
-  // guard(#97): a probe call site silently letting the SDK fall back to its
-  // own bundled binary instead of the resolved operator install.
+  // --- Every real query( call site passes pathToClaudeCodeExecutable — never let the SDK
+  // fall back to its own bundled binary instead of the resolved operator install. ---
   {
     const queryCallRe = /\bquery\(\s*\{/;
     const matches = allFiles.filter((f) => !f.endsWith('.test.ts') && queryCallRe.test(readFileSync(f, 'utf8')));
@@ -103,9 +94,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- classify.cases.json resolves every case against a real export ------
-  // guard(#97): a case naming a function classify.ts no longer exports,
-  // silently skipped rather than failing loudly.
   // pin: `main/runtime/classify.cases.json` ↔ `classifyPreflight`/`classifyProbeFailure` in `main/runtime/classify.ts`
   {
     const classifyFile = allFiles.find((f) => relOf(f) === `${runtimeDir}/classify.ts`);

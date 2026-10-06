@@ -4,10 +4,8 @@ import { pathToFileURL } from 'node:url';
 import { root, readJson, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// #94: the single-label operator actions and the operator decisions —
-// mechanical rails, dependency-free and regex-based, in the shape of
-// desktop-claim.ts's own guards. Reading these directories by explicit path
-// (never walk('apps/'), which descends into node_modules).
+// The single-label operator actions and operator decisions — mechanical, dependency-free,
+// regex-based rails, reading directories by explicit path, never walk('apps/').
 export default async function ({ expect, fail, ok }: Reporter) {
   const sharedActionsDir = 'apps/desktop/src/shared/actions';
   const mainActionsDir = 'apps/desktop/src/main/actions';
@@ -22,23 +20,17 @@ export default async function ({ expect, fail, ok }: Reporter) {
   const sharedActionsFiles = allFiles.filter((f) => relOf(f).startsWith(`${sharedActionsDir}/`));
   const mainActionsFiles = allFiles.filter((f) => relOf(f).startsWith(`${mainActionsDir}/`));
 
-  // --- shared/actions/ has source files -------------------------------------
-  // guard(#94): the directory this whole ticket adds being deleted with
-  // nothing to catch it.
+  // --- shared/actions/ has source files, so deleting the directory cannot pass vacuously. ---
   if (sharedActionsFiles.filter((f) => !relOf(f).endsWith('.test.ts')).length === 0) {
     fail('desktop-actions', `${sharedActionsDir} has no source files — the guard cannot pass vacuously if the directory is deleted`);
     return;
   }
 
-  // #348: shared/actions/plan.ts's own RETRY_TRIGGER now derives from
-  // scripts/port-tick/liveness.ts's own export directly (ENGINE_RETRY_TRIGGER),
-  // so there is no second copy left for this pin to compare — the assignment
-  // itself typechecks the keys and values against LabelKey.
+  // shared/actions/plan.ts's RETRY_TRIGGER derives from scripts/port-tick/liveness.ts's
+  // export directly, so the assignment itself typechecks against LabelKey.
 
-  // --- No file under shared/actions/ imports a node: builtin or a main/ path
-  // guard(#94): the pure action-derivation layer losing its
-  // `typecheck:web` compatibility, the same rail `shared/writes/types.ts`
-  // and `shared/claim/types.ts` already hold.
+  // --- No file under shared/actions/ imports a node: builtin or a main/ path — the pure
+  // action-derivation layer must keep its `typecheck:web` compatibility. ---
   {
     let found = false;
     for (const f of sharedActionsFiles) {
@@ -51,14 +43,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- No non-test file under shared/actions/ or main/actions/ retypes a ----
-  // guard(#94): a hand-typed display name drifting from a repository's own
-  // label override, instead of resolving through the vocabulary as a
-  // LabelKey. Checked only where key !== name (the same set
-  // scripts/checks/labels.ts's own "Desktop app never retypes a resolved
-  // label name" rail already scans the whole app for), since a single-word
-  // label's name and its LabelKey coincide (e.g. 'ready' is both), which a
-  // bare string-equality check cannot tell apart.
+  // --- No non-test file under shared/actions/ or main/actions/ retypes a hand-typed label
+  // name instead of resolving through the vocabulary. Checked only where key !== name. ---
   {
     const mismatched = readJson('plugins/port/data/labels.json')
       .labels.filter((l: any) => l.key !== l.name)
@@ -78,13 +64,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- applyLabels( is called under apps/desktop/src/ only from main/actions/
-  // guard(#94): a third applyLabels caller diffusing the write chokepoint
-  // built for issue 90, instead of main/actions/ staying the one composition
-  // root. Issue 92 retired main/claim.ts's own pre-#94 grandfathered call
-  // (docs/ENGINEERING.md named it "the second-caller debt issue 92 should
-  // retire") by moving the write into main/actions/claim.ts — so
-  // main/actions/ is now this rail's only caller, with no exception left.
+  // --- applyLabels( is called under apps/desktop/src/ only from main/actions/, the one write chokepoint. No exception left. ---
   {
     const definitionFile = 'apps/desktop/src/main/writes/apply.ts';
     let found = false;
@@ -106,10 +86,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     else if (!found) ok();
   }
 
-  // --- shared/board/project.ts's ungated selection names approvalGate -------
-  // guard(#94): the "Ungated pull requests" section rendering regardless of
-  // the approval-gate module being off, instead of the section being
-  // absent entirely.
+  // --- shared/board/project.ts's ungated selection names approvalGate, so the section is
+  // absent entirely when the module is off, never rendering regardless. ---
   {
     const text = readFileSync(join(root, projectFile), 'utf8');
     const lines = text.split('\n');

@@ -4,15 +4,8 @@ import { root, walk, relOf, readJson, pipelineSkillText, pipelineDocsText } from
 import type { Reporter } from '../lib/report.ts';
 
 export default async function ({ expect, fail, ok }: Reporter) {
-  // --- Review evidence gate — verdicts wait for concluded checks --------------
-  // guard(#143): a verdict formed before its evidence exists, and a carve-out
-  // hard-coded to one repository's check names. review-agent could form a
-  // verdict before the head commit's own artifact check had concluded — a
-  // check with no conclusion is pending, not passing, but was read as
-  // passing. This checks that the agent definition actually says to wait,
-  // names the timeout verdict, and conditions the one carve-out on the
-  // module that installs it, rather than a literal check name that would
-  // break the moment a repository renamed its workflow job.
+  // --- Review evidence gate — verdicts wait for concluded checks, never forming one while a
+  // check has no conclusion, and the one carve-out conditions on the module, never a literal check name. ---
   {
     const rel = 'plugins/port/agents/review-agent.md';
     const text = readFileSync(join(root, rel), 'utf8');
@@ -28,13 +21,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(text.includes('blocked — checks pending'), 'review-evidence', `${rel} never names the 'blocked — checks pending' verdict`);
   }
 
-  // --- Generality guard — no literal CI check name in a stage prompt ----------
-  // guard(#143): a carve-out hard-coded to one repository's check names.
-  // Hard-coding a check name (rather than deriving the one excused check
-  // from approval-check.yml's own jobs: key) breaks the moment a repository
-  // renames its workflow job or runs a different CI setup. `skills/init/
-  // SKILL.md` is deliberately exempt — it tells the operator which check to
-  // mark required, which is the one legitimate literal.
+  // --- Generality guard — no literal CI check name in a stage prompt: a hard-coded name
+  // breaks the moment a repository renames its workflow job. `skills/init/SKILL.md` is exempt — it names which check to mark required, the one legitimate literal. ---
   {
     const bannedNames = ['run-approval-check', 'run-static-checks', 'audit-artifacts', 'run-behavioural-evals'];
     const scanDirs = [join(root, 'plugins/port/agents'), join(root, 'plugins/port/skills/pipeline')];
@@ -52,17 +40,10 @@ export default async function ({ expect, fail, ok }: Reporter) {
     ok();
   }
 
-  // --- Rebase protocol resolves-and-escalates, not fail-closed-and-narrate ----
-  // guard(#143): the rebase protocol regressing to fail-closed-and-narrate
-  // instead of resolve-and-escalate-as-options. A protocol that aborts the
-  // whole rebase on any single ambiguous hunk discards the correct
-  // resolution of every other one, and escalating by dumping conflict
-  // markers at a human who was never going to open an editor is unhelpful.
-  // This checks that the widened auto-resolvable rows and the
-  // decision-request escalation format are both still present.
+  // --- Rebase protocol resolves-and-escalates, not fail-closed-and-narrate: must never abort
+  // the whole rebase on one ambiguous hunk, and must escalate with a decision request, never dumped conflict markers. ---
   {
-    // issue 181: the rebase protocol moved from PIPELINE.md into RECOVERY.md — the
-    // docs union is what this assertion must read now.
+    // The rebase protocol lives in RECOVERY.md — the docs union is what this assertion must read.
     const rel = 'plugins/port/docs/*.md';
     const text = pipelineDocsText();
 
@@ -79,18 +60,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(/D<n>/.test(text), 'rebase-protocol', `${rel}'s escalation format declares no 'D<n>' decision ID form`);
   }
 
-  // --- Mergeability — no review dispatched against a diff CI never validated --
-  // guard(#150): a verdict formed, or a rebase scheduled speculatively,
-  // against a diff GitHub never actually validated. Pull request 134 was
-  // reviewed while `mergeable: CONFLICTING`, so the findings were against a
-  // diff CI had never actually run on — the conflict surfaced one stage
-  // later, in revise-agent. This checks that review-agent reads mergeable at
-  // both points named in the plan and states the no-verdict rule literally,
-  // and that both revise-agent and PIPELINE.md carry the '## Rebase required'
-  // contract the fix routes through. Issue 189 retargeted the route itself: a
-  // conflicting pull request is refreshed, never sent to needs-revision, so
-  // this now pins '<labels.refreshBranch>' at review-agent's mergeability
-  // exit rather than '<labels.needsRevision>'.
+  // --- Mergeability — no review dispatched against a diff CI never validated: a verdict must
+  // never form against `mergeable: CONFLICTING`. A conflicting pull request is refreshed, never sent to needs-revision, so this pins '<labels.refreshBranch>' at the mergeability exit. ---
   {
     const reviewRel = 'plugins/port/agents/review-agent.md';
     const reviewText = readFileSync(join(root, reviewRel), 'utf8');
@@ -112,14 +83,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(pipelineText.includes('never on a schedule'), 'mergeability', `${pipelineRel} is missing the rebase-on-demand decision ('never on a schedule')`);
   }
 
-  // --- Refresh is the bounded route for a stale branch ------------------------
-  // guard(#189): refresh's bounds — the same-SHA guard, the per-tick and
-  // per-pull-request caps, and the review-cycle exemption — regressing to
-  // prose with nothing checking it, now that this issue made refresh the
-  // pipeline's only rebase route. Deleting modules.previewDatabase promoted
-  // refresh mode from an off-by-default subsystem to the pipeline's only
-  // rebase route, so its bounds and its no-cycle-cost accounting must
-  // actually be documented, not merely implemented.
+  // --- Refresh is the bounded route for a stale branch: the same-SHA guard, the per-tick and
+  // per-pull-request caps, and the review-cycle exemption must stay documented, not merely implemented. ---
   {
     const labels = readJson('plugins/port/data/labels.json');
     for (const key of ['refreshBranch', 'refreshing']) {
@@ -148,24 +113,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(pipelineText.includes('never on a schedule'), 'refresh-bounded', `${pipelineRel} is missing the rebase-on-demand decision ('never on a schedule')`);
   }
 
-  // --- File contention — the cockpit holds overlapping dispatch, never races --
-  // guard(#135, #190): two plans claiming the same file dispatched
-  // concurrently so whichever pull request merges first invalidates the
-  // other's rebase, and a gate that held on any shared path — including
-  // append-mostly registries and docs a rebase resolves as a union —
-  // serialized 23 of 27 overlapping pull request pairs that could have run
-  // in parallel. Issues 67, 61 and 52 all claimed the same three files and
-  // were dispatched concurrently, so whichever pull request merged first
-  // invalidated the others' rebases; #190 narrowed the predicate from any
-  // shared path to enough shared, non-excused paths, via `concurrency`. This
-  // checks that the fenced `files` contract exists in both PIPELINE.md and
-  // plan-agent.md, that the schema and template carry both `concurrency`
-  // keys with their documented default and minimum, that PIPELINE.md and
-  // SKILL.md each name both keys and record the decision never to express a
-  // hold as a new label or GitHub's dependency graph, that PIPELINE.md states
-  // its fail-open direction, and that SKILL.md's gate names its reworded
-  // precondition, the depth rule, the `<labels.prOpened>` occupied-set input,
-  // and the `dispatch #N anyway` override.
+  // --- File contention — the cockpit holds overlapping dispatch, never races: two plans
+  // claiming the same file must never dispatch concurrently, and the hold predicate narrows to enough shared, non-excused paths via `concurrency`, never any shared path at all. ---
   {
     const pipelineRel = 'plugins/port/docs/PIPELINE.md';
     const docsRel = 'plugins/port/docs/*.md';
@@ -180,8 +129,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     const schemaText = readFileSync(join(root, schemaRel), 'utf8');
     const templateText = readFileSync(join(root, templateRel), 'utf8');
 
-    // issue 181: the '## Changes' fence-tag example moved from PIPELINE.md into
-    // FORMATS.md — the docs union is what this half of the pin must read.
+    // The '## Changes' fence-tag example lives in FORMATS.md — the docs union is what this half of the pin must read.
     const docsText = pipelineDocsText();
     expect(docsText.includes('```files'), 'file-contention', `${docsRel} never carries the '\`\`\`files' fence tag`);
     expect(planAgentText.includes('```files'), 'file-contention', `${planAgentRel} never carries the '\`\`\`files' fence tag`);

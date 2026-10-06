@@ -4,16 +4,11 @@ import { pathToFileURL } from 'node:url';
 import { root, walk, relOf, readJson } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// #317: the visual harness's own rails — each block opens with the failure
-// it catches, and each assertion was broken deliberately once before being
-// trusted to pass (ENGINEERING §7).
+// The visual harness's own rails — each block opens with the failure it catches.
 
 const FIXTURES_DIR = 'apps/desktop/src/main/fixtures';
 
-// Every allowed import specifier a production file under main/fixtures/ may
-// use — anything else (../platform, ../github, ../writes, ../hosting,
-// ../runtime, ../sessions, a barrel) would let fixture mode reach `gh` or
-// `claude`.
+// Every allowed import specifier a production file under main/fixtures/ may use — anything else would let fixture mode reach `gh` or `claude`.
 const ALLOWED_FIXTURE_IMPORTS: readonly RegExp[] = [
   /^electron$/,
   /^node:path$/,
@@ -28,10 +23,8 @@ const ALLOWED_FIXTURE_IMPORTS: readonly RegExp[] = [
 const IMPORT_RE = /^\s*import\s+(?:type\s+)?[\s\S]*?\bfrom\s+['"]([^'"]+)['"]/gm;
 
 export default async function ({ expect, fail, note, ok }: Reporter) {
-  // --- main/fixtures/ imports stay inside the allowlist --------------------
-  // guard(#317): the one rail that keeps fixture mode unable to reach `gh`
-  // or `claude` — tested against both a good and a bad import before being
-  // trusted.
+  // --- main/fixtures/ imports stay inside the allowlist, keeping fixture mode unable to
+  // reach `gh` or `claude`. ---
   {
     const files = walk(join(root, FIXTURES_DIR)).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
     if (files.length === 0) {
@@ -53,9 +46,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- main/index.ts passes app.isPackaged to fixtureMode( -----------------
-  // guard(#317): without this, a packaged build could still read
-  // PORT_FIXTURES from the operator's own environment and serve canned data.
+  // --- main/index.ts passes app.isPackaged to fixtureMode( — without this, a packaged
+  // build could still read PORT_FIXTURES and serve canned data. ---
   {
     const text = readFileSync(join(root, 'apps/desktop/src/main/index.ts'), 'utf8');
     if (/fixtureMode\(\s*process\.env\s*,\s*app\.isPackaged\s*,/.test(text)) {
@@ -65,9 +57,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- router.tsx's own paths stay inside ROUTE_IDS, '/' or '*' ------------
-  // guard(#317): a literal path would escape the exhaustive capture/skip
-  // table in visual/targets.mts, which is keyed on ROUTE_IDS alone.
+  // --- router.tsx's own paths stay inside ROUTE_IDS, '/' or '*' — a literal path would
+  // escape visual/targets.mts's exhaustive capture/skip table. ---
   {
     const text = readFileSync(join(root, 'apps/desktop/src/renderer/src/router/router.tsx'), 'utf8');
     const assignments = [...text.matchAll(/\bpath:\s*([^,}\n]+)/g)].map((m) => (m[1] ?? '').trim());
@@ -77,9 +68,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     } else expect(!(bad.length > 0), 'desktop-visual', `router.tsx names a route path outside ROUTE_IDS/'/'/'*' : ${bad.join(', ')}`);
   }
 
-  // --- commands.checks never names "screenshots" ---------------------------
-  // guard(#317): that list is what every dispatched agent runs before
-  // pushing, and this command launches Electron.
+  // --- commands.checks never names "screenshots" — that list runs on every dispatched agent, and this command launches Electron. ---
   {
     const config = readJson('.claude/port.config.json');
     const checksList: unknown = config?.commands?.checks;
@@ -105,10 +94,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     } else expect(!(onlyInTargets.length > 0 || onlyInRoutes.length > 0), 'desktop-visual', `visual/targets.mts's ROUTE_KEYS and router/legacy-view.ts's ROUTE_IDS disagree — only in targets: [${onlyInTargets.join(', ')}], only in ROUTE_IDS: [${onlyInRoutes.join(', ')}]`);
   }
 
-  // --- pin: the command and output directory, across four surfaces --------
-  // pin: `visual/targets.mts`'s `SCREENSHOT_DIR` ↔ `.github/workflows/visual.yml`,
-  // the root `package.json` script, and `docs/DESIGN.md` §7, all naming the
-  // same `pnpm screenshots` command and `apps/desktop/out/screenshots` path.
+  // pin: `visual/targets.mts`'s `SCREENSHOT_DIR` ↔ `.github/workflows/visual.yml`, the root
+  // `package.json` script, and `docs/DESIGN.md` §7, all naming the same command and path.
   {
     const targetsText = readFileSync(join(root, 'apps/desktop/visual/targets.mts'), 'utf8');
     const workflowText = readFileSync(join(root, '.github/workflows/visual.yml'), 'utf8');

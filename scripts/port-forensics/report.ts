@@ -1,10 +1,5 @@
-// The `report` subcommand's whole implementation (#123): argument
-// validation, scanning, running the six assertions, and rendering — text in
-// the same `note`/`FAIL`/`ok` shape scripts/lib/report.ts's reporter
-// already uses (so this operator tool reads identically to layers 1 and 2
-// at a glance), or `--json`, from the one classifier output behind both.
-// scripts/port-forensics.ts only calls this and prints; every decision
-// lives here and in classify.ts.
+// The `report` subcommand's whole implementation: argument validation, scanning, running
+// the six assertions, and rendering as text or `--json`. scripts/port-forensics.ts only calls this and prints.
 import { resolveClaudeHome, buildProjectIndex, readSession, listSessionIds } from './scan.ts';
 import { classifyTermination, notificationGaps, orphans, shellLoopHits, bashTimeouts, blockedAfterDenial, quotaClass, stageOf, itemNumberOf } from './classify.ts';
 import { fetchInFlightItems } from './gh.ts';
@@ -17,10 +12,8 @@ function fail(message: string): any {
   return { exitCode: 1, notes: [], findings: [{ kind: 'forensics', message }], checksRun: 0 };
 }
 
-/** Every `Bash` tool-call in `records`, paired with its result text when one
- *  arrived — the shared shape `shellLoopHits`/`bashTimeouts` both read,
- *  attributed to `source` (`'session'` or an agent id) so a finding names
- *  where it came from. */
+/** Every `Bash` tool-call in `records`, paired with its result text, attributed to `source`
+ *  (`'session'` or an agent id) so a finding names where it came from. */
 function bashCallsOf(records: any[], source: string): any[] {
   const { emitted, paired } = pairToolResults(records.flatMap((r) => classifyRecord(r)));
   const pairedByIndex = new Map(paired.map((p: any) => [p.index, p]));
@@ -34,17 +27,15 @@ function bashCallsOf(records: any[], source: string): any[] {
   return calls;
 }
 
-/** Every tool-result's text in `records`, regardless of tool name — the
- *  denial-detection input `blockedAfterDenial` needs, since a guard-hook
- *  denial can land on any tool, not only `Bash`. */
+/** Every tool-result's text in `records`, regardless of tool name — a guard-hook denial can
+ *  land on any tool, not only `Bash`. */
 function resultTextsOf(records: any[]): any[] {
   const { emitted, paired } = pairToolResults(records.flatMap((r) => classifyRecord(r)));
   void emitted;
   return paired.map((p: any) => p.text);
 }
 
-/** The last assistant-authored text or thinking entry in `records` — what
- *  `blockedAfterDenial` reads to check whether an agent that hit a denial
+/** The last assistant-authored text or thinking entry — whether an agent that hit a denial
  *  opened its final turn with `BLOCKED:`. */
 function finalAssistantTextOf(records: any[]): string | null {
   const events = records.flatMap((r) => classifyRecord(r));
@@ -68,11 +59,8 @@ function sessionMaxTimestampMs(session: any): number {
   return max;
 }
 
-/** The whole `report` subcommand. `args` carries the already-split flag
- *  values (`session`, `since`, `claudeHome`, `json`); nothing here reads
- *  `process.argv`. Returns `{ exitCode, notes, findings, checksRun }` —
- *  `render*` below turns that into the printed form. Every argument is
- *  validated before any filesystem call, per the CLI contract. */
+/** The whole `report` subcommand. `args` carries the already-split flag values; nothing here
+ *  reads `process.argv`. Every argument is validated before any filesystem call. */
 export function runReport(args: any = {}): any {
   if (args.session !== undefined && !SESSION_ID_RE.test(args.session)) {
     return fail(`--session '${args.session}' is not a valid session id (invalid-id)`);
@@ -116,7 +104,7 @@ export function runReport(args: any = {}): any {
 
   // --- Run the six assertions across every matched session -----------------
   const findings: any[] = [];
-  const agentSummaries: any[] = []; // flat, across every matched session — orphans/quotaClass both need the combined set
+  const agentSummaries: any[] = []; // flat, across every matched session
   let totalAgents = 0;
   let totalMalformed = 0;
   const notComputableNotifications: string[] = [];
@@ -190,11 +178,7 @@ export function runReport(args: any = {}): any {
   const notes = [`forensics: ${matched.length} session(s), ${totalAgents} agent(s), ${totalMalformed} malformed line(s)`];
   for (const n of notComputableNotifications) notes.push(`notification check not computable for ${n}`);
 
-  // The orphan assertion is the only place this engine reads GitHub, and
-  // only when a repository root resolves to a loadable config — a
-  // fixture-only run (no `.claude/port.config.json` at `args.repoRoot`)
-  // degrades this one assertion to "not computable" rather than failing
-  // the whole report (docs/ENGINEERING.md §4's fail-toward-reporting rule).
+  // The orphan assertion is the only place this engine reads GitHub; an unloadable config degrades it to "not computable" rather than failing the whole report.
   let cfg: any = null;
   try {
     if (args.repoRoot) cfg = loadConfig(args.repoRoot);
@@ -225,10 +209,7 @@ export function renderText({ notes, findings, checksRun }: { notes: string[]; fi
     return lines.join('\n');
   }
   for (const f of findings) lines.push(`FAIL  ${f.kind}: ${f.message}`);
-  // The single synthetic `forensics`-kind finding from a malformed argument
-  // (exit 1) or an unreadable session tree (exit 2) is a bare `FAIL` line
-  // with no trailing count, per the plan's "Could not read" sample — those
-  // paths never ran a check, so a count line would misreport 0 as a tally.
+  // A synthetic `forensics` finding (malformed argument or unreadable session tree) ran no check, so a count line would misreport 0 as a tally.
   const isSyntheticFailure = findings.length === 1 && findings[0].kind === 'forensics' && checksRun === 0;
   if (!isSyntheticFailure) lines.push('', `${findings.length} failure(s), ${checksRun} checks run`);
   return lines.join('\n');

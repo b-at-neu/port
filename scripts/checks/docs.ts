@@ -5,16 +5,12 @@ import { root, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 import { message } from '../lib/errors.ts';
 
-// A pure hyphenation or spacing mutation of the marker (e.g. `SESSION-REQUIRED`)
-// drops the two-word substring the scans below key on, so it slips through
-// unnoticed there. This is also what pins PIPELINE.md's own canonical example
-// to the exact form every other file's example is meant to match.
+// A hyphenation or spacing mutation of the marker drops the two-word substring the scans
+// below key on, which also pins PIPELINE.md's canonical example to the exact form expected elsewhere.
 const SESSION_MARKER_LINE = /^>\s*\*\*SESSION REQUIRED:\*\*\s+\S/;
 
 export default async function ({ expect, fail, note, ok }: Reporter) {
-  // --- Stale references -------------------------------------------------------
-  // guard: docs naming things that were renamed or moved. Each of these named
-  // something real that was renamed or moved.
+  // --- Stale references: docs naming things that were renamed or moved. ---
   {
     const docs = [
       ...walk(join(root, 'plugins')),
@@ -31,8 +27,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       [
         /`port\.config\.json`/,
         'the config lives at `.claude/port.config.json`',
-        // /port:init's migration step names the legacy root location on purpose —
-        // it is the one place that acts on it. Any other bare mention is stale.
+        // /port:init's migration step names the legacy root location on purpose.
         (line) => line.includes('repository root'),
       ],
       [/(^|[^:\w/])\/(pipeline|scope|implement|release|worktree-clean|plugin-cache-clean|analyze|init)\b/, 'skill references need the `port:` prefix'],
@@ -51,41 +46,15 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     ok();
   }
 
-  // --- Shipped references stay inside plugins/port/ --------------------------
-  // guard(#169, #212): a shipped file referencing a repository-only doc or
-  // script, which dangles in every adopter's plugin cache, and a
-  // repository-only path riding inside a command or placeholder token, which
-  // classified `skip` as a whole token and let three fresh
-  // `scripts/checks.ts` references ship. PIPELINE.md and SKILL.md pointed an
-  // operator at
-  // `docs/USAGE.md` for the one explanation the reference was promising, but
-  // that file ships nowhere — an adopter's plugin cache carries only
-  // `plugins/port/`, so the reference resolved to nothing everywhere but this
-  // repository's own checkout. Existence-based, not link-resolving: a token
-  // fails only when this checkout provably has it *outside* plugins/port/ with
-  // no counterpart inside it — the exact violation of ENGINEERING.md §1's
-  // "anything shipped may only reference other shipped paths." It fails open
-  // (skips) on a token that resolves nowhere at all, because an adopter-only
-  // install target (`scripts/port-artifacts.mjs`) and a genuine typo are
-  // indistinguishable from files alone.
-  //
-  // Widened for #212: a token can *contain* a repository-only path rather than
-  // be one. `Bash(node scripts/checks.ts)`, `node scripts/checks.ts`, and
-  // `node <root>/scripts/checks.ts` all resolve nowhere as whole tokens — the
-  // first two carry a command prefix, the third an angle-bracketed placeholder
-  // that used to short-circuit the classifier to 'skip' — so three fresh
-  // references to `scripts/checks.mjs` landed under plugins/port/ with this
-  // scan silent. `expandCandidates` decomposes each raw token before
-  // classifying, so the inner path is seen.
+  // --- Shipped references stay inside plugins/port/: a shipped file referencing a
+  // repository-only doc or script dangles in every adopter's plugin cache. `expandCandidates` decomposes a token so a path riding inside a command or placeholder is still seen. ---
   {
     const EXTENSIONS = ['md', 'mjs', 'js', 'ts', 'json', 'yml', 'yaml', 'log', 'graphql', 'txt'];
     const EXT_RE = new RegExp(`\\.(${EXTENSIONS.join('|')})$`);
     const pluginRoot = join(root, 'plugins/port');
 
-    /** Backticked spans plus bare whitespace-delimited tokens (the latter is
-     *  what catches an unbackticked "See CONTRIBUTING.md." sentence), each
-     *  stripped of surrounding punctuation and kept only when it looks
-     *  path-shaped: contains a slash, or ends in a known text extension. */
+    /** Backticked spans plus bare whitespace-delimited tokens, stripped of surrounding
+     *  punctuation and kept only when path-shaped: contains a slash, or ends in a known text extension. */
     function candidateTokens(line: string): string[] {
       const backticked = [...line.matchAll(/`([^`]+)`/g)].map((m) => m[1]);
       const bare = line
@@ -96,17 +65,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       return [...backticked, ...bare].filter((t) => t.includes('/') || EXT_RE.test(t));
     }
 
-    /** Decomposes one raw token into every path-shaped sub-token worth
-     *  classifying (#212), because a token can carry a repository-only path
-     *  rather than be one. Yields, in addition to the token itself: the inside
-     *  of a `Tool(...)` wrapper, each word once split on whitespace and shell
-     *  command separators, and — for a word carrying whole angle-bracketed
-     *  segments — the remainder with those segments dropped, since
-     *  `<root>/scripts/checks.ts` has to resolve as `scripts/checks.ts` to be
-     *  a legitimate shipped reference. Conservative on both ends: a word whose
-     *  placeholder is only *part* of a segment (`checks-<n>.ts`) is genuinely
-     *  templated and yields nothing, and `${...}` spans are left for the
-     *  classifier, which already understands `${CLAUDE_PLUGIN_ROOT}/`. */
+    /** Decomposes one raw token into every path-shaped sub-token, since a token can carry a
+     *  repository-only path rather than be one (e.g. `<root>/scripts/checks.ts` resolves as `scripts/checks.ts`). */
     function expandCandidates(token: string): string[] {
       const out: string[] = [token];
       const wrapper = /^[A-Za-z][A-Za-z0-9_]*\((.*)\)$/.exec(token);
@@ -124,11 +84,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       return [...new Set(out)].filter((t) => t.includes('/') || EXT_RE.test(t));
     }
 
-    /** Pure classifier — the two `existsSync` calls are the only I/O, both
-     *  passed in by the caller, so this is directly unit-testable against
-     *  literals. Returns 'pass' (resolves inside plugins/port/), 'fail'
-     *  (resolves only outside it), or 'skip' (templated, relative, dotfile,
-     *  or resolves nowhere this checkout can see). */
+    /** Pure classifier. Returns 'pass' (resolves inside plugins/port/), 'fail' (resolves
+     *  only outside it), or 'skip' (templated, relative, dotfile, or resolves nowhere). */
     function classifyShippedReference(token: string, { pluginRoot, repoRoot, containingDir }: { pluginRoot: string; repoRoot: string; containingDir: string | null }): string {
       if (/[<>*]/.test(token)) return 'skip';
       if (token.includes('${') && !token.startsWith('${CLAUDE_PLUGIN_ROOT}/')) return 'skip';
@@ -142,8 +99,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       return 'skip';
     }
 
-    // Prove it can fail before trusting it to pass — #169's own historical
-    // failure (`docs/USAGE.md`) is the first case.
+    // Prove it can fail before trusting it to pass — the real historical failure (docs/USAGE.md) is the first case.
     const selfTestCases = [
       ['docs/USAGE.md', 'fail'],
       ['CONTRIBUTING.md', 'fail'],
@@ -164,10 +120,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       expect(!(got !== expected), 'shipped-reference-selftest', `classifyShippedReference(${JSON.stringify(token)}) = ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`);
     }
 
-    // #212's own three forms, each of which classified 'skip' as a whole token
-    // and so shipped a `scripts/checks.ts` reference past this scan. The
-    // worst verdict across a token's expansion is what the scan acts on, so
-    // these assert that worst verdict, not the bare token's.
+    // The worst verdict across a token's expansion is what the scan acts on, so these assert that worst verdict, not the bare token's.
     const worstOf = (token: string): string => {
       const verdicts = expandCandidates(token).map((t) =>
         classifyShippedReference(t, { pluginRoot, repoRoot: root, containingDir: null }),
@@ -179,9 +132,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       ['node scripts/checks.ts', 'fail'],
       ['node <root>/scripts/checks.ts', 'fail'],
       ['node scripts/checks.ts; <anything>', 'fail'],
-      // Still-legitimate forms the widening must not start failing: a shipped
-      // path behind a command prefix, an adopter-only install target, and a
-      // templated path whose placeholder is only part of a segment.
+      // Still-legitimate forms: a shipped path behind a command prefix, an adopter-only install target, a templated path whose placeholder is only part of a segment.
       ['node bin/artifacts.mjs check commit .temp/m.txt', 'pass'],
       ['Bash(node scripts/port-artifacts.mjs *)', 'skip'],
       ['repos/<repo>/pulls/<pr-number>/comments', 'skip'],
@@ -192,8 +143,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       expect(!(got !== expected), 'shipped-reference-selftest', `expansion of ${JSON.stringify(token)} = ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`);
     }
 
-    // The real scan — every shipped file, not just markdown, since a stray
-    // comment in a `.ts` template is exactly how #169 happened.
+    // The real scan — every shipped file, not just markdown, since a stray comment in a `.ts` template is a real historical failure mode.
     const files = walk(pluginRoot).filter((f) => EXT_RE.test(f));
     let confirmedShipped = 0;
     for (const f of files) {
@@ -218,15 +168,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     ok();
   }
 
-  // --- SESSION REQUIRED never rendered as a bare, uncoded marker line --------
-  // guard(#156): a reworded marker that no consumer recognizes,
-  // false-positiving on a ticket that only discusses the mechanism. The
-  // cockpit's consumer check used to be a bare substring search over the
-  // whole body, so any prompt file merely *discussing* the marker in prose
-  // false-positived. This is the producer-side mechanical half: every
-  // `SESSION REQUIRED` mention across the same doc set "Stale references"
-  // scans is either inside backticks or is the canonical
-  // `> **SESSION REQUIRED:** <reason>` rendering at line start.
+  // --- SESSION REQUIRED never rendered as a bare, uncoded marker line: every mention is
+  // either inside backticks or the canonical `> **SESSION REQUIRED:** <reason>` rendering. ---
   {
     const docs = [
       ...walk(join(root, 'plugins')),
@@ -241,9 +184,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     for (const f of docs) {
       const rel = relOf(f);
       const text = readFileSync(f, 'utf8');
-      // Skip YAML frontmatter — a skill's `description:` line may name the
-      // marker bare (implement/SKILL.md's does), and no frontmatter value uses
-      // backticks.
+      // Skip YAML frontmatter — a skill's `description:` line may name the marker bare, and no frontmatter value uses backticks.
       const fm = /^---\n[\s\S]*?\n---\n?/.exec(text);
       const fileLines = text.split('\n');
       const startLine = fm ? fm[0].split('\n').length - 1 : 0;
@@ -284,13 +225,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- Session-required determination reads the whole plan, not just changes -
-  // guard(#118): the session-required determination still names the testing
-  // steps, and the operator-only literal exists in both agent files. The
-  // determination looked only at the changed-file list, so a plan whose
-  // testing steps needed a sessionRequiredPaths write (but whose deliverables
-  // did not) was declared plainly dispatchable, and the dispatched agent died
-  // on the permission prompt.
+  // --- Session-required determination reads the whole plan, not just changes — a plan whose
+  // testing steps need a sessionRequiredPaths write must not be declared plainly dispatchable. ---
   {
     const planAgent = readFileSync(join(root, 'plugins/port/agents/plan-agent.md'), 'utf8');
     const implAgent = readFileSync(join(root, 'plugins/port/agents/impl-agent.md'), 'utf8');
@@ -300,12 +236,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       fail('session-required-scan', 'plugins/port/agents/plan-agent.md has no "Session-required declaration" section');
     } else {
       const rest = planAgent.slice(start);
-      // Scope tightly to the declaration's determination paragraph — stop at the
-      // first blank line, not the next `## ` heading. The old bound ran all the
-      // way to `## Handoff`, which also swallows the later "Human-runnable
-      // manual steps ... in `## Testing`" bullet under "Use the fixed
-      // structure", so a real deletion of the `## Testing` reference from the
-      // determination sentence went undetected (R1-C1).
+      // Scope tightly to the declaration's determination paragraph — stop at the first blank line, not the next `## ` heading.
       const end = /\n\s*\n/.exec(rest);
       const section = end ? rest.slice(0, end.index) : rest;
       for (const heading of ['## Testing', '## Changes']) {
@@ -324,24 +255,14 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- Repository map covers the real tree, both directions ------------------
-  // guard(#167): the repository map going stale in either direction — a
-  // moved or renamed path, or a new top-level directory with no row.
-  // ARCHITECTURE.md is prose that goes stale silently, so it is pinned to
-  // the real tree in both directions: every path it names must still exist,
-  // and every tracked top-level directory must be named by at least one row.
-  // Root-level *files* are deliberately outside this mechanical set — they are
-  // covered by the "Placements that cannot move" prose instead, not by a row —
-  // so the coverage check below only ever looks at directories.
-  // pin: `ARCHITECTURE.md`'s map ↔ the real tree
+  // --- Repository map covers the real tree, both directions. Root-level files are covered
+  // by "Placements that cannot move" prose instead, not a row. pin: `ARCHITECTURE.md`'s map ↔ the real tree
   {
     const rel = 'ARCHITECTURE.md';
     const text = readFileSync(join(root, rel), 'utf8');
     const lines = text.split('\n');
 
-    // Locate the table under its fixed heading, never by line number — the
-    // map will grow rows (issue 171 splits templates/) and a positional
-    // parser would break on the first edit.
+    // Locate the table under its fixed heading, never by line number — the map will grow rows and a positional parser would break on the first edit.
     const headingIdx = lines.findIndex((l) => l.trim() === '## Map');
     const rows = [];
     if (headingIdx === -1) {
@@ -367,11 +288,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       expect(existsSync(join(root, path)), 'architecture-map', `${rel}: row '${path}' does not exist on disk`);
     }
 
-    // 2. Every tracked top-level directory is covered by at least one row.
-    // Fails open (a note, not a fail) if git ls-files is unavailable — a stale
-    // map is a documentation defect a reviewer still catches, while a hard
-    // failure in a git-less environment would block every unrelated pull
-    // request.
+    // 2. Every tracked top-level directory is covered by at least one row. Fails open (a
+    // note) if git ls-files is unavailable — a git-less environment must not block every unrelated pull request.
     let lsFiles;
     try {
       lsFiles = execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' });
@@ -391,26 +309,17 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       }
     }
 
-    // 3. Every row's Ships cell is exactly 'yes' or 'no' — the column is the
-    // load-bearing part of the map, so a blank or hedged cell silently drops
-    // the principle the map exists to state.
+    // 3. Every row's Ships cell is exactly 'yes' or 'no' — a blank or hedged cell silently drops the principle the map exists to state.
     for (const { path, ships } of rows) {
       expect(!(ships !== 'yes' && ships !== 'no'), 'architecture-map', `${rel}: row '${path}' has Ships cell ${JSON.stringify(ships)} — must be exactly 'yes' or 'no'`);
     }
   }
 
-  // --- ENGINEERING.md's Module boundaries stay in ascending path order ------
-  // guard(#255): a boundary paragraph appended at the section's end instead
-  // of its alphabetical slot silently restores the single anchor #255
-  // fixes — every paragraph in this subsection opens with a bolded
-  // backticked path, and two tickets adding one each must land at different
-  // offsets for git to merge both.
+  // --- ENGINEERING.md's Module boundaries stay in ascending path order — every paragraph
+  // opens with a bolded backticked path, so two tickets adding one each land at different offsets for git to merge both. ---
   {
-    /** Extracts the ordered list of paths each `### Module boundaries`
-     *  paragraph opens with — the first backticked token inside the
-     *  paragraph's leading bold span (`**...**`), which is the path every
-     *  such paragraph is anchored on. Pure so a self-test can exercise it
-     *  against a literal fixture, not just the real document. */
+    /** Extracts the ordered list of paths each paragraph opens with — the first backticked
+     *  token inside its leading bold span. Pure, so a self-test can exercise it directly. */
     function boundaryPaths(section: string): string[] {
       const paragraphs = section.split(/\n\n+/).filter((p) => p.trim().startsWith('**'));
       const paths: string[] = [];

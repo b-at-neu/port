@@ -5,12 +5,7 @@ import { root, readJson } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
 export default async function ({ expect, fail, ok }: Reporter) {
-  // --- Artifact validator's LABELS table matches labels.json ------------------
-  // guard(#149): audit's label resolution drifting from the source of truth
-  // now that it can't import the file directly. The template can't import
-  // labels.json (previous check), so it carries its own copy. The two must
-  // agree on keys, names, and modules, both directions.
-  // pin: `bin/artifacts.mjs`'s `LABELS` ↔ `labels.json`
+  // --- Artifact validator's LABELS table matches labels.json: must agree on keys, names, and modules, both directions.
   {
     const { LABELS }: { LABELS: Record<string, any> } = await import(pathToFileURL(join(root, 'plugins/port/bin/artifacts.mjs')).href);
     const canonical = new Map<string, any>(readJson('plugins/port/data/labels.json').labels.map((l: any) => [l.key, l]));
@@ -31,20 +26,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     ok();
   }
 
-  // --- Artifact registry claims every heading constant, both directions -------
-  // guard(#204): a seventh artifact kind reachable from audit but not from
-  // check, one artifact claimed under two kind names, or a registry heading
-  // retyped as a diverging literal — an identically retyped one still
-  // compares equal for the two string-typed headings. A seventh `*_HEADING`
-  // export with no matching `CHECKS` entry is validated by `audit` alone and
-  // unreachable from `check`. Two entries sharing one heading is that bug
-  // mirrored: one artifact would carry two kind names, and `audit`'s registry
-  // loop would `fold` twice on the same comment — so the pin is *exactly* one
-  // claim, never merely at least one. The reverse direction catches a
-  // registry `heading` retyped as a *diverging* literal: `===` on the two
-  // string-typed headings compares by value, so an identically retyped
-  // literal passes, and identity only bites for the regex-typed `review` /
-  // `revision` entries.
+  // --- Artifact registry claims every heading constant, both directions: a `*_HEADING`
+  // export with no matching CHECKS entry is unreachable from `check`; two entries sharing one heading means one artifact carries two kind names. ---
   {
     const mod: any = await import(pathToFileURL(join(root, 'plugins/port/bin/artifacts.mjs')).href);
     const headingExports = Object.keys(mod).filter((k) => /_HEADING$/.test(k));
@@ -61,11 +44,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- Artifact validator's patterns accept a good example, reject a bad one --
-  // guard(#149): a pattern that cannot be made to fail is not a pattern. The
-  // commit case uses the real historical failure: a 378-character paragraph
-  // with no '#N ' prefix, standing in for the explanatory-text subject that
-  // recurred four times in one pipeline run before this validator existed.
+  // --- Artifact validator's patterns accept a good example, reject a bad one. The commit
+  // case uses the real historical failure: a paragraph with no '#N ' prefix. ---
   {
     const { COMMIT_SUBJECT, REVIEW_HEADING, REVISION_HEADING, REVISION_OPENS, REVISION_DETAIL, OPERATOR_ONLY_STEP, CHECKS } =
       await import(pathToFileURL(join(root, 'plugins/port/bin/artifacts.mjs')).href);
@@ -92,10 +72,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
       fail('artifacts-patterns', `REVISION_DETAIL rejects its own good example ${JSON.stringify(goodDetail)}`);
     } else expect(!(REVISION_OPENS.test(badDetail) && REVISION_DETAIL.test(badDetail)), 'artifacts-patterns', `REVISION_DETAIL accepts its bad example ${JSON.stringify(badDetail)}`);
 
-    // withdrawn / rebase-required return { ok } from a closure, not a regex,
-    // so they're exercised against FORMATS.md's canonical bodies (good), the
-    // same body with only the SHA backticked (bad: names no fact), and the
-    // same body under a renamed heading (bad: wrong line 1) (#204).
+    // withdrawn / rebase-required return { ok } from a closure, not a regex, so they're
+    // exercised against canonical bodies (good), the same with only the SHA (bad: names no fact), and a renamed heading (bad: wrong line 1).
     const shaCases = [
       [
         'withdrawn',
@@ -117,12 +95,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
       else expect(!run(badHeading).ok, 'artifacts-patterns', `${kind} accepts a renamed heading`);
     }
 
-    // guard(#288): the revise #N route's own artifact — a 'changes-requested'
-    // body with no SHA, a renamed heading, or only the heading and SHA with
-    // no actual request text — passing the validator silently. It has no
-    // backtick-quoted fact beside the SHA (the request itself is free text),
-    // so it is exercised against its own closure cases rather than folded
-    // into shaCases above: one good body, plus three bad ones.
+    // The revise route's own artifact has no backtick-quoted fact beside the SHA (free-text
+    // request), so it is exercised separately from shaCases above: one good body, three bad ones.
     {
       const good = '## Changes requested\nRequested by the operator on `abc1234` after approval:\n\nRename the --limit flag to --max.';
       const headingAndShaOnly = '## Changes requested\n`abc1234`';
@@ -150,14 +124,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- stageViolation: pair-wise pull-request stage legality -------------------
-  // guard(#231): the layer 2 audit's stage rule only ever counted
-  // PR_STAGE_KEYS, never the refresh pair, so issue 225's `ready for review`
-  // + `refresh branch` state passed silently. Legal: at most one stage label,
-  // beside at most one refresh label — the refresh pair is the sanctioned
-  // co-presence (PIPELINE.md → "Branch refresh"). Both directions asserted,
-  // and a failing case's message must name the labels actually offending,
-  // not just a count.
+  // --- stageViolation: pair-wise pull-request stage legality. Legal: at most one stage
+  // label, beside at most one refresh label — the sanctioned co-presence. A failing case's message must name the labels actually offending, not just a count. ---
   {
     const { stageViolation } = await import(pathToFileURL(join(root, 'plugins/port/bin/artifacts.mjs')).href);
     const legal = [
@@ -181,14 +149,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- Issue-side stage keys pinned to labels.json's roles/surfaces, both
-  // directions, plus the issue-side stageViolation cases (#220) ---------------
-  // guard(#220): `ISSUE_STAGE_KEYS` drifting from the label vocabulary's own
-  // roles/surfaces — a key silently added to one side but not the other
-  // leaves the issue-side audit checking the wrong set, exactly the gap
-  // issue 209's Route 2 (`plan approved` + `pr opened`) found with nothing
-  // pinning the issue surface the way `PR_STAGE_KEYS` already pins the pull
-  // request one.
   // pin: `artifacts.mjs`'s `ISSUE_STAGE_KEYS` ↔ `data/labels.json`'s non-marker `issue`-surface keys, both directions
   // pin: `artifacts.mjs`'s `PR_STAGE_KEYS` ∪ `PR_REFRESH_KEYS` ↔ `data/labels.json`'s non-marker `pr`-surface keys, both directions
   {
@@ -224,16 +184,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(!(legal != null), 'artifacts-stage-keys', `stageViolation(['pr opened'], []) reported a violation for a legal single issue-stage label`);
   }
 
-  // --- Artifact workflow's trigger widened, narrowing moved to the step -------
-  // guard(#231): the layer 2 audit running only at `approved`, so a malformed
-  // commit subject or pull request body survived a full plan → implement →
-  // review cycle before anything objected (issue 222). Read off
-  // plugins/port/templates/artifacts.yml only — "Workflow copies stay
-  // rendered from their templates" already pins the live copy to it. Three
-  // rails: the widened trigger and the retired literal are what keep this
-  // reachable as a required check; the indentation arm is what keeps the job
-  // itself from being skippable, which is the one shape that can leave a
-  // required check unreported.
+  // --- Artifact workflow's trigger widened, narrowing moved to the step. Read off the
+  // template only — "Workflow copies stay rendered" already pins the live copy to it. ---
   {
     const rel = 'plugins/port/templates/artifacts.yml';
     const text = readFileSync(join(root, rel), 'utf8');
@@ -245,9 +197,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
 
     const ifLines = [...text.matchAll(/^( *)if:/gm)];
-    // `runs-on:` is a job-level field guaranteed to sit at job-attribute
-    // indentation — the threshold `if:` must sit deeper than, since a step's
-    // fields nest one level inside the `steps:` list beyond that.
+    // `runs-on:` sits at job-attribute indentation; the threshold `if:` must sit deeper, a step field.
     const jobAttrIndent = /^( *)runs-on:/m.exec(text)?.[1]?.length;
     if (ifLines.length !== 1 || jobAttrIndent == null) {
       fail('artifacts-trigger', `${rel} must carry exactly one 'if:' key and a 'runs-on:' job field`);

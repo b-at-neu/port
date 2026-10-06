@@ -20,10 +20,8 @@ export default async function ({ fail, ok, expect, note }: Reporter) {
   const absent = { state: 'absent' };
   const planGateOnly = { state: 'held', owner: 'port-desktop', scopes: ['plan-gate'], unknownScopes: [], claimedAt: '2026-09-05T14:02:11Z' };
 
-  // --- dispatchDenial — the Agent-tool arm, unit cases ------------------------
-  // guard(#265): a cockpit session's Agent call must be denied exactly when
-  // the claim holds 'dispatch' (or is unreadable) and the caller is
-  // established as a cockpit session — never otherwise.
+  // --- dispatchDenial — the Agent-tool arm, unit cases: a cockpit session's Agent call must
+  // be denied exactly when the claim holds 'dispatch' (or is unreadable), never otherwise. ---
   {
     const cockpitWho = { isSubagent: false, isOperatorWorktree: false, isManagedWorktree: false, agent: null, signal: null };
     const subagentWho = { isSubagent: true, isOperatorWorktree: false, isManagedWorktree: true, agent: 'impl-agent', signal: 'agent_type' };
@@ -66,9 +64,8 @@ export default async function ({ fail, ok, expect, note }: Reporter) {
     );
   }
 
-  // --- decide()'s own Agent arm ------------------------------------------------
-  // guard(#265): the pure classifier wires dispatchDenial correctly, in both
-  // directions, through the same decide() every other tool call goes through.
+  // --- decide()'s own Agent arm wires dispatchDenial correctly, through the same decide()
+  // every other tool call goes through. ---
   check(
     'a held dispatch claim denies an Agent call from a cockpit-shaped session',
     gate({ payload: plainPayload({ tool_name: 'Agent', tool_input: { description: 'impl #52', subagent_type: 'port:impl-agent' } }), dispatchClaim: held }),
@@ -87,19 +84,15 @@ export default async function ({ fail, ok, expect, note }: Reporter) {
     'allow',
   );
 
-  // --- hooks.json names an Agent matcher --------------------------------------
-  // guard(#265): the dispatch rule is only reachable if the hook actually
-  // fires for the Agent tool — a classifier with nothing wiring it to the
-  // tool call is dead code.
+  // --- hooks.json names an Agent matcher — the dispatch rule is only reachable if the hook actually fires for the Agent tool. ---
   {
     const hooksJson = JSON.parse(readFileSync(join(root, 'plugins/port/hooks/hooks.json'), 'utf8'));
     const matcherNames = (hooksJson.hooks?.PreToolUse ?? []).map((entry: { matcher?: string }) => entry.matcher);
     expect(matcherNames.includes('Agent'), 'dispatch-claim', () => `hooks.json's PreToolUse matchers (${JSON.stringify(matcherNames)}) do not include 'Agent'`);
   }
 
-  // --- End-to-end wiring: the real agent-guard.mjs against a temp fixture -----
-  // guard(#265): the classifier's own import cannot see the hook's own
-  // dispatch-claim read/resolve wiring for the Agent tool specifically.
+  // --- End-to-end wiring: the real agent-guard.mjs against a temp fixture, since the
+  // classifier's own import cannot see the hook's dispatch-claim read/resolve wiring. ---
   {
     const hookPath = join(root, 'plugins/port/hooks/agent-guard.mjs');
     const fixture = mkdtempSync(join(tmpdir(), 'port-guard-dispatch-'));
@@ -129,8 +122,7 @@ export default async function ({ fail, ok, expect, note }: Reporter) {
         () => `expected permissionDecision 'deny' against a held dispatch claim from a cockpit session, got ${JSON.stringify(parsed)}`,
       );
 
-      // A plain (non-cockpit) session's transcript never trips this rule —
-      // proof the read is scoped to an established cockpit, not every caller.
+      // A plain (non-cockpit) session's transcript never trips this rule.
       const plainTranscriptPath = join(fixture, 'plain-transcript.jsonl');
       writeFileSync(plainTranscriptPath, `${JSON.stringify({ type: 'user', message: { content: 'hello' } })}\n`);
       const allowed = run({ cwd: fixture, session_id: 'sess-dispatch-2', tool_name: 'Agent', transcript_path: plainTranscriptPath, tool_input: { description: 'impl #52', subagent_type: 'port:impl-agent' } });
@@ -143,11 +135,6 @@ export default async function ({ fail, ok, expect, note }: Reporter) {
     }
   }
 
-  // --- Doc pin -----------------------------------------------------------------
-  // guard(#265): dispatchDenial's own reason wording drifting from
-  // docs/COORDINATION.md's stand-down copy — both describe the same fact
-  // ("the app dispatches for this checkout instead") and must say so the
-  // same way, or an operator reading one would not recognize the other.
   // pin: `claim-rules.mjs`'s `dispatchDenial` reason phrase ↔ `docs/COORDINATION.md`'s dispatch-scope description
   {
     const claimRulesText = readFileSync(join(root, 'plugins/port/hooks/lib/claim-rules.mjs'), 'utf8');

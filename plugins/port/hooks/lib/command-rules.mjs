@@ -1,15 +1,8 @@
-// Pure command-syntax predicates for the agent-guard PreToolUse hook.
-//
-// Split out of guard-rules.mjs (#216) — that file was at 483/500 lines and
-// adding the branch rule (#216) would have crossed the ceiling. This module
-// holds every predicate that reasons about a command string's shell syntax
-// alone, with no caller identity or transcript I/O; guard-rules.mjs keeps
-// `callerKind`, `allowMatchers` and the rest of the settings/transcript
-// readers, plus `decide` itself.
+// Pure command-syntax predicates for the agent-guard PreToolUse hook — every predicate that
+// reasons about a command string's shell syntax alone, with no caller identity or transcript I/O.
 
-/** Tokenizes a shell command, respecting single/double quotes — a quoted
- *  span's contents (spaces included) become one token, so a flag value like
- *  `"needs human"` is not split in two. */
+/** Tokenizes a shell command, respecting single/double quotes — a quoted span's contents
+ *  become one token, so a flag value like `"needs human"` is not split in two. */
 export function tokenize(command) {
   const tokens = [];
   let i = 0;
@@ -37,27 +30,21 @@ export function tokenize(command) {
   return tokens;
 }
 
-/** True if `text` carries `keyword` at a shell command position — the start
- *  of the string, or preceded by whitespace, `;`, `&`, `|`, or `(` — and
- *  followed by a word boundary. This is what keeps `github` from matching
- *  `gh` and a `for` inside a longer identifier from matching the loop
- *  keyword. */
+/** True if `text` carries `keyword` at a shell command position and a word boundary — keeps
+ *  `github` from matching `gh` and a `for` inside a longer identifier from matching the loop keyword. */
 export function atCommandPosition(text, keyword) {
   const re = new RegExp(`(?:^|[\\s;&|(])${keyword}(?=[\\s;&|)]|$)`);
   return re.test(text);
 }
 
-/** Replaces every quoted span's *contents* with nothing, so every syntactic
- *  test below runs on the command's shell structure, never on the contents
- *  of a `-b`/`-m`/`--jq` argument. This is what keeps
- *  `gh issue comment -b "a loop for each item to do"` out of the loop rule. */
+/** Replaces every quoted span's contents with nothing, so every syntactic test below runs on
+ *  shell structure only, never flag-argument contents. */
 export function stripQuoted(command) {
   return command.replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""');
 }
 
-/** A `for`/`while`/`until` keyword **and** a `do` keyword, each at a command
- *  position, on the quote-stripped command — the exact shape #120 froze the
- *  pipeline with. */
+/** A `for`/`while`/`until` keyword and a `do` keyword, each at a command position, on the
+ *  quote-stripped command. */
 export function usesShellLoop(command) {
   const stripped = stripQuoted(command);
   const hasLoopKeyword = ['for', 'while', 'until'].some((kw) => atCommandPosition(stripped, kw));
@@ -71,11 +58,8 @@ export function targetsGhOrGit(command) {
   return atCommandPosition(stripped, 'gh') || atCommandPosition(stripped, 'git');
 }
 
-/** True if `command` (already quote-stripped by the caller) invokes a
- *  `claude plugin` mutation that changes what a shared `installPath`
- *  resolves to: `install`, `uninstall`, `marketplace add`, or `marketplace
- *  remove`. Read-only subcommands (`list`, `details`, ...) are deliberately
- *  not matched. */
+/** True if `command` invokes a `claude plugin` mutation that changes what a shared
+ *  `installPath` resolves to: install/uninstall/marketplace add/marketplace remove. */
 export function pluginInstallMutation(command) {
   const stripped = stripQuoted(command);
   if (!atCommandPosition(stripped, 'claude')) return false;
@@ -88,32 +72,16 @@ export function pluginInstallMutation(command) {
   return false;
 }
 
-// `git` global options that consume the *next* token as a separate value —
-// `-c core.editor=true`, `-C /path`, `--git-dir <path>`, and so on — as
-// opposed to a boolean flag or one whose value is glued on with `=`. Missing
-// one of these means the loop below treats that value token as the git
-// subcommand itself and gives up right there, never reaching the real
-// subcommand a few tokens later (#222, R3-M1).
+// `git` global options that consume the next token as a separate value (`-C /path`, etc) —
+// missing one means the loop below treats that value as the subcommand itself and gives up.
 const GIT_VALUE_FLAGS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--super-prefix']);
 
-/** True when `command` (quote-stripped internally) invokes `git
- *  checkout`/`git switch`, plain or via `git -C <path> checkout` — the
- *  escape #216 recorded a cockpit session taking to get around its own
- *  startup refusal. Deliberately coarse: inside a cockpit session it fails
- *  toward **denying**, since that session's own `allowed-tools` grants it
- *  only `git rev-parse`/`branch`/`cat-file` in the first place, so a false
- *  deny costs the cockpit nothing it is supposed to do, while a false allow
- *  is exactly the escape this rule exists to close. */
+/** True when `command` invokes `git checkout`/`git switch`, plain or via `git -C <path>
+ *  checkout` — closes a cockpit-session escape from its own startup refusal. */
 export function switchesBranch(command) {
   const stripped = stripQuoted(command);
-  // Every command-position `git` occurrence, not just the first — the same
-  // shape `usesShellLoop`/`targetsGhOrGit` scan for their own keywords, since
-  // a chained command can carry an earlier, unrelated `git` invocation ahead
-  // of the checkout (e.g. `git branch --sort=... ; git checkout evil-branch`).
-  // Uses the same raw-text command-position regex `atCommandPosition` tests
-  // with, run with `g` so every occurrence is visited, since token-splitting
-  // alone would miss a separator glued to `git` with no surrounding space
-  // (`...;git checkout`).
+  // Every command-position `git` occurrence, not just the first, since a chained command can
+  // carry an earlier, unrelated `git` invocation ahead of the checkout.
   const gitAtCommandPosition = /(?:^|[\s;&|(])git(?=[\s;&|)]|$)/g;
   let match;
   while ((match = gitAtCommandPosition.exec(stripped))) {
@@ -141,15 +109,8 @@ function isGhLabelEdit(tokens) {
   );
 }
 
-/** The item numbers a `gh pr edit`/`gh issue edit` call targets — a bare
- *  positional digit, the trailing digits of a `github.com/**\/(issues|
- *  pull)/<n>` URL, or (#281, `gh pr edit` only) a branch-selector
- *  positional token's leading `N-` (`tokens[1] === 'pr'`): a branch **with**
- *  a leading `N-` names `N`; a branch with no leading `N-` (or `gh issue
- *  edit`, which has no branch selector at all) still gives `hasNumbers:
- *  false` for that token. Shared by `gateClearAttempt` and `labelEditAttempt`
- *  so neither re-derives it, and so a future third caller gets the same
- *  behaviour rather than a hand-rolled copy. */
+/** The item numbers a `gh pr edit`/`gh issue edit` call targets: a bare digit, an issue/pull
+ *  URL's trailing digits, or (`pr edit` only) a branch selector's leading `N-`. */
 function commandNumbers(tokens) {
   const numbers = [];
   const isPrEdit = tokens[0] === 'gh' && tokens[1] === 'pr' && tokens[2] === 'edit';
@@ -174,11 +135,7 @@ function commandNumbers(tokens) {
   return numbers;
 }
 
-/** Every value `flag` (spaced or `=`-glued) carries on `tokens`, comma-split
- *  and trimmed, lower-cased — the reader `gateClearAttempt` used to inline
- *  for `--remove-label` alone, factored out so `labelEditAttempt` can reuse
- *  it for `--add-label` too without a second implementation to drift from
- *  the first. */
+/** Every value `flag` (spaced or `=`-glued) carries on `tokens`, comma-split, trimmed, lower-cased. */
 function flagValues(tokens, flag) {
   const values = [];
   for (let i = 0; i < tokens.length; i++) {
@@ -192,18 +149,8 @@ function flagValues(tokens, flag) {
   return values;
 }
 
-/** Detects a `gh pr edit`/`gh issue edit` call that removes `label`, and the
- *  item numbers it targets. Quote-aware, so a label name with spaces
- *  (`"needs human"`) is read correctly. `numbers` is always collected, even
- *  when `isAttempt` is false, so a caller never re-tokenizes. `hasNumbers`
- *  is `false` whenever `gh` was given no digit, no `issues|pull` URL, and no
- *  branch selector with a leading `N-` to key off — e.g. `gh pr edit
- *  <branch-name-with-no-leading-N-> ...` or `gh pr edit --remove-label ...`
- *  with no identifier at all, which `gh` accepts as "the current branch's
- *  PR". A caller must not treat an empty `numbers` array as
- *  "nothing to verify": `[].every(...)` is vacuously `true`, so skipping
- *  this check would let an unidentified item's gate clear through with
- *  nothing for the operator to have named. */
+/** Detects a `gh pr edit`/`gh issue edit` call that removes `label`, and the item numbers it
+ *  targets. An empty `numbers` must never be treated as "nothing to verify". */
 export function gateClearAttempt(command, label) {
   const tokens = tokenize(command);
   const isEdit = isGhLabelEdit(tokens);
@@ -218,14 +165,8 @@ export function gateClearAttempt(command, label) {
   return { isAttempt, numbers, hasNumbers };
 }
 
-/** Detects a `gh pr edit`/`gh issue edit` call whose `--add-label` **or**
- *  `--remove-label` value set intersects `names` (any iterable of label
- *  names, matched case-insensitively) — the guard rule for #206's plan-gate
- *  claim needs both directions, unlike `gateClearAttempt`'s `--remove-label`
- *  only. `matched` names every label from `names` the command actually
- *  touched, in the casing `names` provided, so a deny reason can name them
- *  without re-deriving anything. Shares `gateClearAttempt`'s quote-aware
- *  tokenizing, number extraction, and flag-value reading. */
+/** Detects a `gh pr edit`/`gh issue edit` call whose `--add-label`/`--remove-label` value
+ *  set intersects `names`, matched case-insensitively — unlike `gateClearAttempt`'s remove-only. */
 export function labelEditAttempt(command, names) {
   const tokens = tokenize(command);
   const isEdit = isGhLabelEdit(tokens);

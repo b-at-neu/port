@@ -1,14 +1,8 @@
-// Pure: the statusCheckRollup reduction contract from
-// plugins/port/docs/PIPELINE.md → "Check evidence". Reduces to the latest
-// entry per check name, then reads the verdict — never trusting `gh pr
-// checks`'s exit code, and never reading an empty rollup as green. The app
-// imports this directly (docs/ENGINEERING.md §1): no relative import, a leaf
-// module — `CheckContext` is a local, minimal shape, never a GraphQL-shaped
-// node; `wire.ts`'s `toCheckContexts` adapts the raw rollup at the edge.
+// Pure: the statusCheckRollup reduction contract. Reduces to the latest entry per check name,
+// then reads the verdict — never trusting `gh pr checks`'s exit code, never reading an empty rollup as green.
 
-/** The union of a CheckRun's and a StatusContext's own fields this module
- *  reads — every field optional and nullable, since the two GraphQL types
- *  carry different subsets. */
+/** The union of a CheckRun's and a StatusContext's own fields this module reads — every
+ *  field optional, since the two GraphQL types carry different subsets. */
 export interface CheckContext {
   readonly __typename?: string | null;
   readonly name?: string | null;
@@ -24,23 +18,19 @@ export interface CheckContext {
 
 const GREEN = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED']);
 
-/** `(.name // .context)` — the field a CheckRun and a StatusContext each
- *  carry the check's identity under. */
+/** `(.name // .context)` — the field each carries the check's identity under. */
 function nameOf(c: CheckContext): string | null {
   return c.name ?? c.context ?? null;
 }
 
-/** The sortable moment a context reports itself at: `startedAt` for a
- *  CheckRun, falling back to `completedAt`, then a StatusContext's
- *  `createdAt` — whichever this union member actually carries. */
+/** The sortable moment a context reports itself at: `startedAt`, falling back to
+ *  `completedAt`, then `createdAt` — whichever this union member carries. */
 function timeOf(c: CheckContext): string | null {
   return c.startedAt ?? c.completedAt ?? c.createdAt ?? null;
 }
 
-/** Reduces a rollup's `contexts.nodes` to the latest entry per check name by
- *  `timeOf`, since the approval gate alone re-runs on every labeled event and
- *  a pull request that has been through a few label changes can carry
- *  several entries for the same name. */
+/** Reduces a rollup's `contexts.nodes` to the latest entry per check name by `timeOf` — the
+ *  approval gate re-runs on every labeled event, so one pull request can carry several entries for the same name. */
 export function reduceRollup(contexts: readonly CheckContext[] | undefined): readonly CheckContext[] {
   const latest = new Map<string, CheckContext>();
   for (const c of contexts ?? []) {
@@ -53,24 +43,19 @@ export function reduceRollup(contexts: readonly CheckContext[] | undefined): rea
   return [...latest.values()];
 }
 
-/** Concluded is `status == 'COMPLETED'` for a CheckRun, or `state !=
- *  'PENDING'` for a StatusContext. */
+/** Concluded is `status == 'COMPLETED'` for a CheckRun, or `state != 'PENDING'` for a StatusContext. */
 export function isConcluded(entry: CheckContext): boolean {
   if (entry.__typename === 'StatusContext') return entry.state !== 'PENDING';
   return entry.status === 'COMPLETED';
 }
 
-/** `(.conclusion // .state)` — CheckRun's conclusion, or a StatusContext's
- *  state, whichever this entry carries. */
+/** `(.conclusion // .state)` — whichever this entry carries. */
 export function conclusionOf(entry: CheckContext): string | null {
   return entry.conclusion ?? entry.state ?? null;
 }
 
-/** A single check's disposition (#246, generalizing the one derived
- *  approval-gate carve-out into a map): `blocking` (the default — a red
- *  conclusion forms a finding and blocks) or `infrastructure` (red is
- *  reported, forms no finding, never blocks). `source` names where the
- *  disposition came from, since an excused check is always listed with it. */
+/** A single check's disposition: `blocking` (default — a red conclusion forms a finding and
+ *  blocks) or `infrastructure` (reported, no finding, never blocks). `source` names where it came from. */
 export interface Disposition {
   readonly disposition: 'blocking' | 'infrastructure';
   readonly source: 'approval-gate' | 'CLAUDE.md';
@@ -85,22 +70,8 @@ export interface RollupVerdict {
   readonly unmatched: readonly string[];
 }
 
-/** Reduces `contexts` (the rollup's own `contexts.nodes`, already flattened
- *  at the edge by `wire.ts`'s `toCheckContexts`) to a verdict against
- *  `dispositions` — a map from check name to `Disposition`, keyed by the
- *  same name `nameOf` reads (`config.ts`'s `loadConfig` builds this: the
- *  approval-gate's own derived excusal folded in as `source:
- *  'approval-gate'`, every `checks.<name> = infrastructure` override in
- *  `CLAUDE.md` folded in as `source: 'CLAUDE.md'`). An empty or absent
- *  rollup is pending, never green.
- *
- *  `excused` names every disposition-excused check still found in the
- *  rollup, with its real conclusion and source — nothing an excused check
- *  reported is ever dropped from a listing. `unmatched` names a
- *  disposition entry whose check never appeared in the reduced rollup at
- *  all — reported, never treated as satisfied. **Zero evidence**: when the
- *  rollup is non-empty but every entry in it was excused, the verdict is
- *  `pending` with `zeroEvidence: true`, never green. */
+/** Reduces `contexts` to a verdict against `dispositions`. An empty/absent rollup is pending,
+ *  never green; zero evidence (every entry excused) is likewise pending, never green. */
 export function rollupVerdict(contexts: readonly CheckContext[] | null | undefined, dispositions: Readonly<Record<string, Disposition>> = {}): RollupVerdict {
   if (contexts === null || contexts === undefined || contexts.length === 0) return { pending: true, red: [], green: [], excused: [], unmatched: [] };
 

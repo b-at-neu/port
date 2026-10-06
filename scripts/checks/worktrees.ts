@@ -4,17 +4,10 @@ import { pathToFileURL } from 'node:url';
 import { root, readJson } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// The four worktree-reclamation blocks split out of scripts/checks/cockpit.ts
-// (issue 181, splitting that module's own file-size ratchet entry) — named to
-// mirror scripts/checks/artifacts.ts, which pins plugins/port/bin/
-// artifacts.mjs the same way this pins bin/worktrees.mjs.
+// The four worktree-reclamation blocks, named to mirror scripts/checks/artifacts.ts, which pins bin/artifacts.mjs the same way this pins bin/worktrees.mjs.
 export default async function ({ expect, fail, ok }: Reporter) {
-  // --- Worktree reclamation template reaches outside its contract ------------
-  // guard(#144): the one file an adopting repository copies alone reaching
-  // outside its contract — never shell out via a POSIX-only binary name or a
-  // shell string. Self-containment itself is now the directory-wide
-  // `layout.ts` check (issue 171); this module keeps only this file's own
-  // contract-specific assertions.
+  // --- Worktree reclamation template reaches outside its contract: never shell out via a
+  // POSIX-only binary name or a shell string. Self-containment is layout.ts's job; this keeps only contract-specific assertions. ---
   {
     const rel = 'plugins/port/bin/worktrees.mjs';
     const text = readFileSync(join(root, rel), 'utf8');
@@ -23,9 +16,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
 
     expect(!/shell:\s*true/.test(text), 'worktrees-template', `${rel} passes shell: true to a child process — every call must be an explicit argv array, never a shell string`);
 
-    // Strip comment-only lines first — the file's own docstring names both
-    // forbidden calls as a disclaimer ("Never in this script: `git fetch`,
-    // `git worktree add`, …"), which must not itself trip this check.
+    // Strip comment-only lines first — the file's own docstring names both calls as a disclaimer, which must not itself trip this check.
     const codeOnly = text
       .split('\n')
       .filter((l) => !/^\s*(\/\/|\*)/.test(l))
@@ -33,10 +24,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(!/git\(\[['"]fetch['"]|git\(\[[^\]]*['"]worktree['"],\s*['"]add['"]/.test(codeOnly), 'worktrees-template', `${rel} must never run 'git fetch' or 'git worktree add' — those are outside its contract`);
   }
 
-  // --- Worktree reclamation classifier ----------------------------------------
-  // guard(#144): the correlation ladder or the classification precedence
-  // silently drifting from what PIPELINE.md documents. Unit-tests the pure
-  // functions in isolation from every git/gh call.
+  // --- Worktree reclamation classifier: unit-tests the pure functions in isolation from every git/gh call. ---
   {
     const { parsePorcelain, correlate, classifyCandidate } =
       await import(pathToFileURL(join(root, 'plugins/port/bin/worktrees.mjs')).href);
@@ -113,10 +101,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- Cockpit hygiene invokes the worktree script, never bare git worktree --
-  // guard(#144): the cockpit's worktree hygiene collapsing back into the
-  // prose issue 62 already tried once. The cockpit's hygiene section must
-  // call `commands.worktrees` and must not itself run `git worktree remove`.
+  // --- Cockpit hygiene invokes the worktree script, never bare git worktree: must call
+  // `commands.worktrees` and must not itself run `git worktree remove`. ---
   {
     const rel = 'plugins/port/skills/pipeline/SKILL.md';
     const text = readFileSync(join(root, rel), 'utf8');
@@ -133,9 +119,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- Cockpit's config table carries commands.worktrees ----------------------
-  // guard(#144): the config key existing in only some of the places that
-  // must agree on it — the cockpit would read a placeholder nothing sets.
+  // --- Cockpit's config table carries commands.worktrees everywhere, or it would read a placeholder nothing sets. ---
   {
     const schemaProps = readJson('schema/port.config.schema.json').properties.commands.properties;
     expect(schemaProps.worktrees, 'worktree-hygiene', "schema/port.config.schema.json's commands object has no 'worktrees' property");

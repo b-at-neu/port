@@ -1,19 +1,12 @@
 import { pipelineSkillText } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// The tick query, pacing ladder, busy-wait, and ownership/blind-tick blocks
-// split out of scripts/checks/cockpit.ts (issue 181, splitting that module's own
-// file-size ratchet entry).
+// The tick query, pacing ladder, busy-wait, and ownership/blind-tick blocks.
 export default async function ({ expect, fail, ok }: Reporter) {
   const rel = 'plugins/port/skills/pipeline/*.md';
 
-  // --- Collapsed tick query — one round trip, never a per-label poll ---------
-  // guard(#148): a tick regressing from one collapsed round trip back to
-  // ~15 per-label `gh issue list`/`gh pr list --label` REST calls. This
-  // checks the Tick procedure names the collapsed single-call contract and
-  // that no per-label poll crept back in under that heading — scoped there,
-  // so the Configuration section's illustrative `--label <unknown>` mention
-  // is correctly exempt.
+  // --- Collapsed tick query — one round trip, never a per-label poll: the Configuration
+  // section's illustrative `--label <unknown>` mention is correctly exempt. ---
   {
     const text = pipelineSkillText();
 
@@ -21,11 +14,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
       expect(text.includes(phrase), 'tick-query', `${rel} never names '${phrase}' — the collapsed tick contract is missing a piece`);
     }
 
-    // Scans the whole union rather than one heading-scoped section — issue
-    // 203 split the Tick procedure across two files, and a per-label poll
-    // creeping back into either is equally a regression. The Configuration
-    // section's own illustrative `--label <unknown>` (explaining why a wrong
-    // string is silent, not a real polling call) is exempt.
+    // Scans the whole union, since the Tick procedure is split across two files and a
+    // per-label poll creeping into either is equally a regression.
     const pollRe = /gh (?:issue|pr) list[^\n]*--label(?!\s*<unknown>)/g;
     const hits = [...text.matchAll(pollRe)];
     expect(
@@ -35,12 +25,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     );
   }
 
-  // --- Pacing ladder — reset-on-change and never-stop are checkable, not prose
-  // guard(#148): the two-speed pacing rule — which measured as one speed in
-  // a real 25-hour run (26 of 27 wakeups at the floor) because it conflated
-  // "an agent is running" with "something will move without a human" —
-  // regressing back in. This checks the ladder's constants and its two
-  // preconditions are still literal, checkable phrases.
+  // --- Pacing ladder — reset-on-change and never-stop are checkable, not prose: the
+  // ladder's constants and its two preconditions must stay literal, checkable phrases. ---
   {
     const text = pipelineSkillText();
 
@@ -53,20 +39,14 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(text.includes('Never stop — a stopped cockpit is the only dispatcher'), 'pacing-ladder', `${rel} is missing the literal never-stop phrase 'Never stop — a stopped cockpit is the only dispatcher'`);
   }
 
-  // --- No busy-waiting in the cockpit skill -----------------------------------
-  // guard(#148): the cockpit blocking a turn on sleep/--watch instead of
-  // letting the next scheduled tick or completion do the waiting — a real
-  // run issued 6 `sleep`-based waits inside tool calls.
+  // --- No busy-waiting in the cockpit skill: never block a turn on sleep/--watch instead of letting the next scheduled tick do the waiting. ---
   {
     const text = pipelineSkillText();
     expect(!/\bsleep\s+\d/.test(text), 'no-busy-wait', `${rel} contains a 'sleep <n>'-shaped busy-wait — the next tick is how this cockpit waits`);
   }
 
-  // --- Ownership enforced client-side, and the blind-tick contract -----------
-  // guard(#148): dropping the per-alias assignee filter (what makes the
-  // unowned sweep derivable from one call) silently dropping the ownership
-  // rail with it, and a failed collapsed query being read as an empty,
-  // all-clear tick.
+  // --- Ownership enforced client-side, and the blind-tick contract: a failed collapsed
+  // query must never be read as an empty, all-clear tick. ---
   {
     const text = pipelineSkillText();
 

@@ -1,12 +1,5 @@
-// The trajectory record's emitter: one append-only JSONL line per event, to
-// `.agents/events.jsonl` (gitignored — `.agents/` already is). #187: the
-// pipeline had no machine-readable record of its own runs, only prose and
-// GitHub state. Write-only from here — nothing under scripts/port-tick/
-// other than report.ts may read this file back, mechanically pinned by
-// scripts/checks/tick.ts's write-only rail: an append-only history that fed
-// a future decision would quietly break #203's invariant that `plan` never
-// persists anything a later tick reads. That is also why this module exports
-// no function whose name contains `read` or `parse`.
+// The trajectory record's emitter: one append-only JSONL line per event. Write-only from
+// here — nothing but report.ts may read it back, so this module exports no `read`/`parse`.
 import { appendFileSync, existsSync, statSync, renameSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 
@@ -16,13 +9,8 @@ export const EVENTS_PREV_PATH = '.agents/events.1.jsonl';
 const MAX_LINE_BYTES = 8 * 1024;
 const ROTATE_AT_BYTES = 8 * 1024 * 1024;
 
-/** Pure: builds one envelope-plus-payload line, capped at `MAX_LINE_BYTES`.
- *  `envelope` carries `{v, ts, runId, repo, kind}`; `payload` is the kind's
- *  own fields. When the encoded line is over the cap, the largest array-
- *  valued payload field is repeatedly halved until it fits, and the line is
- *  stamped `truncated: true` — never the envelope fields themselves, and
- *  never a throw. Returns the line's JSON string, with no trailing newline
- *  (`appendEvent` adds it). */
+/** Pure: builds one envelope-plus-payload line, capped at `MAX_LINE_BYTES` by repeatedly
+ *  halving the largest array-valued payload field and stamping `truncated: true`. */
 export function formatEvent(envelope: any, payload: Record<string, any> = {}): string {
   const full = { ...envelope, ...payload };
   const line = JSON.stringify(full);
@@ -48,20 +36,13 @@ export function formatEvent(envelope: any, payload: Record<string, any> = {}): s
   }
   if (fits()) return JSON.stringify({ ...envelope, ...shrunk, truncated: true });
 
-  // Still over the cap with nothing left to shrink — drop every array-valued
-  // field to empty rather than emit a line long enough to split under two
-  // cockpits' concurrent whole-line appends. Non-array payload fields are
-  // kept as-is: only array-valued fields are ever capped.
+  // Still over the cap — drop every array-valued field rather than emit an overlong line.
   const minimal: Record<string, any> = { ...envelope, ...payload, truncated: true };
   for (const k of arrayKeys) minimal[k] = [];
   return JSON.stringify(minimal);
 }
 
-/** The only I/O in this module. Appends `event` (a `formatEvent` string, or
- *  the object it would encode) plus `\n` to `.agents/events.jsonl` under
- *  `root`, creating `.agents/` if needed. Swallows every failure — a
- *  disk-full or permissions error must never fail a tick; the resulting gap
- *  surfaces in `report.ts` as a gap, never as a clean run. */
+/** The only I/O in this module. Swallows every failure — a disk-full tick must still run. */
 export function appendEvent(root: string, event: string | any): void {
   try {
     const path = join(root, EVENTS_PATH);
@@ -69,21 +50,16 @@ export function appendEvent(root: string, event: string | any): void {
     const line = typeof event === 'string' ? event : JSON.stringify(event);
     appendFileSync(path, `${line}\n`, 'utf8');
   } catch {
-    // Deliberately swallowed — see header comment.
+    // Deliberately swallowed — see module header.
   }
 }
 
-/** Pure: whether `.agents/events.jsonl` should rotate before a fresh run
- *  starts. Rotates at or over `capBytes` (default 8 MB), never under — the
- *  boundary layer 1 pins so it cannot silently drift in either direction. */
+/** Pure: whether `.agents/events.jsonl` should rotate. At or over `capBytes`, never under. */
 export function rotationDecision(sizeBytes: number, capBytes = ROTATE_AT_BYTES): boolean {
   return sizeBytes >= capBytes;
 }
 
-/** The only caller of `rotationDecision` that touches the filesystem, run
- *  once by `start` and never mid-tick, so one run's records are never split
- *  across a rotation. Replaces any previous `events.1.jsonl` outright — two
- *  generations, ~16 MB ceiling (docs/TESTING.md → "Trajectory record"). */
+/** The only caller of `rotationDecision` that touches the filesystem, run once by `start`. */
 export function rotateIfNeeded(root: string): void {
   const path = join(root, EVENTS_PATH);
   if (!existsSync(path)) return;
@@ -97,22 +73,16 @@ export function rotateIfNeeded(root: string): void {
   try {
     renameSync(path, join(root, EVENTS_PREV_PATH));
   } catch {
-    // A failed rotation degrades to one oversized generation, never a lost
-    // tick — the same fail-open direction as appendEvent above.
+    // A failed rotation degrades to one oversized generation, never a lost tick.
   }
 }
 
-/** The shared envelope every event kind opens with — one place composing
- *  `{v, ts, runId, repo, kind}` so every call site in port-tick.ts is a
- *  single line into this module, per docs/ENGINEERING.md §7's small-file
- *  discipline (the CLI entry has 28 lines of headroom at most). */
+/** The shared envelope every event kind opens with. */
 export function envelopeFor(kind: string, runId: string | null, repo: string, ts?: string | null): any {
   return { v: 1, ts: ts ?? new Date().toISOString(), runId: runId ?? null, repo, kind };
 }
 
-/** `run-start`'s own fields — the config facts that make a run
- *  interpretable on their own, without cross-referencing `.claude/port.config.json`
- *  as it stood when the run happened. */
+/** `run-start`'s own fields — the config facts that make a run interpretable on their own. */
 export function runStartPayload(cfg: any): any {
   return {
     engine: 'port-tick',
@@ -123,16 +93,11 @@ export function runStartPayload(cfg: any): any {
     modules: cfg.modules,
     labelsOverridden: cfg.labelsOverridden,
     budgetConfigured: cfg.budgetConfigured,
-    // CLAUDE.md overrides (#246) — alongside labelsOverridden above, the same
-    // "what actually differs from the port default" fact, now for every
-    // overridable category rather than labels alone.
     overrides: { applied: cfg.overrides?.applied ?? [], refused: cfg.overrides?.refused ?? [] },
   };
 }
 
-/** `tick`'s own fields, built from `cmdPlan`'s own locals — reused as-is for
- *  a blind tick, which passes only `tickId` and `envelope` and gets sensible
- *  empty defaults for the rest rather than a second, near-duplicate shape. */
+/** `tick`'s own fields, reused as-is for a blind tick (`tickId`/`envelope` only, rest default). */
 export function tickEventPayload({
   tickId,
   envelope,
@@ -164,11 +129,7 @@ export function tickEventPayload({
     tickId,
     envelope,
     counts: Object.fromEntries(Object.entries<any>(items?.mine ?? {}).map(([k, v]) => [k, v.length])),
-    // othersCounts/unownedCounts (#111): the same shape as counts, built from
-    // items.others/items.unowned — without these, an ownership divergence
-    // (the desktop app holds an item as unowned/other-operator that the
-    // cockpit actually dispatched, or vice versa) has nothing recorded on
-    // this side to diff against; items.mine alone cannot show that.
+    // Same shape as counts, from items.others/items.unowned — without these an ownership divergence has nothing to diff against.
     othersCounts: Object.fromEntries(Object.entries<any>(items?.others ?? {}).map(([k, v]) => [k, v.length])),
     unownedCounts: Object.fromEntries(Object.entries<any>(items?.unowned ?? {}).map(([k, v]) => [k, v.length])),
     liveItems: (livenessExpected ?? []).map((e: any) => ({ item: e.item, stage: e.stage })),

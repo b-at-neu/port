@@ -5,10 +5,7 @@ import { resolveMatchers, subagentPayload, makeCheck, makeDecide } from '../lib/
 import type { Reporter } from '../lib/report.ts';
 
 export default async function ({ fail, ok, expect }: Reporter) {
-  // --- Guard hook classifier ---------------------------------------------------
-  // guard(#67): the mechanism that actually denies, independent of
-  // parent-session mode. Unit-tests the pure decision logic in isolation
-  // from stdin/stdout/exit-code plumbing.
+  // --- Guard hook classifier: unit-tests the pure decision logic, isolated from stdin/stdout/exit-code plumbing. ---
   const { decide, callerKind, globToRegExp } =
     await import(pathToFileURL(join(root, 'plugins/port/hooks/lib/guard-rules.mjs')).href);
 
@@ -19,11 +16,7 @@ export default async function ({ fail, ok, expect }: Reporter) {
   // Subagent + non-allowlisted Bash → deny.
   check('subagent non-allowlisted bash', gate({ payload: subagentPayload() }), 'deny');
 
-  // Same command, no agent signal → miss, never deny. A fabricated cwd, not
-  // this checkout's own path — this script may itself be running inside a
-  // dispatched agent's worktree, whose path legitimately matches the
-  // worktree signal, which would otherwise make this case pass for the
-  // wrong reason.
+  // Same command, no agent signal → miss, never deny. A fabricated cwd, not this checkout's own path.
   check(
     'no-signal non-allowlisted bash',
     gate({

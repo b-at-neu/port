@@ -3,24 +3,16 @@ import { join } from 'node:path';
 import { root, walk, relOf, readJson } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// guard(#287): a doc naming a concrete package version that goes stale on
-// the next release — version-pinned docs go stale as soon as a newer
-// version ships, and create confusion about whether the pin is
-// load-bearing or just an example. This module scans for a concrete
-// version literal in the shipped/repository docs and fails unless the
-// literal is explicitly exempted below as genuinely load-bearing.
+// Scans shipped/repository docs for a concrete version literal, failing unless it is
+// explicitly exempted below as genuinely load-bearing.
 
-/** A dotted `X.Y.Z` triple, optionally `v`-prefixed and prerelease-suffixed
- *  (`v0.2.0`, `0.2.1-dev`, `22.18.0`), plus a two-part `Node >= X.Y[.Z]`
- *  floor form (`Node ≥22.18`) — the shape ENGINEERING.md's own Node floor
- *  restatements used to carry, which the first pattern alone would miss. */
+/** A dotted `X.Y.Z` triple, optionally `v`-prefixed and prerelease-suffixed, plus a
+ *  `Node >= X.Y[.Z]` floor form that the first pattern alone would miss. */
 const VERSION_RE = /\bv?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?/g;
 const NODE_FLOOR_RE = /\bNode(?:\.js)?\s*(?:≥|>=)\s*\d+(?:\.\d+)*/g;
 
-/** Every concrete version-literal substring in `line`. Pure, so the
- *  self-test below can exercise it directly against literal fixtures
- *  before this module is trusted to scan anything real (ENGINEERING §7: a
- *  check that cannot be made to fail is not a check). */
+/** Every concrete version-literal substring in `line`. Pure, so the self-test below can
+ *  exercise it directly before this module is trusted to scan anything real. */
 export function versionLiterals(line: string): string[] {
   const out: string[] = [];
   for (const m of line.matchAll(VERSION_RE)) out.push(m[0]);
@@ -28,11 +20,8 @@ export function versionLiterals(line: string): string[] {
   return out;
 }
 
-/** The explicit "this is load-bearing" call-out the ticket asks for,
- *  instead of a doc that simply goes quiet about a version it still
- *  names. Each entry excuses exactly one literal in exactly one file —
- *  never a whole file or a bare pattern — so a fresh version literal
- *  introduced elsewhere in the same file still fails. */
+/** An explicit "this is load-bearing" call-out. Each entry excuses exactly one literal in
+ *  exactly one file — never a whole file — so a fresh literal elsewhere still fails. */
 interface Exemption {
   file: string;
   literal: string;
@@ -77,10 +66,8 @@ const EXEMPTIONS: Exemption[] = [
   },
 ];
 
-/** The same markdown set docs.ts's "Stale references" scan uses: `.md`
- *  files under plugins/, docs/, schema/, evals/ (via walk), plus the three
- *  root docs. YAML eval fixtures are deliberately out — their own
- *  `package.json` versions are test data, not documentation. */
+/** The same markdown set docs.ts's "Stale references" scan uses. YAML eval fixtures are out
+ *  — their own `package.json` versions are test data, not documentation. */
 function scanSet(): string[] {
   return [
     ...walk(join(root, 'plugins')),
@@ -94,11 +81,7 @@ function scanSet(): string[] {
 }
 
 export default async function ({ expect, fail, note, ok }: Reporter) {
-  // --- versionLiterals self-test ----------------------------------------------
-  // A check that cannot be made to fail is not a check (ENGINEERING §7):
-  // prove the pattern catches what it exists to catch, and leaves alone what
-  // is deliberately not a package version, before trusting it to scan real
-  // docs.
+  // --- versionLiterals self-test: proves the pattern catches what it should and leaves alone what is not a package version, before scanning real docs. ---
   {
     const mustMatch = ['v0.2.0', '0.2.1-dev', '22.18.0', 'Node ≥22.18'];
     const mustNotMatch = ['v<semver>', 'v<version>', '<X.Y.Z>-dev', 'devwindow/v<next>', '~4.5 minutes', '2026-08-31', '/v2/widgets'];
@@ -138,18 +121,12 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     note(`version-literal: ${scanned} doc files scanned`);
     ok();
 
-    // --- Stale exemptions --------------------------------------------------
-    // guard(#287): an exemption that matches nothing on disk any more is
-    // dead weight that stays allowed forever (the same ratchet idea
-    // file-size.config.json's allowlist already follows) — a fixed doc
-    // should drop its exemption in the same commit, not leave a licence
-    // nothing uses.
+    // --- Stale exemptions: one matching nothing on disk is dead weight that stays allowed forever. ---
     for (const exemption of EXEMPTIONS) {
       expect(used.has(exemption), 'version-literal-exemption', `${exemption.file}: exemption for ${JSON.stringify(exemption.literal)} matches nothing on disk — drop the exemption or the doc changed out from under it`);
     }
   }
 
-  // --- Node-floor pin: CONTRIBUTING.md ↔ package.json's engines.node --------
   // pin: CONTRIBUTING.md's Node floor ↔ package.json engines.node
   {
     const contributing = readFileSync(join(root, 'CONTRIBUTING.md'), 'utf8');

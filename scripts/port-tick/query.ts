@@ -1,11 +1,5 @@
-// Pure: builds the one aliased GraphQL document the tick needs, per
-// plugins/port/skills/pipeline/SKILL.md → "Tick procedure" ("One query, one
-// round trip"). No I/O — gh.ts is the only thing that runs it.
-//
-// Every issue/pull-request node carries `assignees` (ownership is partitioned
-// client-side, never filtered in the query) and every connection carries
-// `totalCount` beside `nodes`, so a truncated set is detectable rather than
-// silently read as complete.
+// Pure: builds the one aliased GraphQL document the tick needs — one query, one round trip.
+// No I/O. Every connection carries `totalCount` beside `nodes`, so truncation is detectable.
 
 const escape = (s: unknown): string => String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
@@ -22,15 +16,8 @@ function prSet(alias: string, labelName: string, extraFields = ''): string {
   return `${alias}: pullRequests(first: 100, states: OPEN, labels: ["${escape(labelName)}"]) { totalCount nodes { ${PR_BASE_FIELDS} ${extraFields} } }`;
 }
 
-/** `labels` is the resolved vocabulary (scripts/port-tick/config.ts's
- *  `resolveLabels`). `announcedApproved` is `.temp/tick-state.json`'s
- *  remembered set of already-announced approved pull request numbers — each
- *  gets its own `pullRequest(number:)` alias for the merged/approved
- *  re-verify, folded into the same call rather than a follow-up `gh pr
- *  view`. `allOpenPRs` below is unconditional (#220): it is the duplicate-
- *  pull-request sweep's source as well as the ungated report's, and only the
- *  latter is module-gated — `modules.approvalGate` filters and reports it,
- *  never whether it is fetched. */
+/** `announcedApproved` is folded in as its own re-verify alias. `allOpenPRs` is unconditional
+ *  — only its filter and report are module-gated. */
 export function buildQuery({
   owner,
   name,
@@ -74,8 +61,7 @@ export function buildQuery({
   // --- Occupied set for the file contention gate ---------------------------
   parts.push(issueSet('prOpened', labels.prOpened));
 
-  // --- Unconditional: the duplicate-pull-request sweep and the (module-
-  // gated) ungated report share this one alias (#220) ------------------------
+  // --- Unconditional: the duplicate-pull-request sweep and the (module-gated) ungated report share this alias.
   parts.push(
     'allOpenPRs: pullRequests(states: OPEN, first: 100) { totalCount nodes { number title headRefName baseRefName body labels(first: 20) { nodes { name } } assignees(first: 5) { nodes { login } } } }',
   );

@@ -3,10 +3,8 @@ import { join } from 'node:path';
 import { root, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// The claim dialog's ("work on #N" from the UI) five mechanical rails —
-// dependency-free and regex-based, in the shape of desktop-writes.ts's and
-// desktop-github.ts's own guards. Reading directories by explicit path
-// (never walk('apps/'), which descends into node_modules).
+// The claim dialog's five mechanical rails — dependency-free, regex-based, reading
+// directories by explicit path, never walk('apps/').
 export default async function ({ expect, fail, ok }: Reporter) {
   const githubDir = 'apps/desktop/src/main/github';
   const queryFile = `${githubDir}/query.ts`;
@@ -22,13 +20,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     return;
   }
 
-  // --- 'blockedBy(' — a GraphQL field selection, not a JS property access —
-  // guard(#93): a second GraphQL query builder for the claim dialog's
-  // preflight read. 'blockedBy(' appears under apps/desktop/src/ only in
-  // main/github/query.ts. adapter.ts reads the resolved field back off the
-  // parsed JSON (`raw.blockedBy`, `path[2] === 'blockedBy'`), which this
-  // pattern deliberately does not match, since that is a reader, never a
-  // second query builder.
+  // --- 'blockedBy(' — a GraphQL field selection, never a second query builder. adapter.ts's
+  // `raw.blockedBy` read does not match this pattern, since it is a reader, not a builder. ---
   {
     let found = false;
     let sawQueryFile = false;
@@ -48,10 +41,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     else if (!found) ok();
   }
 
-  // --- 'viewer {' (a GraphQL selection) and 'viewerLogin' (the resolved ----
-  // guard(#93): the renderer asserting who the app is signed in as, instead
-  // of only displaying what main resolved. 'viewer {' and 'viewerLogin'
-  // appear under apps/desktop/src/ only inside main/github/.
+  // --- 'viewer {' and 'viewerLogin' stay inside main/github/ — the renderer never asserts
+  // who is signed in, only displays what main resolved. ---
   {
     let found = false;
     let sawSelection = false;
@@ -75,10 +66,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     else if (!found) ok();
   }
 
-  // --- No file under apps/desktop/src/ contains the literal '@me' — the -----
-  // guard(#93): the signed-in login reaching the audit log as an
-  // unattributable sentinel instead of a resolved value. The login must be
-  // resolved and recorded, never a sentinel.
+  // --- No file under apps/desktop/src/ contains the literal '@me' — the login must be resolved and recorded, never an unattributable sentinel. ---
   {
     let found = false;
     for (const f of allFiles) {
@@ -91,17 +79,12 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- buildClaimRequest's expect.absent names 'marker' ---------------------
-  // guard(#93): the two-stage-label guard against claiming an already
-  // in-pipeline issue being quietly dropped.
+  // --- buildClaimRequest's expect.absent names 'marker' — the two-stage-label guard against claiming an already in-pipeline issue. ---
   {
     const text = readFileSync(join(root, classifyFile), 'utf8');
     expect(/absent:\s*\['marker'\]/.test(text), 'desktop-claim', `${classifyFile} does not set 'absent: ['marker']' — the two-stage-label guard must not be quietly dropped`);
   }
 
-  // --- shared/claim/'s opt-in key set matches SKILL.md's opt-in paragraph, -
-  // guard(#93): the claim dialog's opt-in write drifting from the cockpit's
-  // own opt-in labels. Checked both directions.
   // pin: `shared/claim/classify.ts`'s opt-in key set (`CLAIM_LABEL_KEYS` + `AUTO_PLAN_KEY`) ↔ `plugins/port/skills/pipeline/SKILL.md`'s "work on #N" paragraph's `<labels.X>` keys, both directions
   {
     const text = readFileSync(join(root, classifyFile), 'utf8');

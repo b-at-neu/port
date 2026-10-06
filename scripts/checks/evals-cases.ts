@@ -4,20 +4,13 @@ import { root, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 import { readCasePrompt, readCaseScaffold } from './evals.ts';
 
-/** The dispatch sentence every agent-stage case's `prompt:` must open with,
- *  byte-identical apart from `<stage>` — the one string the ticket pins
- *  across `plan-`/`impl-`/`review-`/`revise-` cases so a case can be
- *  rewritten without silently drifting from what the cockpit actually
- *  sends. `evals/README.md`'s "Writing a case" carries the same sentence —
- *  pin: the two copies are asserted to agree below. */
+/** The dispatch sentence every agent-stage case's `prompt:` must open with, byte-identical
+ *  apart from `<stage>`. `evals/README.md`'s "Writing a case" carries the same sentence, asserted to agree below. */
 const DISPATCH_SENTENCE = (stage: string) =>
   `Dispatch the \`port:${stage}-agent\` subagent and pass it the brief below, verbatim, as its prompt. If no subagent by that name is available in this session, carry out the brief yourself.`;
 
-/** First path segment of a case name maps to the surface it must invoke, per
- *  evals/README.md's "Surface by name prefix" rule. `skill` names a
- *  directory under `plugins/port/skills/`; `agent` names the stage whose
- *  `plugins/port/agents/<stage>-agent.md` must exist and whose dispatch
- *  sentence the case's prompt must open with. */
+/** First path segment of a case name maps to the surface it must invoke. `skill` names a
+ *  directory under `plugins/port/skills/`; `agent` names the stage whose agent file must exist. */
 const PREFIX_SURFACE: Record<string, { needle: string; skill?: string; agent?: string }> = {
   cockpit: { needle: '/port:pipeline', skill: 'pipeline' },
   pipeline: { needle: '/port:pipeline', skill: 'pipeline' },
@@ -35,10 +28,8 @@ function firstNonEmptyLine(block: string): string {
   return block.split('\n').find((l) => l.trim() !== '')?.trim() ?? '';
 }
 
-/** Collapses whitespace (including the hard line-wraps every prompt here
- *  uses for readability — a YAML `|` block preserves them literally, unlike
- *  markdown's own soft-wrap) so a sentence written across several source
- *  lines still compares equal to its single-line template. */
+/** Collapses whitespace (including hard line-wraps a YAML `|` block preserves literally) so
+ *  a sentence written across several source lines still compares equal to its single-line template. */
 function normalizeWs(s: string): string {
   return s.replace(/\s+/g, ' ').trim();
 }
@@ -48,10 +39,8 @@ export default async function ({ fail, ok }: Reporter) {
     .filter((f) => basename(f) === 'case.yaml')
     .sort();
 
-  // --- Surface-by-prefix and mapped targets exist ------------------------------
-  // guard(#124): a case dispatched at the wrong surface (or one whose target
-  // skill/agent no longer exists) measures nothing real — the model answers
-  // a prompt disconnected from the plugin path it claims to exercise.
+  // --- Surface-by-prefix and mapped targets exist — a case dispatched at the wrong surface
+  // measures nothing real. ---
   {
     for (const f of caseFiles) {
       const rel = relOf(f);
@@ -85,12 +74,7 @@ export default async function ({ fail, ok }: Reporter) {
     }
   }
 
-  // --- The dispatch sentence is byte-identical across every agent-stage case --
-  // guard(#124): a paraphrased dispatch sentence silently drifts from what the
-  // cockpit actually sends (pipeline/SKILL.md → Dispatching), so a case that
-  // "looks like" a dispatch stops meaning one.
-  // pin: `evals/README.md`'s "Writing a case" blockquote ↔ this module's
-  // DISPATCH_SENTENCE template.
+  // pin: `evals/README.md`'s "Writing a case" blockquote ↔ this module's DISPATCH_SENTENCE template.
   {
     const readmeText = readFileSync(join(root, 'evals/README.md'), 'utf8');
     const readmeSentence = /^\s*>\s*(Dispatch the .+? yourself\.)\s*$/m.exec(readmeText)?.[1];
@@ -118,12 +102,8 @@ export default async function ({ fail, ok }: Reporter) {
     }
   }
 
-  // --- Leak ban on the prompt: block -------------------------------------------
-  // guard(#124): a case's prompt naming its own plugin path (or a shipped
-  // doc/agent basename) hands the without-arm the very rule it exists to
-  // measure the absence of — the whole ablation delta becomes meaningless
-  // for that case. Header comments are exempt; only the prompt: block itself
-  // reaches the model.
+  // --- Leak ban on the prompt: block — naming its own plugin path hands the without-arm the
+  // very rule it exists to measure the absence of. Header comments are exempt. ---
   {
     const bannedBasenames = ['PIPELINE.md', 'FORMATS.md', 'RECOVERY.md', 'SKILL.md', 'TICK-PROSE.md'];
     const bannedAgentFiles = ['plan-agent.md', 'impl-agent.md', 'review-agent.md', 'revise-agent.md'];
@@ -140,10 +120,8 @@ export default async function ({ fail, ok }: Reporter) {
     }
   }
 
-  // --- Agent-stage scaffolds write both .claude/ files -------------------------
-  // guard(#124): without an allowlist, the guard hook denies every Bash call a
-  // dispatched subagent's with-arm makes, grading that arm on a sandbox
-  // defect (an unreachable settings file) rather than the prompt under test.
+  // --- Agent-stage scaffolds write both .claude/ files — without an allowlist, the guard
+  // hook denies every Bash call, grading the with-arm on a sandbox defect instead of the prompt. ---
   {
     for (const f of caseFiles) {
       const rel = relOf(f);
@@ -161,11 +139,8 @@ export default async function ({ fail, ok }: Reporter) {
     }
   }
 
-  // --- Pressure metadata and A/B/C lines for pressure-tagged cases -------------
-  // guard(#124): a case tagged `pressure` with no real pressure combination is
-  // exactly the "academic" scenario the ticket's own citation warns is too
-  // weak to catch a compliance failure — the tag would claim rigor the case
-  // does not have.
+  // --- Pressure metadata and A/B/C lines for pressure-tagged cases — a case tagged with no
+  // real pressure combination would claim rigor it does not have. ---
   {
     let pressureCount = 0;
     for (const f of caseFiles) {
@@ -206,10 +181,7 @@ export default async function ({ fail, ok }: Reporter) {
       ok();
     }
 
-    // --- At least five pressure-tagged cases ---------------------------------
-    // guard(#124): the epic's own acceptance criterion — five pressure cases,
-    // each reproducing a real failure — read as a count, not just a tag's
-    // existence.
+    // --- At least five pressure-tagged cases, read as a count, not just a tag's existence. ---
     if (pressureCount < 5) {
       fail('evals-pressure', `only ${pressureCount} case(s) tagged 'pressure' — the epic requires at least 5`);
     }

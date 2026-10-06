@@ -3,18 +3,11 @@ import { join } from 'node:path';
 import { root, readJson, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// #74: the registry's config contract (defaults and validation) is read from
-// schema/port.config.schema.json at runtime, never transcribed into
-// TypeScript (ENGINEERING §1, decisions 1-2). Two assertions pin that, in the
-// shape of desktop-platform.ts's own guards.
+// The registry's config contract (defaults and validation) is read from
+// schema/port.config.schema.json at runtime, never transcribed into TypeScript.
 
-/** Walks only the schema sub-trees `CONFIG_DEFAULTS` (plus `tracker`, read
- *  the same way elsewhere) actually reads — `tracker`, `branches`, `models`
- *  — collecting every leaf `default` whose declared `type` is `'string'`.
- *  Deliberately excludes `labels`: those defaults are a different contract,
- *  already pinned by `labels.ts`'s own guard, and its ~18 short label
- *  names (`ready`, `blocked`, …) would otherwise collide with unrelated
- *  identifiers throughout the registry's own code. */
+/** Walks only `tracker`/`branches`/`models`, collecting every leaf `default` typed `'string'`.
+ *  Excludes `labels`: pinned by `labels.ts` separately, and its short names would collide. */
 function collectStringDefaults(schema: any): string[] {
   const roots = [schema.properties.tracker, schema.properties.branches, schema.properties.models];
   const defaults = new Set<string>();
@@ -38,10 +31,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
   const files = walk(srcDir).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
   const schemaImportPattern = /['"](?:\.\.\/)+schema\/port\.config\.schema\.json['"]/;
 
-  // --- The shipped schema is imported by exactly one file, and it is imported ---
-  // guard(#74): the registry silently re-deriving the config contract
-  // instead of reading the shipped schema, or the guard passing vacuously
-  // once the importer is deleted.
+  // --- The shipped schema is imported by exactly one file — never re-derived instead of read. ---
   {
     const importers = files.filter((f) => schemaImportPattern.test(readFileSync(f, 'utf8')));
     if (importers.length === 0) {
@@ -49,9 +39,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     } else expect(!(importers.length > 1), 'desktop-registry', `schema/port.config.schema.json is imported by ${importers.length} files, expected exactly one: ${importers.map(relOf).join(', ')}`);
   }
 
-  // --- No file under main/registry/ retypes a string default as a literal ---
-  // guard(#74): a schema default retyped by hand instead of read off the
-  // CONFIG_DEFAULTS import, drifting the moment the schema changes.
+  // --- No file under main/registry/ retypes a string default as a literal — must come from the CONFIG_DEFAULTS import. ---
   {
     const schema = readJson('schema/port.config.schema.json');
     const stringDefaults = collectStringDefaults(schema);
@@ -68,17 +56,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     ok();
   }
 
-  // #348: main/registry/effective.ts imports scripts/port-tick/overrides.ts
-  // directly — there is no app-owned copy left to drift, so the former
-  // port/case-table pins above are gone with it (desktop-tick's (3)/(4)/(8)/
-  // (11) retired the same way for the tick decision families).
+  // main/registry/effective.ts imports scripts/port-tick/overrides.ts directly — no app-owned copy left to drift.
 
-  // --- Excused-check pin: effective.ts and config.ts share the same anchor ----
-  // guard(#300): a prior ticket's comment claimed this pin existed before
-  // this one actually asserted it — the two-space-indent assumption and the
-  // job-name
-  // regex drifting apart would silently misresolve which check the approval
-  // gate excuses.
   // pin: `apps/desktop/src/main/registry/effective.ts`'s `parseExcusedCheckName` anchor (`'\njobs:'`, `/\n {2}([A-Za-z0-9_-]+):/`) ↔ `scripts/port-tick/config.ts`'s `resolveExcusedCheckName`, both directions
   {
     const effectiveText = readFileSync(join(root, 'apps/desktop/src/main/registry/effective.ts'), 'utf8');
@@ -93,10 +72,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- Wiring: effective.ts calls parseOverrides(/applyOverrides(, and -------
-  // inspect.ts calls resolveEffectiveConfig(
-  // guard(#300): deleting the call silently reverts the app to ignoring the
-  // CLAUDE.md overrides block entirely, with no runtime failure to catch it.
   // pin: `apps/desktop/src/main/registry/effective.ts` calls `parseOverrides(`/`applyOverrides(` ↔ `apps/desktop/src/main/registry/inspect.ts` calls `resolveEffectiveConfig(`
   {
     const effectiveText = readFileSync(join(root, 'apps/desktop/src/main/registry/effective.ts'), 'utf8');
@@ -105,11 +80,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(inspectText.includes('resolveEffectiveConfig('), 'desktop-registry', 'main/registry/inspect.ts does not call resolveEffectiveConfig(');
   }
 
-  // --- Retirement: withdraw-unverifiable / claude-md-overrides / unverifiable: -
-  // appear in no file under apps/desktop/src/
-  // guard(#300): the retired kind, problem reason, or disposition field
-  // silently reverting instead of staying retired (the 'budget-unported'
-  // precedent, scripts/checks/desktop-dispatch.ts).
+  // --- Retirement: withdraw-unverifiable / claude-md-overrides / unverifiable: appear in no
+  // file under apps/desktop/src/ — the retired terms must never revert. ---
   {
     const srcDir = join(root, 'apps/desktop/src');
     const retiredTerms = ['withdraw-unverifiable', 'claude-md-overrides', 'unverifiable:'];

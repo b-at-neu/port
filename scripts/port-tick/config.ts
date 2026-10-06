@@ -1,15 +1,11 @@
-// Reads .claude/port.config.json and resolves everything the tick engine
-// needs from it: the label vocabulary (pinned to data/labels.json,
-// checked by scripts/checks/tick.ts), models, modules, concurrency, and the
-// review cycle cap. No path is string-concatenated — node:path only.
+// Reads .claude/port.config.json and resolves everything the tick engine needs: labels,
+// models, modules, concurrency, the review cycle cap. No path is string-concatenated.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { message } from '../lib/errors.ts';
 import { parseOverrides, applyOverrides } from './overrides.ts';
 
-// Defaults and roles mirror plugins/port/docs/PIPELINE.md → "Label lifecycle"
-// and plugins/port/data/labels.json exactly — the pin check in
-// scripts/checks/tick.ts asserts both directions.
+// Defaults and roles mirror plugins/port/data/labels.json exactly; scripts/checks/tick.ts pins both directions.
 export const LABEL_DEFAULTS = {
   marker: 'claude',
   autoPlan: 'auto plan',
@@ -52,15 +48,8 @@ export const LABEL_ROLES = {
   approved: 'terminal',
 };
 
-// #236: livenessResetWrite (and every other writes.ts export) hardcoded
-// `target: 'issue'`, wrong for the three in-flight labels that only ever
-// apply to a pull request. This map is what `writes.ts`'s `labelEdit` reads
-// instead of assuming a surface — deliberately **no runtime default**:
-// defaulting to `'issue'` is the exact bug this map exists to prevent, and
-// the `tick-labels` coverage pin (scripts/checks/tick.ts) is what makes a
-// key missing from this map unreachable rather than silently mis-targeted.
-// Pinned against query.ts's `issueSet`/`prSet` call sites by `tick-surface`
-// (docs/ENGINEERING.md §2), so the two facts can never drift apart silently.
+// What `writes.ts`'s `labelEdit` reads to target a label's real surface — no runtime
+// default, so a key missing here is unreachable rather than silently mis-targeted.
 export const LABEL_SURFACE = {
   ready: 'issue',
   planChangesRequested: 'issue',
@@ -93,10 +82,8 @@ export function resolveLabels(cfg: any): Record<string, string> {
   return out;
 }
 
-/** Reads and resolves `.claude/port.config.json` at `repoRoot`. Throws with a
- *  named reason on anything the CLI must report as a hard `exit 1` — missing
- *  file, unparseable JSON, or no `repo` — rather than returning a half-filled
- *  config a caller might use by accident. */
+/** Reads and resolves `.claude/port.config.json`. Throws with a named reason on anything the
+ *  CLI must report as a hard `exit 1` — missing file, unparseable JSON, or no `repo`. */
 export function loadConfig(repoRoot: string): any {
   const path = join(repoRoot, '.claude', 'port.config.json');
   let text: string;
@@ -143,18 +130,12 @@ export function loadConfig(repoRoot: string): any {
     sessionRequiredPaths: cfg.sessionRequiredPaths ?? ['CLAUDE.md', '.claude/**'],
     commandsTick: cfg.commands?.tick ?? null,
     commandsWorktrees: cfg.commands?.worktrees ?? null,
-    // The `run-start` event's config facts (#187) — read from the *raw*
-    // parsed JSON, never the already-resolved `labels` above: only the keys
-    // the repository actually overrode are interesting, not every key's
-    // resolved name.
+    // Read from the raw parsed JSON, never the resolved `labels` above — only overridden keys matter.
     labelsOverridden: Object.keys(cfg.labels ?? {}),
     budgetConfigured: Boolean(cfg.commands?.budget),
   };
 
-  // CLAUDE.md overrides (#246) — a repository's own root CLAUDE.md, never
-  // ~/.claude/CLAUDE.md, applied after every port.config.json default has
-  // already resolved. Absent file → empty parse, no problem reported, and
-  // the effective config is byte-identical to `resolved` above.
+  // The repository's own root CLAUDE.md, never ~/.claude/CLAUDE.md, applied after defaults resolve.
   let claudeMdText = '';
   try {
     claudeMdText = readFileSync(join(repoRoot, 'CLAUDE.md'), 'utf8');
@@ -166,20 +147,13 @@ export function loadConfig(repoRoot: string): any {
     labelKeys: Object.keys(LABEL_DEFAULTS),
   });
 
-  // Check dispositions (#246): the approval-gate carve-out folds in first,
-  // as `source: 'approval-gate'`, resolved against the *effective*
-  // modules.approvalGate — an override to that flag must be able to turn the
-  // carve-out itself off. Every `checks.<name>` applied entry follows, as
-  // `source: 'CLAUDE.md'`. A later `applied` entry never overwrites the
-  // approval-gate's own name — the two sources cannot collide, since the
-  // workflow file's job key is never a name an operator would also write by
-  // hand into the block for the same disposition value.
+  // The approval-gate carve-out folds in first, resolved against the effective
+  // modules.approvalGate so an override to that flag can turn the carve-out off too.
   const excusedCheckName = resolveExcusedCheckName(repoRoot, effective.modules);
   const checkDispositions: Record<string, { disposition: 'blocking' | 'infrastructure'; source: 'approval-gate' | 'CLAUDE.md' }> = {};
   if (excusedCheckName) checkDispositions[excusedCheckName] = { disposition: 'infrastructure', source: 'approval-gate' };
   for (const a of applied) {
-    // `validate` already restricted a 'checks.*' entry's value to 'blocking'
-    // or 'infrastructure' before it could ever reach `applied`.
+    // `validate` already restricted this value to 'blocking' or 'infrastructure'.
     if (a.path.startsWith('checks.') && (a.value === 'blocking' || a.value === 'infrastructure')) {
       checkDispositions[a.path.slice('checks.'.length)] = { disposition: a.value, source: 'CLAUDE.md' };
     }
@@ -188,16 +162,8 @@ export function loadConfig(repoRoot: string): any {
   return { ...effective, overrides: { applied, refused }, checkDispositions };
 }
 
-/** The single job key under `jobs:` in `.github/workflows/approval-check.yml`
- *  — the approval-gate's own excused check-run name, folded into
- *  `loadConfig`'s `checkDispositions` map as `source: 'approval-gate'`, per
- *  plugins/port/docs/PIPELINE.md → "Check evidence" → "Dispositions".
- *  Derived from the file, never typed as a literal. Returns `null` when
- *  `modules.approvalGate` is false or the workflow file is absent — no
- *  carve-out at all, and every red check blocks. A minimal line-based read,
- *  not a YAML parser — the stack carries zero runtime dependencies, and this
- *  file's shape (one job, two-space indent) is fixed by the template that
- *  writes it. */
+/** The single job key under `jobs:` in `.github/workflows/approval-check.yml`, derived from
+ *  the file rather than typed as a literal. `null` means no carve-out — every red check blocks. */
 export function resolveExcusedCheckName(repoRoot: string, modules: any): string | null {
   if (!modules.approvalGate) return null;
   const path = join(repoRoot, '.github', 'workflows', 'approval-check.yml');

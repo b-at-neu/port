@@ -1,19 +1,6 @@
 #!/usr/bin/env node
-// Decides whether an open release corridor (#224) is a legitimate, in-flight
-// release or the bug #224's corridor rail exists to catch (#275): a corridor
-// left open with nothing addressing it.
-//
-// "Is a release in flight?" can only be answered from GitHub, and layer 1
-// must stay offline (docs/ENGINEERING.md §1's pure-logic/I/O split). So the
-// decision splits in two:
-//   - classifyCorridor/releaseInFlight below are pure and shared by both
-//     readers — scripts/checks/release.ts (which always passes
-//     inFlight: { checked: false }, since it never calls gh) and this same
-//     file's own CLI, which gathers the evidence and calls both for real.
-//   - the CLI is the network-aware half, run by the run-release-corridor
-//     workflow job on every push to <integration>/<production> — the only
-//     place this repository now produces one authoritative
-//     run-release-corridor result per (check name, head SHA).
+// Decides whether an open release corridor is legitimate and in-flight, or left open with
+// nothing addressing it. Pure logic shared with scripts/checks/release.ts; this CLI gathers evidence.
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
@@ -25,15 +12,8 @@ export type CorridorVerdict = 'pass' | 'skip' | 'unresolved' | 'in-flight' | 'vi
 
 export type InFlightEvidence = { checked: false } | { checked: true; reason: string | null; shipped: boolean; hookCommand: string | null };
 
-/** The corridor rule itself (#224), pure: which branch may carry a
- *  prerelease-suffixed version and which may not, extended by #275 to
- *  distinguish a legitimate in-flight release from the bug #224 catches.
- *  `inFlight` is `{ checked: false }` when the caller never asked GitHub —
- *  layer 1's own case, which can therefore only ever report `unresolved` for
- *  a clean integration branch, never guess at `violation` or `in-flight`. A
- *  branch that is neither the production nor the integration branch — a
- *  feature branch, or `null` for detached `HEAD` — is `skip`, deliberately,
- *  not an omission. */
+/** The corridor rule, pure. `inFlight: { checked: false }` (layer 1's own case) can only
+ *  report `unresolved`, never guess `violation`/`in-flight`. Any other branch is `skip`. */
 export function classifyCorridor({
   branch,
   productionName,
@@ -84,10 +64,7 @@ export function classifyCorridor({
   return { verdict: 'skip', message: '' };
 }
 
-/** Whether a release is in flight, from the evidence a caller already
- *  gathered — never touches `gh` itself. Mirrors `release/SKILL.md` §0.5
- *  cases 2–3 plus `dev-window.ts`'s `pr-exists`, so the skill and this check
- *  read the same state the same way. The first match wins. */
+/** Whether a release is in flight, from evidence a caller already gathered. First match wins. */
 export function releaseInFlight({
   version,
   releasePrs,
@@ -110,9 +87,7 @@ export function releaseInFlight({
   for (const pr of releasePrs) {
     const m = /^Release v(.+)$/.exec(pr.title);
     if (!m) {
-      // Title renamed and unparseable — release/SKILL.md §0.5 case 2 falls
-      // back to the integration branch's own version in this shape, so this
-      // still counts as in flight rather than an unrecognized pull request.
+      // Title renamed and unparseable — still counts as in flight, matching /port:release's own fallback.
       return { reason: `release pull request #${pr.number} is open (title unparseable — adopting v${version}, as /port:release does)`, shipped };
     }
     if (m[1] === version) {
@@ -132,11 +107,8 @@ export function releaseInFlight({
   return { reason: null, shipped };
 }
 
-// --- The CLI -----------------------------------------------------------
-// Thin wrapper: gather the evidence with `gh`, call the pure functions above,
-// print one line per branch, exit non-zero on any violation or unreadable
-// evidence. Same standalone-script shape dev-window.ts uses, including the
-// `import.meta.url === pathToFileURL(process.argv[1])` guard.
+// --- The CLI: gathers evidence with `gh`, calls the pure functions above, prints one line
+// per branch, exits non-zero on any violation or unreadable evidence. -----------------------
 
 function loadConfig(): { repo: string; integrationName: string; productionName: string | null; manifestRel: string; postPublishHook: string | null } {
   const cfg = JSON.parse(readFileSync(join(root, '.claude/port.config.json'), 'utf8'));
@@ -150,9 +122,8 @@ function loadConfig(): { repo: string; integrationName: string; productionName: 
   };
 }
 
-/** Reads `manifestRel`'s `version` at `branch`'s remote tip — never the
- *  checkout, so the verdict is the same from any clone, including CI's
- *  shallow single-ref one. */
+/** Reads `manifestRel`'s `version` at `branch`'s remote tip, so the verdict is the same
+ *  from any clone, including CI's shallow single-ref one. */
 function readVersionAt(repo: string, branch: string, manifestRel: string): string {
   let text: string;
   try {
@@ -211,8 +182,7 @@ async function main(): Promise<void> {
       console.log(`ok: ${productionName} at ${productionVersionRaw}, no prerelease suffix`);
     }
 
-    // --- Integration branch: needs GitHub to tell a legitimate corridor
-    // from #224's own bug ----------------------------------------------
+    // --- Integration branch: needs GitHub to tell a legitimate corridor from a left-open one.
     const integrationVersionRaw = readVersionAt(cfg.repo, integrationName, cfg.manifestRel);
     const integrationParsed = parseVersion(integrationVersionRaw);
     if (!integrationParsed) throw new Error(`'${integrationVersionRaw}' is not well-formed semver`);
@@ -226,9 +196,7 @@ async function main(): Promise<void> {
       let devWindowPrs: { number: number }[] = [];
       let branch = '';
       if (!parsed.suffix) {
-        // Only meaningful once production itself carries a clean version —
-        // computing it against a still-suffixed production would compute a
-        // dev-window branch below the version actually in flight.
+        // Only meaningful once production itself carries a clean version.
         const next = nextDevWindow(productionVersionRaw);
         branch = devWindowBranch(next);
         devWindowPrs = ghJson(['pr', 'list', '--repo', cfg.repo, '--base', integrationName, '--head', branch, '--state', 'open', '--json', 'number']);
@@ -260,10 +228,7 @@ async function main(): Promise<void> {
       }
     }
   } catch (e) {
-    // Fails closed on evidence (docs/ENGINEERING.md §4): a `gh` read that
-    // exits non-zero, or a manifest that does not parse, is never treated as
-    // a release in flight. A red run a re-run clears is better than a green
-    // verdict nobody verified.
+    // Fails closed on evidence: an unreadable `gh` read or manifest is never treated as a release in flight.
     console.log(`FAIL: could not read evidence: ${message(e)} — not treated as a release in flight`);
     process.exitCode = 1;
     return;

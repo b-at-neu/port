@@ -6,23 +6,15 @@ import { pathToFileURL } from 'node:url';
 import { root } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// Checks cross-platform worktree removal: longpaths on every git call, an
-// `fs.rmSync` fallback for a `git worktree remove` that half-succeeds
-// (deregisters without deleting), an explicit `.claude/worktrees/` orphan
-// scan, and a `purge --orphan` mode that replaces worktree-clean's old
-// rm -rf/PowerShell recipe (#115). Split out from scripts/checks/worktrees.ts
-// (which keeps the pre-existing template/classifier/hygiene assertions) so
-// this ticket's new surface gets its own topic module rather than growing
-// that one past its own shape.
+// Checks cross-platform worktree removal: longpaths handling, an fs.rmSync fallback for a
+// half-succeeded git worktree remove, an orphan scan, and a cross-platform purge mode.
 export default async function ({ expect, fail, note, ok }: Reporter) {
   const scriptPath = join(root, 'plugins/port/bin/worktrees.mjs');
   const { fallbackDecision, classifyRemovalFailure, orphanVerdict, longPathAdvisory, pathKey, stripExtendedPrefix, removeWorktree } =
     await import(pathToFileURL(scriptPath).href);
 
   // --- Pure cases --------------------------------------------------------------
-  // guard(#115): worktree removal decisions drifting — a moved HEAD falling
-  // back anyway instead of aborting, or an unreadable `.git` read as an
-  // orphan instead of skipped.
+  // guard: a moved HEAD falling back instead of aborting, or an unreadable `.git` read as an orphan.
   {
     const fdCases: [string, Record<string, unknown>, { action: string; reason?: string }][] = [
       ['dir gone → done', { dirExists: false, stillRegistered: true, headNow: 'a', headClassified: 'a' }, { action: 'done' }],
@@ -69,9 +61,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       expect(matches, 'worktrees-removal-pure', `longPathAdvisory — ${label}: got ${JSON.stringify(got)}`);
     }
 
-    // pathKey case-folds only on win32 — asserted against this run's own
-    // platform rather than faked, since layer 1 itself runs the three-OS
-    // matrix (ENGINEERING §6) and each leg exercises its own branch.
+    // pathKey case-folds only on win32 — asserted against this run's own platform rather than faked.
     const equalHere = pathKey('/Repo/Path') === pathKey('/repo/path');
     const expectEqual = process.platform === 'win32';
     expect(!(equalHere !== expectEqual), 'worktrees-removal-pure', `pathKey: expected case-fold=${expectEqual} on ${process.platform}, got ${equalHere}`);
@@ -91,9 +81,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   }
 
   // --- Injected-failure orchestration -------------------------------------------
-  // guard(#115): removeWorktree silently dropping its own fallback call — a
-  // variant that skips it fails this block's first case (rmSync would never
-  // be called, and removed would read false instead of true).
+  // guard: removeWorktree silently dropping its own fallback call to rmSync.
   {
     const calls: string[] = [];
     const result = removeWorktree('/main', { path: '/main/.claude/worktrees/x', head: 'abc' }, {
@@ -138,9 +126,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   }
 
   // --- Real-git end-to-end fixture ----------------------------------------------
-  // guard(#115): a worktree with a long-path, read-only, or junctioned
-  // dependency tree surviving reclaim on Windows, or removal following a
-  // junction out of the worktree.
+  // guard: a long-path, read-only, or junctioned dependency tree surviving reclaim, or removal following a junction outside the worktree.
   {
     const fixture = mkdtempSync(join(tmpdir(), 'port-worktrees-removal-'));
     const storeDir = mkdtempSync(join(tmpdir(), 'port-worktrees-removal-store-'));
@@ -246,8 +232,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   }
 
   // --- Skill guard: worktree-clean no longer reverts to POSIX/PowerShell-only deletion ----
-  // guard(#115): the manual escape hatch reverting to POSIX/PowerShell-only
-  // deletion instead of the script's own cross-platform `purge` mode.
+  // guard: the manual escape hatch reverting to a platform-specific recipe instead of the script's cross-platform `purge` mode.
   {
     const rel = 'plugins/port/skills/worktree-clean/SKILL.md';
     const text = readFileSync(join(root, rel), 'utf8');

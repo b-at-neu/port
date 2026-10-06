@@ -3,14 +3,10 @@ import { join } from 'node:path';
 import { root, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// The mechanical guard against future drift in the runner-plus-companions
-// shape #181 gives SKILL.md/PIPELINE.md — a split prose hub whose companion
-// nobody reads is the documentation analogue of the unimported check module
-// scripts/checks/harness.ts already guards.
+// The mechanical guard against drift in the runner-plus-companions shape SKILL.md/PIPELINE.md
+// use — a split prose hub whose companion nobody reads is the documentation analogue of the unimported check module harness.ts already guards.
 export default async function ({ expect, fail, ok }: Reporter) {
-  // --- A split companion stays reachable from its hub -------------------------
-  // guard(#181): a companion document nobody reads. It runs nothing and
-  // reports nothing, and a reader following the hub never learns it exists.
+  // --- A split companion stays reachable from its hub, never an unnamed, unreachable document. ---
   {
     const skillsRoot = join(root, 'plugins/port/skills');
     const skillDirs = readdirSync(skillsRoot, { withFileTypes: true })
@@ -36,12 +32,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- Companion unions are directory-derived, never a hard-coded list -------
-  // guard(#181): the next split of a hub's companions reintroducing exactly
-  // the phrase-check churn this ticket retires — a hard-coded file list in
-  // pipelineSkillText/pipelineDocsText would need editing on every future
-  // split, the same way every union caller once had to when the file list
-  // lived only in each caller's own head.
+  // --- Companion unions are directory-derived, never a hard-coded list — editing on every future split would reintroduce the phrase-check churn this check retires. ---
   {
     const rel = 'scripts/lib/files.ts';
     const text = readFileSync(join(root, rel), 'utf8');

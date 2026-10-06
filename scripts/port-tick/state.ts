@@ -1,10 +1,5 @@
-// Reads and writes the two state files under the gitignored `.temp/`: tick
-// state (the pacing ladder, the resume clock, the denial-log offset, the
-// remembered report sets) and the dispatch log (this session's own proof of
-// what it dispatched, per plugins/port/docs/RECOVERY.md → "Liveness"). Each
-// carries a `repo` field treated as absent when it names a different
-// repository — a `start` rewrites both fresh, and that overwrite *is* the
-// session scoping, no clock or session id needed.
+// Reads and writes the two state files under gitignored `.temp/`: tick state and the
+// dispatch log. Each carries a `repo` field treated as absent when it names a different one.
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -12,17 +7,13 @@ import { randomUUID } from 'node:crypto';
 export const TICK_STATE_PATH = '.temp/tick-state.json';
 export const DISPATCH_LOG_PATH = '.temp/dispatch-log.json';
 
-/** 12 hex characters — enough to make a `runId` collision a non-concern
- *  across two `.agents/events.jsonl` generations (docs/ENGINEERING.md's own
- *  risk note), never a claimed session identifier. */
+/** 12 hex characters — enough to make a `runId` collision a non-concern; never a session id. */
 export function newRunId(): string {
   return randomUUID().replace(/-/g, '').slice(0, 12);
 }
 
-/** Reads a JSON state file at `relPath` under `repoRoot`. Returns `null`
- *  when the file is absent, unparseable, or its `repo` field names a
- *  different repository than `repo` — all three are "treated as absent",
- *  never trusted. */
+/** Reads a JSON state file at `relPath`. Returns `null` when absent, unparseable, or its
+ *  `repo` field names a different repository — all three treated as absent, never trusted. */
 export function readState(repoRoot: string, relPath: string, repo: string): any {
   const path = join(repoRoot, relPath);
   if (!existsSync(path)) return null;
@@ -61,19 +52,15 @@ export function freshTickState(repo: string): any {
     pluginStaleness: null,
     refreshed: {},
     unknownStreak: {},
-    // #220 — label-state reconciliation's three change-only remembered sets,
-    // one signature per contradiction/duplicate/orphan. An older state file
-    // lacks them; every read is `?? []`, so the first tick after upgrading
-    // reports everything once rather than crashing on a missing field.
+    // An older state file lacks these; every read is `?? []`, so the first tick after
+    // upgrading reports everything once rather than crashing on a missing field.
     contradictionsReported: [],
     duplicatesReported: [],
     orphansReported: [],
   };
 }
 
-/** A fresh dispatch-log record, as `start` writes it. `items` is keyed by
- *  issue/pull-request number (as a string, for stable JSON round-tripping)
- *  to `{ stage, state, resets }`. */
+/** A fresh dispatch-log record. `items` is keyed by issue/PR number (string) to `{ stage, state, resets }`. */
 export function freshDispatchLog(repo: string): any {
   return { repo, items: {} };
 }

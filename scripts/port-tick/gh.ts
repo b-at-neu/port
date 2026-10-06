@@ -1,16 +1,9 @@
-// The only I/O in the engine. Spawns `gh api graphql --include` with an
-// explicit argv array (never `shell: true`, never `execSync`) so the call is
-// testable by mocking this one module, and classifies nothing itself —
-// envelope.ts reads what comes back.
+// The only I/O in the engine. Spawns `gh api graphql --include` with an explicit argv array
+// (never `shell: true`), classifies nothing itself — envelope.ts reads what comes back.
 import { spawnSync } from 'node:child_process';
 
-/** Runs `gh api graphql --include -F query=<query>`. `--include` is what
- *  puts the `Date:` response header on stdout ahead of the JSON body — the
- *  only authoritative clock this engine has, since GitHub's schema exposes
- *  none. Returns `{ ok, headers, body, exitCode }`; `ok` is false only when no
- *  JSON body could be parsed at all — `gh` exits non-zero whenever the
- *  response carries a GraphQL `errors` array even when `data` is still
- *  usable, so a non-zero exit is never read as "no data" on its own. */
+/** Runs `gh api graphql --include`. `--include` puts the `Date:` header on stdout — the only
+ *  clock this engine has. `ok` is false only when no JSON body could be parsed at all. */
 export function runGraphql(query: string): any {
   const res = spawnSync('gh', ['api', 'graphql', '--include', '-F', `query=${query}`], {
     encoding: 'utf8',

@@ -1,17 +1,6 @@
 #!/usr/bin/env node
-// The tick engine's CLI entry: arg parse, subcommand dispatch, JSON to
-// stdout, exit codes. This file only wires — every decision is imported from
-// scripts/port-tick/, the runner-plus-modules split scripts/checks.ts
-// already establishes (docs/ENGINEERING.md §1). Five subcommands, each
-// emitting one JSON object on stdout and nothing else; exit 0 usable, 1 hard
-// failure, 2 blind tick — the model always reads the JSON, never the code.
-//
-//   start    config + labels, both state files fresh, emits `run-start`
-//   plan     one GraphQL call → the tick plan (never persists), emits `tick`
-//   commit --tick <id> --live <d> --dispatched <d>   liveness + pacing → both
-//            state files, emits `tick-commit`
-//   resolve --item <n> --decision <d>   the `writes` for a human gate answer
-//   report [--since <iso>] [--run <id>]   reads .agents/events.jsonl (#187)
+// CLI entry: arg parse, subcommand dispatch, JSON to stdout. Wiring only — every decision
+// lives in scripts/port-tick/. Exit 0 usable, 1 hard failure, 2 blind tick.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -99,27 +88,18 @@ function cmdPlan(root: string, cfg: any): void {
   ];
   const partitions = partitionAliases(repository, viewer, aliasSpecs);
 
-  // Reconcile (#209/#220): flag any item holding more than one role-bearing
-  // label and exclude it from every action below, reported, never repaired.
-  // `actionable` feeds dispatch/gates/writes/liveness; `partitions` itself
-  // stays the full picture for inFlightClaims, `items`, `willMoveWithoutHuman`.
+  // Flags any item holding more than one role-bearing label and excludes it
+  // from every action below; `partitions` stays the full picture.
   const roleBearingKeys = aliasSpecs.map(([a]) => a);
   const byItem = labelsByItem(repository, roleBearingKeys);
   const contradictionsList = contradictions(byItem, viewer, cfg.labels);
   const actionable = actionablePartitions(partitions, contradictionsList.map((c) => c.item));
 
-  // --- Refresh sweep state: readyForReview ∪ approved reading CONFLICTING ---
-  // `refreshedUpdates`/`unknownStreakUpdates` are applied to tickState by
-  // `commit`, since `plan` itself never persists.
+  // readyForReview ∪ approved reading CONFLICTING; applied to tickState by `commit`, since `plan` never persists.
   const refreshedState: Record<string, any> = tickState.refreshed ?? {};
   const unknownStreakState: Record<string, any> = tickState.unknownStreak ?? {};
 
-  // Refresh wins: a pull request already claimed by a refresh
-  // (<labels.refreshBranch>) or mid-refresh (<labels.refreshing>) is never
-  // dispatched to review or revision in the same tick (PIPELINE.md → "Tick
-  // engine" / SKILL.md's "Refresh wins"). All owners, never `.mine` —
-  // carrying the label is an ownership-independent fact. The refreshBranch
-  // trigger loop in planTriggers is the refresh itself and is never vetoed.
+  // Refresh wins: a pull request already claimed by or mid-refresh is never dispatched to review or revision this tick.
   const refreshBranchNumbers = (repository.refreshBranch?.nodes ?? []).map((n: any) => n.number);
   const refreshingNumbers = (repository.refreshing?.nodes ?? []).map((n: any) => n.number);
 
@@ -133,14 +113,11 @@ function cmdPlan(root: string, cfg: any): void {
 
   const { dispatch, gates, held, announce, writes, refreshedUpdates, unknownStreakUpdates } = acc;
 
-  // Ungated sweep (module-gated, never assignee-filtered): the raw set, for
-  // Housekeeping's own change-only dedup/report. `allOpenPRs` is unconditional
-  // (#220) — only the filter and the report stay module-gated.
+  // Ungated sweep: `allOpenPRs` is unconditional — only the filter and the report stay module-gated.
   const openPRs = repository.allOpenPRs?.nodes ?? [];
   const ungated: number[] = cfg.modules.approvalGate ? ungatedPullRequests(openPRs, cfg.labels) : [];
 
-  // Duplicate-pull-request sweep + reconcile reporting (#220), change-only
-  // against `.temp/tick-state.json`'s two remembered sets.
+  // Duplicate-pull-request sweep + reconcile reporting, change-only against `.temp/tick-state.json`'s remembered sets.
   const { reconcile, persist: reconcilePersist } = reconcileTick({
     repository, roleBearingKeys, viewer, labels: cfg.labels, integration: cfg.integration,
     envelopeUnavailable: envelope.unavailable, truncated,
@@ -153,8 +130,7 @@ function cmdPlan(root: string, cfg: any): void {
     unowned: Object.fromEntries(aliasSpecs.map(([a]) => [a, partitions[a].unowned.map((n: any) => n.number)])),
   };
 
-  // Denial delta since tickState's own offset (PIPELINE.md → "Denial
-  // visibility") — the read stays here; denials.ts only classifies it.
+  // Denial delta since tickState's own offset — the read stays here; denials.ts only classifies it.
   let denialAll: string[] = [];
   try { denialAll = readFileSync(join(root, '.agents', 'denials.log'), 'utf8').split('\n'); } catch {}
   if (denialAll.at(-1) === '') denialAll.pop();
@@ -205,9 +181,7 @@ function cmdCommit(root: string, cfg: any, args: any): void {
     return die(`--tick '${tickId}' does not match the plan this session last ran ('${cache.tickId ?? 'none'}') — the model must run the script's own plan this tick before committing`, 1);
   }
 
-  // `--live`'s *presence* is the fact, never its value — `""` counts as
-  // present, a missing flag does not, and a value `parseFlags` mistook for
-  // the next flag's own name (starts with `--`) is treated as absent too.
+  // `--live`'s presence is the fact, never its value — `""` counts as present, a missing flag does not.
   const liveFlagPresent = args.live !== undefined && !String(args.live).startsWith('--');
   const liveDescriptions = (liveFlagPresent ? args.live : '').split(',').map((s: string) => s.trim()).filter(Boolean);
   const dispatchedItems = (args.dispatched ?? '').split(',').map((s: string) => s.trim()).filter(Boolean);
@@ -222,12 +196,7 @@ function cmdCommit(root: string, cfg: any, args: any): void {
     }
   }
 
-  // Liveness diff for every in-flight item the plan expected. `liveness`
-  // names every unmatched item's classification (matched items are simply
-  // absent) — not just the ones that got reset — since the model needs it to
-  // render the required per-tick UX state for each of the four outcomes
-  // ("confirming next tick", "in flight with no dispatch record", "stalled
-  // again after I reset it once"), not only the completed-reset case.
+  // Liveness diff for every in-flight item the plan expected; `liveness` names every unmatched item's classification.
   const writes: any[] = [];
   const resets: any[] = [];
   const liveness: any[] = [];
@@ -239,9 +208,7 @@ function cmdCommit(root: string, cfg: any, args: any): void {
     liveness.push({ item: expected.item, class: result.class });
     if (result.class === 'reset') {
       dispatchLog.items[expected.item] = { stage: row.stage, state: 'reset', resets: result.nextResets };
-      // Resolved from the labelKey the plan recorded, never by matching the
-      // resolved name back against cfg.labels — a repository overriding a
-      // label name must still hit the right trigger.
+      // Resolved from the labelKey the plan recorded, so a renamed label still hits the right trigger.
       const trigger = (RETRY_TRIGGER as Record<string, string>)[expected.labelKey] ?? null;
       resets.push({ item: expected.item, from: expected.label, fromKey: expected.labelKey, toKey: trigger });
     } else if (result.class === 'suspect') {
@@ -251,7 +218,7 @@ function cmdCommit(root: string, cfg: any, args: any): void {
     // still named in `liveness` above so the model can render them.
   }
 
-  // Orphan reporting (#220) — change-only against `orphansReported`.
+  // Change-only against `orphansReported`.
   tickState.orphansReported = reportOrphans(liveness, tickState.orphansReported ?? []);
   tickState.contradictionsReported = cache.reconcilePersist?.contradictions ?? tickState.contradictionsReported ?? [];
   tickState.duplicatesReported = cache.reconcilePersist?.duplicates ?? tickState.duplicatesReported ?? [];
@@ -261,8 +228,7 @@ function cmdCommit(root: string, cfg: any, args: any): void {
     writes.push(livenessResetWrite({ repo: cfg.repo, labels: cfg.labels, item: r.item, fromKey: r.fromKey, toKey: r.toKey }));
   }
 
-  // Apply the refresh sweep's and the mergeability-UNKNOWN carve-out's
-  // per-item state — `plan` only computed these, since it never persists.
+  // `plan` only computed this per-item state, since it never persists.
   tickState.refreshed = tickState.refreshed ?? {};
   for (const u of cache.refreshedUpdates ?? []) {
     if (u.remove) delete tickState.refreshed[u.item];

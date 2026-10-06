@@ -4,20 +4,15 @@ import { pathToFileURL } from 'node:url';
 import { root, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// #316: four rails for the React renderer, each broken deliberately once
-// before being trusted to pass (ENGINEERING §7).
+// Four rails for the React renderer, each broken deliberately once before being trusted to pass.
 export default async function ({ expect, fail, note, ok }: Reporter) {
   const rendererDir = 'apps/desktop/src/renderer';
   const ruleUrl = pathToFileURL(join(root, 'apps/desktop/eslint/no-raw-colour.mjs')).href;
-  // A single dynamic import (not a re-implementation) keeps this
-  // dependency-free while reading both pattern lists once for every block
-  // below that needs them.
+  // A single dynamic import reads both pattern lists once for every block below that needs them.
   const mod = await import(ruleUrl);
 
-  // --- Every no-raw-colour pattern rejects bad, accepts good --------------
-  // guard(#316): a pattern that cannot distinguish the state it exists to
-  // catch is not a check — each of COLOUR_PATTERNS/CSS_COLOUR_PATTERNS
-  // carries its own good/bad pair, asserted both ways here.
+  // --- Every no-raw-colour pattern rejects bad, accepts good — each pattern carries its own
+  // good/bad pair, asserted both ways here. ---
   {
     const allPatterns = [...mod.COLOUR_PATTERNS, ...mod.CSS_COLOUR_PATTERNS];
     if (allPatterns.length === 0) {
@@ -32,12 +27,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- No .css under renderer/ holds a colour value, except theme.css and
-  // --- the ten legacy stylesheets --------------------------------------
-  // guard(#316): the legacy quarantine (app.css) depends on every legacy
-  // stylesheet staying the sole other source of colour values until issue
-  // 319 and issue 320 delete them one at a time — this list only ever
-  // shrinks.
+  // --- No .css under renderer/ holds a colour value, except theme.css and the legacy
+  // stylesheets — this exemption list only ever shrinks. ---
   {
     const cssPatterns = mod.CSS_COLOUR_PATTERNS as { source: string; flags: string; id: string }[];
     const exemptRel = new Set(
@@ -67,9 +58,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     if (!violated) ok();
   }
 
-  // --- window.port's push listeners are named only in data/subscriptions.ts
-  // guard(#316): every other push subscriber (main.ts, session/controller.ts,
-  // permission/controller.ts) now goes through that one module's `subscribe`.
+  // --- window.port's push listeners are named only in data/subscriptions.ts — every other
+  // push subscriber goes through that one module's `subscribe`. ---
   {
     const bridgeEventRe = /\.(onBoardUpdate|onSessionStatus|onSessionEntries)\b/;
     const subscriptionsRel = `${rendererDir}/src/data/subscriptions.ts`;
@@ -80,18 +70,15 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     } else expect(!matches.some((rel) => rel !== subscriptionsRel), 'desktop-react', `window.port's push listeners are named outside ${subscriptionsRel}, in: ${matches.filter((rel) => rel !== subscriptionsRel).join(', ')}`);
   }
 
-  // --- No useEffect/useLayoutEffect outside comments, non-test files -------
-  // guard(#316): mirrors the ESLint ban (no-restricted-imports/-properties)
-  // for a worktree that never ran `pnpm install`, so the rail still holds
-  // without a lint pass.
+  // --- No useEffect/useLayoutEffect outside comments, non-test files — mirrors the ESLint
+  // ban so the rail still holds in a worktree that never ran `pnpm install`. ---
   {
     const effectRe = /\buse(?:Effect|LayoutEffect)\b/;
     const files = walk(join(root, rendererDir)).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
     let violated = false;
     for (const f of files) {
       const rel = relOf(f);
-      // Strips /* */ blocks (including /** */ doc comments) first, then
-      // every // line comment, so a mention inside either never counts.
+      // Strips /* */ blocks first, then every // line comment, so a mention inside either never counts.
       const withoutBlockComments = readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
       const code = withoutBlockComments
         .split('\n')

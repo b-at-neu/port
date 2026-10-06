@@ -1,25 +1,15 @@
-// Pure: classifies a parsed `gh api graphql` response body into usable /
-// partial / blind, per plugins/port/docs/PIPELINE.md → "The tick's cost and
-// clock" and ENGINEERING.md §4's fail-closed-on-actions rule. Never reads a
-// non-zero exit code as "no data" — only the caller (gh.ts) failing to
-// parse any JSON at all is blind.
+// Pure: classifies a parsed `gh api graphql` response body into usable/partial/blind. Never
+// reads a non-zero exit code as "no data" — only an unparsable body is blind.
 
-/** `body` is the parsed `{ data, errors }` GraphQL envelope, or `null` when
- *  `gh.ts` could not parse a body at all. Returns:
- *  - `{ kind: 'blind' }` — no `data` at all, or no body was parsable.
- *  - `{ kind: 'partial', unavailable: [...aliasNames] }` — `errors` present
- *    but `data` still usable; only the aliases named in `errors[].path` are
- *    unavailable, every other alias is trustworthy.
- *  - `{ kind: 'usable', unavailable: [] }` — a clean response. */
+/** `body` is the parsed `{ data, errors }` GraphQL envelope, or `null` if unparsable. Returns
+ *  `blind` (no data), `partial` (errors present, only `errors[].path` aliases unavailable), or `usable`. */
 export function classifyEnvelope(body: any): { kind: string; unavailable: string[] } {
   if (!body || body.data == null) return { kind: 'blind', unavailable: [] };
 
   const errors = Array.isArray(body.errors) ? body.errors : [];
   if (errors.length === 0) return { kind: 'usable', unavailable: [] };
 
-  // GraphQL error paths are `["repository", "<alias>", ...]` for a field
-  // under the one `repository(...)` selection this engine's query always
-  // uses — the alias name is always the second element.
+  // GraphQL error paths are `["repository", "<alias>", ...]` — the alias name is always the second element.
   const unavailable: string[] = [
     ...new Set<string>(
       errors
@@ -30,10 +20,8 @@ export function classifyEnvelope(body: any): { kind: string; unavailable: string
   return { kind: 'partial', unavailable };
 }
 
-/** A connection is truncated when its `totalCount` exceeds its returned
- *  `nodes` length — "act on what came back, never report the set as empty."
- *  `data` is the `repository` object; returns the list of alias names whose
- *  connection under-returned. */
+/** A connection is truncated when its `totalCount` exceeds its returned `nodes` length.
+ *  Returns the list of alias names whose connection under-returned. */
 export function truncatedAliases(repository: any): string[] {
   if (!repository) return [];
   const hits: string[] = [];

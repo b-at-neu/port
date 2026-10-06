@@ -3,11 +3,8 @@ import { join } from 'node:path';
 import { root, walk, relOf, readJson } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// Issue 72: apps/desktop/src/main/platform/ is the only place under
-// apps/desktop/src/ that may touch a child process, the filesystem, or a
-// path string. These four assertions make that a compile-time and layer 1
-// fact rather than a review comment — the same shape as the
-// desktop-label-defaults guard in labels.ts.
+// apps/desktop/src/main/platform/ is the only place under apps/desktop/src/ that may touch
+// a child process, the filesystem, or a path string — a compile-time and layer 1 fact.
 export default async function ({ expect, fail, ok }: Reporter) {
   const platformDir = 'apps/desktop/src/main/platform';
   const testingDir = 'apps/desktop/src/testing';
@@ -15,9 +12,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
   const srcDir = join(root, 'apps/desktop/src');
   const files = walk(srcDir).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
 
-  // --- child_process is confined to run.ts, and run.ts actually imports it ---
-  // guard(#72): a POSIX shell-out, or a synchronous/shell-spawning API,
-  // creeping into an adapter instead of staying behind the platform layer.
+  // --- child_process is confined to run.ts, and run.ts actually imports it — a shell-out
+  // must never creep into an adapter instead of staying behind the platform layer. ---
   {
     let runHasIt = false;
     for (const f of files) {
@@ -56,13 +52,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- KNOWN_COMMANDS contains no POSIX-only/shell utility --------------------
-  // guard(#72, #116): a POSIX-only or shell-only executable becoming
-  // spawnable, which fails only on Windows at runtime instead of at compile
-  // time. The denylist itself now reads scripts/checks/portability.config.json's
-  // shared 'nonPortable' classification rather than carrying a second inline
-  // copy of it (docs/ENGINEERING.md §2) — a superset of the original list, so
-  // nothing that passed before starts failing.
+  // --- KNOWN_COMMANDS contains no POSIX-only/shell utility — a non-portable executable
+  // would fail only on Windows at runtime. Reads the shared 'nonPortable' classification, never a second inline copy. ---
   {
     const runFile = files.find((f) => relOf(f) === runRel);
     const text = runFile ? readFileSync(runFile, 'utf8') : '';
@@ -82,10 +73,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- No shell:true, no execSync/spawnSync, no *Sync fs call, no stray fs ---
-  // guard(#72): the cross-platform command and path layer's own rail —
-  // shelling out or blocking the main process — regressing silently in a
-  // future adapter.
+  // --- No shell:true, no execSync/spawnSync, no *Sync fs call, no stray fs — shelling out
+  // or blocking the main process must never regress silently in a future adapter. ---
   {
     for (const f of files) {
       const rel = relOf(f);
@@ -109,13 +98,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
         }
       }
 
-      // Issue 74: a *.test.ts file is exempt — it verifies an adapter's behaviour
-      // rather than being one, and setting up a realistic fixture (a real
-      // mkdtemp directory, same as platform/'s own files.test.ts/paths.test.ts)
-      // needs the real async fs API. apps/desktop/src/testing/ is the same
-      // exemption for the shared fixture helpers *.test.ts files import it
-      // from (#350) — it ships no production code. Production code stays
-      // fully gated.
+      // A *.test.ts file is exempt — it verifies an adapter's behaviour rather than being
+      // one, and needs the real async fs API for a realistic fixture. apps/desktop/src/testing/ is the same exemption; it ships no production code.
       if (
         /from\s*'node:fs(?:\/promises)?'/.test(text) &&
         !rel.startsWith(`${platformDir}/`) &&
@@ -128,11 +112,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     ok();
   }
 
-  // --- runCommand( is called only from main/platform/ -------------------------
-  // guard(#76): a second adapter spawning gh/git itself, or hand-rolling a
-  // second failure classifier, instead of going through the platform layer —
-  // issue 72's plan named it but left it unpinned until the first adapter
-  // (main/github/) landed.
+  // --- runCommand( is called only from main/platform/ — never a second adapter spawning
+  // gh/git itself, or hand-rolling a second failure classifier. ---
   {
     for (const f of files) {
       const rel = relOf(f);
@@ -145,13 +126,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     ok();
   }
 
-  // --- No fs.watch/watchFile/FSWatcher/chokidar anywhere under apps/desktop/src/ ---
-  // guard(#84): the decision against a filesystem watcher (Windows' ReadDirectoryChangesW
-  // defers a last-write-time update while the writer holds the handle open, so a
-  // watch cannot be the correctness mechanism there) is recorded, not merely
-  // followed — a later "optimization" reaching for one regresses silently
-  // otherwise. platform/ is included: the ban is on the mechanism everywhere,
-  // not a layering boundary readLinesFrom/statPath already cover.
+  // --- No fs.watch/watchFile/FSWatcher/chokidar anywhere under apps/desktop/src/ — Windows'
+  // own deferred last-write-time update means a watch can never be the correctness mechanism. ---
   {
     const forbidden = ['fs.watch', 'watchFile', 'FSWatcher', 'chokidar'];
     let found = false;
