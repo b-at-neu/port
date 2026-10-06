@@ -273,7 +273,9 @@ Stage mapping:
 
 ### Cycle cap (before every revise dispatch)
 
-**`commands.tick` set** — the plan's `gates` already carries a `cycle-cap` entry when `reviewCycleCap` is reached (unconditional — whatever the latest review found); execute its `writes` verbatim, never re-count reviews by hand. **`commands.tick` null** — follow `TICK-PROSE.md` → "Cycle cap" in full.
+**`commands.tick` set** — the plan's `gates` already carries a `cycle-cap` entry when `reviewCycleCap` **plus any operator-granted cycles on this pull request** is reached (unconditional — whatever the latest review found); its `facts.grants` is the count the plan already read off `## Gate cleared` comments carrying `### Cycle grant` — never re-count reviews or grants by hand, and never read it from anywhere but the entry the plan returned. Execute its `writes` verbatim. **`commands.tick` null** — follow `TICK-PROSE.md` → "Cycle cap" in full.
+
+**Raising the cap vs. granting one ticket.** `reviewCycleCap` in `.claude/port.config.json` applies to every ticket, permanently, and changing it is a config edit outside this cockpit. **Grant one more cycle** under "Gate clear" above is the opposite: scoped to one pull request, one-shot, recorded on that pull request alone — it never touches the config.
 
 ## Human gates
 
@@ -309,15 +311,19 @@ The gate applies **no special label** for a session-required plan; the marker is
   > #134's pull request is at `needs human`: *revise-agent aborted an ambiguous rebase in `PIPELINE.md` — both sides rewrote the same section.* Clearing this says you have handled it. Where should it go?
   > **Back to revision** (dispatch `revise-agent` again) · **Back to review** (re-review as-is) · **Cancel**
 
-  If the gate came from the cycle cap rather than a rebase escalation, append: *"This one hit the review cycle cap, so the revision route will escalate straight back to `needs human` on the next tick. Choose review, or merge it yourself."*
+  If the gate came from the cycle cap rather than a rebase escalation, offer **Grant one more cycle** in place of the generic "Back to revision" option: *"#134's pull request is at `needs human`: 5 review cycles reached the cap of 5 without merging. Where should it go? **Grant one more cycle** (back to revision; only this PR gets a 6th review — the cap stays 5 everywhere else) · **Back to review** (re-review as-is) · **Cancel**."* Picking it writes a `### Cycle grant` line into `.temp/gate-cleared-<n>.md` (the only thing that distinguishes this clear from any other) — the grant is scoped to this one pull request and raises nothing repo-wide; `reviewCycleCap` in `.claude/port.config.json` is unchanged. A non-cap escalation never writes this line.
 
   If the gate came from the **zero-diff review gate** instead, append: *"This one hit the zero-diff gate — the latest review already covered this head. **Back to review** is the authorized one-shot re-review this clear grants; **back to revision** only helps if the revision actually moves the head, or it escalates straight back."*
 
   **When the escalation comment carries `### D<n>` blocks** (a rebase escalation with decisions to make), present **every decision in one `AskUserQuestion` call** — it takes up to 4 questions of up to 4 options each — never one call per decision. The guard hook's gate rule authorises the clear from the last **5** operator messages in this session's own transcript, and one call per decision would push the operator's own `unblock #N` out of that window and get the clear denied. More than 4 decisions → batch across multiple calls, and re-confirm the count with the operator before the label swap.
 
-  Then write `.temp/gate-cleared-<n>.md` — for a rebase escalation, a `### Rebase decisions` block, one line per decision: `` - D<n> `path` — **<letter> <label>** ``, this is the machine-readable half of the operator's answer and the only place the selection is durable. Comment it **before** the label swap, so the decisions are durable even if the swap fails: `gh pr comment <n> --repo <repo> --body-file .temp/gate-cleared-<n>.md` (`## Gate cleared`), then swap the label by branch or number per the two routes above, and announce:
+  Then write `.temp/gate-cleared-<n>.md` — for a rebase escalation, a `### Rebase decisions` block, one line per decision: `` - D<n> `path` — **<letter> <label>** ``; for a cycle-cap escalation cleared with **Grant one more cycle**, a `### Cycle grant` block instead: `One extra review cycle for this PR only; reviewCycleCap is unchanged.` — this is the only durable record of the grant (see "Cycle cap" below: the next tick counts it straight off this comment, never a separate counter). This is the machine-readable half of the operator's answer and the only place the selection is durable. Comment it **before** the label swap, so the decisions are durable even if the swap fails: `gh pr comment <n> --repo <repo> --body-file .temp/gate-cleared-<n>.md` (`## Gate cleared`), then swap the label by branch or number per the two routes above, and announce:
 
   > ✅ Gate cleared on #134's pull request at your instruction — D1 **C**. Recorded on the pull request and swapped to `needs revision`; revision redoes the rebase this tick, reapplying both automatic resolutions alongside your choice.
+
+  For a cycle-cap grant:
+
+  > ✅ Gate cleared on #134's pull request at your instruction — one extra review cycle granted (6 for this PR). Swapped to `needs revision`; revision dispatches this tick. If that review still needs revision, it escalates back here, reading 6 review cycles reached this PR's cap of 6 (5 + 1 grant).
 
 **`resume #N` and `retry #N` never clear this gate** — they re-apply a trigger for an *in-flight* label only. Say so if asked to use either on a `<labels.needsHuman>` item.
 

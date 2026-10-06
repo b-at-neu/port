@@ -55,7 +55,7 @@ export function buildQuery({
       'mergeable headRefOid reviews(first: 30) { nodes { body submittedAt commit { oid } } } comments(last: 20) { nodes { body createdAt } }',
     ),
   );
-  parts.push(prSet('needsRevision', labels.needsRevision, 'mergeable reviews(first: 30) { nodes { body } }'));
+  parts.push(prSet('needsRevision', labels.needsRevision, 'mergeable reviews(first: 30) { nodes { body } } comments(last: 20) { nodes { body createdAt } }'));
   parts.push(prSet('refreshBranch', labels.refreshBranch));
 
   // --- Gate sets ----------------------------------------------------------
