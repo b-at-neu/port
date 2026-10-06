@@ -1,8 +1,5 @@
-// The relay compose form, ported from the legacy banner (#107, #315) — state
-// in React `useState` keyed by the relay's own `sessionId#agentId`, no
-// `useEffect`. Answers (or the single decision text for `blocked`), a
-// "Copy answers"/"Copy decision" button disabled until every answer is
-// filled, and the same paste footnote the banner used.
+// The relay compose form: answers (or the single decision text for
+// `blocked`) with a copy button disabled until every answer is filled.
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'

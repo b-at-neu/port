@@ -1,7 +1,5 @@
-// The Needs you screen (#315) — everything waiting on the operator, newest
-// first, each with its action inline. No `useEffect`: the list navigator is
-// registered directly in the render body, the same idiom the Backlog screen
-// already follows.
+// The Needs you screen — everything waiting on the operator, newest first,
+// each with its action inline.
 import { useState } from 'react'
 import { RefreshCw, Inbox } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'

@@ -1,7 +1,5 @@
 // Every lead-copy string the Needs you screen renders, one switch over
-// `NeedsYouItem.kind` (the same rule `board/tick.ts`/`board/copy.ts` already
-// state) — a new kind is a compile error here, never a silently blank row.
-// DESIGN §6: a message that needs the operator leads with the action.
+// `NeedsYouItem.kind` — a new kind is a compile error, never a blank row.
 import type { NeedsYouItem } from '../../../shared/board/needs-you'
 import type { RelayPending } from '../../../shared/relay/types'
 
@@ -23,9 +21,7 @@ function questionLeadCopy(pending: RelayPending, label: string): string {
   }
 }
 
-/** The reason text behind `needs-human` — `decisions.unblock`'s own context
- *  when available, `null` otherwise (an already-unblockable item, or one at
- *  the cycle cap, still gets the fallback "escalated without a reason"). */
+/** The reason text behind `needs-human`, or `null` for the fallback copy. */
 function unblockReason(item: NeedsYouItem): string | null {
   const decision = item.matchedRow?.decisions.unblock
   if (decision === undefined || !decision.available) return null

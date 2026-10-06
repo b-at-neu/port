@@ -1,7 +1,5 @@
-// DESIGN §4 NeedsYouItem — the Needs you row: an amber status dot, lead
-// copy, a repo tag, relative age when known, and one inline action. A row
-// with more detail (an escalation reason, held paths, relay questions) gets
-// a caret that expands it in place.
+// The Needs you row: a status dot, lead copy, a repo tag, relative age,
+// and one inline action, with a caret to expand more detail in place.
 import type { ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'

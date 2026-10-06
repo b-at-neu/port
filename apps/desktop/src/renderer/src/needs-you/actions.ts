@@ -1,8 +1,5 @@
-// `actionFor` resolves each row's single inline action (the plan's own
-// table); `runAction` dispatches it — opening a dialog, calling
-// `window.port.itemAction`/`window.port.relayCopy`, or opening the item's
-// url. One switch over `NeedsYouItem.kind`, the same rule `copy.ts` already
-// states for itself.
+// `actionFor` resolves each row's single inline action; `runAction`
+// dispatches it, one switch over `NeedsYouItem.kind`.
 import type { DecisionRefusal } from '../../../shared/actions/types'
 import type { NeedsYouItem } from '../../../shared/board/needs-you'
 import { openReviewDialog } from '../gate/controller'
@@ -74,11 +71,8 @@ export interface RunActionDeps {
   readonly onExpand: () => void
 }
 
-/** The row's own click entry point. `review-plan`/`unblock` open a dialog;
- *  `open` opens the item's url in the system browser; `retry`/`refresh` are
- *  single-label `item:action` writes, reported as a toast (DESIGN §4:
- *  reversible actions apply immediately with a toast); `answer` just expands
- *  the row's compose form in place. */
+/** The row's own click entry point: opens a dialog, opens the item's url,
+ *  fires a single-label write reported as a toast, or expands the row. */
 export function runAction(item: NeedsYouItem, deps: RunActionDeps): void {
   const action = actionFor(item)
   if (action.disabledReason !== null) return
