@@ -92,6 +92,11 @@ describe('runtimeDiagnosisModel', () => {
     expect(model.body).toBe('Verified against acme/widgets in 1.5s')
   })
 
+  it('a null-repo probe (repository-free mode) names only the elapsed time', () => {
+    const model = runtimeDiagnosisModel(preflight(), probe({ repo: null, elapsedMs: 1200 }), READY_REPO, false)
+    expect(model.body).toBe('Verified in 1.2s')
+  })
+
   it('surfaces the API key note only when the probe reports one', () => {
     expect(runtimeDiagnosisModel(preflight(), probe({ apiKeyInEnvironment: true }), READY_REPO, false).notes).toContain(
       'An ANTHROPIC_API_KEY is set in this environment — this turn may not have used your subscription.',

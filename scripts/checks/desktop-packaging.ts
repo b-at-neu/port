@@ -32,6 +32,29 @@ export default async function ({ expect, fail, ok }: Reporter) {
       if (noticeLines.length !== 2) {
         fail('desktop-packaging', `${relOf(noticePath)} must carry exactly two lines, found ${noticeLines.length}`);
       } else expect(!(noticeLines[0] !== designLine1 || noticeLines[1] !== designLine2), 'desktop-packaging', `${relOf(noticePath)} (${JSON.stringify(noticeLines)}) does not match docs/DESIGN.md §6's About: line (${JSON.stringify([designLine1, designLine2])})`);
+
+      // --- shared/about/copy.ts's two strings ↔ the same About: line, both
+      // directions (#337) — the in-app About screen and the native About
+      // panel both read this file, so it drifting from NOTICE.txt would ship
+      // a third, different posture.
+      // pin: `apps/desktop/src/shared/about/copy.ts` ↔ `docs/DESIGN.md` §6's `About:` line
+      const copyPath = join(appDir, 'src/shared/about/copy.ts');
+      if (!existsSync(copyPath)) {
+        fail('desktop-packaging', `${relOf(copyPath)} does not exist`);
+      } else {
+        const copyText = readFileSync(copyPath, 'utf8');
+        const poweredByMatch = /ABOUT_POWERED_BY = '([^']*)'/.exec(copyText);
+        const noticeConstMatch = /ABOUT_NOTICE = '([^']*)'/.exec(copyText);
+        if (!poweredByMatch || !noticeConstMatch) {
+          fail('desktop-packaging', `${relOf(copyPath)} must export ABOUT_POWERED_BY and ABOUT_NOTICE string literals`);
+        } else {
+          expect(
+            !(poweredByMatch[1] !== designLine1 || noticeConstMatch[1] !== designLine2),
+            'desktop-packaging',
+            `${relOf(copyPath)} (${JSON.stringify([poweredByMatch[1], noticeConstMatch[1]])}) does not match docs/DESIGN.md §6's About: line (${JSON.stringify([designLine1, designLine2])})`,
+          );
+        }
+      }
     }
   }
 

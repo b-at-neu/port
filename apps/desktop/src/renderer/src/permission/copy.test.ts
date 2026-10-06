@@ -137,15 +137,15 @@ describe('grantLines / grantSummaryLine', () => {
 })
 
 describe('documentTitle', () => {
-  it('is "Port" when the queue is empty', () => {
-    expect(documentTitle(0)).toBe('Port')
+  it('is "port" when the queue is empty', () => {
+    expect(documentTitle(0)).toBe('port')
   })
 
   it('singular for exactly one', () => {
-    expect(documentTitle(1)).toBe('Port — 1 permission request waiting')
+    expect(documentTitle(1)).toBe('port — 1 permission request waiting')
   })
 
   it('plural for more than one', () => {
-    expect(documentTitle(2)).toBe('Port — 2 permission requests waiting')
+    expect(documentTitle(2)).toBe('port — 2 permission requests waiting')
   })
 })

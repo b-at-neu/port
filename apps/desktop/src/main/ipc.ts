@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
+import { join } from 'node:path'
 import { IPC_CHANNELS, type IpcChannel, type IpcEvent, type IpcEventMap, type IpcMap } from '../shared/ipc'
 import type { WorktreesReport } from '../shared/reclaimer/types'
 import { SOURCE_KINDS } from '../shared/board/types'
@@ -352,7 +353,7 @@ export function registerIpc(): RegisteredIpc {
     return runtimePreflight()
   })
 
-  handle('runtime:probe', (_event, request) => resolveRuntimeProbe(registryDeps, request))
+  handle('runtime:probe', (_event, request) => resolveRuntimeProbe(registryDeps, request, join(app.getPath('userData'), 'runtime-probe')))
 
   // The plan gate's four channels (#92) — `gatePreflight`/`gateClaimRead`/
   // `gateClaimSet`/`gateAnswer` are `main/actions/gate.ts`'s own exports,

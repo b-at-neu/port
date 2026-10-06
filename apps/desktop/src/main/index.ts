@@ -9,6 +9,7 @@ import { createQuitGuard } from './dispatch/quit'
 import type { Dispatcher } from './dispatch/dispatcher'
 import { confirmQuit } from './dialogs'
 import { applyNavigationGuards } from './navigation'
+import { ABOUT_NOTICE, ABOUT_POWERED_BY } from '../shared/about/copy'
 
 // A dev-only `pnpm install` never runs as root, so the SUID sandbox helper
 // (`chrome-sandbox`) ships without the root-owned 4755 permissions Chromium
@@ -58,7 +59,7 @@ if (fixture.kind === 'invalid') {
         height: 800,
         minWidth: 900,
         minHeight: 600,
-        title: 'Port',
+        title: 'port',
         show: false,
         webPreferences: {
           preload: join(__dirname, '../preload/index.js'),
@@ -99,6 +100,10 @@ if (fixture.kind === 'invalid') {
     }
 
     void app.whenReady().then(() => {
+      // Never `app.setName('port')` here — that would move the dev
+      // `userData` directory away from the operator's real profile.
+      app.setAboutPanelOptions({ applicationName: 'port', applicationVersion: app.getVersion(), credits: [ABOUT_POWERED_BY, ABOUT_NOTICE].join('\n') })
+
       // #317: fixture mode registers its own canned handlers instead of the
       // live adapter chain, and starts neither a watcher nor a hosted-session
       // store — both stay `null`, so `before-quit` below no-ops for them.

@@ -6,6 +6,7 @@
 // `claimPreflight`/`claimApply` already use, so `main/ipc.ts` only ever
 // validates the request shape and delegates. Neither ever strips
 // `ANTHROPIC_API_KEY`; both only report whether it is present.
+import { ensureDirectory } from '../platform/files'
 import { readCredentialsTell } from './credentials'
 import { resolveClaudeExecutable } from './locate'
 import { readClaudeVersion } from './version'
@@ -76,6 +77,7 @@ export interface RuntimeProbeDeps {
   readonly resolveClaudeExecutable: typeof resolveClaudeExecutable
   readonly readCredentialsTell: typeof readCredentialsTell
   readonly probe: RuntimeProbeFn
+  readonly ensureDirectory: typeof ensureDirectory
   readonly env: NodeJS.ProcessEnv
   readonly platform: NodeJS.Platform
   readonly now: () => number
@@ -86,6 +88,7 @@ const defaultRuntimeProbeDeps: RuntimeProbeDeps = {
   resolveClaudeExecutable,
   readCredentialsTell,
   probe: createRuntimeProbe(),
+  ensureDirectory,
   env: process.env,
   platform: process.platform,
   now: () => Date.now(),
@@ -97,24 +100,42 @@ function resolveReadyEntry(registryDeps: RegistryDeps, repoId: RepoId, list: typ
 
 export interface RunRuntimeProbeParams {
   readonly registryDeps: RegistryDeps
-  readonly repoId: RepoId
+  /** `null` runs the probe repository-free, against `probeDir` instead of a
+   *  registered repository — no registry lookup at all. */
+  readonly repoId: RepoId | null
+  /** The app-owned directory a repository-free probe runs in
+   *  (`join(app.getPath('userData'), 'runtime-probe')`), created if absent.
+   *  Unused in repository mode. */
+  readonly probeDir: string
 }
 
-/** Resolves the repository, then locate → credentials → one probe turn.
- *  `repo` in the response is the resolved `config.repo` display name, never
- *  the path — "Test connection" never silently picks one without saying
- *  which. */
+/** Resolves the repository (or, in repository-free mode, `params.probeDir`),
+ *  then locate → credentials → one probe turn. `repo` in the response is the
+ *  resolved `config.repo` display name, `null` in repository-free mode —
+ *  "Test connection" never silently picks one without saying which. */
 export async function runtimeProbe(params: RunRuntimeProbeParams, deps: RuntimeProbeDeps = defaultRuntimeProbeDeps): Promise<RuntimeProbe> {
   const started = deps.now()
   const checkedAt = new Date(started).toISOString()
   const apiKey = apiKeyInEnvironment(deps.env)
-  const entry = await resolveReadyEntry(params.registryDeps, params.repoId, deps.listRepositories)
+
+  let repo: string | null
+  let cwd: string
+  if (params.repoId === null) {
+    repo = null
+    cwd = params.probeDir
+    await deps.ensureDirectory(params.probeDir)
+  } else {
+    const entry = await resolveReadyEntry(params.registryDeps, params.repoId, deps.listRepositories)
+    repo = entry.config.repo
+    cwd = entry.path
+  }
+
   const located = await deps.resolveClaudeExecutable({ env: deps.env, platform: deps.platform })
 
   if (!located.ok) {
     return {
       checkedAt,
-      repo: entry.config.repo,
+      repo,
       elapsedMs: deps.now() - started,
       apiKeyInEnvironment: apiKey,
       diagnosis: located.kind === 'not-found' ? 'cli-missing' : 'bundled-fallback',
@@ -123,11 +144,11 @@ export async function runtimeProbe(params: RunRuntimeProbeParams, deps: RuntimeP
   }
 
   const credentials = await deps.readCredentialsTell()
-  const outcome = await deps.probe({ executablePath: located.path, cwd: entry.path, credentials, now: deps.now() })
+  const outcome = await deps.probe({ executablePath: located.path, cwd, credentials, now: deps.now() })
 
   return {
     checkedAt,
-    repo: entry.config.repo,
+    repo,
     elapsedMs: deps.now() - started,
     apiKeyInEnvironment: apiKey,
     diagnosis: outcome.diagnosis,
