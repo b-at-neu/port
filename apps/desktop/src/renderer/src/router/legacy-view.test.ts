@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ROUTE_IDS, containerFor, isReactScreen, routeForView, transcriptSearchFromRaw, viewFromMatch } from './legacy-view'
+import { ROUTE_IDS, boardSearchFromRaw, containerFor, isReactScreen, repoSearchFromRaw, routeForView, transcriptSearchFromRaw, viewFromMatch } from './legacy-view'
 import type { View } from './legacy-view'
 import type { RepoId } from '../../../shared/repos'
 
@@ -8,6 +8,8 @@ const REPO_ID = 'repo-1' as RepoId
 const VIEWS: readonly View[] = [
   { screen: 'board' },
   { screen: 'repos' },
+  { screen: 'repo', repoId: REPO_ID, tab: 'overview' },
+  { screen: 'repo', repoId: REPO_ID, tab: 'worktrees' },
   { screen: 'sessions', repoId: REPO_ID },
   { screen: 'search', repoId: REPO_ID },
   { screen: 'transcript', sessionId: 'sess-1', agentId: 'agent-1', title: 'My session', from: 'search', focusIndex: 3 },
@@ -64,8 +66,9 @@ describe('transcriptSearchFromRaw', () => {
 
 describe('containerFor', () => {
   it('maps every screen to its legacy container', () => {
-    expect(containerFor({ screen: 'board' })).toBe('board')
-    expect(containerFor({ screen: 'repos' })).toBe('repositories')
+    expect(containerFor({ screen: 'board' })).toBe('react')
+    expect(containerFor({ screen: 'repos' })).toBe('react')
+    expect(containerFor({ screen: 'repo', repoId: REPO_ID, tab: 'overview' })).toBe('react')
     expect(containerFor({ screen: 'sessions', repoId: REPO_ID })).toBe('repositories')
     expect(containerFor({ screen: 'search', repoId: REPO_ID })).toBe('repositories')
     expect(containerFor({ screen: 'transcript', sessionId: 's', agentId: null, title: '', from: 'sessions', focusIndex: null })).toBe('repositories')
@@ -83,7 +86,42 @@ describe('isReactScreen', () => {
     expect(isReactScreen({ screen: 'backlog' })).toBe(true)
     expect(isReactScreen({ screen: 'setup' })).toBe(true)
     expect(isReactScreen({ screen: 'about' })).toBe(true)
-    expect(isReactScreen({ screen: 'board' })).toBe(false)
+    expect(isReactScreen({ screen: 'board' })).toBe(true)
+    expect(isReactScreen({ screen: 'repos' })).toBe(true)
+    expect(isReactScreen({ screen: 'repo', repoId: REPO_ID, tab: 'overview' })).toBe(true)
     expect(isReactScreen({ screen: 'session' })).toBe(false)
+    expect(isReactScreen({ screen: 'sessions', repoId: REPO_ID })).toBe(false)
+  })
+})
+
+describe('boardSearchFromRaw', () => {
+  it('parses a valid item ref', () => {
+    expect(boardSearchFromRaw({ item: 'repo-a:41' })).toEqual({ item: { repoId: 'repo-a', number: 41 }, group: 'phase', repo: null })
+  })
+
+  it('falls back to no selection for a malformed or absent item', () => {
+    expect(boardSearchFromRaw({ item: 'not-an-item-ref' }).item).toBeNull()
+    expect(boardSearchFromRaw({}).item).toBeNull()
+  })
+
+  it('defaults group to phase, accepts repo', () => {
+    expect(boardSearchFromRaw({}).group).toBe('phase')
+    expect(boardSearchFromRaw({ group: 'repo' }).group).toBe('repo')
+    expect(boardSearchFromRaw({ group: 'nonsense' }).group).toBe('phase')
+  })
+
+  it('reads a repo filter, null when absent or empty', () => {
+    expect(boardSearchFromRaw({ repo: 'repo-a' }).repo).toBe('repo-a')
+    expect(boardSearchFromRaw({}).repo).toBeNull()
+    expect(boardSearchFromRaw({ repo: '' }).repo).toBeNull()
+  })
+})
+
+describe('repoSearchFromRaw', () => {
+  it('defaults to overview, accepts worktrees and denials', () => {
+    expect(repoSearchFromRaw({}).tab).toBe('overview')
+    expect(repoSearchFromRaw({ tab: 'worktrees' }).tab).toBe('worktrees')
+    expect(repoSearchFromRaw({ tab: 'denials' }).tab).toBe('denials')
+    expect(repoSearchFromRaw({ tab: 'nonsense' }).tab).toBe('overview')
   })
 })

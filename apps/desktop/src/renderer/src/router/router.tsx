@@ -5,13 +5,14 @@
 // source of truth for which screen is on top. `/settings` is the one route
 // that renders a real component — the renderer's first React screen.
 import { createHashHistory, createRootRoute, createRoute, createRouter, redirect } from '@tanstack/react-router'
-import { ROUTE_IDS, transcriptSearchFromRaw } from './legacy-view'
-import type { TranscriptSearch } from './legacy-view'
+import { ROUTE_IDS, boardSearchFromRaw, transcriptSearchFromRaw } from './legacy-view'
+import type { BoardSearch, TranscriptSearch } from './legacy-view'
 import { SettingsScreen } from '../settings/screen'
 import { BacklogScreen } from '../backlog/screen'
 import { NeedsYouScreen } from '../needs-you/screen'
 import { SetupScreen } from '../setup/screen'
 import { AboutScreen } from '../about/screen'
+import { BoardScreen } from '../board/screen'
 import { ShellLayout } from '../shell/layout'
 
 const rootRoute = createRootRoute({ component: ShellLayout })
@@ -24,7 +25,12 @@ const indexRoute = createRoute({
   },
 })
 
-const boardRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.board, component: () => null })
+const boardRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: ROUTE_IDS.board,
+  component: BoardScreen,
+  validateSearch: (search: Record<string, unknown>): BoardSearch => boardSearchFromRaw(search),
+})
 const reposRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.repos, component: () => null })
 const sessionsRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.sessions, component: () => null })
 const searchRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.search, component: () => null })
