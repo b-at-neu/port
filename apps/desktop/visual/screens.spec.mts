@@ -73,6 +73,21 @@ for (const [key, target] of Object.entries(SCREENSHOT_TARGETS)) {
 
       await fixture.page.screenshot({ path: join(SCREENSHOT_DIR, `${key}-${theme}.png`), animations: 'disabled', caret: 'hide' })
     })
+
+    const captureTarget = target.kind === 'capture' ? target : null
+    for (const variant of captureTarget?.variants ?? []) {
+      test(`${key} · ${variant.name} · ${theme}`, async () => {
+        if (captureTarget === null) return
+        await setTheme(fixture.page, theme)
+        await settle(fixture.page, captureTarget, variant)
+
+        if (pageErrors.length > 0) {
+          throw new Error(`'${key} · ${variant.name} · ${theme}' hit a page or console error: ${pageErrors.join('; ')}`)
+        }
+
+        await fixture.page.screenshot({ path: join(SCREENSHOT_DIR, `${key}-${variant.name}-${theme}.png`), animations: 'disabled', caret: 'hide' })
+      })
+    }
   }
 }
 

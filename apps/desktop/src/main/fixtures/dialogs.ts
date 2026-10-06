@@ -1,7 +1,5 @@
-// Fixture mode's canned claim and plan-gate preflights — an answerable
-// gate:preflight for #41 (a markdown plan body exercising every block kind)
-// and a claimable claim:preflight, both held by this app so their dialogs
-// screenshot with every step reachable.
+// Fixture mode's canned claim and plan-gate preflights, both held by this
+// app so their dialogs screenshot with every step reachable.
 import { GATE_CLAIM_OWNER } from '../../shared/gate/types'
 import type { GatePreflightResponse } from '../../shared/gate/types'
 import type { ClaimPreflightResponse } from '../../shared/claim/types'

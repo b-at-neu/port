@@ -1,6 +1,5 @@
 // Fixture mode's canned worktrees:report — one each of active, done, dirty
-// and locked, plus one orphan directory, so the Worktrees tab's own list and
-// its orphan block both have something to show.
+// and locked, plus one orphan directory.
 import type { InspectedWorktree, WorktreesReport } from '../../shared/reclaimer/types'
 
 function worktree(overrides: Partial<InspectedWorktree> & Pick<InspectedWorktree, 'path' | 'pathBasename' | 'state' | 'reason'>): InspectedWorktree {

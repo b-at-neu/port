@@ -21,7 +21,7 @@ import { FIXTURE_ENV } from '../src/main/fixtures/mode'
 // `.mjs`, matching this `.mts` file's own emitted-ESM specifier rules — a
 // relative import from a `.mts` module must name the extension Node would
 // actually resolve, not the source extension.
-import type { Target, Theme } from './targets.mjs'
+import type { CaptureVariant, Target, Theme } from './targets.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const MAIN_ENTRY = join(HERE, '..', 'out', 'main', 'index.js')
@@ -100,25 +100,34 @@ export async function setTheme(page: Page, theme: Theme): Promise<void> {
   }
 }
 
-/** Navigates to a capture target's own hash, then waits for its container,
- *  its `ready` selector, every skeleton inside that container to clear, web
- *  fonts, and two animation frames — in that order, each bounded to
- *  `WAIT_TIMEOUT_MS` and naming the target on timeout. */
-export async function settle(page: Page, target: Extract<Target, { readonly kind: 'capture' }>): Promise<void> {
-  await page.evaluate((hash: string) => {
-    location.hash = hash
-  }, target.hash)
+// Navigates to the target's (or variant's) hash, waits for the container,
+// clicks the variant's own selector if it has one, then waits ready/settle.
+export async function settle(page: Page, target: Extract<Target, { readonly kind: 'capture' }>, variant?: CaptureVariant): Promise<void> {
+  const hash = variant?.hash ?? target.hash
+  const ready = variant?.ready ?? target.ready
+
+  await page.evaluate((h: string) => {
+    location.hash = h
+  }, hash)
 
   try {
     await page.locator(target.container).first().waitFor({ state: 'visible', timeout: WAIT_TIMEOUT_MS })
   } catch (error) {
-    throw new Error(`${target.hash}: container '${target.container}' never became visible — ${String(error)}`, { cause: error })
+    throw new Error(`${hash}: container '${target.container}' never became visible — ${String(error)}`, { cause: error })
+  }
+
+  if (variant?.click !== undefined) {
+    try {
+      await page.locator(variant.click).first().click({ timeout: WAIT_TIMEOUT_MS })
+    } catch (error) {
+      throw new Error(`${hash}: click target '${variant.click}' never became clickable — ${String(error)}`, { cause: error })
+    }
   }
 
   try {
-    await page.locator(target.ready).first().waitFor({ state: 'visible', timeout: WAIT_TIMEOUT_MS })
+    await page.locator(ready).first().waitFor({ state: 'visible', timeout: WAIT_TIMEOUT_MS })
   } catch (error) {
-    throw new Error(`${target.hash}: ready selector '${target.ready}' never became visible — ${String(error)}`, { cause: error })
+    throw new Error(`${hash}: ready selector '${ready}' never became visible — ${String(error)}`, { cause: error })
   }
 
   try {
@@ -127,7 +136,7 @@ export async function settle(page: Page, target: Extract<Target, { readonly kind
       .first()
       .waitFor({ state: 'detached', timeout: WAIT_TIMEOUT_MS })
   } catch (error) {
-    throw new Error(`${target.hash}: a skeleton never cleared inside '${target.container}' — ${String(error)}`, { cause: error })
+    throw new Error(`${hash}: a skeleton never cleared inside '${target.container}' — ${String(error)}`, { cause: error })
   }
 
   await page.evaluate(() => document.fonts.ready)

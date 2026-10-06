@@ -27,6 +27,7 @@ const PILL_STATUS: Readonly<Record<InspectedWorktree['state'], PillStatus>> = {
 function WorktreeRow({ worktree, selected, onSelect }: { readonly worktree: InspectedWorktree; readonly selected: boolean; readonly onSelect: () => void }) {
   return (
     <div
+      data-slot="worktree-row"
       role="button"
       tabIndex={0}
       onClick={onSelect}
