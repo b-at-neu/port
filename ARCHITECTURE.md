@@ -12,10 +12,10 @@
 | `plugins/.claude-plugin/marketplace.json` | The dev-loop marketplace index (`port-dev`) naming `./port` | The plugin client, for this checkout's local-scope dev loop | no |
 | `plugins/port/.claude-plugin/plugin.json` | The plugin manifest; `version` is both the release signal and the on-disk cache key | `/port:init`, the release tooling | yes |
 | `plugins/port/agents/` | The plan, impl, review, revise stage prompts | Dispatched subagents | yes |
-| `plugins/port/skills/` | The seven `/port:*` skills | The operator's own session | yes |
+| `plugins/port/skills/` | The eight `/port:*` skills | The operator's own session | yes |
 | `plugins/port/hooks/` | The guard hook and its classifier | Every dispatched `Bash`/`Edit`/`Write` call | yes |
 | `plugins/port/templates/` | Fill-in templates only, written into a managed repository by `/port:init` (permissions, config, workflows) and by `/port:analyze` (the standards documents, the scaffolder/auditor skill archetypes) | `/port:init`, `/port:analyze` | yes |
-| `plugins/port/bin/` | The three scripts `/port:init` copies verbatim into a managed repository (`artifacts.mjs`, `worktrees.mjs`, `budget.mjs`); `artifacts.mjs` and `worktrees.mjs` also run in place here, addressed through `commands.artifacts`/`commands.worktrees` | `/port:init`, this repository's CI and cockpit | yes |
+| `plugins/port/bin/` | Four scripts: the three `/port:init` copies verbatim into a managed repository (`artifacts.mjs`, `worktrees.mjs`, `budget.mjs`) plus `plugin-cache.mjs`, run in place by `/port:plugin-cache-clean` and never copied by `/port:init` (the problem it fixes is per-machine, not per-repo); `artifacts.mjs` and `worktrees.mjs` also run in place here, addressed through `commands.artifacts`/`commands.worktrees` | `/port:init`, this repository's CI and cockpit, `/port:plugin-cache-clean` | yes |
 | `plugins/port/data/` | `labels.json`, the canonical label vocabulary — nothing fills it in | `/port:init`, this repository's layer 1 checks, the desktop app's label vocabulary | yes |
 | `plugins/port/docs/` | `PIPELINE.md`, `FORMATS.md`, `RECOVERY.md` — the operator's reference | Every stage agent, resolved as `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` (and its two companions) | yes |
 | `schema/` | `port.config.schema.json`, the per-repo config contract | An adopter's editor, via the `$schema` key it inherits | no |
