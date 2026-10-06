@@ -33,6 +33,27 @@ export function problemCopy(problem: RepoProblem): string {
   }
 }
 
+/** The Repositories list row's own short problem label (plan's own **UX
+ *  states**: "a short problem label") — `problemCopy` above stays the long
+ *  explanatory sentence shown on the per-repo Overview tab; this is the
+ *  pill's own text. */
+export function problemLabel(problem: RepoProblem): string {
+  switch (problem.kind) {
+    case 'directory-missing':
+      return 'Folder missing'
+    case 'not-a-git-repository':
+      return 'Not a git repo'
+    case 'not-port-managed':
+      return 'Not port-managed'
+    case 'config-malformed':
+    case 'config-invalid':
+      return 'Config invalid'
+    case 'config-unreadable':
+    case 'effective-config-unreadable':
+      return 'Config unreadable'
+  }
+}
+
 export function diagnosticCopy(diagnostic: RepoDiagnostic): string {
   switch (diagnostic.kind) {
     case 'off-integration-branch':
@@ -72,7 +93,7 @@ export function overrideLineCopy(override: AppliedOverride): string {
   return `override: ${override.path} = ${String(override.value)} (port default: ${portDefaultCopy(override.portDefault)}) — ${override.reason} — source: ${override.source}`
 }
 
-function moduleSummary(modules: ResolvedRepoConfig['modules']): string {
+export function moduleSummary(modules: ResolvedRepoConfig['modules']): string {
   const keys = Object.keys(MODULE_LABELS) as (keyof ResolvedRepoConfig['modules'])[]
   return keys
     .filter((key) => modules[key])

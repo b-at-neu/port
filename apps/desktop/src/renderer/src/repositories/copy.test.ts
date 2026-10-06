@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { diagnosticCopy, overrideLineCopy, problemCopy, registryBannerCopy, summaryParts } from './copy'
+import { diagnosticCopy, overrideLineCopy, problemCopy, problemLabel, registryBannerCopy, summaryParts } from './copy'
 import type { AppliedOverride, ResolvedRepoConfig } from '../../../shared/repos'
 
 function baseConfig(overrides: Partial<ResolvedRepoConfig> = {}): ResolvedRepoConfig {
@@ -32,6 +32,18 @@ describe('problemCopy', () => {
     const copy = problemCopy({ kind: 'effective-config-unreadable', file: '.github/workflows/approval-check.yml', reason: 'not-a-file', message: 'EISDIR' })
     expect(copy).toContain("Can't read .github/workflows/approval-check.yml")
     expect(copy).toContain('names the check the approval gate excuses')
+  })
+})
+
+describe('problemLabel', () => {
+  it('gives every problem kind a short pill label', () => {
+    expect(problemLabel({ kind: 'directory-missing' })).toBe('Folder missing')
+    expect(problemLabel({ kind: 'not-a-git-repository' })).toBe('Not a git repo')
+    expect(problemLabel({ kind: 'not-port-managed', carriedBy: [], currentBranch: 'dev' })).toBe('Not port-managed')
+    expect(problemLabel({ kind: 'config-malformed', message: 'x' })).toBe('Config invalid')
+    expect(problemLabel({ kind: 'config-invalid', violations: [] })).toBe('Config invalid')
+    expect(problemLabel({ kind: 'config-unreadable', reason: 'permission-denied', message: 'x' })).toBe('Config unreadable')
+    expect(problemLabel({ kind: 'effective-config-unreadable', file: 'CLAUDE.md', reason: 'permission-denied', message: 'x' })).toBe('Config unreadable')
   })
 })
 
