@@ -148,7 +148,7 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
     }
   })
 
-  const base = { groupBy, groups, notReady, repositorySummaries, totalItems: rows.length, ungated, relays }
+  const base = { groupBy, groups, rows, notReady, repositorySummaries, totalItems: rows.length, ungated, relays }
   return { ...base, emittedAt: snapshot.emittedAt, signature: JSON.stringify(base) }
 }
 

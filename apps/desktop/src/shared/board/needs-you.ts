@@ -44,6 +44,14 @@ const ROW_KIND: Readonly<Partial<Record<string, RowNeedsYouKind>>> = {
   blocked: 'blocked',
 }
 
+/** The row-level "needs you" kind for a stage label key, `undefined` for
+ *  every other stage — shared with `board/sections.ts`'s own "Waiting on
+ *  you" predicate so the Board's section and the sidebar's count can never
+ *  disagree about which rows qualify. */
+export function needsYouReasonOf(stageKey: string | undefined): RowNeedsYouKind | undefined {
+  return ROW_KIND[stageKey ?? '']
+}
+
 // A held reason outside this set is routine queueing, never something waiting on the operator.
 const HELD_KINDS: ReadonlySet<TickHeld['reason']> = new Set(['conflicting', 'contended', 'cycle-cap'])
 
@@ -82,7 +90,7 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date): readonly Need
   const items: NeedsYouItem[] = []
 
   for (const row of rows) {
-    const kind = ROW_KIND[row.stageLabel?.key ?? '']
+    const kind = needsYouReasonOf(row.stageLabel?.key)
     if (kind === undefined) continue
     const viewer = viewerByRepo.get(row.item.repoId) ?? null
     if (viewer !== null && !row.item.assignees.includes(viewer)) continue
