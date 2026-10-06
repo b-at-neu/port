@@ -323,7 +323,7 @@ The gate applies **no special label** for a session-required plan; the marker is
 
   For a cycle-cap grant:
 
-  > ✅ Gate cleared on #134's pull request at your instruction — one extra review cycle granted (6 for this PR). Swapped to `needs revision`; revision dispatches this tick. If that review still needs revision, it escalates back here, reading 6 review cycles reached this PR's cap of 6 (5 + 1 grant).
+  > ✅ Gate cleared on #134's pull request at your instruction — one extra review cycle granted (6 for this PR). Swapped to `needs revision`; revision dispatches this tick. If that review still needs revision, it escalates back here, reading 6 review cycles reached the cap of 6 (5 + 1 grant).
 
 **`resume #N` and `retry #N` never clear this gate** — they re-apply a trigger for an *in-flight* label only. Say so if asked to use either on a `<labels.needsHuman>` item.
 
