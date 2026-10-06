@@ -1,4 +1,7 @@
-// The one React root — sidebar, the portaled route, the palette, the pause dialog, the toaster.
+// The one React root — sidebar, the portaled route, the palette, the pause
+// dialog, the claim and plan-gate dialogs (#319, mounted once here rather
+// than per-screen so the Board's TicketRow and the Backlog's own entry
+// points share one instance each), the toaster.
 import { Outlet } from '@tanstack/react-router'
 import { createPortal } from 'react-dom'
 import { Sidebar } from './sidebar'
@@ -6,6 +9,8 @@ import { CommandPalette } from './palette'
 import { PauseConfirmDialog } from './pause-confirm'
 import { Toaster } from '@/components/ui/sonner'
 import { usePortalTarget } from '../react/portal-target'
+import { ClaimDialog } from '../claim/dialog'
+import { GateDialog } from '../gate/dialog'
 
 export function ShellLayout() {
   const reactRoot = usePortalTarget()
@@ -16,6 +21,8 @@ export function ShellLayout() {
       {reactRoot !== null ? createPortal(<Outlet />, reactRoot) : null}
       <CommandPalette />
       <PauseConfirmDialog />
+      <ClaimDialog />
+      <GateDialog />
       <Toaster />
     </>
   )
