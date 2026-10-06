@@ -5,20 +5,11 @@ import { root, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 import { message } from '../lib/errors.ts';
 
-// One-contract-per-directory rail for the three-way split under
-// plugins/port/ (#171): templates/ keeps only fill-in templates, bin/ keeps
-// only self-contained executables, data/ keeps only canonical JSON, and no
-// tracked file still names one of the four moved paths under its old
-// templates/-relative location. docs/ENGINEERING.md §1 states the split;
-// this is what pins it so the next executable or data file cannot land in
-// templates/ silently the way worktrees.mjs and budget.mjs both did before
-// this ticket.
+// One-contract-per-directory rail for the three-way split under plugins/port/: templates/
+// keeps only fill-in templates, bin/ only self-contained executables, data/ only canonical JSON.
 export default async function ({ expect, fail, note, ok }: Reporter) {
-  // --- templates/ holds only fill-in templates, both directions ---------------
-  // guard(#171): a new executable or canonical-data file landing in
-  // templates/ the way worktrees.mjs and budget.mjs both did after issue 149
-  // established the precedent — a manifest forces a decision about a new
-  // file's role instead of silently accepting it.
+  // --- templates/ holds only fill-in templates, both directions — a manifest forces a
+  // decision about a new file's role instead of silently accepting it. ---
   {
     const dir = 'plugins/port/templates';
     const expected = new Set([
@@ -40,11 +31,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- bin/ holds only self-contained .mjs -------------------------------------
-  // guard(#171): the precedent issue 149 established per file — an adopting
-  // repository copies each of these alone, so none may carry a relative
-  // import — now enforced directory-wide, so a fourth script added here is
-  // covered automatically rather than needing its own per-file check block.
+  // --- bin/ holds only self-contained .mjs — an adopting repository copies each alone, so
+  // none may carry a relative import, enforced directory-wide. ---
   {
     const dir = 'plugins/port/bin';
     for (const f of readdirSync(join(root, dir))) {
@@ -63,9 +51,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- data/ holds only canonical JSON -----------------------------------------
-  // guard(#171): data/ exists to name the canonical-data role; a non-JSON
-  // file there would blur it back into looking like a second templates/.
+  // --- data/ holds only canonical JSON — a non-JSON file there would blur it into a second templates/. ---
   {
     const dir = 'plugins/port/data';
     for (const f of readdirSync(join(root, dir))) {
@@ -73,14 +59,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- No stale path survives the move -----------------------------------------
-  // guard(#171): a reference to one of the four moved files' old
-  // templates/-relative location surviving somewhere `docs.ts`'s own
-  // "Stale references" scan does not reach — that check is markdown-only and
-  // scoped to four trees, while these paths live in .ts, .json, and .yml
-  // files. Excludes only this file itself, which names the four strings by
-  // construction; docs/TESTING.md's description of this very rule is worded
-  // to avoid forming the literal substrings for the same reason.
+  // --- No stale path survives the move — a reference to one of the four moved files' old
+  // templates/-relative location, in non-markdown files docs.ts's scan does not reach. ---
   {
     const banned = ['templates/artifacts.mjs', 'templates/worktrees.mjs', 'templates/budget.mjs', 'templates/labels.json'];
     const selfRel = 'scripts/checks/layout.ts';

@@ -4,24 +4,15 @@ import { pathToFileURL } from 'node:url';
 import { root, readJson } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// Issue 205: 121 denials recorded against stage agents running their own
-// configured commands.checks — 18 of them because the repository's own
-// extraAllow entry for `node scripts/checks.ts` carried no trailing
-// wildcard, so an agent limiting output (`2>&1 | tail -100`) missed the
-// allowlist outright. This module makes that coverage mechanically checkable
-// instead of a convention nobody re-verifies.
+// Makes extraAllow coverage for commands.* mechanically checkable, so an entry missing its
+// trailing wildcard (denying any agent that limits a check's output) is caught, not a convention nobody re-verifies.
 export default async function ({ expect, fail, note, ok }: Reporter) {
   const { allowMatchers, decide, bashPatternMatches, repoRelative } = await import(
     pathToFileURL(join(root, 'plugins/port/hooks/lib/guard-rules.mjs')).href
   );
 
-  // --- Check A self-test — make it fail first ---------------------------------
-  // guard(#205): an extraAllow entry generated without a trailing ` *`,
-  // denying every dispatched agent that limits a check's output. The real
-  // historical failure, per ENGINEERING §7: a check that cannot be made to
-  // fail is not a check. `bashPatternMatches` is called directly — Check A's
-  // own matcher-wrapper shape is `allowMatchers`'s job to build, and
-  // rebuilding it here would only re-derive fields nothing reads.
+  // --- Check A self-test: an extraAllow entry without a trailing ` *` denies every agent
+  // that limits a check's output. `bashPatternMatches` is called directly, not rebuilt. ---
   {
     const narrowPattern = 'node scripts/checks.ts';
     const wildcardPattern = 'node scripts/checks.ts *';
@@ -35,8 +26,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   }
 
   // --- Check A — commands.* coverage ------------------------------------------
-  // Every command this repository configures must match the allowlist both
-  // bare and with a probe suffix — the second is what forces the wildcard.
+  // Every configured command must match the allowlist both bare and with a probe suffix.
   {
     const settingsFiles = ['.claude/settings.json', '.claude/settings.local.json'].map((f) => join(root, f));
     const matchers = allowMatchers(settingsFiles);
@@ -67,20 +57,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- Check A' — a preexisting bare entry is never replaced by its wildcard --
-  // guard(#212): a wildcard silently replacing a preexisting bare entry
-  // instead of joining it — functional matching alone can't tell the two
-  // states apart, since a wildcard-only entry already satisfies both (R3-M1).
-  // A wildcard entry alone already satisfies Check A's functional bare/suffix
-  // match above, so it cannot by itself catch a bare entry silently dropped
-  // when the wildcard was added alongside it — exactly what happened once:
-  // issue 205's fix removed `Bash(node scripts/checks.ts)` instead of
-  // keeping it. `init/SKILL.md`'s reconcile rule says the wildcard form is
-  // "added alongside it — never removed", matching the paired bare/wildcard
-  // convention every other bare-invocable command in permissions.base.json
-  // already follows. Asserted as literal string presence, not functional
-  // matching, since functional matching is exactly what cannot distinguish
-  // the two states here.
+  // --- Check A' — a preexisting bare entry is never replaced by its wildcard: asserted as
+  // literal string presence, since functional matching can't tell a dropped bare entry from a kept one. ---
   {
     const checkCommand = readJson('.claude/port.config.json').commands?.checks?.[0]?.run;
     if (typeof checkCommand === 'string') {
@@ -94,11 +72,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- Check B — classifier cases for normalization ---------------------------
-  // guard(#205): the guard denying an agent's own configured command merely
-  // because the harness expanded it to an absolute path. Each case names the
-  // failure it catches, mirroring hooks.ts's own "Guard hook classifier"
-  // style.
+  // --- Check B — classifier cases for normalization: the guard must not deny an agent's own
+  // configured command merely because the harness expanded it to an absolute path. ---
   {
     const settingsFile = join(root, '.claude/settings.json');
     const matchers = allowMatchers([settingsFile]);
@@ -180,13 +155,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     );
   }
 
-  // --- Check C — repoRelative, called directly --------------------------------
-  // guard(#205): the fail-closed arm silently reshaping a declined path into
-  // the POSIX form the allow patterns are written in, widening the match.
-  // Check B reaches this function only through `decide`, which can only ever
-  // observe the allow/deny it feeds into. These cases assert the rewrite's
-  // own documented contract, including the fail-closed arm, whose whole
-  // point is that a declined path comes back byte-identical.
+  // --- Check C — repoRelative, called directly: asserts the rewrite's documented contract,
+  // including the fail-closed arm, whose point is that a declined path comes back byte-identical. ---
   {
     const rel = (label: string, command: string, configRoot: string, expected: string): void => {
       const actual = repoRelative(command, configRoot);
@@ -218,10 +188,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     // (4) The docstring's `..`-escape claim — no root occurrence, so no rewrite.
     rel('a relative .. escape is returned byte-identical', 'node ../../elsewhere/checks.ts', r, 'node ../../elsewhere/checks.ts');
 
-    // (5) The fail-closed arm's second effect, which used to leak: a
-    // backslash-spelled command outside the root must come back exactly as
-    // typed, never separator-normalized into something the POSIX-shaped allow
-    // patterns could match.
+    // (5) A backslash-spelled command outside the root must come back exactly as typed, never separator-normalized.
     rel(
       'a backslash path outside the root is not separator-normalized',
       'node C:\\other\\scripts\\checks.ts',
@@ -229,9 +196,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       'node C:\\other\\scripts\\checks.ts',
     );
 
-    // (6) A backslash-spelled path *inside* the root still resolves — the
-    // normalization is a by-product of a real strip, which is the only way it
-    // is ever reached.
+    // (6) A backslash-spelled path inside the root still resolves — a by-product of a real strip.
     rel(
       'a backslash path inside the root still resolves',
       'node C:\\w\\repo\\scripts\\checks.ts',
@@ -240,11 +205,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     );
   }
 
-  // --- Check D — phrase pins ---------------------------------------------------
-  // guard(#205): the prompt arm of the fix being reverted in one file with
-  // CI silent — PIPELINE.md must still name which direction the trailing
-  // wildcard fails toward. A future prose edit that quietly reverts either
-  // rule fails here rather than in a live pipeline run.
+  // --- Check D — phrase pins: PIPELINE.md must still name which direction the trailing
+  // wildcard fails toward, so a reverting prose edit fails here rather than in a live run. ---
   {
     const skillRel = 'plugins/port/skills/init/SKILL.md';
     const skillText = readFileSync(join(root, skillRel), 'utf8');
@@ -257,14 +219,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     expect(pipelineText.includes('fails toward availability'), 'allowlist-phrase-pin', `${pipelineRel} no longer states which direction the wildcard fails toward (ENGINEERING §4)`);
   }
 
-  // --- Check E — the prompt arm's own copies ------------------------------------
-  // guard(#205): the prompt arm of the fix being reverted in one file with
-  // CI silent. The prose issue 205 records as having lost this argument 18
-  // times lives in three stage prompts, so §2 needs it pinned. The long
-  // clause is byte-identical between impl-agent and revise-agent (both
-  // describe running commands.checks); the review-agent variant says the
-  // same thing about commands.artifacts in its own words, so only the two
-  // operative phrases are pinned across all three.
+  // --- Check E — the prompt arm's own copies: the long clause is byte-identical between
+  // impl-agent and revise-agent; review-agent says the same about commands.artifacts in its own words, so only the two operative phrases are pinned across all three. ---
   {
     const runners = ['plugins/port/agents/impl-agent.md', 'plugins/port/agents/revise-agent.md'];
     const allThree = [...runners, 'plugins/port/agents/review-agent.md'];
@@ -276,9 +232,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       }
     }
 
-    // The shared clause, pinned byte-identical between its two copies rather
-    // than only asserted present in each — a reworded copy is exactly the drift
-    // §2 forbids.
+    // The shared clause, pinned byte-identical between its two copies — a reworded copy is the drift to forbid.
     const CLAUSE =
       ': no `2>&1`, no pipe into `tail`/`head`/`grep` (#205 — the reporter prints one `ok` line or one `FAIL` line per failure, so there is nothing to truncate), and no expansion to an absolute path (the harness preamble\'s "use absolute file paths" is wrong for a `commands.*` invocation specifically — the allowlist entry is the repo-relative string, run it exactly as configured).';
     for (const rel of runners) {
@@ -286,28 +240,13 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- Check F — what actually bounds the wildcard ------------------------------
-  // guard(#212): the trailing wildcard's fail-toward-availability argument
-  // resting on the deny list, which keys off a command's leading tokens and
-  // so cannot fire on anything chained after a matched prefix. Both prose
-  // copies used to rest the argument on "the deny list stays the real safety
-  // surface for whatever gets chained after it", which is false. What makes
-  // the widening bounded is that the guard hook is **deny-only**: it can add
-  // a denial but never grant one, so a wildcard entry widens only what the
-  // hook declines to object to. That is a property of the shipped hook, so
-  // it is asserted against the hook itself rather than trusted as prose, and
-  // the two prose copies are pinned to state it.
+  // --- Check F — what actually bounds the wildcard: the guard hook is deny-only, so a
+  // wildcard entry widens only what the hook declines to object to — asserted against the hook itself, not trusted as prose. ---
   {
     const hookRel = 'plugins/port/hooks/agent-guard.mjs';
     const hookText = readFileSync(join(root, hookRel), 'utf8');
-    // The hook's own header comment spells `permissionDecision: "deny"` in
-    // prose, so matching the raw file left `emitted` non-empty even with the
-    // real emission deleted — the presence assertion below reported green while
-    // looping over a comment (ENGINEERING §7, "a check must be able to
-    // distinguish the state it exists to detect"). Only whole-line and block
-    // comments are stripped: a trailing `//` strip would truncate any code line
-    // holding a `//` inside a string literal, and a stray decision spelled in a
-    // trailing comment failing this check errs toward the safe direction.
+    // Only whole-line and block comments are stripped, never a trailing `//`, which would
+    // truncate a code line holding one inside a string literal.
     const hookCode = hookText
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .split('\n')
@@ -331,13 +270,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- Check G — the Skill delivery path, both directions ---------------------
-  // guard(#50): a skill-only plugin could not reach a dispatched agent because
-  // Skill was absent from the template, this repository's own settings, and
-  // the two read-only agents' tools: — recommending a capability the
-  // pipeline could not deliver. Same shape as Check A': asserted in both
-  // directions, since three of four carrying it is the half-live state that
-  // recommends a benefit the agents do not actually have.
+  // --- Check G — the Skill delivery path, both directions: three of four carriers having it
+  // is the half-live state that recommends a benefit the agents do not actually have. ---
   {
     function frontmatterOf(text: string): Record<string, string> | null {
       const m = /^---\n([\s\S]*?)\n---/.exec(text);

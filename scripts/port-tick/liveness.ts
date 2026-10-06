@@ -1,9 +1,5 @@
-// Pure: the liveness diff against the dispatch log, per
-// plugins/port/docs/RECOVERY.md → "Liveness". `TaskList` itself is a model-
-// only call (this engine cannot make it), so the model calls it and passes
-// the live `description` strings in; this module only classifies. The app
-// imports this directly (docs/ENGINEERING.md §1): no relative import, a leaf
-// module.
+// Pure: the liveness diff against the dispatch log. `TaskList` is a model-only call; the
+// model passes the live `description` strings in, and this module only classifies.
 
 /** The dispatch-log `description` the harness records verbatim for an
  *  in-flight item. */
@@ -30,19 +26,8 @@ export interface UnmatchedResult {
   readonly nextResets?: number;
 }
 
-/** Classifies one in-flight item with no live `TaskList` match against its
- *  dispatch-log row, or `undefined` for an item this session never
- *  dispatched. At most one automatic reset per item per session — a crash
- *  loop reports instead of resetting forever:
- *
- *  - No row at all → `no-record`: this session cannot prove anything about
- *    it, report-only forever.
- *  - Row `dispatched` (first unmatched tick) → `suspect`: debounce one tick,
- *    change nothing.
- *  - Row `suspect`, still unmatched, `resets: 0` → `reset`: provably dead,
- *    safe to auto-reset. Redispatches next tick, never this one.
- *  - Already reset once and stalled again (`resets >= 1`) → `capped`:
- *    report, never reset a second time. */
+/** Classifies one in-flight item with no live `TaskList` match against its dispatch-log row.
+ *  At most one automatic reset per item per session: no row → `no-record`; `dispatched` → `suspect` (debounce one tick); `suspect` with `resets: 0` → `reset`; else `capped`. */
 export function classifyUnmatched(logRow: LedgerRow | undefined): UnmatchedResult {
   if (!logRow) return { class: 'no-record' };
   if (logRow.state === 'dispatched') return { class: 'suspect', nextState: 'suspect', nextResets: logRow.resets ?? 0 };
@@ -52,11 +37,8 @@ export function classifyUnmatched(logRow: LedgerRow | undefined): UnmatchedResul
   return { class: 'capped' };
 }
 
-/** The five in-flight aliases' `livenessExpected` rows, read from `actionable`
- *  (#220's exclusion applied) rather than the raw partition — a contradictory
- *  in-flight item is never cross-checked or auto-reset. `label` is resolved
- *  through `labels`, never the default string literal. Moved out of
- *  `port-tick.ts` for line-budget headroom (#220); behaviour-identical. */
+/** The five in-flight aliases' `livenessExpected` rows, read from `actionable` rather than the
+ *  raw partition — a contradictory in-flight item is never cross-checked or auto-reset. */
 export function buildLivenessExpected(actionable: Record<string, { mine: { readonly number: number }[] }>, labels: Record<string, string>): { readonly item: number; readonly labelKey: string; readonly label: string; readonly stage: string }[] {
   const specs: Array<[string, string, string]> = [
     ['planning', 'planning', 'plan-agent'],
@@ -70,9 +52,7 @@ export function buildLivenessExpected(actionable: Record<string, { mine: { reado
   );
 }
 
-/** The retry mapping from an in-flight label back to its trigger label,
- *  keyed by the config label key (never the resolved name — the caller
- *  substitutes the resolved name). */
+/** The retry mapping from an in-flight label back to its trigger label, keyed by config label key. */
 export const RETRY_TRIGGER: Readonly<Record<string, string>> = {
   planning: 'ready',
   inProgress: 'planApproved',
@@ -81,9 +61,7 @@ export const RETRY_TRIGGER: Readonly<Record<string, string>> = {
   refreshing: 'refreshBranch',
 };
 
-/** A `"session limit"`/`"resets at"`-shaped completion message — the usage-
- *  limit class, which takes precedence over ordinary stalling and resets
- *  every affected item regardless of its dispatch-log state. */
+/** A `"session limit"`/`"resets at"`-shaped message — takes precedence over ordinary stalling. */
 export function isUsageLimitMessage(text: string | null | undefined): boolean {
   return /session limit|resets at/i.test(text ?? '');
 }

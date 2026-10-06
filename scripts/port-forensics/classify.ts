@@ -1,9 +1,5 @@
-// The six assertions (#123), as pure functions over already-scanned events —
-// no filesystem, no `gh`, nothing but arrays and strings, so every one is
-// exercised directly by scripts/port-forensics/cases/classify.cases.json.
-// scan.ts is the only I/O; report.ts is the only place a finding's text
-// reaches the operator, and always through `excerpt` (imported, never
-// reimplemented).
+// The six assertions, as pure functions over already-scanned events — no filesystem, no `gh`.
+// scan.ts is the only I/O; report.ts is the only place a finding's text reaches the operator.
 import { classifyRecord, pairToolResults, excerpt } from '../lib/transcript.ts';
 
 function isRecord(v: unknown): boolean {
@@ -11,17 +7,11 @@ function isRecord(v: unknown): boolean {
 }
 
 // --- Item correlation --------------------------------------------------------
-// The existing documented rule and no other (PIPELINE.md's worktree
-// correlation, apps/desktop's own AgentRecord.itemNumber): `/#(\d+)\b/`
-// against the meta sidecar's description, first match, `#0` excluded. The
-// stage list is pinned against the real basenames under
-// plugins/port/agents/ and against apps/desktop's own PORT_STAGE_AGENTS,
-// both directions, by scripts/checks/forensics.ts.
+// `/#(\d+)\b/` against the meta sidecar's description, first match, `#0` excluded.
 export const STAGE_AGENTS = ['plan-agent', 'impl-agent', 'review-agent', 'revise-agent'];
 
-/** Matched prefix-agnostically: everything up to and including the last `:`
- *  is stripped first, since real meta sidecars carry both `port:plan-agent`
- *  and a bare `plan-agent`. `null` for a non-port agent. */
+/** Matched prefix-agnostically — stripped up to the last `:`, since meta sidecars carry
+ *  both `port:plan-agent` and a bare `plan-agent`. */
 export function stageOf(agentType: unknown): string | null {
   if (typeof agentType !== 'string') return null;
   const colonIndex = agentType.lastIndexOf(':');
@@ -38,10 +28,7 @@ export function itemNumberOf(description: unknown): number | null {
 }
 
 // --- Local copies of the two shell-syntax predicates ------------------------
-// Deliberately reimplemented rather than imported from
-// plugins/port/hooks/lib/command-rules.mjs — scripts/ may not depend on a
-// shipped path's internals. scripts/checks/forensics.ts pins this copy
-// against the original, both directions, per docs/ENGINEERING.md §2.
+// Deliberately reimplemented rather than imported from a shipped path's internals; scripts/checks/forensics.ts pins this copy against the original, both directions.
 function tokenize(command: string): string[] {
   const tokens: string[] = [];
   let i = 0;
@@ -78,8 +65,7 @@ function stripQuoted(command: string): string {
   return command.replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""');
 }
 
-/** A `for`/`while`/`until` keyword and a `do` keyword, each at a shell
- *  command position, on the quote-stripped command — the #120 shape. */
+/** A `for`/`while`/`until` keyword and a `do` keyword, each at a shell command position, on the quote-stripped command. */
 export function usesShellLoop(command: string): boolean {
   const stripped = stripQuoted(command);
   const hasLoopKeyword = ['for', 'while', 'until'].some((kw) => atCommandPosition(stripped, kw));
@@ -113,13 +99,8 @@ function rawText(raw: any): string {
     .join('\n');
 }
 
-/** Derives one of `quota`/`operator-stop`/`truncated`/`terminal`/`unknown`
- *  for a single transcript's raw records, in order. There is no persisted
- *  `status: killed`/`status: failed` anywhere in the on-disk format (verified
- *  against a real session tree) — every one of these four is read from an
- *  observable record shape, and an ending this cannot place is `unknown`,
- *  named with its last record's kind, never folded into `terminal` (reads as
- *  clean) or `truncated` (reads as a crash). */
+/** Derives one of `quota`/`operator-stop`/`truncated`/`terminal`/`unknown` for a single
+ *  transcript's raw records. An ending this cannot place is `unknown`, never folded into `terminal` or `truncated`. */
 export function classifyTermination(records: any[]): any {
   if (!Array.isArray(records) || records.length === 0) {
     return { class: 'unknown', evidence: { lastKind: 'none', reason: 'empty transcript' } };
@@ -146,9 +127,7 @@ export function classifyTermination(records: any[]): any {
   if (last.kind === 'tool-call') {
     const isPaired = paired.some((p) => p.index === emitted.length - 1);
     if (!isPaired) return { class: 'truncated', evidence: { tool: last.name } };
-    // A paired-but-last tool-call (the transcript ends right on the result)
-    // reads the same as any other completed turn — falls through to unknown
-    // below, since nothing here says whether more was coming.
+    // A paired-but-last tool-call reads the same as any completed turn — falls through to unknown.
     return { class: 'unknown', evidence: { lastKind: 'tool-call (paired)' } };
   }
   if (last.kind === 'assistant-text' || last.kind === 'thinking') {
@@ -159,8 +138,7 @@ export function classifyTermination(records: any[]): any {
 
 // --- (2) Notification gaps --------------------------------------------------
 
-/** Every `agentId` a session's own transcript dispatched
- *  (`toolUseResult.status === 'async_launched'`). */
+/** Every `agentId` a session's own transcript dispatched. */
 function dispatchedAgentIds(sessionRecords: any[]): string[] {
   const ids: string[] = [];
   for (const raw of sessionRecords) {
@@ -177,13 +155,8 @@ function taskStatusRecords(sessionRecords: any[]): any[] {
   return sessionRecords.filter((raw) => isRecord(raw) && raw.type === 'attachment' && isRecord(raw.attachment) && raw.attachment.type === 'task_status');
 }
 
-/** Fails toward `not-computable`, never toward a fabricated failure count —
- *  a session predating the `task_status` attachment type carries zero of
- *  them, and reporting every dispatch as unnotified there would be
- *  fabricated defects (docs/ENGINEERING.md's own "an absent signal is never
- *  read as a passing one" cuts both ways: it is also never read as a
- *  failing one). Requires at least one `task_status` record in the session
- *  before asserting anything. */
+/** Fails toward `not-computable`, never a fabricated failure count — a session predating the
+ *  `task_status` attachment type carries zero of them. Requires at least one before asserting anything. */
 export function notificationGaps(sessionRecords: any[]): any {
   const statusRecords = taskStatusRecords(sessionRecords);
   if (statusRecords.length === 0) {
@@ -197,14 +170,8 @@ export function notificationGaps(sessionRecords: any[]): any {
 
 // --- (3) Orphans -------------------------------------------------------------
 
-/** `inFlightItems`: `[{ number, label }]` from a live label read.
- *  `agentSummaries`: `[{ agentId, itemNumber, class }]`, one per correlated
- *  agent transcript (`classifyTermination`'s own output, already reduced to
- *  `class`). An item is an orphan when it carries an in-flight label but no
- *  correlated agent shows a `terminal` turn — either nothing correlates to
- *  it at all, or every agent that does has already stopped
- *  (quota/operator-stop/truncated/unknown). Reports only; never writes a
- *  label. */
+/** An item is an orphan when it carries an in-flight label but no correlated agent shows a
+ *  `terminal` turn — either nothing correlates, or every correlated agent has already stopped. Reports only; never writes a label. */
 export function orphans(inFlightItems: any[], agentSummaries: any[]): any[] {
   const findings: any[] = [];
   for (const item of inFlightItems) {
@@ -224,11 +191,8 @@ export function orphans(inFlightItems: any[], agentSummaries: any[]): any[] {
 
 // --- (4)/(5) Shell loops and Bash timeouts ----------------------------------
 
-/** `sources`: `[{ source, name, command }]` — every `Bash` tool-call across
- *  the session and every subagent transcript, `source` naming which
- *  (`'session'` or an `agentId`) so a finding is attributable. Complements
- *  the `PreToolUse` guard hook (#120): the hook prevents, this detects what
- *  the hook missed, e.g. a loop run before the hook shipped. */
+/** Every `Bash` tool-call across the session and every subagent transcript, `source` naming
+ *  which so a finding is attributable. Complements the guard hook: the hook prevents, this detects what it missed. */
 export function shellLoopHits(sources: any[]): any[] {
   const bySource = new Map<string, any>();
   for (const s of sources) {
@@ -242,8 +206,7 @@ export function shellLoopHits(sources: any[]): any[] {
   return [...bySource.values()];
 }
 
-/** `sources`: `[{ source, name, resultText }]` — every paired `Bash`
- *  tool-result's text, across the session and every subagent transcript. */
+/** Every paired `Bash` tool-result's text, across the session and every subagent transcript. */
 export function bashTimeouts(sources: any[]): any[] {
   const hits: any[] = [];
   for (const s of sources) {
@@ -257,13 +220,8 @@ export function bashTimeouts(sources: any[]): any[] {
 
 // --- (6) Blocked-after-denial -------------------------------------------------
 
-/** `agent`: `{ agentId, description, stage, resultTexts: string[], finalAssistantText: string | null }`.
- *  A denial is a tool-result whose text opens with `port: ` — the guard
- *  hook's own `permissionDecisionReason` prefix. The contract this checks:
- *  every stage agent that hit at least one denial must open its **final**
- *  assistant turn with the literal `BLOCKED:` — never a substring anywhere,
- *  which the literal string alone matches thousands of times across the
- *  tree in prompts and prose and would pass vacuously. */
+/** A denial is a tool-result whose text opens with `port: `. Every stage agent that hit at
+ *  least one denial must open its final assistant turn with the literal `BLOCKED:`. */
 export function blockedAfterDenial(agent: any): any {
   const denialCount = agent.resultTexts.filter((t: unknown) => typeof t === 'string' && t.startsWith('port: ')).length;
   if (denialCount === 0) return null;
@@ -280,9 +238,8 @@ export function blockedAfterDenial(agent: any): any {
 
 // --- Quota classing ----------------------------------------------------------
 
-/** Groups agents whose `classifyTermination` read `quota` by `resetsAt` —
- *  four agents hitting the same five-hour reset is one exhausted window,
- *  not four independent crashes. `agents`: `[{ agentId, class, evidence }]`. */
+/** Groups agents whose `classifyTermination` read `quota` by `resetsAt` — four agents hitting
+ *  the same reset is one exhausted window, not four independent crashes. */
 export function quotaClass(agents: any[]): any[] {
   const groups = new Map<string, any>();
   for (const a of agents) {

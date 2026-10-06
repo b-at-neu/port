@@ -4,10 +4,8 @@ import { pathToFileURL } from 'node:url';
 import { root } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// #293: bin/budget.mjs's --session support — one session log per dispatcher,
-// so the cockpit's own sweep never closes rows this app's agents are still
-// working through, and vice versa. A new topic module rather than growing
-// scripts/checks/budget.ts further.
+// bin/budget.mjs's --session support: one session log per dispatcher, so one dispatcher's
+// sweep never closes rows another's agents are still working through.
 export default async function ({ expect, fail, ok }: Reporter) {
   const scriptRel = 'plugins/port/bin/budget.mjs';
   const scriptPath = join(root, scriptRel);
@@ -16,9 +14,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
   const mod = await import(pathToFileURL(scriptPath).href);
   const { sessionLogName } = mod;
 
-  // --- sessionLogName: the absent/valid/invalid cases ------------------------
-  // guard(#293): a malformed --session silently sharing a file with the
-  // default session, or a valid one wrongly rejected.
+  // --- sessionLogName: the absent/valid/invalid cases — a malformed --session must never silently share the default session's file. ---
   {
     const cases: [string | undefined, string | null][] = [
       [undefined, 'budget-session.tsv'],
@@ -35,9 +31,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- reset/sweep/dispatch each accept --session -----------------------------
-  // guard(#293): one mode gaining --session while another is left behind,
-  // silently sharing the default session log for the one that was missed.
+  // --- reset/sweep/dispatch each accept --session — one mode missing it would silently share the default session log. ---
   {
     const modes: { name: string; fn: string }[] = [
       { name: 'reset', fn: 'function runReset(' },

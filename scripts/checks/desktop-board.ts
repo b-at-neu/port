@@ -3,12 +3,8 @@ import { join } from 'node:path';
 import { root, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// #80: apps/desktop/src/shared/board/ and renderer/src/board/ are the first
-// screen — a pure projection plus plain-DOM rendering, reading nothing
-// itself. Five assertions pin its plan's decisions mechanically,
-// dependency-free and regex-based, in the shape of desktop-state.ts's own
-// guards — reading these directories by explicit path (never walk('apps/'),
-// which descends into node_modules).
+// apps/desktop/src/shared/board/ and renderer/src/board/ are a pure projection plus
+// plain-DOM rendering, reading nothing itself. Reads directories by explicit path, never walk('apps/').
 export default async function ({ expect, fail, ok }: Reporter) {
   const boardDir = 'apps/desktop/src/shared/board';
   const rendererBoardDir = 'apps/desktop/src/renderer/src/board';
@@ -17,10 +13,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
 
   const boardFiles = walk(join(root, boardDir)).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
 
-  // --- The directory has source files, so nothing below passes vacuously ---
-  // guard(#80): the board screen becoming a fifth reader instead of
-  // projecting an already-fetched BoardSnapshot, or this guard passing
-  // vacuously once the directory is deleted.
+  // --- The directory has source files, so nothing below passes vacuously once deleted. ---
   if (boardFiles.length === 0) {
     fail('desktop-board', `${boardDir} has no source files — the guard cannot pass vacuously if the directory is deleted`);
     return;
@@ -28,9 +21,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
   ok();
 
   // --- The board screen reads nothing itself ----------------------------------
-  // No file under shared/board/ or renderer/src/ imports src/main/, a
-  // node: builtin, or names gh(/runCommand( — every fact it renders arrives
-  // already fetched, over IPC, from main/state/'s own watcher.
+  // No file here imports src/main/, a node: builtin, or calls gh(/runCommand( — every fact arrives over IPC.
   {
     const dirs = [join(root, boardDir), join(root, 'apps/desktop/src/renderer/src')];
     let found = false;
@@ -57,9 +48,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- One clock: watcher.ts is the only non-test file under main/ naming a timer ---
-  // guard(#80): a second clock landing beside the watcher's own single
-  // rescheduled timer (Decision 2).
+  // --- One clock: watcher.ts is the only non-test file under main/ naming a timer. ---
   {
     const timerWords = ['setTimeout', 'setInterval', 'setImmediate'];
     const offenders = [];
@@ -72,10 +61,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(!(offenders.length > 0), 'desktop-board', `${offenders.join(', ')} name a timer — main/state/watcher.ts is the only file under src/main/ allowed to (#80 Decision 2)`);
   }
 
-  // --- SOURCE_KINDS and RepositoryFreshness's keys agree, itemStates excepted ---
-  // guard(#80): the board's four pollable sources drifting from the
-  // freshness shape issue 79 already established, or itemStates becoming
-  // independently schedulable.
+  // --- SOURCE_KINDS and RepositoryFreshness's keys agree, itemStates excepted. ---
   {
     const boardTypesFile = join(root, boardDir, 'types.ts');
     const boardTypesText = readFileSync(boardTypesFile, 'utf8');
@@ -102,10 +88,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- No running/alive/isLive identifier or string literal outside a comment ---
-  // guard(#80): a suppressed-stall verdict being reported as liveness rather
-  // than a report derived from recency, the same rail issue 78/issue 79
-  // already pin, extended to the surface that displays it.
+  // --- No running/alive/isLive identifier outside a comment — a stall is a report, never liveness. ---
   {
     const dirs = [join(root, boardDir), join(root, rendererBoardDir)];
     const forbidden = ['running', 'alive', 'isLive'];
@@ -126,9 +109,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- pin: board/copy.ts's autoPlanTagLabel() literal ↔ docs/DESIGN.md §6 --
-  // guard(#313): the row's own Auto-plan tag drifting from the design
-  // system's own documented tag sentence.
   // pin: `renderer/src/board/copy.ts`'s `autoPlanTagLabel()` ↔ `docs/DESIGN.md` §6's "Auto-plan" tag sentence
   {
     const copyFile = join(root, rendererBoardDir, 'copy.ts');

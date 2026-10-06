@@ -3,10 +3,8 @@ import { join } from 'node:path';
 import { root, readJson, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// #92: the plan gate's own eight mechanical rails — dependency-free and
-// regex-based, in the shape of desktop-claim.ts's and desktop-actions.ts's
-// own guards. Reading these directories by explicit path (never
-// walk('apps/'), which descends into node_modules).
+// The plan gate's own eight mechanical rails — dependency-free, regex-based, reading
+// directories by explicit path, never walk('apps/').
 export default async function ({ expect, fail, ok }: Reporter) {
   const sharedGateDir = 'apps/desktop/src/shared/gate';
   const sharedMarkdownDir = 'apps/desktop/src/shared/markdown';
@@ -40,10 +38,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
     return;
   }
 
-  // --- shared/gate/classify.ts's LabelKeys equal main/writes/scope.ts's -----
-  // PLAN_GATE_KEYS, both directions.
-  // guard(#92): the gate answering a label the claim scope does not
-  // actually cover, or covering one the gate never touches.
   // pin: `shared/gate/classify.ts`'s LabelKeys (`planReview`/`planApproved`/`planChangesRequested`) ↔ `main/writes/scope.ts`'s `PLAN_GATE_KEYS`, both directions
   {
     const classifyText = readFileSync(join(root, classifyFile), 'utf8');
@@ -60,17 +54,12 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- Both plans set expect.present to ['planReview'] ----------------------
-  // guard(#92): the "don't answer an item that already moved" guard being
-  // quietly dropped from either decision's own plan.
+  // --- Both plans set expect.present to ['planReview'] — the "don't answer an item that already moved" guard must not be quietly dropped. ---
   {
     const text = readFileSync(join(root, classifyFile), 'utf8');
     expect(text.includes(`present: ['planReview']`), 'desktop-gate', `${classifyFile} does not set "present: ['planReview']" — the stale-item guard must not be quietly dropped`);
   }
 
-  // --- GATE_CLAIM_OWNER's value appears in docs/COORDINATION.md -------------
-  // guard(#92): the cockpit's own stand-down report naming a different
-  // owner than what this app actually writes to the claim file.
   // pin: `shared/gate/types.ts`'s `GATE_CLAIM_OWNER` ↔ `docs/COORDINATION.md`'s stand-down report copy
   {
     const typesText = readFileSync(join(root, typesFile), 'utf8');
@@ -81,23 +70,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     } else expect(coordinationText.includes(ownerMatch[1]), 'desktop-gate', `${coordinationFile} does not name '${ownerMatch[1]}' — the cockpit's stand-down report would name the wrong owner`);
   }
 
-  // --- postComment( is called under apps/desktop/src/ only from -----------
-  // main/actions/gate.ts, main/actions/decide.ts, main/actions/
-  // escalate.ts (#293), and main/actions/observe.ts (#292) — each in its own
-  // fixed order.
-  // guard(#92): the comment-then-swap ordering (issue 90 left it to this
-  // ticket) silently reverting, or a second postComment caller diffusing the
-  // chokepoint main/writes/apply.ts defines it in. decide.ts shares gate.ts's
-  // own direction, for the same reason: a label swap with no comment behind
-  // it would misrepresent what authorised it.
-  // guard(#293): escalate.ts's own swap-then-comment ordering (the opposite
-  // of gate.ts's) silently reverting — a failed comment must still leave the
-  // item stopped, and a failed swap must never post a comment that would
-  // repeat on every poll.
-  // guard(#292): observe.ts's own swap-then-comment ordering (the same
-  // direction as escalate.ts's) silently reverting — a losing writer
-  // (unclaimed scope, precondition failed) must never post a comment that
-  // explains a write that never actually happened.
+  // --- postComment( is called under apps/desktop/src/ only from gate.ts, decide.ts,
+  // escalate.ts, and observe.ts — each in its own fixed comment/swap order, so a failed write never leaves a mismatched record. ---
   {
     let found = false;
     let sawGateFile = false;
@@ -139,10 +113,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     else if (!found) ok();
   }
 
-  // --- shared/markdown/ imports no node: builtin and nothing from main/ -----
-  // renderer/src/markdown.ts is the only file under renderer/ importing it
-  // guard(#92): the pure parser layer losing its typecheck:web compatibility,
-  // or a second renderer file bypassing the one DOM-building consumer.
+  // --- shared/markdown/ imports no node: builtin and nothing from main/; renderer/src/
+  // markdown.ts is the only renderer file importing it, the one DOM-building consumer. ---
   {
     let impure = false;
     for (const f of sharedMarkdownFiles) {
@@ -169,9 +141,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     else if (!found && !impure) ok();
   }
 
-  // --- inline.ts's scheme allowlist names exactly http:// and https:// -----
-  // guard(#92): a `javascript:`/`mailto:`/other scheme silently becoming
-  // clickable in an Electron renderer — a code-execution sink.
+  // --- inline.ts's scheme allowlist names exactly http:// and https:// — any other scheme
+  // becoming clickable in an Electron renderer is a code-execution sink. ---
   {
     const text = readFileSync(join(root, inlineFile), 'utf8');
     const match = /LINK_SCHEMES\s*=\s*\[([^\]]*)\]/.exec(text);
@@ -184,10 +155,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- copy.ts's session-required consequence and claim-step lines ----------
-  // guard(#92): the operator never learning that an approved session-required
-  // plan will not be dispatched, or the claim-step copy drifting from
-  // docs/COORDINATION.md's own decided sentences.
+  // --- copy.ts's session-required consequence and claim-step lines — the operator must
+  // learn that an approved session-required plan will not be dispatched. ---
   {
     const text = readFileSync(join(root, copyFile), 'utf8');
     const missing: string[] = [];
@@ -200,11 +169,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(!(missing.length > 0), 'desktop-gate', `${copyFile} is missing: ${missing.join(', ')}`);
   }
 
-  // --- No file under shared/gate/, main/actions/, or renderer/src/gate/ -----
-  // names a literal label name, reusing desktop-actions.ts's own scan
-  // guard(#92): a hand-typed display name drifting from a repository's own
-  // label override, instead of resolving through the vocabulary as a
-  // LabelKey.
+  // --- No file under shared/gate/, main/actions/, or renderer/src/gate/ names a literal
+  // label name instead of resolving through the vocabulary as a LabelKey. ---
   {
     const mainActionsFiles = allFiles.filter((f) => relOf(f).startsWith(`${mainActionsDir}/`));
     const rendererGateFiles = allFiles.filter((f) => relOf(f).startsWith(`${rendererGateDir}/`));
@@ -226,10 +192,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- #313: GATE_ACTIONS carries 'auto-approve-plan', and gate.ts never ----
-  // posts a comment for it
-  // guard(#313): the auto-plan swap losing its own audit-distinguishable
-  // action name, or gaining a comment it has no operator feedback to carry.
+  // --- GATE_ACTIONS carries 'auto-approve-plan', and gate.ts never posts a comment for it
+  // — this write has no operator feedback to attach. ---
   {
     const typesText = readFileSync(join(root, typesFile), 'utf8');
     const gateText = readFileSync(join(root, gateActionFile), 'utf8');

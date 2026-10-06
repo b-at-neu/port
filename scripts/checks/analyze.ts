@@ -3,14 +3,8 @@ import { join } from 'node:path';
 import { root, frontmatter, parseFrontmatter } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// guard(#50): /port:analyze's step 6 recommended plugins on three bad
-// criteria — "already installed" measured against the operator's own
-// machine rather than this repository's declarations, tier 3 skipped on
-// "small, simple stack", and no distinction between a plugin that reaches a
-// dispatched agent and one that only helps the operator's own session. Each
-// pin below is the literal phrase (or absent phrase) that constitutes the
-// fix, so a future prose edit that quietly reverts one of the three fails
-// here rather than in a live /port:analyze run.
+// Each pin below is the literal phrase (or absent phrase) constituting the fix, so a future
+// prose edit that quietly reverts one of the three fails here rather than in a live run.
 export default async function ({ expect, fail, note, ok }: Reporter) {
   const skillRel = 'plugins/port/skills/analyze/SKILL.md';
   const text = readFileSync(join(root, skillRel), 'utf8');
@@ -28,9 +22,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   expect(text.includes('already declared at project scope in this repository'), 'analyze-scope-exclusion', `${skillRel} no longer scopes exclusion to this repository's own project-scope declarations`);
   expect(!text.includes('Exclude anything already installed'), 'analyze-scope-exclusion', `${skillRel} still carries the machine-wide "Exclude anything already installed" rule this ticket replaced`);
 
-  // --- Delivery table parses, with an affirmative Skills row -------------------
-  // A hand-edited table is exactly the kind of change a reviewer skims past —
-  // assert its shape rather than trusting the prose around it.
+  // --- Delivery table parses, with an affirmative Skills row — asserted against its shape, not the surrounding prose. ---
   const tableMatch = /\| Component \| Reaches a dispatched agent\? \|\n\|[-\s|]+\|\n((?:\|.*\|\n?)+)/.exec(text);
   if (!tableMatch) {
     fail('analyze-delivery-table', `${skillRel} is missing the delivery-surface table ("| Component | Reaches a dispatched agent? |")`);
@@ -53,15 +45,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
 
   note('analyze: step 6 prose pins for #50 — scope-aware exclusion, unconditional tier 3, delivery-surface criterion, delivery table shape');
 
-  // --- #191: skill generation (step 6.5) --------------------------------------
-  // guard(#191): a dangling reference from step 6.5's thin defer to the
-  // recipe or its two templates is silent at runtime — the skill just cannot
-  // find the file, exactly the failure mode "Design document wiring" in
-  // scripts/checks/standards.ts already guards for the engineering and
-  // design templates. Also pins the frontmatter shape of both archetypes, the
-  // marketplace-first/propose-nothing ordering, the generic test as the
-  // named central gate, and the absence of a transcribed shipped-skill list
-  // that would be a second copy needing its own pin.
+  // --- Skill generation (step 6.5): a dangling reference to the recipe or its templates
+  // is silent at runtime — the skill just cannot find the file. ---
   {
     const recipeRel = 'plugins/port/skills/analyze/SKILL-GENERATION.md';
     const recipePath = join(root, recipeRel);
@@ -100,12 +85,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
         }
       }
 
-      // A malformed frontmatter block must fail the same shape check, and a
-      // missing allowed-tools entry must fail too — a check that cannot be
-      // made to fail is not a check. Exercises the real shared
-      // `parseFrontmatter()` from lib/files.ts (the same parser the loop
-      // above calls, via `frontmatter()`, against the on-disk templates) —
-      // not a hand-rolled duplicate that could silently drift from it.
+      // A malformed or incomplete frontmatter block must fail the same shape check; exercises
+      // the real shared `parseFrontmatter()`, not a hand-rolled duplicate.
       const goodFrontmatter = '---\nname: x\ndescription: y\nallowed-tools: Read, Grep, Glob\n---\n';
       const missingAllowedTools = '---\nname: x\ndescription: y\n---\n';
       const missingName = '---\ndescription: y\nallowed-tools: Read, Grep, Glob\n---\n';
@@ -130,8 +111,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
 
       expect(recipeText.includes('never work from a transcribed list'), 'analyze-skillgen', `${recipeRel} no longer states the anti-transcribed-list rule`);
 
-      // The transcribed-list guard, self-tested: a literal that *does*
-      // enumerate every shipped skill name must be caught by the same rule.
+      // The transcribed-list guard, self-tested: a literal enumerating every shipped skill name must be caught.
       const enumeratedList =
         'The shipped skills are: analyze, implement, init, pipeline, release, scope, worktree-clean.';
       const looksLikeTranscribedList = (s: string): boolean =>

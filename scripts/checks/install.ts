@@ -3,9 +3,7 @@ import { join, resolve } from 'node:path';
 import { root, readJson, walk, relOf, frontmatter } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// Structural equality for the small, JSON-shaped values this module compares
-// (an `owner` object) — never relies on key order, unlike a JSON.stringify
-// comparison would.
+// Structural equality for the small JSON-shaped values this module compares — never relies on key order, unlike JSON.stringify.
 function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
@@ -15,19 +13,12 @@ function deepEqual(a: unknown, b: unknown): boolean {
   return ak.every((k) => deepEqual((a as any)[k], (b as any)[k]));
 }
 
-// `ref` is legitimately either the release branch ('main') — this
-// repository's own committed, contributor-facing pin — or a `v<semver>`
-// release tag, which is what `/port:init` resolves for an adopting
-// repository once a version has actually been published. Both forms are a
-// deliberate pin; only the unpinned, ref-less shape `marketplace add` leaves
-// behind is the drift this check guards against.
+// `ref` is legitimately either the release branch ('main') or a `v<semver>` release tag;
+// only the unpinned, ref-less shape `marketplace add` leaves behind is the drift to guard against.
 const MARKETPLACE_REF_PATTERN = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 
 export default async function ({ expect, fail, ok }: Reporter) {
-  // --- Self-hosted marketplace entry stays pinned -----------------------------
-  // guard(#146): a bare `claude plugin marketplace add` rewriting the entry
-  // back to its unpinned form, silently tracking the default branch instead
-  // of a release.
+  // --- Self-hosted marketplace entry stays pinned — a bare `marketplace add` must never rewrite it back to unpinned, default-branch tracking. ---
   {
     const settings = readJson('.claude/settings.json');
     const port = settings.extraKnownMarketplaces?.port;
@@ -41,14 +32,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     ok();
   }
 
-  // --- CONTRIBUTING's cache path names no hard-coded version (#224) -----------
-  // guard(#224): the three-way ground-truth recipe naming a literal released
-  // version instead of '<version>' — the observed failure was the recipe
-  // still reading '0.1.0' two releases later, which by then pointed at the
-  // wrong directory entirely rather than merely a stale one.
-  // guard(#343): widened to also match the dev-loop's own cache segment
-  // (`cache/port-dev/port/<version>`) — the rewritten recipe line would
-  // otherwise leave the guard's coverage silently.
+  // --- CONTRIBUTING's cache path names no hard-coded version — a literal released version
+  // reads wrong the moment this repository releases again. Also matches the dev-loop's own cache segment. ---
   {
     const readme = readFileSync(join(root, 'CONTRIBUTING.md'), 'utf8');
     for (const m of readme.matchAll(/cache\/port(?:-dev)?\/port\/(\S+?)[\s/`]/g)) {
@@ -56,10 +41,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- README's documented install source stays pinned ------------------------
-  // guard(#146): a docs edit quietly restoring default-branch tracking on
-  // the very command adopters copy-paste. `owner/repo@ref` and
-  // `owner/repo#ref` both parse; only a bare, ref-less source is disallowed.
+  // --- README's documented install source stays pinned — a docs edit must never quietly
+  // restore default-branch tracking on the command adopters copy-paste. ---
   {
     const readme = readFileSync(join(root, 'README.md'), 'utf8');
     for (const line of readme.split('\n')) {
@@ -72,10 +55,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     ok();
   }
 
-  // --- Install docs keep live source and pinned install apart (#282) ----------
-  // guard(#282): README's inventory section presenting `claude plugin details`
-  // alone as what is installed, and the machine-wide marketplace-name note
-  // dropping out of README or CONTRIBUTING.
+  // --- Install docs keep live source and pinned install apart — never presenting `claude
+  // plugin details` alone as what is installed, and never dropping the marketplace-name note. ---
   {
     const readme = readFileSync(join(root, 'README.md'), 'utf8');
     const contributing = readFileSync(join(root, 'CONTRIBUTING.md'), 'utf8');
@@ -98,11 +79,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- Joining section precedes the adopter section and never says to run ----
-  // --- `/port:init` -------------------------------------------------------------
-  // guard: the joining section's heading dropping out, or the
-  // adopter-facing install section silently moving ahead of it again, routing
-  // a joining teammate through `/port:init` with nothing telling them not to.
+  // --- Joining section precedes the adopter section and never says to run `/port:init` — a
+  // joining teammate must never be routed through /port:init with nothing telling them not to. ---
   {
     const readme = readFileSync(join(root, 'README.md'), 'utf8');
     const joiningHeading = '## Joining a repository that already has port';
@@ -127,11 +105,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- Dev-loop marketplace stays apart from the consumer one (#343) ---------
-  // guard(#343): a dev-loop registration sharing the consumer-facing
-  // marketplace name, so the most recently added source silently wins for
-  // every repository on the machine that resolves it, regardless of scope.
-  // pin: plugins/.claude-plugin/marketplace.json ↔ .claude-plugin/marketplace.json
+  // --- Dev-loop marketplace stays apart from the consumer one, or the most recently added
+  // source silently wins. pin: plugins/.claude-plugin/marketplace.json ↔ .claude-plugin/marketplace.json
   {
     const devManifestRel = 'plugins/.claude-plugin/marketplace.json';
     const rootManifestRel = '.claude-plugin/marketplace.json';
@@ -164,8 +139,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
         const rootResolved = resolve(root, rootEntry?.source ?? '');
         expect(!(devResolved !== rootResolved), 'install-dev-marketplace', `${devManifestRel}'s plugin source ('${devEntry.source}', resolved from plugins/) must resolve to the same directory as ${rootManifestRel}'s ('${rootEntry?.source}', resolved from the repository root)`);
 
-        // devName is read off the manifest, never typed as a literal —
-        // a later rename must not need this check rewritten.
+        // devName is read off the manifest, never typed as a literal, so a later rename never needs this check rewritten.
         const devName: string = dev.name;
         const rootName: string = rootManifest.name;
         const pluginName: string = devEntry.name;
@@ -197,10 +171,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
         }
         if (!anyBadAddSrc) ok();
 
-        // Every `<plugin>@<x>` token not preceded by `/` (which would make it
-        // part of an `owner/repo@ref` GitHub source, not a marketplace name)
-        // must name a marketplace this ticket actually declares — catches a
-        // later rename that misses one of these three files.
+        // Every `<plugin>@<x>` token not preceded by `/` must name a declared marketplace — catches a later rename that misses one of these three files.
         let anyBadAt = false;
         for (const [name, text] of [
           ['CONTRIBUTING.md', contributingText],
@@ -219,11 +190,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- Pin agreement: init applies and verifies, PREFLIGHT reports drift ------
-  // guard(#341): a committed ref change that relied entirely on background
-  // reconciliation to actually move the install, and a startup line that
-  // printed an unflagged 'current with' even when this machine's registered
-  // source disagreed with the committed pin.
+  // --- Pin agreement: init applies and verifies, PREFLIGHT reports drift — a startup line
+  // must never print an unflagged 'current with' when the registered source disagrees. ---
   {
     const initRel = 'plugins/port/skills/init/SKILL.md';
     const initPath = join(root, initRel);
@@ -268,9 +236,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
       expect(!(driftIdx === -1), 'pin-agreement', `${preflightRel}'s UX states are missing "${driftMarker}"`);
       expect(!(misconfigIdx === -1), 'pin-agreement', `${preflightRel}'s UX states are missing "${misconfigMarker}"`);
 
-      // Each entry's own text is bounded by the next top-level '- **' bullet,
-      // never the whole section — the misconfiguration entry legitimately
-      // names '/port:init' and the drift entry legitimately must not.
+      // Each entry's text is bounded by the next top-level '- **' bullet, never the whole section.
       if (driftIdx !== -1) {
         const nextBulletIdx = uxSection.indexOf('\n- **', driftIdx + driftMarker.length);
         const driftEntry = nextBulletIdx === -1 ? uxSection.slice(driftIdx) : uxSection.slice(driftIdx, nextBulletIdx);
@@ -286,11 +252,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- The accepted ref forms stay pinned between init and PREFLIGHT ---------
-  // pin: scripts/checks/install.ts's MARKETPLACE_REF_PATTERN ↔ the prose in
-  // plugins/port/skills/init/SKILL.md and plugins/port/skills/pipeline/PREFLIGHT.md
-  // stating what it accepts — a drift here means an operator is told a ref
-  // form is fine (or rejected) that the actual validator disagrees with.
+  // pin: scripts/checks/install.ts's MARKETPLACE_REF_PATTERN ↔ the prose in init/SKILL.md and PREFLIGHT.md stating what it accepts
   {
     const refFormPhrase = '`main` or a `v<semver>` tag';
     const initRel = 'plugins/port/skills/init/SKILL.md';

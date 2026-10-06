@@ -1,12 +1,5 @@
-// Layer 1 guards for #216 — a false "not port-managed" refusal, a git
-// diagnostic that answered the wrong question, an unenforced "hard refusal"
-// prose rule a session talked itself past, and an identity line whose sha
-// and comparison ref were never pinned to their real sources.
-//
-// This ticket's own guards get their own topic module rather than landing in
-// scripts/checks/cockpit.ts or scripts/checks/hooks.ts: both are already at
-// the file-size ratchet (scripts/checks/file-size.config.json), so neither
-// can take a new check until issue 182 splits them.
+// Layer 1 guards against a false "not port-managed" refusal, a git diagnostic that answered
+// the wrong question, an unenforced "hard refusal" talked past, and an identity line printed from a guess.
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -18,19 +11,13 @@ import type { Reporter } from '../lib/report.ts';
 export default async function ({ expect, fail, ok }: Reporter) {
   const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
   const skillPath = join(root, skillRel);
-  // issue 181: the startup preflight and its UX states moved into PREFLIGHT.md —
-  // `<root>/.github/workflows/approval-check.yml` stays in SKILL.md's
-  // approved-announcement section while every other rooted path moved, so
-  // the phrase scans below read the skill union rather than either file
-  // alone. The frontmatter check stays on SKILL.md itself (structural).
+  // The startup preflight and its UX states live in PREFLIGHT.md, so phrase scans below read the skill union rather than either file alone.
   const unionRel = 'plugins/port/skills/pipeline/*.md';
   const skillText = pipelineSkillText();
   const preflightRel = 'plugins/port/skills/pipeline/PREFLIGHT.md';
   const preflightText = readFileSync(join(root, preflightRel), 'utf8');
 
-  // Prose lines only — a blockquote (operator-facing UX copy) or a fenced
-  // block (literal shell commands) is exempt from every phrase scan below,
-  // the same carve-out "Running-plugin staleness" already uses in cockpit.ts.
+  // Prose lines only — a blockquote or fenced block is exempt from every phrase scan below.
   const proseOnly = (text: string): string => {
     const lines = text.split('\n');
     const out: string[] = [];
@@ -46,13 +33,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     return out.join('\n');
   };
 
-  // --- Preflight anchoring (#216 defect 1) ------------------------------------
-  // Regression guard: the cockpit's config Read resolved against the session's
-  // transcript directory rather than the repository, because SKILL.md named a
-  // bare relative path with no repo anchor at all.
-  // guard(#216): the startup preflight's config Read resolving against the
-  // session's transcript directory instead of the repository, reporting a
-  // false "not port-managed".
+  // --- Preflight anchoring: the config Read must never resolve against the session's
+  // transcript directory instead of the repository, reporting a false "not port-managed". ---
   {
     expect(skillText.includes('git rev-parse --show-toplevel'), 'preflight-anchoring', `${unionRel} no longer resolves a repository root with 'git rev-parse --show-toplevel'`);
     for (const rootedPath of [
@@ -65,12 +47,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- Config diagnostic asks the right question (#216 defect 2) -------------
-  // Regression guard: 'git rev-list --all' + 'git branch --contains' finds the
-  // newest commit touching the file, not where the file exists — a question a
-  // rebase invalidates on its own.
-  // guard(#216): a diagnostic that finds the newest commit touching the file
-  // rather than where it exists, and that a rebase invalidates on its own.
+  // --- Config diagnostic asks the right question: must test where the file exists, never the
+  // newest commit touching it — a question a rebase invalidates on its own. ---
   {
     expect(skillText.includes('git cat-file -e'), 'preflight-config-diagnostic', `${unionRel} no longer tests config existence with 'git cat-file -e'`);
     expect(!(skillText.includes('git branch -a --contains') || skillText.includes('git rev-list --all')), 'preflight-config-diagnostic', `${unionRel} still carries the stale 'last commit touching the file' diagnostic`);
@@ -78,38 +56,24 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(skillAllowedTools.includes('Bash(git cat-file *)'), 'preflight-config-diagnostic', `${skillRel}'s frontmatter allowed-tools is missing 'Bash(git cat-file *)'`);
   }
 
-  // --- Refusal rail is a checkable precondition, not bare prose (#216 defect 3)
-  // Regression guard: "hard refusal with no override" was itself overridden —
-  // the cockpit checked out another branch to escape its own stated refusal.
-  // guard(#216): an unenforced prose "hard refusal" being escaped by the very
-  // session it was meant to stop.
+  // --- Refusal rail is a checkable precondition, not bare prose — an unenforced "hard
+  // refusal" must never be escaped by the very session it was meant to stop. ---
   {
     expect(!skillText.includes('hard refusal with no override'), 'preflight-refusal-rail', `${unionRel} still states the unenforced "hard refusal with no override" prose`);
     expect(skillText.includes('checked-out branch unchanged'), 'preflight-refusal-rail', `${unionRel} is missing the checkable "stop with the checked-out branch unchanged" precondition`);
   }
 
-  // --- Identity line's two inputs are pinned, not printed from a guess
-  // (#216 defect 4) -------------------------------------------------------------
-  // guard(#216): an identity line printing a sha or a comparison ref from the
-  // wrong source.
+  // --- Identity line's two inputs are pinned, not printed from a guess — a sha or
+  // comparison ref must never come from the wrong source. ---
   {
     expect(skillText.includes('not a prefix of the resolved record\'s `gitCommitSha`'), 'preflight-identity', `${unionRel} never states the sha-prefix precondition for the identity line's commit`);
     expect(skillText.includes('render `staleness not computable` instead of a number'), 'preflight-identity', `${unionRel} never states the ref precondition for the identity line's comparison target`);
-    // guard(#343): a self-hosting directory source below the repository root
-    // reading as not computable — the dev-loop marketplace manifest sits at
-    // plugins/.claude-plugin/marketplace.json, a directory inside this
-    // working tree rather than this working tree itself, and the narrower
-    // phrase before this ticket matched only an exact path.
+    // A self-hosting directory source below the repository root must never read as not computable.
     expect(skillText.includes('this working tree or a directory inside it'), 'preflight-identity', `${unionRel} no longer widens the self-hosting directory-source case to "this working tree or a directory inside it"`);
   }
 
-  // --- Guard against the generality mistake this ticket's own fixes could
-  // introduce: no repository-specific literal in the new prose above. -------
-  // guard(#216): this ticket's own fixes reintroducing the generality mistake
-  // they were meant to close, pinning the prose to one repository. issue 181: the
-  // whole section moved into PREFLIGHT.md — a structural heading slice, so
-  // this reads that file directly rather than the union, which could also
-  // match SKILL.md's own pointer heading of the same name.
+  // --- No repository-specific literal in the new prose above — reads PREFLIGHT.md directly
+  // (a structural heading slice), never the union, which could also match SKILL.md's own pointer heading. ---
   {
     const start = preflightText.indexOf('## Startup preflight');
     const end = preflightText.indexOf('## UX states (startup preflight)');
@@ -123,23 +87,15 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- Branch-rule classifier (#216 defect 3) ---------------------------------
-  // Unit-tests switchesBranch and the decide() branch rule directly, proving
-  // the rule can both fire and stay out of the way before trusting it.
-  // guard(#216): a cockpit session escaping its own startup refusal by
-  // switching branches, and a rule that fires on any session that merely
-  // reads SKILL.md's own prose naming the skill.
+  // --- Branch-rule classifier: unit-tests switchesBranch and decide() directly, proving the
+  // rule can both fire and stay out of the way before trusting it. ---
   {
     const { decide, invokedCockpitSkill, allowMatchers } = await import(
       pathToFileURL(join(root, 'plugins/port/hooks/lib/guard-rules.mjs')).href
     );
     const { switchesBranch } = await import(pathToFileURL(join(root, 'plugins/port/hooks/lib/command-rules.mjs')).href);
 
-    // A synthetic allowlist matching the cockpit's *own* real-world
-    // `allowed-tools` profile (git rev-parse/branch/cat-file — never
-    // checkout), not this repository's broad `Bash(git *)` — the point of
-    // these cases is to prove the branch rule's own reason fires (or does
-    // not) independent of any repository's ordinary allowlist breadth.
+    // A synthetic allowlist matching the cockpit's own real-world profile, not this repository's broad `Bash(git *)`, so these cases prove the branch rule's reason independent of allowlist breadth.
     const classifierFixture = mkdtempSync(join(tmpdir(), 'port-branch-classifier-'));
     const classifierSettings = join(classifierFixture, 'settings.json');
     writeFileSync(
@@ -187,34 +143,28 @@ export default async function ({ expect, fail, ok }: Reporter) {
       'deny',
     );
 
-    // A read-only git command from the same cockpit session → allowed by the
-    // branch rule (it still needs to clear the ordinary allowlist, which
-    // `git rev-parse` does).
+    // A read-only git command from the same cockpit session → allowed by the branch rule (still needs the ordinary allowlist, which `git rev-parse` clears).
     check(
       'cockpit session git rev-parse allowed',
       decide(decideArgs(cockpitPayload({ tool_input: { command: 'git rev-parse --abbrev-ref HEAD' } }), true)),
       'allow',
     );
 
-    // The same checkout command, non-cockpit session → not denied by the
-    // branch rule. It still misses the ordinary allowlist as a bare `git
-    // checkout`, so the outcome is 'miss', never 'deny' by this rule.
+    // The same checkout command, non-cockpit session → not denied by the branch rule; it still misses the ordinary allowlist, so 'miss', never 'deny' by this rule.
     check(
       'non-cockpit session git checkout',
       decide(decideArgs(cockpitPayload({ tool_input: { command: 'git checkout main' } }), false)),
       'miss',
     );
 
-    // isCockpitSession: null (transcript unreadable) → unverifiable, allows —
-    // matching the gate rule's own null handling.
+    // isCockpitSession: null (transcript unreadable) → unverifiable, allows — matching the gate rule's own null handling.
     check(
       'unreadable transcript git checkout',
       decide(decideArgs(cockpitPayload({ tool_input: { command: 'git checkout main' } }), null)),
       'miss',
     );
 
-    // A subagent payload is never in scope for the branch rule — it is
-    // already deny/allow purely on the ordinary subagent rules.
+    // A subagent payload is never in scope for the branch rule — already deny/allow purely on the ordinary subagent rules.
     check(
       'subagent git checkout not covered by the branch rule',
       decide(
@@ -233,8 +183,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
       'deny', // deny — but from the ordinary allowlist-miss-for-subagent rule, not the branch rule
     );
 
-    // An /port:implement impl-<n> operator worktree is exempt from the branch
-    // rule, same as the loop and gate rules.
+    // An /port:implement impl-<n> operator worktree is exempt from the branch rule, same as the loop and gate rules.
     check(
       'impl-<n> operator worktree git checkout is not denied by the branch rule',
       decide(
@@ -251,8 +200,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
       'miss',
     );
 
-    // The words "checkout the branch" quoted inside an unrelated argument
-    // must never trip the rule.
+    // The words "checkout the branch" quoted inside an unrelated argument must never trip the rule.
     check(
       'quoted checkout mention does not trip the rule',
       decide(decideArgs(cockpitPayload({ tool_input: { command: 'gh issue comment 5 -b "checkout the branch first"' } }), true)),
@@ -266,24 +214,16 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(!switchesBranch('git rev-parse --abbrev-ref HEAD'), 'branch-rule-classifier', 'switchesBranch: expected false for a read-only git command');
     expect(!switchesBranch('gh pr checkout 5'), 'branch-rule-classifier', 'switchesBranch: expected false — this is gh, not git');
 
-    // A chained command carrying an earlier, unrelated `git` invocation
-    // ahead of the checkout must still be caught — every command-position
-    // `git` occurrence is scanned, not just the first.
+    // A chained command carrying an earlier, unrelated `git` invocation ahead of the checkout must still be caught — every command-position `git` occurrence is scanned, not just the first.
     expect(switchesBranch('git branch --sort=-committerdate ; git checkout evil-branch'), 'branch-rule-classifier', 'switchesBranch: expected true for a chained command with an earlier git invocation (spaced separator)');
     expect(switchesBranch('git branch --sort=-committerdate;git checkout evil-branch'), 'branch-rule-classifier', 'switchesBranch: expected true for a chained command with an earlier git invocation (unspaced separator)');
     expect(switchesBranch('git status && git checkout evil-branch'), 'branch-rule-classifier', 'switchesBranch: expected true for a chained command joined with &&');
 
-    // A value-taking global flag like `-c` must not be mistaken for the git
-    // subcommand itself — this repo's own shell-discipline block prescribes
-    // exactly this idiom (`git -c core.editor=true rebase --continue`), so a
-    // miss here would let a cockpit session slip a checkout past the rule
-    // this ticket exists to add (issue 222, R3-M1).
+    // A value-taking global flag like `-c` must not be mistaken for the git subcommand itself, or a cockpit session could slip a checkout past this rule.
     expect(switchesBranch('git -c core.editor=true checkout evil-branch'), 'branch-rule-classifier', 'switchesBranch: expected true for "git -c core.editor=true checkout evil-branch"');
     expect(!switchesBranch('git -c core.editor=true rebase --continue'), 'branch-rule-classifier', 'switchesBranch: expected false for "git -c core.editor=true rebase --continue"');
 
-    // --- invokedCockpitSkill ---------------------------------------------------
-    // The wrapper element is the whole tell — a bare mention of the skill
-    // name in prose (SKILL.md's own pacing section names it) must not trip it.
+    // --- invokedCockpitSkill: the wrapper element is the whole tell — a bare mention of the skill name in prose must not trip it. ---
     expect(invokedCockpitSkill('<command-name>/port:pipeline</command-name>'), 'branch-rule-classifier', 'invokedCockpitSkill: expected true for the real wrapper form');
     expect(invokedCockpitSkill('<command-name>pipeline</command-name>'), 'branch-rule-classifier', 'invokedCockpitSkill: expected true with no namespace prefix');
     expect(!invokedCockpitSkill('Run /port:pipeline to start the cockpit.'), 'branch-rule-classifier', 'invokedCockpitSkill: expected false for a bare prose mention with no wrapper element');
@@ -292,12 +232,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     rmSync(classifierFixture, { recursive: true, force: true, maxRetries: 3 });
   }
 
-  // --- End-to-end wiring: the real hook script, a temp JSONL transcript -------
-  // The classifier's own tests import guard-rules.mjs directly and cannot see
-  // agent-guard.mjs's transcript read; this proves the wiring, not just the
-  // decision logic.
-  // guard(#216): the classifier's own tests importing guard-rules.mjs
-  // directly, which cannot see agent-guard.mjs's own transcript read.
+  // --- End-to-end wiring: the real hook script, a temp JSONL transcript — proves the real
+  // transcript read, not just the decision logic the classifier's own direct import cannot see. ---
   {
     const hookPath = join(root, 'plugins/port/hooks/agent-guard.mjs');
     const fixture = mkdtempSync(join(tmpdir(), 'port-guard-branch-hook-'));
@@ -359,12 +295,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- The tell cannot be neutered by a shipped file naming it (#216) ---------
-  // If any file under plugins/port/ carries the literal `<command-name>`
-  // string, a session that merely reads that file would look like a cockpit.
-  // guard(#216): a shipped file naming the cockpit-invocation tell directly,
-  // which would make any session that merely reads that file look like a
-  // cockpit.
+  // --- The tell cannot be neutered by a shipped file naming it — a session that merely
+  // reads a file carrying the literal `<command-name>` string must never look like a cockpit. ---
   {
     const shipped = walk(join(root, 'plugins/port')).filter((f) => f.endsWith('.md') || f.endsWith('.mjs'));
     for (const f of shipped) {

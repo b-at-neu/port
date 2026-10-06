@@ -1,9 +1,5 @@
-// The only I/O in the forensics engine (#123): resolves the Claude home,
-// builds the project index, and reads a session plus its subagent
-// transcripts and meta sidecars. Every path is built with node:path, every
-// read is bounded, and every failure is a named result — never a thrown
-// error a caller has to guess the shape of, since a transcript tree is
-// untrusted, partially-written, machine-local state.
+// The only I/O in the forensics engine: resolves the Claude home, builds the project index,
+// and reads a session plus its subagent transcripts. Every failure is a named result, never a thrown error — a transcript tree is untrusted, partially-written state.
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
@@ -16,8 +12,7 @@ export const SESSION_ID_RE = new RegExp(`^${SESSION_ID_CORE}$`, 'i');
 const SESSION_ID_FILENAME_RE = new RegExp(`^(${SESSION_ID_CORE})\\.jsonl$`, 'i');
 const AGENT_META_SUFFIX = '.meta.json';
 
-/** `--claude-home`, else `CLAUDE_CONFIG_DIR`, else `~/.claude` — never a
- *  hardcoded path, and this is the one place either env var is read. */
+/** `--claude-home`, else `CLAUDE_CONFIG_DIR`, else `~/.claude` — the one place either env var is read. */
 export function resolveClaudeHome(explicit: string | undefined): string {
   if (typeof explicit === 'string' && explicit !== '') return explicit;
   const fromEnv = process.env.CLAUDE_CONFIG_DIR;
@@ -25,13 +20,8 @@ export function resolveClaudeHome(explicit: string | undefined): string {
   return join(homedir(), '.claude');
 }
 
-/** Lists `<claudeHome>/projects/` and every project directory beneath it
- *  exactly once, collecting `sessionId -> projectDir` from each
- *  `<uuid>.jsonl` filename — the same ladder apps/desktop/src/main/sessions/
- *  locate.ts uses, so the two never derive a session's location two
- *  different ways. An absent `projects/` is `claude-home-missing`; any
- *  other top-level listing failure is `projects-unreadable`. One
- *  unreadable project directory is skipped, never blinding every other. */
+/** Lists `<claudeHome>/projects/` and collects `sessionId -> projectDir` from each
+ *  `<uuid>.jsonl` filename. An absent `projects/` is `claude-home-missing`; one unreadable project directory is skipped, never blinding every other. */
 export function buildProjectIndex(claudeHome: string): any {
   const projectsDir = join(claudeHome, 'projects');
   if (!existsSync(projectsDir)) {
@@ -83,9 +73,7 @@ export function readBounded(path: string, cap = DEFAULT_READ_CAP_BYTES): any {
   }
 }
 
-/** The first `cwd` any record in `records` carries — used only to default
- *  `--session` to this repository's own sessions, never to resolve or open
- *  anything (the project index above is what resolves paths). */
+/** The first `cwd` any record in `records` carries — used only to default `--session`, never to resolve or open anything. */
 export function firstCwdOf(records: any[]): string | null {
   for (const raw of records) {
     if (typeof raw === 'object' && raw !== null && typeof raw.cwd === 'string' && raw.cwd !== '') return raw.cwd;
@@ -93,30 +81,20 @@ export function firstCwdOf(records: any[]): string | null {
   return null;
 }
 
-/** True when `child`, once resolved, is `parent` itself or nested under it —
- *  the containment rail `readSession` applies before reading any path built
- *  from an untrusted directory-entry name. */
+/** True when `child`, once resolved, is `parent` itself or nested under it — the containment rail before reading any untrusted path. */
 function isContainedIn(child: string, parent: string): boolean {
   const resolvedParent = resolve(parent);
   const resolvedChild = resolve(child);
   return resolvedChild === resolvedParent || resolvedChild.startsWith(resolvedParent + sep);
 }
 
-/** Every session id this Claude home knows about, oldest listing order —
- *  `--since`/no-`--session` both start here. Read-only: this lists what
- *  `buildProjectIndex` already found, it does not re-scan. */
+/** Every session id this Claude home knows about. Read-only: lists what `buildProjectIndex` already found, does not re-scan. */
 export function listSessionIds(index: Map<string, string>): string[] {
   return [...index.keys()];
 }
 
-/** Reads one session's own transcript plus every subagent transcript and
- *  meta sidecar beside it (`<projectDir>/<sessionId>/subagents/`). Never
- *  throws: a session file or an agent's `.jsonl`/`.meta.json` that fails to
- *  read is recorded in `problems` and skipped, and every other agent in the
- *  same session is still read. Every path is asserted to stay under this
- *  session's own directory before being read, since an `agentId` is
- *  attacker-influenced only through a meta filename this same call already
- *  produced — defense in depth, not the expected path. */
+/** Reads one session's own transcript plus every subagent transcript and meta sidecar beside
+ *  it. Never throws: a file that fails to read is recorded in `problems` and skipped. Every path is asserted to stay under this session's own directory before being read. */
 export function readSession(sessionId: string, projectDir: string, { cap = DEFAULT_READ_CAP_BYTES }: { cap?: number } = {}): any {
   const sessionPath = join(projectDir, `${sessionId}.jsonl`);
   const problems: any[] = [];

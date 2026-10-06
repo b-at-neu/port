@@ -3,11 +3,8 @@ import { join } from 'node:path';
 import { root, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// Issue 78: apps/desktop/src/main/sessions/ is the app's only reader of local
-// Claude transcripts. Three assertions pin its plan's decisions mechanically,
-// dependency-free and regex-based, in the shape of desktop-registry.ts's own
-// guards — reading these directories by explicit path (never walk('apps/'),
-// which descends into node_modules).
+// apps/desktop/src/main/sessions/ is the app's only reader of local Claude transcripts.
+// These assertions pin its plan's decisions mechanically.
 export default async function ({ expect, fail, ok }: Reporter) {
   const sessionsDir = 'apps/desktop/src/main/sessions';
   const sharedSessionsDir = 'apps/desktop/src/shared/sessions';
@@ -18,15 +15,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
   const sdkAllowlist = new Set([sdkRel, runtimeSdkRel, hostingSdkRel]);
   const allFiles = walk(srcDir).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
 
-  // --- The Agent SDK is referenced under apps/desktop/src/ only in the three allowlisted seams ---
-  // guard(#78, #97, #98): a second reader spawning the SDK directly instead
-  // of going through one of the three lazy-imported seams — the session
-  // reader (#78), the runtime probe (#97), and the hosted-session query/
-  // renameSession seam (#98). Matched only as an import specifier
-  // (`from '...'` or `import(...)`), never a bare substring — `runtime/
-  // locate.test.ts`'s own fixtures legitimately spell the SDK's per-platform
-  // package name out as a path string (what a resolved `claude` binary
-  // sitting inside it looks like), never as an import.
+  // --- The Agent SDK is referenced under apps/desktop/src/ only in the three allowlisted
+  // seams: the session reader, the runtime probe, and the hosted-session query seam. Matched only as an import specifier, never a bare substring. ---
   {
     const importSpecifierRe = /(?:from\s+|import\()\s*['"]@anthropic-ai\/claude-agent-sdk['"]/;
     const seenAllowlisted = new Set();
@@ -48,9 +38,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (seenAllowlisted.size === sdkAllowlist.size && !extraReferences) ok();
   }
 
-  // --- PORT_STAGE_AGENTS matches plugins/port/agents/'s basenames, both directions ---
-  // guard(#78): the stage union or the role ladder's first-prompt rung
-  // drifting from the real agents and skills it names.
+  // --- PORT_STAGE_AGENTS matches plugins/port/agents/'s basenames, both directions, so the
+  // union never drifts from the real agents it names. ---
   {
     const classifyFile = allFiles.find((f) => relOf(f) === `${sessionsDir}/classify.ts`);
     if (!classifyFile) {
@@ -80,9 +69,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
       }
     }
 
-    // The wildcard-prefix rung (Decision, SessionRole ladder) reads
-    // /<prefix>:(pipeline|implement) — both must exist as real skill
-    // directories, or the rung is testing against nothing.
+    // The wildcard-prefix rung reads /<prefix>:(pipeline|implement) — both must exist as real skill directories.
     let skillDirsOk = true;
     for (const skillName of ['pipeline', 'implement']) {
       if (!existsSync(join(root, 'plugins/port/skills', skillName))) {
@@ -93,14 +80,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (skillDirsOk) ok();
   }
 
-  // --- No `running`/`alive`/`isLive` identifier or string literal in production code ---
-  // guard(#78, #87): a local transcript's recency being reported as
-  // liveness, the exact distinction Decision 4 exists to hold -- extended to
-  // main/search/ and shared/search/ so a hit's own recency can't drift into
-  // the same "running" framing either. Comments are stripped first — a doc
-  // comment is allowed to *discuss* the rail (as this very file's plan
-  // does, in backticks), only real code (identifiers, string literals) is
-  // checked.
+  // --- No `running`/`alive`/`isLive` identifier or string literal in production code — a
+  // local transcript's recency must never be reported as liveness. Comments are stripped first. ---
   {
     const dirs = [join(root, sessionsDir), join(root, sharedSessionsDir), join(root, 'apps/desktop/src/main/search'), join(root, 'apps/desktop/src/shared/search')];
     const forbidden = ['running', 'alive', 'isLive'];
@@ -121,12 +102,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- transcript:tail:poll's response is a delta, never a full entries list ---
-  // guard(#84): the tail-poll response (TranscriptTailPoll) must carry
-  // `appended` and `patched` on its ok branch and never an `entries` field --
-  // a poll that returned the whole transcript every second would defeat the
-  // byte cursor's whole point, and the renderer's own no-full-re-render
-  // contract depends on this staying a delta.
+  // --- transcript:tail:poll's response is a delta, never a full entries list — the ok branch
+  // must carry `appended`/`patched`, never `entries`, or the byte cursor's whole point is defeated. ---
   {
     const file = allFiles.find((f) => relOf(f) === `${sharedSessionsDir}/transcript.ts`);
     if (!file) {
@@ -148,12 +125,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- getSubagentMessages/getSessionMessages stay unreferenced ---------------
-  // guard(#83): a later "simplification" onto the SDK's own message-read API
-  // silently dropping every diff, since its SessionMessage carries no
-  // toolUseResult. Decision 3 is "the reader parses the .jsonl itself, and
-  // getSubagentMessages stays unused" — deciding against the SDK's own
-  // message-read APIs.
+  // --- getSubagentMessages/getSessionMessages stay unreferenced — a later "simplification"
+  // onto the SDK's own message-read API would silently drop every diff, since SessionMessage carries no toolUseResult. ---
   {
     let found = false;
     for (const f of allFiles) {

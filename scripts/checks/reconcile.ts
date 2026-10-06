@@ -10,17 +10,9 @@ async function importEngine(rel: string): Promise<any> {
   return import(pathToFileURL(join(root, rel)).href);
 }
 
-// The label-state reconciliation contract (issue 209's cockpit half, #220),
-// split out of tick.ts
-// for its own line budget (docs/ENGINEERING.md §1, §7) — same shape
-// cockpit-tick.ts was split out of cockpit.ts.
+// The label-state reconciliation contract.
 export default async function ({ expect, fail, ok }: Reporter) {
-  // --- allOpenPRs is unconditional and carries the duplicate sweep's fields,
-  // and REFRESH_PAIR ↔ artifacts.mjs's PR_REFRESH_KEYS, both directions
-  // guard(#220): the duplicate-pull-request sweep and the ungated report
-  // silently losing their shared source (allOpenPRs going back behind
-  // `modules.approvalGate`, or losing a field the sweep reads), and the
-  // reconciler's one literal drifting from the artifact contract's own copy.
+  // --- allOpenPRs is unconditional and carries the duplicate sweep's fields.
   // pin: `scripts/port-tick/reconcile.ts`'s `REFRESH_PAIR` ↔ `plugins/port/bin/artifacts.mjs`'s exported `PR_REFRESH_KEYS`
   const queryText = readFileSync(join(root, TICK_DIR, 'query.ts'), 'utf8');
   const buildQuerySrc = queryText.slice(queryText.indexOf('export function buildQuery'), queryText.indexOf('): string {'));

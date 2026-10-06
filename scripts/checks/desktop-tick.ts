@@ -4,13 +4,8 @@ import { pathToFileURL } from 'node:url';
 import { root, readJson, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// Issue 105: apps/desktop/src/main/tick/ turns one repository's reconciled
-// RepositoryState into a TickReport — it computes, it never writes (the
-// dispatch call itself is blocked on issues 97, 98, and 101, the retry write
-// is issue 94). Issue 106 adds the file-contention gate as a third ported
-// family, so the report's own actionable order is the real dispatch order
-// once a dispatcher exists. Ten assertions pin its decisions mechanically,
-// in the shape of desktop-actions.ts's and desktop-local.ts's own guards.
+// apps/desktop/src/main/tick/ turns one repository's reconciled RepositoryState into a
+// TickReport — it computes, it never writes. These assertions pin its decisions mechanically.
 export default async function ({ expect, fail, ok }: Reporter) {
   const mainDir = 'apps/desktop/src/main/tick';
   const sharedDir = 'apps/desktop/src/shared/tick';
@@ -18,19 +13,15 @@ export default async function ({ expect, fail, ok }: Reporter) {
   const mainAllFiles = walk(join(root, mainDir)).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
   const sharedFiles = walk(join(root, sharedDir)).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
 
-  // --- (1) main/tick/ has source files at all ---------------------------------
-  // guard(#105): the directory this whole ticket adds being deleted with
-  // nothing to catch it.
+  // --- (1) main/tick/ has source files at all, so this cannot pass vacuously once deleted. ---
   if (mainFiles.length === 0) {
     fail('desktop-tick', `${mainDir} has no source files — the guard cannot pass vacuously if the directory is deleted`);
     return;
   }
   ok();
 
-  // --- (2) No file under main/tick/ reaches I/O -------------------------------
-  // guard(#105): the tick module — a pure decision layer, per its own header
-  // — silently gaining a `gh`/`git` call or a Node builtin, instead of
-  // deciding over an already-built RepositoryState.
+  // --- (2) No file under main/tick/ reaches I/O — a pure decision layer must never gain a
+  // `gh`/`git` call or a Node builtin. ---
   {
     let violated = false;
     for (const f of mainFiles) {
@@ -55,10 +46,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!violated) ok();
   }
 
-  // --- (5) main/tick/routing.ts's AGENT_FOR_TRIGGER matches labels.json's ----
-  // trigger keys, both directions
-  // guard(#105): a trigger label added or retired in labels.json leaving the
-  // dispatch-routing map silently out of step, either direction.
   // pin: `main/tick/routing.ts`'s `AGENT_FOR_TRIGGER` keys ↔ `data/labels.json`'s `role: "trigger"` keys, both directions
   {
     const routingFile = `${mainDir}/routing.ts`;
@@ -81,11 +68,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- (6) running/alive/isLive banned under shared/tick/ and main/tick/ -----
-  // guard(#105): a local session read being presented as proof of a live
-  // agent — the same absence `desktop-sessions`/`desktop-state` already pin
-  // for the modules that feed this one (ENGINEERING §4: "Liveness is a
-  // TaskList call, never a label inference").
+  // --- (6) running/alive/isLive banned under shared/tick/ and main/tick/ — liveness is a
+  // TaskList call, never a label inference. ---
   {
     let violated = false;
     for (const f of [...mainAllFiles, ...sharedFiles]) {
@@ -104,10 +88,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!violated) ok();
   }
 
-  // --- (7) shared/tick/types.ts's nextTickAt-shaped fields are string | null -
-  // guard(#105): a field that cannot express "no timer" — the same bug
-  // issue 62 was filed for, this time in the tick engine's own
-  // renderer-safe shapes.
+  // --- (7) shared/tick/types.ts's nextTickAt-shaped fields are string | null — a bare
+  // `string` cannot express "no timer". ---
   {
     const typesFile = `${sharedDir}/types.ts`;
     const text = readFileSync(join(root, typesFile), 'utf8');
@@ -127,10 +109,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- (9) main/tick/plan.ts's occupied-set stage keys resolve in labels.json ---
-  // guard(#106): a retired or renamed stage key silently emptying the
-  // occupied set rather than failing here — the gate's whole premise is
-  // that 'inProgress'/'prOpened' name real labels with the roles it assumes.
   // pin: `main/tick/plan.ts`'s occupied-set stage keys (`inProgress` → `in-flight`, `prOpened` → `terminal`) ↔ `data/labels.json`'s own roles
   {
     const planFile = `${mainDir}/plan.ts`;
@@ -159,13 +137,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- (10) schema.ts's concurrency default reads off the schema import, ------
-  // never a hand-typed literal
-  // guard(#106): a literal number or array silently drifting from the
-  // schema's own default the moment either changes — `desktop-registry.ts`'s
-  // own guard only walks string-typed defaults (`collectStringDefaults`), so
-  // `concurrency`'s numeric `overlapThreshold` and array `sharedFiles` need
-  // this narrower rail of their own.
+  // --- (10) schema.ts's concurrency default reads off the schema import, never a hand-typed
+  // literal — desktop-registry.ts's own guard only walks string-typed defaults. ---
   {
     const schemaFile = 'apps/desktop/src/main/registry/schema.ts';
     const text = readFileSync(join(root, schemaFile), 'utf8');
@@ -182,12 +155,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- (12) main/tick/routing.ts's AGENT_FOR_IN_FLIGHT matches liveness.ts's -
-  // buildLivenessExpected (labelKey, stage) pairs, both directions
-  // guard(#292): the app's own in-flight-to-stage map silently drifting from
-  // the engine's own liveness spec table — either an in-flight label cross-
-  // checked against the wrong stage, or the dispatcher's own started-task
-  // descriptions (`"${agent} #${n}"`) never matching a live claim at all.
   // pin: `main/tick/routing.ts`'s `AGENT_FOR_IN_FLIGHT` ↔ `scripts/port-tick/liveness.ts`'s own `buildLivenessExpected` (labelKey, stage) pairs, both directions
   {
     const routingFile = `${mainDir}/routing.ts`;
@@ -211,11 +178,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- (13) main/tick/routing.ts's REFRESH_PAIR matches reconcile.ts's own ---
-  // REFRESH_PAIR, both directions
-  // guard(#292): the one sanctioned co-present label pair silently drifting
-  // between the engine and the app — either side would then tolerate (or
-  // reject) a pair of labels the other disagrees on.
   // pin: `main/tick/routing.ts`'s `REFRESH_PAIR` ↔ `scripts/port-tick/reconcile.ts`'s own `REFRESH_PAIR`, both directions
   {
     const routingFile = `${mainDir}/routing.ts`;
@@ -235,15 +197,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- (14) main/dispatch/observation.ts's label table matches writes.ts's ---
-  // own, found by calling each write with an identity labels map, both
-  // directions
-  // guard(#292): the app's own `observationWrite` label plan silently
-  // drifting from the cockpit's own `writes.ts` table it was ported from —
-  // found by actually calling each write with an identity labels map (label
-  // name === label key) and parsing the add/remove flags off the resulting
-  // `gh` command, rather than a second hand-transcribed table that could
-  // drift from both.
   // pin: `main/dispatch/observation.ts`'s `observationWrite` label plan ↔ `scripts/port-tick/writes.ts`'s own write functions, both directions
   {
     const observationPath = join(root, 'apps/desktop/src/main/dispatch/observation.ts');

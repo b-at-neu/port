@@ -1,6 +1,4 @@
-// Layer 1 checks for the trajectory record (#187) — split out of
-// scripts/checks/tick.ts, which is already near the 500-line ratchet
-// (docs/ENGINEERING.md §7): the write-only rail, the envelope contract, the
+// Layer 1 checks for the trajectory record: the write-only rail, the envelope contract, the
 // denial-decision vocabulary pinned three ways, and the retention literal.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -14,11 +12,8 @@ async function importEngine(rel: string): Promise<any> {
   return import(pathToFileURL(join(root, rel)).href);
 }
 
-/** Extracts every `'<decision>'` string literal passed as `log()`'s second
- *  positional argument in `agent-guard.mjs`, tracking paren depth (never a
- *  flat regex) so a first argument carrying its own nested call and comma —
- *  `log(join(baseRepoRoot(cwd), '.agents'), 'hook-error', ...)` — still
- *  splits on the right comma. */
+/** Extracts every `'<decision>'` literal passed as `log()`'s second argument,
+ *  tracking paren depth so a nested-call first argument still splits correctly. */
 function extractLogDecisions(text: string): Set<string> {
   const decisions = new Set<string>();
   const callRe = /\blog\(/g;
@@ -53,11 +48,8 @@ function extractLogDecisions(text: string): Set<string> {
 }
 
 export default async function ({ expect, fail, ok }: Reporter) {
-  // --- Write-only rail: nothing but port-tick.ts and report.ts itself may
-  // import events.ts or report.ts, and events.ts exports no reader.
-  // guard(#187, #203): an append-only history feeding a future tick's
-  // decision, quietly breaking the invariant that `plan` never persists
-  // anything a later tick reads back.
+  // --- Write-only rail: nothing but port-tick.ts and report.ts itself may import events.ts
+  // or report.ts, and events.ts exports no reader — `plan` must never persist anything a later tick reads back. ---
   {
     const eventsPath = join(root, TICK_DIR, 'events.ts');
     const reportPath = join(root, TICK_DIR, 'report.ts');
@@ -97,9 +89,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
     else expect(!(bigParsed.truncated !== true), 'tick-events', 'formatEvent capped an oversized payload but never stamped truncated: true');
   }
 
-  // --- Decision vocabulary pinned three ways: DENIAL_DECISIONS equals the
-  // literals hooks/agent-guard.mjs passes to log(), and equals the desktop's
-  // CURRENT_DECISIONS, both directions.
   // pin: `scripts/port-tick/denials.ts`'s `DENIAL_DECISIONS` ↔ `hooks/agent-guard.mjs`'s logged decisions ↔ `apps/desktop`'s `CURRENT_DECISIONS`, all three directions
   {
     const { DENIAL_DECISIONS } = await importEngine(`${TICK_DIR}/denials.ts`);

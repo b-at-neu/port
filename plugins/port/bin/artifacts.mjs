@@ -1,35 +1,13 @@
 #!/usr/bin/env node
-// The pipeline's artifact contract — commit subjects, pull request bodies,
-// review payloads, revision notes — as one executable file instead of prose
-// restated in four agent files. Two modes:
-//
-//   check <kind> <file> [--issue N] [--cycle N]
-//     Validate a single artifact file offline — no `gh`, no network, no
-//     config read. Kinds are this module's own `CHECKS` registry keys, so
-//     this can't drift. Run by the stage agents on the file they just
-//     wrote, so a malformed one fails in the worktree, not after `approved`.
-//
-//   audit [<pr>...] [--limit <n>]
-//     Today's `gh`-driven pass over finished pull requests. Asserts the same
-//     patterns `check` does, against real fixtures instead of one file.
-//
-// Self-contained — no relative imports. An adopting repository copies this
-// file alone, with neither this repository's plugin tree nor its shared
-// scripts library beside it, so it carries its own reporter and its own
-// label table rather than importing either.
-//
-// NEVER add this to commands.checks — `audit` shells out to `gh`, which a
-// dispatched agent's allowlist does not grant. The port repository's own
-// layer 1 checks enforce that mechanically.
+// The pipeline's artifact contract, self-contained. `check <kind> <file>` validates offline;
+// `audit` is a gh-driven pass over pull requests — NEVER add this to commands.checks.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 // --- Label vocabulary --------------------------------------------------------
-// Mirrors data/labels.json (key, default name, module). The port
-// repository's own layer 1 checks assert the two agree, both directions, so
-// a drift here fails layer 1 rather than silently mismatching in `audit`.
+// Mirrors data/labels.json (key, default name, module); layer 1 asserts the two agree.
 export const LABELS = {
   marker: { name: 'claude', module: 'core' },
   autoPlan: { name: 'auto plan', module: 'core' },
@@ -54,35 +32,24 @@ export const LABELS = {
 // --- Format contracts --------------------------------------------------------
 export const BODY_HEADINGS = ['## Summary', '## Changes', '## Testing plan', '## Automated checks'];
 export const REVIEW_PREFIX = '## Code Review';
-// Third verdict: `review-agent` posts this when the head commit's checks
-// never concluded within the bounded wait — a timeout is a `BLOCKED:`, never
-// a pass, and the heading says so rather than silently reusing one of the
-// other two.
+// Third verdict: posted when the head commit's checks never concluded within the bounded wait.
 export const REVIEW_HEADING = /^## Code Review — Cycle (\d+) · (approved|needs revision|blocked — checks pending)$/;
 export const REVISION_HEADING = /^## Revision — Cycle (\d+)$/;
 export const APPROVAL_WITHDRAWN_HEADING = '## Approval withdrawn';
 export const REBASE_REQUIRED_HEADING = '## Rebase required';
 export const CHANGES_REQUESTED_HEADING = '## Changes requested';
 export const SHA_RE = /\b[0-9a-f]{7,40}\b/;
-// `fixed <ids> · skipped <ids> · <sha>`, with either segment dropped when empty
-// (revise-agent.md), and an optional `· rebase: <file> (<strategy>)` after the
-// sha. One of the two segments must be there — a cycle that did neither writes
-// no comment at all. `check <name> · <sha>` is the check-fix-mode form: no
-// threads to resolve, so no `fixed`/`skipped` segment at all.
+// `fixed <ids> · skipped <ids> · <sha>`, either segment dropped when empty, or the
+// check-fix-mode form `check <name> · <sha>` with neither segment at all.
 export const REVISION_OPENS = /^(?:fixed|skipped|check)\b/;
 export const REVISION_DETAIL = /^(?:(?:fixed\b[^·]*·\s*)?(?:skipped\b[^·]*·\s*)?[0-9a-f]{7,40}\b|check\s+\S+\s*·\s*[0-9a-f]{7,40}\b)/;
 export const COMMIT_SUBJECT = /^#\d+ [a-z]/;
 export const SCRATCH_PATHS = /^(\.temp|\.agents)\//;
-// A verification step only the operator can run, at its defined position — a
-// checkbox item whose text opens with the bolded prefix. Never a bare
-// substring search: a plan that merely *writes about* the prefix (this
-// ticket's own does) is not a marked plan.
+// A verification step only the operator can run — a checkbox item opening with the bolded
+// prefix. Never a bare substring search: a plan merely discussing the prefix is not marked.
 export const OPERATOR_ONLY_STEP = /^\s*[-*]\s*\[[ xX]\]\s*\*\*operator-only\*\*/;
-// The session-required marker's canonical rendering, anchored at the start of
-// the (trimmed) line, reason non-empty. Detection is slot-plus-form, never a
-// substring search of the whole body — see PIPELINE.md → "Detection". A plan
-// that merely *discusses* the marker (this ticket's own does, three times)
-// must not read as marked.
+// The session-required marker's canonical rendering, anchored at line start. Detection is
+// slot-plus-form, never a substring search — see PIPELINE.md → "Detection".
 const SESSION_MARKER = /^>\s*\*\*SESSION REQUIRED:\*\*\s+\S/;
 
 /** Pull request stage labels; legality is pair-wise, checked by
@@ -90,16 +57,14 @@ const SESSION_MARKER = /^>\s*\*\*SESSION REQUIRED:\*\*\s+\S/;
 export const PR_STAGE_KEYS = ['readyForReview', 'reviewing', 'needsRevision', 'revising', 'approved', 'needsHuman'];
 /** The refresh pair — sanctioned beside a stage label, never twice over. */
 export const PR_REFRESH_KEYS = ['refreshBranch', 'refreshing'];
-/** Issue-side stage labels — the `ISSUE_STAGE_KEYS` counterpart to
- *  `PR_STAGE_KEYS` (#220). No refresh pair on this surface: the refresh
- *  labels only ever apply to a pull request. */
+/** Issue-side stage labels, the counterpart to `PR_STAGE_KEYS`. No refresh pair on this
+ *  surface: the refresh labels only ever apply to a pull request. */
 export const ISSUE_STAGE_KEYS = ['ready', 'planChangesRequested', 'planApproved', 'planning', 'inProgress', 'planReview', 'blocked', 'prOpened'];
 const IN_FLIGHT_KEYS = ['planning', 'inProgress', 'reviewing', 'revising', 'refreshing'];
 const TRIGGER_KEYS = ['ready', 'planChangesRequested', 'planApproved', 'readyForReview', 'needsRevision', 'refreshBranch'];
 
-/** Pair-wise stage legality (#231): at most one stage label, beside at most
- *  one refresh label — sanctioned by PIPELINE.md → "Branch refresh". `null`
- *  means legal; both arguments are already-resolved label names. */
+/** Pair-wise stage legality: at most one stage label, beside at most one refresh label.
+ *  `null` means legal; both arguments are already-resolved label names. */
 export function stageViolation(stages, refresh) {
   if (stages.length > 1) return `carries ${stages.length} stage labels at once: ${stages.join(', ')}`;
   if (refresh.length > 1) return `carries both refresh labels at once: ${refresh.join(', ')}`;
@@ -120,28 +85,19 @@ const section = (ls, heading) => {
 const firstNonEmpty = (ls) => ls.find((l) => l.trim() !== '') ?? '';
 const firstNonEmptyIndex = (ls) => ls.findIndex((l) => l.trim() !== '');
 
-/** One clear line, no stack trace — the failure modes here are a bad
- *  argument, a missing `gh`, a missing login, and a missing config, none of
- *  which a trace helps with. */
+/** One clear line, no stack trace — nothing here is a failure mode a trace helps with. */
 const die = (msg) => {
   console.error(`FAIL  ${msg}`);
   process.exit(1);
 };
 
-// --- check <kind> <file> -----------------------------------------------------
-// Every rule below is the same constant `audit` uses further down — that
-// identity is the point, and layer 1 is what keeps it. Each returns
-// `{ ok: true }` or `{ ok: false, detail, expected }`: `detail` is what was
-// wrong, `expected` is the shape on its own line, since that line is how the
-// agent that wrote the file learns the format without reading another one.
+// --- check <kind> <file> --- Every rule below is the same one `audit` uses further down.
+// Each returns `{ ok: true }` or `{ ok: false, detail, expected }`.
 const ok = () => ({ ok: true });
 const fail = (detail, expected) => ({ ok: false, detail, expected });
 
-/** Every failing assertion, not just the first — `audit` reports each one
- *  independently (so a commit with several defects surfaces all of them, as
- *  the pre-move script did), while `checkCommit` below surfaces only the
- *  first, since a single-file `check` reports one `FAIL` line. Both read
- *  from this one list, so there is nothing to keep in sync between them. */
+/** Every failing assertion, not just the first — `audit` reports each one independently,
+ *  while `checkCommit` below surfaces only the first, since `check` reports one FAIL line. */
 function commitViolations(text, { issue } = {}) {
   const violations = [];
   const ls = lines(text);
@@ -259,10 +215,8 @@ function checkRevision(text, { cycle } = {}) {
   return ok();
 }
 
-/** Shared by `withdrawn` and `rebase-required`: heading on line 1, a 7-40
- *  character hex SHA below it, and a backtick-quoted fact beside the SHA
- *  (`missingNoun` names it — check or base branch). Line 1 is new here;
- *  `audit` already filters comments on that equality before calling. */
+/** Shared by `withdrawn` and `rebase-required`: heading on line 1, a 7-40 character hex SHA
+ *  below it, and a backtick-quoted fact beside the SHA (`missingNoun` names it). */
 function checkShaAnnotated(heading, missingNoun) {
   return (text) => {
     const ls = lines(text);
@@ -283,15 +237,8 @@ function checkShaAnnotated(heading, missingNoun) {
   };
 }
 
-/** `## Changes requested` (#288) — the cockpit's `revise #N` comment, posted
- *  on an approved pull request before the label swap so the request is
- *  durable even if the swap's compare-and-swap then fails. Three checks:
- *  line 1 is exactly the heading; a 7-40 character hex SHA appears below it;
- *  and at least one non-empty line below the heading is not the SHA itself —
- *  the operator's request, never a SHA-only comment that forgot it. Unlike
- *  `checkShaAnnotated`'s withdrawn/rebase-required pair, there is no
- *  backtick-quoted fact to find beside the SHA — the request itself is free
- *  text, so the test is simply "something besides the SHA is here". */
+/** `## Changes requested` — the cockpit's `revise #N` comment. Three checks: heading on line
+ *  1, a hex SHA below it, and at least one non-empty line that is not the SHA itself. */
 function checkChangesRequested(text) {
   const ls = lines(text);
   const first = (ls[0] ?? '').trim();
@@ -312,9 +259,8 @@ function checkChangesRequested(text) {
   return ok();
 }
 
-// One registry for both modes — kind -> { run, heading }, `heading` the
-// exported constant itself so the layer 1 pin can assert identity; `null`
-// marks the two kinds `audit` matches by shape, not heading (#204).
+// One registry for both modes — kind -> { run, heading }; `null` marks the two kinds
+// `audit` matches by shape, not heading.
 export const CHECKS = {
   commit: { run: checkCommit, heading: null },
   'pr-body': { run: checkPrBody, heading: null },
@@ -364,10 +310,8 @@ function runCheck(argv) {
   process.exit(1);
 }
 
-// --- audit [<pr>...] [--limit <n>] -------------------------------------------
-/** Walk up from `startDir` looking for `.claude/port.config.json`. Only
- *  `audit` needs a repository root — `check` reads nothing but the one file
- *  it was pointed at. */
+// --- audit [<pr>...] [--limit <n>] --- Walk up looking for `.claude/port.config.json`.
+/** Only `audit` needs a repository root — `check` reads nothing but the file it was pointed at. */
 function findRoot(startDir) {
   let dir = startDir;
   for (;;) {
@@ -435,8 +379,7 @@ function runAudit(argv) {
   const auditFail = (check, detail) => failures.push(`${check}: ${detail}`);
   const note = (text) => notes.push(text);
   const auditOk = () => checked++;
-  /** Fold a `check*` result (as used by `check`) into the audit's collector,
-   *  so both modes assert from the exact same functions. */
+  /** Fold a `check*` result into the audit's collector, so both modes share the same functions. */
   const fold = (at, result) => (result.ok ? auditOk() : auditFail(at, result.detail));
 
   const sweep = targets.length === 0;
@@ -455,10 +398,7 @@ function runAudit(argv) {
     const pr = ghJson(['pr', 'view', String(n), '--repo', repo, '--json', PR_FIELDS]);
     const names = pr.labels.map((l) => l.name);
 
-    // The marker is what makes a pull request the pipeline's. Without it there
-    // is nothing to hold to these formats — a human or a bot pull request is
-    // not a deviation. This is also why "marker present when approvalGate is
-    // on" cannot be a failure here: its absence is the skip condition.
+    // The marker is what makes a pull request the pipeline's — a human or bot one is not a deviation.
     if (!names.includes(marker)) {
       note(`#${n}: not a pipeline pull request — skipped`);
       continue;
@@ -468,12 +408,8 @@ function runAudit(argv) {
     // --- Body ---
     fold(at('body'), checkPrBody(pr.body ?? ''));
 
-    // --- Reviews ---
-    // Human reviews are not held to the format, so only pipeline ones are
-    // checked: by the pull request's own author (PIPELINE.md's common case,
-    // one account) or by a first line that is already trying to be a cycle
-    // heading. The second clause is what makes a *renamed* heading fail
-    // rather than quietly skip.
+    // --- Reviews --- Only pipeline reviews are checked: by the pull request's own author, or a
+    // first line already trying to be a cycle heading.
     const cycles = [];
     const reviewOids = [];
     for (const r of pr.reviews) {
@@ -502,13 +438,8 @@ function runAudit(argv) {
       else auditOk();
     }
 
-    // --- Zero-diff review bounce (#162) ---
-    // The cockpit's zero-diff gate stops a *second* review from ever being
-    // dispatched against a head already reviewed, but a `## Gate cleared`
-    // exception authorizes exactly one more — so one repeat (two reviews
-    // sharing a `commit.oid`) is the sanctioned escape, never a failure.
-    // Three or more sharing one oid means the gate was bypassed, or predates
-    // this fix, and the cap-without-convergence loop #162 exists for is back.
+    // --- Zero-diff review bounce --- A `## Gate cleared` exception authorizes one repeat
+    // review on the same commit.oid; three or more means the gate was bypassed.
     {
       const byOid = new Map();
       for (const oid of reviewOids) byOid.set(oid, (byOid.get(oid) ?? 0) + 1);
@@ -538,13 +469,8 @@ function runAudit(argv) {
       }
     }
 
-    // --- Approval withdrawn / Rebase required / Changes requested ---
-    // Each is a fixed heading on line 1 with a SHA below it — two of the
-    // three (withdrawn, rebase-required) also carry a backtick-quoted fact
-    // beside the SHA (a check name, or a base branch); the third (changes
-    // requested, #288) carries free-text request instead. One loop over the
-    // registry's string headings checks all three, replacing the near-
-    // identical blocks that only differed in which constant they named (#204).
+    // --- Approval withdrawn / Rebase required / Changes requested --- Each is a fixed heading
+    // on line 1 with a SHA below it; one loop over the registry's headings checks all three.
     const shaAnnotated = Object.entries(CHECKS).filter(([, e]) => typeof e.heading === 'string');
     for (const c of pr.comments) {
       const first = (lines(c.body)[0] ?? '').trim();
@@ -556,8 +482,7 @@ function runAudit(argv) {
     // --- Commits ---
     for (const c of pr.commits) {
       const subject = c.messageHeadline ?? '';
-      // The commits API returns no parent count, so a merge is recognized by
-      // its subject. Merges are exempt: GitHub writes them, not the pipeline.
+      // Merges are recognized by subject (no parent count in this API) and exempt — GitHub writes them.
       if (subject.startsWith('Merge ')) continue;
       const violations = commitViolations(`${subject}\n\n${c.messageBody ?? ''}`);
       if (violations.length === 0) auditOk();
@@ -596,12 +521,8 @@ function runAudit(argv) {
       } else {
         auditOk();
       }
-      // Both surfaces are checked at the marker's *slot*, never by searching
-      // the whole body: a plan that merely writes about the marker — this
-      // ticket's own does, three times — is not a marked plan. On the issue
-      // the slot is the first non-empty line of the plan block, before
-      // `## Overview`; on the pull request it is directly under `Closes #N`,
-      // where the cockpit reads it to route stage 4.
+      // Both surfaces are checked at the marker's slot, never by searching the whole body —
+      // the plan's first non-empty line on the issue, directly under `Closes #N` on the pull request.
       const issuePlan = lines(issueBody).slice(
         lines(issueBody).findIndex((l) => l.trim() === '## Implementation Plan') + 1,
       );
@@ -618,13 +539,8 @@ function runAudit(argv) {
         auditOk();
       }
 
-      // The canonical rendering must appear only at the slot, in
-      // pipeline-authored text. Scoped deliberately: the issue's plan block
-      // (never the human-authored ticket text above it, which is not the
-      // pipeline's to constrain) and the whole pull request body (all of it
-      // pipeline-authored, once `Closes #N` is excluded). A rendering
-      // elsewhere would be misread as a second marker by anything that ever
-      // regresses to a substring search.
+      // The canonical rendering must appear only at the slot, in pipeline-authored text —
+      // the issue's plan block, and the pull request body once `Closes #N` is excluded.
       const outsideIssue = issuePlan.some((l, i) => i !== issueSlotIdx && SESSION_MARKER.test(l.trim()));
       const outsidePr = prBody.some((l, i) => i !== prSlotIdx && SESSION_MARKER.test(l.trim()));
       if (outsideIssue) {
@@ -638,11 +554,8 @@ function runAudit(argv) {
         auditOk();
       }
 
-      // An operator-only testing step on the issue must reach the pull
-      // request's testing plan — it is the human's only warning that one box
-      // is theirs alone to tick. One-directional on purpose: dropping it
-      // loses that warning, while an extra one in the pull request is
-      // harmless caution.
+      // An operator-only testing step on the issue must reach the pull request's testing
+      // plan — the human's only warning that one box is theirs alone to tick.
       const issueTesting = section(lines(issueBody), '## Testing') ?? [];
       const issueHasOperatorOnly = issueTesting.some((l) => OPERATOR_ONLY_STEP.test(l));
       if (issueHasOperatorOnly) {
@@ -657,10 +570,8 @@ function runAudit(argv) {
     }
   }
 
-  // --- Parked sweep -----------------------------------------------------------
-  // An item sitting in an in-flight label may be a crashed agent, or an agent
-  // that is simply still working. This layer cannot tell, so it never fails
-  // on one.
+  // --- Parked sweep --- An item in an in-flight label may be a crashed agent, or one simply
+  // still working — this layer cannot tell, so it never fails on one.
   if (sweep) {
     const PARKED_HOURS = 2;
     for (const key of IN_FLIGHT_KEYS.filter(labelEnabled)) {

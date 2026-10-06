@@ -4,27 +4,21 @@ import { pathToFileURL } from 'node:url';
 import { root, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// Issue 86: apps/desktop/src/main/reclaimer/ drives the shipped
-// plugins/port/bin/worktrees.mjs through commands.worktrees and never
-// re-implements its classification — this directory calls no `git worktree`
-// itself (main/local/'s join is the one place that does). Four assertions
-// pin that mechanically, in the shape of desktop-local.ts's own guards.
+// apps/desktop/src/main/reclaimer/ drives the shipped bin/worktrees.mjs through
+// commands.worktrees and never re-implements its classification or calls `git worktree` itself.
 export default async function ({ fail, ok }: Reporter) {
   const dir = 'apps/desktop/src/main/reclaimer';
   const files = walk(join(root, dir)).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
 
-  // --- (1) The directory has source files at all ------------------------------
-  // guard(#86): the guard passing vacuously once the directory is deleted.
+  // --- (1) The directory has source files at all, so this cannot pass vacuously once deleted. ---
   if (files.length === 0) {
     fail('desktop-reclaimer', `${dir} has no source files — the guard cannot pass vacuously if the directory is deleted`);
     return;
   }
   ok();
 
-  // --- (2) No file here re-implements worktree enumeration/removal -----------
-  // guard(#86): a third `git worktree` caller landing beside the shipped
-  // script's own classification and issue 77's join, instead of driving the
-  // one or reading the other.
+  // --- (2) No file here re-implements worktree enumeration/removal — never a third `git
+  // worktree` caller beside the shipped script's classification and main/local/'s join. ---
   {
     let violated = false;
     for (const f of files) {
@@ -40,9 +34,6 @@ export default async function ({ fail, ok }: Reporter) {
     if (!violated) ok();
   }
 
-  // --- (3) WORKTREE_STATES/RECLAIMABLE_STATES pinned against the template ----
-  // guard(#86): the app's reclaimability vocabulary silently drifting from
-  // the script's real classification.
   // pin: `bin/worktrees.mjs`'s state vocabulary (`describeReason`'s cases, and which states `classifyCandidate` returns `removable: true` for) ↔ `shared/reclaimer/types.ts`'s `WORKTREE_STATES`/`RECLAIMABLE_STATES`
   {
     const typesPath = join(root, 'apps/desktop/src/shared/reclaimer/types.ts');
@@ -100,10 +91,6 @@ export default async function ({ fail, ok }: Reporter) {
     ok();
   }
 
-  // --- (4) Both script literals reach the app's own constants -----------------
-  // guard(#86): the script's own diagnostic literals drifting from the app's
-  // pinned copies, breaking the offline-retry and script-failed
-  // classification silently.
   // pin: `bin/worktrees.mjs`'s two diagnostic literals (`die()`'s `FAIL` prefix, `gh issueOrPullRequest resolution failed`) ↔ `main/reclaimer/report.ts`'s pinned copies
   {
     const templatePath = join(root, 'plugins/port/bin/worktrees.mjs');

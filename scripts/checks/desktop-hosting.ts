@@ -3,12 +3,8 @@ import { join } from 'node:path';
 import { root, readJson, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// #98/#99/#103/#265/#364: apps/desktop/src/main/hosting/ owns the full
-// lifecycle of a hosted session in the main process. These assertions pin
-// its plan's decisions mechanically, in the shape desktop-runtime.ts's and
-// desktop-sessions.ts's own guards already use — desktop-hosting-defaults.ts
-// holds the #364 operator-defaults assertions, split out to stay under this
-// file's own 500-line ceiling.
+// apps/desktop/src/main/hosting/ owns the full lifecycle of a hosted session in the main
+// process. These assertions pin its plan's decisions mechanically.
 export default async function ({ expect, fail, ok }: Reporter) {
   const hostingDir = 'apps/desktop/src/main/hosting';
   const sharedHostingDir = 'apps/desktop/src/shared/hosting';
@@ -19,13 +15,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
   const sharedHostingFiles = allFiles.filter((f) => relOf(f).startsWith(`${sharedHostingDir}/`));
   const sharedHostingProdFiles = sharedHostingFiles.filter((f) => !relOf(f).endsWith('.test.ts'));
 
-  // --- No string prompt anywhere under main/hosting/ -----------------------
-  // guard(#98): streaming input mode, always — `interrupt()`/
-  // `setPermissionMode()` are documented as "only supported when streaming
-  // input/output is used", so a string `prompt` would silently make Stop
-  // impossible. Matched as the `prompt:` option key followed by a quote or
-  // backtick, never the substring `prompt` alone (which appears in prose and
-  // in `PROBE_PROMPT`-shaped identifiers elsewhere).
+  // --- No string prompt anywhere under main/hosting/ — streaming input mode, always, since
+  // `interrupt()`/`setPermissionMode()` need it or Stop becomes impossible. ---
   {
     const stringPromptRe = /\bprompt\s*:\s*['"`]/;
     let found = false;
@@ -40,11 +31,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- No direct process control under main/hosting/ -----------------------
-  // guard(#98): the SDK owns termination — never `process.kill`, never a
-  // signal, never a raw `node:child_process`/`node:fs` reach-around. This is
-  // what makes close() identical on Windows (the SDK ends stdin rather than
-  // sending SIGTERM there).
+  // --- No direct process control under main/hosting/ — the SDK owns termination, never
+  // `process.kill` or a raw node:child_process/node:fs reach-around. ---
   {
     const forbidden = ["'node:child_process'", '"node:child_process"', "'node:fs'", '"node:fs"', 'process.kill', '.kill('];
     let found = false;
@@ -61,11 +49,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- shared/hosting/ never names an SDK message variant type, and stays message: unknown ---
-  // guard(#98): SDKMessage is a 37-variant open union — the envelope carries
-  // `message: unknown` and issue 219/issue 83 own every narrowing decision,
-  // one renderer for both. A shared type re-deriving a narrowing here would
-  // be a second, competing decision.
+  // --- shared/hosting/ never names an SDK message variant type, and stays message: unknown
+  // — SDKMessage is a large open union, and a shared type re-deriving a narrowing here would compete with the one true renderer. ---
   {
     const typesFile = allFiles.find((f) => relOf(f) === `${sharedHostingDir}/types.ts`);
     if (!typesFile) {
@@ -78,10 +63,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- All four SDK end-of-process wordings appear in classify.cases.json --
-  // guard(#98): a refactor collapsing "exited with code" / "terminated by
-  // signal" / "process error" / "aborted by user" into one bucket loses the
-  // exact reason an operator needs to see.
+  // --- All four SDK end-of-process wordings appear in classify.cases.json — collapsing them
+  // into one bucket loses the exact reason an operator needs to see. ---
   {
     const casesPath = `${hostingDir}/classify.cases.json`;
     const cases = readJson(casesPath) as Array<{ input?: { text?: string } }>;
@@ -102,10 +85,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (allPresent) ok();
   }
 
-  // --- classify.cases.json resolves against classifyEnd's real export ------
-  // guard(#98): a case naming a function classify.ts no longer exports,
-  // silently skipped rather than failing loudly (the same rail
-  // desktop-runtime.ts's own case-table guard already applies).
   // pin: `main/hosting/classify.cases.json` ↔ `classifyEnd` in `main/hosting/classify.ts`
   {
     const classifyFile = allFiles.find((f) => relOf(f) === `${hostingDir}/classify.ts`);
@@ -114,9 +93,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
     } else expect(/export function classifyEnd\(/.test(readFileSync(classifyFile, 'utf8')), 'desktop-hosting', `${hostingDir}/classify.ts does not export 'classifyEnd'`);
   }
 
-  // --- SessionPhase's members match the phases handle.ts assigns, both directions ---
-  // guard(#98): a phase added to the union with no assignment in handle.ts,
-  // or an assignment there naming a phase the union no longer has.
   // pin: `shared/hosting/types.ts`'s `SessionPhase` ↔ `main/hosting/handle.ts`'s own phase assignments, both directions
   {
     const typesFile = allFiles.find((f) => relOf(f) === `${sharedHostingDir}/types.ts`);
@@ -131,8 +107,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
         fail('desktop-hosting', `${sharedHostingDir}/types.ts has no 'export type SessionPhase = ...' declaration`);
       } else {
         const members = new Set([...unionMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]));
-        // Matches both a reassignment (`phase = 'ready'`) and the initial
-        // type-annotated declaration (`let phase: SessionPhase = 'starting'`).
+        // Matches both a reassignment and the initial type-annotated declaration.
         const assigned = new Set([...handleText.matchAll(/\bphase\s*(?::\s*SessionPhase\s*)?=\s*'([^']+)'/g)].map((m) => m[1]));
         for (const member of members) {
           if (!assigned.has(member)) fail('desktop-hosting', `handle.ts never assigns phase = '${member}' — SessionPhase names a phase the handle never reaches`);
@@ -145,11 +120,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- No running/alive/isLive identifier or string literal under main/hosting/ ---
-  // guard(#98): a hosted session's phase is a real process-phase report
-  // (this module owns the child and holds the Query, unlike main/sessions/),
-  // but never spells liveness with the words Decision 4 already banned
-  // elsewhere in this app.
+  // --- No running/alive/isLive identifier under main/hosting/ — a hosted session's phase is
+  // a real process-phase report, but must never spell liveness with those words. ---
   {
     const forbidden = ['running', 'alive', 'isLive'];
     let found = false;
@@ -166,9 +138,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- main/index.ts's before-quit names the store's closeAll --------------
-  // guard(#98): quitting must never orphan a `claude` child, the same rail
-  // issue 80 already applies to the board watcher's own timer.
+  // --- main/index.ts's before-quit names the store's closeAll — quitting must never orphan a `claude` child. ---
   {
     const indexFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/main/index.ts');
     if (!indexFile) {
@@ -182,9 +152,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- live.test.ts references PORT_LIVE_SDK and a skip guard --------------
-  // guard(#98): the acceptance run must stay opt-in — a missing skip guard
-  // would spawn a real `claude` child in every default `pnpm test` run.
+  // --- live.test.ts references PORT_LIVE_SDK and a skip guard — the acceptance run must
+  // stay opt-in, or it spawns a real `claude` child in every default test run. ---
   {
     const liveFile = allFiles.find((f) => relOf(f) === `${hostingDir}/live.test.ts`);
     if (!liveFile) {
@@ -197,9 +166,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- No permissionPromptToolName under main/hosting/ ----------------------
-  // guard(#99): mutually exclusive with canUseTool — the SDK throws when
-  // both are present, so this option must never appear here at all.
+  // --- No permissionPromptToolName under main/hosting/ — mutually exclusive with
+  // canUseTool; the SDK throws when both are present. ---
   {
     let found = false;
     for (const f of hostingProdFiles) {
@@ -214,7 +182,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
   }
 
   // --- No bypass/dontAsk escape hatch under main/hosting/ or shared/hosting/ ---
-  // guard(#99): nothing under either tree may silently widen past the host prompt.
+  // guard: nothing under either tree may silently widen past the host prompt.
   {
     const forbidden = ['bypassPermissions', 'allowDangerouslySkipPermissions', "'dontAsk'"];
     let found = false;
@@ -239,10 +207,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- Every destination: in grant.ts is 'session' --------------------------
-  // guard(#99): an "allow for this session" must never write a settings
-  // file — a widened destination here would be unrecoverable from inside
-  // the app.
+  // --- Every destination: in grant.ts is 'session' — never a settings file, which would be unrecoverable from inside the app. ---
   {
     const grantFile = allFiles.find((f) => relOf(f) === `${hostingDir}/grant.ts`);
     if (!grantFile) {
@@ -257,12 +222,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- permissions.ts's canUseTool returns Promise<PermissionResult>, no | null ---
-  // guard(#99): the SDK's own CanUseTool returns `Promise<PermissionResult |
-  // null>`, treating `null` as "already answered out of band" and leaving
-  // the tool blocked forever. This broker never answers out of band, so its
-  // own declared type excludes `null` — a compile error catches a future
-  // edit that reintroduces it.
+  // --- permissions.ts's canUseTool returns Promise<PermissionResult>, no | null — this
+  // broker never answers out of band, so its declared type excludes `null`. ---
   {
     const permissionsFile = allFiles.find((f) => relOf(f) === `${hostingDir}/permissions.ts`);
     if (!permissionsFile) {
@@ -275,11 +236,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- project.ts's live projection goes through createDeriver ------------
-  // guard(#219): the live projector must reuse issue 83/issue 84's own
-  // pairing state, never a second implementation — the whole point of "one
-  // normalizer, one renderer" (the plan's own framing, and the fix for the
-  // issue 123 three-renderers trap).
+  // --- project.ts's live projection goes through createDeriver — reuses the existing pairing
+  // state, never a second implementation. ---
   {
     const projectFile = allFiles.find((f) => relOf(f) === `${hostingDir}/project.ts`);
     if (!projectFile) {
@@ -290,12 +248,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- No second tool_use_id pairing implementation -----------------------
-  // guard(#219): `\btool_use_id\b` may appear in exactly one production file
-  // — `main/sessions/transcript-entries.ts`'s own deriver. A second match
-  // anywhere else under apps/desktop/src/ (project.ts included) would be a
-  // competing pairing implementation, the same trap the createDeriver guard
-  // above exists to prevent from the other direction.
+  // --- No second tool_use_id pairing implementation — the literal may appear only in
+  // transcript-entries.ts's own deriver; a second match anywhere else is a competing implementation. ---
   {
     const allowedFile = 'apps/desktop/src/main/sessions/transcript-entries.ts';
     const prodFiles = allFiles.filter((f) => !relOf(f).endsWith('.test.ts'));
@@ -303,11 +257,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(!(stray.length > 0), 'desktop-hosting', `'tool_use_id' appears outside ${allowedFile}, in: ${stray.map(relOf).join(', ')} — a second pairing implementation is the three-renderers trap #123 flagged`);
   }
 
-  // --- options.ts sets settingSources to exactly the three explicit sources ---
-  // guard(#101): an omitted or empty settingSources silently drops the
-  // repository's own permissions.deny, its enabledPlugins (so no installed
-  // port), and CLAUDE.md — this must never regress to the SDK's own
-  // unstated default.
+  // --- options.ts sets settingSources to exactly the three explicit sources — an omitted or
+  // empty one silently drops permissions.deny, enabledPlugins, and CLAUDE.md. ---
   {
     const optionsFile = allFiles.find((f) => relOf(f) === `${hostingDir}/options.ts`);
     if (!optionsFile) {
@@ -320,14 +271,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- No production file under main/hosting/ passes a skills: option key ---
-  // guard(#101): a command runs as a typed slash command in the live
-  // session, never through the Skill-tool filter — `skills` only hides
-  // every unlisted skill and cannot target an already-running session, so
-  // this option key must never appear here at all. `ExpectedComponents`'s
-  // own `readonly skills: readonly string[]` field (plugin.ts/verify.ts) is
-  // an unrelated shape naming the same word — excluded by requiring the
-  // match not be a `readonly skills:` type declaration.
+  // --- No production file under main/hosting/ passes a skills: option key — a command runs
+  // as a typed slash command, never through the Skill-tool filter. Excludes the unrelated `readonly skills:` type declaration. ---
   {
     let found = false;
     for (const f of hostingProdFiles) {
@@ -343,12 +288,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- No production file under main/hosting/ names a tools: option key ----
-  // guard(#265, #326): `tools:` restricts the built-in set for the whole
-  // session, including subagents — it would strip `Bash`/`Write` from a
-  // stage session. The pattern requires a non-word character (or line
-  // start) immediately before `tools`, so a stray `tools:` is still caught
-  // even sharing a line with another identifier ending in "tools".
+  // --- No production file under main/hosting/ names a tools: option key — it restricts the
+  // whole session's built-in set, including subagents, stripping `Bash`/`Write` from a stage session. ---
   {
     let found = false;
     for (const f of hostingProdFiles) {
@@ -364,10 +305,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- capabilities.ts reads both supportedCommands() and supportedAgents() ---
-  // guard(#101): the inventory is read back, never assumed — a plugin flag
-  // silently doing nothing must surface as 'missing'/'unavailable', not an
-  // empty command strip nobody investigates.
+  // --- capabilities.ts reads both supportedCommands() and supportedAgents() — the inventory
+  // is read back, never assumed, so a plugin flag doing nothing surfaces as unavailable. ---
   {
     const capabilitiesFile = allFiles.find((f) => relOf(f) === `${hostingDir}/capabilities.ts`);
     if (!capabilitiesFile) {
@@ -378,11 +317,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- Only persist.ts names writeJsonFileAtomic or hosting.json under main/hosting/ ---
-  // guard(#103): hosting.json is recoverable app state, not an operator-
-  // curated list — a second writer could persist a set that skipped
-  // freeze() on quit, silently restoring a session the operator already
-  // closed.
+  // --- Only persist.ts names writeJsonFileAtomic or hosting.json under main/hosting/ — a
+  // second writer could persist a set that skipped freeze() on quit. ---
   {
     const stray = hostingProdFiles.filter((f) => relOf(f) !== `${hostingDir}/persist.ts`).filter((f) => {
       const code = stripComments(readFileSync(f, 'utf8'));
@@ -391,12 +327,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(!(stray.length > 0), 'desktop-hosting', `writeJsonFileAtomic or 'hosting.json' appears outside ${hostingDir}/persist.ts, in: ${stray.map(relOf).join(', ')} — a second writer could skip freeze() on quit`);
   }
 
-  // --- shared/hosting/label.ts's sessionDisplayLabel is declared once and used by both consumers ---
-  // guard(#103) / pin: shared/hosting/label.ts's sessionDisplayLabel ↔ its
-  // two consumers (renderer/src/session/rail.ts, renderer/src/permission/
-  // controller.ts). If the dialog and the rail named a session differently,
-  // the operator would have no reliable way to tell which session a prompt
-  // belongs to.
+  // pin: shared/hosting/label.ts's sessionDisplayLabel ↔ its two consumers — if the dialog
+  // and the rail named a session differently, the operator could not tell which prompt belongs where.
   {
     const declarations = allFiles.filter((f) => !relOf(f).endsWith('.test.ts')).filter((f) => /export function sessionDisplayLabel\(/.test(readFileSync(f, 'utf8')));
     const declaredOnlyInLabel = declarations.length === 1 && relOf(declarations[0] ?? '') === `${sharedHostingDir}/label.ts`;

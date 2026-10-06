@@ -3,12 +3,8 @@ import { join } from 'node:path';
 import { root, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// Issue 87: apps/desktop/src/main/search/ answers a query against every
-// transcript main/sessions/ can already parse. Three assertions pin its
-// plan's decisions mechanically, dependency-free and regex-based, in the
-// shape of desktop-sessions.ts's and desktop-claim.ts's own guards —
-// reading directories by explicit path (never walk('apps/'), which descends
-// into node_modules).
+// apps/desktop/src/main/search/ answers a query against every transcript main/sessions/ can
+// already parse. These assertions pin its plan's decisions mechanically.
 export default async function ({ expect, fail, ok }: Reporter) {
   const searchDir = 'apps/desktop/src/main/search';
   const sharedSearchTypesFile = 'apps/desktop/src/shared/search/types.ts';
@@ -23,14 +19,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     return;
   }
 
-  // --- main/search/ imports only the named sessions files it needs --------
-  // guard(#87): a second transcript parser or a second Agent SDK seam,
-  // growing back the exact drift `main/sessions/` exists to prevent
-  // (ENGINEERING §1). The sessions barrel is gone, so this is now an
-  // allowlist of the defining files `query.ts` actually needs
-  // (`./locate`, the project index and path resolver; `./transcript`, the
-  // on-disk reader) — any other deep `../sessions/*` import is still the
-  // same drift the barrel rail used to catch.
+  // --- main/search/ imports only the named sessions files it needs — never a second
+  // transcript parser or a second Agent SDK seam, the exact drift main/sessions/ prevents. ---
   {
     let found = false;
     const allowedDeepImports = new Set(['../sessions/locate', '../sessions/transcript']);
@@ -52,11 +42,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- shared/search/types.ts declares every honesty field; the renderer ---
-  // --- reads 'complete' before rendering an empty result ---
-  // guard(#87): a partial (budget-bounded) search rendering as an exhaustive
-  // "no matches" -- the plan's own "direction of failure: closed on the
-  // answer, open on reporting" contract for SearchResult.
+  // --- shared/search/types.ts declares every honesty field; the renderer reads 'complete'
+  // before rendering an empty result — a partial search must never render as exhaustive. ---
   {
     const typesFile = allFiles.find((f) => relOf(f) === sharedSearchTypesFile);
     const rendererFile = allFiles.find((f) => relOf(f) === rendererSearchFile);
@@ -75,11 +62,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- MIN_TERM_CHARS === TRIGRAM_SIZE ---
-  // guard(#87): a term shorter than the trigram filter's own n-gram makes
-  // the index skip silently lossy -- a term with fewer characters than a
-  // trigram has no windows to test, so `mightContain` trivially reads
-  // "present" for a term the signature was never actually built to answer.
+  // --- MIN_TERM_CHARS === TRIGRAM_SIZE — a shorter term has no windows to test, so
+  // `mightContain` trivially reads "present" for a term the signature was never built to answer. ---
   {
     const typesFile = allFiles.find((f) => relOf(f) === sharedSearchTypesFile);
     if (!typesFile) {

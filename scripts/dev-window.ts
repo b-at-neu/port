@@ -1,50 +1,25 @@
 #!/usr/bin/env node
-// Restores the integration branch's prerelease "dev window" after a release
-// bump merges (#224). Invoked as `release.postPublishHook` from
-// `/port:release` Phase B, and safe to run by hand.
-//
-// Why this exists: the plugin's on-disk cache directory is keyed by
-// marketplace + plugin + version. A release bump strips the integration
-// branch's prerelease suffix as part of the existing bump commit, so between
-// that merge and this script's own pull request landing, the integration
-// branch briefly carries a version string a released consumer could also be
-// pinned to — reinstalling either resolves to the same cache directory and
-// overwrites the other. This script reopens the corridor by bumping the
-// integration branch to the next patch version with a prerelease suffix,
-// which no released install can ever occupy.
-//
-// Decision logic (parseVersion, nextDevWindow, decide, devWindowSubject) is
-// pure and exported, so the layer 1 check in scripts/checks/release.ts can
-// assert every case without a git subprocess (docs/ENGINEERING.md §1's
-// guard-rules.mjs split).
-// The I/O — reading config, talking to git and gh — lives in this same
-// file's thin CLI wrapper below.
+// Reopens the prerelease "dev window" after a release bump, so a released
+// consumer and the next-in-progress version never share a plugin cache key.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { message } from './lib/errors.ts';
 
-// The suffix is this project's own documented convention, not recovered from
-// git history — a single constant here is the same behaviour as archaeology
-// across the previous manifest commit, with one fewer unreadable-history
-// failure mode now that this script is port-only.
+// Documented convention, not recovered from git history.
 export const DEV_SUFFIX = 'dev';
 
-/** Parses `X.Y.Z` with an optional `-<prerelease>` suffix. Returns
- *  `{major, minor, patch, suffix}` (`suffix` null when absent), or `null` for
- *  anything malformed — never a guessed default. */
+/** Parses `X.Y.Z` with an optional `-<prerelease>` suffix. `null` for anything malformed —
+ *  never a guessed default. */
 export function parseVersion(raw: unknown): { major: number; minor: number; patch: number; suffix: string | null } | null {
   const m = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(String(raw ?? '').trim());
   if (!m) return null;
   return { major: Number(m[1]), minor: Number(m[2]), patch: Number(m[3]), suffix: m[4] ?? null };
 }
 
-/** The next-patch dev-window version for a clean (non-prerelease) production
- *  version, e.g. `nextDevWindow('0.2.0')` → `'0.2.1-dev'`, never
- *  `'0.3.0-dev'` — the placeholder claims as little as possible about the
- *  size of the pending release. Throws on malformed or already-suffixed
- *  input rather than defaulting. */
+/** The next-patch dev-window version for a clean production version, e.g.
+ *  `nextDevWindow('0.2.0')` → `'0.2.1-dev'`. Throws on malformed or already-suffixed input. */
 export function nextDevWindow(productionVersion: string, suffix = DEV_SUFFIX): string {
   const v = parseVersion(productionVersion);
   if (!v) throw new Error(`nextDevWindow: '${productionVersion}' is not a well-formed semver`);
@@ -52,10 +27,8 @@ export function nextDevWindow(productionVersion: string, suffix = DEV_SUFFIX): s
   return `${v.major}.${v.minor}.${v.patch + 1}-${suffix}`;
 }
 
-/** The one constructor for a dev-window branch name, e.g.
- *  `devWindowBranch('0.2.1-dev')` → `'devwindow/v0.2.1-dev'` — used here and
- *  by `scripts/release-corridor.ts` (#275), so there is never a second copy
- *  of this string shape to drift from this one. */
+/** The one constructor for a dev-window branch name, shared with
+ *  `scripts/release-corridor.ts` so the shape never drifts between them. */
 export function devWindowBranch(next: string): string {
   return `devwindow/v${next}`;
 }
@@ -65,10 +38,7 @@ export function devWindowSubject(next: string): string {
   return `open dev window for v${next}`;
 }
 
-/** The pure decision: given the integration branch's current version, the
- *  next dev-window version (already computed from production's version by
- *  the caller), and whether that window's branch already exists on origin —
- *  which of the three outcomes applies. Never touches git or gh itself. */
+/** The pure decision over which of the three outcomes applies. Never touches git or gh itself. */
 export function decide({ integrationVersion, next, devWindowBranchExists }: { integrationVersion: string; next: string; devWindowBranchExists: boolean }): any {
   const integration = parseVersion(integrationVersion);
   if (!integration) throw new Error(`decide: integration version '${integrationVersion}' is not well-formed semver`);
@@ -135,11 +105,8 @@ function findOpenPrUrl(repo: string, branch: string): string | null {
   return out.length > 0 ? out : null;
 }
 
-/** Part 1's detached-checkout shape, reused exactly: no local branch
- *  survives, so a retry after a failed push cannot collide with a stale
- *  local one — the remote branch stays the single source of truth for
- *  in-flight state. Restores the entry ref on every path, failure included,
- *  and asserts the restoration rather than assuming it. */
+/** A detached checkout: no local branch survives, so a retry after a failed push cannot
+ *  collide with a stale one. Restores the entry ref on every path, including failure. */
 function openDevWindow({ root, cfg, next, branch }: { root: string; cfg: any; next: string; branch: string }): void {
   const entryRefRaw = git(['rev-parse', '--abbrev-ref', 'HEAD']);
   const entryRef = entryRefRaw === 'HEAD' ? git(['rev-parse', 'HEAD']) : entryRefRaw;
@@ -167,17 +134,13 @@ function openDevWindow({ root, cfg, next, branch }: { root: string; cfg: any; ne
     );
     git(['add', cfg.versionFile]);
     git(['commit', '-F', commitMsgPath]);
-    // devwindow/v<next> is deliberately not bump/v<next> — release/SKILL.md
-    // §0.5 case 1 matches `bump/v*` and would adopt this branch as an
-    // in-flight release.
+    // Deliberately not bump/v<next> — release/SKILL.md's case 1 would adopt that as an in-flight release.
     git(['push', 'origin', `HEAD:refs/heads/${branch}`]);
   } catch (e) {
     try {
       restore();
     } catch (restoreErr) {
-      // Never let a failed restore erase the original failure — that would
-      // hide why the checkout/commit/push actually broke behind an unrelated
-      // restore-mismatch message.
+      // Never let a failed restore erase the original failure behind an unrelated restore-mismatch message.
       throw new Error(`FAIL: ${message(e)}\n(restore() also failed: ${message(restoreErr)})`, { cause: e });
     }
     throw e;
@@ -188,7 +151,7 @@ function openDevWindow({ root, cfg, next, branch }: { root: string; cfg: any; ne
   const bodyPath = join(root, '.temp/devwindow-pr.md');
   writeFileSync(
     bodyPath,
-    `Opens the dev window at v${next} so the integration branch never carries a version a released consumer can be pinned to (#224).\n`,
+    `Opens the dev window at v${next} so the integration branch never carries a version a released consumer can be pinned to.\n`,
   );
   const url = execFileSync(
     'gh',

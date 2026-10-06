@@ -1,9 +1,5 @@
-// Shared reporting for the testing loop's scripts, so layer 1 and layer 2 read
-// identically at a glance: `note` lines first, then either one `ok` line or one
-// `FAIL` line per failure and a count.
-//
-// Kept deliberately dumb — a collector and a printer. The scripts decide what is
-// worth checking; this decides nothing.
+// Shared reporting so layer 1 and layer 2 read identically: `note` lines first, then one
+// `ok` line or one `FAIL` line per failure. Kept deliberately dumb — decides nothing.
 
 /** What every topic module receives, and the only surface it may act through. */
 export interface Reporter {
@@ -23,12 +19,8 @@ export interface Reporter {
 /** A topic module's shape: takes the shared reporter, asserts against it. */
 export type CheckModule = (reporter: Reporter) => Promise<void>;
 
-/** A collector plus its terminal printer. `report()` sets `process.exitCode`
- *  rather than calling `process.exit`, because `process.stdout` is
- *  asynchronous when connected to a pipe on Windows — exiting immediately
- *  after writing risks truncating these very lines. Setting `exitCode` and
- *  letting the process end naturally is safe everywhere, since `report()` is
- *  the last thing either script does. */
+/** A collector plus its terminal printer. `report()` sets `process.exitCode` rather than
+ *  calling `process.exit`, since an immediate exit risks truncating output on a piped Windows stdout. */
 export function createReporter(): Reporter {
   const failures: string[] = [];
   const notes: string[] = [];

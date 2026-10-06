@@ -3,13 +3,8 @@ import { basename, join } from 'node:path';
 import { root, readJson, walk, relOf, blockScalar, sectionText } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-/** Every key a case.yaml may declare, read live from evals/README.md's own
- *  schema table (its "Key" column) rather than transcribed here — a second,
- *  hand-typed copy of that table is exactly the kind of duplicate
- *  docs/ENGINEERING.md §2 requires a mechanical pin for, and the cheaper fix
- *  is to have only one copy at all. The `max_turns, timeout_seconds` row
- *  packs two backtick-quoted keys into one cell, so every backtick token in
- *  the column is taken, not just the row's first. */
+/** Every key a case.yaml may declare, read live from evals/README.md's own schema table
+ *  rather than transcribed here. One row packs two backtick-quoted keys into one cell, so every backtick token is taken, not just the first. */
 function readmeSchemaKeys(readmeText: string): string[] {
   const schemaSection = sectionText(readmeText, 'The case schema, and where it came from');
   const keys: string[] = [];
@@ -20,12 +15,7 @@ function readmeSchemaKeys(readmeText: string): string[] {
 }
 
 export default async function ({ fail, ok }: Reporter) {
-  // --- Eval cases are structurally sound --------------------------------------
-  // guard: a layer 3 case broken by a rename, invisible while the evals
-  // cannot run. Everything statically knowable about a case is checked here,
-  // for free, so a broken case is caught without an API key or early access.
-  // Presence and shape only, by regex — same reasoning as the frontmatter
-  // reader above.
+  // --- Eval cases are structurally sound — a broken case is caught without an API key or early access. ---
   {
     const caseFiles = walk(join(root, 'evals')).filter((f) => basename(f) === 'case.yaml');
     if (caseFiles.length === 0) {
@@ -64,13 +54,8 @@ export default async function ({ fail, ok }: Reporter) {
     ok();
   }
 
-  // --- Case top-level keys are a subset of the README schema ------------------
-  // guard(#124): an invented key (an `ablation:` field is the one the ticket
-  // names explicitly) reads plausibly but no consumer of case.yaml — today's
-  // interim tooling or the eventual real `claude plugin eval` — has any
-  // reason to look for it, so it silently does nothing. Keeping every case's
-  // keys inside the README's own schema table is what keeps that table
-  // authoritative rather than aspirational.
+  // --- Case top-level keys are a subset of the README schema — an invented key reads
+  // plausibly but no consumer of case.yaml looks for it, silently doing nothing. ---
   {
     const schemaKeys = readmeSchemaKeys(readFileSync(join(root, 'evals/README.md'), 'utf8'));
     if (schemaKeys.length === 0) {
@@ -90,12 +75,8 @@ export default async function ({ fail, ok }: Reporter) {
     }
   }
 
-  // --- Behavioural evals never enter commands.checks --------------------------
-  // guard: every dispatched agent spawning its own model run before it can
-  // push. The mechanical form of the ticket's own last rule — `commands.checks`
-  // is what impl-agent runs before pushing, so an eval or an audit there means
-  // every dispatched agent spawning a model run, or shelling out to `gh` it
-  // cannot reach.
+  // --- Behavioural evals never enter commands.checks — that list is what impl-agent runs
+  // before pushing, so an eval there means every dispatched agent spawning its own model run. ---
   {
     const banned: [RegExp, string][] = [
       [/plugin\s+eval/, 'a behavioural eval'],
@@ -118,14 +99,8 @@ export default async function ({ fail, ok }: Reporter) {
     }
   }
 
-  // --- Every `claude plugin eval` invocation carries --ablation with-without --
-  // guard(#124): a documented or CI command missing the flag measures Claude,
-  // not port — the delta is the whole point of this layer, so an invocation
-  // that silently drops it produces a number nobody should trust. Scoped to
-  // fenced code blocks (markdown) and `run:` step bodies (the workflow),
-  // never a bare prose mention of the subcommand name — a sentence like
-  // "`claude plugin eval --help` is the exception" is documentation about the
-  // command, not an invocation of it.
+  // --- Every `claude plugin eval` invocation carries --ablation with-without — a command
+  // missing the flag measures Claude, not port. Scoped to code blocks and `run:` bodies, never a bare prose mention. ---
   {
     const files = ['evals/README.md', 'docs/TESTING.md', '.github/workflows/evals.yml'];
     for (const rel of files) {
@@ -153,10 +128,7 @@ export default async function ({ fail, ok }: Reporter) {
   }
 }
 
-/** Used by evals-cases.ts, which needs the same block-scalar reads this
- *  module already validated the presence of. Kept here rather than
- *  duplicated so the extraction shape (a case's `prompt:`/`scaffold_script:`
- *  blocks) can never drift between modules. */
+/** Used by evals-cases.ts; kept here rather than duplicated so the extraction shape can never drift between modules. */
 export function readCasePrompt(text: string): string {
   return blockScalar(text, 'prompt') ?? '';
 }

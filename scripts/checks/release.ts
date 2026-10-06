@@ -5,10 +5,8 @@ import { root, readJson } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 import { extractJobBlock } from './portability.ts';
 
-/** Resolves the checked-out branch name from files alone — no `git`
- *  subprocess, so this stays usable from a layer 1 check that must not
- *  shell out. `null` for a detached `HEAD` (every CI `pull_request` run
- *  checks out the merge ref, never a branch). */
+/** Resolves the checked-out branch name from files alone — no `git` subprocess. `null` for a
+ *  detached `HEAD` (every CI `pull_request` run checks out the merge ref, never a branch). */
 function currentBranch(repoRoot: string): string | null {
   const gitPath = join(repoRoot, '.git');
   let headFile;
@@ -24,15 +22,8 @@ function currentBranch(repoRoot: string): string | null {
   return m ? m[1] : null;
 }
 
-/** The top-level `on:` block's direct child keys (e.g. `['pull_request']`),
- *  or `null` when there is no `on:` block at all. Per-job-block reasoning
- *  (docs/ENGINEERING.md §7 — a check must distinguish the state it exists to
- *  detect): a whole-file substring search for `push:` would also match a
- *  step named "push", so this reads only the direct children of the
- *  top-level `on:` mapping. Handles both the block form every workflow in
- *  this repository uses (`on:\n  push:\n  pull_request:`) and the inline
- *  scalar/list forms (`on: push`, `on: [push, pull_request]`) for
- *  completeness, since nothing pins which form a hand-edit introduces. */
+/** The top-level `on:` block's direct child keys, or `null` if absent. A whole-file substring
+ *  search for `push:` would also match a step named "push", so this reads only the direct children of the top-level `on:` mapping. Handles both the block and inline forms. */
 export function onTriggers(text: string): string[] | null {
   const lines = text.replace(/\r\n/g, '\n').split('\n');
   const startIdx = lines.findIndex((l) => /^on:/.test(l));
@@ -61,13 +52,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   const { classifyCorridor, releaseInFlight } = await import(pathToFileURL(join(root, 'scripts/release-corridor.ts')).href);
   const { parseVersion, nextDevWindow, decide, devWindowSubject } = await import(pathToFileURL(join(root, 'scripts/dev-window.ts')).href);
 
-  // --- Integration branch stays on a prerelease version (#224) ---------------
-  // guard(#224): a dev-loop install and a released consumer install both
-  // resolving to the same versioned plugin cache directory, so developing
-  // port silently overwrites what other repositories run.
-  // guard(#275): layer 1 cannot see GitHub, so it must never guess "no
-  // release in flight" for a clean integration branch — every release
-  // merge used to fail this check at exactly the moment nothing was wrong.
+  // --- Integration branch stays on a prerelease version, so a dev-loop install never
+  // resolves to the same cache directory as a released consumer. Layer 1 cannot see GitHub, so it must never guess "no release in flight" for a clean integration branch. ---
   {
     const cfg = readJson('.claude/port.config.json');
     const production = cfg.branches?.production;
@@ -78,9 +64,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       const integrationName = cfg.branches?.integration ?? 'dev';
       const manifestRel = (cfg.release?.versionFiles ?? [])[0] ?? 'plugins/port/.claude-plugin/plugin.json';
 
-      // Self-test first (ENGINEERING §7): every row of classifyCorridor's
-      // verdict table, plus two message-content cases, before trusting the
-      // predicate against real files.
+      // Self-test first: every row of classifyCorridor's verdict table, plus two message-content cases, before trusting the predicate against real files.
       const cases: { name: string; args: Parameters<typeof classifyCorridor>[0]; want: string }[] = [
         { name: 'production, clean', args: { branch: 'main', productionName: 'main', integrationName: 'dev', version: '0.3.0', hasSuffix: false, inFlight: { checked: false } }, want: 'pass' },
         { name: 'production, suffixed', args: { branch: 'main', productionName: 'main', integrationName: 'dev', version: '0.3.0-dev', hasSuffix: true, inFlight: { checked: false } }, want: 'violation' },
@@ -115,8 +99,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       });
       expect(unshippedFix.message.includes('/port:release'), 'release-corridor', "classifyCorridor self-test 'unshipped fix': message must name /port:release");
 
-      // releaseInFlight self-test: a passing example of each kind of
-      // evidence it reads.
+      // releaseInFlight self-test: a passing example of each kind of evidence it reads.
       const inFlightCases: { name: string; args: Parameters<typeof releaseInFlight>[0]; wantReason: string | null; wantShipped: boolean }[] = [
         {
           name: 'matching title',
@@ -167,9 +150,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       } else {
         ok();
         const branch = currentBranch(root);
-        // Real evaluation always passes inFlight: { checked: false } — layer
-        // 1 never calls gh, so this can only ever report the production arm
-        // as a violation; a clean integration branch reports `unresolved`.
+        // Real evaluation always passes inFlight: { checked: false } — layer 1 never calls gh, so this can only ever report the production arm as a violation; a clean integration branch reports `unresolved`.
         const result = classifyCorridor({
           branch,
           productionName,
@@ -184,8 +165,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
           note(result.message);
           ok();
         } else if (result.verdict === 'skip' && !parsed.suffix) {
-          // Skip arm, but a note when the version reads clean rather than
-          // silence — silence must never be read as a pass.
+          // Skip arm, but a note when the version reads clean rather than silence — silence must never be read as a pass.
           note(`release: ${branch === null ? 'detached HEAD' : `branch '${branch}'`} carries a clean version '${manifest.version}' (release corridor not checked here)`);
           ok();
         } else {
@@ -195,11 +175,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- One authoritative result per check name and commit (#275) -----------
-  // guard(#275): the push trigger coming back to checks.yml, whose run lands
-  // on the open release pull request's own head SHA under the same
-  // run-static-checks (<os>) names its pull_request-triggered run already
-  // produced for the same commit.
+  // --- One authoritative result per check name and commit — the push trigger must never
+  // come back to checks.yml, since its run would land on the open release pull request's own head SHA that pull_request already produced for. ---
   {
     // Self-test onTriggers first, in both directions.
     const syntheticBlock = ['on:', '  push:', '  pull_request:', 'permissions:', '  contents: read'].join('\n');
@@ -242,12 +219,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- release.postPublishHook: declared in all three places, in shape ------
-  // guard(#224): the three-way config contract drifting the way
-  // commands.worktrees already guards against.
-  // The same three-way contract commands.worktrees already has: string|null
-  // with default null in the schema, null in the shipped template, and a
-  // non-empty string in this repository's own opted-in config.
+  // --- release.postPublishHook: declared in all three places, in shape — the same three-way
+  // contract commands.worktrees already has: string|null, default null, non-empty in this repository's own opt-in. ---
   {
     const schema = readJson('schema/port.config.schema.json');
     const prop = schema.properties?.release?.properties?.postPublishHook;
@@ -261,15 +234,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     expect(!(typeof selfCfg.release?.postPublishHook !== 'string' || selfCfg.release.postPublishHook.length === 0), 'release-post-publish-hook', ".claude/port.config.json's release.postPublishHook must be a non-empty string — this repository's own opt-in");
   }
 
-  // --- release/SKILL.md pin --------------------------------------------------
-  // guard(#224): a prose edit quietly dropping the dev-window contract or
-  // reintroducing a false "bump already merged" read while a dev window is
-  // open.
-  // guard(#275): a renamed "Release v<version>" title form would quietly
-  // turn every legitimate corridor into a violation, since releaseInFlight's
-  // title parser and the skill's own release-title form must agree.
-  // A future prose edit that quietly drops the contract fails here rather
-  // than in a live release run.
+  // --- release/SKILL.md pin: a prose edit must never quietly drop the dev-window contract,
+  // reintroduce a false "bump already merged" read, or rename the "Release v<version>" title form releaseInFlight's parser depends on. ---
   {
     const rel = 'plugins/port/skills/release/SKILL.md';
     const text = readFileSync(join(root, rel), 'utf8');
@@ -278,10 +244,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- scripts/dev-window.ts's pure exports resolve their documented cases -
-  // guard(#224): the dev-window restore script computing the wrong next
-  // version, or silently defaulting instead of failing, on a malformed
-  // manifest.
+  // --- scripts/dev-window.ts's pure exports resolve their documented cases — must never
+  // compute the wrong next version, or silently default instead of failing, on a malformed manifest. ---
   {
     expect(!(nextDevWindow('0.2.0', 'dev') !== '0.2.1-dev'), 'dev-window', "nextDevWindow('0.2.0', 'dev') must equal '0.2.1-dev'");
     expect(!(nextDevWindow('0.2.0', 'dev') === '0.3.0-dev'), 'dev-window', 'nextDevWindow must never guess a minor bump');
@@ -315,9 +279,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     expect(!(parseVersion('nope') !== null), 'dev-window', 'parseVersion must return null, never throw or guess, for malformed input');
   }
 
-  // --- scripts/dev-window.ts's subject carries no ticket prefix -------------
-  // guard(#278): the dev-window restore commit and PR title regrowing a '#0'
-  // prefix the bump commit deliberately omits.
+  // --- scripts/dev-window.ts's subject carries no ticket prefix — the restore commit and
+  // PR title must never regrow a '#0' prefix the bump commit deliberately omits. ---
   {
     expect(!(devWindowSubject('0.2.1-dev') !== 'open dev window for v0.2.1-dev'), 'dev-window', "devWindowSubject('0.2.1-dev') must equal 'open dev window for v0.2.1-dev'");
     expect(!/^#\d+\s/.test(devWindowSubject('0.2.1-dev')), 'dev-window', 'devWindowSubject must never carry a ticket-number prefix');

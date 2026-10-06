@@ -13,14 +13,6 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   const PERMISSION_SURFACE: Set<string> = engine.PERMISSION_SURFACE;
   const { parseOverrides, applyOverrides, BEGIN, END } = engine;
 
-  // --- OVERRIDABLE ∪ NEVER_OVERRIDABLE covers every schema top-level key,
-  // both directions (#246)
-  // guard(#246): a schema key added later never classified as overridable or
-  // refused, silently falling through `overrides.ts`'s own default-refusal
-  // path with nothing here to catch the omission. `checks` is the one
-  // synthetic entry allowed on the overridable side — no `port.config.json`
-  // field backs it, since it is the first consumer of this general
-  // mechanism rather than a schema-derived category.
   // pin: `schema/port.config.schema.json`'s top-level keys ↔ `scripts/port-tick/overrides.ts`'s `OVERRIDABLE`/`NEVER_OVERRIDABLE`, both directions
   {
     const schema = readJson('schema/port.config.schema.json');
@@ -50,10 +42,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- labels.<key> resolves against data/labels.json --------------------------
-  // guard(#246): an override naming a label key that does not exist in the
-  // vocabulary at all, applied anyway because nothing checked it against the
-  // real key set.
+  // --- labels.<key> resolves against data/labels.json — an override naming a nonexistent key must never apply anyway. ---
   {
     const labelsJson = readJson('plugins/port/data/labels.json');
     const labelKeys = labelsJson.labels.map((l: any) => l.key);
@@ -78,11 +67,6 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     expect(!(badResult.applied.length !== 0 || badResult.refused.length !== 1), 'overrides-labels', 'applyOverrides applied labels.notARealKey — the label key set was never checked');
   }
 
-  // --- PIPELINE.md's category table matches OVERRIDABLE, and the marker
-  // literals agree with the parser's own (#246)
-  // guard(#246): the shipped documentation drifting from the parser it
-  // describes — an operator writes a block that follows the doc and the
-  // engine silently refuses every line, or vice versa.
   // pin: `plugins/port/docs/PIPELINE.md`'s "CLAUDE.md overrides" category table ↔ `scripts/port-tick/overrides.ts`'s `OVERRIDABLE`/`NEVER_OVERRIDABLE`/`BEGIN`/`END`
   {
     const pipelineText = readFileSync(join(root, 'plugins/port/docs/PIPELINE.md'), 'utf8');
@@ -100,10 +84,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- /port:init still carries the reconciliation step (#246) ---------------
-  // guard(#246): the import-time reconciliation flow silently dropped from
-  // the installer, leaving every override undiscovered and undocumented —
-  // exactly the negotiated-in-prose failure mode this ticket forbids.
+  // --- /port:init still carries the reconciliation step — must never silently drop, leaving every override undiscovered and undocumented. ---
   {
     const initText = readFileSync(join(root, 'plugins/port/skills/init/SKILL.md'), 'utf8');
     for (const phrase of ['port-overrides', 'Reconcile']) {
@@ -111,15 +92,13 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- The cockpit reports overrides once at startup and names dispositions
-  // in the merge-ready line (#246)
+  // --- The cockpit reports overrides once at startup and names dispositions in the merge-ready line. ---
   {
     const skillText = pipelineSkillText();
     expect(skillText.includes('overrides'), 'overrides-cockpit', 'plugins/port/skills/pipeline/*.md never mentions CLAUDE.md overrides');
   }
 
-  // --- A check that cannot be made to fail is not a check: the parser and
-  // resolver each accept a good example and reject a bad one (#246)
+  // --- The parser and resolver each accept a good example and reject a bad one. ---
   {
     const goodText = `<!-- port-overrides:begin -->\n\`\`\`port-overrides\nreviewCycleCap = 3  # we converge in three or it needs a human\n\`\`\`\n<!-- port-overrides:end -->\n`;
     const goodParsed = parseOverrides(goodText);

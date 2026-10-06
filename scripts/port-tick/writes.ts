@@ -1,31 +1,9 @@
-// Pure: every `gh` label-edit command string the tick engine emits, and
-// nothing else. #225 found the additive-vs-swap distinction between the
-// approved and readyForReview refresh paths living un-tested inside
-// port-tick.ts's own inline template literals — the one layer with no case
-// table. This module is that table's implementation: every label name
-// arrives already resolved through `cfg.labels`; no default label string is
-// a literal here (docs/ENGINEERING.md §1).
-//
-// #236: `target` ('issue' vs 'pr') used to be a literal the caller typed by
-// hand, which every write got right except `livenessResetWrite` — hardcoded
-// to 'issue', wrong for the three in-flight labels that only ever apply to a
-// pull request. Every write now composes through `labelEdit`, which derives
-// `target` from `LABEL_SURFACE`, so the class of bug (a caller typing the
-// wrong surface) is unreachable rather than merely fixed once. No
-// `'issue'`/`'pr'` string literal remains below this point.
+// Pure: every `gh` label-edit command string the tick engine emits. Every write composes
+// through `labelEdit`, which derives `target` ('issue' vs 'pr') from `LABEL_SURFACE`.
 import { LABEL_SURFACE } from './config.ts';
 
-/** One shared formatter. `removeKey`/`addKey` are config label keys (never
- *  resolved names) — `target` is derived from `LABEL_SURFACE[removeKey ??
- *  addKey]` (the subject label: the one the item currently carries), and
- *  both names are resolved through `labels[...]`. `--remove-label` is
- *  omitted entirely when `removeKey` is falsy, never emitted as an empty
- *  string — every exported write below composes through this, so a
- *  label-flag typo, or a wrong-surface `gh` subcommand, only has one place
- *  to happen. `selector` (#281), when given, is emitted quoted in place of
- *  `number` — a validated `gh pr edit` branch selector (`gateResolveWrite`'s
- *  own job to validate, never this formatter's), so a gate clear can name
- *  the pull request by its branch rather than its own number. */
+/** One shared formatter; `target` derives from `LABEL_SURFACE[removeKey ?? addKey]`.
+ *  `selector`, when given, replaces `number` with a validated branch selector. */
 function labelEdit({
   removeKey,
   addKey,
@@ -47,21 +25,8 @@ function labelEdit({
   return `gh ${target} edit ${subject} --repo ${repo}${removePart} --add-label "${labels[addKey]}"`;
 }
 
-/** The refresh sweep's asymmetry, in one place (#225). `candidate` is
- *  `{ number, sourceLabelKey }` — `sourceLabelKey` is `'readyForReview'` or
- *  `'approved'`, whichever trigger/status label this pull request entered
- *  the sweep carrying. `decision` is `gates.ts`'s `refreshDecision` output.
- *
- *  `action: 'refresh'` — add `labels.refreshBranch`, remove nothing, on
- *  **both** paths. The trigger survives because `gates.ts`'s `refreshWins`
- *  veto, not a removal, is what stops a second dispatch — and because
- *  refresh mode's clean-rebase handoff adds no label back, so a removal
- *  here would strand the pull request at no stage label at all.
- *
- *  `action: 'escalate'` — remove `labels[candidate.sourceLabelKey]` and add
- *  `labels.needsHuman`. This is #225's second symptom, closed in both
- *  directions: escalating a `readyForReview` candidate now removes `ready
- *  for review`, not only `approved`. */
+/** The refresh sweep's asymmetry, in one place. `action: 'refresh'` adds `labels.refreshBranch`
+ *  and removes nothing; `action: 'escalate'` removes `labels[candidate.sourceLabelKey]` and adds `labels.needsHuman`. */
 export function refreshSweepWrite({ repo, labels, candidate, decision }: { repo: string; labels: Record<string, string>; candidate: any; decision: any }): any {
   if (decision.action === 'escalate') {
     return {
@@ -75,9 +40,7 @@ export function refreshSweepWrite({ repo, labels, candidate, decision }: { repo:
   };
 }
 
-/** The newest `## Code Review` already covers the current head with no
- *  `## Gate cleared` since — no second review cycle without operator
- *  authorisation. */
+/** The newest review already covers the current head with no `## Gate cleared` since. */
 export function zeroDiffWrite({ repo, labels, number }: { repo: string; labels: Record<string, string>; number: number }): any {
   return {
     command: labelEdit({ removeKey: 'readyForReview', addKey: 'needsHuman', number, repo, labels }),
@@ -85,8 +48,7 @@ export function zeroDiffWrite({ repo, labels, number }: { repo: string; labels: 
   };
 }
 
-/** Unconditional — fires at or over `reviewCycleCap` whatever the latest
- *  review said. */
+/** Unconditional — fires at or over `reviewCycleCap` whatever the latest review said. */
 export function cycleCapWrite({ repo, labels, number }: { repo: string; labels: Record<string, string>; number: number }): any {
   return {
     command: labelEdit({ removeKey: 'needsRevision', addKey: 'needsHuman', number, repo, labels }),
@@ -94,8 +56,7 @@ export function cycleCapWrite({ repo, labels, number }: { repo: string; labels: 
   };
 }
 
-/** A check on an `<labels.approved>` pull request has gone red since
- *  approval — the one non-refresh route off the terminal state. */
+/** A check on an `<labels.approved>` pull request has gone red since approval. */
 export function approvalWithdrawnWrite({ repo, labels, number }: { repo: string; labels: Record<string, string>; number: number }): any {
   return {
     command: labelEdit({ removeKey: 'approved', addKey: 'needsRevision', number, repo, labels }),
@@ -103,15 +64,8 @@ export function approvalWithdrawnWrite({ repo, labels, number }: { repo: string;
   };
 }
 
-/** A provably-dead dispatch (liveness's `reset` classification) hands the
- *  item back to its trigger label. `fromKey`/`toKey` are config label keys
- *  — `toKey` is `RETRY_TRIGGER`'s value for the in-flight label the item was
- *  found at — resolved through `labels` here, the same `{ repo, labels, … }`
- *  shape every other write in this module already takes. This is the #236
- *  fix: `target` used to be hardcoded `'issue'`, wrong for `reviewing`,
- *  `revising`, and `refreshing`, which only ever apply to a pull request;
- *  `labelEdit` now derives it from `LABEL_SURFACE[fromKey]` like every other
- *  write. */
+/** A provably-dead dispatch hands the item back to its trigger label. `toKey` is
+ *  `RETRY_TRIGGER`'s value for the in-flight label the item was found at. */
 export function livenessResetWrite({
   repo,
   labels,
@@ -131,21 +85,11 @@ export function livenessResetWrite({
   };
 }
 
-// A `gh pr edit` branch selector (#281): leading digits, a dash, then the
-// rest of the branch name — the same shape `command-rules.mjs`'s own
-// `commandNumbers` branch rung reads back out of the command line it
-// produces here.
+// A `gh pr edit` branch selector: leading digits, a dash, then the rest of the branch name.
 const BRANCH_SELECTOR_RE = /^\d+-[\w./-]+$/;
 
-/** The four `resolve --decision` answers a human gate accepts: two on the
- *  plan-review gate (an issue), two clearing `<labels.needsHuman>` (a pull
- *  request). Returns `null` for an unrecognized decision — the caller turns
- *  that into the CLI's own error. `branch` (#281, optional) is honoured only
- *  for `back-to-revision`/`back-to-review` — the two decisions that ever
- *  target a pull request — and must match `BRANCH_SELECTOR_RE`; an invalid
- *  branch, or a `branch` passed alongside one of the two plan-review
- *  decisions (an issue, which has no branch selector), also returns `null`
- *  rather than silently falling back to the numeric form. */
+/** The four `resolve --decision` answers a human gate accepts. Returns `null` for an
+ *  unrecognized decision, or an invalid `branch`, or one paired with a plan-review decision. */
 export function gateResolveWrite({
   repo,
   labels,

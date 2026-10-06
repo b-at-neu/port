@@ -4,10 +4,8 @@ import { pathToFileURL } from 'node:url';
 import { pipelineDocsText, pipelineSkillText, root, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// Operator control over dispatch (issue 110) and the app's own dispatch loop
-// (#265, #326) — mechanical rails, dependency-free and regex-based, in the
-// shape of desktop-actions.ts's and desktop-writes.ts's own guards. #293
-// adds the budget gate's own rails alongside them.
+// Operator control over dispatch and the app's own dispatch loop, plus the budget gate's own
+// rails — mechanical, dependency-free, regex-based rails.
 export default async function ({ expect, fail, ok }: Reporter) {
   const sharedDispatchDir = 'apps/desktop/src/shared/dispatch';
   const mainDispatchDir = 'apps/desktop/src/main/dispatch';
@@ -25,14 +23,10 @@ export default async function ({ expect, fail, ok }: Reporter) {
   const sharedDispatchFiles = allFiles.filter((f) => relOf(f).startsWith(`${sharedDispatchDir}/`));
   const mainDispatchFiles = allFiles.filter((f) => relOf(f).startsWith(`${mainDispatchDir}/`));
 
-  // --- main/dispatch/ has source files ---------------------------------------
-  // guard(#110): the directory this whole ticket adds being deleted with
-  // nothing to catch it.
+  // --- main/dispatch/ has source files, so nothing below passes vacuously once deleted. ---
   expect(!(mainDispatchFiles.filter((f) => !relOf(f).endsWith('.test.ts')).length === 0), 'desktop-dispatch', `${mainDispatchDir} has no source files — the guard cannot pass vacuously if the directory is deleted`);
 
-  // --- shared/dispatch/ compiles under typecheck:web -------------------------
-  // guard(#110): the pure drain/halt contract losing its typecheck:web
-  // compatibility, the same rail shared/actions/ already holds.
+  // --- shared/dispatch/ compiles under typecheck:web, the same rail shared/actions/ holds. ---
   {
     let found = false;
     for (const f of sharedDispatchFiles) {
@@ -45,10 +39,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- running/alive/isLive banned under shared/dispatch/ and main/dispatch/ -
-  // guard(#110): a local transcript's recency, or an attached agent's
-  // presence, reported as liveness rather than an attachment fact this app
-  // cannot actually stop.
+  // --- running/alive/isLive banned under shared/dispatch/ and main/dispatch/ — never report
+  // a recency or attachment fact as liveness. ---
   {
     let found = false;
     for (const f of [...sharedDispatchFiles, ...mainDispatchFiles]) {
@@ -63,12 +55,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- The gate rail: .actionable is read under main/ only where documented --
-  // guard(#110): a future dispatcher reading report.actionable directly,
-  // bypassing dispatchableFrom — the one function the drain gate is meant to
-  // funnel through. main/trajectory/log.ts is a pre-existing, documented
-  // reporting-only reader (its own trajectory event, issue 111), never a
-  // dispatch path, so it is allowed alongside dispatchable.ts itself.
+  // --- The gate rail: .actionable is read under main/ only where documented. main/
+  // trajectory/log.ts is a pre-existing, reporting-only reader, allowed alongside dispatchable.ts itself. ---
   {
     const allowed = new Set([dispatchableFile, trajectoryFile]);
     let sawDispatchable = false;
@@ -89,10 +77,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     else if (!found) ok();
   }
 
-  // --- The literal 'dispatching' appears exactly once under main/dispatch/ --
-  // guard(#314): a second place constructing the one open run-state value
-  // instead of reusing shared/dispatch/types.ts's own RUN_TARGET, so a new
-  // arm added later cannot quietly fail open by retyping the literal.
+  // --- The literal 'dispatching' appears exactly once under main/dispatch/ — never a
+  // second place constructing the one open run-state value by retyping the literal. ---
   {
     let count = 0;
     for (const f of mainDispatchFiles) {
@@ -103,9 +89,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(!(count !== 1), 'desktop-dispatch', `the literal 'dispatching' appears ${count} times under ${mainDispatchDir} — expected exactly 1 (the v1 migration in store.ts)`);
   }
 
-  // --- resolve.ts validates against DISPATCH_COMMANDS by name ----------------
-  // guard(#110, #314): a retyped command list silently drifting from
-  // shared/dispatch/types.ts's own DISPATCH_COMMANDS.
+  // --- resolve.ts validates against DISPATCH_COMMANDS by name, never a retyped command list. ---
   {
     const text = readFileSync(join(root, resolveFile), 'utf8');
     if (!/DISPATCH_COMMANDS/.test(text)) {
@@ -113,20 +97,12 @@ export default async function ({ expect, fail, ok }: Reporter) {
     } else expect(!/\[\s*'run'\s*,\s*'drain'\s*,\s*'pause'\s*,\s*'halt'\s*\]/.test(text), 'desktop-dispatch', `${resolveFile} retypes the command list as a literal array instead of validating against DISPATCH_COMMANDS`);
   }
 
-  // --- In halt.ts, runStates.set( precedes stopFor(, which precedes ----------
-  // applyItemAction(, which precedes standDown(
-  // guard(#110, #265, #314): the ordering the feature's correctness rests
-  // on — resetting labels before the run-state write is confirmed would only
-  // re-dispatch everything this call was meant to stop, resetting a label
-  // before the dispatcher's own agent is asked to stop would leave an
-  // app-dispatched agent running past the point its label says it is gone,
-  // and standing a session down before its per-item stops have run would
-  // never let `stopFor` find the task it is looking for.
+  // --- In halt.ts, runStates.set( precedes stopFor(, which precedes applyItemAction(,
+  // which precedes standDown( — resetting labels before each prior step is confirmed would misfire. ---
   {
     const text = readFileSync(join(root, haltFile), 'utf8');
     const setIdx = text.indexOf('runStates.set(');
-    // `stopFor?.(`/`standDown?.(` (optional chaining) count the same as a
-    // bare `stopFor(`/`standDown(`.
+    // Optional chaining counts the same as a bare call.
     const stopForMatch = /stopFor\??\.?\(/.exec(text);
     const stopForIdx = stopForMatch ? stopForMatch.index : -1;
     const applyIdx = text.indexOf('applyItemAction(');
@@ -143,9 +119,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     } else expect((setIdx < stopForIdx && stopForIdx < applyIdx && applyIdx < standDownIdx), 'desktop-dispatch', `${haltFile}'s own runStates.set(/stopFor(/applyItemAction(/standDown( calls are out of order — expected runStates.set( before stopFor( before applyItemAction( before standDown(`);
   }
 
-  // --- dispatcher.ts calls readGateClaim( and names 'dispatch' ---------------
-  // guard(#265): the composition root silently losing its own claim read, or
-  // reading it for a scope it never actually checks against.
+  // --- dispatcher.ts calls readGateClaim( and names 'dispatch' — must never check against the wrong scope. ---
   {
     const text = readFileSync(join(root, dispatcherFile), 'utf8');
     if (!/\breadGateClaim\s*\(/.test(text)) {
@@ -153,11 +127,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     } else expect(text.includes("'dispatch'"), 'desktop-dispatch', `${dispatcherFile} never names the 'dispatch' scope — it cannot be reading the claim for the right thing`);
   }
 
-  // --- budget-unported is gone; the gate runs instead -------------------------
-  // guard(#293): #265's refusal reverting instead of staying ported — the
-  // literal reason string must appear nowhere, and the dispatcher's own
-  // ordering (re-read, then gate, then send) must hold so a stale candidate
-  // is never gated and a gated-in candidate is never skipped.
+  // --- budget-unported is gone; the gate runs instead, in order: re-read, then gate, then send. ---
   {
     let foundRefusal = false;
     for (const f of allFiles) {
@@ -180,10 +150,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
     } else expect((fetchIdx < checkIdx && checkIdx < launchIdx), 'desktop-dispatch', `${dispatcherFile}'s own fetchItemsByNumber(/budget.check(/launch.launch( calls are out of order — expected fetchItemsByNumber( before budget.check( before launch.launch(`);
   }
 
-  // --- pin: BUDGET_VERDICTS ↔ budget.mjs's own verdict(), both directions ----
-  // guard(#293): the app's own gate reading a verdict the script can never
-  // produce, or missing one it does — `budgetRoute` would then either throw
-  // on something real or silently treat it as unreachable.
   // pin: `main/dispatch/budget.ts`'s `BUDGET_VERDICTS` ↔ `bin/budget.mjs`'s `verdict()`, both directions
   {
     const budgetText = readFileSync(join(root, budgetFile), 'utf8');
@@ -203,21 +169,12 @@ export default async function ({ expect, fail, ok }: Reporter) {
       expect(!(onlyInApp.length > 0 || onlyInScript.length > 0), 'desktop-dispatch', `${budgetFile}'s BUDGET_VERDICTS (${[...appVerdicts].join(', ')}) and bin/budget.mjs's verdicts (${[...scriptVerdicts].join(', ')}) disagree`);
     }
 
-    // --- pin: sessionLogName(BUDGET_SESSION) !== null -------------------------
-    // guard(#293): BUDGET_SESSION drifting to a name the script's own
-    // validator rejects, wedging the gate shut on every call.
     // pin: `main/dispatch/budget.ts`'s `BUDGET_SESSION` ↔ `bin/budget.mjs`'s `sessionLogName` accepting it
     const sessionMatch = /BUDGET_SESSION\s*=\s*'([^']+)'/.exec(budgetText);
     if (!sessionMatch) {
       fail('desktop-dispatch', `${budgetFile} has no 'BUDGET_SESSION = ...' assignment`);
     } else expect(!(mod.sessionLogName(sessionMatch[1]) === null), 'desktop-dispatch', `${budgetFile}'s BUDGET_SESSION ('${sessionMatch[1]}') is rejected by bin/budget.mjs's own sessionLogName — the gate would die on every call`);
 
-    // --- pin: OUTDATED_SCRIPT_SENTINEL matches budget.mjs's own die() template -
-    // guard(#293): the sentinel drifting from the wording an older script's
-    // unrecognized-argument failure produces, so a pre-`--session` copy is
-    // never actually detected as outdated. The rendered message is never a
-    // literal in the script's own source (the argument is interpolated), so
-    // this pins the shared prefix both sides must agree on.
     // pin: `main/dispatch/budget.ts`'s `OUTDATED_SCRIPT_SENTINEL` ↔ `bin/budget.mjs`'s unrecognized-argument `die()` template
     const sentinelMatch = /OUTDATED_SCRIPT_SENTINEL\s*=\s*"([^"]+)"/.exec(budgetText);
     const scriptText = readFileSync(budgetScriptPath, 'utf8');
@@ -229,10 +186,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
     } else expect(sentinelMatch[1].startsWith(diePrefix), 'desktop-dispatch', `${budgetFile}'s OUTDATED_SCRIPT_SENTINEL ('${sentinelMatch[1]}') does not match bin/budget.mjs's own unrecognized-argument wording ('${diePrefix}…')`);
   }
 
-  // --- pin: bin/budget.mjs contains SCRIPT_FAIL_PREFIX ------------------------
-  // guard(#293): budget-gate.ts reading a FAIL line prefix the shipped
-  // script no longer actually emits, so every real failure reads as an
-  // unparseable platform error instead.
   // pin: `main/reclaimer/report.ts`'s `SCRIPT_FAIL_PREFIX` ↔ `bin/budget.mjs`'s own `die()`
   {
     const scriptText = readFileSync(budgetScriptPath, 'utf8');
@@ -245,10 +198,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     } else expect(gateText.includes('SCRIPT_FAIL_PREFIX'), 'desktop-dispatch', `${budgetGateFile} never imports SCRIPT_FAIL_PREFIX — it must reuse the reclaimer's own constant, never a retyped literal`);
   }
 
-  // --- ledger.record( is called under main/ only from dispatch/dispatcher.ts -
-  // guard(#265, #326): a second caller recording a dispatch — this must run
-  // only after a launch returns ok, never before a session is actually
-  // confirmed to exist.
+  // --- ledger.record( is called under main/ only from dispatch/dispatcher.ts, only after a
+  // launch returns ok. ---
   {
     let found = false;
     let sawDispatcher = false;
@@ -258,9 +209,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
       if (!rel.startsWith('apps/desktop/src/main/')) continue;
       const text = readFileSync(f, 'utf8');
       if (!/\.record\s*\(/.test(text)) continue;
-      // Narrowed to the ledger's own call shape (`<name>.record(repoId,
-      // number)`), never a bare `.record(` match that would also catch an
-      // unrelated method of the same name on some other object.
+      // Narrowed to the ledger's own call shape, never a bare `.record(` that could match an unrelated method.
       if (!/ledger\.record\s*\(/.test(text)) continue;
       if (rel === dispatcherFile) {
         sawDispatcher = true;
@@ -273,10 +222,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
     else if (!found) ok();
   }
 
-  // --- pin: dispatcher.ts's two prompts ↔ SKILL.md's Dispatching block -------
-  // guard(#265): the dispatcher's own prompt text drifting from the cockpit's
-  // — both must send the identical instruction to a stage agent regardless
-  // of which one dispatched it.
   // pin: `main/dispatch/dispatcher.ts`'s `DISPATCH_PROMPT`/`REFRESH_PROMPT` ↔ `pipeline/SKILL.md`'s "Dispatching" block, both directions
   {
     const dispatcherText = readFileSync(join(root, dispatcherFile), 'utf8');
@@ -291,12 +236,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- #292: .observations is read under main/ only by dispatchable.ts's -----
-  // observableFrom
-  // guard(#292): a future caller reading report.observations directly,
-  // bypassing observableFrom — the one function that strips the one
-  // report-only kind (refresh-deferred) before anything may act on the
-  // rest.
+  // --- .observations is read under main/ only by dispatchable.ts's observableFrom, which
+  // strips the one report-only kind before anything may act on the rest. ---
   {
     let sawObservableFrom = false;
     let found = false;
@@ -316,18 +257,12 @@ export default async function ({ expect, fail, ok }: Reporter) {
     else if (!found) ok();
   }
 
-  // --- #292: dispatcher.ts wires the observation write only past the owner ---
-  // gate
-  // guard(#292): the write-bearing observation pass being wired before the
-  // owner !== 'app' stand-down, which would let this app write a
-  // repository's observations while the cockpit (or nobody) actually holds
-  // dispatch.
+  // --- dispatcher.ts wires the observation write only past the owner gate — never before
+  // the owner !== 'app' stand-down, which could write while the cockpit holds dispatch. ---
   {
     const text = readFileSync(join(root, dispatcherFile), 'utf8');
     const ownerGateIdx = text.indexOf("owner !== 'app'");
-    // `deps.writeObservation` — the call-site usage, never the interface's
-    // own `writeObservation:` field declaration above it (which the gate
-    // naturally precedes, telling us nothing about ordering).
+    // The call-site usage, never the interface's own field declaration above it.
     const writeIdx = text.indexOf('deps.writeObservation');
     if (ownerGateIdx === -1) {
       fail('desktop-dispatch', `${dispatcherFile} no longer checks owner !== 'app' — the guard cannot compare an ordering that isn't there`);
@@ -336,11 +271,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
     } else expect(!(writeIdx < ownerGateIdx), 'desktop-dispatch', `${dispatcherFile} references deps.writeObservation before its own owner !== 'app' stand-down — the observation pass must run only once this app owns dispatch`);
   }
 
-  // --- pin: observation.ts's comment templates ↔ FORMATS.md/TICK-PROSE.md ----
-  // fences
-  // guard(#292): a comment template drifting from the fence FORMATS.md or
-  // TICK-PROSE.md documents, so what a human (or revise-agent/review-agent)
-  // reads on the pull request no longer matches what either doc promises.
   // pin: `main/dispatch/observation.ts`'s comment templates ↔ `FORMATS.md`'s "Approval withdrawn"/"Rebase required" fences and `TICK-PROSE.md`'s zero-diff escalation fence
   {
     const observationFile = `${mainDispatchDir}/observation.ts`;
@@ -356,10 +286,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
       return docText.slice(fenceStart + 3, fenceEnd).trim();
     };
 
-    // Splits on `<placeholder>` tokens and strips the backticks a placeholder
-    // is usually wrapped in — a JS template literal escapes those (`\``),
-    // so a fragment ending or starting on a bare backtick would never match
-    // the escaped form in source text.
+    // Splits on `<placeholder>` tokens and strips surrounding backticks — a JS template
+    // literal escapes those, so a fragment ending on a bare backtick would never match. ---
     const fenceLiteralsOf = (fence: string): readonly string[] =>
       fence
         .split('\n')
@@ -392,12 +320,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!violated) ok();
   }
 
-  // --- #313: .autoApprovals is read under main/ only by dispatchable.ts's ---
-  // autoApprovableFrom
-  // guard(#313): a future caller reading report.autoApprovals directly,
-  // bypassing autoApprovableFrom — the one function that gates the
-  // auto-plan swap on run state and a non-blind report, the same rail
-  // .actionable and .observations already hold.
+  // --- .autoApprovals is read under main/ only by dispatchable.ts's autoApprovableFrom —
+  // the same rail .actionable and .observations already hold. ---
   {
     const autoPlanFile = `${mainDispatchDir}/auto-plan.ts`;
     let sawAutoApprovableFrom = false;
@@ -417,11 +341,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!sawAutoApprovableFrom) fail('desktop-dispatch', `${dispatchableFile} never reads '.autoApprovals' — the gate itself must`);
     else if (!found) ok();
 
-    // --- auto-plan.ts calls readGateClaim( and names 'plan-gate', never ----
-    // 'dispatch'
-    // guard(#313): the planner reading the wrong claim scope, which would
-    // either never fire (reading 'dispatch') or fire alongside the
-    // dispatcher's own agent launches (reading nothing at all).
+    // --- auto-plan.ts calls readGateClaim( and names 'plan-gate', never 'dispatch', or it
+    // would either never fire or fire alongside the dispatcher's own agent launches. ---
     if (mainDispatchFiles.some((f) => relOf(f) === autoPlanFile)) {
       const autoPlanText = readFileSync(join(root, autoPlanFile), 'utf8');
       const claimIdx = autoPlanText.indexOf('readGateClaim(');

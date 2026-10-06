@@ -13,14 +13,7 @@ async function importEngine(rel: string): Promise<any> {
 
 export default async function ({ expect, fail, note, ok }: Reporter) {
   // --- Every decision case resolves, and the table covers all fourteen families
-  // guard(#203, #246, #220, #292): a second implementation (apps/desktop's) silently
-  // diverging from the engine's own recorded behaviour. #187 adds three
-  // families for the trajectory record: events, denials, report. #246 adds
-  // the twelfth: the CLAUDE.md override resolver. #220 adds the thirteenth:
-  // label-state reconciliation. #292 adds the fourteenth: the
-  // statusCheckRollup reduction contract (`checks.ts`), until now ported into
-  // `apps/desktop` with no case table of its own asserting either side.
-  // pin: `scripts/port-tick/cases/*.json` ↔ every pure function in `scripts/port-tick/` it names
+  // guard: apps/desktop's own port of the engine silently diverging from its recorded behaviour.
   {
     const families: Record<string, string> = {
       'envelope.cases.json': 'envelope.ts',
@@ -115,17 +108,9 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   }
 
   // --- No mutating gh (or git) subcommand under the engine --------------------
-  // guard(#203): the tick engine silently gaining a write path the model
-  // can no longer audit. The engine is read-only against GitHub, enforced
-  // mechanically: gh.ts's one call is `gh api graphql`, and nothing under
-  // scripts/port-tick/ (nor scripts/port-tick.ts itself) may spawn a
-  // mutating gh/git call — every write is emitted as a `writes` string for
-  // the model to run.
+  // guard: the tick engine silently gaining a write path the model can no longer audit.
   {
-    // Read-only against GitHub: only gh.ts may spawn 'gh' at all (git is
-    // fine anywhere — port-tick.ts's own repoRoot() reads it — the rail is
-    // specifically "no mutating gh subcommand under the engine"), and its
-    // one call must be 'gh api graphql', never an editing subcommand.
+    // Only gh.ts may spawn 'gh' at all; git is fine anywhere. Its one gh call must be 'gh api graphql'.
     const engineFiles = walk(join(root, TICK_DIR)).filter((f) => f.endsWith('.ts'));
     expect(!(engineFiles.length === 0), 'tick-readonly', `${TICK_DIR}/*.ts matched zero files — the read-only scan itself is broken`);
     const files = [join(root, 'scripts/port-tick.ts'), ...engineFiles];
@@ -143,9 +128,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   }
 
   // --- Defaults table matches labels.json, both directions --------------------
-  // guard(#203): the engine's label vocabulary drifting from the template
-  // it must resolve against.
-  // pin: `scripts/port-tick/config.ts`'s `LABEL_DEFAULTS`/`LABEL_ROLES` ↔ `data/labels.json`
+  // guard: the engine's label vocabulary drifting from the template it must resolve against.
   {
     const labelsJson = readJson('plugins/port/data/labels.json');
     const { LABEL_DEFAULTS, LABEL_ROLES, LABEL_SURFACE } = await importEngine(`${TICK_DIR}/config.ts`);
@@ -161,11 +144,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
 
     // --- LABEL_SURFACE covers exactly the same key set, both directions
-    // guard(#236): a label key silently missing a surface, so a write for
-    // it falls through to no target at all rather than a wrongly-guessed
-    // one — a key LABEL_DEFAULTS carries but LABEL_SURFACE omits is the
-    // exact shape of the original bug, so this pin makes a missing key a
-    // layer-1 failure instead of a runtime default.
+    // guard: a label key silently missing a surface, so a write for it falls through to no target.
     const surfaceKeys = new Set(Object.keys(LABEL_SURFACE));
     for (const key of engineKeys) {
       expect(surfaceKeys.has(key), 'tick-labels', `config.ts's LABEL_SURFACE is missing key '${key}', which LABEL_DEFAULTS carries`);
@@ -182,21 +161,13 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     expect(!(bothKeys.length !== expectedBoth.size || !bothKeys.every((k) => expectedBoth.has(k))), 'tick-labels', `config.ts's LABEL_SURFACE 'both' entries are [${bothKeys.join(', ')}], expected exactly [marker]`);
   }
 
-  // --- LABEL_SURFACE pinned against query.ts's issueSet/prSet call sites, and the cross-surface/no-target-literal rails (#236) ---
-  // pin: `scripts/port-tick/config.ts`'s `LABEL_SURFACE` ↔ `query.ts`'s `issueSet`/`prSet` call sites
+  // --- LABEL_SURFACE pinned against query.ts's issueSet/prSet call sites, and the cross-surface/no-target-literal rails ---
   {
     const { LABEL_SURFACE } = await importEngine(`${TICK_DIR}/config.ts`);
     const { RETRY_TRIGGER } = await importEngine(`${TICK_DIR}/liveness.ts`);
     const queryText = readFileSync(join(root, TICK_DIR, 'query.ts'), 'utf8');
 
-    // query.ts's own call sites are the other half of this pin — a key
-    // queried via issueSet must read 'issue' here, and prSet must read 'pr'.
-    // Fails if fewer than the 16 the query builds parse, so a rewritten
-    // query.ts the pattern no longer reads cannot pass by matching nothing.
-    // Coverage is deliberately one-way: marker/autoPlan are never queried.
-    // guard(#236): query.ts's own issue-vs-PR fact drifting from
-    // writes.ts's, so a label queried as a pull request could still be
-    // written back to as an issue.
+    // guard: query.ts's issue-vs-PR fact drifting from writes.ts's, so a label queried as a pull request could still be written back to as an issue.
     const callRe = /\b(issueSet|prSet)\(\s*'[^']*'\s*,\s*labels\.([A-Za-z]+)/g;
     let match;
     let callCount = 0;
@@ -208,29 +179,19 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
     expect(!(callCount < 16), 'tick-surface', `query.ts: only ${callCount} issueSet/prSet call sites parsed, expected at least 16 — the pattern may no longer match query.ts's shape`);
 
-    // Every RETRY_TRIGGER pair maps to exactly one surface: a future trigger
-    // mapping that crosses surfaces (issue in-flight label resetting to a PR
-    // trigger, or vice versa) is a wrong write by construction.
-    // guard(#236): a liveness reset crossing surfaces, or a future write
-    // hardcoding the target the way livenessResetWrite did before this fix.
+    // guard: a liveness reset crossing surfaces (issue label resetting to a PR trigger, or vice versa).
     for (const [fromKey, toKey] of Object.entries<string>(RETRY_TRIGGER)) {
       expect(!(LABEL_SURFACE[fromKey] !== LABEL_SURFACE[toKey]), 'tick-surface', `RETRY_TRIGGER.${fromKey} → ${toKey} crosses surfaces: LABEL_SURFACE.${fromKey}='${LABEL_SURFACE[fromKey]}', LABEL_SURFACE.${toKey}='${LABEL_SURFACE[toKey]}'`);
     }
 
-    // The #236 guard itself: no non-comment line of writes.ts may contain an
-    // 'issue' or 'pr' string literal — every target must be derived through
-    // LABEL_SURFACE, never typed by a caller.
+    // No non-comment line of writes.ts may contain an 'issue'/'pr' string literal — every target derives from LABEL_SURFACE.
     const writesText = readFileSync(join(root, TICK_DIR, 'writes.ts'), 'utf8')
       .split('\n')
       .filter((l) => !/^\s*(\/\/|\*)/.test(l))
       .join('\n');
     expect(!/'issue'|"issue"|'pr'|"pr"/.test(writesText), 'tick-surface', `writes.ts contains an 'issue'/'pr' string literal outside a comment — every target must derive from LABEL_SURFACE`);
 
-    // Every function writes.ts exports is named by at least one case in
-    // writes.cases.json, so a future write with a wrong-surface key cannot
-    // ship with nothing exercising it.
-    // guard(#236): a new write shipping with nothing in the decision-case
-    // table exercising its target resolution.
+    // guard: a new write shipping with nothing in the decision-case table exercising its target resolution.
     const exportRe = /export function (\w+)\(/g;
     const exported = [...writesText.matchAll(exportRe)].map((m) => m[1]);
     const casesTable = readJson(`${TICK_DIR}/cases/writes.cases.json`);
@@ -241,9 +202,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   }
 
   // --- Ladder constants are literal, and wakeup is never null on a non-draining
-  // guard(#203): a non-draining tick reaching ScheduleWakeup with nothing to
-  // pass — the model reads plan/commit's 'wakeup' field directly, so a null
-  // here would leave it with nothing.
+  // guard: a non-draining tick reaching ScheduleWakeup with nothing to pass — the model reads 'wakeup' directly.
   {
     const text = readFileSync(join(root, TICK_DIR, 'pacing.ts'), 'utf8');
     for (const n of ['270', '540', '1080', '1800']) {
@@ -257,16 +216,14 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   }
 
   // --- No --jq, no search, no shell:true, no execSync under the engine -------
-  // guard(#203): the tick engine silently gaining a filtered or degraded
-  // read the model can no longer audit.
+  // guard: the tick engine silently gaining a filtered or degraded read the model can no longer audit.
   {
     const engineFiles = walk(join(root, TICK_DIR)).filter((f) => f.endsWith('.ts'));
     expect(!(engineFiles.length === 0), 'tick-io', `${TICK_DIR}/*.ts matched zero files — the io scan itself is broken`);
     const files = [join(root, 'scripts/port-tick.ts'), ...engineFiles];
     for (const f of files) {
       const rel = relOf(f);
-      // Strip comment-only lines first — this file's own docstrings name
-      // every forbidden call as a disclaimer, which must not trip the check.
+      // Strip comment-only lines first — docstrings name these calls as disclaimers and must not trip the check.
       const text = readFileSync(f, 'utf8')
         .split('\n')
         .filter((l) => !/^\s*(\/\/|\*)/.test(l))
@@ -278,15 +235,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- Write composition lives only in writes.ts (#225) ----------------------
-  // guard(#225): the write-composition layer drifting back into the
-  // orchestrator, which is exactly where the additive-vs-swap refresh-write
-  // bug lived with nothing to catch it.
-  // The additive-vs-swap bug this ticket fixes lived in port-tick.ts's own
-  // inline `gh ... --add-label`/`--remove-label` template literals — the one
-  // layer with no case table. This keeps every future label write inside the
-  // module the eighth family actually tests, instead of drifting back into
-  // the orchestrator the way this one did.
+  // --- Write composition lives only in writes.ts ----------------------
+  // guard: the write-composition layer drifting back into the orchestrator, where an additive-vs-swap label bug once lived unchecked.
   {
     const writesPath = join(root, TICK_DIR, 'writes.ts');
     const engineFiles = walk(join(root, TICK_DIR)).filter((f) => f.endsWith('.ts') && f !== writesPath);
@@ -304,13 +254,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- SKILL.md names tickId, the verbatim rail, the TICK-PROSE.md fallback,
-  // and the two defect fixes issue 187 found: `start` actually being called,
-  // and `--live` always passed explicitly.
-  // guard(#203, #187): the model re-deriving a decision the plan already
-  // settled, or skipping `start` so the engine's session-scoped state never
-  // resets. Issue 181 moved `<commands.tick> start` (Startup preflight step 7)
-  // into PREFLIGHT.md, so this reads the skill union rather than SKILL.md alone.
+  // --- SKILL.md names tickId, the verbatim rail, and the TICK-PROSE.md fallback
+  // guard: the model re-deriving a decision the plan already settled, or skipping `start` so session-scoped state never resets.
   {
     const skillRel = 'plugins/port/skills/pipeline/*.md';
     const skillText = pipelineSkillText();

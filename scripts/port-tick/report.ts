@@ -1,9 +1,5 @@
-// The trajectory record's reader — `node scripts/port-tick.ts report`.
-// Read-only, local-only: no `gh` call, and nothing under scripts/port-tick/
-// other than this file may read `.agents/events.jsonl` — `events.ts`
-// deliberately exports no reader (docs/ENGINEERING.md §1's write-only rail).
-// Never in `commands.checks`: it reads a gitignored path absent from a
-// dispatched agent's worktree and from CI (docs/ENGINEERING.md §6).
+// The trajectory record's reader — `node scripts/port-tick.ts report`. Read-only, local-only:
+// nothing but this file reads `.agents/events.jsonl`. Never in `commands.checks` — the path is gitignored and absent from CI.
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { EVENTS_PATH, EVENTS_PREV_PATH } from './events.ts';
@@ -13,14 +9,11 @@ const RESOLUTION_SECONDS = 270;
 const DENIAL_LOG_WARN_BYTES = 4 * 1024 * 1024;
 const DEFAULT_GAP_GRACE_SECONDS = 300;
 const ESCALATION_KINDS = new Set(['cycle-cap', 'zero-diff', 'refresh-stuck', 'approval-withdrawn', 'blocked']);
-// The desktop app's own trajectory record (apps/desktop/src/main/trajectory/log.ts)
-// — a sibling of EVENTS_PATH, read only here, never by the tick engine
-// itself (#111's parity harness).
+// The desktop app's own trajectory record — a sibling of EVENTS_PATH, read only here, never by the tick engine itself.
 const DEFAULT_DESKTOP_EVENTS_PATH = '.agents/desktop-events.jsonl';
 
-/** Reads both generations, oldest first, tolerating either being absent or
- *  unreadable. Never throws — a missing file means "nothing recorded",
- *  never an error. */
+/** Reads both generations, oldest first, tolerating either being absent or unreadable. Never
+ *  throws — a missing file means "nothing recorded". */
 export function readEventLines(root: string): string[] {
   const lines: string[] = [];
   for (const rel of [EVENTS_PREV_PATH, EVENTS_PATH]) {
@@ -39,11 +32,8 @@ export function readEventLines(root: string): string[] {
   return lines;
 }
 
-/** Pure: parses raw JSONL lines into events. A line that does not parse, or
- *  whose `v` is not the recognized version, is skipped and counted in
- *  `skipped` rather than crashing the reader or being silently dropped
- *  (docs/ENGINEERING.md §4 — forward-compatible, loudly: every count above
- *  it in the report is then a lower bound). */
+/** Pure: parses raw JSONL lines into events. A line that fails to parse, or whose `v` is
+ *  unrecognized, is skipped and counted in `skipped` — every count above it is then a lower bound. */
 export function parseEventLines(lines: string[]): { events: any[]; skipped: { malformed: number; unknownVersion: number } } {
   const events: any[] = [];
   let malformed = 0;
@@ -65,12 +55,8 @@ export function parseEventLines(lines: string[]): { events: any[]; skipped: { ma
   return { events, skipped: { malformed, unknownVersion } };
 }
 
-/** Pure: dormancy detection over chronologically sorted `tick` events. A gap
- *  is reported when the actual interval between two consecutive ticks
- *  exceeds the earlier tick's own proposed wakeup by more than
- *  `graceSeconds` — the same "materially overshoots what was scheduled"
- *  test `SKILL.md`'s own resume line uses, applied after the fact instead of
- *  live. */
+/** Pure: dormancy detection over chronologically sorted `tick` events. A gap is reported
+ *  when the actual interval exceeds the earlier tick's own proposed wakeup by more than `graceSeconds`. */
 export function findGaps(tickEvents: any[], graceSeconds = DEFAULT_GAP_GRACE_SECONDS): any[] {
   const gaps: any[] = [];
   for (let i = 1; i < tickEvents.length; i++) {
@@ -88,14 +74,8 @@ export function findGaps(tickEvents: any[], graceSeconds = DEFAULT_GAP_GRACE_SEC
   return gaps;
 }
 
-/** Pure: reconstructs each dispatch's span from the tick stream alone —
- *  no per-dispatch timer exists locally (that precision lives behind
- *  `commands.budget`, #188's ledger, which this ticket does not duplicate,
- *  per docs/ENGINEERING.md §2). Pairs a `tick-commit`'s `dispatched` entry
- *  with the first later tick where the item is absent from that tick's own
- *  `liveItems` — the span's end is only ever known to tick resolution
- *  (`RESOLUTION_SECONDS`), never exact, and `seconds` is `null` (ongoing)
- *  when no later tick ever drops the item. */
+/** Pure: reconstructs each dispatch's span from the tick stream alone. `seconds` is `null`
+ *  (ongoing) when no later tick ever drops the item from `liveItems`. */
 export function deriveSpans(events: any[]): any[] {
   const ticks = [...events].filter((e) => e.kind === 'tick').sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
   const commits = events.filter((e) => e.kind === 'tick-commit');
@@ -142,14 +122,8 @@ function mode(values: any[]): any {
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
 }
 
-/** Pure: the whole reduction, from a (possibly `--since`/`--run`-filtered)
- *  event list to the report's JSON shape (`text` excluded — `renderText`
- *  composes that separately, since it also needs `skipped`/denial-log-size
- *  facts that are not events). An absent signal is never `0`: `window.runs`
- *  is flagged `runsIsLowerBound` whenever a `runId` appears on a tick with
- *  no matching `run-start` — a session that skipped `start` inherits the
- *  previous run's id, so the true run count can only be undercounted, never
- *  overcounted. */
+/** Pure: the whole reduction from a filtered event list to the report's JSON shape. An
+ *  absent signal is never `0`: `window.runs` is flagged `runsIsLowerBound` whenever a `runId` appears with no matching `run-start`. */
 export function aggregate(events: any[]): any {
   const ticks = events.filter((e) => e.kind === 'tick').sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
   const commits = events.filter((e) => e.kind === 'tick-commit');
@@ -279,9 +253,7 @@ const shortStage = (stage: string): string => stage.replace('-agent', '');
 const escalationLabel = (kind: string): string =>
   ({ 'cycle-cap': 'cycle cap', 'zero-diff': 'zero-diff', 'refresh-stuck': 'refresh stuck', 'approval-withdrawn': 'approval withdrawn' } as Record<string, string>)[kind] ?? kind;
 
-/** Pure (given its inputs): the human-readable `text` field. Sections that
- *  do not apply are omitted rather than printed as "0" or "none"
- *  (docs/ENGINEERING.md §4's writing style). */
+/** Pure: the human-readable `text` field. Sections that do not apply are omitted rather than printed as "0" or "none". */
 export function renderText(
   report: any,
   { repo, skipped = { malformed: 0, unknownVersion: 0 }, denialLogBytes = null }: { repo?: string; skipped?: { malformed: number; unknownVersion: number }; denialLogBytes?: number | null } = {},
@@ -343,12 +315,8 @@ export function renderText(
   return lines.join('\n');
 }
 
-/** Reads one desktop trajectory line file whole, tolerating an absent or
- *  unreadable path — never a throw, the same direction `readEventLines`
- *  already takes for the cockpit's own two-generation pair. Unlike that
- *  reader, this one reads only the single path given (no `.prev` fallback):
- *  the parity harness compares against what is currently live, and the
- *  desktop side's own rotation history is out of scope here. */
+/** Reads one desktop trajectory line file whole, tolerating an absent or unreadable path —
+ *  never a throw. Reads only the single path given (no `.prev` fallback): the parity harness compares against what is currently live. */
 function readDesktopEventLines(path: string): string[] {
   if (!existsSync(path)) return [];
   let text: string;
@@ -360,11 +328,8 @@ function readDesktopEventLines(path: string): string[] {
   return text.split('\n').filter((line) => line !== '');
 }
 
-/** Pure: parses raw JSONL lines from the desktop trajectory record. A line
- *  that does not parse, or whose `v` is not the recognized version, is
- *  counted in `malformed` rather than thrown on or silently dropped — the
- *  same forward-compatible-but-loud direction `parseEventLines` already
- *  takes for the cockpit side. */
+/** Pure: parses raw JSONL lines from the desktop trajectory record. A line that fails to
+ *  parse, or whose `v` is unrecognized, is counted in `malformed`, same direction as `parseEventLines`. */
 export function parseDesktopEventLines(lines: readonly string[]): { events: any[]; malformed: number } {
   const events: any[] = [];
   let malformed = 0;
@@ -385,11 +350,8 @@ export function parseDesktopEventLines(lines: readonly string[]): { events: any[
   return { events, malformed };
 }
 
-/** The `--desktop-events <path>` mode's own read + diff, split out of
- *  `runReport` so its early return stays a single expression there. An
- *  absent desktop trajectory file reports `{ available: false, reason }` —
- *  never `{ available: true, pairs: [] }`, which would read as "compared,
- *  and clean" for a comparison that never ran (docs/ENGINEERING.md §4). */
+/** The `--desktop-events <path>` mode's own read + diff. An absent desktop trajectory file
+ *  reports `{ available: false, reason }`, never `{ available: true, pairs: [] }` — that would read as "compared, and clean" for a comparison that never ran. */
 function buildParitySection(root: string, cockpitEvents: readonly any[], desktopEventsArg: string | undefined): any {
   const relPath = desktopEventsArg ?? DEFAULT_DESKTOP_EVENTS_PATH;
   const path = join(root, relPath);
@@ -403,13 +365,8 @@ function buildParitySection(root: string, cockpitEvents: readonly any[], desktop
   return section;
 }
 
-/** The `report` subcommand's whole implementation — the only impure entry
- *  point in this module. `args` may carry `since` (ISO string), `run` (a
- *  `runId`), and `desktop-events` (a path, default
- *  `.agents/desktop-events.jsonl` under `root`) — the first two filters
- *  applied before aggregation, the third read independently for the parity
- *  section. Never throws: an absent record is reported in `text`, not
- *  treated as an error. */
+/** The `report` subcommand's whole implementation — the only impure entry point in this
+ *  module. Never throws: an absent record is reported in `text`, not treated as an error. */
 export function runReport(root: string, cfg: any, args: any = {}): any {
   const present = existsSync(join(root, EVENTS_PATH)) || existsSync(join(root, EVENTS_PREV_PATH));
   if (!present) {

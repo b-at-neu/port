@@ -3,21 +3,8 @@ import { join } from 'node:path';
 import { root, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// --- No GraphQL search(, no gh --jq under main/github/ ----------------------
-// guard(#76): the index-backed search field's ingestion lag reintroducing
-// silent staleness, or `gh` silently skipping its own `--jq` filter on a
-// partial-error response this adapter must read. apps/desktop/src/main/github/
-// is the app's only GitHub reader; two decisions from its plan are pinned
-// mechanically, dependency-free and regex-based, in the shape of
-// desktop-platform.ts's own guards — reading this directory by explicit
-// path (never walk('apps/'), which descends into node_modules).
-//
-// - Decision 2: GraphQL `search` is rejected — it is index-backed with
-//   ingestion lag, so a label applied seconds ago would not be searchable
-//   yet. `repository.issues`/`pullRequests` are read-your-writes consistent.
-// - Decision 3: the envelope is parsed, never `--jq`'d — `gh api graphql`
-//   silently skips the `--jq` filter on the exact partial-error response
-//   this adapter most needs to read.
+// --- No GraphQL search(, no gh --jq under main/github/: `search` is index-backed with
+// ingestion lag, and `gh` silently skips `--jq` on the partial-error response this adapter must read. ---
 export default async function ({ expect, fail, ok }: Reporter) {
   const dir = 'apps/desktop/src/main/github';
   const files = walk(join(root, dir)).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
@@ -53,11 +40,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- pin: query.ts's CheckRollupFields selection ↔ scripts/port-tick/query.ts's own ROLLUP ---
-  // guard(#292): the app's own statusCheckRollup selection silently drifting
-  // from the cockpit's own ROLLUP constant it was copied from — either side
-  // then reads a field (or a __typename branch) the other's reducer was
-  // never written to expect.
   // pin: `main/github/query.ts`'s `CheckRollupFields` fragment selection ↔ `scripts/port-tick/query.ts`'s own `ROLLUP`, both directions
   {
     const queryFile = `${dir}/query.ts`;
@@ -71,10 +53,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     } else if (!rollupMatch) {
       fail('desktop-github-adapter', `scripts/port-tick/query.ts has no 'const ROLLUP = \`...\`' to compare`);
     } else {
-      // Both sides are read as the set of GraphQL field/selection tokens
-      // they name — never as byte-identical text, since the app's fragment
-      // is spread onto a pull-request alias while the engine's own ROLLUP is
-      // inlined under a `commits(...)` selection of its own.
+      // Both sides read as the set of GraphQL field/selection tokens, never byte-identical text.
       const tokenize = (text: string): Set<string> => new Set(text.match(/[A-Za-z_][A-Za-z0-9_]*/g) ?? []);
       const appTokens = tokenize(fragmentMatch[1]);
       const engineTokens = tokenize(rollupMatch[1]);

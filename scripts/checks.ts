@@ -1,16 +1,6 @@
 #!/usr/bin/env node
-// Layer 1 of the testing loop: deterministic checks over the plugin's files.
-//
-// No model calls, no dependencies, and no plugin install required — a
-// dispatched agent's worktree may not resolve the plugin, so every check here
-// works from files alone.
-//
-// This file only wires: it discovers every topic module under
-// scripts/checks/ from disk, imports and awaits each in turn against the
-// shared reporter, then reports. Check logic itself lives in the topic
-// modules — never here, so the file stays thin no matter how many regression
-// guards the topics below accumulate (scripts/checks/harness.ts enforces
-// this split mechanically).
+// Layer 1 of the testing loop: deterministic checks over the plugin's files, no model calls.
+// This file only wires: discovers every topic module under scripts/checks/, imports and awaits each, then reports.
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
 import { createReporter } from './lib/report.ts';
