@@ -20,8 +20,7 @@ function keyOf(record) {
   return `${record.marketplaceName}@${record.pluginName}`;
 }
 
-/** A record is dead when its projectPath no longer exists; a cache directory
- *  is unreferenced when no live record's installPath resolves to it. */
+/** A record is dead when its projectPath no longer exists. */
 export function classify({ installed, exists, cacheDirs, plugins = DEFAULT_PLUGINS }) {
   const wanted = new Set(plugins);
   const deadRecords = [];
@@ -110,8 +109,7 @@ function listDirs(dir) {
   }
 }
 
-/** Refuses a path outside <home>/plugins/cache/<marketplace> for a
- *  marketplace in scope — nothing in the running CLI can trip this. */
+/** Refuses a path outside <home>/plugins/cache/<marketplace> for a marketplace in scope. */
 export function assertFenced(path, home, plugins) {
   const marketplaces = new Set(plugins.map((p) => p.split('@')[0]));
   const key = pathKeyOf(path);
