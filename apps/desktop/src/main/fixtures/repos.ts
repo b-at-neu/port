@@ -24,8 +24,7 @@ const WIDGETS_CONFIG: ResolvedRepoConfig = {
   modules: CONFIG_DEFAULTS.modules,
   reviewCycleCap: CONFIG_DEFAULTS.reviewCycleCap,
   vocabulary: WIDGETS_VOCABULARY,
-  // #319: a real commands.worktrees, not CONFIG_DEFAULTS' own null, so the
-  // Repositories screen's Worktrees tab has an Inspect button to click.
+  // A real commands.worktrees, not CONFIG_DEFAULTS' own null, so the Worktrees tab has an Inspect button.
   commands: { ...CONFIG_DEFAULTS.commands, worktrees: 'node plugins/port/bin/worktrees.mjs' },
   concurrency: CONFIG_DEFAULTS.concurrency,
   checkDispositions: {},

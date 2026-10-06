@@ -102,13 +102,11 @@ export async function setTheme(page: Page, theme: Theme): Promise<void> {
 
 // Navigates to the target's (or variant's) hash, waits for the container,
 // clicks the variant's own selector if it has one, then waits ready/settle.
-// Escape first: the claim/gate dialogs mount once in shell/layout.tsx, so a
-// dialog a previous test opened survives a hash-only navigation and would
-// otherwise block this one's own click.
 export async function settle(page: Page, target: Extract<Target, { readonly kind: 'capture' }>, variant?: CaptureVariant): Promise<void> {
   const hash = variant?.hash ?? target.hash
   const ready = variant?.ready ?? target.ready
 
+  // Clears a dialog a previous test left open — claim/gate mount once in shell/layout.tsx.
   await page.keyboard.press('Escape')
 
   await page.evaluate((h: string) => {
@@ -121,10 +119,7 @@ export async function settle(page: Page, target: Extract<Target, { readonly kind
     throw new Error(`${hash}: container '${target.container}' never became visible — ${String(error)}`, { cause: error })
   }
 
-  // Skip the click if `ready` is already showing — a write the click
-  // triggers (an IPC query cache fetch) persists for the rest of the suite,
-  // so the second theme's run of the same variant finds the state the
-  // click used to produce already there, with nothing left to click.
+  // Skip if `ready` is already visible — the click's own cached query fetch persists across themes.
   const alreadyReady = variant?.click !== undefined && (await page.locator(ready).first().isVisible().catch(() => false))
 
   if (variant?.click !== undefined && !alreadyReady) {
@@ -150,10 +145,7 @@ export async function settle(page: Page, target: Extract<Target, { readonly kind
     throw new Error(`${hash}: a skeleton never cleared inside '${target.container}' — ${String(error)}`, { cause: error })
   }
 
-  // A click-triggered dialog is still mid its own 150ms entrance transition
-  // the instant `ready` becomes visible — wait for it to actually finish.
-  // Never `subtree: true`: a descendant's own infinite animation (the
-  // attention status pill's pulsing dot) would never resolve `finished`.
+  // Waits out ready's own entrance transition; never subtree (an infinite pulse would hang it).
   await page
     .locator(ready)
     .first()
