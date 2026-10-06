@@ -1,10 +1,5 @@
-// --- Plugin cache cleanup removes only dead port records ---
-// guard(#344): the cockpit cache sweep never catches a local/project-scope
-// install record pinned to a deleted project — deleting that project never
-// removes the record, so its version directory never gets an `.orphaned_at`
-// marker and accumulates forever. Unit-tests classify() directly, then
-// spawns the real CLI against fixture homes so the report/apply split, the
-// backup, and the cache-root fence are all exercised end to end.
+// Unit-tests classify()/assertFenced() directly, then spawns the real CLI
+// against fixture homes for the report/apply split and the backup.
 import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -109,9 +104,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       cacheDirs: [{ marketplace: 'port', plugin: 'port', version: '0.7.0', path: 'c:\\users\\x\\plugins\\cache\\port\\port\\0.7.0' }],
       plugins: ['port@port'],
     });
-    // win32 case-insensitivity only applies under process.platform === 'win32'
-    // in the real module; off-platform this assertion would need a different
-    // fixture, so this case only runs when it can actually observe the effect.
+    // Only observable on win32 — a differently-cased fixture off-platform.
     if (process.platform === 'win32') {
       expect(got.unreferenced.length === 0, 'plugin-cache-classifier', `classify — win32 case-insensitive comparison: expected the differently-cased path to match and report nothing unreferenced, got ${JSON.stringify(got.unreferenced)}`);
     } else {
@@ -120,12 +113,6 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   }
 
   // --- assertFenced(): refuses a path outside the scoped cache roots ---------
-  // guard(#344): a deletion candidate sourced from anywhere but
-  // findCacheDirs's own directory walk (a malformed or hand-edited
-  // installPath, say) must still be refused, never deleted — the one guard
-  // standing between that and an arbitrary delete. Exercised directly since
-  // the running CLI's own candidates can never actually reach this path (see
-  // assertFenced's own comment).
   {
     const home = process.platform === 'win32' ? 'C:\\Users\\x\\.claude' : '/home/x/.claude';
     const insideFence = join(home, 'plugins', 'cache', 'port', 'port', '1.0.0');
@@ -136,8 +123,6 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   }
 
   // --- End-to-end: report changes nothing, apply removes dead/unreferenced ---
-  // guard(#344): the CLI's own JSON wiring, the backup, and the fence
-  // diverging from classify()'s own pure decision.
   {
     let tmp: string | null = null;
     try {
@@ -204,7 +189,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
 
       expect(!existsSync(deadCacheDir), 'plugin-cache-e2e', 'apply must delete the unreferenced cache directory');
       expect(existsSync(liveCacheDir), 'plugin-cache-e2e', 'apply must keep the cache directory a live record still points at');
-      expect(existsSync(otherVendorDir), 'plugin-cache-e2e', 'apply must never touch a directory outside the port@port/port@port-dev scope');
+      expect(existsSync(otherVendorDir), 'plugin-cache-e2e', 'apply must never touch a directory outside the plugins in scope');
 
       ok();
     } catch (e) {

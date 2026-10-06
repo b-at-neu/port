@@ -1,37 +1,6 @@
 #!/usr/bin/env node
-// Plugin cache cleanup — removes only what a dead project pins (#344).
-//
-// Claude Code's documented sweep removes an `.orphaned_at`-marked cache
-// directory 14 days after an update. It only fires when a version bump is
-// recognized as an update to the same tracked install, so it never marks a
-// directory a `local`/`project`-scope record still points at — and deleting
-// that record's own project (a worktree, a removed clone, a moved repo)
-// never removes the record itself, since `claude plugin uninstall --scope
-// local` cannot run from a directory that no longer exists. The record pins
-// its version directory for good. Not specific to any one repository's dev
-// loop: any adopter who installs port per-project and later deletes or moves
-// that project hits this, in every repo, on every machine they use.
-//
-//   report [--json] [--home <dir>] [--plugins <key>,...]
-//     Classify every installed_plugins.json record and cache directory,
-//     remove nothing.
-//
-//   apply [--home <dir>] [--plugins <key>,...]
-//     Back up installed_plugins.json, remove every dead record, then delete
-//     every cache directory no live record's installPath resolves to.
-//
-// Self-contained — no relative imports, so an adopting repository can run
-// this file alone, on any machine with port installed, through the shipped
-// `/port:plugin-cache-clean` skill. Every child process is invoked with an
-// explicit argv array via node:child_process, never a shell string.
-//
-// Scope is `port@port` only by default (`--plugins` widens it, comma-
-// separated `<marketplace>@<plugin>` keys — a repository running its own
-// differently-named dev-loop marketplace passes its own key here) — a
-// shipped tool deleting another vendor's cache is out of bounds.
-// Deletion is fenced to `<home>/plugins/cache/<marketplace>` for exactly the
-// marketplaces in scope; a resolved path outside that fence is never
-// deleted, whatever classify() says.
+// Plugin cache cleanup — removes only what a dead project pins.
+// Usage: report|apply [--json] [--home <dir>] [--plugins <key>,...]
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync, rmSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
@@ -40,40 +9,19 @@ import { pathToFileURL } from 'node:url';
 const USAGE = 'usage: node plugin-cache.mjs <report|apply> [--home <dir>] [--plugins <key>,...] [--json]';
 const DEFAULT_PLUGINS = ['port@port'];
 
-/** One clear line, no stack trace. */
 const die = (msg) => {
   console.error(`FAIL  ${msg}`);
   process.exit(1);
 };
 
-// --- Pure classifier (exported for this repository's own layer 1 checks) ----
+// --- Pure classifier ---------------------------------------------------------
 
-/** Resolves a plugin key (`<marketplace>@<plugin>`) from an install record's
- *  own fields — the record itself never carries one. */
 function keyOf(record) {
   return `${record.marketplaceName}@${record.pluginName}`;
 }
 
-/** Classifies the parsed `installed_plugins.json` against the cache
- *  directories actually on disk, for the given `plugins` key filter alone —
- *  a non-matching record or directory is simply invisible to this call, as
- *  if it did not exist.
- *
- *  `installed` is the parsed JSON (an object keyed by install identity, each
- *  value an array of records, or a single record — Claude Code's own shape
- *  is not guaranteed array-vs-object per key, so both are normalized here).
- *  `exists(projectPath)` is an injected predicate so this stays pure.
- *  `cacheDirs` is `{ marketplace, plugin, version, path }[]`.
- *
- *  A record is **dead** when it carries a `projectPath` and `exists(…)` is
- *  false — a `user`-scope record (no `projectPath`) is never dead, since
- *  nothing about it can go stale this way. A cache directory is
- *  **unreferenced** when no *live* record's `installPath` resolves to it —
- *  compared case-insensitively on win32, matching `pathKey` in
- *  `bin/worktrees.mjs`. Returns `{ deadRecords, liveRecords, unreferenced }`;
- *  `deadRecords`/`liveRecords` entries carry `{ key, index, scope,
- *  projectPath, installPath }` so a caller can both report and remove them
- *  without re-deriving anything. */
+/** A record is dead when its projectPath no longer exists; a cache directory
+ *  is unreferenced when no live record's installPath resolves to it. */
 export function classify({ installed, exists, cacheDirs, plugins = DEFAULT_PLUGINS }) {
   const wanted = new Set(plugins);
   const deadRecords = [];
@@ -105,10 +53,7 @@ export function classify({ installed, exists, cacheDirs, plugins = DEFAULT_PLUGI
   return { deadRecords, liveRecords, unreferenced };
 }
 
-/** Case-insensitive on win32 only, mirroring `bin/worktrees.mjs`'s own
- *  `pathKey` — this file does not resolve symlinks or short-name aliases,
- *  since both sides of every comparison here come from the same JSON or the
- *  same `readdirSync` walk, never a filesystem handle. */
+// Case-insensitive on win32 only, mirroring bin/worktrees.mjs's pathKey.
 function pathKeyOf(p) {
   const r = resolve(p);
   return process.platform === 'win32' ? r.toLowerCase() : r;
@@ -134,10 +79,7 @@ function readInstalled(home) {
   return { path, installed };
 }
 
-/** Every `<home>/plugins/cache/<marketplace>/<plugin>/<version>/` directory,
- *  for marketplaces actually present on disk — never assumes a marketplace
- *  name from `plugins` alone, since a scope filter with nothing installed
- *  under it must find zero directories, not error. */
+/** Every cache/<marketplace>/<plugin>/<version>/ directory on disk. */
 function findCacheDirs(home) {
   const cacheRoot = join(home, 'plugins', 'cache');
   if (!existsSync(cacheRoot)) return [];
@@ -168,17 +110,8 @@ function listDirs(dir) {
   }
 }
 
-/** Refuses to delete anything outside `<home>/plugins/cache/<marketplace>`
- *  for a marketplace actually in `plugins` scope — the one guard standing
- *  between a malformed or hand-edited `installPath` and an arbitrary delete.
- *  Exit 2, nothing touched, the moment one path fails this fence. Every path
- *  `apply` ever deletes comes from `findCacheDirs`, which only ever walks
- *  `<home>/plugins/cache/<marketplace>/` in the first place — so in the
- *  running CLI this can never actually fail. It exists, and is exported and
- *  unit-tested directly, as the second independent check: if `classify`'s
- *  caller is ever changed to source a deletion candidate from anywhere but
- *  `findCacheDirs` (an `installPath` taken on faith, say), this is what
- *  still stands between that and an arbitrary delete. */
+/** Refuses a path outside <home>/plugins/cache/<marketplace> for a
+ *  marketplace in scope — nothing in the running CLI can trip this. */
 export function assertFenced(path, home, plugins) {
   const marketplaces = new Set(plugins.map((p) => p.split('@')[0]));
   const key = pathKeyOf(path);
