@@ -151,7 +151,7 @@ function openDevWindow({ root, cfg, next, branch }: { root: string; cfg: any; ne
   const bodyPath = join(root, '.temp/devwindow-pr.md');
   writeFileSync(
     bodyPath,
-    `Opens the dev window at v${next} so the integration branch never carries a version a released consumer can be pinned to.\n`,
+    `Opens the dev window at v${next} so the integration branch never carries a version a released consumer can be pinned to (#224).\n`,
   );
   const url = execFileSync(
     'gh',

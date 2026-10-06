@@ -204,7 +204,7 @@ export function decide({
         who,
         subject: command,
         reason:
-          'port: switching branches from a cockpit session is denied — the startup preflight\'s hard stop names the carrying branch or /port:init; it is never escaped by checking one out from here. Stop and emit the preflight\'s hard-stop message rather than changing the operator\'s branch.',
+          'port: switching branches from a cockpit session is denied (#216) — the startup preflight\'s hard stop names the carrying branch or /port:init; it is never escaped by checking one out from here. Stop and emit the preflight\'s hard-stop message rather than changing the operator\'s branch.',
       };
     }
 

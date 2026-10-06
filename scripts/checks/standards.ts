@@ -79,10 +79,10 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     const cmdIdx = block.indexOf('commands.*');
     const soleIdx = block.indexOf('sole non-overridable exception');
     if (cmdIdx === -1 || soleIdx === -1 || cmdIdx > soleIdx) {
-      problems.push('does not name commands.* as the sole non-overridable exception');
+      problems.push('does not name commands.* as the sole non-overridable exception (#246)');
     }
     if (!block.includes('is overridable')) {
-      problems.push('does not state that every other category is overridable');
+      problems.push('does not state that every other category is overridable (#246)');
     }
     return problems;
   };
