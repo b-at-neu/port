@@ -39,19 +39,36 @@ function getState(): DecisionState {
   return state
 }
 
-/** The row's own click entry point — the button carries its already-computed
- *  `context`, so this dialog never re-derives availability. */
+/** The typed entry point — opens the dialog directly from an already-known repoId/number/decision/context, no DOM dataset round trip. */
+export function openDecisionDialogFor(params: {
+  readonly repoId: RepoId
+  readonly number: number
+  readonly decision: OperatorDecision
+  readonly expectedStage: LabelKey | null
+  readonly context: UnblockContext | ReviseContext
+}): void {
+  const { repoId, number, decision, expectedStage, context } = params
+  if (decision === 'unblock') {
+    setState({ step: 'confirm-unblock', repoId, number, expectedStage, context: context as UnblockContext })
+  } else {
+    setState({ step: 'confirm-revise', repoId, number, expectedStage, context: context as ReviseContext, text: '' })
+  }
+}
+
+/** The row's own click entry point — parses the dataset, then delegates to `openDecisionDialogFor`. */
 export function openDecisionDialog(target: HTMLElement): void {
   const decision = target.dataset.action?.slice('decide-'.length) as OperatorDecision | undefined
   const { repoId, number, stage, context } = target.dataset
   if (!decision || !repoId || !number || context === undefined) return
 
   const expectedStage = (stage || null) as LabelKey | null
-  if (decision === 'unblock') {
-    setState({ step: 'confirm-unblock', repoId: repoId as RepoId, number: Number(number), expectedStage, context: JSON.parse(context) as UnblockContext })
-  } else {
-    setState({ step: 'confirm-revise', repoId: repoId as RepoId, number: Number(number), expectedStage, context: JSON.parse(context) as ReviseContext, text: '' })
-  }
+  openDecisionDialogFor({
+    repoId: repoId as RepoId,
+    number: Number(number),
+    decision,
+    expectedStage,
+    context: JSON.parse(context) as UnblockContext | ReviseContext,
+  })
 }
 
 async function runDecision(params: {

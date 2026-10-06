@@ -61,7 +61,7 @@ function Rail({ onExpand, needsYouCount }: { readonly onExpand: () => void; read
 export function Sidebar() {
   const collapsed = useSidebarCollapsed()
   const snapshot = useIpcQuery('board:snapshot')
-  const needsYouCount = snapshot.data !== undefined ? needsYouItems(snapshot.data).length : 0
+  const needsYouCount = snapshot.data !== undefined ? needsYouItems(snapshot.data, new Date()).length : 0
 
   function toggle(): void {
     setSidebarCollapsed(toggleSidebarCollapsed())

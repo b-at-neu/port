@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../repos'
 import type { PipelineState, ReconciledItem, RepositoryState } from '../state/types'
 import type { RelayPending } from '../relay/types'
+import type { TickReport } from '../tick/types'
+import type { RepoDispatchStatus } from '../dispatch/types'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from './types'
 import type { BoardSnapshot } from './types'
 import { needsYouCount, needsYouItems, repoNeedsYou } from './needs-you'
@@ -78,18 +80,51 @@ function readyRepo(overrides: Partial<Extract<RepositoryState, { ok: true }>> = 
   }
 }
 
-function snapshotOf(repositories: readonly RepositoryState[], relay: BoardSnapshot['relay'] = { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: NOW.toISOString() }): BoardSnapshot {
+function tickReport(overrides: Partial<TickReport> = {}): TickReport {
+  return {
+    repoId: 'repo-a' as RepoId,
+    displayName: 'o/a',
+    blind: null,
+    actionable: [],
+    held: [],
+    claims: [],
+    autoApprovals: [],
+    disabledStages: [],
+    nextTickAt: null,
+    observations: [],
+    ...overrides,
+  }
+}
+
+function dispatchStatus(overrides: Partial<RepoDispatchStatus> = {}): RepoDispatchStatus {
+  return {
+    repoId: 'repo-a' as RepoId,
+    owner: 'app',
+    state: { kind: 'idle' },
+    runState: 'dispatching',
+    claimedAt: null,
+    budget: null,
+    observed: [],
+    ...overrides,
+  }
+}
+
+function snapshotOf(
+  repositories: readonly RepositoryState[],
+  overrides: Partial<Pick<BoardSnapshot, 'relay' | 'tick' | 'dispatch'>> = {},
+): BoardSnapshot {
   const state: PipelineState = { repositories, sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: NOW.toISOString() }, readAt: NOW.toISOString() }
   return {
     state,
     health: [],
     policy: { baseIntervalMs: SOURCE_BASE_INTERVAL_MS, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: STALE_GRACE_MS },
     tick: [],
-    relay,
+    relay: { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: NOW.toISOString() },
     runStates: { store: { kind: 'loaded' }, repositories: [] },
     nextWakeupAt: null,
     emittedAt: NOW.toISOString(),
     dispatch: [],
+    ...overrides,
   }
 }
 
@@ -110,57 +145,97 @@ function pending(overrides: Partial<RelayPending> = {}): RelayPending {
 }
 
 describe('needsYouItems', () => {
-  it('each stage reason surfaces for its own key', () => {
+  it('each stage key surfaces as its own kind', () => {
     const cases: readonly [ReconciledItem['stage'], string, string][] = [
       ['gate', 'planReview', 'plan-review'],
       ['terminal', 'approved', 'ready-to-merge'],
       ['gate', 'needsHuman', 'needs-human'],
       ['gate', 'blocked', 'blocked'],
     ]
-    for (const [role, key, reason] of cases) {
+    for (const [role, key, kind] of cases) {
       const repo = readyRepo({ items: [item({ stage: role, stages: [{ key: key as never, name: key, role: role as never }] })] })
-      const items = needsYouItems(snapshotOf([repo]))
+      const items = needsYouItems(snapshotOf([repo]), NOW)
       expect(items).toHaveLength(1)
-      expect(items[0]?.reasons).toEqual([reason])
+      expect(items[0]?.kind).toBe(kind)
     }
   })
 
-  it('a stage key with no mapped reason is excluded', () => {
+  it('a stage key with no mapped kind is excluded', () => {
     const repo = readyRepo({ items: [item({ stage: 'trigger', stages: [{ key: 'ready', name: 'ready', role: 'trigger' }] })] })
-    expect(needsYouItems(snapshotOf([repo]))).toEqual([])
+    expect(needsYouItems(snapshotOf([repo]), NOW)).toEqual([])
   })
 
   it('excludes an item not assigned to a known viewer', () => {
     const repo = readyRepo({ viewer: 'op', items: [item({ assignees: ['someone-else'] })] })
-    expect(needsYouItems(snapshotOf([repo]))).toEqual([])
+    expect(needsYouItems(snapshotOf([repo]), NOW)).toEqual([])
   })
 
   it('includes an item regardless of assignees when the viewer is null', () => {
     const repo = readyRepo({ viewer: null, items: [item({ assignees: ['someone-else'] })] })
-    expect(needsYouItems(snapshotOf([repo]))).toHaveLength(1)
+    expect(needsYouItems(snapshotOf([repo]), NOW)).toHaveLength(1)
   })
 
-  it('adds a question reason to an existing row matched by repoId and number', () => {
+  it('a row and a question on the same (repo, number) produce two separate rows', () => {
     const repo = readyRepo({ items: [item({ repoId: 'repo-a' as RepoId, number: 7 })] })
-    const relay: BoardSnapshot['relay'] = { ok: true, pending: [pending({ repoId: 'repo-a' as RepoId, number: 7 })], checked: 1, unreached: 0, scannedAt: NOW.toISOString() }
-    const items = needsYouItems(snapshotOf([repo], relay))
-    expect(items).toHaveLength(1)
-    expect(items[0]?.reasons).toEqual(['plan-review', 'question'])
+    const items = needsYouItems(snapshotOf([repo], { relay: { ok: true, pending: [pending({ repoId: 'repo-a' as RepoId, number: 7 })], checked: 1, unreached: 0, scannedAt: NOW.toISOString() } }), NOW)
+    expect(items.map((i) => i.kind).sort()).toEqual(['plan-review', 'question'])
   })
 
   it('a question with no matching row still appears, title and url null', () => {
-    const relay: BoardSnapshot['relay'] = { ok: true, pending: [pending({ repoId: 'repo-b' as RepoId, number: 99 })], checked: 1, unreached: 0, scannedAt: NOW.toISOString() }
-    const items = needsYouItems(snapshotOf([], relay))
+    const items = needsYouItems(snapshotOf([], { relay: { ok: true, pending: [pending({ repoId: 'repo-b' as RepoId, number: 99 })], checked: 1, unreached: 0, scannedAt: NOW.toISOString() } }), NOW)
     expect(items).toHaveLength(1)
-    expect(items[0]).toMatchObject({ repoId: 'repo-b', number: 99, title: null, url: null, reasons: ['question'] })
+    expect(items[0]).toMatchObject({ kind: 'question', repoId: 'repo-b', number: 99, title: null, url: null })
+  })
+
+  it('held items keep only conflicting, contended and cycle-cap', () => {
+    const held = [
+      { number: 1, kind: 'pull-request' as const, trigger: 'readyForReview' as const, reason: 'conflicting' as const, contention: null, escalation: null },
+      { number: 2, kind: 'pull-request' as const, trigger: 'readyForReview' as const, reason: 'unowned' as const, contention: null, escalation: null },
+    ]
+    const items = needsYouItems(snapshotOf([], { tick: [tickReport({ held })] }), NOW)
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ kind: 'held', number: 1 })
+  })
+
+  it('claims keep only stalled-confirmed', () => {
+    const claims = [
+      { number: 3, kind: 'issue' as const, inFlight: 'inProgress' as const, class: 'stalled-confirmed' as const, retryKey: 'inProgress' as const },
+      { number: 4, kind: 'issue' as const, inFlight: 'inProgress' as const, class: 'matched' as const, retryKey: null },
+    ]
+    const items = needsYouItems(snapshotOf([], { tick: [tickReport({ claims })] }), NOW)
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ kind: 'stalled', number: 3 })
+  })
+
+  it('budget notes keep only escalated and escalation-failed', () => {
+    const dispatch = [
+      dispatchStatus({ budget: { line: null, problem: null, notes: [{ kind: 'escalated', number: 5, needsHumanLabel: 'needs human', commentFailedMessage: null }] } }),
+      dispatchStatus({ repoId: 'repo-b' as RepoId, budget: { line: null, problem: null, notes: [{ kind: 'held', number: 6, line: 'held' }] } }),
+    ]
+    const items = needsYouItems(snapshotOf([], { dispatch }), NOW)
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ kind: 'budget', number: 5 })
+  })
+
+  it('orders a known `at` before anything without one, newest first', () => {
+    const olderPending = pending({ repoId: 'repo-a' as RepoId, number: 1, lastActivityAt: '2026-01-01T00:00:00.000Z', sessionId: 'sess-older' })
+    const newerPending = pending({ repoId: 'repo-a' as RepoId, number: 2, lastActivityAt: '2026-01-01T00:30:00.000Z', sessionId: 'sess-newer' })
+    const held = [{ number: 9, kind: 'pull-request' as const, trigger: 'readyForReview' as const, reason: 'conflicting' as const, contention: null, escalation: null }]
+    const items = needsYouItems(
+      snapshotOf([], { relay: { ok: true, pending: [olderPending, newerPending], checked: 2, unreached: 0, scannedAt: NOW.toISOString() }, tick: [tickReport({ held })] }),
+      NOW,
+    )
+    expect(items.map((i) => i.kind)).toEqual(['question', 'question', 'held'])
+    expect(items[0]).toMatchObject({ number: 2 })
+    expect(items[1]).toMatchObject({ number: 1 })
   })
 })
 
 describe('needsYouCount / repoNeedsYou', () => {
-  it('counts the full list and one repository\'s own slice', () => {
+  it("counts the full list and one repository's own slice", () => {
     const repoA = readyRepo({ repoId: 'repo-a' as RepoId, items: [item({ repoId: 'repo-a' as RepoId, number: 1 })] })
     const repoB = readyRepo({ repoId: 'repo-b' as RepoId, repo: 'o/b', items: [item({ repoId: 'repo-b' as RepoId, number: 2 })] })
-    const items = needsYouItems(snapshotOf([repoA, repoB]))
+    const items = needsYouItems(snapshotOf([repoA, repoB]), NOW)
     expect(needsYouCount(items)).toBe(2)
     expect(repoNeedsYou(items, 'repo-a' as RepoId)).toBe(1)
     expect(repoNeedsYou(items, 'repo-b' as RepoId)).toBe(1)

@@ -63,8 +63,8 @@ function pillFor(snapshot: BoardSnapshot | undefined, repoId: RepoId): { readonl
 
 /** A not-`ready` repository gets a bare row with no menu. `snapshot` may be
  *  `undefined` before the first read; a ready row then falls back to paused. */
-export function pipelinesModel(repos: readonly RepositoryEntry[], snapshot: BoardSnapshot | undefined): readonly PipelineRow[] {
-  const needsYou = snapshot !== undefined ? needsYouItems(snapshot) : []
+export function pipelinesModel(repos: readonly RepositoryEntry[], snapshot: BoardSnapshot | undefined, now: Date = new Date()): readonly PipelineRow[] {
+  const needsYou = snapshot !== undefined ? needsYouItems(snapshot, now) : []
   const needsYouNumbers = new Map<RepoId, Set<number>>()
   for (const item of needsYou) {
     if (item.repoId === null || item.number === null) continue

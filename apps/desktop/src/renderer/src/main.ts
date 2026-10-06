@@ -31,8 +31,6 @@ import { changeSearchScope, openSearch, registerSearchRedraw, renderSearch, sear
 import { render as renderBoard, type BoardViewState } from './board/view'
 import { handleItemActionClick, pruneItemActionStates } from './board/actions'
 import { handleDispatchClick } from './board/dispatch'
-import { handleRelayCopy, pruneRelayStates, relayKeyOf, setRelayAnswer, toggleRelayExpanded } from './board/relay'
-import type { RelayPending } from '../../shared/relay/types'
 import { initClaim, openClaimDialog } from './claim/controller'
 import { initDecision, openDecisionDialog } from './decision/controller'
 import { initGate, openGateDialog, openReviewDialog } from './gate/controller'
@@ -222,41 +220,7 @@ async function handleInspectWorktrees(id: RepoId): Promise<void> {
 
 function applySnapshot(snapshot: BoardSnapshot): void {
   pruneItemActionStates(snapshot)
-  pruneRelayStates(snapshot.relay)
   boardState = { ...boardState, status: 'ready', snapshot, refreshing: false }
-  drawBoard()
-}
-
-// Resolves the dataset key's own RelayPending from the live snapshot.
-function findRelayPending(key: string): RelayPending | null {
-  const relay = boardState.snapshot?.relay
-  if (relay === undefined || !relay.ok) return null
-  return relay.pending.find((p) => relayKeyOf(p) === key) ?? null
-}
-
-function handleRelayToggleClick(target: HTMLElement): void {
-  const key = target.dataset.key
-  if (key === undefined) return
-  const pending = findRelayPending(key)
-  if (pending === null) return
-  toggleRelayExpanded(pending)
-  drawBoard()
-}
-
-function handleRelayCopyClick(target: HTMLElement): void {
-  const key = target.dataset.key
-  if (key === undefined) return
-  const pending = findRelayPending(key)
-  if (pending === null) return
-  void handleRelayCopy(pending, drawBoard)
-}
-
-function handleRelayAnswerInput(target: HTMLTextAreaElement): void {
-  const { key, index } = target.dataset
-  if (key === undefined || index === undefined) return
-  const pending = findRelayPending(key)
-  if (pending === null) return
-  setRelayAnswer(pending, Number(index), target.value)
   drawBoard()
 }
 
@@ -416,8 +380,6 @@ app?.addEventListener('click', (event) => {
   else if (action === 'claim-open') openClaimDialog()
   else if (action === 'gate-open') openGateDialog()
   else if (action === 'gate-review') handleGateReviewClick(target)
-  else if (action === 'relay-toggle') handleRelayToggleClick(target)
-  else if (action === 'relay-copy') handleRelayCopyClick(target)
   else if (action?.startsWith('item-')) handleItemActionClick(target, drawBoard)
   else if (action?.startsWith('decide-')) openDecisionDialog(target)
   else if (action?.startsWith('dispatch-')) handleDispatchClick(target, boardState.snapshot, drawBoard)
@@ -430,11 +392,6 @@ app?.addEventListener('click', (event) => {
 app?.addEventListener('change', (event) => {
   const target = event.target
   if (target instanceof HTMLSelectElement && target.dataset.field === 'search-scope') handleSearchScopeChange(target.value)
-})
-
-app?.addEventListener('input', (event) => {
-  const target = event.target
-  if (target instanceof HTMLTextAreaElement && target.classList.contains('relay-banner__answer')) handleRelayAnswerInput(target)
 })
 
 app?.addEventListener('submit', (event) => {
@@ -471,7 +428,7 @@ installKeyboardMap({
   },
   currentListNavigator: () => {
     const view = currentView()
-    const screen = view.screen === 'board' ? 'board' : view.screen === 'backlog' ? 'backlog' : null
+    const screen = view.screen === 'board' ? 'board' : view.screen === 'backlog' ? 'backlog' : view.screen === 'needsYou' ? 'needsYou' : null
     return screen !== null ? listNavigatorFor(screen) : undefined
   },
   noReadyRepoToast: () => toast('Register a repository to start a session.'),

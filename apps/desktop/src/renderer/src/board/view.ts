@@ -11,7 +11,7 @@ import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
 import { actionsFingerprint } from './actions'
 import { notReadyCopy, planGateHeaderButtonLabel, rateLimitCopy, sourceHealthCopy } from './copy'
 import { buildHaltReport, currentHaltReport, haltButtonLabel, haltPending, isHaltConfirmArmed } from './dispatch'
-import { buildRelayBanner, relayFingerprint, relayLineCopy } from './relay'
+import { relayLineCopy } from './relay'
 import { buildRow } from './rows'
 import { buildTickStrip } from './tick'
 
@@ -197,7 +197,7 @@ function buildNotReadySection(states: readonly Extract<RepositoryState, { readon
  *  until GitHub is re-read, so an action's `pending`/`result` transition
  *  would never repaint without this second half. */
 function signatureOf(projection: ReturnType<typeof projectBoard>): string {
-  return `${projection.signature}|${actionsFingerprint()}|${relayFingerprint()}`
+  return `${projection.signature}|${actionsFingerprint()}`
 }
 
 function buildList(state: BoardViewState): HTMLElement {
@@ -214,13 +214,6 @@ function buildList(state: BoardViewState): HTMLElement {
 
   const notReadySection = buildNotReadySection(projection.notReady)
   if (notReadySection !== null) list.appendChild(notReadySection)
-
-  // Above the group sections and above the ungated section (#107) — the
-  // longest-stalled pending relay leads, since `projection.relays` is
-  // already sorted oldest-waiting first.
-  const repoNameByRepoId = new Map(projection.repositorySummaries.map((summary) => [summary.repoId, summary.displayName]))
-  const relayBanner = buildRelayBanner(projection.relays, (repoId) => (repoId !== null ? (repoNameByRepoId.get(repoId) ?? repoId) : 'unknown repo'), state.now)
-  if (relayBanner !== null) list.appendChild(relayBanner)
 
   const ungatedSection = buildUngatedSection(projection.ungated.map(buildRow))
   if (ungatedSection !== null) list.appendChild(ungatedSection)

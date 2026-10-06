@@ -11,11 +11,11 @@ const ROW_CLASS =
 
 export function SidebarScreens() {
   const snapshot = useIpcQuery('board:snapshot')
-  const count = snapshot.data !== undefined ? needsYouItems(snapshot.data).length : 0
+  const count = snapshot.data !== undefined ? needsYouItems(snapshot.data, new Date()).length : 0
 
   return (
     <div className="flex flex-col gap-0.5 px-2 py-1">
-      <Link to={ROUTE_IDS.board} className={ROW_CLASS}>
+      <Link to={ROUTE_IDS.needsYou} className={ROW_CLASS} activeProps={{ className: 'active' }}>
         <Inbox className="size-4 shrink-0" />
         <span className="flex-1 truncate">Needs you</span>
         {count > 0 ? (

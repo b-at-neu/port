@@ -27,7 +27,7 @@ export function CommandPalette() {
   const [, setThemePreference] = useThemePreference()
   const runState = useRunStateCommand()
 
-  const needsYouCount = snapshot.data !== undefined ? needsYouItems(snapshot.data).length : 0
+  const needsYouCount = snapshot.data !== undefined ? needsYouItems(snapshot.data, new Date()).length : 0
   const readyRepos = repos.data?.ok === true ? repos.data.repositories.filter(isReady) : []
   const live = (sessions.data ?? []).filter((s) => s.phase !== 'ended')
 
