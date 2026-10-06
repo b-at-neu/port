@@ -4,10 +4,23 @@
 // directly: `board/actions.ts` now only holds that state, never presentation.
 import { OPERATOR_DECISIONS } from '../../../shared/actions/types'
 import type { ActionAvailability, OperatorAction, OperatorDecision } from '../../../shared/actions/types'
+import { needsYouReasonOf } from '../../../shared/board/needs-you'
 import type { BoardItemRow } from '../../../shared/board/types'
 import type { AttachedAgent, AttachedSession } from '../../../shared/state/types'
+import type { PillStatus } from '../components/status-pill'
 import type { ItemActionState } from './actions'
 import { actionRefusalNote, actionResultCopy, answerQuestionButtonLabel, decisionButtonLabel, decisionRefusalNote, openPrButtonLabel, reviewPlanButtonLabel } from './copy'
+
+/** `TicketRow`'s own phase-pill colour (plan's own **UX states**: "attention
+ *  when waiting on you, working in progress, danger stalled, idle queued") —
+ *  first hit wins, the same order `board/sections.ts`'s own `sectionOf`
+ *  uses, so a row's section and its pill colour can never disagree. */
+export function pillStatusFor(row: BoardItemRow): PillStatus {
+  if (needsYouReasonOf(row.stageLabel?.key) !== undefined || row.relay !== null) return 'attention'
+  if (row.displayStatus.status === 'stalled') return 'danger'
+  if (row.displayStatus.status === 'in-flight') return 'working'
+  return 'idle'
+}
 
 /** First hit wins: the agent that is still active, else the first attached
  *  (dormant) one, else the attached `/port:implement` session — the same

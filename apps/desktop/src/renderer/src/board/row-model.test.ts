@@ -4,7 +4,7 @@ import type { ActionAvailability, DecisionAvailability, OperatorAction, Operator
 import type { BoardItemRow } from '../../../shared/board/types'
 import type { AttachedAgent, AttachedSession, ReconciledItem, StageLabel } from '../../../shared/state/types'
 import type { RepoId } from '../../../shared/repos'
-import { agentSummaryOf, decisionNoteFor, nextActionFor, ownershipNoteFor, stopAttachedAgentNote } from './row-model'
+import { agentSummaryOf, decisionNoteFor, nextActionFor, ownershipNoteFor, pillStatusFor, stopAttachedAgentNote } from './row-model'
 
 const NO_ACTIONS = Object.fromEntries(OPERATOR_ACTIONS.map((a): [OperatorAction, ActionAvailability] => [a, { available: false, reason: 'not-applicable' }])) as Record<OperatorAction, ActionAvailability>
 const NO_DECISIONS = Object.fromEntries(OPERATOR_DECISIONS.map((d): [OperatorDecision, DecisionAvailability] => [d, { available: false, reason: 'not-applicable' }])) as Record<OperatorDecision, DecisionAvailability>
@@ -12,6 +12,7 @@ const NO_DECISIONS = Object.fromEntries(OPERATOR_DECISIONS.map((d): [OperatorDec
 function row(overrides: {
   readonly kind?: 'issue' | 'pull-request'
   readonly stageKey?: string | null
+  readonly status?: 'waiting' | 'in-flight' | 'stalled' | 'gated' | 'terminal' | 'unstaged'
   readonly relay?: BoardItemRow['relay']
   readonly actions?: Partial<Record<OperatorAction, ActionAvailability>>
   readonly decisions?: Partial<Record<OperatorDecision, DecisionAvailability>>
@@ -55,7 +56,7 @@ function row(overrides: {
   } as unknown as ReconciledItem
   return {
     item,
-    displayStatus: { status: 'waiting', staleGithub: false, githubAgeMs: null },
+    displayStatus: { status: overrides.status ?? 'waiting', staleGithub: false, githubAgeMs: null },
     stageLabel,
     actions: { ...NO_ACTIONS, ...overrides.actions },
     decisions: { ...NO_DECISIONS, ...overrides.decisions },
@@ -113,6 +114,29 @@ describe('stopAttachedAgentNote', () => {
 
   it('null when nothing is attached', () => {
     expect(stopAttachedAgentNote(row({}))).toBeNull()
+  })
+})
+
+describe('pillStatusFor', () => {
+  it('attention when waiting on you (a needs-you stage)', () => {
+    expect(pillStatusFor(row({ stageKey: 'planReview' }))).toBe('attention')
+  })
+
+  it('attention when a relay is pending, even if otherwise in-flight', () => {
+    const relay = { repoId: 'repo-a' as RepoId, number: 41 } as unknown as BoardItemRow['relay']
+    expect(pillStatusFor(row({ stageKey: 'inProgress', status: 'in-flight', relay }))).toBe('attention')
+  })
+
+  it('working when in-flight', () => {
+    expect(pillStatusFor(row({ stageKey: 'inProgress', status: 'in-flight' }))).toBe('working')
+  })
+
+  it('danger when stalled', () => {
+    expect(pillStatusFor(row({ stageKey: 'inProgress', status: 'stalled' }))).toBe('danger')
+  })
+
+  it('idle for everything else (queued)', () => {
+    expect(pillStatusFor(row({ stageKey: 'ready', status: 'waiting' }))).toBe('idle')
   })
 })
 
