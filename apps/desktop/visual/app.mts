@@ -34,8 +34,8 @@ export interface FixtureApp {
 }
 
 /** Fails fast with the actual remedy rather than a Playwright launch error
- *  an agent would have to decode. */
-export async function launchFixtureApp(): Promise<FixtureApp> {
+ *  an agent would have to decode. `scenario` defaults to `populated`. */
+export async function launchFixtureApp(scenario: 'populated' | 'empty' = 'populated'): Promise<FixtureApp> {
   if (!existsSync(MAIN_ENTRY)) {
     throw new Error('Built app not found. Run `pnpm screenshots`, which builds first.')
   }
@@ -51,6 +51,7 @@ export async function launchFixtureApp(): Promise<FixtureApp> {
   }
   env[FIXTURE_ENV.flag] = '1'
   env[FIXTURE_ENV.userData] = userDataDir
+  if (scenario !== 'populated') env[FIXTURE_ENV.scenario] = scenario
   delete env['ELECTRON_RENDERER_URL']
   delete env['ELECTRON_RUN_AS_NODE']
 

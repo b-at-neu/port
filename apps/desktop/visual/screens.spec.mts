@@ -11,7 +11,7 @@ import type { ConsoleMessage } from 'playwright-core'
 // rules — see `app.mts`'s own note on this.
 import { launchFixtureApp, settle, setTheme } from './app.mjs'
 import type { FixtureApp } from './app.mjs'
-import { SCREENSHOT_DIR, SCREENSHOT_TARGETS, THEMES } from './targets.mjs'
+import { SCREENSHOT_DIR, SCREENSHOT_TARGETS, THEMES, VARIANT_TARGETS } from './targets.mjs'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -74,4 +74,54 @@ for (const [key, target] of Object.entries(SCREENSHOT_TARGETS)) {
       await fixture.page.screenshot({ path: join(SCREENSHOT_DIR, `${key}-${theme}.png`), animations: 'disabled', caret: 'hide' })
     })
   }
+}
+
+// Scenario-variant captures — one Electron launch per distinct scenario, so
+// each screenshot shows that variant's own fixture data, not the defaults.
+const VARIANT_SCENARIOS = [...new Set(VARIANT_TARGETS.map((variant) => variant.scenario))]
+
+for (const scenario of VARIANT_SCENARIOS) {
+  test.describe(`scenario variants · ${scenario}`, () => {
+    test.describe.configure({ mode: 'serial' })
+
+    let variantFixture: FixtureApp
+    let variantPageErrors: string[] = []
+
+    test.beforeAll(async () => {
+      variantFixture = await launchFixtureApp(scenario)
+      variantFixture.page.on('pageerror', (error: Error) => variantPageErrors.push(error.message))
+      variantFixture.page.on('console', (message: ConsoleMessage) => {
+        if (message.type() === 'error') variantPageErrors.push(message.text())
+      })
+    })
+
+    test.afterAll(async () => {
+      await variantFixture.close()
+    })
+
+    test.beforeEach(() => {
+      variantPageErrors = []
+    })
+
+    test.afterEach(async ({}, testInfo) => {
+      if (testInfo.status !== 'passed' && testInfo.status !== 'skipped') {
+        await variantFixture.page.screenshot({ path: testInfo.outputPath('failure.png') }).catch(() => undefined)
+      }
+    })
+
+    for (const variant of VARIANT_TARGETS.filter((v) => v.scenario === scenario)) {
+      for (const theme of THEMES) {
+        test(`${variant.name} · ${theme}`, async () => {
+          await setTheme(variantFixture.page, theme)
+          await settle(variantFixture.page, variant.target)
+
+          if (variantPageErrors.length > 0) {
+            throw new Error(`'${variant.name} · ${theme}' hit a page or console error: ${variantPageErrors.join('; ')}`)
+          }
+
+          await variantFixture.page.screenshot({ path: join(SCREENSHOT_DIR, `${variant.name}-${theme}.png`), animations: 'disabled', caret: 'hide' })
+        })
+      }
+    }
+  })
 }

@@ -20,6 +20,7 @@ import { reconcileRepository } from '../state/reconcile'
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '../tick/ledger'
 import { planTick } from '../tick/plan'
 import { FIXTURE_REPOSITORIES, LEGACY_SITE_ID, WIDGETS_ID, WIDGETS_VOCABULARY_REPORT } from './repos'
+import type { FixtureScenario } from './mode'
 
 const VIEWER = 'octo-dev'
 
@@ -58,7 +59,7 @@ interface ItemSeed {
  *  by, so the screenshot shows every group non-empty. #315: #50 →
  *  `needsHuman` and #51 → `blocked` seed the Needs you screen's own two
  *  label-kinds the board itself does not otherwise exercise. */
-const ITEM_SEEDS: readonly ItemSeed[] = [
+const POPULATED_ITEM_SEEDS: readonly ItemSeed[] = [
   { kind: 'issue', number: 41, title: 'Add CSV export to the reports page', stageKey: 'planReview' },
   { kind: 'issue', number: 38, title: 'Retry failed webhook deliveries', stageKey: 'inProgress' },
   { kind: 'issue', number: 44, title: 'Show the build number in the footer', stageKey: 'ready' },
@@ -68,8 +69,20 @@ const ITEM_SEEDS: readonly ItemSeed[] = [
   { kind: 'issue', number: 51, title: 'Backfill order totals for Q3', stageKey: 'blocked' },
 ]
 
-function pipelineItemsFor(vocabulary: LabelVocabulary): readonly PipelineItem[] {
-  return ITEM_SEEDS.map((seed) => {
+// The empty scenario keeps only the routine, non-"needs you" seeds, so the
+// Needs you screen renders its empty state while the Board stays non-empty.
+const EMPTY_ITEM_SEEDS: readonly ItemSeed[] = [
+  { kind: 'issue', number: 38, title: 'Retry failed webhook deliveries', stageKey: 'inProgress' },
+  { kind: 'issue', number: 44, title: 'Show the build number in the footer', stageKey: 'ready' },
+  { kind: 'pull-request', number: 35, title: 'Cache avatar thumbnails', stageKey: 'needsRevision' },
+]
+
+function itemSeedsFor(scenario: FixtureScenario): readonly ItemSeed[] {
+  return scenario === 'empty' ? EMPTY_ITEM_SEEDS : POPULATED_ITEM_SEEDS
+}
+
+function pipelineItemsFor(vocabulary: LabelVocabulary, seeds: readonly ItemSeed[]): readonly PipelineItem[] {
+  return seeds.map((seed) => {
     const matchedKeys: readonly LabelKey[] = ['marker', seed.stageKey]
     const labels = matchedKeys.map((key) => labelName(vocabulary, key)).filter((name): name is string => name !== undefined)
     const isPr = seed.kind === 'pull-request'
@@ -98,10 +111,10 @@ function queriedLabelsFor(vocabulary: LabelVocabulary): readonly QueriedLabel[] 
   return vocabulary.labels.map((label, index) => ({ key: label.key, name: label.name, source: label.source, issueAlias: `i${String(index)}`, prAlias: `p${String(index)}` }))
 }
 
-function readyRepositoryState(now: Date): RepositoryState {
+function readyRepositoryState(now: Date, scenario: FixtureScenario): RepositoryState {
   const entry = widgetsEntry()
   const vocabulary = entry.config.vocabulary
-  const items = pipelineItemsFor(vocabulary)
+  const items = pipelineItemsFor(vocabulary, itemSeedsFor(scenario))
 
   const pipelineFetch: PipelineFetch = {
     ok: true,
@@ -177,8 +190,8 @@ function pendingQuestion(now: Date): RelayPending {
  *  — no dispatcher is wired in fixture mode otherwise (PIPELINE.md's own "no
  *  gh or claude calls" rule applies here too: nothing in this module spawns
  *  anything). */
-export function fixtureBoardSnapshot(now: Date): BoardSnapshot {
-  const ready = readyRepositoryState(now)
+export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'populated'): BoardSnapshot {
+  const ready = readyRepositoryState(now, scenario)
   const notReady = notReadyRepositoryState()
   const readyEntry = widgetsEntry()
 
@@ -199,7 +212,7 @@ export function fixtureBoardSnapshot(now: Date): BoardSnapshot {
     health: [repositoryHealth(now)],
     policy: DEFAULT_POLL_POLICY,
     tick,
-    relay: { ok: true, pending: [pendingQuestion(now)], checked: 1, unreached: 0, scannedAt: now.toISOString() },
+    relay: { ok: true, pending: scenario === 'empty' ? [] : [pendingQuestion(now)], checked: 1, unreached: 0, scannedAt: now.toISOString() },
     // #314: acme/widgets reads `dispatching` — the ordinary, nothing-paused
     // state a fresh registration starts in.
     runStates: { store: { kind: 'loaded' }, repositories: [{ repoId: WIDGETS_ID, state: 'dispatching', since: now.toISOString() }] },
@@ -212,7 +225,11 @@ export function fixtureBoardSnapshot(now: Date): BoardSnapshot {
         state: { kind: 'idle' },
         runState: 'dispatching',
         claimedAt: now.toISOString(),
-        budget: { line: null, problem: null, notes: [{ kind: 'escalated', number: 44, needsHumanLabel: LABEL_DEFAULTS.find((def) => def.key === 'needsHuman')?.name ?? 'needsHuman', commentFailedMessage: null }] },
+        budget: {
+          line: null,
+          problem: null,
+          notes: scenario === 'empty' ? [] : [{ kind: 'escalated', number: 44, needsHumanLabel: LABEL_DEFAULTS.find((def) => def.key === 'needsHuman')?.name ?? 'needsHuman', commentFailedMessage: null }],
+        },
         observed: [],
       },
     ],

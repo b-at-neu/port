@@ -16,6 +16,7 @@ import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
 import { fixtureBoardSnapshot } from './board'
 import { fixtureBacklog } from './backlog'
 import { FIXTURE_REPOSITORIES } from './repos'
+import type { FixtureScenario } from './mode'
 
 /** Exhaustive by construction: a new `IpcChannel` fails `pnpm typecheck` in
  *  `fixtureHandlers`'s own return literal until a fixture exists for it. */
@@ -31,15 +32,15 @@ function idleDispatchStatus(repoId: RepoId): RepoDispatchStatus {
   return { repoId, owner: 'cockpit', state: { kind: 'idle' }, runState: 'dispatching', claimedAt: null, budget: null, observed: [] }
 }
 
-export function fixtureHandlers(now: Date): FixtureHandlers {
+export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populated'): FixtureHandlers {
   return {
     // --- Screen reads, populated -------------------------------------------
     'app:info': () => ({ app: '0.1.0', electron: '38.2.1', node: '22.14.0', chromium: '140.0.0.0' }),
 
     'repos:list': () => ({ ok: true, repositories: FIXTURE_REPOSITORIES }),
 
-    'board:snapshot': () => fixtureBoardSnapshot(now),
-    'board:refresh': () => fixtureBoardSnapshot(now),
+    'board:snapshot': () => fixtureBoardSnapshot(now, scenario),
+    'board:refresh': () => fixtureBoardSnapshot(now, scenario),
 
     'runtime:preflight': () => ({
       checkedAt: now.toISOString(),
