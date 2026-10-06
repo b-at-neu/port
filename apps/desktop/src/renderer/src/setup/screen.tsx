@@ -1,8 +1,5 @@
-// The Set up port checklist (#337) — reached on launch whenever setup is
-// incomplete (`main.ts`'s `boot()`), and from Settings' "Set up port" link
-// otherwise. Three steps, each reusing `setupModel`'s own display state; no
-// `useEffect`, the same as every other React screen here. Checks never
-// re-run on their own (DESIGN §4) — every re-check is a button.
+// The Set up port checklist — three steps, each reusing `setupModel`'s own
+// display state. Checks never re-run on their own; every re-check is a button.
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'

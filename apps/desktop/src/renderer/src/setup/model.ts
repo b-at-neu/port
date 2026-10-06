@@ -1,10 +1,5 @@
 // The Set up port checklist's own `(preflight, probe, gh, repos) → display
-// model` — `screen.tsx` only ever renders what this function returns, and
-// the launch redirect (`main.ts`'s `boot()`) reuses `complete` directly, so
-// the two can never disagree about what "setup is done" means. Reuses
-// `RUNTIME_COPY`, `PILL_LABEL` and `RUNTIME_API_KEY_NOTE` from
-// `settings/runtime-model.ts`/`shared/runtime/copy.ts` rather than a second
-// copy of either.
+// model` — the launch redirect reuses `complete` directly, so the two can never disagree.
 import type { RuntimePreflight, RuntimeProbe } from '../../../shared/runtime/types'
 import { RUNTIME_API_KEY_NOTE, RUNTIME_COPY } from '../../../shared/runtime/copy'
 import { PILL_LABEL } from '../settings/runtime-model'
@@ -13,9 +8,7 @@ import type { ReposListResponse } from '../../../shared/ipc'
 import type { RepositoryEntry } from '../../../shared/repos'
 import type { PillStatus } from '../components/status-pill'
 
-/** One query's own loading/error/data split — the same three states
- *  `useIpcQuery` reports, kept loose here so `model.test.ts` can build one
- *  without a real `QueryObserverResult`. */
+/** One query's own loading/error/data split, kept loose for easy testing. */
 export interface QueryState<T> {
   readonly status: 'pending' | 'error' | 'success'
   readonly data?: T
@@ -164,9 +157,7 @@ function repoStep(repos: QueryState<ReposListResponse>): SetupStep {
   return { state: 'done', pillStatus: 'success', pillLabel: 'Done', title: 'Done', body: repoSummary(repos.data.repositories), detail: null, action: null }
 }
 
-/** `complete` is every step at `done` — a query in `error` is never `done`
- *  (ENGINEERING §4: "an absent signal is never read as a passing one"), so an
- *  unreachable main process never silently reads as "ready to launch". */
+/** `complete` is every step at `done` — a query in `error` is never `done`. */
 export function setupModel(preflight: QueryState<RuntimePreflight>, probe: RuntimeProbe | null, gh: QueryState<GhStatus>, repos: QueryState<ReposListResponse>): SetupModel {
   const claude = claudeStep(preflight, probe)
   const ghResult = ghStep(gh)

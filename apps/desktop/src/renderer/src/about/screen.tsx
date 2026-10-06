@@ -1,5 +1,4 @@
-// The About screen (#337) — static notice copy plus the live `app:info`
-// version line. No `useEffect`: `useIpcQuery` is the only data source.
+// The About screen — static notice copy plus the live `app:info` version line.
 import { useNavigate } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
