@@ -3,7 +3,7 @@
 import type { DecisionRefusal } from '../../../shared/actions/types'
 import type { NeedsYouItem } from '../../../shared/board/needs-you'
 import { openReviewDialog } from '../gate/controller'
-import { openDecisionDialogFor } from '../decision/controller'
+import { openDecision } from '../decision/controller'
 
 export type NeedsYouActionKind = 'review-plan' | 'answer' | 'open' | 'unblock' | 'retry' | 'refresh'
 
@@ -85,7 +85,7 @@ export function runAction(item: NeedsYouItem, deps: RunActionDeps): void {
       if (item.matchedRow === null || item.repoId === null || item.number === null) return
       const decision = item.matchedRow.decisions.unblock
       if (!decision.available) return
-      openDecisionDialogFor({ repoId: item.repoId, number: item.number, decision: 'unblock', expectedStage: item.matchedRow.stageLabel?.key ?? null, context: decision.context })
+      openDecision({ repoId: item.repoId, number: item.number, decision: 'unblock', expectedStage: item.matchedRow.stageLabel?.key ?? null, context: decision.context })
       return
     }
     case 'open':

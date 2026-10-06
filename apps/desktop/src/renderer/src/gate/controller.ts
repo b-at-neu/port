@@ -1,12 +1,12 @@
-// The plan gate dialog's state machine and its own event wiring (#92) — the
-// dialog owns its `data-action="gate-*"` handling directly, rather than
-// routing through `main.ts`'s delegated board/repositories handler, so the
-// entry point there stays exactly two branches (the header button and a
-// row's own "Review plan" button).
+// The plan gate dialog's state machine (#92, #319) — a `useSyncExternalStore`
+// store now, with `gate/dialog.tsx` (a shadcn `Dialog`, its steps split into
+// `gate/dialog-steps.tsx`) as its one renderer in place of the deleted
+// `view.ts`'s native `<dialog>`. Every write goes through `data/invoke.ts`'s
+// `invoke`, never `window.port` directly.
+import { invoke } from '../data/invoke'
 import type { RepoId, RepositoryEntry } from '../../../shared/repos'
 import type { GateAnswerResponse, GateDecision, GatePreflight, GateVerdict } from '../../../shared/gate/types'
 import type { ClaimRead } from '../../../shared/writes/types'
-import { buildGateDialog, renderGateDialog } from './view'
 
 export interface ReadyRepo {
   readonly id: RepoId
@@ -39,22 +39,28 @@ export type GateState =
     }
 
 let state: GateState = { step: 'closed' }
-let dialog: HTMLDialogElement | null = null
+const listeners = new Set<() => void>()
 
-function draw(): void {
-  if (dialog) renderGateDialog(dialog, state)
+function notify(): void {
+  for (const listener of listeners) listener()
+}
+
+/** `useSyncExternalStore`'s own subscribe half. */
+export function subscribe(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
 }
 
 function setState(next: GateState): void {
   state = next
-  draw()
+  notify()
 }
 
 /** The same indirection `claim/controller.ts`'s own `getState` documents —
  *  a `let` read directly after an `await` still carries the narrowing from a
  *  guard earlier in the same function, even though `setState` may have
  *  reassigned it in between. */
-function getState(): GateState {
+export function getState(): GateState {
   return state
 }
 
@@ -63,7 +69,7 @@ function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { st
 }
 
 async function loadRepos(): Promise<readonly ReadyRepo[]> {
-  const result = await window.port.reposList()
+  const result = await invoke('repos:list')
   if (!result.ok) return []
   return result.repositories.filter(isReady).map((entry) => ({ id: entry.id, repo: entry.config.repo }))
 }
@@ -71,7 +77,7 @@ async function loadRepos(): Promise<readonly ReadyRepo[]> {
 async function loadClaim(repoId: RepoId): Promise<void> {
   setState({ step: 'claim-loading', repoId })
   try {
-    const claim = await window.port.gateClaimRead({ repoId })
+    const claim = await invoke('gate:claim:read', { repoId })
     if (getState().step !== 'claim-loading') return
     setState({ step: 'claim-view', repoId, claim })
   } catch (error) {
@@ -93,34 +99,36 @@ export function openGateDialog(): void {
   })
 }
 
-function pickRepo(repoId: RepoId): void {
+export function pickRepo(repoId: RepoId): void {
   if (state.step !== 'claim-picking') return
   setState({ ...state, repoId })
   void loadClaim(repoId)
 }
 
-async function setClaim(held: boolean): Promise<void> {
+export function setClaim(held: boolean): void {
   const repoId = state.step === 'claim-view' ? state.repoId : state.step === 'reviewing' ? state.repoId : null
   if (repoId === null) return
   const from = state
-  setState({ step: 'claim-acting', repoId })
-  try {
-    const response = await window.port.gateClaimSet({ repoId, held })
-    if (getState().step !== 'claim-acting') return
-    if (response.kind === 'failed') {
-      const message = response.result.ok ? 'unknown failure' : response.result.message
-      setState({ step: 'claim-failed', repoId, message })
-      return
+  void (async () => {
+    setState({ step: 'claim-acting', repoId })
+    try {
+      const response = await invoke('gate:claim:set', { repoId, held })
+      if (getState().step !== 'claim-acting') return
+      if (response.kind === 'failed') {
+        const message = response.result.ok ? 'unknown failure' : response.result.message
+        setState({ step: 'claim-failed', repoId, message })
+        return
+      }
+      if (from.step === 'reviewing') {
+        setState({ step: 'reviewing', repoId, preflight: from.preflight, verdict: from.verdict, claim: response.claim })
+      } else {
+        setState({ step: 'claim-view', repoId, claim: response.claim })
+      }
+    } catch (error) {
+      console.error('Failed to reach the main process while changing the plan-gate claim', error)
+      setState({ step: 'claim-failed', repoId, message: 'Failed to reach the main process.' })
     }
-    if (from.step === 'reviewing') {
-      setState({ step: 'reviewing', repoId, preflight: from.preflight, verdict: from.verdict, claim: response.claim })
-    } else {
-      setState({ step: 'claim-view', repoId, claim: response.claim })
-    }
-  } catch (error) {
-    console.error('Failed to reach the main process while changing the plan-gate claim', error)
-    setState({ step: 'claim-failed', repoId, message: 'Failed to reach the main process.' })
-  }
+  })()
 }
 
 /** A `plan review` row's own **Review plan** button — straight to the
@@ -132,7 +140,7 @@ export function openReviewDialog(repoId: RepoId, number: number): void {
 
 async function loadPreflight(repoId: RepoId, number: number): Promise<void> {
   try {
-    const response = await window.port.gatePreflight({ repoId, number })
+    const response = await invoke('gate:preflight', { repoId, number })
     if (getState().step !== 'loading') return
     if (response.kind === 'failed') {
       setState({ step: 'preflight-failed', repoId, number, message: response.message })
@@ -156,31 +164,36 @@ async function loadPreflight(repoId: RepoId, number: number): Promise<void> {
 /** Re-fetches in place — the retry affordance both a `precondition-failed`
  *  label outcome and a `refused` verdict offer ("Show me the current
  *  state"). */
-function retryPreflight(): void {
+export function retryPreflight(): void {
   const target = state.step === 'result' ? { repoId: state.repoId, number: state.preflight.number } : state.step === 'refused' ? { repoId: state.repoId, number: state.number } : null
   if (target === null) return
   setState({ step: 'loading', repoId: target.repoId, number: target.number })
   void loadPreflight(target.repoId, target.number)
 }
 
-function openFeedback(): void {
+export function openFeedback(): void {
   if (state.step !== 'reviewing') return
   setState({ step: 'feedback', repoId: state.repoId, preflight: state.preflight, verdict: state.verdict, claim: state.claim, text: '' })
 }
 
-function backToReview(): void {
+export function backToReview(): void {
   if (state.step !== 'feedback') return
   setState({ step: 'reviewing', repoId: state.repoId, preflight: state.preflight, verdict: state.verdict, claim: state.claim })
+}
+
+export function setFeedbackText(text: string): void {
+  if (state.step !== 'feedback') return
+  setState({ ...state, text })
 }
 
 async function runAnswer(repoId: RepoId, preflight: GatePreflight, decision: GateDecision, feedback: string | null, skipComment: boolean): Promise<void> {
   setState({ step: 'answering', repoId, number: preflight.number })
   try {
-    const response = await window.port.gateAnswer({ repoId, number: preflight.number, decision, feedback, skipComment })
+    const response = await invoke('gate:answer', { repoId, number: preflight.number, decision, feedback, skipComment })
     if (getState().step !== 'answering') return
     setState({ step: 'result', repoId, preflight, decision, feedback, response })
     if (response.kind === 'answered' && response.labels.kind === 'applied') {
-      void window.port.boardRefresh({ repoId, source: 'github' })
+      void invoke('board:refresh', { repoId, source: 'github' })
     }
   } catch (error) {
     console.error('Failed to reach the main process while answering the plan gate', error)
@@ -188,31 +201,31 @@ async function runAnswer(repoId: RepoId, preflight: GatePreflight, decision: Gat
   }
 }
 
-function submitApprove(): void {
+export function submitApprove(): void {
   if (state.step !== 'reviewing') return
   void runAnswer(state.repoId, state.preflight, 'approve', null, false)
 }
 
-function submitFeedback(): void {
+export function submitFeedback(): void {
   if (state.step !== 'feedback' || state.text.trim() === '') return
   void runAnswer(state.repoId, state.preflight, 'request-changes', state.text, false)
 }
 
 /** The one retry affordance that suppresses the comment — a landed comment
  *  followed by an aborted label swap retries the swap alone. */
-function retryLabelOnly(): void {
+export function retryLabelOnly(): void {
   if (state.step !== 'result') return
   void runAnswer(state.repoId, state.preflight, state.decision, null, true)
 }
 
-function tryCommentAgain(): void {
+export function tryCommentAgain(): void {
   if (state.step !== 'result') return
   void runAnswer(state.repoId, state.preflight, state.decision, state.feedback, false)
 }
 
 /** The result step's own **take the plan gate** shortcut — routes to the
  *  claim step for the same repository, never a second dialog. */
-function goToClaimStep(): void {
+export function goToClaimStep(): void {
   if (state.step !== 'result') return
   const { repoId } = state
   setState({ step: 'claim-picking', repos: [], repoId })
@@ -223,58 +236,6 @@ function goToClaimStep(): void {
   })
 }
 
-function closeGateDialog(): void {
+export function closeGateDialog(): void {
   setState({ step: 'closed' })
-}
-
-function setField(target: HTMLElement): void {
-  const field = target.dataset.field
-  if (field === undefined) return
-  if (state.step === 'claim-picking' && field === 'repo' && target instanceof HTMLSelectElement) {
-    pickRepo(target.value as RepoId)
-    return
-  }
-  if (state.step === 'feedback' && field === 'feedback' && target instanceof HTMLTextAreaElement) {
-    setState({ ...state, text: target.value })
-  }
-}
-
-/** Appended once to `#app`, outside the board's own signature-guarded
- *  rebuild — a poll landing mid-decision cannot blow away a half-written
- *  change request. */
-export function initGate(container: HTMLElement): void {
-  dialog = buildGateDialog()
-  container.appendChild(dialog)
-  draw()
-
-  dialog.addEventListener('click', (event) => {
-    const target = event.target
-    if (!(target instanceof HTMLElement)) return
-    const action = target.dataset.action
-    if (action === 'gate-cancel') closeGateDialog()
-    else if (action === 'gate-claim-take') void setClaim(true)
-    else if (action === 'gate-claim-release') void setClaim(false)
-    else if (action === 'gate-claim-overwrite') void setClaim(true)
-    else if (action === 'gate-claim-delete') void setClaim(false)
-    else if (action === 'gate-approve') submitApprove()
-    else if (action === 'gate-request-changes') openFeedback()
-    else if (action === 'gate-feedback-back') backToReview()
-    else if (action === 'gate-feedback-submit') submitFeedback()
-    else if (action === 'gate-retry-label') retryLabelOnly()
-    else if (action === 'gate-try-again') tryCommentAgain()
-    else if (action === 'gate-retry-preflight') retryPreflight()
-    else if (action === 'gate-take-claim') goToClaimStep()
-  })
-
-  dialog.addEventListener('input', (event) => {
-    if (event.target instanceof HTMLElement) setField(event.target)
-  })
-  dialog.addEventListener('change', (event) => {
-    if (event.target instanceof HTMLElement) setField(event.target)
-  })
-
-  // A native <dialog>'s own Escape handling fires 'cancel', not 'click' —
-  // without this the state would still say 'reviewing' while the dialog
-  // itself is invisible.
-  dialog.addEventListener('cancel', () => closeGateDialog())
 }

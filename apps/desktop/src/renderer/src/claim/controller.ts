@@ -1,13 +1,12 @@
-// The claim dialog's state machine and its own event wiring (#93) — the
-// dialog owns its `data-action="claim-*"` handling directly, rather than
-// routing through `main.ts`'s delegated board/repositories handler, so the
-// entry point there stays exactly one branch (`action?.startsWith('claim-')`
-// opening it).
+// The claim dialog's state machine (#93, #319) — a `useSyncExternalStore`
+// store now, with `claim/dialog.tsx` (a shadcn `Dialog`) as its one renderer
+// in place of the deleted `view.ts`'s native `<dialog>`. Every write goes
+// through `data/invoke.ts`'s `invoke`, never `window.port` directly.
+import { invoke } from '../data/invoke'
 import { isReadyRepo } from '../../../shared/repos'
 import type { RepoId } from '../../../shared/repos'
 import type { ClaimPreflight, ClaimVerdict, PlanGateChoice } from '../../../shared/claim/types'
 import type { WriteOutcome } from '../../../shared/writes/types'
-import { buildClaimDialog, renderClaimDialog } from './view'
 
 export interface ReadyRepo {
   readonly id: RepoId
@@ -34,17 +33,23 @@ export type ClaimState =
   | { readonly step: 'write-result'; readonly repoId: RepoId; readonly repo: string; readonly number: number; readonly outcome: WriteOutcome }
 
 let state: ClaimState = { step: 'closed' }
-let dialog: HTMLDialogElement | null = null
+const listeners = new Set<() => void>()
 // Set only by `openClaimDialogFor`; fires once on an `applied`/`no-op` write, cleared whenever the dialog closes or reopens.
 let onClaimed: (() => void) | null = null
 
-function draw(): void {
-  if (dialog) renderClaimDialog(dialog, state)
+function notify(): void {
+  for (const listener of listeners) listener()
+}
+
+/** `useSyncExternalStore`'s own subscribe half. */
+export function subscribe(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
 }
 
 function setState(next: ClaimState): void {
   state = next
-  draw()
+  notify()
 }
 
 /** Reads `state` through an indirection `await`-narrowing can't see through
@@ -54,12 +59,12 @@ function setState(next: ClaimState): void {
  *  check below (`did the dialog move on to something else while this
  *  request was in flight?`) needs the *current* value, not the one TS
  *  narrowed against before the `await`. */
-function getState(): ClaimState {
+export function getState(): ClaimState {
   return state
 }
 
 async function loadRepos(): Promise<readonly ReadyRepo[]> {
-  const result = await window.port.reposList()
+  const result = await invoke('repos:list')
   if (!result.ok) return []
   return result.repositories.filter(isReadyRepo).map((entry) => ({ id: entry.id, repo: entry.config.repo }))
 }
@@ -74,7 +79,7 @@ export function openClaimDialog(): void {
   })
 }
 
-function closeClaimDialog(): void {
+export function closeClaimDialog(): void {
   onClaimed = null
   setState({ step: 'closed' })
 }
@@ -90,7 +95,7 @@ function parseNumber(raw: string): number | null {
 async function runPreflight(repoId: RepoId, repo: string, number: number, planGate: PlanGateChoice): Promise<void> {
   setState({ step: 'loading', repoId, repo, number })
   try {
-    const response = await window.port.claimPreflight({ repoId, number })
+    const response = await invoke('claim:preflight', { repoId, number })
     if (getState().step !== 'loading') return
     if (response.kind === 'failed') {
       setState({ step: 'preflight-failed', repoId, repo, number, message: response.message })
@@ -111,7 +116,22 @@ async function runPreflight(repoId: RepoId, repo: string, number: number, planGa
   }
 }
 
-async function submitPick(): Promise<void> {
+export function setClaimRepo(repoId: RepoId): void {
+  if (state.step !== 'picking') return
+  setState({ ...state, repoId, error: null })
+}
+
+export function setClaimNumber(number: string): void {
+  if (state.step !== 'picking') return
+  setState({ ...state, number, error: null })
+}
+
+export function setPlanGate(planGate: PlanGateChoice): void {
+  if (state.step !== 'reviewing') return
+  setState({ ...state, planGate })
+}
+
+export function submitPick(): void {
   if (state.step !== 'picking') return
   const { repoId, number } = state
   const parsed = parseNumber(number)
@@ -124,7 +144,7 @@ async function submitPick(): Promise<void> {
     return
   }
   const repo = state.repos.find((r) => r.id === repoId)?.repo ?? repoId
-  await runPreflight(repoId, repo, parsed, 'review')
+  void runPreflight(repoId, repo, parsed, 'review')
 }
 
 export interface OpenClaimDialogForParams {
@@ -142,7 +162,7 @@ export function openClaimDialogFor(params: OpenClaimDialogForParams): void {
   void runPreflight(params.repoId, params.repo, params.number, params.planGate)
 }
 
-function backToPick(): void {
+export function backToPick(): void {
   if (state.step !== 'reviewing') return
   setState({ step: 'picking', repos: [], repoId: state.repoId, number: String(state.preflight.number), error: null })
   void loadRepos().then((repos) => {
@@ -151,94 +171,51 @@ function backToPick(): void {
   })
 }
 
-async function confirmClaim(): Promise<void> {
+export function confirmClaim(): void {
   if (state.step !== 'reviewing') return
   const { repoId, repo, preflight, planGate } = state
-  setState({ step: 'applying', number: preflight.number })
-  try {
-    const response = await window.port.claimApply({ repoId, number: preflight.number, planGate, confirmedAssignees: preflight.assignees })
-    if (getState().step !== 'applying') return
-    if (response.kind === 'moved') {
-      setState({ step: 'moved', repoId, repo, number: preflight.number, current: response.current, readAt: response.readAt })
-      return
+  void (async () => {
+    setState({ step: 'applying', number: preflight.number })
+    try {
+      const response = await invoke('claim:apply', { repoId, number: preflight.number, planGate, confirmedAssignees: preflight.assignees })
+      if (getState().step !== 'applying') return
+      if (response.kind === 'moved') {
+        setState({ step: 'moved', repoId, repo, number: preflight.number, current: response.current, readAt: response.readAt })
+        return
+      }
+      if (response.kind === 'refused') {
+        setState({ step: 'refused-at-apply', repo, number: preflight.number, verdict: response.verdict })
+        return
+      }
+      if (response.kind === 'preflight-failed') {
+        setState({ step: 'preflight-failed', repoId, repo, number: preflight.number, message: response.message })
+        return
+      }
+      setState({ step: 'write-result', repoId, repo, number: preflight.number, outcome: response.outcome })
+      if (response.outcome.kind === 'applied' || response.outcome.kind === 'no-op') {
+        void invoke('board:refresh', { repoId, source: 'github' })
+        onClaimed?.()
+      }
+    } catch (error) {
+      console.error('Failed to reach the main process while applying a claim', error)
+      setState({ step: 'preflight-failed', repoId, repo, number: preflight.number, message: 'Failed to reach the main process.' })
     }
-    if (response.kind === 'refused') {
-      setState({ step: 'refused-at-apply', repo, number: preflight.number, verdict: response.verdict })
-      return
-    }
-    if (response.kind === 'preflight-failed') {
-      setState({ step: 'preflight-failed', repoId, repo, number: preflight.number, message: response.message })
-      return
-    }
-    setState({ step: 'write-result', repoId, repo, number: preflight.number, outcome: response.outcome })
-    if (response.outcome.kind === 'applied' || response.outcome.kind === 'no-op') {
-      void window.port.boardRefresh({ repoId, source: 'github' })
-      onClaimed?.()
-    }
-  } catch (error) {
-    console.error('Failed to reach the main process while applying a claim', error)
-    setState({ step: 'preflight-failed', repoId, repo, number: preflight.number, message: 'Failed to reach the main process.' })
-  }
+  })()
 }
 
 /** Re-runs the preflight in place, for both result shapes the plan groups
  *  under the same retry affordance: `moved` (the IPC-level race) and a
  *  `write-result` carrying `precondition-failed` (the write-level race). */
-function retryPreflight(): void {
+export function retryPreflight(): void {
   if (state.step === 'moved') {
     const { repoId, number } = state
     setState({ step: 'picking', repos: [], repoId, number: String(number), error: null })
-    void submitPick()
+    submitPick()
     return
   }
   if (state.step === 'write-result' && state.outcome.kind === 'precondition-failed') {
     const { repoId, number } = state
     setState({ step: 'picking', repos: [], repoId, number: String(number), error: null })
-    void submitPick()
+    submitPick()
   }
-}
-
-function setField(target: HTMLElement): void {
-  const field = target.dataset.field
-  if (field === undefined) return
-  if (state.step === 'picking') {
-    if (field === 'repo' && target instanceof HTMLSelectElement) setState({ ...state, repoId: target.value as RepoId, error: null })
-    else if (field === 'number' && target instanceof HTMLInputElement) setState({ ...state, number: target.value, error: null })
-    return
-  }
-  if (state.step === 'reviewing' && field === 'planGate' && target instanceof HTMLInputElement) {
-    setState({ ...state, planGate: target.value as PlanGateChoice })
-  }
-}
-
-/** Appended once to `#app`, outside the board's own signature-guarded
- *  rebuild — a poll landing mid-decision cannot blow away a half-filled
- *  form, since nothing here re-renders on a board tick. */
-export function initClaim(container: HTMLElement): void {
-  dialog = buildClaimDialog()
-  container.appendChild(dialog)
-  draw()
-
-  dialog.addEventListener('click', (event) => {
-    const target = event.target
-    if (!(target instanceof HTMLElement)) return
-    const action = target.dataset.action
-    if (action === 'claim-cancel') closeClaimDialog()
-    else if (action === 'claim-submit') void submitPick()
-    else if (action === 'claim-back') backToPick()
-    else if (action === 'claim-confirm') void confirmClaim()
-    else if (action === 'claim-retry-preflight') retryPreflight()
-  })
-
-  dialog.addEventListener('input', (event) => {
-    if (event.target instanceof HTMLElement) setField(event.target)
-  })
-  dialog.addEventListener('change', (event) => {
-    if (event.target instanceof HTMLElement) setField(event.target)
-  })
-
-  // A native <dialog>'s own Escape handling fires 'cancel', not 'click' —
-  // without this the state would still say 'reviewing' while the dialog
-  // itself is invisible.
-  dialog.addEventListener('cancel', () => closeClaimDialog())
 }
