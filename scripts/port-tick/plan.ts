@@ -3,7 +3,7 @@
 import { partitionOwnership, issueSessionRequiredReason, prSessionRequiredReason } from './classify.ts';
 import { parseFilesBlock, gateCandidates } from './contention.ts';
 import { rollupVerdict } from './checks.ts';
-import { mergeabilityRoute, refreshDecision, capRefreshes, zeroDiffGate, cycleCapExceeded, approvedReverify, refreshWins } from './gates.ts';
+import { mergeabilityRoute, refreshDecision, capRefreshes, zeroDiffGate, cycleCapExceeded, cycleGrantCount, approvedReverify, refreshWins } from './gates.ts';
 import { toReviewNode, toCheckContexts, assigneeLoginsOf } from './wire.ts';
 import { refreshSweepWrite, zeroDiffWrite, cycleCapWrite, approvalWithdrawnWrite } from './writes.ts';
 
@@ -121,9 +121,10 @@ export function planNeedsRevision(cfg: any, actionable: any, refreshBranchNumber
       acc.announce.push({ kind: 'session-required-pr', item: item.number, facts: { reason } });
       continue;
     }
-    if (cycleCapExceeded((item.reviews?.nodes ?? []).map(toReviewNode), cfg.reviewCycleCap)) {
+    const comments = item.comments?.nodes;
+    if (cycleCapExceeded((item.reviews?.nodes ?? []).map(toReviewNode), cfg.reviewCycleCap, comments)) {
       acc.writes.push(cycleCapWrite({ repo: cfg.repo, labels: cfg.labels, number: item.number }));
-      acc.announce.push({ kind: 'cycle-cap', item: item.number, facts: { cap: cfg.reviewCycleCap } });
+      acc.announce.push({ kind: 'cycle-cap', item: item.number, facts: { cap: cfg.reviewCycleCap, grants: cycleGrantCount(comments) } });
       continue;
     }
     acc.dispatch.push({ stage: 'revise-agent', item: item.number, kind: 'revise', model: cfg.models.revise, reason: 'needs revision' });

@@ -285,6 +285,44 @@ describe('applyItemDecision — comment then swap', () => {
     expect(result).toEqual({ ok: true, comment: { kind: 'applied', argv: [] }, labels: { kind: 'applied', argv: [] } })
     expect(calls).toEqual(['comment', 'labels'])
   })
+
+  it('posts a Cycle grant block when clearing a cycle-cap escalation back to revision', async () => {
+    const comments = [{ body: '## Pipeline Escalation\n5 review cycles reached the cap of 5 without merging.', createdAt: '2026-01-01T00:00:00Z' }]
+    const snapshot = snapshotOf([repoState([item({ comments })])])
+    let body = ''
+    const deps = depsWith({
+      postComment: (params) => {
+        body = params.request.body
+        return Promise.resolve({ kind: 'applied', argv: [] })
+      },
+      applyLabels: () => Promise.resolve({ kind: 'applied', argv: [] }),
+      fetchItemsByNumber: fetchReturning({ ok: true, resolved: [resolvedItem()], unavailable: [], fetchedAt: NOW().toISOString() }),
+    })
+    await applyItemDecision(
+      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      deps,
+    )
+    expect(body).toContain('### Cycle grant')
+  })
+
+  it('posts no Cycle grant block when clearing a rebase escalation back to revision', async () => {
+    const comments = [{ body: '## Pipeline Escalation\n1 conflicts — 0 resolved automatically, 1 need a decision', createdAt: '2026-01-01T00:00:00Z' }]
+    const snapshot = snapshotOf([repoState([item({ comments })])])
+    let body = ''
+    const deps = depsWith({
+      postComment: (params) => {
+        body = params.request.body
+        return Promise.resolve({ kind: 'applied', argv: [] })
+      },
+      applyLabels: () => Promise.resolve({ kind: 'applied', argv: [] }),
+      fetchItemsByNumber: fetchReturning({ ok: true, resolved: [resolvedItem()], unavailable: [], fetchedAt: NOW().toISOString() }),
+    })
+    await applyItemDecision(
+      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      deps,
+    )
+    expect(body).not.toContain('### Cycle grant')
+  })
 })
 
 describe('applyItemDecision — real writers', () => {

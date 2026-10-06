@@ -27,7 +27,7 @@ interface ZeroDiffCase {
 interface CycleCapCase {
   readonly function: 'cycleCapExceeded'
   readonly name: string
-  readonly input: readonly [readonly RawReview[], number]
+  readonly input: readonly [readonly RawReview[], number] | readonly [readonly RawReview[], number, readonly { readonly body: string; readonly createdAt: string }[]]
   readonly expected: boolean
 }
 
@@ -97,8 +97,8 @@ describe('gates — shared case table', () => {
         return
       }
       if (row.function === 'cycleCapExceeded') {
-        const [reviews, cap] = row.input
-        expect(cycleCapExceeded(reviews.map(toReviewNode), cap)).toBe(row.expected)
+        const [reviews, cap, comments] = row.input
+        expect(cycleCapExceeded(reviews.map(toReviewNode), cap, comments)).toBe(row.expected)
         return
       }
       if (row.function === 'mergeabilityRoute') {

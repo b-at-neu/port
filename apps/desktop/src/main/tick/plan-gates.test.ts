@@ -129,6 +129,26 @@ describe('planTick — cycle-cap and zero-diff gates (#108)', () => {
     ])
   })
 
+  it('a revise candidate at cap with one grant comment dispatches, cap folded into cycle', () => {
+    const reviews = Array.from({ length: 5 }, (_, i) => ({ body: `## Code Review — Cycle ${String(i + 1)}`, submittedAt: '2026-01-01T00:00:00Z', commitOid: 'sha1' }))
+    const comments = [{ body: '## Gate cleared\n\n### Cycle grant\nOne extra review cycle for this PR only; reviewCycleCap is unchanged.', createdAt: '2026-01-01T00:00:00Z' }]
+    const repo = readyRepo([reviseItem({ reviews, comments, reviewCycleCount: 5 })])
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    expect(report.actionable).toEqual([{ number: 204, kind: 'pull-request', trigger: 'needsRevision', agent: 'revise', unchecked: false, cycle: { count: 5, cap: 6 } }])
+    expect(report.held).toEqual([])
+  })
+
+  it('a revise candidate at cap+1 with one grant is held, cycle-cap, with cap: 6', () => {
+    const reviews = Array.from({ length: 6 }, (_, i) => ({ body: `## Code Review — Cycle ${String(i + 1)}`, submittedAt: '2026-01-01T00:00:00Z', commitOid: 'sha1' }))
+    const comments = [{ body: '## Gate cleared\n\n### Cycle grant\nOne extra review cycle for this PR only; reviewCycleCap is unchanged.', createdAt: '2026-01-01T00:00:00Z' }]
+    const repo = readyRepo([reviseItem({ reviews, comments, reviewCycleCount: 6 })])
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    expect(report.actionable).toEqual([])
+    expect(report.held).toEqual([
+      { number: 204, kind: 'pull-request', trigger: 'needsRevision', reason: 'cycle-cap', contention: null, escalation: { kind: 'cycle-cap', count: 6, cap: 6 } },
+    ])
+  })
+
   it('a review candidate with no prior Code Review dispatches, cycle null (no reviews yet)', () => {
     const repo = readyRepo([reviewItem()])
     const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })

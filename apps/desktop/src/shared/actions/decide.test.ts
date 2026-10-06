@@ -69,6 +69,15 @@ describe('decisionsFor — unblock', () => {
     expect(decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5 }).unblock).toEqual({ available: false, reason: 'rebase-decisions' })
   })
 
+  it('raises the cap by one grant comment', () => {
+    const comments: readonly PullRequestCommentNode[] = [
+      { body: '## Gate cleared\nCleared by the operator in port: back to revision.\n\n### Cycle grant\nOne extra review cycle for this PR only; reviewCycleCap is unchanged.', createdAt: '2026-01-01T00:00:00Z' },
+    ]
+    const it1 = item({ stages: [stageLabel('needsHuman', 'gate')], comments })
+    const result = decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5 })
+    expect(result.unblock).toEqual({ available: true, context: { reason: null, cyclesUsed: 0, cap: 6 } })
+  })
+
   it('is not-applicable on an issue, or with a second role-bearing label present', () => {
     const issue = item({ kind: 'issue', stages: [stageLabel('needsHuman', 'gate')] })
     expect(decisionsFor({ item: issue, viewer: 'op', reviewCycleCap: 5 }).unblock).toEqual({ available: false, reason: 'not-applicable' })

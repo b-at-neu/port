@@ -18,7 +18,7 @@ import type { TickActionable, TickBlind, TickClaim, TickHeld, TickHeldReason, Ti
 import type { ClaimedItem, OccupiedEntry } from '../../../../../scripts/port-tick/contention'
 import { gateCandidates } from '../../../../../scripts/port-tick/contention'
 import type { Disposition } from '../../../../../scripts/port-tick/checks'
-import { cycleCapExceeded, mergeabilityRoute, refreshWins, zeroDiffGate } from '../../../../../scripts/port-tick/gates'
+import { cycleCapExceeded, cycleGrantCount, mergeabilityRoute, refreshWins, zeroDiffGate } from '../../../../../scripts/port-tick/gates'
 import type { DispatchLedger, RefreshMemo, UnknownStreaks } from './ledger'
 import { RETRY_TRIGGER } from '../../../../../scripts/port-tick/liveness'
 import { observationsOf } from './observe'
@@ -247,15 +247,16 @@ function actionableAndHeld(
     }
 
     // The cycle-cap gate — unconditional, per `cycleCapExceeded`'s own
-    // contract: fires whatever the latest review said.
-    if (agent === 'revise' && cycleCapExceeded(item.reviews ?? undefined, reviewCycleCap)) {
+    // contract: fires whatever the latest review said. The effective cap
+    // folds in any operator-granted cycles (`### Cycle grant` comments).
+    if (agent === 'revise' && cycleCapExceeded(item.reviews ?? undefined, reviewCycleCap, item.comments ?? undefined)) {
       held.push({
         number: item.number,
         kind: item.kind,
         trigger,
         reason: 'cycle-cap',
         contention: null,
-        escalation: { kind: 'cycle-cap', count: item.reviewCycleCount ?? 0, cap: reviewCycleCap },
+        escalation: { kind: 'cycle-cap', count: item.reviewCycleCount ?? 0, cap: reviewCycleCap + cycleGrantCount(item.comments ?? undefined) },
       })
       continue
     }
@@ -270,7 +271,7 @@ function actionableAndHeld(
       continue
     }
 
-    const cycle = cycleOf(item, reviewCycleCap)
+    const cycle = cycleOf(item, agent === 'revise' ? reviewCycleCap + cycleGrantCount(item.comments ?? undefined) : reviewCycleCap)
 
     if (agent !== 'impl' || item.claimedFiles === null) {
       ungated.push({ number: item.number, kind: item.kind, trigger, agent, unchecked: agent === 'impl' && item.claimedFiles === null, cycle })

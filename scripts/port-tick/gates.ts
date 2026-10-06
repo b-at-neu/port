@@ -50,11 +50,25 @@ export function zeroDiffGate({
   return { action: 'escalate' };
 }
 
-/** The cap is unconditional — it fires at or above `cap` whatever the latest
- *  review said, since cycle 3+ can loop back here with a clean latest review
- *  (a rebase, an approval withdrawal, a liveness reset). */
-export function cycleCapExceeded(reviews: readonly ReviewNode[] | undefined, cap: number): boolean {
-  return codeReviewCount(reviews) >= cap;
+const CYCLE_GRANT_LINE = '### Cycle grant';
+
+/** The number of operator-authorised extra cycles recorded on this pull
+ *  request — one per `## Gate cleared` comment that carries a `### Cycle
+ *  grant` line. `comments` undefined (an alias that never fetched them)
+ *  means zero grants, fail closed to the unconditional cap. */
+export function cycleGrantCount(comments: readonly CommentNode[] | undefined): number {
+  return (comments ?? []).filter(
+    (c) => c.body.startsWith(GATE_CLEARED_PREFIX) && c.body.split('\n').some((line) => line.trim() === CYCLE_GRANT_LINE),
+  ).length;
+}
+
+/** The cap is unconditional — it fires at or above the effective cap
+ *  (`cap` plus any operator-granted cycles) whatever the latest review said,
+ *  since cycle 3+ can loop back here with a clean latest review (a rebase, an
+ *  approval withdrawal, a liveness reset). `comments` optional so an absent
+ *  list means zero grants (fail closed to today's behaviour). */
+export function cycleCapExceeded(reviews: readonly ReviewNode[] | undefined, cap: number, comments?: readonly CommentNode[]): boolean {
+  return codeReviewCount(reviews) >= cap + cycleGrantCount(comments);
 }
 
 export type MergeabilityAction = 'dispatch' | 'refresh' | 'hold';

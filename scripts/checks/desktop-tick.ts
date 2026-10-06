@@ -309,4 +309,16 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
     if (!violated) ok();
   }
+
+  // --- (15) observation.ts's cycle-cap marker literal matches bodies.ts's own export ---
+  // pin: observation.ts's inlined CYCLE_CAP_ESCALATION_MARKER ↔ bodies.ts's exported constant
+  {
+    const observationSource = readFileSync(join(root, 'apps/desktop/src/main/dispatch/observation.ts'), 'utf8');
+    const bodiesPath = join(root, 'apps/desktop/src/shared/actions/bodies.ts');
+    const bodiesModule = await import(pathToFileURL(bodiesPath).href);
+    const literalMatch = /CYCLE_CAP_ESCALATION_MARKER = '([^']+)'/.exec(observationSource);
+    if (literalMatch?.[1] !== bodiesModule.CYCLE_CAP_ESCALATION_MARKER) {
+      fail('desktop-tick', `observation.ts's inlined cycle-cap marker (${String(literalMatch?.[1])}) disagrees with bodies.ts's own export (${String(bodiesModule.CYCLE_CAP_ESCALATION_MARKER)})`);
+    } else ok();
+  }
 }

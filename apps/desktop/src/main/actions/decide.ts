@@ -1,6 +1,6 @@
 // applyItemDecision — unblock and revise, the comment-then-swap write
 // `main/actions/gate.ts`'s own `gateAnswer` already establishes.
-import { decisionPlan, decisionsFor, reviseNoteProblem } from '../../shared/actions/decide'
+import { decisionPlan, decisionsFor, isCycleCapEscalation, reviseNoteProblem } from '../../shared/actions/decide'
 import { changesRequestedBody, gateClearedBody } from '../../shared/actions/bodies'
 import type { ItemDecisionResult, OperatorDecision, UnblockRoute } from '../../shared/actions/types'
 import { stageKeyOf } from '../../shared/actions/plan'
@@ -100,9 +100,10 @@ export async function applyItemDecision(params: ApplyItemDecisionParams, deps: A
 
   let comment: WriteOutcome | null = null
   if (!request.skipComment) {
+    const cycleGrant = request.decision === 'unblock' && request.route === 'revision' && isCycleCapEscalation(item.comments)
     const body =
       request.decision === 'unblock'
-        ? gateClearedBody(request.route === 'revision' ? 'revision' : 'review')
+        ? gateClearedBody(request.route === 'revision' ? 'revision' : 'review', { cycleGrant })
         : changesRequestedBody(headRefOid ?? '', request.note ?? '')
     comment = await deps.postComment({
       request: { repoId: entry.id, repo: entry.config.repo, kind: 'pull-request', number: request.number, body, action: request.decision, scratchDir },

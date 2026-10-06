@@ -354,8 +354,8 @@ function runCase(fn: string, impl: any, input: any): any {
     case 'zeroDiffGate':
       return impl({ reviews: (input.reviews ?? []).map(toReviewNode), comments: input.comments, headRefOid: input.headRefOid });
     case 'cycleCapExceeded': {
-      const [reviews, cap] = input;
-      return impl((reviews ?? []).map(toReviewNode), cap);
+      const [reviews, cap, comments] = input;
+      return impl((reviews ?? []).map(toReviewNode), cap, comments);
     }
     case 'approvedReverify':
       return impl(input);
