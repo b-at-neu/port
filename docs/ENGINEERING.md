@@ -135,6 +135,11 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - the one row renderer and the one append/patch/pin-to-bottom list model
 - shared by the on-disk transcript view and the live session view, never a second copy
 
+**`apps/desktop/src/renderer/src/needs-you/`**
+- the Needs you screen (#315): its own copy (`copy.ts`), action resolution and dispatch (`actions.ts`), and the relay compose form (`relay-form.tsx`), ported out of `board/relay.ts`'s former banner
+- `screen.tsx` reads `board:snapshot` through `shared/board/needs-you.ts`'s `needsYouItems`, never a second derivation; writes go through the existing `item:action`/`item:decide` channels, no new IPC
+- `components/needs-you-item.tsx` is the shared row (DESIGN §4's `NeedsYouItem`); a screen never builds its own version
+
 **`apps/desktop/src/renderer/src/session/`**
 - `controller.ts` is the rail/switch/re-attach composition root — the same module-closure idiom as `permission/controller.ts`, no framework, no class
 - `sequence.ts`'s `accept`/`drainBuffered` apply a `session:entries` delta only in revision order, never papering over a gap

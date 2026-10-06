@@ -9,8 +9,10 @@
 // the same on every run, never "just now".
 import { labelName } from '../../shared/labels/vocabulary'
 import type { LabelKey, LabelVocabulary } from '../../shared/labels/vocabulary'
+import { LABEL_DEFAULTS } from '../../shared/labels/defaults'
 import type { PipelineFetch, PipelineItem, QueriedLabel } from '../../shared/github/types'
 import type { AgentRecord } from '../../shared/sessions/types'
+import type { RelayPending } from '../../shared/relay/types'
 import { DEFAULT_POLL_POLICY, SOURCE_BASE_INTERVAL_MS } from '../../shared/board/types'
 import type { BoardSnapshot, RepositoryHealth, SourceKind } from '../../shared/board/types'
 import type { RepositoryState } from '../../shared/state/types'
@@ -53,13 +55,17 @@ interface ItemSeed {
 /** #41 → `planReview`, #38 → `inProgress` (with its own active `impl-agent`
  *  below), #44 → `ready`, #36 (a pull request) → `approved`, #35 (a pull
  *  request) → `needsRevision` — one item per stage family the board groups
- *  by, so the screenshot shows every group non-empty. */
+ *  by, so the screenshot shows every group non-empty. #315: #50 →
+ *  `needsHuman` and #51 → `blocked` seed the Needs you screen's own two
+ *  label-kinds the board itself does not otherwise exercise. */
 const ITEM_SEEDS: readonly ItemSeed[] = [
   { kind: 'issue', number: 41, title: 'Add CSV export to the reports page', stageKey: 'planReview' },
   { kind: 'issue', number: 38, title: 'Retry failed webhook deliveries', stageKey: 'inProgress' },
   { kind: 'issue', number: 44, title: 'Show the build number in the footer', stageKey: 'ready' },
   { kind: 'pull-request', number: 36, title: 'Paginate the audit log', stageKey: 'approved' },
   { kind: 'pull-request', number: 35, title: 'Cache avatar thumbnails', stageKey: 'needsRevision' },
+  { kind: 'issue', number: 50, title: 'Rotate the webhook signing secret', stageKey: 'needsHuman' },
+  { kind: 'issue', number: 51, title: 'Backfill order totals for Q3', stageKey: 'blocked' },
 ]
 
 function pipelineItemsFor(vocabulary: LabelVocabulary): readonly PipelineItem[] {
@@ -145,12 +151,31 @@ function notReadyRepositoryState(): RepositoryState {
   return { ok: false, repoId: entry.id, displayName: entry.displayName, reason: 'not-ready', problem: entry.problem }
 }
 
+/** #315: #38's own `impl-agent` has a question waiting — the Needs you
+ *  screen's `question` kind, matched onto the same row its `inProgress`
+ *  label already produces. */
+function pendingQuestion(now: Date): RelayPending {
+  return {
+    repoId: WIDGETS_ID,
+    number: 38,
+    stage: 'impl-agent',
+    sessionId: 'fixture-session-impl-38',
+    agentId: 'fixture-agent-impl-38',
+    parentSessionLabel: 'cockpit session',
+    agentLabel: 'impl-agent #38',
+    lastActivityAt: offsetMinutes(now, -5),
+    kind: 'questions',
+    questions: [{ index: 0, text: 'Should the retry backoff be linear or exponential?' }],
+  }
+}
+
 /** `tick` is built with the real `planTick`, over a fresh `createDispatchLedger`
  *  — a process-scoped ledger, same as the real app gets on every restart, so
- *  a single invocation never carries state across repositories. `relay` is
- *  an ok scan with nothing pending, `drain` is open, and `dispatch` is `[]`
- *  — no dispatcher is wired in fixture mode (PIPELINE.md's own "no gh or
- *  claude calls" rule applies here too: nothing in this module spawns
+ *  a single invocation never carries state across repositories. `relay`
+ *  carries #38's own pending question (above); `dispatch` carries one
+ *  `escalated` budget note on #44, the Needs you screen's own `budget` kind
+ *  — no dispatcher is wired in fixture mode otherwise (PIPELINE.md's own "no
+ *  gh or claude calls" rule applies here too: nothing in this module spawns
  *  anything). */
 export function fixtureBoardSnapshot(now: Date): BoardSnapshot {
   const ready = readyRepositoryState(now)
@@ -174,12 +199,22 @@ export function fixtureBoardSnapshot(now: Date): BoardSnapshot {
     health: [repositoryHealth(now)],
     policy: DEFAULT_POLL_POLICY,
     tick,
-    relay: { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: now.toISOString() },
+    relay: { ok: true, pending: [pendingQuestion(now)], checked: 1, unreached: 0, scannedAt: now.toISOString() },
     // #314: acme/widgets reads `dispatching` — the ordinary, nothing-paused
     // state a fresh registration starts in.
     runStates: { store: { kind: 'loaded' }, repositories: [{ repoId: WIDGETS_ID, state: 'dispatching', since: now.toISOString() }] },
     nextWakeupAt: nextDecisionAt.toISOString(),
     emittedAt: now.toISOString(),
-    dispatch: [],
+    dispatch: [
+      {
+        repoId: WIDGETS_ID,
+        owner: 'app',
+        state: { kind: 'idle' },
+        runState: 'dispatching',
+        claimedAt: now.toISOString(),
+        budget: { line: null, problem: null, notes: [{ kind: 'escalated', number: 44, needsHumanLabel: LABEL_DEFAULTS.find((def) => def.key === 'needsHuman')?.name ?? 'needsHuman', commentFailedMessage: null }] },
+        observed: [],
+      },
+    ],
   }
 }

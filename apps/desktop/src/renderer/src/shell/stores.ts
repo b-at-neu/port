@@ -103,7 +103,7 @@ export interface ListNavigator {
   open(): void
 }
 
-export type ScreenKey = 'board' | 'backlog'
+export type ScreenKey = 'board' | 'backlog' | 'needsYou'
 
 const navigators = new Map<ScreenKey, ListNavigator>()
 

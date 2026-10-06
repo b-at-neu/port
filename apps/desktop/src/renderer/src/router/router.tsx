@@ -9,6 +9,7 @@ import { ROUTE_IDS, transcriptSearchFromRaw } from './legacy-view'
 import type { TranscriptSearch } from './legacy-view'
 import { SettingsScreen } from '../settings/screen'
 import { BacklogScreen } from '../backlog/screen'
+import { NeedsYouScreen } from '../needs-you/screen'
 import { SetupScreen } from '../setup/screen'
 import { AboutScreen } from '../about/screen'
 import { ShellLayout } from '../shell/layout'
@@ -38,6 +39,7 @@ const transcriptRoute = createRoute({
 const sessionRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.session, component: () => null })
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.settings, component: SettingsScreen })
 const backlogRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.backlog, component: BacklogScreen })
+const needsYouRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.needsYou, component: NeedsYouScreen })
 const setupRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.setup, component: SetupScreen })
 const aboutRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.about, component: AboutScreen })
 
@@ -51,7 +53,21 @@ const catchAllRoute = createRoute({
   },
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, boardRoute, reposRoute, sessionsRoute, searchRoute, transcriptRoute, sessionRoute, settingsRoute, backlogRoute, setupRoute, aboutRoute, catchAllRoute])
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  boardRoute,
+  reposRoute,
+  sessionsRoute,
+  searchRoute,
+  transcriptRoute,
+  sessionRoute,
+  settingsRoute,
+  backlogRoute,
+  needsYouRoute,
+  setupRoute,
+  aboutRoute,
+  catchAllRoute,
+])
 
 export const router = createRouter({ routeTree, history: createHashHistory() })
 
