@@ -24,17 +24,24 @@ export type View =
   | { readonly screen: 'session' }
   | { readonly screen: 'settings' }
   | { readonly screen: 'backlog' }
+  | { readonly screen: 'setup' }
+  | { readonly screen: 'about' }
 
 /** Which legacy container a screen draws into — `main.ts`'s `drawViews`
- *  shows exactly one of the four and hides the rest. `backlog` and
- *  `settings` both map to `react`, since both are React screens mounted
- *  into the same portaled `#react-root` (#316, replacing `Tab`). */
+ *  shows exactly one of the four and hides the rest. `backlog`, `settings`,
+ *  `setup` and `about` all map to `react`, since every one is a React screen
+ *  mounted into the same portaled `#react-root` (#316, replacing `Tab`). */
 export type LegacyContainer = 'board' | 'repositories' | 'session' | 'react'
+
+/** True for every route mounted into `#react-root`. */
+export function isReactScreen(view: View): boolean {
+  return view.screen === 'settings' || view.screen === 'backlog' || view.screen === 'setup' || view.screen === 'about'
+}
 
 export function containerFor(view: View): LegacyContainer {
   if (view.screen === 'board') return 'board'
   if (view.screen === 'session') return 'session'
-  if (view.screen === 'settings' || view.screen === 'backlog') return 'react'
+  if (isReactScreen(view)) return 'react'
   return 'repositories'
 }
 
@@ -49,6 +56,8 @@ export const ROUTE_IDS = {
   transcript: '/transcript/$sessionId',
   session: '/session',
   settings: '/settings',
+  setup: '/setup',
+  about: '/about',
 } as const
 
 /** Every route a launch or `shell/prefs.ts`'s `trackLastRoute` may restore
@@ -100,6 +109,10 @@ export function viewFromMatch(routeId: string, params: Readonly<Record<string, s
       return { screen: 'settings' }
     case ROUTE_IDS.backlog:
       return { screen: 'backlog' }
+    case ROUTE_IDS.setup:
+      return { screen: 'setup' }
+    case ROUTE_IDS.about:
+      return { screen: 'about' }
     default:
       return { screen: 'board' }
   }
@@ -138,5 +151,9 @@ export function routeForView(view: View): RouteDescriptor {
       return { to: ROUTE_IDS.settings }
     case 'backlog':
       return { to: ROUTE_IDS.backlog }
+    case 'setup':
+      return { to: ROUTE_IDS.setup }
+    case 'about':
+      return { to: ROUTE_IDS.about }
   }
 }

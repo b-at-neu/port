@@ -23,13 +23,19 @@ const registryDeps: RegistryDeps = {
   chooseDirectory: () => Promise.resolve(null),
 }
 
+const PROBE_DIR = '/userdata/runtime-probe'
+
 describe('resolveRuntimeProbe', () => {
   it('rejects a missing repoId', async () => {
-    await expect(resolveRuntimeProbe(registryDeps, { repoId: undefined as unknown as RepoId })).rejects.toThrow("'runtime:probe' requires a non-empty 'repoId'")
+    await expect(resolveRuntimeProbe(registryDeps, { repoId: undefined as unknown as RepoId }, PROBE_DIR)).rejects.toThrow("'runtime:probe' requires 'repoId' to be a non-empty string or null")
   })
 
   it('rejects an empty repoId', async () => {
-    await expect(resolveRuntimeProbe(registryDeps, { repoId: '' as unknown as RepoId })).rejects.toThrow("'runtime:probe' requires a non-empty 'repoId'")
+    await expect(resolveRuntimeProbe(registryDeps, { repoId: '' as unknown as RepoId }, PROBE_DIR)).rejects.toThrow("'runtime:probe' requires 'repoId' to be a non-empty string or null")
+  })
+
+  it('rejects a non-string, non-null repoId', async () => {
+    await expect(resolveRuntimeProbe(registryDeps, { repoId: 1 as unknown as RepoId }, PROBE_DIR)).rejects.toThrow("'runtime:probe' requires 'repoId' to be a non-empty string or null")
   })
 
   it('a well-formed request delegates to runtimeProbe, which resolves the registry itself', async () => {
@@ -37,6 +43,11 @@ describe('resolveRuntimeProbe', () => {
     // so `runtimeProbe`'s own registry lookup surfaces its own error --
     // proof that validation passed through rather than a `RuntimeProbe`
     // value silently swallowing the mismatch.
-    await expect(resolveRuntimeProbe(registryDeps, { repoId: REPO_ID })).rejects.toThrow(/runtime:probe/)
+    await expect(resolveRuntimeProbe(registryDeps, { repoId: REPO_ID }, PROBE_DIR)).rejects.toThrow(/runtime:probe/)
+  })
+
+  it('an explicit null repoId never touches the registry', async () => {
+    const result = await resolveRuntimeProbe(registryDeps, { repoId: null }, PROBE_DIR)
+    expect(result.repo).toBeNull()
   })
 })

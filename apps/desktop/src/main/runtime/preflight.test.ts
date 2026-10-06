@@ -145,6 +145,7 @@ function probeDeps(overrides: Partial<RuntimeProbeDeps>): RuntimeProbeDeps {
     resolveClaudeExecutable: () => Promise.resolve({ ok: true, path: '/usr/bin/claude' }),
     readCredentialsTell: () => Promise.resolve({ present: false, expiresAt: null, hasRefreshToken: false }),
     probe: () => Promise.resolve({ diagnosis: 'verified', detail: null }),
+    ensureDirectory: () => Promise.resolve({ ok: true, value: undefined }),
     env: {},
     platform: 'linux',
     now: () => NOW,
@@ -152,23 +153,25 @@ function probeDeps(overrides: Partial<RuntimeProbeDeps>): RuntimeProbeDeps {
   }
 }
 
+const PROBE_DIR = '/userdata/runtime-probe'
+
 describe('runtimeProbe', () => {
   it('rejects a repository id that does not resolve', async () => {
-    await expect(runtimeProbe({ registryDeps, repoId: REPO_ID }, probeDeps({ listRepositories: () => Promise.resolve({ ok: true, repositories: [] }) }))).rejects.toThrow(
-      `'runtime:probe' found no repository registered with id '${REPO_ID}'`,
-    )
+    await expect(
+      runtimeProbe({ registryDeps, repoId: REPO_ID, probeDir: PROBE_DIR }, probeDeps({ listRepositories: () => Promise.resolve({ ok: true, repositories: [] }) })),
+    ).rejects.toThrow(`'runtime:probe' found no repository registered with id '${REPO_ID}'`)
   })
 
   it('rejects a repository that is not ready', async () => {
     const notReady = { id: REPO_ID, path: '/repo', displayName: 'widgets', problem: { kind: 'directory-missing' as const }, diagnostics: [] }
-    await expect(runtimeProbe({ registryDeps, repoId: REPO_ID }, probeDeps({ listRepositories: () => Promise.resolve({ ok: true, repositories: [notReady] }) }))).rejects.toThrow(
-      "'runtime:probe' requires a 'ready' repository, got 'directory-missing'",
-    )
+    await expect(
+      runtimeProbe({ registryDeps, repoId: REPO_ID, probeDir: PROBE_DIR }, probeDeps({ listRepositories: () => Promise.resolve({ ok: true, repositories: [notReady] }) })),
+    ).rejects.toThrow("'runtime:probe' requires a 'ready' repository, got 'directory-missing'")
   })
 
   it('names the resolved repository, even on a locate failure', async () => {
     const result = await runtimeProbe(
-      { registryDeps, repoId: REPO_ID },
+      { registryDeps, repoId: REPO_ID, probeDir: PROBE_DIR },
       probeDeps({ resolveClaudeExecutable: () => Promise.resolve({ ok: false, kind: 'not-found', searched: [] }) }),
     )
     expect(result.repo).toBe('acme/widgets')
@@ -178,7 +181,7 @@ describe('runtimeProbe', () => {
   it('never calls the probe when locate fails', async () => {
     let probeCalled = false
     await runtimeProbe(
-      { registryDeps, repoId: REPO_ID },
+      { registryDeps, repoId: REPO_ID, probeDir: PROBE_DIR },
       probeDeps({
         resolveClaudeExecutable: () => Promise.resolve({ ok: false, kind: 'not-found', searched: [] }),
         probe: () => {
@@ -191,14 +194,68 @@ describe('runtimeProbe', () => {
   })
 
   it('a successful probe reports verified and elapsed time', async () => {
-    const result = await runtimeProbe({ registryDeps, repoId: REPO_ID }, probeDeps({}))
+    const result = await runtimeProbe({ registryDeps, repoId: REPO_ID, probeDir: PROBE_DIR }, probeDeps({}))
     expect(result.diagnosis).toBe('verified')
     expect(result.detail).toBeNull()
     expect(result.elapsedMs).toBeGreaterThanOrEqual(0)
   })
 
   it('carries the api key flag through to the probe response', async () => {
-    const result = await runtimeProbe({ registryDeps, repoId: REPO_ID }, probeDeps({ env: { ANTHROPIC_API_KEY: 'sk-ant-dummy' } }))
+    const result = await runtimeProbe({ registryDeps, repoId: REPO_ID, probeDir: PROBE_DIR }, probeDeps({ env: { ANTHROPIC_API_KEY: 'sk-ant-dummy' } }))
     expect(result.apiKeyInEnvironment).toBe(true)
+  })
+
+  describe('repository-free mode (repoId: null)', () => {
+    it('never calls listRepositories', async () => {
+      let listCalled = false
+      const result = await runtimeProbe(
+        { registryDeps, repoId: null, probeDir: PROBE_DIR },
+        probeDeps({
+          listRepositories: () => {
+            listCalled = true
+            return Promise.resolve({ ok: true, repositories: [READY_ENTRY] })
+          },
+        }),
+      )
+      expect(listCalled).toBe(false)
+      expect(result.repo).toBeNull()
+    })
+
+    it('creates the probe directory before locating claude', async () => {
+      let ensured: string | null = null
+      await runtimeProbe(
+        { registryDeps, repoId: null, probeDir: PROBE_DIR },
+        probeDeps({
+          ensureDirectory: (path) => {
+            ensured = path
+            return Promise.resolve({ ok: true, value: undefined })
+          },
+        }),
+      )
+      expect(ensured).toBe(PROBE_DIR)
+    })
+
+    it('runs the probe turn with cwd set to the probe directory', async () => {
+      let cwdUsed: string | null = null
+      await runtimeProbe(
+        { registryDeps, repoId: null, probeDir: PROBE_DIR },
+        probeDeps({
+          probe: (params) => {
+            cwdUsed = params.cwd
+            return Promise.resolve({ diagnosis: 'verified', detail: null })
+          },
+        }),
+      )
+      expect(cwdUsed).toBe(PROBE_DIR)
+    })
+
+    it('a missing executable still returns cli-missing, never throws', async () => {
+      const result = await runtimeProbe(
+        { registryDeps, repoId: null, probeDir: PROBE_DIR },
+        probeDeps({ resolveClaudeExecutable: () => Promise.resolve({ ok: false, kind: 'not-found', searched: [] }) }),
+      )
+      expect(result.diagnosis).toBe('cli-missing')
+      expect(result.repo).toBeNull()
+    })
   })
 })

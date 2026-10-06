@@ -82,7 +82,7 @@ export function fixtureHandlers(now: Date): FixtureHandlers {
     'gate:preflight': () => ({ kind: 'unresolved', claim: EMPTY_CLAIM(now) }),
     'gate:claim:read': () => EMPTY_CLAIM(now),
 
-    'runtime:probe': () => ({ checkedAt: now.toISOString(), repo: 'acme/widgets', elapsedMs: 420, apiKeyInEnvironment: false, diagnosis: 'verified', detail: null }),
+    'runtime:probe': (request) => ({ checkedAt: now.toISOString(), repo: request.repoId === null ? null : 'acme/widgets', elapsedMs: 420, apiKeyInEnvironment: false, diagnosis: 'verified', detail: null }),
 
     // --- Writes, never a side effect ---------------------------------------
     'repos:add': () => ({ ok: true, outcome: 'cancelled' }),

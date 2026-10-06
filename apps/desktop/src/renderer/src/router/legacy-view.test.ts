@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ROUTE_IDS, containerFor, routeForView, transcriptSearchFromRaw, viewFromMatch } from './legacy-view'
+import { ROUTE_IDS, containerFor, isReactScreen, routeForView, transcriptSearchFromRaw, viewFromMatch } from './legacy-view'
 import type { View } from './legacy-view'
 import type { RepoId } from '../../../shared/repos'
 
@@ -15,6 +15,8 @@ const VIEWS: readonly View[] = [
   { screen: 'session' },
   { screen: 'settings' },
   { screen: 'backlog' },
+  { screen: 'setup' },
+  { screen: 'about' },
 ]
 
 describe('routeForView / viewFromMatch round trip', () => {
@@ -70,5 +72,18 @@ describe('containerFor', () => {
     expect(containerFor({ screen: 'session' })).toBe('session')
     expect(containerFor({ screen: 'settings' })).toBe('react')
     expect(containerFor({ screen: 'backlog' })).toBe('react')
+    expect(containerFor({ screen: 'setup' })).toBe('react')
+    expect(containerFor({ screen: 'about' })).toBe('react')
+  })
+})
+
+describe('isReactScreen', () => {
+  it('is true for every React screen, false for every legacy one', () => {
+    expect(isReactScreen({ screen: 'settings' })).toBe(true)
+    expect(isReactScreen({ screen: 'backlog' })).toBe(true)
+    expect(isReactScreen({ screen: 'setup' })).toBe(true)
+    expect(isReactScreen({ screen: 'about' })).toBe(true)
+    expect(isReactScreen({ screen: 'board' })).toBe(false)
+    expect(isReactScreen({ screen: 'session' })).toBe(false)
   })
 })

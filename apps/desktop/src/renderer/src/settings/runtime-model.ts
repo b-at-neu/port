@@ -50,7 +50,7 @@ const PILL_STATUS: Readonly<Record<RuntimeDiagnosis, PillStatus>> = {
   'probe-failed': 'danger',
 }
 
-const PILL_LABEL: Readonly<Record<RuntimeDiagnosis, string>> = {
+export const PILL_LABEL: Readonly<Record<RuntimeDiagnosis, string>> = {
   unverified: 'Not verified',
   verified: 'Verified',
   'cli-missing': 'Not installed',
@@ -85,7 +85,7 @@ export function runtimeDiagnosisModel(
     body = 'A test runs one short turn against a registered repository.'
   } else if (diagnosis === 'verified' && probe !== null) {
     title = PILL_LABEL.verified
-    body = `Verified against ${probe.repo} in ${(probe.elapsedMs / 1000).toFixed(1)}s`
+    body = probe.repo !== null ? `Verified against ${probe.repo} in ${(probe.elapsedMs / 1000).toFixed(1)}s` : `Verified in ${(probe.elapsedMs / 1000).toFixed(1)}s`
   } else {
     const copy = RUNTIME_COPY[diagnosis]
     title = copy.title

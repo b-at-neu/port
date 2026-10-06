@@ -101,10 +101,10 @@ export function grantSummaryLine(summary: readonly SessionGrantItem[]): string {
   return `Also allows, until this session ends: ${grantLines(summary).join(', ')}`
 }
 
-/** `document.title` while the queue is non-empty — "Port" otherwise. A
+/** `document.title` while the queue is non-empty — "port" otherwise. A
  *  prompt waits with no deadline, so an unfocused window must still show
  *  that something is blocked. */
 export function documentTitle(count: number): string {
-  if (count === 0) return 'Port'
-  return `Port — ${String(count)} permission request${count === 1 ? '' : 's'} waiting`
+  if (count === 0) return 'port'
+  return `port — ${String(count)} permission request${count === 1 ? '' : 's'} waiting`
 }

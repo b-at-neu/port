@@ -74,13 +74,14 @@ export interface RuntimePreflight {
   readonly detail: string | null
 }
 
-/** `'runtime:probe'`'s response — one `query()` turn against a registered
- *  repository. `repo` names which repository the probe actually ran
- *  against, so "Test connection" never silently picks one without saying
- *  which. */
+/** `'runtime:probe'`'s response — one `query()` turn, against a registered
+ *  repository or, in repository-free mode, an app-owned scratch directory.
+ *  `repo` names which repository the probe actually ran against, so "Test
+ *  connection" never silently picks one without saying which; `null` is
+ *  repository-free mode. */
 export interface RuntimeProbe {
   readonly checkedAt: string
-  readonly repo: string
+  readonly repo: string | null
   readonly elapsedMs: number
   readonly apiKeyInEnvironment: boolean
   readonly diagnosis: RuntimeDiagnosis

@@ -39,7 +39,7 @@ import { initGate, openGateDialog, openReviewDialog } from './gate/controller'
 import { initPermissions } from './permission/controller'
 import { initSession } from './session/controller'
 import { router } from './router/router'
-import { routeForView, containerFor, viewFromMatch, type View } from './router/legacy-view'
+import { routeForView, containerFor, isReactScreen, viewFromMatch, type View } from './router/legacy-view'
 import { createQueryClient, ipcQueryOptions, observeIpcQuery } from './data/query'
 import { connectQueryCache } from './data/subscriptions'
 import { mountReact } from './react/mount'
@@ -52,6 +52,7 @@ import { installKeyboardMap } from './shell/keyboard'
 import { liveSessionKeys, selectSession, startNewSession } from './session/controller'
 import { selectedSession } from './session/selection'
 import { toast } from 'sonner'
+import { shouldRedirectToSetup } from './setup/launch-redirect'
 
 const app = document.querySelector<HTMLDivElement>('#app')
 const shellRoot = document.querySelector<HTMLDivElement>('#shell-root')
@@ -81,8 +82,8 @@ function drawViews(view: View): void {
   // The session container is hidden rather than cleared on a route switch,
   // so the stream keeps rendering in the background.
   if (sessionContainer) sessionContainer.hidden = active !== 'session'
-  // #react-root shows for every React screen (Settings, Backlog).
-  if (reactRootContainer) reactRootContainer.hidden = active !== 'react'
+  // #react-root shows for every React screen (Settings, Backlog, Setup, About).
+  if (reactRootContainer) reactRootContainer.hidden = !isReactScreen(view)
 }
 
 function drawRepositories(view: View): void {
@@ -111,8 +112,7 @@ function draw(): void {
 }
 
 // Navigates, then lets `router.subscribe('onResolved', draw)` repaint — the
-// one seam asserting the loose `RouteDescriptor` against `navigate`'s real
-// signature (`data/invoke.ts`'s own "one type assertion" idiom).
+// one seam asserting the loose `RouteDescriptor` against `navigate`'s real signature.
 async function navigateTo(next: View): Promise<void> {
   await router.navigate(routeForView(next) as Parameters<typeof router.navigate>[0])
 }
@@ -260,9 +260,8 @@ function handleRelayAnswerInput(target: HTMLTextAreaElement): void {
   drawBoard()
 }
 
-// Reads the board through the query cache (#316) — `connectQueryCache`
-// feeds `board:update` pushes into the same cache, so this one observer
-// reaches `applySnapshot` for both the initial fetch and every later push.
+// Reads the board through the query cache — `connectQueryCache` feeds
+// `board:update` pushes into the same cache this observer reads from.
 function initBoard(client: ReturnType<typeof createQueryClient>): void {
   observeIpcQuery(client, 'board:snapshot', undefined, (result) => {
     if (result.status === 'success') applySnapshot(result.data)
@@ -488,6 +487,7 @@ async function boot(): Promise<void> {
   if (lastRoute !== null && (location.hash === '' || location.hash === '#/')) router.history.replace(`#${lastRoute}`)
   await router.load()
   draw()
+  if (await shouldRedirectToSetup(queryClient)) await navigateTo({ screen: 'setup' })
   void refreshRepositories()
   initBoard(queryClient)
   if (app) initClaim(app)

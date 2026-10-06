@@ -173,10 +173,13 @@ export interface IpcMap {
     request: void
     response: RuntimePreflight
   }
-  /** One `query()` turn against a registered, `ready` repository — the
-   *  renderer names an intent (`repoId`), never a path or a `cwd`. */
+  /** One `query()` turn, against a registered, `ready` repository or, when
+   *  `repoId` is `null`, an app-owned scratch directory — the renderer names
+   *  an intent (`repoId`), never a path or a `cwd`. `null` is explicit rather
+   *  than optional, so a caller can't drop the key by accident and silently
+   *  get repository-free mode. */
   'runtime:probe': {
-    request: { repoId: RepoId }
+    request: { repoId: RepoId | null }
     response: RuntimeProbe
   }
   /** The plan gate's own preflight read (#92) — resolves one issue's
