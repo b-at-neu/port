@@ -1,15 +1,13 @@
-// The tick strip (#105) — one switch per union so a new variant is a
-// compile error rather than a silently blank line, the same rule
-// `board/copy.ts`'s own header states. Pure copy functions plus the strip's
-// DOM; `view.ts` renders this directly under the freshness strip, inside
-// `buildHeader`, so both re-render on every draw and the countdown stays
-// live.
-import type { BoardSnapshot, RepositoryHealth } from '../../../shared/board/types'
+// The tick strip's own pure copy (#105, #319) — one switch per union so a
+// new variant is a compile error rather than a silently blank line, the
+// same rule `board/copy.ts`'s own header states. `board/pipeline-status.tsx`
+// renders this through `repositoryDetailLines`/`itemDetailLines` below,
+// re-reading on every poll so the countdown and the hover detail stay live.
+import type { RepositoryHealth } from '../../../shared/board/types'
 import type { DispatchOwner, RunState, RunStatesSnapshot } from '../../../shared/dispatch/types'
 import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
 import type { LabelKey } from '../../../shared/labels/vocabulary'
 import type { TickActionable, TickBlind, TickClaim, TickHeld, TickObservation, TickReport } from '../../../shared/tick/types'
-import { buildOwnerLine } from './owner'
 
 function labelNameOf(key: LabelKey): string {
   return LABEL_DEFAULTS.find((def) => def.key === key)?.name ?? key
@@ -237,55 +235,33 @@ export function observationDetailCopy(observation: TickObservation): string | nu
   }
 }
 
-/** The strip's whole DOM — a clock line plus one line per repository, each
- *  carrying its held/stalled detail as a `title` (hover), so the summary
- *  line stays one line while the detail is still reachable. */
-export function buildTickStrip(snapshot: BoardSnapshot, now: Date): HTMLElement {
-  const strip = document.createElement('div')
-  strip.className = 'board-header__tick'
+/** One repository's whole hover detail, the same five sources
+ *  `buildTickStrip` used to concatenate into a single `title` — now a list,
+ *  for `pipeline-status.tsx`'s own `Tooltip` to render as separate lines.
+ *  `[]` for a blind repository: none of these five sources mean anything
+ *  when the repository itself could not be read. */
+export function repositoryDetailLines(report: TickReport, owner: DispatchOwner): readonly string[] {
+  if (report.blind !== null) return []
+  return [
+    ...report.held.map((h) => heldDetailCopy(h, owner)),
+    ...report.actionable.filter((a) => a.unchecked).map(uncheckedDetailCopy),
+    ...report.actionable.map(cycleDetailCopy),
+    ...report.claims.map((c) => stalledDetailCopy(c, owner)),
+    ...report.observations.map(observationDetailCopy),
+  ].filter((d): d is string => d !== null)
+}
 
-  const storeLine = storeLineFor(snapshot.runStates.store)
-  if (storeLine !== null) {
-    const line = document.createElement('div')
-    line.className = 'board-header__tick-drain'
-    line.textContent = storeLine.text
-    if (storeLine.title !== null) line.title = storeLine.title
-    strip.appendChild(line)
-  }
-
-  const clock = document.createElement('div')
-  clock.className = 'board-header__tick-clock'
-  clock.textContent = clockLineCopy(snapshot.nextWakeupAt, snapshot.health, now)
-  strip.appendChild(clock)
-
-  for (const report of snapshot.tick) {
-    const dispatchStatus = snapshot.dispatch.find((d) => d.repoId === report.repoId)
-    const owner = dispatchStatus?.owner ?? 'cockpit'
-    const repoRunState = snapshot.runStates.repositories.find((r) => r.repoId === report.repoId) ?? { repoId: report.repoId, state: 'paused' as const, since: null }
-
-    const line = document.createElement('div')
-    line.className = 'board-header__tick-line'
-    line.textContent = repositoryLineCopy(report, repoRunState.state, dispatchStatus?.owner)
-
-    if (report.blind === null) {
-      const details = [
-        ...report.held.map((h) => heldDetailCopy(h, owner)),
-        ...report.actionable.filter((a) => a.unchecked).map(uncheckedDetailCopy),
-        ...report.actionable.map(cycleDetailCopy),
-        ...report.claims.map((c) => stalledDetailCopy(c, owner)),
-        ...report.observations.map(observationDetailCopy),
-      ].filter((d): d is string => d !== null)
-      if (details.length > 0) line.title = details.join('\n')
-    }
-
-    strip.appendChild(line)
-
-    // #265: the owner line, directly under the tick line — rendered
-    // only once a `RepoDispatchStatus` exists for it (every ready
-    // repository, once `main/ipc.ts`'s dispatcher has considered it at
-    // least once).
-    if (dispatchStatus !== undefined) strip.appendChild(buildOwnerLine(dispatchStatus))
-  }
-
-  return strip
+/** The same five sources, narrowed to one item — the Board's detail pane's
+ *  own "Held" section (plan's own **UX states**: "this item's held, stalled,
+ *  unchecked and cycle detail lines from its repo's tick report, omitted
+ *  when there are none"). */
+export function itemDetailLines(report: TickReport, number: number, owner: DispatchOwner): readonly string[] {
+  if (report.blind !== null) return []
+  return [
+    ...report.held.filter((h) => h.number === number).map((h) => heldDetailCopy(h, owner)),
+    ...report.actionable.filter((a) => a.number === number && a.unchecked).map(uncheckedDetailCopy),
+    ...report.actionable.filter((a) => a.number === number).map(cycleDetailCopy),
+    ...report.claims.filter((c) => c.number === number).map((c) => stalledDetailCopy(c, owner)),
+    ...report.observations.filter((o) => o.number === number).map(observationDetailCopy),
+  ].filter((d): d is string => d !== null)
 }

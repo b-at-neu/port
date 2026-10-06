@@ -129,6 +129,18 @@ export function planGateHeaderButtonLabel(): string {
   return 'Plan gate'
 }
 
+/** The row's own next-action link (#319, plan's own **UX states**) — the
+ *  relay and the "ready to merge" cases, alongside `reviewPlanButtonLabel`
+ *  above and `decisionButtonLabel` below, which the plan groups under the
+ *  same one-link-per-row choice (`board/row-model.ts`'s `nextActionFor`). */
+export function answerQuestionButtonLabel(): string {
+  return 'Answer question'
+}
+
+export function openPrButtonLabel(): string {
+  return 'Open PR'
+}
+
 /** #313: the row tag for an `autoPlan` issue, at any phase — `docs/DESIGN.md`
  *  §6's own "Auto-plan" tag sentence, pinned by `scripts/checks/desktop-board.ts`. */
 export function autoPlanTagLabel(): string {
