@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { diagnosticCopy, overrideLineCopy, problemCopy, summaryParts } from './repositories'
-import type { AppliedOverride, ResolvedRepoConfig } from '../../shared/repos'
+import { diagnosticCopy, overrideLineCopy, problemCopy, registryBannerCopy, summaryParts } from './copy'
+import type { AppliedOverride, ResolvedRepoConfig } from '../../../shared/repos'
 
 function baseConfig(overrides: Partial<ResolvedRepoConfig> = {}): ResolvedRepoConfig {
   return {
@@ -94,5 +94,13 @@ describe('summaryParts', () => {
     const parts = summaryParts(baseConfig({ modules: { approvalGate: true, release: false, scope: true } }))
     expect(parts.join(' · ')).not.toContain('release')
     expect(parts.join(' · ')).toContain('approval gate')
+  })
+})
+
+describe('registryBannerCopy', () => {
+  it('names each reason', () => {
+    expect(registryBannerCopy({ path: 'registry.json', reason: 'unreadable' })).toContain("couldn't be read")
+    expect(registryBannerCopy({ path: 'registry.json', reason: 'malformed' })).toContain("isn't valid JSON")
+    expect(registryBannerCopy({ path: 'registry.json', reason: 'unsupported-version' })).toContain('newer version of Port')
   })
 })

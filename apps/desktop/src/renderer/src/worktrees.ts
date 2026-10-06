@@ -8,6 +8,7 @@
 // blank row.
 import type { RepoId } from '../../shared/repos'
 import type { InspectedWorktree, WorktreesReport } from '../../shared/reclaimer/types'
+import { failureCopy, needsAttentionCount, producerCopy } from './repositories/worktrees-copy'
 
 export type WorktreeSectionState =
   | { readonly status: 'idle' }
@@ -31,43 +32,6 @@ function button(label: string, action: string, repoId: RepoId, disabled: boolean
   return el
 }
 
-/** One line per kind, naming what was refused — the plan's own **UX
- *  states** copy, verbatim where the plan gives an exact sentence. */
-function failureCopy(failure: Extract<WorktreesReport, { ok: false }>): string {
-  switch (failure.kind) {
-    case 'not-configured':
-      return 'No commands.worktrees in this repository’s config, so worktree hygiene is unavailable. Run /port:init in it to install the reclamation script.'
-    case 'unsupported-runner':
-      return `commands.worktrees starts with ${failure.token}, which Port won’t run — only a node prefix is supported.`
-    case 'unparseable-command':
-      return 'commands.worktrees could not be parsed as a plain command — it may contain a shell metacharacter or an unbalanced quote. Nothing was run.'
-    case 'not-found':
-      return "Node.js wasn't found. Set PORT_NODE_PATH if it's installed somewhere unusual."
-    case 'cwd-missing':
-      return "This repository's working directory couldn't be found on disk."
-    case 'script-failed':
-      return `The reclamation script reported: ${failure.message}.`
-    case 'report-unparseable':
-      return "The script's output wasn't the expected JSON."
-    case 'timeout':
-      return 'Timed out after 60s.'
-    case 'signalled':
-      return 'The reclamation script was killed before it finished.'
-    case 'output-too-large':
-      return "The reclamation script's output was too large to read."
-    case 'nonzero':
-      return `The reclamation script exited with an error: ${failure.message}`
-    case 'spawn-failed':
-      return `Couldn't run Node.js: ${failure.message}`
-  }
-}
-
-function producerCopy(producer: InspectedWorktree['producer']): string | null {
-  if (producer === 'operator') return 'operator session'
-  if (producer === 'dispatched') return 'dispatched agent'
-  return null
-}
-
 function buildRow(worktree: InspectedWorktree): HTMLElement {
   const row = document.createElement('div')
   row.className = 'worktree-row'
@@ -89,10 +53,6 @@ function buildRow(worktree: InspectedWorktree): HTMLElement {
   if (producer !== null) row.appendChild(text('div', 'worktree-row__note', producer))
 
   return row
-}
-
-function needsAttentionCount(worktrees: readonly InspectedWorktree[]): number {
-  return worktrees.filter((w) => !w.reclaimable && (w.state === 'locked' || w.state === 'dirty' || w.state === 'unresolved')).length
 }
 
 function buildReady(report: Extract<WorktreesReport, { ok: true }>, repoId: RepoId): HTMLElement {
