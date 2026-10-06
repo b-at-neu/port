@@ -114,6 +114,7 @@ Installers are unsigned, built by the **Package desktop app** CI workflow; there
 | `/port:implement` | Run a stage yourself, for tickets an agent cannot be given |
 | `/port:release` | Cut a release, integration to production |
 | `/port:worktree-clean` | Reclaim stale agent worktrees |
+| `/port:plugin-cache-clean` | Remove plugin cache versions pinned by deleted projects |
 
 ## Layout
 

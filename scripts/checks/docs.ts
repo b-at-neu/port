@@ -35,7 +35,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
         // it is the one place that acts on it. Any other bare mention is stale.
         (line) => line.includes('repository root'),
       ],
-      [/(^|[^:\w/])\/(pipeline|scope|implement|release|worktree-clean|analyze|init)\b/, 'skill references need the `port:` prefix'],
+      [/(^|[^:\w/])\/(pipeline|scope|implement|release|worktree-clean|plugin-cache-clean|analyze|init)\b/, 'skill references need the `port:` prefix'],
     ];
     for (const f of docs) {
       const rel = relOf(f);
