@@ -35,7 +35,20 @@ describe('fixtureMode', () => {
     expect(result.kind).toBe('invalid')
   })
 
-  it('is on with an absolute userData in an unpackaged build', () => {
-    expect(fixtureMode({ [FIXTURE_ENV.flag]: '1', [FIXTURE_ENV.userData]: '/tmp/fixtures' }, false, isAbsolutePosix)).toEqual({ kind: 'on', userData: '/tmp/fixtures' })
+  it('is on with an absolute userData in an unpackaged build, defaulting to the populated scenario', () => {
+    expect(fixtureMode({ [FIXTURE_ENV.flag]: '1', [FIXTURE_ENV.userData]: '/tmp/fixtures' }, false, isAbsolutePosix)).toEqual({ kind: 'on', userData: '/tmp/fixtures', scenario: 'populated' })
+  })
+
+  it('is on with the empty scenario when requested', () => {
+    expect(fixtureMode({ [FIXTURE_ENV.flag]: '1', [FIXTURE_ENV.userData]: '/tmp/fixtures', [FIXTURE_ENV.scenario]: 'empty' }, false, isAbsolutePosix)).toEqual({
+      kind: 'on',
+      userData: '/tmp/fixtures',
+      scenario: 'empty',
+    })
+  })
+
+  it('is invalid when the scenario is unrecognised', () => {
+    const result = fixtureMode({ [FIXTURE_ENV.flag]: '1', [FIXTURE_ENV.userData]: '/tmp/fixtures', [FIXTURE_ENV.scenario]: 'bogus' }, false, isAbsolutePosix)
+    expect(result.kind).toBe('invalid')
   })
 })

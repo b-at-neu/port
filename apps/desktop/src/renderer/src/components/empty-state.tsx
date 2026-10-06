@@ -14,11 +14,12 @@ export interface EmptyStateProps {
   readonly message: string
   readonly action?: EmptyStateAction
   readonly className?: string
+  readonly 'data-slot'?: string
 }
 
-export function EmptyState({ icon: Icon, message, action, className }: EmptyStateProps) {
+export function EmptyState({ icon: Icon, message, action, className, 'data-slot': dataSlot }: EmptyStateProps) {
   return (
-    <div className={cn('flex flex-col items-center gap-2 py-6 text-center text-small text-muted-foreground', className)}>
+    <div data-slot={dataSlot} className={cn('flex flex-col items-center gap-2 py-6 text-center text-small text-muted-foreground', className)}>
       <Icon aria-hidden="true" className="size-5" />
       <p>{message}</p>
       {action !== undefined ? (

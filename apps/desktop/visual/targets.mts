@@ -41,6 +41,18 @@ interface SkipTarget {
 
 export type Target = CaptureTarget | SkipTarget
 
+// Extra captures run under a non-default fixture scenario, alongside
+// `SCREENSHOT_TARGETS`'s own populated-scenario set.
+export interface VariantTarget {
+  readonly name: string
+  readonly scenario: 'empty'
+  readonly target: CaptureTarget
+}
+
+export const VARIANT_TARGETS: readonly VariantTarget[] = [
+  { name: 'needs-you-empty', scenario: 'empty', target: { kind: 'capture', hash: '#/needs-you', container: '#react-root', ready: '[data-slot="needs-you-empty"]' } },
+]
+
 const LEGACY_SCREEN_REASON = 'Legacy screen, reachable only through in-app clicks; a deep link shows an unloaded shell. Becomes a capture target when #320 migrates it.'
 
 /** One target per `ROUTE_KEYS` entry — the `Readonly<Record<…>>` annotation

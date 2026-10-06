@@ -5,10 +5,11 @@
 import { ipcMain } from 'electron'
 import { IPC_CHANNELS } from '../../shared/ipc'
 import type { IpcChannel } from '../../shared/ipc'
+import type { FixtureScenario } from './mode'
 import { fixtureHandlers } from './handlers'
 
-export function registerFixtureIpc(): void {
-  const handlers = fixtureHandlers(new Date())
+export function registerFixtureIpc(scenario: FixtureScenario): void {
+  const handlers = fixtureHandlers(new Date(), scenario)
   const registered = new Set<IpcChannel>()
 
   for (const channel of IPC_CHANNELS) {

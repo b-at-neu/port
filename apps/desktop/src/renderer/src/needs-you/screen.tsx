@@ -122,7 +122,7 @@ export function NeedsYouScreen() {
               <p className="px-4 py-1 text-meta text-muted-foreground">Can&apos;t read agent transcripts, so a waiting question would not show here.</p>
             ) : null}
             {items.length === 0 ? (
-              <EmptyState icon={Inbox} message="Nothing needs you right now." className="px-4 py-6" />
+              <EmptyState icon={Inbox} message="Nothing needs you right now." className="px-4 py-6" data-slot="needs-you-empty" />
             ) : (
               items.map((item, index) => {
                 const key = itemKey(item)

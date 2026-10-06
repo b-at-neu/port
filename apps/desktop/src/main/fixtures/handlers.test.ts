@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { IPC_CHANNELS } from '../../shared/ipc'
 import type { IpcChannel } from '../../shared/ipc'
+import { needsYouItems } from '../../shared/board/needs-you'
 import { fixtureHandlers } from './handlers'
 
 // A representative request for every channel whose request is not `void` —
@@ -38,9 +39,9 @@ const SAMPLE_REQUESTS: Partial<Record<IpcChannel, unknown>> = {
   'backlog:list': { repoId: 'fixture-acme-widgets' },
 }
 
-describe('fixtureHandlers', () => {
+describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', (scenario) => {
   const now = new Date('2026-09-05T14:00:00.000Z')
-  const handlers = fixtureHandlers(now)
+  const handlers = fixtureHandlers(now, scenario)
 
   it('has a handler for every IPC channel', () => {
     for (const channel of IPC_CHANNELS) {
@@ -76,7 +77,7 @@ describe('fixtureHandlers', () => {
       expect(snapshot.state.repositories.filter((r) => !r.ok)).toHaveLength(1)
     })
 
-    it('has one item each with status gated, in-flight, waiting, and terminal', () => {
+    it.runIf(scenario === 'populated')('has one item each with status gated, in-flight, waiting, and terminal', () => {
       const ok = snapshot.state.repositories.find((r) => r.ok)
       if (ok === undefined || !ok.ok) throw new Error('fixture board carries no ok repository')
       const statuses = new Set(ok.items.map((item) => item.status))
@@ -84,6 +85,14 @@ describe('fixtureHandlers', () => {
       expect(statuses.has('in-flight')).toBe(true)
       expect(statuses.has('waiting')).toBe(true)
       expect(statuses.has('terminal')).toBe(true)
+    })
+
+    it.runIf(scenario === 'empty')('produces an empty Needs you list', () => {
+      expect(needsYouItems(snapshot, now)).toHaveLength(0)
+    })
+
+    it.runIf(scenario === 'populated')('produces a non-empty Needs you list', () => {
+      expect(needsYouItems(snapshot, now).length).toBeGreaterThan(0)
     })
 
     it('never times anything after now', () => {

@@ -108,7 +108,7 @@ if (fixture.kind === 'invalid') {
       // live adapter chain, and starts neither a watcher nor a hosted-session
       // store — both stay `null`, so `before-quit` below no-ops for them.
       if (fixture.kind === 'on') {
-        registerFixtureIpc()
+        registerFixtureIpc(fixture.scenario)
       } else {
         const registered = registerIpc()
         watcher = registered.watcher
