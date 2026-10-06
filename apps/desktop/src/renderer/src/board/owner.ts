@@ -220,7 +220,7 @@ export function noteCopy(note: BudgetNote): string {
  *  whenever `owner !== 'app'`: the clause still shows (`budgetClause`), but
  *  these are this app's own gate decisions, which only apply while it
  *  actually owns dispatch. */
-function budgetNoteLines(status: RepoDispatchStatus): readonly string[] {
+export function budgetNoteLines(status: RepoDispatchStatus): readonly string[] {
   if (status.owner !== 'app' || status.budget === null) return []
   const lines = status.budget.notes.map(noteCopy)
   return status.budget.problem !== null
@@ -229,8 +229,10 @@ function budgetNoteLines(status: RepoDispatchStatus): readonly string[] {
 }
 
 /** The button's own label and action — `null` for `nobody` (no control at
- *  all, per the plan's own UX table). */
-function controlFor(status: RepoDispatchStatus): { readonly label: string; readonly action: 'dispatch-claim-take' | 'dispatch-claim-release'; readonly title: string } | null {
+ *  all, per the plan's own UX table). `pipeline-status.tsx` calls
+ *  `setDispatchClaim(repoId, action === 'dispatch-claim-take')` directly on
+ *  click, rather than dispatching through a `data-action` string. */
+export function controlFor(status: RepoDispatchStatus): { readonly label: string; readonly action: 'dispatch-claim-take' | 'dispatch-claim-release'; readonly title: string } | null {
   if (status.owner === 'nobody') return null
   if (status.owner === 'cockpit') {
     return { label: 'Take dispatch', action: 'dispatch-claim-take', title: 'Stops a /port:pipeline cockpit in this checkout from dispatching.' }
@@ -238,48 +240,10 @@ function controlFor(status: RepoDispatchStatus): { readonly label: string; reado
   return { label: 'Release dispatch', action: 'dispatch-claim-release', title: 'Hands dispatch back to a /port:pipeline cockpit in this checkout.' }
 }
 
-/** One repository's own owner line plus its Take/Release control, plus any
- *  budget-gate notes underneath (#293) — `view.ts` renders this directly
- *  under that repository's tick line. The control carries `data-repo-id` so
- *  `board/dispatch.ts`'s `handleDispatchClick` can resolve which repository
- *  a click names without a second lookup. */
-export function buildOwnerLine(status: RepoDispatchStatus): HTMLElement {
-  const group = document.createElement('div')
-  group.className = 'board-header__owner-group'
-
-  const line = document.createElement('div')
-  line.className = 'board-header__owner-line'
-
-  const observationPart = status.owner === 'app' ? observationClause(status.observed) : ''
-  const runStatePart = status.runState === 'draining' ? ' · draining' : status.runState === 'paused' ? ' · paused' : ''
-
-  const text = document.createElement('span')
-  text.className = 'board-header__owner-text'
-  text.textContent = ownerLineCopy(status) + runStatePart + observationPart
-  line.appendChild(text)
-
-  const observationTitleText = status.owner === 'app' ? observationTitle(status.observed) : null
-  if (observationTitleText !== null) line.title = observationTitleText
-
-  const control = controlFor(status)
-  if (control !== null) {
-    const button = document.createElement('button')
-    button.className = 'board-header__owner-button'
-    button.dataset.action = control.action
-    button.dataset.repoId = String(status.repoId)
-    button.title = control.title
-    button.textContent = control.label
-    line.appendChild(button)
-  }
-
-  group.appendChild(line)
-
-  for (const noteText of budgetNoteLines(status)) {
-    const note = document.createElement('div')
-    note.className = 'board-header__owner-note'
-    note.textContent = noteText
-    group.appendChild(note)
-  }
-
-  return group
+/** The owner line's own run-state suffix (plain concatenation, no state
+ *  machine) — `pipeline-status.tsx` appends this to `ownerLineCopy`'s own
+ *  text itself, the same way `buildOwnerLine` used to before it was deleted
+ *  in favour of that component. */
+export function runStateSuffix(runState: RepoDispatchStatus['runState']): string {
+  return runState === 'draining' ? ' · draining' : runState === 'paused' ? ' · paused' : ''
 }

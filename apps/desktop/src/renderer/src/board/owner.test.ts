@@ -1,15 +1,10 @@
-// Covers the line's pure copy function — `buildOwnerLine` itself needs a
-// DOM, which this workspace's vitest config does not provide (`environment:
-// 'node'`, no jsdom/happy-dom installed), the same gap every other DOM
-// builder under `renderer/src/board/` already has (see `tick.test.ts`'s own
-// header). `observationClause`/`observationTitle` (#292) are exported
-// specifically so the owner-line's observation clause and hover title — both
-// otherwise reachable only from `buildOwnerLine`'s DOM — have a direct,
-// DOM-free test surface.
+// Covers the owner line's pure copy, including `controlFor`/`budgetNoteLines`
+// (#319) — both now exported directly for `pipeline-status.tsx` to consume,
+// in place of the deleted `buildOwnerLine`'s own DOM.
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../../../shared/repos'
 import type { ObservationRecord, RepoDispatchStatus } from '../../../shared/dispatch/types'
-import { noteCopy, observationClause, observationTitle, ownerLineCopy } from './owner'
+import { budgetNoteLines, controlFor, noteCopy, observationClause, observationTitle, ownerLineCopy, runStateSuffix } from './owner'
 
 const WRITE_FAILED = { kind: 'write-failed' as const, classification: 'unknown' as const, stderr: 'boom', reread: null }
 
@@ -181,6 +176,47 @@ describe('observationClause', () => {
   it('refused — a non-plan-gate scope always uses the dispatch-released copy', () => {
     expect(observationClause([record({ kind: 'liveness-reset', number: 26, outcome: 'refused', scope: 'dispatch' })])).toContain("didn't reset #26 — dispatch was released mid-pass.")
     expect(observationClause([record({ kind: 'liveness-reset', number: 27, outcome: 'refused', scope: null })])).toContain("didn't reset #27 — dispatch was released mid-pass.")
+  })
+})
+
+describe('controlFor', () => {
+  it('nobody gets no control at all', () => {
+    expect(controlFor(status({ owner: 'nobody' }))).toBeNull()
+  })
+
+  it('cockpit offers Take dispatch', () => {
+    expect(controlFor(status({ owner: 'cockpit' }))?.label).toBe('Take dispatch')
+    expect(controlFor(status({ owner: 'cockpit' }))?.action).toBe('dispatch-claim-take')
+  })
+
+  it('app offers Release dispatch', () => {
+    expect(controlFor(status({ owner: 'app' }))?.label).toBe('Release dispatch')
+    expect(controlFor(status({ owner: 'app' }))?.action).toBe('dispatch-claim-release')
+  })
+})
+
+describe('budgetNoteLines', () => {
+  it('empty when this app does not own dispatch, even with a budget present', () => {
+    const budget = { line: null, problem: null, notes: [{ kind: 'held' as const, number: 1, line: 'held' }] }
+    expect(budgetNoteLines(status({ owner: 'cockpit', budget }))).toEqual([])
+  })
+
+  it('empty when there is no budget at all', () => {
+    expect(budgetNoteLines(status({ budget: null }))).toEqual([])
+  })
+
+  it('one line per note, plus the sweep problem line when present', () => {
+    const budget = { line: null, problem: 'timed out', notes: [{ kind: 'held' as const, number: 1, line: 'held note' }] }
+    const lines = budgetNoteLines(status({ budget }))
+    expect(lines).toEqual(['held note', '⚠ Budget sweep failed (timed out) — finished dispatches stay open and keep counting until a sweep succeeds.'])
+  })
+})
+
+describe('runStateSuffix', () => {
+  it('draining and paused get their own suffix, dispatching gets none', () => {
+    expect(runStateSuffix('draining')).toBe(' · draining')
+    expect(runStateSuffix('paused')).toBe(' · paused')
+    expect(runStateSuffix('dispatching')).toBe('')
   })
 })
 

@@ -1,11 +1,11 @@
-// Operator control over dispatch (#110, #314): the header's Halt everything
-// button and the halt report rendered under the tick strip — per-repository
-// run/drain/pause now lives in `board/run-state.ts`. #265 adds the dispatch
-// claim's own Take/Release button and the relay's own "Send to agent".
-// `main.ts` delegates one `dispatch-*` click branch here rather than owning
-// this state itself, the same split `board/actions.ts` draws for the
-// board's own per-item actions.
-import type { BoardSnapshot } from '../../../shared/board/types'
+// Operator control over dispatch (#110, #314, #319): the header's Halt
+// everything request and the halt report rendered under the pipeline status
+// strip — per-repository run/drain/pause lives in `board/run-state.ts`. The
+// two-click arm step is gone: `header.tsx`'s shadcn `AlertDialog` is the
+// confirmation now, so this module only runs the request once the dialog's
+// own confirm button is pressed. #265's dispatch claim take/release is a
+// plain async function, called directly from `pipeline-status.tsx`'s own
+// button — no DOM click delegation.
 import type { HaltReport } from '../../../shared/dispatch/types'
 import type { RepoId } from '../../../shared/repos'
 import { haltAbortedCopy, haltHeadingCopy, haltItemLine } from './halt-copy'
@@ -13,33 +13,40 @@ import { haltAbortedCopy, haltHeadingCopy, haltItemLine } from './halt-copy'
 type PendingCommand = 'halt' | null
 
 let pending: PendingCommand = null
-let haltConfirmArmed = false
 let lastHaltReport: HaltReport | null = null
+const listeners = new Set<() => void>()
+
+function notify(): void {
+  for (const listener of listeners) listener()
+}
+
+/** `useSyncExternalStore`'s own subscribe half for `haltPending`/
+ *  `currentHaltReport`. */
+export function subscribeDispatch(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
 
 export function haltPending(): boolean {
   return pending === 'halt'
 }
 
-export function isHaltConfirmArmed(): boolean {
-  return haltConfirmArmed
-}
-
-/** `view.ts`'s own lookup for the halt report banner — `null` once
+/** `header.tsx`'s own lookup for the halt report banner — `null` once
  *  dismissed, or before any halt has ever run this session. */
 export function currentHaltReport(): HaltReport | null {
   return lastHaltReport
 }
 
-/** First click arms the confirm step (`Halt N items?`); the pending label
- *  takes over once the second click actually runs it. */
-export function haltButtonLabel(inFlightCount: number): string {
-  if (pending === 'halt') return 'Halting…'
-  return haltConfirmArmed ? `Halt ${String(inFlightCount)} items?` : 'Halt everything'
+/** No arm step to pair with any more — `header.tsx`'s own `AlertDialog`
+ *  open state is the confirmation, so this reads only `haltPending()`. */
+export function haltButtonLabel(pending: boolean): string {
+  return pending ? 'Halting…' : 'Halt everything'
 }
 
-async function runHalt(redraw: () => void): Promise<void> {
+/** The `AlertDialog`'s own confirm action. */
+export async function runHalt(): Promise<void> {
   pending = 'halt'
-  redraw()
+  notify()
   try {
     const result = await window.port.dispatchControl({ command: 'halt' })
     if (result.command === 'halt') lastHaltReport = result.report
@@ -47,116 +54,31 @@ async function runHalt(redraw: () => void): Promise<void> {
     console.error('Failed to reach the main process for dispatch halt', error)
   }
   pending = null
-  redraw()
+  notify()
 }
 
-/** First click arms the confirm step; a second click while armed runs the
- *  halt. `handleHaltCancel` disarms without a round trip. */
-export function handleHaltClick(redraw: () => void): void {
-  if (pending !== null) return
-  if (!haltConfirmArmed) {
-    haltConfirmArmed = true
-    redraw()
-    return
-  }
-  haltConfirmArmed = false
-  void runHalt(redraw)
-}
-
-/** One data-action, `dispatch-halt-cancel`, shared by the confirm step's own
- *  Cancel button and the halt report's Dismiss button — the two are never
- *  visible at once (a fresh halt disarms the confirm step by construction),
- *  so one handler unarming the confirm step and clearing the last report
- *  covers both without a fourth click branch in `main.ts`. */
-export function handleHaltCancel(redraw: () => void): void {
-  haltConfirmArmed = false
+/** The halt report banner's own Dismiss button. */
+export function dismissHaltReport(): void {
   lastHaltReport = null
-  redraw()
+  notify()
 }
 
 // `haltItemLine`/`haltHeadingCopy`/`haltAbortedCopy` live in `./halt-copy`
 // now, shared with `board/run-state.ts`'s own per-repository pause report —
-// re-exported here since `view.ts` and this module's own `dispatch.test.ts`
+// re-exported here since `header.tsx` and this module's own `dispatch.test.ts`
 // still import them from `./dispatch`.
 export { haltAbortedCopy, haltHeadingCopy, haltItemLine }
 
-/** The halt report's whole DOM, rendered under the tick strip until
- *  dismissed (`data-action="dispatch-halt-cancel"`, the same action the
- *  confirm step's own Cancel button uses, wired through `main.ts`'s one
- *  delegated click listener). `aborted` never lists an item — the run-state
- *  write itself failed, so nothing was touched. */
-export function buildHaltReport(report: HaltReport, now: Date): HTMLElement {
-  const section = document.createElement('div')
-  section.className = 'board-halt'
-
-  const dismiss = document.createElement('button')
-  dismiss.className = 'board-halt__dismiss'
-  dismiss.dataset.action = 'dispatch-halt-cancel'
-  dismiss.textContent = 'Dismiss'
-
-  if (report.kind === 'aborted') {
-    section.appendChild(document.createTextNode(haltAbortedCopy(report)))
-    section.appendChild(dismiss)
-    return section
-  }
-
-  const heading = document.createElement('div')
-  heading.className = 'board-halt__heading'
-  heading.textContent = haltHeadingCopy(report)
-  section.appendChild(heading)
-
-  const note = document.createElement('div')
-  note.className = 'board-halt__note'
-  note.textContent = 'Every pipeline is paused. Nothing will be picked up until you run it again.'
-  section.appendChild(note)
-
-  for (const outcome of report.items) {
-    const line = document.createElement('div')
-    line.className = 'board-halt__line'
-    line.textContent = haltItemLine(outcome, now)
-    section.appendChild(line)
-  }
-
-  section.appendChild(dismiss)
-  return section
-}
-
-/** #265: the claim take/release button's own click — the target state is
- *  the button's own action, never a toggle read off the current line (the
- *  same "never a toggle this channel infers" rule `gate:claim:set` already
- *  follows), so a stale render can only ever ask for the state its own
- *  label showed. */
-async function runClaimSet(repoId: RepoId, held: boolean, redraw: () => void): Promise<void> {
+/** #265: the claim take/release button's own click, called directly from
+ *  `pipeline-status.tsx` — the target state is the button's own action,
+ *  never a toggle read off the current line (the same "never a toggle this
+ *  channel infers" rule `gate:claim:set` already follows). No local
+ *  `notify()`: a successful write is picked up by the board's next regular
+ *  poll, the same as every other dispatch-status field. */
+export async function setDispatchClaim(repoId: RepoId, held: boolean): Promise<void> {
   try {
     await window.port.dispatchClaimSet({ repoId, held })
   } catch (error) {
     console.error(`Failed to ${held ? 'take' : 'release'} the dispatch claim for '${repoId}'`, error)
-  }
-  redraw()
-}
-
-/**
- * The one `dispatch-*` click branch `main.ts` delegates every such action
- * to — halt and halt-cancel. Per-repository run/drain/pause moved to the
- * sidebar's `StatusPillMenu` (#316), driven by `shell/run-state-command.ts`
- * instead of this click-delegation path. A click naming a repository this
- * app cannot resolve from `target.dataset` and `snapshot` is silently
- * ignored, the same fail-safe every other board control already applies to
- * a stale render.
- */
-export function handleDispatchClick(target: HTMLElement, snapshot: BoardSnapshot | null, redraw: () => void): void {
-  const action = target.dataset.action
-  if (action === 'dispatch-halt') {
-    handleHaltClick(redraw)
-    return
-  }
-  if (action === 'dispatch-halt-cancel') {
-    handleHaltCancel(redraw)
-    return
-  }
-  if (action === 'dispatch-claim-take' || action === 'dispatch-claim-release') {
-    const repoId = target.dataset.repoId
-    if (repoId === undefined) return
-    void runClaimSet(repoId as RepoId, action === 'dispatch-claim-take', redraw)
   }
 }
