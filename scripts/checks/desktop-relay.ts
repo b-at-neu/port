@@ -7,7 +7,7 @@ import type { Reporter } from '../lib/report.ts';
 // regex-based, in the shape of desktop-gate.ts's own guards. Reading these
 // directories by explicit path (never walk('apps/'), which descends into
 // node_modules).
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const sharedRelayDir = 'apps/desktop/src/shared/relay';
   const mainRelayDir = 'apps/desktop/src/main/relay';
   const classifyFile = `${sharedRelayDir}/classify.ts`;
@@ -55,11 +55,7 @@ export default async function ({ fail, ok }: Reporter) {
   // call — it reads transcripts already on disk, it never calls out.
   {
     const text = readFileSync(join(root, readFile), 'utf8');
-    if (/\b(gh|ghJson|runCommand)\(/.test(text)) {
-      fail('desktop-relay', `${readFile} calls gh(/ghJson(/runCommand( — it must only read local transcripts`);
-    } else {
-      ok();
-    }
+    expect(!/\b(gh|ghJson|runCommand)\(/.test(text), 'desktop-relay', `${readFile} calls gh(/ghJson(/runCommand( — it must only read local transcripts`);
   }
 
   // --- (3) the marker pin — RELAY_MARKERS both directions against ----------
@@ -90,14 +86,7 @@ export default async function ({ fail, ok }: Reporter) {
     } else {
       const onlyInClassify = markerValues.filter((m) => !docSet.has(m));
       const onlyInDoc = docTokens.filter((t) => !markerSet.has(t));
-      if (onlyInClassify.length > 0 || onlyInDoc.length > 0) {
-        fail(
-          'desktop-relay',
-          `${classifyFile}'s RELAY_MARKERS (${markerValues.join(', ')}) and ${recoveryFile}'s '## Escalation' markers (${docTokens.join(', ')}) disagree`,
-        );
-      } else {
-        ok();
-      }
+      expect(!(onlyInClassify.length > 0 || onlyInDoc.length > 0), 'desktop-relay', `${classifyFile}'s RELAY_MARKERS (${markerValues.join(', ')}) and ${recoveryFile}'s '## Escalation' markers (${docTokens.join(', ')}) disagree`);
     }
   }
 
@@ -111,11 +100,7 @@ export default async function ({ fail, ok }: Reporter) {
     const skillText = readFileSync(join(root, skillFile), 'utf8');
     if (!phraseMatch) {
       fail('desktop-relay', `${classifyFile} has no 'USAGE_LIMIT_PHRASE = ...' assignment`);
-    } else if (!skillText.includes(phraseMatch[1])) {
-      fail('desktop-relay', `${skillFile} does not name '${phraseMatch[1]}' — the usage-limit class would drift from the cockpit's own prose`);
-    } else {
-      ok();
-    }
+    } else expect(skillText.includes(phraseMatch[1]), 'desktop-relay', `${skillFile} does not name '${phraseMatch[1]}' — the usage-limit class would drift from the cockpit's own prose`);
   }
 
   // --- (5) running/alive/isLive banned under shared/relay/ and main/relay/ -
@@ -149,21 +134,13 @@ export default async function ({ fail, ok }: Reporter) {
   // would fire on a message that merely quotes the convention.
   {
     const readText = readFileSync(join(root, readFile), 'utf8');
-    if (/\b(setTimeout|setInterval)\(/.test(readText)) {
-      fail('desktop-relay', `${readFile} names a timer — the relay reader must be recomputed only when called, on the sessions source's own cadence`);
-    } else {
-      ok();
-    }
+    expect(!/\b(setTimeout|setInterval)\(/.test(readText), 'desktop-relay', `${readFile} names a timer — the relay reader must be recomputed only when called, on the sessions source's own cadence`);
 
     const classifyText = readFileSync(join(root, classifyFile), 'utf8');
     const anchored = /new RegExp\(`\^/.test(classifyText);
     const bareIncludes = /text\.includes\(RELAY_MARKERS/.test(classifyText);
     if (!anchored) {
       fail('desktop-relay', `${classifyFile} has no line-start-anchored ('^') marker pattern — a marker must count only at the start of a line`);
-    } else if (bareIncludes) {
-      fail('desktop-relay', `${classifyFile} matches a marker with a bare 'text.includes(RELAY_MARKERS...)' — form, not substring`);
-    } else {
-      ok();
-    }
+    } else expect(!bareIncludes, 'desktop-relay', `${classifyFile} matches a marker with a bare 'text.includes(RELAY_MARKERS...)' — form, not substring`);
   }
 }

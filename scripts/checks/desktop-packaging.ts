@@ -8,7 +8,7 @@ import type { Reporter } from '../lib/report.ts';
 // packaging boundary. These assertions pin the installer build's own
 // decisions mechanically, the same shape desktop-runtime.ts's own guards
 // already use.
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const appDir = join(root, 'apps/desktop');
   const noticePath = join(appDir, 'NOTICE.txt');
   const configPath = join(appDir, 'electron-builder.config.mjs');
@@ -31,14 +31,7 @@ export default async function ({ fail, ok }: Reporter) {
       const [designLine1, designLine2] = [aboutMatch[1], aboutMatch[2]];
       if (noticeLines.length !== 2) {
         fail('desktop-packaging', `${relOf(noticePath)} must carry exactly two lines, found ${noticeLines.length}`);
-      } else if (noticeLines[0] !== designLine1 || noticeLines[1] !== designLine2) {
-        fail(
-          'desktop-packaging',
-          `${relOf(noticePath)} (${JSON.stringify(noticeLines)}) does not match docs/DESIGN.md §6's About: line (${JSON.stringify([designLine1, designLine2])})`,
-        );
-      } else {
-        ok();
-      }
+      } else expect(!(noticeLines[0] !== designLine1 || noticeLines[1] !== designLine2), 'desktop-packaging', `${relOf(noticePath)} (${JSON.stringify(noticeLines)}) does not match docs/DESIGN.md §6's About: line (${JSON.stringify([designLine1, designLine2])})`);
     }
   }
 
@@ -62,34 +55,18 @@ export default async function ({ fail, ok }: Reporter) {
           },
         };
         const forbidden = mod.sdkPlatformPackages(fixtureManifest);
-        if (forbidden.length !== 2) {
-          fail('desktop-packaging', `sdkPlatformPackages(fixture) returned ${forbidden.length} packages, expected 2`);
-        } else {
-          ok();
-        }
+        expect(!(forbidden.length !== 2), 'desktop-packaging', `sdkPlatformPackages(fixture) returned ${forbidden.length} packages, expected 2`);
 
         const requiredEntries = ['/out/main/index.js', '/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs'];
 
         const clean = mod.auditEntries([...requiredEntries, '/package.json'], forbidden);
-        if (clean.bundled.length !== 0 || clean.missing.length !== 0) {
-          fail('desktop-packaging', `auditEntries on a clean listing reported ${JSON.stringify(clean)}, expected empty bundled and missing`);
-        } else {
-          ok();
-        }
+        expect(!(clean.bundled.length !== 0 || clean.missing.length !== 0), 'desktop-packaging', `auditEntries on a clean listing reported ${JSON.stringify(clean)}, expected empty bundled and missing`);
 
         const bundledCase = mod.auditEntries([...requiredEntries, '/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude'], forbidden);
-        if (bundledCase.bundled.length !== 1) {
-          fail('desktop-packaging', `auditEntries did not flag a bundled SDK platform binary: ${JSON.stringify(bundledCase)}`);
-        } else {
-          ok();
-        }
+        expect(!(bundledCase.bundled.length !== 1), 'desktop-packaging', `auditEntries did not flag a bundled SDK platform binary: ${JSON.stringify(bundledCase)}`);
 
         const missingCase = mod.auditEntries(['/package.json'], forbidden);
-        if (!missingCase.missing.includes('/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs')) {
-          fail('desktop-packaging', `auditEntries did not report the missing sdk.mjs positive control: ${JSON.stringify(missingCase)}`);
-        } else {
-          ok();
-        }
+        expect(missingCase.missing.includes('/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs'), 'desktop-packaging', `auditEntries did not report the missing sdk.mjs positive control: ${JSON.stringify(missingCase)}`);
       }
     }
   }
@@ -102,31 +79,15 @@ export default async function ({ fail, ok }: Reporter) {
       fail('desktop-packaging', `${relOf(configPath)} does not exist`);
     } else {
       const text = readFileSync(configPath, 'utf8');
-      if (!text.includes('sdkPlatformPackages(')) {
-        fail('desktop-packaging', `${relOf(configPath)} must call sdkPlatformPackages( to derive its exclusions`);
-      } else {
-        ok();
-      }
-      if (/\basarUnpack\b/.test(text)) {
-        fail('desktop-packaging', `${relOf(configPath)} must not set asarUnpack — there are no native production dependencies`);
-      } else {
-        ok();
-      }
-      if (!/extraResources:\s*\[\s*\{\s*from:\s*['"]NOTICE\.txt['"]/.test(text)) {
-        fail('desktop-packaging', `${relOf(configPath)} must copy NOTICE.txt through extraResources`);
-      } else {
-        ok();
-      }
+      expect(text.includes('sdkPlatformPackages('), 'desktop-packaging', `${relOf(configPath)} must call sdkPlatformPackages( to derive its exclusions`);
+      expect(!/\basarUnpack\b/.test(text), 'desktop-packaging', `${relOf(configPath)} must not set asarUnpack — there are no native production dependencies`);
+      expect(/extraResources:\s*\[\s*\{\s*from:\s*['"]NOTICE\.txt['"]/.test(text), 'desktop-packaging', `${relOf(configPath)} must copy NOTICE.txt through extraResources`);
 
       // --- productName/appId/executableName name 'port', never 'Claude' ---
       // guard(#335): DESIGN.md "Identity" — the installed app must never
       // present itself as a Claude product.
       const productNameMatch = /productName:\s*['"]([^'"]+)['"]/.exec(text);
-      if (!productNameMatch || productNameMatch[1] !== 'port') {
-        fail('desktop-packaging', `${relOf(configPath)}'s productName must be exactly 'port'`);
-      } else {
-        ok();
-      }
+      expect(!(!productNameMatch || productNameMatch[1] !== 'port'), 'desktop-packaging', `${relOf(configPath)}'s productName must be exactly 'port'`);
       for (const field of ['productName', 'appId', 'executableName']) {
         const matches = [...text.matchAll(new RegExp(`${field}:\\s*['"\`]([^'"\`]*)['"\`]`, 'g'))];
         for (const m of matches) {
@@ -150,11 +111,7 @@ export default async function ({ fail, ok }: Reporter) {
       const dist: string | undefined = pkg.scripts?.dist;
       if (!dist) {
         fail('desktop-packaging', `${relOf(packageJsonPath)} has no 'dist' script`);
-      } else if (!/electron-builder[\s\S]*&&[\s\S]*audit-bundle\.mjs/.test(dist)) {
-        fail('desktop-packaging', `'dist' script must run audit-bundle.mjs after electron-builder in the same && chain, got: ${dist}`);
-      } else {
-        ok();
-      }
+      } else expect(/electron-builder[\s\S]*&&[\s\S]*audit-bundle\.mjs/.test(dist), 'desktop-packaging', `'dist' script must run audit-bundle.mjs after electron-builder in the same && chain, got: ${dist}`);
     }
   }
 
@@ -166,11 +123,7 @@ export default async function ({ fail, ok }: Reporter) {
       fail('desktop-packaging', `${relOf(workflowPath)} does not exist`);
     } else {
       const text = readFileSync(workflowPath, 'utf8');
-      if (!/pnpm --filter @port\/desktop dist/.test(text)) {
-        fail('desktop-packaging', `${relOf(workflowPath)} must run 'pnpm --filter @port/desktop dist'`);
-      } else {
-        ok();
-      }
+      expect(/pnpm --filter @port\/desktop dist/.test(text), 'desktop-packaging', `${relOf(workflowPath)} must run 'pnpm --filter @port/desktop dist'`);
       for (const os of ['ubuntu-latest', 'macos-latest', 'windows-latest']) {
         if (!text.includes(os)) {
           fail('desktop-packaging', `${relOf(workflowPath)} must include '${os}' in its matrix`);

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { root, walk, relOf, readJson, pipelineSkillText, pipelineDocsText } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   // --- Review evidence gate — verdicts wait for concluded checks --------------
   // guard(#143): a verdict formed before its evidence exists, and a carve-out
   // hard-coded to one repository's check names. review-agent could form a
@@ -17,35 +17,15 @@ export default async function ({ fail, ok }: Reporter) {
     const rel = 'plugins/port/agents/review-agent.md';
     const text = readFileSync(join(root, rel), 'utf8');
 
-    if (!text.includes('statusCheckRollup')) {
-      fail('review-evidence', `${rel} never reads 'statusCheckRollup' — the evidence gate has nothing to reduce`);
-    } else {
-      ok();
-    }
+    expect(text.includes('statusCheckRollup'), 'review-evidence', `${rel} never reads 'statusCheckRollup' — the evidence gate has nothing to reduce`);
 
-    if (!text.includes('--watch')) {
-      fail('review-evidence', `${rel} never uses 'gh pr checks --watch' — nothing bounds the wait for pending checks`);
-    } else {
-      ok();
-    }
+    expect(text.includes('--watch'), 'review-evidence', `${rel} never uses 'gh pr checks --watch' — nothing bounds the wait for pending checks`);
 
-    if (!text.includes('no verdict is formed while any check on the head commit is pending')) {
-      fail('review-evidence', `${rel} is missing the literal phrase 'no verdict is formed while any check on the head commit is pending'`);
-    } else {
-      ok();
-    }
+    expect(text.includes('no verdict is formed while any check on the head commit is pending'), 'review-evidence', `${rel} is missing the literal phrase 'no verdict is formed while any check on the head commit is pending'`);
 
-    if (!/modules\.approvalGate/.test(text)) {
-      fail('review-evidence', `${rel} never conditions the carve-out on 'modules.approvalGate'`);
-    } else {
-      ok();
-    }
+    expect(/modules\.approvalGate/.test(text), 'review-evidence', `${rel} never conditions the carve-out on 'modules.approvalGate'`);
 
-    if (!text.includes('blocked — checks pending')) {
-      fail('review-evidence', `${rel} never names the 'blocked — checks pending' verdict`);
-    } else {
-      ok();
-    }
+    expect(text.includes('blocked — checks pending'), 'review-evidence', `${rel} never names the 'blocked — checks pending' verdict`);
   }
 
   // --- Generality guard — no literal CI check name in a stage prompt ----------
@@ -87,32 +67,16 @@ export default async function ({ fail, ok }: Reporter) {
     const text = pipelineDocsText();
 
     for (const phrase of ['take the union', 'deterministic order', 'apply the addition inside the new structure']) {
-      if (!text.includes(phrase)) {
-        fail('rebase-protocol', `${rel} is missing the auto-resolvable phrase '${phrase}'`);
-      } else {
-        ok();
-      }
+      expect(text.includes(phrase), 'rebase-protocol', `${rel} is missing the auto-resolvable phrase '${phrase}'`);
     }
 
     for (const name of ['sessionRequiredPaths', 'migration', 'environment', 'build configuration']) {
-      if (!text.includes(name)) {
-        fail('rebase-protocol', `${rel}'s never-auto-resolve list is missing '${name}'`);
-      } else {
-        ok();
-      }
+      expect(text.includes(name), 'rebase-protocol', `${rel}'s never-auto-resolve list is missing '${name}'`);
     }
 
-    if (!text.includes('Recommendation')) {
-      fail('rebase-protocol', `${rel}'s escalation format declares no 'Recommendation'`);
-    } else {
-      ok();
-    }
+    expect(text.includes('Recommendation'), 'rebase-protocol', `${rel}'s escalation format declares no 'Recommendation'`);
 
-    if (!/D<n>/.test(text)) {
-      fail('rebase-protocol', `${rel}'s escalation format declares no 'D<n>' decision ID form`);
-    } else {
-      ok();
-    }
+    expect(/D<n>/.test(text), 'rebase-protocol', `${rel}'s escalation format declares no 'D<n>' decision ID form`);
   }
 
   // --- Mergeability — no review dispatched against a diff CI never validated --
@@ -132,43 +96,20 @@ export default async function ({ fail, ok }: Reporter) {
     const reviewText = readFileSync(join(root, reviewRel), 'utf8');
 
     for (const phrase of ['mergeable', 'CONFLICTING']) {
-      if (!reviewText.includes(phrase)) {
-        fail('mergeability', `${reviewRel} never reads '${phrase}'`);
-      } else {
-        ok();
-      }
+      expect(reviewText.includes(phrase), 'mergeability', `${reviewRel} never reads '${phrase}'`);
     }
 
-    if (!reviewText.includes('no verdict is formed on a pull request that cannot be merged')) {
-      fail(
-        'mergeability',
-        `${reviewRel} is missing the literal phrase 'no verdict is formed on a pull request that cannot be merged'`,
-      );
-    } else {
-      ok();
-    }
+    expect(reviewText.includes('no verdict is formed on a pull request that cannot be merged'), 'mergeability', `${reviewRel} is missing the literal phrase 'no verdict is formed on a pull request that cannot be merged'`);
 
-    if (!reviewText.includes('<labels.refreshBranch>')) {
-      fail('mergeability', `${reviewRel} never routes its mergeability exit to '<labels.refreshBranch>'`);
-    } else {
-      ok();
-    }
+    expect(reviewText.includes('<labels.refreshBranch>'), 'mergeability', `${reviewRel} never routes its mergeability exit to '<labels.refreshBranch>'`);
 
     const pipelineRel = 'plugins/port/docs/PIPELINE.md';
     for (const [rel, text] of [[reviewRel, reviewText], [pipelineRel, readFileSync(join(root, pipelineRel), 'utf8')]]) {
-      if (!text.includes('## Rebase required')) {
-        fail('mergeability', `${rel} never names the '## Rebase required' comment`);
-      } else {
-        ok();
-      }
+      expect(text.includes('## Rebase required'), 'mergeability', `${rel} never names the '## Rebase required' comment`);
     }
 
     const pipelineText = readFileSync(join(root, pipelineRel), 'utf8');
-    if (!pipelineText.includes('never on a schedule')) {
-      fail('mergeability', `${pipelineRel} is missing the rebase-on-demand decision ('never on a schedule')`);
-    } else {
-      ok();
-    }
+    expect(pipelineText.includes('never on a schedule'), 'mergeability', `${pipelineRel} is missing the rebase-on-demand decision ('never on a schedule')`);
   }
 
   // --- Refresh is the bounded route for a stale branch ------------------------
@@ -183,11 +124,7 @@ export default async function ({ fail, ok }: Reporter) {
     const labels = readJson('plugins/port/data/labels.json');
     for (const key of ['refreshBranch', 'refreshing']) {
       const entry = labels.labels.find((l: any) => l.key === key);
-      if (!entry || entry.module !== 'core') {
-        fail('refresh-bounded', `labels.json's '${key}' entry must be module 'core', got ${JSON.stringify(entry?.module)}`);
-      } else {
-        ok();
-      }
+      expect(!(!entry || entry.module !== 'core'), 'refresh-bounded', `labels.json's '${key}' entry must be module 'core', got ${JSON.stringify(entry?.module)}`);
     }
 
     const pipelineRel = 'plugins/port/docs/PIPELINE.md';
@@ -196,11 +133,7 @@ export default async function ({ fail, ok }: Reporter) {
     const skillText = pipelineSkillText();
 
     for (const [rel, text] of [[pipelineRel, pipelineText], [skillRel, skillText]]) {
-      if (!text.includes('a refresh consumes no review cycle')) {
-        fail('refresh-bounded', `${rel} is missing the literal phrase 'a refresh consumes no review cycle'`);
-      } else {
-        ok();
-      }
+      expect(text.includes('a refresh consumes no review cycle'), 'refresh-bounded', `${rel} is missing the literal phrase 'a refresh consumes no review cycle'`);
     }
 
     for (const phrase of [
@@ -209,18 +142,10 @@ export default async function ({ fail, ok }: Reporter) {
       'at most 3 consecutive refreshes per pull request',
       'leaves `<labels.approved>` in place',
     ]) {
-      if (!skillText.includes(phrase)) {
-        fail('refresh-bounded', `${skillRel} is missing the literal phrase '${phrase}'`);
-      } else {
-        ok();
-      }
+      expect(skillText.includes(phrase), 'refresh-bounded', `${skillRel} is missing the literal phrase '${phrase}'`);
     }
 
-    if (!pipelineText.includes('never on a schedule')) {
-      fail('refresh-bounded', `${pipelineRel} is missing the rebase-on-demand decision ('never on a schedule')`);
-    } else {
-      ok();
-    }
+    expect(pipelineText.includes('never on a schedule'), 'refresh-bounded', `${pipelineRel} is missing the rebase-on-demand decision ('never on a schedule')`);
   }
 
   // --- File contention — the cockpit holds overlapping dispatch, never races --
@@ -258,90 +183,33 @@ export default async function ({ fail, ok }: Reporter) {
     // issue 181: the '## Changes' fence-tag example moved from PIPELINE.md into
     // FORMATS.md — the docs union is what this half of the pin must read.
     const docsText = pipelineDocsText();
-    if (!docsText.includes('```files')) {
-      fail('file-contention', `${docsRel} never carries the '\`\`\`files' fence tag`);
-    } else {
-      ok();
-    }
-    if (!planAgentText.includes('```files')) {
-      fail('file-contention', `${planAgentRel} never carries the '\`\`\`files' fence tag`);
-    } else {
-      ok();
-    }
+    expect(docsText.includes('```files'), 'file-contention', `${docsRel} never carries the '\`\`\`files' fence tag`);
+    expect(planAgentText.includes('```files'), 'file-contention', `${planAgentRel} never carries the '\`\`\`files' fence tag`);
 
-    if (!(schemaText.includes('"sharedFiles"') && schemaText.includes('"overlapThreshold"'))) {
-      fail('file-contention', `${schemaRel} is missing 'concurrency.sharedFiles' or 'concurrency.overlapThreshold'`);
-    } else {
-      ok();
-    }
+    expect((schemaText.includes('"sharedFiles"') && schemaText.includes('"overlapThreshold"')), 'file-contention', `${schemaRel} is missing 'concurrency.sharedFiles' or 'concurrency.overlapThreshold'`);
 
-    if (!(schemaText.includes('"default": 2') && schemaText.includes('"minimum": 1'))) {
-      fail(
-        'file-contention',
-        `${schemaRel}'s 'concurrency.overlapThreshold' is missing its documented 'default: 2' or 'minimum: 1'`,
-      );
-    } else {
-      ok();
-    }
+    expect((schemaText.includes('"default": 2') && schemaText.includes('"minimum": 1')), 'file-contention', `${schemaRel}'s 'concurrency.overlapThreshold' is missing its documented 'default: 2' or 'minimum: 1'`);
 
-    if (!(templateText.includes('sharedFiles') && templateText.includes('overlapThreshold'))) {
-      fail('file-contention', `${templateRel} never ships the 'concurrency' defaults`);
-    } else {
-      ok();
-    }
+    expect((templateText.includes('sharedFiles') && templateText.includes('overlapThreshold')), 'file-contention', `${templateRel} never ships the 'concurrency' defaults`);
 
     for (const [rel, text] of [
       [pipelineRel, pipelineText],
       [skillRel, skillText],
     ]) {
-      if (!(text.includes('concurrency.sharedFiles') && text.includes('concurrency.overlapThreshold'))) {
-        fail('file-contention', `${rel} never names both 'concurrency.sharedFiles' and 'concurrency.overlapThreshold'`);
-      } else {
-        ok();
-      }
+      expect((text.includes('concurrency.sharedFiles') && text.includes('concurrency.overlapThreshold')), 'file-contention', `${rel} never names both 'concurrency.sharedFiles' and 'concurrency.overlapThreshold'`);
     }
 
-    if (!pipelineText.includes("never a new label and never GitHub's dependency graph")) {
-      fail(
-        'file-contention',
-        `${pipelineRel} is missing the literal phrase "never a new label and never GitHub's dependency graph"`,
-      );
-    } else {
-      ok();
-    }
+    expect(pipelineText.includes("never a new label and never GitHub's dependency graph"), 'file-contention', `${pipelineRel} is missing the literal phrase "never a new label and never GitHub's dependency graph"`);
 
-    if (!pipelineText.includes('fails open toward dispatch')) {
-      fail('file-contention', `${pipelineRel} is missing the literal phrase "fails open toward dispatch"`);
-    } else {
-      ok();
-    }
+    expect(pipelineText.includes('fails open toward dispatch'), 'file-contention', `${pipelineRel} is missing the literal phrase "fails open toward dispatch"`);
 
     const reworded = 'only when no single in-flight item\'s plan claims concurrency.overlapThreshold or more of the same non-shared files';
-    if (!skillText.replaceAll('`', '').includes(reworded)) {
-      fail('file-contention', `${skillRel} is missing the reworded precondition phrase "${reworded}"`);
-    } else {
-      ok();
-    }
+    expect(skillText.replaceAll('`', '').includes(reworded), 'file-contention', `${skillRel} is missing the reworded precondition phrase "${reworded}"`);
 
-    if (!skillText.includes('counted per in-flight item, never pooled')) {
-      fail(
-        'file-contention',
-        `${skillRel} is missing the literal phrase "counted per in-flight item, never pooled"`,
-      );
-    } else {
-      ok();
-    }
+    expect(skillText.includes('counted per in-flight item, never pooled'), 'file-contention', `${skillRel} is missing the literal phrase "counted per in-flight item, never pooled"`);
 
-    if (!skillText.includes('<labels.prOpened>')) {
-      fail('file-contention', `${skillRel} never names '<labels.prOpened>' as part of the occupied-set input`);
-    } else {
-      ok();
-    }
+    expect(skillText.includes('<labels.prOpened>'), 'file-contention', `${skillRel} never names '<labels.prOpened>' as part of the occupied-set input`);
 
-    if (!skillText.includes('dispatch #N anyway')) {
-      fail('file-contention', `${skillRel} never declares the 'dispatch #N anyway' override`);
-    } else {
-      ok();
-    }
+    expect(skillText.includes('dispatch #N anyway'), 'file-contention', `${skillRel} never declares the 'dispatch #N anyway' override`);
   }
 }

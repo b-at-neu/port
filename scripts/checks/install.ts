@@ -23,7 +23,7 @@ function deepEqual(a: unknown, b: unknown): boolean {
 // behind is the drift this check guards against.
 const MARKETPLACE_REF_PATTERN = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   // --- Self-hosted marketplace entry stays pinned -----------------------------
   // guard(#146): a bare `claude plugin marketplace add` rewriting the entry
   // back to its unpinned form, silently tracking the default branch instead
@@ -52,11 +52,7 @@ export default async function ({ fail, ok }: Reporter) {
   {
     const readme = readFileSync(join(root, 'CONTRIBUTING.md'), 'utf8');
     for (const m of readme.matchAll(/cache\/port(?:-dev)?\/port\/(\S+?)[\s/`]/g)) {
-      if (m[1] !== '<version>') {
-        fail('install-cache-path', `CONTRIBUTING.md's cache path names a literal version ('${m[1]}') instead of '<version>' — it will read wrong the moment this repository releases again`);
-      } else {
-        ok();
-      }
+      expect(!(m[1] !== '<version>'), 'install-cache-path', `CONTRIBUTING.md's cache path names a literal version ('${m[1]}') instead of '<version>' — it will read wrong the moment this repository releases again`);
     }
   }
 
@@ -94,19 +90,11 @@ export default async function ({ fail, ok }: Reporter) {
       const section = nextHeading ? after.slice(0, nextHeading.index) : after;
       if (!section.includes('claude plugin details')) {
         fail('install-docs', 'README.md\'s inventory section no longer mentions `claude plugin details`');
-      } else if (!section.includes('claude plugin list')) {
-        fail('install-docs', 'README.md\'s inventory section no longer mentions `claude plugin list`');
-      } else {
-        ok();
-      }
+      } else expect(section.includes('claude plugin list'), 'install-docs', 'README.md\'s inventory section no longer mentions `claude plugin list`');
     }
 
     for (const [name, text] of [['README.md', readme], ['CONTRIBUTING.md', contributing]] as const) {
-      if (!/one live source per marketplace name/i.test(text)) {
-        fail('install-docs', `${name} no longer states 'one live source per marketplace name'`);
-      } else {
-        ok();
-      }
+      expect(/one live source per marketplace name/i.test(text), 'install-docs', `${name} no longer states 'one live source per marketplace name'`);
     }
   }
 
@@ -157,20 +145,9 @@ export default async function ({ fail, ok }: Reporter) {
     if (dev !== undefined) {
       const rootManifest = readJson(rootManifestRel);
 
-      if (dev.name === rootManifest.name) {
-        fail(
-          'install-dev-marketplace',
-          `${devManifestRel}'s name ('${dev.name}') must differ from ${rootManifestRel}'s — that is the collision this ticket exists to prevent`,
-        );
-      } else {
-        ok();
-      }
+      expect(!(dev.name === rootManifest.name), 'install-dev-marketplace', `${devManifestRel}'s name ('${dev.name}') must differ from ${rootManifestRel}'s — that is the collision this ticket exists to prevent`);
 
-      if (!deepEqual(dev.owner, rootManifest.owner)) {
-        fail('install-dev-marketplace', `${devManifestRel}'s owner must deep-equal ${rootManifestRel}'s`);
-      } else {
-        ok();
-      }
+      expect(deepEqual(dev.owner, rootManifest.owner), 'install-dev-marketplace', `${devManifestRel}'s owner must deep-equal ${rootManifestRel}'s`);
 
       const devPlugins = Array.isArray(dev.plugins) ? dev.plugins : [];
       if (devPlugins.length !== 1) {
@@ -180,27 +157,12 @@ export default async function ({ fail, ok }: Reporter) {
         const devEntry = devPlugins[0];
         const rootEntry = (rootManifest.plugins ?? [])[0];
 
-        if (!rootEntry || devEntry.name !== rootEntry.name) {
-          fail('install-dev-marketplace', `${devManifestRel}'s plugin entry name must match ${rootManifestRel}'s`);
-        } else {
-          ok();
-        }
-        if (!rootEntry || devEntry.description !== rootEntry.description) {
-          fail('install-dev-marketplace', `${devManifestRel}'s plugin entry description must match ${rootManifestRel}'s`);
-        } else {
-          ok();
-        }
+        expect(!(!rootEntry || devEntry.name !== rootEntry.name), 'install-dev-marketplace', `${devManifestRel}'s plugin entry name must match ${rootManifestRel}'s`);
+        expect(!(!rootEntry || devEntry.description !== rootEntry.description), 'install-dev-marketplace', `${devManifestRel}'s plugin entry description must match ${rootManifestRel}'s`);
 
         const devResolved = resolve(root, 'plugins', devEntry.source ?? '');
         const rootResolved = resolve(root, rootEntry?.source ?? '');
-        if (devResolved !== rootResolved) {
-          fail(
-            'install-dev-marketplace',
-            `${devManifestRel}'s plugin source ('${devEntry.source}', resolved from plugins/) must resolve to the same directory as ${rootManifestRel}'s ('${rootEntry?.source}', resolved from the repository root)`,
-          );
-        } else {
-          ok();
-        }
+        expect(!(devResolved !== rootResolved), 'install-dev-marketplace', `${devManifestRel}'s plugin source ('${devEntry.source}', resolved from plugins/) must resolve to the same directory as ${rootManifestRel}'s ('${rootEntry?.source}', resolved from the repository root)`);
 
         // devName is read off the manifest, never typed as a literal —
         // a later rename must not need this check rewritten.
@@ -209,11 +171,7 @@ export default async function ({ fail, ok }: Reporter) {
         const pluginName: string = devEntry.name;
 
         const readmeText = readFileSync(join(root, 'README.md'), 'utf8');
-        if (readmeText.includes(devName)) {
-          fail('install-dev-marketplace', `README.md names the dev-loop marketplace ('${devName}') — a surface every consumer reads`);
-        } else {
-          ok();
-        }
+        expect(!readmeText.includes(devName), 'install-dev-marketplace', `README.md names the dev-loop marketplace ('${devName}') — a surface every consumer reads`);
 
         let anyShippedHit = false;
         for (const f of walk(join(root, 'plugins/port'))) {
@@ -225,24 +183,9 @@ export default async function ({ fail, ok }: Reporter) {
         if (!anyShippedHit) ok();
 
         const contributingText = readFileSync(join(root, 'CONTRIBUTING.md'), 'utf8');
-        if (!contributingText.includes(`claude plugin install ${pluginName}@${devName} --scope local`)) {
-          fail('install-dev-marketplace', `CONTRIBUTING.md is missing 'claude plugin install ${pluginName}@${devName} --scope local'`);
-        } else {
-          ok();
-        }
-        if (!contributingText.includes(`claude plugin disable ${pluginName}@${rootName} --scope local`)) {
-          fail('install-dev-marketplace', `CONTRIBUTING.md is missing 'claude plugin disable ${pluginName}@${rootName} --scope local'`);
-        } else {
-          ok();
-        }
-        if (contributingText.includes(`claude plugin install ${pluginName}@${rootName} --scope local`)) {
-          fail(
-            'install-dev-marketplace',
-            `CONTRIBUTING.md still carries the old shared-name recipe ('claude plugin install ${pluginName}@${rootName} --scope local')`,
-          );
-        } else {
-          ok();
-        }
+        expect(contributingText.includes(`claude plugin install ${pluginName}@${devName} --scope local`), 'install-dev-marketplace', `CONTRIBUTING.md is missing 'claude plugin install ${pluginName}@${devName} --scope local'`);
+        expect(contributingText.includes(`claude plugin disable ${pluginName}@${rootName} --scope local`), 'install-dev-marketplace', `CONTRIBUTING.md is missing 'claude plugin disable ${pluginName}@${rootName} --scope local'`);
+        expect(!contributingText.includes(`claude plugin install ${pluginName}@${rootName} --scope local`), 'install-dev-marketplace', `CONTRIBUTING.md still carries the old shared-name recipe ('claude plugin install ${pluginName}@${rootName} --scope local')`);
 
         let anyBadAddSrc = false;
         for (const m of contributingText.matchAll(/claude plugin marketplace add\s+(\S+)/g)) {
@@ -288,11 +231,7 @@ export default async function ({ fail, ok }: Reporter) {
     const initAllowedTools = frontmatter(initPath)?.['allowed-tools'] ?? '';
 
     for (const entry of ['Bash(claude plugin marketplace remove *)', 'Bash(claude plugin marketplace add *)', 'Bash(claude plugin install *)']) {
-      if (!initAllowedTools.includes(entry)) {
-        fail('pin-agreement', `${initRel}'s frontmatter allowed-tools is missing '${entry}'`);
-      } else {
-        ok();
-      }
+      expect(initAllowedTools.includes(entry), 'pin-agreement', `${initRel}'s frontmatter allowed-tools is missing '${entry}'`);
     }
 
     const removeIdx = initText.indexOf('claude plugin marketplace remove');
@@ -303,32 +242,17 @@ export default async function ({ fail, ok }: Reporter) {
         'pin-agreement',
         `${initRel} is missing one of 'claude plugin marketplace remove'/'claude plugin marketplace add'/'claude plugin install'`,
       );
-    } else if (!(removeIdx < addIdx && addIdx < installIdx)) {
-      fail(
-        'pin-agreement',
-        `${initRel} does not name 'claude plugin marketplace remove', then 'claude plugin marketplace add', then 'claude plugin install', in that order`,
-      );
-    } else {
-      ok();
-    }
+    } else expect((removeIdx < addIdx && addIdx < installIdx), 'pin-agreement', `${initRel} does not name 'claude plugin marketplace remove', then 'claude plugin marketplace add', then 'claude plugin install', in that order`);
 
     for (const literal of ['Never report the pin applied until', 'verify-only']) {
-      if (!initText.includes(literal)) {
-        fail('pin-agreement', `${initRel} is missing the literal '${literal}'`);
-      } else {
-        ok();
-      }
+      expect(initText.includes(literal), 'pin-agreement', `${initRel} is missing the literal '${literal}'`);
     }
 
     const preflightRel = 'plugins/port/skills/pipeline/PREFLIGHT.md';
     const preflightText = readFileSync(join(root, preflightRel), 'utf8');
 
     for (const phrase of ['extraKnownMarketplaces', 'aheadBy']) {
-      if (!preflightText.includes(phrase)) {
-        fail('pin-agreement', `${preflightRel} never names '${phrase}'`);
-      } else {
-        ok();
-      }
+      expect(preflightText.includes(phrase), 'pin-agreement', `${preflightRel} never names '${phrase}'`);
     }
 
     const uxHeadingIdx = preflightText.indexOf('## UX states (startup preflight)');
@@ -341,16 +265,8 @@ export default async function ({ fail, ok }: Reporter) {
       const driftIdx = uxSection.indexOf(driftMarker);
       const misconfigIdx = uxSection.indexOf(misconfigMarker);
 
-      if (driftIdx === -1) {
-        fail('pin-agreement', `${preflightRel}'s UX states are missing "${driftMarker}"`);
-      } else {
-        ok();
-      }
-      if (misconfigIdx === -1) {
-        fail('pin-agreement', `${preflightRel}'s UX states are missing "${misconfigMarker}"`);
-      } else {
-        ok();
-      }
+      expect(!(driftIdx === -1), 'pin-agreement', `${preflightRel}'s UX states are missing "${driftMarker}"`);
+      expect(!(misconfigIdx === -1), 'pin-agreement', `${preflightRel}'s UX states are missing "${misconfigMarker}"`);
 
       // Each entry's own text is bounded by the next top-level '- **' bullet,
       // never the whole section — the misconfiguration entry legitimately
@@ -358,29 +274,14 @@ export default async function ({ fail, ok }: Reporter) {
       if (driftIdx !== -1) {
         const nextBulletIdx = uxSection.indexOf('\n- **', driftIdx + driftMarker.length);
         const driftEntry = nextBulletIdx === -1 ? uxSection.slice(driftIdx) : uxSection.slice(driftIdx, nextBulletIdx);
-        if (!driftEntry.includes('claude plugin marketplace remove')) {
-          fail('pin-agreement', `${preflightRel}'s drift UX state is missing 'claude plugin marketplace remove'`);
-        } else {
-          ok();
-        }
-        if (driftEntry.includes('/port:init')) {
-          fail(
-            'pin-agreement',
-            `${preflightRel}'s drift UX state names '/port:init' — this is the operator's own machine, never the repository maintainer's fix`,
-          );
-        } else {
-          ok();
-        }
+        expect(driftEntry.includes('claude plugin marketplace remove'), 'pin-agreement', `${preflightRel}'s drift UX state is missing 'claude plugin marketplace remove'`);
+        expect(!driftEntry.includes('/port:init'), 'pin-agreement', `${preflightRel}'s drift UX state names '/port:init' — this is the operator's own machine, never the repository maintainer's fix`);
       }
 
       if (misconfigIdx !== -1) {
         const nextBulletIdx = uxSection.indexOf('\n- **', misconfigIdx + misconfigMarker.length);
         const misconfigEntry = nextBulletIdx === -1 ? uxSection.slice(misconfigIdx) : uxSection.slice(misconfigIdx, nextBulletIdx);
-        if (!misconfigEntry.includes('/port:init')) {
-          fail('pin-agreement', `${preflightRel}'s misconfiguration UX state is missing '/port:init'`);
-        } else {
-          ok();
-        }
+        expect(misconfigEntry.includes('/port:init'), 'pin-agreement', `${preflightRel}'s misconfiguration UX state is missing '/port:init'`);
       }
     }
   }
@@ -397,15 +298,7 @@ export default async function ({ fail, ok }: Reporter) {
     const initText = readFileSync(join(root, initRel), 'utf8');
     const preflightText = readFileSync(join(root, preflightRel), 'utf8');
 
-    if (!initText.includes(refFormPhrase)) {
-      fail('pin-agreement', `${initRel} never states the accepted ref forms as '${refFormPhrase}'`);
-    } else {
-      ok();
-    }
-    if (!preflightText.includes(refFormPhrase)) {
-      fail('pin-agreement', `${preflightRel} never states the accepted ref forms as '${refFormPhrase}'`);
-    } else {
-      ok();
-    }
+    expect(initText.includes(refFormPhrase), 'pin-agreement', `${initRel} never states the accepted ref forms as '${refFormPhrase}'`);
+    expect(preflightText.includes(refFormPhrase), 'pin-agreement', `${preflightRel} never states the accepted ref forms as '${refFormPhrase}'`);
   }
 }

@@ -33,7 +33,7 @@ function collectStringDefaults(schema: any): string[] {
   return [...defaults];
 }
 
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const srcDir = join(root, 'apps/desktop/src');
   const files = walk(srcDir).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
   const schemaImportPattern = /['"](?:\.\.\/)+schema\/port\.config\.schema\.json['"]/;
@@ -46,14 +46,7 @@ export default async function ({ fail, ok }: Reporter) {
     const importers = files.filter((f) => schemaImportPattern.test(readFileSync(f, 'utf8')));
     if (importers.length === 0) {
       fail('desktop-registry', 'no file under apps/desktop/src/ imports schema/port.config.schema.json — the guard cannot pass vacuously if this file is deleted');
-    } else if (importers.length > 1) {
-      fail(
-        'desktop-registry',
-        `schema/port.config.schema.json is imported by ${importers.length} files, expected exactly one: ${importers.map(relOf).join(', ')}`,
-      );
-    } else {
-      ok();
-    }
+    } else expect(!(importers.length > 1), 'desktop-registry', `schema/port.config.schema.json is imported by ${importers.length} files, expected exactly one: ${importers.map(relOf).join(', ')}`);
   }
 
   // --- No file under main/registry/ retypes a string default as a literal ---
@@ -96,11 +89,7 @@ export default async function ({ fail, ok }: Reporter) {
     ] as const) {
       if (!text.includes("'\\njobs:'")) {
         fail('desktop-registry', `${label} does not carry the '\\njobs:' anchor`);
-      } else if (!text.includes('/\\n {2}([A-Za-z0-9_-]+):/')) {
-        fail('desktop-registry', `${label} does not carry the /\\n {2}([A-Za-z0-9_-]+):/ regex literal`);
-      } else {
-        ok();
-      }
+      } else expect(text.includes('/\\n {2}([A-Za-z0-9_-]+):/'), 'desktop-registry', `${label} does not carry the /\\n {2}([A-Za-z0-9_-]+):/ regex literal`);
     }
   }
 
@@ -112,16 +101,8 @@ export default async function ({ fail, ok }: Reporter) {
   {
     const effectiveText = readFileSync(join(root, 'apps/desktop/src/main/registry/effective.ts'), 'utf8');
     const inspectText = readFileSync(join(root, 'apps/desktop/src/main/registry/inspect.ts'), 'utf8');
-    if (!effectiveText.includes('parseOverrides(') || !effectiveText.includes('applyOverrides(')) {
-      fail('desktop-registry', "main/registry/effective.ts does not call both parseOverrides( and applyOverrides(");
-    } else {
-      ok();
-    }
-    if (!inspectText.includes('resolveEffectiveConfig(')) {
-      fail('desktop-registry', 'main/registry/inspect.ts does not call resolveEffectiveConfig(');
-    } else {
-      ok();
-    }
+    expect(!(!effectiveText.includes('parseOverrides(') || !effectiveText.includes('applyOverrides(')), 'desktop-registry', "main/registry/effective.ts does not call both parseOverrides( and applyOverrides(");
+    expect(inspectText.includes('resolveEffectiveConfig('), 'desktop-registry', 'main/registry/inspect.ts does not call resolveEffectiveConfig(');
   }
 
   // --- Retirement: withdraw-unverifiable / claude-md-overrides / unverifiable: -

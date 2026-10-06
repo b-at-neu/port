@@ -4,7 +4,7 @@ import type { Reporter } from '../lib/report.ts';
 // The tick query, pacing ladder, busy-wait, and ownership/blind-tick blocks
 // split out of scripts/checks/cockpit.ts (issue 181, splitting that module's own
 // file-size ratchet entry).
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const rel = 'plugins/port/skills/pipeline/*.md';
 
   // --- Collapsed tick query — one round trip, never a per-label poll ---------
@@ -18,11 +18,7 @@ export default async function ({ fail, ok }: Reporter) {
     const text = pipelineSkillText();
 
     for (const phrase of ['gh api graphql', '--include', '.temp/tick-state.md']) {
-      if (!text.includes(phrase)) {
-        fail('tick-query', `${rel} never names '${phrase}' — the collapsed tick contract is missing a piece`);
-      } else {
-        ok();
-      }
+      expect(text.includes(phrase), 'tick-query', `${rel} never names '${phrase}' — the collapsed tick contract is missing a piece`);
     }
 
     // Scans the whole union rather than one heading-scoped section — issue
@@ -32,14 +28,11 @@ export default async function ({ fail, ok }: Reporter) {
     // string is silent, not a real polling call) is exempt.
     const pollRe = /gh (?:issue|pr) list[^\n]*--label(?!\s*<unknown>)/g;
     const hits = [...text.matchAll(pollRe)];
-    if (hits.length > 0) {
-      fail(
-        'tick-query',
-        `${rel}'s tick procedure still issues a per-label poll (${JSON.stringify(hits[0][0])}) — the collapse must fold it into the one query`,
-      );
-    } else {
-      ok();
-    }
+    expect(
+      !(hits.length > 0),
+      'tick-query',
+      () => `${rel}'s tick procedure still issues a per-label poll (${JSON.stringify(hits[0][0])}) — the collapse must fold it into the one query`,
+    );
   }
 
   // --- Pacing ladder — reset-on-change and never-stop are checkable, not prose
@@ -52,30 +45,12 @@ export default async function ({ fail, ok }: Reporter) {
     const text = pipelineSkillText();
 
     for (const n of ['270', '540', '1080', '1800']) {
-      if (!text.includes(n)) {
-        fail('pacing-ladder', `${rel} is missing the ladder constant '${n}'`);
-      } else {
-        ok();
-      }
+      expect(text.includes(n), 'pacing-ladder', `${rel} is missing the ladder constant '${n}'`);
     }
 
-    if (!text.includes('Reset to the floor immediately on any observed change')) {
-      fail(
-        'pacing-ladder',
-        `${rel} is missing the literal reset-on-change phrase 'Reset to the floor immediately on any observed change'`,
-      );
-    } else {
-      ok();
-    }
+    expect(text.includes('Reset to the floor immediately on any observed change'), 'pacing-ladder', `${rel} is missing the literal reset-on-change phrase 'Reset to the floor immediately on any observed change'`);
 
-    if (!text.includes('Never stop — a stopped cockpit is the only dispatcher')) {
-      fail(
-        'pacing-ladder',
-        `${rel} is missing the literal never-stop phrase 'Never stop — a stopped cockpit is the only dispatcher'`,
-      );
-    } else {
-      ok();
-    }
+    expect(text.includes('Never stop — a stopped cockpit is the only dispatcher'), 'pacing-ladder', `${rel} is missing the literal never-stop phrase 'Never stop — a stopped cockpit is the only dispatcher'`);
   }
 
   // --- No busy-waiting in the cockpit skill -----------------------------------
@@ -84,11 +59,7 @@ export default async function ({ fail, ok }: Reporter) {
   // run issued 6 `sleep`-based waits inside tool calls.
   {
     const text = pipelineSkillText();
-    if (/\bsleep\s+\d/.test(text)) {
-      fail('no-busy-wait', `${rel} contains a 'sleep <n>'-shaped busy-wait — the next tick is how this cockpit waits`);
-    } else {
-      ok();
-    }
+    expect(!/\bsleep\s+\d/.test(text), 'no-busy-wait', `${rel} contains a 'sleep <n>'-shaped busy-wait — the next tick is how this cockpit waits`);
   }
 
   // --- Ownership enforced client-side, and the blind-tick contract -----------
@@ -99,22 +70,8 @@ export default async function ({ fail, ok }: Reporter) {
   {
     const text = pipelineSkillText();
 
-    if (!text.includes('never acted on, only reported')) {
-      fail(
-        'tick-query',
-        `${rel} is missing the literal client-side ownership precondition phrase 'never acted on, only reported'`,
-      );
-    } else {
-      ok();
-    }
+    expect(text.includes('never acted on, only reported'), 'tick-query', `${rel} is missing the literal client-side ownership precondition phrase 'never acted on, only reported'`);
 
-    if (!text.includes('dispatch nothing, run no hygiene, reset nothing')) {
-      fail(
-        'tick-query',
-        `${rel} is missing the literal blind-tick precondition phrase 'dispatch nothing, run no hygiene, reset nothing'`,
-      );
-    } else {
-      ok();
-    }
+    expect(text.includes('dispatch nothing, run no hygiene, reset nothing'), 'tick-query', `${rel} is missing the literal blind-tick precondition phrase 'dispatch nothing, run no hygiene, reset nothing'`);
   }
 }

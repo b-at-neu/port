@@ -73,3 +73,11 @@ export const makeCheck = (fail: (check: string, detail: string) => void, ok: () 
     ok();
   }
 };
+
+/** Binds a module's repeated `decide({ …fixed-base… })` literal to its own defaults, so each case passes only what differs. */
+export const makeDecide = (decide: (args: Record<string, unknown>) => { decision: string; reason?: string }, base: Record<string, unknown>) =>
+  (overrides: Record<string, unknown> = {}) => decide({ ...base, ...overrides });
+
+/** A payload shorthand for the common case of varying only the command. */
+export const bash = (command: string, payloadFn: (overrides?: object) => object = plainPayload) =>
+  payloadFn({ tool_input: { command } });

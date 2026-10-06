@@ -74,58 +74,26 @@ export function extractJobBlock(lines: readonly string[], job: string): string[]
 const MATRIXED_JOBS = ['run-static-checks', 'run-app-checks'];
 const RUNNER_LABELS = ['ubuntu-latest', 'macos-latest', 'windows-latest'];
 
-export default async function ({ fail, note, ok }: Reporter) {
+export default async function ({ expect, fail, note, ok }: Reporter) {
   // --- Self-test first ---------------------------------------------------
   // guard(#116): a check that cannot be made to fail is not a check
   // (docs/ENGINEERING.md §7) — assert leadingToken/classifyAllowlist against
   // fixed synthetic inputs before trusting either against real files.
   {
-    if (leadingToken('Bash(grep *)') !== 'grep') {
-      fail('portability-selftest', "leadingToken('Bash(grep *)') did not return 'grep'");
-    } else {
-      ok();
-    }
-    if (leadingToken('Bash(node scripts/checks.ts *)') !== 'node') {
-      fail('portability-selftest', "leadingToken('Bash(node scripts/checks.ts *)') did not return 'node'");
-    } else {
-      ok();
-    }
-    if (leadingToken('Bash({{packageManager}} *)') !== null) {
-      fail('portability-selftest', "leadingToken('Bash({{packageManager}} *)') must return null — an unsubstituted placeholder is never real for this repository");
-    } else {
-      ok();
-    }
-    if (leadingToken('Bash(mkdir -p *)') !== 'mkdir') {
-      fail('portability-selftest', "leadingToken('Bash(mkdir -p *)') did not return 'mkdir'");
-    } else {
-      ok();
-    }
-    if (leadingToken('Edit(**)') !== null) {
-      fail('portability-selftest', "leadingToken('Edit(**)') must return null — it is not a Bash(...) entry");
-    } else {
-      ok();
-    }
+    expect(!(leadingToken('Bash(grep *)') !== 'grep'), 'portability-selftest', "leadingToken('Bash(grep *)') did not return 'grep'");
+    expect(!(leadingToken('Bash(node scripts/checks.ts *)') !== 'node'), 'portability-selftest', "leadingToken('Bash(node scripts/checks.ts *)') did not return 'node'");
+    expect(!(leadingToken('Bash({{packageManager}} *)') !== null), 'portability-selftest', "leadingToken('Bash({{packageManager}} *)') must return null — an unsubstituted placeholder is never real for this repository");
+    expect(!(leadingToken('Bash(mkdir -p *)') !== 'mkdir'), 'portability-selftest', "leadingToken('Bash(mkdir -p *)') did not return 'mkdir'");
+    expect(!(leadingToken('Edit(**)') !== null), 'portability-selftest', "leadingToken('Edit(**)') must return null — it is not a Bash(...) entry");
 
     const oneViolation = classifyAllowlist(['Bash(grep *)'], ['grep'], []);
-    if (oneViolation.violations.length !== 1 || oneViolation.violations[0].token !== 'grep') {
-      fail('portability-selftest', "classifyAllowlist(['Bash(grep *)'], ['grep'], []) must report exactly one 'grep' violation");
-    } else {
-      ok();
-    }
+    expect(!(oneViolation.violations.length !== 1 || oneViolation.violations[0].token !== 'grep'), 'portability-selftest', "classifyAllowlist(['Bash(grep *)'], ['grep'], []) must report exactly one 'grep' violation");
 
     const clean = classifyAllowlist(['Bash(node scripts/checks.ts *)', 'Bash({{packageManager}} *)'], ['grep'], []);
-    if (clean.violations.length !== 0 || clean.stale.length !== 0) {
-      fail('portability-selftest', 'classifyAllowlist over non-portable-free entries must report no violations and no stale tokens');
-    } else {
-      ok();
-    }
+    expect(!(clean.violations.length !== 0 || clean.stale.length !== 0), 'portability-selftest', 'classifyAllowlist over non-portable-free entries must report no violations and no stale tokens');
 
     const staleCase = classifyAllowlist([], ['mkdir'], ['mkdir']);
-    if (staleCase.stale.length !== 1 || staleCase.stale[0] !== 'mkdir') {
-      fail('portability-selftest', "a pending token absent from the entries must be reported stale");
-    } else {
-      ok();
-    }
+    expect(!(staleCase.stale.length !== 1 || staleCase.stale[0] !== 'mkdir'), 'portability-selftest', "a pending token absent from the entries must be reported stale");
   }
 
   // --- Self-test the job-block extractor ----------------------------------
@@ -155,11 +123,7 @@ export default async function ({ fail, note, ok }: Reporter) {
       fail('portability-selftest', 'extractJobBlock: expected the synthetic run-static-checks block to lack windows-latest');
     } else if (!appBlock || !appBlock.join('\n').includes('windows-latest')) {
       fail('portability-selftest', 'extractJobBlock: expected the synthetic run-app-checks block to include windows-latest');
-    } else if (missingBlock !== null) {
-      fail('portability-selftest', 'extractJobBlock: a job absent from the text must return null');
-    } else {
-      ok();
-    }
+    } else expect(!(missingBlock !== null), 'portability-selftest', 'extractJobBlock: a job absent from the text must return null');
   }
 
   // --- Validate the config's own shape ------------------------------------
@@ -183,11 +147,7 @@ export default async function ({ fail, note, ok }: Reporter) {
   ok();
 
   const nonPortable: string[] = Array.isArray(config.nonPortable) ? config.nonPortable : [];
-  if (!Array.isArray(config.nonPortable) || nonPortable.length === 0) {
-    fail('portability', `${CONFIG_REL}: 'nonPortable' must be a non-empty array of command names`);
-  } else {
-    ok();
-  }
+  expect(!(!Array.isArray(config.nonPortable) || nonPortable.length === 0), 'portability', `${CONFIG_REL}: 'nonPortable' must be a non-empty array of command names`);
   const nonPortableSet = new Set(nonPortable);
 
   const pendingEntries: { file: string; commands: string[]; issue: number }[] = [];
@@ -279,17 +239,9 @@ export default async function ({ fail, note, ok }: Reporter) {
         }
         const text = block.join('\n');
         for (const runnerLabel of RUNNER_LABELS) {
-          if (!text.includes(runnerLabel)) {
-            fail('platform-matrix', `${rel}: job '${job}' never names the runner label '${runnerLabel}'`);
-          } else {
-            ok();
-          }
+          expect(text.includes(runnerLabel), 'platform-matrix', `${rel}: job '${job}' never names the runner label '${runnerLabel}'`);
         }
-        if (!text.includes('runs-on: ${{ matrix.os }}')) {
-          fail('platform-matrix', `${rel}: job '${job}' does not run on 'runs-on: \${{ matrix.os }}'`);
-        } else {
-          ok();
-        }
+        expect(text.includes('runs-on: ${{ matrix.os }}'), 'platform-matrix', `${rel}: job '${job}' does not run on 'runs-on: \${{ matrix.os }}'`);
       }
     }
   }

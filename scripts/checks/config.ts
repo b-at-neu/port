@@ -43,7 +43,7 @@ export function scriptPathsIn(command: string): string[] {
   return withoutWildcard.filter((t) => /\.(ts|mjs|js|cjs)$/.test(t) && !t.includes('<') && !t.includes('{{'));
 }
 
-export default async function ({ fail, note, ok }: Reporter) {
+export default async function ({ expect, fail, note, ok }: Reporter) {
   // --- Branch model coherence rail ---------------------------------------------
   // guard(#54): a single-branch repository (null production) silently
   // asking for both no release flow and a release flow, or a dropped
@@ -85,11 +85,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     ];
     for (const c of cases) {
       const got = branchModelError(c.cfg) !== null;
-      if (got !== c.wantError) {
-        fail('branch-model', `branchModelError self-test failed for '${c.name}': expected error=${c.wantError}, got=${got}`);
-      } else {
-        ok();
-      }
+      expect(!(got !== c.wantError), 'branch-model', `branchModelError self-test failed for '${c.name}': expected error=${c.wantError}, got=${got}`);
     }
 
     // Run the real predicate over every config-shaped file in the repository.
@@ -103,8 +99,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     for (const rel of targets) {
       const cfg = readJson(rel);
       const err = branchModelError(cfg);
-      if (err) fail('branch-model', `${rel}: ${err}`);
-      else ok();
+      expect(!err, 'branch-model', `${rel}: ${err}`);
     }
 
     // The invalid fixtures built for exactly this rule must still be rejected.
@@ -113,21 +108,13 @@ export default async function ({ fail, note, ok }: Reporter) {
       'schema/fixtures/invalid.null-production-default-release.json',
     ]) {
       const cfg = readJson(rel);
-      if (branchModelError(cfg) === null) {
-        fail('branch-model', `${rel}: expected branchModelError to reject this fixture, got no error`);
-      } else {
-        ok();
-      }
+      expect(!(branchModelError(cfg) === null), 'branch-model', `${rel}: expected branchModelError to reject this fixture, got no error`);
     }
 
     // The rendered approval-check template must carry no `{{production}}` token —
     // a placeholder a single-branch install could never fill.
     const templateRel = 'plugins/port/templates/approval-check.yml';
-    if (readFileSync(join(root, templateRel), 'utf8').includes('{{production}}')) {
-      fail('branch-model', `${templateRel} still contains an unresolvable {{production}} token`);
-    } else {
-      ok();
-    }
+    expect(!readFileSync(join(root, templateRel), 'utf8').includes('{{production}}'), 'branch-model', `${templateRel} still contains an unresolvable {{production}} token`);
 
     // Every `{{name}}` placeholder in permissions.base.json's allow/deny must be
     // named somewhere in init/SKILL.md, and the bullet that carries
@@ -142,37 +129,21 @@ export default async function ({ fail, note, ok }: Reporter) {
     const skillRel = 'plugins/port/skills/init/SKILL.md';
     const skillText = readFileSync(join(root, skillRel), 'utf8');
     for (const name of placeholders) {
-      if (!skillText.includes(`{{${name}}}`)) {
-        fail('branch-model', `${skillRel} never names the '{{${name}}}' placeholder from permissions.base.json`);
-      } else {
-        ok();
-      }
+      expect(skillText.includes(`{{${name}}}`), 'branch-model', `${skillRel} never names the '{{${name}}}' placeholder from permissions.base.json`);
     }
     const dropBullet = /^-.*\{\{packageManager\}\}.*drop.*$/m.exec(skillText);
     if (!dropBullet) {
       fail('branch-model', `${skillRel} is missing the bullet stating {{packageManager}}'s drop-when-absent rule`);
-    } else if (!dropBullet[0].includes('{{production}}')) {
-      fail('branch-model', `${skillRel}: the {{packageManager}} drop-rule bullet must also name {{production}}`);
-    } else {
-      ok();
-    }
+    } else expect(dropBullet[0].includes('{{production}}'), 'branch-model', `${skillRel}: the {{packageManager}} drop-rule bullet must also name {{production}}`);
 
     // PIPELINE.md must state what null production means, and what the CI merge
     // gate covers in single-branch mode.
     const pipelineRel = 'plugins/port/docs/PIPELINE.md';
     const pipelineText = readFileSync(join(root, pipelineRel), 'utf8');
     const productionRow = /\|\s*`<production>`\s*\|[^\n]*\|/.exec(pipelineText);
-    if (!productionRow || !productionRow[0].includes('null')) {
-      fail('branch-model', `${pipelineRel}'s '<production>' table row must name 'null'`);
-    } else {
-      ok();
-    }
+    expect(!(!productionRow || !productionRow[0].includes('null')), 'branch-model', `${pipelineRel}'s '<production>' table row must name 'null'`);
     const gateSection = /### CI merge gate[\s\S]*?(?=\n## )/.exec(pipelineText);
-    if (!gateSection || !gateSection[0].toLowerCase().includes('single-branch')) {
-      fail('branch-model', `${pipelineRel}'s CI merge gate section must name the single-branch case`);
-    } else {
-      ok();
-    }
+    expect(!(!gateSection || !gateSection[0].toLowerCase().includes('single-branch')), 'branch-model', `${pipelineRel}'s CI merge gate section must name the single-branch case`);
   }
 
   // --- Templates are valid JSON ----------------------------------------------
@@ -203,11 +174,7 @@ export default async function ({ fail, note, ok }: Reporter) {
   {
     const settings = readJson('.claude/settings.json');
     const allow = settings.permissions?.allow;
-    if (!Array.isArray(allow) || allow.length === 0) {
-      fail('permissions', `.claude/settings.json's permissions.allow must be a non-empty array, got ${JSON.stringify(allow)}`);
-    } else {
-      ok();
-    }
+    expect(!(!Array.isArray(allow) || allow.length === 0), 'permissions', `.claude/settings.json's permissions.allow must be a non-empty array, got ${JSON.stringify(allow)}`);
   }
 
   // --- The config template matches its own schema's shape --------------------
@@ -271,11 +238,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     }
     const cfg = readJson('.claude/port.config.json');
     if ('previewDatabase' in (cfg.modules ?? {})) hits.push('.claude/port.config.json');
-    if (hits.length > 0) {
-      fail('no-preview-database', `'previewDatabase' still appears outside scripts/: ${hits.join(', ')}`);
-    } else {
-      ok();
-    }
+    expect(!(hits.length > 0), 'no-preview-database', `'previewDatabase' still appears outside scripts/: ${hits.join(', ')}`);
   }
 
   // --- Every script path this repository configures resolves on disk ---------
@@ -287,17 +250,13 @@ export default async function ({ fail, note, ok }: Reporter) {
     const selfTestCases: [string, string[]][] = [
       ['pnpm install', []],
       ['node scripts/checks.ts', ['scripts/checks.ts']],
-      ['node scripts/checks.ts --guards', ['scripts/checks.ts']],
+      ['node scripts/checks.ts --verbose', ['scripts/checks.ts']],
       ['Bash(node scripts/checks.ts *)', ['scripts/checks.ts']],
       ['node scripts/checks-<topic>.ts', []],
     ];
     for (const [command, expected] of selfTestCases) {
       const got = scriptPathsIn(command);
-      if (JSON.stringify(got) !== JSON.stringify(expected)) {
-        fail('config-script-paths-selftest', `scriptPathsIn(${JSON.stringify(command)}) = ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`);
-      } else {
-        ok();
-      }
+      expect(!(JSON.stringify(got) !== JSON.stringify(expected)), 'config-script-paths-selftest', `scriptPathsIn(${JSON.stringify(command)}) = ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`);
     }
 
     const cfg = readJson('.claude/port.config.json');
@@ -318,11 +277,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     for (const command of commandSources) {
       for (const p of scriptPathsIn(command)) {
         anyPath = true;
-        if (!existsSync(join(root, p))) {
-          fail('config-script-paths', `'${command}' names '${p}', which does not exist on disk`);
-        } else {
-          ok();
-        }
+        expect(existsSync(join(root, p)), 'config-script-paths', `'${command}' names '${p}', which does not exist on disk`);
       }
     }
     if (!anyPath) {
@@ -330,10 +285,6 @@ export default async function ({ fail, note, ok }: Reporter) {
     }
 
     const pkg = readJson('package.json');
-    if (pkg.type !== 'module') {
-      fail('config-script-paths', `package.json's 'type' is ${JSON.stringify(pkg.type)}, not 'module' — every scripts/*.ts file loads as ESM only because of this field`);
-    } else {
-      ok();
-    }
+    expect(!(pkg.type !== 'module'), 'config-script-paths', `package.json's 'type' is ${JSON.stringify(pkg.type)}, not 'module' — every scripts/*.ts file loads as ESM only because of this field`);
   }
 }

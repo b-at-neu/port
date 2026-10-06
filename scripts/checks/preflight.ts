@@ -15,7 +15,7 @@ import { pathToFileURL } from 'node:url';
 import { root, walk, relOf, frontmatter, pipelineSkillText } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const skillRel = 'plugins/port/skills/pipeline/SKILL.md';
   const skillPath = join(root, skillRel);
   // issue 181: the startup preflight and its UX states moved into PREFLIGHT.md —
@@ -54,22 +54,14 @@ export default async function ({ fail, ok }: Reporter) {
   // session's transcript directory instead of the repository, reporting a
   // false "not port-managed".
   {
-    if (!skillText.includes('git rev-parse --show-toplevel')) {
-      fail('preflight-anchoring', `${unionRel} no longer resolves a repository root with 'git rev-parse --show-toplevel'`);
-    } else {
-      ok();
-    }
+    expect(skillText.includes('git rev-parse --show-toplevel'), 'preflight-anchoring', `${unionRel} no longer resolves a repository root with 'git rev-parse --show-toplevel'`);
     for (const rootedPath of [
       '<root>/.claude/port.config.json',
       '<root>/.claude/settings.json',
       '<root>/.claude-plugin/marketplace.json',
       '<root>/.github/workflows/approval-check.yml',
     ]) {
-      if (!skillText.includes(rootedPath)) {
-        fail('preflight-anchoring', `${unionRel} never reads '${rootedPath}' — a repository-root file must be read as <root>/... , never a bare relative path`);
-      } else {
-        ok();
-      }
+      expect(skillText.includes(rootedPath), 'preflight-anchoring', `${unionRel} never reads '${rootedPath}' — a repository-root file must be read as <root>/... , never a bare relative path`);
     }
   }
 
@@ -80,22 +72,10 @@ export default async function ({ fail, ok }: Reporter) {
   // guard(#216): a diagnostic that finds the newest commit touching the file
   // rather than where it exists, and that a rebase invalidates on its own.
   {
-    if (!skillText.includes('git cat-file -e')) {
-      fail('preflight-config-diagnostic', `${unionRel} no longer tests config existence with 'git cat-file -e'`);
-    } else {
-      ok();
-    }
-    if (skillText.includes('git branch -a --contains') || skillText.includes('git rev-list --all')) {
-      fail('preflight-config-diagnostic', `${unionRel} still carries the stale 'last commit touching the file' diagnostic`);
-    } else {
-      ok();
-    }
+    expect(skillText.includes('git cat-file -e'), 'preflight-config-diagnostic', `${unionRel} no longer tests config existence with 'git cat-file -e'`);
+    expect(!(skillText.includes('git branch -a --contains') || skillText.includes('git rev-list --all')), 'preflight-config-diagnostic', `${unionRel} still carries the stale 'last commit touching the file' diagnostic`);
     const skillAllowedTools = frontmatter(skillPath)?.['allowed-tools'] ?? '';
-    if (!skillAllowedTools.includes('Bash(git cat-file *)')) {
-      fail('preflight-config-diagnostic', `${skillRel}'s frontmatter allowed-tools is missing 'Bash(git cat-file *)'`);
-    } else {
-      ok();
-    }
+    expect(skillAllowedTools.includes('Bash(git cat-file *)'), 'preflight-config-diagnostic', `${skillRel}'s frontmatter allowed-tools is missing 'Bash(git cat-file *)'`);
   }
 
   // --- Refusal rail is a checkable precondition, not bare prose (#216 defect 3)
@@ -104,16 +84,8 @@ export default async function ({ fail, ok }: Reporter) {
   // guard(#216): an unenforced prose "hard refusal" being escaped by the very
   // session it was meant to stop.
   {
-    if (skillText.includes('hard refusal with no override')) {
-      fail('preflight-refusal-rail', `${unionRel} still states the unenforced "hard refusal with no override" prose`);
-    } else {
-      ok();
-    }
-    if (!skillText.includes('checked-out branch unchanged')) {
-      fail('preflight-refusal-rail', `${unionRel} is missing the checkable "stop with the checked-out branch unchanged" precondition`);
-    } else {
-      ok();
-    }
+    expect(!skillText.includes('hard refusal with no override'), 'preflight-refusal-rail', `${unionRel} still states the unenforced "hard refusal with no override" prose`);
+    expect(skillText.includes('checked-out branch unchanged'), 'preflight-refusal-rail', `${unionRel} is missing the checkable "stop with the checked-out branch unchanged" precondition`);
   }
 
   // --- Identity line's two inputs are pinned, not printed from a guess
@@ -121,29 +93,14 @@ export default async function ({ fail, ok }: Reporter) {
   // guard(#216): an identity line printing a sha or a comparison ref from the
   // wrong source.
   {
-    if (!skillText.includes('not a prefix of the resolved record\'s `gitCommitSha`')) {
-      fail('preflight-identity', `${unionRel} never states the sha-prefix precondition for the identity line's commit`);
-    } else {
-      ok();
-    }
-    if (!skillText.includes('render `staleness not computable` instead of a number')) {
-      fail('preflight-identity', `${unionRel} never states the ref precondition for the identity line's comparison target`);
-    } else {
-      ok();
-    }
+    expect(skillText.includes('not a prefix of the resolved record\'s `gitCommitSha`'), 'preflight-identity', `${unionRel} never states the sha-prefix precondition for the identity line's commit`);
+    expect(skillText.includes('render `staleness not computable` instead of a number'), 'preflight-identity', `${unionRel} never states the ref precondition for the identity line's comparison target`);
     // guard(#343): a self-hosting directory source below the repository root
     // reading as not computable — the dev-loop marketplace manifest sits at
     // plugins/.claude-plugin/marketplace.json, a directory inside this
     // working tree rather than this working tree itself, and the narrower
     // phrase before this ticket matched only an exact path.
-    if (!skillText.includes('this working tree or a directory inside it')) {
-      fail(
-        'preflight-identity',
-        `${unionRel} no longer widens the self-hosting directory-source case to "this working tree or a directory inside it"`,
-      );
-    } else {
-      ok();
-    }
+    expect(skillText.includes('this working tree or a directory inside it'), 'preflight-identity', `${unionRel} no longer widens the self-hosting directory-source case to "this working tree or a directory inside it"`);
   }
 
   // --- Guard against the generality mistake this ticket's own fixes could
@@ -161,11 +118,7 @@ export default async function ({ fail, ok }: Reporter) {
     } else {
       const startupProse = proseOnly(preflightText.slice(start, end));
       for (const literal of ['b-at-neu/port', '`dev`']) {
-        if (startupProse.includes(literal)) {
-          fail('preflight-generality', `${preflightRel}'s Startup preflight section names the literal '${literal}' outside a UX-state example`);
-        } else {
-          ok();
-        }
+        expect(!startupProse.includes(literal), 'preflight-generality', `${preflightRel}'s Startup preflight section names the literal '${literal}' outside a UX-state example`);
       }
     }
   }
@@ -196,11 +149,7 @@ export default async function ({ fail, ok }: Reporter) {
     const matchers = allowMatchers([classifierSettings]);
 
     const check = (label: string, result: any, expected: string) => {
-      if (result.decision !== expected) {
-        fail('branch-rule-classifier', `${label}: expected '${expected}', got '${result.decision}'`);
-      } else {
-        ok();
-      }
+      expect(!(result.decision !== expected), 'branch-rule-classifier', `${label}: expected '${expected}', got '${result.decision}'`);
     };
 
     const cockpitPayload = (overrides = {}) => ({
@@ -311,62 +260,34 @@ export default async function ({ fail, ok }: Reporter) {
     );
 
     // switchesBranch itself, directly.
-    if (!switchesBranch('git checkout main')) fail('branch-rule-classifier', 'switchesBranch: expected true for "git checkout main"');
-    else ok();
-    if (!switchesBranch('git switch -c tmp')) fail('branch-rule-classifier', 'switchesBranch: expected true for "git switch -c tmp"');
-    else ok();
-    if (!switchesBranch('git -C /repo checkout main')) fail('branch-rule-classifier', 'switchesBranch: expected true for "git -C /repo checkout main"');
-    else ok();
-    if (switchesBranch('git rev-parse --abbrev-ref HEAD')) fail('branch-rule-classifier', 'switchesBranch: expected false for a read-only git command');
-    else ok();
-    if (switchesBranch('gh pr checkout 5')) fail('branch-rule-classifier', 'switchesBranch: expected false — this is gh, not git');
-    else ok();
+    expect(switchesBranch('git checkout main'), 'branch-rule-classifier', 'switchesBranch: expected true for "git checkout main"');
+    expect(switchesBranch('git switch -c tmp'), 'branch-rule-classifier', 'switchesBranch: expected true for "git switch -c tmp"');
+    expect(switchesBranch('git -C /repo checkout main'), 'branch-rule-classifier', 'switchesBranch: expected true for "git -C /repo checkout main"');
+    expect(!switchesBranch('git rev-parse --abbrev-ref HEAD'), 'branch-rule-classifier', 'switchesBranch: expected false for a read-only git command');
+    expect(!switchesBranch('gh pr checkout 5'), 'branch-rule-classifier', 'switchesBranch: expected false — this is gh, not git');
 
     // A chained command carrying an earlier, unrelated `git` invocation
     // ahead of the checkout must still be caught — every command-position
     // `git` occurrence is scanned, not just the first.
-    if (!switchesBranch('git branch --sort=-committerdate ; git checkout evil-branch')) {
-      fail('branch-rule-classifier', 'switchesBranch: expected true for a chained command with an earlier git invocation (spaced separator)');
-    } else ok();
-    if (!switchesBranch('git branch --sort=-committerdate;git checkout evil-branch')) {
-      fail('branch-rule-classifier', 'switchesBranch: expected true for a chained command with an earlier git invocation (unspaced separator)');
-    } else ok();
-    if (!switchesBranch('git status && git checkout evil-branch')) {
-      fail('branch-rule-classifier', 'switchesBranch: expected true for a chained command joined with &&');
-    } else ok();
+    expect(switchesBranch('git branch --sort=-committerdate ; git checkout evil-branch'), 'branch-rule-classifier', 'switchesBranch: expected true for a chained command with an earlier git invocation (spaced separator)');
+    expect(switchesBranch('git branch --sort=-committerdate;git checkout evil-branch'), 'branch-rule-classifier', 'switchesBranch: expected true for a chained command with an earlier git invocation (unspaced separator)');
+    expect(switchesBranch('git status && git checkout evil-branch'), 'branch-rule-classifier', 'switchesBranch: expected true for a chained command joined with &&');
 
     // A value-taking global flag like `-c` must not be mistaken for the git
     // subcommand itself — this repo's own shell-discipline block prescribes
     // exactly this idiom (`git -c core.editor=true rebase --continue`), so a
     // miss here would let a cockpit session slip a checkout past the rule
     // this ticket exists to add (issue 222, R3-M1).
-    if (!switchesBranch('git -c core.editor=true checkout evil-branch')) {
-      fail('branch-rule-classifier', 'switchesBranch: expected true for "git -c core.editor=true checkout evil-branch"');
-    } else ok();
-    if (switchesBranch('git -c core.editor=true rebase --continue')) {
-      fail('branch-rule-classifier', 'switchesBranch: expected false for "git -c core.editor=true rebase --continue"');
-    } else ok();
+    expect(switchesBranch('git -c core.editor=true checkout evil-branch'), 'branch-rule-classifier', 'switchesBranch: expected true for "git -c core.editor=true checkout evil-branch"');
+    expect(!switchesBranch('git -c core.editor=true rebase --continue'), 'branch-rule-classifier', 'switchesBranch: expected false for "git -c core.editor=true rebase --continue"');
 
     // --- invokedCockpitSkill ---------------------------------------------------
     // The wrapper element is the whole tell — a bare mention of the skill
     // name in prose (SKILL.md's own pacing section names it) must not trip it.
-    if (!invokedCockpitSkill('<command-name>/port:pipeline</command-name>')) {
-      fail('branch-rule-classifier', 'invokedCockpitSkill: expected true for the real wrapper form');
-    } else {
-      ok();
-    }
-    if (!invokedCockpitSkill('<command-name>pipeline</command-name>')) {
-      fail('branch-rule-classifier', 'invokedCockpitSkill: expected true with no namespace prefix');
-    } else {
-      ok();
-    }
-    if (invokedCockpitSkill('Run /port:pipeline to start the cockpit.')) {
-      fail('branch-rule-classifier', 'invokedCockpitSkill: expected false for a bare prose mention with no wrapper element');
-    } else {
-      ok();
-    }
-    if (invokedCockpitSkill('')) fail('branch-rule-classifier', 'invokedCockpitSkill: expected false for empty text');
-    else ok();
+    expect(invokedCockpitSkill('<command-name>/port:pipeline</command-name>'), 'branch-rule-classifier', 'invokedCockpitSkill: expected true for the real wrapper form');
+    expect(invokedCockpitSkill('<command-name>pipeline</command-name>'), 'branch-rule-classifier', 'invokedCockpitSkill: expected true with no namespace prefix');
+    expect(!invokedCockpitSkill('Run /port:pipeline to start the cockpit.'), 'branch-rule-classifier', 'invokedCockpitSkill: expected false for a bare prose mention with no wrapper element');
+    expect(!invokedCockpitSkill(''), 'branch-rule-classifier', 'invokedCockpitSkill: expected false for empty text');
 
     rmSync(classifierFixture, { recursive: true, force: true, maxRetries: 3 });
   }
@@ -420,11 +341,7 @@ export default async function ({ fail, ok }: Reporter) {
         fail('branch-rule-hook-fixture', `expected permissionDecision 'deny', got ${JSON.stringify(parsed)}`);
       }
       let lines = readLog();
-      if (lines.length !== 1 || !lines[0].includes('\tdeny\t')) {
-        fail('branch-rule-hook-fixture', `expected exactly one 'deny' line, got ${JSON.stringify(lines)}`);
-      } else {
-        ok();
-      }
+      expect(!(lines.length !== 1 || !lines[0].includes('\tdeny\t')), 'branch-rule-hook-fixture', `expected exactly one 'deny' line, got ${JSON.stringify(lines)}`);
 
       const plainTranscript = transcriptFor('just an ordinary session transcript, no wrapper element anywhere');
       stdout = run({
@@ -436,11 +353,7 @@ export default async function ({ fail, ok }: Reporter) {
       });
       if (stdout.trim() !== '') fail('branch-rule-hook-fixture', `expected no stdout for a non-cockpit session, got ${JSON.stringify(stdout)}`);
       lines = readLog();
-      if (lines.length !== 2 || !lines[1].includes('\tmiss\t')) {
-        fail('branch-rule-hook-fixture', `expected a 'miss' line (ordinary allowlist miss, not the branch rule), got ${JSON.stringify(lines)}`);
-      } else {
-        ok();
-      }
+      expect(!(lines.length !== 2 || !lines[1].includes('\tmiss\t')), 'branch-rule-hook-fixture', `expected a 'miss' line (ordinary allowlist miss, not the branch rule), got ${JSON.stringify(lines)}`);
     } finally {
       rmSync(fixture, { recursive: true, force: true, maxRetries: 3 });
     }
@@ -455,11 +368,7 @@ export default async function ({ fail, ok }: Reporter) {
   {
     const shipped = walk(join(root, 'plugins/port')).filter((f) => f.endsWith('.md') || f.endsWith('.mjs'));
     for (const f of shipped) {
-      if (readFileSync(f, 'utf8').includes('<command-name>')) {
-        fail('preflight-tell-guard', `${relOf(f)} carries the literal '<command-name>' string — this would make any session that reads it look like a cockpit`);
-      } else {
-        ok();
-      }
+      expect(!readFileSync(f, 'utf8').includes('<command-name>'), 'preflight-tell-guard', `${relOf(f)} carries the literal '<command-name>' string — this would make any session that reads it look like a cockpit`);
     }
   }
 }

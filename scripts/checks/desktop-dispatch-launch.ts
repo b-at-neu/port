@@ -5,7 +5,7 @@ import type { Reporter } from '../lib/report.ts';
 
 // Split out of desktop-dispatch.ts to stay under the file-size limit: no
 // hosted dispatcher session, the onTick pacing, and the quit guard's ordering.
-export default function ({ fail, ok }: Reporter) {
+export default function ({ expect, fail, ok }: Reporter) {
   const mainDispatchDir = 'apps/desktop/src/main/dispatch';
   const ipcFile = 'apps/desktop/src/main/ipc.ts';
   const indexFile = 'apps/desktop/src/main/index.ts';
@@ -47,11 +47,7 @@ export default function ({ fail, ok }: Reporter) {
       fail('desktop-dispatch-launch', `${ipcFile} has no 'onSnapshot:' callback to compare against`);
     } else if (!/dispatcher\.consider\(/.test(onTickMatch[1])) {
       fail('desktop-dispatch-launch', `${ipcFile}'s onTick: callback never calls dispatcher.consider( — the loop is not wired to the watcher's clock`);
-    } else if (/dispatcher\.consider\(/.test(onSnapshotMatch[1])) {
-      fail('desktop-dispatch-launch', `${ipcFile}'s onSnapshot: callback calls dispatcher.consider( — that re-triggers on every republish(), recreating the old feedback loop`);
-    } else {
-      ok();
-    }
+    } else expect(!/dispatcher\.consider\(/.test(onSnapshotMatch[1]), 'desktop-dispatch-launch', `${ipcFile}'s onSnapshot: callback calls dispatcher.consider( — that re-triggers on every republish(), recreating the old feedback loop`);
   }
 
   // --- Quit: intercept( precedes shutdownDispatch(, precedes closeAll( -----
@@ -67,11 +63,7 @@ export default function ({ fail, ok }: Reporter) {
       const closeAllIdx = body.indexOf('closeAll(');
       if (interceptIdx === -1 || shutdownIdx === -1 || closeAllIdx === -1) {
         fail('desktop-dispatch-launch', `${indexFile}'s before-quit handler is missing intercept(, shutdownDispatch(, or closeAll( — the guard cannot compare an ordering that isn't there`);
-      } else if (!(interceptIdx < shutdownIdx && shutdownIdx < closeAllIdx)) {
-        fail('desktop-dispatch-launch', `${indexFile}'s before-quit handler calls intercept(/shutdownDispatch(/closeAll( out of order — expected intercept( before shutdownDispatch( before closeAll(`);
-      } else {
-        ok();
-      }
+      } else expect((interceptIdx < shutdownIdx && shutdownIdx < closeAllIdx), 'desktop-dispatch-launch', `${indexFile}'s before-quit handler calls intercept(/shutdownDispatch(/closeAll( out of order — expected intercept( before shutdownDispatch( before closeAll(`);
     }
   }
 }

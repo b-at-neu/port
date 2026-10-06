@@ -99,7 +99,7 @@ export function evaluateRatchet(files: readonly FileScan[], config: CommentsConf
   return { failures, notes };
 }
 
-export default async function ({ fail, note, ok }: Reporter) {
+export default async function ({ expect, fail, note, ok }: Reporter) {
   // --- Self-test the scanner first — a check that cannot be made to fail is
   // not a check (docs/ENGINEERING.md §7) --------------------------------------
   {
@@ -122,14 +122,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     for (const c of cases) {
       const gotCitations = citations(c.src);
       const gotBlocks = blocks(c.src);
-      if (gotCitations !== c.citations || gotBlocks !== c.blocks) {
-        fail(
-          'comments-selftest',
-          `scanComments(${c.label}): expected ${c.citations} citation(s)/${c.blocks} block(s), got ${gotCitations}/${gotBlocks}`,
-        );
-      } else {
-        ok();
-      }
+      expect(!(gotCitations !== c.citations || gotBlocks !== c.blocks), 'comments-selftest', `scanComments(${c.label}): expected ${c.citations} citation(s)/${c.blocks} block(s), got ${gotCitations}/${gotBlocks}`);
     }
   }
 
@@ -141,42 +134,22 @@ export default async function ({ fail, note, ok }: Reporter) {
     };
 
     const newFileCited: FileScan = { path: 'src/new.ts', citationLines: [3], longBlocks: [] };
-    if (!evaluateRatchet([newFileCited], config).failures.some((f) => f.includes('src/new.ts'))) {
-      fail('comments-selftest', 'evaluateRatchet did not fail a new file citing an issue');
-    } else {
-      ok();
-    }
+    expect(evaluateRatchet([newFileCited], config).failures.some((f) => f.includes('src/new.ts')), 'comments-selftest', 'evaluateRatchet did not fail a new file citing an issue');
 
     const newFileBlock: FileScan = { path: 'src/new.ts', citationLines: [], longBlocks: [5] };
-    if (!evaluateRatchet([newFileBlock], config).failures.some((f) => f.includes('src/new.ts'))) {
-      fail('comments-selftest', 'evaluateRatchet did not fail a new file with a long comment block');
-    } else {
-      ok();
-    }
+    expect(evaluateRatchet([newFileBlock], config).failures.some((f) => f.includes('src/new.ts')), 'comments-selftest', 'evaluateRatchet did not fail a new file with a long comment block');
 
     const grandfatheredOverCeiling: FileScan = { path: 'src/old.ts', citationLines: [1, 2], longBlocks: [] };
     const overResult = evaluateRatchet([grandfatheredOverCeiling], config);
-    if (overResult.failures.length === 0 || !overResult.failures.some((f) => f.includes('over its ceiling'))) {
-      fail('comments-selftest', 'evaluateRatchet did not fail an area total pushed over its ceiling');
-    } else {
-      ok();
-    }
+    expect(!(overResult.failures.length === 0 || !overResult.failures.some((f) => f.includes('over its ceiling'))), 'comments-selftest', 'evaluateRatchet did not fail an area total pushed over its ceiling');
 
     const atCeiling: FileScan = { path: 'src/old.ts', citationLines: [1], longBlocks: [] };
     const atResult = evaluateRatchet([atCeiling], config);
-    if (atResult.failures.length !== 0) {
-      fail('comments-selftest', 'evaluateRatchet failed a file exactly at its area ceiling');
-    } else {
-      ok();
-    }
+    expect(!(atResult.failures.length !== 0), 'comments-selftest', 'evaluateRatchet failed a file exactly at its area ceiling');
 
     const underCeiling: FileScan = { path: 'src/old.ts', citationLines: [], longBlocks: [] };
     const underResult = evaluateRatchet([underCeiling], config);
-    if (underResult.failures.length !== 0 || !underResult.notes.some((n) => n.includes('under ceiling'))) {
-      fail('comments-selftest', 'evaluateRatchet did not note an area total under its ceiling');
-    } else {
-      ok();
-    }
+    expect(!(underResult.failures.length !== 0 || !underResult.notes.some((n) => n.includes('under ceiling'))), 'comments-selftest', 'evaluateRatchet did not note an area total under its ceiling');
   }
 
   // --- Read and validate the config's own shape ----------------------------
@@ -195,11 +168,7 @@ export default async function ({ fail, note, ok }: Reporter) {
 
   const rawAreas = Array.isArray(raw.areas) ? raw.areas : [];
   const rawGrandfathered = Array.isArray(raw.grandfathered) ? raw.grandfathered : [];
-  if (!Array.isArray(raw.areas) || !Array.isArray(raw.grandfathered)) {
-    fail('comments', `${CONFIG_REL}: 'areas' and 'grandfathered' must both be arrays`);
-  } else {
-    ok();
-  }
+  expect(!(!Array.isArray(raw.areas) || !Array.isArray(raw.grandfathered)), 'comments', `${CONFIG_REL}: 'areas' and 'grandfathered' must both be arrays`);
 
   const areas: AreaConfig[] = [];
   const seenAreaPaths = new Set<string>();

@@ -9,7 +9,7 @@ import type { Reporter } from '../lib/report.ts';
 // shape of desktop-sessions.ts's and desktop-claim.ts's own guards —
 // reading directories by explicit path (never walk('apps/'), which descends
 // into node_modules).
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const searchDir = 'apps/desktop/src/main/search';
   const sharedSearchTypesFile = 'apps/desktop/src/shared/search/types.ts';
   const rendererSearchFile = 'apps/desktop/src/renderer/src/search.ts';
@@ -71,11 +71,7 @@ export default async function ({ fail, ok }: Reporter) {
       const missing = requiredFields.filter((field) => !new RegExp(`\\b${field}\\s*:`).test(typesText));
       if (missing.length > 0) {
         fail('desktop-search', `${sharedSearchTypesFile}'s SearchResult is missing field(s): ${missing.join(', ')}`);
-      } else if (!/\bcomplete\b/.test(rendererText)) {
-        fail('desktop-search', `${rendererSearchFile} never references 'complete' -- a partial search must never render as an exhaustive empty result`);
-      } else {
-        ok();
-      }
+      } else expect(/\bcomplete\b/.test(rendererText), 'desktop-search', `${rendererSearchFile} never references 'complete' -- a partial search must never render as an exhaustive empty result`);
     }
   }
 
@@ -94,11 +90,7 @@ export default async function ({ fail, ok }: Reporter) {
       const trigramMatch = /TRIGRAM_SIZE\s*=\s*(\d+)/.exec(text);
       if (!minTermMatch || !trigramMatch) {
         fail('desktop-search', `${sharedSearchTypesFile} must declare both 'MIN_TERM_CHARS' and 'TRIGRAM_SIZE' as numeric literals`);
-      } else if (minTermMatch[1] !== trigramMatch[1]) {
-        fail('desktop-search', `MIN_TERM_CHARS (${minTermMatch[1]}) must equal TRIGRAM_SIZE (${trigramMatch[1]})`);
-      } else {
-        ok();
-      }
+      } else expect(!(minTermMatch[1] !== trigramMatch[1]), 'desktop-search', `MIN_TERM_CHARS (${minTermMatch[1]}) must equal TRIGRAM_SIZE (${trigramMatch[1]})`);
     }
   }
 }

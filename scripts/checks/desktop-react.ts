@@ -6,7 +6,7 @@ import type { Reporter } from '../lib/report.ts';
 
 // #316: four rails for the React renderer, each broken deliberately once
 // before being trusted to pass (ENGINEERING §7).
-export default async function ({ fail, ok, note }: Reporter) {
+export default async function ({ expect, fail, note, ok }: Reporter) {
   const rendererDir = 'apps/desktop/src/renderer';
   const ruleUrl = pathToFileURL(join(root, 'apps/desktop/eslint/no-raw-colour.mjs')).href;
   // A single dynamic import (not a re-implementation) keeps this
@@ -77,11 +77,7 @@ export default async function ({ fail, ok, note }: Reporter) {
     const matches = files.filter((f) => bridgeEventRe.test(readFileSync(f, 'utf8'))).map(relOf);
     if (!matches.includes(subscriptionsRel)) {
       fail('desktop-react', `${subscriptionsRel} does not name any window.port push-listener method — the guard cannot pass vacuously if it stops calling the bridge`);
-    } else if (matches.some((rel) => rel !== subscriptionsRel)) {
-      fail('desktop-react', `window.port's push listeners are named outside ${subscriptionsRel}, in: ${matches.filter((rel) => rel !== subscriptionsRel).join(', ')}`);
-    } else {
-      ok();
-    }
+    } else expect(!matches.some((rel) => rel !== subscriptionsRel), 'desktop-react', `window.port's push listeners are named outside ${subscriptionsRel}, in: ${matches.filter((rel) => rel !== subscriptionsRel).join(', ')}`);
   }
 
   // --- No useEffect/useLayoutEffect outside comments, non-test files -------

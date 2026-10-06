@@ -13,7 +13,7 @@ import type { Reporter } from '../lib/report.ts';
 // into PIPELINE.md (issue 181 freed the headroom) — every agent copy is now
 // compared against that one source, never pairwise against each other.
 // pin: The `label-cas` block ↔ its canonical copy in PIPELINE.md
-export default async function ({ fail, note, ok }: Reporter) {
+export default async function ({ expect, fail, note, ok }: Reporter) {
   const BEGIN = '<!-- label-cas:begin -->';
   const END = '<!-- label-cas:end -->';
   const extractBlock = (text: string): string | null => {
@@ -25,11 +25,7 @@ export default async function ({ fail, note, ok }: Reporter) {
 
   const pipelineText = readFileSync(join(root, 'plugins/port/docs/PIPELINE.md'), 'utf8');
   const canonicalBlock = extractBlock(pipelineText);
-  if (canonicalBlock === null) {
-    fail('label-protocol', 'plugins/port/docs/PIPELINE.md carries no label-cas canonical copy');
-  } else {
-    ok();
-  }
+  expect(!(canonicalBlock === null), 'label-protocol', 'plugins/port/docs/PIPELINE.md carries no label-cas canonical copy');
 
   const agentsDir = join(root, 'plugins/port/agents');
   const agentFiles = walk(agentsDir).filter((f) => f.endsWith('.md'));
@@ -49,19 +45,11 @@ export default async function ({ fail, note, ok }: Reporter) {
       fail('label-protocol', `${rel} grants Bash but is missing the label-cas markers`);
     } else {
       withBlock.push({ rel, block });
-      if (canonicalBlock !== null && block !== canonicalBlock) {
-        fail('label-protocol', `${rel}'s label-cas block has drifted from PIPELINE.md's canonical copy`);
-      } else {
-        ok();
-      }
+      expect(!(canonicalBlock !== null && block !== canonicalBlock), 'label-protocol', `${rel}'s label-cas block has drifted from PIPELINE.md's canonical copy`);
     }
   }
 
-  if (matched < 4) {
-    fail('label-protocol', `only ${matched} agent(s) granting Bash matched under plugins/port/agents — expected at least 4`);
-  } else {
-    ok();
-  }
+  expect(!(matched < 4), 'label-protocol', `only ${matched} agent(s) granting Bash matched under plugins/port/agents — expected at least 4`);
 
   // Every --remove-label occurrence under plugins/port/agents/ is in a file
   // carrying the block — an agent that writes through a stale view without
@@ -70,11 +58,7 @@ export default async function ({ fail, note, ok }: Reporter) {
   for (const f of agentFiles) {
     const rel = relOf(f);
     const text = readFileSync(f, 'utf8');
-    if (text.includes('--remove-label') && !blockRels.has(rel)) {
-      fail('label-protocol', `${rel} issues --remove-label but carries no label-cas block`);
-    } else {
-      ok();
-    }
+    expect(!(text.includes('--remove-label') && !blockRels.has(rel)), 'label-protocol', `${rel} issues --remove-label but carries no label-cas block`);
   }
 
   // --- Label-cas carve-outs and existing-work pre-flight ---------------------
@@ -91,35 +75,14 @@ export default async function ({ fail, note, ok }: Reporter) {
       .labels.filter((l: any) => l.role === 'marker')
       .map((l: any) => l.key);
     for (const key of markerKeys) {
-      if (!canonical.includes(`<labels.${key}>`)) {
-        fail(
-          'label-protocol',
-          `label-cas block does not name marker label '<labels.${key}>', which data/labels.json declares role: "marker"`,
-        );
-      } else {
-        ok();
-      }
+      expect(canonical.includes(`<labels.${key}>`), 'label-protocol', `label-cas block does not name marker label '<labels.${key}>', which data/labels.json declares role: "marker"`);
     }
-    if (!canonical.includes('<labels.refreshBranch>') || !canonical.includes('<labels.refreshing>')) {
-      fail(
-        'label-protocol',
-        'label-cas block does not name the sanctioned co-presence pair <labels.refreshBranch>/<labels.refreshing>',
-      );
-    } else {
-      ok();
-    }
+    expect(!(!canonical.includes('<labels.refreshBranch>') || !canonical.includes('<labels.refreshing>')), 'label-protocol', 'label-cas block does not name the sanctioned co-presence pair <labels.refreshBranch>/<labels.refreshing>');
 
     // The failure-direction phrase (#209, docs/ENGINEERING.md §4) is present
     // literally, not paraphrased, so a future edit that loses the direction
     // fails here rather than in a live pipeline run.
-    if (!canonical.includes('fails closed on the write and open on the report')) {
-      fail(
-        'label-protocol',
-        'label-cas block is missing the literal phrase "fails closed on the write and open on the report"',
-      );
-    } else {
-      ok();
-    }
+    expect(canonical.includes('fails closed on the write and open on the report'), 'label-protocol', 'label-cas block is missing the literal phrase "fails closed on the write and open on the report"');
   } else {
     note('label-protocol: no label-cas block found anywhere — skipped the carve-out and failure-direction checks');
   }
@@ -130,16 +93,8 @@ export default async function ({ fail, note, ok }: Reporter) {
   {
     const rel = 'plugins/port/agents/impl-agent.md';
     const text = readFileSync(join(root, rel), 'utf8');
-    if (!text.includes('gh pr list') || !text.includes('--state open')) {
-      fail('label-protocol', `${rel}'s Pre-flight is missing the existing-work lookup ('gh pr list ... --state open')`);
-    } else {
-      ok();
-    }
-    if (!text.includes('already has an open pull request')) {
-      fail('label-protocol', `${rel}'s Pre-flight is missing the existing-work abort message`);
-    } else {
-      ok();
-    }
+    expect(!(!text.includes('gh pr list') || !text.includes('--state open')), 'label-protocol', `${rel}'s Pre-flight is missing the existing-work lookup ('gh pr list ... --state open')`);
+    expect(text.includes('already has an open pull request'), 'label-protocol', `${rel}'s Pre-flight is missing the existing-work abort message`);
   }
 
   // --- Resume from a pushed branch ---------------------------------------------
@@ -155,42 +110,24 @@ export default async function ({ fail, note, ok }: Reporter) {
     const preflightIdx = text.indexOf('## Pre-flight');
     const labelSwapIdx = text.indexOf('## Label swap (first action after pre-flight)');
     const lsRemoteIdx = text.indexOf('git ls-remote --heads origin');
-    if (
-      preflightIdx === -1 ||
-      labelSwapIdx === -1 ||
-      lsRemoteIdx === -1 ||
-      !(preflightIdx < lsRemoteIdx && lsRemoteIdx < labelSwapIdx)
-    ) {
-      fail('label-protocol', `${rel}'s Pre-flight is missing the resume-branch lookup ('git ls-remote --heads origin')`);
-    } else {
-      ok();
-    }
+    expect(!(preflightIdx === -1 ||
+    labelSwapIdx === -1 ||
+    lsRemoteIdx === -1 ||
+    !(preflightIdx < lsRemoteIdx && lsRemoteIdx < labelSwapIdx)), 'label-protocol', `${rel}'s Pre-flight is missing the resume-branch lookup ('git ls-remote --heads origin')`);
 
     // The first checkpoint push must land before the checks step — a push
     // gated behind every check passing is exactly the durability gap #254
     // reports, since a killed run never reaches it.
     const firstPushIdx = text.indexOf('git push');
     const runChecksIdx = text.indexOf('**Run the checks.**');
-    if (firstPushIdx === -1 || runChecksIdx === -1 || !(firstPushIdx < runChecksIdx)) {
-      fail('label-protocol', `${rel} does not push a checkpoint before its 'Run the checks' step — a killed run must leave a pushed branch behind it`);
-    } else {
-      ok();
-    }
+    expect(!(firstPushIdx === -1 || runChecksIdx === -1 || !(firstPushIdx < runChecksIdx)), 'label-protocol', `${rel} does not push a checkpoint before its 'Run the checks' step — a killed run must leave a pushed branch behind it`);
 
-    if (!text.includes('every failure in the resume path degrades to a fresh start')) {
-      fail('label-protocol', `${rel} is missing the literal phrase "every failure in the resume path degrades to a fresh start"`);
-    } else {
-      ok();
-    }
+    expect(text.includes('every failure in the resume path degrades to a fresh start'), 'label-protocol', `${rel} is missing the literal phrase "every failure in the resume path degrades to a fresh start"`);
   }
   {
     const rel = 'plugins/port/skills/implement/SKILL.md';
     const text = readFileSync(join(root, rel), 'utf8');
-    if (!text.includes('git ls-remote --heads origin')) {
-      fail('label-protocol', `${rel} does not name the same 'git ls-remote --heads origin' resume-branch lookup impl-agent.md's Pre-flight uses — the dispatched and operator routes have drifted apart`);
-    } else {
-      ok();
-    }
+    expect(text.includes('git ls-remote --heads origin'), 'label-protocol', `${rel} does not name the same 'git ls-remote --heads origin' resume-branch lookup impl-agent.md's Pre-flight uses — the dispatched and operator routes have drifted apart`);
   }
 
   // --- Refresh escalation removes the surviving trigger too -------------------
@@ -203,10 +140,6 @@ export default async function ({ fail, note, ok }: Reporter) {
   {
     const rel = 'plugins/port/agents/revise-agent.md';
     const text = readFileSync(join(root, rel), 'utf8');
-    if (!text.includes('plus `<labels.readyForReview>` when it is present too')) {
-      fail('label-protocol', `${rel}'s Refresh mode escalation does not name removing the surviving trigger label (<labels.readyForReview>) alongside <labels.refreshing>/<labels.approved> (#225)`);
-    } else {
-      ok();
-    }
+    expect(text.includes('plus `<labels.readyForReview>` when it is present too'), 'label-protocol', `${rel}'s Refresh mode escalation does not name removing the surviving trigger label (<labels.readyForReview>) alongside <labels.refreshing>/<labels.approved> (#225)`);
   }
 }

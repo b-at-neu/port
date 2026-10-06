@@ -13,7 +13,7 @@ import { message } from '../lib/errors.ts';
 // this is what pins it so the next executable or data file cannot land in
 // templates/ silently the way worktrees.mjs and budget.mjs both did before
 // this ticket.
-export default async function ({ fail, note, ok }: Reporter) {
+export default async function ({ expect, fail, note, ok }: Reporter) {
   // --- templates/ holds only fill-in templates, both directions ---------------
   // guard(#171): a new executable or canonical-data file landing in
   // templates/ the way worktrees.mjs and budget.mjs both did after issue 149
@@ -33,21 +33,10 @@ export default async function ({ fail, note, ok }: Reporter) {
     ]);
     const actual = new Set(readdirSync(join(root, dir)).filter((f) => statSync(join(root, dir, f)).isFile()));
     for (const f of actual) {
-      if (!expected.has(f)) {
-        fail(
-          'layout-templates',
-          `${dir}/${f} is not in this check's fill-in-template manifest — move it to plugins/port/bin/ (an executable) or plugins/port/data/ (canonical data), or extend the manifest if it genuinely is a fill-in template`,
-        );
-      } else {
-        ok();
-      }
+      expect(expected.has(f), 'layout-templates', `${dir}/${f} is not in this check's fill-in-template manifest — move it to plugins/port/bin/ (an executable) or plugins/port/data/ (canonical data), or extend the manifest if it genuinely is a fill-in template`);
     }
     for (const f of expected) {
-      if (!actual.has(f)) {
-        fail('layout-templates', `${dir}/${f} is in this check's manifest but does not exist on disk`);
-      } else {
-        ok();
-      }
+      expect(actual.has(f), 'layout-templates', `${dir}/${f} is in this check's manifest but does not exist on disk`);
     }
   }
 
@@ -70,14 +59,7 @@ export default async function ({ fail, note, ok }: Reporter) {
       }
       const text = readFileSync(abs, 'utf8');
       const relativeImport = /\bfrom\s+['"]\.\.?\//.exec(text);
-      if (relativeImport) {
-        fail(
-          'layout-bin',
-          `${dir}/${f} has a relative import (${JSON.stringify(relativeImport[0])}) — every file an adopter copies alone must be self-contained`,
-        );
-      } else {
-        ok();
-      }
+      expect(!relativeImport, 'layout-bin', () => `${dir}/${f} has a relative import (${JSON.stringify(relativeImport![0])}) — every file an adopter copies alone must be self-contained`);
     }
   }
 
@@ -87,11 +69,7 @@ export default async function ({ fail, note, ok }: Reporter) {
   {
     const dir = 'plugins/port/data';
     for (const f of readdirSync(join(root, dir))) {
-      if (!f.endsWith('.json')) {
-        fail('layout-data', `${dir}/${f} is not JSON — data/ holds only canonical data`);
-      } else {
-        ok();
-      }
+      expect(f.endsWith('.json'), 'layout-data', `${dir}/${f} is not JSON — data/ holds only canonical data`);
     }
   }
 

@@ -52,7 +52,7 @@ function extractLogDecisions(text: string): Set<string> {
   return decisions;
 }
 
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   // --- Write-only rail: nothing but port-tick.ts and report.ts itself may
   // import events.ts or report.ts, and events.ts exports no reader.
   // guard(#187, #203): an append-only history feeding a future tick's
@@ -68,13 +68,11 @@ export default async function ({ fail, ok }: Reporter) {
       if (f === eventsPath || f === reportPath || f === portTickPath) continue;
       const text = readFileSync(f, 'utf8');
       const m = importRe.exec(text);
-      if (m) fail('tick-events', `${relOf(f)} imports ${m[1]}.ts — only port-tick.ts and report.ts itself may read the trajectory record`);
-      else ok();
+      expect(!m, 'tick-events', () => `${relOf(f)} imports ${m![1]}.ts — only port-tick.ts and report.ts itself may read the trajectory record`);
     }
     const eventsExports = [...readFileSync(eventsPath, 'utf8').matchAll(/export function (\w+)\(/g)].map((m) => m[1]);
     for (const name of eventsExports) {
-      if (/read|parse/i.test(name)) fail('tick-events', `events.ts exports '${name}' — a read/parse-named export is exactly what the write-only rail forbids`);
-      else ok();
+      expect(!/read|parse/i.test(name), 'tick-events', `events.ts exports '${name}' — a read/parse-named export is exactly what the write-only rail forbids`);
     }
   }
 
@@ -91,17 +89,12 @@ export default async function ({ fail, ok }: Reporter) {
     }
     if (!parsedSmall || !('v' in parsedSmall) || !('ts' in parsedSmall) || !('runId' in parsedSmall) || !('repo' in parsedSmall) || !('kind' in parsedSmall)) {
       fail('tick-events', 'formatEvent output does not parse as JSON carrying v/ts/runId/repo/kind');
-    } else if (small.includes('\n')) {
-      fail('tick-events', 'formatEvent output contains a raw newline — a single line must never split');
-    } else {
-      ok();
-    }
+    } else expect(!small.includes('\n'), 'tick-events', 'formatEvent output contains a raw newline — a single line must never split');
     const bigArray = Array.from({ length: 5000 }, (_, i) => ({ item: i, stage: 'impl-agent' }));
     const big = formatEvent({ v: 1, ts: 't', runId: 'r', repo: 'o/n', kind: 'tick' }, { liveItems: bigArray });
     const bigParsed = JSON.parse(big);
     if (Buffer.byteLength(big, 'utf8') > 8 * 1024) fail('tick-events', `formatEvent did not cap an oversized payload at 8KB (got ${Buffer.byteLength(big, 'utf8')} bytes)`);
-    else if (bigParsed.truncated !== true) fail('tick-events', 'formatEvent capped an oversized payload but never stamped truncated: true');
-    else ok();
+    else expect(!(bigParsed.truncated !== true), 'tick-events', 'formatEvent capped an oversized payload but never stamped truncated: true');
   }
 
   // --- Decision vocabulary pinned three ways: DENIAL_DECISIONS equals the
@@ -113,30 +106,25 @@ export default async function ({ fail, ok }: Reporter) {
     const hookText = readFileSync(join(root, 'plugins/port/hooks/agent-guard.mjs'), 'utf8');
     const hookDecisions = extractLogDecisions(hookText);
     for (const d of hookDecisions) {
-      if (!DENIAL_DECISIONS.has(d)) fail('tick-events', `agent-guard.mjs logs decision '${d}', which denials.ts's DENIAL_DECISIONS does not carry`);
-      else ok();
+      expect(DENIAL_DECISIONS.has(d), 'tick-events', `agent-guard.mjs logs decision '${d}', which denials.ts's DENIAL_DECISIONS does not carry`);
     }
     for (const d of DENIAL_DECISIONS) {
-      if (!hookDecisions.has(d)) fail('tick-events', `denials.ts's DENIAL_DECISIONS carries '${d}', which agent-guard.mjs never logs`);
-      else ok();
+      expect(hookDecisions.has(d), 'tick-events', `denials.ts's DENIAL_DECISIONS carries '${d}', which agent-guard.mjs never logs`);
     }
     const desktopText = readFileSync(join(root, 'apps/desktop/src/main/local/denials.ts'), 'utf8');
     const desktopMatch = /CURRENT_DECISIONS[^=]*=\s*new Set\(\[([^\]]+)\]\)/.exec(desktopText);
     const desktopDecisions = new Set((desktopMatch?.[1].match(/'([a-z-]+)'/g) ?? []).map((s) => s.slice(1, -1)));
     for (const d of desktopDecisions) {
-      if (!DENIAL_DECISIONS.has(d)) fail('tick-events', `desktop's CURRENT_DECISIONS carries '${d}', which denials.ts's DENIAL_DECISIONS does not`);
-      else ok();
+      expect(DENIAL_DECISIONS.has(d), 'tick-events', `desktop's CURRENT_DECISIONS carries '${d}', which denials.ts's DENIAL_DECISIONS does not`);
     }
     for (const d of DENIAL_DECISIONS) {
-      if (!desktopDecisions.has(d)) fail('tick-events', `denials.ts's DENIAL_DECISIONS carries '${d}', which desktop's CURRENT_DECISIONS does not`);
-      else ok();
+      expect(desktopDecisions.has(d), 'tick-events', `denials.ts's DENIAL_DECISIONS carries '${d}', which desktop's CURRENT_DECISIONS does not`);
     }
   }
 
   // --- Retention: the 8MB rotation cap is a literal, never a guess. -------
   {
     const eventsText = readFileSync(join(root, TICK_DIR, 'events.ts'), 'utf8');
-    if (!eventsText.includes('8 * 1024 * 1024')) fail('tick-events', 'events.ts is missing the literal 8MB rotation cap');
-    else ok();
+    expect(eventsText.includes('8 * 1024 * 1024'), 'tick-events', 'events.ts is missing the literal 8MB rotation cap');
   }
 }

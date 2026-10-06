@@ -4,15 +4,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { root, pipelineDocsText } from '../lib/files.ts';
-import { makeCheck, plainPayload, resolveMatchers, subagentPayload } from '../lib/guard-fixtures.ts';
+import { makeCheck, makeDecide, plainPayload, resolveMatchers, subagentPayload } from '../lib/guard-fixtures.ts';
 import type { Reporter } from '../lib/report.ts';
 
-export default async function ({ fail, ok, note }: Reporter) {
+export default async function ({ fail, ok, expect, note }: Reporter) {
   const { decide } = await import(pathToFileURL(join(root, 'plugins/port/hooks/lib/guard-rules.mjs')).href);
   const { dispatchDenial } = await import(pathToFileURL(join(root, 'plugins/port/hooks/lib/claim-rules.mjs')).href);
 
   const matchers = resolveMatchers(fail);
   const check = makeCheck(fail, ok);
+  const gate = makeDecide(decide, { matchers, sessionRequiredPaths: [], root, isCockpitSession: true });
 
   const held = { state: 'held', owner: 'port-desktop', scopes: ['dispatch'], unknownScopes: [], claimedAt: '2026-09-05T14:02:11Z' };
   const unreadable = { state: 'unreadable', message: "missing 'owner' or 'claimedAt'" };
@@ -28,32 +29,41 @@ export default async function ({ fail, ok, note }: Reporter) {
     const subagentWho = { isSubagent: true, isOperatorWorktree: false, isManagedWorktree: true, agent: 'impl-agent', signal: 'agent_type' };
 
     const deniedHeld = dispatchDenial({ toolName: 'Agent', who: cockpitWho, isCockpitSession: true, claim: held });
-    if (deniedHeld?.decision !== 'deny') fail('dispatch-claim', `expected a held 'dispatch' claim to deny a cockpit session's Agent call, got ${JSON.stringify(deniedHeld)}`);
-    else ok();
+    expect(deniedHeld?.decision === 'deny', 'dispatch-claim', () => `expected a held 'dispatch' claim to deny a cockpit session's Agent call, got ${JSON.stringify(deniedHeld)}`);
 
     const deniedUnreadable = dispatchDenial({ toolName: 'Agent', who: cockpitWho, isCockpitSession: true, claim: unreadable });
-    if (deniedUnreadable?.decision !== 'deny') fail('dispatch-claim', `expected an unreadable claim to deny exactly as a held one does, got ${JSON.stringify(deniedUnreadable)}`);
-    else ok();
+    expect(
+      deniedUnreadable?.decision === 'deny',
+      'dispatch-claim',
+      () => `expected an unreadable claim to deny exactly as a held one does, got ${JSON.stringify(deniedUnreadable)}`,
+    );
 
     const allowedAbsent = dispatchDenial({ toolName: 'Agent', who: cockpitWho, isCockpitSession: true, claim: absent });
-    if (allowedAbsent !== null) fail('dispatch-claim', `expected an absent claim to never deny, got ${JSON.stringify(allowedAbsent)}`);
-    else ok();
+    expect(allowedAbsent === null, 'dispatch-claim', () => `expected an absent claim to never deny, got ${JSON.stringify(allowedAbsent)}`);
 
     const allowedPlanGateOnly = dispatchDenial({ toolName: 'Agent', who: cockpitWho, isCockpitSession: true, claim: planGateOnly });
-    if (allowedPlanGateOnly !== null) fail('dispatch-claim', `expected a claim holding only 'plan-gate' to never deny an Agent call, got ${JSON.stringify(allowedPlanGateOnly)}`);
-    else ok();
+    expect(
+      allowedPlanGateOnly === null,
+      'dispatch-claim',
+      () => `expected a claim holding only 'plan-gate' to never deny an Agent call, got ${JSON.stringify(allowedPlanGateOnly)}`,
+    );
 
     const allowedSubagent = dispatchDenial({ toolName: 'Agent', who: subagentWho, isCockpitSession: true, claim: held });
-    if (allowedSubagent !== null) fail('dispatch-claim', `expected a subagent to be exempt — stage agents already declare disallowedTools: Agent — got ${JSON.stringify(allowedSubagent)}`);
-    else ok();
+    expect(
+      allowedSubagent === null,
+      'dispatch-claim',
+      () => `expected a subagent to be exempt — stage agents already declare disallowedTools: Agent — got ${JSON.stringify(allowedSubagent)}`,
+    );
 
     const allowedNotCockpit = dispatchDenial({ toolName: 'Agent', who: cockpitWho, isCockpitSession: false, claim: held });
-    if (allowedNotCockpit !== null) fail('dispatch-claim', `expected an ordinary (non-cockpit) session to never be denied, got ${JSON.stringify(allowedNotCockpit)}`);
-    else ok();
+    expect(allowedNotCockpit === null, 'dispatch-claim', () => `expected an ordinary (non-cockpit) session to never be denied, got ${JSON.stringify(allowedNotCockpit)}`);
 
     const allowedUnverifiable = dispatchDenial({ toolName: 'Agent', who: cockpitWho, isCockpitSession: null, claim: held });
-    if (allowedUnverifiable !== null) fail('dispatch-claim', `expected an unreadable transcript (isCockpitSession: null) to fail open, got ${JSON.stringify(allowedUnverifiable)}`);
-    else ok();
+    expect(
+      allowedUnverifiable === null,
+      'dispatch-claim',
+      () => `expected an unreadable transcript (isCockpitSession: null) to fail open, got ${JSON.stringify(allowedUnverifiable)}`,
+    );
   }
 
   // --- decide()'s own Agent arm ------------------------------------------------
@@ -61,19 +71,19 @@ export default async function ({ fail, ok, note }: Reporter) {
   // directions, through the same decide() every other tool call goes through.
   check(
     'a held dispatch claim denies an Agent call from a cockpit-shaped session',
-    decide({ payload: plainPayload({ tool_name: 'Agent', tool_input: { description: 'impl #52', subagent_type: 'port:impl-agent' } }), matchers, sessionRequiredPaths: [], root, isCockpitSession: true, dispatchClaim: held }),
+    gate({ payload: plainPayload({ tool_name: 'Agent', tool_input: { description: 'impl #52', subagent_type: 'port:impl-agent' } }), dispatchClaim: held }),
     'deny',
   );
 
   check(
     'the identical Agent call from a subagent is never denied by this rule',
-    decide({ payload: subagentPayload({ tool_name: 'Agent', tool_input: { description: 'impl #52', subagent_type: 'port:impl-agent' } }), matchers, sessionRequiredPaths: [], root, isCockpitSession: true, dispatchClaim: held }),
+    gate({ payload: subagentPayload({ tool_name: 'Agent', tool_input: { description: 'impl #52', subagent_type: 'port:impl-agent' } }), dispatchClaim: held }),
     'allow',
   );
 
   check(
     'no claim (absent) never denies an Agent call',
-    decide({ payload: plainPayload({ tool_name: 'Agent', tool_input: { description: 'impl #52', subagent_type: 'port:impl-agent' } }), matchers, sessionRequiredPaths: [], root, isCockpitSession: true, dispatchClaim: absent }),
+    gate({ payload: plainPayload({ tool_name: 'Agent', tool_input: { description: 'impl #52', subagent_type: 'port:impl-agent' } }), dispatchClaim: absent }),
     'allow',
   );
 
@@ -84,11 +94,7 @@ export default async function ({ fail, ok, note }: Reporter) {
   {
     const hooksJson = JSON.parse(readFileSync(join(root, 'plugins/port/hooks/hooks.json'), 'utf8'));
     const matcherNames = (hooksJson.hooks?.PreToolUse ?? []).map((entry: { matcher?: string }) => entry.matcher);
-    if (!matcherNames.includes('Agent')) {
-      fail('dispatch-claim', `hooks.json's PreToolUse matchers (${JSON.stringify(matcherNames)}) do not include 'Agent'`);
-    } else {
-      ok();
-    }
+    expect(matcherNames.includes('Agent'), 'dispatch-claim', () => `hooks.json's PreToolUse matchers (${JSON.stringify(matcherNames)}) do not include 'Agent'`);
   }
 
   // --- End-to-end wiring: the real agent-guard.mjs against a temp fixture -----
@@ -111,25 +117,24 @@ export default async function ({ fail, ok, note }: Reporter) {
         execFileSync(process.execPath, [hookPath], { cwd: fixture, input: JSON.stringify(payload), stdio: ['pipe', 'pipe', 'ignore'], encoding: 'utf8' });
 
       const stdout = run({ cwd: fixture, session_id: 'sess-dispatch-1', tool_name: 'Agent', transcript_path: transcriptPath, tool_input: { description: 'impl #52', subagent_type: 'port:impl-agent' } });
-      let parsed;
+      let parsed: any;
       try {
         parsed = JSON.parse(stdout);
       } catch {
         fail('dispatch-claim-wiring', `expected JSON deny output against a held dispatch claim and a cockpit transcript, got ${JSON.stringify(stdout)}`);
       }
-      if (parsed && parsed.hookSpecificOutput?.permissionDecision !== 'deny') {
-        fail('dispatch-claim-wiring', `expected permissionDecision 'deny' against a held dispatch claim from a cockpit session, got ${JSON.stringify(parsed)}`);
-      } else {
-        ok();
-      }
+      expect(
+        parsed && parsed.hookSpecificOutput?.permissionDecision === 'deny',
+        'dispatch-claim-wiring',
+        () => `expected permissionDecision 'deny' against a held dispatch claim from a cockpit session, got ${JSON.stringify(parsed)}`,
+      );
 
       // A plain (non-cockpit) session's transcript never trips this rule —
       // proof the read is scoped to an established cockpit, not every caller.
       const plainTranscriptPath = join(fixture, 'plain-transcript.jsonl');
       writeFileSync(plainTranscriptPath, `${JSON.stringify({ type: 'user', message: { content: 'hello' } })}\n`);
       const allowed = run({ cwd: fixture, session_id: 'sess-dispatch-2', tool_name: 'Agent', transcript_path: plainTranscriptPath, tool_input: { description: 'impl #52', subagent_type: 'port:impl-agent' } });
-      if (allowed.trim() !== '') fail('dispatch-claim-wiring', `expected no deny for a non-cockpit session, got ${JSON.stringify(allowed)}`);
-      else ok();
+      expect(allowed.trim() === '', 'dispatch-claim-wiring', () => `expected no deny for a non-cockpit session, got ${JSON.stringify(allowed)}`);
     } catch (e: any) {
       if (e.status !== undefined) fail('dispatch-claim-wiring', `hook exited non-zero: ${e.message}`);
       else throw e;
@@ -147,23 +152,11 @@ export default async function ({ fail, ok, note }: Reporter) {
   {
     const claimRulesText = readFileSync(join(root, 'plugins/port/hooks/lib/claim-rules.mjs'), 'utf8');
     const phrase = 'the app dispatches for this checkout';
-    if (!claimRulesText.includes(phrase)) {
-      fail('dispatch-claim-doc-pin', `claim-rules.mjs's dispatchDenial no longer states the phrase '${phrase}'`);
-    } else {
-      ok();
-    }
+    expect(claimRulesText.includes(phrase), 'dispatch-claim-doc-pin', `claim-rules.mjs's dispatchDenial no longer states the phrase '${phrase}'`);
     const coordinationText = readFileSync(join(root, 'docs/COORDINATION.md'), 'utf8');
-    if (!coordinationText.includes(phrase)) {
-      fail('dispatch-claim-doc-pin', `docs/COORDINATION.md no longer states the phrase '${phrase}'`);
-    } else {
-      ok();
-    }
+    expect(coordinationText.includes(phrase), 'dispatch-claim-doc-pin', `docs/COORDINATION.md no longer states the phrase '${phrase}'`);
     const docsText = pipelineDocsText();
-    if (!docsText.includes(phrase)) {
-      fail('dispatch-claim-doc-pin', `PIPELINE.md no longer states the phrase '${phrase}'`);
-    } else {
-      ok();
-    }
+    expect(docsText.includes(phrase), 'dispatch-claim-doc-pin', `PIPELINE.md no longer states the phrase '${phrase}'`);
   }
 
   note('dispatch-claim: dispatchDenial unit cases, decide()\'s Agent arm, end-to-end wiring, hooks.json matcher, and the stand-down-copy doc pin');

@@ -7,7 +7,7 @@ import type { Reporter } from '../lib/report.ts';
 // regex-based, in the shape of desktop-claim.ts's and desktop-actions.ts's
 // own guards. Reading these directories by explicit path (never
 // walk('apps/'), which descends into node_modules).
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const sharedGateDir = 'apps/desktop/src/shared/gate';
   const sharedMarkdownDir = 'apps/desktop/src/shared/markdown';
   const mainActionsDir = 'apps/desktop/src/main/actions';
@@ -56,11 +56,7 @@ export default async function ({ fail, ok }: Reporter) {
       const scopeKeys = new Set([...scopeMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]));
       const onlyInClassify = [...classifyKeys].filter((k) => !scopeKeys.has(k));
       const onlyInScope = [...scopeKeys].filter((k) => !classifyKeys.has(k));
-      if (onlyInClassify.length > 0 || onlyInScope.length > 0) {
-        fail('desktop-gate', `${classifyFile}'s LabelKeys (${[...classifyKeys].join(', ')}) and ${scopeFile}'s PLAN_GATE_KEYS (${[...scopeKeys].join(', ')}) disagree`);
-      } else {
-        ok();
-      }
+      expect(!(onlyInClassify.length > 0 || onlyInScope.length > 0), 'desktop-gate', `${classifyFile}'s LabelKeys (${[...classifyKeys].join(', ')}) and ${scopeFile}'s PLAN_GATE_KEYS (${[...scopeKeys].join(', ')}) disagree`);
     }
   }
 
@@ -69,11 +65,7 @@ export default async function ({ fail, ok }: Reporter) {
   // quietly dropped from either decision's own plan.
   {
     const text = readFileSync(join(root, classifyFile), 'utf8');
-    if (!text.includes(`present: ['planReview']`)) {
-      fail('desktop-gate', `${classifyFile} does not set "present: ['planReview']" — the stale-item guard must not be quietly dropped`);
-    } else {
-      ok();
-    }
+    expect(text.includes(`present: ['planReview']`), 'desktop-gate', `${classifyFile} does not set "present: ['planReview']" — the stale-item guard must not be quietly dropped`);
   }
 
   // --- GATE_CLAIM_OWNER's value appears in docs/COORDINATION.md -------------
@@ -86,11 +78,7 @@ export default async function ({ fail, ok }: Reporter) {
     const ownerMatch = /GATE_CLAIM_OWNER\s*=\s*'([^']+)'/.exec(typesText);
     if (!ownerMatch) {
       fail('desktop-gate', `${typesFile} has no 'GATE_CLAIM_OWNER = ...' assignment`);
-    } else if (!coordinationText.includes(ownerMatch[1])) {
-      fail('desktop-gate', `${coordinationFile} does not name '${ownerMatch[1]}' — the cockpit's stand-down report would name the wrong owner`);
-    } else {
-      ok();
-    }
+    } else expect(coordinationText.includes(ownerMatch[1]), 'desktop-gate', `${coordinationFile} does not name '${ownerMatch[1]}' — the cockpit's stand-down report would name the wrong owner`);
   }
 
   // --- postComment( is called under apps/desktop/src/ only from -----------
@@ -192,11 +180,7 @@ export default async function ({ fail, ok }: Reporter) {
     } else {
       const schemes = [...match[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
       const expected = ['http://', 'https://'];
-      if (schemes.length !== expected.length || !expected.every((s) => schemes.includes(s))) {
-        fail('desktop-gate', `${inlineFile}'s LINK_SCHEMES is ${JSON.stringify(schemes)} — must name exactly ${JSON.stringify(expected)}`);
-      } else {
-        ok();
-      }
+      expect(!(schemes.length !== expected.length || !expected.every((s) => schemes.includes(s))), 'desktop-gate', `${inlineFile}'s LINK_SCHEMES is ${JSON.stringify(schemes)} — must name exactly ${JSON.stringify(expected)}`);
     }
   }
 
@@ -213,11 +197,7 @@ export default async function ({ fail, ok }: Reporter) {
     if (!text.includes('still answering it in your terminal')) missing.push('the absent-claim note');
     if (!text.includes("can't be read")) missing.push(`the unreadable-claim line ("can't be read")`);
     if (!text.includes('stand down from the plan gate')) missing.push('the unreadable-claim note');
-    if (missing.length > 0) {
-      fail('desktop-gate', `${copyFile} is missing: ${missing.join(', ')}`);
-    } else {
-      ok();
-    }
+    expect(!(missing.length > 0), 'desktop-gate', `${copyFile} is missing: ${missing.join(', ')}`);
   }
 
   // --- No file under shared/gate/, main/actions/, or renderer/src/gate/ -----
@@ -260,11 +240,7 @@ export default async function ({ fail, ok }: Reporter) {
     } else {
       const fnStart = gateText.indexOf('export async function autoApprovePlan');
       const fnBody = fnStart === -1 ? '' : gateText.slice(fnStart, gateText.indexOf('\n}', fnStart));
-      if (fnBody.includes('postComment(')) {
-        fail('desktop-gate', `${gateActionFile}'s autoApprovePlan calls postComment( — this write has no operator feedback to attach, it must post none`);
-      } else {
-        ok();
-      }
+      expect(!fnBody.includes('postComment('), 'desktop-gate', `${gateActionFile}'s autoApprovePlan calls postComment( — this write has no operator feedback to attach, it must post none`);
     }
   }
 }

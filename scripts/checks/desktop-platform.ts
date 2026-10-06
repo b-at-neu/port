@@ -8,7 +8,7 @@ import type { Reporter } from '../lib/report.ts';
 // path string. These four assertions make that a compile-time and layer 1
 // fact rather than a review comment — the same shape as the
 // desktop-label-defaults guard in labels.ts.
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const platformDir = 'apps/desktop/src/main/platform';
   const testingDir = 'apps/desktop/src/testing';
   const runRel = `${platformDir}/run.ts`;
@@ -30,11 +30,7 @@ export default async function ({ fail, ok }: Reporter) {
       }
       fail('desktop-platform-layer', `${rel} references 'child_process' — only ${runRel} may`);
     }
-    if (!runHasIt) {
-      fail('desktop-platform-layer', `${runRel} does not import 'node:child_process' — the guard cannot pass vacuously if the file is deleted`);
-    } else {
-      ok();
-    }
+    expect(runHasIt, 'desktop-platform-layer', `${runRel} does not import 'node:child_process' — the guard cannot pass vacuously if the file is deleted`);
   }
 
   // --- run.ts's node:child_process import binds only execFile/spawn ----------

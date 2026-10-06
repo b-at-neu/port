@@ -8,7 +8,7 @@ import type { Reporter } from '../lib/report.ts';
 // (#265, #326) — mechanical rails, dependency-free and regex-based, in the
 // shape of desktop-actions.ts's and desktop-writes.ts's own guards. #293
 // adds the budget gate's own rails alongside them.
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const sharedDispatchDir = 'apps/desktop/src/shared/dispatch';
   const mainDispatchDir = 'apps/desktop/src/main/dispatch';
   const resolveFile = `${mainDispatchDir}/resolve.ts`;
@@ -28,11 +28,7 @@ export default async function ({ fail, ok }: Reporter) {
   // --- main/dispatch/ has source files ---------------------------------------
   // guard(#110): the directory this whole ticket adds being deleted with
   // nothing to catch it.
-  if (mainDispatchFiles.filter((f) => !relOf(f).endsWith('.test.ts')).length === 0) {
-    fail('desktop-dispatch', `${mainDispatchDir} has no source files — the guard cannot pass vacuously if the directory is deleted`);
-  } else {
-    ok();
-  }
+  expect(!(mainDispatchFiles.filter((f) => !relOf(f).endsWith('.test.ts')).length === 0), 'desktop-dispatch', `${mainDispatchDir} has no source files — the guard cannot pass vacuously if the directory is deleted`);
 
   // --- shared/dispatch/ compiles under typecheck:web -------------------------
   // guard(#110): the pure drain/halt contract losing its typecheck:web
@@ -104,11 +100,7 @@ export default async function ({ fail, ok }: Reporter) {
       const text = readFileSync(f, 'utf8');
       count += (text.match(/'dispatching'/g) ?? []).length;
     }
-    if (count !== 1) {
-      fail('desktop-dispatch', `the literal 'dispatching' appears ${count} times under ${mainDispatchDir} — expected exactly 1 (the v1 migration in store.ts)`);
-    } else {
-      ok();
-    }
+    expect(!(count !== 1), 'desktop-dispatch', `the literal 'dispatching' appears ${count} times under ${mainDispatchDir} — expected exactly 1 (the v1 migration in store.ts)`);
   }
 
   // --- resolve.ts validates against DISPATCH_COMMANDS by name ----------------
@@ -118,11 +110,7 @@ export default async function ({ fail, ok }: Reporter) {
     const text = readFileSync(join(root, resolveFile), 'utf8');
     if (!/DISPATCH_COMMANDS/.test(text)) {
       fail('desktop-dispatch', `${resolveFile} never references DISPATCH_COMMANDS — command validation must resolve it by name, never a retyped list`);
-    } else if (/\[\s*'run'\s*,\s*'drain'\s*,\s*'pause'\s*,\s*'halt'\s*\]/.test(text)) {
-      fail('desktop-dispatch', `${resolveFile} retypes the command list as a literal array instead of validating against DISPATCH_COMMANDS`);
-    } else {
-      ok();
-    }
+    } else expect(!/\[\s*'run'\s*,\s*'drain'\s*,\s*'pause'\s*,\s*'halt'\s*\]/.test(text), 'desktop-dispatch', `${resolveFile} retypes the command list as a literal array instead of validating against DISPATCH_COMMANDS`);
   }
 
   // --- In halt.ts, runStates.set( precedes stopFor(, which precedes ----------
@@ -152,11 +140,7 @@ export default async function ({ fail, ok }: Reporter) {
       fail('desktop-dispatch', `${haltFile} never calls applyItemAction( — the guard cannot compare an ordering that isn't there`);
     } else if (standDownIdx === -1) {
       fail('desktop-dispatch', `${haltFile} never calls standDown( — the dispatcher's own whole-session stand-down must run after the item loop`);
-    } else if (!(setIdx < stopForIdx && stopForIdx < applyIdx && applyIdx < standDownIdx)) {
-      fail('desktop-dispatch', `${haltFile}'s own runStates.set(/stopFor(/applyItemAction(/standDown( calls are out of order — expected runStates.set( before stopFor( before applyItemAction( before standDown(`);
-    } else {
-      ok();
-    }
+    } else expect((setIdx < stopForIdx && stopForIdx < applyIdx && applyIdx < standDownIdx), 'desktop-dispatch', `${haltFile}'s own runStates.set(/stopFor(/applyItemAction(/standDown( calls are out of order — expected runStates.set( before stopFor( before applyItemAction( before standDown(`);
   }
 
   // --- dispatcher.ts calls readGateClaim( and names 'dispatch' ---------------
@@ -166,11 +150,7 @@ export default async function ({ fail, ok }: Reporter) {
     const text = readFileSync(join(root, dispatcherFile), 'utf8');
     if (!/\breadGateClaim\s*\(/.test(text)) {
       fail('desktop-dispatch', `${dispatcherFile} never calls readGateClaim( — the owner resolution this whole module rests on is missing`);
-    } else if (!text.includes("'dispatch'")) {
-      fail('desktop-dispatch', `${dispatcherFile} never names the 'dispatch' scope — it cannot be reading the claim for the right thing`);
-    } else {
-      ok();
-    }
+    } else expect(text.includes("'dispatch'"), 'desktop-dispatch', `${dispatcherFile} never names the 'dispatch' scope — it cannot be reading the claim for the right thing`);
   }
 
   // --- budget-unported is gone; the gate runs instead -------------------------
@@ -197,11 +177,7 @@ export default async function ({ fail, ok }: Reporter) {
     const launchIdx = text.indexOf('launch.launch(');
     if (fetchIdx === -1 || checkIdx === -1 || launchIdx === -1) {
       fail('desktop-dispatch', `${dispatcherFile} is missing fetchItemsByNumber(, budget.check(, or launch.launch( — the guard cannot compare an ordering that isn't there`);
-    } else if (!(fetchIdx < checkIdx && checkIdx < launchIdx)) {
-      fail('desktop-dispatch', `${dispatcherFile}'s own fetchItemsByNumber(/budget.check(/launch.launch( calls are out of order — expected fetchItemsByNumber( before budget.check( before launch.launch(`);
-    } else {
-      ok();
-    }
+    } else expect((fetchIdx < checkIdx && checkIdx < launchIdx), 'desktop-dispatch', `${dispatcherFile}'s own fetchItemsByNumber(/budget.check(/launch.launch( calls are out of order — expected fetchItemsByNumber( before budget.check( before launch.launch(`);
   }
 
   // --- pin: BUDGET_VERDICTS ↔ budget.mjs's own verdict(), both directions ----
@@ -224,11 +200,7 @@ export default async function ({ fail, ok }: Reporter) {
       const appVerdicts = new Set([...verdictsMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]));
       const onlyInApp = [...appVerdicts].filter((v) => !scriptVerdicts.has(v));
       const onlyInScript = [...scriptVerdicts].filter((v) => !appVerdicts.has(v));
-      if (onlyInApp.length > 0 || onlyInScript.length > 0) {
-        fail('desktop-dispatch', `${budgetFile}'s BUDGET_VERDICTS (${[...appVerdicts].join(', ')}) and bin/budget.mjs's verdicts (${[...scriptVerdicts].join(', ')}) disagree`);
-      } else {
-        ok();
-      }
+      expect(!(onlyInApp.length > 0 || onlyInScript.length > 0), 'desktop-dispatch', `${budgetFile}'s BUDGET_VERDICTS (${[...appVerdicts].join(', ')}) and bin/budget.mjs's verdicts (${[...scriptVerdicts].join(', ')}) disagree`);
     }
 
     // --- pin: sessionLogName(BUDGET_SESSION) !== null -------------------------
@@ -238,11 +210,7 @@ export default async function ({ fail, ok }: Reporter) {
     const sessionMatch = /BUDGET_SESSION\s*=\s*'([^']+)'/.exec(budgetText);
     if (!sessionMatch) {
       fail('desktop-dispatch', `${budgetFile} has no 'BUDGET_SESSION = ...' assignment`);
-    } else if (mod.sessionLogName(sessionMatch[1]) === null) {
-      fail('desktop-dispatch', `${budgetFile}'s BUDGET_SESSION ('${sessionMatch[1]}') is rejected by bin/budget.mjs's own sessionLogName — the gate would die on every call`);
-    } else {
-      ok();
-    }
+    } else expect(!(mod.sessionLogName(sessionMatch[1]) === null), 'desktop-dispatch', `${budgetFile}'s BUDGET_SESSION ('${sessionMatch[1]}') is rejected by bin/budget.mjs's own sessionLogName — the gate would die on every call`);
 
     // --- pin: OUTDATED_SCRIPT_SENTINEL matches budget.mjs's own die() template -
     // guard(#293): the sentinel drifting from the wording an older script's
@@ -258,11 +226,7 @@ export default async function ({ fail, ok }: Reporter) {
       fail('desktop-dispatch', `${budgetFile} has no 'OUTDATED_SCRIPT_SENTINEL = "..."' assignment`);
     } else if (!scriptText.includes(`die(\`${diePrefix}`)) {
       fail('desktop-dispatch', `bin/budget.mjs no longer defines the unrecognized-argument die() template this sentinel pins against`);
-    } else if (!sentinelMatch[1].startsWith(diePrefix)) {
-      fail('desktop-dispatch', `${budgetFile}'s OUTDATED_SCRIPT_SENTINEL ('${sentinelMatch[1]}') does not match bin/budget.mjs's own unrecognized-argument wording ('${diePrefix}…')`);
-    } else {
-      ok();
-    }
+    } else expect(sentinelMatch[1].startsWith(diePrefix), 'desktop-dispatch', `${budgetFile}'s OUTDATED_SCRIPT_SENTINEL ('${sentinelMatch[1]}') does not match bin/budget.mjs's own unrecognized-argument wording ('${diePrefix}…')`);
   }
 
   // --- pin: bin/budget.mjs contains SCRIPT_FAIL_PREFIX ------------------------
@@ -278,11 +242,7 @@ export default async function ({ fail, ok }: Reporter) {
       fail('desktop-dispatch', `apps/desktop/src/main/reclaimer/report.ts has no 'SCRIPT_FAIL_PREFIX = ...' assignment`);
     } else if (!scriptText.includes(prefixMatch[1])) {
       fail('desktop-dispatch', `bin/budget.mjs never emits '${prefixMatch[1]}' — SCRIPT_FAIL_PREFIX would never match a real failure`);
-    } else if (!gateText.includes('SCRIPT_FAIL_PREFIX')) {
-      fail('desktop-dispatch', `${budgetGateFile} never imports SCRIPT_FAIL_PREFIX — it must reuse the reclaimer's own constant, never a retyped literal`);
-    } else {
-      ok();
-    }
+    } else expect(gateText.includes('SCRIPT_FAIL_PREFIX'), 'desktop-dispatch', `${budgetGateFile} never imports SCRIPT_FAIL_PREFIX — it must reuse the reclaimer's own constant, never a retyped literal`);
   }
 
   // --- ledger.record( is called under main/ only from dispatch/dispatcher.ts -
@@ -326,16 +286,8 @@ export default async function ({ fail, ok }: Reporter) {
       fail('desktop-dispatch', `${dispatcherFile} is missing DISPATCH_PROMPT or REFRESH_PROMPT as a single-quoted string literal`);
     } else {
       const skillText = pipelineSkillText();
-      if (!skillText.includes(dispatchPromptMatch[1])) {
-        fail('desktop-dispatch', `${dispatcherFile}'s DISPATCH_PROMPT is not byte-identical to any text in pipeline/SKILL.md's Dispatching block`);
-      } else {
-        ok();
-      }
-      if (!skillText.includes(refreshPromptMatch[1])) {
-        fail('desktop-dispatch', `${dispatcherFile}'s REFRESH_PROMPT is not byte-identical to any text in pipeline/SKILL.md's Dispatching block`);
-      } else {
-        ok();
-      }
+      expect(skillText.includes(dispatchPromptMatch[1]), 'desktop-dispatch', `${dispatcherFile}'s DISPATCH_PROMPT is not byte-identical to any text in pipeline/SKILL.md's Dispatching block`);
+      expect(skillText.includes(refreshPromptMatch[1]), 'desktop-dispatch', `${dispatcherFile}'s REFRESH_PROMPT is not byte-identical to any text in pipeline/SKILL.md's Dispatching block`);
     }
   }
 
@@ -381,11 +333,7 @@ export default async function ({ fail, ok }: Reporter) {
       fail('desktop-dispatch', `${dispatcherFile} no longer checks owner !== 'app' — the guard cannot compare an ordering that isn't there`);
     } else if (writeIdx === -1) {
       fail('desktop-dispatch', `${dispatcherFile} never references deps.writeObservation — the observation pass wiring is missing`);
-    } else if (writeIdx < ownerGateIdx) {
-      fail('desktop-dispatch', `${dispatcherFile} references deps.writeObservation before its own owner !== 'app' stand-down — the observation pass must run only once this app owns dispatch`);
-    } else {
-      ok();
-    }
+    } else expect(!(writeIdx < ownerGateIdx), 'desktop-dispatch', `${dispatcherFile} references deps.writeObservation before its own owner !== 'app' stand-down — the observation pass must run only once this app owns dispatch`);
   }
 
   // --- pin: observation.ts's comment templates ↔ FORMATS.md/TICK-PROSE.md ----
@@ -484,11 +432,7 @@ export default async function ({ fail, ok }: Reporter) {
         fail('desktop-dispatch', `${autoPlanFile} never names the 'plan-gate' scope — it cannot be reading the claim for the right thing`);
       } else if (autoPlanText.includes("'dispatch'")) {
         fail('desktop-dispatch', `${autoPlanFile} names the 'dispatch' scope — the auto-plan swap must never gate on it`);
-      } else if (approveIdx === -1 || claimIdx > approveIdx) {
-        fail('desktop-dispatch', `${autoPlanFile}'s readGateClaim( call must precede its deps.autoApprove( call in source order`);
-      } else {
-        ok();
-      }
+      } else expect(!(approveIdx === -1 || claimIdx > approveIdx), 'desktop-dispatch', `${autoPlanFile}'s readGateClaim( call must precede its deps.autoApprove( call in source order`);
     } else {
       fail('desktop-dispatch', `${autoPlanFile} does not exist — the guard cannot pass vacuously`);
     }

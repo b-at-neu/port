@@ -44,7 +44,7 @@ function extractObjectKeys(text: string): Set<string> {
   return keys;
 }
 
-export default async function ({ fail, ok }: Reporter) {
+export default async function ({ expect, fail, ok }: Reporter) {
   const { computeParity } = await importEngine(`${TICK_DIR}/parity.ts`);
 
   // --- 1. computeParity asserted against every row of parity.cases.json ----
@@ -64,11 +64,7 @@ export default async function ({ fail, ok }: Reporter) {
       const got = runParityCase(computeParity, c.input);
       const gotStr = JSON.stringify(got);
       const expStr = JSON.stringify(c.expected);
-      if (gotStr !== expStr) {
-        fail('tick-parity-cases', `parity.cases.json — '${c.name}': expected ${expStr}, got ${gotStr}`);
-      } else {
-        ok();
-      }
+      expect(!(gotStr !== expStr), 'tick-parity-cases', `parity.cases.json — '${c.name}': expected ${expStr}, got ${gotStr}`);
     }
   }
 
@@ -92,10 +88,8 @@ export default async function ({ fail, ok }: Reporter) {
       } else {
         const cockpitKeys = extractObjectKeys(dispatchMapping[1]);
         for (const key of ['item', 'stage']) {
-          if (!desktopKeys.has(key)) fail('tick-parity-fields', `${TYPES_FILE}'s DesktopDispatchEvent is missing '${key}', which the dispatch join key needs`);
-          else ok();
-          if (!cockpitKeys.has(key)) fail('tick-parity-fields', `${TICK_DIR}/events.ts's dispatch mapping is missing '${key}', which the dispatch join key needs`);
-          else ok();
+          expect(desktopKeys.has(key), 'tick-parity-fields', `${TYPES_FILE}'s DesktopDispatchEvent is missing '${key}', which the dispatch join key needs`);
+          expect(cockpitKeys.has(key), 'tick-parity-fields', `${TICK_DIR}/events.ts's dispatch mapping is missing '${key}', which the dispatch join key needs`);
         }
       }
     }
@@ -119,10 +113,8 @@ export default async function ({ fail, ok }: Reporter) {
       } else {
         const cockpitKeys = extractObjectKeys(heldMapping[1]);
         for (const key of ['blocker', 'depth']) {
-          if (!desktopKeys.has(key)) fail('tick-parity-fields', `${TICK_TYPES_FILE}'s TickContention is missing '${key}', which the contention diff needs`);
-          else ok();
-          if (!cockpitKeys.has(key)) fail('tick-parity-fields', `${TICK_DIR}/events.ts's held mapping is missing '${key}', which the contention diff needs`);
-          else ok();
+          expect(desktopKeys.has(key), 'tick-parity-fields', `${TICK_TYPES_FILE}'s TickContention is missing '${key}', which the contention diff needs`);
+          expect(cockpitKeys.has(key), 'tick-parity-fields', `${TICK_DIR}/events.ts's held mapping is missing '${key}', which the contention diff needs`);
         }
       }
     }
@@ -136,11 +128,7 @@ export default async function ({ fail, ok }: Reporter) {
   {
     const parityPath = join(root, TICK_DIR, 'parity.ts');
     const text = readFileSync(parityPath, 'utf8');
-    if (/from\s+['"]\.\/(events|report)\.ts['"]/.test(text)) {
-      fail('tick-parity-boundary', `${TICK_DIR}/parity.ts imports events.ts or report.ts — a pure diff must never read either trajectory file itself`);
-    } else {
-      ok();
-    }
+    expect(!/from\s+['"]\.\/(events|report)\.ts['"]/.test(text), 'tick-parity-boundary', `${TICK_DIR}/parity.ts imports events.ts or report.ts — a pure diff must never read either trajectory file itself`);
   }
 
   // --- 5. report.ts's --desktop-events mode calls computeParity -----------
@@ -148,26 +136,14 @@ export default async function ({ fail, ok }: Reporter) {
   // instead of calling parity.ts's own exported function.
   {
     const reportText = readFileSync(join(root, TICK_DIR, 'report.ts'), 'utf8');
-    if (!reportText.includes('computeParity')) {
-      fail('tick-parity-boundary', `${TICK_DIR}/report.ts never calls computeParity — the --desktop-events mode must delegate to parity.ts, never re-derive the diff`);
-    } else {
-      ok();
-    }
-    if (!/from\s+['"]\.\/parity\.ts['"]/.test(reportText)) {
-      fail('tick-parity-boundary', `${TICK_DIR}/report.ts does not import from ./parity.ts`);
-    } else {
-      ok();
-    }
+    expect(reportText.includes('computeParity'), 'tick-parity-boundary', `${TICK_DIR}/report.ts never calls computeParity — the --desktop-events mode must delegate to parity.ts, never re-derive the diff`);
+    expect(/from\s+['"]\.\/parity\.ts['"]/.test(reportText), 'tick-parity-boundary', `${TICK_DIR}/report.ts does not import from ./parity.ts`);
   }
 
   // --- 6. Every .ts file under scripts/port-tick/ is still enumerable ------
   // Defensive: an empty walk would make every check above pass vacuously.
   {
     const files = walk(join(root, TICK_DIR)).filter((f) => f.endsWith('.ts'));
-    if (!files.some((f) => relOf(f) === `${TICK_DIR}/parity.ts`)) {
-      fail('tick-parity-boundary', `${TICK_DIR}/parity.ts was not found by the directory walk — the scan itself is broken`);
-    } else {
-      ok();
-    }
+    expect(files.some((f) => relOf(f) === `${TICK_DIR}/parity.ts`), 'tick-parity-boundary', `${TICK_DIR}/parity.ts was not found by the directory walk — the scan itself is broken`);
   }
 }

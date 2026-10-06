@@ -11,7 +11,7 @@ import { message } from '../lib/errors.ts';
 // to the exact form every other file's example is meant to match.
 const SESSION_MARKER_LINE = /^>\s*\*\*SESSION REQUIRED:\*\*\s+\S/;
 
-export default async function ({ fail, note, ok }: Reporter) {
+export default async function ({ expect, fail, note, ok }: Reporter) {
   // --- Stale references -------------------------------------------------------
   // guard: docs naming things that were renamed or moved. Each of these named
   // something real that was renamed or moved.
@@ -161,11 +161,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     ];
     for (const [token, expected] of selfTestCases) {
       const got = classifyShippedReference(token, { pluginRoot, repoRoot: root, containingDir: null });
-      if (got !== expected) {
-        fail('shipped-reference-selftest', `classifyShippedReference(${JSON.stringify(token)}) = ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`);
-      } else {
-        ok();
-      }
+      expect(!(got !== expected), 'shipped-reference-selftest', `classifyShippedReference(${JSON.stringify(token)}) = ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`);
     }
 
     // #212's own three forms, each of which classified 'skip' as a whole token
@@ -193,11 +189,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     ];
     for (const [token, expected] of expansionCases) {
       const got = worstOf(token);
-      if (got !== expected) {
-        fail('shipped-reference-selftest', `expansion of ${JSON.stringify(token)} = ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`);
-      } else {
-        ok();
-      }
+      expect(!(got !== expected), 'shipped-reference-selftest', `expansion of ${JSON.stringify(token)} = ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`);
     }
 
     // The real scan — every shipped file, not just markdown, since a stray
@@ -288,14 +280,7 @@ export default async function ({ fail, note, ok }: Reporter) {
       }
       if (exampleIdx === -1) {
         fail('session-required-rendering', `${rel}:${anchorIdx + 1}: no blockquote example follows the canonical marker anchor`);
-      } else if (!SESSION_MARKER_LINE.test(fileLines[exampleIdx].trim())) {
-        fail(
-          'session-required-rendering',
-          `${rel}:${exampleIdx + 1}: canonical marker example is not '> **SESSION REQUIRED:** <reason>', got ${JSON.stringify(fileLines[exampleIdx].trim())}`,
-        );
-      } else {
-        ok();
-      }
+      } else expect(SESSION_MARKER_LINE.test(fileLines[exampleIdx].trim()), 'session-required-rendering', `${rel}:${exampleIdx + 1}: canonical marker example is not '> **SESSION REQUIRED:** <reason>', got ${JSON.stringify(fileLines[exampleIdx].trim())}`);
     }
   }
 
@@ -335,11 +320,7 @@ export default async function ({ fail, note, ok }: Reporter) {
       ['plugins/port/agents/plan-agent.md', planAgent],
       ['plugins/port/agents/impl-agent.md', implAgent],
     ]) {
-      if (!text.includes('operator-only')) {
-        fail('session-required-scan', `${rel} never mentions 'operator-only' — one file defines the prefix, the other must act on it`);
-      } else {
-        ok();
-      }
+      expect(text.includes('operator-only'), 'session-required-scan', `${rel} never mentions 'operator-only' — one file defines the prefix, the other must act on it`);
     }
   }
 
@@ -383,11 +364,7 @@ export default async function ({ fail, note, ok }: Reporter) {
 
     // 1. Every path the map names must exist on disk.
     for (const { path } of rows) {
-      if (!existsSync(join(root, path))) {
-        fail('architecture-map', `${rel}: row '${path}' does not exist on disk`);
-      } else {
-        ok();
-      }
+      expect(existsSync(join(root, path)), 'architecture-map', `${rel}: row '${path}' does not exist on disk`);
     }
 
     // 2. Every tracked top-level directory is covered by at least one row.
@@ -410,11 +387,7 @@ export default async function ({ fail, note, ok }: Reporter) {
       }
       for (const dir of topDirs) {
         const covered = rows.some(({ path }) => path === `${dir}/` || path.startsWith(`${dir}/`));
-        if (!covered) {
-          fail('architecture-map', `${rel}: top-level directory '${dir}/' is not covered by any row`);
-        } else {
-          ok();
-        }
+        expect(covered, 'architecture-map', `${rel}: top-level directory '${dir}/' is not covered by any row`);
       }
     }
 
@@ -422,11 +395,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     // load-bearing part of the map, so a blank or hedged cell silently drops
     // the principle the map exists to state.
     for (const { path, ships } of rows) {
-      if (ships !== 'yes' && ships !== 'no') {
-        fail('architecture-map', `${rel}: row '${path}' has Ships cell ${JSON.stringify(ships)} — must be exactly 'yes' or 'no'`);
-      } else {
-        ok();
-      }
+      expect(!(ships !== 'yes' && ships !== 'no'), 'architecture-map', `${rel}: row '${path}' has Ships cell ${JSON.stringify(ships)} — must be exactly 'yes' or 'no'`);
     }
   }
 
@@ -461,11 +430,7 @@ export default async function ({ fail, note, ok }: Reporter) {
     ].join('\n\n');
     const fixturePaths = boundaryPaths(fixture);
     const fixtureSorted = [...fixturePaths].sort();
-    if (fixturePaths.length !== 3 || JSON.stringify(fixturePaths) === JSON.stringify(fixtureSorted)) {
-      fail('engineering-module-boundaries', 'boundaryPaths self-test: a deliberately out-of-order fixture parsed as already sorted, or lost an entry');
-    } else {
-      ok();
-    }
+    expect(!(fixturePaths.length !== 3 || JSON.stringify(fixturePaths) === JSON.stringify(fixtureSorted)), 'engineering-module-boundaries', 'boundaryPaths self-test: a deliberately out-of-order fixture parsed as already sorted, or lost an entry');
 
     const rel = 'docs/ENGINEERING.md';
     const text = readFileSync(join(root, rel), 'utf8');
@@ -480,14 +445,7 @@ export default async function ({ fail, note, ok }: Reporter) {
         note(`engineering-module-boundaries: ${paths.length} paragraphs parsed`);
         ok();
         for (let i = 1; i < paths.length; i++) {
-          if (paths[i - 1] > paths[i]) {
-            fail(
-              'engineering-module-boundaries',
-              `${rel}: '### Module boundaries' is out of order — '${paths[i - 1]}' appears before '${paths[i]}'`,
-            );
-          } else {
-            ok();
-          }
+          expect(!(paths[i - 1] > paths[i]), 'engineering-module-boundaries', `${rel}: '### Module boundaries' is out of order — '${paths[i - 1]}' appears before '${paths[i]}'`);
         }
       }
     }

@@ -22,7 +22,7 @@ import type { Reporter } from '../lib/report.ts';
 // agent copy is now compared against that one source, never pairwise.
 // pin: The `standards-precedence` block ↔ its canonical copy in PIPELINE.md
 // pin: `docs.design`'s presence in the `standards-precedence` block ↔ its copies in the four agent files, and every agent naming `docs.engineering` also naming `docs.design` (and vice versa)
-export default async function ({ fail, note, ok }: Reporter) {
+export default async function ({ expect, fail, note, ok }: Reporter) {
   const BEGIN = '<!-- standards-precedence:begin -->';
   const END = '<!-- standards-precedence:end -->';
   const extractBlock = (text: string): string | null => {
@@ -34,11 +34,7 @@ export default async function ({ fail, note, ok }: Reporter) {
 
   const pipelineText = readFileSync(join(root, 'plugins/port/docs/PIPELINE.md'), 'utf8');
   const canonicalBlock = extractBlock(pipelineText);
-  if (canonicalBlock === null) {
-    fail('standards', 'plugins/port/docs/PIPELINE.md carries no standards-precedence canonical copy');
-  } else {
-    ok();
-  }
+  expect(!(canonicalBlock === null), 'standards', 'plugins/port/docs/PIPELINE.md carries no standards-precedence canonical copy');
 
   const agentsDir = join(root, 'plugins/port/agents');
   const agentFiles = walk(agentsDir).filter((f) => f.endsWith('.md'));
@@ -58,19 +54,11 @@ export default async function ({ fail, note, ok }: Reporter) {
       fail('standards', `${rel} grants Bash but is missing the standards-precedence markers`);
     } else {
       withBlock.push({ rel, block });
-      if (canonicalBlock !== null && block !== canonicalBlock) {
-        fail('standards', `${rel}'s standards-precedence block has drifted from PIPELINE.md's canonical copy`);
-      } else {
-        ok();
-      }
+      expect(!(canonicalBlock !== null && block !== canonicalBlock), 'standards', `${rel}'s standards-precedence block has drifted from PIPELINE.md's canonical copy`);
     }
   }
 
-  if (matched < 4) {
-    fail('standards', `only ${matched} agent(s) granting Bash matched under plugins/port/agents — expected at least 4`);
-  } else {
-    ok();
-  }
+  expect(!(matched < 4), 'standards', `only ${matched} agent(s) granting Bash matched under plugins/port/agents — expected at least 4`);
 
   // guard(#49): docs.design staying a dead field wired into only some of
   // the four agents, silently inverting precedence between the two
@@ -88,26 +76,10 @@ export default async function ({ fail, note, ok }: Reporter) {
     const namesEngineering = text.includes('docs.engineering');
     const namesDesign = text.includes('docs.design');
     const namesClaudeMd = text.includes('CLAUDE.md');
-    if (namesEngineering && !namesClaudeMd) {
-      fail('standards', `${rel} names docs.engineering but never CLAUDE.md`);
-    } else {
-      ok();
-    }
-    if (namesClaudeMd && !blockRels.has(rel)) {
-      fail('standards', `${rel} names CLAUDE.md but carries no standards-precedence block`);
-    } else {
-      ok();
-    }
-    if (namesEngineering && !namesDesign) {
-      fail('standards', `${rel} names docs.engineering but never docs.design`);
-    } else {
-      ok();
-    }
-    if (namesDesign && !namesEngineering) {
-      fail('standards', `${rel} names docs.design but never docs.engineering`);
-    } else {
-      ok();
-    }
+    expect(!(namesEngineering && !namesClaudeMd), 'standards', `${rel} names docs.engineering but never CLAUDE.md`);
+    expect(!(namesClaudeMd && !blockRels.has(rel)), 'standards', `${rel} names CLAUDE.md but carries no standards-precedence block`);
+    expect(!(namesEngineering && !namesDesign), 'standards', `${rel} names docs.engineering but never docs.design`);
+    expect(!(namesDesign && !namesEngineering), 'standards', `${rel} names docs.design but never docs.engineering`);
   }
 
   // The load-bearing literals survive paraphrase: CLAUDE.md's index precedes
@@ -169,64 +141,36 @@ export default async function ({ fail, note, ok }: Reporter) {
     'commands.* and .claude/port.config.json alone decide the rest. ' +
     'commands.* is the sole non-overridable exception; every other category is overridable. ' +
     'Code that follows CLAUDE.md is never a finding, at any severity.';
-  if (literalProblems(GOOD).length !== 0) {
-    fail('standards', 'self-test: literalProblems rejected a known-good block');
-  } else {
-    ok();
-  }
+  expect(!(literalProblems(GOOD).length !== 0), 'standards', 'self-test: literalProblems rejected a known-good block');
 
   const orderReversed = GOOD.replace(
     'CLAUDE.md first, then docs.engineering,',
     'docs.engineering first, then CLAUDE.md,',
   );
-  if (literalProblems(orderReversed).length === 0) {
-    fail('standards', 'self-test: literalProblems accepted a block with the ordering sentence reversed');
-  } else {
-    ok();
-  }
+  expect(!(literalProblems(orderReversed).length === 0), 'standards', 'self-test: literalProblems accepted a block with the ordering sentence reversed');
 
   const carveOutDeleted = GOOD.replace(
     'commands.* and .claude/port.config.json alone decide the rest. ',
     '',
   );
-  if (literalProblems(carveOutDeleted).length === 0) {
-    fail('standards', 'self-test: literalProblems accepted a block with the commands carve-out deleted');
-  } else {
-    ok();
-  }
+  expect(!(literalProblems(carveOutDeleted).length === 0), 'standards', 'self-test: literalProblems accepted a block with the commands carve-out deleted');
 
   const reworded = GOOD.replace('is never a finding, at any severity', 'is not a blocking finding, at any severity');
-  if (literalProblems(reworded).length === 0) {
-    fail('standards', 'self-test: literalProblems accepted a block with "never a finding" reworded');
-  } else {
-    ok();
-  }
+  expect(!(literalProblems(reworded).length === 0), 'standards', 'self-test: literalProblems accepted a block with "never a finding" reworded');
 
   const designOrderReversed = GOOD.replace(
     'docs.engineering, then docs.design,',
     'docs.design, then docs.engineering,',
   );
-  if (literalProblems(designOrderReversed).length === 0) {
-    fail('standards', 'self-test: literalProblems accepted a block with the docs.engineering/docs.design order reversed');
-  } else {
-    ok();
-  }
+  expect(!(literalProblems(designOrderReversed).length === 0), 'standards', 'self-test: literalProblems accepted a block with the docs.engineering/docs.design order reversed');
 
   // (#246) two further mutations: the sole-exception phrase deleted, and the
   // overridable statement deleted — each must still be rejected.
   const soleExceptionDeleted = GOOD.replace('commands.* is the sole non-overridable exception; every other category is overridable. ', '');
-  if (literalProblems(soleExceptionDeleted).length === 0) {
-    fail('standards', 'self-test: literalProblems accepted a block with the sole-non-overridable-exception phrase deleted');
-  } else {
-    ok();
-  }
+  expect(!(literalProblems(soleExceptionDeleted).length === 0), 'standards', 'self-test: literalProblems accepted a block with the sole-non-overridable-exception phrase deleted');
 
   const overridableStatementDeleted = GOOD.replace('every other category is overridable', 'every other category behaves how it likes');
-  if (literalProblems(overridableStatementDeleted).length === 0) {
-    fail('standards', 'self-test: literalProblems accepted a block with no statement that the rest is overridable');
-  } else {
-    ok();
-  }
+  expect(!(literalProblems(overridableStatementDeleted).length === 0), 'standards', 'self-test: literalProblems accepted a block with no statement that the rest is overridable');
 
   // --- Design document wiring (#49, widened #191) -----------------------------
   // guard(#49, #191): a dangling template reference or a silently narrowed
@@ -244,24 +188,12 @@ export default async function ({ fail, note, ok }: Reporter) {
   for (const ref of ['templates/ENGINEERING.template.md', 'templates/DESIGN.template.md']) {
     if (!skillText.includes(ref)) {
       fail('standards', `analyze/SKILL.md no longer references ${ref}`);
-    } else if (!existsSync(join(root, 'plugins/port', ref))) {
-      fail('standards', `analyze/SKILL.md references ${ref}, which does not exist on disk`);
-    } else {
-      ok();
-    }
+    } else expect(existsSync(join(root, 'plugins/port', ref)), 'standards', `analyze/SKILL.md references ${ref}, which does not exist on disk`);
   }
 
-  if (!skillText.includes('the engineering document, the design document, `.claude/port.config.json`, and the skills generated under `.claude/skills/`')) {
-    fail('standards', "analyze/SKILL.md's writable-set sentence no longer names all four files");
-  } else {
-    ok();
-  }
+  expect(skillText.includes('the engineering document, the design document, `.claude/port.config.json`, and the skills generated under `.claude/skills/`'), 'standards', "analyze/SKILL.md's writable-set sentence no longer names all four files");
 
-  if (!skillText.includes('docs.design` stays null')) {
-    fail('standards', 'analyze/SKILL.md no longer states the docs.design skip rule');
-  } else {
-    ok();
-  }
+  expect(skillText.includes('docs.design` stays null'), 'standards', 'analyze/SKILL.md no longer states the docs.design skip rule');
 
   // --- Accessibility's single home (#49) --------------------------------------
   // guard(#49): the two templates drifting into restating accessibility in
@@ -278,21 +210,9 @@ export default async function ({ fail, note, ok }: Reporter) {
   );
   const designTemplate = readFileSync(join(root, 'plugins/port/templates/DESIGN.template.md'), 'utf8');
 
-  if (!/^## \d+\. Accessibility/m.test(engineeringTemplate)) {
-    fail('standards', 'ENGINEERING.template.md no longer carries an Accessibility heading');
-  } else {
-    ok();
-  }
+  expect(/^## \d+\. Accessibility/m.test(engineeringTemplate), 'standards', 'ENGINEERING.template.md no longer carries an Accessibility heading');
 
-  if (/^## \d+\. Accessibility/m.test(designTemplate)) {
-    fail('standards', 'DESIGN.template.md carries its own Accessibility heading — that section has exactly one home');
-  } else {
-    ok();
-  }
+  expect(!/^## \d+\. Accessibility/m.test(designTemplate), 'standards', 'DESIGN.template.md carries its own Accessibility heading — that section has exactly one home');
 
-  if (!designTemplate.includes('ENGINEERING.md')) {
-    fail('standards', 'DESIGN.template.md no longer cross-references ENGINEERING.md');
-  } else {
-    ok();
-  }
+  expect(designTemplate.includes('ENGINEERING.md'), 'standards', 'DESIGN.template.md no longer cross-references ENGINEERING.md');
 }
