@@ -4,8 +4,6 @@ Every stage agent working on interface work reads this document, because `docs.d
 
 **Boundary with `ENGINEERING.md`.** `ENGINEERING.md` is how code is structured and what must be true of it. This document is what the interface looks like and the vocabulary for building it. **Accessibility requirements live in `ENGINEERING.md` §5 alone** and are not restated here; the contrast ratios each token pairing actually achieves are recorded in §1, as design vocabulary.
 
-**Status: the renderer predates this document.** The current renderer builds its DOM by hand with one stylesheet per screen. It is being replaced by a React renderer built to this document, screen by screen. Until a screen is migrated, work inside it matches its surrounding code, and that is **not** a finding against this document. Every React screen, and every new screen, follows this document in full.
-
 **Stack:** React · Tailwind · shadcn/ui (components added through its CLI, so their source is in the tree) · lucide icons · Inter and JetBrains Mono, bundled with the app so it works offline. Tokens are declared once, as CSS custom properties on shadcn's own role names, in the renderer's Tailwind theme stylesheet. That stylesheet is the only place a colour value appears.
 
 **Identity.** The layout and spacing follow Claude Code's desktop app on purpose. The identity is port's own: navy accent, Inter, the sailboat mark (§8). The app must never look like an Anthropic product. No coral or cream palette, no Claude or Claude Code logo or wordmark, and never the name "Claude Code" for the app itself.
@@ -266,7 +264,6 @@ The markers `marker` and `autoPlan` are never shown as phases; `autoPlan` appear
 
 ## 7. Agent quick reference
 
-- [ ] Legacy (hand-built DOM) screen? Match the surrounding code and stop here. React screen? Everything below applies.
 - [ ] Colour only through the §1 roles. No hex, no Tailwind arbitrary colours, no new role without changing this document.
 - [ ] Status colour follows §1's status table. Anything waiting on the operator is `attention`, and nothing else is.
 - [ ] No `muted-foreground` text on `muted`/`accent` surfaces, and no `faint` text anywhere.

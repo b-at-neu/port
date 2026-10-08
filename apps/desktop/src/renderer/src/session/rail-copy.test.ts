@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { restoreBannerLine, restoreOpenedLine, restorePartialLine, restoreUnavailableLine, rowMeta, usageNoticeLines } from './rail-copy'
+import { restoreBannerLine, restoreOpenedLine, restorePartialLine, restoreUnavailableLine, usageNoticeLines } from './rail-copy'
 import type { UsageNotice } from './rail-model'
 
 const NOW = new Date(2026, 0, 5, 12, 0)
@@ -28,20 +28,6 @@ describe('usageNoticeLines', () => {
   it('falls back to "usage" for an unrecognised window', () => {
     const notice: UsageNotice = { status: 'warning', window: null, resetsAt: null }
     expect(usageNoticeLines(notice, NOW).main).toContain('usage limit')
-  })
-})
-
-describe('rowMeta', () => {
-  it('shows only the started time with no pending permissions', () => {
-    expect(rowMeta('14:02', 0)).toBe('started 14:02')
-  })
-
-  it('adds a singular permission-waiting suffix', () => {
-    expect(rowMeta('14:02', 1)).toBe('started 14:02 · 1 permission waiting')
-  })
-
-  it('adds a plural permission-waiting suffix', () => {
-    expect(rowMeta('14:02', 2)).toBe('started 14:02 · 2 permissions waiting')
   })
 })
 

@@ -1,9 +1,5 @@
-/* The renderer's one entry stylesheet. Layer order is explicit so the
- * legacy quarantine below can sit between Tailwind's reset and its own
- * component/utility layers (ENGINEERING's "Preflight is layered, legacy CSS
- * is unlayered" note on theme.css applies the same way here: an unlayered
- * block always wins over a layered one). */
-@layer theme, base, legacy, components, utilities;
+/* The renderer's one entry stylesheet and one React root's own styling. */
+@layer theme, base, components, utilities;
 
 @import 'tailwindcss/theme.css' layer(theme);
 @import 'tailwindcss/preflight.css' layer(base);
@@ -18,43 +14,25 @@
 
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
-/* Legacy quarantine (risk noted on the ticket): the legacy, hand-built
- * screens predate this stylesheet and must render exactly as before. Every
- * property legacy left to the browser default returns to that default here
- * — list bullets, paragraph margins, button chrome, line-height: normal.
- * Never edit legacy CSS to compensate for this rule; fix the selector
- * instead. */
-@layer legacy {
-  html,
-  body,
-  #app,
-  #app :not(#shell-root, #shell-root *, #react-root, #react-root *) {
-    all: revert;
-  }
+html,
+body {
+  height: 100%;
 }
 
-#shell-root,
-#react-root {
-  min-height: 0;
-  overflow: auto;
+#app {
+  display: flex;
+  height: 100vh;
+  box-sizing: border-box;
   @apply font-sans text-body bg-background text-foreground;
 }
 
-#react-root {
-  flex: 1;
-}
-
 /* DESIGN §5 / ENGINEERING §5: the OS reduce-motion setting turns off every
- * transition and the attention pulse. Scoped to the React tree (both roots)
- * and Radix's portaled popover/menu/tooltip/dialog/toast content, since the
- * legacy frame's own CSS is untouched by this ticket. */
+ * transition and the attention pulse. Scoped to the whole app and Radix's
+ * portaled popover/menu/tooltip/dialog/toast content. */
 @media (prefers-reduced-motion: reduce) {
-  #shell-root *,
-  #shell-root *::before,
-  #shell-root *::after,
-  #react-root *,
-  #react-root *::before,
-  #react-root *::after,
+  #app *,
+  #app *::before,
+  #app *::after,
   [data-radix-popper-content-wrapper],
   [data-radix-popper-content-wrapper] *,
   [data-radix-popper-content-wrapper] *::before,

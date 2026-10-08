@@ -6,14 +6,8 @@ import type { SessionRateLimit } from '../../../shared/hosting/types'
 import type { UsageNotice } from './rail-model'
 import { startedClock } from '../../../shared/hosting/label'
 
-export const RAIL_TITLE = 'Sessions'
 export const LIMIT_STEPPER_TITLE = "Each session is its own Claude Code process. They all share your subscription's usage limit."
-export const NEW_SESSION_START = 'Start'
-export const NEW_SESSION_NO_REPO = 'No ready repository to start in.'
 export const CAPACITY_SET_FAILED = "Couldn't reach the main process. The limit wasn't changed."
-
-export const RAIL_EMPTY_TITLE = 'No sessions yet.'
-export const RAIL_EMPTY_HINT = 'Start one above, or with New session on a repository card.'
 
 export const DISMISS_BUTTON = 'Dismiss'
 
@@ -53,14 +47,6 @@ export function usageNoticeLines(notice: UsageNotice, now: Date): UsageNoticeLin
     return { main: `⚠ Nearing your ${window} usage limit${resets}`, sub: 'Every open session draws on the same limit.' }
   }
   return { main: `⛔ ${capitalize(window)} usage limit reached${resets}`, sub: 'New turns in every session will fail until then.' }
-}
-
-/** A row's meta line: `started 14:02`, plus `· 1 permission waiting` when
- *  prompts are pending. */
-export function rowMeta(startedClockText: string, pendingCount: number): string {
-  const base = `started ${startedClockText}`
-  if (pendingCount === 0) return base
-  return `${base} · ${String(pendingCount)} permission${pendingCount === 1 ? '' : 's'} waiting`
 }
 
 export function restoreBannerLine(count: number): string {

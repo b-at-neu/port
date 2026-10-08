@@ -1,12 +1,8 @@
-// The router replacing `main.ts`'s hand-rolled `View` union (#316) —
-// code-based, hash history (`loadFile` serves `file://`, where path history
-// cannot resolve). Every legacy screen renders `null`: the legacy DOM under
-// `main.ts` keeps drawing them, so the route exists only to be the one
-// source of truth for which screen is on top. `/settings` is the one route
-// that renders a real component — the renderer's first React screen.
+// The app's one router — code-based, hash history (`loadFile` serves
+// `file://`, where path history cannot resolve).
 import { createHashHistory, createRootRoute, createRoute, createRouter, redirect } from '@tanstack/react-router'
-import { ROUTE_IDS, boardSearchFromRaw, repoSearchFromRaw, transcriptSearchFromRaw } from './legacy-view'
-import type { BoardSearch, RepoSearch, TranscriptSearch } from './legacy-view'
+import { ROUTE_IDS, boardSearchFromRaw, historySearchFromRaw, repoSearchFromRaw, searchSearchFromRaw, sessionSearchFromRaw, transcriptSearchFromRaw } from './routes'
+import type { BoardSearch, HistorySearch, RepoSearch, SearchSearch, SessionSearch, TranscriptSearch } from './routes'
 import { SettingsScreen } from '../settings/screen'
 import { BacklogScreen } from '../backlog/screen'
 import { NeedsYouScreen } from '../needs-you/screen'
@@ -15,6 +11,10 @@ import { AboutScreen } from '../about/screen'
 import { BoardScreen } from '../board/screen'
 import { RepositoriesScreen } from '../repositories/screen'
 import { RepoScreen } from '../repositories/repo-screen'
+import { SessionScreen } from '../session/screen'
+import { HistoryScreen } from '../history/screen'
+import { TranscriptScreen } from '../transcript/screen'
+import { SearchScreen } from '../search/screen'
 import { ShellLayout } from '../shell/layout'
 
 const rootRoute = createRootRoute({ component: ShellLayout })
@@ -40,17 +40,33 @@ const repoRoute = createRoute({
   component: RepoScreen,
   validateSearch: (search: Record<string, unknown>): RepoSearch => repoSearchFromRaw(search),
 })
-const sessionsRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.sessions, component: () => null })
-const searchRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.search, component: () => null })
+
+const historyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: ROUTE_IDS.history,
+  component: HistoryScreen,
+  validateSearch: (search: Record<string, unknown>): HistorySearch => historySearchFromRaw(search),
+})
+const searchRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: ROUTE_IDS.search,
+  component: SearchScreen,
+  validateSearch: (search: Record<string, unknown>): SearchSearch => searchSearchFromRaw(search),
+})
 
 const transcriptRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: ROUTE_IDS.transcript,
-  component: () => null,
+  component: TranscriptScreen,
   validateSearch: (search: Record<string, unknown>): TranscriptSearch => transcriptSearchFromRaw(search),
 })
 
-const sessionRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.session, component: () => null })
+const sessionRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: ROUTE_IDS.session,
+  component: SessionScreen,
+  validateSearch: (search: Record<string, unknown>): SessionSearch => sessionSearchFromRaw(search),
+})
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.settings, component: SettingsScreen })
 const backlogRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.backlog, component: BacklogScreen })
 const needsYouRoute = createRoute({ getParentRoute: () => rootRoute, path: ROUTE_IDS.needsYou, component: NeedsYouScreen })
@@ -72,7 +88,7 @@ const routeTree = rootRoute.addChildren([
   boardRoute,
   reposRoute,
   repoRoute,
-  sessionsRoute,
+  historyRoute,
   searchRoute,
   transcriptRoute,
   sessionRoute,

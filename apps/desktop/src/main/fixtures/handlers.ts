@@ -17,6 +17,7 @@ import { fixtureBoardSnapshot } from './board'
 import { fixtureBacklog } from './backlog'
 import { fixtureClaimPreflight, fixtureGateClaimRead, fixtureGatePreflight } from './dialogs'
 import { FIXTURE_REPOSITORIES } from './repos'
+import { fixtureAttachEntries, fixturePermissionSnapshots, fixtureSearchResult, fixtureSessionAttach, fixtureSessionsScan, fixtureSessionSnapshots } from './sessions'
 import type { FixtureScenario } from './mode'
 import { fixtureWorktreesReport } from './worktrees'
 
@@ -54,9 +55,9 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
       detail: null,
     }),
 
-    'sessions:scan': () => ({ ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 1, scanMs: 1, scannedAt: now.toISOString() }),
+    'sessions:scan': () => fixtureSessionsScan(now),
 
-    'session:list': () => [],
+    'session:list': () => (scenario === 'empty' ? fixturePermissionSnapshots(now) : fixtureSessionSnapshots(now)),
     'session:capacity': () => ({ limit: 4, ceiling: 8 }),
     'session:capacity:set': () => ({ limit: 4, ceiling: 8 }),
     'session:restore:list': () => ({ entries: [] }),
@@ -64,11 +65,11 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     // --- Click-only reads, valid and populated ------------------------------
     'worktrees:report': () => fixtureWorktreesReport(now),
 
-    'transcript:tail:open': (request) => ({ ok: true, tailId: 'fixture-tail', source: transcriptSourceFor(request.sessionId, request.agentId, now), entries: [] }),
+    'transcript:tail:open': (request) => ({ ok: true, tailId: 'fixture-tail', source: transcriptSourceFor(request.sessionId, request.agentId, now), entries: fixtureAttachEntries(now) }),
     'transcript:tail:poll': () => ({ ok: true, source: transcriptSourceFor('fixture-session', null, now), appended: [], patched: [], hasMore: false }),
     'transcript:tail:close': () => undefined,
 
-    'search:query': () => ({ ok: true, groups: [], inScope: 0, skippedByIndex: 0, read: 0, unreached: 0, complete: true, hitsTruncated: false, indexPersisted: false, tookMs: 0 }),
+    'search:query': () => fixtureSearchResult(now),
 
     'claim:preflight': () => fixtureClaimPreflight(now),
     'gate:preflight': () => fixtureGatePreflight(now),
@@ -106,7 +107,7 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'session:send': () => ({ ok: false, kind: 'unknown-session' }),
     'session:interrupt': () => ({ ok: false, kind: 'unknown-session' }),
     'session:close': () => ({ ok: false, kind: 'unknown-session' }),
-    'session:attach': () => ({ ok: false, kind: 'unknown-session' }),
+    'session:attach': (request) => fixtureSessionAttach(request.sessionKey, now),
     'session:permission:answer': () => ({ ok: false, kind: 'unknown-session' }),
     'session:invoke': () => ({ ok: false, kind: 'unknown-session' }),
     'session:dismiss': () => ({ ok: false, kind: 'unknown-session' }),

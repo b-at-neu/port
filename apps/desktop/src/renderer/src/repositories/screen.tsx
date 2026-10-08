@@ -11,7 +11,7 @@ import { ErrorBanner } from '../components/error-banner'
 import { ScreenHeader } from '../components/screen-header'
 import { StatusPill } from '../components/status-pill'
 import { useIpcMutation, useIpcQuery } from '../data/query'
-import { ROUTE_IDS } from '../router/legacy-view'
+import { ROUTE_IDS } from '../router/routes'
 import type { RepoId, RepositoryEntry } from '../../../shared/repos'
 import { problemLabel, registryBannerCopy } from './copy'
 

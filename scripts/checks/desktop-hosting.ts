@@ -332,15 +332,15 @@ export default async function ({ expect, fail, ok }: Reporter) {
   {
     const declarations = allFiles.filter((f) => !relOf(f).endsWith('.test.ts')).filter((f) => /export function sessionDisplayLabel\(/.test(readFileSync(f, 'utf8')));
     const declaredOnlyInLabel = declarations.length === 1 && relOf(declarations[0] ?? '') === `${sharedHostingDir}/label.ts`;
-    const railFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/renderer/src/session/rail.ts');
-    const controllerFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/renderer/src/permission/controller.ts');
+    const headerFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/renderer/src/session/header.tsx');
+    const dialogFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/renderer/src/permission/dialog.tsx');
     const copyFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/renderer/src/permission/copy.ts');
     if (!declaredOnlyInLabel) {
       fail('desktop-hosting', `sessionDisplayLabel must be declared only in ${sharedHostingDir}/label.ts, found in: ${declarations.map(relOf).join(', ') || '(nowhere)'}`);
-    } else if (!railFile || !/sessionDisplayLabel/.test(readFileSync(railFile, 'utf8'))) {
-      fail('desktop-hosting', 'apps/desktop/src/renderer/src/session/rail.ts does not import sessionDisplayLabel');
-    } else if (!controllerFile || !/sessionDisplayLabel/.test(readFileSync(controllerFile, 'utf8'))) {
-      fail('desktop-hosting', 'apps/desktop/src/renderer/src/permission/controller.ts does not import sessionDisplayLabel');
+    } else if (!headerFile || !/sessionDisplayLabel/.test(readFileSync(headerFile, 'utf8'))) {
+      fail('desktop-hosting', 'apps/desktop/src/renderer/src/session/header.tsx does not import sessionDisplayLabel');
+    } else if (!dialogFile || !/sessionDisplayLabel/.test(readFileSync(dialogFile, 'utf8'))) {
+      fail('desktop-hosting', 'apps/desktop/src/renderer/src/permission/dialog.tsx does not import sessionDisplayLabel');
     } else expect(!(!copyFile || /function contextLine\([^)]*sessionKey/.test(readFileSync(copyFile, 'utf8'))), 'desktop-hosting', "apps/desktop/src/renderer/src/permission/copy.ts's contextLine must take no 'sessionKey' parameter");
   }
 }

@@ -27,15 +27,11 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- No .css under renderer/ holds a colour value, except theme.css and the legacy
-  // stylesheets — this exemption list only ever shrinks. ---
+  // --- No .css under renderer/ holds a colour value, except theme.css —
+  // this exemption list only ever shrinks. ---
   {
     const cssPatterns = mod.CSS_COLOUR_PATTERNS as { source: string; flags: string; id: string }[];
-    const exemptRel = new Set(
-      ['commands-strip.css', 'index.css', 'permission.css', 'search.css', 'session-rail.css', 'session.css', 'transcript.css'].map(
-        (f) => `${rendererDir}/src/${f}`,
-      ),
-    );
+    const exemptRel = new Set<string>();
     exemptRel.add(`${rendererDir}/src/styles/theme.css`);
 
     for (const rel of exemptRel) {
@@ -87,6 +83,27 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       if (effectRe.test(code)) {
         violated = true;
         fail('desktop-react', `${rel} names useEffect/useLayoutEffect outside a comment — the ban is total (#316)`);
+      }
+    }
+    if (!violated) ok();
+  }
+
+  // --- No hand-built DOM (createElement family, innerHTML/outerHTML, insertAdjacentHTML)
+  // outside comments, non-test files — mirrors the ESLint ban for a worktree with no install. ---
+  {
+    const domRe = /\bdocument\.(createElement|createElementNS|createTextNode)\b|\.(innerHTML|outerHTML)\s*=|\.insertAdjacentHTML\s*\(/;
+    const files = walk(join(root, rendererDir)).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
+    let violated = false;
+    for (const f of files) {
+      const rel = relOf(f);
+      const withoutBlockComments = readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+      const code = withoutBlockComments
+        .split('\n')
+        .map((line) => line.split('//')[0])
+        .join('\n');
+      if (domRe.test(code)) {
+        violated = true;
+        fail('desktop-react', `${rel} builds DOM by hand outside a comment — the renderer builds every node through JSX now`);
       }
     }
     if (!violated) ok();

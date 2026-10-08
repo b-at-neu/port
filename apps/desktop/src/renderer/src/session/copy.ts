@@ -111,9 +111,7 @@ export function interruptNote(queuedAfterInterrupt: number | null): string | nul
   return `Stopped. ${String(queuedAfterInterrupt)} queued message${queuedAfterInterrupt === 1 ? '' : 's'} will still run.`
 }
 
-export const BUSY_BANNER = 'Close the current session before starting a new one.'
 export const EMPTY_TITLE = 'No session open.'
-export const EMPTY_HINT = 'Start one with New session on a repository card.'
 export const RECONNECTING = 'Reconnecting to your session…'
 
 export function startingCopy(repoLabel: string): string {
@@ -129,7 +127,6 @@ export function windowNote(): string {
 }
 
 export const CLOSE_CONFIRM_PROMPT = 'Close while Claude is working? The current turn is abandoned.'
-export const CLOSE_CONFIRM_YES = 'Close anyway'
 export const CLOSE_CONFIRM_NO = 'Keep working'
 
 export const NEW_SESSION_BUTTON = 'New session'

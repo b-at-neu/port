@@ -12,7 +12,7 @@ import { pipelinesModel } from './pipelines-model'
 import type { PipelineRow } from './pipelines-model'
 import { useRunStateCommand } from './run-state-command'
 import { shellPrefs, setRepoCollapsed } from './prefs'
-import { ROUTE_IDS } from '../router/legacy-view'
+import { ROUTE_IDS } from '../router/routes'
 
 function RunStateMenu({ row }: { readonly row: Extract<PipelineRow, { readonly ready: true }> }) {
   const runState = useRunStateCommand()

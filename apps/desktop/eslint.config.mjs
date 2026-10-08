@@ -84,7 +84,16 @@ export default tseslint.config(
       'no-restricted-properties': [
         'error',
         { object: 'React', property: 'useEffect', message: 'useEffect is banned here — use TanStack Query, useSyncExternalStore, or a ref callback instead.' },
-        { object: 'React', property: 'useLayoutEffect', message: 'useLayoutEffect is banned here — use TanStack Query, useSyncExternalStore, or a ref callback instead.' }
+        { object: 'React', property: 'useLayoutEffect', message: 'useLayoutEffect is banned here — use TanStack Query, useSyncExternalStore, or a ref callback instead.' },
+        { object: 'document', property: 'createElement', message: 'createElement is banned here — render JSX instead.' },
+        { object: 'document', property: 'createElementNS', message: 'createElementNS is banned here — render JSX instead.' },
+        { object: 'document', property: 'createTextNode', message: 'createTextNode is banned here — render JSX instead.' }
+      ],
+      'no-restricted-syntax': [
+        'error',
+        { selector: "AssignmentExpression[left.property.name='innerHTML']", message: 'innerHTML is banned here — a tool result or repository text is untrusted.' },
+        { selector: "AssignmentExpression[left.property.name='outerHTML']", message: 'outerHTML is banned here — a tool result or repository text is untrusted.' },
+        { selector: "CallExpression[callee.property.name='insertAdjacentHTML']", message: 'insertAdjacentHTML is banned here — a tool result or repository text is untrusted.' }
       ],
       'port/no-raw-colour': 'error'
     }

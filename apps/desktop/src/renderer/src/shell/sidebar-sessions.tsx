@@ -1,5 +1,6 @@
-// "Your sessions" — selecting or starting one delegates to session/controller.ts.
+// "Your sessions" — selecting or starting one delegates to session/actions.ts.
 import { useState } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { History, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -11,10 +12,10 @@ import type { HostedSessionSnapshot } from '../../../shared/hosting/types'
 import { sessionTitle } from '../../../shared/hosting/label'
 import type { RepoId, RepositoryEntry } from '../../../shared/repos'
 import { useIpcMutation, useIpcQuery } from '../data/query'
-import { selectSession, startNewSession } from '../session/controller'
+import { startNewSession } from '../session/actions'
 import { useSelectedSession } from '../session/selection'
 import { useRenaming, setRenaming } from './stores'
-import { legacyActions } from './legacy-actions'
+import { ROUTE_IDS } from '../router/routes'
 
 function repoTag(repos: readonly RepositoryEntry[] | undefined, repoId: RepoId): string {
   const entry = repos?.find((r) => r.id === repoId)
@@ -29,6 +30,7 @@ function dotFor(session: HostedSessionSnapshot): { readonly className: string; r
 }
 
 function SessionRow({ session, repos, selected }: { readonly session: HostedSessionSnapshot; readonly repos: readonly RepositoryEntry[] | undefined; readonly selected: boolean }) {
+  const navigate = useNavigate()
   const renaming = useRenaming()
   const rename = useIpcMutation('session:rename')
   const [draft, setDraft] = useState(() => sessionTitle(session))
@@ -69,7 +71,7 @@ function SessionRow({ session, repos, selected }: { readonly session: HostedSess
   return (
     <button
       type="button"
-      onClick={() => selectSession(session.sessionKey)}
+      onClick={() => void navigate({ to: ROUTE_IDS.session, search: { key: session.sessionKey } })}
       className={cn(
         'flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-small text-foreground-secondary hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring',
         selected && 'bg-selection text-primary-text',
@@ -88,6 +90,7 @@ function SessionRow({ session, repos, selected }: { readonly session: HostedSess
 }
 
 export function SidebarSessions() {
+  const navigate = useNavigate()
   const sessions = useIpcQuery('session:list')
   const repos = useIpcQuery('repos:list')
   const selectedKey = useSelectedSession()
@@ -97,11 +100,6 @@ export function SidebarSessions() {
   function handleNewSession(): void {
     const only = readyRepos.length === 1 ? readyRepos[0] : undefined
     if (only !== undefined) startNewSession(only.id)
-  }
-
-  function handleHistory(): void {
-    const only = readyRepos.length === 1 ? readyRepos[0] : undefined
-    if (only !== undefined) legacyActions()?.openSessions(only.id)
   }
 
   return (
@@ -148,34 +146,14 @@ export function SidebarSessions() {
         </DropdownMenu>
       )}
 
-      {readyRepos.length <= 1 ? (
-        <button
-          type="button"
-          onClick={handleHistory}
-          disabled={readyRepos.length === 0}
-          title={readyRepos.length === 0 ? 'Register a repository to see its history.' : undefined}
-          className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-small text-foreground-secondary hover:bg-accent disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <History className="size-4 shrink-0" />
-          History…
-        </button>
-      ) : (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-small text-foreground-secondary hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring">
-              <History className="size-4 shrink-0" />
-              History…
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            {readyRepos.map((repo) => (
-              <DropdownMenuItem key={repo.id} onSelect={() => legacyActions()?.openSessions(repo.id)}>
-                Transcripts for {repo.config.repo}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+      <button
+        type="button"
+        onClick={() => void navigate({ to: ROUTE_IDS.history, search: {} })}
+        className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-small text-foreground-secondary hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <History className="size-4 shrink-0" />
+        History…
+      </button>
     </div>
   )
 }

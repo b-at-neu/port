@@ -125,15 +125,16 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - only GitHub writer; only `command.ts` names `--add-label`/`--remove-label`
 - never `merge`, `close`, `--delete-branch`, or `ready`
 
+**`apps/desktop/src/renderer/src/components/conversation-model.ts`/`conversation-list.tsx`**
+- the one `TranscriptEntry` → view-model mapping and the one pin-to-bottom, chunked-reveal list
+- shared by the on-disk transcript view and the live session view, never a second copy
+- no `useEffect`: `conversation-list.tsx`'s scroll-pin and chunking both run from a plain ref callback, given a fresh function identity every render so React re-invokes it on each commit
+
 **`apps/desktop/src/renderer/src/data/`**
 - the renderer's one TanStack Query composition root
 - `data/subscriptions.ts` is the only caller of a `window.port.on*` push listener
 - a typed `{ ok: false }` response is data, not an error — only a rejected invoke is
 - `session:status` upserts the `session:list` cache by `sessionKey` when it already holds an entry and nothing is mid-fetch; otherwise it invalidates
-
-**`apps/desktop/src/renderer/src/entry-rows.ts`/`entry-list.ts`**
-- the one row renderer and the one append/patch/pin-to-bottom list model
-- shared by the on-disk transcript view and the live session view, never a second copy
 
 **`apps/desktop/src/renderer/src/needs-you/`**
 - the Needs you screen (#315): its own copy (`copy.ts`), action resolution and dispatch (`actions.ts`), and the relay compose form (`relay-form.tsx`), ported out of `board/relay.ts`'s former banner
@@ -141,13 +142,13 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `components/needs-you-item.tsx` is the shared row (DESIGN §4's `NeedsYouItem`); a screen never builds its own version
 
 **`apps/desktop/src/renderer/src/session/`**
-- `controller.ts` is the rail/switch/re-attach composition root — the same module-closure idiom as `permission/controller.ts`, no framework, no class
+- `entries-store.ts`'s `createEntriesRegistry` is the per-`sessionKey` attach/re-attach/buffering registry — injectable for its own tests, a thin app-wide singleton for `useSessionEntries`
 - `sequence.ts`'s `accept`/`drainBuffered` apply a `session:entries` delta only in revision order, never papering over a gap
-- `attach.ts`/`capacity-controller.ts`/`restore-controller.ts` split out of `controller.ts` to stay under the file-size limit (§7), each taking its `onChange`/callbacks as a parameter rather than importing back into the controller
+- `actions.ts` is the one place that writes the `session:list` query cache outside `data/subscriptions.ts`'s own push wiring — `adoptSession` after a start or a restore
+- `drafts.ts` keeps a composer draft per `sessionKey` outside React, so switching sessions and back never loses what was half-typed
 
 **`apps/desktop/src/renderer/src/shell/`**
-- the one React root: `layout.tsx`'s `ShellLayout` renders the sidebar and portals the route `<Outlet/>` into `#react-root`; legacy containers stay outside it
-- no `data-action` anywhere under it — legacy `#app` click delegation matches on it, and a shell row would fire a real legacy action
+- the one React root: `layout.tsx`'s `ShellLayout` renders the sidebar and the routed `<Outlet/>` directly into the main area — no portal, no legacy container
 - `keyboard.ts` installs one module-level listener, never `useEffect`
 - `prefs.ts` fails toward defaults on a malformed `localStorage` value, never throws
 - `lib/phase.ts`'s `PHASE_NAMES` and `key-bindings.ts`'s `KEY_BINDINGS` are pinned against `docs/DESIGN.md` §6 and §3 by the `desktop-shell` check, both directions
@@ -220,7 +221,7 @@ Narrow but real, because the pipeline's whole visible state is a set of GitHub l
 
 **Severity is never colour-only.** Review findings carry both an emoji and the word: 🔴 Critical · 🟠 Medium · 🟡 Low · ⚪ Nit.
 
-**The desktop app's React screens meet WCAG AA.** This applies to every screen built to `docs/DESIGN.md`, not to the legacy screens that predate it:
+**The desktop app's screens meet WCAG AA**, built to `docs/DESIGN.md`:
 - Text contrasts at least 4.5:1 with its background, and focus rings and status dots at least 3:1. `DESIGN.md` §1 records what each token pairing measures and the two rules that follow from the failing ones.
 - Status is never colour-only: every pill and phase carries its name in text, and the phase bar has a tooltip.
 - Every action is reachable by keyboard, with a visible focus ring. An icon-only button has both a tooltip and an accessible name.
