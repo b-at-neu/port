@@ -229,7 +229,8 @@ export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'pop
         owner: 'app',
         state: { kind: 'idle' },
         runState: 'dispatching',
-        claimedAt: now.toISOString(),
+        ownedSince: now.toISOString(),
+        unreadableMessage: null,
         budget: {
           line: null,
           problem: null,

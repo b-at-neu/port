@@ -6,13 +6,11 @@ import type { TranscriptTailOpen, TranscriptTailPoll } from './sessions/transcri
 import type { SearchQuery, SearchResult } from './search/types'
 import type { BoardSnapshot, SourceKind } from './board/types'
 import type { ClaimApplyResponse, ClaimPreflightResponse, PlanGateChoice } from './claim/types'
-import type { GateAnswerResponse, GateClaimResponse, GateDecision, GatePreflightResponse } from './gate/types'
+import type { GateAnswerResponse, GateDecision, GatePreflightResponse } from './gate/types'
 import type { LabelKey } from './labels/vocabulary'
 import type { ItemActionResult, ItemDecisionResult, OperatorAction, OperatorDecision, UnblockRoute } from './actions/types'
-import type { DispatchClaimSetResult, DispatchControlResult } from './dispatch/types'
+import type { DispatchControlResult } from './dispatch/types'
 import type { RuntimePreflight, RuntimeProbe } from './runtime/types'
-import type { ClaimRead } from './writes/types'
-import type { RelayCopyResponse } from './relay/types'
 import type { GhStatus } from './gh/types'
 import type { BacklogResponse } from './backlog/types'
 import type {
@@ -149,21 +147,15 @@ export interface IpcMap {
     request: { repoId: RepoId; number: number; decision: OperatorDecision; expectedStage: LabelKey | null; route: UnblockRoute | null; note: string | null; skipComment: boolean }
     response: ItemDecisionResult
   }
-  /** Operator control over dispatch (#110, #314) — run/drain/pause one
-   *  repository, or halt everything. `repoId` is required for `run`/`drain`/
-   *  `pause` (a registered repository, any status) and must be omitted for
-   *  `halt`, which sweeps every ready repository this app knows about. */
+  /** Operator control over dispatch (#110, #314). `repoId` is required for
+   *  `run`/`drain`/`pause`/`take-over` (a registered repository, any status)
+   *  and must be omitted for `halt`, which sweeps every ready repository
+   *  this app knows about. `take-over` (#331) is reached only from the
+   *  confirmed Take over dialog — it overwrites a `terminal` ownership
+   *  record and then runs. */
   'dispatch:control': {
-    request: { command: 'halt' } | { command: 'run' | 'drain' | 'pause'; repoId: RepoId }
+    request: { command: 'halt' } | { command: 'run' | 'drain' | 'pause' | 'take-over'; repoId: RepoId }
     response: DispatchControlResult
-  }
-  /** #265: takes or releases the `dispatch` claim scope for one repository —
-   *  `held` is the target state the operator's own button named, the same
-   *  never-a-toggle rule `gate:claim:set` already follows. Operator action
-   *  only; nothing machine-observed ever calls this. */
-  'dispatch:claim:set': {
-    request: { repoId: RepoId; held: boolean }
-    response: DispatchClaimSetResult
   }
   /** The runtime strip's cheap check (#97) — no repository context, no
    *  subprocess beyond `claude --version`, no network. Safe on every app
@@ -184,25 +176,11 @@ export interface IpcMap {
   }
   /** The plan gate's own preflight read (#92) — resolves one issue's
    *  identity, labels, assignees, and body (split into ticket/plan
-   *  markdown), classifies it, and reads the plan-gate claim, all
+   *  markdown), classifies it, and reads this repository's ownership, all
    *  server-side; the renderer names an intent, never a precondition. */
   'gate:preflight': {
     request: { repoId: RepoId; number: number }
     response: GatePreflightResponse
-  }
-  /** The Claim step's own re-read — called fresh every time the dialog opens
-   *  at that step, never reused from the preflight's own (potentially
-   *  stale) claim reading. */
-  'gate:claim:read': {
-    request: { repoId: RepoId }
-    response: ClaimRead
-  }
-  /** `held` is the target state the operator's own button named — `true` to
-   *  take the claim, `false` to release it — never a toggle this channel
-   *  infers from the current state. */
-  'gate:claim:set': {
-    request: { repoId: RepoId; held: boolean }
-    response: GateClaimResponse
   }
   /** The plan gate's own write. `feedback` is required (non-empty) only when
    *  `decision` is `'request-changes'` and `skipComment` is `false`;
@@ -212,16 +190,6 @@ export interface IpcMap {
   'gate:answer': {
     request: { repoId: RepoId; number: number; decision: GateDecision; feedback: string | null; skipComment: boolean }
     response: GateAnswerResponse
-  }
-  /** The relay loop's own copy button (#107) — the renderer sends the
-   *  already-composed reply text; `main/relay/clipboard.ts`'s
-   *  `copyRelayReply` validates it (non-empty string, under
-   *  `MAX_REPLY_CHARS`) before electron's clipboard is ever touched. Nothing
-   *  is sent anywhere — the operator still pastes it into the session that
-   *  dispatched the agent. */
-  'relay:copy': {
-    request: { text: string }
-    response: RelayCopyResponse
   }
   /** #98: owns the full lifecycle of a hosted session in the main process
    *  — the renderer only sends intents and receives events. `mode.kind` one
@@ -350,14 +318,10 @@ export const IPC_CHANNELS = [
   'item:action',
   'item:decide',
   'dispatch:control',
-  'dispatch:claim:set',
   'runtime:preflight',
   'runtime:probe',
   'gate:preflight',
-  'gate:claim:read',
-  'gate:claim:set',
   'gate:answer',
-  'relay:copy',
   'session:start',
   'session:send',
   'session:interrupt',

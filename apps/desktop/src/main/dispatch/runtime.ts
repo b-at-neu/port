@@ -54,7 +54,7 @@ export function createDispatchRuntime(deps: Omit<CreateDispatcherParams, 'ledger
   const autoPlannerDeps: AutoPlannerDeps = {
     listRepositories: deps.listRepositories,
     registryDeps: deps.registryDeps,
-    readGateClaim: deps.readGateClaim,
+    readOwnership: deps.readOwnership,
     runState: deps.runState,
     autoApprove: autoApprovePlan,
     auditDir: deps.dirs.audit,

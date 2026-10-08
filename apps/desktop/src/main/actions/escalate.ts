@@ -66,6 +66,7 @@ export async function escalateToHuman(params: EscalateToHumanParams, deps: Escal
 
   const comment = await deps.postComment({
     request: { repoId: params.entry.id, repo: params.entry.config.repo, kind: params.kind, number: params.number, body: params.body, action: params.action, scratchDir: params.scratchDir },
+    repoRoot: params.entry.path,
     auditDir: params.auditDir,
   })
   return { labels, comment }

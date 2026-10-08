@@ -2,18 +2,11 @@
 // app makes to GitHub is expressed in `LabelKey` values and a stated
 // precondition, never a raw argv or a bypassing `gh` call. No import here
 // may reach a Node builtin — `apps/desktop/src/main/writes/` is the only
-// place that spawns `gh` or touches `.agents/gate-claim.json` and
+// place that spawns `gh` or touches `.agents/cockpit.json` and
 // `writes.jsonl`, but the renderer is this ticket's eventual consumer (#92),
 // so this file compiles under `typecheck:web` too.
 import type { LabelKey, LabelVocabulary } from '../labels/vocabulary'
 import type { RepoId } from '../repos'
-
-/** Two recognized claim scopes — `docs/COORDINATION.md`'s own rule ("two
- *  scopes, not a framework"): the array shape is the natural fit for the
- *  question, but no third scope is defined that no ticket implements.
- *  `plan-gate` transfers the plan-review gate (#206); `dispatch` transfers
- *  the `Agent()` call itself (#265), the same coordination shape. */
-export type ClaimScope = 'plan-gate' | 'dispatch'
 
 export type AssigneeExpectation = { readonly kind: 'any' } | { readonly kind: 'unassigned' } | { readonly kind: 'exactly'; readonly logins: readonly string[] }
 
@@ -40,12 +33,6 @@ export interface LabelWriteRequest {
   readonly expect: LabelPrecondition
   /** The operator-facing verb, recorded verbatim in the audit log. */
   readonly action: string
-  /** #292: a scope this write needs beyond whatever `scopeFor` derives from
-   *  `add`/`remove` — `scopesFor` unions it in, never drops the derived
-   *  requirement. Every observation write names `['dispatch']` here, since
-   *  none of the four families touches a `plan-gate` key but every one of
-   *  them must still run only while this app actually holds dispatch. */
-  readonly requiredScopes?: readonly ClaimScope[]
 }
 
 export interface CommentRequest {
@@ -83,37 +70,17 @@ export type Conflict =
   | { readonly kind: 'unattributed-transition'; readonly from: readonly string[]; readonly to: readonly string[]; readonly observedAt: string; readonly lastLocalWriteAt: string | null }
   | { readonly kind: 'dispatch-overtook-pause'; readonly agent: string; readonly pausedAt: string; readonly dispatchedAt: string }
 
-/** A held claim's own fields — `owner` is free text for the cockpit's
- *  report only and is never read as liveness (a pid, port, or heartbeat);
- *  `unknownScopes` carries anything `scopes` held that this app does not
- *  recognize, rather than silently dropping it (`docs/COORDINATION.md` →
- *  "The claim contract"). */
-export interface HeldClaim {
-  readonly owner: string
-  readonly scopes: readonly ClaimScope[]
-  readonly unknownScopes: readonly string[]
-  readonly claimedAt: string
-}
+/** Mirrors `main/dispatch/ownership.ts`'s own `OwnershipRead` — hand-maintained
+ *  rather than an import, since the renderer cannot reach `main/`. Shared by
+ *  the gate dialog (`shared/gate/types.ts`) and the dispatch owner line
+ *  (`shared/dispatch/types.ts`), so both read the one shape. */
+export type OwnershipSummary =
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'app'; readonly since: string }
+  | { readonly kind: 'terminal'; readonly since: string }
+  | { readonly kind: 'unreadable'; readonly path: string; readonly message: string }
 
-/** A `repo` mismatch reads as `absent` — a positive determination, never
- *  ambiguity, the same rule `.temp/tick-state.md`'s `Repo` header already
- *  follows. Malformed or unreadable JSON reads as `unreadable`, on both
- *  sides of the claim standing down (`docs/COORDINATION.md` → "Failure
- *  directions"). */
-export type ClaimRead =
-  | ({ readonly state: 'held'; readonly path: string; readonly readAt: string } & HeldClaim)
-  | { readonly state: 'absent'; readonly path: string; readonly readAt: string }
-  | { readonly state: 'unreadable'; readonly message: string; readonly path: string; readonly readAt: string }
-
-/** Every failure kind a claim-file write (`takeClaimScope`/`releaseClaimScope`)
- *  can report — hand-maintained rather than derived from the platform
- *  layer's `FileFailureKind` (`main/platform/files.ts`), for the same reason
- *  every other shared failure union here is: the renderer cannot import
- *  `main/platform/`. `main/writes/claim.ts` pins this against the real type
- *  with `AssertEqual`. */
-export type ClaimWriteFailureKind = 'not-found' | 'not-a-file' | 'permission-denied' | 'too-large' | 'io'
-
-export type ClaimWriteResult = { readonly ok: true; readonly path: string } | { readonly ok: false; readonly kind: ClaimWriteFailureKind; readonly message: string; readonly path: string }
+export type OwnershipKind = OwnershipSummary['kind']
 
 /** Every failure kind a `gh …edit`/`…comment` call itself can report —
  *  hand-maintained rather than derived from `GhResult` (`main/platform/gh.ts`),
@@ -143,12 +110,12 @@ export type WriteOutcome =
   | { readonly kind: 'applied'; readonly argv: readonly string[] }
   | { readonly kind: 'no-op' }
   | { readonly kind: 'precondition-failed'; readonly conflict: Conflict }
-  /** `keys` is the request's own `[...remove, ...add]` (first hit wins), so a
-   *  caller whose real label — resume's recovered trigger — is only known
-   *  server-side, after the request was built, can still name it exactly
-   *  rather than falling back to generic copy (#94 review). */
-  | { readonly kind: 'unclaimed-scope'; readonly scope: ClaimScope; readonly claimPath: string; readonly keys: readonly LabelKey[] }
-  | { readonly kind: 'claim-unreadable'; readonly scope: ClaimScope; readonly claimPath: string; readonly message: string }
+  /** A terminal cockpit owns this repo — no `gh` call was made. `since` is
+   *  the ownership record's own clock, for the operator-facing "owned it
+   *  since <time>" copy. */
+  | { readonly kind: 'terminal-owned'; readonly since: string }
+  /** `.agents/cockpit.json` could not be read — no `gh` call was made. */
+  | { readonly kind: 'ownership-unreadable'; readonly path: string; readonly message: string }
   | { readonly kind: 'unresolvable-label'; readonly keys: readonly LabelKey[] }
   | { readonly kind: 'item-unavailable' }
   | { readonly kind: 'verify-failed'; readonly message: string }
@@ -168,8 +135,10 @@ export interface AuditEntry {
   readonly kind: 'issue' | 'pull-request'
   readonly number: number
   readonly action: string
-  readonly scope: ClaimScope | null
-  readonly claim: 'absent' | 'held' | 'unreadable' | 'not-required'
+  /** The ownership verdict this write read before touching anything — always
+   *  populated now that ownership gates every write uniformly, never a
+   *  `'not-required'` case the way the old claim scope had one. */
+  readonly ownership: OwnershipKind
   readonly precondition: { readonly present: readonly string[]; readonly absent: readonly string[]; readonly assignees: AssigneeExpectation } | null
   readonly observed: ObservedItem | null
   readonly call: readonly string[] | null

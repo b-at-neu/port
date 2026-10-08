@@ -8,23 +8,22 @@ import type { BoardSnapshot } from '../shared/board/types'
 import { chooseDirectory } from './dialogs'
 import { applyItemAction } from './actions/apply'
 import { applyItemDecision } from './actions/decide'
-import { gateAnswer, gateClaimRead, gateClaimSet, gatePreflight } from './actions/gate'
+import { gateAnswer, gatePreflight } from './actions/gate'
 import { resolveClaimApply, resolveClaimPreflight } from './channels/claim'
 import { resolveBacklogList } from './channels/backlog'
 import { resolveGhStatus } from './channels/gh'
 import { createDispatchRuntime } from './dispatch/runtime'
 import { createRunStateStore } from './dispatch/store'
 import { defaultHaltDispatchDeps, haltDispatch } from './dispatch/halt'
-import { registeredRepoIds, resolveDispatchClaimSet, resolveDispatchControl } from './dispatch/resolve'
+import { registeredRepoIds, resolveDispatchControl } from './dispatch/resolve'
 import type { Dispatcher } from './dispatch/dispatcher'
 import { fetchItemsByNumber } from './github/adapter'
-import { readGateClaim } from './writes/claim'
-import { resolveGateAnswer, resolveGateClaimRead, resolveGateClaimSet, resolveGatePreflight } from './channels/gate'
+import { readOwnership, releaseOwnership, takeOwnership } from './dispatch/ownership'
+import { resolveGateAnswer, resolveGatePreflight } from './channels/gate'
 import type { GateChannelDeps } from './channels/gate'
 import { resolveItemAction, resolveItemDecision } from './channels/items'
 import type { ItemDecisionDeps } from './channels/items'
 import { resolveRuntimeProbe } from './channels/runtime'
-import { copyRelayReply } from './relay/clipboard'
 import { resolveSearchQuery, resolveSessionsScan, resolveTranscriptTailClose, resolveTranscriptTailOpen, resolveTranscriptTailPoll } from './channels/sessions'
 import {
   defaultHostingChannelDeps,
@@ -261,7 +260,8 @@ export function registerIpc(): RegisteredIpc {
     store: hostedStore,
     launch: null,
     runState: (repoId) => runStates.current(repoId).state,
-    readGateClaim,
+    readOwnership,
+    takeOwnership,
     fetchItemsByNumber,
     listRepositories,
     registryDeps,
@@ -328,25 +328,23 @@ export function registerIpc(): RegisteredIpc {
     } satisfies ItemDecisionDeps),
   )
 
-  // Operator control over dispatch (#110, #314): run/drain/pause one
-  // repository, or halt everything — all branching in `resolveDispatchControl`.
+  // Operator control over dispatch (#110, #314, #331): run/drain/pause/
+  // take-over one repository, or halt everything — all branching in
+  // `resolveDispatchControl`.
   handle('dispatch:control', (_event, request) =>
     resolveDispatchControl(registryDeps, request, {
       listRepositories,
       runStates,
       haltDispatch: (params) =>
         haltDispatch(params, { ...defaultHaltDispatchDeps, stopFor: (repoId, number) => dispatcher.stopFor(repoId, number), standDown: (repoId) => dispatcher.standDown(repoId) }),
+      takeOwnership,
+      releaseOwnership,
       snapshot: watcher.snapshot,
       refresh: watcher.refresh,
       auditDir: app.getPath('userData'),
       now: () => new Date(),
     }),
   )
-
-  // #265: the dispatch claim take/release — delegates to the one dispatcher
-  // instance above. #326: 'dispatch:relay' is removed along with the hosted
-  // dispatcher session it relayed through.
-  handle('dispatch:claim:set', (_event, request) => resolveDispatchClaimSet(registryDeps, request, { listRepositories, dispatcher, refresh: watcher.refresh, now: () => new Date() }))
 
   handle('runtime:preflight', (_event, request) => {
     if (request !== undefined) throw new Error("'runtime:preflight' takes no payload")
@@ -355,24 +353,15 @@ export function registerIpc(): RegisteredIpc {
 
   handle('runtime:probe', (_event, request) => resolveRuntimeProbe(registryDeps, request, join(app.getPath('userData'), 'runtime-probe')))
 
-  // The plan gate's four channels (#92) — `gatePreflight`/`gateClaimRead`/
-  // `gateClaimSet`/`gateAnswer` are `main/actions/gate.ts`'s own exports,
-  // already bound to their own `defaultGateDeps`; `refresh` is the live
-  // watcher's method, never a second poll built here.
-  const gateChannelDeps: GateChannelDeps = { gatePreflight, gateClaimRead, gateClaimSet, gateAnswer, refresh: watcher.refresh }
+  // The plan gate's two channels (#92) — `gatePreflight`/`gateAnswer` are
+  // `main/actions/gate.ts`'s own exports, already bound to their own
+  // `defaultGateDeps`; `refresh` is the live watcher's method, never a
+  // second poll built here.
+  const gateChannelDeps: GateChannelDeps = { gatePreflight, gateAnswer, refresh: watcher.refresh }
 
   handle('gate:preflight', (_event, request) => resolveGatePreflight(registryDeps, request, gateChannelDeps))
 
-  handle('gate:claim:read', (_event, request) => resolveGateClaimRead(registryDeps, request, gateChannelDeps))
-
-  handle('gate:claim:set', (_event, request) => resolveGateClaimSet(registryDeps, request, gateChannelDeps))
-
   handle('gate:answer', (_event, request) => resolveGateAnswer(registryDeps, request, app.getPath('userData'), app.getPath('temp'), gateChannelDeps))
-
-  // The relay loop's own copy button (#107) — one delegating line;
-  // `copyRelayReply` (`./relay`) does the validation and the one electron
-  // clipboard write.
-  handle('relay:copy', (_event, request) => copyRelayReply(request))
 
   handle('session:start', (_event, request) => resolveSessionStart(registryDeps, request, hostingChannelDeps))
 

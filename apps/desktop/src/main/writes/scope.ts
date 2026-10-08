@@ -1,39 +1,7 @@
-// Pure claim-scope derivation and precondition evaluation — no `gh`, no
-// filesystem, no `git`. `scopeFor` derives the required claim scope from a
-// request's own `add`/`remove` keys, never from a caller-declared field a
-// caller could understate.
-import type { LabelKey } from '../../shared/labels/vocabulary'
-import type { AssigneeExpectation, ClaimScope, LabelWriteRequest, ObservedItem } from '../../shared/writes/types'
-
-/** Byte-for-byte `docs/COORDINATION.md` → "The claim contract"'s own set —
- *  pinned both directions by `scripts/checks/desktop-writes.mjs`. `autoPlan`
- *  is deliberately excluded: the cockpit's opt-in path still sets it, and
- *  its auto-plan swap is already covered by `planApproved` being in the
- *  set. */
-export const PLAN_GATE_KEYS: readonly LabelKey[] = ['planReview', 'planApproved', 'planChangesRequested']
-
-/** `applyLabels` requires a held `plan-gate` claim iff `add ∪ remove`
- *  intersects `PLAN_GATE_KEYS`; every other label or assignee write is
- *  "either — convergent" per `docs/COORDINATION.md`'s ownership table and
- *  needs none (plan's own **Authorization, per entry point**). */
-export function scopeFor(request: Pick<LabelWriteRequest, 'add' | 'remove'>): ClaimScope | null {
-  const touched = new Set<LabelKey>([...request.add, ...request.remove])
-  return PLAN_GATE_KEYS.some((key) => touched.has(key)) ? 'plan-gate' : null
-}
-
-/** #292: every scope `applyLabels` must hold before it writes — `scopeFor`'s
- *  own derived requirement, unioned with the request's own `requiredScopes`.
- *  It can only ever add a requirement, never drop the derived one: a caller
- *  cannot understate what its own label keys already demand. Order is
- *  derived-first, so `applyLabels` checks the two known scopes
- *  (`'plan-gate'`, `'dispatch'`) in a stable, predictable order when a
- *  request happens to need both. */
-export function scopesFor(request: Pick<LabelWriteRequest, 'add' | 'remove' | 'requiredScopes'>): readonly ClaimScope[] {
-  const derived = scopeFor(request)
-  const required = request.requiredScopes ?? []
-  const scopes = derived !== null ? [derived, ...required] : [...required]
-  return [...new Set(scopes)]
-}
+// Pure precondition evaluation — no `gh`, no filesystem, no `git`. Ownership
+// (`main/dispatch/ownership.ts`) gates every write uniformly now, so there is
+// no per-request scope to derive here any more.
+import type { AssigneeExpectation, ObservedItem } from '../../shared/writes/types'
 
 export type PreconditionVerdict = { readonly satisfied: true } | { readonly satisfied: false; readonly expected: readonly string[]; readonly observed: readonly string[] }
 

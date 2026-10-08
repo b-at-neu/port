@@ -12,8 +12,8 @@ import type { ItemsByNumberFetch, ResolvedItem } from '../../shared/github/types
 import { applyLabels, postComment } from './apply'
 import type { GhRunner } from './apply'
 import { readAuditLog } from './audit'
-import { takeClaimScope } from './claim'
-import type { GitRunner } from './claim'
+import { takeOwnership } from '../dispatch/ownership'
+import type { GitRunner } from '../dispatch/ownership'
 
 const VOCABULARY: LabelVocabulary = resolveVocabulary({})
 const REPO_ID = 'repo-1' as unknown as RepoId
@@ -68,42 +68,45 @@ function neverCalledGh(): GhRunner {
   }
 }
 
-describe('applyLabels — the plan-gate claim', () => {
-  it('refuses with unclaimed-scope when no claim file exists', async () => {
+describe('applyLabels — ownership', () => {
+  it('refuses with terminal-owned when a terminal cockpit owns the repo, even for a convergent write', async () => {
     const { repoRoot, auditDir, git } = await makeDirs()
-    const req = request({ add: ['planApproved'], remove: ['planReview'], expect: { present: ['planReview'], absent: [], assignees: { kind: 'any' } } })
+    await mkdir(join(repoRoot, '.agents'), { recursive: true })
+    await writeFile(join(repoRoot, '.agents', 'cockpit.json'), JSON.stringify({ repo: 'o/r', owner: 'terminal', since: '2026-01-01T00:00:00Z' }), 'utf8')
+
+    const req = request({ add: ['ready'], remove: ['blocked'] })
     const gh = neverCalledGh()
     const fetcher = fetcherReturning({ ok: true, resolved: [], unavailable: [], fetchedAt: now().toISOString() })
 
     const outcome = await applyLabels({ request: req, repoRoot, auditDir, git, gh, fetchItemsByNumber: fetcher.fn, now })
-    expect(outcome.kind).toBe('unclaimed-scope')
+    expect(outcome).toEqual({ kind: 'terminal-owned', since: '2026-01-01T00:00:00Z' })
     expect(fetcher.calls).toBe(0)
 
     const log = await readAuditLog(auditDir)
     if (!log.ok) throw new Error('unreachable')
     expect(log.entries).toHaveLength(1)
-    expect(log.entries[0]?.claim).toBe('absent')
-    expect(log.entries[0]?.result.kind).toBe('unclaimed-scope')
+    expect(log.entries[0]?.ownership).toBe('terminal')
+    expect(log.entries[0]?.result.kind).toBe('terminal-owned')
   })
 
-  it('refuses with claim-unreadable for malformed claim JSON', async () => {
+  it('refuses with ownership-unreadable for malformed cockpit.json', async () => {
     const { repoRoot, auditDir, git } = await makeDirs()
     await mkdir(join(repoRoot, '.agents'), { recursive: true })
-    await writeFile(join(repoRoot, '.agents', 'gate-claim.json'), '{not json', 'utf8')
+    await writeFile(join(repoRoot, '.agents', 'cockpit.json'), '{not json', 'utf8')
 
-    const req = request({ add: ['planApproved'], remove: ['planReview'], expect: { present: ['planReview'], absent: [], assignees: { kind: 'any' } } })
+    const req = request({ add: ['ready'], remove: ['blocked'] })
     const gh = neverCalledGh()
     const outcome = await applyLabels({ request: req, repoRoot, auditDir, git, gh, now })
-    expect(outcome.kind).toBe('claim-unreadable')
+    expect(outcome.kind).toBe('ownership-unreadable')
 
     const log = await readAuditLog(auditDir)
     if (!log.ok) throw new Error('unreachable')
-    expect(log.entries[0]?.claim).toBe('unreadable')
+    expect(log.entries[0]?.ownership).toBe('unreadable')
   })
 
-  it('proceeds to a real write once the scope is held', async () => {
+  it('proceeds to a real write while this app owns the repo', async () => {
     const { repoRoot, auditDir, git } = await makeDirs()
-    await takeClaimScope({ repoRoot, repo: 'o/r', owner: 'port-desktop', scope: 'plan-gate', git, now })
+    await takeOwnership({ repoRoot, repo: 'o/r', git, now })
 
     const req = request({ add: ['planApproved'], remove: ['planReview'], expect: { present: ['planReview'], absent: [], assignees: { kind: 'any' } } })
     const fetcher = fetcherReturning({ ok: true, resolved: [resolvedItem({ labels: ['plan review'] })], unavailable: [], fetchedAt: now().toISOString() })
@@ -116,51 +119,13 @@ describe('applyLabels — the plan-gate claim', () => {
     const outcome = await applyLabels({ request: req, repoRoot, auditDir, git, gh, fetchItemsByNumber: fetcher.fn, now })
     expect(outcome).toEqual({ kind: 'applied', argv: ghCalled })
     expect(ghCalled).toEqual(['issue', 'edit', '1', '--repo', 'o/r', '--add-label', 'plan approved', '--remove-label', 'plan review'])
-  })
-})
-
-describe('applyLabels — requiredScopes (#292)', () => {
-  it('refuses with unclaimed-scope for a convergent write naming a required scope that is not held', async () => {
-    const { repoRoot, auditDir, git } = await makeDirs()
-    const req = request({ add: ['needsHuman'], remove: ['needsRevision'], requiredScopes: ['dispatch'] })
-    const gh = neverCalledGh()
-
-    const outcome = await applyLabels({ request: req, repoRoot, auditDir, git, gh, now })
-    expect(outcome.kind).toBe('unclaimed-scope')
-    if (outcome.kind !== 'unclaimed-scope') throw new Error('unreachable')
-    expect(outcome.scope).toBe('dispatch')
-  })
-
-  it('refuses on the first unheld scope when both plan-gate and dispatch are required', async () => {
-    const { repoRoot, auditDir, git } = await makeDirs()
-    await takeClaimScope({ repoRoot, repo: 'o/r', owner: 'port-desktop', scope: 'dispatch', git, now })
-    const req = request({ add: ['planApproved'], remove: ['planReview'], requiredScopes: ['dispatch'], expect: { present: ['planReview'], absent: [], assignees: { kind: 'any' } } })
-    const gh = neverCalledGh()
-
-    const outcome = await applyLabels({ request: req, repoRoot, auditDir, git, gh, now })
-    expect(outcome.kind).toBe('unclaimed-scope')
-    if (outcome.kind !== 'unclaimed-scope') throw new Error('unreachable')
-    expect(outcome.scope).toBe('plan-gate')
-  })
-
-  it('proceeds once every required scope is held, with one claim read', async () => {
-    const { repoRoot, auditDir, git } = await makeDirs()
-    await takeClaimScope({ repoRoot, repo: 'o/r', owner: 'port-desktop', scope: 'dispatch', git, now })
-    const req = request({ add: ['needsHuman'], remove: ['readyForReview'], requiredScopes: ['dispatch'], expect: { present: ['readyForReview'], absent: [], assignees: { kind: 'any' } } })
-    const fetcher = fetcherReturning({ ok: true, resolved: [resolvedItem({ labels: ['ready for review'] })], unavailable: [], fetchedAt: now().toISOString() })
-    const gh: GhRunner = () => Promise.resolve({ ok: true, stdout: '', stderr: '' } satisfies GhResult)
-
-    const outcome = await applyLabels({ request: req, repoRoot, auditDir, git, gh, fetchItemsByNumber: fetcher.fn, now })
-    expect(outcome.kind).toBe('applied')
 
     const log = await readAuditLog(auditDir)
     if (!log.ok) throw new Error('unreachable')
-    expect(log.entries[0]?.scope).toBe('dispatch')
+    expect(log.entries[0]?.ownership).toBe('app')
   })
-})
 
-describe('applyLabels — convergent writes need no claim', () => {
-  it('applies a ready/blocked swap with no claim file present', async () => {
+  it('proceeds to a real write when nobody owns the repo yet', async () => {
     const { repoRoot, auditDir, git } = await makeDirs()
     const req = request({ add: ['ready'], remove: ['blocked'] })
     const fetcher = fetcherReturning({ ok: true, resolved: [resolvedItem({ labels: ['blocked'] })], unavailable: [], fetchedAt: now().toISOString() })
@@ -171,8 +136,7 @@ describe('applyLabels — convergent writes need no claim', () => {
 
     const log = await readAuditLog(auditDir)
     if (!log.ok) throw new Error('unreachable')
-    expect(log.entries[0]?.scope).toBe(null)
-    expect(log.entries[0]?.claim).toBe('not-required')
+    expect(log.entries[0]?.ownership).toBe('absent')
   })
 })
 
@@ -222,7 +186,7 @@ describe('applyLabels — an unknown label at gh', () => {
 })
 
 describe('applyLabels — unresolvable-label', () => {
-  it('aborts before any gh or verify call for a module-disabled or unknown key', async () => {
+  it('aborts before any gh, ownership, or verify call for a module-disabled or unknown key', async () => {
     const { repoRoot, auditDir, git } = await makeDirs()
     const emptyVocabulary: LabelVocabulary = { labels: [], disabled: [], problems: [] }
     const req = request({ vocabulary: emptyVocabulary, add: ['ready'] })
@@ -241,6 +205,7 @@ function commentRequest(overrides: Partial<CommentRequest> = {}): CommentRequest
 
 describe('postComment', () => {
   it('writes the body to a scratch file, passes --body-file, and deletes it afterwards', async () => {
+    const { repoRoot } = await makeDirs()
     const scratchDir = await mkdtemp(join(tmpdir(), 'port-writes-comment-'))
     const auditDir = await mkdtemp(join(tmpdir(), 'port-writes-apply-audit-'))
     let bodyFileContent: string | undefined
@@ -251,7 +216,7 @@ describe('postComment', () => {
       return { ok: true, stdout: '', stderr: '' } satisfies GhResult
     }
 
-    const outcome = await postComment({ request: commentRequest({ scratchDir, body: 'a comment body' }), auditDir, gh, now })
+    const outcome = await postComment({ request: commentRequest({ scratchDir, body: 'a comment body' }), repoRoot, auditDir, gh, now })
     expect(outcome.kind).toBe('applied')
     expect(bodyFileContent).toBe('a comment body')
 
@@ -260,11 +225,12 @@ describe('postComment', () => {
   })
 
   it('audits byte length and target, never the comment text', async () => {
+    const { repoRoot } = await makeDirs()
     const scratchDir = await mkdtemp(join(tmpdir(), 'port-writes-comment-'))
     const auditDir = await mkdtemp(join(tmpdir(), 'port-writes-apply-audit-'))
     const gh: GhRunner = () => Promise.resolve({ ok: true, stdout: '', stderr: '' } satisfies GhResult)
 
-    await postComment({ request: commentRequest({ scratchDir, body: 'secret content' }), auditDir, gh, now })
+    await postComment({ request: commentRequest({ scratchDir, body: 'secret content' }), repoRoot, auditDir, gh, now })
 
     const log = await readAuditLog(auditDir)
     if (!log.ok) throw new Error('unreachable')
@@ -274,14 +240,30 @@ describe('postComment', () => {
   })
 
   it('deletes the scratch file even when gh fails', async () => {
+    const { repoRoot } = await makeDirs()
     const scratchDir = await mkdtemp(join(tmpdir(), 'port-writes-comment-'))
     const auditDir = await mkdtemp(join(tmpdir(), 'port-writes-apply-audit-'))
     const gh: GhRunner = () => Promise.resolve({ ok: false, kind: 'unknown', stdout: '', stderr: 'boom' } satisfies GhResult)
 
-    const outcome = await postComment({ request: commentRequest({ scratchDir }), auditDir, gh, now })
+    const outcome = await postComment({ request: commentRequest({ scratchDir }), repoRoot, auditDir, gh, now })
     expect(outcome.kind).toBe('write-failed')
     if (outcome.kind !== 'write-failed') return
     expect(outcome.stderr).toBe('boom')
+
+    const remaining = await readdir(scratchDir)
+    expect(remaining).toEqual([])
+  })
+
+  it('refuses with terminal-owned and writes no scratch file when a terminal cockpit owns the repo', async () => {
+    const { repoRoot } = await makeDirs()
+    await mkdir(join(repoRoot, '.agents'), { recursive: true })
+    await writeFile(join(repoRoot, '.agents', 'cockpit.json'), JSON.stringify({ repo: 'o/r', owner: 'terminal', since: '2026-01-01T00:00:00Z' }), 'utf8')
+    const scratchDir = await mkdtemp(join(tmpdir(), 'port-writes-comment-'))
+    const auditDir = await mkdtemp(join(tmpdir(), 'port-writes-apply-audit-'))
+    const gh = neverCalledGh()
+
+    const outcome = await postComment({ request: commentRequest({ scratchDir }), repoRoot, auditDir, gh, now })
+    expect(outcome).toEqual({ kind: 'terminal-owned', since: '2026-01-01T00:00:00Z' })
 
     const remaining = await readdir(scratchDir)
     expect(remaining).toEqual([])

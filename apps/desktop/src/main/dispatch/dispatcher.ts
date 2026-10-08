@@ -19,8 +19,8 @@ import type { RegistryDeps } from '../registry'
 import type { ReposListResponse } from '../../shared/ipc'
 import type { DispatchLedger, RefreshMemo } from '../tick/ledger'
 import { dispatchableFrom, observableFrom } from '../tick/dispatchable'
-import type { ReadGateClaimParams } from '../writes/claim'
-import type { ClaimRead } from '../../shared/writes/types'
+import type { ReadOwnershipParams, TakeOwnershipParams, TakeOwnershipResult } from './ownership'
+import type { OwnershipRead } from './ownership'
 import type { FetchItemsByNumberParams } from '../github/adapter'
 import type { ItemsByNumberFetch } from '../../shared/github/types'
 import { labelName } from '../../shared/labels/vocabulary'
@@ -58,9 +58,14 @@ export interface CreateDispatcherParams {
    *  a candidate sits visibly at `no-launcher` rather than silently idle. */
   readonly launch: StageLauncher | null
   /** #314: this repository's own persisted run state — read fresh every
-   *  pass, never cached, the same rule the claim read below follows. */
+   *  pass, never cached, the same rule the ownership read below follows. */
   readonly runState: (repoId: RepoId) => RunState
-  readonly readGateClaim: (params: ReadGateClaimParams) => Promise<ClaimRead>
+  readonly readOwnership: (params: ReadOwnershipParams) => Promise<OwnershipRead>
+  /** #331: the re-take-on-relaunch rule — a persisted `run`/`draining` state
+   *  with an `absent` ownership record (the app restarted and the record
+   *  never survived) takes ownership itself, `force: false` since `absent`
+   *  never refuses it. */
+  readonly takeOwnership: (params: TakeOwnershipParams) => Promise<TakeOwnershipResult>
   readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
   readonly listRepositories: (registryDeps: RegistryDeps) => Promise<ReposListResponse>
   readonly registryDeps: RegistryDeps
@@ -103,7 +108,8 @@ interface RepoDispatcherState {
   owner: DispatchOwner
   dispatcherState: DispatcherState
   runState: RunState
-  claimedAt: string | null
+  ownedSince: string | null
+  unreadableMessage: string | null
   budgetReset: boolean
   budgetHolds: Map<number, number>
   budget: BudgetStatus | null
@@ -114,10 +120,11 @@ interface RepoDispatcherState {
 function emptyRepoState(): RepoDispatcherState {
   return {
     records: [],
-    owner: 'cockpit',
+    owner: 'none',
     dispatcherState: { kind: 'idle' },
     runState: 'paused',
-    claimedAt: null,
+    ownedSince: null,
+    unreadableMessage: null,
     budgetReset: false,
     budgetHolds: new Map(),
     budget: null,
@@ -126,10 +133,17 @@ function emptyRepoState(): RepoDispatcherState {
   }
 }
 
-function ownerOf(claim: ClaimRead): DispatchOwner {
-  if (claim.state === 'unreadable') return 'nobody'
-  if (claim.state === 'held' && claim.scopes.includes('dispatch')) return 'app'
-  return 'cockpit'
+function ownerOf(ownership: OwnershipRead): DispatchOwner {
+  switch (ownership.kind) {
+    case 'absent':
+      return 'none'
+    case 'app':
+      return 'app'
+    case 'terminal':
+      return 'terminal'
+    case 'unreadable':
+      return 'unreadable'
+  }
 }
 
 export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
@@ -182,11 +196,22 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     inFlight.add(entry.id)
     repoNames.set(entry.id, entry.config.repo)
     try {
-      const claim = await deps.readGateClaim({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
-      const owner = ownerOf(claim)
       const runState = deps.runState(entry.id)
+      let ownership = await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
+
+      // #331: a persisted run/draining state with an absent record means the
+      // app restarted and the record never survived — this app's own run
+      // state is the operator's earlier action, so it takes ownership back
+      // rather than sitting idle until the operator clicks Run again.
+      if (ownership.kind === 'absent' && (runState === 'dispatching' || runState === 'draining')) {
+        const taken = await deps.takeOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
+        if (taken.ok) ownership = await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
+      }
+
+      const owner = ownerOf(ownership)
       const state = stateFor(entry.id)
-      state.claimedAt = claim.state === 'held' ? claim.claimedAt : null
+      state.ownedSince = ownership.kind === 'app' || ownership.kind === 'terminal' ? ownership.since : null
+      state.unreadableMessage = ownership.kind === 'unreadable' ? ownership.message : null
       state.records = refreshRecords(state.records, (sessionKey) => deps.store.snapshotOf(sessionKey))
 
       const anyLive = state.records.some((r) => r.state === 'started')
@@ -394,7 +419,8 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       owner: s.owner,
       state: s.dispatcherState,
       runState: s.runState,
-      claimedAt: s.claimedAt,
+      ownedSince: s.ownedSince,
+      unreadableMessage: s.unreadableMessage,
       budget: s.budget,
       observed: s.observed,
     }))

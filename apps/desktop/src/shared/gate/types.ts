@@ -1,10 +1,10 @@
 // Renderer-safe contract for the plan gate dialog (#92, "the gate you hit
 // most"). No import here may reach a Node builtin — `apps/desktop/src/main/
 // actions/gate.ts` is the only place that resolves a repository, spawns
-// `gh`, or writes a claim file, but the renderer is this ticket's own
-// consumer, the same rule `shared/claim/types.ts` and `shared/actions/
+// `gh`, or reads `.agents/cockpit.json`, but the renderer is this ticket's
+// own consumer, the same rule `shared/claim/types.ts` and `shared/actions/
 // types.ts` already state for themselves.
-import type { ClaimRead, ClaimWriteResult, WriteOutcome } from '../writes/types'
+import type { OwnershipSummary, WriteOutcome } from '../writes/types'
 
 /** The two decisions the dialog's Reviewing step offers — validated at
  *  `main/channels/gate.ts` against this exact list, the same reason
@@ -18,10 +18,6 @@ export type GateDecision = (typeof GATE_DECISIONS)[number]
  *  consumer, so the audit log can tell an automatic approval from a click. */
 export const GATE_ACTIONS = ['approve-plan', 'request-plan-changes', 'auto-approve-plan'] as const
 export type GateAction = (typeof GATE_ACTIONS)[number]
-
-/** `docs/COORDINATION.md`'s own stand-down copy names this owner; pinned by
- *  `scripts/checks/desktop-gate.ts` against that file. */
-export const GATE_CLAIM_OWNER = 'port-desktop'
 
 /** The preflight `main/actions/gate.ts` composes: the item's own identity
  *  and labels, the ticket body split at `IMPLEMENTATION_PLAN_HEADING`, the
@@ -59,12 +55,13 @@ export type GateVerdict =
   | { readonly kind: 'not-at-plan-review'; readonly observed: readonly string[] }
   | { readonly kind: 'answerable'; readonly noPlanBlock: boolean; readonly assignedElsewhere: readonly string[] }
 
-/** `'gate:preflight'`'s response — `claim` rides along on every arm, since
- *  the Claim step renders regardless of whether the item itself resolved. */
+/** `'gate:preflight'`'s response — `ownership` rides along on every arm,
+ *  since the dialog disables Approve/Request changes under `terminal`/
+ *  `unreadable` regardless of whether the item itself resolved. */
 export type GatePreflightResponse =
-  | { readonly kind: 'resolved'; readonly preflight: GatePreflight; readonly verdict: GateVerdict; readonly claim: ClaimRead }
-  | { readonly kind: 'unresolved'; readonly claim: ClaimRead }
-  | { readonly kind: 'failed'; readonly message: string; readonly claim: ClaimRead }
+  | { readonly kind: 'resolved'; readonly preflight: GatePreflight; readonly verdict: GateVerdict; readonly ownership: OwnershipSummary }
+  | { readonly kind: 'unresolved'; readonly ownership: OwnershipSummary }
+  | { readonly kind: 'failed'; readonly message: string; readonly ownership: OwnershipSummary }
 
 /** `'gate:answer'`'s response. `refused` covers a verdict that turned
  *  non-`answerable` between the review step and the answer. `comment-failed`
@@ -78,8 +75,3 @@ export type GateAnswerResponse =
   | { readonly kind: 'preflight-failed'; readonly message: string }
   | { readonly kind: 'comment-failed'; readonly comment: WriteOutcome }
   | { readonly kind: 'answered'; readonly comment: WriteOutcome | null; readonly labels: WriteOutcome }
-
-/** `'gate:claim:set'`'s response — `takeClaimScope`/`releaseClaimScope` re-read
- *  after writing, so the response always carries the state as it now is
- *  rather than as it was asked to be. */
-export type GateClaimResponse = { readonly kind: 'ok'; readonly claim: ClaimRead } | { readonly kind: 'failed'; readonly result: ClaimWriteResult }

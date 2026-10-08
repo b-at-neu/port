@@ -1,9 +1,8 @@
-// Fixture mode's canned claim and plan-gate preflights, both held by this
-// app so their dialogs screenshot with every step reachable.
-import { GATE_CLAIM_OWNER } from '../../shared/gate/types'
+// Fixture mode's canned claim and plan-gate preflights — the plan gate owned
+// by this app (#331) so its dialog screenshots with every step reachable.
 import type { GatePreflightResponse } from '../../shared/gate/types'
 import type { ClaimPreflightResponse } from '../../shared/claim/types'
-import type { ClaimRead } from '../../shared/writes/types'
+import type { OwnershipSummary } from '../../shared/writes/types'
 import { LABEL_DEFAULTS } from '../../shared/labels/defaults'
 
 const VIEWER = 'octo-dev'
@@ -35,8 +34,8 @@ function csvEncode(rows: readonly string[][]): string {
 See [the report spec](https://github.com/acme/widgets/issues/41) for the full column list.
 `
 
-function heldByThisApp(now: Date): ClaimRead {
-  return { state: 'held', path: '/home/you/src/widgets/.agents/gate-claim.json', readAt: now.toISOString(), owner: GATE_CLAIM_OWNER, scopes: ['plan-gate'], unknownScopes: [], claimedAt: now.toISOString() }
+function ownedByApp(now: Date): OwnershipSummary {
+  return { kind: 'app', since: now.toISOString() }
 }
 
 export function fixtureGatePreflight(now: Date): GatePreflightResponse {
@@ -58,7 +57,7 @@ export function fixtureGatePreflight(now: Date): GatePreflightResponse {
       readAt: now.toISOString(),
     },
     verdict: { kind: 'answerable', noPlanBlock: false, assignedElsewhere: [] },
-    claim: heldByThisApp(now),
+    ownership: ownedByApp(now),
   }
 }
 
@@ -79,8 +78,4 @@ export function fixtureClaimPreflight(now: Date): ClaimPreflightResponse {
     },
     verdict: { kind: 'claimable', assigneeSituation: 'unassigned', others: [], closed: false, blockers: { ok: true, open: [], shown: 0, total: 0 } },
   }
-}
-
-export function fixtureGateClaimRead(now: Date): ClaimRead {
-  return heldByThisApp(now)
 }

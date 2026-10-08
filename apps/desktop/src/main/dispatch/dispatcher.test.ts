@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest'
 import { resolveVocabulary } from '../../shared/labels/vocabulary'
 import type { RepoId } from '../../shared/repos'
 import type { BoardSnapshot } from '../../shared/board/types'
-import type { ClaimRead } from '../../shared/writes/types'
 import type { HostedSessionSnapshot, SessionKey } from '../../shared/hosting/types'
 import type { HostedStore } from '../hosting/store'
 import type { TickActionable, TickReport } from '../../shared/tick/types'
@@ -10,6 +9,7 @@ import type { ReadyEntry } from '../actions/apply'
 import type { StageLaunchRequest, StageLaunchResult, StageLauncher } from './launch'
 import { createDispatcher, DISPATCH_PROMPT, promptFor, REFRESH_PROMPT } from './dispatcher'
 import type { CreateDispatcherParams } from './dispatcher'
+import type { OwnershipRead } from './ownership'
 
 const REPO_ID = 'repo-a' as RepoId
 const VOCABULARY = resolveVocabulary({})
@@ -61,9 +61,9 @@ function snapshotWith(tick: readonly TickReport[]): BoardSnapshot {
   }
 }
 
-const HELD_CLAIM: ClaimRead = { state: 'held', owner: 'port-desktop', scopes: ['dispatch'], unknownScopes: [], claimedAt: '2026-01-01T00:00:00Z', path: '/repo/.agents/gate-claim.json', readAt: 'r' }
-const ABSENT_CLAIM: ClaimRead = { state: 'absent', path: '/repo/.agents/gate-claim.json', readAt: 'r' }
-const UNREADABLE_CLAIM: ClaimRead = { state: 'unreadable', message: 'bad', path: '/repo/.agents/gate-claim.json', readAt: 'r' }
+const OWNED_BY_APP: OwnershipRead = { kind: 'app', since: '2026-01-01T00:00:00Z', path: '/repo/.agents/cockpit.json', readAt: 'r' }
+const ABSENT_OWNERSHIP: OwnershipRead = { kind: 'absent', path: '/repo/.agents/cockpit.json', readAt: 'r' }
+const UNREADABLE_OWNERSHIP: OwnershipRead = { kind: 'unreadable', message: 'bad', path: '/repo/.agents/cockpit.json', readAt: 'r' }
 
 function sessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSessionSnapshot {
   return {
@@ -145,7 +145,12 @@ function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispat
       throw new Error('writeObservation should not be invoked unless a test wires its own')
     },
     runState: () => 'dispatching',
-    readGateClaim: () => Promise.resolve(ABSENT_CLAIM),
+    readOwnership: () => Promise.resolve(ABSENT_OWNERSHIP),
+    // Harmless by default — the re-take-on-relaunch rule fires on every
+    // `dispatching`/`draining` run state, so a default `readOwnership`
+    // stub that stays `absent` regardless of this write keeps every test
+    // below that doesn't care about the relaunch rule unaffected.
+    takeOwnership: () => Promise.resolve({ ok: true, path: 'p' }),
     fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [], unavailable: [], fetchedAt: 'r' }),
     listRepositories: () => Promise.resolve({ ok: true, repositories: [entry()] }),
     registryDeps: { registryDir: '/registry', git: () => Promise.reject(new Error('unused')), chooseDirectory: () => Promise.resolve(null) },
@@ -173,22 +178,65 @@ function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispat
 const ACTIONABLE = [{ number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }]
 
 describe('createDispatcher — ownership', () => {
-  it('reports cockpit for an absent claim, and never touches the store', async () => {
+  it('reports none for an absent record, and never touches the store', async () => {
     const dispatcher = createDispatcher(baseDeps())
     await dispatcher.consider(snapshotWith([tickReport()]))
-    expect(dispatcher.status()).toEqual([{ repoId: REPO_ID, owner: 'cockpit', state: { kind: 'idle' }, runState: 'dispatching', claimedAt: null, budget: null, observed: [] }])
+    expect(dispatcher.status()).toEqual([
+      { repoId: REPO_ID, owner: 'none', state: { kind: 'idle' }, runState: 'dispatching', ownedSince: null, unreadableMessage: null, budget: null, observed: [] },
+    ])
   })
 
-  it('reports nobody for an unreadable claim', async () => {
-    const dispatcher = createDispatcher(baseDeps({ readGateClaim: () => Promise.resolve(UNREADABLE_CLAIM) }))
+  it('reports unreadable for an unreadable record', async () => {
+    const dispatcher = createDispatcher(baseDeps({ readOwnership: () => Promise.resolve(UNREADABLE_OWNERSHIP) }))
     await dispatcher.consider(snapshotWith([tickReport()]))
-    expect(dispatcher.status()).toEqual([{ repoId: REPO_ID, owner: 'nobody', state: { kind: 'idle' }, runState: 'dispatching', claimedAt: null, budget: null, observed: [] }])
+    expect(dispatcher.status()).toEqual([
+      { repoId: REPO_ID, owner: 'unreadable', state: { kind: 'idle' }, runState: 'dispatching', ownedSince: null, unreadableMessage: 'bad', budget: null, observed: [] },
+    ])
   })
 
-  it('reports app for a claim naming dispatch', async () => {
-    const dispatcher = createDispatcher(baseDeps({ readGateClaim: () => Promise.resolve(HELD_CLAIM) }))
+  it('reports terminal for a record owned by the terminal cockpit', async () => {
+    const dispatcher = createDispatcher(baseDeps({ readOwnership: () => Promise.resolve({ kind: 'terminal', since: '2026-01-01T00:00:00Z', path: '/repo/.agents/cockpit.json', readAt: 'r' }) }))
+    await dispatcher.consider(snapshotWith([tickReport()]))
+    expect(dispatcher.status()[0]).toMatchObject({ owner: 'terminal', ownedSince: '2026-01-01T00:00:00Z' })
+  })
+
+  it('reports app for a record owned by this app', async () => {
+    const dispatcher = createDispatcher(baseDeps({ readOwnership: () => Promise.resolve(OWNED_BY_APP) }))
     await dispatcher.consider(snapshotWith([tickReport()]))
     expect(dispatcher.status()[0]?.owner).toBe('app')
+  })
+})
+
+describe('createDispatcher — re-take on relaunch (#331)', () => {
+  it('takes ownership itself when run state is dispatching but the record is absent', async () => {
+    let took = false
+    const dispatcher = createDispatcher(
+      baseDeps({
+        readOwnership: () => Promise.resolve(ABSENT_OWNERSHIP),
+        takeOwnership: () => {
+          took = true
+          return Promise.resolve({ ok: true, path: 'p' })
+        },
+      }),
+    )
+    await dispatcher.consider(snapshotWith([tickReport()]))
+    expect(took).toBe(true)
+  })
+
+  it('never takes ownership while paused', async () => {
+    let took = false
+    const dispatcher = createDispatcher(
+      baseDeps({
+        runState: () => 'paused',
+        readOwnership: () => Promise.resolve(ABSENT_OWNERSHIP),
+        takeOwnership: () => {
+          took = true
+          return Promise.resolve({ ok: true, path: 'p' })
+        },
+      }),
+    )
+    await dispatcher.consider(snapshotWith([tickReport()]))
+    expect(took).toBe(false)
   })
 })
 
@@ -196,7 +244,7 @@ describe('createDispatcher — no-launcher', () => {
   it('holds visibly with candidates and no launcher, never fetching or budgeting', async () => {
     let fetched = false
     const dispatcher = createDispatcher(
-      baseDeps({ readGateClaim: () => Promise.resolve(HELD_CLAIM), fetchItemsByNumber: () => { fetched = true; return Promise.resolve({ ok: true, resolved: [], unavailable: [], fetchedAt: 'r' }) } }),
+      baseDeps({ readOwnership: () => Promise.resolve(OWNED_BY_APP), fetchItemsByNumber: () => { fetched = true; return Promise.resolve({ ok: true, resolved: [], unavailable: [], fetchedAt: 'r' }) } }),
     )
     await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
     expect(dispatcher.status()[0]?.state).toEqual({ kind: 'no-launcher' })
@@ -204,7 +252,7 @@ describe('createDispatcher — no-launcher', () => {
   })
 
   it('stays idle with nothing dispatchable', async () => {
-    const dispatcher = createDispatcher(baseDeps({ readGateClaim: () => Promise.resolve(HELD_CLAIM) }))
+    const dispatcher = createDispatcher(baseDeps({ readOwnership: () => Promise.resolve(OWNED_BY_APP) }))
     await dispatcher.consider(snapshotWith([tickReport({ actionable: [] })]))
     expect(dispatcher.status()[0]?.state).toEqual({ kind: 'idle' })
   })
@@ -221,7 +269,7 @@ describe('createDispatcher — launching', () => {
     const deps = baseDeps({
       store,
       launch,
-      readGateClaim: () => Promise.resolve(HELD_CLAIM),
+      readOwnership: () => Promise.resolve(OWNED_BY_APP),
       fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
       ...overrides,
     })
@@ -300,7 +348,7 @@ describe('createDispatcher — stopFor and standDown', () => {
       baseDeps({
         store,
         launch,
-        readGateClaim: () => Promise.resolve(HELD_CLAIM),
+        readOwnership: () => Promise.resolve(OWNED_BY_APP),
         fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
       }),
     )
@@ -322,7 +370,7 @@ describe('createDispatcher — run state (#314)', () => {
         store,
         launch,
         runState: () => 'draining',
-        readGateClaim: () => Promise.resolve(HELD_CLAIM),
+        readOwnership: () => Promise.resolve(OWNED_BY_APP),
         fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
       }),
     )
@@ -330,16 +378,16 @@ describe('createDispatcher — run state (#314)', () => {
     expect(dispatcher.status()[0]).toMatchObject({ runState: 'draining', state: { kind: 'idle' } })
   })
 
-  it('status() reports this repository\'s own current run state even for the cockpit owner', async () => {
+  it('status() reports this repository\'s own current run state even for the none owner', async () => {
     const dispatcher = createDispatcher(baseDeps({ runState: () => 'paused' }))
     await dispatcher.consider(snapshotWith([tickReport()]))
-    expect(dispatcher.status()[0]).toMatchObject({ owner: 'cockpit', runState: 'paused' })
+    expect(dispatcher.status()[0]).toMatchObject({ owner: 'none', runState: 'paused' })
   })
 })
 
 describe('createDispatcher — shutdown', () => {
   it('consider is a no-op once shutdown has run', async () => {
-    const dispatcher = createDispatcher(baseDeps({ readGateClaim: () => Promise.resolve(HELD_CLAIM) }))
+    const dispatcher = createDispatcher(baseDeps({ readOwnership: () => Promise.resolve(OWNED_BY_APP) }))
     dispatcher.shutdown()
     await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
     expect(dispatcher.status()).toEqual([])

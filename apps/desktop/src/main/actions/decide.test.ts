@@ -11,7 +11,7 @@ import type { ItemsByNumberFetch, ResolvedItem } from '../../shared/github/types
 import type { WriteOutcome } from '../../shared/writes/types'
 import { readAuditLog } from '../writes/audit'
 import type { GhRunner } from '../writes/apply'
-import type { GitRunner } from '../writes/claim'
+import type { GitRunner } from '../dispatch/ownership'
 import { applyItemDecision, defaultApplyItemDecisionDeps } from './decide'
 import type { ApplyItemDecisionDeps } from './decide'
 import type { ReadyEntry } from './apply'

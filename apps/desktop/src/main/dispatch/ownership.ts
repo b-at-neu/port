@@ -11,6 +11,7 @@ import { pathOps as defaultPathOps } from '../platform/paths'
 import type { FileFailureKind } from '../platform/files'
 import type { GitRunner } from '../platform/git'
 import type { PathOps } from '../platform/paths'
+import type { OwnershipSummary } from '../../shared/writes/types'
 
 export type { GitRunner }
 
@@ -108,6 +109,23 @@ export async function readOwnership(params: ReadOwnershipParams): Promise<Owners
       return { kind: 'terminal', since: verdict.since, path, readAt }
     case 'unreadable':
       return { kind: 'unreadable', message: verdict.message, path, readAt }
+  }
+}
+
+/** Drops the path/clock fields an `OwnershipRead` carries for its own
+ *  read-site bookkeeping — the renderer-safe shape every gate and dispatch
+ *  surface actually renders (`shared/writes/types.ts`'s own
+ *  `OwnershipSummary`). */
+export function toOwnershipSummary(read: OwnershipRead): OwnershipSummary {
+  switch (read.kind) {
+    case 'absent':
+      return { kind: 'absent' }
+    case 'app':
+      return { kind: 'app', since: read.since }
+    case 'terminal':
+      return { kind: 'terminal', since: read.since }
+    case 'unreadable':
+      return { kind: 'unreadable', path: read.path, message: read.message }
   }
 }
 

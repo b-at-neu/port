@@ -3,9 +3,10 @@ import { resolveVocabulary } from '../../shared/labels/vocabulary'
 import type { LabelVocabulary } from '../../shared/labels/vocabulary'
 import type { RepoId } from '../../shared/repos'
 import type { GatePreflightFetch } from '../../shared/github/types'
-import type { ClaimRead, LabelWriteRequest, WriteOutcome } from '../../shared/writes/types'
+import type { LabelWriteRequest, OwnershipSummary, WriteOutcome } from '../../shared/writes/types'
+import type { OwnershipRead } from '../dispatch/ownership'
 import type { ReposListResponse } from '../../shared/ipc'
-import { autoApprovePlan, gateAnswer, gateClaimRead, gateClaimSet, gatePreflight } from './gate'
+import { autoApprovePlan, gateAnswer, gatePreflight } from './gate'
 import type { GateDeps } from './gate'
 import type { RegistryDeps } from '../registry'
 
@@ -43,7 +44,8 @@ const READY_ENTRY = {
   diagnostics: [],
 }
 
-const ABSENT_CLAIM: ClaimRead = { state: 'absent', path: '/repo/.agents/gate-claim.json', readAt: '2026-01-01T00:00:00.000Z' }
+const ABSENT_OWNERSHIP: OwnershipRead = { kind: 'absent', path: '/repo/.agents/cockpit.json', readAt: '2026-01-01T00:00:00.000Z' }
+const ABSENT_OWNERSHIP_SUMMARY: OwnershipSummary = { kind: 'absent' }
 
 function depsWith(overrides: Partial<GateDeps>): GateDeps {
   return {
@@ -51,13 +53,7 @@ function depsWith(overrides: Partial<GateDeps>): GateDeps {
     fetchGatePreflight: () => {
       throw new Error('fetchGatePreflight should not be invoked in this case')
     },
-    readGateClaim: () => Promise.resolve(ABSENT_CLAIM),
-    takeClaimScope: () => {
-      throw new Error('takeClaimScope should not be invoked in this case')
-    },
-    releaseClaimScope: () => {
-      throw new Error('releaseClaimScope should not be invoked in this case')
-    },
+    readOwnership: () => Promise.resolve(ABSENT_OWNERSHIP),
     applyLabels: () => {
       throw new Error('applyLabels should not be invoked in this case')
     },
@@ -95,20 +91,23 @@ describe('gatePreflight', () => {
     await expect(gatePreflight({ registryDeps, repoId: REPO_ID, number: 148 }, deps)).rejects.toThrow("gate requires a 'ready' repository, got 'directory-missing'")
   })
 
-  it('carries the claim on a fetch failure', async () => {
+  it('carries ownership on a fetch failure', async () => {
     const deps = depsWith({ fetchGatePreflight: () => Promise.resolve({ ok: false, kind: 'network', message: 'dial tcp', fetchedAt: 't' }) })
     const result = await gatePreflight({ registryDeps, repoId: REPO_ID, number: 148 }, deps)
-    expect(result).toEqual({ kind: 'failed', message: 'dial tcp', claim: ABSENT_CLAIM })
+    expect(result).toEqual({ kind: 'failed', message: 'dial tcp', ownership: ABSENT_OWNERSHIP_SUMMARY })
   })
 
-  it('reports unresolved for a number that does not exist, carrying the claim', async () => {
+  it('reports unresolved for a number that does not exist, carrying ownership', async () => {
     const deps = depsWith({ fetchGatePreflight: () => Promise.resolve(preflightFetch({ item: null })) })
     const result = await gatePreflight({ registryDeps, repoId: REPO_ID, number: 999999 }, deps)
-    expect(result).toEqual({ kind: 'unresolved', claim: ABSENT_CLAIM })
+    expect(result).toEqual({ kind: 'unresolved', ownership: ABSENT_OWNERSHIP_SUMMARY })
   })
 
-  it('resolves an answerable item, splitting ticket and plan markdown at the heading', async () => {
-    const deps = depsWith({ fetchGatePreflight: () => Promise.resolve(preflightFetch()) })
+  it('resolves an answerable item, splitting ticket and plan markdown at the heading, and summarizes ownership', async () => {
+    const deps = depsWith({
+      fetchGatePreflight: () => Promise.resolve(preflightFetch()),
+      readOwnership: () => Promise.resolve({ kind: 'app', since: '2026-01-01T00:00:00.000Z', path: 'p', readAt: 'r' }),
+    })
     const result = await gatePreflight({ registryDeps, repoId: REPO_ID, number: 148 }, deps)
     expect(result.kind).toBe('resolved')
     if (result.kind !== 'resolved') return
@@ -116,6 +115,7 @@ describe('gatePreflight', () => {
     expect(result.preflight.planMarkdown).toBe('## Implementation Plan\n\nPlan text.')
     expect(result.preflight.sessionRequired).toBe(false)
     expect(result.verdict).toEqual({ kind: 'answerable', noPlanBlock: false, assignedElsewhere: [] })
+    expect(result.ownership).toEqual({ kind: 'app', since: '2026-01-01T00:00:00.000Z' })
   })
 
   it('reports noPlanBlock when the body carries no Implementation Plan heading', async () => {
@@ -125,60 +125,6 @@ describe('gatePreflight', () => {
     if (result.kind !== 'resolved') return
     expect(result.preflight.planMarkdown).toBeNull()
     expect(result.verdict).toEqual({ kind: 'answerable', noPlanBlock: true, assignedElsewhere: [] })
-  })
-})
-
-describe('gateClaimRead', () => {
-  it('resolves the entry and reads the claim', async () => {
-    let seenRepoRoot: string | undefined
-    const deps = depsWith({
-      readGateClaim: (p) => {
-        seenRepoRoot = p.repoRoot
-        return Promise.resolve(ABSENT_CLAIM)
-      },
-    })
-    const result = await gateClaimRead({ registryDeps, repoId: REPO_ID }, deps)
-    expect(result).toEqual(ABSENT_CLAIM)
-    expect(seenRepoRoot).toBe('/repo')
-  })
-})
-
-describe('gateClaimSet', () => {
-  it('takes the claim and re-reads afterwards', async () => {
-    let took = false
-    const held: ClaimRead = { state: 'held', owner: 'port-desktop', scopes: ['plan-gate'], unknownScopes: [], claimedAt: '2026-01-01T00:00:00.000Z', path: 'p', readAt: 'r' }
-    const deps = depsWith({
-      takeClaimScope: (p) => {
-        took = true
-        expect(p.owner).toBe('port-desktop')
-        expect(p.scope).toBe('plan-gate')
-        return Promise.resolve({ ok: true, path: 'p' })
-      },
-      readGateClaim: () => Promise.resolve(held),
-    })
-    const result = await gateClaimSet({ registryDeps, repoId: REPO_ID, held: true }, deps)
-    expect(took).toBe(true)
-    expect(result).toEqual({ kind: 'ok', claim: held })
-  })
-
-  it('releases the claim and re-reads afterwards', async () => {
-    const deps = depsWith({ releaseClaimScope: () => Promise.resolve({ ok: true, path: 'p' }), readGateClaim: () => Promise.resolve(ABSENT_CLAIM) })
-    const result = await gateClaimSet({ registryDeps, repoId: REPO_ID, held: false }, deps)
-    expect(result).toEqual({ kind: 'ok', claim: ABSENT_CLAIM })
-  })
-
-  it('reports failed without re-reading when the write itself fails', async () => {
-    let reread = false
-    const deps = depsWith({
-      takeClaimScope: () => Promise.resolve({ ok: false, kind: 'permission-denied', message: 'nope', path: 'p' }),
-      readGateClaim: () => {
-        reread = true
-        return Promise.resolve(ABSENT_CLAIM)
-      },
-    })
-    const result = await gateClaimSet({ registryDeps, repoId: REPO_ID, held: true }, deps)
-    expect(result).toEqual({ kind: 'failed', result: { ok: false, kind: 'permission-denied', message: 'nope', path: 'p' } })
-    expect(reread).toBe(false)
   })
 })
 

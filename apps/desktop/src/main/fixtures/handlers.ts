@@ -8,14 +8,13 @@
 // screen. A write never causes a side effect: each returns its type's own
 // "nothing happened" variant where one exists, and otherwise the minimal ok.
 import type { IpcChannel, IpcMap } from '../../shared/ipc'
-import type { RepoId } from '../../shared/repos'
-import type { RepoDispatchStatus, RepoRunState } from '../../shared/dispatch/types'
+import type { RepoRunState } from '../../shared/dispatch/types'
 import { RUN_TARGET } from '../../shared/dispatch/types'
 import type { TranscriptSource } from '../../shared/sessions/transcript'
 import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
 import { fixtureBoardSnapshot } from './board'
 import { fixtureBacklog } from './backlog'
-import { fixtureClaimPreflight, fixtureGateClaimRead, fixtureGatePreflight } from './dialogs'
+import { fixtureClaimPreflight, fixtureGatePreflight } from './dialogs'
 import { FIXTURE_REPOSITORIES } from './repos'
 import { fixtureAttachEntries, fixturePermissionSnapshots, fixtureSearchResult, fixtureSessionAttach, fixtureSessionsScan, fixtureSessionSnapshots } from './sessions'
 import type { FixtureScenario } from './mode'
@@ -25,14 +24,8 @@ import { fixtureWorktreesReport } from './worktrees'
  *  `fixtureHandlers`'s own return literal until a fixture exists for it. */
 export type FixtureHandlers = { readonly [C in IpcChannel]: (request: IpcMap[C]['request']) => IpcMap[C]['response'] }
 
-const EMPTY_CLAIM = (now: Date): IpcMap['gate:claim:read']['response'] => ({ state: 'absent', path: '/home/you/src/widgets/.agents/gate-claim.json', readAt: now.toISOString() })
-
 function transcriptSourceFor(sessionId: string, agentId: string | null, now: Date): TranscriptSource {
   return { sessionId, agentId, path: '', sizeBytes: 0, modifiedAt: now.toISOString(), recordCount: 0, malformedLines: 0 }
-}
-
-function idleDispatchStatus(repoId: RepoId): RepoDispatchStatus {
-  return { repoId, owner: 'cockpit', state: { kind: 'idle' }, runState: 'dispatching', claimedAt: null, budget: null, observed: [] }
 }
 
 export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populated'): FixtureHandlers {
@@ -73,7 +66,6 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
 
     'claim:preflight': () => fixtureClaimPreflight(now),
     'gate:preflight': () => fixtureGatePreflight(now),
-    'gate:claim:read': () => fixtureGateClaimRead(now),
 
     'runtime:probe': (request) => ({ checkedAt: now.toISOString(), repo: request.repoId === null ? null : 'acme/widgets', elapsedMs: 420, apiKeyInEnvironment: false, diagnosis: 'verified', detail: null }),
 
@@ -86,22 +78,17 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'item:decide': () => ({ ok: true, comment: null, labels: { kind: 'no-op' } }),
 
     'dispatch:control': (request) => {
-      if (request.command === 'halt') return { ok: true, command: 'halt', report: { kind: 'completed', items: [] } }
+      if (request.command === 'halt') return { ok: true, command: 'halt', report: { kind: 'completed', items: [] }, released: true }
+      if (request.command === 'take-over') return { ok: true, command: 'take-over', repoId: request.repoId, runState: { repoId: request.repoId, state: RUN_TARGET.run, since: now.toISOString() } }
       const runState: RepoRunState = { repoId: request.repoId, state: RUN_TARGET[request.command], since: now.toISOString() }
       if (request.command === 'run') return { ok: true, command: 'run', repoId: request.repoId, runState }
       if (request.command === 'drain') return { ok: true, command: 'drain', repoId: request.repoId, runState, persisted: false }
-      return { ok: true, command: 'pause', repoId: request.repoId, runState, report: { kind: 'completed', items: [] } }
+      return { ok: true, command: 'pause', repoId: request.repoId, runState, report: { kind: 'completed', items: [] }, released: true }
     },
-    'dispatch:claim:set': (request) => ({ kind: 'ok', status: idleDispatchStatus(request.repoId) }),
 
     'claim:apply': () => ({ kind: 'refused', verdict: { kind: 'not-found' } }),
 
-    'gate:claim:set': () => ({ kind: 'ok', claim: EMPTY_CLAIM(now) }),
     'gate:answer': () => ({ kind: 'refused', verdict: { kind: 'not-found' } }),
-
-    // `copyRelayReply` would otherwise touch electron's clipboard — fixture
-    // mode reports success without ever calling it.
-    'relay:copy': () => ({ ok: true }),
 
     'session:start': () => ({ ok: false, kind: 'runtime', diagnosis: 'unverified', detail: 'Fixture mode: sessions are not started.' }),
     'session:send': () => ({ ok: false, kind: 'unknown-session' }),
