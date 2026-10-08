@@ -7,7 +7,7 @@
 // list, and `router/legacy-view.ts` belongs to the renderer's web project,
 // not this one. `scripts/checks/desktop-visual.ts` pins the two key sets
 // against each other, both directions.
-export const ROUTE_KEYS = ['board', 'repos', 'sessions', 'search', 'transcript', 'session', 'settings', 'backlog', 'needsYou', 'setup', 'about'] as const
+export const ROUTE_KEYS = ['board', 'repos', 'repo', 'sessions', 'search', 'transcript', 'session', 'settings', 'backlog', 'needsYou', 'setup', 'about'] as const
 
 // Resolved against `process.cwd()` at the point of use (`screens.spec.mts`),
 // never here — this stays the bare, pinned literal `scripts/checks/
@@ -16,6 +16,15 @@ export const SCREENSHOT_DIR = 'out/screenshots'
 
 export const THEMES = ['light', 'dark'] as const
 export type Theme = (typeof THEMES)[number]
+
+// A named sub-state of a capture target, with its own ready selector and
+// an optional click (and hash) to reach it.
+export interface CaptureVariant {
+  readonly name: string
+  readonly hash?: string
+  readonly click?: string
+  readonly ready: string
+}
 
 interface CaptureTarget {
   readonly kind: 'capture'
@@ -28,6 +37,9 @@ interface CaptureTarget {
   /** A selector that only exists once the screen has actually loaded — never
    *  the container itself, which exists the instant the route mounts. */
   readonly ready: string
+  /** Extra states of this same screen, each written to its own
+   *  `${key}-${variant}-${theme}.png` (`screens.spec.mts`). */
+  readonly variants?: readonly CaptureVariant[]
 }
 
 interface SkipTarget {
@@ -61,8 +73,30 @@ const LEGACY_SCREEN_REASON = 'Legacy screen, reachable only through in-app click
  *  typecheck` in this file, never silently falling through to "not
  *  captured". */
 export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Target>> = {
-  board: { kind: 'capture', hash: '#/board', container: '#board-view', ready: '.board-row' },
-  repos: { kind: 'capture', hash: '#/repositories', container: '#repositories-view', ready: '.repo-card' },
+  board: {
+    kind: 'capture',
+    hash: '#/board',
+    container: '#react-root',
+    ready: '[data-slot="ticket-row"]',
+    variants: [
+      { name: 'detail', hash: '#/board?item=fixture-acme-widgets:38', ready: '[role="complementary"]' },
+      { name: 'gate-review', click: 'text=Review plan', ready: '[data-slot="dialog-content"]' },
+      { name: 'claim', click: 'text=Work on ticket', ready: '[data-slot="dialog-content"]' },
+      { name: 'halt', click: 'text=Halt everything', ready: '[data-slot="alert-dialog-content"]' },
+    ],
+  },
+  repos: { kind: 'capture', hash: '#/repositories', container: '#react-root', ready: '[data-slot="repo-row"]' },
+  repo: {
+    kind: 'capture',
+    hash: '#/repositories/fixture-acme-widgets',
+    container: '#react-root',
+    ready: '[role="tablist"]',
+    variants: [
+      { name: 'worktrees', hash: '#/repositories/fixture-acme-widgets?tab=worktrees', click: 'text=Inspect worktrees', ready: '[data-slot="worktree-row"]' },
+      { name: 'denials', hash: '#/repositories/fixture-acme-widgets?tab=denials', ready: 'text=No denial bursts' },
+      { name: 'problem', hash: '#/repositories/fixture-acme-legacy-site', ready: '[role="alert"]' },
+    ],
+  },
   // No hosted session exists in fixture mode (`session:list` is always
   // `[]`), so the screen's own empty state is what actually renders —
   // `.session-view__empty`, never the composer, which `session/view.ts`

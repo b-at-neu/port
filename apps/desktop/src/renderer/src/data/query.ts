@@ -25,12 +25,15 @@ export function createQueryClient(): QueryClient {
  *  `connectQueryCache` keeps it fresh from the `board:update` push — a
  *  background refetch here would race that cache write. `backlog:list` gets
  *  a 60s `staleTime` (the Backlog screen's own read) — open issues don't
- *  move fast enough to justify refetching on every remount. */
+ *  move fast enough to justify refetching on every remount. `worktrees:report`
+ *  also gets `staleTime: Infinity` (#319) — a reclamation report runs only on
+ *  an explicit Inspect/Refresh (`worktrees-tab.tsx` passes `enabled: false`
+ *  and calls `refetch()` itself), never polled. */
 export function ipcQueryOptions<C extends QueryChannel>(channel: C, request?: IpcMap[C]['request']) {
   return queryOptions({
     queryKey: [channel, request ?? null] as const,
     queryFn: () => invoke(channel, request),
-    ...(channel === 'board:snapshot' ? { staleTime: Infinity } : {}),
+    ...(channel === 'board:snapshot' || channel === 'worktrees:report' ? { staleTime: Infinity } : {}),
     ...(channel === 'backlog:list' ? { staleTime: 60_000 } : {}),
   })
 }

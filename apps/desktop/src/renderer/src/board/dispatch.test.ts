@@ -1,18 +1,19 @@
-// Covers the header controls' pure copy functions — `buildHaltReport` itself
-// needs a DOM, which this workspace's vitest config does not provide
-// (`environment: 'node'`), the same gap `tick.test.ts` already documents.
-// `handleHaltClick` reaches `window.port`, so — like `board/actions.ts`'s
-// own `handleItemAction` — it is left untested here too; only the derived
-// copy is asserted. Per-repository run/drain/pause copy moved to
-// `run-state.test.ts` (#314).
+// Covers the header controls' pure copy functions. `runHalt`/`setDispatchClaim`
+// reach `window.port`, so — like `board/actions.ts`'s own `runItemAction` —
+// they are left untested here too; only the derived copy is asserted.
+// Per-repository run/drain/pause copy moved to `run-state.test.ts` (#314).
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../../../shared/repos'
 import type { HaltItemOutcome, HaltReport } from '../../../shared/dispatch/types'
 import { haltButtonLabel, haltAbortedCopy, haltHeadingCopy, haltItemLine } from './dispatch'
 
 describe('haltButtonLabel', () => {
-  it('reads Halt everything before any confirm step is armed', () => {
-    expect(haltButtonLabel(4)).toBe('Halt everything')
+  it('reads Halt everything when nothing is pending', () => {
+    expect(haltButtonLabel(false)).toBe('Halt everything')
+  })
+
+  it('reads Halting… while the request is in flight', () => {
+    expect(haltButtonLabel(true)).toBe('Halting…')
   })
 })
 

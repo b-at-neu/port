@@ -159,7 +159,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 **`apps/desktop/src/shared/markdown/`**
 - pure, bounded-subset markdown parser — no `node:` import, nothing from `main/`
 - link scheme allowlist is `http://`/`https://` only; everything else renders as literal text
-- `renderer/src/markdown.ts` is its only consumer; builds DOM via `textContent`, never `innerHTML`
+- `renderer/src/components/markdown.tsx` is its only consumer; renders React elements, never `dangerouslySetInnerHTML`
 
 ## 2. Data and integrity
 

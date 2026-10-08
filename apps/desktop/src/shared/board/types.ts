@@ -192,6 +192,12 @@ export interface BoardRepositorySummary {
 export interface BoardProjection {
   readonly groupBy: GroupBy
   readonly groups: readonly BoardGroup[]
+  /** Every row, sorted the same way `groups` orders them — unlike `groups`,
+   *  never drops a row whose `stageLabel` matches no `LABEL_DEFAULTS` entry
+   *  (an unstaged item). The Board screen's three-section split
+   *  (`board/sections.ts`) needs the full set; `groups` stays scoped to the
+   *  legacy stage/repo grouping it already served. */
+  readonly rows: readonly BoardItemRow[]
   readonly notReady: readonly Extract<RepositoryState, { readonly ok: false }>[]
   readonly repositorySummaries: readonly BoardRepositorySummary[]
   readonly totalItems: number

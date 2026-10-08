@@ -8,7 +8,7 @@ import type { RepositoryHealth } from '../../../shared/board/types'
 import { initialHealth } from '../../../shared/board/types'
 import type { TickActionable, TickClaim, TickHeld, TickObservation, TickReport } from '../../../shared/tick/types'
 import type { RunState } from '../../../shared/dispatch/types'
-import { clockLineCopy, cycleDetailCopy, heldDetailCopy, observationDetailCopy, repositoryLineCopy, stalledDetailCopy, storeLineFor, uncheckedDetailCopy } from './tick'
+import { clockLineCopy, cycleDetailCopy, heldDetailCopy, itemDetailLines, observationDetailCopy, repositoryDetailLines, repositoryLineCopy, stalledDetailCopy, storeLineFor, uncheckedDetailCopy } from './tick'
 
 const NOW = new Date('2026-01-01T00:00:00.000Z')
 const DISPATCHING: RunState = 'dispatching'
@@ -242,6 +242,47 @@ describe('stalledDetailCopy', () => {
   it('#292: owner "app" makes no difference when there is no retry key to apply', () => {
     const confirmed: TickClaim = { ...base, class: 'stalled-confirmed', retryKey: null }
     expect(stalledDetailCopy(confirmed, 'app')).toBe('#146 reviewing — no claim, and this app dispatched it.')
+  })
+})
+
+describe('repositoryDetailLines', () => {
+  it('concatenates held, unchecked, cycle, stalled and observation lines', () => {
+    const rep = report({
+      held: [{ number: 1, kind: 'issue', trigger: 'ready', reason: 'unowned', contention: null, escalation: null }],
+      actionable: [{ number: 2, kind: 'pull-request', trigger: 'needsRevision', agent: 'revise', unchecked: true, cycle: { count: 1, cap: 5 } }],
+      claims: [{ number: 3, kind: 'issue', inFlight: 'inProgress', class: 'no-record', retryKey: null }],
+      observations: [{ kind: 'refresh-deferred', number: 4, itemKind: 'pull-request' }],
+    })
+    const lines = repositoryDetailLines(rep, 'cockpit')
+    expect(lines).toEqual([
+      '#1 unassigned — no cockpit will pick this up.',
+      '#2 has no file list in its plan — dispatching unchecked.',
+      '#2 revise — cycle 1 of 5.',
+      "#3 in progress — no claim, and this app didn't dispatch it, so it can't tell.",
+      '#4 conflicts too — refreshes are capped this poll; it goes next.',
+    ])
+  })
+
+  it('is empty for a blind repository', () => {
+    expect(repositoryDetailLines(report({ blind: { reason: 'viewer-unknown' } }), 'cockpit')).toEqual([])
+  })
+})
+
+describe('itemDetailLines', () => {
+  it('narrows every source to one item number', () => {
+    const rep = report({
+      held: [
+        { number: 1, kind: 'issue', trigger: 'ready', reason: 'unowned', contention: null, escalation: null },
+        { number: 2, kind: 'issue', trigger: 'ready', reason: 'unowned', contention: null, escalation: null },
+      ],
+      claims: [{ number: 1, kind: 'issue', inFlight: 'inProgress', class: 'no-record', retryKey: null }],
+    })
+    expect(itemDetailLines(rep, 1, 'cockpit')).toEqual(['#1 unassigned — no cockpit will pick this up.', "#1 in progress — no claim, and this app didn't dispatch it, so it can't tell."])
+    expect(itemDetailLines(rep, 2, 'cockpit')).toEqual(['#2 unassigned — no cockpit will pick this up.'])
+  })
+
+  it('is empty for a blind repository', () => {
+    expect(itemDetailLines(report({ blind: { reason: 'viewer-unknown' } }), 1, 'cockpit')).toEqual([])
   })
 })
 

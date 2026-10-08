@@ -20,7 +20,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
   const scopeFile = 'apps/desktop/src/main/writes/scope.ts';
   const writesApplyFile = 'apps/desktop/src/main/writes/apply.ts';
   const copyFile = `${rendererGateDir}/copy.ts`;
-  const markdownFile = 'apps/desktop/src/renderer/src/markdown.ts';
+  const markdownFile = 'apps/desktop/src/renderer/src/components/markdown.tsx';
   const coordinationFile = 'docs/COORDINATION.md';
 
   const srcDir = join(root, 'apps/desktop/src');
@@ -114,7 +114,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
   }
 
   // --- shared/markdown/ imports no node: builtin and nothing from main/; renderer/src/
-  // markdown.ts is the only renderer file importing it, the one DOM-building consumer. ---
+  // components/markdown.tsx is the only renderer file importing it, the one DOM-building consumer. ---
   {
     let impure = false;
     for (const f of sharedMarkdownFiles) {

@@ -52,7 +52,15 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
 
   // --- guard: no data-action= under shell/, backlog/, components/ ---------
   {
-    const scanDirs = ['apps/desktop/src/renderer/src/shell', 'apps/desktop/src/renderer/src/backlog', 'apps/desktop/src/renderer/src/components'];
+    const scanDirs = [
+      'apps/desktop/src/renderer/src/shell',
+      'apps/desktop/src/renderer/src/backlog',
+      'apps/desktop/src/renderer/src/components',
+      'apps/desktop/src/renderer/src/board',
+      'apps/desktop/src/renderer/src/repositories',
+      'apps/desktop/src/renderer/src/claim',
+      'apps/desktop/src/renderer/src/gate',
+    ];
     let violated = false;
     for (const dir of scanDirs) {
       for (const f of walk(join(root, dir)).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'))) {
