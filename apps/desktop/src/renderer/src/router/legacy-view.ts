@@ -87,16 +87,27 @@ export interface BoardSearch {
 
 const BOARD_ITEM_RE = /^(.+):(\d+)$/
 
+/** `item` is the `<repoId>:<number>` URL string on a fresh parse, or an already-typed
+ *  `BoardItemRef` when `validateSearch` re-runs on an in-app `navigate()`'s own result. */
+function parseBoardItemRef(item: unknown): BoardItemRef | null {
+  if (typeof item === 'string') {
+    const match = BOARD_ITEM_RE.exec(item)
+    return match !== null && match[1] !== undefined && match[2] !== undefined ? { repoId: match[1] as RepoId, number: Number(match[2]) } : null
+  }
+  if (item !== null && typeof item === 'object' && 'repoId' in item && 'number' in item) {
+    const { repoId, number } = item as Record<string, unknown>
+    if (typeof repoId === 'string' && typeof number === 'number') return { repoId: repoId as RepoId, number }
+  }
+  return null
+}
+
 /** `item=<repoId>:<number>` keeps the Board's own selection in the URL
  *  (plan's own **Detail pane**: "selection kept in `?item=`"), so a
- *  relaunch or a back/forward reopens the same row. Fails toward no
- *  selection rather than throwing on a malformed value. */
+ *  relaunch or a back/forward reopens the same row. */
 export function boardSearchFromRaw(search: Readonly<Record<string, unknown>>): BoardSearch {
   const { item, group, repo } = search
-  const match = typeof item === 'string' ? BOARD_ITEM_RE.exec(item) : null
-  const parsedItem: BoardItemRef | null = match !== null && match[1] !== undefined && match[2] !== undefined ? { repoId: match[1] as RepoId, number: Number(match[2]) } : null
   return {
-    item: parsedItem,
+    item: parseBoardItemRef(item),
     group: group === 'repo' ? 'repo' : 'phase',
     repo: typeof repo === 'string' && repo !== '' ? (repo as RepoId) : null,
   }
