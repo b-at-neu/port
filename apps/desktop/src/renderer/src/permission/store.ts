@@ -29,7 +29,7 @@ function documentTitleFor(count: number): string {
 export interface PermissionStoreDeps {
   readonly answerPermission: (params: { readonly sessionKey: QueuedPermission['sessionKey']; readonly permissionId: string; readonly decision: PermissionDecision; readonly message: string | null }) => Promise<SessionPermissionAnswerResult>
   readonly sessionList: () => Promise<readonly HostedSessionSnapshot[]>
-  readonly onSessionStatus: (listener: (snapshot: HostedSessionSnapshot) => void) => () => void
+  readonly subscribeSessionStatus: (listener: (snapshot: HostedSessionSnapshot) => void) => () => void
   readonly now: () => number
   readonly setDocumentTitle: (title: string) => void
 }
@@ -123,7 +123,7 @@ export function createPermissionStore(deps: PermissionStoreDeps): PermissionStor
         console.error('Failed to load the initial permission queue', err)
       })
 
-    deps.onSessionStatus((status) => {
+    deps.subscribeSessionStatus((status) => {
       queue = applySnapshot(queue, status)
       pruneStaleEntries()
       notify()
@@ -173,7 +173,7 @@ function sharedStore(): PermissionStore {
   shared ??= createPermissionStore({
     answerPermission: (params) => invoke('session:permission:answer', params),
     sessionList: () => window.port.sessionList(),
-    onSessionStatus: (listener) => sharedSubscriptions().subscribe('session:status', listener),
+    subscribeSessionStatus: (listener) => sharedSubscriptions().subscribe('session:status', listener),
     now: () => Date.now(),
     setDocumentTitle: (title) => {
       document.title = title

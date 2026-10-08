@@ -4,6 +4,7 @@ import type { IpcChannel } from '../../shared/ipc'
 import { needsYouItems } from '../../shared/board/needs-you'
 import type { RepoId } from '../../shared/repos'
 import { fixtureHandlers } from './handlers'
+import { STREAMING_KEY } from './sessions'
 
 const WIDGETS = 'fixture-acme-widgets' as RepoId
 
@@ -140,5 +141,32 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
     const states = report.worktrees.map((w) => w.state).sort()
     expect(states).toEqual(['active', 'dirty', 'done', 'locked'])
     expect(report.orphanDirs).toHaveLength(1)
+  })
+
+  it('reports session:list with four snapshots covering streaming, a pending permission, ended, and starting', () => {
+    const snapshots = handlers['session:list'](undefined)
+    expect(snapshots.map((s) => s.phase).sort()).toEqual(['ended', 'ready', 'starting', 'streaming'])
+    expect(snapshots.find((s) => s.phase === 'ready')?.pendingPermissions).toHaveLength(1)
+    expect(snapshots.find((s) => s.phase === 'ended')?.end?.diagnosis).not.toBeNull()
+  })
+
+  it('reports session:attach for the streaming fixture with a user, assistant, tool-call and thinking entry', () => {
+    const result = handlers['session:attach']({ sessionKey: STREAMING_KEY })
+    if (!result.ok) throw new Error('fixture session:attach unexpectedly failed')
+    expect(result.entries.map((e) => e.type)).toEqual(['user-text', 'assistant-text', 'tool-call', 'thinking'])
+  })
+
+  it('reports sessions:scan with at least one session and one agent', () => {
+    const scan = handlers['sessions:scan'](undefined)
+    if (!scan.ok) throw new Error('fixture sessions:scan unexpectedly failed')
+    expect(scan.sessions.length).toBeGreaterThan(0)
+    expect(scan.agents.length).toBeGreaterThan(0)
+  })
+
+  it('reports search:query with at least one group and hit', () => {
+    const result = handlers['search:query']({ query: 'widgets', scope: { kind: 'all' } })
+    if (!result.ok) throw new Error('fixture search:query unexpectedly failed')
+    expect(result.groups.length).toBeGreaterThan(0)
+    expect(result.groups[0]?.hits.length).toBeGreaterThan(0)
   })
 })

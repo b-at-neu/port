@@ -41,7 +41,7 @@ function fakeDeps(overrides: Partial<PermissionStoreDeps> = {}): PermissionStore
   const deps: PermissionStoreDeps = {
     answerPermission: vi.fn().mockResolvedValue({ ok: true }),
     sessionList: vi.fn().mockResolvedValue([]),
-    onSessionStatus: (listener) => {
+    subscribeSessionStatus: (listener) => {
       statusListener = listener
       return () => {}
     },

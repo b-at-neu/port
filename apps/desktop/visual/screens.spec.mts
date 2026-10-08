@@ -49,21 +49,6 @@ test.afterEach(async ({}, testInfo) => {
 for (const [key, target] of Object.entries(SCREENSHOT_TARGETS)) {
   for (const theme of THEMES) {
     test(`${key} · ${theme}`, async () => {
-      if (target.kind === 'skip') {
-        await fixture.page.evaluate((hash: string) => {
-          location.hash = hash
-        }, target.hash)
-        const visible = await fixture.page
-          .locator('#react-root')
-          .isVisible()
-          .catch(() => false)
-        if (visible) {
-          throw new Error(`'${key}' now renders through React. Give it a capture target in visual/targets.mts.`)
-        }
-        test.skip(true, target.reason)
-        return
-      }
-
       await setTheme(fixture.page, theme)
       await settle(fixture.page, target)
 
@@ -74,12 +59,10 @@ for (const [key, target] of Object.entries(SCREENSHOT_TARGETS)) {
       await fixture.page.screenshot({ path: join(SCREENSHOT_DIR, `${key}-${theme}.png`), animations: 'disabled', caret: 'hide' })
     })
 
-    const captureTarget = target.kind === 'capture' ? target : null
-    for (const variant of captureTarget?.variants ?? []) {
+    for (const variant of target.variants ?? []) {
       test(`${key} · ${variant.name} · ${theme}`, async () => {
-        if (captureTarget === null) return
         await setTheme(fixture.page, theme)
-        await settle(fixture.page, captureTarget, variant)
+        await settle(fixture.page, target, variant)
 
         if (pageErrors.length > 0) {
           throw new Error(`'${key} · ${variant.name} · ${theme}' hit a page or console error: ${pageErrors.join('; ')}`)

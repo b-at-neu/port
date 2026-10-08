@@ -87,6 +87,7 @@ function EmptyPanel({ readyRepos }: { readonly readyRepos: readonly Extract<Repo
         icon={MessageSquare}
         message={EMPTY_TITLE}
         className="py-0"
+        data-slot="session-empty"
         action={readyRepos.length === 0 ? undefined : { label: 'New session', onClick: () => chosen !== undefined && startNewSession(chosen.id) }}
       />
       {readyRepos.length === 0 ? (

@@ -8,7 +8,7 @@ import type { Reporter } from '../lib/report.ts';
 export default async function ({ expect, fail, ok }: Reporter) {
   const searchDir = 'apps/desktop/src/main/search';
   const sharedSearchTypesFile = 'apps/desktop/src/shared/search/types.ts';
-  const rendererSearchFile = 'apps/desktop/src/renderer/src/search.ts';
+  const rendererSearchCopyFile = 'apps/desktop/src/renderer/src/search/copy.ts';
   const srcDir = join(root, 'apps/desktop/src');
   const allFiles = walk(srcDir).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
 
@@ -46,11 +46,11 @@ export default async function ({ expect, fail, ok }: Reporter) {
   // before rendering an empty result — a partial search must never render as exhaustive. ---
   {
     const typesFile = allFiles.find((f) => relOf(f) === sharedSearchTypesFile);
-    const rendererFile = allFiles.find((f) => relOf(f) === rendererSearchFile);
+    const rendererFile = allFiles.find((f) => relOf(f) === rendererSearchCopyFile);
     if (!typesFile) {
       fail('desktop-search', `${sharedSearchTypesFile} does not exist`);
     } else if (!rendererFile) {
-      fail('desktop-search', `${rendererSearchFile} does not exist`);
+      fail('desktop-search', `${rendererSearchCopyFile} does not exist`);
     } else {
       const typesText = readFileSync(typesFile, 'utf8');
       const rendererText = readFileSync(rendererFile, 'utf8');
@@ -58,7 +58,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
       const missing = requiredFields.filter((field) => !new RegExp(`\\b${field}\\s*:`).test(typesText));
       if (missing.length > 0) {
         fail('desktop-search', `${sharedSearchTypesFile}'s SearchResult is missing field(s): ${missing.join(', ')}`);
-      } else expect(/\bcomplete\b/.test(rendererText), 'desktop-search', `${rendererSearchFile} never references 'complete' -- a partial search must never render as an exhaustive empty result`);
+      } else expect(/\bcomplete\b/.test(rendererText), 'desktop-search', `${rendererSearchCopyFile} never references 'complete' -- a partial search must never render as an exhaustive empty result`);
     }
   }
 

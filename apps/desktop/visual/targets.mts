@@ -1,13 +1,12 @@
-// The visual harness's route → capture/skip table (#317) — exhaustive by
-// type over its own `ROUTE_KEYS`, so a route added to the router fails
-// `pnpm typecheck` here until it is classified one way or the other.
-// `ROUTE_KEYS` is a hand-maintained copy of `router/legacy-view.ts`'s own
-// `ROUTE_IDS` keys, never an import of it — `tsconfig.node.json`'s own
-// project (`composite: true`) cannot admit a file outside its `include`
-// list, and `router/legacy-view.ts` belongs to the renderer's web project,
-// not this one. `scripts/checks/desktop-visual.ts` pins the two key sets
-// against each other, both directions.
-export const ROUTE_KEYS = ['board', 'repos', 'repo', 'sessions', 'search', 'transcript', 'session', 'settings', 'backlog', 'needsYou', 'setup', 'about'] as const
+// The visual harness's route → capture table (#317) — exhaustive by type
+// over its own `ROUTE_KEYS`, so a route added to the router fails `pnpm
+// typecheck` here until it is classified. `ROUTE_KEYS` is a hand-maintained
+// copy of `router/routes.ts`'s own `ROUTE_IDS` keys, never an import of it —
+// `tsconfig.node.json`'s own project (`composite: true`) cannot admit a file
+// outside its `include` list, and `router/routes.ts` belongs to the
+// renderer's web project, not this one. `scripts/checks/desktop-visual.ts`
+// pins the two key sets against each other, both directions.
+export const ROUTE_KEYS = ['board', 'repos', 'repo', 'history', 'search', 'transcript', 'session', 'settings', 'backlog', 'needsYou', 'setup', 'about'] as const
 
 // Resolved against `process.cwd()` at the point of use (`screens.spec.mts`),
 // never here — this stays the bare, pinned literal `scripts/checks/
@@ -18,16 +17,16 @@ export const THEMES = ['light', 'dark'] as const
 export type Theme = (typeof THEMES)[number]
 
 // A named sub-state of a capture target, with its own ready selector and
-// an optional click (and hash) to reach it.
+// an optional click/type (and hash) to reach it.
 export interface CaptureVariant {
   readonly name: string
   readonly hash?: string
   readonly click?: string
+  readonly type?: { readonly selector: string; readonly text: string }
   readonly ready: string
 }
 
-interface CaptureTarget {
-  readonly kind: 'capture'
+export interface Target {
   /** The route's own hash, set via `location.hash` before waiting for
    *  `ready`. */
   readonly hash: string
@@ -42,30 +41,19 @@ interface CaptureTarget {
   readonly variants?: readonly CaptureVariant[]
 }
 
-interface SkipTarget {
-  readonly kind: 'skip'
-  readonly hash: string
-  /** Shown in the test's own skip message, and asserted against if
-   *  `#react-root` ever becomes visible for this route (see
-   *  `screens.spec.mts`). */
-  readonly reason: string
-}
-
-export type Target = CaptureTarget | SkipTarget
-
 // Extra captures run under a non-default fixture scenario, alongside
 // `SCREENSHOT_TARGETS`'s own populated-scenario set.
 export interface VariantTarget {
   readonly name: string
   readonly scenario: 'empty'
-  readonly target: CaptureTarget
+  readonly target: Target
 }
 
 export const VARIANT_TARGETS: readonly VariantTarget[] = [
-  { name: 'needs-you-empty', scenario: 'empty', target: { kind: 'capture', hash: '#/needs-you', container: '#react-root', ready: '[data-slot="needs-you-empty"]' } },
+  { name: 'needs-you-empty', scenario: 'empty', target: { hash: '#/needs-you', container: '#app', ready: '[data-slot="needs-you-empty"]' } },
 ]
 
-const LEGACY_SCREEN_REASON = 'Legacy screen, reachable only through in-app clicks; a deep link shows an unloaded shell. Becomes a capture target when #320 migrates it.'
+const FIXTURE_SESSION_ID = 'fixture-session-streaming'
 
 /** One target per `ROUTE_KEYS` entry — the `Readonly<Record<…>>` annotation
  *  is what makes this exhaustive: a key added to `ROUTE_KEYS` (and, via the
@@ -74,9 +62,8 @@ const LEGACY_SCREEN_REASON = 'Legacy screen, reachable only through in-app click
  *  captured". */
 export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Target>> = {
   board: {
-    kind: 'capture',
     hash: '#/board',
-    container: '#react-root',
+    container: '#app',
     ready: '[data-slot="ticket-row"]',
     variants: [
       { name: 'detail', hash: '#/board?item=fixture-acme-widgets:38', ready: '[role="complementary"]' },
@@ -85,11 +72,10 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'halt', click: 'text=Halt everything', ready: '[data-slot="alert-dialog-content"]' },
     ],
   },
-  repos: { kind: 'capture', hash: '#/repositories', container: '#react-root', ready: '[data-slot="repo-row"]' },
+  repos: { hash: '#/repositories', container: '#app', ready: '[data-slot="repo-row"]' },
   repo: {
-    kind: 'capture',
     hash: '#/repositories/fixture-acme-widgets',
-    container: '#react-root',
+    container: '#app',
     ready: '[role="tablist"]',
     variants: [
       { name: 'worktrees', hash: '#/repositories/fixture-acme-widgets?tab=worktrees', click: 'text=Inspect worktrees', ready: '[data-slot="worktree-row"]' },
@@ -97,17 +83,31 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'problem', hash: '#/repositories/fixture-acme-legacy-site', ready: '[role="alert"]' },
     ],
   },
-  // No hosted session exists in fixture mode (`session:list` is always
-  // `[]`), so the screen's own empty state is what actually renders —
-  // `.session-view__empty`, never the composer, which `session/view.ts`
-  // keeps hidden until a session is selected.
-  session: { kind: 'capture', hash: '#/session', container: '#session-view', ready: '.session-view__empty' },
-  settings: { kind: 'capture', hash: '#/settings', container: '#react-root', ready: '#react-root h2' },
-  backlog: { kind: 'capture', hash: '#/backlog', container: '#react-root', ready: '[data-slot="backlog-row"]' },
-  needsYou: { kind: 'capture', hash: '#/needs-you', container: '#react-root', ready: '[data-slot="needs-you-item"]' },
-  setup: { kind: 'capture', hash: '#/setup', container: '#react-root', ready: '#react-root [data-step]' },
-  about: { kind: 'capture', hash: '#/about', container: '#react-root', ready: '#react-root [data-about-notice]' },
-  sessions: { kind: 'skip', hash: '#/repositories/fixture-acme-widgets/sessions', reason: LEGACY_SCREEN_REASON },
-  search: { kind: 'skip', hash: '#/repositories/fixture-acme-widgets/search', reason: LEGACY_SCREEN_REASON },
-  transcript: { kind: 'skip', hash: '#/transcript/fixture-session', reason: LEGACY_SCREEN_REASON },
+  history: { hash: '#/history', container: '#app', ready: '[data-slot="session-row"]' },
+  search: {
+    hash: '#/search',
+    container: '#app',
+    ready: 'text=port reads transcripts',
+    variants: [{ name: 'results', type: { selector: 'input[placeholder^="An error"]', text: 'widgets' }, ready: 'mark' }],
+  },
+  transcript: { hash: `#/transcript/${FIXTURE_SESSION_ID}`, container: '#app', ready: '[data-slot="tool-call-row"]' },
+  // `session:list` carries four fixture snapshots (empty, streaming,
+  // permission, ended, starting) — the base target shows the empty state,
+  // a variant per other snapshot's own `?key=`.
+  session: {
+    hash: '#/session',
+    container: '#app',
+    ready: '[data-slot="session-empty"]',
+    variants: [
+      { name: 'streaming', hash: `#/session?key=${FIXTURE_SESSION_ID}`, ready: '[data-slot="tool-call-row"]' },
+      { name: 'permission', hash: '#/session?key=fixture-session-permission', ready: '[role="alertdialog"]' },
+      { name: 'ended', hash: '#/session?key=fixture-session-ended', ready: 'text=Crashed' },
+      { name: 'starting', hash: '#/session?key=fixture-session-starting', ready: 'text=Starting a session' },
+    ],
+  },
+  settings: { hash: '#/settings', container: '#app', ready: '#app h2' },
+  backlog: { hash: '#/backlog', container: '#app', ready: '[data-slot="backlog-row"]' },
+  needsYou: { hash: '#/needs-you', container: '#app', ready: '[data-slot="needs-you-item"]' },
+  setup: { hash: '#/setup', container: '#app', ready: '#app [data-step]' },
+  about: { hash: '#/about', container: '#app', ready: '#app [data-about-notice]' },
 }

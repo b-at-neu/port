@@ -102,7 +102,7 @@ export async function setTheme(page: Page, theme: Theme): Promise<void> {
 
 // Navigates to the target's (or variant's) hash, waits for the container,
 // clicks the variant's own selector if it has one, then waits ready/settle.
-export async function settle(page: Page, target: Extract<Target, { readonly kind: 'capture' }>, variant?: CaptureVariant): Promise<void> {
+export async function settle(page: Page, target: Target, variant?: CaptureVariant): Promise<void> {
   const hash = variant?.hash ?? target.hash
   const ready = variant?.ready ?? target.ready
 
@@ -127,6 +127,17 @@ export async function settle(page: Page, target: Extract<Target, { readonly kind
       await page.locator(variant.click).first().click({ timeout: WAIT_TIMEOUT_MS })
     } catch (error) {
       throw new Error(`${hash}: click target '${variant.click}' never became clickable — ${String(error)}`, { cause: error })
+    }
+  }
+
+  // Types a canned query into a field and submits it — the search target's own populated capture.
+  if (variant?.type !== undefined && !alreadyReady) {
+    try {
+      const field = page.locator(variant.type.selector).first()
+      await field.fill(variant.type.text, { timeout: WAIT_TIMEOUT_MS })
+      await field.press('Enter')
+    } catch (error) {
+      throw new Error(`${hash}: type target '${variant.type.selector}' never became fillable — ${String(error)}`, { cause: error })
     }
   }
 

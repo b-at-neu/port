@@ -79,19 +79,19 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   }
 
   // --- visual/targets.mts's ROUTE_KEYS matches the real ROUTE_IDS, both ways
-  // pin: `visual/targets.mts`'s `ROUTE_KEYS` ↔ `router/legacy-view.ts`'s `ROUTE_IDS` keys, both directions
+  // pin: `visual/targets.mts`'s `ROUTE_KEYS` ↔ `router/routes.ts`'s `ROUTE_IDS` keys, both directions
   {
     const targetsUrl = pathToFileURL(join(root, 'apps/desktop/visual/targets.mts')).href;
-    const legacyViewUrl = pathToFileURL(join(root, 'apps/desktop/src/renderer/src/router/legacy-view.ts')).href;
+    const routesUrl = pathToFileURL(join(root, 'apps/desktop/src/renderer/src/router/routes.ts')).href;
     const targetsMod: { SCREENSHOT_TARGETS?: Record<string, unknown> } = await import(targetsUrl);
-    const legacyMod: { ROUTE_IDS?: Record<string, unknown> } = await import(legacyViewUrl);
+    const routesMod: { ROUTE_IDS?: Record<string, unknown> } = await import(routesUrl);
     const targetKeys = new Set(Object.keys(targetsMod.SCREENSHOT_TARGETS ?? {}));
-    const routeKeys = new Set(Object.keys(legacyMod.ROUTE_IDS ?? {}));
+    const routeKeys = new Set(Object.keys(routesMod.ROUTE_IDS ?? {}));
     const onlyInTargets = [...targetKeys].filter((k) => !routeKeys.has(k));
     const onlyInRoutes = [...routeKeys].filter((k) => !targetKeys.has(k));
     if (targetKeys.size === 0 || routeKeys.size === 0) {
       fail('desktop-visual', 'could not read SCREENSHOT_TARGETS or ROUTE_IDS as a non-empty object — the pin cannot pass vacuously if either export is removed');
-    } else expect(!(onlyInTargets.length > 0 || onlyInRoutes.length > 0), 'desktop-visual', `visual/targets.mts's ROUTE_KEYS and router/legacy-view.ts's ROUTE_IDS disagree — only in targets: [${onlyInTargets.join(', ')}], only in ROUTE_IDS: [${onlyInRoutes.join(', ')}]`);
+    } else expect(!(onlyInTargets.length > 0 || onlyInRoutes.length > 0), 'desktop-visual', `visual/targets.mts's ROUTE_KEYS and router/routes.ts's ROUTE_IDS disagree — only in targets: [${onlyInTargets.join(', ')}], only in ROUTE_IDS: [${onlyInRoutes.join(', ')}]`);
   }
 
   // pin: `visual/targets.mts`'s `SCREENSHOT_DIR` ↔ `.github/workflows/visual.yml`, the root
