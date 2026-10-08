@@ -10,7 +10,7 @@ import { trackLastRoute } from './shell/prefs'
 import { initSidebarCollapsed, listNavigatorFor, openPalette, setRenaming, toggleSidebarCollapsed } from './shell/stores'
 import { shellPrefs, setSidebarCollapsed } from './shell/prefs'
 import { installKeyboardMap } from './shell/keyboard'
-import { liveSessionKeys, selectSession, startNewSession } from './session/actions'
+import { liveSessionKeys, selectSession, setSessionsQueryClient, startNewSession } from './session/actions'
 import { selectedSession } from './session/selection'
 import { toast } from 'sonner'
 import { shouldRedirectToSetup } from './setup/launch-redirect'
@@ -39,6 +39,7 @@ themeStore().apply()
 const queryClient = createQueryClient()
 connectQueryCache(queryClient)
 connectItemActionPruning(queryClient)
+setSessionsQueryClient(queryClient)
 initSidebarCollapsed(shellPrefs().sidebarCollapsed)
 if (app) mountReact(app, queryClient)
 
