@@ -4,7 +4,7 @@ import { FolderGit2, Inbox, LayoutList, ListTodo } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { needsYouItems } from '../../../shared/board/needs-you'
 import { useIpcQuery } from '../data/query'
-import { ROUTE_IDS } from '../router/legacy-view'
+import { ROUTE_IDS } from '../router/routes'
 
 const ROW_CLASS =
   'flex h-7 items-center gap-2 rounded-md px-2 text-small text-foreground-secondary hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring [&.active]:bg-accent [&.active]:text-foreground'

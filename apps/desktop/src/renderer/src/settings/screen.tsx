@@ -6,7 +6,7 @@ import { ThemeSection } from './theme-section'
 import { RuntimeSection } from './runtime-section'
 import { GhSection } from './gh-section'
 import { SessionDefaultsSection } from './session-defaults-section'
-import { ROUTE_IDS } from '../router/legacy-view'
+import { ROUTE_IDS } from '../router/routes'
 
 function AboutSection() {
   return (

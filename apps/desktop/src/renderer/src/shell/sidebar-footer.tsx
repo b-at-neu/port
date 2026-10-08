@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useIpcQuery } from '../data/query'
 import { footerStatus } from './status-model'
-import { ROUTE_IDS } from '../router/legacy-view'
+import { ROUTE_IDS } from '../router/routes'
 
 const DOT_CLASS: Readonly<Record<'success' | 'danger' | 'idle', string>> = {
   success: 'bg-success-dot',

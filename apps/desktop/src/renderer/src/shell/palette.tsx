@@ -5,13 +5,12 @@ import { needsYouItems } from '../../../shared/board/needs-you'
 import { sessionTitle } from '../../../shared/hosting/label'
 import type { RepositoryEntry } from '../../../shared/repos'
 import { useIpcQuery } from '../data/query'
-import { startNewSession, selectSession } from '../session/controller'
-import { legacyActions } from '../shell/legacy-actions'
+import { startNewSession, selectSession } from '../session/actions'
 import { openClaimDialog } from '../claim/controller'
 import { useThemePreference } from '../theme/store'
 import { usePaletteState, closePalette, setPaletteOpen, toggleSidebarCollapsed } from './stores'
 import { useRunStateCommand } from './run-state-command'
-import { ROUTE_IDS } from '../router/legacy-view'
+import { ROUTE_IDS } from '../router/routes'
 import { setSidebarCollapsed } from './prefs'
 
 function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { status: 'ready' }> {
@@ -98,17 +97,7 @@ export function CommandPalette() {
               Open {sessionTitle(session)}
             </CommandItem>
           ))}
-          {readyRepos.map((repo) => (
-            <CommandItem
-              key={repo.id}
-              onSelect={() => {
-                legacyActions()?.openSessions(repo.id)
-                closePalette()
-              }}
-            >
-              Transcripts for {repo.config.repo}
-            </CommandItem>
-          ))}
+          <CommandItem onSelect={() => go(ROUTE_IDS.history)}>History…</CommandItem>
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="Pipelines">

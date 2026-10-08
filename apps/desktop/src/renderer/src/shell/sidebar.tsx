@@ -12,7 +12,7 @@ import { SidebarPipelines } from './sidebar-pipelines'
 import { SidebarSessions } from './sidebar-sessions'
 import { SidebarFooter } from './sidebar-footer'
 import { setSidebarCollapsed } from './prefs'
-import { ROUTE_IDS } from '../router/legacy-view'
+import { ROUTE_IDS } from '../router/routes'
 
 const RAIL_SCREENS = [
   { to: ROUTE_IDS.board, icon: Inbox, label: 'Needs you' },
