@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { IPC_CHANNELS } from '../../shared/ipc'
 import type { IpcChannel } from '../../shared/ipc'
 import { needsYouItems } from '../../shared/board/needs-you'
+import type { RepoId } from '../../shared/repos'
 import { fixtureHandlers } from './handlers'
+
+const WIDGETS = 'fixture-acme-widgets' as RepoId
 
 // A representative request for every channel whose request is not `void` —
 // fixture handlers never validate, so any well-typed shape exercises them.
@@ -106,5 +109,36 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
         }
       }
     })
+
+    it('holds #52 as unowned, for a held note on the Board', () => {
+      const report = snapshot.tick.find((r) => r.held.some((h) => h.number === 52))
+      expect(report?.held.find((h) => h.number === 52)?.reason).toBe('unowned')
+    })
+  })
+
+  it('reports gate:preflight as answerable, with a plan body carrying a heading, list, code, table and link', () => {
+    const response = handlers['gate:preflight']({ repoId: WIDGETS, number: 41 })
+    if (response.kind !== 'resolved') throw new Error('fixture gate:preflight did not resolve')
+    expect(response.verdict.kind).toBe('answerable')
+    const plan = response.preflight.planMarkdown ?? ''
+    expect(plan).toContain('## Overview')
+    expect(plan).toContain('1. ')
+    expect(plan).toContain('```ts')
+    expect(plan).toContain('| Column | Type |')
+    expect(plan).toContain('[the report spec]')
+  })
+
+  it('reports claim:preflight as claimable', () => {
+    const response = handlers['claim:preflight']({ repoId: WIDGETS, number: 44 })
+    if (response.kind !== 'resolved') throw new Error('fixture claim:preflight did not resolve')
+    expect(response.verdict.kind).toBe('claimable')
+  })
+
+  it('reports worktrees:report with one each of active, done, dirty and locked, plus one orphan dir', () => {
+    const report = handlers['worktrees:report']({ id: WIDGETS })
+    if (!report.ok) throw new Error('fixture worktrees:report unexpectedly failed')
+    const states = report.worktrees.map((w) => w.state).sort()
+    expect(states).toEqual(['active', 'dirty', 'done', 'locked'])
+    expect(report.orphanDirs).toHaveLength(1)
   })
 })

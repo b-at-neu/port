@@ -51,6 +51,8 @@ interface ItemSeed {
   readonly number: number
   readonly title: string
   readonly stageKey: LabelKey
+  // Defaults to [VIEWER] — only #319's own unowned-held seed overrides it.
+  readonly assignees?: readonly string[]
 }
 
 /** #41 → `planReview`, #38 → `inProgress` (with its own active `impl-agent`
@@ -67,6 +69,9 @@ const POPULATED_ITEM_SEEDS: readonly ItemSeed[] = [
   { kind: 'pull-request', number: 35, title: 'Cache avatar thumbnails', stageKey: 'needsRevision' },
   { kind: 'issue', number: 50, title: 'Rotate the webhook signing secret', stageKey: 'needsHuman' },
   { kind: 'issue', number: 51, title: 'Backfill order totals for Q3', stageKey: 'blocked' },
+  // #319: unassigned and queued, so planTick's own ownership partition holds
+  // it with reason 'unowned' — the Board's "Waiting on you" row needs one.
+  { kind: 'issue', number: 52, title: 'Add a dark-mode icon for the tray', stageKey: 'ready', assignees: [] },
 ]
 
 // The empty scenario keeps only the routine, non-"needs you" seeds, so the
@@ -95,7 +100,7 @@ function pipelineItemsFor(vocabulary: LabelVocabulary, seeds: readonly ItemSeed[
       body: '',
       state: 'OPEN',
       mergedAt: null,
-      assignees: [VIEWER],
+      assignees: seed.assignees ?? [VIEWER],
       labels,
       matchedKeys,
       headRefOid: isPr ? `fixture-sha-${String(seed.number)}` : null,

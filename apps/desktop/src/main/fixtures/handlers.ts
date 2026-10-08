@@ -15,8 +15,10 @@ import type { TranscriptSource } from '../../shared/sessions/transcript'
 import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
 import { fixtureBoardSnapshot } from './board'
 import { fixtureBacklog } from './backlog'
+import { fixtureClaimPreflight, fixtureGateClaimRead, fixtureGatePreflight } from './dialogs'
 import { FIXTURE_REPOSITORIES } from './repos'
 import type { FixtureScenario } from './mode'
+import { fixtureWorktreesReport } from './worktrees'
 
 /** Exhaustive by construction: a new `IpcChannel` fails `pnpm typecheck` in
  *  `fixtureHandlers`'s own return literal until a fixture exists for it. */
@@ -59,19 +61,8 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'session:capacity:set': () => ({ limit: 4, ceiling: 8 }),
     'session:restore:list': () => ({ entries: [] }),
 
-    // --- Click-only reads, valid and empty-but-ok --------------------------
-    'worktrees:report': () => ({
-      ok: true,
-      mainRoot: '/home/you/src/widgets',
-      integrationRef: 'dev',
-      worktrees: [],
-      orphanDirs: [],
-      registered: 0,
-      byState: {},
-      githubResolution: 'resolved',
-      porcelainJoin: 'joined',
-      readAt: now.toISOString(),
-    }),
+    // --- Click-only reads, valid and populated ------------------------------
+    'worktrees:report': () => fixtureWorktreesReport(now),
 
     'transcript:tail:open': (request) => ({ ok: true, tailId: 'fixture-tail', source: transcriptSourceFor(request.sessionId, request.agentId, now), entries: [] }),
     'transcript:tail:poll': () => ({ ok: true, source: transcriptSourceFor('fixture-session', null, now), appended: [], patched: [], hasMore: false }),
@@ -79,9 +70,9 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
 
     'search:query': () => ({ ok: true, groups: [], inScope: 0, skippedByIndex: 0, read: 0, unreached: 0, complete: true, hitsTruncated: false, indexPersisted: false, tookMs: 0 }),
 
-    'claim:preflight': () => ({ kind: 'unresolved' }),
-    'gate:preflight': () => ({ kind: 'unresolved', claim: EMPTY_CLAIM(now) }),
-    'gate:claim:read': () => EMPTY_CLAIM(now),
+    'claim:preflight': () => fixtureClaimPreflight(now),
+    'gate:preflight': () => fixtureGatePreflight(now),
+    'gate:claim:read': () => fixtureGateClaimRead(now),
 
     'runtime:probe': (request) => ({ checkedAt: now.toISOString(), repo: request.repoId === null ? null : 'acme/widgets', elapsedMs: 420, apiKeyInEnvironment: false, diagnosis: 'verified', detail: null }),
 
