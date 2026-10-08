@@ -17,7 +17,7 @@ import { fixtureBoardSnapshot } from './board'
 import { fixtureBacklog } from './backlog'
 import { fixtureClaimPreflight, fixtureGateClaimRead, fixtureGatePreflight } from './dialogs'
 import { FIXTURE_REPOSITORIES } from './repos'
-import { fixtureAttachEntries, fixtureSearchResult, fixtureSessionAttach, fixtureSessionsScan, fixtureSessionSnapshots } from './sessions'
+import { fixtureAttachEntries, fixturePermissionSnapshots, fixtureSearchResult, fixtureSessionAttach, fixtureSessionsScan, fixtureSessionSnapshots } from './sessions'
 import type { FixtureScenario } from './mode'
 import { fixtureWorktreesReport } from './worktrees'
 
@@ -57,7 +57,7 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
 
     'sessions:scan': () => fixtureSessionsScan(now),
 
-    'session:list': () => fixtureSessionSnapshots(now),
+    'session:list': () => (scenario === 'empty' ? fixturePermissionSnapshots(now) : fixtureSessionSnapshots(now)),
     'session:capacity': () => ({ limit: 4, ceiling: 8 }),
     'session:capacity:set': () => ({ limit: 4, ceiling: 8 }),
     'session:restore:list': () => ({ entries: [] }),

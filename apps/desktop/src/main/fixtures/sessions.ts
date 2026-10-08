@@ -1,6 +1,5 @@
-// Fixture mode's canned hosted-session data — four snapshots covering the
-// Session screen's own states, plus the entries `session:attach` replays for
-// the streaming one. `now` minus a fixed offset, same contract as handlers.ts.
+// Fixture mode's canned hosted-session data — the Session screen's own
+// states, plus the entries `session:attach` replays for the streaming one.
 import type { HostedSessionSnapshot, SessionAttachResult, SessionKey } from '../../shared/hosting/types'
 import type { TranscriptEntry } from '../../shared/sessions/transcript'
 import type { SearchResult } from '../../shared/search/types'
@@ -55,26 +54,13 @@ export function fixtureAttachEntries(now: Date): readonly TranscriptEntry[] {
   ]
 }
 
-export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapshot[] {
+/** Kept out of `fixtureSessionSnapshots` — the permission dialog is app-wide,
+ *  so this would pop up over every other screenshot target otherwise. */
+export function fixturePermissionSnapshots(now: Date): readonly HostedSessionSnapshot[] {
   const t = (minutesAgo: number) => new Date(now.getTime() - minutesAgo * MINUTE).toISOString()
   const capabilities = { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [], plugin: { kind: 'loaded', path: '/home/you/.claude/plugins/port', version: '0.2.1' }, components: { kind: 'complete' } } as const
 
   return [
-    {
-      sessionKey: STREAMING_KEY,
-      claudeSessionId: 'fixture-claude-1',
-      repoId: WIDGETS_ID,
-      phase: 'streaming',
-      origin: { kind: 'fresh' },
-      startedAt: t(5),
-      queuedAfterInterrupt: null,
-      end: null,
-      titled: null,
-      pendingPermissions: [],
-      capabilities,
-      title: 'Add a loading state to the repositories table',
-      rateLimit: null,
-    },
     {
       sessionKey: PERMISSION_KEY,
       claudeSessionId: 'fixture-claude-2',
@@ -102,6 +88,29 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       ],
       capabilities,
       title: 'Remove an unused dependency',
+      rateLimit: null,
+    },
+  ]
+}
+
+export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapshot[] {
+  const t = (minutesAgo: number) => new Date(now.getTime() - minutesAgo * MINUTE).toISOString()
+  const capabilities = { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [], plugin: { kind: 'loaded', path: '/home/you/.claude/plugins/port', version: '0.2.1' }, components: { kind: 'complete' } } as const
+
+  return [
+    {
+      sessionKey: STREAMING_KEY,
+      claudeSessionId: 'fixture-claude-1',
+      repoId: WIDGETS_ID,
+      phase: 'streaming',
+      origin: { kind: 'fresh' },
+      startedAt: t(5),
+      queuedAfterInterrupt: null,
+      end: null,
+      titled: null,
+      pendingPermissions: [],
+      capabilities,
+      title: 'Add a loading state to the repositories table',
       rateLimit: null,
     },
     {
@@ -138,7 +147,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
 }
 
 export function fixtureSessionAttach(sessionKey: SessionKey, now: Date): SessionAttachResult {
-  const snapshot = fixtureSessionSnapshots(now).find((candidate) => candidate.sessionKey === sessionKey)
+  const snapshot = [...fixtureSessionSnapshots(now), ...fixturePermissionSnapshots(now)].find((candidate) => candidate.sessionKey === sessionKey)
   if (snapshot === undefined) return { ok: false, kind: 'unknown-session' }
   const entries = sessionKey === STREAMING_KEY ? fixtureAttachEntries(now) : []
   return { ok: true, snapshot, replay: [], droppedBefore: 0, entries, firstIndex: 0, partial: null, pendingSends: [], revision: entries.length }

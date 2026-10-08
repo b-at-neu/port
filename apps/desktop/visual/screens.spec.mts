@@ -46,6 +46,10 @@ test.afterEach(async ({}, testInfo) => {
   }
 })
 
+// Every base capture runs before any of that target's own variants, across
+// both themes — a variant's click or type can leave local component state
+// (e.g. a submitted search query) that a same-hash base re-settle would
+// otherwise inherit, since it never actually navigates anywhere.
 for (const [key, target] of Object.entries(SCREENSHOT_TARGETS)) {
   for (const theme of THEMES) {
     test(`${key} · ${theme}`, async () => {
@@ -58,7 +62,9 @@ for (const [key, target] of Object.entries(SCREENSHOT_TARGETS)) {
 
       await fixture.page.screenshot({ path: join(SCREENSHOT_DIR, `${key}-${theme}.png`), animations: 'disabled', caret: 'hide' })
     })
+  }
 
+  for (const theme of THEMES) {
     for (const variant of target.variants ?? []) {
       test(`${key} · ${variant.name} · ${theme}`, async () => {
         await setTheme(fixture.page, theme)

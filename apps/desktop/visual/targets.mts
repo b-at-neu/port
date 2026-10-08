@@ -49,8 +49,13 @@ export interface VariantTarget {
   readonly target: Target
 }
 
+// The permission dialog is app-wide — its one fixture session is served only
+// under the `empty` scenario (see `main/fixtures/sessions.ts`'s own note on
+// `fixturePermissionSnapshots`), so capturing it here never blocks any other
+// target's own click or ready selector.
 export const VARIANT_TARGETS: readonly VariantTarget[] = [
   { name: 'needs-you-empty', scenario: 'empty', target: { hash: '#/needs-you', container: '#app', ready: '[data-slot="needs-you-empty"]' } },
+  { name: 'session-permission', scenario: 'empty', target: { hash: '#/session?key=fixture-session-permission', container: '#app', ready: '[role="alertdialog"]' } },
 ]
 
 const FIXTURE_SESSION_ID = 'fixture-session-streaming'
@@ -91,18 +96,18 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
     variants: [{ name: 'results', type: { selector: 'input[placeholder^="An error"]', text: 'widgets' }, ready: 'mark' }],
   },
   transcript: { hash: `#/transcript/${FIXTURE_SESSION_ID}`, container: '#app', ready: '[data-slot="tool-call-row"]' },
-  // `session:list` carries four fixture snapshots (empty, streaming,
-  // permission, ended, starting) — the base target shows the empty state,
-  // a variant per other snapshot's own `?key=`.
+  // `session:list` carries three fixture snapshots (streaming, ended,
+  // starting) — the base target shows the empty state, a variant per other
+  // snapshot's own `?key=`. The pending-permission state is its own
+  // `VARIANT_TARGETS` entry below, in the `empty` scenario's isolated launch.
   session: {
     hash: '#/session',
     container: '#app',
     ready: '[data-slot="session-empty"]',
     variants: [
       { name: 'streaming', hash: `#/session?key=${FIXTURE_SESSION_ID}`, ready: '[data-slot="tool-call-row"]' },
-      { name: 'permission', hash: '#/session?key=fixture-session-permission', ready: '[role="alertdialog"]' },
       { name: 'ended', hash: '#/session?key=fixture-session-ended', ready: 'text=Crashed' },
-      { name: 'starting', hash: '#/session?key=fixture-session-starting', ready: 'text=Starting a session' },
+      { name: 'starting', hash: '#/session?key=fixture-session-starting', ready: 'text=Starting' },
     ],
   },
   settings: { hash: '#/settings', container: '#app', ready: '#app h2' },

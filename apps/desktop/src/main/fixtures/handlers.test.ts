@@ -143,11 +143,18 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
     expect(report.orphanDirs).toHaveLength(1)
   })
 
-  it('reports session:list with four snapshots covering streaming, a pending permission, ended, and starting', () => {
+  it.runIf(scenario === 'populated')('reports session:list with three snapshots covering streaming, ended, and starting', () => {
     const snapshots = handlers['session:list'](undefined)
-    expect(snapshots.map((s) => s.phase).sort()).toEqual(['ended', 'ready', 'starting', 'streaming'])
-    expect(snapshots.find((s) => s.phase === 'ready')?.pendingPermissions).toHaveLength(1)
+    expect(snapshots.map((s) => s.phase).sort()).toEqual(['ended', 'starting', 'streaming'])
     expect(snapshots.find((s) => s.phase === 'ended')?.end?.diagnosis).not.toBeNull()
+  })
+
+  // The permission dialog is app-wide, so its one fixture session is kept out of the
+  // populated scenario's own session:list — see sessions.ts's own note on fixturePermissionSnapshots.
+  it.runIf(scenario === 'empty')('reports session:list with the one pending-permission snapshot', () => {
+    const snapshots = handlers['session:list'](undefined)
+    expect(snapshots.map((s) => s.phase)).toEqual(['ready'])
+    expect(snapshots[0]?.pendingPermissions).toHaveLength(1)
   })
 
   it('reports session:attach for the streaming fixture with a user, assistant, tool-call and thinking entry', () => {
