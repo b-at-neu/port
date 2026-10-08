@@ -110,7 +110,7 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
       }
     })
 
-    it('holds #52 as unowned, for a held note on the Board', () => {
+    it.runIf(scenario === 'populated')('holds #52 as unowned, for a held note on the Board', () => {
       const report = snapshot.tick.find((r) => r.held.some((h) => h.number === 52))
       expect(report?.held.find((h) => h.number === 52)?.reason).toBe('unowned')
     })
