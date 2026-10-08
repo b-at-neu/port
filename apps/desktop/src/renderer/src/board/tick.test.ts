@@ -104,7 +104,7 @@ describe('repositoryLineCopy', () => {
   it('#265: "would dispatch" becomes "dispatched" when this app owns dispatch for the repository', () => {
     const rep = report({ actionable: [{ number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null }] })
     expect(repositoryLineCopy(rep, DISPATCHING, 'app')).toBe('o/a — dispatched impl #52 · Liveness: nothing in flight.')
-    expect(repositoryLineCopy(rep, DISPATCHING, 'cockpit')).toBe('o/a — would dispatch impl #52 · Liveness: nothing in flight.')
+    expect(repositoryLineCopy(rep, DISPATCHING, 'none')).toBe('o/a — would dispatch impl #52 · Liveness: nothing in flight.')
     expect(repositoryLineCopy(rep, DISPATCHING)).toBe('o/a — would dispatch impl #52 · Liveness: nothing in flight.')
   })
 
@@ -182,17 +182,17 @@ describe('heldDetailCopy', () => {
   it('#292: owner "app" reads cycle-cap and zero-diff in the present tense, since this app is the one escalating', () => {
     const capped: TickHeld = { number: 204, kind: 'pull-request', trigger: 'needsRevision', reason: 'cycle-cap', contention: null, escalation: { kind: 'cycle-cap', count: 5, cap: 5 } }
     expect(heldDetailCopy(capped, 'app')).toBe('#204 escalating to needs human — cycle 5 reached the cap of 5.')
-    expect(heldDetailCopy(capped, 'cockpit')).toBe('#204 would escalate to needs human — cycle 5 reached the cap of 5.')
+    expect(heldDetailCopy(capped, 'none')).toBe('#204 would escalate to needs human — cycle 5 reached the cap of 5.')
 
     const zeroDiff: TickHeld = { number: 157, kind: 'pull-request', trigger: 'readyForReview', reason: 'zero-diff', contention: null, escalation: { kind: 'zero-diff' } }
     expect(heldDetailCopy(zeroDiff, 'app')).toBe('#157 escalating to needs human — the latest review already covers the current head.')
-    expect(heldDetailCopy(zeroDiff, 'cockpit')).toBe('#157 would escalate to needs human — the latest review already covers the current head.')
+    expect(heldDetailCopy(zeroDiff, 'none')).toBe('#157 would escalate to needs human — the latest review already covers the current head.')
   })
 
   it('#292: a conflicting hold reads as this app actively refreshing it, instead of naming the cockpit\'s sweep', () => {
     const held: TickHeld = { number: 88, kind: 'pull-request', trigger: 'readyForReview', reason: 'conflicting', contention: null, escalation: null }
     expect(heldDetailCopy(held, 'app')).toBe('#88 conflicts — this app is refreshing it (rebase + force-push).')
-    expect(heldDetailCopy(held, 'cockpit')).toBe("#88 held — GitHub reports merge conflicts. The cockpit's refresh sweep rebases it; this app doesn't.")
+    expect(heldDetailCopy(held, 'none')).toBe("#88 held — GitHub reports merge conflicts. The cockpit's refresh sweep rebases it; this app doesn't.")
     expect(heldDetailCopy(held)).toBe("#88 held — GitHub reports merge conflicts. The cockpit's refresh sweep rebases it; this app doesn't.")
   })
 })
@@ -236,7 +236,7 @@ describe('stalledDetailCopy', () => {
   it('#292: owner "app" reads a confirmed stall as this app resetting it, rather than asking the operator to retry', () => {
     const confirmed: TickClaim = { ...base, class: 'stalled-confirmed', retryKey: 'readyForReview' }
     expect(stalledDetailCopy(confirmed, 'app')).toBe('#146 reviewing — no agent, and this app dispatched it. Resetting to ready for review.')
-    expect(stalledDetailCopy(confirmed, 'cockpit')).toBe('#146 reviewing — no claim, and this app dispatched it. Retry re-applies "ready for review".')
+    expect(stalledDetailCopy(confirmed, 'none')).toBe('#146 reviewing — no claim, and this app dispatched it. Retry re-applies "ready for review".')
   })
 
   it('#292: owner "app" makes no difference when there is no retry key to apply', () => {
@@ -253,7 +253,7 @@ describe('repositoryDetailLines', () => {
       claims: [{ number: 3, kind: 'issue', inFlight: 'inProgress', class: 'no-record', retryKey: null }],
       observations: [{ kind: 'refresh-deferred', number: 4, itemKind: 'pull-request' }],
     })
-    const lines = repositoryDetailLines(rep, 'cockpit')
+    const lines = repositoryDetailLines(rep, 'none')
     expect(lines).toEqual([
       '#1 unassigned — no cockpit will pick this up.',
       '#2 has no file list in its plan — dispatching unchecked.',
@@ -264,7 +264,7 @@ describe('repositoryDetailLines', () => {
   })
 
   it('is empty for a blind repository', () => {
-    expect(repositoryDetailLines(report({ blind: { reason: 'viewer-unknown' } }), 'cockpit')).toEqual([])
+    expect(repositoryDetailLines(report({ blind: { reason: 'viewer-unknown' } }), 'none')).toEqual([])
   })
 })
 
@@ -277,12 +277,12 @@ describe('itemDetailLines', () => {
       ],
       claims: [{ number: 1, kind: 'issue', inFlight: 'inProgress', class: 'no-record', retryKey: null }],
     })
-    expect(itemDetailLines(rep, 1, 'cockpit')).toEqual(['#1 unassigned — no cockpit will pick this up.', "#1 in progress — no claim, and this app didn't dispatch it, so it can't tell."])
-    expect(itemDetailLines(rep, 2, 'cockpit')).toEqual(['#2 unassigned — no cockpit will pick this up.'])
+    expect(itemDetailLines(rep, 1, 'none')).toEqual(['#1 unassigned — no cockpit will pick this up.', "#1 in progress — no claim, and this app didn't dispatch it, so it can't tell."])
+    expect(itemDetailLines(rep, 2, 'none')).toEqual(['#2 unassigned — no cockpit will pick this up.'])
   })
 
   it('is empty for a blind repository', () => {
-    expect(itemDetailLines(report({ blind: { reason: 'viewer-unknown' } }), 1, 'cockpit')).toEqual([])
+    expect(itemDetailLines(report({ blind: { reason: 'viewer-unknown' } }), 1, 'none')).toEqual([])
   })
 })
 

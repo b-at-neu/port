@@ -14,17 +14,44 @@ import { useRunStateCommand } from './run-state-command'
 import { shellPrefs, setRepoCollapsed } from './prefs'
 import { ROUTE_IDS } from '../router/routes'
 
+/** #331: `terminal`/`unreadable` ownership disables Run and Drain outright —
+ *  neither ever reaches a currently-running/-draining row, since the pill
+ *  itself never reads `Running`/`Draining` under either verdict. */
+function ownershipDisabledReason(owner: Extract<PipelineRow, { readonly ready: true }>['owner'], unreadableMessage: string | null): string | null {
+  if (owner === 'terminal') return 'Your terminal cockpit runs this repo'
+  if (owner === 'unreadable') return `.agents/cockpit.json can't be read (${unreadableMessage ?? 'unknown reason'})`
+  return null
+}
+
 function RunStateMenu({ row }: { readonly row: Extract<PipelineRow, { readonly ready: true }> }) {
   const runState = useRunStateCommand()
+  const ownershipReason = ownershipDisabledReason(row.owner, row.unreadableMessage)
   return (
     <StatusPillMenu
       status={row.pill.status}
       label={row.pill.label}
       pending={runState.pending}
       items={[
-        { key: 'run', label: 'Run', hint: 'start dispatching', current: row.pill.label === 'Running', disabledReason: row.pill.label === 'Running' ? 'Already running' : null, onSelect: () => runState.run(row.repoId, row.name) },
-        { key: 'drain', label: 'Drain', hint: 'finish in-flight', current: row.pill.label === 'Draining', disabledReason: row.pill.label === 'Draining' ? 'Already draining' : null, onSelect: () => runState.drain(row.repoId, row.name) },
+        {
+          key: 'run',
+          label: 'Run',
+          hint: 'start dispatching',
+          current: row.pill.label === 'Running',
+          disabledReason: row.pill.label === 'Running' ? 'Already running' : ownershipReason,
+          onSelect: () => runState.run(row.repoId, row.name),
+        },
+        {
+          key: 'drain',
+          label: 'Drain',
+          hint: 'finish in-flight',
+          current: row.pill.label === 'Draining',
+          disabledReason: row.pill.label === 'Draining' ? 'Already draining' : ownershipReason,
+          onSelect: () => runState.drain(row.repoId, row.name),
+        },
         { key: 'pause', label: 'Pause', hint: 'stop now', current: row.pill.label === 'Paused', disabledReason: row.pill.label === 'Paused' ? 'Already paused' : null, onSelect: () => runState.requestPause(row.repoId, row.name, row.inFlight) },
+        ...(row.owner === 'terminal'
+          ? [{ key: 'take-over', label: 'Take over…', hint: "the terminal isn't running", current: false, disabledReason: null, onSelect: () => runState.requestTakeOver(row.repoId, row.name) }]
+          : []),
       ]}
     />
   )

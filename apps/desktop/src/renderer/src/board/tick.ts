@@ -97,9 +97,9 @@ function dispatchPartOf(report: TickReport, runState: RunState, dispatchedByApp:
   return dispatchedByApp ? `dispatched ${named}` : `would dispatch ${named}`
 }
 
-/** `owner` defaults to `'cockpit'` — every pre-#265 caller (and test) reads
+/** `owner` defaults to `'none'` — every pre-#265 caller (and test) reads
  *  exactly as before. */
-export function repositoryLineCopy(report: TickReport, runState: RunState, owner: DispatchOwner = 'cockpit'): string {
+export function repositoryLineCopy(report: TickReport, runState: RunState, owner: DispatchOwner = 'none'): string {
   if (report.blind !== null) return `${report.displayName} — ${blindCopy(report.blind)}`
 
   const dispatchPart = dispatchPartOf(report, runState, owner === 'app')
@@ -120,12 +120,12 @@ function contendedPathList(paths: readonly string[]): string {
   return more > 0 ? `${shown.join(', ')} and ${String(more)} more` : shown.join(', ')
 }
 
-/** `owner` defaults to `'cockpit'` — every pre-#292 caller (and test) reads
+/** `owner` defaults to `'none'` — every pre-#292 caller (and test) reads
  *  exactly as before. While this app itself owns dispatch, the held reasons
  *  it actually writes (#292: cycle-cap, zero-diff, conflicting) read in the
  *  present tense rather than "would …" — plan's own **UX states**, "Tick
  *  strip hover". */
-export function heldDetailCopy(held: TickHeld, owner: DispatchOwner = 'cockpit'): string {
+export function heldDetailCopy(held: TickHeld, owner: DispatchOwner = 'none'): string {
   const n = String(held.number)
   const byApp = owner === 'app'
   switch (held.reason) {
@@ -182,7 +182,7 @@ export function uncheckedDetailCopy(actionable: TickActionable): string {
   return `#${String(actionable.number)} has no file list in its plan — dispatching unchecked.`
 }
 
-/** `owner` defaults to `'cockpit'`, the same direction as `heldDetailCopy`.
+/** `owner` defaults to `'none'`, the same direction as `heldDetailCopy`.
  *  `null` for the two non-stall classes — never called for them in
  *  `buildTickStrip` below, but the switch stays exhaustive so a new
  *  `TickClaimClass` member is a compile error here too. While this app owns
@@ -190,7 +190,7 @@ export function uncheckedDetailCopy(actionable: TickActionable): string {
  *  about to reset itself (#292's own liveness-reset write), not one an
  *  operator must retry by hand — plan's own **UX states**, "Tick strip
  *  hover". */
-export function stalledDetailCopy(claim: TickClaim, owner: DispatchOwner = 'cockpit'): string | null {
+export function stalledDetailCopy(claim: TickClaim, owner: DispatchOwner = 'none'): string | null {
   const n = String(claim.number)
   const name = labelNameOf(claim.inFlight)
   switch (claim.class) {

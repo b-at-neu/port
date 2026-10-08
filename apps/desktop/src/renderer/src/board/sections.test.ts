@@ -15,7 +15,6 @@ function row(overrides: {
   readonly number?: number
   readonly stageKey?: StageLabel['key'] | null
   readonly status?: ReconciledItem['status']
-  readonly relay?: BoardItemRow['relay']
 }): BoardItemRow {
   const repoId = (overrides.repoId ?? 'repo-a') as RepoId
   const stageLabel: StageLabel | null = overrides.stageKey != null ? { key: overrides.stageKey, name: overrides.stageKey, role: 'trigger' } : null
@@ -59,7 +58,6 @@ function row(overrides: {
     stageLabel,
     actions: NO_ACTIONS,
     decisions: NO_DECISIONS,
-    relay: overrides.relay ?? null,
   }
 }
 
@@ -71,14 +69,6 @@ describe('boardSections', () => {
     expect(sections[0]?.count).toBe(1)
     expect(sections[1]?.count).toBe(1)
     expect(sections[2]?.count).toBe(1)
-  })
-
-  it('a relay-pending row is Waiting on you even when in-flight', () => {
-    const relay = { repoId: 'repo-a' as RepoId, number: 1, stage: 'impl-agent', sessionId: 's', agentId: null, parentSessionLabel: 'cockpit', agentLabel: 'impl-agent', lastActivityAt: '2026-01-01T00:00:00.000Z', kind: 'questions', questions: [] } as unknown as BoardItemRow['relay']
-    const rows = [row({ number: 1, stageKey: 'inProgress', status: 'in-flight', relay })]
-    const sections = boardSections(rows, { group: 'repo', repo: null })
-    expect(sections).toHaveLength(1)
-    expect(sections[0]?.key).toBe('waiting-on-you')
   })
 
   it('omits an empty section entirely', () => {

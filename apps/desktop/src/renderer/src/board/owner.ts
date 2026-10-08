@@ -1,9 +1,8 @@
-// The dispatch-ownership line (#265) — one per ready repository, rendered
+// The pipeline owner line (#265, #331) — one per ready repository, rendered
 // under its own tick line (`view.ts`). Pure copy plus the line's own DOM;
-// `main.ts` routes the Take/Release button's click to `window.port.
-// dispatchClaimSet` through `board/dispatch.ts`'s `handleDispatchClick`, the
-// same split every other board control already follows. #293: the budget
-// clause and its per-candidate notes.
+// `pipeline-status.tsx` routes the Take over button's click to
+// `board/dispatch.ts`'s `takeOver`, the same split every other board control
+// already follows. #293: the budget clause and its per-candidate notes.
 import type { BudgetNote, BudgetStatus, DispatcherState, ObservationRecord, RepoDispatchStatus } from '../../../shared/dispatch/types'
 import type { TickObservationKind } from '../../../shared/tick/types'
 import { writeOutcomeCopy } from '../claim/copy'
@@ -14,32 +13,33 @@ function timeOf(iso: string): string {
   return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
-function activeLine(state: Extract<DispatcherState, { readonly kind: 'active' }>, claimedAt: string | null): string {
+function activeLine(state: Extract<DispatcherState, { readonly kind: 'active' }>, ownedSince: string | null): string {
   const live = state.recent.filter((r) => r.state === 'started')
-  const claimedPart = claimedAt !== null ? ` · claimed ${timeOf(claimedAt)}` : ''
+  const sincePart = ownedSince !== null ? ` · since ${timeOf(ownedSince)}` : ''
   const newestFailed = [...state.recent].reverse().find((r) => r.state === 'failed')
   const failedClause = newestFailed !== null && newestFailed !== undefined ? ` · couldn't start ${newestFailed.agent} #${String(newestFailed.number)} (${newestFailed.detail ?? 'unknown error'}).` : ''
   if (live.length === 0) {
-    return `▶ Dispatch: this app${claimedPart} · nothing to dispatch.${failedClause}`
+    return `▶ Dispatch: this app${sincePart} · nothing to dispatch.${failedClause}`
   }
   const newest = live.reduce((a, b) => (Date.parse(a.at) > Date.parse(b.at) ? a : b))
   const named = live.map((r) => `${r.agent} #${String(r.number)}`).join(', ')
   return `▶ Dispatch: this app · started ${named} at ${timeOf(newest.at)}.${failedClause}`
 }
 
-/** #292: per-kind phrasing for the owner line's "newest observation" clause
- *  (plan's own **UX states**, "Owner line clause") — every
+/** #292, #331: per-kind phrasing for the owner line's "newest observation"
+ *  clause (plan's own **UX states**, "Owner line clause") — every
  *  `TickObservationKind` is covered so a new member is a compile error here,
  *  even though `refresh-deferred` is report-only and never actually reaches
  *  `RepoDispatchStatus.observed` (`main/tick/dispatchable.ts`'s
  *  `observableFrom` never emits it as a write — covered here only to keep
- *  this table exhaustive). */
+ *  this table exhaustive). `refusedTerminal` replaces the old
+ *  `refusedPlanGate`/`refusedDispatch` pair — ownership gates every write
+ *  uniformly now, so there is only one way a write is refused mid-pass. */
 interface ObservationCopy {
   readonly written: (n: string, at: string) => string
   readonly already: (n: string) => string
   readonly moved: (n: string) => string
-  readonly refusedPlanGate: ((n: string) => string) | null
-  readonly refusedDispatch: (n: string) => string
+  readonly refusedTerminal: (n: string) => string
   readonly failed: (n: string) => string
   readonly commentFailed: (n: string) => string
 }
@@ -49,8 +49,7 @@ const OBSERVATION_COPY: Record<TickObservationKind, ObservationCopy> = {
     written: (n, at) => `♻️ reset #${n} at ${at} — no agent was attached to it.`,
     already: (n) => `#${n} was already reset.`,
     moved: (n) => `#${n} moved before this app could reset it — nothing was written.`,
-    refusedPlanGate: (n) => `couldn't reset #${n} — moving it back needs the plan gate too. Take the plan gate, or say retry #${n} in the cockpit.`,
-    refusedDispatch: (n) => `didn't reset #${n} — dispatch was released mid-pass.`,
+    refusedTerminal: (n) => `didn't reset #${n} — your terminal cockpit took this repo mid-pass.`,
     failed: (n) => `⚠ couldn't reset #${n} — GitHub refused the write. The next poll decides again.`,
     commentFailed: (n) => `reset #${n}, but its explanation comment didn't post.`,
   },
@@ -58,8 +57,7 @@ const OBSERVATION_COPY: Record<TickObservationKind, ObservationCopy> = {
     written: (n, at) => `⛔ escalated #${n} to needs human at ${at} — the review cycle cap was reached.`,
     already: (n) => `#${n} was already escalated.`,
     moved: (n) => `#${n} moved before this app could escalate it — nothing was written.`,
-    refusedPlanGate: null,
-    refusedDispatch: (n) => `didn't escalate #${n} — dispatch was released mid-pass.`,
+    refusedTerminal: (n) => `didn't escalate #${n} — your terminal cockpit took this repo mid-pass.`,
     failed: (n) => `⚠ couldn't escalate #${n} — GitHub refused the write. The next poll decides again.`,
     commentFailed: (n) => `escalated #${n}, but its explanation comment didn't post.`,
   },
@@ -67,8 +65,7 @@ const OBSERVATION_COPY: Record<TickObservationKind, ObservationCopy> = {
     written: (n, at) => `⛔ escalated #${n} to needs human at ${at} — the latest review already covers the current head.`,
     already: (n) => `#${n} was already escalated.`,
     moved: (n) => `#${n} moved before this app could escalate it — nothing was written.`,
-    refusedPlanGate: null,
-    refusedDispatch: (n) => `didn't escalate #${n} — dispatch was released mid-pass.`,
+    refusedTerminal: (n) => `didn't escalate #${n} — your terminal cockpit took this repo mid-pass.`,
     failed: (n) => `⚠ couldn't escalate #${n} — GitHub refused the write. The next poll decides again.`,
     commentFailed: (n) => `escalated #${n}, but its explanation comment didn't post.`,
   },
@@ -76,8 +73,7 @@ const OBSERVATION_COPY: Record<TickObservationKind, ObservationCopy> = {
     written: (n, at) => `🔄 refreshing #${n} at ${at} — it conflicts with the base branch; added refresh branch.`,
     already: (n) => `#${n} was already refreshing.`,
     moved: (n) => `#${n} moved before this app could refresh it — nothing was written.`,
-    refusedPlanGate: null,
-    refusedDispatch: (n) => `didn't refresh #${n} — dispatch was released mid-pass.`,
+    refusedTerminal: (n) => `didn't refresh #${n} — your terminal cockpit took this repo mid-pass.`,
     failed: (n) => `⚠ couldn't refresh #${n} — GitHub refused the write. The next poll decides again.`,
     commentFailed: (n) => `refreshed #${n}, but its explanation comment didn't post.`,
   },
@@ -85,8 +81,7 @@ const OBSERVATION_COPY: Record<TickObservationKind, ObservationCopy> = {
     written: (n, at) => `⛔ escalated #${n} to needs human at ${at} — still conflicting after a refresh.`,
     already: (n) => `#${n} was already escalated.`,
     moved: (n) => `#${n} moved before this app could escalate it — nothing was written.`,
-    refusedPlanGate: null,
-    refusedDispatch: (n) => `didn't escalate #${n} — dispatch was released mid-pass.`,
+    refusedTerminal: (n) => `didn't escalate #${n} — your terminal cockpit took this repo mid-pass.`,
     failed: (n) => `⚠ couldn't escalate #${n} — GitHub refused the write. The next poll decides again.`,
     commentFailed: (n) => `escalated #${n}, but its explanation comment didn't post.`,
   },
@@ -94,8 +89,7 @@ const OBSERVATION_COPY: Record<TickObservationKind, ObservationCopy> = {
     written: (n, at) => `↩️ withdrew approval on #${n} at ${at} — a required check went red.`,
     already: (n) => `#${n}'s approval was already withdrawn.`,
     moved: (n) => `#${n} moved before this app could withdraw approval — nothing was written.`,
-    refusedPlanGate: null,
-    refusedDispatch: (n) => `didn't withdraw approval on #${n} — dispatch was released mid-pass.`,
+    refusedTerminal: (n) => `didn't withdraw approval on #${n} — your terminal cockpit took this repo mid-pass.`,
     failed: (n) => `⚠ couldn't withdraw approval on #${n} — GitHub refused the write. The next poll decides again.`,
     commentFailed: (n) => `withdrew approval on #${n}, but its explanation comment didn't post.`,
   },
@@ -103,8 +97,7 @@ const OBSERVATION_COPY: Record<TickObservationKind, ObservationCopy> = {
     written: (n, at) => `updated #${n} at ${at}.`,
     already: (n) => `#${n} was already up to date.`,
     moved: (n) => `#${n} moved before this app could act on it — nothing was written.`,
-    refusedPlanGate: null,
-    refusedDispatch: (n) => `didn't act on #${n} — dispatch was released mid-pass.`,
+    refusedTerminal: (n) => `didn't act on #${n} — your terminal cockpit took this repo mid-pass.`,
     failed: (n) => `⚠ couldn't act on #${n} — GitHub refused the write. The next poll decides again.`,
     commentFailed: (n) => `acted on #${n}, but its explanation comment didn't post.`,
   },
@@ -121,7 +114,7 @@ function recordClause(record: ObservationRecord): string {
     case 'moved':
       return copy.moved(n)
     case 'refused':
-      return record.scope === 'plan-gate' && copy.refusedPlanGate !== null ? copy.refusedPlanGate(n) : copy.refusedDispatch(n)
+      return copy.refusedTerminal(n)
     case 'failed':
       return copy.failed(n)
   }
@@ -165,24 +158,28 @@ function budgetClause(budget: BudgetStatus | null): string {
 export function ownerLineCopy(status: RepoDispatchStatus): string {
   const clause = budgetClause(status.budget)
 
-  if (status.owner === 'nobody') {
-    return `⛔ Dispatch: nobody — .agents/gate-claim.json can't be read. This app and the cockpit both stand down. Fix or delete the file.${clause}`
+  if (status.owner === 'unreadable') {
+    return `⛔ Pipeline: nobody — .agents/cockpit.json can't be read (${status.unreadableMessage ?? 'unknown reason'}). Neither this app nor a terminal cockpit runs this repo until it's fixed or deleted.${clause}`
   }
-  if (status.owner === 'cockpit') {
-    return `Dispatch: your terminal cockpit dispatches here. This app only reports what it would dispatch.${clause}`
+  if (status.owner === 'terminal') {
+    const sincePart = status.ownedSince !== null ? ` (since ${timeOf(status.ownedSince)})` : ''
+    return `Pipeline: your terminal cockpit runs this repo${sincePart}. This app won't dispatch, answer gates, or write labels here.${clause}`
+  }
+  if (status.owner === 'none') {
+    return `Pipeline: not running here. Run starts it.${clause}`
   }
 
   // owner === 'app'
   const state = status.state
   switch (state.kind) {
     case 'idle':
-      return activeLine({ kind: 'active', recent: [] }, status.claimedAt) + clause
+      return activeLine({ kind: 'active', recent: [] }, status.ownedSince) + clause
     case 'active':
-      return activeLine(state, status.claimedAt) + clause
+      return activeLine(state, status.ownedSince) + clause
     case 'budget-unavailable':
       return `⏸ Dispatch: this app, but not dispatching — ${state.message}`
     case 'no-launcher':
-      return "⏸ Dispatch: this app, but it can't start stage sessions yet — nothing dispatches here. Release dispatch to hand it back to your terminal cockpit."
+      return "⏸ Dispatch: this app, but it can't start stage sessions yet — nothing dispatches here."
     case 'at-capacity': {
       const waitingWord = state.waiting === 1 ? '1 waiting' : `${String(state.waiting)} waiting`
       return `⏸ Dispatch: this app · ${waitingWord} for a session slot — all ${String(state.limit)} are in use. Close a session or raise the limit; they start on the next poll.`
@@ -206,8 +203,8 @@ export function noteCopy(note: BudgetNote): string {
         ? `⛔ #${String(note.number)} is over its budget ceiling — moved it to ${note.needsHumanLabel} and commented why.`
         : `⛔ #${String(note.number)} is over its budget ceiling — moved it to ${note.needsHumanLabel}, but the comment explaining why didn't post (${note.commentFailedMessage}).`
     case 'escalation-failed':
-      if (note.outcome.kind === 'unclaimed-scope') {
-        return `⛔ #${String(note.number)} is over its budget ceiling and won't dispatch, but removing ${note.triggerLabel} needs the plan gate claim. Take the plan gate here, or move it to ${note.needsHumanLabel} by hand.`
+      if (note.outcome.kind === 'terminal-owned') {
+        return `⛔ #${String(note.number)} is over its budget ceiling and won't dispatch — removing ${note.triggerLabel} was refused — this repo is owned by your terminal cockpit.`
       }
       return `⛔ #${String(note.number)} is over its budget ceiling and won't dispatch — moving it to ${note.needsHumanLabel} failed: ${writeOutcomeCopy(note.number, note.outcome).line}`
     case 'gate-failed':
@@ -228,16 +225,12 @@ export function budgetNoteLines(status: RepoDispatchStatus): readonly string[] {
     : lines
 }
 
-/** The button's own label and action — `null` for `nobody` (no control at
- *  all, per the plan's own UX table). `pipeline-status.tsx` calls
- *  `setDispatchClaim(repoId, action === 'dispatch-claim-take')` directly on
- *  click, rather than dispatching through a `data-action` string. */
-export function controlFor(status: RepoDispatchStatus): { readonly label: string; readonly action: 'dispatch-claim-take' | 'dispatch-claim-release'; readonly title: string } | null {
-  if (status.owner === 'nobody') return null
-  if (status.owner === 'cockpit') {
-    return { label: 'Take dispatch', action: 'dispatch-claim-take', title: 'Stops a /port:pipeline cockpit in this checkout from dispatching.' }
-  }
-  return { label: 'Release dispatch', action: 'dispatch-claim-release', title: 'Hands dispatch back to a /port:pipeline cockpit in this checkout.' }
+/** The button's own label and title — `null` for every owner but `terminal`
+ *  (no control at all otherwise, per the plan's own UX table). `pipeline-
+ *  status.tsx` calls `takeOver(repoId, repoName)` directly on click. */
+export function controlFor(status: RepoDispatchStatus): { readonly label: string; readonly title: string } | null {
+  if (status.owner !== 'terminal') return null
+  return { label: 'Take over…', title: "Only do this if the terminal isn't running — this app can't tell whether it is." }
 }
 
 /** The owner line's own run-state suffix (plain concatenation, no state

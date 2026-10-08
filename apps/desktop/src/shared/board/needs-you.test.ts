@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../repos'
 import type { PipelineState, ReconciledItem, RepositoryState } from '../state/types'
-import type { RelayPending } from '../relay/types'
 import type { TickReport } from '../tick/types'
 import type { RepoDispatchStatus } from '../dispatch/types'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from './types'
@@ -110,39 +109,19 @@ function dispatchStatus(overrides: Partial<RepoDispatchStatus> = {}): RepoDispat
   }
 }
 
-function snapshotOf(
-  repositories: readonly RepositoryState[],
-  overrides: Partial<Pick<BoardSnapshot, 'relay' | 'tick' | 'dispatch'>> = {},
-): BoardSnapshot {
+function snapshotOf(repositories: readonly RepositoryState[], overrides: Partial<Pick<BoardSnapshot, 'tick' | 'dispatch'>> = {}): BoardSnapshot {
   const state: PipelineState = { repositories, sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: NOW.toISOString() }, readAt: NOW.toISOString() }
   return {
     state,
     health: [],
     policy: { baseIntervalMs: SOURCE_BASE_INTERVAL_MS, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: STALE_GRACE_MS },
     tick: [],
-    relay: { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: NOW.toISOString() },
     runStates: { store: { kind: 'loaded' }, repositories: [] },
     nextWakeupAt: null,
     emittedAt: NOW.toISOString(),
     dispatch: [],
     ...overrides,
   }
-}
-
-function pending(overrides: Partial<RelayPending> = {}): RelayPending {
-  return {
-    repoId: 'repo-a' as RepoId,
-    number: 7,
-    stage: 'impl-agent',
-    sessionId: 'sess-1',
-    agentId: 'agent-1',
-    parentSessionLabel: 'cockpit',
-    agentLabel: 'impl-agent',
-    lastActivityAt: NOW.toISOString(),
-    kind: 'questions',
-    questions: [{ index: 0, text: 'Which approach?' }],
-    ...overrides,
-  } as RelayPending
 }
 
 describe('needsYouItems', () => {
@@ -176,18 +155,6 @@ describe('needsYouItems', () => {
     expect(needsYouItems(snapshotOf([repo]), NOW)).toHaveLength(1)
   })
 
-  it('a row and a question on the same (repo, number) produce two separate rows', () => {
-    const repo = readyRepo({ items: [item({ repoId: 'repo-a' as RepoId, number: 7 })] })
-    const items = needsYouItems(snapshotOf([repo], { relay: { ok: true, pending: [pending({ repoId: 'repo-a' as RepoId, number: 7 })], checked: 1, unreached: 0, scannedAt: NOW.toISOString() } }), NOW)
-    expect(items.map((i) => i.kind).sort()).toEqual(['plan-review', 'question'])
-  })
-
-  it('a question with no matching row still appears, title and url null', () => {
-    const items = needsYouItems(snapshotOf([], { relay: { ok: true, pending: [pending({ repoId: 'repo-b' as RepoId, number: 99 })], checked: 1, unreached: 0, scannedAt: NOW.toISOString() } }), NOW)
-    expect(items).toHaveLength(1)
-    expect(items[0]).toMatchObject({ kind: 'question', repoId: 'repo-b', number: 99, title: null, url: null })
-  })
-
   it('held items keep only conflicting, contended and cycle-cap', () => {
     const held = [
       { number: 1, kind: 'pull-request' as const, trigger: 'readyForReview' as const, reason: 'conflicting' as const, contention: null, escalation: null },
@@ -218,18 +185,6 @@ describe('needsYouItems', () => {
     expect(items[0]).toMatchObject({ kind: 'budget', number: 5 })
   })
 
-  it('orders a known `at` before anything without one, newest first', () => {
-    const olderPending = pending({ repoId: 'repo-a' as RepoId, number: 1, lastActivityAt: '2026-01-01T00:00:00.000Z', sessionId: 'sess-older' })
-    const newerPending = pending({ repoId: 'repo-a' as RepoId, number: 2, lastActivityAt: '2026-01-01T00:30:00.000Z', sessionId: 'sess-newer' })
-    const held = [{ number: 9, kind: 'pull-request' as const, trigger: 'readyForReview' as const, reason: 'conflicting' as const, contention: null, escalation: null }]
-    const items = needsYouItems(
-      snapshotOf([], { relay: { ok: true, pending: [olderPending, newerPending], checked: 2, unreached: 0, scannedAt: NOW.toISOString() }, tick: [tickReport({ held })] }),
-      NOW,
-    )
-    expect(items.map((i) => i.kind)).toEqual(['question', 'question', 'held'])
-    expect(items[0]).toMatchObject({ number: 2 })
-    expect(items[1]).toMatchObject({ number: 1 })
-  })
 })
 
 describe('needsYouCount / repoNeedsYou', () => {

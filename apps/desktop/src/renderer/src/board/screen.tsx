@@ -99,7 +99,7 @@ export function BoardScreen() {
   })
 
   const report = selectedRow !== null && snapshot !== null ? snapshot.tick.find((r) => r.repoId === selectedRow.item.repoId) : undefined
-  const owner = selectedRow !== null && snapshot !== null ? (snapshot.dispatch.find((d) => d.repoId === selectedRow.item.repoId)?.owner ?? 'cockpit') : 'cockpit'
+  const owner = selectedRow !== null && snapshot !== null ? (snapshot.dispatch.find((d) => d.repoId === selectedRow.item.repoId)?.owner ?? 'none') : 'none'
 
   return (
     <div className="flex h-full flex-col">
@@ -124,7 +124,7 @@ export function BoardScreen() {
             </div>
           ) : projection !== null ? (
             <>
-              <BoardBanners snapshot={snapshot} projection={projection} now={now} onSelectRow={selectRow} />
+              <BoardBanners projection={projection} onSelectRow={selectRow} />
               {snapshot.state.repositories.length === 0 ? (
                 <EmptyState icon={LayoutGrid} message="Add a repository to see its pipeline." action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.repos }) }} className="px-4 py-6" />
               ) : sections.length === 0 ? (

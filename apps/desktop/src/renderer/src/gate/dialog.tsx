@@ -3,23 +3,13 @@
 import { useSyncExternalStore } from 'react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { closeGateDialog, getState, subscribe } from './controller'
-import { ClaimPickingStep, ClaimStatusStep, ErrorStep, FeedbackStep, LoadingStep, RefusedStep, ResultStep, ReviewingStep } from './dialog-steps'
+import { ErrorStep, FeedbackStep, LoadingStep, RefusedStep, ResultStep, ReviewingStep } from './dialog-steps'
 
 function DialogBody() {
   const state = useSyncExternalStore(subscribe, getState)
   switch (state.step) {
     case 'closed':
       return null
-    case 'claim-picking':
-      return <ClaimPickingStep state={state} />
-    case 'claim-loading':
-      return <LoadingStep hint="Reading the plan gate…" />
-    case 'claim-view':
-      return <ClaimStatusStep claim={state.claim} acting={false} />
-    case 'claim-acting':
-      return <LoadingStep hint="Updating the plan gate…" />
-    case 'claim-failed':
-      return <ErrorStep line="Couldn't reach the main process." note={state.message} />
     case 'loading':
       return <LoadingStep hint={`Reading #${String(state.number)}…`} />
     case 'reviewing':

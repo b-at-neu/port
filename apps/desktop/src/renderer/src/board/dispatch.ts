@@ -3,9 +3,10 @@
 // strip — per-repository run/drain/pause lives in `board/run-state.ts`. The
 // two-click arm step is gone: `header.tsx`'s shadcn `AlertDialog` is the
 // confirmation now, so this module only runs the request once the dialog's
-// own confirm button is pressed. #265's dispatch claim take/release is a
-// plain async function, called directly from `pipeline-status.tsx`'s own
-// button — no DOM click delegation.
+// own confirm button is pressed. #331's Take over is a plain async function,
+// called directly from `pipeline-status.tsx`'s own button — no DOM click
+// delegation, and `window.confirm` rather than a second `AlertDialog`, the
+// same idiom this owner line already used for the claim button it replaces.
 import type { HaltReport } from '../../../shared/dispatch/types'
 import type { RepoId } from '../../../shared/repos'
 import { haltAbortedCopy, haltHeadingCopy, haltItemLine } from './halt-copy'
@@ -69,16 +70,18 @@ export function dismissHaltReport(): void {
 // still import them from `./dispatch`.
 export { haltAbortedCopy, haltHeadingCopy, haltItemLine }
 
-/** #265: the claim take/release button's own click, called directly from
- *  `pipeline-status.tsx` — the target state is the button's own action,
- *  never a toggle read off the current line (the same "never a toggle this
- *  channel infers" rule `gate:claim:set` already follows). No local
+/** #331: the owner line's own Take over button, called directly from
+ *  `pipeline-status.tsx`. `window.confirm` is the confirmation — no local
  *  `notify()`: a successful write is picked up by the board's next regular
  *  poll, the same as every other dispatch-status field. */
-export async function setDispatchClaim(repoId: RepoId, held: boolean): Promise<void> {
+export async function takeOver(repoId: RepoId, repoName: string): Promise<void> {
+  const confirmed = window.confirm(
+    `Take over ${repoName} from the terminal?\n\nOnly do this if /port:pipeline isn't running for this repo in any terminal. This app can't tell whether it is. A cockpit still running there stops at its next tick.`,
+  )
+  if (!confirmed) return
   try {
-    await window.port.dispatchClaimSet({ repoId, held })
+    await window.port.dispatchControl({ command: 'take-over', repoId })
   } catch (error) {
-    console.error(`Failed to ${held ? 'take' : 'release'} the dispatch claim for '${repoId}'`, error)
+    console.error(`Failed to take over '${repoId}'`, error)
   }
 }

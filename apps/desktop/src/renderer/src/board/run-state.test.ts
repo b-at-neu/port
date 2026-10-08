@@ -73,6 +73,32 @@ describe('runStateResultNote', () => {
   })
 
   it('says nothing for a pause — its own report renders separately', () => {
-    expect(runStateResultNote({ ok: true, command: 'pause', repoId: REPO_ID, runState: runState(), report: { kind: 'completed', items: [] } })).toBeNull()
+    expect(runStateResultNote({ ok: true, command: 'pause', repoId: REPO_ID, runState: runState(), report: { kind: 'completed', items: [] }, released: true })).toBeNull()
+  })
+
+  it('names the since instant when run is refused by a terminal cockpit', () => {
+    const note = runStateResultNote({ ok: false, command: 'run', repoId: REPO_ID, reason: 'terminal-owned', since: '2026-01-01T14:02:00.000Z' })
+    expect(note).toContain('terminal cockpit')
+    expect(note).toContain('2026-01-01T14:02:00.000Z')
+  })
+
+  it('names the message when run is refused for an unreadable ownership record', () => {
+    const note = runStateResultNote({ ok: false, command: 'run', repoId: REPO_ID, reason: 'ownership-unreadable', message: 'bad json' })
+    expect(note).toContain('bad json')
+  })
+
+  it('names the since instant when drain is refused by a terminal cockpit', () => {
+    const note = runStateResultNote({ ok: false, command: 'drain', repoId: REPO_ID, reason: 'terminal-owned', since: '2026-01-01T14:02:00.000Z' })
+    expect(note).toContain('terminal cockpit')
+  })
+
+  it('says nothing for a successful take-over', () => {
+    expect(runStateResultNote({ ok: true, command: 'take-over', repoId: REPO_ID, runState: runState({ state: 'dispatching' }) })).toBeNull()
+  })
+
+  it('names the path and message for a take-over that fails to write', () => {
+    const note = runStateResultNote({ ok: false, command: 'take-over', repoId: REPO_ID, reason: 'unwritable', message: 'disk full', path: '/repo/.agents/cockpit.json' })
+    expect(note).toContain('/repo/.agents/cockpit.json')
+    expect(note).toContain('disk full')
   })
 })

@@ -13,7 +13,6 @@ function row(overrides: {
   readonly kind?: 'issue' | 'pull-request'
   readonly stageKey?: string | null
   readonly status?: 'waiting' | 'in-flight' | 'stalled' | 'gated' | 'terminal' | 'unstaged'
-  readonly relay?: BoardItemRow['relay']
   readonly actions?: Partial<Record<OperatorAction, ActionAvailability>>
   readonly decisions?: Partial<Record<OperatorDecision, DecisionAvailability>>
   readonly agents?: readonly AttachedAgent[]
@@ -60,7 +59,6 @@ function row(overrides: {
     stageLabel,
     actions: { ...NO_ACTIONS, ...overrides.actions },
     decisions: { ...NO_DECISIONS, ...overrides.decisions },
-    relay: overrides.relay ?? null,
   }
 }
 
@@ -122,11 +120,6 @@ describe('pillStatusFor', () => {
     expect(pillStatusFor(row({ stageKey: 'planReview' }))).toBe('attention')
   })
 
-  it('attention when a relay is pending, even if otherwise in-flight', () => {
-    const relay = { repoId: 'repo-a' as RepoId, number: 41 } as unknown as BoardItemRow['relay']
-    expect(pillStatusFor(row({ stageKey: 'inProgress', status: 'in-flight', relay }))).toBe('attention')
-  })
-
   it('working when in-flight', () => {
     expect(pillStatusFor(row({ stageKey: 'inProgress', status: 'in-flight' }))).toBe('working')
   })
@@ -149,15 +142,6 @@ describe('nextActionFor', () => {
     expect(nextActionFor(row({ kind: 'pull-request', stageKey: 'planReview' }))).toBeNull()
   })
 
-  it('Review plan wins over a pending relay on the same row (first hit wins)', () => {
-    const relay = { repoId: 'repo-a' as RepoId, number: 41 } as unknown as BoardItemRow['relay']
-    expect(nextActionFor(row({ kind: 'issue', stageKey: 'planReview', relay }))).toEqual({ kind: 'review-plan', label: 'Review plan' })
-  })
-
-  it('Answer question when a relay is pending and no review-plan applies', () => {
-    const relay = { repoId: 'repo-a' as RepoId, number: 41 } as unknown as BoardItemRow['relay']
-    expect(nextActionFor(row({ kind: 'issue', stageKey: 'inProgress', relay }))).toEqual({ kind: 'answer-question', label: 'Answer question' })
-  })
 
   it('Open PR when the stage is approved', () => {
     expect(nextActionFor(row({ kind: 'pull-request', stageKey: 'approved' }))).toEqual({ kind: 'open-pr', label: 'Open PR', url: 'https://github.com/o/a/pull/41' })

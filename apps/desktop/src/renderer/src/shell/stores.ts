@@ -69,6 +69,23 @@ export function usePauseRequest(): PauseRequest | null {
   return useSyncExternalStore(pauseRequestStore.subscribe, pauseRequestStore.get)
 }
 
+/** #331: the sidebar's own Take over confirmation — `take-over-confirm.tsx`'s
+ *  `AlertDialog`, armed the same way `PauseRequest` arms its own. */
+export interface TakeOverRequest {
+  readonly repoId: RepoId
+  readonly name: string
+}
+
+const takeOverRequestStore = createStore<TakeOverRequest | null>(null)
+
+export function setTakeOverRequest(request: TakeOverRequest | null): void {
+  takeOverRequestStore.set(request)
+}
+
+export function useTakeOverRequest(): TakeOverRequest | null {
+  return useSyncExternalStore(takeOverRequestStore.subscribe, takeOverRequestStore.get)
+}
+
 const renamingStore = createStore<string | null>(null)
 
 export function setRenaming(sessionKey: string | null): void {

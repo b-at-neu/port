@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { BoardSnapshot } from '../../../shared/board/types'
 import { budgetNoteLines, controlFor, observationClause, observationTitle, ownerLineCopy, runStateSuffix } from './owner'
-import { setDispatchClaim } from './dispatch'
+import { takeOver } from './dispatch'
 import { clockLineCopy, repositoryDetailLines, repositoryLineCopy, storeLineFor } from './tick'
 
 export interface PipelineStatusProps {
@@ -12,7 +12,7 @@ export interface PipelineStatusProps {
   readonly now: Date
 }
 
-function OwnerLine({ snapshot, repoId }: { readonly snapshot: BoardSnapshot; readonly repoId: BoardSnapshot['dispatch'][number]['repoId'] }) {
+function OwnerLine({ snapshot, repoId, repoName }: { readonly snapshot: BoardSnapshot; readonly repoId: BoardSnapshot['dispatch'][number]['repoId']; readonly repoName: string }) {
   const status = snapshot.dispatch.find((d) => d.repoId === repoId)
   if (status === undefined) return null
 
@@ -30,7 +30,7 @@ function OwnerLine({ snapshot, repoId }: { readonly snapshot: BoardSnapshot; rea
           {observationPart}
         </span>
         {control !== null ? (
-          <Button variant="ghost" size="small" title={control.title} onClick={() => void setDispatchClaim(status.repoId, control.action === 'dispatch-claim-take')}>
+          <Button variant="ghost" size="small" title={control.title} onClick={() => void takeOver(status.repoId, repoName)}>
             {control.label}
           </Button>
         ) : null}
@@ -53,7 +53,7 @@ export function PipelineStatus({ snapshot, now }: PipelineStatusProps) {
       <div>{clockLineCopy(snapshot.nextWakeupAt, snapshot.health, now)}</div>
       {snapshot.tick.map((report) => {
         const dispatchStatus = snapshot.dispatch.find((d) => d.repoId === report.repoId)
-        const owner = dispatchStatus?.owner ?? 'cockpit'
+        const owner = dispatchStatus?.owner ?? 'none'
         const repoRunState = snapshot.runStates.repositories.find((r) => r.repoId === report.repoId) ?? { repoId: report.repoId, state: 'paused' as const, since: null }
         const details = repositoryDetailLines(report, owner)
         const line = <div>{repositoryLineCopy(report, repoRunState.state, dispatchStatus?.owner)}</div>
@@ -72,7 +72,7 @@ export function PipelineStatus({ snapshot, now }: PipelineStatusProps) {
             ) : (
               line
             )}
-            <OwnerLine snapshot={snapshot} repoId={report.repoId} />
+            <OwnerLine snapshot={snapshot} repoId={report.repoId} repoName={report.displayName} />
           </div>
         )
       })}

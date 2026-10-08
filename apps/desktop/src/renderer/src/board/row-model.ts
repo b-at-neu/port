@@ -7,12 +7,12 @@ import type { BoardItemRow } from '../../../shared/board/types'
 import type { AttachedAgent, AttachedSession } from '../../../shared/state/types'
 import type { PillStatus } from '../components/status-pill'
 import type { ItemActionState } from './actions'
-import { actionRefusalNote, actionResultCopy, answerQuestionButtonLabel, decisionButtonLabel, decisionRefusalNote, openPrButtonLabel, reviewPlanButtonLabel } from './copy'
+import { actionRefusalNote, actionResultCopy, decisionButtonLabel, decisionRefusalNote, openPrButtonLabel, reviewPlanButtonLabel } from './copy'
 
 // Mirrors board/sections.ts's own waiting-on-you predicate, so a row's
 // section and its pill colour can never disagree.
 export function pillStatusFor(row: BoardItemRow): PillStatus {
-  if (needsYouReasonOf(row.stageLabel?.key) !== undefined || row.relay !== null) return 'attention'
+  if (needsYouReasonOf(row.stageLabel?.key) !== undefined) return 'attention'
   if (row.displayStatus.status === 'stalled') return 'danger'
   if (row.displayStatus.status === 'in-flight') return 'working'
   return 'idle'
@@ -83,18 +83,14 @@ export function actionNoteFor(row: BoardItemRow, state: ItemActionState | undefi
 
 export type NextAction =
   | { readonly kind: 'review-plan'; readonly label: string }
-  | { readonly kind: 'answer-question'; readonly label: string }
   | { readonly kind: 'open-pr'; readonly label: string; readonly url: string }
   | { readonly kind: 'decision'; readonly label: string; readonly decision: OperatorDecision }
 
-// First hit wins: review the plan, answer a pending question, open a
-// ready-to-merge pull request, then the first available decision.
+// First hit wins: review the plan, open a ready-to-merge pull request, then
+// the first available decision.
 export function nextActionFor(row: BoardItemRow): NextAction | null {
   if (row.item.kind === 'issue' && row.stageLabel?.key === 'planReview') {
     return { kind: 'review-plan', label: reviewPlanButtonLabel() }
-  }
-  if (row.relay !== null) {
-    return { kind: 'answer-question', label: answerQuestionButtonLabel() }
   }
   if (row.stageLabel?.key === 'approved') {
     return { kind: 'open-pr', label: openPrButtonLabel(), url: row.item.url }

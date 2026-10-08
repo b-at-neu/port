@@ -7,9 +7,9 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { BoardSnapshot } from '../../../shared/board/types'
 import { haltHeadingCopy, haltItemLine } from '../board/halt-copy'
 import { runStateResultNote, pauseReportNote, pauseAbortedCopy } from '../board/run-state'
-import { setPauseRequest } from './stores'
+import { setPauseRequest, setTakeOverRequest } from './stores'
 
-function applyRunState(client: ReturnType<typeof useQueryClient>, repoId: RepoId, result: Extract<DispatchControlResult, { readonly command: 'run' | 'drain' | 'pause' }>): void {
+function applyRunState(client: ReturnType<typeof useQueryClient>, repoId: RepoId, result: Extract<DispatchControlResult, { readonly command: 'run' | 'drain' | 'pause' | 'take-over' }>): void {
   if (!result.ok) return
   client.setQueryData(ipcQueryOptions('board:snapshot').queryKey, (snapshot: BoardSnapshot | undefined) => {
     if (snapshot === undefined) return snapshot
@@ -76,6 +76,28 @@ export function useRunStateCommand() {
     confirmPause(repoId: RepoId, repoName: string): void {
       setPauseRequest(null)
       void send('pause', repoId, repoName)
+    },
+    /** #331: arms `take-over-confirm.tsx`'s `AlertDialog` (DESIGN §4: a
+     *  consequential action) — the sidebar's own Take over, never applied
+     *  at once the way an empty-in-flight pause is. */
+    requestTakeOver(repoId: RepoId, repoName: string): void {
+      setTakeOverRequest({ repoId, name: repoName })
+    },
+    async confirmTakeOver(repoId: RepoId, repoName: string): Promise<void> {
+      setTakeOverRequest(null)
+      try {
+        const result = await mutation.mutateAsync({ command: 'take-over', repoId })
+        if (result.command !== 'take-over') return
+        if (!result.ok) {
+          toast.error(runStateResultNote(result) ?? `Couldn't take over ${repoName}.`)
+          return
+        }
+        applyRunState(client, repoId, result)
+        toast.success(`${repoName} is running here`)
+      } catch (error) {
+        console.error('Failed to reach the main process for dispatch take-over', error)
+        toast.error("Couldn't reach the main process. Restart port to try again.")
+      }
     },
     pending: mutation.isPending,
   }

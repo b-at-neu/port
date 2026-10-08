@@ -91,7 +91,6 @@ function snapshotWith(tick: readonly TickReport[], items: readonly ReconciledIte
     health: [],
     policy: { baseIntervalMs: { github: 60_000, sessions: 15_000, worktrees: 15_000, denials: 15_000 }, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: 30_000 },
     tick,
-    relay: { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: readAt },
     runStates: { store: { kind: 'loaded' }, repositories: [] },
     nextWakeupAt: null,
     emittedAt: readAt,

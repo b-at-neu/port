@@ -35,10 +35,8 @@ const SECTION_NAMES: Readonly<Record<BoardSectionKey, string>> = {
   queued: 'Queued',
 }
 
-// First hit wins: a relay-pending row reads as Waiting on you even if
-// otherwise in-flight.
 function sectionOf(row: BoardItemRow): BoardSectionKey {
-  if (needsYouReasonOf(row.stageLabel?.key) !== undefined || row.relay !== null) return 'waiting-on-you'
+  if (needsYouReasonOf(row.stageLabel?.key) !== undefined) return 'waiting-on-you'
   if (row.displayStatus.status === 'in-flight' || row.displayStatus.status === 'stalled') return 'in-progress'
   return 'queued'
 }

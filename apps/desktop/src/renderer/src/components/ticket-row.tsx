@@ -32,9 +32,6 @@ function NextActionLink({ row, onSelect }: { readonly row: BoardItemRow; readonl
       case 'review-plan':
         openReviewDialog(row.item.repoId, row.item.number)
         return
-      case 'answer-question':
-        onSelect()
-        return
       case 'open-pr':
         window.open(action.url, '_blank')
         return

@@ -1,53 +1,26 @@
 // Every string the plan gate dialog renders lives here, one function per
 // union — a new variant is a compile error rather than a silently blank
 // line, the same rule `claim/copy.ts`'s and `board/copy.ts`'s own headers
-// state. Pure string functions; no DOM here. The claim-step lines are
-// `docs/COORDINATION.md`'s own decided copy, verbatim — a mismatch there is
-// this file's own regression, pinned by `scripts/checks/desktop-gate.ts`.
+// state. Pure string functions; no DOM here.
 import type { GateAnswerResponse, GateDecision, GateVerdict } from '../../../shared/gate/types'
-import type { ClaimRead } from '../../../shared/writes/types'
+import type { OwnershipSummary } from '../../../shared/writes/types'
 
-export interface ClaimLineCopy {
-  readonly line: string
-  readonly note: string | null
-  readonly action: 'take' | 'release' | 'overwrite' | 'delete' | null
-}
-
-/** The Claim step's own copy — `docs/COORDINATION.md`'s "Detecting and
- *  presenting a conflict" section, verbatim, since the Reviewing step
- *  repeats this same line rather than re-deriving it. */
-export function claimLineCopy(claim: ClaimRead): ClaimLineCopy {
-  switch (claim.state) {
-    case 'absent':
-      return { line: "The plan gate isn't claimed here.", note: 'The cockpit is still answering it in your terminal.', action: 'take' }
-    case 'held': {
-      const unknown = claim.unknownScopes.length > 0 ? ` · it also claims \`${claim.unknownScopes.join('`, `')}\`, which this app doesn't recognize.` : ''
-      return {
-        line: `Plan gate claimed by \`${claim.owner}\` since ${claim.claimedAt}.`,
-        note: `The cockpit stands down from \`plan review\` in this checkout.${unknown}`,
-        action: 'release',
-      }
-    }
-    case 'unreadable':
-      return {
-        line: `\`${claim.path}\` can't be read (${claim.message}).`,
-        note: "Until it's valid or removed, this app and the cockpit both stand down from the plan gate — nothing will answer an issue at `plan review`. Fix or delete the file.",
-        action: 'overwrite',
-      }
+/** #331: the Reviewing step's own disabled-controls reason — `null` while
+ *  `ownership` is `'app'` or `'absent'`, since Approve/Request changes work
+ *  directly then (the app answers the gate without a claim either way). */
+export function gateDisabledReason(ownership: OwnershipSummary): string | null {
+  if (ownership.kind === 'terminal') return 'Your terminal cockpit answers this gate — this app owns nothing here.'
+  if (ownership.kind === 'unreadable') {
+    return `${ownership.path} can't be read (${ownership.message}). Until it's valid or removed, this app and a terminal cockpit both stand down from the plan gate — nothing will answer this issue. Fix or delete the file.`
   }
+  return null
 }
 
-export function isClaimHeldForPlanGate(claim: ClaimRead): boolean {
-  return claim.state === 'held' && claim.scopes.includes('plan-gate')
-}
-
-/** #313: the app now makes the `autoPlan` swap itself under a held
- *  `plan-gate` claim, so the note no longer says this item is stuck waiting
- *  for the claim — one arm per claim state, mirroring `claimLineCopy`'s own
- *  split. */
-export function autoPlanNoteCopy(claim: ClaimRead): string {
-  if (claim.state === 'unreadable') return "Opted in with auto-approve, but nothing approves it until the claim file is fixed or removed."
-  if (claim.state === 'held' && claim.scopes.includes('plan-gate')) {
+/** #313, #331: the app makes the `autoPlan` swap itself while it owns the
+ *  repository — the note no longer reads a claim. */
+export function autoPlanNoteCopy(ownership: OwnershipSummary): string {
+  if (ownership.kind === 'unreadable') return "Opted in with auto-approve, but nothing approves it until the ownership record is fixed or removed."
+  if (ownership.kind === 'app') {
     return 'Opted in with auto-approve. port approves it on its next poll, unless dispatch is drained. You can still answer it now.'
   }
   return 'Opted in with auto-approve. The cockpit approves it on its next tick.'
@@ -89,7 +62,7 @@ export function feedbackHint(number: number): string {
 export interface ResultCopy {
   readonly line: string
   readonly note: string | null
-  readonly actions: readonly ('retry-label' | 'show-state' | 'try-again' | 'take-claim' | 'dismiss')[]
+  readonly actions: readonly ('retry-label' | 'show-state' | 'try-again' | 'dismiss')[]
 }
 
 /** One line plus a note, exhaustive over `GateAnswerResponse` (the plan's
@@ -166,9 +139,9 @@ function labelAbortDetail(labels: Extract<GateAnswerResponse, { kind: 'answered'
         : ''
     case 'write-failed':
       return labels.stderr
-    case 'unclaimed-scope':
-    case 'claim-unreadable':
-      return 'The plan gate is no longer claimed here.'
+    case 'terminal-owned':
+    case 'ownership-unreadable':
+      return 'This app no longer owns the repository.'
     case 'unresolvable-label':
       return `Check the following keys in .claude/port.config.json's labels: ${labels.keys.join(', ')}.`
     case 'verify-failed':
@@ -192,9 +165,10 @@ function labelOnlyCopy(n: string, labels: Extract<GateAnswerResponse, { kind: 'a
     }
     case 'no-op':
       return { line: `#${n} already carries that label.`, note: 'Nothing was written.', actions: ['dismiss'] }
-    case 'unclaimed-scope':
-    case 'claim-unreadable':
-      return { line: 'The plan gate is not claimed here.', note: 'Nothing was written.', actions: ['take-claim'] }
+    case 'terminal-owned':
+      return { line: 'This app no longer owns the repository.', note: `Your terminal cockpit has owned it since ${labels.since}. Nothing was written.`, actions: ['dismiss'] }
+    case 'ownership-unreadable':
+      return { line: 'This app no longer owns the repository.', note: `${labels.path} can't be read (${labels.message}). Nothing was written.`, actions: ['dismiss'] }
     case 'write-failed':
       return { line: 'GitHub refused the write.', note: `${labels.stderr} Nothing else was changed.`, actions: ['dismiss'] }
     case 'verify-failed':

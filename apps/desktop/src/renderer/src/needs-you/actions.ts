@@ -5,7 +5,7 @@ import type { NeedsYouItem } from '../../../shared/board/needs-you'
 import { openReviewDialog } from '../gate/controller'
 import { openDecision } from '../decision/controller'
 
-export type NeedsYouActionKind = 'review-plan' | 'answer' | 'open' | 'unblock' | 'retry' | 'refresh'
+export type NeedsYouActionKind = 'review-plan' | 'open' | 'unblock' | 'retry' | 'refresh'
 
 export interface NeedsYouAction {
   readonly label: string
@@ -50,10 +50,6 @@ export function actionFor(item: NeedsYouItem): NeedsYouAction {
       return { label: 'Review plan', kind: 'review-plan', disabledReason: null }
     case 'ready-to-merge':
       return { label: 'Open PR', kind: 'open', disabledReason: null }
-    case 'question':
-      return item.pending.kind === 'usage-limit'
-        ? { label: 'Answer', kind: 'answer', disabledReason: 'Nothing to answer — the session hit its usage limit.' }
-        : { label: 'Answer', kind: 'answer', disabledReason: null }
     case 'needs-human':
     case 'blocked':
       return unblockAction(item)
@@ -68,7 +64,6 @@ export function actionFor(item: NeedsYouItem): NeedsYouAction {
 
 export interface RunActionDeps {
   readonly onToast: (message: string) => void
-  readonly onExpand: () => void
 }
 
 /** The row's own click entry point: opens a dialog, opens the item's url,
@@ -90,9 +85,6 @@ export function runAction(item: NeedsYouItem, deps: RunActionDeps): void {
     }
     case 'open':
       if (item.url !== null) window.open(item.url, '_blank')
-      return
-    case 'answer':
-      deps.onExpand()
       return
     case 'retry':
     case 'refresh':

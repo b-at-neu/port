@@ -6,7 +6,6 @@ import type { RepoId } from '../repos'
 import type { ItemStatus, PipelineState, ReconciledItem, RepositoryState, StageLabel } from '../state/types'
 import type { ActionAvailability, DecisionAvailability, OperatorAction, OperatorDecision } from '../actions/types'
 import type { TickReport } from '../tick/types'
-import type { RelayPending, RelayScan } from '../relay/types'
 import type { RepoDispatchStatus, RunStatesSnapshot } from '../dispatch/types'
 
 /**
@@ -108,11 +107,6 @@ export interface BoardSnapshot {
    *  `buildSnapshot()` from the same `PipelineState` above, never a second
    *  poll or a second cadence. */
   readonly tick: readonly TickReport[]
-  /** The relay loop's own scan (#107) — computed inside `runSessions()`
-   *  right after `refreshSessions`, over the same session scan it just
-   *  refreshed. No new `SourceKind`: it rides the `sessions` source's own
-   *  cadence and freshness rather than scheduling a second one. */
-  readonly relay: RelayScan
   /** #314: every registered repository's own run state (`dispatching`,
    *  `draining` or `paused`), stamped onto every snapshot so the board's
    *  per-repository run-state row and the store line never need a second
@@ -130,9 +124,9 @@ export interface BoardSnapshot {
   readonly emittedAt: string
   /** #265: one row per ready repository, this app's own dispatcher state —
    *  computed inside `buildSnapshot()` from `dispatcher.status()`, never a
-   *  second read channel, the same rule `tick`/`relay`/`drain` above already
-   *  follow for their own sources. `[]` when no dispatcher was wired at all
-   *  (every existing caller, until `main/ipc.ts` wires one). */
+   *  second read channel, the same rule `tick` above already follows for its
+   *  own source. `[]` when no dispatcher was wired at all (every existing
+   *  caller, until `main/ipc.ts` wires one). */
   readonly dispatch: readonly RepoDispatchStatus[]
 }
 
@@ -159,10 +153,6 @@ export interface BoardItemRow {
   /** `decisionsFor`'s own result for this item, the same already-computed
    *  rule `actions` above follows. */
   readonly decisions: Readonly<Record<OperatorDecision, DecisionAvailability>>
-  /** This row's own pending relay (#107), matched on `repoId`+`number` —
-   *  `null` when nothing dispatched against this item is waiting on a human.
-   *  Drives the row's `Waiting on you` badge. */
-  readonly relay: RelayPending | null
 }
 
 export interface BoardGroup {
@@ -207,10 +197,6 @@ export interface BoardProjection {
    *  request. Never populated when the module is off: there is no gate to
    *  restore, so the section is absent entirely, not disabled. */
   readonly ungated: readonly BoardItemRow[]
-  /** Every pending relay (#107), oldest-waiting first — a pending whose
-   *  number matches no row still appears here, never dropped for having no
-   *  home on the board. */
-  readonly relays: readonly RelayPending[]
   readonly emittedAt: string
   /** The Decision 1 no-op guard — a compact string over every rendered
    *  field, deliberately excluding `emittedAt` itself, so a poll that

@@ -24,20 +24,37 @@ export function runStateLineCopy(repoRunState: RepoRunState, store: RunStatesSna
   return since !== null ? `Paused since ${timeOf(since)} — nothing dispatches` : 'Paused — press Run to start dispatching'
 }
 
-/** The one line rendered near the row once a run/drain command's own result
- *  needs the operator's attention — `null` for an ordinary success, since
- *  `runStateLineCopy` already covers the persisted state on every later
- *  read. `pause`'s own result renders as a stop report instead
+/** `run`/`drain`/`take-over`'s own failure reasons (#331): `terminal-owned`
+ *  and `ownership-unreadable` come from the ownership take that now runs
+ *  before the run-state write itself, so neither ever reaches the
+ *  `dispatch.json`-specific copy below. */
+function ownershipRefusalNote(reason: 'terminal-owned' | 'ownership-unreadable', since: string | undefined, message: string | undefined): string {
+  if (reason === 'terminal-owned') return `Stays paused: your terminal cockpit has owned this repository since ${since}. Take over there, or use Take over here.`
+  return `Stays paused: its ownership record can't be read (${message}). Fix or delete it, then run it again.`
+}
+
+/** The one line rendered near the row once a run/drain/take-over command's
+ *  own result needs the operator's attention — `null` for an ordinary
+ *  success, since `runStateLineCopy` already covers the persisted state on
+ *  every later read. `pause`'s own result renders as a stop report instead
  *  (`pauseReportNote`/`pauseAbortedCopy`), never through this line. */
 export function runStateResultNote(result: DispatchControlResult): string | null {
   if (result.command === 'run') {
     if (result.ok) return null
+    if (result.reason === 'terminal-owned' || result.reason === 'ownership-unreadable') return ownershipRefusalNote(result.reason, result.since, result.message)
     if (result.reason === 'unwritable') return `Couldn't run: ${result.path} couldn't be written (${result.message}). It's still paused.`
     return `Stays paused: dispatch.json can't be read (${result.message}). Fix or delete it, then run it again.`
   }
   if (result.command === 'drain') {
-    if (!result.ok) return `Stays paused: dispatch.json can't be read (${result.message}). Fix or delete it, then run it again.`
+    if (!result.ok) {
+      if (result.reason === 'terminal-owned' || result.reason === 'ownership-unreadable') return ownershipRefusalNote(result.reason, result.since, result.message)
+      return `Stays paused: dispatch.json can't be read (${result.message}). Fix or delete it, then run it again.`
+    }
     return result.persisted ? null : "Draining, but it wasn't saved to disk, so it won't survive a restart."
+  }
+  if (result.command === 'take-over') {
+    if (result.ok) return null
+    return `Couldn't take over: ${result.path} couldn't be written (${result.message}).`
   }
   return null
 }

@@ -51,7 +51,7 @@ describe('createDispatchRuntime', () => {
       dirs: { audit: '/audit', scratch: '/scratch' },
       now: () => new Date('2026-01-01T00:00:00Z'),
     })
-    expect(() => runtime.dispatcher.consider({ state: { repositories: [], sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: 't' }, readAt: 't' }, health: [], policy: { baseIntervalMs: { github: 60_000, sessions: 15_000, worktrees: 15_000, denials: 15_000 }, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: 30_000 }, tick: [], relay: { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: 't' }, runStates: { store: { kind: 'loaded' }, repositories: [] }, nextWakeupAt: null, emittedAt: 't', dispatch: [] })).not.toThrow()
+    expect(() => runtime.dispatcher.consider({ state: { repositories: [], sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: 't' }, readAt: 't' }, health: [], policy: { baseIntervalMs: { github: 60_000, sessions: 15_000, worktrees: 15_000, denials: 15_000 }, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: 30_000 }, tick: [], runStates: { store: { kind: 'loaded' }, repositories: [] }, nextWakeupAt: null, emittedAt: 't', dispatch: [] })).not.toThrow()
   })
 
   it('exposes an autoPlanner alongside the dispatcher', () => {
@@ -113,7 +113,7 @@ describe('createDispatchRuntime', () => {
     runtime.bindWatcher(() => {
       called = true
     })
-    await runtime.dispatcher.consider({ state: { repositories: [], sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: 't' }, readAt: 't' }, health: [], policy: { baseIntervalMs: { github: 60_000, sessions: 15_000, worktrees: 15_000, denials: 15_000 }, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: 30_000 }, tick: [], relay: { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: 't' }, runStates: { store: { kind: 'loaded' }, repositories: [] }, nextWakeupAt: null, emittedAt: 't', dispatch: [] })
+    await runtime.dispatcher.consider({ state: { repositories: [], sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: 't' }, readAt: 't' }, health: [], policy: { baseIntervalMs: { github: 60_000, sessions: 15_000, worktrees: 15_000, denials: 15_000 }, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: 30_000 }, tick: [], runStates: { store: { kind: 'loaded' }, repositories: [] }, nextWakeupAt: null, emittedAt: 't', dispatch: [] })
     expect(called).toBe(true)
   })
 })
