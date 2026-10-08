@@ -24,7 +24,8 @@ function sessionListKey() {
   return ipcQueryOptions('session:list').queryKey
 }
 
-function putSession(snapshot: HostedSessionSnapshot): void {
+/** Adopts a snapshot into the `session:list` cache — the restore banner's own resumes use this too. */
+export function adoptSession(snapshot: HostedSessionSnapshot): void {
   if (queryClient === null) return
   const key = sessionListKey()
   const existing = queryClient.getQueryData<readonly HostedSessionSnapshot[]>(key)
@@ -104,7 +105,7 @@ function handleStartResult(result: SessionStartResult): void {
   setPendingStart(null)
   if (result.ok) {
     setStartFailure(null)
-    putSession(result.snapshot)
+    adoptSession(result.snapshot)
     void router.navigate({ to: ROUTE_IDS.session, search: { key: result.snapshot.sessionKey } })
     return
   }
