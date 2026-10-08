@@ -13,8 +13,7 @@ import { ipcQueryOptions, useIpcMutation, useIpcQuery } from '../data/query'
 import { ROUTE_IDS } from '../router/routes'
 import type { ReposListResponse } from '../../../shared/ipc'
 import type { RepoId, RepositoryEntry } from '../../../shared/repos'
-import { legacyActions } from '../shell/legacy-actions'
-import { startNewSession } from '../session/controller'
+import { startNewSession } from '../session/actions'
 import { DenialsTab } from './denials-tab'
 import { OverviewTab } from './overview-tab'
 import { WorktreesTab } from './worktrees-tab'
@@ -78,8 +77,8 @@ export function RepoScreen() {
               New session
             </Button>
           ) : null}
-          <Button variant="outline" size="small" onClick={() => legacyActions()?.openSessions(repoId as RepoId)}>
-            Transcripts
+          <Button variant="outline" size="small" onClick={() => void navigate({ to: ROUTE_IDS.history, search: { repo: repoId as RepoId } })}>
+            History
           </Button>
           <Button variant="outline" size="small" onClick={() => setRemoveOpen(true)}>
             Remove

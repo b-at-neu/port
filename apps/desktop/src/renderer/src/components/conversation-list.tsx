@@ -37,14 +37,17 @@ export interface ConversationListProps {
   /** Scrolled to and highlighted once, on the row's own mount — a later prop
    *  change never re-focuses anything. */
   readonly focusIndex: number | null
+  /** Bumping this number scrolls to the bottom — the transcript header's own Jump to latest. */
+  readonly jumpSignal?: number
 }
 
-export function ConversationList({ entries, baseIndex, live, focusIndex }: ConversationListProps) {
+export function ConversationList({ entries, baseIndex, live, focusIndex, jumpSignal }: ConversationListProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const wasNearBottomRef = useRef(true)
   const hasScrolledOnceRef = useRef(false)
   const revealingRef = useRef(false)
   const signatureRef = useRef('')
+  const jumpSignalRef = useRef(jumpSignal)
   const [visibleCount, setVisibleCount] = useState(() => Math.min(entries.length, CHUNK_THRESHOLD))
   const [pendingBelow, setPendingBelow] = useState(0)
 
@@ -65,6 +68,11 @@ export function ConversationList({ entries, baseIndex, live, focusIndex }: Conve
   function containerRefCallback(node: HTMLDivElement | null): void {
     containerRef.current = node
     if (node === null) return
+
+    if (jumpSignal !== undefined && jumpSignal !== jumpSignalRef.current) {
+      jumpSignalRef.current = jumpSignal
+      jumpToLatest()
+    }
 
     if (!hasScrolledOnceRef.current) {
       hasScrolledOnceRef.current = true

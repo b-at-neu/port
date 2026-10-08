@@ -40,7 +40,7 @@ export function SessionHeader({
 }) {
   const { phase } = snapshot
   const phaseCopy = PHASE_COPY[phase]
-  const label = phase === 'ended' && snapshot.end !== null ? END_COPY[snapshot.end.reason].title : PHASE_LABEL[phase]
+  const label = phase === 'ended' ? (snapshot.end !== null ? END_COPY[snapshot.end.reason].title : '') : PHASE_LABEL[phase]
 
   return (
     <ScreenHeader className="justify-between gap-3">

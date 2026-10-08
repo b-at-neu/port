@@ -14,7 +14,7 @@ import { ConversationList } from '../components/conversation-list'
 import { useIpcQuery } from '../data/query'
 import { ROUTE_IDS } from '../router/routes'
 import type { RepoId, RepositoryEntry } from '../../../shared/repos'
-import type { HostedSessionSnapshot } from '../../../shared/hosting/types'
+import type { HostedSessionSnapshot, SessionKey } from '../../../shared/hosting/types'
 import { setSelectedSession } from './selection'
 import { useSessionEntries } from './entries-store'
 import { useDraft, setDraft } from './drafts'
@@ -41,7 +41,7 @@ export function SessionScreen() {
   const repos = useIpcQuery('repos:list')
   const pendingStart = usePendingStart()
   const startFailure = useStartFailure()
-  const key = search.key ?? null
+  const key = (search.key ?? null) as SessionKey | null
 
   setSelectedSession(key)
 

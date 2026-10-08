@@ -6,21 +6,27 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { DiffView } from './diff-view'
 import type { RowView, ToolResultView } from './conversation-model'
 
-const TOOL_ICONS: Readonly<Record<string, typeof Wrench>> = {
-  Read: FileText,
-  Write: FileEdit,
-  Edit: FileEdit,
-  MultiEdit: FileEdit,
-  NotebookEdit: FileEdit,
-  Bash: SquareTerminal,
-  Glob: FileSearch,
-  Grep: Search,
-  WebFetch: Globe,
-  WebSearch: Globe,
-}
-
-function iconFor(name: string): typeof Wrench {
-  return TOOL_ICONS[name] ?? Wrench
+function ToolIcon({ name, className }: { readonly name: string; readonly className: string }) {
+  switch (name) {
+    case 'Read':
+      return <FileText aria-hidden="true" className={className} />
+    case 'Write':
+    case 'Edit':
+    case 'MultiEdit':
+    case 'NotebookEdit':
+      return <FileEdit aria-hidden="true" className={className} />
+    case 'Bash':
+      return <SquareTerminal aria-hidden="true" className={className} />
+    case 'Glob':
+      return <FileSearch aria-hidden="true" className={className} />
+    case 'Grep':
+      return <Search aria-hidden="true" className={className} />
+    case 'WebFetch':
+    case 'WebSearch':
+      return <Globe aria-hidden="true" className={className} />
+    default:
+      return <Wrench aria-hidden="true" className={className} />
+  }
 }
 
 function resultLabel(result: ToolResultView): string {
@@ -31,13 +37,12 @@ function resultLabel(result: ToolResultView): string {
 
 export function ToolCallRow({ row }: { readonly row: Extract<RowView, { readonly kind: 'tool-call' }> }) {
   const [open, setOpen] = useState(false)
-  const Icon = iconFor(row.name)
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} data-slot="tool-call-row">
       <CollapsibleTrigger className="flex h-7 w-full items-center gap-2 rounded-md px-1 text-left text-small outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring">
         <ChevronRight aria-hidden="true" className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
-        <Icon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+        <ToolIcon name={row.name} className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="shrink-0 text-foreground-secondary">{row.name}</span>
         <span className="flex-1 truncate font-mono text-meta text-muted-foreground">{row.headline}</span>
         <span className={cn('shrink-0 text-meta', row.result.kind === 'error' ? 'text-danger-pill-foreground' : 'text-muted-foreground')}>{resultLabel(row.result)}</span>
