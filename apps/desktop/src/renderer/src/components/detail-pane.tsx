@@ -1,10 +1,5 @@
-// A reusable 290px side panel (#319) — the Board's own item detail and the
-// Repositories screen's worktree detail (`repositories/worktrees-tab.tsx`)
-// both compose their own content inside this shell, which owns only the
-// width, padding, the 150ms-fade-plus-4px-slide entrance (reduced motion
-// turns it off globally, `app.css`) and Esc-to-close. A callback `ref`
-// focuses the pane on mount so `onKeyDown` alone catches Escape — no global
-// listener, no `useEffect`.
+// A reusable 290px side panel. A callback ref focuses the pane on mount so
+// onKeyDown alone catches Escape — no global listener, no useEffect.
 import type { KeyboardEvent, ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 

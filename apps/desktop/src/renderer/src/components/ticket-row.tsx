@@ -1,7 +1,5 @@
-// DESIGN's Board `TicketRow` (36px) — #319. The row carries no action strip
-// of its own; every operator action lives in the detail pane now
-// (`item-pane.tsx`), so this component only needs the row's identity, its
-// `PhaseBar`/phase pill, and the one next-action link.
+// The Board's TicketRow (36px) — identity, PhaseBar/phase pill, and the
+// one next-action link; every operator action lives in the detail pane.
 import type { KeyboardEvent, MouseEvent } from 'react'
 import { cn } from '@/lib/utils'
 import type { BoardItemRow } from '../../../shared/board/types'

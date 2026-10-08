@@ -39,12 +39,8 @@ function getState(): DecisionState {
   return state
 }
 
-/** The typed entry point (#319) — opens the dialog directly from an
- *  already-known repoId/number/decision/context, no DOM dataset round trip.
- *  The Board's `nextActionFor` 'decision' choice calls this directly; the
- *  legacy Backlog's own dataset-based click delegation below still goes
- *  through it too, so the two surfaces can never drift on what "open the
- *  decision dialog" means. */
+// The typed entry point — opens the dialog from an already-known
+// repoId/number/decision/context, no DOM dataset round trip.
 export function openDecision(params: {
   readonly repoId: RepoId
   readonly number: number
@@ -60,9 +56,8 @@ export function openDecision(params: {
   }
 }
 
-/** The legacy Backlog row's own click entry point — parses the dataset,
- *  then delegates to `openDecision`. Stays until #320 migrates Backlog's own
- *  DOM. */
+// The legacy Backlog row's own click entry point — parses the dataset,
+// then delegates to openDecision.
 export function openDecisionDialog(target: HTMLElement): void {
   const decision = target.dataset.action?.slice('decide-'.length) as OperatorDecision | undefined
   const { repoId, number, stage, context } = target.dataset

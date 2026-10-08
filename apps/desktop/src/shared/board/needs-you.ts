@@ -44,10 +44,7 @@ const ROW_KIND: Readonly<Partial<Record<string, RowNeedsYouKind>>> = {
   blocked: 'blocked',
 }
 
-/** The row-level "needs you" kind for a stage label key, `undefined` for
- *  every other stage — shared with `board/sections.ts`'s own "Waiting on
- *  you" predicate so the Board's section and the sidebar's count can never
- *  disagree about which rows qualify. */
+// The row-level "needs you" kind for a stage label key, undefined otherwise.
 export function needsYouReasonOf(stageKey: string | undefined): RowNeedsYouKind | undefined {
   return ROW_KIND[stageKey ?? '']
 }

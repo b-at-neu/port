@@ -1,7 +1,5 @@
-// The Board's own detail pane content (#319, plan's own **UX states**) —
-// composed inside the shared `DetailPane` shell. Holds the row's title,
-// phase pill, `PhaseList`, held detail, the relay card when a question is
-// pending, and every available operator action/decision.
+// The Board's detail pane content, inside the shared `DetailPane` shell:
+// title, phase pill, `PhaseList`, held detail, relay card, actions.
 import { useSyncExternalStore } from 'react'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -100,7 +98,7 @@ export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
                   </Button>
                 </span>
               </TooltipTrigger>
-              {pendingAction !== null && pendingAction !== action ? <TooltipContent>Another action on #{item.number} is running.</TooltipContent> : null}
+              {pendingAction !== null && pendingAction !== action ? <TooltipContent>Another action on #{item.number} is already in progress.</TooltipContent> : null}
             </Tooltip>
           ))}
           {availableDecisions.map((decision) => {

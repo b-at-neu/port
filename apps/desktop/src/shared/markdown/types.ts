@@ -1,6 +1,7 @@
 // The renderer-safe node values `shared/markdown/block.ts`/`inline.ts` parse
-// into (#92) — DOM construction is `renderer/src/markdown.ts`'s job alone;
-// this file contains no browser or Node API and no markup string anywhere.
+// into (#92) — rendering is `renderer/src/components/markdown.tsx`'s job
+// alone; this file contains no browser or Node API and no markup string
+// anywhere.
 // Anything the block/inline parsers do not recognize (raw HTML, images,
 // footnotes, reference links, deeper list nesting) is carried inside an
 // ordinary `paragraph`'s own `text` inline nodes — rendered as literal

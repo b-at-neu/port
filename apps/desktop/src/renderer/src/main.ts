@@ -1,20 +1,14 @@
 import './styles/app.css'
 import './index.css'
 import './transcript.css'
-import './board.css'
-import './claim.css'
-import './gate.css'
 import './decision.css'
 import './permission.css'
 import './search.css'
 import './session.css'
 import './session-rail.css'
 import './commands-strip.css'
-import type { AppInfo } from '../../shared/ipc'
 import type { RepoId, RepositoryEntry } from '../../shared/repos'
-import type { BoardSnapshot, GroupBy } from '../../shared/board/types'
-import { render, type RegistryBanner, type RendererState } from './repositories'
-import type { WorktreeSectionState } from './worktrees'
+import type { ReposListResponse } from '../../shared/ipc'
 import { renderSessionsPicker, type SessionsPickerState } from './sessions'
 import { jumpToLatest, renderTranscript } from './transcript'
 import {
@@ -28,18 +22,14 @@ import {
 } from './transcript-tail'
 import { agentLabel, sessionLabel } from '../../shared/sessions/label'
 import { changeSearchScope, openSearch, registerSearchRedraw, renderSearch, searchScreenState, submitSearch } from './search'
-import { render as renderBoard, type BoardViewState } from './board/view'
-import { handleItemActionClick, pruneItemActionStates } from './board/actions'
-import { handleDispatchClick } from './board/dispatch'
-import { initClaim, openClaimDialog } from './claim/controller'
 import { initDecision, openDecisionDialog } from './decision/controller'
-import { initGate, openGateDialog, openReviewDialog } from './gate/controller'
 import { initPermissions } from './permission/controller'
 import { initSession } from './session/controller'
 import { router } from './router/router'
 import { routeForView, containerFor, isReactScreen, viewFromMatch, type View } from './router/legacy-view'
-import { createQueryClient, ipcQueryOptions, observeIpcQuery } from './data/query'
+import { createQueryClient, ipcQueryOptions } from './data/query'
 import { connectQueryCache } from './data/subscriptions'
+import { connectItemActionPruning } from './board/screen'
 import { mountReact } from './react/mount'
 import { themeStore } from './theme/store'
 import { registerLegacyActions } from './shell/legacy-actions'
@@ -54,14 +44,10 @@ import { shouldRedirectToSetup } from './setup/launch-redirect'
 
 const app = document.querySelector<HTMLDivElement>('#app')
 const shellRoot = document.querySelector<HTMLDivElement>('#shell-root')
-const boardContainer = document.querySelector<HTMLDivElement>('#board-view')
 const reposContainer = document.querySelector<HTMLDivElement>('#repositories-view')
 const sessionContainer = document.querySelector<HTMLDivElement>('#session-view')
 const reactRootContainer = document.querySelector<HTMLDivElement>('#react-root')
 
-let state: RendererState = { status: 'loading', repositories: [] }
-let worktreeSections = new Map<RepoId, WorktreeSectionState>()
-let boardState: BoardViewState = { status: 'loading', snapshot: null, groupBy: 'stage', refreshing: false, now: new Date() }
 let sessionsState: SessionsPickerState = { status: 'loading' }
 
 // The router is the one source of truth for which screen is on top (#316) —
@@ -75,20 +61,18 @@ function currentView(): View {
 
 function drawViews(view: View): void {
   const active = containerFor(view)
-  if (boardContainer) boardContainer.hidden = active !== 'board'
   if (reposContainer) reposContainer.hidden = active !== 'repositories'
   // The session container is hidden rather than cleared on a route switch,
   // so the stream keeps rendering in the background.
   if (sessionContainer) sessionContainer.hidden = active !== 'session'
-  // #react-root shows for every React screen (Settings, Backlog, Setup, About).
+  // #react-root shows for every React screen (Board, Repositories, Settings,
+  // Backlog, Setup, About, Needs you).
   if (reactRootContainer) reactRootContainer.hidden = !isReactScreen(view)
 }
 
 function drawRepositories(view: View): void {
   if (!reposContainer) return
-  if (view.screen === 'repos') {
-    render(reposContainer, { ...state, worktreeSections })
-  } else if (view.screen === 'sessions') {
+  if (view.screen === 'sessions') {
     renderSessionsPicker(reposContainer, view.repoId, repoLabelFor(view.repoId), sessionsState)
   } else if (view.screen === 'search') {
     renderSearch(reposContainer, searchScreenState())
@@ -97,16 +81,10 @@ function drawRepositories(view: View): void {
   }
 }
 
-function drawBoard(): void {
-  if (!boardContainer) return
-  renderBoard(boardContainer, { ...boardState, now: new Date() })
-}
-
 function draw(): void {
   const view = currentView()
   drawViews(view)
   drawRepositories(view)
-  drawBoard()
 }
 
 // Navigates, then lets `router.subscribe('onResolved', draw)` repaint — the
@@ -115,156 +93,19 @@ async function navigateTo(next: View): Promise<void> {
   await router.navigate(routeForView(next) as Parameters<typeof router.navigate>[0])
 }
 
-function bannerFor(kind: string): RegistryBanner['reason'] {
-  if (kind === 'registry-malformed') return 'malformed'
-  if (kind === 'registry-unsupported-version') return 'unsupported-version'
-  return 'unreadable'
-}
-
-async function refreshRepositories(): Promise<void> {
-  state = { ...state, status: 'loading' }
-  drawRepositories(currentView())
-  try {
-    const [info, result] = await Promise.all([window.port.appInfo(), window.port.reposList()])
-    applyListResult(info, result)
-  } catch (error) {
-    console.error('Failed to reach the main process', error)
-    state = { status: 'error', repositories: [] }
-    drawRepositories(currentView())
-  }
-}
-
-function applyListResult(appInfo: AppInfo, result: Awaited<ReturnType<typeof window.port.reposList>>): void {
-  if (!result.ok) {
-    state = { status: 'ready', repositories: [], appInfo, registryBanner: { path: 'registry.json', reason: bannerFor(result.kind) } }
-    drawRepositories(currentView())
-    return
-  }
-  state = { status: 'ready', repositories: result.repositories, appInfo }
-  drawRepositories(currentView())
-}
-
-function highlight(id: RepoId, repositories: readonly RepositoryEntry[], notice: string): void {
-  state = { ...state, status: 'ready', repositories, highlighted: id, notice }
-  drawRepositories(currentView())
-  setTimeout(() => {
-    state = { ...state, highlighted: undefined, notice: undefined }
-    drawRepositories(currentView())
-  }, 3000)
-}
-
-async function handleAdd(): Promise<void> {
-  state = { ...state, status: 'loading' }
-  drawRepositories(currentView())
-  try {
-    const result = await window.port.reposAdd()
-    if (!result.ok) {
-      state = { ...state, status: 'ready', registryBanner: { path: 'registry.json', reason: bannerFor(result.kind) } }
-      drawRepositories(currentView())
-      return
-    }
-    if (result.outcome === 'cancelled') {
-      state = { ...state, status: 'ready' }
-      drawRepositories(currentView())
-      return
-    }
-    if (result.outcome === 'already-registered') {
-      highlight(result.existing, result.repositories, 'Already added.')
-      return
-    }
-    state = { ...state, status: 'ready', repositories: result.repositories, registryBanner: undefined }
-    drawRepositories(currentView())
-  } catch (error) {
-    console.error('Failed to add a repository', error)
-    state = { status: 'error', repositories: [] }
-    drawRepositories(currentView())
-  }
-}
-
-async function handleRemove(id: RepoId): Promise<void> {
-  state = { ...state, status: 'loading' }
-  drawRepositories(currentView())
-  try {
-    const result = await window.port.reposRemove({ id })
-    if (!result.ok) {
-      state = { ...state, status: 'ready' }
-      drawRepositories(currentView())
-      return
-    }
-    state = { ...state, status: 'ready', repositories: result.repositories }
-    drawRepositories(currentView())
-  } catch (error) {
-    console.error('Failed to remove a repository', error)
-    state = { status: 'error', repositories: [] }
-    drawRepositories(currentView())
-  }
-}
-
-// Per-repository inspection state in its own Map (never blanking one card
-// when another refreshes); never polls — a report runs only on request.
-async function handleInspectWorktrees(id: RepoId): Promise<void> {
-  worktreeSections = new Map(worktreeSections).set(id, { status: 'loading' })
-  drawRepositories(currentView())
-  try {
-    const report = await window.port.worktreesReport({ id })
-    worktreeSections = new Map(worktreeSections).set(id, { status: 'done', report })
-  } catch (error) {
-    console.error('Failed to inspect worktrees', error)
-    worktreeSections = new Map(worktreeSections).set(id, {
-      status: 'done',
-      report: { ok: false, kind: 'spawn-failed', message: 'Failed to reach the main process', readAt: new Date().toISOString() },
-    })
-  }
-  drawRepositories(currentView())
-}
-
-function applySnapshot(snapshot: BoardSnapshot): void {
-  pruneItemActionStates(snapshot)
-  boardState = { ...boardState, status: 'ready', snapshot, refreshing: false }
-  drawBoard()
-}
-
-// Reads the board through the query cache — `connectQueryCache` feeds
-// `board:update` pushes into the same cache this observer reads from.
-function initBoard(client: ReturnType<typeof createQueryClient>): void {
-  observeIpcQuery(client, 'board:snapshot', undefined, (result) => {
-    if (result.status === 'success') applySnapshot(result.data)
-    else if (result.status === 'error') {
-      console.error('Failed to reach the main process', result.error)
-      boardState = { ...boardState, status: 'error' }
-      drawBoard()
-    }
-  })
-}
-
-async function handleBoardRefresh(client: ReturnType<typeof createQueryClient>): Promise<void> {
-  boardState = { ...boardState, refreshing: true }
-  drawBoard()
-  try {
-    const snapshot = await window.port.boardRefresh({})
-    client.setQueryData(ipcQueryOptions('board:snapshot').queryKey, snapshot)
-  } catch (error) {
-    console.error('Failed to refresh the board', error)
-    boardState = { ...boardState, refreshing: false }
-    drawBoard()
-  }
-}
-
-// The plan gate's own row entry point (board/rows.ts's Review plan button).
-function handleGateReviewClick(target: HTMLElement): void {
-  const { repoId, number } = target.dataset
-  if (!repoId || !number) return
-  openReviewDialog(repoId as RepoId, Number(number))
-}
-
-function toggleGroupBy(): void {
-  const next: GroupBy = boardState.groupBy === 'stage' ? 'repo' : 'stage'
-  boardState = { ...boardState, groupBy: next }
-  drawBoard()
+/** The one place renderer code outside `repositories/` still needs the
+ *  repository list — `repoLabelFor`/`readyRepoIds` below — reads it from the
+ *  query cache rather than a `state` this module tracks itself (#319): the
+ *  Repositories screen's own `useIpcQuery('repos:list')` is what keeps this
+ *  cache populated day to day, and `boot()`'s own `fetchQuery` below
+ *  guarantees it is populated at least once before anything reads it. */
+function currentRepositories(client: ReturnType<typeof createQueryClient>): readonly RepositoryEntry[] {
+  const data = client.getQueryData<ReposListResponse>(ipcQueryOptions('repos:list').queryKey)
+  return data?.ok === true ? data.repositories : []
 }
 
 function repoLabelFor(id: RepoId): string {
-  const entry = state.repositories.find((repository) => repository.id === id)
+  const entry = currentRepositories(queryClient).find((repository) => repository.id === id)
   if (entry === undefined) return id
   return 'config' in entry ? entry.config.repo : entry.displayName
 }
@@ -285,10 +126,6 @@ async function loadSessions(): Promise<void> {
 async function handleOpenSessions(repoId: RepoId): Promise<void> {
   await navigateTo({ screen: 'sessions', repoId })
   void loadSessions()
-}
-
-async function handleBackToRepos(): Promise<void> {
-  await navigateTo({ screen: 'repos' })
 }
 
 // #83: "stage plus #N, else the session title", from the already-loaded
@@ -358,12 +195,7 @@ app?.addEventListener('click', (event) => {
   const target = event.target
   if (!(target instanceof HTMLElement)) return
   const action = target.dataset.action
-  if (action === 'add') void handleAdd()
-  else if (action === 'rescan') void refreshRepositories()
-  else if (action === 'remove' && target.dataset.repoId) void handleRemove(target.dataset.repoId as RepoId)
-  else if (action === 'inspect-worktrees' && target.dataset.repoId) void handleInspectWorktrees(target.dataset.repoId as RepoId)
-  else if (action === 'transcripts' && target.dataset.repoId) void handleOpenSessions(target.dataset.repoId as RepoId)
-  else if (action === 'back-to-repos') void handleBackToRepos()
+  if (action === 'back-to-repos') void navigateTo({ screen: 'repos' })
   else if (action === 'rescan-sessions') void loadSessions()
   else if (action === 'open-transcript' && target.dataset.sessionId !== undefined) void handleOpenTranscript(target.dataset.sessionId, target.dataset.agentId ?? '')
   else if (action === 'back-to-sessions') void handleBackToSessions()
@@ -372,21 +204,10 @@ app?.addEventListener('click', (event) => {
   else if (action === 'search-hit' && target.dataset.sessionId !== undefined) {
     void handleOpenSearchHit(target.dataset.sessionId, target.dataset.agentId ?? '', Number(target.dataset.entryIndex ?? '0'), target.dataset.label ?? '')
   }
-  else if (action === 'board-refresh') void handleBoardRefresh(queryClient)
-  else if (action === 'board-group-toggle') toggleGroupBy()
   else if (action === 'toggle-follow') toggleFollow()
   else if (action === 'jump-to-latest') jumpToLatest()
   else if (action === 'retry-transcript') resumeFollowing()
-  else if (action === 'claim-open') openClaimDialog()
-  else if (action === 'gate-open') openGateDialog()
-  else if (action === 'gate-review') handleGateReviewClick(target)
-  else if (action?.startsWith('item-')) handleItemActionClick(target, drawBoard)
   else if (action?.startsWith('decide-')) openDecisionDialog(target)
-  else if (action?.startsWith('dispatch-')) handleDispatchClick(target, boardState.snapshot, drawBoard)
-  else {
-    const row = target.closest<HTMLElement>('.board-row')
-    if (row?.dataset.url) window.open(row.dataset.url, '_blank')
-  }
 })
 
 app?.addEventListener('change', (event) => {
@@ -409,12 +230,13 @@ registerTranscriptRedraw(draw)
 themeStore().apply()
 const queryClient = createQueryClient()
 connectQueryCache(queryClient)
+connectItemActionPruning(queryClient)
 initSidebarCollapsed(shellPrefs().sidebarCollapsed)
 if (shellRoot && reactRootContainer) mountReact(shellRoot, reactRootContainer, queryClient)
 
 installKeyboardMap({
   openPalette,
-  readyRepoIds: () => state.repositories.filter((r) => 'config' in r).map((r) => r.id),
+  readyRepoIds: () => currentRepositories(queryClient).filter((r) => 'config' in r).map((r) => r.id),
   startNewSession,
   liveSessionKeys,
   currentSessionKey: () => selectedSession(),
@@ -445,11 +267,12 @@ async function boot(): Promise<void> {
   await router.load()
   draw()
   if (await shouldRedirectToSetup(queryClient)) await navigateTo({ screen: 'setup' })
-  void refreshRepositories()
-  initBoard(queryClient)
-  if (app) initClaim(app)
+  // Populates the `repos:list` cache at least once, regardless of which
+  // screen the app lands on — `repoLabelFor`/`readyRepoIds` above read it,
+  // and `repositories/screen.tsx`'s own `useIpcQuery` keeps it current from
+  // here on.
+  void queryClient.fetchQuery(ipcQueryOptions('repos:list'))
   if (app) initDecision(app, queryClient)
-  if (app) initGate(app)
   if (app) initPermissions(app)
   registerLegacyActions({ openSessions: (repoId) => void handleOpenSessions(repoId) })
   if (sessionContainer) initSession(sessionContainer, { show: () => void navigateTo({ screen: 'session' }) })

@@ -7,7 +7,7 @@
 // list, and `router/legacy-view.ts` belongs to the renderer's web project,
 // not this one. `scripts/checks/desktop-visual.ts` pins the two key sets
 // against each other, both directions.
-export const ROUTE_KEYS = ['board', 'repos', 'sessions', 'search', 'transcript', 'session', 'settings', 'backlog', 'needsYou', 'setup', 'about'] as const
+export const ROUTE_KEYS = ['board', 'repos', 'repo', 'sessions', 'search', 'transcript', 'session', 'settings', 'backlog', 'needsYou', 'setup', 'about'] as const
 
 // Resolved against `process.cwd()` at the point of use (`screens.spec.mts`),
 // never here — this stays the bare, pinned literal `scripts/checks/
@@ -61,8 +61,9 @@ const LEGACY_SCREEN_REASON = 'Legacy screen, reachable only through in-app click
  *  typecheck` in this file, never silently falling through to "not
  *  captured". */
 export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Target>> = {
-  board: { kind: 'capture', hash: '#/board', container: '#board-view', ready: '.board-row' },
-  repos: { kind: 'capture', hash: '#/repositories', container: '#repositories-view', ready: '.repo-card' },
+  board: { kind: 'capture', hash: '#/board', container: '#react-root', ready: '[data-slot="ticket-row"]' },
+  repos: { kind: 'capture', hash: '#/repositories', container: '#react-root', ready: '[data-slot="repo-row"]' },
+  repo: { kind: 'capture', hash: '#/repositories/fixture-acme-widgets', container: '#react-root', ready: '[role="tablist"]' },
   // No hosted session exists in fixture mode (`session:list` is always
   // `[]`), so the screen's own empty state is what actually renders —
   // `.session-view__empty`, never the composer, which `session/view.ts`

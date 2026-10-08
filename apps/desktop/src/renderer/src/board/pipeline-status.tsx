@@ -1,7 +1,5 @@
-// The Board's own pipeline status strip (#105, #319, plan's own **UX
-// states**) — the store line, the clock line, then one line per repository
-// with its own owner line and budget notes underneath. Per-repository
-// run/drain/pause stays in the sidebar pill (#318), never repeated here.
+// The Board's pipeline status strip: store/clock lines, then one line per
+// repository with its own owner line and budget notes underneath.
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { BoardSnapshot } from '../../../shared/board/types'

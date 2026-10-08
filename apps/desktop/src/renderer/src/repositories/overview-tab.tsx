@@ -1,4 +1,4 @@
-// The repo page's Overview tab (#319, plan's own **UX states**).
+// The repo page's Overview tab.
 import { ErrorBanner } from '../components/error-banner'
 import type { RepositoryEntry } from '../../../shared/repos'
 import { diagnosticCopy, moduleSummary, overrideLineCopy, problemCopy, summaryParts } from './copy'

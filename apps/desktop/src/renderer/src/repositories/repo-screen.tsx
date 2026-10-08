@@ -1,5 +1,5 @@
-// The per-repository page (#319, plan's own **UX states**) — back link,
-// New session/Transcripts/Remove, and the Overview/Worktrees/Denials tabs.
+// The per-repository page — back link, New session/Transcripts/Remove,
+// and the Overview/Worktrees/Denials tabs.
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router'

@@ -1,8 +1,5 @@
-// The plan gate dialog (#92, #319) — a shadcn `Dialog` over
-// `gate/controller.ts`'s `useSyncExternalStore` state, in place of the
-// deleted `view.ts`'s native `<dialog>`. Steps live in `dialog-steps.tsx` to
-// stay under 500 lines. Closing via Esc or the scrim calls `closeGateDialog`,
-// the same as every button that used to carry the `gate-cancel` action.
+// The plan gate dialog — a shadcn Dialog over gate/controller.ts's
+// useSyncExternalStore state. Esc or the scrim calls closeGateDialog.
 import { useSyncExternalStore } from 'react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { closeGateDialog, getState, subscribe } from './controller'

@@ -1,7 +1,5 @@
-// The claim dialog (#93, #319) — a shadcn `Dialog` over `claim/controller.ts`'s
-// `useSyncExternalStore` state, in place of the deleted `view.ts`'s native
-// `<dialog>`. Closing via Esc or the scrim calls `closeClaimDialog`, the
-// same as every button that used to carry the `claim-cancel` action.
+// The claim dialog — a shadcn Dialog over claim/controller.ts's
+// useSyncExternalStore state. Esc or the scrim calls closeClaimDialog.
 import { useSyncExternalStore } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'

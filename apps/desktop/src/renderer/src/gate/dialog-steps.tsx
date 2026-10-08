@@ -1,6 +1,4 @@
-// The plan gate dialog's own steps (#92, #319) — split out of `dialog.tsx`
-// to stay under 500 lines. Every step is a shadcn-styled fragment the
-// dialog's own `DialogContent` wraps; none of them own the `Dialog` itself.
+// The plan gate dialog's own steps, split out to stay under 500 lines.
 import { Button } from '@/components/ui/button'
 import { DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'

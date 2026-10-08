@@ -1,8 +1,5 @@
-// `BlockNode[]` to React elements (#92, #319) — the only `renderer/`
-// importer of `shared/markdown/` now that the legacy `markdown.ts` (DOM,
-// deleted) is gone. Never `dangerouslySetInnerHTML`: every node becomes its
-// own element or literal text child, the same rule the DOM builder it
-// replaces already followed.
+// `BlockNode[]` to React elements — every node becomes its own element or
+// literal text child, never raw HTML injection.
 import type { ReactNode } from 'react'
 import { parseMarkdown } from '../../../shared/markdown/block'
 import type { BlockNode, InlineNode, ListItem, TableAlign } from '../../../shared/markdown/types'
@@ -129,9 +126,7 @@ export interface MarkdownProps {
   readonly className?: string
 }
 
-/** Parses and renders in one call — the plan gate's reviewing step and any
- *  other surface that has a raw markdown string, never a second
- *  `shared/markdown/` import elsewhere under `renderer/`. */
+// Parses and renders in one call, from a raw markdown string.
 export function Markdown({ source, className }: MarkdownProps) {
   return (
     <div className={cn('flex flex-col gap-2', className)}>

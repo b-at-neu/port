@@ -1,4 +1,4 @@
-// The repo page's Worktrees tab (#86, #319, plan's own **UX states**).
+// The repo page's Worktrees tab.
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'

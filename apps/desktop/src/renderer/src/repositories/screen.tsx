@@ -1,5 +1,5 @@
-// The Repositories list screen (#319) — one RepoRow per registered entry,
-// Add repository and Rescan in the header, the version footer.
+// The Repositories list screen — one RepoRow per registered entry, Add
+// repository and Rescan in the header, the version footer.
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { FolderGit2 } from 'lucide-react'
@@ -23,6 +23,7 @@ function RepoRow({ entry, highlighted, onOpen }: { readonly entry: RepositoryEnt
   const ready = 'config' in entry
   return (
     <div
+      data-slot="repo-row"
       role="button"
       tabIndex={0}
       onClick={onOpen}

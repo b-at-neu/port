@@ -1,5 +1,5 @@
-// The Board's own banners, above the list, in a fixed order (#319, plan's
-// own **UX states**): Not reading, Relay, Ungated PRs.
+// The Board's own banners, above the list, in a fixed order: Not reading,
+// Relay, Ungated PRs.
 import { useState } from 'react'
 import { ErrorBanner } from '../components/error-banner'
 import { TicketRow } from '../components/ticket-row'

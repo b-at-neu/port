@@ -32,7 +32,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   {
     const cssPatterns = mod.CSS_COLOUR_PATTERNS as { source: string; flags: string; id: string }[];
     const exemptRel = new Set(
-      ['board.css', 'claim.css', 'commands-strip.css', 'gate.css', 'index.css', 'permission.css', 'search.css', 'session-rail.css', 'session.css', 'transcript.css'].map(
+      ['commands-strip.css', 'index.css', 'permission.css', 'search.css', 'session-rail.css', 'session.css', 'transcript.css'].map(
         (f) => `${rendererDir}/src/${f}`,
       ),
     );

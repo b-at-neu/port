@@ -1,8 +1,5 @@
-// The Board screen (#80, #319) — header, pipeline status, banners, the
-// three-section list, and the detail pane, all React now. `useIpcQuery`
-// reads `board:snapshot`; `connectItemActionPruning` below is the one
-// non-`useEffect` seam that prunes `board/actions.ts`'s per-item state on
-// every fresh snapshot, called once from `main.ts`'s boot.
+// The Board screen — header, pipeline status, banners, the three-section
+// list, and the detail pane.
 import { useState } from 'react'
 import type { QueryClient } from '@tanstack/react-query'
 import { useQueryClient } from '@tanstack/react-query'
@@ -27,12 +24,8 @@ import { PipelineStatus } from './pipeline-status'
 import { boardSections } from './sections'
 import type { BoardGroupBy } from './sections'
 
-/** Registered once from `main.ts`'s boot (module scope, never a `useEffect`
- *  inside the component) — reuses `observeIpcQuery`, the same
- *  hook-free `QueryObserver` wrapper `main.ts`'s own legacy `initBoard` used,
- *  since a fresh `board:snapshot` write is the only signal that can tell "no
- *  longer on the board" apart from "just not in this frame"
- *  (`pruneItemActionStates`'s own doc comment). */
+// Registered once from main.ts's boot — never a useEffect inside the
+// component.
 export function connectItemActionPruning(client: QueryClient): () => void {
   return observeIpcQuery(client, 'board:snapshot', undefined, (result) => {
     if (result.status === 'success') pruneItemActionStates(result.data)
@@ -83,10 +76,7 @@ export function BoardScreen() {
   const sections = projection !== null ? boardSections(projection.rows, { group, repo }) : []
   const flatRows = sections.flatMap((section) => section.subGroups.flatMap((g) => g.rows))
 
-  // An item that no longer matches any row closes the pane silently (plan's
-  // own **UX states**) — `selectedRow` is simply `null` the moment the
-  // search param stops resolving, never a stale row rendered past its
-  // disappearance.
+  // An item that no longer matches any row closes the pane silently.
   const itemRef = search.item ?? null
   const selectedRow = itemRef !== null ? (flatRows.find((row) => sameItem(row, itemRef)) ?? null) : null
 

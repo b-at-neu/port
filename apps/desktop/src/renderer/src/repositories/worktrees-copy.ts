@@ -1,7 +1,5 @@
-// Every pure string the Repositories screen's own Worktrees tab renders
-// (#86, #319) — moved out of the legacy `worktrees.ts` (deleted in the
-// routing/main commit, which imports these instead of defining them a
-// second time until then). No DOM here.
+// Every pure string the Repositories screen's own Worktrees tab renders.
+// No DOM here.
 import type { InspectedWorktree, WorktreesReport } from '../../../shared/reclaimer/types'
 
 /** One line per kind, naming what was refused — the plan's own **UX

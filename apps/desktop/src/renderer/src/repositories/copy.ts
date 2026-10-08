@@ -1,7 +1,4 @@
-// Every pure string the Repositories screens render (#319) — moved out of
-// the legacy `repositories.ts` (deleted in the routing/main commit, which
-// imports these instead of defining them a second time until then). No DOM
-// here.
+// Every pure string the Repositories screens render. No DOM here.
 import type { AppliedOverride, RepoDiagnostic, RepoProblem, ResolvedRepoConfig } from '../../../shared/repos'
 
 const MODULE_LABELS: { readonly [K in keyof ResolvedRepoConfig['modules']]: string } = {
@@ -33,10 +30,8 @@ export function problemCopy(problem: RepoProblem): string {
   }
 }
 
-/** The Repositories list row's own short problem label (plan's own **UX
- *  states**: "a short problem label") — `problemCopy` above stays the long
- *  explanatory sentence shown on the per-repo Overview tab; this is the
- *  pill's own text. */
+// The list row's own short problem label — problemCopy above stays the
+// long sentence shown on the per-repo Overview tab.
 export function problemLabel(problem: RepoProblem): string {
   switch (problem.kind) {
     case 'directory-missing':
@@ -75,10 +70,8 @@ export function diagnosticCopy(diagnostic: RepoDiagnostic): string {
   }
 }
 
-/** `portDefault`'s own rendering rule (#300, plan's own **UX states**): an
- *  array is comma-joined, `null` is `none`, `undefined` is `unset` — never
- *  the literal word `undefined`, which would read as a bug rather than "this
- *  field had no prior port value to show". */
+// An array is comma-joined, null is none, undefined is unset — never the
+// literal word undefined.
 function portDefaultCopy(portDefault: AppliedOverride['portDefault']): string {
   if (portDefault === undefined) return 'unset'
   if (portDefault === null) return 'none'
@@ -86,9 +79,8 @@ function portDefaultCopy(portDefault: AppliedOverride['portDefault']): string {
   return String(portDefault)
 }
 
-/** One applied `CLAUDE.md` override's own line (#300) — the exact words the
- *  cockpit's own startup preflight already prints, so an operator sees the
- *  same override described identically in both places. */
+// One applied CLAUDE.md override's own line, matching the cockpit's own
+// startup preflight wording.
 export function overrideLineCopy(override: AppliedOverride): string {
   return `override: ${override.path} = ${String(override.value)} (port default: ${portDefaultCopy(override.portDefault)}) — ${override.reason} — source: ${override.source}`
 }
@@ -101,10 +93,8 @@ export function moduleSummary(modules: ResolvedRepoConfig['modules']): string {
     .join(', ')
 }
 
-/** The repository card's own summary line, as parts to join with ` · ` —
- *  pure, so it is directly testable without building DOM. Single-branch mode
- *  (`production === null`) shows the integration branch alone, never
- *  `dev → null`. */
+// Parts to join with ' · '. Single-branch mode shows the integration
+// branch alone, never 'dev → null'.
 export function summaryParts(config: ResolvedRepoConfig): readonly string[] {
   const branchSummary = config.branches.production === null ? config.branches.integration : `${config.branches.integration} → ${config.branches.production}`
   const labelCount = config.vocabulary.labels.length

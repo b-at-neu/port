@@ -1,7 +1,5 @@
-// The Board's own header (#319, plan's own **UX states**) — title, the
-// stale note, the Phase/Repo segmented control, the repo filter, Refresh,
-// Plan gate, Work on ticket, and Halt everything (a shadcn `AlertDialog`
-// replacing the legacy two-click arm).
+// The Board's own header — title, freshness, the Phase/Repo toggle, the
+// repo filter, Refresh, Plan gate, Work on ticket, and Halt everything.
 import { useState, useSyncExternalStore } from 'react'
 import { RefreshCw } from 'lucide-react'
 import {
@@ -71,7 +69,7 @@ function HaltButton({ snapshot }: { readonly snapshot: BoardSnapshot }) {
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Halt everything?</AlertDialogTitle>
-          <AlertDialogDescription>Pauses every pipeline and stops {inFlightCount} running items. Nothing is picked up until you run it again.</AlertDialogDescription>
+          <AlertDialogDescription>Pauses every pipeline and stops {inFlightCount} in-flight items. Nothing is picked up until you run it again.</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>

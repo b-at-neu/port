@@ -1,8 +1,5 @@
-// The Board's own relay card (#319, plan's own **UX states**) — the same
-// compose-and-copy shape as `needs-you/relay-form.tsx`'s `RelayForm`, kept
-// as its own component rather than shared: the Board's copy button reads
-// "Copy reply" (not "Copy answers"/"Copy decision") and toasts on success,
-// which the Needs-you screen's own card does not.
+// The Board's own relay card — compose-and-copy, like `needs-you/relay-form.tsx`'s
+// `RelayForm`, but with its own "Copy reply" label and a success toast.
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'

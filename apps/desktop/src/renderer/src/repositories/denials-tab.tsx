@@ -1,6 +1,5 @@
-// The repo page's Denials tab (#85, #319, plan's own **UX states**) — the
-// existing denial-burst line from `projectBoard`'s own `repositorySummaries`,
-// never a line total (Decision 7).
+// The repo page's Denials tab — the denial-burst line from projectBoard's
+// own repositorySummaries, never a line total.
 import { ShieldAlert } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '../components/empty-state'
