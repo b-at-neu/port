@@ -5,7 +5,9 @@ import { router } from '../router/router'
 import { ROUTE_IDS } from '../router/routes'
 import { ipcQueryOptions } from '../data/query'
 import { invoke } from '../data/invoke'
-import type { HostedSessionSnapshot, SessionDismissResult, SessionKey, SessionStartResult, WorktreeChoice } from '../../../shared/hosting/types'
+import type { RepoId, RepositoryEntry } from '../../../shared/repos'
+import type { ReposListResponse } from '../../../shared/ipc'
+import type { HostedSessionSnapshot, SessionDismissResult, SessionKey, SessionStartResult, SessionTaskStopResult, WorktreeChoice } from '../../../shared/hosting/types'
 import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SessionEffort, SetControlsResult } from '../../../shared/hosting/controls'
 import type { ComposerAttachment } from '../../../shared/hosting/attachments'
 import type { FolderId } from '../../../shared/workspace/types'
@@ -152,7 +154,11 @@ export async function answerPlan(sessionKey: SessionKey, permissionId: string, d
   return invoke('session:plan:answer', { sessionKey, permissionId, decision })
 }
 
-export async function startFromTranscript(sessionId: string, kind: 'resume' | 'fork'): Promise<void> {
+export async function stopTask(sessionKey: SessionKey, taskId: string): Promise<SessionTaskStopResult> {
+  return invoke('session:task:stop', { sessionKey, taskId })
+}
+
+export async function startFromTranscript(repoId: RepoId, sessionId: string, kind: 'resume' | 'fork'): Promise<void> {
   try {
     const result = await invoke('session:start', { target: { kind: 'transcript' }, mode: { kind, sessionId } })
     if (!result.ok && result.kind === 'folder-missing') {

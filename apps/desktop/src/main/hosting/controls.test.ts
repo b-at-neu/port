@@ -17,6 +17,7 @@ function fakeQuery(overrides: Partial<HostedQuery> = {}): HostedQuery {
         { value: 'opus', displayName: 'Opus', description: 'Most capable', supportsEffort: true, supportedEffortLevels: ['low', 'high'] },
         { value: 'sonnet', displayName: 'Sonnet', description: 'Balanced' },
       ]),
+    stopTask: () => Promise.resolve(),
     ...overrides,
   }
 }

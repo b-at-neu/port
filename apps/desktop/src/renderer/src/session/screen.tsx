@@ -34,7 +34,8 @@ import { QUESTION_SKIPPED_MESSAGE, COMPOSER_PLAN_PLACEHOLDER, COMPOSER_QUESTION_
 import { toast } from 'sonner'
 import { PromptInput } from './prompt-input'
 import { PIPELINE_SEND_BLOCKED } from './composer-copy'
-import { COMPOSER_HINT, composerCopy, CLOSE_CONFIRM_NO, CLOSE_CONFIRM_PROMPT, EMPTY_TITLE, interruptNote, RECONNECTING, SEND_FAILED_UNKNOWN_SESSION, SEND_FAILED_UNREACHABLE, windowNote } from './copy'
+import { COMPOSER_HINT, composerCopy, CLOSE_CONFIRM_NO, CLOSE_CONFIRM_PROMPT, EMPTY_TITLE, interruptNote, originDividerLabel, RECONNECTING, SEND_FAILED_UNKNOWN_SESSION, SEND_FAILED_UNREACHABLE, windowNote } from './copy'
+import { BackgroundTasksPanel } from './background-tasks'
 
 function repoLabelFor(repos: readonly RepositoryEntry[] | undefined, snapshot: HostedSessionSnapshot): string {
   if (snapshot.repoId === null) return folderLabel(snapshot.workspace.folder)
@@ -209,11 +210,19 @@ function SessionLive({ snapshot, repoLabel }: { readonly snapshot: HostedSession
       {sendError !== null ? <ErrorBanner message={sendError} className="mx-auto w-full max-w-[680px]" /> : null}
       <div className="mx-auto flex w-full max-w-[680px] min-h-0 flex-1 flex-col gap-3">
         {windowNoteVisible ? <p className="text-meta text-muted-foreground">{windowNote()}</p> : null}
-        <ConversationList entries={entries.entries} baseIndex={entries.firstIndex} live={entries.live} focusIndex={null} />
+        <ConversationList
+          entries={entries.entries}
+          baseIndex={entries.firstIndex}
+          live={entries.live}
+          focusIndex={null}
+          history={entries.history}
+          historyDividerLabel={originDividerLabel(snapshot.origin)}
+        />
         {snapshot.phase === 'ended' && snapshot.end !== null ? (
           <EndPanel end={snapshot.end} onNewSession={() => openNewSessionDialog({ kind: 'path', path: snapshot.workspace.root ?? snapshot.workspace.folder })} />
         ) : null}
         {snapshot.repoId !== null ? <CommandStrip snapshot={snapshot} /> : null}
+        <BackgroundTasksPanel sessionKey={key} tasks={snapshot.backgroundTasks} />
         {interaction !== null && interaction.kind === 'question' ? (
           <QuestionCard questions={interaction.questions} sending={questionSending} error={questionError} onSend={(answers) => void handleQuestionSend(answers)} onSkip={() => void handleQuestionSkip()} />
         ) : null}

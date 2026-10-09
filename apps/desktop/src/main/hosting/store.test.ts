@@ -163,6 +163,7 @@ describe('createHostedStore', () => {
       partial: null,
       pendingSends: [],
       revision: 0,
+      history: { kind: 'none' },
     })
   })
 

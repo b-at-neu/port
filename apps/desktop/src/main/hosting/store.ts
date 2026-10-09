@@ -26,6 +26,7 @@ import type {
   SessionSendResult,
   SessionStartMode,
   SessionStartResult,
+  SessionTaskStopResult,
   WorktreeChoice,
 } from '../../shared/hosting/types'
 import { createHostedHandle } from './handle'
@@ -34,6 +35,7 @@ import type { SessionMarksTracker } from './marks'
 import type { HostedHandle, HostedQueryFn } from './handle'
 import { createHostedSdk } from './sdk'
 import type { HostedSdk } from './sdk'
+import { readHistory } from './history'
 import { defaultForkListSessions, titleFork } from './fork'
 import { defaultReadExpectedComponentsDeps, readExpectedComponents, resolvePluginRequest } from './plugin'
 import { resolveStartTitle } from './title'
@@ -137,6 +139,7 @@ export interface HostedStore {
   marks(): Promise<SessionMarks>
   /** An empty or over-200-char id returns `invalid-session-id`, never thrown. */
   setMark(kind: 'pinned' | 'archived', sessionId: string, on: boolean): Promise<SessionMarkResult>
+  stopTask(sessionKey: SessionKey, taskId: string): Promise<SessionTaskStopResult>
 }
 
 function toSessionKey(n: number): SessionKey {
@@ -231,7 +234,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     }
 
     const cwd = params.workspace.folder
-    const [credentials, sdk, plugin] = await Promise.all([deps.readCredentialsTell(), deps.getSdk(), deps.resolvePluginRequest(cwd)])
+    const [credentials, sdk, plugin, history] = await Promise.all([deps.readCredentialsTell(), deps.getSdk(), deps.resolvePluginRequest(cwd), readHistory(params.mode)])
     const sessionKey = toSessionKey(nextId)
     nextId += 1
     const mode = params.mode
@@ -268,6 +271,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
         samePath: deps.samePath,
         initialTitle,
         defaults,
+        history,
       },
       queryFn,
     )
@@ -310,7 +314,13 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     if (!handle) return { ok: false, kind: 'unknown-session' }
     const { events, droppedBefore } = handle.replay()
     const { entries, firstIndex, partial, pendingSends, revision } = handle.entriesWindow()
-    return { ok: true, snapshot: handle.snapshot(), replay: events, droppedBefore, entries, firstIndex, partial, pendingSends, revision }
+    return { ok: true, snapshot: handle.snapshot(), replay: events, droppedBefore, entries, firstIndex, partial, pendingSends, revision, history: handle.history() }
+  }
+
+  function stopTask(sessionKey: SessionKey, taskId: string): Promise<SessionTaskStopResult> {
+    const handle = handles.get(sessionKey)
+    if (!handle) return Promise.resolve({ ok: false, kind: 'unknown-session' })
+    return handle.stopTask(taskId)
   }
 
   async function closeAll(): Promise<void> {
@@ -476,5 +486,6 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     discardRestorable,
     marks,
     setMark,
+    stopTask,
   }
 }

@@ -37,6 +37,7 @@ import type {
   SessionStartMode,
   SessionStartResult,
   SessionStartTarget,
+  SessionTaskStopResult,
   WorktreeChoice,
 } from './hosting/types'
 import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SetControlsResult } from './hosting/controls'
@@ -240,6 +241,11 @@ export interface IpcMap {
     request: { restoreId: string | null }
     response: SessionRestoreDiscardResult
   }
+  /** The background-task panel's own Stop — `taskId` is scoped to this session's own `backgroundTasks`, never forwarded otherwise. */
+  'session:task:stop': {
+    request: { sessionKey: SessionKey; taskId: string }
+    response: SessionTaskStopResult
+  }
   /** The footer's gh status dot — no payload; never throws for a gh failure itself. */
   'gh:status': {
     request: void
@@ -369,6 +375,7 @@ export const IPC_CHANNELS = [
   'session:marks',
   'session:pin:set',
   'session:archive:set',
+  'session:task:stop',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]

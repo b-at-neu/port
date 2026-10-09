@@ -60,6 +60,7 @@ function baseParams(overrides: Partial<Parameters<typeof createHostedHandle>[0]>
     samePath: (a: string, b: string) => a === b,
     initialTitle: null,
     defaults: DEFAULT_SESSION_DEFAULTS,
+    history: { kind: 'none' as const },
     ...overrides,
   }
 }

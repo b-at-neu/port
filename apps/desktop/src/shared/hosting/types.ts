@@ -65,6 +65,8 @@ export interface HostedSessionSnapshot {
   readonly models: SessionModels
   /** The newest cost/token/context reading off this process's own messages — `null` until the first usable one arrives. */
   readonly usage: SessionUsage | null
+  /** Live, non-ambient background tasks — `[]` before any level message arrives and after `ended`. */
+  readonly backgroundTasks: readonly BackgroundTask[]
 }
 
 /** Pin and archive marks, keyed by `claudeSessionId` — app-local, persisted in `hosting.json`. */
@@ -129,6 +131,7 @@ export type SessionAttachResult =
       readonly partial: LiveBlock | null
       readonly pendingSends: readonly string[]
       readonly revision: number
+      readonly history: SessionHistory
     }
   | { readonly ok: false; readonly kind: 'unknown-session' }
 
@@ -319,3 +322,20 @@ export type SessionFilesResult =
   | { readonly ok: true; readonly files: readonly string[]; readonly truncated: boolean }
   | { readonly ok: false; readonly kind: 'unknown-session' }
   | { readonly ok: false; readonly kind: 'unreadable'; readonly message: string }
+
+/** One live, non-ambient background task — rides the snapshot the same way `pendingPermissions` does. `toolUseId`/`description` fill in only once `system/task_started` names them. */
+export interface BackgroundTask {
+  readonly taskId: string
+  readonly type: string
+  readonly description: string
+  readonly toolUseId: string | null
+}
+
+/** The earlier conversation read before spawn on `resume`/`resume-at`/`fork` — `{ kind: 'none' }` for a fresh session. Kept frozen on the handle for the session's whole life. */
+export type SessionHistory =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'loaded'; readonly entries: readonly TranscriptEntry[]; readonly omittedBefore: number; readonly sourceSessionId: string }
+  | { readonly kind: 'failed'; readonly message: string }
+
+/** `'session:task:stop'`'s response — `unknown-task` for an id not in this handle's own `backgroundTasks`, so a task from another session can never be stopped. */
+export type SessionTaskStopResult = { readonly ok: true } | { readonly ok: false; readonly kind: 'unknown-session' | 'unknown-task' } | { readonly ok: false; readonly kind: 'stop-failed'; readonly message: string }

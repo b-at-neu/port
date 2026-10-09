@@ -114,5 +114,6 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'session:marks': () => FIXTURE_MARKS,
     'session:pin:set': (request) => ({ ok: true, marks: { ...FIXTURE_MARKS, pinned: request.pinned ? [...FIXTURE_MARKS.pinned, request.sessionId] : FIXTURE_MARKS.pinned.filter((id) => id !== request.sessionId) } }),
     'session:archive:set': (request) => ({ ok: true, marks: { ...FIXTURE_MARKS, archived: request.archived ? [...FIXTURE_MARKS.archived, request.sessionId] : FIXTURE_MARKS.archived.filter((id) => id !== request.sessionId) } }),
+    'session:task:stop': () => ({ ok: true }),
   }
 }

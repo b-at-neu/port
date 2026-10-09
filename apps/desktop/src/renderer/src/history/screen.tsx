@@ -153,10 +153,10 @@ function SessionRow({
         <span className="shrink-0 text-meta text-muted-foreground">{repoTag}</span>
         {canHost ? (
           <div className="flex shrink-0 gap-1">
-            <Button variant="outline" size="small" onClick={() => void startFromTranscript(session.sessionId, 'resume')}>
+            <Button variant="outline" size="small" onClick={() => void startFromTranscript(session.repoId as RepoId, session.sessionId, 'resume')}>
               Resume
             </Button>
-            <Button variant="outline" size="small" onClick={() => void startFromTranscript(session.sessionId, 'fork')}>
+            <Button variant="outline" size="small" onClick={() => void startFromTranscript(session.repoId as RepoId, session.sessionId, 'fork')}>
               Fork
             </Button>
           </div>

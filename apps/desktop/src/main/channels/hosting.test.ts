@@ -149,6 +149,9 @@ function storeStub(overrides: Partial<HostedStore> = {}): HostedStore {
     answerPlan: () => {
       throw new Error('answerPlan should not be invoked in this case')
     },
+    stopTask: () => {
+      throw new Error('stopTask should not be invoked in this case')
+    },
     ...overrides,
   }
 }

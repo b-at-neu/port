@@ -20,6 +20,7 @@ function okResult(entries: readonly TranscriptEntry[], revision: number): Extrac
     partial: null,
     pendingSends: [],
     revision,
+    history: { kind: 'none' },
   }
 }
 
@@ -130,5 +131,17 @@ describe('createEntriesRegistry', () => {
 
     registry.forget(KEY)
     expect(registry.getSnapshot(KEY).entries).toEqual([])
+  })
+
+  it('carries history from attach, surviving a later re-attach', async () => {
+    const history = { kind: 'loaded' as const, entries: [entry('h1')], omittedBefore: 0, sourceSessionId: 's1' }
+    const sessionAttach = vi.fn().mockResolvedValue({ ...okResult([entry('a')], 1), history })
+    const registry = createEntriesRegistry({ sessionAttach })
+    registry.subscribe(KEY, () => {})
+    await flush()
+    expect(registry.getSnapshot(KEY).history).toEqual(history)
+
+    await registry.reattach(KEY)
+    expect(registry.getSnapshot(KEY).history).toEqual(history)
   })
 })

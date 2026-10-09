@@ -7,7 +7,7 @@
 // awaiting-permission phase later fails typecheck until its own copy exists
 // here. End diagnoses reuse `RUNTIME_COPY` from `shared/runtime/copy.ts`,
 // never new wording of their own.
-import type { SessionEnd, SessionEndReason, SessionPhase, SessionStartResult } from '../../../shared/hosting/types'
+import type { HostedSessionSnapshot, SessionEnd, SessionEndReason, SessionPhase, SessionStartResult } from '../../../shared/hosting/types'
 import { RUNTIME_COPY } from '../../../shared/runtime/copy'
 
 export type StopState = 'enabled' | 'disabled' | 'stopping' | 'hidden'
@@ -172,4 +172,20 @@ export const ARCHIVE_UNREACHABLE_TOAST = "Couldn't reach the main process."
 
 export function folderMissingToast(path: string | null): string {
   return path !== null ? `This session's folder is gone: ${path}` : "Port couldn't find this session's folder."
+}
+
+export const TASK_STOP_TITLE = 'Stop this background task?'
+export function taskStopBody(description: string): string {
+  return `"${description}" stops now. Claude is told it was stopped.`
+}
+export const TASK_KEEP_RUNNING = 'Keep running'
+export const TASK_STOP_BUTTON = 'Stop task'
+export const TASK_STOP_UNKNOWN = 'That task already finished.'
+export function taskStopFailed(message: string): string {
+  return `Couldn't stop the task: ${message}`
+}
+export const TASK_STOP_UNKNOWN_SESSION = 'This session has ended.'
+
+export function originDividerLabel(origin: HostedSessionSnapshot['origin']): string {
+  return origin.kind === 'forked' ? 'Forked here' : 'Resumed here'
 }

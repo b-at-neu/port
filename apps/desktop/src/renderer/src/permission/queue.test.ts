@@ -47,6 +47,7 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     controls: TEST_CONTROLS,
     models: TEST_MODELS,
     usage: null,
+    backgroundTasks: [],
     ...overrides,
   }
 }

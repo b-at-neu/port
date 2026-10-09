@@ -10,6 +10,7 @@ import type {
   SessionEnd,
   SessionEntriesDelta,
   SessionEventEnvelope,
+  SessionHistory,
   SessionInvokeResult,
   SessionKey,
   SessionOrigin,
@@ -17,6 +18,7 @@ import type {
   SessionPhase,
   SessionRateLimit,
   SessionStartMode,
+  SessionTaskStopResult,
 } from '../../shared/hosting/types'
 import type { RepoId } from '../../shared/repos'
 import type { SessionWorkspace } from '../../shared/workspace/types'
@@ -30,6 +32,7 @@ import { createPermissionBroker } from './permissions'
 import { createSessionProjector } from './project'
 import type { ProjectedDelta, SessionProjectorWindow } from './project'
 import { createCapabilityTracker } from './capabilities'
+import { createTaskTracker } from './tasks'
 import { readRateLimit } from './rate-limit'
 import { readUsage } from './usage'
 import type { UsageReading } from './usage'
@@ -73,6 +76,8 @@ export interface CreateHostedHandleParams {
   readonly onSessionId?: (claudeSessionId: string) => void
   /** One delta per message that produced a visible change, plus one per `send()`. */
   readonly onEntries?: (delta: SessionEntriesDelta) => void
+  /** Read before spawn and kept frozen on the handle for its whole life. */
+  readonly history: SessionHistory
 }
 
 export interface HostedHandleReplay {
@@ -114,6 +119,9 @@ export interface HostedHandle {
   setControls(patch: { readonly permissionMode?: SessionControls['permissionMode']; readonly model?: string; readonly effort?: SessionControls['effort'] }): Promise<Awaited<ReturnType<ControlsTracker['set']>> | { readonly ok: false; readonly kind: 'unknown-session' | 'not-ready' }>
   answerQuestion(permissionId: string, answers: Readonly<Record<string, string>>): QuestionAnswerResult
   answerPlan(permissionId: string, decision: PlanDecision): PlanAnswerResult
+  history(): SessionHistory
+  /** `unknown-task` for an id not in this handle's own `backgroundTasks` — never forwards an arbitrary id. */
+  stopTask(taskId: string): Promise<SessionTaskStopResult>
 }
 
 function resumeTargetFor(mode: SessionStartMode): string | null {
@@ -154,6 +162,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     samePath: params.samePath,
     onChange: () => emitStatus(),
   })
+  const tasks = createTaskTracker()
 
   function emitEntries(delta: ProjectedDelta | null): void {
     if (delta === null) return
@@ -192,6 +201,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
       controls: controls.current(),
       models: controls.models(),
       usage: usageReading?.usage ?? null,
+      backgroundTasks: tasks.current(),
     }
   }
 
@@ -218,6 +228,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
   function applyMessage(message: SDKMessage): void {
     capabilities.observe(message)
     controls.observe(message)
+    if (tasks.observe(message)) emitStatus()
     const observedAt = new Date(params.now()).toISOString()
     const reading = readRateLimit(message, observedAt)
     if (reading !== null) {
@@ -273,8 +284,9 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
       const classified = classifyEnd({ text, closeRequested, credentials: params.credentials, now: params.now() })
       end = { reason: classified.reason, exitCode: classified.exitCode, signal: classified.signal, message: text, diagnosis: classified.diagnosis }
     }
-    // An ended session must never report a pending prompt.
+    // An ended session must never report a pending prompt or a stale background task.
     broker.cancelAll()
+    tasks.reset()
     phase = 'ended'
     emitStatus()
   }
@@ -376,6 +388,19 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     },
     answerPlan(permissionId, decision) {
       return broker.answerPlan(permissionId, decision)
+    },
+    history() {
+      return params.history
+    },
+    async stopTask(taskId) {
+      if (phase === 'closing' || phase === 'ended') return { ok: false, kind: 'unknown-session' }
+      if (!tasks.current().some((task) => task.taskId === taskId)) return { ok: false, kind: 'unknown-task' }
+      try {
+        await stream.stopTask(taskId)
+        return { ok: true }
+      } catch (error) {
+        return { ok: false, kind: 'stop-failed', message: error instanceof Error ? error.message : String(error) }
+      }
     },
   }
 }

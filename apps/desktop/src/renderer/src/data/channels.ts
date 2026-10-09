@@ -64,6 +64,7 @@ export const MUTATION_CHANNELS = [
   'session:controls:set',
   'session:question:answer',
   'session:plan:answer',
+  'session:task:stop',
   'folders:choose',
   'session:pin:set',
   'session:archive:set',

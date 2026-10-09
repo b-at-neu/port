@@ -93,6 +93,7 @@ function sessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): Hosted
     controls: TEST_CONTROLS,
     models: TEST_MODELS,
     usage: null,
+    backgroundTasks: [],
     ...overrides,
   }
 }
@@ -149,6 +150,9 @@ function fakeStore(overrides: Partial<HostedStore> = {}): HostedStore {
     },
     setMark: () => {
       throw new Error('setMark should not be invoked in this case')
+    },
+    stopTask: () => {
+      throw new Error('stopTask should not be invoked in this case')
     },
     ...overrides,
   }
