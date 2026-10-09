@@ -7,8 +7,9 @@ import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
 import { fixtureBoardSnapshot } from './board'
 import { fixtureBacklog } from './backlog'
 import { fixtureClaimPreflight, fixtureGatePreflight } from './dialogs'
+import { fixtureFolders, fixtureSessionChanges } from './folders'
 import { FIXTURE_REPOSITORIES } from './repos'
-import { fixtureAttachEntries, fixturePermissionSnapshots, fixtureSearchResult, fixtureSessionAttach, fixtureSessionsScan, fixtureSessionSnapshots } from './sessions'
+import { fixtureAttachEntries, fixturePermissionSnapshots, fixtureSearchResult, fixtureSessionAttach, fixtureSessionsScan, fixtureSessionSnapshots, STREAMING_KEY } from './sessions'
 import type { FixtureScenario } from './mode'
 import { fixtureWorktreesReclaim, fixtureWorktreesReport } from './worktrees'
 
@@ -103,5 +104,9 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'session:question:answer': () => ({ ok: false, kind: 'unknown-session' }),
     'session:plan:answer': () => ({ ok: false, kind: 'unknown-session' }),
     'session:files': () => ({ ok: false, kind: 'unknown-session' }),
+
+    'folders:list': () => ({ folders: fixtureFolders(now) }),
+    'folders:choose': () => ({ outcome: 'cancelled' }),
+    'session:changes': (request) => (request.sessionKey === STREAMING_KEY ? fixtureSessionChanges(now) : { ok: false, kind: 'unknown-session', message: `no session is open for key '${request.sessionKey}'` }),
   }
 }

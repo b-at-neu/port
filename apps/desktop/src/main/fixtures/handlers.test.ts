@@ -38,6 +38,7 @@ const SAMPLE_REQUESTS: Partial<Record<IpcChannel, unknown>> = {
   'session:restore': { restoreId: 'r1' },
   'session:restore:discard': { restoreId: null },
   'backlog:list': { repoId: 'fixture-acme-widgets' },
+  'session:changes': { sessionKey: STREAMING_KEY },
 }
 
 describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', (scenario) => {
@@ -174,5 +175,28 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
     if (!result.ok) throw new Error('fixture search:query unexpectedly failed')
     expect(result.groups.length).toBeGreaterThan(0)
     expect(result.groups[0]?.hits.length).toBeGreaterThan(0)
+  })
+
+  it('reports folders:list with one port repo and one plain folder', () => {
+    const result = handlers['folders:list'](undefined)
+    expect(result.folders).toHaveLength(2)
+    expect(result.folders.filter((folder) => folder.git !== null)).toHaveLength(1)
+    expect(result.folders.filter((folder) => folder.git === null)).toHaveLength(1)
+  })
+
+  it('reports folders:choose as cancelled', () => {
+    expect(handlers['folders:choose'](undefined)).toEqual({ outcome: 'cancelled' })
+  })
+
+  it('reports session:changes with a two-file diff for the streaming session', () => {
+    const result = handlers['session:changes']({ sessionKey: STREAMING_KEY })
+    if (!result.ok) throw new Error('fixture session:changes unexpectedly failed')
+    expect(result.files).toHaveLength(2)
+  })
+
+  it('reports session:changes as unknown-session for any other key', () => {
+    const result = handlers['session:changes']({ sessionKey: 'hosted-999' as typeof STREAMING_KEY })
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.kind).toBe('unknown-session')
   })
 })
