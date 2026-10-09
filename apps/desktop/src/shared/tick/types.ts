@@ -101,9 +101,7 @@ export interface TickAutoApproval {
   readonly number: number
 }
 
-/** One repository's own tick — `planTick`'s whole result. `disabledStages`
- *  is always `[]` on a blind repository, the same direction as
- *  `actionable`/`held`/`claims`. */
+/** One repository's own tick — `planTick`'s whole result. `disabledStages` is always `[]` on a blind repository. */
 export interface TickReport {
   readonly repoId: RepoId
   readonly displayName: string

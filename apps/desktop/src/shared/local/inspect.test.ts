@@ -3,16 +3,9 @@ import type { SessionRecord, SessionScan } from '../sessions/types'
 import { actorKeyOf, BURST_MIN_COUNT, BURST_WINDOW_MS, inspectDenials, shapeOf } from './inspect'
 import type { DenialActor, DenialDecision, DenialEntry, DenialsRead, DenialSummary } from './types'
 
-// The real-repository-log case lives in `main/local/inspect.test.ts`, not
-// here: reading the log itself is `readDenials` (`main/local/denials.ts`),
-// and this file must import nothing from `src/main/` — the same purity
-// `inspect.ts` itself rests on (Decision 2) — or `pnpm typecheck:web` fails,
-// since `tsconfig.web.json` type-checks every file under `src/shared/**/*`
-// including its own transitive imports.
+// The real-repository-log case lives in `main/local/inspect.test.ts` — this file must import nothing from `src/main/`, the same purity `inspect.ts` rests on.
 
-// --- Fixture builders ------------------------------------------------------
-// Every helper below builds the minimum shape `inspectDenials` needs; tests
-// override only the fields the case is about.
+// --- Fixture builders: each builds the minimum shape `inspectDenials` needs ---
 
 let rawCounter = 0
 function entry(overrides: Partial<DenialEntry> = {}): DenialEntry {

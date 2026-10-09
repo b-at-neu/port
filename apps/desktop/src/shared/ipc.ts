@@ -42,9 +42,7 @@ export interface AppInfo {
   chromium: string
 }
 
-/** Every failure kind `readRegistry`/`writeRegistry` can report, shared by
- *  all three channels below so a filesystem-level registry problem always
- *  carries the same three variants. */
+/** Every failure kind `readRegistry`/`writeRegistry` can report, shared by all three channels below. */
 export type RegistryFailureKind = 'registry-malformed' | 'registry-unsupported-version' | 'registry-unreadable' | 'registry-unwritable'
 
 export type ReposListResponse =
@@ -108,9 +106,7 @@ export interface IpcMap {
     request: void
     response: BoardSnapshot
   }
-  /** `repoId`/`source` both optional — omitting either widens the force to
-   *  every repository or every source; the watcher's own in-flight guard is
-   *  what stops a held button from stacking round trips. */
+  /** `repoId`/`source` both optional — omitting either widens the force to every repository or every source. */
   'board:refresh': {
     request: { repoId?: RepoId; source?: SourceKind }
     response: BoardSnapshot
@@ -120,10 +116,7 @@ export interface IpcMap {
     request: { repoId: RepoId; number: number }
     response: ClaimPreflightResponse
   }
-  /** The claim dialog's write. `confirmedAssignees` is the exact assignee
-   *  list the review step displayed — a fresh read that disagrees with it
-   *  refuses as `moved` rather than applying a take-over the operator never
-   *  actually confirmed. */
+  /** The claim dialog's write. A fresh read that disagrees with `confirmedAssignees` refuses as `moved` rather than applying an unconfirmed take-over. */
   'claim:apply': {
     request: { repoId: RepoId; number: number; planGate: PlanGateChoice; confirmedAssignees: readonly string[] }
     response: ClaimApplyResponse
@@ -149,11 +142,7 @@ export interface IpcMap {
     request: void
     response: RuntimePreflight
   }
-  /** One `query()` turn, against a registered, `ready` repository or, when
-   *  `repoId` is `null`, an app-owned scratch directory — the renderer names
-   *  an intent (`repoId`), never a path or a `cwd`. `null` is explicit rather
-   *  than optional, so a caller can't drop the key by accident and silently
-   *  get repository-free mode. */
+  /** One `query()` turn, against a registered repository or, when `repoId` is `null`, an app-owned scratch directory. `null` is explicit rather than optional. */
   'runtime:probe': {
     request: { repoId: RepoId | null }
     response: RuntimeProbe
@@ -163,11 +152,7 @@ export interface IpcMap {
     request: { repoId: RepoId; number: number }
     response: GatePreflightResponse
   }
-  /** The plan gate's own write. `feedback` is required (non-empty) only when
-   *  `decision` is `'request-changes'` and `skipComment` is `false`;
-   *  `skipComment` is `true` only on a retry after a comment already landed
-   *  and the label swap alone failed — it can only ever suppress a write,
-   *  never widen one. */
+  /** The plan gate's own write. `feedback` is required only when `decision` is `'request-changes'` and `skipComment` is `false`; `skipComment` can only ever suppress a write, never widen one. */
   'gate:answer': {
     request: { repoId: RepoId; number: number; decision: GateDecision; feedback: string | null; skipComment: boolean }
     response: GateAnswerResponse
@@ -192,9 +177,7 @@ export interface IpcMap {
     request: { sessionKey: SessionKey }
     response: SessionCloseResult
   }
-  /** The reconnect path after a renderer reload — handles are
-   *  main-process-owned and survive it. `replay` is a bounded window, never
-   *  the whole session. */
+  /** The reconnect path after a renderer reload — handles are main-process-owned and survive it. `replay` is a bounded window, never the whole session. */
   'session:attach': {
     request: { sessionKey: SessionKey }
     response: SessionAttachResult
