@@ -104,7 +104,7 @@ export interface HostedStore {
   setControls(sessionKey: SessionKey, patch: { readonly permissionMode?: SessionControls['permissionMode']; readonly model?: string; readonly effort?: SessionControls['effort'] }): Promise<SetControlsResult>
   answerQuestion(sessionKey: SessionKey, permissionId: string, answers: Readonly<Record<string, string>>): QuestionAnswerResult
   answerPlan(sessionKey: SessionKey, permissionId: string, decision: PlanDecision): PlanAnswerResult
-  /** #103: removes an ended handle — `still-open` for any other phase. */
+  /** Removes an ended handle — `still-open` for any other phase. */
   dismiss(sessionKey: SessionKey): SessionDismissResult
   snapshotOf(sessionKey: SessionKey): HostedSessionSnapshot | null
   capacity(): Promise<HostingCapacity>

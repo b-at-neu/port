@@ -133,9 +133,7 @@ function grace(ms: number): Promise<void> {
 export function createHostedHandle(params: CreateHostedHandleParams, query: HostedQueryFn): HostedHandle {
   const input = createHostedInput()
   const controls = createControlsTracker({ defaults: params.defaults, onChange: () => emitStatus() })
-  // #99: created before buildSessionOptions, whose allowlisted permissionMode
-  // (never 'dontAsk') routes an un-preapproved tool call through this
-  // broker's own canUseTool rather than a silent auto-deny.
+  // Created before buildSessionOptions so an un-preapproved tool call routes through canUseTool, not a silent auto-deny.
   const broker = createPermissionBroker({ now: params.now, onChange: () => emitStatus(), onPlanApproved: (mode) => controls.adoptApprovedMode(mode) })
   const options = buildSessionOptions({ mode: params.mode, cwd: params.cwd, executablePath: params.executablePath, canUseTool: broker.canUseTool, plugin: params.plugin, defaults: params.defaults })
   const startedAt = new Date(params.now()).toISOString()

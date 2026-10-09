@@ -1,9 +1,5 @@
-// #99: the per-session permission broker — this handle's own `canUseTool`.
-// Every call becomes a pending request on the handle's snapshot, settled by
-// an operator answer (`answer`) or by the SDK's own `AbortSignal`, never by
-// a timer of this broker's own: the wait is the SDK's, and the broker never
-// decides for the operator (no park deadline — see `canUseTool`'s own
-// doc comment on the SDK side).
+// The per-session permission broker: every call becomes a pending request, settled by
+// an operator answer or by the SDK's own AbortSignal, never by a timer of its own.
 import type { QuestionAnswerResult, PlanAnswerResult, PlanDecision } from '../../shared/hosting/controls'
 import type { PendingPermission, PermissionDecision, SessionPermissionAnswerResult } from '../../shared/hosting/types'
 import { narrowSessionGrant } from './grant'
