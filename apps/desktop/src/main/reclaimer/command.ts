@@ -1,15 +1,5 @@
-// Tokenizes and validates a `node`-prefixed `commands.*` string —
-// `commands.worktrees` and `commands.budget` are both a free-form
-// command-prefix string a repository's config carries verbatim. `KNOWN_COMMANDS` in
-// `main/platform/run.ts` is a literal union precisely so an adapter cannot
-// reach for an arbitrary binary (ENGINEERING §1), so this rejects a shell
-// metacharacter or unbalanced quote outright and accepts only a `node`
-// prefix — reject rather than interpret, since a metacharacter means the
-// operator wrote something a shell would do and this layer will not.
-
-/** Every character this layer refuses to interpret when it appears outside
- *  a quoted span — each one is something a real shell would give special
- *  meaning to, which this tokenizer deliberately does not implement. */
+// Rejects a shell metacharacter or unbalanced quote outright and accepts only a `node` prefix —
+// reject rather than interpret.
 const METACHARACTERS = new Set(['|', '&', ';', '<', '>', '$', '`', '(', ')'])
 
 export type TokenizeResult =
@@ -17,11 +7,7 @@ export type TokenizeResult =
   | { readonly ok: false; readonly kind: 'unparseable-command' }
   | { readonly ok: false; readonly kind: 'unsupported-runner'; readonly token: string }
 
-/** Whitespace outside a quoted span splits tokens; single and double quotes
- *  both open a span that consumes metacharacters and whitespace literally,
- *  closed only by a matching quote of the same kind. Never interprets an
- *  escape sequence — an adopter's config is a plain string, not a shell
- *  script. */
+// Never interprets an escape sequence — an adopter's config is a plain string, not a shell script.
 function tokenize(prefix: string): readonly string[] | null {
   const tokens: string[] = []
   let current = ''
@@ -62,13 +48,8 @@ function tokenize(prefix: string): readonly string[] | null {
   return tokens
 }
 
-/** Tokenizes a `node`-prefixed command string — `commands.worktrees` and
- *  `commands.budget` share this exact shape (#293: the tokenizer was never
- *  worktrees-specific) — and accepts it only when the first token is
- *  exactly `node`: every schema example and every `/port:init` install is
- *  `node <script>`, so this rejects nothing real. Never spawns anything;
- *  the caller (`report.ts`, `dispatch/budget-gate.ts`) decides what to do
- *  with a successful result. */
+// Accepts it only when the first token is exactly `node`. Never spawns anything; the caller decides
+// what to do with a successful result.
 export function parseNodeCommand(prefix: string): TokenizeResult {
   const tokens = tokenize(prefix)
   if (tokens === null || tokens.length === 0) return { ok: false, kind: 'unparseable-command' }

@@ -7,9 +7,7 @@ describe('foldCase', () => {
   })
 
   it('preserves length for a code point whose lowercase expands', () => {
-    // German sharp s uppercases/lowercases in a way that can expand under
-    // some mappings -- the guarantee is length preservation, not a specific
-    // lowercasing choice.
+    // The guarantee is length preservation, not a specific lowercasing choice.
     const text = 'STRASSE'
     expect(foldCase(text).length).toBe(text.length)
   })

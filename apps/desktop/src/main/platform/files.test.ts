@@ -265,10 +265,7 @@ describe('readLinesFrom', () => {
   })
 
   it('reports too-large on a stuck line — one line longer than the whole budget, never spinning', async () => {
-    // Large enough to arrive across many stream chunks (a small file can
-    // arrive in one chunk, which would make an abort-mid-stream assertion
-    // meaningless) — the same order-of-magnitude the readTextFile too-large
-    // test above already uses for its own cap.
+    // Large enough to arrive across many stream chunks, so the abort-mid-stream assertion is meaningful.
     const dir = await makeTempDir()
     const file = join(dir, 'big.jsonl')
     await writeFile(file, 'x'.repeat(4 * 1024 * 1024)) // one line, no newline at all
@@ -401,9 +398,6 @@ describe('statPath', () => {
     expect(result.value.kind).toBe('directory')
   })
 
-  // #78: a transcript's mtime is the only per-agent activity signal a local
-  // read can produce — the session adapter stat's a subagent's sibling
-  // `.jsonl` for exactly this field.
   it('reports modifiedAt as the file mtime, ISO-formatted', async () => {
     const dir = await makeTempDir()
     const file = join(dir, 'a.txt')

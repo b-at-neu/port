@@ -1,12 +1,5 @@
-// #292: applyObservation — the one write chokepoint
-// `main/dispatch/dispatcher.ts`'s own observation pass calls, label-first
-// then (only on `applied`, and only when the plan carries one) the comment
-// — the same ordering `main/actions/escalate.ts`'s own `escalateToHuman`
-// already follows, since a failed comment must still leave the label write
-// standing and a failed label write must never post a comment that would
-// repeat on every poll. `applyLabels` re-reads ownership at write time, so a
-// takeover mid-pass refuses with `terminal-owned` rather than writing
-// through a stale authorization.
+// Label-first, then (only on `applied`, and only when the plan carries one) the comment —
+// a failed comment must still leave the label write standing.
 import type { ReconciledItem } from '../../shared/state/types'
 import type { LabelWriteRequest, WriteOutcome } from '../../shared/writes/types'
 import { applyLabels, postComment } from '../writes/apply'
@@ -17,9 +10,6 @@ import type { ReadyEntry } from './apply'
 
 export interface ApplyObservationParams {
   readonly entry: ReadyEntry
-  /** The snapshot this pass read the observation against — never a second,
-   *  independent read; `observationWrite`'s own precondition is built from
-   *  this item's exact role-bearing label set and assignee set. */
   readonly item: ReconciledItem
   readonly observation: WriteObservation
   readonly auditDir: string
@@ -35,9 +25,7 @@ export const defaultApplyObservationDeps: ApplyObservationDeps = { applyLabels, 
 
 export interface ApplyObservationResult {
   readonly labels: WriteOutcome
-  /** `null` when the label swap itself did not reach `applied`, or the plan
-   *  carried no comment at all (every `liveness-reset`/`refresh` write) — a
-   *  comment is never attempted on an item this call did not actually move. */
+  /** `null` when the label swap did not reach `applied`, or the plan carried no comment. */
   readonly comment: WriteOutcome | null
 }
 

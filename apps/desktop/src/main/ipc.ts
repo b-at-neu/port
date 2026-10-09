@@ -78,10 +78,7 @@ function handle<C extends IpcChannel>(channel: C, handler: Handler<C>): void {
   })
 }
 
-/** The one place every main → renderer push goes through (#219) — a net
- *  line reduction over each caller repeating its own `for (const window of
- *  BrowserWindow.getAllWindows())` loop, and one seam if a future push ever
- *  needs anything beyond "every open, non-destroyed window". */
+// The one place every main → renderer push goes through.
 function broadcast<E extends IpcEvent>(event: E, payload: IpcEventMap[E]): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) window.webContents.send(event, payload)
@@ -97,10 +94,6 @@ function getAppInfo(): AppInfo {
   }
 }
 
-/** The two calls `'worktrees:report'` composes — injected so the
- *  id-validation/lookup/ready-check branching below is testable without
- *  Electron or a real registry, the same seam `RegistryDeps` gives the
- *  registry functions themselves. */
 export interface WorktreesReportDeps {
   readonly listRepositories: typeof listRepositories
   readonly readWorktreeReport: (params: ReadWorktreeReportParams) => Promise<WorktreesReport>
@@ -108,10 +101,7 @@ export interface WorktreesReportDeps {
 
 const defaultWorktreesReportDeps: WorktreesReportDeps = { listRepositories, readWorktreeReport }
 
-/** The renderer sends only the opaque id, never a path — resolved here
- *  through the same registry every other channel reads, so a repository
- *  that has moved, gone stale, or lost its 'ready' status is caught before
- *  anything is spawned. */
+// The renderer sends only the opaque id, never a path.
 export async function resolveWorktreesReport(
   registryDeps: RegistryDeps,
   request: IpcMap['worktrees:report']['request'],
@@ -128,18 +118,11 @@ export async function resolveWorktreesReport(
   })
 }
 
-/** The two calls `'board:refresh'` composes — the same injectable seam
- *  `WorktreesReportDeps` gives `resolveWorktreesReport`, so the id/source
- *  validation below is testable without Electron or a real watcher. */
 export interface BoardRefreshDeps {
   readonly listRepositories: typeof listRepositories
   readonly refresh: (request: IpcMap['board:refresh']['request']) => Promise<BoardSnapshot>
 }
 
-/** `repoId`, when present, must name a currently registered repository —
- *  the same rail `resolveWorktreesReport` already applies — and `source`
- *  must be one of `SOURCE_KINDS`; anything else throws rather than silently
- *  forcing nothing. */
 export async function resolveBoardRefresh(
   registryDeps: RegistryDeps,
   request: IpcMap['board:refresh']['request'],
@@ -169,19 +152,14 @@ export interface RegisteredIpc {
 }
 
 export function registerIpc(): RegisteredIpc {
-  // The one place a real `git` invocation and the real userData directory
-  // reach the registry — every registry function itself takes these as
-  // injected dependencies, so its own tests need neither Electron nor a
-  // real repository.
+  // The one place a real `git` invocation and the real userData directory reach the registry.
   const registryDeps: RegistryDeps = {
     registryDir: app.getPath('userData'),
     git: (args, cwd) => git(args, { cwd }),
     chooseDirectory,
   }
 
-  // #314: the per-repository run-state store, created before `repos:add`/
-  // `repos:remove` so their handlers can forget a stale entry; `current()`
-  // stays synchronous and starts every repository paused.
+  // Created before `repos:add`/`repos:remove` so their handlers can forget a stale entry.
   const runStates = createRunStateStore(app.getPath('userData'))
   void runStates.load(() => registeredRepoIds(registryDeps))
 
@@ -199,8 +177,7 @@ export function registerIpc(): RegisteredIpc {
     return listRepositories(registryDeps)
   })
 
-  // #314: forgetting a run-state entry never fails the registry call itself,
-  // only logs — so a stale entry can never silently revive a re-added repo.
+  // Forgetting a run-state entry never fails the registry call itself, only logs.
   function forgetRunState(channel: string, repoId: Parameters<typeof runStates.forget>[0]): void {
     void runStates.forget(repoId).then((f) => {
       if (!f.ok) console.error(`'${channel}' could not forget the run-state entry for '${String(repoId)}':`, f.message)
@@ -238,12 +215,8 @@ export function registerIpc(): RegisteredIpc {
 
   handle('search:query', (_event, request) => resolveSearchQuery(registryDeps, request, app.getPath('userData')))
 
-  // #98: one hosted-session store for the process lifetime, broadcasting
-  // over `session:status`/`session:entries`. Created before the watcher
-  // (#265): the dispatcher sits between the two and needs this store first.
-  // `onEvent` stays at its no-op default — nothing broadcasts the raw SDK
-  // envelope over IPC any more (#350); it is still forwarded internally for
-  // `session:attach`'s own replay ring (`main/hosting/handle.ts`).
+  // One hosted-session store for the process lifetime, created before the watcher — the dispatcher
+  // sits between the two and needs this store first.
   const hostedStore = createHostedStore({
     ...defaultHostedStoreDeps,
     onStatus: (snapshot) => broadcast('session:status', snapshot),
@@ -252,10 +225,8 @@ export function registerIpc(): RegisteredIpc {
   })
   const hostingChannelDeps = defaultHostingChannelDeps(hostedStore)
 
-  // #326: the ledger, refresh memo, and dispatch loop, bundled — see
-  // `main/dispatch/runtime.ts` for why `bindWatcher` exists. `launch: null`
-  // is the honest state until #327 passes a real `StageLauncher` — a
-  // candidate sits visibly at `no-launcher` rather than silently idle.
+  // `launch: null` is the honest state until a real `StageLauncher` lands — a candidate sits
+  // visibly at `no-launcher` rather than silently idle.
   const { watcherDeps, dispatcher, autoPlanner, bindWatcher, shutdown } = createDispatchRuntime({
     store: hostedStore,
     launch: null,
@@ -269,11 +240,8 @@ export function registerIpc(): RegisteredIpc {
     now: () => new Date(),
   })
 
-  // The board's own clock (#80) — one watcher for the process lifetime,
-  // broadcasting every snapshot over `board:update`. #326: `onTick` fires
-  // only on a fresh poll (never on `republish()`), considering the dispatch
-  // loop against it, never awaited — a pass must never block the broadcast
-  // the renderer is waiting on.
+  // One watcher for the process lifetime. `onTick` fires only on a fresh poll, never awaited —
+  // a pass must never block the broadcast the renderer is waiting on.
   const watcher = createPipelineWatcher({
     repositories: async () => {
       const list = await listRepositories(registryDeps)
@@ -328,9 +296,7 @@ export function registerIpc(): RegisteredIpc {
     } satisfies ItemDecisionDeps),
   )
 
-  // Operator control over dispatch (#110, #314, #331): run/drain/pause/
-  // take-over one repository, or halt everything — all branching in
-  // `resolveDispatchControl`.
+  // run/drain/pause/take-over one repository, or halt everything — all branching in `resolveDispatchControl`.
   handle('dispatch:control', (_event, request) =>
     resolveDispatchControl(registryDeps, request, {
       listRepositories,
@@ -353,10 +319,7 @@ export function registerIpc(): RegisteredIpc {
 
   handle('runtime:probe', (_event, request) => resolveRuntimeProbe(registryDeps, request, join(app.getPath('userData'), 'runtime-probe')))
 
-  // The plan gate's two channels (#92) — `gatePreflight`/`gateAnswer` are
-  // `main/actions/gate.ts`'s own exports, already bound to their own
-  // `defaultGateDeps`; `refresh` is the live watcher's method, never a
-  // second poll built here.
+  // `refresh` is the live watcher's method, never a second poll built here.
   const gateChannelDeps: GateChannelDeps = { gatePreflight, gateAnswer, refresh: watcher.refresh }
 
   handle('gate:preflight', (_event, request) => resolveGatePreflight(registryDeps, request, gateChannelDeps))

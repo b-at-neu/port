@@ -1,10 +1,4 @@
-// The sessions/transcript/search resolvers — relocated verbatim out of
-// `main/ipc.ts` (#92) so that file can register the plan gate's four new
-// channels without crossing the 500-line ratchet. `docs/ENGINEERING.md` §1's
-// own rule: a channel's validation and composition move here as each is next
-// touched; `main/ipc.ts` stays the registrar. No behaviour change in this
-// relocation — every function, its own deps interface, and its own default
-// wiring are unchanged from what left `main/ipc.ts`.
+// `main/ipc.ts` stays the registrar; a channel's validation and composition move here as each is next touched.
 import type { RepositoryEntry } from '../../shared/repos'
 import type { SessionScan } from '../../shared/sessions/types'
 import type { TranscriptTailOpen, TranscriptTailPoll } from '../../shared/sessions/transcript'
@@ -20,9 +14,6 @@ import type { TailStore } from '../sessions/tail'
 import { runSearch } from '../search/query'
 import type { RunSearchParams } from '../search/query'
 
-/** `'sessions:scan'`'s only composition: the ready repository list becomes
- *  `readSessionState`'s `repos`, never a second config or worktree reader —
- *  reconciliation against labels is #79's job, not this channel's. */
 export interface SessionsScanDeps {
   readonly listRepositories: typeof listRepositories
   readonly readSessionState: (params: ReadSessionStateParams) => Promise<SessionScan>
@@ -41,10 +32,6 @@ export async function resolveSessionsScan(registryDeps: RegistryDeps, deps: Sess
   return deps.readSessionState({ repos })
 }
 
-/** The three tail channels' only composition: each request's own validation,
- *  then a direct call into the one running `TailStore` (`tailStore`) —
- *  injected here so a test exercises the validation branching without a real
- *  transcript on disk, the same seam every other channel's `*Deps` gives. */
 export interface TranscriptTailDeps {
   readonly openTail: TailStore['openTail']
   readonly pollTail: TailStore['pollTail']
@@ -90,10 +77,6 @@ export function resolveTranscriptTailClose(
   deps.closeTail({ tailId: request.tailId })
 }
 
-/** `'search:query'`'s only composition: the same `resolveSessionsScan` every
- *  `'sessions:scan'` request builds becomes `runSearch`'s `scan` -- never a
- *  second scan builder -- so a repository this caller cannot read is the
- *  same `sessions-unavailable` answer either channel would give. */
 export interface SearchQueryDeps {
   readonly resolveSessionsScan: (registryDeps: RegistryDeps) => Promise<SessionScan>
   readonly runSearch: (params: RunSearchParams) => Promise<SearchResult>
@@ -108,10 +91,8 @@ function isValidScope(scope: unknown): scope is SearchScope {
   return value['kind'] === 'repo' && typeof value['repoId'] === 'string' && value['repoId'] !== ''
 }
 
-/** A malformed payload throws (a renderer bug, per every other channel's own
- *  rule) -- a query that *parses* to zero usable terms is `runSearch`'s own
- *  `invalid-query` answer, a value rather than a thrown error, since it is
- *  still a well-formed request. */
+/** A query that *parses* to zero usable terms is `runSearch`'s own `invalid-query` answer,
+ *  a value rather than a thrown error. */
 export async function resolveSearchQuery(
   registryDeps: RegistryDeps,
   request: IpcMap['search:query']['request'],

@@ -1,11 +1,5 @@
-// The plan gate's two channels' validation and composition (#92) — every
-// stale-renderer mistake throws here, never becomes a value `main/actions/
-// gate.ts` has to defend against, the same rail `main/ipc.ts`'s own
-// `resolveItemAction` already applies. Forces one `board:refresh` on an
-// `applied` label outcome, swallowing and logging a refresh failure so it
-// can never mask the write's own success — `repository.issues` is
-// read-your-writes consistent (`query.ts` Decision 2), the same reasoning
-// `resolveItemAction`'s own forced refresh already relies on.
+// Forces one `board:refresh` on an `applied` label outcome; a refresh failure is swallowed and
+// logged so it can never mask the write's own success.
 import { GATE_DECISIONS } from '../../shared/gate/types'
 import type { GateAnswerResponse, GateDecision, GatePreflightResponse } from '../../shared/gate/types'
 import type { BoardSnapshot } from '../../shared/board/types'
@@ -14,22 +8,12 @@ import type { RegistryDeps } from '../registry'
 import { requireRepoId } from '../registry'
 import type { GateAnswerParams, GatePreflightParams } from '../actions/gate'
 
-/** One binding per composed function, plus the board's own `refresh` —
- *  the same seam `main/ipc.ts`'s `ItemActionDeps` gives `resolveItemAction`,
- *  so every validation branch below is testable without Electron, a real
- *  registry, or a real `gh`. `main/ipc.ts` wires each field to `main/actions/
- *  gate.ts`'s own export (already bound to its own `defaultGateDeps`) and to
- *  the live watcher's `refresh`. */
 export interface GateChannelDeps {
   readonly gatePreflight: (params: GatePreflightParams) => Promise<GatePreflightResponse>
   readonly gateAnswer: (params: GateAnswerParams) => Promise<GateAnswerResponse>
   readonly refresh: (request: IpcMap['board:refresh']['request']) => Promise<BoardSnapshot>
 }
 
-/** `'gate:preflight'`'s validation: `repoId` a non-empty string, `number` a
- *  positive integer — the same rail every other channel applies. Whether the
- *  id names a currently-registered, `ready` repository is `main/actions/
- *  gate.ts`'s own `resolveReadyEntry` to decide, never duplicated here. */
 export async function resolveGatePreflight(registryDeps: RegistryDeps, request: IpcMap['gate:preflight']['request'], deps: GateChannelDeps): Promise<GatePreflightResponse> {
   const repoId = requireRepoId(request?.repoId, "'gate:preflight'")
   if (!Number.isInteger(request.number) || request.number <= 0) {
@@ -42,14 +26,6 @@ function isGateDecision(value: unknown): value is GateDecision {
   return (GATE_DECISIONS as readonly string[]).includes(value as string)
 }
 
-/**
- * `'gate:answer'`'s validation: the same `repoId`/`number` rail every other
- * channel applies, `decision` restricted to `GATE_DECISIONS`, `skipComment`
- * a boolean, and `feedback` a non-empty string when — and only when —
- * `decision` is `'request-changes'` and `skipComment` is `false`. On an
- * `applied` label outcome, forces one `board:refresh` before returning, the
- * same rule `resolveItemAction` already follows.
- */
 export async function resolveGateAnswer(
   registryDeps: RegistryDeps,
   request: IpcMap['gate:answer']['request'],

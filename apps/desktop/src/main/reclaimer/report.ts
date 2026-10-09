@@ -1,9 +1,5 @@
-// readWorktreeReport: drives the shipped `bin/worktrees.mjs report
-// --json` through `commands.worktrees`, classifies its outcome, and joins
-// #77's `readWorktrees` for the one fact the script's JSON omits
-// (`prunable`) — never a second classification implementation, and never a
-// second `git worktree` caller (this directory calls no `git` itself; the
-// join is the only reader).
+// Joins `readWorktrees` for the one fact the script's JSON omits (`prunable`) — this directory
+// calls no `git` itself; the join is the only reader.
 import { node as defaultNode } from '../platform/node'
 import { pathOps as defaultPathOps } from '../platform/paths'
 import type { CommandResult } from '../platform/run'
@@ -17,19 +13,12 @@ import { isReclaimableState } from '../../shared/reclaimer/types'
 import { parseNodeCommand } from './command'
 import { parseReportPayload } from './parse'
 
-/** Fails to compile if a new `CommandResult` failure kind is added to the
- *  platform layer without `ReclaimerFailureKind`
- *  (`shared/reclaimer/types.ts`) growing to match — the same pin
- *  `main/local/worktrees.ts` establishes for `LocalFailureKind`. Five kinds
- *  are this adapter's own, layered above the platform layer's seven. */
+// Fails to compile if a new `CommandResult` failure kind is added without `ReclaimerFailureKind` growing to match.
 type CommandResultFailureKind = Exclude<CommandResult, { ok: true }>['kind']
 type ReclaimerOwnFailureKind = 'not-configured' | 'unparseable-command' | 'unsupported-runner' | 'script-failed' | 'report-unparseable'
 export const _kindsCoverCommandResult: AssertEqual<ReclaimerFailureKind, CommandResultFailureKind | ReclaimerOwnFailureKind> = true
 
-/** Two literals reaching in from the shipped script, pinned against
- *  `bin/worktrees.mjs`'s own copies by the `desktop-reclaimer` layer 1
- *  check — `die()`'s own `FAIL` prefix, and the sentence Decision 3's retry
- *  keys on. */
+// Two literals reaching in from the shipped script, pinned against its own copies by layer 1.
 export const SCRIPT_FAIL_PREFIX = 'FAIL  '
 export const GH_RESOLUTION_FAILED_SENTINEL = 'gh issueOrPullRequest resolution failed'
 
@@ -37,13 +26,11 @@ export type { NodeRunner }
 
 export interface ReadWorktreeReportParams {
   readonly repoRoot: string
-  /** `commands.worktrees` verbatim off the resolved config — `null` means
-   *  the repository has not installed the reclamation script. */
+  /** `null` means the repository has not installed the reclamation script. */
   readonly worktreesCommand: string | null
   readonly runNode?: NodeRunner
-  /** #77's own seam, injected here for the join (Decision 1). Omitted means
-   *  the join is skipped and `porcelainJoin` reports `'unavailable'` — the
-   *  report itself still succeeds. */
+  /** Omitted means the join is skipped and `porcelainJoin` reports `'unavailable'` — the report
+   *  itself still succeeds. */
   readonly git?: WorktreesGitRunner
   readonly now?: () => Date
   readonly pathOps?: PathOps
@@ -54,9 +41,7 @@ function firstFailLine(stderr: string): string {
   return (line ?? stderr.trim()).slice(0, 2000)
 }
 
-/** Maps a platform-layer failure straight through, never re-classifying —
- *  the same "carry the real kind" rule `main/local/worktrees.ts`'s
- *  `describeFailure` follows for `git`. */
+// Maps a platform-layer failure straight through, never re-classifying.
 function describeCommandFailure(result: Exclude<CommandResult, { ok: true }>): { kind: CommandResultFailureKind; message: string } {
   switch (result.kind) {
     case 'not-found':
@@ -76,10 +61,7 @@ function describeCommandFailure(result: Exclude<CommandResult, { ok: true }>): {
   }
 }
 
-/** Runs the reclaimer's `report --json` and returns whatever `result` came
- *  back, retrying exactly once with `--offline` appended when the first
- *  attempt's stderr carries the sentinel — never a second retry, whatever
- *  the retry itself returns. */
+// Retries exactly once with `--offline` appended when the first attempt's stderr carries the sentinel.
 async function runReport(
   runNode: NodeRunner,
   args: readonly string[],
@@ -133,10 +115,7 @@ export async function readWorktreeReport(params: ReadWorktreeReportParams): Prom
     return { ok: false, kind: 'report-unparseable', message: parsed.message, readAt }
   }
 
-  // Decision 1's join: #77's readWorktrees supplies `prunable`/`producer`,
-  // indexed by pathOps.pathKey — never string equality, since case and
-  // separator differ on Windows. A failed join degrades both fields to
-  // `null` on every row rather than failing the whole report.
+  // Indexed by pathOps.pathKey, never string equality, since case and separator differ on Windows.
   let porcelainJoin: PorcelainJoinState = 'unavailable'
   const joined = new Map<string, { prunable: boolean; producer: InspectedWorktree['producer'] }>()
   if (params.git) {

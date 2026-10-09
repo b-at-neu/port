@@ -1,11 +1,5 @@
-// The seven hosted-session channels' validation and registry resolution
-// (#98, #99) — everything a stale renderer could get wrong throws here, never a
-// value `main/hosting/store.ts` has to defend against, the same rail every
-// other channel already applies. `repoId` resolves through the same
-// `listRepositories` ready-entry rail `resolveWorktreesReport`/
-// `resolveClaimPreflight` already use; an unresolvable executable returns
-// #97's own diagnosis rather than a new error kind (that is `HostedStore`'s
-// own job, not this file's).
+// Everything a stale renderer could get wrong throws here, never a value `main/hosting/store.ts`
+// has to defend against.
 import type { IpcMap, ReposListResponse } from '../../shared/ipc'
 import type { RepoId, RepoProblem } from '../../shared/repos'
 import { PERMISSION_DECISIONS, SESSION_MODELS, SESSION_PERMISSION_MODES, SESSION_TITLE_MAX } from '../../shared/hosting/types'
@@ -27,21 +21,11 @@ function resolveReadyEntry(registryDeps: RegistryDeps, repoId: unknown, deps: Ho
   return requireReadyRepo(registryDeps, `'${channel}'`, requireRepoId(repoId, `'${channel}'`), deps.listRepositories)
 }
 
-/** The one validation `session:send`/`session:interrupt`/`session:close`/
- *  `session:attach`/`session:dismiss`/`session:invoke`/
- *  `session:permission:answer` all open with — a stale or buggy renderer is
- *  the only way `sessionKey` is ever missing or empty. */
 function requireSessionKey(sessionKey: unknown, channel: string): SessionKey {
   if (typeof sessionKey !== 'string' || sessionKey === '') throw new Error(`'${channel}' requires a non-empty 'sessionKey'`)
   return sessionKey as SessionKey
 }
 
-/** `mode.kind` one of `fresh | resume | resume-at | fork`, with `sessionId`
- *  a non-empty string for the latter three and `messageUuid` required for
- *  `resume-at`; `resumeDropsTurn` is optional there and, when present, a
- *  non-empty string. Anything else throws rather than reaching
- *  `buildSessionOptions` with a shape it was never built to defend
- *  against. */
 function isValidStartMode(value: unknown): value is SessionStartMode {
   if (typeof value !== 'object' || value === null) return false
   const mode = value as Record<string, unknown>
@@ -101,16 +85,8 @@ export function resolveSessionList(request: IpcMap['session:list']['request'], d
   return deps.store.list()
 }
 
-/** `sessionKey`/`permissionId` non-empty strings, `decision` one of
- *  `PERMISSION_DECISIONS`, `message` either `null` or a string of 1–2000
- *  characters, and a non-null `message` only ever alongside `'deny'` — every
- *  one of these can only come from a stale or buggy renderer, so each
- *  throws rather than reaching `HostedStore.answerPermission` with a shape
- *  it was never built to defend against. */
-/** #101: the shape rail every channel uses. `name`'s content is **not**
- *  validated here — that is a typed result from `HostedStore.invoke`
- *  (`invalid-command`/`unknown-command`), so the UI can show it rather than
- *  the channel throwing on a name the operator might legitimately click. */
+/** `name`'s content is **not** validated here — that is a typed result from
+ *  `HostedStore.invoke` (`invalid-command`/`unknown-command`). */
 export const MAX_INVOKE_ARGS_CHARS = 8_000
 
 export function resolveSessionInvoke(request: IpcMap['session:invoke']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['invoke']> {
@@ -139,7 +115,6 @@ export function resolveSessionPermissionAnswer(
   return deps.store.answerPermission(sessionKey, request.permissionId, request.decision, message)
 }
 
-/** #103: `session:dismiss` — removes an ended handle from the rail. */
 export function resolveSessionDismiss(request: IpcMap['session:dismiss']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['dismiss']> {
   return deps.store.dismiss(requireSessionKey(request?.sessionKey, 'session:dismiss'))
 }
@@ -156,10 +131,7 @@ export function resolveSessionCapacitySet(request: IpcMap['session:capacity:set'
   return deps.store.setLimit(request.limit)
 }
 
-/** A short, main-process-only reason string for a repository that cannot
- *  host a restore — never the renderer's own `problemCopy`
- *  (`renderer/src/repositories.ts`), which is written for the repository
- *  card rather than a one-line restore-banner reason. */
+/** A short, main-process-only reason string, distinct from the renderer's own `problemCopy`. */
 function problemReason(problem: RepoProblem): string {
   switch (problem.kind) {
     case 'directory-missing':
@@ -187,10 +159,7 @@ function availabilityFor(repoId: RepoId, list: ReposListResponse): RestorableSes
   return { ok: true }
 }
 
-/** #103: `session:restore:list` — joins every restorable entry with
- *  `listRepositories` for availability. A listing failure marks every entry
- *  unavailable with its message, rather than ever returning an empty list
- *  for a read that failed. */
+/** A listing failure marks every entry unavailable with its message, never an empty list. */
 export async function resolveSessionRestoreList(registryDeps: RegistryDeps, request: IpcMap['session:restore:list']['request'], deps: HostingChannelDeps): Promise<IpcMap['session:restore:list']['response']> {
   if (request !== undefined) throw new Error("'session:restore:list' takes no payload")
   const [entries, list] = await Promise.all([deps.store.restorable(), deps.listRepositories(registryDeps)])
@@ -206,10 +175,7 @@ export async function resolveSessionRestoreList(registryDeps: RegistryDeps, requ
   }
 }
 
-/** #103: `session:restore` — resolves the ready entry's own path itself and
- *  returns `repo-unavailable` as a value rather than throwing, since an
- *  operator can hit that state in normal use (the registered repository
- *  moved, or was removed, since the entry was offered). */
+/** Returns `repo-unavailable` as a value rather than throwing — an operator can hit this in normal use. */
 export async function resolveSessionRestore(registryDeps: RegistryDeps, request: IpcMap['session:restore']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['restore']> {
   if (typeof request?.restoreId !== 'string' || request.restoreId === '') throw new Error("'session:restore' requires a non-empty 'restoreId'")
 
@@ -226,8 +192,7 @@ export async function resolveSessionRestore(registryDeps: RegistryDeps, request:
   return deps.store.restore(request.restoreId, repository.path)
 }
 
-/** #103: `session:restore:discard` — `restoreId: null` discards every
- *  entry, idempotently either way. */
+/** `restoreId: null` discards every entry, idempotently either way. */
 export function resolveSessionRestoreDiscard(request: IpcMap['session:restore:discard']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['discardRestorable']> {
   if (request === undefined || (request.restoreId !== null && (typeof request.restoreId !== 'string' || request.restoreId === ''))) {
     throw new Error("'session:restore:discard' requires 'restoreId' to be null or a non-empty string")

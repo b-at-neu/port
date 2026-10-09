@@ -21,10 +21,7 @@ interface Router {
   readonly log?: CommandResult
 }
 
-/** Routes by the git subcommand (`args[0]`), recording every call made so a
- *  test can assert the exact call budget. `config`/`log` default to the
- *  common "nothing to report" shape so a test that only cares about
- *  `worktree list` need not stub every call. */
+/** Routes by the git subcommand, recording every call so a test can assert the exact call budget. */
 function routedGit(router: Router, calls: string[][]): GitRunner {
   return (args) => {
     calls.push([...args])

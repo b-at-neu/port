@@ -1,11 +1,4 @@
-// The real-repository-log case for `shared/local/inspect.ts` (#85) lives
-// here, not in `shared/local/inspect.test.ts`: `readDenials` is a
-// `main/local/` export, and `shared/local/inspect.test.ts` must import
-// nothing from `src/main/` — the same purity the inspector itself rests on
-// (Decision 2) — since `tsconfig.web.json` type-checks every file under
-// `src/shared/**/*` including its transitive imports, and a platform-layer
-// import there would pull Node-only module resolution into a project whose
-// file list never listed those files (`tsc`'s `TS6307`).
+// Lives here, not in `shared/local/inspect.test.ts`, which must import nothing from `src/main/`.
 import { describe, expect, it } from 'vitest'
 import { inspectDenials } from '../../shared/local/inspect'
 import { readDenials } from './denials'

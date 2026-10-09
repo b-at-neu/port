@@ -1,6 +1,4 @@
-// Pure precondition evaluation — no `gh`, no filesystem, no `git`. Ownership
-// (`main/dispatch/ownership.ts`) gates every write uniformly now, so there is
-// no per-request scope to derive here any more.
+// Pure precondition evaluation — no `gh`, no filesystem, no `git`.
 import type { AssigneeExpectation, ObservedItem } from '../../shared/writes/types'
 
 export type PreconditionVerdict = { readonly satisfied: true } | { readonly satisfied: false; readonly expected: readonly string[]; readonly observed: readonly string[] }
@@ -30,24 +28,12 @@ function assigneeExpectationNames(expectation: AssigneeExpectation): readonly st
   }
 }
 
-/** Display form for an `absentNames` entry — distinguishes "expected
- *  present" from "expected absent" in the flattened `expected` list, since
- *  both share the same `string[]` shape. */
+/** Distinguishes "expected present" from "expected absent" in the flattened `expected` list. */
 function absentLabelName(name: string): string {
   return `not ${name}`
 }
 
-/** Evaluates an already name-resolved precondition against `observed`.
- *  `presentNames`/`absentNames` are the caller's `expect.present`/
- *  `expect.absent` keys, already resolved through `labelName` — this
- *  function never resolves a key itself, so it stays pure and label-key
- *  agnostic. `expected`/`observed` in the failing case are display names,
- *  exactly what the `Conflict` payload needs — `expected` always carries
- *  `presentNames` in full (the positive half of the expectation), plus
- *  whichever `absentNames` entries actually turned up (rendered
- *  `not <name>`) and the assignee expectation when *that* is what
- *  violated (including the `unassigned` case), so an absent-label or
- *  assignee violation is never silently missing from the payload. */
+// Never resolves a key itself, so it stays pure and label-key agnostic.
 export function evaluate(
   precondition: { readonly presentNames: readonly string[]; readonly absentNames: readonly string[]; readonly assignees: AssigneeExpectation },
   observed: ObservedItem,
@@ -70,10 +56,8 @@ export function evaluate(
   return { satisfied: false, expected, observed: observedNames }
 }
 
-/** `no-op` when the write would change nothing observable: every `add` key's
- *  name is already present, every `remove` key's name is already absent,
- *  and no assignee change is requested. Pure over already-resolved names —
- *  `apply.ts` supplies them from the same resolution `command.ts` performed. */
+/** `no-op` when every `add` key's name is already present, every `remove` key's name is already
+ *  absent, and no assignee change is requested. */
 export function wouldChangeNothing(
   request: { readonly addNames: readonly string[]; readonly removeNames: readonly string[]; readonly addAssignees: readonly string[]; readonly removeAssignees: readonly string[] },
   observed: ObservedItem,

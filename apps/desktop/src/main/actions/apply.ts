@@ -1,8 +1,4 @@
-// applyItemAction — the single-label operator actions' only `applyLabels`
-// caller (#94, wiring #90's write chokepoint into the app for the first
-// time). Rebuilds the plan from the watcher's own snapshot and the
-// registry's vocabulary; a renderer-supplied `expectedStage` is only ever
-// grounds to refuse, never to widen a plan.
+// A renderer-supplied `expectedStage` is only ever grounds to refuse, never to widen a plan.
 import { actionsFor, stageKeyOf } from '../../shared/actions/plan'
 import type { ActionPlan, ItemActionResult, OperatorAction } from '../../shared/actions/types'
 import { labelName } from '../../shared/labels/vocabulary'
@@ -23,10 +19,7 @@ export interface ItemActionRequest {
   readonly kind: 'issue' | 'pull-request'
   readonly number: number
   readonly action: OperatorAction
-  /** The `StageLabel.key` the renderer's own row carried when the operator
-   *  clicked, `null` when the row showed no stage at all (resume). Compared
-   *  against a fresh read of the same item — a mismatch means the board
-   *  moved on since the click, and the action is refused, never widened. */
+  /** `null` when the row showed no stage (resume). A mismatch against a fresh read refuses. */
   readonly expectedStage: LabelKey | null
 }
 
@@ -44,8 +37,6 @@ export interface ApplyItemActionDeps {
 
 export const defaultApplyItemActionDeps: ApplyItemActionDeps = { applyLabels, recoverPausedTrigger }
 
-/** Exported so `main/actions/decide.ts` reuses this rather than a second
- *  copy of the watcher-snapshot lookup. */
 export function findRepoState(snapshot: BoardSnapshot, repoId: RepoId): Extract<RepositoryState, { readonly ok: true }> | null {
   const state = snapshot.state.repositories.find((repository) => repository.repoId === repoId)
   return state !== undefined && state.ok ? state : null
@@ -55,16 +46,12 @@ function findItem(repoState: Extract<RepositoryState, { readonly ok: true }>, ki
   return repoState.items.find((item) => item.kind === kind && item.number === number) ?? null
 }
 
-/** Display form for a stage key — `'no stage'` for `null`, the resolved
- *  label name (or the bare key, if the vocabulary somehow no longer
- *  resolves it) otherwise. Used only for the `moved` refusal's copy. */
+/** Display form for a stage key, used only for the `moved` refusal's copy. */
 function stageDisplayName(vocabulary: ReadyEntry['config']['vocabulary'], key: LabelKey | null): string {
   if (key === null) return 'no stage'
   return labelName(vocabulary, key) ?? key
 }
 
-/** Exported so `main/actions/decide.ts` reuses this. Returns the bare
- *  `moved` shape, structurally assignable to either caller's own union. */
 export function movedResult(
   vocabulary: ReadyEntry['config']['vocabulary'],
   expected: LabelKey | null,
@@ -94,15 +81,6 @@ function buildWriteRequest(entry: ReadyEntry, request: ItemActionRequest, plan: 
   }
 }
 
-/**
- * Fixed order: find the `ReconciledItem` in the watcher's own snapshot
- * (never a renderer-supplied label set) → refuse `moved` when
- * `request.expectedStage` disagrees with what the snapshot now holds,
- * naming both → `actionsFor` → refuse on `not-owned`/`viewer-unknown` →
- * resume only: recover the paused trigger from the audit log → build the
- * `LabelWriteRequest` from the plan plus the registry entry's own
- * vocabulary/repo → `applyLabels`.
- */
 export async function applyItemAction(params: ApplyItemActionParams, deps: ApplyItemActionDeps = defaultApplyItemActionDeps): Promise<ItemActionResult> {
   const { request, snapshot, entry, auditDir } = params
   const repoState = findRepoState(snapshot, entry.id)
@@ -118,9 +96,7 @@ export async function applyItemAction(params: ApplyItemActionParams, deps: Apply
   if (!availability.available) {
     if (availability.reason === 'viewer-unknown') return { ok: false, reason: 'viewer-unknown' }
     if (availability.reason === 'not-owned') return { ok: false, reason: 'not-owned', owners: item.assignees }
-    // 'not-applicable' here means the renderer requested an action its own
-    // projection never marked available and the stage-drift check above
-    // already agreed with the fresh read — a client bug, not a real race.
+    // 'not-applicable' here means a client bug, not a real race — stage drift was ruled out above.
     throw new Error(`'${request.action}' is not applicable to ${request.kind} #${String(request.number)}`)
   }
 

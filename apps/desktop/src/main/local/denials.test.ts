@@ -174,9 +174,7 @@ describe('readDenials — file failures', () => {
     await chmod(logPath, 0o000)
     try {
       const result = await readDenials({ repoRoot: root, git, now })
-      // Root may still be readable as a privileged test-runner user (some CI
-      // containers run as root, where chmod 000 is not actually enforced) —
-      // in that case this degrades to a skip rather than a false failure.
+      // Degrades to a skip rather than a false failure when run as a privileged user.
       if (result.ok) return
       expect(result.kind).toBe('permission-denied')
     } finally {

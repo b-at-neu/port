@@ -1,30 +1,18 @@
-// The shape `main/trajectory/log.ts` appends, one line per ready repository
-// per app poll (#111) — the desktop app's own twin to the cockpit's
-// `scripts/port-tick/events.ts` `tick` event, built directly from one
-// repository's `TickReport` (`main/tick/plan.ts`'s whole result) so the
-// mapping to the cockpit's own `tickEventPayload` shape is mechanical rather
-// than clever. Type-only, no function — the same shape every other
-// `shared/*/types.ts` and `main/tick/`'s own consumers already take.
+// One line per ready repository per app poll — the desktop app's own twin to the cockpit's
+// trajectory event. Type-only, no function.
 import type { RepoId } from '../../shared/repos'
 import type { LabelKey } from '../../shared/labels/vocabulary'
 import type { StageAgent, TickBlind, TickClaimClass, TickContention, TickHeldReason } from '../../shared/tick/types'
 
-/** One dispatch candidate this poll's tick would have sent out — `stage` is
- *  `` `${agent}-agent` ``, the same string the cockpit's own `planned.dispatch`
- *  entries carry, so `scripts/port-tick/parity.ts` can compare the two
- *  without a translation table on either side. */
+/** `stage` is `` `${agent}-agent` ``, the same string the cockpit's own `planned.dispatch`
+ *  entries carry. */
 export interface DesktopDispatchEvent {
   readonly item: number
   readonly stage: string
   readonly agent: StageAgent
 }
 
-/** One held trigger-stage candidate — `reason`/`contention`/`trigger` copied
- *  straight off `TickHeld`, dropping only `kind`, which the parity diff has
- *  no use for. `trigger` is load-bearing: `scripts/port-tick/parity.ts`'s
- *  `diffOwnership` reads it on every entry to bucket `unowned`/`other-operator`
- *  counts per `OWNERSHIP_TRIGGER_KEYS` before comparing against the
- *  cockpit's own `othersCounts`/`unownedCounts`. */
+/** `trigger` is load-bearing: the parity diff buckets `unowned`/`other-operator` counts off it. */
 export interface DesktopHeldEvent {
   readonly item: number
   readonly reason: TickHeldReason
@@ -32,19 +20,13 @@ export interface DesktopHeldEvent {
   readonly trigger: LabelKey
 }
 
-/** One in-flight claim's own resolution — `TickClaim` minus `kind`/
- *  `inFlight`/`retryKey`, the fields the parity diff has no cockpit-side
- *  counterpart for. */
 export interface DesktopClaimEvent {
   readonly item: number
   readonly class: TickClaimClass
 }
 
-/** One repository, one poll. `blind` carries the same reason `TickReport`
- *  itself would report a blind tick for — never folded into an empty
- *  `dispatch`/`held`/`claims`, the same "absence is reported, never rendered
- *  as agreement" rule `docs/ENGINEERING.md` §4 states for the cockpit's own
- *  trajectory record. */
+/** `blind` is never folded into an empty `dispatch`/`held`/`claims` — absence is reported, never
+ *  rendered as agreement. */
 export interface DesktopTickEvent {
   readonly v: 1
   readonly ts: string

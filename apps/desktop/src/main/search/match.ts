@@ -1,13 +1,9 @@
-// Entry -> searchable fields, and fields -> hits (#87). Pure over a
-// `TranscriptEntry[]` already parsed by `main/sessions/` -- no filesystem, no
-// signature, nothing about scope or budget. `query.ts` is the only caller.
+// Pure over a `TranscriptEntry[]` already parsed by `main/sessions/` -- no filesystem, no signature.
 import type { SearchField, SearchHit, SearchSnippet } from '../../shared/search/types'
 import type { FileDiff, TranscriptEntry } from '../../shared/sessions/transcript'
 import { foldCase, indexOfFolded } from './terms'
 
-/** Either side of a match, in the original (unfolded) text -- generous
- *  enough to show a path or an error in context without dumping a whole
- *  payload into one row. */
+// Either side of a match, in the original (unfolded) text.
 const SNIPPET_CONTEXT_CHARS = 60
 
 export interface SearchableField {
@@ -20,12 +16,7 @@ function diffText(diff: FileDiff): string {
   return [diff.path, ...lines].join('\n')
 }
 
-/** `text` for the three text-kind entries; `name`/`headline`/`input` always
- *  for a tool call, plus `result`/`diff` only when that entry actually
- *  carries one -- an unpaired tool call (no result yet) contributes fewer
- *  fields, never an empty placeholder one. `diff`'s text is the path plus
- *  every hunk line, so a query for a changed line's content matches the same
- *  way a query for its file path does. */
+/** An unpaired tool call (no result yet) contributes fewer fields, never an empty placeholder one. */
 export function searchableFields(entry: TranscriptEntry): readonly SearchableField[] {
   switch (entry.type) {
     case 'user-text':
@@ -55,15 +46,8 @@ function snippetFor(text: string, matchStart: number, matchLength: number): Sear
   return { text: `${prefix}${text.slice(start, end)}${suffix}`, matchStart: matchStart - start + prefix.length, matchLength }
 }
 
-/**
- * Every entry where **all** `terms` (already folded, via `parseQuery`)
- * appear in *some* field of it -- AND across the entry, never the field, so
- * a path in a tool call's headline and an error string in its result both
- * count toward the same hit. One `SearchHit` per matching entry, anchored on
- * the first term's first match in whichever field it appeared in first --
- * which field or term produced a *later* match is not reported, since the
- * point is "this entry matched", not a ranked explanation.
- */
+// AND across the entry, never the field. One `SearchHit` per matching entry, anchored on the
+// first term's first match.
 export function hitsFor(entries: readonly TranscriptEntry[], terms: readonly string[]): readonly SearchHit[] {
   if (terms.length === 0) return []
   const hits: SearchHit[] = []

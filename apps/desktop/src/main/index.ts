@@ -11,18 +11,14 @@ import { confirmQuit } from './dialogs'
 import { applyNavigationGuards } from './navigation'
 import { ABOUT_NOTICE, ABOUT_POWERED_BY } from '../shared/about/copy'
 
-// A dev-only `pnpm install` never runs as root, so the SUID sandbox helper
-// (`chrome-sandbox`) ships without the root-owned 4755 permissions Chromium
-// requires, and aborts rather than falling back unprivileged. Packaged
-// builds are unaffected — installers set up `chrome-sandbox` correctly.
+// A dev-only `pnpm install` never runs as root, so `chrome-sandbox` ships without the root-owned
+// permissions Chromium requires. Packaged builds are unaffected.
 if (!app.isPackaged) {
   app.commandLine.appendSwitch('no-sandbox')
 }
 
-// #317: the visual harness's own fixture-mode switch, resolved before the
-// single-instance lock — an `on` result relocates `userData` before that
-// lock is ever requested, so a fixture run never contends for the operator's
-// own lock or touches their real profile.
+// An `on` result relocates `userData` before the single-instance lock is ever requested, so a
+// fixture run never contends for the operator's own lock or touches their real profile.
 const fixture = fixtureMode(process.env, app.isPackaged, isAbsolute)
 
 if (fixture.kind === 'invalid') {
@@ -73,10 +69,7 @@ if (fixture.kind === 'invalid') {
 
       applyNavigationGuards(window.webContents)
 
-      // #326: on Windows/Linux, closing the last window quits the app — the
-      // same quit guard `before-quit` uses, so closing the window prompts
-      // exactly like quitting does. On macOS, closing the window never
-      // quits the app (the dock-icon convention), so this never applies.
+      // On Windows/Linux, closing the last window quits the app, so it uses the same quit guard.
       if (process.platform !== 'darwin') {
         window.on('close', (event) => {
           if (quitGuard.intercept(() => event.preventDefault())) return
@@ -104,9 +97,8 @@ if (fixture.kind === 'invalid') {
       // `userData` directory away from the operator's real profile.
       app.setAboutPanelOptions({ applicationName: 'port', applicationVersion: app.getVersion(), credits: [ABOUT_POWERED_BY, ABOUT_NOTICE].join('\n') })
 
-      // #317: fixture mode registers its own canned handlers instead of the
-      // live adapter chain, and starts neither a watcher nor a hosted-session
-      // store — both stay `null`, so `before-quit` below no-ops for them.
+      // Fixture mode starts neither a watcher nor a hosted-session store — both stay `null`, so
+      // `before-quit` below no-ops for them.
       if (fixture.kind === 'on') {
         registerFixtureIpc(fixture.scenario)
       } else {
@@ -123,9 +115,8 @@ if (fixture.kind === 'invalid') {
       })
     })
 
-    // #326: the quit warning — intercepts `before-quit` and (off darwin)
-    // the main window's own `close` while any stage session is still live,
-    // naming each one before the operator confirms.
+    // Intercepts `before-quit` and (off darwin) the main window's own `close` while any stage
+    // session is still live, naming each one before the operator confirms.
     const quitGuard = createQuitGuard({
       sessions: () => dispatcher?.liveStageSessions() ?? [],
       confirm: (copy) => confirmQuit(mainWindow, copy),
@@ -136,13 +127,8 @@ if (fixture.kind === 'invalid') {
       if (process.platform !== 'darwin') app.quit()
     })
 
-    // Stop the watcher's timer and close every hosted session on quit, so a
-    // closing app leaves no `gh`/`git` spawn (#80) or `claude` child (#98)
-    // behind — `before-quit` fires on every platform, unlike
-    // `window-all-closed`, which macOS's dock-icon convention skips. The
-    // quit guard runs first: `intercept` prevents the default when it needs
-    // to prompt, and the real shutdown sequence below runs only once that
-    // resolves (or there was nothing to guard).
+    // `before-quit` fires on every platform, unlike `window-all-closed`, which macOS's dock-icon
+    // convention skips. The quit guard runs first, and shutdown below runs only once it resolves.
     app.on('before-quit', (event) => {
       if (quitGuard.intercept(() => event.preventDefault())) return
       shutdownDispatch?.()

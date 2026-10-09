@@ -11,16 +11,8 @@ export interface GhExitOutcome {
   readonly stderr: string
 }
 
-/**
- * Pure and unit-testable without spawning `gh` — `gh.test.ts` drives this
- * directly. Classification order, first match wins:
- * 1. exit code `4` → `unauthenticated` (gh's documented auth exit code, ahead
- *    of any string match).
- * 2. `(HTTP <nnn>)` parsed from stdout/stderr.
- * 3. stderr naming a DNS or connection failure → `network`.
- * 4. otherwise → `unknown`, carrying stderr verbatim — never coerced into an
- *    empty success.
- */
+// Classification order, first match wins: exit code 4 (gh's documented auth code) before any
+// string match, then HTTP status, then a DNS/connection failure, else `unknown` verbatim.
 export function classifyGhExit(outcome: GhExitOutcome): GhClassification {
   if (outcome.code === 4) return 'unauthenticated'
 
@@ -47,14 +39,8 @@ export type GhResult =
   | Exclude<CommandResult, { ok: true } | { ok: false; kind: 'nonzero' }>
   | { readonly ok: false; readonly kind: GhClassification; readonly stdout: string; readonly stderr: string }
 
-/** `gh(args)` — never spawned by an adapter directly; a second failure
- *  classifier at a call site would drift from this one over time. The layer
- *  never reads, stores, or logs a token.
- *
- *  `stdout` is preserved on the classified-failure branch (#76): `gh api
- *  graphql` exits non-zero whenever the response carries `errors`, even when
- *  `data` is usable, so dropping `stdout` here would discard a response the
- *  adapter still needs to parse. */
+// `stdout` is preserved on the classified-failure branch: `gh api graphql` exits non-zero whenever
+// the response carries `errors`, even when `data` is still usable.
 export async function gh(args: readonly string[], options: GhOptions = {}): Promise<GhResult> {
   const result = await runCommand('gh', args, options)
   if (result.ok) return result
@@ -79,11 +65,8 @@ export async function ghJson<T>(args: readonly string[], options?: GhOptions): P
 
 export type GhAuthStatusResult = { readonly ok: true; readonly authenticated: boolean } | Exclude<GhResult, { ok: true } | { ok: false; kind: 'unauthenticated' }>
 
-/** Runs `gh auth status` and reads its own exit code directly — 0 is
- *  authenticated, any other nonzero exit is not — rather than routing
- *  through `classifyGhExit`, which is tuned for HTTP-bearing API failures
- *  and never sees an `(HTTP nnn)` string or exit code `4` from this
- *  command. No token is ever buffered or inspected either way. */
+/** Reads the exit code directly rather than routing through `classifyGhExit`, which is tuned
+ *  for HTTP-bearing API failures this command never produces. */
 export async function ghAuthStatus(options?: GhOptions): Promise<GhAuthStatusResult> {
   const result = await runCommand('gh', ['auth', 'status'], options)
   if (result.ok) return { ok: true, authenticated: true }
@@ -91,8 +74,5 @@ export async function ghAuthStatus(options?: GhOptions): Promise<GhAuthStatusRes
   return result
 }
 
-/** The seam `main/github/adapter.ts`, `main/github/gate.ts`,
- *  `main/github/backlog.ts` and `main/writes/apply.ts` each used to declare
- *  separately — an injectable `gh` invocation, so a test runs against a
- *  fake runner and needs no real `gh` binary. */
+/** An injectable `gh` invocation, so a test runs against a fake runner and needs no real `gh` binary. */
 export type GhRunner = (args: readonly string[], options?: GhOptions) => Promise<GhResult>
