@@ -89,13 +89,8 @@ export type WriteOutcome =
   | { readonly kind: 'verify-failed'; readonly message: string }
   | { readonly kind: 'write-failed'; readonly classification: GhWriteFailureKind; readonly stderr: string; readonly reread: ObservedItem | null }
 
-/** One line per attempt, `\n`-terminated JSON, written to
- *  `<app.getPath('userData')>/writes.jsonl` — one cross-repo file, outside
- *  every working tree (plan's own **The audit log**). `call` is the exact
- *  argv array that ran — never a reconstructed shell string, since
- *  `shell: false` means no shell string ever existed — and is `null` for
- *  every abort arm and for `no-op`, where no `gh` call was made. Writes and
- *  write attempts only; a read is never logged. */
+/** One line per attempt, `\n`-terminated JSON, in `writes.jsonl`. `call` is the exact argv that ran, or `null` for an abort/no-op arm.
+ *  Writes and write attempts only; a read is never logged. */
 export interface LabelAuditEntry {
   readonly at: string
   readonly repo: string

@@ -102,8 +102,7 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
   const [reclaiming, setReclaiming] = useState(false)
   const snapshotQuery = useIpcQuery('board:snapshot')
   const worktreesLastSuccessAt = snapshotQuery.data?.health.find((h) => h.repoId === repoId)?.worktrees.lastSuccessAt ?? null
-  const reportOptions = ipcQueryOptions('worktrees:report', { id: repoId })
-  const query = useQuery({ ...reportOptions, queryKey: [...reportOptions.queryKey, worktreesLastSuccessAt] })
+  const query = useQuery(ipcQueryOptions('worktrees:report', { id: repoId }, [worktreesLastSuccessAt]))
 
   if (commandsWorktrees === null) {
     return (

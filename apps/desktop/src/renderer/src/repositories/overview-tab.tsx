@@ -45,6 +45,7 @@ export function OverviewTab({ entry, repoId }: { readonly entry: RepositoryEntry
   }
 
   const health = overviewHealth(config, repoId, snapshotQuery.data)
+  const now = new Date()
 
   return (
     <div className="flex flex-col gap-6 p-4">
