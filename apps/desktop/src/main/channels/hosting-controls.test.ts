@@ -68,6 +68,12 @@ function storeStub(overrides: Partial<HostedStore> = {}): HostedStore {
     discardRestorable: () => {
       throw new Error('unused in this test')
     },
+    marks: () => {
+      throw new Error('unused in this test')
+    },
+    setMark: () => {
+      throw new Error('unused in this test')
+    },
     setControls: () => {
       throw new Error('setControls should not be invoked in this case')
     },

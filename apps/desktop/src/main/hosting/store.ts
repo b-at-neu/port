@@ -17,6 +17,8 @@ import type {
   SessionInterruptResult,
   SessionInvokeResult,
   SessionKey,
+  SessionMarkResult,
+  SessionMarks,
   SessionPermissionAnswerResult,
   SessionRenameResult,
   SessionRestoreDiscardResult,
@@ -26,6 +28,8 @@ import type {
   SessionStartResult,
 } from '../../shared/hosting/types'
 import { createHostedHandle } from './handle'
+import { createSessionMarks } from './marks'
+import type { SessionMarksTracker } from './marks'
 import type { HostedHandle, HostedQueryFn } from './handle'
 import { createHostedSdk } from './sdk'
 import type { HostedSdk } from './sdk'
@@ -121,6 +125,9 @@ export interface HostedStore {
   /** Starts through the normal `start` path, so capacity and `already-open` still apply. */
   restore(restoreId: string, cwd: string): Promise<SessionRestoreResult>
   discardRestorable(restoreId: string | null): Promise<SessionRestoreDiscardResult>
+  marks(): Promise<SessionMarks>
+  /** An empty or over-200-char id returns `invalid-session-id`, never thrown. */
+  setMark(kind: 'pinned' | 'archived', sessionId: string, on: boolean): Promise<SessionMarkResult>
 }
 
 function toSessionKey(n: number): SessionKey {
@@ -136,6 +143,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
   const endedOrder: SessionKey[] = []
   const endedSeen = new Set<SessionKey>()
   let loaded: Promise<void> | null = null
+  let marksTracker: SessionMarksTracker = createSessionMarks({ pinned: [], archived: [] })
 
   function ensureLoaded(): Promise<void> {
     if (loaded === null) {
@@ -143,6 +151,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
         limit = state.limit
         restorable = mintRestorable(state.open)
         defaults = state.defaults
+        marksTracker = createSessionMarks(state.marks)
       })
     }
     return loaded
@@ -162,7 +171,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
 
   function persistSave(): void {
     const live = persistedOpen(list())
-    deps.persistence.save({ ...nextPersisted({ limit, live, restorable }), defaults })
+    deps.persistence.save({ ...nextPersisted({ limit, live, restorable }), defaults, marks: marksTracker.current() })
   }
 
   function forgetHandle(sessionKey: SessionKey): void {
@@ -416,6 +425,19 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     return { ok: true }
   }
 
+  async function marks(): Promise<SessionMarks> {
+    await ensureLoaded()
+    return marksTracker.current()
+  }
+
+  async function setMark(kind: 'pinned' | 'archived', sessionId: string, on: boolean): Promise<SessionMarkResult> {
+    await ensureLoaded()
+    if (sessionId === '' || sessionId.length > 200) return { ok: false, kind: 'invalid-session-id' }
+    const result = marksTracker.set(kind, sessionId, on)
+    persistSave()
+    return { ok: true, marks: result }
+  }
+
   return {
     start,
     send,
@@ -440,5 +462,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     restorable: restorableList,
     restore,
     discardRestorable,
+    marks,
+    setMark,
   }
 }

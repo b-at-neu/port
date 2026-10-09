@@ -17,6 +17,9 @@ import { fixtureWorktreesReclaim, fixtureWorktreesReport } from './worktrees'
  *  `fixtureHandlers`'s own return literal until a fixture exists for it. */
 export type FixtureHandlers = { readonly [C in IpcChannel]: (request: IpcMap[C]['request']) => IpcMap[C]['response'] }
 
+// One pinned fixture session, per the Implementation checklist.
+const FIXTURE_MARKS = { pinned: ['fixture-claude-1'], archived: [] }
+
 function transcriptSourceFor(sessionId: string, agentId: string | null, now: Date): TranscriptSource {
   return { sessionId, agentId, path: '', sizeBytes: 0, modifiedAt: now.toISOString(), recordCount: 0, malformedLines: 0 }
 }
@@ -108,5 +111,8 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'folders:list': () => ({ folders: fixtureFolders(now) }),
     'folders:choose': () => ({ outcome: 'cancelled' }),
     'session:changes': (request) => (request.sessionKey === STREAMING_KEY ? fixtureSessionChanges(now) : { ok: false, kind: 'unknown-session', message: `no session is open for key '${request.sessionKey}'` }),
+    'session:marks': () => FIXTURE_MARKS,
+    'session:pin:set': (request) => ({ ok: true, marks: { ...FIXTURE_MARKS, pinned: request.pinned ? [...FIXTURE_MARKS.pinned, request.sessionId] : FIXTURE_MARKS.pinned.filter((id) => id !== request.sessionId) } }),
+    'session:archive:set': (request) => ({ ok: true, marks: { ...FIXTURE_MARKS, archived: request.archived ? [...FIXTURE_MARKS.archived, request.sessionId] : FIXTURE_MARKS.archived.filter((id) => id !== request.sessionId) } }),
   }
 }

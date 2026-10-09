@@ -27,6 +27,8 @@ import type {
   SessionInterruptResult,
   SessionInvokeResult,
   SessionKey,
+  SessionMarkResult,
+  SessionMarks,
   SessionPermissionAnswerResult,
   SessionRenameResult,
   SessionRestoreDiscardResult,
@@ -38,6 +40,7 @@ import type {
 import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SetControlsResult } from './hosting/controls'
 import type { ComposerAttachment } from './hosting/attachments'
 import type { FolderEntry, SessionChanges } from './workspace/types'
+import type { AppCommand } from './shell/commands'
 
 export interface AppInfo {
   app: string
@@ -295,6 +298,21 @@ export interface IpcMap {
     request: { sessionKey: SessionKey }
     response: SessionChanges
   }
+  /** The sidebar and History's own read of pin/archive marks. */
+  'session:marks': {
+    request: void
+    response: SessionMarks
+  }
+  /** Pins or unpins a session, by its `claudeSessionId`. */
+  'session:pin:set': {
+    request: { sessionId: string; pinned: boolean }
+    response: SessionMarkResult
+  }
+  /** Archives or unarchives a session, by its `claudeSessionId`. */
+  'session:archive:set': {
+    request: { sessionId: string; archived: boolean }
+    response: SessionMarkResult
+  }
 }
 
 export const IPC_CHANNELS = [
@@ -346,6 +364,9 @@ export const IPC_CHANNELS = [
   'folders:list',
   'folders:choose',
   'session:changes',
+  'session:marks',
+  'session:pin:set',
+  'session:archive:set',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]
@@ -360,9 +381,11 @@ export interface IpcEventMap {
   'session:status': HostedSessionSnapshot
   /** The live projector's own delta — narrowed, renderer-safe values, never the opaque envelope the removed `session:event` once carried. */
   'session:entries': SessionEntriesDelta
+  /** The app menu's own click, and a notification's own `click` — both run through the same action runner the keyboard map uses. */
+  'app:command': AppCommand
 }
 
-export const IPC_EVENTS = ['board:update', 'session:status', 'session:entries'] as const
+export const IPC_EVENTS = ['board:update', 'session:status', 'session:entries', 'app:command'] as const
 
 export type IpcEvent = (typeof IPC_EVENTS)[number]
 

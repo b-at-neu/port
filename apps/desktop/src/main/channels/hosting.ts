@@ -376,3 +376,25 @@ export function resolveSessionPlanAnswer(request: IpcMap['session:plan:answer'][
   }
   throw new Error("'session:plan:answer' requires 'decision.kind' to be 'approve' or 'keep-planning'")
 }
+
+export function resolveSessionMarks(request: IpcMap['session:marks']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['marks']> {
+  if (request !== undefined) throw new Error("'session:marks' takes no payload")
+  return deps.store.marks()
+}
+
+function requireSessionId(sessionId: unknown, channel: string): string {
+  if (typeof sessionId !== 'string') throw new Error(`'${channel}' requires 'sessionId' to be a string`)
+  return sessionId
+}
+
+export function resolveSessionPinSet(request: IpcMap['session:pin:set']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['setMark']> {
+  const sessionId = requireSessionId(request?.sessionId, 'session:pin:set')
+  if (typeof request?.pinned !== 'boolean') throw new Error("'session:pin:set' requires 'pinned' to be a boolean")
+  return deps.store.setMark('pinned', sessionId, request.pinned)
+}
+
+export function resolveSessionArchiveSet(request: IpcMap['session:archive:set']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['setMark']> {
+  const sessionId = requireSessionId(request?.sessionId, 'session:archive:set')
+  if (typeof request?.archived !== 'boolean') throw new Error("'session:archive:set' requires 'archived' to be a boolean")
+  return deps.store.setMark('archived', sessionId, request.archived)
+}

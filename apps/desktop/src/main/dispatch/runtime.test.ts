@@ -42,6 +42,8 @@ function fakeStore(): HostedStore {
     defaults: () => Promise.reject(new Error('unused')),
     setDefaults: () => Promise.reject(new Error('unused')),
     rename: () => Promise.reject(new Error('unused')),
+    marks: () => Promise.reject(new Error('unused')),
+    setMark: () => Promise.reject(new Error('unused')),
   }
 }
 
