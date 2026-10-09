@@ -24,7 +24,7 @@ describe('classifyGate', () => {
     expect(result).toEqual({ kind: 'not-at-plan-review', observed: ['in progress'] })
   })
 
-  it('reports not-at-plan-review when the plan-gate key does not resolve at all', () => {
+  it('reports not-at-plan-review when the plan review key does not resolve at all', () => {
     const emptyVocabulary: LabelVocabulary = { labels: [], disabled: ['planReview'], problems: [] }
     const result = classifyGate({ item: item(), vocabulary: emptyVocabulary })
     expect(result).toEqual({ kind: 'not-at-plan-review', observed: ['plan review'] })

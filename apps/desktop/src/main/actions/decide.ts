@@ -107,6 +107,7 @@ export async function applyItemDecision(params: ApplyItemDecisionParams, deps: A
         : changesRequestedBody(headRefOid ?? '', request.note ?? '')
     comment = await deps.postComment({
       request: { repoId: entry.id, repo: entry.config.repo, kind: 'pull-request', number: request.number, body, action: request.decision, scratchDir },
+      repoRoot: entry.path,
       auditDir,
     })
     if (comment.kind !== 'applied') return { ok: false, reason: 'comment-failed', comment }

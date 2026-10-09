@@ -6,7 +6,6 @@ import type { ItemStatus, LinkReason, RepositoryFreshness, RepositoryState, Stat
 import type { DisplayStatus, SourceHealth, SourceKind } from '../../../shared/board/types'
 import type { RepoProblem } from '../../../shared/repos'
 import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
-import type { LabelKey } from '../../../shared/labels/vocabulary'
 import { RETRY_TRIGGER } from '../../../shared/actions/plan'
 import type { ActionPlan, ActionRefusal, ItemActionResult, OperatorAction, OperatorDecision } from '../../../shared/actions/types'
 import type { Conflict } from '../../../shared/writes/types'
@@ -123,18 +122,6 @@ export function rateLimitCopy(freshness: RepositoryFreshness | null, remaining: 
 
 export function reviewPlanButtonLabel(): string {
   return 'Review plan'
-}
-
-export function planGateHeaderButtonLabel(): string {
-  return 'Plan gate'
-}
-
-/** The row's own next-action link (#319, plan's own **UX states**) — the
- *  relay and the "ready to merge" cases, alongside `reviewPlanButtonLabel`
- *  above and `decisionButtonLabel` below, which the plan groups under the
- *  same one-link-per-row choice (`board/row-model.ts`'s `nextActionFor`). */
-export function answerQuestionButtonLabel(): string {
-  return 'Answer question'
 }
 
 export function openPrButtonLabel(): string {
@@ -281,16 +268,9 @@ function preconditionFailedCopy(action: OperatorAction, number: number, conflict
 
 const ACTION_PAST_TENSE: Readonly<Record<OperatorAction, string>> = { pause: 'paused', resume: 'resumed', retry: 'retried', stop: 'stopped', gate: 'gated', refresh: 'refreshed' }
 
-/** `outcome.keys` is the request `applyLabels` actually evaluated — built
- *  server-side, after resume's own recovered trigger is known — so it names
- *  the real touched label even when the row's own client-side `plan` cannot
- *  (resume's `add` is a placeholder until the audit log is read). Falls back
- *  to `plan` only if `outcome` somehow carried no keys at all. */
-function unclaimedScopeCopy(action: OperatorAction, number: number, claimPath: string, keys: readonly LabelKey[], plan: ActionPlan | null): string {
-  const key = keys[0] ?? plan?.remove[0] ?? plan?.add[0]
-  const name = key !== undefined ? labelNameOf(key) : 'a plan-gate label'
+function terminalOwnedCopy(action: OperatorAction, number: number, since: string): string {
   const n = String(number)
-  return `#${n} wasn't ${ACTION_PAST_TENSE[action]}. That would touch "${name}", one of the plan gate's own labels, and the plan gate isn't claimed here (${claimPath}). Use ${action} #${n} in the cockpit.`
+  return `#${n} wasn't ${ACTION_PAST_TENSE[action]} — your terminal cockpit has owned this repository since ${since}. Use ${action} #${n} there.`
 }
 
 /** One switch over `WriteOutcome['kind']` (the plan's own **UX states**),
@@ -338,10 +318,10 @@ export function actionResultCopy(params: {
       return `#${n} already reads that way. Nothing was written.`
     case 'precondition-failed':
       return preconditionFailedCopy(action, number, outcome.conflict, now)
-    case 'unclaimed-scope':
-      return unclaimedScopeCopy(action, number, outcome.claimPath, outcome.keys, plan)
-    case 'claim-unreadable':
-      return `${outcome.claimPath} can't be read — ${outcome.message}. Until it is valid or removed, this app and the cockpit both stand down from the plan gate — nothing will answer #${n}. Fix or delete the file.`
+    case 'terminal-owned':
+      return terminalOwnedCopy(action, number, outcome.since)
+    case 'ownership-unreadable':
+      return `${outcome.path} can't be read — ${outcome.message}. Until it is valid or removed, this app and a terminal cockpit both stand down here — nothing will act on #${n}. Fix or delete the file.`
     case 'unresolvable-label':
       return `This repository's label vocabulary doesn't resolve: ${outcome.keys.join(', ')}. Nothing was written.`
     case 'item-unavailable':

@@ -43,18 +43,14 @@ function observationOutcomeOf(outcome: WriteOutcome): ObservationRecord['outcome
     case 'precondition-failed':
     case 'item-unavailable':
       return 'moved'
-    case 'unclaimed-scope':
-    case 'claim-unreadable':
+    case 'terminal-owned':
+    case 'ownership-unreadable':
     case 'unresolvable-label':
       return 'refused'
     case 'verify-failed':
     case 'write-failed':
       return 'failed'
   }
-}
-
-function observationScopeOf(outcome: WriteOutcome): ObservationRecord['scope'] {
-  return outcome.kind === 'unclaimed-scope' || outcome.kind === 'claim-unreadable' ? outcome.scope : null
 }
 
 function pushObserved(state: ObservationPassState, record: ObservationRecord): void {
@@ -93,12 +89,11 @@ export async function runObservationPass(
         itemKind: observation.itemKind,
         at,
         outcome: observationOutcomeOf(result.labels),
-        scope: observationScopeOf(result.labels),
         comment: result.comment === null ? 'none' : result.comment.kind === 'applied' ? 'posted' : 'failed',
       })
     } catch {
       state.observedWriteAt.set(observation.number, at)
-      pushObserved(state, { kind: observation.kind, number: observation.number, itemKind: observation.itemKind, at, outcome: 'failed', scope: null, comment: 'none' })
+      pushObserved(state, { kind: observation.kind, number: observation.number, itemKind: observation.itemKind, at, outcome: 'failed', comment: 'none' })
     }
   }
   deps.onChange()

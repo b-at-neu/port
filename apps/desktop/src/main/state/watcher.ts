@@ -6,13 +6,11 @@
 import type { GhRunner } from '../github/adapter'
 import type { GitRunner } from '../local/worktrees'
 import { readSessionState } from '../sessions/adapter'
-import { createRelayReader } from '../relay/read'
 import type { RepoId } from '../../shared/repos'
 import type { RepositoryEntry } from '../../shared/repos'
 import { DEFAULT_POLL_POLICY, SOURCE_KINDS, initialHealth } from '../../shared/board/types'
 import type { BoardSnapshot, RepositoryHealth, SourceHealth, SourceKind } from '../../shared/board/types'
 import type { RepoDispatchStatus, RunStatesSnapshot } from '../../shared/dispatch/types'
-import type { RelayScan } from '../../shared/relay/types'
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '../tick/ledger'
 import { planTick } from '../tick/plan'
 import type { DispatchLedger, RefreshMemo, UnknownStreaks } from '../tick/ledger'
@@ -145,16 +143,9 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
   // (#111) — injectable the same way `gh`/`git`/`sessionReader` already are,
   // so a test never touches a real filesystem for it.
   const recordTickFn: RecordTickFn = params.recordTick ?? defaultRecordTick
-  // The relay reader (#107) — one instance for the watcher's whole
-  // lifetime, run inside `runSessions()` right after `refreshSessions`, over
-  // the same session scan that call just refreshed. Relay carries no new
-  // `SourceKind`: it never schedules its own cadence, only rides the
-  // sessions source's.
-  const relayReader = createRelayReader()
   const runStatesOf =
     params.runStates ??
     ((repoIds: readonly RepoId[]): RunStatesSnapshot => ({ store: { kind: 'loaded' }, repositories: repoIds.map((repoId) => ({ repoId, state: 'paused', since: null })) }))
-  let relay: RelayScan = { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: now().toISOString() }
   let latest: BoardSnapshot = {
     state: {
       repositories: [],
@@ -164,7 +155,6 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     health: [],
     policy: DEFAULT_POLL_POLICY,
     tick: [],
-    relay,
     runStates: runStatesOf(repositories.map((entry) => entry.id)),
     nextWakeupAt: null,
     emittedAt: now().toISOString(),
@@ -251,7 +241,6 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       health: healthList,
       policy: DEFAULT_POLL_POLICY,
       tick,
-      relay,
       runStates: runStatesOf(repositories.map((entry) => entry.id)),
       nextWakeupAt,
       emittedAt: now().toISOString(),
@@ -309,11 +298,6 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
         now,
       })
       sessionsHealth = outcome.ok ? afterSuccess(sessionsHealth, 'sessions', now()) : afterFailure(sessionsHealth, 'sessions', now(), outcome.error ?? 'unknown error')
-      // Right after the sessions scan, over the same fresh `cache.sessions`
-      // (#107) — never a second poll or a second cadence of its own.
-      if (cache.sessions !== null) {
-        relay = await relayReader.read({ scan: cache.sessions, claudeHome: params.claudeHome, now })
-      }
     } finally {
       inFlight.delete(key)
     }

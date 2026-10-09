@@ -9,10 +9,10 @@ import type { BoardSnapshot } from '../../shared/board/types'
 import type { HaltReport } from '../../shared/dispatch/types'
 import type { RegistryDeps } from '../registry'
 import type { ReadyEntry } from '../actions/apply'
-import type { Dispatcher } from './dispatcher'
 import type { RunStateStore, SetRunStateResult } from './store'
-import { registeredRepoIds, resolveDispatchClaimSet, resolveDispatchControl } from './resolve'
-import type { ResolveDispatchClaimSetDeps, ResolveDispatchControlDeps } from './resolve'
+import { registeredRepoIds, resolveDispatchControl } from './resolve'
+import type { ResolveDispatchControlDeps } from './resolve'
+import type { OwnershipWriteResult, TakeOwnershipResult } from './ownership'
 
 const registryDeps: RegistryDeps = {
   registryDir: '/registry',
@@ -29,7 +29,6 @@ const SNAPSHOT: BoardSnapshot = {
   health: [],
   policy: { baseIntervalMs: { github: 60_000, sessions: 15_000, worktrees: 15_000, denials: 15_000 }, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: 30_000 },
   tick: [],
-  relay: { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: 't' },
   runStates: { store: { kind: 'loaded' }, repositories: [] },
   nextWakeupAt: null,
   emittedAt: 't',
@@ -82,6 +81,8 @@ function depsWith(overrides: Partial<ResolveDispatchControlDeps> = {}): ResolveD
     listRepositories: () => Promise.resolve({ ok: true, repositories: [] } as ReposListResponse),
     runStates: fakeRunStates(() => ({ repoId: REPO_ID, state: 'paused', since: null })).runStates,
     haltDispatch: () => Promise.resolve({ kind: 'completed', items: [] } as HaltReport),
+    takeOwnership: () => Promise.resolve({ ok: true, path: '/repo/.agents/cockpit.json' } as TakeOwnershipResult),
+    releaseOwnership: () => Promise.resolve({ ok: true, path: '/repo/.agents/cockpit.json' } as OwnershipWriteResult),
     snapshot: () => SNAPSHOT,
     refresh: () => Promise.resolve(SNAPSHOT),
     auditDir: '/audit',
@@ -106,7 +107,7 @@ describe('registeredRepoIds', () => {
 describe('resolveDispatchControl — validation', () => {
   it('rejects a command outside DISPATCH_COMMANDS', async () => {
     await expect(resolveDispatchControl(registryDeps, { command: 'bogus' as never }, depsWith())).rejects.toThrow(
-      "'dispatch:control' requires 'command' to be one of run, drain, pause, halt",
+      "'dispatch:control' requires 'command' to be one of run, drain, pause, halt, take-over",
     )
   })
 
@@ -152,6 +153,84 @@ describe('resolveDispatchControl — run', () => {
     expect(result).toEqual({ ok: false, command: 'run', repoId: REPO_ID, reason: 'unwritable', message: 'disk full', path: '/userData/dispatch.json' })
     expect(refreshed).toBe(false)
   })
+
+  it('takes ownership before the run-state write, and refuses with no write at all when a terminal cockpit owns it', async () => {
+    let written = false
+    const entry = await readyEntry()
+    const { runStates } = fakeRunStates(() => ({ repoId: REPO_ID, state: 'paused', since: null }))
+    const terminalSince = '2026-01-01T00:00:00Z'
+    const result = await resolveDispatchControl(
+      registryDeps,
+      { command: 'run', repoId: REPO_ID },
+      depsWith({
+        runStates: { ...runStates, set: (repoIds, state, at) => { written = true; return runStates.set(repoIds, state, at) } },
+        listRepositories: () => Promise.resolve({ ok: true, repositories: [entry] }),
+        takeOwnership: () =>
+          Promise.resolve({ ok: false, kind: 'refused', verdict: { kind: 'terminal', since: terminalSince, path: '/repo/.agents/cockpit.json', readAt: terminalSince }, path: '/repo/.agents/cockpit.json' }),
+      }),
+    )
+    expect(result).toEqual({ ok: false, command: 'run', repoId: REPO_ID, reason: 'terminal-owned', since: terminalSince })
+    expect(written).toBe(false)
+  })
+
+  it('refuses with ownership-unreadable when the record cannot be read', async () => {
+    const entry = await readyEntry()
+    const result = await resolveDispatchControl(
+      registryDeps,
+      { command: 'run', repoId: REPO_ID },
+      depsWith({
+        listRepositories: () => Promise.resolve({ ok: true, repositories: [entry] }),
+        takeOwnership: () =>
+          Promise.resolve({
+            ok: false,
+            kind: 'refused',
+            verdict: { kind: 'unreadable', message: 'bad json', path: '/repo/.agents/cockpit.json', readAt: '2026-01-01T00:00:00Z' },
+            path: '/repo/.agents/cockpit.json',
+          }),
+      }),
+    )
+    expect(result).toEqual({ ok: false, command: 'run', repoId: REPO_ID, reason: 'ownership-unreadable', message: 'bad json', path: '/repo/.agents/cockpit.json' })
+  })
+
+  it('skips taking ownership for a repository with no ready config, and still sets run state', async () => {
+    let took = false
+    const result = await resolveDispatchControl(
+      registryDeps,
+      { command: 'run', repoId: REPO_ID },
+      depsWith({
+        listRepositories: () => Promise.resolve({ ok: true, repositories: [{ id: REPO_ID, path: '/repo', displayName: 'o/a', problem: { kind: 'directory-missing' as const }, diagnostics: [] }] }),
+        takeOwnership: () => { took = true; return Promise.resolve({ ok: true, path: 'p' }) },
+      }),
+    )
+    expect(took).toBe(false)
+    expect(result.ok).toBe(true)
+  })
+})
+
+describe('resolveDispatchControl — take-over (#331)', () => {
+  it('requires a ready repository', async () => {
+    const notReady = { id: REPO_ID, path: '/repo', displayName: 'o/a', problem: { kind: 'directory-missing' as const }, diagnostics: [] }
+    await expect(
+      resolveDispatchControl(registryDeps, { command: 'take-over', repoId: REPO_ID }, depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [notReady] }) })),
+    ).rejects.toThrow("take-over requires 'repo-a' to be a ready repository")
+  })
+
+  it('forces ownership, then sets dispatching and refreshes once', async () => {
+    let forced = false
+    const entry = await readyEntry()
+    const { runStates } = fakeRunStates(() => ({ repoId: REPO_ID, state: 'dispatching', since: '2026-01-01T00:00:00Z' }))
+    const result = await resolveDispatchControl(
+      registryDeps,
+      { command: 'take-over', repoId: REPO_ID },
+      depsWith({
+        runStates,
+        listRepositories: () => Promise.resolve({ ok: true, repositories: [entry] }),
+        takeOwnership: (params) => { forced = params.force === true; return Promise.resolve({ ok: true, path: 'p' }) },
+      }),
+    )
+    expect(forced).toBe(true)
+    expect(result).toEqual({ ok: true, command: 'take-over', repoId: REPO_ID, runState: { repoId: REPO_ID, state: 'dispatching', since: '2026-01-01T00:00:00Z' } })
+  })
 })
 
 describe('resolveDispatchControl — drain', () => {
@@ -178,9 +257,10 @@ describe('resolveDispatchControl — drain', () => {
 })
 
 describe('resolveDispatchControl — pause', () => {
-  it('scopes haltDispatch to the one repository, refreshes once, and reports the new run state', async () => {
+  it('scopes haltDispatch to the one repository, releases ownership, refreshes once, and reports the new run state', async () => {
     let refreshed: unknown
     let haltRepoIds: readonly RepoId[] | null = null
+    let released: unknown
     const entry = await readyEntry()
     const { runStates } = fakeRunStates(() => ({ repoId: REPO_ID, state: 'paused', since: '2026-01-01T00:00:00Z' }))
     const result = await resolveDispatchControl(
@@ -193,19 +273,39 @@ describe('resolveDispatchControl — pause', () => {
           haltRepoIds = params.repoIds
           return Promise.resolve({ kind: 'completed', items: [] })
         },
+        releaseOwnership: (params) => { released = params; return Promise.resolve({ ok: true, path: 'p' }) },
         refresh: (request) => { refreshed = request; return Promise.resolve(SNAPSHOT) },
       }),
     )
     expect(haltRepoIds).toEqual([REPO_ID])
+    expect(released).toEqual({ repoRoot: entry.path, repo: entry.config.repo })
     expect(refreshed).toEqual({ repoId: REPO_ID })
-    expect(result).toEqual({ ok: true, command: 'pause', repoId: REPO_ID, runState: { repoId: REPO_ID, state: 'paused', since: '2026-01-01T00:00:00Z' }, report: { kind: 'completed', items: [] } })
+    expect(result).toEqual({
+      ok: true,
+      command: 'pause',
+      repoId: REPO_ID,
+      runState: { repoId: REPO_ID, state: 'paused', since: '2026-01-01T00:00:00Z' },
+      report: { kind: 'completed', items: [] },
+      released: true,
+    })
+  })
+
+  it('reports released: false without throwing when the release itself fails', async () => {
+    const entry = await readyEntry()
+    const result = await resolveDispatchControl(
+      registryDeps,
+      { command: 'pause', repoId: REPO_ID },
+      depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [entry] }), releaseOwnership: () => Promise.resolve({ ok: false, kind: 'permission-denied', message: 'nope', path: 'p' }) }),
+    )
+    expect(result).toMatchObject({ ok: true, command: 'pause', released: false })
   })
 })
 
 describe('resolveDispatchControl — halt', () => {
-  it('lists ready repositories, calls haltDispatch across all of them, and refreshes once', async () => {
+  it('lists ready repositories, calls haltDispatch across all of them, releases ownership for each, and refreshes once', async () => {
     let refreshCalls = 0
     let haltCalled = false
+    let releaseCalls = 0
     const entry = await readyEntry()
     const result = await resolveDispatchControl(
       registryDeps,
@@ -217,6 +317,7 @@ describe('resolveDispatchControl — halt', () => {
           expect(params.repoIds).toEqual([REPO_ID])
           return Promise.resolve({ kind: 'completed', items: [] })
         },
+        releaseOwnership: () => { releaseCalls += 1; return Promise.resolve({ ok: true, path: 'p' }) },
         refresh: () => {
           refreshCalls += 1
           return Promise.resolve(SNAPSHOT)
@@ -224,8 +325,9 @@ describe('resolveDispatchControl — halt', () => {
       }),
     )
     expect(haltCalled).toBe(true)
+    expect(releaseCalls).toBe(1)
     expect(refreshCalls).toBe(1)
-    expect(result).toEqual({ ok: true, command: 'halt', report: { kind: 'completed', items: [] } })
+    expect(result).toEqual({ ok: true, command: 'halt', report: { kind: 'completed', items: [] }, released: true })
   })
 
   it('still refreshes once even when the halt itself aborted', async () => {
@@ -237,41 +339,6 @@ describe('resolveDispatchControl — halt', () => {
       depsWith({ haltDispatch: () => Promise.resolve(aborted), refresh: () => { refreshCalls += 1; return Promise.resolve(SNAPSHOT) } }),
     )
     expect(refreshCalls).toBe(1)
-    expect(result).toEqual({ ok: true, command: 'halt', report: aborted })
-  })
-})
-
-function fakeDispatcher(overrides: Partial<Dispatcher> = {}): Dispatcher {
-  return {
-    consider: () => Promise.resolve(),
-    status: () => [],
-    stopFor: () => Promise.resolve(false),
-    standDown: () => Promise.resolve(false),
-    liveStages: () => [],
-    liveStageSessions: () => [],
-    shutdown: () => undefined,
-    ...overrides,
-  }
-}
-
-describe('resolveDispatchClaimSet (#265)', () => {
-  it('throws for a repository that is not ready', async () => {
-    const deps: ResolveDispatchClaimSetDeps = { listRepositories: () => Promise.resolve({ ok: true, repositories: [] }), dispatcher: fakeDispatcher(), refresh: () => Promise.resolve(SNAPSHOT), now: () => new Date('2026-01-01T00:00:00Z') }
-    await expect(resolveDispatchClaimSet(registryDeps, { repoId: REPO_ID, held: true }, deps)).rejects.toThrow("no repository registered with id 'repo-a'")
-  })
-
-  it('takes the claim, refreshes once, and reports the dispatcher status it then reads back', async () => {
-    let refreshed = 0
-    const entry = await readyEntry()
-    const dispatcher = fakeDispatcher({ status: () => [{ repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, runState: 'dispatching', claimedAt: null, budget: null, observed: [] }] })
-    const deps: ResolveDispatchClaimSetDeps = {
-      listRepositories: () => Promise.resolve({ ok: true, repositories: [entry] }),
-      dispatcher,
-      refresh: (request) => { refreshed += 1; expect(request).toEqual({ repoId: REPO_ID }); return Promise.resolve(SNAPSHOT) },
-      now: () => new Date('2026-01-01T00:00:00Z'),
-    }
-    const result = await resolveDispatchClaimSet(registryDeps, { repoId: REPO_ID, held: true }, deps)
-    expect(result).toEqual({ kind: 'ok', status: { repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, runState: 'dispatching', claimedAt: null, budget: null, observed: [] } })
-    expect(refreshed).toBe(1)
+    expect(result).toEqual({ ok: true, command: 'halt', report: aborted, released: true })
   })
 })

@@ -6,7 +6,6 @@ import { describe, expect, it, vi } from 'vitest'
 import { resolveVocabulary } from '../../shared/labels/vocabulary'
 import type { RepoId } from '../../shared/repos'
 import type { BoardSnapshot } from '../../shared/board/types'
-import type { ClaimRead } from '../../shared/writes/types'
 import type { HostedSessionSnapshot, SessionKey } from '../../shared/hosting/types'
 import type { HostedStore } from '../hosting/store'
 import type { TickReport } from '../../shared/tick/types'
@@ -16,6 +15,7 @@ import type { StageLaunchResult, StageLauncher } from './launch'
 import { createDispatcher } from './dispatcher'
 import type { CreateDispatcherParams } from './dispatcher'
 import type { BudgetCheckResult, BudgetGate, BudgetResetResult, BudgetSweepResult } from './budget-gate'
+import type { OwnershipRead } from './ownership'
 
 const REPO_ID = 'repo-a' as RepoId
 const VOCABULARY = resolveVocabulary({})
@@ -60,7 +60,6 @@ function snapshotWith(tick: readonly TickReport[]): BoardSnapshot {
     health: [],
     policy: { baseIntervalMs: { github: 60_000, sessions: 15_000, worktrees: 15_000, denials: 15_000 }, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: 30_000 },
     tick,
-    relay: { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: '2026-01-01T00:00:00Z' },
     runStates: { store: { kind: 'loaded' }, repositories: [] },
     nextWakeupAt: null,
     emittedAt: '2026-01-01T00:00:00Z',
@@ -68,8 +67,8 @@ function snapshotWith(tick: readonly TickReport[]): BoardSnapshot {
   }
 }
 
-const HELD_CLAIM: ClaimRead = { state: 'held', owner: 'port-desktop', scopes: ['dispatch'], unknownScopes: [], claimedAt: '2026-01-01T00:00:00Z', path: '/repo/.agents/gate-claim.json', readAt: 'r' }
-const ABSENT_CLAIM: ClaimRead = { state: 'absent', path: '/repo/.agents/gate-claim.json', readAt: 'r' }
+const OWNED_BY_APP: OwnershipRead = { kind: 'app', since: '2026-01-01T00:00:00Z', path: '/repo/.agents/cockpit.json', readAt: 'r' }
+const ABSENT_OWNERSHIP: OwnershipRead = { kind: 'absent', path: '/repo/.agents/cockpit.json', readAt: 'r' }
 
 const IMPL_CANDIDATE = { number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }
 
@@ -164,7 +163,8 @@ function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispat
       throw new Error('writeObservation should not be invoked unless a test wires its own')
     },
     runState: () => 'dispatching',
-    readGateClaim: () => Promise.resolve(HELD_CLAIM),
+    readOwnership: () => Promise.resolve(OWNED_BY_APP),
+    takeOwnership: () => Promise.resolve({ ok: true, path: 'p' }),
     fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [], unavailable: [], fetchedAt: 'r' }),
     listRepositories: () => Promise.resolve({ ok: true, repositories: [entry()] }),
     registryDeps: { registryDir: '/registry', git: () => Promise.reject(new Error('unused')), chooseDirectory: () => Promise.resolve(null) },
@@ -222,16 +222,24 @@ describe('createDispatcher — budget bookkeeping', () => {
         return Promise.resolve({ line: `sweep ${String(sweepCalls)}`, problem: null })
       },
     })
-    let claim: ClaimRead = HELD_CLAIM
-    const dispatcher = createDispatcher(baseDeps({ store, launch, budget, readGateClaim: () => Promise.resolve(claim), fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }) }))
+    let ownership: OwnershipRead = OWNED_BY_APP
+    const dispatcher = createDispatcher(
+      baseDeps({
+        store,
+        launch,
+        budget,
+        readOwnership: () => Promise.resolve(ownership),
+        fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 52, kind: 'issue', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['plan approved'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
+      }),
+    )
 
     await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })])) // owner app, launches, starts the session
     expect(dispatcher.status()[0]?.owner).toBe('app')
     expect(sweepCalls).toBe(1)
 
-    claim = ABSENT_CLAIM // the claim moves back to the cockpit
+    ownership = ABSENT_OWNERSHIP // ownership moves back to the terminal cockpit's own startup window
     await dispatcher.consider(snapshotWith([tickReport()]))
-    expect(dispatcher.status()[0]?.owner).toBe('cockpit')
+    expect(dispatcher.status()[0]?.owner).toBe('none')
     expect(sweepCalls).toBe(2) // still sweeping — this app's own session may still be live
     expect(dispatcher.status()[0]?.budget?.line).toBe('sweep 2')
   })
@@ -300,11 +308,11 @@ describe('createDispatcher — the budget gate itself', () => {
 
   it('escalation-failed carries the outcome, for the renderer to classify', async () => {
     const budget = fakeBudget({ check: () => Promise.resolve({ ok: true, verdict: 'exceeded', line: 'over budget' }) })
-    const escalate: CreateDispatcherParams['escalate'] = () => Promise.resolve({ labels: { kind: 'unclaimed-scope', scope: 'plan-gate', claimPath: '/x', keys: ['planApproved'] }, comment: null })
+    const escalate: CreateDispatcherParams['escalate'] = () => Promise.resolve({ labels: { kind: 'terminal-owned', since: '2026-01-01T00:00:00Z' }, comment: null })
     const { dispatcher } = readyToDispatch({ budget, escalate })
     await dispatcher.consider(snapshotWith([tickReport({ actionable: [IMPL_CANDIDATE] })]))
     const notes = dispatcher.status()[0]?.budget?.notes
-    expect(notes).toEqual([{ kind: 'escalation-failed', number: 52, needsHumanLabel: 'needs human', triggerLabel: 'plan approved', outcome: { kind: 'unclaimed-scope', scope: 'plan-gate', claimPath: '/x', keys: ['planApproved'] } }])
+    expect(notes).toEqual([{ kind: 'escalation-failed', number: 52, needsHumanLabel: 'needs human', triggerLabel: 'plan approved', outcome: { kind: 'terminal-owned', since: '2026-01-01T00:00:00Z' } }])
   })
 
   it('a failed gate check drops the candidate — gate-failed note, never a launch', async () => {

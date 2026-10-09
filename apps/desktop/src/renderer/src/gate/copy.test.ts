@@ -1,40 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import type { GateAnswerResponse } from '../../../shared/gate/types'
-import type { ClaimRead } from '../../../shared/writes/types'
-import { autoPlanNoteCopy, claimLineCopy, isClaimHeldForPlanGate, primaryApproveLabel, refusedVerdictCopy, resultCopy, sessionRequiredCopy } from './copy'
+import type { OwnershipSummary } from '../../../shared/writes/types'
+import { autoPlanNoteCopy, gateDisabledReason, primaryApproveLabel, refusedVerdictCopy, resultCopy, sessionRequiredCopy } from './copy'
 
-describe('claimLineCopy', () => {
-  it('renders the absent line verbatim from docs/COORDINATION.md', () => {
-    const claim: ClaimRead = { state: 'absent', path: 'p', readAt: 'r' }
-    expect(claimLineCopy(claim)).toEqual({ line: "The plan gate isn't claimed here.", note: 'The cockpit is still answering it in your terminal.', action: 'take' })
+describe('gateDisabledReason', () => {
+  it('is null while this app owns the repository, or while ownership is absent', () => {
+    expect(gateDisabledReason({ kind: 'app', since: 't' })).toBeNull()
+    expect(gateDisabledReason({ kind: 'absent' })).toBeNull()
   })
 
-  it('renders the held line with the owner and claimedAt', () => {
-    const claim: ClaimRead = { state: 'held', owner: 'port-desktop', scopes: ['plan-gate'], unknownScopes: [], claimedAt: '2026-09-05T14:02:11Z', path: 'p', readAt: 'r' }
-    const copy = claimLineCopy(claim)
-    expect(copy.line).toBe('Plan gate claimed by `port-desktop` since 2026-09-05T14:02:11Z.')
-    expect(copy.action).toBe('release')
+  it('names the terminal cockpit when it owns the repository', () => {
+    expect(gateDisabledReason({ kind: 'terminal', since: 't' })).toContain('terminal cockpit')
   })
 
-  it('names an unknown scope alongside the held line', () => {
-    const claim: ClaimRead = { state: 'held', owner: 'port-desktop', scopes: ['plan-gate'], unknownScopes: ['future-scope'], claimedAt: 't', path: 'p', readAt: 'r' }
-    expect(claimLineCopy(claim).note).toContain('future-scope')
-  })
-
-  it('renders the unreadable line with the reason', () => {
-    const claim: ClaimRead = { state: 'unreadable', message: 'invalid JSON', path: '.agents/gate-claim.json', readAt: 'r' }
-    const copy = claimLineCopy(claim)
-    expect(copy.line).toContain('.agents/gate-claim.json')
-    expect(copy.line).toContain('invalid JSON')
-    expect(copy.action).toBe('overwrite')
-  })
-})
-
-describe('isClaimHeldForPlanGate', () => {
-  it('is true only when held and scopes include plan-gate', () => {
-    expect(isClaimHeldForPlanGate({ state: 'absent', path: 'p', readAt: 'r' })).toBe(false)
-    expect(isClaimHeldForPlanGate({ state: 'held', owner: 'x', scopes: [], unknownScopes: [], claimedAt: 't', path: 'p', readAt: 'r' })).toBe(false)
-    expect(isClaimHeldForPlanGate({ state: 'held', owner: 'x', scopes: ['plan-gate'], unknownScopes: [], claimedAt: 't', path: 'p', readAt: 'r' })).toBe(true)
+  it('names the path and message when ownership is unreadable', () => {
+    const reason = gateDisabledReason({ kind: 'unreadable', path: '.agents/cockpit.json', message: 'invalid JSON' })
+    expect(reason).toContain('.agents/cockpit.json')
+    expect(reason).toContain('invalid JSON')
   })
 })
 
@@ -55,24 +37,24 @@ describe('primaryApproveLabel', () => {
 })
 
 describe('autoPlanNoteCopy', () => {
-  it('held with plan-gate: the app approves it on its next poll', () => {
-    const claim: ClaimRead = { state: 'held', owner: 'port-desktop', scopes: ['plan-gate'], unknownScopes: [], claimedAt: 't', path: 'p', readAt: 'r' }
-    expect(autoPlanNoteCopy(claim)).toContain('port approves it on its next poll')
+  it('app: this app approves it on its next poll', () => {
+    const ownership: OwnershipSummary = { kind: 'app', since: 't' }
+    expect(autoPlanNoteCopy(ownership)).toContain('port approves it on its next poll')
   })
 
   it('absent: the cockpit approves it on its next tick', () => {
-    const claim: ClaimRead = { state: 'absent', path: 'p', readAt: 'r' }
-    expect(autoPlanNoteCopy(claim)).toContain('cockpit approves it on its next tick')
+    const ownership: OwnershipSummary = { kind: 'absent' }
+    expect(autoPlanNoteCopy(ownership)).toContain('cockpit approves it on its next tick')
   })
 
-  it('held without plan-gate: the cockpit approves it on its next tick', () => {
-    const claim: ClaimRead = { state: 'held', owner: 'port-desktop', scopes: ['dispatch'], unknownScopes: [], claimedAt: 't', path: 'p', readAt: 'r' }
-    expect(autoPlanNoteCopy(claim)).toContain('cockpit approves it on its next tick')
+  it('terminal: the cockpit approves it on its next tick', () => {
+    const ownership: OwnershipSummary = { kind: 'terminal', since: 't' }
+    expect(autoPlanNoteCopy(ownership)).toContain('cockpit approves it on its next tick')
   })
 
-  it('unreadable: nothing approves it until the claim file is fixed or removed', () => {
-    const claim: ClaimRead = { state: 'unreadable', message: 'bad', path: 'p', readAt: 'r' }
-    expect(autoPlanNoteCopy(claim)).toContain("fixed or removed")
+  it('unreadable: nothing approves it until the ownership record is fixed or removed', () => {
+    const ownership: OwnershipSummary = { kind: 'unreadable', message: 'bad', path: 'p' }
+    expect(autoPlanNoteCopy(ownership)).toContain('fixed or removed')
   })
 })
 
@@ -145,16 +127,16 @@ describe('resultCopy', () => {
     expect(copy.line).toBe('#148 already carries that label.')
   })
 
-  it('labels unclaimed-scope offers take-claim', () => {
-    const response: GateAnswerResponse = { kind: 'answered', comment: null, labels: { kind: 'unclaimed-scope', scope: 'plan-gate', claimPath: 'p', keys: ['planApproved'] } }
+  it('labels terminal-owned', () => {
+    const response: GateAnswerResponse = { kind: 'answered', comment: null, labels: { kind: 'terminal-owned', since: 't' } }
     const copy = resultCopy({ number: 148, decision: 'approve', response, sessionRequired: false })
-    expect(copy.actions).toEqual(['take-claim'])
+    expect(copy.actions).toEqual(['dismiss'])
   })
 
-  it('labels claim-unreadable offers take-claim', () => {
-    const response: GateAnswerResponse = { kind: 'answered', comment: null, labels: { kind: 'claim-unreadable', scope: 'plan-gate', claimPath: 'p', message: 'bad json' } }
+  it('labels ownership-unreadable', () => {
+    const response: GateAnswerResponse = { kind: 'answered', comment: null, labels: { kind: 'ownership-unreadable', path: 'p', message: 'bad json' } }
     const copy = resultCopy({ number: 148, decision: 'approve', response, sessionRequired: false })
-    expect(copy.actions).toEqual(['take-claim'])
+    expect(copy.actions).toEqual(['dismiss'])
   })
 
   it('labels write-failed', () => {

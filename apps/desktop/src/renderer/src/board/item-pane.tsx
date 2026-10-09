@@ -1,5 +1,5 @@
 // The Board's detail pane content, inside the shared `DetailPane` shell:
-// title, phase pill, `PhaseList`, held detail, relay card, actions.
+// title, phase pill, `PhaseList`, held detail, actions.
 import { useSyncExternalStore } from 'react'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -19,7 +19,6 @@ import { openReviewDialog } from '../gate/controller'
 import { itemActionState, runItemAction, subscribeItemActions } from './actions'
 import { actionButtonLabel, actionPendingLabel, actionResultCopy, decisionButtonLabel, reviewPlanButtonLabel } from './copy'
 import { actionNoteFor, agentSummaryOf, decisionNoteFor, pillStatusFor } from './row-model'
-import { RelayCard } from './relay-card'
 import { itemDetailLines } from './tick'
 
 export interface ItemPaneProps {
@@ -85,7 +84,6 @@ export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
           ))}
         </div>
       ) : null}
-      {row.relay !== null ? <RelayCard pending={row.relay} /> : null}
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap gap-2">
           {availableActions.map((action) => (

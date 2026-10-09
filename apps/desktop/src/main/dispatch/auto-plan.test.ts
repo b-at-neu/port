@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { resolveVocabulary } from '../../shared/labels/vocabulary'
 import type { RepoId } from '../../shared/repos'
 import type { BoardSnapshot } from '../../shared/board/types'
-import type { ClaimRead, WriteOutcome } from '../../shared/writes/types'
+import type { WriteOutcome } from '../../shared/writes/types'
 import type { ReconciledItem } from '../../shared/state/types'
 import type { TickReport } from '../../shared/tick/types'
 import type { ReadyEntry } from '../actions/apply'
@@ -10,6 +10,7 @@ import type { AutoApprovePlanParams } from '../actions/gate'
 import type { ReposListResponse } from '../../shared/ipc'
 import { createAutoPlanner } from './auto-plan'
 import type { AutoPlannerDeps } from './auto-plan'
+import type { OwnershipRead } from './ownership'
 
 const REPO_ID = 'repo-a' as RepoId
 const VOCABULARY = resolveVocabulary({})
@@ -90,7 +91,6 @@ function snapshotWith(tick: readonly TickReport[], items: readonly ReconciledIte
     health: [],
     policy: { baseIntervalMs: { github: 60_000, sessions: 15_000, worktrees: 15_000, denials: 15_000 }, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: 30_000 },
     tick,
-    relay: { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: readAt },
     runStates: { store: { kind: 'loaded' }, repositories: [] },
     nextWakeupAt: null,
     emittedAt: readAt,
@@ -98,16 +98,16 @@ function snapshotWith(tick: readonly TickReport[], items: readonly ReconciledIte
   } as unknown as BoardSnapshot
 }
 
-const HELD_PLAN_GATE: ClaimRead = { state: 'held', owner: 'port-desktop', scopes: ['plan-gate'], unknownScopes: [], claimedAt: '2026-01-01T00:00:00Z', path: '/repo/.agents/gate-claim.json', readAt: 'r' }
-const HELD_DISPATCH_ONLY: ClaimRead = { state: 'held', owner: 'port-desktop', scopes: ['dispatch'], unknownScopes: [], claimedAt: '2026-01-01T00:00:00Z', path: '/repo/.agents/gate-claim.json', readAt: 'r' }
-const ABSENT_CLAIM: ClaimRead = { state: 'absent', path: '/repo/.agents/gate-claim.json', readAt: 'r' }
+const OWNED_BY_APP: OwnershipRead = { kind: 'app', since: '2026-01-01T00:00:00Z', path: '/repo/.agents/cockpit.json', readAt: 'r' }
+const OWNED_BY_TERMINAL: OwnershipRead = { kind: 'terminal', since: '2026-01-01T00:00:00Z', path: '/repo/.agents/cockpit.json', readAt: 'r' }
+const ABSENT_OWNERSHIP: OwnershipRead = { kind: 'absent', path: '/repo/.agents/cockpit.json', readAt: 'r' }
 const APPLIED: WriteOutcome = { kind: 'applied', argv: [] }
 
 function deps(overrides: Partial<AutoPlannerDeps> = {}): AutoPlannerDeps {
   return {
     listRepositories: () => Promise.resolve({ ok: true, repositories: [entry()] } as ReposListResponse),
     registryDeps: { registryDir: '/registry', git: () => Promise.reject(new Error('git unused')), chooseDirectory: () => Promise.resolve(null) },
-    readGateClaim: () => Promise.resolve(HELD_PLAN_GATE),
+    readOwnership: () => Promise.resolve(OWNED_BY_APP),
     runState: () => 'dispatching',
     autoApprove: () => Promise.resolve(APPLIED),
     auditDir: '/audit',
@@ -117,23 +117,23 @@ function deps(overrides: Partial<AutoPlannerDeps> = {}): AutoPlannerDeps {
 }
 
 describe('createAutoPlanner', () => {
-  it('writes an auto-approval while plan-gate is held and the item is autoApprovable', async () => {
+  it('writes an auto-approval while this app owns the repository and the item is autoApprovable', async () => {
     let received: AutoApprovePlanParams | undefined
     const planner = createAutoPlanner(deps({ autoApprove: (p) => { received = p; return Promise.resolve(APPLIED) } }))
     await planner.consider(snapshotWith([tickReport()], [item()]))
     expect(received?.item).toEqual({ number: 7, assignees: ['op'] })
   })
 
-  it('writes nothing when the claim is absent — the cockpit still owns the swap', async () => {
+  it('writes nothing when ownership is absent — a terminal cockpit may still start up', async () => {
     let called = false
-    const planner = createAutoPlanner(deps({ readGateClaim: () => Promise.resolve(ABSENT_CLAIM), autoApprove: () => { called = true; return Promise.resolve(APPLIED) } }))
+    const planner = createAutoPlanner(deps({ readOwnership: () => Promise.resolve(ABSENT_OWNERSHIP), autoApprove: () => { called = true; return Promise.resolve(APPLIED) } }))
     await planner.consider(snapshotWith([tickReport()], [item()]))
     expect(called).toBe(false)
   })
 
-  it('writes nothing when the claim holds dispatch but not plan-gate', async () => {
+  it('writes nothing when a terminal cockpit owns the repository', async () => {
     let called = false
-    const planner = createAutoPlanner(deps({ readGateClaim: () => Promise.resolve(HELD_DISPATCH_ONLY), autoApprove: () => { called = true; return Promise.resolve(APPLIED) } }))
+    const planner = createAutoPlanner(deps({ readOwnership: () => Promise.resolve(OWNED_BY_TERMINAL), autoApprove: () => { called = true; return Promise.resolve(APPLIED) } }))
     await planner.consider(snapshotWith([tickReport()], [item()]))
     expect(called).toBe(false)
   })

@@ -73,7 +73,7 @@ describe('escalateToHuman', () => {
   it('never comments when the label swap does not apply', async () => {
     let commentCalled = false
     const deps: EscalateToHumanDeps = {
-      applyLabels: () => Promise.resolve({ kind: 'unclaimed-scope', scope: 'plan-gate', claimPath: '/x', keys: ['planApproved'] } satisfies WriteOutcome),
+      applyLabels: () => Promise.resolve({ kind: 'terminal-owned', since: '2026-01-01T00:00:00Z' } satisfies WriteOutcome),
       postComment: () => {
         commentCalled = true
         return Promise.resolve({ kind: 'applied', argv: [] } satisfies WriteOutcome)
@@ -82,7 +82,7 @@ describe('escalateToHuman', () => {
     const result = await escalateToHuman(params(), deps)
     expect(commentCalled).toBe(false)
     expect(result.comment).toBeNull()
-    expect(result.labels.kind).toBe('unclaimed-scope')
+    expect(result.labels.kind).toBe('terminal-owned')
   })
 
   it('reports a failed comment without discarding the successful swap', async () => {

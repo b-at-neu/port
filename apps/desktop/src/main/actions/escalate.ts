@@ -18,10 +18,9 @@ export interface EscalateToHumanParams {
   readonly kind: 'issue' | 'pull-request'
   readonly number: number
   /** The in-flight label's own trigger — removed, with `needsHuman` added.
-   *  `applyLabels` derives the required claim scope from this itself
-   *  (`scopeFor`), so a `planApproved`/`planChangesRequested` trigger still
-   *  needs a held `plan-gate` claim, exactly as every other writer of those
-   *  two keys does. */
+   *  `applyLabels` gates every write on ownership uniformly now, so a
+   *  `planApproved`/`planChangesRequested` trigger needs no scope of its
+   *  own beyond that. */
   readonly trigger: LabelKey
   readonly viewer: string
   readonly body: string
@@ -66,6 +65,7 @@ export async function escalateToHuman(params: EscalateToHumanParams, deps: Escal
 
   const comment = await deps.postComment({
     request: { repoId: params.entry.id, repo: params.entry.config.repo, kind: params.kind, number: params.number, body: params.body, action: params.action, scratchDir: params.scratchDir },
+    repoRoot: params.entry.path,
     auditDir: params.auditDir,
   })
   return { labels, comment }

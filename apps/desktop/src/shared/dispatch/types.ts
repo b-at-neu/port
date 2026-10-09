@@ -8,7 +8,7 @@ import type { PipelineItemKind } from '../github/types'
 import type { ItemActionResult } from '../actions/types'
 import type { RepoId } from '../repos'
 import type { StageAgent, TickObservationKind } from '../tick/types'
-import type { ClaimScope, ClaimWriteResult, WriteOutcome } from '../writes/types'
+import type { WriteOutcome } from '../writes/types'
 
 /**
  * #314: `dispatch.json`'s own per-repository run state — `dispatching`
@@ -34,8 +34,11 @@ export const RUN_TARGET: Readonly<Record<RunCommand, RunState>> = {
 }
 
 /** `halt` joins the three per-repository commands as the one command that
- *  carries no `repoId` at all — it pauses every registered repository. */
-export const DISPATCH_COMMANDS = [...RUN_COMMANDS, 'halt'] as const
+ *  carries no `repoId` at all — it pauses every registered repository.
+ *  `take-over` (#331) overwrites a `terminal` ownership record and runs —
+ *  reached only from the confirmed Take over dialog, never a `RUN_TARGET`
+ *  entry, since it is a compound action rather than a plain state write. */
+export const DISPATCH_COMMANDS = [...RUN_COMMANDS, 'halt', 'take-over'] as const
 export type DispatchCommand = (typeof DISPATCH_COMMANDS)[number]
 
 /** The run-state store's own read status — `unread` before the on-disk file
@@ -109,33 +112,36 @@ export type HaltReport =
   | { readonly kind: 'completed'; readonly items: readonly HaltItemOutcome[] }
 
 /**
- * `'dispatch:control'`'s response (#314). `run`/`drain`/`pause` all carry the
- * repository they acted on and the `RepoRunState` the write left behind —
- * `run` is refused outright on any write failure (fail closed toward
- * dispatching nothing); `drain`'s own write failure is instead visible as
- * `persisted: false`, since the gate still closed in memory and the operator
- * got the stop they asked for, refused outright only when the store itself
- * is unreadable; `pause` is never refused outright — a failed run-state write
- * surfaces inside its own `report` as `{ kind: 'aborted' }` instead. `halt`
- * carries no `repoId` at all.
+ * `'dispatch:control'`'s response (#314, #331). `run`/`drain`/`take-over`
+ * each take ownership first (`take-over` with `force: true`, so it refuses
+ * only on a genuine write failure); a `terminal-owned`/`ownership-unreadable`
+ * refusal on `run`/`drain` makes no run-state write at all. `drain`'s own
+ * run-state write failure is instead visible as `persisted: false`, since the
+ * gate still closed in memory and the operator got the stop they asked for.
+ * `pause`/`halt` are never refused outright — a failed run-state write
+ * surfaces inside `report` as `{ kind: 'aborted' }` instead, and a failed
+ * ownership release afterwards surfaces as `released: false`, never thrown.
+ * `halt` carries no `repoId` at all.
  */
 export type DispatchControlResult =
   | { readonly ok: true; readonly command: 'run'; readonly repoId: RepoId; readonly runState: RepoRunState }
-  | { readonly ok: false; readonly command: 'run'; readonly repoId: RepoId; readonly reason: 'unwritable' | 'unreadable'; readonly message: string; readonly path: string }
+  | { readonly ok: false; readonly command: 'run'; readonly repoId: RepoId; readonly reason: 'terminal-owned' | 'ownership-unreadable' | 'unwritable' | 'unreadable'; readonly message?: string; readonly since?: string; readonly path?: string }
   | { readonly ok: true; readonly command: 'drain'; readonly repoId: RepoId; readonly runState: RepoRunState; readonly persisted: boolean }
-  | { readonly ok: false; readonly command: 'drain'; readonly repoId: RepoId; readonly reason: 'unreadable'; readonly message: string; readonly path: string }
-  | { readonly ok: true; readonly command: 'pause'; readonly repoId: RepoId; readonly runState: RepoRunState; readonly report: HaltReport }
-  | { readonly ok: true; readonly command: 'halt'; readonly report: HaltReport }
+  | { readonly ok: false; readonly command: 'drain'; readonly repoId: RepoId; readonly reason: 'terminal-owned' | 'ownership-unreadable' | 'unwritable' | 'unreadable'; readonly message?: string; readonly since?: string; readonly path?: string }
+  | { readonly ok: true; readonly command: 'pause'; readonly repoId: RepoId; readonly runState: RepoRunState; readonly report: HaltReport; readonly released: boolean }
+  | { readonly ok: true; readonly command: 'halt'; readonly report: HaltReport; readonly released: boolean }
+  | { readonly ok: true; readonly command: 'take-over'; readonly repoId: RepoId; readonly runState: RepoRunState }
+  | { readonly ok: false; readonly command: 'take-over'; readonly repoId: RepoId; readonly reason: 'unwritable'; readonly message: string; readonly path: string }
 
 /**
- * #265: who dispatches for one ready repository, read fresh off the claim
- * every pass (`main/dispatch/dispatcher.ts`'s own `consider`, never cached)
- * — mirrors `docs/COORDINATION.md`'s dispatch row. `held` naming `dispatch`
- * → `app`; `unreadable` → `nobody` (both sides stand down, matching
- * `plan-gate`'s own fail direction); anything else (`absent`, or held
- * without `dispatch`) → `cockpit`.
+ * #331: who runs the pipeline for one ready repository, read fresh off
+ * `.agents/cockpit.json` every pass (`main/dispatch/dispatcher.ts`'s own
+ * `consider`, never cached) — mirrors `docs/COORDINATION.md`'s verdict
+ * table. `absent` → `none` (neither side owns it yet); `unreadable` stands on
+ * its own, since neither this app nor a terminal cockpit can tell who should
+ * run it.
  */
-export type DispatchOwner = 'cockpit' | 'app' | 'nobody'
+export type DispatchOwner = 'app' | 'terminal' | 'none' | 'unreadable'
 
 /** #326: one stage-session launch this app's loop attempted, tracked from
  *  `started` (the launch returned ok and the session has not ended) through
@@ -192,17 +198,17 @@ export type BudgetNote =
  *  `DispatchRecord` already establishes). `outcome` is the mapping
  *  `main/actions/observe.ts`'s own table carries from a raw `WriteOutcome` —
  *  `written` (applied), `already` (no-op), `moved` (the item changed under
- *  it — a precondition failure or a vanished item), `refused` (an unclaimed
- *  or unreadable scope, or a key this vocabulary cannot resolve), or `failed`
- *  (the `gh` call itself errored, or the attempt threw). `scope` is the
- *  scope a `refused` outcome names, `null` for every other outcome. */
+ *  it — a precondition failure or a vanished item), `refused` (#331: a
+ *  terminal cockpit took ownership mid-pass, an unreadable ownership record,
+ *  or a key this vocabulary cannot resolve — ownership gates every write
+ *  uniformly now, so there is no longer a scope to distinguish), or `failed`
+ *  (the `gh` call itself errored, or the attempt threw). */
 export interface ObservationRecord {
   readonly kind: TickObservationKind
   readonly number: number
   readonly itemKind: PipelineItemKind
   readonly at: string
   readonly outcome: 'written' | 'already' | 'moved' | 'refused' | 'failed'
-  readonly scope: ClaimScope | null
   readonly comment: 'posted' | 'failed' | 'none'
 }
 
@@ -219,9 +225,9 @@ export interface BudgetStatus {
   readonly notes: readonly BudgetNote[]
 }
 
-/** #265: `BoardSnapshot.dispatch`'s own one-row-per-ready-repository shape —
- *  `state` is always `{ kind: 'idle' }` when `owner !== 'app'`, since only
- *  this app's own dispatcher ever has anything richer to report. */
+/** #265, #331: `BoardSnapshot.dispatch`'s own one-row-per-ready-repository
+ *  shape — `state` is always `{ kind: 'idle' }` when `owner !== 'app'`, since
+ *  only this app's own dispatcher ever has anything richer to report. */
 export interface RepoDispatchStatus {
   readonly repoId: RepoId
   readonly owner: DispatchOwner
@@ -231,13 +237,16 @@ export interface RepoDispatchStatus {
    *  never a fifth `DispatcherState` member for what is really an
    *  orthogonal fact. */
   readonly runState: RunState
-  /** The claim's own `claimedAt` (#265) — `null` unless `owner` is `'app'`.
-   *  The owner line's own "claimed 14:02" clause reads this, never a second
-   *  clock of its own. */
-  readonly claimedAt: string | null
+  /** The ownership record's own `since` (#331) — `null` unless `owner` is
+   *  `'app'` or `'terminal'`. The owner line's own "since 14:02" clause reads
+   *  this, never a second clock of its own. */
+  readonly ownedSince: string | null
+  /** Set only while `owner === 'unreadable'` — `.agents/cockpit.json`'s own
+   *  read failure, for the "can't be read (<reason>)" copy. */
+  readonly unreadableMessage: string | null
   /** #293: `null` iff `commands.budget` is `null` — otherwise populated
    *  regardless of `owner`, since the sweep that produces it keeps going
-   *  while this app's own agents are still working even after the claim
+   *  while this app's own agents are still working even after ownership
    *  moves elsewhere. */
   readonly budget: BudgetStatus | null
   /** #292: the machine-observation writes this app has made for this
@@ -247,9 +256,3 @@ export interface RepoDispatchStatus {
    *  hover title. */
   readonly observed: readonly ObservationRecord[]
 }
-
-/** `'dispatch:claim:set'`'s response (#265) — the mirror of
- *  `shared/gate/types.ts`'s own `GateClaimResponse`, for the `dispatch`
- *  scope instead of `plan-gate`. Always re-reads and recomputes the owner
- *  after writing, the same "carries the state as it now is" rule. */
-export type DispatchClaimSetResult = { readonly kind: 'ok'; readonly status: RepoDispatchStatus } | { readonly kind: 'failed'; readonly result: ClaimWriteResult }

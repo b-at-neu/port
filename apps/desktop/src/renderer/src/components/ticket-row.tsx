@@ -21,7 +21,7 @@ function phaseLabel(row: BoardItemRow): string {
   return row.stageLabel !== null ? (PHASE_NAMES[row.stageLabel.key] ?? row.stageLabel.key) : 'Unstaged'
 }
 
-function NextActionLink({ row, onSelect }: { readonly row: BoardItemRow; readonly onSelect: () => void }) {
+function NextActionLink({ row }: { readonly row: BoardItemRow }) {
   const action = nextActionFor(row)
   if (action === null) return null
 
@@ -31,9 +31,6 @@ function NextActionLink({ row, onSelect }: { readonly row: BoardItemRow; readonl
     switch (action.kind) {
       case 'review-plan':
         openReviewDialog(row.item.repoId, row.item.number)
-        return
-      case 'answer-question':
-        onSelect()
         return
       case 'open-pr':
         window.open(action.url, '_blank')
@@ -79,7 +76,7 @@ export function TicketRow({ row, selected, onSelect }: TicketRowProps) {
       ) : null}
       <PhaseBar stageKey={row.stageLabel?.key ?? null} kind={item.kind} merged={item.mergedAt !== null} className="shrink-0" />
       <StatusPill status={pillStatusFor(row)} label={phaseLabel(row)} className="shrink-0" />
-      <NextActionLink row={row} onSelect={onSelect} />
+      <NextActionLink row={row} />
     </div>
   )
 }

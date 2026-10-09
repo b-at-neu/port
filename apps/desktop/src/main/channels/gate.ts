@@ -1,4 +1,4 @@
-// The plan gate's four channels' validation and composition (#92) — every
+// The plan gate's two channels' validation and composition (#92) — every
 // stale-renderer mistake throws here, never becomes a value `main/actions/
 // gate.ts` has to defend against, the same rail `main/ipc.ts`'s own
 // `resolveItemAction` already applies. Forces one `board:refresh` on an
@@ -7,13 +7,12 @@
 // read-your-writes consistent (`query.ts` Decision 2), the same reasoning
 // `resolveItemAction`'s own forced refresh already relies on.
 import { GATE_DECISIONS } from '../../shared/gate/types'
-import type { GateAnswerResponse, GateClaimResponse, GateDecision, GatePreflightResponse } from '../../shared/gate/types'
+import type { GateAnswerResponse, GateDecision, GatePreflightResponse } from '../../shared/gate/types'
 import type { BoardSnapshot } from '../../shared/board/types'
-import type { ClaimRead } from '../../shared/writes/types'
 import type { IpcMap } from '../../shared/ipc'
 import type { RegistryDeps } from '../registry'
 import { requireRepoId } from '../registry'
-import type { GateAnswerParams, GateClaimReadParams, GateClaimSetParams, GatePreflightParams } from '../actions/gate'
+import type { GateAnswerParams, GatePreflightParams } from '../actions/gate'
 
 /** One binding per composed function, plus the board's own `refresh` —
  *  the same seam `main/ipc.ts`'s `ItemActionDeps` gives `resolveItemAction`,
@@ -23,8 +22,6 @@ import type { GateAnswerParams, GateClaimReadParams, GateClaimSetParams, GatePre
  *  the live watcher's `refresh`. */
 export interface GateChannelDeps {
   readonly gatePreflight: (params: GatePreflightParams) => Promise<GatePreflightResponse>
-  readonly gateClaimRead: (params: GateClaimReadParams) => Promise<ClaimRead>
-  readonly gateClaimSet: (params: GateClaimSetParams) => Promise<GateClaimResponse>
   readonly gateAnswer: (params: GateAnswerParams) => Promise<GateAnswerResponse>
   readonly refresh: (request: IpcMap['board:refresh']['request']) => Promise<BoardSnapshot>
 }
@@ -39,21 +36,6 @@ export async function resolveGatePreflight(registryDeps: RegistryDeps, request: 
     throw new Error("'gate:preflight' requires 'number' to be a positive integer")
   }
   return deps.gatePreflight({ registryDeps, repoId, number: request.number })
-}
-
-export async function resolveGateClaimRead(registryDeps: RegistryDeps, request: IpcMap['gate:claim:read']['request'], deps: GateChannelDeps): Promise<ClaimRead> {
-  const repoId = requireRepoId(request?.repoId, "'gate:claim:read'")
-  return deps.gateClaimRead({ registryDeps, repoId })
-}
-
-/** `held` is the target state the operator's own button named — `true` to
- *  take, `false` to release — never a toggle this channel infers. */
-export async function resolveGateClaimSet(registryDeps: RegistryDeps, request: IpcMap['gate:claim:set']['request'], deps: GateChannelDeps): Promise<GateClaimResponse> {
-  const repoId = requireRepoId(request?.repoId, "'gate:claim:set'")
-  if (typeof request.held !== 'boolean') {
-    throw new Error("'gate:claim:set' requires 'held' to be a boolean")
-  }
-  return deps.gateClaimSet({ registryDeps, repoId, held: request.held })
 }
 
 function isGateDecision(value: unknown): value is GateDecision {

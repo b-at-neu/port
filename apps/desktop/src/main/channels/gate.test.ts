@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../../shared/repos'
-import type { GateAnswerResponse, GateClaimResponse, GatePreflightResponse } from '../../shared/gate/types'
+import type { GateAnswerResponse, GatePreflightResponse } from '../../shared/gate/types'
 import type { BoardSnapshot } from '../../shared/board/types'
 import type { RegistryDeps } from '../registry'
-import { resolveGateAnswer, resolveGateClaimRead, resolveGateClaimSet, resolveGatePreflight } from './gate'
+import { resolveGateAnswer, resolveGatePreflight } from './gate'
 import type { GateChannelDeps } from './gate'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
@@ -19,12 +19,6 @@ function depsWith(overrides: Partial<GateChannelDeps>): GateChannelDeps {
   return {
     gatePreflight: () => {
       throw new Error('gatePreflight should not be invoked in this case')
-    },
-    gateClaimRead: () => {
-      throw new Error('gateClaimRead should not be invoked in this case')
-    },
-    gateClaimSet: () => {
-      throw new Error('gateClaimSet should not be invoked in this case')
     },
     gateAnswer: () => {
       throw new Error('gateAnswer should not be invoked in this case')
@@ -50,7 +44,7 @@ describe('resolveGatePreflight', () => {
   })
 
   it('passes a valid request through to gatePreflight', async () => {
-    const response: GatePreflightResponse = { kind: 'unresolved', claim: { state: 'absent', path: 'p', readAt: 'r' } }
+    const response: GatePreflightResponse = { kind: 'unresolved', ownership: { kind: 'absent' } }
     let received: unknown
     const deps = depsWith({
       gatePreflight: (params) => {
@@ -61,49 +55,6 @@ describe('resolveGatePreflight', () => {
     const result = await resolveGatePreflight(registryDeps, { repoId: REPO_ID, number: 148 }, deps)
     expect(result).toBe(response)
     expect(received).toEqual({ registryDeps, repoId: REPO_ID, number: 148 })
-  })
-})
-
-describe('resolveGateClaimRead', () => {
-  it('rejects a missing repoId', async () => {
-    await expect(resolveGateClaimRead(registryDeps, { repoId: undefined as unknown as RepoId }, depsWith({}))).rejects.toThrow(
-      "'gate:claim:read' requires a non-empty 'repoId'",
-    )
-  })
-
-  it('passes a valid request through', async () => {
-    const claim = { state: 'absent' as const, path: 'p', readAt: 'r' }
-    const deps = depsWith({ gateClaimRead: () => Promise.resolve(claim) })
-    const result = await resolveGateClaimRead(registryDeps, { repoId: REPO_ID }, deps)
-    expect(result).toBe(claim)
-  })
-})
-
-describe('resolveGateClaimSet', () => {
-  it('rejects a missing repoId', async () => {
-    await expect(resolveGateClaimSet(registryDeps, { repoId: undefined as unknown as RepoId, held: true }, depsWith({}))).rejects.toThrow(
-      "'gate:claim:set' requires a non-empty 'repoId'",
-    )
-  })
-
-  it('rejects a non-boolean held', async () => {
-    await expect(resolveGateClaimSet(registryDeps, { repoId: REPO_ID, held: 'yes' as never }, depsWith({}))).rejects.toThrow(
-      "'gate:claim:set' requires 'held' to be a boolean",
-    )
-  })
-
-  it('passes a valid request through', async () => {
-    const response: GateClaimResponse = { kind: 'ok', claim: { state: 'absent', path: 'p', readAt: 'r' } }
-    let received: unknown
-    const deps = depsWith({
-      gateClaimSet: (params) => {
-        received = params
-        return Promise.resolve(response)
-      },
-    })
-    const result = await resolveGateClaimSet(registryDeps, { repoId: REPO_ID, held: true }, deps)
-    expect(result).toBe(response)
-    expect(received).toEqual({ registryDeps, repoId: REPO_ID, held: true })
   })
 })
 

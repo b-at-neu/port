@@ -119,12 +119,12 @@ export default async function ({ expect, fail, ok }: Reporter) {
     } else expect((setIdx < stopForIdx && stopForIdx < applyIdx && applyIdx < standDownIdx), 'desktop-dispatch', `${haltFile}'s own runStates.set(/stopFor(/applyItemAction(/standDown( calls are out of order — expected runStates.set( before stopFor( before applyItemAction( before standDown(`);
   }
 
-  // --- dispatcher.ts calls readGateClaim( and names 'dispatch' — must never check against the wrong scope. ---
+  // --- dispatcher.ts calls deps.readOwnership( and dispatches only for owner 'app' — must never check against the wrong verdict. ---
   {
     const text = readFileSync(join(root, dispatcherFile), 'utf8');
-    if (!/\breadGateClaim\s*\(/.test(text)) {
-      fail('desktop-dispatch', `${dispatcherFile} never calls readGateClaim( — the owner resolution this whole module rests on is missing`);
-    } else expect(text.includes("'dispatch'"), 'desktop-dispatch', `${dispatcherFile} never names the 'dispatch' scope — it cannot be reading the claim for the right thing`);
+    if (!/\bdeps\.readOwnership\s*\(/.test(text)) {
+      fail('desktop-dispatch', `${dispatcherFile} never calls deps.readOwnership( — the owner resolution this whole module rests on is missing`);
+    } else expect(text.includes("owner === 'app'"), 'desktop-dispatch', `${dispatcherFile} never checks owner === 'app' — it cannot be reading the ownership record for the right thing`);
   }
 
   // --- budget-unported is gone; the gate runs instead, in order: re-read, then gate, then send. ---
@@ -341,19 +341,17 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!sawAutoApprovableFrom) fail('desktop-dispatch', `${dispatchableFile} never reads '.autoApprovals' — the gate itself must`);
     else if (!found) ok();
 
-    // --- auto-plan.ts calls readGateClaim( and names 'plan-gate', never 'dispatch', or it
-    // would either never fire or fire alongside the dispatcher's own agent launches. ---
+    // --- auto-plan.ts gates on ownership.kind === 'app', never a claim scope — the auto-plan
+    // swap fires only while this app owns the repository outright. ---
     if (mainDispatchFiles.some((f) => relOf(f) === autoPlanFile)) {
       const autoPlanText = readFileSync(join(root, autoPlanFile), 'utf8');
-      const claimIdx = autoPlanText.indexOf('readGateClaim(');
+      const ownershipIdx = autoPlanText.indexOf('deps.readOwnership(');
       const approveIdx = autoPlanText.indexOf('deps.autoApprove(');
-      if (claimIdx === -1) {
-        fail('desktop-dispatch', `${autoPlanFile} never calls readGateClaim( — the owner resolution this whole module rests on is missing`);
-      } else if (!autoPlanText.includes("'plan-gate'")) {
-        fail('desktop-dispatch', `${autoPlanFile} never names the 'plan-gate' scope — it cannot be reading the claim for the right thing`);
-      } else if (autoPlanText.includes("'dispatch'")) {
-        fail('desktop-dispatch', `${autoPlanFile} names the 'dispatch' scope — the auto-plan swap must never gate on it`);
-      } else expect(!(approveIdx === -1 || claimIdx > approveIdx), 'desktop-dispatch', `${autoPlanFile}'s readGateClaim( call must precede its deps.autoApprove( call in source order`);
+      if (ownershipIdx === -1) {
+        fail('desktop-dispatch', `${autoPlanFile} never calls deps.readOwnership( — the owner resolution this whole module rests on is missing`);
+      } else if (!autoPlanText.includes("ownership.kind !== 'app'") && !autoPlanText.includes("ownership.kind === 'app'")) {
+        fail('desktop-dispatch', `${autoPlanFile} never gates on ownership.kind being 'app' — it cannot be reading the ownership record for the right thing`);
+      } else expect(!(approveIdx === -1 || ownershipIdx > approveIdx), 'desktop-dispatch', `${autoPlanFile}'s deps.readOwnership( call must precede its deps.autoApprove( call in source order`);
     } else {
       fail('desktop-dispatch', `${autoPlanFile} does not exist — the guard cannot pass vacuously`);
     }

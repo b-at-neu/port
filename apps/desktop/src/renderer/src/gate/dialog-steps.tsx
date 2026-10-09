@@ -1,25 +1,11 @@
 // The plan gate dialog's own steps, split out to stay under 500 lines.
 import { Button } from '@/components/ui/button'
 import { DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Markdown } from '../components/markdown'
-import type { ClaimRead } from '../../../shared/writes/types'
-import type { RepoId } from '../../../shared/repos'
 import type { GateState } from './controller'
-import { backToReview, closeGateDialog, goToClaimStep, openFeedback, pickRepo, retryLabelOnly, retryPreflight, setClaim, setFeedbackText, submitApprove, submitFeedback, tryCommentAgain } from './controller'
-import {
-  assigneeNoteCopy,
-  autoPlanNoteCopy,
-  claimLineCopy,
-  feedbackHint,
-  isClaimHeldForPlanGate,
-  noPlanNoteCopy,
-  primaryApproveLabel,
-  refusedVerdictCopy,
-  resultCopy,
-  sessionRequiredCopy,
-} from './copy'
+import { backToReview, closeGateDialog, openFeedback, retryLabelOnly, retryPreflight, setFeedbackText, submitApprove, submitFeedback, tryCommentAgain } from './controller'
+import { assigneeNoteCopy, autoPlanNoteCopy, feedbackHint, gateDisabledReason, noPlanNoteCopy, primaryApproveLabel, refusedVerdictCopy, resultCopy, sessionRequiredCopy } from './copy'
 
 function Aside({ line, note }: { readonly line: string; readonly note: string | null }) {
   return (
@@ -27,77 +13,6 @@ function Aside({ line, note }: { readonly line: string; readonly note: string | 
       <span>{line}</span>
       {note !== null && note !== '' ? <span className="text-meta text-muted-foreground">{note}</span> : null}
     </div>
-  )
-}
-
-export function ClaimPickingStep({ state }: { readonly state: Extract<GateState, { readonly step: 'claim-picking' }> }) {
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle>Plan gate</DialogTitle>
-      </DialogHeader>
-      {state.repos.length === 0 ? (
-        <p className="text-small text-muted-foreground">No port-managed repositories yet.</p>
-      ) : state.repos.length > 1 ? (
-        <label className="flex flex-col gap-1">
-          <span className="text-small text-muted-foreground">Repository</span>
-          <Select value={state.repoId ?? undefined} onValueChange={(value) => pickRepo(value as RepoId)}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Pick a repository" />
-            </SelectTrigger>
-            <SelectContent>
-              {state.repos.map((repo) => (
-                <SelectItem key={repo.id} value={repo.id}>
-                  {repo.repo}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </label>
-      ) : null}
-      <DialogFooter>
-        <Button variant="outline" onClick={closeGateDialog}>
-          Cancel
-        </Button>
-      </DialogFooter>
-    </>
-  )
-}
-
-export function ClaimStatusStep({ claim, acting }: { readonly claim: ClaimRead; readonly acting: boolean }) {
-  const copy = claimLineCopy(claim)
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle>Plan gate</DialogTitle>
-      </DialogHeader>
-      <Aside line={copy.line} note={copy.note} />
-      <DialogFooter>
-        <Button variant="outline" onClick={closeGateDialog} disabled={acting}>
-          Cancel
-        </Button>
-        {copy.action === 'take' ? (
-          <Button onClick={() => setClaim(true)} disabled={acting}>
-            Take the plan gate
-          </Button>
-        ) : null}
-        {copy.action === 'release' ? (
-          <Button onClick={() => setClaim(false)} disabled={acting}>
-            Release the plan gate
-          </Button>
-        ) : null}
-        {copy.action === 'overwrite' ? (
-          <>
-            <Button variant="outline" onClick={() => setClaim(false)} disabled={acting}>
-              Delete the file
-            </Button>
-            <Button onClick={() => setClaim(true)} disabled={acting}>
-              Overwrite with a fresh claim
-            </Button>
-          </>
-        ) : null}
-      </DialogFooter>
-    </>
   )
 }
 
@@ -113,9 +28,8 @@ export function LoadingStep({ hint }: { readonly hint: string }) {
 }
 
 export function ReviewingStep({ state }: { readonly state: Extract<GateState, { readonly step: 'reviewing' }> }) {
-  const { preflight, verdict, claim } = state
-  const held = isClaimHeldForPlanGate(claim)
-  const claimCopy = claimLineCopy(claim)
+  const { preflight, verdict, ownership } = state
+  const disabledReason = gateDisabledReason(ownership)
 
   return (
     <>
@@ -134,7 +48,7 @@ export function ReviewingStep({ state }: { readonly state: Extract<GateState, { 
           <code className="rounded bg-background/50 px-1.5 py-1 font-mono text-meta">{sessionRequiredCopy(preflight.number, preflight.title, preflight.sessionRequiredReason).launchLine}</code>
         </div>
       ) : null}
-      {preflight.autoPlan ? <p className="text-small text-muted-foreground">{autoPlanNoteCopy(claim)}</p> : null}
+      {preflight.autoPlan ? <p className="text-small text-muted-foreground">{autoPlanNoteCopy(ownership)}</p> : null}
       {verdict.assignedElsewhere.map((login) => (
         <p key={login} className="text-small text-muted-foreground">
           {assigneeNoteCopy(login)}
@@ -142,20 +56,15 @@ export function ReviewingStep({ state }: { readonly state: Extract<GateState, { 
       ))}
       {verdict.noPlanBlock ? <p className="text-small text-muted-foreground">{noPlanNoteCopy()}</p> : null}
       <Markdown source={preflight.planMarkdown ?? preflight.ticketMarkdown} className="max-h-[60vh] overflow-y-auto rounded-md border border-border p-3" />
-      <Aside line={claimCopy.line} note={claimCopy.note} />
-      {!held && claimCopy.action === 'take' ? (
-        <Button variant="outline" size="small" onClick={() => setClaim(true)} className="self-start">
-          Take the plan gate
-        </Button>
-      ) : null}
+      {disabledReason !== null ? <Aside line={disabledReason} note={null} /> : null}
       <DialogFooter>
         <Button variant="outline" onClick={closeGateDialog}>
           Cancel
         </Button>
-        <Button variant="outline" onClick={openFeedback} disabled={!held}>
+        <Button variant="outline" onClick={openFeedback} disabled={disabledReason !== null}>
           Request changes
         </Button>
-        <Button onClick={submitApprove} disabled={!held}>
+        <Button onClick={submitApprove} disabled={disabledReason !== null}>
           {primaryApproveLabel(preflight.sessionRequired)}
         </Button>
       </DialogFooter>
@@ -240,11 +149,6 @@ export function ResultStep({ state }: { readonly state: Extract<GateState, { rea
         {copy.actions.includes('try-again') ? (
           <Button variant="outline" onClick={tryCommentAgain}>
             Try again
-          </Button>
-        ) : null}
-        {copy.actions.includes('take-claim') ? (
-          <Button variant="outline" onClick={goToClaimStep}>
-            Take the plan gate
           </Button>
         ) : null}
         <Button onClick={closeGateDialog}>Dismiss</Button>

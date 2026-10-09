@@ -1,7 +1,7 @@
 // Pure classifier for the agent-guard PreToolUse hook — kept separate from agent-guard.mjs's
 // stdin/stdout plumbing so layer 1 checks can unit-test decision logic directly.
-import { readFileSync, existsSync } from 'node:fs';
-import { relative, resolve } from 'node:path';
+import { readFileSync, existsSync, realpathSync } from 'node:fs';
+import { dirname, basename, relative, resolve } from 'node:path';
 import {
   gateClearAttempt,
   pluginInstallMutation,
@@ -9,8 +9,22 @@ import {
   targetsGhOrGit,
   usesShellLoop,
 } from './command-rules.mjs';
-import { dispatchDenial, planGateDenial } from './claim-rules.mjs';
+import { cockpitWriteDenial, dispatchDenial } from './ownership-rules.mjs';
 import { operatorNamed } from './operator-rules.mjs';
+
+/** Canonicalizes `p` via realpath, falling back a directory level for a not-yet-created leaf. */
+export function realCanonical(p) {
+  const resolved = resolve(p);
+  try {
+    return realpathSync(resolved);
+  } catch {
+    try {
+      return resolve(realpathSync(dirname(resolved)), basename(resolved));
+    } catch {
+      return resolved;
+    }
+  }
+}
 
 /** Compiles a glob (`**` → any depth, `*` → one path segment, else escaped) into an
  *  anchored RegExp, for `sessionRequiredPaths` globs against an already-relativized path. */
@@ -122,17 +136,16 @@ export function decide({
   needsHumanLabel,
   operatorMessages,
   isCockpitSession,
-  planGateClaim,
-  planGateLabels,
-  dispatchClaim,
-  claimFilePath,
+  ownership,
+  cockpitFilePath,
+  repo,
   approvedLabel,
 }) {
   const who = callerKind(payload);
   const toolName = payload?.tool_name;
 
   if (toolName === 'Agent') {
-    const denial = dispatchDenial({ toolName, who, isCockpitSession, claim: dispatchClaim });
+    const denial = dispatchDenial({ toolName, who, isCockpitSession, ownership });
     if (denial) return denial;
     return { decision: 'allow', who, subject: null };
   }
@@ -179,10 +192,6 @@ export function decide({
         return { decision: 'gate-clear', who, subject: command };
       }
     }
-
-    // Claim rule, Bash arm — a `plan-gate` claim transfers the plan-review gate to an external owner.
-    const planGateResult = planGateDenial({ command, who, planGateClaim, planGateLabels });
-    if (planGateResult) return planGateResult;
 
     // Install rule — every install scope shares one installPath; deliberately not exempt for
     // `who.isOperatorWorktree`, unlike the other cockpit-class rules below.
@@ -248,16 +257,23 @@ export function decide({
   if (toolName === 'Edit' || toolName === 'Write' || toolName === 'NotebookEdit') {
     const filePath = payload?.tool_input?.file_path;
 
-    // Claim rule, write-tool arm — denied for every caller, including a subagent or operator
-    // worktree, unlike the Bash arm above: releasing the claim file is a machine's own constraint.
-    if (claimFilePath && typeof filePath === 'string' && filePath.length > 0 && resolve(root, filePath) === claimFilePath) {
-      return {
-        decision: 'deny',
-        who,
-        subject: filePath,
-        reason:
-          'port: .agents/gate-claim.json is created and released only by an explicit operator action in the app — no session or agent may write to it, including from an operator worktree. Release a claim in the app instead.',
-      };
+    // Ownership rule, write-tool arm — denied for every caller, with the one exception
+    // `cockpitWriteDenial` itself carves out (a terminal's own preflight write).
+    if (cockpitFilePath && typeof filePath === 'string' && filePath.length > 0) {
+      const resolvedPath = resolve(root, filePath);
+      if (realCanonical(resolvedPath) === realCanonical(cockpitFilePath)) {
+        const denial = cockpitWriteDenial({
+          toolName,
+          who,
+          filePath,
+          cockpitFilePath: resolvedPath,
+          isCockpitSession,
+          content: payload?.tool_input?.content,
+          repo,
+          currentOwnership: ownership,
+        });
+        if (denial) return denial;
+      }
     }
 
     if (!who.isSubagent || typeof filePath !== 'string' || filePath.length === 0) {

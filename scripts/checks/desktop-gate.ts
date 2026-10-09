@@ -17,7 +17,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
   const decideActionFile = `${mainActionsDir}/decide.ts`;
   const escalateActionFile = `${mainActionsDir}/escalate.ts`;
   const observeActionFile = `${mainActionsDir}/observe.ts`;
-  const scopeFile = 'apps/desktop/src/main/writes/scope.ts';
   const writesApplyFile = 'apps/desktop/src/main/writes/apply.ts';
   const copyFile = `${rendererGateDir}/copy.ts`;
   const markdownFile = 'apps/desktop/src/renderer/src/components/markdown.tsx';
@@ -38,36 +37,20 @@ export default async function ({ expect, fail, ok }: Reporter) {
     return;
   }
 
-  // pin: `shared/gate/classify.ts`'s LabelKeys (`planReview`/`planApproved`/`planChangesRequested`) ↔ `main/writes/scope.ts`'s `PLAN_GATE_KEYS`, both directions
-  {
-    const classifyText = readFileSync(join(root, classifyFile), 'utf8');
-    const scopeText = readFileSync(join(root, scopeFile), 'utf8');
-    const classifyKeys = new Set([...classifyText.matchAll(/'(plan[A-Za-z]+)'/g)].map((m) => m[1]));
-    const scopeMatch = /PLAN_GATE_KEYS[^=]*=\s*\[([^\]]*)\]/.exec(scopeText);
-    if (!scopeMatch) {
-      fail('desktop-gate', `${scopeFile} has no 'PLAN_GATE_KEYS = [...]' array to compare against`);
-    } else {
-      const scopeKeys = new Set([...scopeMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]));
-      const onlyInClassify = [...classifyKeys].filter((k) => !scopeKeys.has(k));
-      const onlyInScope = [...scopeKeys].filter((k) => !classifyKeys.has(k));
-      expect(!(onlyInClassify.length > 0 || onlyInScope.length > 0), 'desktop-gate', `${classifyFile}'s LabelKeys (${[...classifyKeys].join(', ')}) and ${scopeFile}'s PLAN_GATE_KEYS (${[...scopeKeys].join(', ')}) disagree`);
-    }
-  }
-
   // --- Both plans set expect.present to ['planReview'] — the "don't answer an item that already moved" guard must not be quietly dropped. ---
   {
     const text = readFileSync(join(root, classifyFile), 'utf8');
     expect(text.includes(`present: ['planReview']`), 'desktop-gate', `${classifyFile} does not set "present: ['planReview']" — the stale-item guard must not be quietly dropped`);
   }
 
-  // pin: `shared/gate/types.ts`'s `GATE_CLAIM_OWNER` ↔ `docs/COORDINATION.md`'s stand-down report copy
+  // pin: `gate/copy.ts`'s terminal-owned disabled-reason line ↔ `docs/COORDINATION.md`'s "a terminal cockpit owns it" copy — one decided string
   {
-    const typesText = readFileSync(join(root, typesFile), 'utf8');
     const coordinationText = readFileSync(join(root, coordinationFile), 'utf8');
-    const ownerMatch = /GATE_CLAIM_OWNER\s*=\s*'([^']+)'/.exec(typesText);
-    if (!ownerMatch) {
-      fail('desktop-gate', `${typesFile} has no 'GATE_CLAIM_OWNER = ...' assignment`);
-    } else expect(coordinationText.includes(ownerMatch[1]), 'desktop-gate', `${coordinationFile} does not name '${ownerMatch[1]}' — the cockpit's stand-down report would name the wrong owner`);
+    const copyText = readFileSync(join(root, copyFile), 'utf8');
+    const line = 'Your terminal cockpit answers this gate — this app owns nothing here.';
+    if (!coordinationText.includes(line)) {
+      fail('desktop-gate', `${coordinationFile} does not contain '${line}' — the decided copy this dialog's disabled reason must match`);
+    } else expect(copyText.includes(line), 'desktop-gate', `${copyFile}'s gateDisabledReason does not contain the decided line '${line}'`);
   }
 
   // --- postComment( is called under apps/desktop/src/ only from gate.ts, decide.ts,
@@ -155,17 +138,15 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- copy.ts's session-required consequence and claim-step lines — the operator must
-  // learn that an approved session-required plan will not be dispatched. ---
+  // --- copy.ts's session-required consequence and ownership disabled-reason lines. ---
   {
     const text = readFileSync(join(root, copyFile), 'utf8');
     const missing: string[] = [];
     if (!text.includes('/port:implement')) missing.push("'/port:implement'");
     if (!text.includes('no agent will ever pick it up')) missing.push("'no agent will ever pick it up'");
-    if (!text.includes("isn't claimed here")) missing.push(`the absent-claim line ("isn't claimed here")`);
-    if (!text.includes('still answering it in your terminal')) missing.push('the absent-claim note');
-    if (!text.includes("can't be read")) missing.push(`the unreadable-claim line ("can't be read")`);
-    if (!text.includes('stand down from the plan gate')) missing.push('the unreadable-claim note');
+    if (!text.includes('this app owns nothing here')) missing.push(`the terminal-owned disabled reason ("this app owns nothing here")`);
+    if (!text.includes("can't be read")) missing.push(`the unreadable disabled reason ("can't be read")`);
+    if (!text.includes('stand down from the plan gate')) missing.push('the unreadable disabled reason\'s stand-down note');
     expect(!(missing.length > 0), 'desktop-gate', `${copyFile} is missing: ${missing.join(', ')}`);
   }
 

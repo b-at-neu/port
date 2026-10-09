@@ -10,8 +10,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
   const githubDir = 'apps/desktop/src/main/github';
   const writesDir = 'apps/desktop/src/main/writes';
   const commandFile = `${writesDir}/command.ts`;
-  const claimFile = `${writesDir}/claim.ts`;
-  const scopeFile = `${writesDir}/scope.ts`;
+  const ownershipFile = 'apps/desktop/src/main/dispatch/ownership.ts';
   const typesFile = 'apps/desktop/src/shared/writes/types.ts';
   const coordinationFile = 'docs/COORDINATION.md';
 
@@ -105,28 +104,6 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // pin: `main/writes/scope.ts`'s `PLAN_GATE_KEYS` ↔ `docs/COORDINATION.md`'s claim-contract keys, both directions
-  {
-    const scopeText = readFileSync(join(root, scopeFile), 'utf8');
-    const scopeMatch = /PLAN_GATE_KEYS[^=]*=\s*\[([^\]]*)\]/.exec(scopeText);
-    const coordinationText = readFileSync(join(root, coordinationFile), 'utf8');
-    const coordinationMatch = /adding or removing the resolved names for ([^.]*)\./.exec(coordinationText);
-
-    if (!scopeMatch) {
-      fail('desktop-writes', `${scopeFile} has no 'PLAN_GATE_KEYS = [...]' array`);
-    } else if (!coordinationMatch) {
-      fail('desktop-writes', `${coordinationFile} has no "adding or removing the resolved names for ..." sentence to compare against`);
-    } else {
-      const scopeKeys = [...scopeMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]).sort();
-      const coordinationKeys = [...coordinationMatch[1].matchAll(/`([^`]+)`/g)].map((m) => m[1]).sort();
-      const scopeSet = new Set(scopeKeys);
-      const coordinationSet = new Set(coordinationKeys);
-      const onlyInScope = scopeKeys.filter((k) => !coordinationSet.has(k));
-      const onlyInDoc = coordinationKeys.filter((k) => !scopeSet.has(k));
-      expect(!(onlyInScope.length > 0 || onlyInDoc.length > 0), 'desktop-writes', `${scopeFile}'s PLAN_GATE_KEYS (${JSON.stringify(scopeKeys)}) and ${coordinationFile}'s claim contract (${JSON.stringify(coordinationKeys)}) disagree`);
-    }
-  }
-
   // pin: `shared/writes/types.ts`'s `Conflict` union ↔ `docs/COORDINATION.md`'s fenced `type Conflict` block — kind literals and field-name sets, both directions, not byte-identity
   {
     const typesText = readFileSync(join(root, typesFile), 'utf8');
@@ -150,14 +127,14 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- .agents/gate-claim.json appears in both claim.ts and COORDINATION.md — the claim
-  // file's path must never diverge between the code and its own contract doc. ---
+  // --- .agents/cockpit.json appears in both ownership.ts and COORDINATION.md — the ownership
+  // record's path must never diverge between the code and its own contract doc. ---
   {
-    const claimText = readFileSync(join(root, claimFile), 'utf8');
+    const ownershipText = readFileSync(join(root, ownershipFile), 'utf8');
     const coordinationText = readFileSync(join(root, coordinationFile), 'utf8');
-    if (!claimText.includes('.agents/gate-claim.json') && !claimText.includes("'.agents', 'gate-claim.json'")) {
-      fail('desktop-writes', `${claimFile} does not reference the gate-claim.json path`);
-    } else expect(coordinationText.includes('.agents/gate-claim.json'), 'desktop-writes', `${coordinationFile} does not reference '.agents/gate-claim.json'`);
+    if (!ownershipText.includes("'.agents', 'cockpit.json'")) {
+      fail('desktop-writes', `${ownershipFile} does not reference the cockpit.json path`);
+    } else expect(coordinationText.includes('.agents/cockpit.json'), 'desktop-writes', `${coordinationFile} does not reference '.agents/cockpit.json'`);
   }
 
   // --- appendTextFile( is called under apps/desktop/src/ only from main/writes/audit.ts

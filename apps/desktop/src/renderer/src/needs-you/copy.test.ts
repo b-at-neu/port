@@ -18,30 +18,6 @@ describe('needsYouLeadCopy', () => {
     expect(needsYouLeadCopy(item)).toBe('#36 is ready to merge')
   })
 
-  it('question — a single-question pending', () => {
-    const item = { ...base({ number: 24 }), kind: 'question', pending: { kind: 'questions', questions: [{ index: 0, text: 'which hero layout?' }] } } as unknown as NeedsYouItem
-    expect(needsYouLeadCopy(item)).toBe('#24 is asking: which hero layout?')
-  })
-
-  it('question — multiple questions names the overflow', () => {
-    const item = {
-      ...base({ number: 24 }),
-      kind: 'question',
-      pending: { kind: 'questions', questions: [{ index: 0, text: 'first?' }, { index: 1, text: 'second?' }, { index: 2, text: 'third?' }] },
-    } as unknown as NeedsYouItem
-    expect(needsYouLeadCopy(item)).toBe('#24 is asking: first? (+2 more)')
-  })
-
-  it('question — blocked relay names the request', () => {
-    const item = { ...base({ number: 24 }), kind: 'question', pending: { kind: 'blocked', request: 'which base branch?' } } as unknown as NeedsYouItem
-    expect(needsYouLeadCopy(item)).toBe('#24 needs a decision: which base branch?')
-  })
-
-  it('question — usage-limit', () => {
-    const item = { ...base({ number: 24 }), kind: 'question', pending: { kind: 'usage-limit' } } as unknown as NeedsYouItem
-    expect(needsYouLeadCopy(item)).toBe("#24 hit the session limit. Nothing moves until the window resets.")
-  })
-
   it('needs-human with a reason', () => {
     const item = {
       ...base({ number: 33 }),

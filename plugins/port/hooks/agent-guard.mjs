@@ -3,9 +3,9 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { allowMatchers, decide, callerKind, invokedCockpitSkill } from './lib/guard-rules.mjs';
+import { allowMatchers, decide, callerKind, invokedCockpitSkill, realCanonical } from './lib/guard-rules.mjs';
 import { gateClearAttempt, switchesBranch } from './lib/command-rules.mjs';
-import { classifyGateClaim } from './lib/claim-rules.mjs';
+import { classifyOwnership } from './lib/ownership-rules.mjs';
 import { recentOperatorMessages } from './lib/operator-rules.mjs';
 
 /** Nearest ancestor of `from` containing `rel`, or null. */
@@ -70,33 +70,22 @@ if (configRoot) {
       join(configRoot, '.claude', 'settings.local.json'),
     ]);
 
-    // Every worktree of a checkout resolves to the one claim file, the base repository root.
+    // Every worktree of a checkout resolves to the one ownership record, the base repository root.
     const baseRoot = baseRepoRoot(cwd);
-    const claimFilePath = join(baseRoot, '.agents', 'gate-claim.json');
-    const planGateLabels = [
-      config?.labels?.planReview ?? 'plan review',
-      config?.labels?.planApproved ?? 'plan approved',
-      config?.labels?.planChangesRequested ?? 'plan changes requested',
-    ];
+    const cockpitFilePath = join(baseRoot, '.agents', 'cockpit.json');
+    const isWriteToolCall = payload?.tool_name === 'Write' || payload?.tool_name === 'Edit' || payload?.tool_name === 'NotebookEdit';
+    const writeTargetsCockpitFile =
+      isWriteToolCall &&
+      typeof payload?.tool_input?.file_path === 'string' &&
+      payload.tool_input.file_path.length > 0 &&
+      realCanonical(resolve(configRoot, payload.tool_input.file_path)) === realCanonical(cockpitFilePath);
 
-    // Reading and classifying the claim file only when a Bash call carries a label-editing flag.
-    let planGateClaim;
-    if (
-      payload?.tool_name === 'Bash' &&
-      typeof payload?.tool_input?.command === 'string' &&
-      /--(?:add|remove)-label/.test(payload.tool_input.command)
-    ) {
-      const exists = existsSync(claimFilePath);
-      const text = exists ? readFileSync(claimFilePath, 'utf8') : '';
-      planGateClaim = classifyGateClaim(exists, text, config?.repo);
-    }
-
-    // Same claim file, read unconditionally for an Agent call since there is no second predicate to test first.
-    let dispatchClaim;
-    if (payload?.tool_name === 'Agent') {
-      const exists = existsSync(claimFilePath);
-      const text = exists ? readFileSync(claimFilePath, 'utf8') : '';
-      dispatchClaim = classifyGateClaim(exists, text, config?.repo);
+    // Reads and classifies the ownership record for an Agent call or a write targeting it.
+    let ownership;
+    if (payload?.tool_name === 'Agent' || writeTargetsCockpitFile) {
+      const exists = existsSync(cockpitFilePath);
+      const text = exists ? readFileSync(cockpitFilePath, 'utf8') : '';
+      ownership = classifyOwnership(exists, text, config?.repo);
     }
 
     // Gate/branch/approval need the session transcript, read once for all three; any read failure yields `null`.
@@ -120,12 +109,11 @@ if (configRoot) {
           }
         }
       }
-    } else if (payload?.tool_name === 'Agent') {
+    } else if (payload?.tool_name === 'Agent' || writeTargetsCockpitFile) {
       const who = callerKind(payload);
-      const claimsDispatch =
-        dispatchClaim?.state === 'unreadable' ||
-        (dispatchClaim?.state === 'held' && (dispatchClaim.scopes ?? []).includes('dispatch'));
-      if (!who.isSubagent && claimsDispatch && typeof payload?.transcript_path === 'string') {
+      const appOwnsItOrUnknown = ownership?.kind === 'app' || ownership?.kind === 'unreadable';
+      const needsTranscript = payload?.tool_name === 'Agent' ? !who.isSubagent && appOwnsItOrUnknown : !who.isSubagent;
+      if (needsTranscript && typeof payload?.transcript_path === 'string') {
         try {
           isCockpitSession = invokedCockpitSkill(readFileSync(payload.transcript_path, 'utf8'));
         } catch {
@@ -142,10 +130,9 @@ if (configRoot) {
       needsHumanLabel,
       operatorMessages,
       isCockpitSession,
-      planGateClaim,
-      planGateLabels,
-      dispatchClaim,
-      claimFilePath,
+      ownership,
+      cockpitFilePath,
+      repo: config?.repo,
       approvedLabel,
     });
     const logDir = join(baseRoot, '.agents');

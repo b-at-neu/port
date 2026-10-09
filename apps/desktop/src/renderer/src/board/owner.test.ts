@@ -11,29 +11,38 @@ const WRITE_FAILED = { kind: 'write-failed' as const, classification: 'unknown' 
 const REPO_ID = 'repo-a' as RepoId
 
 function status(overrides: Partial<RepoDispatchStatus> = {}): RepoDispatchStatus {
-  return { repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, runState: 'dispatching', claimedAt: null, budget: null, observed: [], ...overrides }
+  return { repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, runState: 'dispatching', ownedSince: null, unreadableMessage: null, budget: null, observed: [], ...overrides }
 }
 
 function record(overrides: Partial<ObservationRecord> = {}): ObservationRecord {
-  return { kind: 'liveness-reset', number: 1, itemKind: 'issue', at: '2026-01-01T14:00:00Z', outcome: 'written', scope: null, comment: 'none', ...overrides }
+  return { kind: 'liveness-reset', number: 1, itemKind: 'issue', at: '2026-01-01T14:00:00Z', outcome: 'written', comment: 'none', ...overrides }
 }
 
 describe('ownerLineCopy', () => {
-  it('nobody — the unreadable-claim line', () => {
-    expect(ownerLineCopy(status({ owner: 'nobody' }))).toContain("can't be read")
+  it('unreadable — names the reason and that neither side runs it', () => {
+    const line = ownerLineCopy(status({ owner: 'unreadable', unreadableMessage: 'invalid JSON' }))
+    expect(line).toContain("can't be read")
+    expect(line).toContain('invalid JSON')
+    expect(line).toContain('Neither this app nor a terminal cockpit')
   })
 
-  it('cockpit — the standard-pipeline line', () => {
-    expect(ownerLineCopy(status({ owner: 'cockpit' }))).toContain('your terminal cockpit dispatches here')
+  it('terminal — names since and that this app writes nothing here', () => {
+    const line = ownerLineCopy(status({ owner: 'terminal', ownedSince: '2026-01-01T14:02:00Z' }))
+    expect(line).toContain('your terminal cockpit runs this repo')
+    expect(line).toContain("won't dispatch, answer gates, or write labels")
   })
 
-  it('app, idle, never claimed — no "claimed" clause', () => {
+  it('none — idle here, Run starts it', () => {
+    expect(ownerLineCopy(status({ owner: 'none' }))).toContain('idle here')
+  })
+
+  it('app, idle, never owned — no "since" clause', () => {
     expect(ownerLineCopy(status())).toBe('▶ Dispatch: this app · nothing to dispatch.')
   })
 
-  it('app, idle, claimed — the claimed-time clause', () => {
-    const line = ownerLineCopy(status({ claimedAt: '2026-01-01T14:02:00Z' }))
-    expect(line).toContain('claimed')
+  it('app, idle, owned — the since-time clause', () => {
+    const line = ownerLineCopy(status({ ownedSince: '2026-01-01T14:02:00Z' }))
+    expect(line).toContain('since')
     expect(line).toContain('nothing to dispatch')
   })
 
@@ -64,11 +73,11 @@ describe('ownerLineCopy', () => {
     expect(ownerLineCopy(status({ state: { kind: 'budget-unavailable', message } }))).toBe(`⏸ Dispatch: this app, but not dispatching — ${message}`)
   })
 
-  it('the budget clause is appended for every owner, including cockpit and nobody', () => {
+  it('the budget clause is appended for every owner, including terminal and unreadable', () => {
     const budget = { line: 'session 2 dispatches · 41m 12s agent wall-clock', problem: null, notes: [] }
     expect(ownerLineCopy(status({ budget }))).toContain('Budget: session 2 dispatches')
-    expect(ownerLineCopy(status({ owner: 'cockpit', budget }))).toContain('Budget: session 2 dispatches')
-    expect(ownerLineCopy(status({ owner: 'nobody', budget }))).toContain('Budget: session 2 dispatches')
+    expect(ownerLineCopy(status({ owner: 'terminal', budget }))).toContain('Budget: session 2 dispatches')
+    expect(ownerLineCopy(status({ owner: 'unreadable', budget }))).toContain('Budget: session 2 dispatches')
   })
 
   it('no budget clause when the status carries none', () => {
@@ -109,11 +118,11 @@ describe('noteCopy', () => {
     expect(line).toContain("didn't post (boom)")
   })
 
-  it('escalation-failed — unclaimed-scope names the trigger and the claim', () => {
-    const outcome = { kind: 'unclaimed-scope' as const, scope: 'plan-gate' as const, claimPath: '/x', keys: ['planApproved' as const] }
+  it('escalation-failed — terminal-owned names the trigger and the terminal cockpit', () => {
+    const outcome = { kind: 'terminal-owned' as const, since: '2026-01-01T14:02:00Z' }
     const line = noteCopy({ kind: 'escalation-failed', number: 52, needsHumanLabel: 'needs human', triggerLabel: 'plan approved', outcome })
-    expect(line).toContain('removing plan approved needs the plan gate claim')
-    expect(line).toContain('needs human')
+    expect(line).toContain('removing plan approved was refused')
+    expect(line).toContain('owned by your terminal cockpit')
   })
 
   it('escalation-failed — any other outcome falls back to writeOutcomeCopy', () => {
@@ -163,42 +172,28 @@ describe('observationClause', () => {
     expect(clause).not.toContain('no agent was attached')
   })
 
-  it('refused — plan-gate scope on liveness-reset gets the dedicated plan-gate copy', () => {
-    const clause = observationClause([record({ kind: 'liveness-reset', number: 24, outcome: 'refused', scope: 'plan-gate' })])
-    expect(clause).toContain('moving it back needs the plan gate too')
-  })
-
-  it('refused — every other kind has no plan-gate copy, so a plan-gate scope still falls back to the dispatch-released line', () => {
-    const clause = observationClause([record({ kind: 'cycle-cap', number: 25, outcome: 'refused', scope: 'plan-gate' })])
-    expect(clause).toContain("didn't escalate #25 — dispatch was released mid-pass.")
-  })
-
-  it('refused — a non-plan-gate scope always uses the dispatch-released copy', () => {
-    expect(observationClause([record({ kind: 'liveness-reset', number: 26, outcome: 'refused', scope: 'dispatch' })])).toContain("didn't reset #26 — dispatch was released mid-pass.")
-    expect(observationClause([record({ kind: 'liveness-reset', number: 27, outcome: 'refused', scope: null })])).toContain("didn't reset #27 — dispatch was released mid-pass.")
+  it('refused — every kind reads as the terminal cockpit taking this repo mid-pass', () => {
+    expect(observationClause([record({ kind: 'liveness-reset', number: 26, outcome: 'refused' })])).toContain("didn't reset #26 — your terminal cockpit took this repo mid-pass.")
+    expect(observationClause([record({ kind: 'cycle-cap', number: 27, outcome: 'refused' })])).toContain("didn't escalate #27 — your terminal cockpit took this repo mid-pass.")
   })
 })
 
 describe('controlFor', () => {
-  it('nobody gets no control at all', () => {
-    expect(controlFor(status({ owner: 'nobody' }))).toBeNull()
+  it('app, none, and unreadable get no control at all', () => {
+    expect(controlFor(status({ owner: 'app' }))).toBeNull()
+    expect(controlFor(status({ owner: 'none' }))).toBeNull()
+    expect(controlFor(status({ owner: 'unreadable' }))).toBeNull()
   })
 
-  it('cockpit offers Take dispatch', () => {
-    expect(controlFor(status({ owner: 'cockpit' }))?.label).toBe('Take dispatch')
-    expect(controlFor(status({ owner: 'cockpit' }))?.action).toBe('dispatch-claim-take')
-  })
-
-  it('app offers Release dispatch', () => {
-    expect(controlFor(status({ owner: 'app' }))?.label).toBe('Release dispatch')
-    expect(controlFor(status({ owner: 'app' }))?.action).toBe('dispatch-claim-release')
+  it('terminal offers Take over…', () => {
+    expect(controlFor(status({ owner: 'terminal' }))?.label).toBe('Take over…')
   })
 })
 
 describe('budgetNoteLines', () => {
   it('empty when this app does not own dispatch, even with a budget present', () => {
     const budget = { line: null, problem: null, notes: [{ kind: 'held' as const, number: 1, line: 'held' }] }
-    expect(budgetNoteLines(status({ owner: 'cockpit', budget }))).toEqual([])
+    expect(budgetNoteLines(status({ owner: 'terminal', budget }))).toEqual([])
   })
 
   it('empty when there is no budget at all', () => {

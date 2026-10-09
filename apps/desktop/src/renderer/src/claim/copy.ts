@@ -66,9 +66,9 @@ export function movedCopy(current: readonly string[], readAt: string): { readonl
 }
 
 /** One line per `WriteOutcome` arm (the plan's own **Results** table) —
- *  `unclaimed-scope`/`claim-unreadable` are rendered by name for
- *  exhaustiveness, though unreachable here: opt-in touches no plan-gate
- *  key. */
+ *  `terminal-owned`/`ownership-unreadable` are rendered by name for
+ *  exhaustiveness, though unreachable here: the opt-in claim only ever
+ *  writes while this app owns the repository. */
 export function writeOutcomeCopy(number: number, outcome: WriteOutcome): { readonly line: string; readonly note: string | null } {
   switch (outcome.kind) {
     case 'applied':
@@ -96,8 +96,8 @@ export function writeOutcomeCopy(number: number, outcome: WriteOutcome): { reado
       return { line: `Couldn't re-read #${String(number)} before writing.`, note: 'The item is no longer available. Nothing was written.' }
     case 'unresolvable-label':
       return { line: "This repository's label vocabulary doesn't resolve.", note: `Check the following keys in .claude/port.config.json's labels: ${outcome.keys.join(', ')}.` }
-    case 'unclaimed-scope':
-    case 'claim-unreadable':
-      return { line: 'Blocked by the plan-gate claim.', note: 'This should be unreachable for opt-in — please report it.' }
+    case 'terminal-owned':
+    case 'ownership-unreadable':
+      return { line: 'Blocked by repository ownership.', note: 'This should be unreachable for opt-in — please report it.' }
   }
 }

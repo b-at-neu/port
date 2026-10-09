@@ -14,22 +14,18 @@ import type { NeedsYouItem as NeedsYouItemModel } from '../../../shared/board/ne
 import { registerListNavigator } from '../shell/stores'
 import { needsYouLeadCopy } from './copy'
 import { actionFor, runAction } from './actions'
-import { RelayForm } from './relay-form'
 import { toast } from 'sonner'
 
 function itemKey(item: NeedsYouItemModel): string {
-  if (item.kind === 'question') return `question:${item.pending.sessionId}#${item.pending.agentId ?? ''}`
   return `${item.kind}:${String(item.repoId)}:${String(item.number)}`
 }
 
 function hasDetail(item: NeedsYouItemModel): boolean {
-  if (item.kind === 'question') return true
   if (item.kind === 'held') return item.held.reason === 'contended' && item.held.contention !== null
   return false
 }
 
 function DetailBody({ item }: { readonly item: NeedsYouItemModel }) {
-  if (item.kind === 'question') return <RelayForm pending={item.pending} />
   if (item.kind === 'held' && item.held.contention !== null) {
     return (
       <div className="border-t border-border px-4 py-2 text-meta text-muted-foreground">
@@ -87,7 +83,6 @@ export function NeedsYouScreen() {
         toast(message)
         void refresh()
       },
-      onExpand: () => setExpandedKey((current) => (current === key ? null : key)),
     })
   }
 
@@ -118,9 +113,6 @@ export function NeedsYouScreen() {
           </div>
         ) : (
           <>
-            {!snapshotQuery.data.relay.ok ? (
-              <p className="px-4 py-1 text-meta text-muted-foreground">Can&apos;t read agent transcripts, so a waiting question would not show here.</p>
-            ) : null}
             {items.length === 0 ? (
               <EmptyState icon={Inbox} message="Nothing needs you right now." className="px-4 py-6" data-slot="needs-you-empty" />
             ) : (

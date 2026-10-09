@@ -2,6 +2,7 @@
 // registered repository.
 import type { RepoId, RepositoryEntry } from '../../../shared/repos'
 import type { BoardSnapshot } from '../../../shared/board/types'
+import type { DispatchOwner } from '../../../shared/dispatch/types'
 import type { ReconciledItem } from '../../../shared/state/types'
 import { needsYouItems, repoNeedsYou } from '../../../shared/board/needs-you'
 import { PHASE_NAMES } from '../lib/phase'
@@ -19,6 +20,9 @@ export interface ReadyPipelineRow {
   readonly repoId: RepoId
   readonly name: string
   readonly pill: { readonly status: PillStatus; readonly label: string }
+  /** This repository's own cockpit ownership — `'none'` before the first read. */
+  readonly owner: DispatchOwner
+  readonly unreadableMessage: string | null
   readonly inFlight: number
   readonly needsYou: boolean
   readonly sessions: readonly PipelineSessionRow[]
@@ -49,11 +53,15 @@ function sessionsFor(repoId: RepoId, items: readonly ReconciledItem[], needsYouN
   return rows
 }
 
-function pillFor(snapshot: BoardSnapshot | undefined, repoId: RepoId): { readonly status: PillStatus; readonly label: string } {
+/** Ownership gates the pill ahead of run state — `terminal`/`unreadable` each have their
+ *  own fixed pill, never `dispatching`/`draining`/`paused`. */
+function pillFor(snapshot: BoardSnapshot | undefined, repoId: RepoId, owner: DispatchOwner): { readonly status: PillStatus; readonly label: string } {
   if (snapshot === undefined) return { status: 'idle', label: 'Paused' }
   const { store } = snapshot.runStates
   if (store.kind === 'unread') return { status: 'idle', label: 'Paused' }
   if (store.kind === 'unreadable') return { status: 'danger', label: 'Paused' }
+  if (owner === 'unreadable') return { status: 'danger', label: 'Paused' }
+  if (owner === 'terminal') return { status: 'idle', label: 'Terminal' }
 
   const runState = snapshot.runStates.repositories.find((r) => r.repoId === repoId)?.state ?? 'paused'
   if (runState === 'dispatching') return { status: 'success', label: 'Running' }
@@ -80,12 +88,16 @@ export function pipelinesModel(repos: readonly RepositoryEntry[], snapshot: Boar
     const items = repoState !== undefined && repoState.ok ? repoState.items : []
     const tick = snapshot?.tick.find((t) => t.repoId === entry.id)
     const numbers = needsYouNumbers.get(entry.id) ?? new Set<number>()
+    const dispatchStatus = snapshot?.dispatch.find((d) => d.repoId === entry.id)
+    const owner: DispatchOwner = dispatchStatus?.owner ?? 'none'
 
     return {
       ready: true,
       repoId: entry.id,
       name: entry.config.repo,
-      pill: pillFor(snapshot, entry.id),
+      pill: pillFor(snapshot, entry.id, owner),
+      owner,
+      unreadableMessage: dispatchStatus?.unreadableMessage ?? null,
       inFlight: tick?.claims.length ?? 0,
       needsYou: repoNeedsYou(needsYou, entry.id) > 0,
       sessions: sessionsFor(entry.id, items, numbers),

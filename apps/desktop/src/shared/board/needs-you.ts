@@ -1,7 +1,6 @@
 // Pure "needs you" derivation, built on `projectBoard`'s own rows so
 // `actions`/`decisions` availability is reused, never re-derived.
 import type { BudgetNote } from '../dispatch/types'
-import type { RelayPending } from '../relay/types'
 import type { RepoId } from '../repos'
 import type { RepositoryState } from '../state/types'
 import type { TickClaim, TickHeld } from '../tick/types'
@@ -11,7 +10,7 @@ import type { BoardItemRow, BoardSnapshot } from './types'
 /** The four label-keyed kinds, each carrying the row they came from. */
 export type RowNeedsYouKind = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'blocked'
 
-export type NeedsYouKind = RowNeedsYouKind | 'question' | 'budget' | 'held' | 'stalled'
+export type NeedsYouKind = RowNeedsYouKind | 'budget' | 'held' | 'stalled'
 
 interface NeedsYouItemBase {
   readonly repoId: RepoId | null
@@ -19,7 +18,7 @@ interface NeedsYouItemBase {
   readonly number: number | null
   readonly title: string | null
   readonly url: string | null
-  /** Known only for a relay question; `null` otherwise, since no other item carries an `updatedAt` today. */
+  /** `null` for every current kind — no kind left carries a real timestamp. */
   readonly at: string | null
   /** The board row at this (repoId, number), when one exists — lets `held`/`stalled` reuse its `decisions.unblock` too. */
   readonly matchedRow: BoardItemRow | null
@@ -31,7 +30,6 @@ export type NeedsYouItem =
   | (NeedsYouItemBase & { readonly kind: 'ready-to-merge'; readonly row: BoardItemRow })
   | (NeedsYouItemBase & { readonly kind: 'needs-human'; readonly row: BoardItemRow })
   | (NeedsYouItemBase & { readonly kind: 'blocked'; readonly row: BoardItemRow })
-  | (NeedsYouItemBase & { readonly kind: 'question'; readonly pending: RelayPending })
   | (NeedsYouItemBase & { readonly kind: 'budget'; readonly note: BudgetNote })
   | (NeedsYouItemBase & { readonly kind: 'held'; readonly held: TickHeld })
   | (NeedsYouItemBase & { readonly kind: 'stalled'; readonly claim: TickClaim })
@@ -92,23 +90,6 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date): readonly Need
     const viewer = viewerByRepo.get(row.item.repoId) ?? null
     if (viewer !== null && !row.item.assignees.includes(viewer)) continue
     items.push({ kind, repoId: row.item.repoId, repo: row.item.repo, number: row.item.number, title: row.item.title, url: row.item.url, at: null, matchedRow: row, row })
-  }
-
-  if (snapshot.relay.ok) {
-    for (const pending of snapshot.relay.pending) {
-      const matched = pending.repoId !== null && pending.number !== null ? rowByKey.get(rowKey(pending.repoId, pending.number)) : undefined
-      items.push({
-        kind: 'question',
-        repoId: pending.repoId,
-        repo: matched?.item.repo ?? null,
-        number: pending.number,
-        title: matched?.item.title ?? null,
-        url: matched?.item.url ?? null,
-        at: pending.lastActivityAt,
-        matchedRow: matched ?? null,
-        pending,
-      })
-    }
   }
 
   for (const report of snapshot.tick) {

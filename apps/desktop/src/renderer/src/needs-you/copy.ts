@@ -1,24 +1,9 @@
 // Every lead-copy string the Needs you screen renders, one switch over
 // `NeedsYouItem.kind` — a new kind is a compile error, never a blank row.
 import type { NeedsYouItem } from '../../../shared/board/needs-you'
-import type { RelayPending } from '../../../shared/relay/types'
 
 function labelOf(item: Pick<NeedsYouItem, 'number'>): string {
   return item.number !== null ? `#${String(item.number)}` : 'this item'
-}
-
-function questionLeadCopy(pending: RelayPending, label: string): string {
-  switch (pending.kind) {
-    case 'questions': {
-      const [first, ...rest] = pending.questions
-      const more = rest.length > 0 ? ` (+${String(rest.length)} more)` : ''
-      return `${label} is asking: ${first?.text ?? ''}${more}`
-    }
-    case 'blocked':
-      return `${label} needs a decision: ${pending.request}`
-    case 'usage-limit':
-      return `${label} hit the session limit. Nothing moves until the window resets.`
-  }
 }
 
 /** The reason text behind `needs-human`, or `null` for the fallback copy. */
@@ -35,8 +20,6 @@ export function needsYouLeadCopy(item: NeedsYouItem): string {
       return `Review the plan for ${label}`
     case 'ready-to-merge':
       return `${label} is ready to merge`
-    case 'question':
-      return questionLeadCopy(item.pending, label)
     case 'needs-human':
       return `Unblock ${label}: ${unblockReason(item) ?? 'escalated without a reason'}`
     case 'blocked':

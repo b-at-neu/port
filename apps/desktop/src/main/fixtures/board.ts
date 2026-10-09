@@ -12,7 +12,6 @@ import type { LabelKey, LabelVocabulary } from '../../shared/labels/vocabulary'
 import { LABEL_DEFAULTS } from '../../shared/labels/defaults'
 import type { PipelineFetch, PipelineItem, QueriedLabel } from '../../shared/github/types'
 import type { AgentRecord } from '../../shared/sessions/types'
-import type { RelayPending } from '../../shared/relay/types'
 import { DEFAULT_POLL_POLICY, SOURCE_BASE_INTERVAL_MS } from '../../shared/board/types'
 import type { BoardSnapshot, RepositoryHealth, SourceKind } from '../../shared/board/types'
 import type { RepositoryState } from '../../shared/state/types'
@@ -169,32 +168,13 @@ function notReadyRepositoryState(): RepositoryState {
   return { ok: false, repoId: entry.id, displayName: entry.displayName, reason: 'not-ready', problem: entry.problem }
 }
 
-/** #315: #38's own `impl-agent` has a question waiting — the Needs you
- *  screen's `question` kind, matched onto the same row its `inProgress`
- *  label already produces. */
-function pendingQuestion(now: Date): RelayPending {
-  return {
-    repoId: WIDGETS_ID,
-    number: 38,
-    stage: 'impl-agent',
-    sessionId: 'fixture-session-impl-38',
-    agentId: 'fixture-agent-impl-38',
-    parentSessionLabel: 'cockpit session',
-    agentLabel: 'impl-agent #38',
-    lastActivityAt: offsetMinutes(now, -5),
-    kind: 'questions',
-    questions: [{ index: 0, text: 'Should the retry backoff be linear or exponential?' }],
-  }
-}
-
 /** `tick` is built with the real `planTick`, over a fresh `createDispatchLedger`
  *  — a process-scoped ledger, same as the real app gets on every restart, so
- *  a single invocation never carries state across repositories. `relay`
- *  carries #38's own pending question (above); `dispatch` carries one
- *  `escalated` budget note on #44, the Needs you screen's own `budget` kind
- *  — no dispatcher is wired in fixture mode otherwise (PIPELINE.md's own "no
- *  gh or claude calls" rule applies here too: nothing in this module spawns
- *  anything). */
+ *  a single invocation never carries state across repositories. `dispatch`
+ *  carries one `escalated` budget note on #44, the Needs you screen's own
+ *  `budget` kind — no dispatcher is wired in fixture mode otherwise
+ *  (PIPELINE.md's own "no gh or claude calls" rule applies here too: nothing
+ *  in this module spawns anything). */
 export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'populated'): BoardSnapshot {
   const ready = readyRepositoryState(now, scenario)
   const notReady = notReadyRepositoryState()
@@ -217,7 +197,6 @@ export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'pop
     health: [repositoryHealth(now)],
     policy: DEFAULT_POLL_POLICY,
     tick,
-    relay: { ok: true, pending: scenario === 'empty' ? [] : [pendingQuestion(now)], checked: 1, unreached: 0, scannedAt: now.toISOString() },
     // #314: acme/widgets reads `dispatching` — the ordinary, nothing-paused
     // state a fresh registration starts in.
     runStates: { store: { kind: 'loaded' }, repositories: [{ repoId: WIDGETS_ID, state: 'dispatching', since: now.toISOString() }] },
@@ -229,7 +208,8 @@ export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'pop
         owner: 'app',
         state: { kind: 'idle' },
         runState: 'dispatching',
-        claimedAt: now.toISOString(),
+        ownedSince: now.toISOString(),
+        unreadableMessage: null,
         budget: {
           line: null,
           problem: null,

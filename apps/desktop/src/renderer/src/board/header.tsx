@@ -23,9 +23,8 @@ import type { RepositoryState } from '../../../shared/state/types'
 import { worstHealth } from '../../../shared/board/project'
 import type { BoardGroupBy } from './sections'
 import { haltButtonLabel, haltPending, runHalt, subscribeDispatch } from './dispatch'
-import { planGateHeaderButtonLabel, rateLimitCopy, sourceHealthCopy } from './copy'
+import { rateLimitCopy, sourceHealthCopy } from './copy'
 import { openClaimDialog } from '../claim/controller'
-import { openGateDialog } from '../gate/controller'
 
 const SOURCE_KINDS: readonly SourceKind[] = ['github', 'sessions', 'worktrees', 'denials']
 
@@ -130,9 +129,6 @@ export function BoardHeader({ snapshot, now, refreshing, onRefresh, group, onGro
           <Button variant="ghost" size="small" onClick={onRefresh} disabled={refreshing}>
             <RefreshCw aria-hidden="true" className={refreshing ? 'size-3.5 animate-spin' : 'size-3.5'} />
             Refresh
-          </Button>
-          <Button variant="outline" size="small" onClick={openGateDialog}>
-            {planGateHeaderButtonLabel()}
           </Button>
           <Button size="small" onClick={openClaimDialog}>
             Work on ticket

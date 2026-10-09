@@ -11,7 +11,7 @@ import type { ItemsByNumberFetch, ResolvedItem } from '../../shared/github/types
 import type { WriteOutcome } from '../../shared/writes/types'
 import { readAuditLog } from '../writes/audit'
 import type { GhRunner } from '../writes/apply'
-import type { GitRunner } from '../writes/claim'
+import type { GitRunner } from '../dispatch/ownership'
 import { applyItemDecision, defaultApplyItemDecisionDeps } from './decide'
 import type { ApplyItemDecisionDeps } from './decide'
 import type { ReadyEntry } from './apply'
@@ -100,7 +100,6 @@ function snapshotOf(repositories: readonly RepositoryState[]): BoardSnapshot {
     health: [],
     policy: { baseIntervalMs: { github: 60_000, sessions: 15_000, worktrees: 15_000, denials: 15_000 }, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: 30_000 },
     tick: [],
-    relay: { ok: true, pending: [], checked: 0, unreached: 0, scannedAt: '2026-01-01T00:00:00Z' },
     runStates: { store: { kind: 'loaded' }, repositories: [] },
     nextWakeupAt: null,
     emittedAt: '2026-01-01T00:00:00Z',

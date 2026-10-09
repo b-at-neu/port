@@ -1,4 +1,4 @@
-// Honours the cockpit's unprompted `autoPlan` swap while this app holds the `plan-gate` claim, not `dispatch`.
+// Honours the cockpit's unprompted `autoPlan` swap while this app owns the repository.
 import type { BoardSnapshot } from '../../shared/board/types'
 import type { RunState } from '../../shared/dispatch/types'
 import type { RepoId } from '../../shared/repos'
@@ -7,14 +7,14 @@ import type { AutoApprovePlanParams } from '../actions/gate'
 import { autoApprovableFrom } from '../tick/dispatchable'
 import type { RegistryDeps } from '../registry'
 import { listRepositories as defaultListRepositories } from '../registry'
-import type { ReadGateClaimParams } from '../writes/claim'
-import type { ClaimRead } from '../../shared/writes/types'
+import type { ReadOwnershipParams } from './ownership'
+import type { OwnershipRead } from './ownership'
 import type { WriteOutcome } from '../../shared/writes/types'
 
 export interface AutoPlannerDeps {
   readonly listRepositories: typeof defaultListRepositories
   readonly registryDeps: RegistryDeps
-  readonly readGateClaim: (params: ReadGateClaimParams) => Promise<ClaimRead>
+  readonly readOwnership: (params: ReadOwnershipParams) => Promise<OwnershipRead>
   /** The same per-repository run state `main/dispatch/dispatcher.ts` reads, never a second store. */
   readonly runState: (repoId: RepoId) => RunState
   readonly autoApprove: (params: AutoApprovePlanParams) => Promise<WriteOutcome>
@@ -43,8 +43,8 @@ export function createAutoPlanner(deps: AutoPlannerDeps): AutoPlanner {
     if (inFlight.has(entry.id)) return
     inFlight.add(entry.id)
     try {
-      const claim = await deps.readGateClaim({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
-      if (claim.state !== 'held' || !claim.scopes.includes('plan-gate')) return
+      const ownership = await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
+      if (ownership.kind !== 'app') return
 
       const tick = snapshot.tick.find((t) => t.repoId === entry.id)
       if (tick === undefined) return

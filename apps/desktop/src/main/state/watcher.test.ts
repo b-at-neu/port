@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -8,7 +8,6 @@ import type { CommandResult } from '../platform/run'
 import type { GhResult } from '../platform/gh'
 import type { BoardSnapshot } from '../../shared/board/types'
 import { buildPipelineQuery } from '../github/query'
-import type { SessionReader } from '../sessions/sdk'
 import { createPipelineWatcher } from './watcher'
 import type { TimerFactory, TimerHandle } from './watcher'
 
@@ -427,53 +426,5 @@ describe('createPipelineWatcher — stop() and nextWakeupAt', () => {
 
     watcher.stop()
     expect(watcher.snapshot().nextWakeupAt).toBeNull()
-  })
-})
-
-describe('createPipelineWatcher — relay wiring (#107)', () => {
-  it('runs the relay reader right after the sessions scan and publishes it on the snapshot', async () => {
-    const now = () => new Date('2026-01-01T00:00:00.000Z')
-    const timer = makeFakeTimer()
-    const waiter = makeSnapshotWaiter()
-    const root = await mkdtemp(join(tmpdir(), 'port-watcher-repo-'))
-    const claudeHome = await mkdtemp(join(tmpdir(), 'port-watcher-claude-'))
-
-    const sessionId = '11111111-2222-3333-4444-555555555555'
-    const agentId = 'a1b2c3d4e5'
-    const projectDir = join(claudeHome, 'projects', 'project-a')
-    await mkdir(projectDir, { recursive: true })
-    await writeFile(join(projectDir, `${sessionId}.jsonl`), JSON.stringify({ uuid: 'u0', timestamp: '2026-01-01T00:00:00.000Z', cwd: root, type: 'user', message: { role: 'user', content: 'go' } }) + '\n')
-    const subagentsDir = join(projectDir, sessionId, 'subagents')
-    await mkdir(subagentsDir, { recursive: true })
-    await writeFile(join(subagentsDir, `agent-${agentId}.meta.json`), JSON.stringify({ agentType: 'plan-agent', description: '#107 relay loop', model: 'opus' }))
-    await writeFile(
-      join(subagentsDir, `agent-${agentId}.jsonl`),
-      JSON.stringify({
-        uuid: 'u1',
-        timestamp: '2026-01-01T00:00:00.000Z',
-        type: 'assistant',
-        message: { role: 'assistant', content: ['Need a decision.', '', 'QUESTIONS FOR HUMAN:', '1. Which branch is base?'].join('\n') },
-      }) + '\n',
-    )
-
-    const sessionReader: SessionReader = () =>
-      Promise.resolve({ ok: true, sessions: [{ sessionId, summary: null, lastModified: '2026-01-01T00:00:00.000Z', customTitle: null, firstPrompt: null, gitBranch: null, cwd: root }] })
-
-    const watcher = createPipelineWatcher({
-      repositories: [readyEntry('repo-a', root, 'o/a')],
-      onSnapshot: waiter.onSnapshot,
-      now,
-      setTimer: timer.factory,
-      git: fakeGit({ worktreeList: 0 }),
-      gh: () => Promise.resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' } satisfies GhResult),
-      sessionReader,
-      claudeHome,
-    })
-
-    const snap = await watcher.refresh()
-    expect(snap.relay.ok).toBe(true)
-    if (!snap.relay.ok) throw new Error('unreachable')
-    expect(snap.relay.pending).toHaveLength(1)
-    expect(snap.relay.pending[0]).toMatchObject({ kind: 'questions', number: 107, stage: 'plan-agent', sessionId, agentId })
   })
 })
