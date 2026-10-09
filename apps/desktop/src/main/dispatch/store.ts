@@ -1,8 +1,5 @@
-// The per-repository run-state store (#314, replacing #110's single global
-// drain switch): read, version gate, atomic write — the same idiom
-// `main/registry/store.ts` already follows for `registry.json`. Takes its
-// directory as a parameter (main passes `app.getPath('userData')`, tests
-// pass a `mkdtemp`), so nothing in this module imports Electron.
+// The per-repository run-state store: read, version gate, atomic write. Takes its directory as a
+// parameter so nothing in this module imports Electron.
 import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '../platform/files'
 import { pathOps } from '../platform/paths'
 import type { RepoId } from '../../shared/repos'
@@ -32,22 +29,15 @@ interface V2FileShape {
 export type SetRunStateResult = { readonly ok: true } | { readonly ok: false; readonly reason: 'unwritable' | 'unreadable'; readonly message: string }
 
 export interface RunStateStore {
-  /** Synchronous, always answerable — a repository with no entry, or any
-   *  entry while the store is `unread`/`unreadable`, reads paused with
-   *  `since: null` (a not-yet-`load()`-ed store never reads as dispatching). */
+  /** Synchronous, always answerable — a repository with no entry reads paused with `since: null`. */
   readonly current: (repoId: RepoId) => RepoRunState
   readonly status: () => RunStateStoreStatus
   readonly snapshot: (repoIds: readonly RepoId[]) => RunStatesSnapshot
-  /** Resolves the on-disk state once, at startup. `registered` is called
-   *  only for a v1 file, to migrate every currently-registered repository
-   *  onto its own entry — a v2 file never calls it. */
+  /** Resolves the on-disk state once, at startup. `registered` is called only for a v1 file, to
+   *  migrate every currently-registered repository onto its own entry. */
   readonly load: (registered: () => Promise<readonly RepoId[] | null>) => Promise<void>
-  /** Writes every named repository's new state atomically, then updates
-   *  memory — except a failed `set(..., 'paused' | 'draining', ...)` still
-   *  applies in memory (the operator got the stop they asked for, with the
-   *  caveat that it will not survive a restart), while a failed
-   *  `set(..., RUN_TARGET.run, ...)` changes nothing at all (a run that did
-   *  not persist would mean the screen and the next launch disagree). */
+  /** A failed `set(..., 'paused' | 'draining', ...)` still applies in memory; a failed
+   *  `set(..., RUN_TARGET.run, ...)` changes nothing at all. */
   readonly set: (repoIds: readonly RepoId[], state: RunState, at: string) => Promise<SetRunStateResult>
   readonly forget: (repoId: RepoId) => Promise<SetRunStateResult>
   readonly path: string
@@ -70,12 +60,8 @@ export function createRunStateStore(dir: string): RunStateStore {
   let storeStatus: RunStateStoreStatus = { kind: 'unread' }
   const entries = new Map<RepoId, RepoRunState>()
 
-  // Reads `entries` directly, never gated on `storeStatus` — `set()` is the
-  // only writer of `entries`, and it already refuses to populate one while
-  // the store is unreadable, so a repository with no entry reads paused
-  // regardless of load status, and one `set()` has written reads back
-  // immediately even before `load()` has run (the same "no `load()` needed
-  // for `set()` to take effect in memory" rule the old drain store followed).
+  // Reads `entries` directly, never gated on `storeStatus`: one `set()` has written reads back
+  // immediately even before `load()` has run.
   function currentOf(repoId: RepoId): RepoRunState {
     return entries.get(repoId) ?? pausedDefault(repoId)
   }
@@ -98,11 +84,7 @@ export function createRunStateStore(dir: string): RunStateStore {
     async load(registered): Promise<void> {
       const result = await readJsonFile<unknown>(path)
       if (!result.ok) {
-        // A missing file reads as no entries — every repository paused —
-        // rather than a v1-open default: a never-drained v1 user had no
-        // file either, and a missing file can't be told apart from one
-        // deleted to recover from an unreadable state (the plan's own
-        // **Risks / notes**).
+        // A missing file reads as no entries — every repository paused — never a v1-open default.
         storeStatus = result.kind === 'not-found' ? { kind: 'loaded' } : { kind: 'unreadable', message: result.message, path }
         return
       }
@@ -126,8 +108,7 @@ export function createRunStateStore(dir: string): RunStateStore {
         }
         const ids = await registered()
         if (ids === null) {
-          // The registry itself couldn't be read — every repository paused,
-          // the v1 file untouched, retried next launch.
+          // The registry itself couldn't be read — every repository paused, retried next launch.
           storeStatus = { kind: 'loaded' }
           return
         }
@@ -137,15 +118,12 @@ export function createRunStateStore(dir: string): RunStateStore {
           entries.set(id, v1.draining ? { repoId: id, state: 'paused', since } : { repoId: id, state: 'dispatching', since: now })
         }
         storeStatus = { kind: 'loaded' }
-        // Write v2 at once; if it fails, the migrated state stays in memory
-        // and the v1 file is left alone, so the next launch retries.
+        // If this fails, the migrated state stays in memory and the v1 file is left alone.
         await writeV2()
         return
       }
 
-      // version === 2 — `Array.isArray` narrows to `any[]`, losing the
-      // element type, so the cast below is what keeps `raw.id`/`raw.state`/
-      // `raw.since` typed as `unknown` rather than `any`.
+      // The cast below keeps raw.id/raw.state/raw.since typed as `unknown` rather than `any`.
       const rawRepositories = (value as Partial<V2FileShape>).repositories
       if (!Array.isArray(rawRepositories)) {
         storeStatus = { kind: 'unreadable', message: `${path} is not a dispatch file`, path }
@@ -163,10 +141,7 @@ export function createRunStateStore(dir: string): RunStateStore {
 
     async set(repoIds, state, at): Promise<SetRunStateResult> {
       if (storeStatus.kind === 'unreadable') {
-        // Every repository already reads paused, and still will after a
-        // restart — nothing to write. Only `dispatching`/`draining` are
-        // refused outright, since those would claim a state this store
-        // cannot actually persist.
+        // Every repository already reads paused and still will after a restart — nothing to write.
         if (state === 'paused') return { ok: true }
         return { ok: false, reason: 'unreadable', message: storeStatus.message }
       }
@@ -177,8 +152,7 @@ export function createRunStateStore(dir: string): RunStateStore {
       if (written.ok) return { ok: true }
 
       if (state === RUN_TARGET.run) {
-        // Fail closed toward dispatching nothing: a run that did not
-        // persist must not disagree with the next launch.
+        // Fail closed toward dispatching nothing.
         for (const id of repoIds) {
           const prior = previous.get(id)
           if (prior === undefined) entries.delete(id)

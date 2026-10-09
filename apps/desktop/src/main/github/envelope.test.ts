@@ -3,9 +3,8 @@ import { classifyFailure, collectTruncated, collectUnavailable, parseEnvelope } 
 import type { AliasInfo } from './envelope'
 import type { GhResult } from '../platform/gh'
 
-// Captured live against b-at-neu/port (#76's plan, Decision 3): a
-// nonexistent aliased `issue(number: 999999)` beside three intact aliases,
-// `gh api graphql` exiting 1 while `data` stays fully usable.
+// Captured live: a nonexistent aliased issue(number: 999999) beside three intact aliases, gh api
+// graphql exiting 1 while data stays fully usable.
 const PARTIAL_ERROR_FIXTURE =
   '{"data":{"repository":{"i0":{"totalCount":0,"nodes":[]},"s0":null,"s1":{"number":76},"repoLabels":{"totalCount":27,"nodes":[{"name":"accessibility"},{"name":"bug"}]}},"rateLimit":{"cost":1,"remaining":4942,"resetAt":"2026-09-05T14:47:43Z"}},"errors":[{"type":"NOT_FOUND","path":["repository","s0"],"locations":[{"line":1,"column":165}],"message":"Could not resolve to an Issue with the number of 999999."}]}'
 
@@ -82,9 +81,7 @@ describe('classifyFailure', () => {
   })
 
   it('no failure path produces the ok verdict alongside an empty-looking envelope claim', () => {
-    // Every branch other than the final 'ok' returns a distinct kind, never
-    // silently reusing 'ok' — enumerate every failure kind this function can
-    // return and confirm none of them is the string 'ok'.
+    // Every branch other than the final 'ok' returns a distinct kind, never silently reusing 'ok'.
     const cases: FailureCase[] = [
       [{ ok: false, kind: 'cwd-missing', cwd: '/nope' }, undefined],
       [{ ok: false, kind: 'signalled', signal: 'SIGKILL', stderr: '' }, undefined],

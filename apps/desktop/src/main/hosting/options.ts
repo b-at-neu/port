@@ -1,50 +1,23 @@
-// #98: pure mapping from `SessionStartMode` to `Options`, holding every
-// constant in one place. `sessionId` is deliberately never passed — the
-// `init` message stays the single source of the id (see shared/hosting/
-// types.ts's "Two identifiers, never one").
+// Pure mapping from SessionStartMode to Options. sessionId is deliberately never passed; init stays the single source.
 import type { CanUseTool, Options } from './sdk'
 import type { PluginRequest, SessionDefaults, SessionStartMode } from '../../shared/hosting/types'
 
-/** #101: explicit, never omitted — omitting it matches today's CLI default,
- *  but that is an SDK default this app does not own. `[]` would drop the
- *  repository's `permissions.deny`, its `enabledPlugins` (so no installed
- *  `port`), and `CLAUDE.md`; under `permissionMode: 'dontAsk'` elsewhere in
- *  this pipeline, a session with no allow rules can do nothing. */
+/** Explicit, never omitted — `[]` would drop the repository's deny rules, plugins, and `CLAUDE.md`. */
 export const SETTING_SOURCES: readonly ('user' | 'project' | 'local')[] = ['user', 'project', 'local']
 
 export interface BuildSessionOptionsParams {
   readonly mode: SessionStartMode
-  /** The ready registry entry's own path — never a second-guessed cwd. */
   readonly cwd: string
-  /** #97's resolved executable — never left to the SDK's own bundled
-   *  fallback. */
+  /** Never left to the SDK's own bundled fallback. */
   readonly executablePath: string
-  /** #99: this handle's own permission broker's `canUseTool`. */
   readonly canUseTool: CanUseTool
-  /** #101: which plugin path this session asked for — the `repository`
-   *  source adds `plugins: [{ type: 'local', path }]`, so the bundled CLI
-   *  overrides the installed copy with the working tree; the `installed`
-   *  source passes no `plugins` at all, loading `port@port` from
-   *  `enabledPlugins` exactly as every other repository does today. Never
-   *  a `skills` option key here — a command runs as a typed slash command
-   *  in the live session, never through the Skill-tool filter (see
-   *  `capabilities.ts`'s own header). */
+  /** `repository` adds a local plugin entry overriding the installed copy; `installed` passes none. */
   readonly plugin: PluginRequest
-  /** An operator's persisted session defaults — `permissionMode` is
-   *  read directly, and `model` is set only when non-null, so leaving it
-   *  `null` matches Claude Code's own default rather than naming one. */
+  /** `model` is set only when non-null, matching Claude Code's own default. */
   readonly defaults: SessionDefaults
 }
 
-/** `includePartialMessages: true` now, not later — #219's "text appears as
- *  it arrives" is impossible without it. `permissionMode` is set explicitly
- *  rather than omitted (#99) — the CLI flag outranks a `defaultMode` in the
- *  user's own settings, so leaving it out would let a `bypassPermissions`
- *  default silently skip the host prompt entirely. It names the operator's
- *  own `defaults.permissionMode` — the allowlisted value `session:defaults:set`
- *  validated on the way in. `permissionPromptToolName` is never set: the SDK throws
- *  when both it and `canUseTool` are present. `settingSources` is always the
- *  three sources above (#101). */
+/** `permissionMode` is always explicit, so a `bypassPermissions` default can't silently skip the host prompt. */
 export function buildSessionOptions(params: BuildSessionOptionsParams): Options {
   const base: Options = {
     cwd: params.cwd,

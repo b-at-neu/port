@@ -1,36 +1,19 @@
-// The process-scoped dispatch ledger (#105) — this app's own analogue of
-// the cockpit's session-scoped `.temp/dispatch-log.md`, in memory rather
-// than on disk: a restarted app has an empty ledger, so every in-flight item
-// reads `no-record` and is report-only, never a false reset. No timer, no
-// filesystem — `main/state/watcher.ts` owns exactly one of each already.
+// The process-scoped dispatch ledger: this app's own analogue of the cockpit's session-scoped
+// dispatch log, in memory rather than on disk. A restarted app has an empty ledger, never a false reset.
 import type { RepoId } from '../../shared/repos'
 import type { LedgerRow, LedgerState, UnmatchedResult } from '../../../../../scripts/port-tick/liveness'
 import { classifyUnmatched } from '../../../../../scripts/port-tick/liveness'
 import type { RefreshMemoEntry } from '../../../../../scripts/port-tick/gates'
 
 export interface DispatchLedger {
-  /** #106's own call, once it actually dispatches — records the claim at
-   *  `state: 'dispatched'`, carrying over any `resets` a prior row already
-   *  had (a redispatch after a confirmed reset does not forgive a capped
-   *  item, since nothing here ever clears `resets` back to zero). */
+  /** Records the claim at `state: 'dispatched'`, carrying over any `resets` a prior row already had. */
   readonly record: (repoId: RepoId, number: number) => void
-  /** The low-level primitive `observeUnmatched` below is built from — writes
-   *  the row forward only when `classifyUnmatched` returned a `nextState`
-   *  (its `suspect`/`reset` classes); `no-record` and `capped` carry no
-   *  `nextState` and leave the ledger untouched, exactly
-   *  `scripts/port-tick.mjs`'s own orchestration. */
+  /** Writes the row forward only when `classifyUnmatched` returned a `nextState`; `no-record` and
+   *  `capped` leave the ledger untouched. */
   readonly advance: (repoId: RepoId, number: number, result: UnmatchedResult) => void
   readonly rowFor: (repoId: RepoId, number: number) => LedgerRow | undefined
-  /** #292: `plan.ts`'s own call for every unmatched in-flight claim, replacing
-   *  its former `rowFor` + `classifyUnmatched` + `advance` call sequence.
-   *  Classifies and advances the row **at most once per distinct `readAt`**
-   *  (the GitHub read's own `fetchedAt`) — the UI polls roughly every 15s,
-   *  far more often than a fresh GitHub read, and without this memo every
-   *  poll would independently advance `dispatched` → `suspect` → `reset`,
-   *  turning the cockpit's own two-tick debounce into roughly 30 seconds. A
-   *  repeated snapshot over the same read returns the memoized result; a
-   *  `null` `readAt` never advances and is never memoized, since the caller
-   *  has nothing to key the memo on. */
+  /** Classifies and advances the row at most once per distinct `readAt`, so repeated polls over
+   *  the same GitHub read don't independently advance the state past the intended debounce. */
   readonly observeUnmatched: (repoId: RepoId, number: number, readAt: string | null) => UnmatchedResult
 }
 
@@ -87,12 +70,8 @@ export interface UnknownStreaks {
   readonly clear: (repoId: RepoId, number: number) => void
 }
 
-/** The app's own equivalent of the cockpit's `tickState.unknownStreak`
- *  (#265) — a process-scoped `Map` keyed by `(repoId, number)`, counting how
- *  many consecutive ticks a pull request's mergeability has read `UNKNOWN`.
- *  No timer, no filesystem, same shape `createDispatchLedger` already
- *  establishes: an app restart starts every item back at 0, never a false
- *  hold. `get` defaults to 0 for an item never recorded. */
+/** The app's own equivalent of the cockpit's `tickState.unknownStreak` — a process-scoped map
+ *  counting consecutive UNKNOWN mergeability ticks. `get` defaults to 0 for an item never recorded. */
 export function createUnknownStreaks(): UnknownStreaks {
   const rows = new Map<RepoId, Map<number, number>>()
 
@@ -123,11 +102,8 @@ export interface RefreshMemo {
   readonly clear: (repoId: RepoId, number: number) => void
 }
 
-/** The app's own equivalent of the cockpit's `.temp/tick-state.json`
- *  `Refreshed:` record (#292) — a process-scoped `(repoId, number) → { sha,
- *  count }` map, the same lifetime and restart behaviour `createUnknownStreaks`
- *  already establishes: an app restart starts every pull request back at "no
- *  entry", never a false same-SHA escalation. */
+/** The app's own equivalent of the cockpit's `Refreshed:` record — a process-scoped map, same
+ *  restart behaviour as `createUnknownStreaks`: every pull request starts back at "no entry". */
 export function createRefreshMemo(): RefreshMemo {
   const rows = new Map<RepoId, Map<number, RefreshMemoEntry>>()
 

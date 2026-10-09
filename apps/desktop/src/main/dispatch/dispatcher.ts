@@ -1,10 +1,5 @@
-// #326: the app's own dispatch loop — the composition root that turns a
-// `BoardSnapshot` into real stage-session launches, through a
-// `StageLauncher` seam (#327 implements it) rather than a hosted Claude
-// session of its own. `consider` is the one entry point `main/ipc.ts` wires
-// to `onTick`; `status`/`stopFor`/`standDown`/`liveStages`/
-// `liveStageSessions`/`shutdown` serve the renderer's own reads and the quit
-// guard.
+// The app's own dispatch loop: turns a BoardSnapshot into real stage-session launches through a
+// StageLauncher seam. `consider` is the one entry point main/ipc.ts wires to `onTick`.
 import type { BoardSnapshot } from '../../shared/board/types'
 import type { BudgetNote, BudgetStatus, DispatchOwner, DispatcherState, ObservationRecord, RepoDispatchStatus } from '../../shared/dispatch/types'
 import { RUN_TARGET } from '../../shared/dispatch/types'
@@ -36,16 +31,11 @@ import type { TickActionable, TickReport } from '../../shared/tick/types'
 const RECENT_LIMIT = 20
 const NOTE_LIMIT = 20
 
-/** Byte-identical to `plugins/port/skills/pipeline/SKILL.md`'s own
- *  "Dispatching" block — a pin (`scripts/checks/desktop-dispatch.ts`), since
- *  both the cockpit and this app's loop must send the exact same
- *  instruction to a stage agent regardless of which one dispatched it. */
+/** Byte-identical to the pipeline skill's own "Dispatching" block, pinned by desktop-dispatch.ts. */
 export const DISPATCH_PROMPT = 'Run your pipeline stage for #<n>. Follow your Pre-flight, Label swap, Work, and Handoff steps exactly.'
 export const REFRESH_PROMPT = 'Run your pipeline stage for pull request #<n> in refresh mode.'
 
-/** `model` comes from `entry.config.models[agent]`; `prompt` comes from this
- *  function — `launch.ts`'s own `StageLaunchRequest.prompt` is filled from
- *  it, never re-derived at the launcher. */
+/** `launch.ts`'s own `StageLaunchRequest.prompt` is filled from this, never re-derived at the launcher. */
 export function promptFor(actionable: Pick<TickActionable, 'trigger' | 'number'>): string {
   const n = String(actionable.number)
   return actionable.trigger === 'refreshBranch' ? REFRESH_PROMPT.replace('<n>', n) : DISPATCH_PROMPT.replace('<n>', n)
@@ -54,17 +44,13 @@ export function promptFor(actionable: Pick<TickActionable, 'trigger' | 'number'>
 export interface CreateDispatcherParams {
   readonly store: HostedStore
   readonly ledger: DispatchLedger
-  /** #327 implements the real one; `null` is the honest state until then —
-   *  a candidate sits visibly at `no-launcher` rather than silently idle. */
+  /** `null` is the honest state until a real launcher exists; a candidate sits visibly at `no-launcher`. */
   readonly launch: StageLauncher | null
-  /** #314: this repository's own persisted run state — read fresh every
-   *  pass, never cached, the same rule the ownership read below follows. */
+  /** Read fresh every pass, never cached. */
   readonly runState: (repoId: RepoId) => RunState
   readonly readOwnership: (params: ReadOwnershipParams) => Promise<OwnershipRead>
-  /** #331: the re-take-on-relaunch rule — a persisted `run`/`draining` state
-   *  with an `absent` ownership record (the app restarted and the record
-   *  never survived) takes ownership itself, `force: false` since `absent`
-   *  never refuses it. */
+  /** The re-take-on-relaunch rule: a persisted `run`/`draining` state with an `absent` ownership
+   *  record takes ownership itself. */
   readonly takeOwnership: (params: TakeOwnershipParams) => Promise<TakeOwnershipResult>
   readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
   readonly listRepositories: (registryDeps: RegistryDeps) => Promise<ReposListResponse>
@@ -79,25 +65,16 @@ export interface CreateDispatcherParams {
 }
 
 export interface Dispatcher {
-  /** Called once per fresh snapshot (`main/ipc.ts`'s own `onTick`) —
-   *  considers every ready repository, at most one pass each at a time.
-   *  Never throws: a failure in one repository's pass is reported on its
-   *  own status, never allowed to stop the others. */
+  /** Considers every ready repository, at most one pass each at a time. Never throws: a failure
+   *  in one repository's pass is reported on its own status, never allowed to stop the others. */
   consider(snapshot: BoardSnapshot): Promise<void>
   status(): readonly RepoDispatchStatus[]
-  /** The halt composition's own per-item stop (`dispatch/halt.ts`'s
-   *  `HaltDispatchDeps.stopFor`) — `true` only when this loop found a
-   *  `started` record for `(repoId, number)` and closing its session did
-   *  not throw. */
+  /** `true` only when this loop found a `started` record for `(repoId, number)` and closing it did not throw. */
   stopFor(repoId: RepoId, number: number): Promise<boolean>
   /** Closes every remaining live stage session in a repository. */
   standDown(repoId: RepoId): Promise<boolean>
-  /** This repository's own live stage sessions, as `"<agent> #<n>"` —
-   *  `main/state/watcher.ts` passes this into `planTick`'s own
-   *  `startedTasks` param. */
   liveStages(repoId: RepoId): readonly string[]
-  /** Every live stage session across every repository, for the quit
-   *  guard. */
+  /** Every live stage session across every repository, for the quit guard. */
   liveStageSessions(): readonly StageSessionSummary[]
   /** Stops new launches — called before `closeAll()` on quit. */
   shutdown(): void
@@ -151,8 +128,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
   const repoNames = new Map<RepoId, string>()
   const inFlight = new Set<RepoId>()
   let stopped = false
-  // Serializes every repository's own launch section into one promise
-  // chain, so two repositories never race for the same free slot.
+  // Serializes every repository's own launch section so two repositories never race for the same free slot.
   let launchQueue: Promise<void> = Promise.resolve()
 
   function serialize<T>(fn: () => Promise<T>): Promise<T> {
@@ -199,10 +175,8 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       const runState = deps.runState(entry.id)
       let ownership = await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
 
-      // #331: a persisted run/draining state with an absent record means the
-      // app restarted and the record never survived — this app's own run
-      // state is the operator's earlier action, so it takes ownership back
-      // rather than sitting idle until the operator clicks Run again.
+      // A persisted run/draining state with an absent record means the app restarted; it takes
+      // ownership back rather than sitting idle until the operator clicks Run again.
       if (ownership.kind === 'absent' && (runState === RUN_TARGET.run || runState === RUN_TARGET.drain)) {
         const taken = await deps.takeOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
         if (taken.ok) ownership = await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
@@ -242,9 +216,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
         return
       }
 
-      // #292: the observation pass — independent of whatever dispatches
-      // below, so it still runs on a repository with nothing else to
-      // dispatch this pass.
+      // The observation pass is independent of whatever dispatches below.
       const observable = observableFrom(tick, runState)
       if (observable.length > 0) {
         const repoState = snapshotRepoState(entry.id)
@@ -394,8 +366,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     }
   }
 
-  // Resolved lazily from the most recent `consider()` call's own snapshot —
-  // kept as a tiny cache rather than threaded through every helper above.
+  // Resolved lazily from the most recent consider() call's own snapshot, as a tiny cache.
   let lastRepoStates: BoardSnapshot['state']['repositories'] = []
   function snapshotRepoState(repoId: RepoId): Extract<BoardSnapshot['state']['repositories'][number], { readonly ok: true }> | undefined {
     const found = lastRepoStates.find((r) => r.ok && r.repoId === repoId)

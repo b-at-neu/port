@@ -1,9 +1,5 @@
-// Runs `partitionOwnership` over the tick engine's own shared case table —
-// the same file `scripts/checks/tick.ts` runs this same export over. #348
-// made this function itself the engine's own (`apps/desktop` imports it
-// directly, no local copy). The cases are GraphQL-shaped
-// (`assignees: { nodes: [{ login }] }`); this test adapts that wire shape at
-// its edges only, never the decision (plan's own **Data & contracts**).
+// Runs partitionOwnership over the tick engine's own shared case table; this function is the
+// engine's own. The cases are GraphQL-shaped; this test adapts that wire shape at its edges only.
 import { describe, expect, it } from 'vitest'
 import { partitionOwnership } from '../../../../../scripts/port-tick/classify'
 import cases from '../../../../../scripts/port-tick/cases/ownership.cases.json'
@@ -21,11 +17,8 @@ interface Case {
 
 const table = cases.cases as readonly Case[]
 
-// The case table's own field for the signed-in login is read off a key
-// built at runtime, never spelled as one literal token here —
-// `scripts/checks/desktop-claim.mjs` reserves that literal for
-// `main/github/`'s real GraphQL identity resolution, and this file only
-// ever reads an already-fixed ownership fixture, never resolves anything.
+// The signed-in login field is read off a key built at runtime, never spelled as one literal
+// token, which is reserved for main/github/'s real GraphQL identity resolution.
 const VIEWER_FIELD = ['viewer', 'Login'].join('')
 
 describe('partitionOwnership — shared case table', () => {

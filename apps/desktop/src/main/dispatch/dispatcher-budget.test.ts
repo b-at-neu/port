@@ -1,7 +1,5 @@
-// #293/#326: dispatcher-level budget-gate cases — reset-once/sweep-every-pass
-// bookkeeping, the fail-closed `budget-unavailable` refusal, and the gate's
-// own per-candidate routing (allow/hold/escalate/failed). `dispatcher.test.ts`
-// covers everything else; this file is additive, not a duplicate.
+// Dispatcher-level budget-gate cases: reset-once/sweep-every-pass bookkeeping, the fail-closed
+// budget-unavailable refusal, and per-candidate routing. Additive to dispatcher.test.ts, not a duplicate.
 import { describe, expect, it, vi } from 'vitest'
 import { resolveVocabulary } from '../../shared/labels/vocabulary'
 import type { RepoId } from '../../shared/repos'

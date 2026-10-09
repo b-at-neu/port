@@ -1,7 +1,5 @@
-// The public logic behind `fetchPipelineItems`/`fetchItemStates` — building
-// the document, calling the injected `gh`, then composing `envelope.ts` and
-// `map.ts`. Never reads a config and never calls `resolveVocabulary` itself;
-// the caller supplies #75's `LabelVocabulary`.
+// The public logic behind fetchPipelineItems/fetchItemStates: building the document, calling the
+// injected gh, then composing envelope.ts and map.ts. The caller supplies the LabelVocabulary.
 import type { GhResult, GhRunner } from '../platform/gh'
 import { gh as defaultGh } from '../platform/gh'
 
@@ -29,11 +27,8 @@ import type { AliasInfo, EnvelopeFailureKind, GraphQLErrorEntry } from './envelo
 import { applyItemStates, fieldListOf, mapPipelineItems } from './map'
 import { buildClaimPreflightQuery, buildItemStatesQuery, buildItemsByNumberQuery, buildPipelineQuery } from './query'
 
-/** Fails to compile if a failure kind is added to the platform layer (a new
- *  `CommandResult`/`GhClassification` member) or to `envelope.ts`'s own
- *  `EnvelopeFailureKind` without the hand-maintained, renderer-safe
- *  `PipelineFailureKind` growing to match — see `shared/github/types.ts`'s
- *  own comment on why that union can't be derived instead. */
+/** Fails to compile if a failure kind is added to the platform layer or `envelope.ts` without the
+ *  hand-maintained, renderer-safe `PipelineFailureKind` growing to match. */
 type GhResultFailureKind = Exclude<GhResult, { ok: true }>['kind']
 export const _kindsCoverGhResult: AssertEqual<PipelineFailureKind, GhResultFailureKind | EnvelopeFailureKind> = true
 
@@ -47,11 +42,8 @@ function toRateLimit(value: unknown): RateLimitInfo {
   }
 }
 
-/** Narrows `body.data.viewer` the same way `toRateLimit` narrows
- *  `body.data.rateLimit` — `null`, never a guess, when the alias is absent,
- *  malformed, or named in a partial response's `errors[].path` (#94). Unlike
- *  `fetchClaimPreflight`'s own `viewerLogin` read, an unresolvable viewer
- *  here never fails the whole fetch. */
+/** `null`, never a guess, when the alias is absent, malformed, or named in `errors[].path`.
+ *  Unlike `fetchClaimPreflight`'s `viewerLogin`, this never fails the whole fetch. */
 function toViewer(value: unknown, errors: readonly GraphQLErrorEntry[] | undefined): string | null {
   if ((errors ?? []).some((error) => error.path?.[0] === 'viewer')) return null
   if (typeof value !== 'object' || value === null) return null
@@ -64,10 +56,7 @@ interface RepoLabelsConnection {
   readonly nodes?: unknown
 }
 
-/** `repoLabels` truncation is reported as `unverified`, never as a
- *  confidently-short list — a repository with more than 100 labels would
- *  otherwise report a correctly-resolved name as missing (plan, **Data &
- *  contracts**). */
+/** `repoLabels` truncation is reported as `unverified`, never as a confidently-short list. */
 function toRepoLabels(value: unknown): RepoLabels {
   if (typeof value !== 'object' || value === null) return { ok: false, reason: 'repoLabels alias missing from the response' }
   const connection = value as RepoLabelsConnection
@@ -92,8 +81,7 @@ function stdoutOf(result: GhResult): string | undefined {
   return 'stdout' in result ? result.stdout : undefined
 }
 
-/** Every `errors[].path` entry beside `"repository"`, as the set of unusable
- *  alias names — shared by both fetch functions' failure short-circuits. */
+/** Every `errors[].path` entry beside `"repository"`, as the set of unusable alias names. */
 function unavailableAliasNames(errors: readonly GraphQLErrorEntry[] | undefined): ReadonlySet<string> {
   const names = new Set<string>()
   for (const error of errors ?? []) {
@@ -115,11 +103,8 @@ export interface FetchPipelineItemsParams {
   readonly now?: () => Date
 }
 
-/** One `gh api graphql` round trip returning every pipeline item, the
- *  repository's real label list, and the rate-limit budget together. Never
- *  filters the reply server-side — `gh` silently skips that filter on the
- *  exact partial-error response this adapter most needs to read (Decision
- *  3), so the envelope is always parsed here in full instead. */
+/** One `gh api graphql` round trip returning every pipeline item, the repository's real label
+ *  list, and the rate-limit budget together. Never filters the reply server-side. */
 export async function fetchPipelineItems(params: FetchPipelineItemsParams): Promise<PipelineFetch> {
   const runner = params.gh ?? defaultGh
   const now = params.now ?? (() => new Date())
@@ -135,9 +120,7 @@ export async function fetchPipelineItems(params: FetchPipelineItemsParams): Prom
   if (verdict.kind !== 'ok') {
     return { ok: false, kind: verdict.kind, message: verdict.message, fetchedAt }
   }
-  // classifyFailure's own contract: 'ok' is returned only when `parsed` holds
-  // a usable `data.repository` — re-checked here rather than asserted, so a
-  // contract violation is a reported value, never a thrown or unsafely cast one.
+  // Re-checked here rather than asserted, so a contract violation is a reported value, never thrown.
   if (parsed === undefined || !parsed.ok) {
     return { ok: false, kind: 'no-data', message: 'internal: an ok verdict without a parsed envelope', fetchedAt }
   }
@@ -182,11 +165,8 @@ export interface FetchItemStatesParams {
   readonly now?: () => Date
 }
 
-/** The reconciliation primitive: never infer "still awaiting merge" from a
- *  cached open-sweep list, re-check state. The caller supplies each item's
- *  `kind`, so no alias here is guaranteed to 404 — a number that has
- *  genuinely vanished comes back in `unavailable`, never silently dropped
- *  or read as still open. */
+/** The reconciliation primitive: never infer "still awaiting merge" from a cached open-sweep
+ *  list, re-check state. A vanished number comes back in `unavailable`, never silently dropped. */
 export async function fetchItemStates(params: FetchItemStatesParams): Promise<ItemStatesFetch> {
   const now = params.now ?? (() => new Date())
   const fetchedAt = now().toISOString()
@@ -255,14 +235,8 @@ function kindOfTypename(typename: unknown): PipelineItemKind | undefined {
   return undefined
 }
 
-/**
- * The re-check primitive for a number a worktree or an agent record merely
- * names (#79 Decision 4): never infer "still awaiting merge" from a cached
- * open-sweep list. The kind is read off each node's own `__typename`, since
- * the caller does not know it — unlike `fetchItemStates`, whose caller
- * already does. An empty `numbers` short-circuits to `ok: true` with no
- * round trip.
- */
+/** The re-check primitive for a number a worktree or agent record merely names. The kind is read
+ *  off each node's own `__typename`. An empty `numbers` short-circuits with no round trip. */
 export async function fetchItemsByNumber(params: FetchItemsByNumberParams): Promise<ItemsByNumberFetch> {
   const now = params.now ?? (() => new Date())
   const fetchedAt = now().toISOString()
@@ -329,12 +303,8 @@ export interface FetchClaimPreflightParams {
   readonly now?: () => Date
 }
 
-/** Reads a `blockedBy` connection into a `BlockerRead` — `errored` is the
- *  sub-selection's own error (never the item alias's own, see below), so an
- *  unreadable connection is reported by name rather than folded into an
- *  empty list (ENGINEERING §4: an absent signal is never read as passing).
- *  `shown`/`total` count every node the connection returned, open or closed
- *  — the truncation signal `open`'s own filtering must not distort. */
+/** Reads a `blockedBy` connection into a `BlockerRead`. An unreadable connection is reported by
+ *  name rather than folded into an empty list. `shown`/`total` count every node, open or closed. */
 function toBlockerRead(value: unknown, errored: boolean): BlockerRead {
   if (errored) return { ok: false, reason: "GitHub reported an error reading this issue's blockers" }
   if (typeof value !== 'object' || value === null) return { ok: false, reason: 'blockedBy is missing from the response' }
@@ -358,22 +328,8 @@ function toBlockerRead(value: unknown, errored: boolean): BlockerRead {
   return { ok: true, open, shown: connection.nodes.length, total: connection.totalCount }
 }
 
-/**
- * The claim dialog's one round trip (#93): one item's identity, labels,
- * assignees, and open blockers, plus the signed-in account's own login.
- * `item: null` covers both "the number does not exist" and "the alias
- * itself errored" — the plan's own rule that neither is a failure, since a
- * mistyped number is an ordinary outcome of an operator typing one in. An
- * unresolvable `viewer.login` is the one thing that fails the whole
- * preflight (`kind: 'no-data'`): the take-over decision cannot be made
- * without knowing who "me" is.
- *
- * A GraphQL error's `path` distinguishes an item-level failure
- * (`["repository", "c0"]`, length 2) from a `blockedBy`-only failure
- * (`["repository", "c0", "blockedBy", ...]`, longer and naming it) — the
- * former discards the node entirely, the latter reports only the blockers
- * as unreadable while the rest of the item still resolves.
- */
+/** The claim dialog's one round trip: one item's identity, labels, assignees, open blockers, and
+ *  the signed-in login. `item: null` covers "does not exist" or "alias errored", neither a failure. */
 export async function fetchClaimPreflight(params: FetchClaimPreflightParams): Promise<ClaimPreflightFetch> {
   const runner = params.gh ?? defaultGh
   const now = params.now ?? (() => new Date())

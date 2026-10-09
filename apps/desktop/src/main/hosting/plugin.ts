@@ -1,12 +1,5 @@
-// #101: resolves which plugin path a hosted session should request, before
-// spawn — the repository's own `plugins/port/` wins over the installed
-// cache when this checkout's own manifest names `port`, so self-hosting
-// sees a fix the moment it lands in the working tree rather than waiting on
-// a machine-local install to catch up (ENGINEERING §1's own "installed
-// copy is a stale trap" framing, restated for this app). Every other
-// repository this app hosts a session on passes no `plugins` option at
-// all — the CLI loads `port@port` from `enabledPlugins` exactly as it does
-// today.
+// Resolves which plugin path a hosted session should request: the repository's own plugins/port/
+// wins over the installed cache when this checkout's manifest names `port`.
 import { listDirectory, readJsonFile } from '../platform/files'
 import { pathOps } from '../platform/paths'
 import type { PluginRequest } from '../../shared/hosting/types'
@@ -21,13 +14,8 @@ export interface ResolvePluginRequestDeps {
 
 export const defaultResolvePluginRequestDeps: ResolvePluginRequestDeps = { readJsonFile }
 
-/** `repoRoot` is the ready registry entry's own path — never re-derived or
- *  second-guessed. `not-found`, or a readable manifest naming anything but
- *  `port`, resolves to the installed copy. A manifest that exists but
- *  cannot be read or parsed **still** resolves to `repository` — this fails
- *  loud: verification then reports `missing` rather than silently falling
- *  back to a different plugin than the one this repository actually
- *  declares. */
+/** `not-found`, or a manifest naming anything but `port`, resolves to the installed copy. A manifest
+ *  that exists but cannot be parsed still resolves to `repository` — verification then reports `missing`. */
 export async function resolvePluginRequest(repoRoot: string, deps: ResolvePluginRequestDeps = defaultResolvePluginRequestDeps): Promise<PluginRequest> {
   const pluginPath = pathOps.join(repoRoot, 'plugins', 'port')
   const manifestPath = pathOps.join(pluginPath, '.claude-plugin', 'plugin.json')
@@ -53,10 +41,8 @@ export const defaultReadExpectedComponentsDeps: ReadExpectedComponentsDeps = { l
 
 const MARKDOWN_EXTENSION = '.md'
 
-/** `null` on either read failing — never treated as complete by
- *  `verify.ts`'s `checkComponents` (this app's "fails closed on complete"
- *  direction, ENGINEERING §4). Skills are directory names under `skills/`;
- *  agents are `.md` basenames under `agents/`, extension dropped. */
+/** `null` on either read failing — never treated as complete. Skills are directory names under
+ *  `skills/`; agents are `.md` basenames under `agents/`, extension dropped. */
 export async function readExpectedComponents(pluginPath: string, deps: ReadExpectedComponentsDeps = defaultReadExpectedComponentsDeps): Promise<ExpectedComponents | null> {
   const [skillsResult, agentsResult] = await Promise.all([deps.listDirectory(pathOps.join(pluginPath, 'skills')), deps.listDirectory(pathOps.join(pluginPath, 'agents'))])
   if (!skillsResult.ok || !agentsResult.ok) return null

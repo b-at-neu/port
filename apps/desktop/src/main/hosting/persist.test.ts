@@ -8,9 +8,7 @@ import { makeTempDir } from '../../testing/fixtures'
 
 const ENTRY = { repoId: 'repo-1' as RepoId, claudeSessionId: 'session-1', title: 'Title', startedAt: '2026-01-01T00:00:00.000Z' }
 
-/** `save()` is deliberately fire-and-forget over real filesystem I/O
- *  (`writeFile` + `rename`), which needs a real macrotask turn to settle —
- *  a microtask-only flush never lets its callback run. */
+/** `save()` is fire-and-forget over real filesystem I/O, which needs a real macrotask turn to settle. */
 async function flush(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 20))
 }

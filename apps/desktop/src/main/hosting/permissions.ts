@@ -1,9 +1,5 @@
-// #99: the per-session permission broker — this handle's own `canUseTool`.
-// Every call becomes a pending request on the handle's snapshot, settled by
-// an operator answer (`answer`) or by the SDK's own `AbortSignal`, never by
-// a timer of this broker's own: the wait is the SDK's, and the broker never
-// decides for the operator (no park deadline — see `canUseTool`'s own
-// doc comment on the SDK side).
+// The per-session permission broker: every call becomes a pending request, settled by
+// an operator answer or by the SDK's own AbortSignal, never by a timer of its own.
 import type { PendingPermission, PermissionDecision, SessionPermissionAnswerResult } from '../../shared/hosting/types'
 import { narrowSessionGrant } from './grant'
 import type { CanUseTool, PermissionResult, PermissionUpdate } from './sdk'
@@ -16,10 +12,7 @@ export interface CreatePermissionBrokerParams {
 }
 
 export interface PermissionBroker {
-  /** Typed `Promise<PermissionResult>`, never `| null` — the SDK treats
-   *  `null` as "already answered out of band" and leaves the tool blocked
-   *  forever, so this narrower return makes that a compile error rather
-   *  than a runtime hang. */
+  /** Typed `Promise<PermissionResult>`, never `| null` — the SDK treats `null` as "already answered" and hangs. */
   readonly canUseTool: CanUseTool
   pending(): readonly PendingPermission[]
   answer(permissionId: string, decision: PermissionDecision, message: string | null): SessionPermissionAnswerResult

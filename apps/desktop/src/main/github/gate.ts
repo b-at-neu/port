@@ -1,8 +1,5 @@
-// fetchGatePreflight — the plan gate's own one round trip (#92). A new file
-// rather than more of `adapter.ts` (436 lines) purely to stay clear of the
-// 500-line ratchet; reuses `envelope.ts`'s parsing and `adapter.ts`'s own
-// exported `fieldListOf`/`kindOfTypename`-shaped helpers rather than
-// hand-rolling a second reader.
+// fetchGatePreflight — the plan gate's own one round trip. A new file to stay clear of the
+// file-size ratchet; reuses envelope.ts's parsing rather than hand-rolling a second reader.
 import { gh as defaultGh } from '../platform/gh'
 import type { GhResult, GhRunner } from '../platform/gh'
 import type { GatePreflightFetch, GatePreflightItem } from '../../shared/github/types'
@@ -30,15 +27,8 @@ export interface FetchGatePreflightParams {
   readonly now?: () => Date
 }
 
-/**
- * The plan gate's one round trip: one issue's identity, labels, assignees,
- * and body, plus the signed-in account's own login. `item: null` covers both
- * "the number does not exist" and "the alias itself errored" — neither is a
- * failure, since an issue can move off `plan review` between the row
- * rendering and the dialog opening. An unresolvable `viewer.login` is the
- * one thing that fails the whole preflight (`kind: 'no-data'`): the
- * assignee note cannot be rendered without knowing who "me" is.
- */
+/** The plan gate's one round trip: one issue's identity, labels, assignees, body, and the
+ *  signed-in account's login. `item: null` covers "does not exist" or "alias errored", neither a failure. */
 export async function fetchGatePreflight(params: FetchGatePreflightParams): Promise<GatePreflightFetch> {
   const runner = params.gh ?? defaultGh
   const now = params.now ?? (() => new Date())

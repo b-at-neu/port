@@ -18,12 +18,8 @@ describe('graphqlStringLiteral', () => {
 
 describe('buildPipelineQuery', () => {
   it('emits two aliases per enabled label and none for a disabled one', () => {
-    // No shipped label is module-gated any more (#189) — `resolveVocabulary`
-    // itself never produces a non-empty `disabled` today (see
-    // `vocabulary.test.ts` → "disables nothing"). `disabled` stays a designed
-    // extension point (`labels.json`'s own `$comment`), so this builds a
-    // `LabelVocabulary` by hand to keep `buildPipelineQuery`'s handling of it
-    // under test rather than dropping the case.
+    // No shipped label is module-gated any more, so this builds a LabelVocabulary by hand to keep
+    // buildPipelineQuery's handling of `disabled` under test rather than dropping the case.
     const vocabulary: LabelVocabulary = {
       labels: [
         { key: 'ready', name: 'ready', source: 'default', module: 'core', role: 'trigger' },
@@ -90,10 +86,8 @@ describe('buildPipelineQuery', () => {
     expect(document).toContain(graphqlStringLiteral('weird "quoted" label'))
   })
 
-  // #108: headRefOid/reviews/comments feed the cycle-cap and zero-diff
-  // gates — requested once, on the PullRequestFields fragment, never a
-  // second round trip. #265: mergeable feeds the mergeability gate the same
-  // way.
+  // headRefOid/reviews/comments feed the cycle-cap and zero-diff gates, requested once on the
+  // PullRequestFields fragment; mergeable feeds the mergeability gate the same way.
   it('the PullRequestFields fragment carries headRefOid, mergeable, reviews, and comments', () => {
     const vocabulary = resolveVocabulary({})
     const { document } = buildPipelineQuery(vocabulary)
@@ -135,10 +129,8 @@ describe('buildItemStatesQuery', () => {
   })
 })
 
-/** Extracts the balanced-brace body of `... on <typeName> { ... }` — the
- *  naive `/\{([^}]*)\}/` regex `mergedAt`/`labels` used to check against
- *  stops at the *first* nested `}`, which now falls inside `assignees`'s own
- *  `{ nodes { login } }` before the fragment's real close. */
+/** Extracts the balanced-brace body of `... on <typeName> { ... }` — a naive regex stops at the
+ *  first nested `}`, which falls inside `assignees`'s own braces before the fragment's real close. */
 function extractFragment(document: string, typeName: string): string {
   const start = document.indexOf(`... on ${typeName} {`)
   if (start === -1) return ''
@@ -193,8 +185,7 @@ describe('buildItemsByNumberQuery', () => {
     expect(prFragment).toContain('labels(first:')
   })
 
-  // #90: the write chokepoint's authoritative read needs assignees beside
-  // labels — one round trip, not a second query.
+  // The write chokepoint's authoritative read needs assignees beside labels, one round trip.
   it('selects assignees inside both the Issue and the PullRequest fragment', () => {
     const { document } = buildItemsByNumberQuery([1])
     const issueFragment = extractFragment(document, 'Issue')

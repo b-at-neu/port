@@ -1,10 +1,5 @@
-// Runs `zeroDiffGate`/`cycleCapExceeded`/etc over the tick engine's own
-// shared case table (`scripts/port-tick/cases/gates.cases.json`) — the same
-// idiom `contention.test.ts` already uses. #348 made these functions
-// themselves the engine's own (`apps/desktop` imports them directly, no
-// local copy); the table's own review shape still nests `commit.oid`, so
-// `wire.ts`'s `toReviewNode` adapts it at the edge, the same adapter the
-// cockpit's own call sites use.
+// Runs zeroDiffGate/cycleCapExceeded/etc over the tick engine's own shared case table; these are
+// the engine's own functions. The table's review shape nests commit.oid, so toReviewNode adapts it.
 import { describe, expect, it } from 'vitest'
 import { approvedReverify, capRefreshes, codeReviewCount, cycleCapExceeded, mergeabilityRoute, refreshDecision, refreshWins, zeroDiffGate } from '../../../../../scripts/port-tick/gates'
 import type { ReviewNode } from '../../../../../scripts/port-tick/gates'

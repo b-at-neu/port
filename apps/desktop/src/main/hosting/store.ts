@@ -1,13 +1,5 @@
-// #98/#103: `Map<sessionKey, Handle>`, the process-lifetime instance
-// `main/ipc.ts` binds, plus `closeAll()`. `DEFAULT_SESSION_LIMIT = 4`,
-// adjustable 1-`SESSION_LIMIT_CEILING` (8) from the rail and persisted; a
-// start past the current limit returns `{ ok: false, kind: 'at-capacity',
-// limit }` — counted against **live** handles only (`phase !== 'ended'`),
-// since an ended handle's child process is already gone and the history
-// stays visible for `session:list`/`session:attach` rather than
-// disappearing the moment a session ends. Fails closed on the live count:
-// each handle is a real child process with real memory, so refusing one
-// start costs one message while not refusing costs an unbounded spawn loop.
+// Map<sessionKey, Handle>, the process-lifetime instance main/ipc.ts binds, plus closeAll().
+// A start past the current limit returns at-capacity, counted against live handles only.
 import type { RepoId } from '../../shared/repos'
 import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
 import type {
@@ -49,9 +41,7 @@ import { pathOps } from '../platform/paths'
 
 export { DEFAULT_SESSION_LIMIT, SESSION_LIMIT_CEILING } from './persist'
 
-/** Ended handles are retained for `session:list`/`session:attach` up to this
- *  many — the oldest-ended is evicted on the next `end`, so a long day of
- *  short sessions does not grow the map without bound. */
+/** Ended handles retained up to this many; the oldest-ended is evicted on the next `end`. */
 export const ENDED_RETAIN_LIMIT = 20
 
 export interface HostedStoreDeps {
@@ -64,18 +54,13 @@ export interface HostedStoreDeps {
   readonly now: () => number
   readonly onEvent: (envelope: SessionEventEnvelope) => void
   readonly onStatus: (snapshot: HostedSessionSnapshot) => void
-  /** #219: forwarded verbatim to every handle's own `onEntries` — a no-op
-   *  default, the same shape `onEvent`/`onStatus` already default to. */
+  /** Forwarded verbatim to every handle's own `onEntries`. */
   readonly onEntries: (delta: SessionEntriesDelta) => void
-  /** #101: resolved once per `start()`, after the executable and before a
-   *  key is minted — the repository's own `plugins/port/` wins over the
-   *  installed cache when this checkout is port's own repository. */
+  /** Resolved once per `start()`, after the executable and before a key is minted. */
   readonly resolvePluginRequest: typeof resolvePluginRequest
   readonly readExpectedComponents: (pluginPath: string) => ReturnType<typeof readExpectedComponents>
   readonly samePath: (a: string, b: string) => boolean
-  /** #103: `hosting.json`'s own load/save/freeze — `main/ipc.ts` supplies
-   *  the real file-backed one; the default here is disk-free, for tests and
-   *  any caller that never overrides it. */
+  /** `main/ipc.ts` supplies the real file-backed one; the default here is disk-free, for tests. */
   readonly persistence: HostingPersistence
 }
 
@@ -99,11 +84,9 @@ export const defaultHostedStoreDeps: HostedStoreDeps = {
 export interface StartSessionParams {
   readonly repoId: RepoId
   readonly mode: SessionStartMode
-  /** The ready registry entry's own path — resolved by the caller
-   *  (`main/channels/hosting.ts`), never re-derived here. */
+  /** Resolved by the caller, never re-derived here. */
   readonly cwd: string
-  /** #103: the restore path's own resolved title — `null`/omitted for every
-   *  other start path, which instead runs `resolveStartTitle` itself. */
+  /** The restore path's own resolved title — omitted for every other start path. */
   readonly initialTitle?: string | null
 }
 
@@ -115,35 +98,20 @@ export interface HostedStore {
   attach(sessionKey: SessionKey): SessionAttachResult
   list(): readonly HostedSessionSnapshot[]
   closeAll(): Promise<void>
-  /** #99: routed to the named handle's own broker; `unknown-session` for a
-   *  key that names no live handle. */
   answerPermission(sessionKey: SessionKey, permissionId: string, decision: PermissionDecision, message: string | null): SessionPermissionAnswerResult
-  /** #101: routed to the named handle's own `invoke`; `unknown-session` for
-   *  a key that names no live handle. */
   invoke(sessionKey: SessionKey, name: string, args: string): SessionInvokeResult
-  /** #103: removes an ended handle — `still-open` for any other phase. */
+  /** Removes an ended handle — `still-open` for any other phase. */
   dismiss(sessionKey: SessionKey): SessionDismissResult
-  /** #265: one handle's own snapshot, `null` for a key that names no live
-   *  handle — the dispatcher's own `confirmStarted`/`relay` reads, never a
-   *  second index into `list()`. */
   snapshotOf(sessionKey: SessionKey): HostedSessionSnapshot | null
   capacity(): Promise<HostingCapacity>
-  /** Persists the new limit and never closes a session, even when it drops
-   *  below the current open count — that only refuses new starts. */
+  /** Persists the new limit and never closes a session, even below the current open count. */
   setLimit(limit: number): Promise<HostingCapacity>
-  /** An operator's persisted session defaults — never touches an open
-   *  session; applied only at the next operator-role `start()`/`restore()`. */
   defaults(): Promise<SessionDefaults>
   setDefaults(next: SessionDefaults): Promise<SessionDefaults>
-  /** `unknown-session` for a key that names no live handle, `not-ready`
-   *  before `init` has reported a `claudeSessionId`, otherwise
-   *  renames on disk first and only then applies it to the handle — a
-   *  rejection leaves the title unchanged. */
+  /** Renames on disk first and only then applies it to the handle — a rejection leaves the title unchanged. */
   rename(sessionKey: SessionKey, title: string): Promise<SessionRenameResult>
   restorable(): Promise<readonly MintedRestorable[]>
-  /** Starts `{ kind: 'resume', sessionId }` through the normal `start` path,
-   *  so capacity and `already-open` still apply. The entry is removed only
-   *  when that start succeeds or reports `already-open`. */
+  /** Starts through the normal `start` path, so capacity and `already-open` still apply. */
   restore(restoreId: string, cwd: string): Promise<SessionRestoreResult>
   discardRestorable(restoreId: string | null): Promise<SessionRestoreDiscardResult>
 }
@@ -210,11 +178,8 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     persistSave()
   }
 
-  /** `already-open` compares a live (non-`ended`) handle's own
-   *  `claudeSessionId ?? resumeTarget` against the requested `sessionId` —
-   *  the id it has adopted once `init` reports it, or the id it was told to
-   *  resume before that. Never checked for `fork`: a fork of an open session
-   *  gets a new id, so it is always allowed. */
+  /** Compares a live handle's `claudeSessionId ?? resumeTarget` against the requested `sessionId`.
+   *  Never checked for `fork`: a fork of an open session gets a new id, so it is always allowed. */
   function findAlreadyOpen(sessionId: string): HostedHandle | null {
     for (const handle of handles.values()) {
       if (handle.snapshot().phase === 'ended') continue
@@ -328,8 +293,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
   }
 
   async function closeAll(): Promise<void> {
-    // Freezing before closing a single handle keeps the `closing` phase that
-    // quitting causes from erasing the very set this ticket persists.
+    // Freezing first keeps the 'closing' phase quitting causes from erasing the persisted set.
     deps.persistence.freeze()
     await Promise.all([...handles.values()].map((handle) => handle.close()))
   }

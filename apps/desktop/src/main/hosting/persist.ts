@@ -1,11 +1,5 @@
-// #103: `hosting.json`'s only writer — recoverable app state, not an
-// operator-curated list like `registry.json`, so a missing or malformed file
-// resolves to an empty state rather than refusing to load (the opposite
-// direction `main/registry/store.ts` takes for a file the operator would
-// have to notice and fix by hand). `guard(#103)` in
-// `scripts/checks/desktop-hosting.ts` pins that no other file under
-// `main/hosting/` names `writeJsonFileAtomic` or `hosting.json` — a second
-// writer could persist a set that skipped `freeze()` on quit.
+// hosting.json's only writer: recoverable app state, so a missing or malformed file resolves to
+// an empty state rather than refusing to load. Pinned as the sole writer by desktop-hosting.ts.
 import type { RepoId } from '../../shared/repos'
 import { DEFAULT_SESSION_DEFAULTS, SESSION_MODELS, SESSION_PERMISSION_MODES } from '../../shared/hosting/types'
 import type { SessionDefaults, SessionModel, SessionPermissionMode } from '../../shared/hosting/types'
@@ -15,11 +9,7 @@ import { pathOps } from '../platform/paths'
 const HOSTING_FILE = 'hosting.json'
 const CURRENT_VERSION = 1
 
-/** Default `limit` for a fresh or unrecoverable state, and the operator's
- *  own ceiling when raising it from the rail. Declared here (not in
- *  `store.ts`) because this is the one file that has to fall back to
- *  `DEFAULT_SESSION_LIMIT` on a load failure — `store.ts` imports both
- *  rather than each module declaring its own copy. */
+/** Default `limit` for a fresh or unrecoverable state, and the operator's own ceiling when raising it. */
 export const DEFAULT_SESSION_LIMIT = 4
 export const SESSION_LIMIT_CEILING = 8
 
@@ -92,22 +82,13 @@ export interface CreateHostingPersistenceParams {
 
 export interface HostingPersistence {
   load(): Promise<HostingPersistedState>
-  /** Fire-and-forget — never awaited by a caller, and never blocks a start.
-   *  A state whose serialized JSON equals the last one actually written is
-   *  skipped; while a write is in flight, only the newest pending state
-   *  survives, written once that write settles. */
+  /** Fire-and-forget, deduplicated by last-written JSON; only the newest pending state survives. */
   save(state: HostingPersistedState): void
-  /** Drops every later `save` — called before `closeAll()` touches a single
-   *  handle, so the `closing` phase that quitting causes can never overwrite
-   *  the very set this ticket persists. */
+  /** Drops every later `save` — called before quitting overwrites the persisted set. */
   freeze(): void
 }
 
-/** Loading is recoverable by design: missing, unparseable, the wrong shape,
- *  or a newer `version` all resolve to `emptyState()`, logged once — this is
- *  overwritten on the next save rather than left to block anything. Invalid
- *  `open` entries and an out-of-range `limit` are dropped individually
- *  rather than failing the whole read. */
+/** Missing, unparseable, wrong-shaped, or newer-versioned all resolve to `emptyState()`, logged once. */
 export function createHostingPersistence(params: CreateHostingPersistenceParams): HostingPersistence {
   const filePath = pathOps.join(params.dir, HOSTING_FILE)
   let frozen = false
@@ -173,9 +154,7 @@ export function createHostingPersistence(params: CreateHostingPersistenceParams)
   }
 }
 
-/** A disk-free fallback for `defaultHostedStoreDeps` (tests, and any caller
- *  that never overrides `persistence`) — `main/ipc.ts` always supplies the
- *  real `createHostingPersistence` for the running app. */
+/** A disk-free fallback for tests; `main/ipc.ts` always supplies the real persistence for the running app. */
 export function createInMemoryHostingPersistence(): HostingPersistence {
   let state: HostingPersistedState = emptyState()
   let frozen = false

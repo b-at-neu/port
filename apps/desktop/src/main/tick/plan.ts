@@ -1,14 +1,5 @@
-// planTick — one RepositoryState to one TickReport (#105). Pure: no `gh`, no
-// timer, no write. Blind first (fails closed on actions, never on
-// reporting), then the trigger-stage set (actionable/held) and the
-// in-flight set (claims), each in the order plan's own **Implementation**
-// states. #106 adds the file-contention gate as a fourth, narrower filter
-// applied only to `impl` candidates that already survived ownership and
-// session-required. #108 adds the cycle-cap/zero-diff gates, checked per
-// trigger item after the ownership/session-required ladder and before the
-// file-contention gate — this app computes the decision and the report, it
-// never writes the escalation itself (the real write lands beside the
-// eventual dispatch call, per the plan's own **Risks / notes**).
+// planTick — one RepositoryState to one TickReport. Pure: no gh, no timer, no write. This app
+// computes the decision and the report; it never writes the escalation itself.
 import type { PipelineItemKind } from '../../shared/github/types'
 import type { LabelKey } from '../../shared/labels/vocabulary'
 import type { RepoId } from '../../shared/repos'
@@ -29,33 +20,20 @@ import { autoApprovalsOf } from './auto-plan'
 export interface PlanTickParams {
   readonly repository: RepositoryState
   readonly ledger: DispatchLedger
-  /** This app's own process-scoped mergeability-UNKNOWN memo (#265) — the
-   *  equivalent of the cockpit's `tickState.unknownStreak`, read and written
-   *  only by the `readyForReview` mergeability check below. */
+  /** This app's own process-scoped mergeability-UNKNOWN memo, read and written only by the
+   *  `readyForReview` mergeability check below. */
   readonly unknownStreaks: UnknownStreaks
-  /** This repository's own GitHub source's next-due instant
-   *  (`nextDueAt(health.github, now)`) — carried onto the report's own
-   *  `nextTickAt`, never derived a second time here; `main/state/watcher.ts`
-   *  already owns that computation for its own scheduling. */
+  /** Carried onto the report's own `nextTickAt`, never derived a second time here. */
   readonly nextDecisionAt: Date
   readonly now: () => Date
-  /** `entry.config.reviewCycleCap` (#108) — read from config per repository,
-   *  never hardcoded; `main/state/watcher.ts` passes it through the same way
-   *  it already does `repository.concurrency`. */
+  /** Read from config per repository, never hardcoded. */
   readonly reviewCycleCap: number
-  /** #292, #326: this repository's own live stage sessions, as descriptions
-   *  (`dispatcher.ts`'s own `liveStages`) — `[]` when none are live. An
-   *  in-flight claim matches when either the session scan (`item.status ===
-   *  'in-flight'`) or this app's own dispatch loop record says so, so a
+  /** This repository's own live stage sessions, as descriptions — `[]` when none are live. A
    *  reset never fires against a session this app itself just launched. */
   readonly startedTasks: readonly string[]
-  /** #292: the app's own process-scoped refresh memo
-   *  (`main/tick/ledger.ts`'s `createRefreshMemo`) — read and written only
-   *  by `observationsOf`'s refresh family. */
+  /** The app's own process-scoped refresh memo — read and written only by `observationsOf`'s refresh family. */
   readonly refreshMemo: RefreshMemo
-  /** #292, generalized in #300: `entry.config.checkDispositions` — read from
-   *  config per repository, never hardcoded; feeds the approval-withdrawal
-   *  observation's own `rollupVerdict` call. */
+  /** Read from config per repository, feeds the approval-withdrawal observation's `rollupVerdict` call. */
   readonly checkDispositions: Readonly<Record<string, Disposition>>
 }
 
@@ -63,28 +41,15 @@ function emptyReport(repoId: RepoId, displayName: string, blind: TickBlind): Tic
   return { repoId, displayName, blind, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [], autoApprovals: [] }
 }
 
-/** The winning `StageLabel`'s own key — `null` only when `item.stage` is
- *  `null`, which never happens for the two callers below (both already
- *  filtered to a specific `stage`). A local copy rather than an import from
- *  `shared/actions/plan.ts`: that module answers an operator-action
- *  question, this one a dispatch question, and `main/tick/` stays its own
- *  self-contained decision, the same way `scripts/port-tick/`'s families do. */
+/** The winning `StageLabel`'s own key — `null` only when `item.stage` is `null`. A local copy
+ *  rather than an import from `shared/actions/plan.ts`, since that module answers a different question. */
 function stageKeyOf(item: Pick<ReconciledItem, 'stage' | 'stages'>): LabelKey | null {
   if (item.stage === null) return null
   return item.stages.find((label) => label.role === item.stage)?.key ?? null
 }
 
-/** Held reasons, first hit wins: unowned before other-operator before
- *  session-required — the ladder `ReconciledItem.waitingOn` already uses,
- *  with an ownership check inserted ahead of the session-required one,
- *  since a tick (unlike `waitingOn`) knows the viewer. `contended` is never
- *  returned here — it is the file-contention gate's own reason, applied
- *  afterward and only to the `impl` candidates that survive this ladder.
- *  The unowned/other-operator split itself is never re-derived by hand here
- *  — it comes from `partitionOwnership`, the same ported-and-pinned
- *  primitive `ownership.test.ts` asserts against the shared case table, so a
- *  future change to `classify.mjs`'s rule can't silently diverge from this
- *  caller. */
+/** Held reasons, first hit wins: unowned before other-operator before session-required. `contended`
+ *  is the file-contention gate's own reason, applied afterward, never returned here. */
 function heldReasonOf(item: ReconciledItem, unowned: ReadonlySet<number>, others: ReadonlySet<number>): Exclude<TickHeld['reason'], 'contended' | 'cycle-cap' | 'zero-diff'> | null {
   if (unowned.has(item.number)) return 'unowned'
   if (others.has(item.number)) return 'other-operator'
@@ -92,39 +57,19 @@ function heldReasonOf(item: ReconciledItem, unowned: ReadonlySet<number>, others
   return null
 }
 
-/** `TickActionable.cycle` — populated only when this item carries a
- *  precomputed review count (a `revise`/`review` candidate; `null` for
- *  every other agent, since `reviewCycleCount` is pull-request only). */
+/** `TickActionable.cycle` — populated only for a `revise`/`review` candidate; `null` for every other agent. */
 function cycleOf(item: ReconciledItem, cap: number): { readonly count: number; readonly cap: number } | null {
   return item.reviewCycleCount !== null ? { count: item.reviewCycleCount, cap } : null
 }
 
-/** The file-contention gate's own occupied set (PIPELINE.md → "File
- *  contention" → "The occupied set"): every item whose winning stage key is
- *  `inProgress`, plus every open item at `prOpened` — an open issue at that
- *  label is exactly "a pull request exists for it and has not merged", so
- *  this is the whole unmerged-branch set with no second query. `claimedFiles
- *  ?? []` per PIPELINE.md's own phrasing — an unstructured in-flight item
- *  occupies nothing, it never blocks a candidate the way a structured one
- *  does. */
-/** Every item number carrying `key` among its (plural) `stages` — an
- *  ownership-independent fact, deliberately not filtered to the viewer or to
- *  `item.stage`'s own single winning role, since `refreshBranch` can sit
- *  alongside another trigger (the `<labels.approved>` carve-out's own
- *  shape) and the refresh-wins veto must see it regardless of which label
- *  `item.stage` resolved to (#265). */
+/** Every item number carrying `key` among its (plural) `stages` — not filtered to the viewer or
+ *  to `item.stage`'s own single winning role, since `refreshBranch` can sit alongside another trigger. */
 function numbersCarrying(items: readonly ReconciledItem[], key: LabelKey): readonly number[] {
   return items.filter((item) => item.stages.some((label) => label.key === key)).map((item) => item.number)
 }
 
-/** The mergeability gate's own held reason, or `null` to proceed —
- *  `readyForReview` only (PIPELINE.md → "Check evidence" → "Mergeability
- *  precondition", #265). `CONFLICTING` and `MERGEABLE` both clear the
- *  streak memo outright ("cleared for any item that reads non-UNKNOWN");
- *  `UNKNOWN` consults `mergeabilityRoute` with the memo's own prior streak,
- *  holding once before dispatching on the second consecutive poll; `null`
- *  holds every poll, unconditionally — GitHub has not reported anything yet,
- *  so this fails closed on action rather than ever guessing. */
+/** The mergeability gate's own held reason, or `null` to proceed — `readyForReview` only.
+ *  `UNKNOWN` holds once before dispatching on the second consecutive poll; `null` holds every poll. */
 function mergeabilityHeld(item: ReconciledItem, repoId: RepoId, unknownStreaks: UnknownStreaks): TickHeldReason | null {
   const mergeable = item.mergeable
   if (mergeable === 'CONFLICTING') {
@@ -156,14 +101,8 @@ function occupiedSetOf(items: readonly ReconciledItem[]): readonly OccupiedEntry
   return occupied
 }
 
-/** Splits the trigger-stage set into: `held` (ownership/session-required,
- *  the file-contention gate's own `contended` holds appended after), and
- *  `actionable` in the real dispatch order — every ungated agent (non-`impl`
- *  triggers, plus `impl` triggers whose plan carried no ` ```files ` fence
- *  at all, `unchecked: true`) in item order, then the structured `impl`
- *  survivors in `gateCandidates`' own fewest-conflicts-first order, so the
- *  eventual dispatcher consumes the list directly rather than re-sorting
- *  it. */
+/** Splits into `held` (ownership/session-required, `contended` appended after) and `actionable`:
+ *  ungated agents first, then structured `impl` survivors in fewest-conflicts-first order. */
 function actionableAndHeld(
   items: readonly ReconciledItem[],
   viewer: string,
@@ -179,10 +118,7 @@ function actionableAndHeld(
   const triggerItems = items.filter(
     (item) =>
       item.stage === 'trigger' &&
-      // Defensive: `STAGE_PRECEDENCE` already ranks `in-flight` above
-      // `trigger`, so a `trigger`-staged item can never carry an in-flight
-      // label too — checked anyway, since this module never assumes another
-      // module's ranking stays exactly as ordered today.
+      // Defensive: STAGE_PRECEDENCE already ranks in-flight above trigger, checked anyway.
       !item.stages.some((label) => label.role === 'in-flight'),
   )
   const { unowned, others } = partitionOwnership(triggerItems, viewer, (item) => item.assignees)
@@ -201,14 +137,8 @@ function actionableAndHeld(
 
     const reason = heldReasonOf(item, unownedNumbers, othersNumbers)
 
-    // #292: a `refreshBranch` trigger co-present with another trigger label
-    // never wins `stageKeyOf`'s own first-match resolution, so without this
-    // the refresh itself would never get its own actionable entry — stranding
-    // the pull request, since its other trigger's own refresh-wins veto
-    // (below) holds it instead. Its other trigger keeps that hold unchanged;
-    // this yields a second, independent entry for `refreshBranch` itself,
-    // run through the same ownership/session-required ladder (`reason`,
-    // already computed above).
+    // A refreshBranch trigger co-present with another trigger label never wins stageKeyOf's own
+    // first-match resolution, so this yields a second, independent entry for refreshBranch itself.
     if (trigger !== 'refreshBranch' && item.stages.some((label) => label.key === 'refreshBranch')) {
       if (reason !== null) {
         held.push({ number: item.number, kind: item.kind, trigger: 'refreshBranch', reason, contention: null, escalation: null })
@@ -224,12 +154,8 @@ function actionableAndHeld(
     const agent = AGENT_FOR_TRIGGER[trigger]
     if (agent === undefined) continue
 
-    // The refresh-wins veto (#225, #265) — a pull request already claimed by
-    // a refresh must never also be dispatched to review or revision in the
-    // same tick. Scoped to `needsRevision` specifically, never the bare
-    // `agent === 'revise'` test the cycle-cap gate below still uses: a
-    // `refreshBranch` trigger's own dispatch is the refresh itself, so
-    // vetoing it against its own label would deadlock every refresh.
+    // The refresh-wins veto: a pull request already claimed by a refresh must never also be
+    // dispatched to review or revision in the same tick.
     if (trigger === 'needsRevision' && refreshWins({ number: item.number, refreshBranch: refreshBranchNumbers, refreshing: refreshingNumbers }).action === 'veto') {
       held.push({ number: item.number, kind: item.kind, trigger, reason: 'refresh-wins', contention: null, escalation: null })
       continue
@@ -246,9 +172,8 @@ function actionableAndHeld(
       }
     }
 
-    // The cycle-cap gate — unconditional, per `cycleCapExceeded`'s own
-    // contract: fires whatever the latest review said. The effective cap
-    // folds in any operator-granted cycles (`### Cycle grant` comments).
+    // The cycle-cap gate: unconditional, fires whatever the latest review said. The effective cap
+    // folds in any operator-granted cycles.
     if (agent === 'revise' && cycleCapExceeded(item.reviews ?? undefined, reviewCycleCap, item.comments ?? undefined)) {
       held.push({
         number: item.number,
@@ -260,9 +185,7 @@ function actionableAndHeld(
       })
       continue
     }
-    // The zero-diff gate — `dispatch`/`dispatch-once` both fall through to
-    // ordinary dispatch below; the one-time re-review permission is
-    // inherent in the label state itself, nothing further to track here.
+    // The zero-diff gate: the one-time re-review permission is inherent in the label state itself.
     if (
       agent === 'review' &&
       zeroDiffGate({ reviews: item.reviews ?? undefined, comments: item.comments ?? undefined, headRefOid: item.headRefOid ?? '' }).action === 'escalate'
@@ -286,11 +209,8 @@ function actionableAndHeld(
 
   const gatedActionable: TickActionable[] = gated.dispatch.map((number) => {
     const meta = structuredMeta.get(number)
-    // Defensive: every number in `gated.dispatch` came from `structuredCandidates`,
-    // built from this same map's keys, just above.
     if (meta === undefined) throw new Error(`gateCandidates dispatched #${String(number)}, which was never a structured candidate`)
-    // Always `null`: every structured candidate is an `impl` trigger over an
-    // issue, and `reviewCycleCount` is pull-request only.
+    // Always `null`: every structured candidate is an impl trigger over an issue.
     return { number, kind: meta.kind, trigger: meta.trigger, agent: 'impl', unchecked: false, cycle: null }
   })
 
@@ -321,11 +241,8 @@ function claimsOf(items: readonly ReconciledItem[], repoId: RepoId, ledger: Disp
       claims.push({ number: item.number, kind: item.kind, inFlight, class: 'session-required', retryKey: null })
       continue
     }
-    // #292: either source is enough to hold a reset back — a session scan
-    // hit (the pre-existing rule) or this app's own dispatcher session
-    // reporting the matching task as `started`, so a reset never fires
-    // against an agent this process itself just dispatched before the
-    // session scan has caught up to it.
+    // Either source is enough to hold a reset back, so a reset never fires against an agent this
+    // process itself just dispatched before the session scan has caught up to it.
     const agentForInFlight = AGENT_FOR_IN_FLIGHT[inFlight]
     const matchedByTask = agentForInFlight !== undefined && startedTasks.includes(`${agentForInFlight} #${String(item.number)}`)
     if (item.status === 'in-flight' || matchedByTask) {
@@ -335,10 +252,7 @@ function claimsOf(items: readonly ReconciledItem[], repoId: RepoId, ledger: Disp
 
     const result = ledger.observeUnmatched(repoId, item.number, readAt)
     const cls = result.class === 'reset' ? 'stalled-confirmed' : result.class
-    // RETRY_TRIGGER's engine type is a bare Record<string, string> — every
-    // value is a real LabelKey by construction (the vocabulary pin in
-    // scripts/checks/desktop-tick.ts), so the app's own in-flight caller
-    // narrows it here rather than widening the engine's own export.
+    // RETRY_TRIGGER's engine type is a bare Record<string, string>; this caller narrows it to LabelKey.
     const retryKey = cls === 'stalled-confirmed' ? ((RETRY_TRIGGER[inFlight] as LabelKey | undefined) ?? null) : null
     claims.push({ number: item.number, kind: item.kind, inFlight, class: cls, retryKey })
   }

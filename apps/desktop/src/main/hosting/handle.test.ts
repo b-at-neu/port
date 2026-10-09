@@ -9,10 +9,7 @@ const SESSION_KEY = 'hosted-1' as SessionKey
 const REPO_ID = 'repo-1' as RepoId
 const INSTALLED_PLUGIN: PluginRequest = { source: 'installed' }
 
-/** A fake `HostedQuery` driven entirely from the test — `push` delivers the
- *  next message to whichever `next()` is currently waiting, `end`/`fail`
- *  finish the generator, and `interrupt`/`close` are spies the assertions
- *  read back. */
+/** `push` delivers the next message to whichever `next()` is currently waiting. */
 function fakeQuery(options: { readonly commands?: readonly { name: string; description: string; argumentHint: string }[]; readonly agents?: readonly { name: string; description: string; model?: string }[] } = {}) {
   let pendingResolve: ((result: IteratorResult<unknown>) => void) | null = null
   let pendingReject: ((error: Error) => void) | null = null
@@ -194,8 +191,7 @@ describe('createHostedHandle', () => {
     await flush()
     expect(onEntries).toHaveBeenCalledTimes(2)
 
-    // A message type the projector never renders (live-edge ephemera) fires
-    // no further onEntries call.
+    // A message type the projector never renders fires no further onEntries call.
     fake.push({ type: 'system', subtype: 'init', session_id: 'sdk-session-1' })
     await flush()
     expect(onEntries).toHaveBeenCalledTimes(2)
@@ -204,9 +200,6 @@ describe('createHostedHandle', () => {
   it('a throwing onEntries/projector never stops the pump — the message is still forwarded to onEvent', async () => {
     const onEvent = vi.fn()
     const fake = fakeQuery()
-    // `onEntries` throwing exercises the same "never stops the pump" rail as
-    // a projector throw — handle.ts wraps the whole `projector.push(...)` +
-    // `emitEntries(...)` pair in one try/catch.
     const onEntries = vi.fn(() => {
       throw new Error('boom')
     })
@@ -327,10 +320,7 @@ describe('createHostedHandle', () => {
     const handle = createHostedHandle(baseParams(), () => fake.query)
     const total = REPLAY_LIMIT + 3
     for (let i = 0; i < total; i += 1) fake.push({ type: 'result', subtype: 'success', n: i })
-    // A macrotask boundary rather than a fixed number of microtask flushes —
-    // draining `total` queued messages through the pump's own `await` per
-    // iteration takes as many microtask turns as there are messages, and
-    // `setTimeout` only runs once every pending microtask has settled.
+    // A macrotask boundary, since setTimeout only runs once every pending microtask has settled.
     await new Promise((resolve) => setTimeout(resolve, 0))
     const { events, droppedBefore } = handle.replay()
     expect(events.length).toBe(REPLAY_LIMIT)

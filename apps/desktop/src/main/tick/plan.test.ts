@@ -286,9 +286,7 @@ describe('planTick — in-flight items: claims', () => {
   })
 
   it('walks a dispatched ledger row to suspect, then to a stalled-confirmed retry, across ticks', () => {
-    // #292: `observeUnmatched` advances at most once per distinct `readAt` —
-    // each simulated tick below reads a genuinely fresher GitHub read, the
-    // same way three actual polls would, so the ledger walks forward on each.
+    // Each simulated tick reads a genuinely fresher GitHub read, so the ledger walks forward on each.
     const ledger = createDispatchLedger()
     const unknownStreaks = createUnknownStreaks()
     ledger.record(REPO, 1)

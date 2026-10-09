@@ -1,9 +1,5 @@
-// The 'dispatch:control' channel's own validation and composition (#110,
-// #314, #331) — all the branching lives here, not in `main/ipc.ts`, the same
-// split every other multi-call channel in this app already follows. #326
-// removes 'dispatch:relay' along with the hosted dispatcher session it
-// relayed through; #331 replaces the old dispatch claim scope with
-// `.agents/cockpit.json` ownership and adds the `take-over` command.
+// The 'dispatch:control' channel's own validation and composition — all the branching lives here,
+// not in main/ipc.ts, the same split every other multi-call channel in this app follows.
 import { DISPATCH_COMMANDS, RUN_TARGET } from '../../shared/dispatch/types'
 import type { DispatchCommand, DispatchControlResult, HaltReport } from '../../shared/dispatch/types'
 import type { BoardSnapshot } from '../../shared/board/types'
@@ -27,11 +23,8 @@ export interface ResolveDispatchControlDeps {
   readonly now: () => Date
 }
 
-/** Every currently registered repository's id, any status — `null` when the
- *  registry itself could not be listed. Shared by `resolveDispatchControl`'s
- *  own `repoId` validation (run/drain/pause: "a registered repository, any
- *  status") and by `main/dispatch/store.ts`'s own v1 migration, which
- *  `main/ipc.ts` wires as `runStates.load`'s own `registered` callback. */
+/** Every currently registered repository's id, any status — `null` when the registry itself
+ *  could not be listed. */
 export async function registeredRepoIds(registryDeps: RegistryDeps, deps: { readonly listRepositories: typeof listRepositories } = { listRepositories }): Promise<readonly RepoId[] | null> {
   const list = await deps.listRepositories(registryDeps)
   return list.ok ? list.repositories.map((r) => r.id) : null
@@ -44,10 +37,7 @@ async function findReadyEntry(registryDeps: RegistryDeps, repoId: RepoId, deps: 
   return entry !== undefined && isReadyEntry(entry) ? entry : null
 }
 
-/** Maps a failed `takeOwnership`/`releaseOwnership` write into the one
- *  `'unwritable'` reason every `DispatchControlResult` failure already
- *  carries for a run-state write it cannot distinguish further — an
- *  ownership-file write failure is just as fatal as a run-state one. */
+/** Maps a failed `takeOwnership`/`releaseOwnership` write into the same reasons a run-state write failure carries. */
 function ownershipWriteFailureReason(result: Extract<Awaited<ReturnType<typeof takeOwnership>>, { readonly ok: false }>): { readonly reason: 'terminal-owned'; readonly since: string } | { readonly reason: 'ownership-unreadable'; readonly message: string; readonly path: string } | { readonly reason: 'unwritable'; readonly message: string; readonly path: string } {
   if (result.kind === 'refused') {
     return result.verdict.kind === 'terminal'
@@ -57,34 +47,8 @@ function ownershipWriteFailureReason(result: Extract<Awaited<ReturnType<typeof t
   return { reason: 'unwritable', message: result.message, path: result.path }
 }
 
-/**
- * `command` validated against `DISPATCH_COMMANDS` by name — the same rail
- * `resolveItemAction` already follows for `OPERATOR_ACTIONS`. `halt` carries
- * no `repoId` and sweeps every ready repository; `run`/`drain`/`pause`/
- * `take-over` each require a `repoId` naming a currently registered
- * repository (any status).
- *
- * `run` → `takeOwnership({ force: false })` when a ready entry exists for
- * this repository (refused outright on `terminal`/`unreadable`/a write
- * failure, with no run-state write), then `runStates.set([repoId],
- * RUN_TARGET.run, …)`, refused outright on any write failure, then one
- * `refresh({ repoId })`. `drain` → the same ownership take, then
- * `runStates.set([repoId], 'draining', …)`, never refused on an unwritable
- * run-state failure (`persisted: false` instead — the gate still closed in
- * memory), refused outright only when the run-state store itself is
- * unreadable; no refresh, since nothing about the poll needs to change.
- * `pause` → `haltDispatch` scoped to `[repoId]` (which itself writes
- * `'paused'` first), then `releaseOwnership` for this repository (a release
- * failure surfaces as `released: false`, never thrown — the halt itself
- * still succeeded), then one `refresh({ repoId })`. `halt` → `haltDispatch`
- * across every ready repository (which itself writes `'paused'` for each
- * first), then `releaseOwnership` for each of them, then one `refresh({})`
- * regardless of whether the halt completed or aborted, since the run state
- * itself may have changed either way. `take-over` → `takeOwnership({ force:
- * true })` (refused only on a genuine write failure, since `force`
- * overrides a `terminal`/`unreadable` record), then the same run-state write
- * and refresh as `run`.
- */
+/** `halt` sweeps every ready repository with no `repoId`; the rest require one, naming a registered
+ *  repository, and take or release ownership before writing the run state and refreshing. */
 export async function resolveDispatchControl(
   registryDeps: RegistryDeps,
   request: { readonly command: DispatchCommand; readonly repoId?: RepoId },
@@ -128,9 +92,7 @@ export async function resolveDispatchControl(
     const entry = await findReadyEntry(registryDeps, repoId, deps)
     if (entry === null) throw new Error(`'dispatch:control' take-over requires '${repoId}' to be a ready repository`)
     const taken = await deps.takeOwnership({ repoRoot: entry.path, repo: entry.config.repo, force: true, now: deps.now })
-    // `force: true` means `taken.kind` can never actually be `'refused'` —
-    // narrowed here only so this compiles against `TakeOwnershipResult`'s
-    // full union.
+    // `force: true` means `taken.kind` can never actually be `'refused'`.
     if (!taken.ok) return { ok: false, command: 'take-over', repoId, reason: 'unwritable', message: taken.kind === 'refused' ? 'ownership write unexpectedly refused despite force' : taken.message, path: taken.path }
     const written = await deps.runStates.set([repoId], RUN_TARGET.run, deps.now().toISOString())
     if (!written.ok) return { ok: false, command: 'take-over', repoId, reason: 'unwritable', message: written.message, path: deps.runStates.path }

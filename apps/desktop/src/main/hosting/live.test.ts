@@ -1,14 +1,5 @@
-// #98's own acceptance run — the ticket's acceptance criterion ("start,
-// stream, interrupt mid-turn, close cleanly, then resume and fork that same
-// session") end to end, against the real Agent SDK and a real `claude`
-// child process. Skipped unless `PORT_LIVE_SDK=1`, and stays out of
-// `commands.checks` and the default `pnpm test` run — this is the only
-// place under `apps/desktop/` that exercises the real child process before
-// #219 exists.
-//
-// `PORT_LIVE_SDK_CWD` names the registered, `ready` repository to run
-// against (a real git checkout with Claude Code logged in); the run is
-// skipped with a clear reason when it is not set, never silently no-op'd.
+// An acceptance run against the real Agent SDK and a real claude child process. Skipped unless
+// PORT_LIVE_SDK=1. PORT_LIVE_SDK_CWD names the ready repository to run against.
 import { access, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -91,9 +82,7 @@ describe.skipIf(!live || !cwd)('hosting — live SDK acceptance (PORT_LIVE_SDK=1
     }
   }, 60_000)
 
-  // #219: the one check of the SDK shape assumptions in project.ts's own
-  // header (no prompt echo, user_message_uuids on the first frame,
-  // queued_turn_count on result) against the real CLI, rather than a fake.
+  // Checks the SDK shape assumptions in project.ts against the real CLI, rather than a fake.
   it('#219: partial text streams before the phase reads streaming, and an assistant entry lands', async () => {
     if (!cwd) throw new Error('PORT_LIVE_SDK=1 requires PORT_LIVE_SDK_CWD to name a registered, ready repository')
     const entries: SessionEntriesDelta[] = []
@@ -131,10 +120,7 @@ describe.skipIf(!live || !cwd)('hosting — live SDK acceptance (PORT_LIVE_SDK=1
     await store.closeAll()
   }, 60_000)
 
-  // #101: the one check of the `port:<agent>` naming and the `--plugin-dir`
-  // override behaviour against the real CLI, since both come from the
-  // SDK's own types and the bundled binary rather than anything this app
-  // controls.
+  // Checks the port:<agent> naming and the --plugin-dir override against the real CLI.
   it('#101: capabilities reach ready before any send, then loaded/complete after one turn, naming the repository copy', async () => {
     if (!cwd) throw new Error('PORT_LIVE_SDK=1 requires PORT_LIVE_SDK_CWD to name a registered, ready repository')
     let latest: HostedSessionSnapshot | null = null
@@ -165,8 +151,7 @@ describe.skipIf(!live || !cwd)('hosting — live SDK acceptance (PORT_LIVE_SDK=1
     await store.closeAll()
   }, 60_000)
 
-  // #103: two hosted sessions route independently, and a second resume of a
-  // live id is refused rather than opening a second writer on one transcript.
+  // Two hosted sessions route independently, and a second resume of a live id is refused.
   it('#103: two concurrent sessions route independently, and a second resume of a live id is refused', async () => {
     if (!cwd) throw new Error('PORT_LIVE_SDK=1 requires PORT_LIVE_SDK_CWD to name a registered, ready repository')
     const envelopes: { sessionKey: SessionKey }[] = []
@@ -240,10 +225,7 @@ async function fileExists(path: string): Promise<boolean> {
   }
 }
 
-/** Polls the latest captured snapshot for the named session until it
- *  carries at least one pending permission, or throws after a bounded wait
- *  — the SDK's own round trip to the real `claude` child has no fixed
- *  latency this test can await directly. */
+/** Polls the latest snapshot until it carries a pending permission, or throws after a bounded wait. */
 async function waitForPendingPermission(latest: () => HostedSessionSnapshot | null, sessionKey: SessionKey): Promise<PendingPermission> {
   const deadline = Date.now() + 30_000
   while (Date.now() < deadline) {
