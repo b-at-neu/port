@@ -33,7 +33,7 @@ export interface DispatchRuntime {
   readonly refreshMemo: RefreshMemo
   readonly dispatcher: Dispatcher
   /** #313: the auto-plan swap's own snapshot consumer — built from the same
-   *  deps as `dispatcher`, gated on `plan-gate` rather than `dispatch`. */
+   *  deps as `dispatcher`, gated on this app owning the repository. */
   readonly autoPlanner: AutoPlanner
   /** `main/state/watcher.ts`'s own `CreatePipelineWatcherParams` subset this
    *  runtime already owns — spread directly rather than wired field by field. */

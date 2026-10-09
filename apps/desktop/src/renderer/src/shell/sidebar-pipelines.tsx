@@ -14,9 +14,8 @@ import { useRunStateCommand } from './run-state-command'
 import { shellPrefs, setRepoCollapsed } from './prefs'
 import { ROUTE_IDS } from '../router/routes'
 
-/** #331: `terminal`/`unreadable` ownership disables Run and Drain outright —
- *  neither ever reaches a currently-running/-draining row, since the pill
- *  itself never reads `Running`/`Draining` under either verdict. */
+/** `terminal`/`unreadable` ownership disables Run and Drain outright — the pill itself
+ *  never reads `Running`/`Draining` under either verdict. */
 function ownershipDisabledReason(owner: Extract<PipelineRow, { readonly ready: true }>['owner'], unreadableMessage: string | null): string | null {
   if (owner === 'terminal') return 'Your terminal cockpit runs this repo'
   if (owner === 'unreadable') return `.agents/cockpit.json can't be read (${unreadableMessage ?? 'unknown reason'})`
@@ -50,7 +49,7 @@ function RunStateMenu({ row }: { readonly row: Extract<PipelineRow, { readonly r
         },
         { key: 'pause', label: 'Pause', hint: 'stop now', current: row.pill.label === 'Paused', disabledReason: row.pill.label === 'Paused' ? 'Already paused' : null, onSelect: () => runState.requestPause(row.repoId, row.name, row.inFlight) },
         ...(row.owner === 'terminal'
-          ? [{ key: 'take-over', label: 'Take over…', hint: "the terminal isn't running", current: false, disabledReason: null, onSelect: () => runState.requestTakeOver(row.repoId, row.name) }]
+          ? [{ key: 'take-over', label: 'Take over…', hint: 'the terminal has stopped', current: false, disabledReason: null, onSelect: () => runState.requestTakeOver(row.repoId, row.name) }]
           : []),
       ]}
     />

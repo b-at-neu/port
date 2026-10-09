@@ -203,7 +203,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       // app restarted and the record never survived — this app's own run
       // state is the operator's earlier action, so it takes ownership back
       // rather than sitting idle until the operator clicks Run again.
-      if (ownership.kind === 'absent' && (runState === 'dispatching' || runState === 'draining')) {
+      if (ownership.kind === 'absent' && (runState === RUN_TARGET.run || runState === RUN_TARGET.drain)) {
         const taken = await deps.takeOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
         if (taken.ok) ownership = await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
       }

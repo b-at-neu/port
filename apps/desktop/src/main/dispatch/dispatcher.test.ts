@@ -145,10 +145,7 @@ function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispat
     },
     runState: () => 'dispatching',
     readOwnership: () => Promise.resolve(ABSENT_OWNERSHIP),
-    // Harmless by default — the re-take-on-relaunch rule fires on every
-    // `dispatching`/`draining` run state, so a default `readOwnership`
-    // stub that stays `absent` regardless of this write keeps every test
-    // below that doesn't care about the relaunch rule unaffected.
+    // Harmless by default — readOwnership above stays `absent`, so this never changes outcomes.
     takeOwnership: () => Promise.resolve({ ok: true, path: 'p' }),
     fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [], unavailable: [], fetchedAt: 'r' }),
     listRepositories: () => Promise.resolve({ ok: true, repositories: [entry()] }),

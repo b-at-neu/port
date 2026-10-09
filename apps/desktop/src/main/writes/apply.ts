@@ -102,7 +102,7 @@ async function recordLabelAudit(auditDir: string, ctx: AuditContext, outcome: Wr
 
 /**
  * Fixed order (plan's own **Implementation**): resolve names → read
- * ownership (every write needs it now, not only a plan-gate-touching one) →
+ * ownership (every write needs it now, not only a plan-review-touching one) →
  * the authoritative read → evaluate the precondition → short-circuit
  * `no-op` → `gh(argv)` → on failure only, one best-effort re-read. Every
  * branch appends exactly one audit entry, aborts included. A successful
@@ -133,7 +133,7 @@ export async function applyLabels(params: ApplyLabelsParams): Promise<WriteOutco
   const precondition: AuditEntry['precondition'] = { present: expectPresent.names, absent: expectAbsent.names, assignees: request.expect.assignees }
 
   // --- Every write needs this app to own the repository, full stop — never
-  // a per-label scope the way the old gate-claim derived one.
+  // a per-label scope the way the old claim file derived one.
   const ownership = await readOwnership({ repoRoot: params.repoRoot, repo: request.repo, git: params.git, pathOps, now })
   if (ownership.kind === 'terminal') {
     const outcome: WriteOutcome = { kind: 'terminal-owned', since: ownership.since }

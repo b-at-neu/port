@@ -160,9 +160,9 @@ export type TickObservation =
     })
 
 /** One `autoPlan` issue at `planReview` alone, assigned to the viewer (#313)
- *  — the app's own auto-plan swap acts on this set while it holds the
- *  `plan-gate` claim, mirroring the cockpit's own unprompted `autoPlan`
- *  swap (`docs/COORDINATION.md` → "The decision"). */
+ *  — the app's own auto-plan swap acts on this set while it owns the
+ *  repository, mirroring the cockpit's own unprompted `autoPlan` swap
+ *  (`docs/COORDINATION.md` → "The decision"). */
 export interface TickAutoApproval {
   readonly number: number
 }

@@ -20,8 +20,7 @@ export interface ReadyPipelineRow {
   readonly repoId: RepoId
   readonly name: string
   readonly pill: { readonly status: PillStatus; readonly label: string }
-  /** #331: this repository's own cockpit ownership — `'none'` before the
-   *  first read, the same fallback `pillFor` already applies. */
+  /** This repository's own cockpit ownership — `'none'` before the first read. */
   readonly owner: DispatchOwner
   readonly unreadableMessage: string | null
   readonly inFlight: number
@@ -54,10 +53,8 @@ function sessionsFor(repoId: RepoId, items: readonly ReconciledItem[], needsYouN
   return rows
 }
 
-/** #331: ownership gates the pill ahead of run state — `terminal`/
- *  `unreadable` each have their own fixed pill, since neither reflects
- *  `dispatching`/`draining`/`paused` the way an `app`- or `none`-owned
- *  repository's does. */
+/** Ownership gates the pill ahead of run state — `terminal`/`unreadable` each have their
+ *  own fixed pill, never `dispatching`/`draining`/`paused`. */
 function pillFor(snapshot: BoardSnapshot | undefined, repoId: RepoId, owner: DispatchOwner): { readonly status: PillStatus; readonly label: string } {
   if (snapshot === undefined) return { status: 'idle', label: 'Paused' }
   const { store } = snapshot.runStates

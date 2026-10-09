@@ -1,4 +1,4 @@
-// Pure plan-gate classification and label-level plan building — no `gh`, no
+// Pure plan-review-gate classification and label-level plan building — no `gh`, no
 // filesystem. `classifyGate` never resolves a `gh` call itself; the caller
 // (`main/actions/gate.ts`) supplies the already-fetched `GateClassifyItem`,
 // with `noPlanBlock` already computed from the body split at

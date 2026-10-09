@@ -1,4 +1,4 @@
-// Honours the cockpit's unprompted `autoPlan` swap while this app owns the repository (#331).
+// Honours the cockpit's unprompted `autoPlan` swap while this app owns the repository.
 import type { BoardSnapshot } from '../../shared/board/types'
 import type { RunState } from '../../shared/dispatch/types'
 import type { RepoId } from '../../shared/repos'

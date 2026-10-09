@@ -32,8 +32,8 @@ describe('ownerLineCopy', () => {
     expect(line).toContain("won't dispatch, answer gates, or write labels")
   })
 
-  it('none — not running here, Run starts it', () => {
-    expect(ownerLineCopy(status({ owner: 'none' }))).toContain('not running here')
+  it('none — idle here, Run starts it', () => {
+    expect(ownerLineCopy(status({ owner: 'none' }))).toContain('idle here')
   })
 
   it('app, idle, never owned — no "since" clause', () => {

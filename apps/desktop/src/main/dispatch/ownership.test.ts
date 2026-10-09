@@ -53,6 +53,29 @@ describe('classifyOwnership', () => {
     const text = JSON.stringify({ repo: 'o/r', owner: 'terminal', since: '2026-01-01T00:00:00Z' })
     expect(classifyOwnership(true, text, 'o/r')).toEqual({ kind: 'terminal', since: '2026-01-01T00:00:00Z' })
   })
+
+  // The guard hook's own classifier mirrors this one field for field; a plain .mjs file with
+  // no imports of its own, so a dynamic import of it resolves fine here.
+  it('agrees with the guard hook\'s own classifier on a shared fixture set', async () => {
+    // @ts-expect-error — plain .mjs with no declaration file, never part of this program's own module graph
+    const hookModule = (await import('../../../../../plugins/port/hooks/lib/ownership-rules.mjs')) as {
+      readonly classifyOwnership: (exists: boolean, text: string | null, repo: string) => unknown
+    }
+    const hookClassify = hookModule.classifyOwnership
+    const fixtures: ReadonlyArray<{ readonly exists: boolean; readonly text: string | null; readonly repo: string }> = [
+      { exists: false, text: null, repo: 'o/r' },
+      { exists: true, text: JSON.stringify({ repo: 'o/r', owner: 'app', since: '2026-01-01T00:00:00Z' }), repo: 'o/r' },
+      { exists: true, text: JSON.stringify({ repo: 'o/r', owner: 'terminal', since: '2026-01-01T00:00:00Z' }), repo: 'o/r' },
+      { exists: true, text: JSON.stringify({ repo: 'someone/else', owner: 'app', since: '2026-01-01T00:00:00Z' }), repo: 'o/r' },
+      { exists: true, text: '{not json', repo: 'o/r' },
+      { exists: true, text: '"just a string"', repo: 'o/r' },
+      { exists: true, text: JSON.stringify({ repo: 'o/r', owner: 'app' }), repo: 'o/r' },
+      { exists: true, text: JSON.stringify({ repo: 'o/r', owner: 'someone-else', since: '2026-01-01T00:00:00Z' }), repo: 'o/r' },
+    ]
+    for (const f of fixtures) {
+      expect(hookClassify(f.exists, f.text, f.repo)).toEqual(classifyOwnership(f.exists, f.text, f.repo))
+    }
+  })
 })
 
 describe('readOwnership', () => {

@@ -76,7 +76,7 @@ export { haltAbortedCopy, haltHeadingCopy, haltItemLine }
  *  poll, the same as every other dispatch-status field. */
 export async function takeOver(repoId: RepoId, repoName: string): Promise<void> {
   const confirmed = window.confirm(
-    `Take over ${repoName} from the terminal?\n\nOnly do this if /port:pipeline isn't running for this repo in any terminal. This app can't tell whether it is. A cockpit still running there stops at its next tick.`,
+    `Take over ${repoName} from the terminal?\n\nOnly do this once /port:pipeline has stopped for this repo in every terminal. This app can't confirm that itself. A cockpit still active there stops at its next tick.`,
   )
   if (!confirmed) return
   try {

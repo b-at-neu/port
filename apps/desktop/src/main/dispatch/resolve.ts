@@ -2,7 +2,7 @@
 // #314, #331) — all the branching lives here, not in `main/ipc.ts`, the same
 // split every other multi-call channel in this app already follows. #326
 // removes 'dispatch:relay' along with the hosted dispatcher session it
-// relayed through; #331 replaces the `dispatch` gate-claim scope with
+// relayed through; #331 replaces the old dispatch claim scope with
 // `.agents/cockpit.json` ownership and adds the `take-over` command.
 import { DISPATCH_COMMANDS, RUN_TARGET } from '../../shared/dispatch/types'
 import type { DispatchCommand, DispatchControlResult, HaltReport } from '../../shared/dispatch/types'

@@ -230,8 +230,8 @@ export async function appendTextFile(path: string, text: string): Promise<FileRe
 }
 
 /** Deletes `path`, reporting `not-found` rather than throwing when it is
- *  already gone — `main/writes/claim.ts`'s `releaseClaimScope` treats that as
- *  success, since the caller's intent ("the claim should not exist") is
+ *  already gone — `main/dispatch/ownership.ts`'s `releaseOwnership` treats
+ *  that as success, since the caller's intent ("the record should not exist") is
  *  already satisfied. */
 export async function removeFile(path: string): Promise<FileResult<void>> {
   try {

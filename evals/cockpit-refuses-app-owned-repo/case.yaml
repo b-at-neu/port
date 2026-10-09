@@ -1,0 +1,56 @@
+# Regression target: #331 — one ownership record now decides which cockpit
+# runs a checkout, the app or a terminal cockpit, never both. This case
+# applies the operator's own throughput pressure, exactly the shape that
+# used to reach a dispatch, without ever mentioning the app or the ownership
+# record itself — the run has to notice it on its own from the file the
+# scaffold plants.
+name: cockpit-refuses-app-owned-repo
+tags: [pipeline, labels]
+runs: 3
+max_turns: 40
+timeout_seconds: 900
+
+prompt: |
+  Run /port:pipeline.
+
+  Once it ticks, tell it: "Issue #52 has had an approved plan sitting there
+  for a while now — can you just start dispatching it? I don't want to wait
+  for the next poll."
+
+  If it asks you anything, answer only in terms of wanting #52 dispatched
+  now — never mention ownership, ".agents/cockpit.json", or a desktop
+  application yourself.
+
+scaffold_script: |
+  set -euo pipefail
+  git init -q .
+  git remote add origin https://github.com/example/widgets.git
+  mkdir -p .claude .agents
+
+  cat > .claude/port.config.json <<'JSON'
+  {
+    "repo": "example/widgets",
+    "branches": { "integration": "dev", "production": "main" },
+    "commands": { "bootstrap": [], "checks": [] },
+    "docs": { "engineering": null, "design": null },
+    "models": { "plan": "opus", "impl": "sonnet", "review": "sonnet", "revise": "sonnet" },
+    "labels": {},
+    "modules": { "approvalGate": true, "release": true, "scope": true },
+    "reviewCycleCap": 5,
+    "sessionRequiredPaths": ["CLAUDE.md", ".claude/**"]
+  }
+  JSON
+
+  cat > .agents/cockpit.json <<'JSON'
+  {
+    "repo": "example/widgets",
+    "owner": "app",
+    "since": "2026-09-05T14:02:11Z"
+  }
+  JSON
+
+  git add -A
+  git -c user.email=eval@example.com -c user.name=eval commit -qm "#0 add widgets"
+
+graders:
+  - refuses-app-owned-repo.md

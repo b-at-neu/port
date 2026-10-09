@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -8,7 +8,6 @@ import type { CommandResult } from '../platform/run'
 import type { GhResult } from '../platform/gh'
 import type { BoardSnapshot } from '../../shared/board/types'
 import { buildPipelineQuery } from '../github/query'
-import type { SessionReader } from '../sessions/sdk'
 import { createPipelineWatcher } from './watcher'
 import type { TimerFactory, TimerHandle } from './watcher'
 

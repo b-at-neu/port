@@ -14,7 +14,7 @@ import type { ClaimPreflight, ClaimVerdict, PlanGateChoice } from './types'
  *  names exactly these three `<labels.X>` keys — `scripts/checks/
  *  desktop-claim.mjs` pins this set against that paragraph, both
  *  directions. `autoPlan` is kept separate from `CLAIM_LABEL_KEYS` rather
- *  than folded in, since it is conditional on the operator's plan-gate
+ *  than folded in, since it is conditional on the operator's plan-review
  *  choice and the other two never are. */
 export const CLAIM_LABEL_KEYS: readonly LabelKey[] = ['marker', 'ready']
 export const AUTO_PLAN_KEY: LabelKey = 'autoPlan'

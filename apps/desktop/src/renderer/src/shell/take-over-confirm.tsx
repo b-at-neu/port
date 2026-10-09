@@ -1,5 +1,4 @@
-// The take-over-from-the-terminal confirmation (#331) — shown only once the
-// sidebar's Take over… menu item arms it.
+// The take-over-from-the-terminal confirmation — shown only once the sidebar's Take over… item arms it.
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { useTakeOverRequest, setTakeOverRequest } from './stores'
 import { useRunStateCommand } from './run-state-command'
@@ -16,7 +15,7 @@ export function TakeOverConfirmDialog() {
           <AlertDialogHeader>
             <AlertDialogTitle>Take over {request.name} from the terminal?</AlertDialogTitle>
             <AlertDialogDescription>
-              Only do this if /port:pipeline isn&apos;t running for this repo in any terminal. This app can&apos;t tell whether it is. A cockpit still running there stops at its next tick.
+              Only do this once /port:pipeline has stopped for this repo in every terminal. This app can&apos;t confirm that itself. A cockpit still active there stops at its next tick.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

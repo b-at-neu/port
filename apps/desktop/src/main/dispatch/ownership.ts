@@ -1,10 +1,5 @@
-// readOwnership / takeOwnership / releaseOwnership over
-// `<base repo root>/.agents/cockpit.json` (docs/COORDINATION.md → "The
-// ownership record"), resolving the base root with the same
-// `git rev-parse --git-common-dir` helper `main/writes/claim.ts` used, so
-// every worktree of a checkout sees the one record. Replaces
-// `main/writes/claim.ts` and its two gate-claim scopes with the single
-// app/terminal exclusivity this record decides.
+// readOwnership / takeOwnership / releaseOwnership over `<base repo root>/.agents/cockpit.json`,
+// resolving the base root the same way every worktree of a checkout sees the one record.
 import { defaultGitRunner, resolveGitBaseRoot } from '../platform/git'
 import { ensureDirectory, readTextFile, removeFile, writeJsonFileAtomic } from '../platform/files'
 import { pathOps as defaultPathOps } from '../platform/paths'
@@ -29,16 +24,8 @@ interface OwnershipFileShape {
   readonly since?: unknown
 }
 
-/** The classification alone, with no path or clock — `exists: false` (or a
- *  `null` text) is `absent` regardless of content; a `repo` mismatch also
- *  reads as `absent`, a positive determination rather than an unreadable
- *  one, mirroring `writes/claim.ts`'s own rule for `readGateClaim`. Anything
- *  else that cannot be trusted reads as `unreadable` — the one state both
- *  the app and the terminal cockpit refuse under
- *  (`docs/COORDINATION.md` → "Failure directions"). `plugins/port/hooks/lib/
- *  ownership-rules.mjs`'s own `classifyOwnership` mirrors this function
- *  field for field, so `scripts/checks/cockpit-ownership.ts` can pin the two
- *  against one shared fixture set. */
+/** The classification alone, with no path or clock — a `repo` mismatch reads as `absent`
+ *  (a positive determination), and anything else untrustworthy reads as `unreadable`. */
 export function classifyOwnership(exists: boolean, text: string | null, repo: string): OwnershipVerdict {
   if (!exists || text === null) return { kind: 'absent' }
   let parsed: unknown
@@ -112,10 +99,7 @@ export async function readOwnership(params: ReadOwnershipParams): Promise<Owners
   }
 }
 
-/** Drops the path/clock fields an `OwnershipRead` carries for its own
- *  read-site bookkeeping — the renderer-safe shape every gate and dispatch
- *  surface actually renders (`shared/writes/types.ts`'s own
- *  `OwnershipSummary`). */
+/** Drops the path/clock fields — the renderer-safe shape every gate and dispatch surface renders. */
 export function toOwnershipSummary(read: OwnershipRead): OwnershipSummary {
   switch (read.kind) {
     case 'absent':
@@ -139,24 +123,15 @@ export type OwnershipWriteResult = { readonly ok: true; readonly path: string } 
 
 export interface TakeOwnershipParams extends OwnershipDeps {
   readonly repo: string
-  /** Overwrites a `terminal` record — reached only from the app's confirmed
-   *  Take over dialog. Without it, `takeOwnership` refuses `terminal` and
-   *  `unreadable` outright, never silently taking over. */
+  /** Overwrites a `terminal` record — reached only from the confirmed Take over dialog. */
   readonly force?: boolean
   readonly now?: () => Date
 }
 
 export type TakeOwnershipResult = OwnershipWriteResult | { readonly ok: false; readonly kind: 'refused'; readonly verdict: Extract<OwnershipRead, { kind: 'terminal' | 'unreadable' }>; readonly path: string }
 
-/**
- * Always writes `owner: "app"` — the only owner this process ever claims
- * for itself; a terminal cockpit takes ownership by writing the record
- * directly (`plugins/port/skills/pipeline/PREFLIGHT.md`'s own "Cockpit
- * ownership" step), never through this function. Unlike `writes/claim.ts`'s
- * scope-preserving pair, there is no read-modify-write: an ownership record
- * carries exactly one owner, so taking it always starts `since` fresh at
- * `now()`.
- */
+/** Always writes `owner: "app"`, the only owner this process ever claims for itself — no
+ *  read-modify-write, since a record carries exactly one owner and `since` always starts fresh. */
 export async function takeOwnership(params: TakeOwnershipParams): Promise<TakeOwnershipResult> {
   const pathOps = params.pathOps ?? defaultPathOps
   const now = params.now ?? (() => new Date())
@@ -180,12 +155,8 @@ export interface ReleaseOwnershipParams extends OwnershipDeps {
   readonly repo: string
 }
 
-/**
- * Deletes the record only when the verdict is `app` — an absent record is
- * already the caller's intent, and a `terminal`/`unreadable` record is never
- * this process's to delete, the one rail that keeps a release from ever
- * discarding a cockpit it does not own.
- */
+/** Deletes the record only when the verdict is `app` — never a `terminal`/`unreadable` one,
+ *  the rail that keeps a release from ever discarding a cockpit it does not own. */
 export async function releaseOwnership(params: ReleaseOwnershipParams): Promise<OwnershipWriteResult> {
   const path = await resolveOwnershipPath(params)
   const current = await readOwnership(params)

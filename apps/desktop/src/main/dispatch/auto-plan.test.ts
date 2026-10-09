@@ -117,7 +117,7 @@ function deps(overrides: Partial<AutoPlannerDeps> = {}): AutoPlannerDeps {
 }
 
 describe('createAutoPlanner', () => {
-  it('writes an auto-approval while plan-gate is held and the item is autoApprovable', async () => {
+  it('writes an auto-approval while this app owns the repository and the item is autoApprovable', async () => {
     let received: AutoApprovePlanParams | undefined
     const planner = createAutoPlanner(deps({ autoApprove: (p) => { received = p; return Promise.resolve(APPLIED) } }))
     await planner.consider(snapshotWith([tickReport()], [item()]))

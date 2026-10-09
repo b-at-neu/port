@@ -77,9 +77,7 @@ export function useRunStateCommand() {
       setPauseRequest(null)
       void send('pause', repoId, repoName)
     },
-    /** #331: arms `take-over-confirm.tsx`'s `AlertDialog` (DESIGN §4: a
-     *  consequential action) — the sidebar's own Take over, never applied
-     *  at once the way an empty-in-flight pause is. */
+    /** Arms `take-over-confirm.tsx`'s `AlertDialog` — a consequential action, never applied at once. */
     requestTakeOver(repoId: RepoId, repoName: string): void {
       setTakeOverRequest({ repoId, name: repoName })
     },

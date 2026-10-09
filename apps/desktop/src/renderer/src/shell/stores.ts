@@ -69,8 +69,7 @@ export function usePauseRequest(): PauseRequest | null {
   return useSyncExternalStore(pauseRequestStore.subscribe, pauseRequestStore.get)
 }
 
-/** #331: the sidebar's own Take over confirmation — `take-over-confirm.tsx`'s
- *  `AlertDialog`, armed the same way `PauseRequest` arms its own. */
+/** The sidebar's own Take over confirmation, armed the same way `PauseRequest` arms its own. */
 export interface TakeOverRequest {
   readonly repoId: RepoId
   readonly name: string

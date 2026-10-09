@@ -166,7 +166,7 @@ export function ownerLineCopy(status: RepoDispatchStatus): string {
     return `Pipeline: your terminal cockpit runs this repo${sincePart}. This app won't dispatch, answer gates, or write labels here.${clause}`
   }
   if (status.owner === 'none') {
-    return `Pipeline: not running here. Run starts it.${clause}`
+    return `Pipeline: idle here. Run starts it.${clause}`
   }
 
   // owner === 'app'
@@ -230,7 +230,7 @@ export function budgetNoteLines(status: RepoDispatchStatus): readonly string[] {
  *  status.tsx` calls `takeOver(repoId, repoName)` directly on click. */
 export function controlFor(status: RepoDispatchStatus): { readonly label: string; readonly title: string } | null {
   if (status.owner !== 'terminal') return null
-  return { label: 'Take over…', title: "Only do this if the terminal isn't running — this app can't tell whether it is." }
+  return { label: 'Take over…', title: "Only do this once the terminal has stopped — this app can't confirm that itself." }
 }
 
 /** The owner line's own run-state suffix (plain concatenation, no state
