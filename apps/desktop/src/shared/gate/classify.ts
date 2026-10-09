@@ -1,12 +1,4 @@
-// Pure plan-review-gate classification and label-level plan building — no `gh`, no
-// filesystem. `classifyGate` never resolves a `gh` call itself; the caller
-// (`main/actions/gate.ts`) supplies the already-fetched `GateClassifyItem`,
-// with `noPlanBlock` already computed from the body split at
-// `IMPLEMENTATION_PLAN_HEADING` — this module never touches a body string.
-// `buildGatePlan` resolves no `LabelKey` either — the vocabulary rides along
-// on the caller's own `LabelWriteRequest` for `main/writes/command.ts` to
-// resolve, the same idiom `shared/claim/classify.ts`'s own `buildClaimRequest`
-// follows.
+// Pure plan-review-gate classification and label-level plan building — no `gh`, no filesystem. The caller supplies the already-fetched `GateClassifyItem`; this module never touches a body string.
 import { labelName } from '../labels/vocabulary'
 import type { LabelKey, LabelVocabulary } from '../labels/vocabulary'
 import type { LabelPrecondition } from '../writes/types'
@@ -19,24 +11,11 @@ export interface GateClassifyItem {
   readonly labels: readonly string[]
   readonly assignees: readonly string[]
   readonly viewer: string
-  /** Computed by `main/actions/gate.ts` from the item's own body — this
-   *  module never parses one, staying label/assignee-only like every other
-   *  pure classifier under `shared/`. */
+  /** Computed by `main/actions/gate.ts` from the item's own body — this module never parses one. */
   readonly noPlanBlock: boolean
 }
 
-/**
- * `item: null` is the composition root's own "the number does not exist or
- * its alias errored" case, passed straight through as `not-found` — never a
- * thrown error, the same rule `shared/claim/classify.ts`'s own
- * `classifyPreflight` follows. Resolves `planReview` through the vocabulary,
- * never a literal name: an unresolved (module-disabled) key reads as
- * `not-at-plan-review` with the observed labels, since "this repository has
- * no plan gate at all" and "this item isn't at it" both refuse the same way.
- * `assignedElsewhere` is advisory only, never a refusal — the claim is the
- * authorization here (`docs/COORDINATION.md`'s ownership table), the one
- * place this diverges from `shared/claim/classify.ts`'s own ownership check.
- */
+/** `item: null` passes through as `not-found`, never a thrown error. Resolves `planReview` through the vocabulary, never a literal name. `assignedElsewhere` is advisory only, never a refusal. */
 export function classifyGate(params: { readonly item: GateClassifyItem | null; readonly vocabulary: LabelVocabulary }): GateVerdict {
   const { item, vocabulary } = params
   if (item === null) return { kind: 'not-found' }
@@ -57,15 +36,7 @@ export interface GatePlan {
   readonly expect: LabelPrecondition
 }
 
-/**
- * The two plans (plan's own **Data & contracts** table), key-level only —
- * `main/actions/gate.ts` supplies `repoId`/`repo`/`kind`/`number`/
- * `vocabulary`. Both plans set `expect.present` to `['planReview']` — the
- * "don't answer an item that already moved" guard, the same shape
- * `shared/claim/classify.ts` pins `expect.absent: ['marker']` with — and
- * `expect.assignees: { kind: 'any' }` is deliberate: an item assigned to
- * someone else is answerable, never refused on that basis alone.
- */
+/** Key-level plans only; the caller supplies `repoId`/`repo`/`kind`/`number`/`vocabulary`. `expect.assignees: { kind: 'any' }` is deliberate: an item assigned to someone else is still answerable. */
 export function buildGatePlan(decision: GateDecision): GatePlan {
   const add: LabelKey = decision === 'approve' ? 'planApproved' : 'planChangesRequested'
   return {
@@ -75,16 +46,7 @@ export function buildGatePlan(decision: GateDecision): GatePlan {
   }
 }
 
-/** #313: the auto-plan swap's own write plan — `add`/`remove` come from
- *  `buildGatePlan('approve')` unchanged, so `desktop-gate`'s own key-set
- *  pin still holds. The precondition is stricter than a click's: `present`
- *  carries both `planReview` and `autoPlan` (an item that lost either
- *  between the tick and the write is no longer this candidate), `absent`
- *  is every role-bearing vocabulary key except `planReview` — the same
- *  derivation `main/dispatch/observation.ts`'s own `precondition` uses —
- *  and `assignees` requires exactly the snapshot's own assignee set, never
- *  `{ kind: 'any' }`: a reassigned issue is no longer the candidate this
- *  pass read. */
+/** The auto-plan swap's write plan — `add`/`remove` come from `buildGatePlan('approve')` unchanged. Its precondition is stricter: `present` requires both `planReview` and `autoPlan`, and `assignees` must exactly match the snapshot's own set. */
 export function buildAutoApprovePlan(params: { readonly vocabulary: LabelVocabulary; readonly assignees: readonly string[] }): GatePlan {
   const { add, remove } = buildGatePlan('approve')
   const allRoleBearing = params.vocabulary.labels.filter((l) => l.role !== 'marker').map((l) => l.key)

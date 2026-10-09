@@ -1,7 +1,4 @@
-// The pure board projection (#80) — everything the screen decides lives
-// here, so it is testable under the existing `environment: 'node'` vitest
-// config with no jsdom dependency. No import here may reach a Node builtin
-// or `src/main/`.
+// The pure board projection — everything the screen decides lives here, testable under `environment: 'node'` with no jsdom dependency.
 import { LABEL_DEFAULTS } from '../labels/defaults'
 import { inspectDenials } from '../local/inspect'
 import { actionsFor } from '../actions/plan'
@@ -11,13 +8,7 @@ import type { RepositoryFreshness, RepositoryState, StageLabel } from '../state/
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from './types'
 import type { BoardGroup, BoardItemRow, BoardProjection, BoardRepositorySummary, BoardSnapshot, DisplayStatus, GroupBy, RepositoryHealth, SourceHealth, SourceKind } from './types'
 
-/**
- * Decision 5 — the eventual-consistency suppression. `item.status` is never
- * rewritten; this is a presentation verdict with its own name, so the model
- * and the screen can never silently disagree about what was observed. Fails
- * toward under-reporting (renders `in-flight` rather than a possibly-phantom
- * `stalled`), which costs one more glance, never a trained-to-ignore signal.
- */
+/** The eventual-consistency suppression; `item.status` is never rewritten. Fails toward under-reporting — renders `in-flight` rather than a possibly-phantom `stalled`. */
 export function displayStatus(item: { readonly status: string }, repoHealth: RepositoryHealth | undefined, freshness: RepositoryFreshness, now: Date): DisplayStatus {
   if (item.status !== 'stalled') {
     return { status: item.status as DisplayStatus['status'], staleGithub: false, githubAgeMs: null }
@@ -39,19 +30,13 @@ export function displayStatus(item: { readonly status: string }, repoHealth: Rep
   return { status: 'in-flight', staleGithub: true, githubAgeMs }
 }
 
-/** The winning `StageLabel` — the first entry of `item.stages` whose
- *  `role === item.stage`, `null` when `stage` is `null`. Deterministic given
- *  `matchedKeys`' own order (`stageOf`'s build order). */
+/** The first entry of `item.stages` whose `role === item.stage`, `null` when `stage` is `null`. */
 export function stageLabelOf(item: { readonly stage: string | null; readonly stages: readonly StageLabel[] }): StageLabel | null {
   if (item.stage === null) return null
   return item.stages.find((label) => label.role === item.stage) ?? null
 }
 
-/** `a` is strictly worse than `b`: more consecutive failures first, then
- *  (same failure count) the older — or never-succeeded — last read. Used to
- *  pick one representative `SourceHealth` per kind across every repository
- *  for the header's freshness strip, so a slow or failing repo other than
- *  the first is never invisible there (#80 R2-L1). */
+/** `a` is strictly worse than `b`: more consecutive failures first, then the older or never-succeeded last read. */
 function isWorseHealth(a: SourceHealth, b: SourceHealth): boolean {
   if (a.consecutiveFailures !== b.consecutiveFailures) return a.consecutiveFailures > b.consecutiveFailures
   const aAt = a.lastSuccessAt === null ? -Infinity : Date.parse(a.lastSuccessAt)
@@ -59,8 +44,7 @@ function isWorseHealth(a: SourceHealth, b: SourceHealth): boolean {
   return aAt < bAt
 }
 
-/** The worst `kind` health across every repository, `null` when there are
- *  none — aggregate rather than an arbitrary first entry (#80 R2-L1). */
+/** The worst `kind` health across every repository, `null` when there are none. */
 export function worstHealth(healths: readonly RepositoryHealth[], kind: SourceKind): SourceHealth | null {
   let worst: SourceHealth | null = null
   for (const h of healths) {
@@ -74,8 +58,7 @@ function repoDisplayName(repo: Extract<RepositoryState, { readonly ok: true }>):
   return repo.displayName
 }
 
-/** #85's own inspector — never a line total, the count belongs to one
- *  actor's one qualifying window on one shape (Decision 7). */
+/** Never a line total — the count belongs to one actor's one qualifying window on one shape. */
 function denialBurstCopyOf(repo: Extract<RepositoryState, { readonly ok: true }>, sessions: BoardSnapshot['state']['sessions']): string | null {
   const inspection = inspectDenials({ read: repo.denials, sessions })
   if (!inspection.ok || !inspection.present) return null
@@ -145,10 +128,7 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
   return { ...base, emittedAt: snapshot.emittedAt, signature: JSON.stringify(base) }
 }
 
-/** The Decision 1 no-op guard — a compact string over every rendered field,
- *  deliberately excluding `emittedAt` so a poll that changed nothing never
- *  triggers a rebuild. Already computed by `projectBoard`; exported so a
- *  caller holding two projections (e.g. a test) can compare them directly. */
+/** A compact string over every rendered field, deliberately excluding `emittedAt`, exported so a caller holding two projections can compare them directly. */
 export function boardSignature(projection: BoardProjection): string {
   return JSON.stringify({
     groupBy: projection.groupBy,
