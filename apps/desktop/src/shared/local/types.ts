@@ -1,42 +1,22 @@
-// Renderer-safe shapes for the two local sources the pipeline writes (#77):
-// `git worktree list --porcelain` and `.agents/denials.log`. No import here
-// may reach a Node builtin — apps/desktop/src/main/local/ is the only place
-// that spawns `git` or reads the log, but the renderer is the eventual
-// consumer of these shapes over IPC (#79/#80), so this file compiles under
-// `typecheck:web` too. `LocalFailureKind` and `DenialsFailureKind` are
-// hand-maintained literal unions for the same reason `PipelineFailureKind`
-// is in `shared/github/types.ts`: the renderer cannot import the platform
-// layer's real failure types, so `main/local/worktrees.ts` and
-// `main/local/denials.ts` each pin their union against the real one with
-// `AssertEqual`, and a new failure kind introduced there breaks
-// `pnpm typecheck` here instead of silently landing in `unknown`.
+// Renderer-safe shapes for the two local sources the pipeline writes: `git worktree list --porcelain` and `.agents/denials.log`. No import here may reach a Node builtin. `LocalFailureKind` and `DenialsFailureKind` are hand-maintained, pinned against the real platform-layer types with `AssertEqual` so a new failure kind there breaks `pnpm typecheck` here rather than silently landing in `unknown`.
 
 export type CorrelationRung = 'upstream-branch' | 'branch-name' | 'directory-basename' | 'head-subject'
 
-/** `{ number, rung }` when one of the four ladder rungs matched, byte-for-byte
- *  the reclaimer's own ladder (`bin/worktrees.mjs`'s `correlate`,
- *  pinned against this repository's TypeScript copy by the shared case
- *  table in `main/local/correlation.cases.json`). */
+/** `{ number, rung }` when one of the four ladder rungs matched, pinned against the reclaimer's own ladder by a shared case table. */
 export interface WorktreeCorrelation {
   readonly number: number
   readonly rung: CorrelationRung
 }
 
-/** Set only when `correlation` is `null` — a rung that could not run
- *  (`subjects-unavailable`, because the batched `git log --no-walk` call
- *  itself failed) is never conflated with a rung that ran and found nothing
- *  (`no-rung-matched`). */
+/** Set only when `correlation` is `null` — a rung that could not run (`subjects-unavailable`) is never conflated with one that ran and found nothing (`no-rung-matched`). */
 export type UnresolvedReason = 'no-rung-matched' | 'subjects-unavailable'
 
-/** `impl-<n>` is an operator's own `/port:implement` worktree; `agent-*` is a
- *  dispatched agent's (`isolation: worktree`); anything else is `other` —
- *  never assumed to be one of the pipeline's own producers. */
+/** `impl-<n>` is an operator's own `/port:implement` worktree; `agent-*` is a dispatched agent's; anything else is `other`. */
 export type WorktreeProducer = 'operator' | 'dispatched' | 'other'
 
 export interface WorktreeEntry {
   readonly path: string
-  /** `true` for the first stanza `git worktree list --porcelain` prints —
-   *  the main checkout — `false` for every linked worktree. */
+  /** `true` for the first stanza — the main checkout — `false` for every linked worktree. */
   readonly isMain: boolean
   readonly branch: string | null
   readonly head: string | null
@@ -44,7 +24,7 @@ export interface WorktreeEntry {
   readonly bare: boolean
   readonly locked: boolean
   readonly lockReason: string | null
-  /** The #62/#144 residue: the directory is gone but the entry remains. */
+  /** The directory is gone but the entry remains. */
   readonly prunable: boolean
   readonly prunableReason: string | null
   readonly producer: WorktreeProducer
@@ -54,9 +34,7 @@ export interface WorktreeEntry {
   readonly unresolved: UnresolvedReason | null
 }
 
-/** Every failure kind `readWorktrees` can report — a flat literal union,
- *  hand-maintained rather than derived from `CommandResult` (see this
- *  file's header). Pinned in `main/local/worktrees.ts`. */
+/** Every failure kind `readWorktrees` can report — hand-maintained, pinned in `main/local/worktrees.ts`. */
 export type LocalFailureKind =
   | 'not-found'
   | 'cwd-missing'
@@ -67,17 +45,13 @@ export type LocalFailureKind =
   | 'spawn-failed'
   | 'not-a-repository'
 
-/** No `state`, no `removable`, no `done`/`active` vocabulary — this adapter
- *  is local-only (Decision 1) and never resolves an item's state; joining a
- *  worktree to an item's `gh`-resolved state is #79's job. */
+/** No `state`, no `removable`, no `done`/`active` vocabulary — this adapter is local-only and never resolves an item's state. */
 export type WorktreesRead =
   | {
       readonly ok: true
       readonly mainPath: string
       readonly entries: readonly WorktreeEntry[]
-      /** `false` when the batched `git log --no-walk` call itself failed —
-       *  every entry the other three rungs could not resolve reports
-       *  `unresolved: 'subjects-unavailable'`, never `'no-rung-matched'`. */
+      /** `false` when the batched `git log --no-walk` call failed; unresolved entries then report `'subjects-unavailable'`, never `'no-rung-matched'`. */
       readonly subjectsAvailable: boolean
       readonly readAt: string
     }
@@ -88,17 +62,10 @@ export type WorktreesRead =
       readonly readAt: string
     }
 
-/** `deny`/`miss`/`gate-clear`/`hook-error` — the four-field current form's
- *  own vocabulary (`PIPELINE.md` → "Denial visibility"). A legacy three-field
- *  line carries no decision at all, so `DenialEntry.decision` is `null` for
- *  one. */
+/** The four-field current form's own vocabulary. A legacy three-field line carries no decision, so `DenialEntry.decision` is `null` for one. */
 export type DenialDecision = 'deny' | 'miss' | 'gate-clear' | 'hook-error'
 
-/** Attribution is *partly* reliable, not uniformly unreliable (the plan's
- *  correction to the ticket's stale premise): a `stage-agent` or `subagent`
- *  actor is attributable, a `session` or `unattributed` actor never is —
- *  nothing in either line distinguishes the cockpit, `/port:implement`, or
- *  an unrelated human session. */
+/** Attribution is partly reliable: a `stage-agent` or `subagent` actor is attributable, a `session` or `unattributed` actor never is. */
 export type DenialActor =
   | { readonly kind: 'stage-agent'; readonly agent: 'plan-agent' | 'impl-agent' | 'review-agent' | 'revise-agent' }
   | { readonly kind: 'subagent'; readonly agentType: string }
@@ -112,34 +79,22 @@ export interface DenialEntry {
   readonly raw: string
   readonly form: DenialForm
   readonly timestamp: string | null
-  /** `null` for a `legacy` or `malformed` line — a legacy line never carried
-   *  a decision field at all. */
+  /** `null` for a `legacy` or `malformed` line — a legacy line never carried a decision field. */
   readonly decision: DenialDecision | null
-  /** `null` only for a `malformed` line the actor ladder could not even
-   *  attempt to parse. */
+  /** `null` only for a `malformed` line the actor ladder could not parse. */
   readonly actor: DenialActor | null
   readonly subject: string | null
 }
 
-/** The buckets a consumer must never re-derive by filtering `entries` itself
- *  (Data & contracts): every wrong reading of this log has come from
- *  collapsing these back together. `total` counts every line in the file,
- *  independent of `limit`, so a cap can only understate `entries`, never
- *  `total`. */
+/** The buckets a consumer must never re-derive by filtering `entries` itself. `total` counts every line in the file, independent of `limit`. */
 export interface DenialSummary {
-  /** `deny` from a `stage-agent` or `subagent` actor — a dispatched agent
-   *  hit the allowlist. */
+  /** `deny` from a `stage-agent` or `subagent` actor — a dispatched agent hit the allowlist. */
   readonly agentDenials: number
-  /** `deny` from a `session` actor — a rail held (the cockpit's own loop,
-   *  gate, or install rule), never a missing permission. Never added to
-   *  `agentDenials`. */
+  /** `deny` from a `session` actor — a rail held, never a missing permission. Never added to `agentDenials`. */
   readonly railDenials: number
-  /** `miss` — a non-subagent allowlist miss, logged for visibility and
-   *  never denied. The #63 false-positive class; never a denial. */
+  /** `miss` — a non-subagent allowlist miss, logged for visibility and never denied. */
   readonly misses: number
-  /** `gate-clear` — an allowed, authorised `needs human` removal, or an
-   *  operator-named `approved` removal (the `revise #N` route, #288). An
-   *  audit record, not a denial, either way. */
+  /** `gate-clear` — an allowed, authorised `needs human` or operator-named `approved` removal. An audit record, not a denial. */
   readonly gateClears: number
   /** `hook-error` — a fail-open hook failure. */
   readonly hookErrors: number
@@ -148,10 +103,7 @@ export interface DenialSummary {
   readonly total: number
 }
 
-/** Every failure kind `readDenials` can report — `not-found` becomes
- *  `present: false` and a text read can never be `unparseable`, so both are
- *  excluded from the platform layer's `FileFailureKind`. Pinned in
- *  `main/local/denials.ts`. */
+/** Every failure kind `readDenials` can report — `not-found` becomes `present: false`, so both it and `unparseable` are excluded here. Pinned in `main/local/denials.ts`. */
 export type DenialsFailureKind = 'not-a-file' | 'permission-denied' | 'too-large' | 'io'
 
 /** An absent log is a distinct healthy state (`present: false`), never an
@@ -164,8 +116,7 @@ export type DenialsRead =
       readonly path: string
       readonly entries: readonly DenialEntry[]
       readonly summary: DenialSummary
-      /** `true` when `entries` holds fewer than `summary.total` lines — the
-       *  newest `limit` (default 500), oldest first. */
+      /** `true` when `entries` holds fewer than `summary.total` lines — the newest `limit` (default 500), oldest first. */
       readonly capped: boolean
       readonly readAt: string
     }

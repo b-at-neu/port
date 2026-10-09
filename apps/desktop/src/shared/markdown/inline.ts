@@ -1,14 +1,7 @@
-// Inline parse and the link-scheme allowlist (#92) — pure, no DOM, no
-// `node:` import (`shared/markdown/` compiles under `typecheck:web`).
-// Anything not recognized by one of the matchers below is literal text;
-// literal runs are always coalesced, never emitted one character at a time.
+// Inline parse and the link-scheme allowlist — pure, no DOM, no `node:` import. Unrecognized text is literal, with literal runs always coalesced.
 import type { InlineNode } from './types'
 
-/** The one allowlist deciding whether `[text](href)` becomes a `link` node
- *  at all — every other scheme (`javascript:`, `mailto:`, a bare relative
- *  path) renders as the literal source text instead, since a `javascript:`
- *  href in an Electron renderer is a code-execution sink and a relative
- *  GitHub path would be broken anyway. */
+/** Every other scheme renders as literal text, since a `javascript:` href in an Electron renderer is a code-execution sink. */
 const LINK_SCHEMES = ['http://', 'https://']
 
 function isAllowedHref(href: string): boolean {
@@ -20,9 +13,7 @@ interface Match {
   readonly length: number
 }
 
-/** Code span: `` `...` `` — no inline parsing inside, and the delimiter can
- *  be a run of one or more backticks, closed only by a run of the same
- *  length (CommonMark's own escape for embedding a literal backtick). */
+/** Code span: delimiter can be a run of one or more backticks, closed only by a run of the same length. */
 function matchCodeSpan(src: string, at: number): Match | null {
   if (src[at] !== '`') return null
   let run = 0
@@ -42,10 +33,7 @@ function matchStrong(src: string, at: number): Match | null {
   return { node: { kind: 'strong', children: parseInline(inner) }, length: closeIdx + 2 - at }
 }
 
-/** Declines whenever `matchStrong` would also match (`src[at + 1] === '*'`)
- *  — `parseInline`'s own ordering tries `matchStrong` first, but a `**` with
- *  no closing run must still fall through to a single literal `*`, never a
- *  misparsed emphasis span starting mid-delimiter. */
+/** Declines whenever `matchStrong` would also match, so an unclosed `**` falls through to a literal `*` rather than a misparsed span. */
 function matchEmphasis(src: string, at: number): Match | null {
   if (src[at] !== '*' || src[at + 1] === '*') return null
   const closeIdx = src.indexOf('*', at + 1)
@@ -54,10 +42,7 @@ function matchEmphasis(src: string, at: number): Match | null {
   return { node: { kind: 'emphasis', children: parseInline(inner) }, length: closeIdx + 1 - at }
 }
 
-/** The `)` that closes `(href)`, tracking nested-paren depth so a href
- *  containing its own balanced parentheses (a `javascript:alert(1)` sink, or
- *  an ordinary URL with one) is not truncated at the first `)` — matches
- *  `-1` only for a genuinely unclosed span. */
+/** The `)` that closes `(href)`, tracking nested-paren depth so an href with its own balanced parens is not truncated at the first `)`. */
 function findLinkClose(src: string, start: number): number {
   let depth = 0
   for (let i = start; i < src.length; i++) {
@@ -71,12 +56,7 @@ function findLinkClose(src: string, start: number): number {
   return -1
 }
 
-/** `[text](href)` — an unrecognized href scheme still consumes the whole
- *  span, but emits it back as the literal `text` node it would have rendered
- *  as anyway, never a `link` node with an inert href. Declines outright when
- *  immediately preceded by `!` — image syntax is not in the bounded subset
- *  (plan's own decided rule), so `![alt](url)` must render as literal text,
- *  never as a clickable link with the `!` orphaned in front of it. */
+/** An unrecognized href scheme still consumes the whole span but emits it back as literal text. Declines when preceded by `!` — image syntax is out of scope. */
 function matchLink(src: string, at: number): Match | null {
   if (src[at] !== '[') return null
   if (src[at - 1] === '!') return null

@@ -1,13 +1,6 @@
 import { LABEL_DEFAULTS, type LabelModule, type LabelRole } from './defaults'
 
-/**
- * Every label key `plugins/port/data/labels.json` defines, in the
- * template's own order. TypeScript widens a JSON import's string values to
- * `string`, so this literal union cannot be derived from that import — it is
- * hand-maintained and cross-checked against the template both directions by
- * `vocabulary.test.ts` and `scripts/checks.mjs`'s `desktop-label-defaults`
- * guard, the same idiom `shared/ipc.ts`'s `IPC_CHANNELS` uses for the IPC map.
- */
+/** Every label key the shipped template defines; hand-maintained since a JSON import's string values widen to `string` and cannot derive this union. */
 export const LABEL_KEYS = [
   'marker',
   'autoPlan',
@@ -31,10 +24,7 @@ export const LABEL_KEYS = [
 
 export type LabelKey = (typeof LABEL_KEYS)[number]
 
-/** `'CLAUDE.md'` (#300) is a `labels.<key>` override resolved from a
- *  repository's own root `CLAUDE.md` `port-overrides` block — it wins over
- *  `'config'` (`.claude/port.config.json`'s own `labels` map), which wins
- *  over `'default'`. */
+/** `'CLAUDE.md'` is an override from the repository's own `port-overrides` block; it wins over `'config'`, which wins over `'default'`. */
 export type LabelSource = 'config' | 'default' | 'CLAUDE.md'
 
 export interface ResolvedLabel {
@@ -42,16 +32,11 @@ export interface ResolvedLabel {
   readonly name: string
   readonly source: LabelSource
   readonly module: LabelModule
-  /** Off `labels.json`'s own `role` field (#79 Decision 1) — never re-derived
-   *  from a second key→stage table. An overridden *name* never changes the
-   *  role; it is a property of the key, not of what an operator calls it. */
+  /** Off `labels.json`'s own `role` field. An overridden name never changes the role; it is a property of the key, not of what an operator calls it. */
   readonly role: LabelRole
 }
 
-/**
- * A config-authoring mistake, never a thrown error — every one of these is
- * something a human should see and fix, not an exception a resolver raises.
- */
+/** A config-authoring mistake, never a thrown error. */
 export type VocabularyProblem =
   | { readonly kind: 'unknown-key'; readonly key: string }
   | { readonly kind: 'invalid-override'; readonly key: LabelKey; readonly value: unknown }
@@ -67,20 +52,11 @@ export interface LabelVocabulary {
 export interface VocabularyInput {
   readonly labels?: Readonly<Record<string, unknown>>
   readonly modules?: Readonly<Record<string, boolean>>
-  /** `CLAUDE.md` `labels.<key>` overrides (#300) — an entry here wins over
-   *  the same key in `labels`, with `source: 'CLAUDE.md'`. Keyed by the
-   *  already-validated `LabelKey`, unlike `labels` itself: these came off
-   *  `scripts/port-tick/overrides.ts`'s own `validate`, which already refused
-   *  anything outside the known key set, so there is no second
-   *  `unknown-key`/`invalid-override` check to run here. */
+  /** `CLAUDE.md` overrides — an entry here wins over the same key in `labels`, with `source: 'CLAUDE.md'`. Already validated, so no second check runs here. */
   readonly overrides?: Readonly<Partial<Record<LabelKey, string>>>
 }
 
-/**
- * A fetch that failed is a distinct value, never an empty array — "no labels
- * came back" and "the repository has no labels" must not collapse into one
- * state. Mirrors the discriminated-result shape `shared/ipc.ts` establishes.
- */
+/** A fetch that failed is a distinct value, never an empty array — "no labels came back" and "the repository has no labels" must not collapse into one state. */
 export type RepoLabels = { readonly ok: true; readonly names: readonly string[] } | { readonly ok: false; readonly reason: string }
 
 export type VocabularyVerdict = 'verified' | 'partial' | 'mis-resolved' | 'unverified'
@@ -98,12 +74,7 @@ function isNonBlankString(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== ''
 }
 
-/**
- * Pure: no filesystem, no `gh`, no config discovery. Reading a config is
- * #74's job; calling GitHub is #76's. `input.labels` values are `unknown` —
- * a config on disk is never runtime-validated before it reaches here, so
- * every override is treated as untrusted and narrowed on the spot.
- */
+/** Pure: no filesystem, no `gh`, no config discovery. `input.labels` values are `unknown` and narrowed on the spot, since nothing validates them before this call. */
 export function resolveVocabulary(input: VocabularyInput): LabelVocabulary {
   const labelsInput = input.labels ?? {}
   const modulesInput = input.modules ?? {}
@@ -125,9 +96,7 @@ export function resolveVocabulary(input: VocabularyInput): LabelVocabulary {
       continue
     }
 
-    // A CLAUDE.md override wins over port.config.json's own labels map —
-    // already validated against the key set, so never a second
-    // unknown-key/invalid-override check here.
+    // A CLAUDE.md override wins over port.config.json's labels map; already validated, so no second check here.
     const claudeMdOverride = claudeMdOverrides[def.key]
     if (claudeMdOverride !== undefined) {
       resolved.push({ key: def.key, name: claudeMdOverride, source: 'CLAUDE.md', module: def.module, role: def.role })
@@ -158,22 +127,12 @@ export function resolveVocabulary(input: VocabularyInput): LabelVocabulary {
   return { labels: resolved, disabled, problems }
 }
 
-/**
- * Returns `undefined` for a module-disabled key — consumers go through this
- * rather than indexing `labels` directly, so "this label does not apply to
- * this repository" is a case the type system forces them to handle.
- */
+/** Returns `undefined` for a module-disabled key, so "this label does not apply here" is a case the type system forces callers to handle. */
 export function labelName(vocabulary: LabelVocabulary, key: LabelKey): string | undefined {
   return vocabulary.labels.find((label) => label.key === key)?.name
 }
 
-/**
- * Pure over an already-fetched result — see `RepoLabels`. Compares names
- * case-insensitively with `toLowerCase()` (not `toLocaleLowerCase`, which
- * maps dotted/dotless `I` under a Turkish locale) because GitHub matches
- * label names case-insensitively; a case-only difference must report as
- * present-with-a-mismatch, never as missing.
- */
+/** Compares names with `toLowerCase()`, not `toLocaleLowerCase` (which maps dotted/dotless `I` under a Turkish locale), since GitHub matches case-insensitively. */
 export function verifyVocabulary(vocabulary: LabelVocabulary, repoLabels: RepoLabels): VocabularyReport {
   if (!repoLabels.ok) {
     return {
