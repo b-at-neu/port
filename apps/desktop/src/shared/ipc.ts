@@ -98,15 +98,12 @@ export interface IpcMap {
     request: { tailId: string }
     response: void
   }
-  /** Full-text search across every transcript in scope (#87) — the renderer
-   *  sends the raw query string and an opaque scope, never a path or a
-   *  parsed term list. */
+  /** Full-text search across every transcript in scope — the renderer sends the raw query string and an opaque scope, never a path or a parsed term list. */
   'search:query': {
     request: SearchQuery
     response: SearchResult
   }
-  /** The board's initial paint — one invoke, no polling of its own; every
-   *  later update arrives over the `board:update` event instead (#80). */
+  /** The board's initial paint — one invoke, no polling of its own; every later update arrives over the `board:update` event instead. */
   'board:snapshot': {
     request: void
     response: BoardSnapshot
@@ -118,9 +115,7 @@ export interface IpcMap {
     request: { repoId?: RepoId; source?: SourceKind }
     response: BoardSnapshot
   }
-  /** The claim dialog's read (#93) — resolves one issue's kind, labels,
-   *  assignees, blockers, and the viewer's own login, and classifies it, all
-   *  server-side; the renderer names an intent, never a precondition. */
+  /** The claim dialog's read — resolves one issue's kind, labels, assignees, blockers, and the viewer's login, and classifies it, all server-side. */
   'claim:preflight': {
     request: { repoId: RepoId; number: number }
     response: ClaimPreflightResponse
@@ -133,10 +128,7 @@ export interface IpcMap {
     request: { repoId: RepoId; number: number; planGate: PlanGateChoice; confirmedAssignees: readonly string[] }
     response: ClaimApplyResponse
   }
-  /** The board's single-label operator actions (#94) — pause/resume/retry/
-   *  gate. The renderer sends an intent, never a label set: `expectedStage`
-   *  is the row's own `stageLabel?.key` at click time, used server-side
-   *  only to refuse a stale click, never to widen what gets written. */
+  /** The board's single-label operator actions — pause/resume/retry/gate. `expectedStage` is used server-side only to refuse a stale click, never to widen what gets written. */
   'item:action': {
     request: { repoId: RepoId; kind: 'issue' | 'pull-request'; number: number; action: OperatorAction; expectedStage: LabelKey | null }
     response: ItemActionResult
@@ -147,20 +139,12 @@ export interface IpcMap {
     request: { repoId: RepoId; number: number; decision: OperatorDecision; expectedStage: LabelKey | null; route: UnblockRoute | null; note: string | null; skipComment: boolean }
     response: ItemDecisionResult
   }
-  /** Operator control over dispatch (#110, #314). `repoId` is required for
-   *  `run`/`drain`/`pause`/`take-over` (a registered repository, any status)
-   *  and must be omitted for `halt`, which sweeps every ready repository
-   *  this app knows about. `take-over` (#331) is reached only from the
-   *  confirmed Take over dialog — it overwrites a `terminal` ownership
-   *  record and then runs. */
+  /** Operator control over dispatch. `repoId` is required for `run`/`drain`/`pause`/`take-over` and must be omitted for `halt`, which sweeps every ready repository. `take-over` overwrites a `terminal` ownership record and then runs. */
   'dispatch:control': {
     request: { command: 'halt' } | { command: 'run' | 'drain' | 'pause' | 'take-over'; repoId: RepoId }
     response: DispatchControlResult
   }
-  /** The runtime strip's cheap check (#97) — no repository context, no
-   *  subprocess beyond `claude --version`, no network. Safe on every app
-   *  start; there is no failure branch, because every failure *is* a
-   *  diagnosis. */
+  /** The runtime strip's cheap check — no repository context, no subprocess beyond `claude --version`, no network. There is no failure branch; every failure *is* a diagnosis. */
   'runtime:preflight': {
     request: void
     response: RuntimePreflight
@@ -174,10 +158,7 @@ export interface IpcMap {
     request: { repoId: RepoId | null }
     response: RuntimeProbe
   }
-  /** The plan gate's own preflight read (#92) — resolves one issue's
-   *  identity, labels, assignees, and body (split into ticket/plan
-   *  markdown), classifies it, and reads this repository's ownership, all
-   *  server-side; the renderer names an intent, never a precondition. */
+  /** The plan gate's own preflight read — resolves one issue's identity, labels, assignees, and body, classifies it, and reads this repository's ownership, all server-side. */
   'gate:preflight': {
     request: { repoId: RepoId; number: number }
     response: GatePreflightResponse
@@ -191,10 +172,7 @@ export interface IpcMap {
     request: { repoId: RepoId; number: number; decision: GateDecision; feedback: string | null; skipComment: boolean }
     response: GateAnswerResponse
   }
-  /** #98: owns the full lifecycle of a hosted session in the main process
-   *  — the renderer only sends intents and receives events. `mode.kind` one
-   *  of `fresh | resume | resume-at | fork`; `repoId` must name a
-   *  currently registered, `ready` repository. */
+  /** Owns the full lifecycle of a hosted session in the main process — the renderer only sends intents and receives events. `repoId` must name a currently registered, `ready` repository. */
   'session:start': {
     request: { repoId: RepoId; mode: SessionStartMode }
     response: SessionStartResult
@@ -225,50 +203,42 @@ export interface IpcMap {
     request: void
     response: readonly HostedSessionSnapshot[]
   }
-  /** #99: the permission dialog's own write. `message` is required
-   *  (non-null) only when `decision` is `'deny'`, optional even then. */
+  /** The permission dialog's own write. `message` is required (non-null) only when `decision` is `'deny'`, optional even then. */
   'session:permission:answer': {
     request: { sessionKey: SessionKey; permissionId: string; decision: PermissionDecision; message: string | null }
     response: SessionPermissionAnswerResult
   }
-  /** #101: the Pipeline strip's own write — runs `name` (already
-   *  namespace-stripped, e.g. `'pipeline'`) as `/<name> <args>` in the live
-   *  session. `name`'s content is validated server-side, never here — see
-   *  `channels/hosting.ts`'s own doc comment. */
+  /** The Pipeline strip's own write — runs `name` (already namespace-stripped) as `/<name> <args>` in the live session. `name`'s content is validated server-side, never here. */
   'session:invoke': {
     request: { sessionKey: SessionKey; name: string; args: string }
     response: SessionInvokeResult
   }
-  /** #103: removes an ended handle from the rail — `still-open` for any
-   *  other phase. */
+  /** Removes an ended handle from the rail — `still-open` for any other phase. */
   'session:dismiss': {
     request: { sessionKey: SessionKey }
     response: SessionDismissResult
   }
-  /** #103: the rail's own limit/open count — takes no payload. */
+  /** The rail's own limit/open count — takes no payload. */
   'session:capacity': {
     request: void
     response: HostingCapacity
   }
-  /** #103: `limit` must be an integer from 1 to `SESSION_LIMIT_CEILING` —
-   *  never closes a session, even when lowered below the open count. */
+  /** `limit` must be an integer from 1 to `SESSION_LIMIT_CEILING` — never closes a session, even when lowered below the open count. */
   'session:capacity:set': {
     request: { limit: number }
     response: HostingCapacity
   }
-  /** #103: the restore banner's own boot-time read — availability resolved
-   *  through `listRepositories`. */
+  /** The restore banner's own boot-time read — availability resolved through `listRepositories`. */
   'session:restore:list': {
     request: void
     response: { entries: readonly RestorableSession[] }
   }
-  /** #103: resumes one restorable entry through the normal `start` path, so
-   *  capacity and `already-open` still apply. */
+  /** Resumes one restorable entry through the normal `start` path, so capacity and `already-open` still apply. */
   'session:restore': {
     request: { restoreId: string }
     response: SessionRestoreResult
   }
-  /** #103: `restoreId: null` discards every entry — idempotent either way. */
+  /** `restoreId: null` discards every entry — idempotent either way. */
   'session:restore:discard': {
     request: { restoreId: string | null }
     response: SessionRestoreDiscardResult
@@ -348,23 +318,12 @@ export type IpcChannel = (typeof IPC_CHANNELS)[number]
 // Fails to compile if IPC_CHANNELS and IpcMap's keys drift apart.
 export const _channelsMatchIpcMap: AssertEqual<IpcChannel, keyof IpcMap> = true
 
-/**
- * The main → renderer push direction — a second `as const` list with its own
- * `IpcEventMap` and its own `AssertEqual` pin, beside `IPC_CHANNELS` above,
- * exactly the compile-time contract that list already carries: an event
- * added to one and not the other fails `pnpm typecheck` (#80). The listener
- * receives the payload only, never the Electron event object, which would
- * hand `sender` to a sandboxed renderer.
- */
+/** The main → renderer push direction — a second `as const` list with its own `IpcEventMap` and `AssertEqual` pin. The listener receives the payload only, never the Electron event object, which would hand `sender` to a sandboxed renderer. */
 export interface IpcEventMap {
   'board:update': BoardSnapshot
-  /** This app's own typed snapshot, on every phase change — never a delta,
-   *  since folding the phase machine into the SDK envelope would put our
-   *  vocabulary inside a payload we promised to forward untouched. */
+  /** This app's own typed snapshot, on every phase change — never a delta, since folding the phase machine into the SDK envelope would mix our vocabulary into a payload we promised to forward untouched. */
   'session:status': HostedSessionSnapshot
-  /** #219: the live projector's own delta — narrowed, renderer-safe
-   *  `TranscriptEntry`/`PartialUpdate` values, never the opaque envelope
-   *  the removed `session:event` once carried. */
+  /** The live projector's own delta — narrowed, renderer-safe values, never the opaque envelope the removed `session:event` once carried. */
   'session:entries': SessionEntriesDelta
 }
 
@@ -374,13 +333,7 @@ export type IpcEvent = (typeof IPC_EVENTS)[number]
 
 export const _eventsMatchIpcEventMap: AssertEqual<IpcEvent, keyof IpcEventMap> = true
 
-/**
- * The bridge's own name derivation (#316) — moved out of the preload so
- * `renderer/src/data/invoke.ts` can resolve `window.port[bridgeMethodName(channel)]`
- * without a second, copied implementation. `preload/index.ts` imports both
- * functions below rather than redeclaring them, so there is exactly one
- * `channel:name` → `camelCase` mapping to pin.
- */
+/** The bridge's own name derivation, moved out of the preload so the renderer can resolve `window.port[bridgeMethodName(channel)]` without a second, copied implementation. */
 type CamelCase<S extends string> = S extends `${infer Head}:${infer Rest}` ? `${Head}${Capitalize<CamelCase<Rest>>}` : S
 
 export type BridgeMethod<C extends string> = CamelCase<C>
