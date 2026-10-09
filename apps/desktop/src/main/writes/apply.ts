@@ -11,7 +11,7 @@ import type { FetchItemsByNumberParams, RepoRef } from '../github/adapter'
 import type { ItemsByNumberFetch } from '../../shared/github/types'
 import type { LabelKey } from '../../shared/labels/vocabulary'
 import type { AssertEqual } from '../../shared/assert-type'
-import type { AuditEntry, CommentRequest, GhWriteFailureKind, LabelWriteRequest, ObservedItem, OwnershipKind, WriteOutcome } from '../../shared/writes/types'
+import type { CommentRequest, GhWriteFailureKind, LabelAuditEntry, LabelWriteRequest, ObservedItem, OwnershipKind, WriteOutcome } from '../../shared/writes/types'
 import { appendAudit } from './audit'
 import { buildCommand, resolveKeys } from './command'
 import type { GitRunner as OwnershipGitRunner } from '../dispatch/ownership'
@@ -64,13 +64,13 @@ export interface ApplyLabelsParams {
 interface AuditContext {
   readonly request: LabelWriteRequest
   readonly ownership: OwnershipKind
-  readonly precondition: AuditEntry['precondition']
+  readonly precondition: LabelAuditEntry['precondition']
   readonly observed: ObservedItem | null
   readonly call: readonly string[] | null
 }
 
 async function recordLabelAudit(auditDir: string, ctx: AuditContext, outcome: WriteOutcome, now: () => Date): Promise<void> {
-  const entry: AuditEntry = {
+  const entry: LabelAuditEntry = {
     at: now().toISOString(),
     repo: ctx.request.repo,
     repoId: ctx.request.repoId,
@@ -109,7 +109,7 @@ export async function applyLabels(params: ApplyLabelsParams): Promise<WriteOutco
     return outcome
   }
 
-  const precondition: AuditEntry['precondition'] = { present: expectPresent.names, absent: expectAbsent.names, assignees: request.expect.assignees }
+  const precondition: LabelAuditEntry['precondition'] = { present: expectPresent.names, absent: expectAbsent.names, assignees: request.expect.assignees }
 
   // --- Every write needs this app to own the repository, full stop — never
   // a per-label scope the way the old claim file derived one.
@@ -202,7 +202,7 @@ export async function postComment(params: PostCommentParams): Promise<WriteOutco
   const bodyBytes = Buffer.byteLength(request.body, 'utf8')
 
   async function record(ownership: OwnershipKind, call: readonly string[] | null, outcome: WriteOutcome): Promise<WriteOutcome> {
-    const entry: AuditEntry = {
+    const entry: LabelAuditEntry = {
       at: now().toISOString(),
       repo: request.repo,
       repoId: request.repoId,

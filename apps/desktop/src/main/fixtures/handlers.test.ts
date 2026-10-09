@@ -13,6 +13,7 @@ const WIDGETS = 'fixture-acme-widgets' as RepoId
 const SAMPLE_REQUESTS: Partial<Record<IpcChannel, unknown>> = {
   'repos:remove': { id: 'fixture-acme-widgets' },
   'worktrees:report': { id: 'fixture-acme-widgets' },
+  'worktrees:reclaim': { id: 'fixture-acme-widgets', issue: null },
   'transcript:tail:open': { sessionId: 'fixture-session', agentId: null },
   'transcript:tail:poll': { tailId: 'fixture-tail' },
   'transcript:tail:close': { tailId: 'fixture-tail' },
@@ -56,11 +57,11 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
     }
   })
 
-  it('reports repos:list with one ready and one not-ready entry', () => {
+  it('reports repos:list with two ready and one not-ready entry', () => {
     const result = handlers['repos:list'](undefined)
     if (!result.ok) throw new Error('fixture repos:list unexpectedly failed')
-    expect(result.repositories).toHaveLength(2)
-    expect(result.repositories.filter((r) => 'config' in r)).toHaveLength(1)
+    expect(result.repositories).toHaveLength(3)
+    expect(result.repositories.filter((r) => 'config' in r)).toHaveLength(2)
     expect(result.repositories.filter((r) => !('config' in r))).toHaveLength(1)
   })
 
@@ -71,9 +72,9 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
   describe('board:snapshot', () => {
     const snapshot = handlers['board:snapshot'](undefined)
 
-    it('has one ok repository and one not-ready repository', () => {
-      expect(snapshot.state.repositories).toHaveLength(2)
-      expect(snapshot.state.repositories.filter((r) => r.ok)).toHaveLength(1)
+    it('has two ok repositories and one not-ready repository', () => {
+      expect(snapshot.state.repositories).toHaveLength(3)
+      expect(snapshot.state.repositories.filter((r) => r.ok)).toHaveLength(2)
       expect(snapshot.state.repositories.filter((r) => !r.ok)).toHaveLength(1)
     })
 

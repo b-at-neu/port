@@ -2,7 +2,7 @@
 // naming the field — never a partial list.
 import type { PathOps } from '../platform/paths'
 import type { CorrelationRung } from '../../shared/local/types'
-import type { WorktreeState } from '../../shared/reclaimer/types'
+import type { ReclaimedWorktree, WorktreeState } from '../../shared/reclaimer/types'
 import { WORKTREE_STATES } from '../../shared/reclaimer/types'
 import { isRecord } from '../../shared/guards'
 
@@ -140,4 +140,59 @@ export function parseReportPayload(stdout: string, pathOps: PathOps): ParsedRepo
   }
 
   return { ok: true, mainRoot: pathOps.toNative(mainRoot), integrationRef, worktrees, orphanDirs, registered, byState }
+}
+
+export type ParsedReclaim =
+  | { readonly ok: true; readonly removed: number; readonly results: readonly ReclaimedWorktree[] }
+  | { readonly ok: false; readonly message: string }
+
+// Parses `reclaim --json`'s stdout, reusing parseReportPayload's shape plus
+// each candidate's own removed/error/branchDeleted fields.
+export function parseReclaimPayload(stdout: string, pathOps: PathOps): ParsedReclaim {
+  const base = parseReportPayload(stdout, pathOps)
+  if (!base.ok) return { ok: false, message: base.message }
+
+  let value: unknown
+  try {
+    value = JSON.parse(stdout)
+  } catch {
+    return { ok: false, message: "the script's stdout was not valid JSON" }
+  }
+  if (!isRecord(value)) return { ok: false, message: "the script's stdout was not a JSON object" }
+  const rawCandidates = value.candidates
+  if (!Array.isArray(rawCandidates)) return { ok: false, message: 'candidates is missing or not an array' }
+
+  const results: ReclaimedWorktree[] = []
+  let removedCount = 0
+  for (const [index, raw] of rawCandidates.entries()) {
+    if (!isRecord(raw)) return { ok: false, message: `candidates[${index}] is not an object` }
+
+    const removedFlag = raw.removed
+    if (typeof removedFlag !== 'boolean') return { ok: false, message: `candidates[${index}].removed is missing or not a boolean` }
+
+    const error = raw.error
+    if (!stringOrNull(error)) return { ok: false, message: `candidates[${index}].error is not a string or null` }
+
+    const branchDeleted = raw.branchDeleted
+    if (!(branchDeleted === null || typeof branchDeleted === 'boolean')) {
+      return { ok: false, message: `candidates[${index}].branchDeleted is not a boolean or null` }
+    }
+
+    const matched = base.worktrees[index]
+    if (matched === undefined) return { ok: false, message: `candidates[${index}] has no matching parsed worktree` }
+
+    const outcome: ReclaimedWorktree['outcome'] = removedFlag ? 'removed' : error !== null ? 'failed' : 'kept'
+    if (outcome === 'removed') removedCount++
+
+    results.push({
+      path: matched.path,
+      pathBasename: pathOps.basename(matched.path),
+      issue: matched.issue,
+      outcome,
+      error,
+      branchDeleted,
+    })
+  }
+
+  return { ok: true, removed: removedCount, results }
 }

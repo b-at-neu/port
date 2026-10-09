@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { resolveVocabulary } from '../../shared/labels/vocabulary'
-import type { AuditEntry, AuditRead } from '../../shared/writes/types'
+import type { AuditEntry, AuditRead, LabelAuditEntry } from '../../shared/writes/types'
 import type { RepoId } from '../../shared/repos'
 import { recoverPausedTrigger } from './resume'
 
 const VOCABULARY = resolveVocabulary({})
 
-function pauseEntry(overrides: Partial<AuditEntry> = {}): AuditEntry {
+function pauseEntry(overrides: Partial<LabelAuditEntry> = {}): LabelAuditEntry {
   return {
     at: '2026-01-01T00:00:00Z',
     repo: 'o/r',

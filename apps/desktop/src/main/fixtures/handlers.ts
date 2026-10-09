@@ -10,7 +10,7 @@ import { fixtureClaimPreflight, fixtureGatePreflight } from './dialogs'
 import { FIXTURE_REPOSITORIES } from './repos'
 import { fixtureAttachEntries, fixturePermissionSnapshots, fixtureSearchResult, fixtureSessionAttach, fixtureSessionsScan, fixtureSessionSnapshots } from './sessions'
 import type { FixtureScenario } from './mode'
-import { fixtureWorktreesReport } from './worktrees'
+import { fixtureWorktreesReclaim, fixtureWorktreesReport } from './worktrees'
 
 /** Exhaustive by construction: a new `IpcChannel` fails `pnpm typecheck` in
  *  `fixtureHandlers`'s own return literal until a fixture exists for it. */
@@ -49,6 +49,7 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
 
     // --- Click-only reads, valid and populated ------------------------------
     'worktrees:report': () => fixtureWorktreesReport(now),
+    'worktrees:reclaim': () => fixtureWorktreesReclaim(now),
 
     'transcript:tail:open': (request) => ({ ok: true, tailId: 'fixture-tail', source: transcriptSourceFor(request.sessionId, request.agentId, now), entries: fixtureAttachEntries(now) }),
     'transcript:tail:poll': () => ({ ok: true, source: transcriptSourceFor('fixture-session', null, now), appended: [], patched: [], hasMore: false }),

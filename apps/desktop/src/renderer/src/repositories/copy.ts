@@ -1,5 +1,7 @@
 // Every pure string the Repositories screens render. No DOM here.
 import type { AppliedOverride, RepoDiagnostic, RepoProblem, ResolvedRepoConfig } from '../../../shared/repos'
+import type { LabelSource, VocabularyProblem, VocabularyVerdict } from '../../../shared/labels/vocabulary'
+import type { OverviewModuleFlag } from './health-model'
 
 const MODULE_LABELS: { readonly [K in keyof ResolvedRepoConfig['modules']]: string } = {
   approvalGate: 'approval gate',
@@ -111,4 +113,45 @@ export interface RegistryBanner {
 export function registryBannerCopy(banner: RegistryBanner): string {
   const reason = banner.reason === 'unreadable' ? "couldn't be read" : banner.reason === 'malformed' ? "isn't valid JSON" : 'was written by a newer version of Port'
   return `Your repository list at ${banner.path} ${reason}. Nothing was changed — fix or delete that file and rescan.`
+}
+
+// --- Overview → Labels -------------------------------------------------
+
+// The verdict line's own sentence, by `VocabularyVerdict`.
+export function verdictCopy(verdict: VocabularyVerdict, total: number, missing: number, unverifiedReason: string | undefined): string {
+  switch (verdict) {
+    case 'verified':
+      return `All ${String(total)} labels exist on GitHub.`
+    case 'partial':
+      return `${String(missing)} of ${String(total)} labels are missing on GitHub. Items carrying them won't show.`
+    case 'mis-resolved':
+      return `None of the ${String(total)} labels this config resolves exist on GitHub. Check \`labels\` in .claude/port.config.json and the CLAUDE.md overrides.`
+    case 'unverified':
+      return `Couldn't check labels on GitHub — ${unverifiedReason ?? 'unknown reason'}.`
+  }
+}
+
+// `LabelSource`'s own values are already the exact display strings.
+export function labelSourceCopy(source: LabelSource): string {
+  return source
+}
+
+export function vocabularyProblemCopy(problem: VocabularyProblem): string {
+  switch (problem.kind) {
+    case 'unknown-key':
+      return `'${problem.key}' in labels isn't a known label key.`
+    case 'invalid-override':
+      return `labels.${problem.key} is ${JSON.stringify(problem.value)}, not a non-empty string — the default name stands.`
+    case 'collision':
+      return `${problem.keys.join(', ')} all resolve to the name '${problem.name}' — only one can match on GitHub.`
+    case 'case-mismatch':
+      return `labels.${problem.key} resolves to '${problem.resolved}', but GitHub has it as '${problem.actual}'.`
+  }
+}
+
+// --- Overview → Config -------------------------------------------------
+
+// "approval gate on · release off · scope on" — every flag, in a fixed order.
+export function moduleFlagCopy(flags: readonly OverviewModuleFlag[]): string {
+  return flags.map((flag) => `${MODULE_LABELS[flag.name]} ${flag.on ? 'on' : 'off'}`).join(' · ')
 }

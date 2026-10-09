@@ -2,7 +2,8 @@
 import { RETRY_TRIGGER, pausedTriggerFrom } from '../../shared/actions/plan'
 import { LABEL_DEFAULTS } from '../../shared/labels/defaults'
 import type { LabelKey, LabelVocabulary } from '../../shared/labels/vocabulary'
-import type { AuditEntry, AuditRead } from '../../shared/writes/types'
+import type { AuditEntry, AuditRead, LabelAuditEntry } from '../../shared/writes/types'
+import { isLabelAuditEntry } from '../../shared/writes/types'
 import { readAuditLog } from '../writes/audit'
 
 export type RecoverPausedTriggerResult = { readonly kind: 'recovered'; readonly trigger: LabelKey } | { readonly kind: 'no-record' } | { readonly kind: 'unresolvable' }
@@ -15,7 +16,8 @@ export interface RecoverPausedTriggerParams {
   readonly readAuditLog?: (dir: string, params: { readonly repo?: string; readonly number?: number }) => Promise<AuditRead>
 }
 
-function isAppliedPauseOrStop(entry: AuditEntry): boolean {
+function isAppliedPauseOrStop(entry: AuditEntry): entry is LabelAuditEntry {
+  if (!isLabelAuditEntry(entry)) return false
   return (entry.action === 'pause' || entry.action === 'stop') && entry.result.kind === 'applied'
 }
 

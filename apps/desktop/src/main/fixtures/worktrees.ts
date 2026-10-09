@@ -1,6 +1,6 @@
 // Fixture mode's canned worktrees:report — one each of active, done, dirty
 // and locked, plus one orphan directory.
-import type { InspectedWorktree, WorktreesReport } from '../../shared/reclaimer/types'
+import type { InspectedWorktree, WorktreesReclaimResult, WorktreesReport } from '../../shared/reclaimer/types'
 
 function worktree(overrides: Partial<InspectedWorktree> & Pick<InspectedWorktree, 'path' | 'pathBasename' | 'state' | 'reason'>): InspectedWorktree {
   return {
@@ -81,5 +81,16 @@ export function fixtureWorktreesReport(now: Date): WorktreesReport {
     githubResolution: 'resolved',
     porcelainJoin: 'joined',
     readAt: now.toISOString(),
+  }
+}
+
+// Removes impl-36, the report's own done row.
+export function fixtureWorktreesReclaim(now: Date): WorktreesReclaimResult {
+  return {
+    ok: true,
+    removed: 1,
+    results: [{ path: '/home/you/src/widgets/.claude/worktrees/impl-36', pathBasename: 'impl-36', issue: 36, outcome: 'removed', error: null, branchDeleted: true }],
+    readAt: now.toISOString(),
+    call: ['plugins/port/bin/worktrees.mjs', 'reclaim', '--json', '--issue', '36'],
   }
 }

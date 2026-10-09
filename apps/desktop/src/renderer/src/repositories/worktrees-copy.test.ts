@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { failureCopy, needsAttentionCount, producerCopy } from './worktrees-copy'
-import type { InspectedWorktree, WorktreesReport } from '../../../shared/reclaimer/types'
+import {
+  failureCopy,
+  needsAttentionCount,
+  producerCopy,
+  reclaimDialogTitle,
+  reclaimFailureToast,
+  reclaimNothingToReclaimTooltip,
+  reclaimResultToast,
+} from './worktrees-copy'
+import type { InspectedWorktree, ReclaimedWorktree, WorktreesReclaimResult, WorktreesReport } from '../../../shared/reclaimer/types'
 
 function worktree(overrides: Partial<InspectedWorktree> = {}): InspectedWorktree {
   return {
@@ -69,5 +77,53 @@ describe('needsAttentionCount', () => {
 
   it('zero for an empty list', () => {
     expect(needsAttentionCount([])).toBe(0)
+  })
+})
+
+function reclaimed(overrides: Partial<ReclaimedWorktree> = {}): ReclaimedWorktree {
+  return { path: '/repo/.claude/worktrees/impl-36', pathBasename: 'impl-36', issue: 36, outcome: 'removed', error: null, branchDeleted: true, ...overrides }
+}
+
+describe('reclaimDialogTitle', () => {
+  it('names a single worktree by path when reclaiming one', () => {
+    expect(reclaimDialogTitle(1, 'impl-36')).toBe('Reclaim impl-36?')
+  })
+
+  it('counts worktrees otherwise', () => {
+    expect(reclaimDialogTitle(2, null)).toBe('Reclaim 2 worktrees?')
+  })
+})
+
+describe('reclaimResultToast', () => {
+  it('reports a full success', () => {
+    const result: Extract<WorktreesReclaimResult, { ok: true }> = {
+      ok: true,
+      removed: 2,
+      results: [reclaimed(), reclaimed({ path: '/x', pathBasename: 'impl-50', issue: 50 })],
+      readAt: 't',
+      call: ['bin/worktrees.mjs'],
+    }
+    expect(reclaimResultToast(result)).toBe('Reclaimed 2 worktrees.')
+  })
+
+  it('reports a partial success with the failed entries', () => {
+    const result: Extract<WorktreesReclaimResult, { ok: true }> = {
+      ok: true,
+      removed: 1,
+      results: [reclaimed(), reclaimed({ path: '/x', pathBasename: 'impl-50', issue: 50, outcome: 'failed', error: 'locked', branchDeleted: null })],
+      readAt: 't',
+      call: ['bin/worktrees.mjs'],
+    }
+    expect(reclaimResultToast(result)).toBe('Reclaimed 1 of 2. impl-50: locked')
+  })
+})
+
+describe('reclaimFailureToast / reclaimNothingToReclaimTooltip', () => {
+  it('reuses failureCopy for a failed reclaim', () => {
+    expect(reclaimFailureToast({ ok: false, kind: 'script-failed', message: 'boom', readAt: 't', call: ['bin/worktrees.mjs'] })).toContain('boom')
+  })
+
+  it('names why reclaim is disabled', () => {
+    expect(reclaimNothingToReclaimTooltip().length).toBeGreaterThan(0)
   })
 })

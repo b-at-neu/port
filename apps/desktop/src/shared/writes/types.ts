@@ -1,6 +1,7 @@
 // Renderer-safe contract for the write chokepoint: every mutation the app makes to GitHub is expressed in `LabelKey` values and a stated precondition, never a raw argv or a bypassing `gh` call. No import here may reach a Node builtin.
 import type { LabelKey, LabelVocabulary } from '../labels/vocabulary'
 import type { RepoId } from '../repos'
+import type { ReclaimerFailureKind } from '../reclaimer/types'
 
 export type AssigneeExpectation = { readonly kind: 'any' } | { readonly kind: 'unassigned' } | { readonly kind: 'exactly'; readonly logins: readonly string[] }
 
@@ -88,8 +89,9 @@ export type WriteOutcome =
   | { readonly kind: 'verify-failed'; readonly message: string }
   | { readonly kind: 'write-failed'; readonly classification: GhWriteFailureKind; readonly stderr: string; readonly reread: ObservedItem | null }
 
-/** One line per attempt, `\n`-terminated JSON, written to one cross-repo file outside every working tree. `call` is the exact argv array that ran, `null` for every abort arm and for `no-op`. Writes only; a read is never logged. */
-export interface AuditEntry {
+/** One line per attempt, `\n`-terminated JSON, in `writes.jsonl`. `call` is the exact argv that ran, or `null` for an abort/no-op arm.
+ *  Writes and write attempts only; a read is never logged. */
+export interface LabelAuditEntry {
   readonly at: string
   readonly repo: string
   readonly repoId: RepoId
@@ -104,6 +106,28 @@ export interface AuditEntry {
   /** `postComment`'s own field — the comment is audited with its byte length and target, never its text. `null` on every label-write entry. */
   readonly commentBytes: number | null
   readonly result: WriteOutcome
+}
+
+// The worktree-reclaim arm — `removed`/`failed` are each candidate's own
+// `pathBasename`, never a raw path. `failure` is set only when `result` is `'failed'`.
+export interface ReclaimAuditEntry {
+  readonly at: string
+  readonly repo: string
+  readonly repoId: RepoId
+  readonly action: 'worktree-reclaim'
+  readonly issue: number | null
+  readonly call: readonly string[] | null
+  readonly removed: readonly string[]
+  readonly failed: readonly string[]
+  readonly result: 'applied' | 'partial' | 'failed'
+  readonly failure: ReclaimerFailureKind | null
+}
+
+export type AuditEntry = LabelAuditEntry | ReclaimAuditEntry
+
+// `'worktree-reclaim'` is the one `action` value `LabelAuditEntry` never takes.
+export function isLabelAuditEntry(entry: AuditEntry): entry is LabelAuditEntry {
+  return entry.action !== 'worktree-reclaim'
 }
 
 export type AuditReadFailureKind = 'permission-denied' | 'too-large' | 'io'

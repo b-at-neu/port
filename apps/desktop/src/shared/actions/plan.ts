@@ -2,7 +2,7 @@
 import { LABEL_DEFAULTS } from '../labels/defaults'
 import type { LabelRole } from '../labels/defaults'
 import type { LabelKey, LabelVocabulary } from '../labels/vocabulary'
-import type { AssigneeExpectation, AuditEntry, LabelPrecondition } from '../writes/types'
+import type { AssigneeExpectation, LabelAuditEntry, LabelPrecondition } from '../writes/types'
 import type { ReconciledItem } from '../state/types'
 import type { ActionAvailability, ActionPlan, ActionRefusal, OperatorAction } from './types'
 import { RETRY_TRIGGER as ENGINE_RETRY_TRIGGER } from '../../../../../scripts/port-tick/liveness'
@@ -124,8 +124,9 @@ export function actionsFor(params: ActionsForParams): Readonly<Record<OperatorAc
   }
 }
 
-/** Inverse of `pausePlan`'s `expect.present`; a unit test round-trips plan → entry → key so the two can never drift apart. */
-export function pausedTriggerFrom(entry: Pick<AuditEntry, 'precondition'>, vocabulary: LabelVocabulary): LabelKey | null {
+/** Inverse of `pausePlan`'s `expect.present`: returns the removed `LabelKey`, or `null` when the
+ *  precondition shape does not match a pause. */
+export function pausedTriggerFrom(entry: Pick<LabelAuditEntry, 'precondition'>, vocabulary: LabelVocabulary): LabelKey | null {
   const present = entry.precondition?.present ?? []
   if (present.length !== 1) return null
   const name = present[0]

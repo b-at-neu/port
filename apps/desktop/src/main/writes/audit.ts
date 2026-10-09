@@ -5,6 +5,7 @@ import { pathOps as defaultPathOps } from '../platform/paths'
 import type { FileFailureKind } from '../platform/files'
 import type { PathOps } from '../platform/paths'
 import type { AuditEntry, AuditRead, AuditReadFailureKind, ReadAuditLogParams } from '../../shared/writes/types'
+import { isLabelAuditEntry } from '../../shared/writes/types'
 
 const LOG_FILE = 'writes.jsonl'
 const PREV_LOG_FILE = 'writes.prev.jsonl'
@@ -87,8 +88,11 @@ export async function readAuditLog(
     }
   }
 
+  // A number-scoped read excludes a reclaim entry, which carries no `number`.
   const filtered = entries.filter(
-    (entry) => (params.repo === undefined || entry.repo === params.repo) && (params.number === undefined || entry.number === params.number),
+    (entry) =>
+      (params.repo === undefined || entry.repo === params.repo) &&
+      (params.number === undefined || (isLabelAuditEntry(entry) && entry.number === params.number)),
   )
   const limited = params.limit !== undefined && filtered.length > params.limit ? filtered.slice(-params.limit) : filtered
 

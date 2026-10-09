@@ -1,6 +1,6 @@
 import type { AssertEqual } from './assert-type'
 import type { RepoId, RepositoryEntry } from './repos'
-import type { WorktreesReport } from './reclaimer/types'
+import type { WorktreesReclaimResult, WorktreesReport } from './reclaimer/types'
 import type { SessionScan } from './sessions/types'
 import type { TranscriptTailOpen, TranscriptTailPoll } from './sessions/transcript'
 import type { SearchQuery, SearchResult } from './search/types'
@@ -80,6 +80,11 @@ export interface IpcMap {
   'worktrees:report': {
     request: { id: RepoId }
     response: WorktreesReport
+  }
+  // The Worktrees tab's own write — `issue: null` reclaims every candidate.
+  'worktrees:reclaim': {
+    request: { id: RepoId; issue: number | null }
+    response: WorktreesReclaimResult
   }
   'sessions:scan': {
     request: void
@@ -275,6 +280,7 @@ export const IPC_CHANNELS = [
   'repos:add',
   'repos:remove',
   'worktrees:report',
+  'worktrees:reclaim',
   'sessions:scan',
   'transcript:tail:open',
   'transcript:tail:poll',

@@ -11,6 +11,7 @@ import { applyItemDecision } from './actions/decide'
 import { gateAnswer, gatePreflight } from './actions/gate'
 import { resolveClaimApply, resolveClaimPreflight } from './channels/claim'
 import { resolveBacklogList } from './channels/backlog'
+import { resolveWorktreesReclaim } from './channels/worktrees'
 import { resolveGhStatus } from './channels/gh'
 import { createDispatchRuntime } from './dispatch/runtime'
 import { createRunStateStore } from './dispatch/store'
@@ -202,6 +203,8 @@ export function registerIpc(): RegisteredIpc {
   })
 
   handle('worktrees:report', (_event, request) => resolveWorktreesReport(registryDeps, request))
+
+  handle('worktrees:reclaim', (_event, request) => resolveWorktreesReclaim(registryDeps, request, app.getPath('userData')))
 
   handle('sessions:scan', (_event, request) => {
     if (request !== undefined) {

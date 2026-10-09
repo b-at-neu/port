@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { diagnosticCopy, overrideLineCopy, problemCopy, problemLabel, registryBannerCopy, summaryParts } from './copy'
+import { diagnosticCopy, labelSourceCopy, moduleFlagCopy, overrideLineCopy, problemCopy, problemLabel, registryBannerCopy, summaryParts, verdictCopy, vocabularyProblemCopy } from './copy'
 import type { AppliedOverride, ResolvedRepoConfig } from '../../../shared/repos'
 
 function baseConfig(overrides: Partial<ResolvedRepoConfig> = {}): ResolvedRepoConfig {
@@ -114,5 +114,54 @@ describe('registryBannerCopy', () => {
     expect(registryBannerCopy({ path: 'registry.json', reason: 'unreadable' })).toContain("couldn't be read")
     expect(registryBannerCopy({ path: 'registry.json', reason: 'malformed' })).toContain("isn't valid JSON")
     expect(registryBannerCopy({ path: 'registry.json', reason: 'unsupported-version' })).toContain('newer version of Port')
+  })
+})
+
+describe('verdictCopy', () => {
+  it('names every label present for verified', () => {
+    expect(verdictCopy('verified', 18, 0, undefined)).toBe('All 18 labels exist on GitHub.')
+  })
+
+  it('counts the missing labels for partial', () => {
+    expect(verdictCopy('partial', 18, 3, undefined)).toBe("3 of 18 labels are missing on GitHub. Items carrying them won't show.")
+  })
+
+  it('names the config and CLAUDE.md for mis-resolved', () => {
+    const copy = verdictCopy('mis-resolved', 18, 18, undefined)
+    expect(copy).toContain('None of the 18 labels')
+    expect(copy).toContain('CLAUDE.md')
+  })
+
+  it('carries the reason for unverified', () => {
+    expect(verdictCopy('unverified', 18, 0, 'rate limited')).toBe("Couldn't check labels on GitHub — rate limited.")
+  })
+})
+
+describe('labelSourceCopy', () => {
+  it('is identity over the three sources', () => {
+    expect(labelSourceCopy('default')).toBe('default')
+    expect(labelSourceCopy('config')).toBe('config')
+    expect(labelSourceCopy('CLAUDE.md')).toBe('CLAUDE.md')
+  })
+})
+
+describe('vocabularyProblemCopy', () => {
+  it('names each problem kind', () => {
+    expect(vocabularyProblemCopy({ kind: 'unknown-key', key: 'bogus' })).toContain('bogus')
+    expect(vocabularyProblemCopy({ kind: 'invalid-override', key: 'ready', value: 42 })).toContain('ready')
+    expect(vocabularyProblemCopy({ kind: 'collision', name: 'ready', keys: ['ready', 'planning'] })).toContain('ready')
+    expect(vocabularyProblemCopy({ kind: 'case-mismatch', key: 'ready', resolved: 'Ready', actual: 'ready' })).toContain('Ready')
+  })
+})
+
+describe('moduleFlagCopy', () => {
+  it('renders every flag in order, on or off', () => {
+    expect(
+      moduleFlagCopy([
+        { name: 'approvalGate', on: true },
+        { name: 'release', on: false },
+        { name: 'scope', on: true },
+      ]),
+    ).toBe('approval gate on · release off · scope on')
   })
 })
