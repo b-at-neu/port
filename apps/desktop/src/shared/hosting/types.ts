@@ -154,13 +154,7 @@ export interface PendingPermission {
   readonly interaction?: PendingInteraction | null
 }
 
-/** `'session:permission:answer'`'s response. `unknown-session`/
- *  `unknown-permission` are ordinary races an operator can hit (a second
- *  window, a withdrawn request) — reported as values, never thrown.
- *  `no-session-grant` is `allow-session` sent for a request whose
- *  `sessionGrant` is `null`; nothing is settled in either case.
- *  `interaction-prompt` is an allow decision sent for a request carrying a
- *  non-`null` `interaction`; `deny` still works. */
+/** `'session:permission:answer'`'s response: ordinary races and `no-session-grant`/`interaction-prompt` refusals are reported as values, never thrown. */
 export type SessionPermissionAnswerResult = { readonly ok: true } | { readonly ok: false; readonly kind: 'unknown-session' | 'unknown-permission' | 'no-session-grant' | 'interaction-prompt' }
 
 /** Which plugin path a session asked for — the repository's own copy (self-hosting) or the operator's installed one. Resolved once before spawn, carried on the snapshot so the operator sees it even before `init` confirms what loaded. */

@@ -25,7 +25,7 @@ describe('modelOptions', () => {
   })
 
   it('offers a leading Default option only when the current model is null', () => {
-    expect(modelOptions(READY, null)).toEqual([{ value: '', label: 'Default' }, { value: 'opus', label: 'Opus' }, { value: 'sonnet', label: 'Sonnet' }])
+    expect(modelOptions(READY, null)).toEqual([{ value: '__default__', label: 'Default' }, { value: 'opus', label: 'Opus' }, { value: 'sonnet', label: 'Sonnet' }])
     expect(modelOptions(READY, 'opus')).toEqual([{ value: 'opus', label: 'Opus' }, { value: 'sonnet', label: 'Sonnet' }])
   })
 })

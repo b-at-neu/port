@@ -26,11 +26,14 @@ export interface ModelSelectOption {
   readonly label: string
 }
 
+// Radix Select.Item reserves "" for "no selection", so the "Default" sentinel is non-empty.
+export const DEFAULT_SELECT_VALUE = '__default__'
+
 // A null currentModel offers a leading "Default" option, only before any change has been made.
 export function modelOptions(models: SessionModels, currentModel: string | null): readonly ModelSelectOption[] {
   if (models.kind !== 'ready') return []
   const options = models.models.map((model) => ({ value: model.value, label: model.displayName }))
-  return currentModel === null ? [{ value: '', label: 'Default' }, ...options] : options
+  return currentModel === null ? [{ value: DEFAULT_SELECT_VALUE, label: 'Default' }, ...options] : options
 }
 
 // Empty when the chosen model lists no effort levels; the controls bar hides the effort select then.

@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { SessionControls, SessionEffort, SessionModels } from '../../../shared/hosting/controls'
 import type { SessionKey } from '../../../shared/hosting/types'
-import { MODE_OPTIONS, controlsBarState, effortLabel } from './controls-model'
+import { DEFAULT_SELECT_VALUE, MODE_OPTIONS, controlsBarState, effortLabel } from './controls-model'
 import { controlsChangeFailed, MODELS_LOADING } from './interaction-copy'
 import { setControls } from './actions'
 
@@ -47,9 +47,9 @@ export function ControlsBar({ sessionKey, controls, models, disabled, disabledRe
       </Select>
 
       <Select
-        value={controls.model ?? ''}
+        value={controls.model ?? DEFAULT_SELECT_VALUE}
         disabled={disabled || pending !== null || state.modelsPending || state.modelsUnavailable !== null || state.modelOptions.length === 0}
-        onValueChange={(value) => void apply({ model: value }, 'model')}
+        onValueChange={(value) => { if (value !== DEFAULT_SELECT_VALUE) void apply({ model: value }, 'model') }}
       >
         <SelectTrigger className="h-7 w-auto gap-1 border-0 bg-transparent px-1.5 text-meta">
           <SelectValue>{pending === 'model' ? 'Saving…' : state.modelsPending ? MODELS_LOADING : `Model: ${state.modelLabel}`}</SelectValue>
@@ -64,12 +64,16 @@ export function ControlsBar({ sessionKey, controls, models, disabled, disabledRe
       </Select>
 
       {state.effortOptions.length > 0 ? (
-        <Select value={controls.effort ?? ''} disabled={disabled || pending !== null} onValueChange={(value) => void apply({ effort: (value === '' ? null : (value as SessionEffort)) }, 'effort')}>
+        <Select
+          value={controls.effort ?? DEFAULT_SELECT_VALUE}
+          disabled={disabled || pending !== null}
+          onValueChange={(value) => void apply({ effort: value === DEFAULT_SELECT_VALUE ? null : (value as SessionEffort) }, 'effort')}
+        >
           <SelectTrigger className="h-7 w-auto gap-1 border-0 bg-transparent px-1.5 text-meta">
             <SelectValue>{pending === 'effort' ? 'Saving…' : `Effort: ${effortLabel(controls.effort)}`}</SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Default</SelectItem>
+            <SelectItem value={DEFAULT_SELECT_VALUE}>Default</SelectItem>
             {state.effortOptions.map((effort) => (
               <SelectItem key={effort} value={effort}>
                 {effortLabel(effort)}
