@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { defaultGitRunner } from '../platform/git'
+import { pathOps } from '../platform/paths'
 import { createSessionWorktree, removeSessionWorktree } from './worktree'
 
 const git = defaultGitRunner()
@@ -43,7 +44,8 @@ describe('worktree — real git integration', () => {
 
     const listed = await git(['worktree', 'list', '--porcelain'], root)
     expect(listed.ok).toBe(true)
-    if (listed.ok) expect(listed.stdout).toContain(result.path)
+    // git reports worktree paths with forward slashes on every platform, result.path is native.
+    if (listed.ok) expect(listed.stdout).toContain(pathOps.toPosix(result.path))
   })
 
   it('appends the exclude line to <git-common-dir>/info/exclude, idempotently', async (ctx) => {

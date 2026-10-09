@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { CommandResult } from '../platform/run'
 import type { GitRunner } from '../platform/git'
+import { createPathOps } from '../platform/paths'
 import type { RepoId, RepositoryEntry } from '../../shared/repos'
 import { resolveWorkspace, toFolderEntry } from './resolve'
+
+// Fixed posix flavour, never the host-bound default: these fixtures are posix-shaped paths, and
+// `defaultPathOps` silently switches to win32 on a Windows runner, which no posix fixture matches.
+const pathOps = createPathOps('posix', { home: '/home/u' })
 
 function ok(stdout: string): CommandResult {
   return { ok: true, stdout, stderr: '' }
@@ -47,7 +52,7 @@ function readyRepo(path: string): RepositoryEntry {
 describe('resolveWorkspace', () => {
   it('resolves root: null for a non-git folder, with no worktree or base', async () => {
     const git = fakeGit({})
-    const { workspace, repoId } = await resolveWorkspace('/tmp/not-a-repo', { git, repositories: [] })
+    const { workspace, repoId } = await resolveWorkspace('/tmp/not-a-repo', { git, repositories: [], pathOps })
     expect(workspace).toEqual({ folder: '/tmp/not-a-repo', root: null, worktree: null, base: null })
     expect(repoId).toBeNull()
   })
@@ -60,7 +65,7 @@ describe('resolveWorkspace', () => {
       'rev-parse --abbrev-ref': () => ok('main\n'),
       'rev-parse HEAD': () => ok('abc123\n'),
     })
-    const { workspace, repoId } = await resolveWorkspace('/repo', { git, repositories: [] })
+    const { workspace, repoId } = await resolveWorkspace('/repo', { git, repositories: [], pathOps })
     expect(workspace.root).toBe('/repo')
     expect(workspace.worktree).toBeNull()
     expect(workspace.base).toEqual({ sha: 'abc123', label: 'main' })
@@ -75,7 +80,7 @@ describe('resolveWorkspace', () => {
       'rev-parse --abbrev-ref': () => ok('session/abc123\n'),
       'config branch.session/abc123.portBase': () => ok('def456\n'),
     })
-    const { workspace } = await resolveWorkspace('/repo/.claude/worktrees/session-abc123', { git, repositories: [] })
+    const { workspace } = await resolveWorkspace('/repo/.claude/worktrees/session-abc123', { git, repositories: [], pathOps })
     expect(workspace.worktree).toEqual({ path: '/repo/.claude/worktrees/session-abc123', branch: 'session/abc123' })
     expect(workspace.base).toEqual({ sha: 'def456', label: 'session/abc123' })
   })
@@ -88,7 +93,7 @@ describe('resolveWorkspace', () => {
       'rev-parse --abbrev-ref': () => ok('session/abc123\n'),
       'config branch.session/abc123.portBase': () => NOT_A_REPO,
     })
-    const { workspace } = await resolveWorkspace('/repo/.claude/worktrees/session-abc123', { git, repositories: [] })
+    const { workspace } = await resolveWorkspace('/repo/.claude/worktrees/session-abc123', { git, repositories: [], pathOps })
     expect(workspace.base).toBeNull()
   })
 
@@ -101,7 +106,7 @@ describe('resolveWorkspace', () => {
       'rev-parse HEAD': () => ok('abc123\n'),
     })
     const repositories = [readyRepo('/repo')]
-    const { repoId } = await resolveWorkspace('/repo', { git, repositories })
+    const { repoId } = await resolveWorkspace('/repo', { git, repositories, pathOps })
     expect(repoId).toBe('/repo')
   })
 })
@@ -109,7 +114,7 @@ describe('resolveWorkspace', () => {
 describe('toFolderEntry', () => {
   it('returns git: null for a non-git folder', async () => {
     const git = fakeGit({})
-    const entry = await toFolderEntry('/tmp/plain', { git, repositories: [], lastUsedAt: null })
+    const entry = await toFolderEntry('/tmp/plain', { git, repositories: [], lastUsedAt: null, pathOps })
     expect(entry.git).toBeNull()
     expect(entry.repoId).toBeNull()
     expect(entry.path).toBe('/tmp/plain')
@@ -124,7 +129,7 @@ describe('toFolderEntry', () => {
       'rev-parse --git-common-dir': () => ok('.git\n'),
     })
     const repositories = [readyRepo('/repo')]
-    const entry = await toFolderEntry('/repo', { git, repositories, lastUsedAt: '2026-01-01T00:00:00.000Z' })
+    const entry = await toFolderEntry('/repo', { git, repositories, lastUsedAt: '2026-01-01T00:00:00.000Z', pathOps })
     expect(entry.git).toEqual({ root: '/repo', head: { sha: 'abc123', branch: 'main' } })
     expect(entry.repoId).toBe('/repo')
     expect(entry.lastUsedAt).toBe('2026-01-01T00:00:00.000Z')
@@ -132,8 +137,8 @@ describe('toFolderEntry', () => {
 
   it('produces a stable id for the same path', async () => {
     const git = fakeGit({})
-    const first = await toFolderEntry('/tmp/same', { git, repositories: [], lastUsedAt: null })
-    const second = await toFolderEntry('/tmp/same', { git, repositories: [], lastUsedAt: null })
+    const first = await toFolderEntry('/tmp/same', { git, repositories: [], lastUsedAt: null, pathOps })
+    const second = await toFolderEntry('/tmp/same', { git, repositories: [], lastUsedAt: null, pathOps })
     expect(first.id).toBe(second.id)
   })
 })
