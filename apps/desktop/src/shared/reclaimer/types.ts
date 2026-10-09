@@ -88,5 +88,12 @@ export interface ReclaimedWorktree {
 // `runReclaim`'s own result — `ok: true` covers both a full and a partial
 // success, with every candidate's own outcome in `results`.
 export type WorktreesReclaimResult =
-  | { readonly ok: true; readonly removed: number; readonly results: readonly ReclaimedWorktree[]; readonly readAt: string }
-  | ({ readonly ok: false; readonly readAt: string } & ReclaimerFailure)
+  | {
+      readonly ok: true
+      readonly removed: number
+      readonly results: readonly ReclaimedWorktree[]
+      readonly readAt: string
+      /** The exact argv `runNode` spawned. */
+      readonly call: readonly string[]
+    }
+  | ({ readonly ok: false; readonly readAt: string; readonly call: readonly string[] | null } & ReclaimerFailure)

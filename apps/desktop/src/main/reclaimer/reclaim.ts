@@ -35,7 +35,7 @@ export async function runReclaim(params: RunReclaimParams): Promise<WorktreesRec
   const readAt = now().toISOString()
 
   if (params.worktreesCommand === null) {
-    return { ok: false, kind: 'not-configured', message: 'commands.worktrees is null — worktree hygiene is unavailable.', readAt }
+    return { ok: false, kind: 'not-configured', message: 'commands.worktrees is null — worktree hygiene is unavailable.', readAt, call: null }
   }
 
   const tokenized = parseNodeCommand(params.worktreesCommand)
@@ -47,9 +47,16 @@ export async function runReclaim(params: RunReclaimParams): Promise<WorktreesRec
         token: tokenized.token,
         message: `commands.worktrees starts with '${tokenized.token}', which Port won't run — only a node prefix is supported.`,
         readAt,
+        call: null,
       }
     }
-    return { ok: false, kind: 'unparseable-command', message: 'commands.worktrees could not be parsed as a plain command prefix.', readAt }
+    return {
+      ok: false,
+      kind: 'unparseable-command',
+      message: 'commands.worktrees could not be parsed as a plain command prefix.',
+      readAt,
+      call: null,
+    }
   }
 
   const args = [...tokenized.args, 'reclaim', '--json']
@@ -61,19 +68,19 @@ export async function runReclaim(params: RunReclaimParams): Promise<WorktreesRec
   if (!result.ok) {
     if (result.kind === 'nonzero' && result.stdout.trim() !== '') {
       const parsed = parseReclaimPayload(result.stdout, pathOps)
-      if (parsed.ok) return { ok: true, removed: parsed.removed, results: parsed.results, readAt }
+      if (parsed.ok) return { ok: true, removed: parsed.removed, results: parsed.results, readAt, call: args }
     }
     if (result.kind === 'nonzero' && result.stderr.includes(SCRIPT_FAIL_PREFIX)) {
-      return { ok: false, kind: 'script-failed', message: firstFailLine(result.stderr), readAt }
+      return { ok: false, kind: 'script-failed', message: firstFailLine(result.stderr), readAt, call: args }
     }
     const { kind, message } = describeCommandFailure(result)
-    return { ok: false, kind, message, readAt }
+    return { ok: false, kind, message, readAt, call: args }
   }
 
   const parsed = parseReclaimPayload(result.stdout, pathOps)
   if (!parsed.ok) {
-    return { ok: false, kind: 'report-unparseable', message: parsed.message, readAt }
+    return { ok: false, kind: 'report-unparseable', message: parsed.message, readAt, call: args }
   }
 
-  return { ok: true, removed: parsed.removed, results: parsed.results, readAt }
+  return { ok: true, removed: parsed.removed, results: parsed.results, readAt, call: args }
 }

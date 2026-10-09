@@ -91,5 +91,6 @@ export function fixtureWorktreesReclaim(now: Date): WorktreesReclaimResult {
     removed: 1,
     results: [{ path: '/home/you/src/widgets/.claude/worktrees/impl-36', pathBasename: 'impl-36', issue: 36, outcome: 'removed', error: null, branchDeleted: true }],
     readAt: now.toISOString(),
+    call: ['plugins/port/bin/worktrees.mjs', 'reclaim', '--json', '--issue', '36'],
   }
 }

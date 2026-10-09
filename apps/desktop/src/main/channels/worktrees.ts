@@ -48,13 +48,13 @@ export async function resolveWorktreesReclaim(
   const auditEntry: ReclaimAuditEntry = result.ok
     ? {
         ...base,
-        call: null,
+        call: result.call,
         removed: basenamesOf(result.results, 'removed'),
         failed: basenamesOf(result.results, 'failed'),
         result: result.results.some((r) => r.outcome === 'failed') ? 'partial' : 'applied',
         failure: null,
       }
-    : { ...base, call: null, removed: [], failed: [], result: 'failed', failure: result.kind }
+    : { ...base, call: result.call, removed: [], failed: [], result: 'failed', failure: result.kind }
 
   const audited = await deps.appendAudit(auditDir, auditEntry)
   if (!audited.ok) console.error(`'worktrees:reclaim' audit append failed: ${audited.message}`)

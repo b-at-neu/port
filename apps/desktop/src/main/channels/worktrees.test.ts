@@ -87,7 +87,8 @@ describe('resolveWorktreesReclaim', () => {
     let auditedEntry: ReclaimAuditEntry | undefined
     const deps = depsWith({
       listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-      runReclaim: () => Promise.resolve({ ok: true, removed: 1, results: [reclaimed()], readAt: 't' } satisfies WorktreesReclaimResult),
+      runReclaim: () =>
+        Promise.resolve({ ok: true, removed: 1, results: [reclaimed()], readAt: 't', call: ['bin/worktrees.mjs'] } satisfies WorktreesReclaimResult),
       appendAudit: (_dir, entry) => {
         auditedEntry = entry as ReclaimAuditEntry
         return Promise.resolve({ ok: true })
@@ -95,7 +96,14 @@ describe('resolveWorktreesReclaim', () => {
     })
     const result = await resolveWorktreesReclaim(registryDeps, { id: REPO_ID, issue: null }, '/audit', deps)
     expect(result.ok).toBe(true)
-    expect(auditedEntry).toMatchObject({ action: 'worktree-reclaim', removed: ['impl-36'], failed: [], result: 'applied', failure: null })
+    expect(auditedEntry).toMatchObject({
+      action: 'worktree-reclaim',
+      removed: ['impl-36'],
+      failed: [],
+      result: 'applied',
+      failure: null,
+      call: ['bin/worktrees.mjs'],
+    })
   })
 
   it('appends a partial-result audit entry when some candidates failed', async () => {
@@ -108,6 +116,7 @@ describe('resolveWorktreesReclaim', () => {
           removed: 0,
           results: [reclaimed({ outcome: 'failed', error: 'locked', branchDeleted: null })],
           readAt: 't',
+          call: ['bin/worktrees.mjs'],
         } satisfies WorktreesReclaimResult),
       appendAudit: (_dir, entry) => {
         auditedEntry = entry as ReclaimAuditEntry
@@ -123,7 +132,14 @@ describe('resolveWorktreesReclaim', () => {
     let auditedEntry: ReclaimAuditEntry | undefined
     const deps = depsWith({
       listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-      runReclaim: () => Promise.resolve({ ok: false, kind: 'script-failed', message: 'boom', readAt: 't' } satisfies WorktreesReclaimResult),
+      runReclaim: () =>
+        Promise.resolve({
+          ok: false,
+          kind: 'script-failed',
+          message: 'boom',
+          readAt: 't',
+          call: ['bin/worktrees.mjs'],
+        } satisfies WorktreesReclaimResult),
       appendAudit: (_dir, entry) => {
         auditedEntry = entry as ReclaimAuditEntry
         return Promise.resolve({ ok: true })
@@ -131,16 +147,17 @@ describe('resolveWorktreesReclaim', () => {
     })
     const result = await resolveWorktreesReclaim(registryDeps, { id: REPO_ID, issue: null }, '/audit', deps)
     expect(result.ok).toBe(false)
-    expect(auditedEntry).toMatchObject({ result: 'failed', failure: 'script-failed' })
+    expect(auditedEntry).toMatchObject({ result: 'failed', failure: 'script-failed', call: ['bin/worktrees.mjs'] })
   })
 
   it('an audit append failure never changes the already-computed result', async () => {
     const deps = depsWith({
       listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
-      runReclaim: () => Promise.resolve({ ok: true, removed: 1, results: [reclaimed()], readAt: 't' } satisfies WorktreesReclaimResult),
+      runReclaim: () =>
+        Promise.resolve({ ok: true, removed: 1, results: [reclaimed()], readAt: 't', call: ['bin/worktrees.mjs'] } satisfies WorktreesReclaimResult),
       appendAudit: () => Promise.resolve({ ok: false, message: 'disk on fire' }),
     })
     const result = await resolveWorktreesReclaim(registryDeps, { id: REPO_ID, issue: null }, '/audit', deps)
-    expect(result).toEqual({ ok: true, removed: 1, results: [reclaimed()], readAt: 't' })
+    expect(result).toEqual({ ok: true, removed: 1, results: [reclaimed()], readAt: 't', call: ['bin/worktrees.mjs'] })
   })
 })

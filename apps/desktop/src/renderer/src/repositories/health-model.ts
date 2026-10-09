@@ -48,7 +48,9 @@ const MODULE_FLAG_NAMES: readonly ModuleFlagName[] = ['approvalGate', 'release',
 function roleDisplayFor(key: LabelKey): string {
   const name = PHASE_NAMES[key]
   if (name !== null) return name
-  return key === 'marker' ? 'Marker' : 'Auto-plan'
+  if (key === 'marker') return 'Marker'
+  if (key === 'prOpened') return 'PR opened'
+  return 'Auto-plan'
 }
 
 export function overviewHealth(config: ResolvedRepoConfig, repoId: RepoId, snapshot: BoardSnapshot | undefined): OverviewHealth {
