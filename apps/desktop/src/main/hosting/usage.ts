@@ -1,6 +1,5 @@
-// Narrows assistant/result messages structurally rather than importing the SDK's own event types,
-// the same rule as rate-limit.ts. Figures are cumulative for this claude process; a resumed session
-// starts from its own result, so the totals mean "since port opened it."
+// Narrows assistant/result messages structurally, the same rule as rate-limit.ts. Cumulative
+// for this claude process: a resumed session's totals mean "since port opened it."
 import type { SessionUsage } from '../../shared/hosting/usage'
 
 function numberOrNull(value: unknown): number | null {

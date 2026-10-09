@@ -1,6 +1,5 @@
-// The one notification decider: pure notificationFor() over consecutive snapshots, plus
-// createNotifier()'s baseline tracker. Fires only when no port window is focused — a missing
-// nudge costs one glance, a spurious one trains the operator to ignore them (docs/ENGINEERING.md §4).
+// The one notification decider. Fires only when no port window is focused — a missing nudge
+// costs one glance, a spurious one trains the operator to ignore them.
 import type { HostedSessionSnapshot } from '../../shared/hosting/types'
 import { sessionDisplayLabel } from '../../shared/hosting/label'
 
@@ -45,9 +44,7 @@ export interface CreateNotifierParams {
 }
 
 export interface SessionNotifier {
-  /** Computes the transition against this session's last-seen snapshot, and calls `show` only
-   *  when `isAppFocused()` is false. A focused transition still updates the baseline, so
-   *  focusing then blurring never replays it. */
+  /** Calls `show` only when unfocused; a focused transition still updates the baseline, so focusing then blurring never replays it. */
   observe(snapshot: HostedSessionSnapshot): void
 }
 
