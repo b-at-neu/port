@@ -12,17 +12,24 @@ import { ScreenHeader } from '../components/screen-header'
 import { Composer } from '../components/composer'
 import { ConversationList } from '../components/conversation-list'
 import { useIpcQuery } from '../data/query'
+import { invoke } from '../data/invoke'
 import { ROUTE_IDS } from '../router/routes'
 import type { RepoId, RepositoryEntry } from '../../../shared/repos'
 import type { HostedSessionSnapshot, SessionKey } from '../../../shared/hosting/types'
 import { setSelectedSession } from './selection'
 import { useSessionEntries } from './entries-store'
 import { useDraft, setDraft } from './drafts'
-import { close, dismiss, send, startNewSession, stop, usePendingStart, useStartFailure } from './actions'
+import { answerPlan, answerQuestion, close, dismiss, send, setControls, startNewSession, stop, usePendingStart, useStartFailure } from './actions'
 import { SessionHeader } from './header'
 import { EndPanel } from './end-panel'
 import { CommandStrip } from './command-strip'
 import { RestoreBanner } from './restore-banner'
+import { ControlsBar } from './controls-bar'
+import { QuestionCard } from './question-card'
+import { PlanCard } from './plan-card'
+import { nextMode } from './controls-model'
+import { QUESTION_SKIPPED_MESSAGE, COMPOSER_PLAN_PLACEHOLDER, COMPOSER_QUESTION_PLACEHOLDER, modeToast } from './interaction-copy'
+import { toast } from 'sonner'
 import { COMPOSER_HINT, composerCopy, CLOSE_CONFIRM_NO, CLOSE_CONFIRM_PROMPT, EMPTY_TITLE, interruptNote, RECONNECTING, SEND_FAILED_UNKNOWN_SESSION, SEND_FAILED_UNREACHABLE, startingCopy, windowNote } from './copy'
 
 function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { status: 'ready' }> {
@@ -161,6 +168,56 @@ function SessionLive({ snapshot, repoLabel }: { readonly snapshot: HostedSession
   const copy = composerCopy(snapshot.phase, sessionGone)
   const windowNoteVisible = entries.firstIndex > 0
 
+  const interactionEntry = snapshot.pendingPermissions.filter((permission) => (permission.interaction ?? null) !== null).sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))[0] ?? null
+  const interaction = interactionEntry?.interaction ?? null
+  const [questionSending, setQuestionSending] = useState(false)
+  const [questionError, setQuestionError] = useState<string | null>(null)
+  const [planSending, setPlanSending] = useState(false)
+  const [planError, setPlanError] = useState<string | null>(null)
+
+  async function handleQuestionSend(answers: Record<string, string>): Promise<void> {
+    if (interactionEntry === null) return
+    setQuestionSending(true)
+    setQuestionError(null)
+    const result = await answerQuestion(key, interactionEntry.permissionId, answers)
+    setQuestionSending(false)
+    if (!result.ok) setQuestionError(result.kind)
+  }
+
+  async function handleQuestionSkip(): Promise<void> {
+    if (interactionEntry === null) return
+    await invoke('session:permission:answer', { sessionKey: key, permissionId: interactionEntry.permissionId, decision: 'deny', message: QUESTION_SKIPPED_MESSAGE })
+  }
+
+  async function handlePlanApprove(mode: 'default' | 'acceptEdits'): Promise<void> {
+    if (interactionEntry === null) return
+    setPlanSending(true)
+    setPlanError(null)
+    const result = await answerPlan(key, interactionEntry.permissionId, { kind: 'approve', mode })
+    setPlanSending(false)
+    if (!result.ok) setPlanError(result.kind)
+  }
+
+  async function handleKeepPlanning(feedback: string): Promise<void> {
+    if (interactionEntry === null) return
+    setPlanSending(true)
+    setPlanError(null)
+    const result = await answerPlan(key, interactionEntry.permissionId, { kind: 'keep-planning', feedback })
+    setPlanSending(false)
+    if (!result.ok) setPlanError(result.kind)
+  }
+
+  async function handleShiftTab(): Promise<void> {
+    const controls = snapshot.controls
+    if (controls === undefined) return
+    const mode = nextMode(controls.permissionMode)
+    const result = await setControls(key, { permissionMode: mode })
+    if (result.ok) toast(modeToast(mode === 'default' ? 'Ask before edits' : mode === 'acceptEdits' ? 'Accept edits' : 'Plan mode'))
+  }
+
+  const composerDisabled = copy.disabled || interaction !== null
+  const composerPlaceholder = interaction === null ? copy.placeholder : interaction.kind === 'question' ? COMPOSER_QUESTION_PLACEHOLDER : COMPOSER_PLAN_PLACEHOLDER
+
   return (
     <>
       <SessionHeader snapshot={snapshot} repoLabel={repoLabel} onStop={() => void handleStop()} onClose={handleCloseClick} onDismiss={() => void dismiss(key)} />
@@ -191,6 +248,12 @@ function SessionLive({ snapshot, repoLabel }: { readonly snapshot: HostedSession
         <ConversationList entries={entries.entries} baseIndex={entries.firstIndex} live={entries.live} focusIndex={null} />
         {snapshot.phase === 'ended' && snapshot.end !== null ? <EndPanel end={snapshot.end} onNewSession={() => startNewSession(snapshot.repoId)} /> : null}
         <CommandStrip snapshot={snapshot} />
+        {interaction !== null && interaction.kind === 'question' ? (
+          <QuestionCard questions={interaction.questions} sending={questionSending} error={questionError} onSend={(answers) => void handleQuestionSend(answers)} onSkip={() => void handleQuestionSkip()} />
+        ) : null}
+        {interaction !== null && interaction.kind === 'plan' ? (
+          <PlanCard plan={interaction.plan} sending={planSending} error={planError} onApprove={(mode) => void handlePlanApprove(mode)} onKeepPlanning={(feedback) => void handleKeepPlanning(feedback)} />
+        ) : null}
         <Composer
           value={draft}
           onChange={(value) => setDraft(key, value)}
@@ -202,10 +265,20 @@ function SessionLive({ snapshot, repoLabel }: { readonly snapshot: HostedSession
               void handleStop()
             }
           }}
-          disabled={copy.disabled}
-          placeholder={copy.placeholder}
+          onShiftTab={() => void handleShiftTab()}
+          disabled={composerDisabled}
+          placeholder={composerPlaceholder}
           sendLabel={copy.sendLabel}
         />
+        {snapshot.controls !== undefined ? (
+          <ControlsBar
+            sessionKey={key}
+            controls={snapshot.controls}
+            models={snapshot.models ?? { kind: 'pending' }}
+            disabled={snapshot.phase === 'starting' || snapshot.phase === 'closing' || snapshot.phase === 'ended'}
+            disabledReason={snapshot.phase === 'starting' ? 'Waiting for the session to start.' : snapshot.phase === 'closing' ? 'This session is closing.' : snapshot.phase === 'ended' ? 'This session has ended.' : null}
+          />
+        ) : null}
         {interruptNoteText !== null ? <p className="text-meta text-muted-foreground">{interruptNoteText}</p> : null}
         <p className="text-meta text-muted-foreground">{COMPOSER_HINT}</p>
       </div>

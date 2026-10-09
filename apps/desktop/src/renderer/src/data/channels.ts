@@ -56,6 +56,9 @@ export const MUTATION_CHANNELS = [
   'session:restore:discard',
   'session:defaults:set',
   'session:rename',
+  'session:controls:set',
+  'session:question:answer',
+  'session:plan:answer',
 ] as const
 
 export type MutationChannel = (typeof MUTATION_CHANNELS)[number]

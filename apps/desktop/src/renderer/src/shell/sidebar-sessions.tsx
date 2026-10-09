@@ -14,6 +14,7 @@ import type { RepoId, RepositoryEntry } from '../../../shared/repos'
 import { useIpcMutation, useIpcQuery } from '../data/query'
 import { startNewSession } from '../session/actions'
 import { useSelectedSession } from '../session/selection'
+import { sidebarDotLabel } from '../session/interaction-copy'
 import { useRenaming, setRenaming } from './stores'
 import { ROUTE_IDS } from '../router/routes'
 
@@ -24,6 +25,8 @@ function repoTag(repos: readonly RepositoryEntry[] | undefined, repoId: RepoId):
 }
 
 function dotFor(session: HostedSessionSnapshot): { readonly className: string; readonly label: string } {
+  const oldestInteraction = session.pendingPermissions.filter((permission) => (permission.interaction ?? null) !== null).sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))[0] ?? null
+  if (oldestInteraction !== null && oldestInteraction.interaction) return { className: 'bg-attention-dot animate-pulse', label: sidebarDotLabel(oldestInteraction.interaction.kind) }
   if (session.pendingPermissions.length > 0) return { className: 'bg-attention-dot animate-pulse', label: 'Waiting for your permission' }
   if (session.phase === 'starting' || session.phase === 'streaming') return { className: 'bg-working-dot', label: 'Working' }
   return { className: 'bg-idle-dot', label: 'Idle' }

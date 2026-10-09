@@ -1,5 +1,6 @@
 // Fixture mode's canned hosted-session data — the Session screen's own
 // states, plus the entries `session:attach` replays for the streaming one.
+import type { SessionControls, SessionModels } from '../../shared/hosting/controls'
 import type { HostedSessionSnapshot, SessionAttachResult, SessionKey } from '../../shared/hosting/types'
 import type { TranscriptEntry } from '../../shared/sessions/transcript'
 import type { SearchResult } from '../../shared/search/types'
@@ -10,6 +11,19 @@ export const STREAMING_KEY = 'fixture-session-streaming' as SessionKey
 export const PERMISSION_KEY = 'fixture-session-permission' as SessionKey
 export const ENDED_KEY = 'fixture-session-ended' as SessionKey
 export const STARTING_KEY = 'fixture-session-starting' as SessionKey
+export const QUESTION_KEY = 'fixture-session-question' as SessionKey
+export const PLAN_KEY = 'fixture-session-plan' as SessionKey
+
+const FIXTURE_CONTROLS: SessionControls = { permissionMode: 'default', model: 'sonnet', effort: null }
+
+const FIXTURE_MODELS: SessionModels = {
+  kind: 'ready',
+  models: [
+    { value: 'opus', displayName: 'Opus', description: 'Most capable, for complex work', efforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
+    { value: 'sonnet', displayName: 'Sonnet', description: 'Balanced for everyday work', efforts: ['low', 'medium', 'high'] },
+    { value: 'haiku', displayName: 'Haiku', description: 'Fastest, for simple tasks', efforts: [] },
+  ],
+}
 
 const MINUTE = 60_000
 
@@ -84,11 +98,14 @@ export function fixturePermissionSnapshots(now: Date): readonly HostedSessionSna
           agentId: null,
           requestedAt: t(0),
           sessionGrant: null,
+          interaction: null,
         },
       ],
       capabilities,
       title: 'Remove an unused dependency',
       rateLimit: null,
+      controls: FIXTURE_CONTROLS,
+      models: FIXTURE_MODELS,
     },
   ]
 }
@@ -112,6 +129,8 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       capabilities,
       title: 'Add a loading state to the repositories table',
       rateLimit: null,
+      controls: FIXTURE_CONTROLS,
+      models: FIXTURE_MODELS,
     },
     {
       sessionKey: ENDED_KEY,
@@ -127,6 +146,8 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       capabilities,
       title: 'Fix the release script',
       rateLimit: null,
+      controls: FIXTURE_CONTROLS,
+      models: FIXTURE_MODELS,
     },
     {
       sessionKey: STARTING_KEY,
@@ -142,6 +163,88 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       capabilities: { kind: 'pending', request: { source: 'installed' } },
       title: null,
       rateLimit: null,
+      controls: FIXTURE_CONTROLS,
+      models: { kind: 'pending' },
+    },
+    {
+      sessionKey: QUESTION_KEY,
+      claudeSessionId: 'fixture-claude-4',
+      repoId: WIDGETS_ID,
+      phase: 'streaming',
+      origin: { kind: 'fresh' },
+      startedAt: t(2),
+      queuedAfterInterrupt: null,
+      end: null,
+      titled: null,
+      pendingPermissions: [
+        {
+          permissionId: 'fixture-permission-question',
+          toolName: 'AskUserQuestion',
+          input: {},
+          title: null,
+          displayName: null,
+          description: null,
+          decisionReason: null,
+          blockedPath: null,
+          agentId: null,
+          requestedAt: t(0),
+          sessionGrant: null,
+          interaction: {
+            kind: 'question',
+            questions: [
+              {
+                question: 'Which approach should we take for the loading state?',
+                header: 'Approach',
+                multiSelect: false,
+                options: [
+                  { label: 'Skeleton rows', description: 'Matches the existing table pattern' },
+                  { label: 'Spinner overlay', description: 'Simpler, less layout shift' },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+      capabilities,
+      title: 'Add a loading state to the repositories table',
+      rateLimit: null,
+      controls: FIXTURE_CONTROLS,
+      models: FIXTURE_MODELS,
+    },
+    {
+      sessionKey: PLAN_KEY,
+      claudeSessionId: 'fixture-claude-5',
+      repoId: WIDGETS_ID,
+      phase: 'streaming',
+      origin: { kind: 'fresh' },
+      startedAt: t(3),
+      queuedAfterInterrupt: null,
+      end: null,
+      titled: null,
+      pendingPermissions: [
+        {
+          permissionId: 'fixture-permission-plan',
+          toolName: 'ExitPlanMode',
+          input: {},
+          title: null,
+          displayName: null,
+          description: null,
+          decisionReason: null,
+          blockedPath: null,
+          agentId: null,
+          requestedAt: t(0),
+          sessionGrant: null,
+          interaction: {
+            kind: 'plan',
+            plan: '1. Add a `Skeleton` row while the repositories query is pending.\n2. Add a regression test covering the loading state.',
+          },
+        },
+      ],
+      capabilities,
+      title: 'Add a loading state to the repositories table',
+      rateLimit: null,
+      controls: { permissionMode: 'plan', model: 'sonnet', effort: null },
+      models: FIXTURE_MODELS,
     },
   ]
 }

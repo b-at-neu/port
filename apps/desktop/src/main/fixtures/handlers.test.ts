@@ -139,10 +139,12 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
     expect(report.orphanDirs).toHaveLength(1)
   })
 
-  it.runIf(scenario === 'populated')('reports session:list with three snapshots covering streaming, ended, and starting', () => {
+  it.runIf(scenario === 'populated')('reports session:list with five snapshots covering streaming, ended, starting, a question, and a plan', () => {
     const snapshots = handlers['session:list'](undefined)
-    expect(snapshots.map((s) => s.phase).sort()).toEqual(['ended', 'starting', 'streaming'])
+    expect(snapshots.map((s) => s.phase).sort()).toEqual(['ended', 'starting', 'streaming', 'streaming', 'streaming'])
     expect(snapshots.find((s) => s.phase === 'ended')?.end?.diagnosis).not.toBeNull()
+    expect(snapshots.filter((s) => s.pendingPermissions.some((p) => p.interaction?.kind === 'question'))).toHaveLength(1)
+    expect(snapshots.filter((s) => s.pendingPermissions.some((p) => p.interaction?.kind === 'plan'))).toHaveLength(1)
   })
 
   // The permission dialog is app-wide, so its one fixture session is kept out of the

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applySnapshot, EMPTY_QUEUE, ordered, seed } from './queue'
+import { applySnapshot, EMPTY_QUEUE, interactionCount, ordered, seed } from './queue'
 import type { HostedSessionSnapshot, PendingPermission, SessionKey } from '../../../shared/hosting/types'
 import type { RepoId } from '../../../shared/repos'
 
@@ -111,5 +111,25 @@ describe('ordered', () => {
 
   it('returns an empty list for an empty queue', () => {
     expect(ordered(EMPTY_QUEUE)).toEqual([])
+  })
+
+  it('excludes an entry with a non-null interaction — it renders as its own card, never the generic dialog', () => {
+    const queue = applySnapshot(
+      EMPTY_QUEUE,
+      snapshot({ pendingPermissions: [permission({ permissionId: 'question-1', interaction: { kind: 'question', questions: [] } }), permission({ permissionId: 'ordinary-1' })] }),
+    )
+    expect(ordered(queue).map((item) => item.permission.permissionId)).toEqual(['ordinary-1'])
+  })
+})
+
+describe('interactionCount', () => {
+  it('counts only entries with a non-null interaction, across sessions', () => {
+    let queue = applySnapshot(EMPTY_QUEUE, snapshot({ sessionKey: 'hosted-1' as SessionKey, pendingPermissions: [permission({ permissionId: 'question-1', interaction: { kind: 'question', questions: [] } }), permission({ permissionId: 'ordinary-1' })] }))
+    queue = applySnapshot(queue, snapshot({ sessionKey: 'hosted-2' as SessionKey, pendingPermissions: [permission({ permissionId: 'plan-1', interaction: { kind: 'plan', plan: null } })] }))
+    expect(interactionCount(queue)).toBe(2)
+  })
+
+  it('is zero for an empty queue', () => {
+    expect(interactionCount(EMPTY_QUEUE)).toBe(0)
   })
 })

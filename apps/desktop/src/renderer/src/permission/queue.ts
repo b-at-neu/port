@@ -53,13 +53,12 @@ export function seed(snapshots: readonly HostedSessionSnapshot[]): PermissionQue
   return queue
 }
 
-/** Oldest `requestedAt` first across every session, `permissionId` as a
- *  stable tiebreak — the single ordering the dialog, the "1 of n waiting"
- *  counter, and the document title all read from. */
+// Oldest requestedAt first, permissionId as a tiebreak; excludes an entry whose interaction is non-null.
 export function ordered(queue: PermissionQueue): readonly QueuedPermission[] {
   const items: QueuedPermission[] = []
   for (const [sessionKey, entry] of queue) {
     for (const permission of entry.permissions) {
+      if ((permission.interaction ?? null) !== null) continue
       items.push({ sessionKey, repoId: entry.repoId, title: entry.title, origin: entry.origin, startedAt: entry.startedAt, permission })
     }
   }
@@ -68,4 +67,15 @@ export function ordered(queue: PermissionQueue): readonly QueuedPermission[] {
     return byTime !== 0 ? byTime : a.permission.permissionId.localeCompare(b.permission.permissionId)
   })
   return items
+}
+
+// A question or plan card still counts toward the document title's "N requests waiting".
+export function interactionCount(queue: PermissionQueue): number {
+  let count = 0
+  for (const entry of queue.values()) {
+    for (const permission of entry.permissions) {
+      if ((permission.interaction ?? null) !== null) count += 1
+    }
+  }
+  return count
 }

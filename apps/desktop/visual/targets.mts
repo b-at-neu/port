@@ -108,6 +108,8 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'streaming', hash: `#/session?key=${FIXTURE_SESSION_ID}`, ready: '[data-slot="tool-call-row"]' },
       { name: 'ended', hash: '#/session?key=fixture-session-ended', ready: 'text=Crashed' },
       { name: 'starting', hash: '#/session?key=fixture-session-starting', ready: 'text=Starting' },
+      { name: 'question', hash: '#/session?key=fixture-session-question', ready: '[data-slot="question-card"]' },
+      { name: 'plan', hash: '#/session?key=fixture-session-plan', ready: '[data-slot="plan-card"]' },
     ],
   },
   settings: { hash: '#/settings', container: '#app', ready: '#app h2' },

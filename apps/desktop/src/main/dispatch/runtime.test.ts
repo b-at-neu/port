@@ -25,6 +25,13 @@ function fakeStore(): HostedStore {
     dismiss: () => {
       throw new Error('unused')
     },
+    setControls: () => Promise.reject(new Error('unused')),
+    answerQuestion: () => {
+      throw new Error('unused')
+    },
+    answerPlan: () => {
+      throw new Error('unused')
+    },
     snapshotOf: () => null,
     capacity: () => Promise.resolve({ limit: 4, ceiling: 8 }),
     setLimit: () => Promise.reject(new Error('unused')),
