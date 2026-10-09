@@ -1,6 +1,4 @@
-// #103: title/rateLimit/resumeTarget — split out of handle.test.ts to stay
-// under the file-size limit (ENGINEERING §7). Its own minimal `fakeQuery`/
-// `baseParams`, the same shapes handle.test.ts's own copies use.
+// title/rateLimit/resumeTarget, split out of handle.test.ts to stay under the file-size limit.
 import { describe, expect, it, vi } from 'vitest'
 import { createHostedHandle } from './handle'
 import type { HostedQuery } from './handle'

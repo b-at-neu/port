@@ -1,10 +1,4 @@
-// #101: the per-session capability tracker — reads `supportedCommands()`/
-// `supportedAgents()` back rather than trusting a plugin flag worked
-// (ENGINEERING §7's "malformed component is silently absent" rule, applied
-// here to the read-back itself: a timeout or a rejection must never present
-// as an empty list, which would look identical to "the plugin loaded with
-// nothing to offer"). Pure decision logic lives in `verify.ts`; this file
-// is only the I/O and timing shell around it (ENGINEERING §1).
+// A timeout or rejected read-back must never look like an empty capability list.
 import type { AgentSummary, CommandSummary, PluginRequest, SessionCapabilities } from '../../shared/hosting/types'
 import { isRecord } from '../../shared/guards'
 import { sanitize } from '../sessions/transcript-entries'
@@ -13,11 +7,7 @@ import type { InitPlugin } from './verify'
 import type { ExpectedComponents } from './plugin'
 import type { AgentInfo, HostedQuery, SlashCommand } from './sdk'
 
-/** These are control requests, answered before the first turn and costing
- *  no tokens — a stalled or unresponsive CLI must never park the strip
- *  forever, so the wait is bounded the same way `handle.ts`'s own
- *  close-grace wait is (`AbortSignal.timeout`, never a manually scheduled
- *  callback). */
+/** Control requests answered before the first turn, costing no tokens. */
 export const CAPABILITIES_TIMEOUT_MS = 30_000
 
 const QUALIFIER = `${PLUGIN_NAME}:`
@@ -27,25 +17,14 @@ export interface CreateCapabilityTrackerParams {
   readonly readExpectedComponents: (pluginPath: string) => Promise<ExpectedComponents | null>
   readonly samePath: (a: string, b: string) => boolean
   readonly onChange: () => void
-  /** Test-only override of `CAPABILITIES_TIMEOUT_MS` — every real caller
-   *  leaves this at its default. */
+  /** Test-only override of `CAPABILITIES_TIMEOUT_MS`. */
   readonly timeoutMs?: number
 }
 
 export interface CapabilityTracker {
-  /** Fired once, right after `query()` — races `supportedCommands()`/
-   *  `supportedAgents()` against `CAPABILITIES_TIMEOUT_MS`. Neither a
-   *  timeout nor a rejected call is ever read as an empty list; both go to
-   *  `unavailable`, the message carried verbatim. */
   start(query: HostedQuery): Promise<void>
-  /** Folds one raw SDK message into this tracker's state — a no-op for
-   *  anything but `system`/`init` and `system`/`commands_changed`. */
   observe(message: unknown): void
   current(): SessionCapabilities
-  /** Whether `name` (already namespace-stripped, e.g. `'pipeline'`) is in
-   *  this session's current `port:` command list — `handle.ts`'s `invoke`
-   *  own membership check, so a renderer can never run a command the
-   *  session did not itself report. */
   has(name: string): boolean
 }
 
@@ -67,10 +46,6 @@ function toAgentSummaries(raw: readonly AgentInfo[]): AgentSummary[] {
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
-/** A runtime-native deadline, never a manually scheduled callback of this
- *  app's own — the same idiom `handle.ts`'s own `grace()` uses, here made
- *  to reject rather than resolve so `Promise.race` treats an unanswered
- *  control request as a failure, not a silent empty result. */
 function timeoutRejection(ms: number): Promise<never> {
   return new Promise((_resolve, reject) => {
     AbortSignal.timeout(ms).addEventListener('abort', () => reject(new Error(`Timed out after ${ms}ms waiting for this session's commands and agents`)), { once: true })
@@ -87,9 +62,7 @@ export function createCapabilityTracker(params: CreateCapabilityTrackerParams): 
   let state: SessionCapabilities = { kind: 'pending', request: params.request }
   let expected: ExpectedComponents | null = null
   let expectedRequested = false
-  /** Distinct from `expectedRequested`: this flips only once the read has
-   *  actually settled, so `checkComponents` can tell "no path yet" from "a
-   *  read is in flight or failed" — both leave `expected` at `null`. */
+  /** Settles only once the read actually finishes, distinct from `expectedRequested`. */
   let expectedSettled = false
   let commands: CommandSummary[] = []
   let agents: AgentSummary[] = []

@@ -1,10 +1,5 @@
-// #103: pure `readRateLimit(message, observedAt)` — narrows a rate limit
-// event structurally rather than importing the SDK's own event type (the
-// envelope crosses the boundary as `message: unknown`, and this app owns
-// every narrowing decision on it, the same rule #219's project.ts already
-// follows). `utilization` is deliberately never read: its unit is
-// undocumented in SDK 0.3.261, and a percentage in the wrong unit is
-// misinformation an operator would act on.
+// Narrows a rate limit event structurally rather than importing the SDK's own event type.
+// `utilization` is deliberately never read: its unit is undocumented and would misinform an operator.
 import type { SessionRateLimit } from '../../shared/hosting/types'
 
 const STATUS_MAP: Readonly<Record<string, SessionRateLimit['status'] | undefined>> = {
@@ -22,10 +17,7 @@ const WINDOW_MAP: Readonly<Record<string, SessionRateLimit['window']>> = {
   overage: 'overage',
 }
 
-/** A finite number below `1e11` reads as epoch seconds (a millisecond epoch
- *  for a plausible near-term date is always well above that), otherwise
- *  milliseconds — the same disambiguation `main/hosting/classify.ts`'s own
- *  numeric-field readers use elsewhere in this app. */
+/** A finite number below `1e11` reads as epoch seconds, otherwise milliseconds. */
 function resetsAtFrom(value: unknown): string | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null
   const millis = value < 1e11 ? value * 1000 : value
@@ -33,9 +25,7 @@ function resetsAtFrom(value: unknown): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
-/** `null` on anything that is not a `rate_limit_event`, or whose `status`
- *  this app does not recognise — leaving the previous reading in place is
- *  the caller's job (`handle.ts`'s `applyMessage`), never this function's. */
+/** `null` on anything that is not a `rate_limit_event`, or whose `status` this app does not recognise. */
 export function readRateLimit(message: unknown, observedAt: string): SessionRateLimit | null {
   if (typeof message !== 'object' || message === null) return null
   const envelope = message as Record<string, unknown>

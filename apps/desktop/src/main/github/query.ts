@@ -1,14 +1,5 @@
-// Pure GraphQL document builders — no network, no config read, no `gh`. Two
-// decisions from #76's plan are pinned mechanically by
-// `scripts/checks/desktop-github.mjs`, so they stay decisions rather than
-// prose this file could quietly stop following:
-//
-// - Decision 1: one alias per (label × surface), never a multi-label
-//   `labels:` argument — GitHub's own docs never state whether a multi-name
-//   list is AND or OR, so the question is avoided entirely.
-// - Decision 2: GraphQL `search` is never used — it is index-backed with
-//   ingestion lag, so a label applied seconds ago would not be searchable
-//   yet. `repository.issues`/`pullRequests` are read-your-writes consistent.
+// Pure GraphQL document builders — no network, no config read, no gh. One alias per (label ×
+// surface); GraphQL `search` is never used since it is index-backed with ingestion lag.
 import type { LabelVocabulary, ResolvedLabel } from '../../shared/labels/vocabulary'
 import type { ItemRef, PipelineItemKind, QueriedLabel } from '../../shared/github/types'
 
@@ -18,12 +9,7 @@ const ASSIGNEE_PAGE_SIZE = 20
 const ITEM_LABEL_PAGE_SIZE = 20
 const BLOCKER_PAGE_SIZE = 20
 
-/**
- * A valid GraphQL StringValue for every escape `JSON.stringify` emits —
- * verified live against a label name containing `"`, `\`, and a newline
- * (`query.test.ts`). Exported so the test can exercise the escaping rule
- * directly rather than re-deriving it from the built document.
- */
+/** A valid GraphQL StringValue for every escape `JSON.stringify` emits. */
 export function graphqlStringLiteral(value: string): string {
   return JSON.stringify(value)
 }
@@ -38,15 +24,8 @@ const ISSUE_FRAGMENT = `fragment IssueFields on Issue {
   labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }
 }`
 
-// `reviews`/`comments` page sizes match `scripts/port-tick/query.ts`'s own
-// `reviews(first: 30)`/`comments(last: 20)` — the same bound for the same
-// purpose (the cycle cap and the zero-diff gate), so a repository's own
-// review/comment history never needs a second round trip larger than the
-// cockpit's own. `headRefOid` is the head this app's own gates compare a
-// review's `commit.oid` against. `mergeable` (#265) is the mergeability
-// precondition `scripts/port-tick/gates.ts`'s `mergeabilityRoute` reads — GitHub's
-// own `MERGEABLE`/`CONFLICTING`/`UNKNOWN` enum, mapped to that same union at
-// the edge (`map.ts`), never re-derived from anything else.
+// reviews/comments page sizes match scripts/port-tick/query.ts's own bound, for the cycle cap
+// and zero-diff gate. mergeable is the mergeability precondition mergeabilityRoute reads.
 const PULL_REQUEST_FRAGMENT = `fragment PullRequestFields on PullRequest {
   number
   title
@@ -62,12 +41,8 @@ const PULL_REQUEST_FRAGMENT = `fragment PullRequestFields on PullRequest {
   comments(last: 20) { totalCount nodes { body createdAt } }
 }`
 
-// #292: the `statusCheckRollup` selection the approval-withdrawal
-// observation reads — byte-identical (modulo formatting) to
-// `scripts/port-tick/query.ts`'s own `ROLLUP` constant, pinned both
-// directions by `scripts/checks/desktop-github.ts`. Spread only into the
-// pull-request alias whose label key is `approved` (the cockpit's own cost
-// shape): every other alias never selects it.
+// The statusCheckRollup selection the approval-withdrawal observation reads. Spread only into
+// the pull-request alias whose label key is approved.
 const CHECK_ROLLUP_FRAGMENT = `fragment CheckRollupFields on PullRequest {
   commits(last: 1) {
     nodes {
@@ -92,29 +67,20 @@ export interface PipelineQuery {
   readonly aliases: readonly QueriedLabel[]
 }
 
-/**
- * One `issues`/`pullRequests` alias pair per enabled label in
- * `vocabulary.labels` (module-disabled keys are already absent from that
- * array — see `resolveVocabulary`). `<idx>` is the label's position, never
- * derived from the label's own name: an alias must be a valid GraphQL name
- * and a label name is arbitrary operator input. Every connection requests
- * `totalCount` beside `nodes` — the only truncation signal there is.
- */
+/** One `issues`/`pullRequests` alias pair per enabled label. `<idx>` is the position, never
+ *  derived from the label's own name, since a label name is arbitrary operator input. */
 export function buildPipelineQuery(vocabulary: LabelVocabulary): PipelineQuery {
   const aliases: QueriedLabel[] = []
   const connections: string[] = []
-  // #292: GraphQL rejects a document declaring a fragment nothing spreads
-  // ("Fragments Must Be Used") — tracked so `CHECK_ROLLUP_FRAGMENT` is only
-  // appended below when an `approved` label actually exists this pass (a
-  // repository can have it absent — the `approvalGate` module gates it off).
+  // GraphQL rejects a document declaring a fragment nothing spreads, so this is tracked to append
+  // CHECK_ROLLUP_FRAGMENT only when an approved label actually exists this pass.
   let usesCheckRollup = false
 
   vocabulary.labels.forEach((label: ResolvedLabel, idx: number) => {
     const issueAlias = `i${idx}`
     const prAlias = `p${idx}`
     const literal = graphqlStringLiteral(label.name)
-    // #292: the `approved` alias alone also spreads `CheckRollupFields` —
-    // the cockpit's own cost shape (every other alias never selects it).
+    // The approved alias alone also spreads CheckRollupFields; every other alias never selects it.
     const isApproved = label.key === 'approved'
     if (isApproved) usesCheckRollup = true
     const prFields = isApproved ? '...PullRequestFields ...CheckRollupFields' : '...PullRequestFields'
@@ -132,9 +98,8 @@ export function buildPipelineQuery(vocabulary: LabelVocabulary): PipelineQuery {
     `    repoLabels: labels(first: ${REPO_LABEL_PAGE_SIZE}) { totalCount nodes { name } }`,
     '  }',
     '  rateLimit { cost remaining resetAt }',
-    // Top-level, deliberately outside `repository` — the same placement
-    // `buildClaimPreflightQuery` already uses, since resolving the signed-in
-    // login is never scoped to one repository (#94's ownership check).
+    // Top-level, deliberately outside repository — resolving the signed-in login is never scoped
+    // to one repository.
     '  viewer { login }',
     '}',
     '',
@@ -157,22 +122,8 @@ export interface ItemsByNumberQuery {
   readonly aliases: readonly ItemsByNumberAlias[]
 }
 
-/**
- * One `issueOrPullRequest(number:)` alias per input number (#79 Decision 4) —
- * the kind is genuinely unknown for a number a worktree or an agent record
- * merely names, unlike `buildItemStatesQuery`'s caller-supplied `kind`. Every
- * alias requests `__typename` and selects `mergedAt` only inside the
- * `PullRequest` inline fragment — an `Issue` has no such field, so
- * requesting it unconditionally would be a GraphQL validation error, never a
- * null. A number that resolves to neither comes back as a `null` node, read
- * by the caller as `unavailable`, never inferred. Numbers are embedded as
- * literals exactly as `buildItemStatesQuery` already does, for the same
- * reason: every number here is caller-supplied (already a JS `number`),
- * never untrusted string input requiring escaping. `assignees` is requested
- * in both inline fragments (#90) — one read covers both the labels #79's
- * reconciler needs and the assignees #90's write chokepoint verifies a
- * precondition against, rather than a second round trip for the same item.
- */
+/** One `issueOrPullRequest(number:)` alias per input number — the kind is genuinely unknown here.
+ *  `mergedAt` is selected only inside the `PullRequest` fragment, since `Issue` has no such field. */
 export function buildItemsByNumberQuery(numbers: readonly number[]): ItemsByNumberQuery {
   const aliases: ItemsByNumberAlias[] = []
   const fields: string[] = []
@@ -204,21 +155,12 @@ export interface ItemStatesQuery {
 }
 
 function itemStateFields(kind: PipelineItemKind): string {
-  // Issues carry no `mergedAt` field at all — requesting it on an Issue
-  // alias is a GraphQL validation error, not a null.
+  // Issues carry no mergedAt field at all — requesting it is a GraphQL validation error, not a null.
   return kind === 'pull-request' ? 'number state mergedAt closedAt url' : 'number state closedAt url'
 }
 
-/**
- * One aliased `issue(number:)`/`pullRequest(number:)` per input item. The
- * caller supplies `kind` (from the open-sweep result that named it), so no
- * alias here is guaranteed to 404 — a number that has genuinely vanished
- * comes back as a partial error, handled by `envelope.ts` the same way as
- * the open sweep's own partial responses. Numbers are embedded as literals,
- * never interpolated into a shared GraphQL variable — each alias needs a
- * different number, and every number here is caller-supplied (already a JS
- * `number`), never untrusted string input requiring escaping.
- */
+/** One aliased `issue(number:)`/`pullRequest(number:)` per input item. The caller supplies
+ *  `kind`, so a vanished number comes back as a partial error, handled by `envelope.ts`. */
 export function buildItemStatesQuery(items: readonly ItemRef[]): ItemStatesQuery {
   const aliases: ItemStateAlias[] = []
   const fields: string[] = []
@@ -239,38 +181,14 @@ export interface ClaimPreflightQuery {
   readonly document: string
 }
 
-/**
- * The claim dialog's one round trip (#93): the number's own identity,
- * labels, assignees, and open `blockedBy` edges, plus the signed-in
- * account's own login — server-side filtering and GraphQL's index-backed
- * text lookup are both avoided here, the same two rails `buildPipelineQuery`
- * already states. `labels`/`assignees`/`blockedBy` are
- * requested **only** inside the `Issue` fragment — `classifyPreflight`
- * refuses a pull request (`not-an-issue`) before any of them would matter,
- * so a `PullRequest` node carries just its identity fields, never a wasted
- * selection. `viewer` is a **top-level** field, deliberately outside
- * `repository` — resolving the signed-in login is never scoped to one
- * repository. This is a single-number, single-alias query (`c0`), unlike
- * `buildItemsByNumberQuery`'s per-orphan-number batch: the claim dialog acts
- * on exactly one number the operator typed, never a list.
- */
+/** The claim dialog's one round trip: the number's identity, labels, assignees, and open
+ *  `blockedBy` edges, plus the signed-in account's login. A single-number, single-alias query (`c0`). */
 export interface GatePreflightQuery {
   readonly document: string
 }
 
-/**
- * The plan gate's one round trip (#92): the number's own identity, labels,
- * assignees, and body — the same two rails `buildPipelineQuery`/
- * `buildClaimPreflightQuery` already state (no server-side label filter, no
- * GraphQL `search`) — plus the signed-in account's own login, top-level and
- * outside `repository` for the same reason `buildClaimPreflightQuery`'s own
- * `viewer` is. `body` is requested only inside the `Issue` fragment —
- * `classifyGate` refuses a pull request (`not-an-issue`) before it would ever
- * matter, so a `PullRequest` node carries just its identity fields, never a
- * wasted selection. This is a single-number, single-alias query (`c0`), the
- * same shape `buildClaimPreflightQuery` uses for the same reason: the plan
- * gate acts on exactly one number the operator opened, never a list.
- */
+/** The plan gate's one round trip: the number's identity, labels, assignees, and body, plus the
+ *  signed-in account's login. `body` is requested only inside the `Issue` fragment. */
 export function buildGatePreflightQuery(number: number): GatePreflightQuery {
   const labelsField = `labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }`
   const assigneesField = `assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } }`

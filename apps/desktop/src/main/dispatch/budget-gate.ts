@@ -1,10 +1,5 @@
-// #293: runs the shipped `bin/budget.mjs` through `commands.budget` and
-// classifies its outcome into values the dispatcher can report — never a
-// throw, and an absent signal is never read as a passing one. Every call
-// tokenizes `entry.config.commands.budget` with `parseNodeCommand` (the same
-// rail `commands.worktrees` already goes through, `main/reclaimer/`) and
-// runs `node <tokenized args…> <mode args…>` with `cwd: entry.path`, since
-// the script resolves its own root from the working directory.
+// Runs the shipped bin/budget.mjs through commands.budget and classifies its outcome into values
+// the dispatcher can report — never a throw, and an absent signal is never read as a passing one.
 import { node as defaultNode } from '../platform/node'
 import type { CommandResult } from '../platform/run'
 import type { NodeRunner } from '../platform/node'
@@ -17,20 +12,13 @@ import type { BudgetVerdict } from './budget'
 
 export type { NodeRunner }
 
-/** `unavailable`: the script can't be run at all, or is too old to accept
- *  `--session` — both fail the whole repository's gate, since the ceiling
- *  is unenforceable either way. `failed`: the script ran but exited non-zero
- *  for some other reason (its own `FAIL` line, when one exists). */
+/** `unavailable`: the script can't be run at all, or is too old. `failed`: the script ran but exited non-zero. */
 export type BudgetGateFailure = { readonly ok: false; readonly kind: 'unavailable' | 'failed'; readonly message: string }
 
 export type BudgetResetResult = { readonly ok: true } | BudgetGateFailure
 export type BudgetCheckResult = { readonly ok: true; readonly verdict: BudgetVerdict; readonly line: string } | BudgetGateFailure
 
-/** Never a `BudgetGateFailure` — a sweep failure must never block dispatch,
- *  only report it (ENGINEERING §4: the over-counting direction is the one
- *  this rail prefers). `line` is read from stdout even when the run itself
- *  failed, because a ledger-flush failure still prints the session clause
- *  first. */
+/** Never a `BudgetGateFailure` — a sweep failure must never block dispatch, only report it. */
 export interface BudgetSweepResult {
   readonly line: string | null
   readonly problem: string | null
@@ -47,10 +35,7 @@ function firstFailLine(stderr: string): string | null {
   return line === undefined ? null : line.slice(0, 2000)
 }
 
-/** Mirrors `main/reclaimer/report.ts`'s own `describeCommandFailure` — a
- *  platform-layer failure carrying no `stderr` at all (`not-found`,
- *  `cwd-missing`, `output-too-large`, `spawn-failed`) is described from its
- *  own fields rather than reading a field the type does not guarantee. */
+/** A platform-layer failure carrying no `stderr` is described from its own fields instead. */
 function describePlatformFailure(result: Exclude<CommandResult, { ok: true }>): string {
   switch (result.kind) {
     case 'not-found':
@@ -70,9 +55,7 @@ function describePlatformFailure(result: Exclude<CommandResult, { ok: true }>): 
   }
 }
 
-/** The owner line's own "Script unusable" copy (plan's **UX states**) —
- *  assembled here, where the failure is classified, so `ownerLineCopy` stays
- *  a generic `⏸ Dispatch: this app, but not dispatching — ${message}`. */
+/** Assembled here, where the failure is classified, so `ownerLineCopy` stays generic. */
 function unavailableMessage(reason: string): string {
   return `commands.budget can't run (${reason}). Fix it in .claude/port.config.json, or release dispatch to hand it back to the cockpit.`
 }
@@ -90,8 +73,7 @@ interface RunFailure {
   readonly ok: false
   readonly kind: 'unavailable' | 'failed'
   readonly message: string
-  /** The raw stdout a 'nonzero' exit still produced — `null` for every
-   *  other failure, where no process output exists to read. */
+  /** The raw stdout a 'nonzero' exit still produced — `null` for every other failure. */
   readonly stdout: string | null
 }
 

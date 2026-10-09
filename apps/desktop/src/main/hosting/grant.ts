@@ -1,15 +1,4 @@
-// #99: narrows the SDK's own permission suggestions into a session-only
-// grant, plus its renderer-safe summary. Pure — no I/O, no SDK call.
-//
-// This fails closed: a narrowing that is too strict costs a repeat prompt.
-// One that is too loose writes a permanent rule into
-// `.claude/settings.local.json` or `~/.claude/settings.json`, which is
-// unrecoverable from inside the app, and in this repository a
-// `sessionRequiredPaths` write besides. So the allowlist below keeps exactly
-// three suggestion kinds and drops everything else — `replaceRules`,
-// `removeRules`, `removeDirectories`, any `setMode` other than
-// `acceptEdits`, and above all `bypassPermissions` — and rewrites every kept
-// update's `destination` to `'session'` regardless of what the SDK proposed.
+// Fails closed: keeps only addRules(allow)/addDirectories/setMode(acceptEdits), rewriting destination to 'session'.
 import type { SessionGrantItem } from '../../shared/hosting/types'
 import type { PermissionUpdate } from './sdk'
 
@@ -18,9 +7,7 @@ export interface SessionGrant {
   readonly summary: readonly SessionGrantItem[]
 }
 
-/** Returns `null` when nothing survives narrowing — the dialog then omits
- *  "allow for this session" entirely rather than offering a grant that
- *  would do nothing. */
+/** `null` when nothing survives narrowing, so the dialog omits the grant option entirely. */
 export function narrowSessionGrant(suggestions: readonly PermissionUpdate[] | undefined): SessionGrant | null {
   if (suggestions === undefined || suggestions.length === 0) return null
 

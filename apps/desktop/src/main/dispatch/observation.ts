@@ -1,24 +1,13 @@
-// Pure: one machine-observation write's label plan, precondition, and
-// comment body (#292) — `main/actions/observe.ts`'s `applyObservation` is
-// the only caller. Labels mirror `scripts/port-tick/writes.ts`'s own
-// `refreshSweepWrite`/`zeroDiffWrite`/`cycleCapWrite`/`approvalWithdrawnWrite`/
-// `livenessResetWrite` exactly, pinned by `scripts/checks/desktop-dispatch.ts`'s
-// label-table comparison, both directions. Comment bodies reuse the exact
-// fenced shapes `docs/FORMATS.md` ("Approval withdrawn", "Rebase required")
-// and `TICK-PROSE.md` (the zero-diff escalation, the cycle cap, the refresh
-// sweep's same-SHA/consecutive-cap escalation) already define — pinned the
-// same way.
+// Pure: one machine-observation write's label plan, precondition, and comment body.
+// Mirrors scripts/port-tick/writes.ts exactly, pinned by scripts/checks/desktop-dispatch.ts.
 import type { LabelKey, LabelVocabulary } from '../../shared/labels/vocabulary'
 import type { ReconciledItem } from '../../shared/state/types'
 import type { TickObservation } from '../../shared/tick/types'
 
-// A literal, not an import — this module loads standalone and can't resolve
-// a relative import; pinned against `bodies.ts`'s own export, below.
+// A literal, not an import — this module loads standalone and can't resolve a relative import.
 const CYCLE_CAP_ESCALATION_MARKER = 'review cycles reached the cap of'
 
-/** Every `TickObservation` kind this module writes — `observableFrom` never
- *  yields the one report-only kind (`refresh-deferred`), so this is the type
- *  `main/dispatch/dispatcher.ts` actually passes through. */
+/** Every `TickObservation` kind this module writes — excludes the one report-only kind, `refresh-deferred`. */
 export type WriteObservation = Exclude<TickObservation, { readonly kind: 'refresh-deferred' }>
 
 export interface ObservationWritePlan {
@@ -51,13 +40,8 @@ function approvalWithdrawnComment(red: Extract<TickObservation, { readonly kind:
   return `## Approval withdrawn\n${lines.join('\n')}`
 }
 
-/**
- * The write chokepoint's own request shape for one observation — labels,
- * precondition, and comment, never decided a second way elsewhere. `item` is
- * the snapshot this pass read the observation against (never a second,
- * independent read); `integration` is `branches.integration`, for the
- * "Rebase required" comment's own `<base>`.
- */
+/** The write chokepoint's own request shape for one observation. `integration` is
+ *  `branches.integration`, for the "Rebase required" comment's own `<base>`. */
 export function observationWrite(observation: WriteObservation, item: ReconciledItem, vocabulary: LabelVocabulary, integration: string): ObservationWritePlan {
   switch (observation.kind) {
     case 'liveness-reset': {

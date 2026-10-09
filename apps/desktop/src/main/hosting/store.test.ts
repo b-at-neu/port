@@ -8,9 +8,7 @@ import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
 
 const REPO_ID = 'repo-1' as RepoId
 
-/** A never-emitting fake query — enough for tests that only care about
- *  store-level bookkeeping (capacity, unknown-session, wiring), never the
- *  pump loop's own message handling (covered by `handle.test.ts`). */
+/** A never-emitting fake query — enough for tests that only care about store-level bookkeeping. */
 function idleQuery(): HostedQuery {
   return {
     interrupt: vi.fn(() => Promise.resolve({ still_queued: [] })),
@@ -186,13 +184,7 @@ describe('createHostedStore', () => {
     'closeAll() calls close() on every live handle',
     async () => {
       const closeSpy = vi.fn()
-      // This fake generator never reacts to the input iterator ending on its
-      // own, so `handle.close()` genuinely waits out its full
-      // `CLOSE_GRACE_MS` before forcing `query.close()` — this test's own
-      // timeout accounts for that. `close()` itself then does what the real
-      // SDK's forced termination does: makes the generator finish. Each
-      // `query()` call (one per handle) gets its own `finish`, so closing one
-      // handle never resolves another's pending `next()`.
+      // This fake never reacts to the input ending, so close() waits out CLOSE_GRACE_MS; each query() gets its own `finish`.
       function query(): HostedQuery {
         let finish: (() => void) | null = null
         return {
@@ -243,8 +235,7 @@ describe('createHostedStore', () => {
     if (!started.ok) throw new Error('unreachable')
 
     box.deliver?.({ type: 'system', subtype: 'init', session_id: 'fork-session-1' })
-    // Two microtask flushes: one for the pump's own await, one for
-    // titleFork's own async chain before it calls handle.setTitled().
+    // One flush for the pump's await, more for titleFork's async chain before setTitled().
     await Promise.resolve()
     await Promise.resolve()
     await Promise.resolve()

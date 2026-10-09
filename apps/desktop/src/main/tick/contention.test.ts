@@ -1,7 +1,5 @@
-// Runs `parseFilesBlock`/`gateCandidates` over the tick engine's own shared
-// case table — the same file `scripts/checks/tick.ts` runs these same
-// exports over. #348 made this module itself the engine's own
-// (`apps/desktop` imports it directly, no local copy).
+// Runs parseFilesBlock/gateCandidates over the tick engine's own shared case table; this module
+// is the engine's own, apps/desktop imports it directly with no local copy.
 import { describe, expect, it } from 'vitest'
 import { gateCandidates, parseFilesBlock } from '../../../../../scripts/port-tick/contention'
 import type { ClaimedItem, OccupiedEntry } from '../../../../../scripts/port-tick/contention'

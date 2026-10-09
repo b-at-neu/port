@@ -1,7 +1,5 @@
-// Pure envelope parse and failure classification — no I/O. `gh api graphql`
-// exits non-zero whenever the response carries `errors`, even when `data` is
-// still usable (Decision 3, #76's plan), so a non-zero exit is never read as
-// "no data" here: the envelope itself, not `ghResult.ok`, is what decides.
+// Pure envelope parse and failure classification — no I/O. gh api graphql exits non-zero whenever
+// the response carries errors, even when data is still usable, so the envelope itself decides.
 import type { GhResult } from '../platform/gh'
 import type { LabelKey } from '../../shared/labels/vocabulary'
 import type { PipelineItemKind, TruncatedSet, UnavailableAlias } from '../../shared/github/types'
@@ -31,31 +29,16 @@ export function parseEnvelope(raw: string): ParsedEnvelope {
   }
 }
 
-/** The failure kinds this classifier can add on top of `gh`'s own —
- *  independent of `shared/github/types.ts`'s hand-maintained
- *  `PipelineFailureKind` so `adapter.ts`'s `_kindsCoverGhResult` assertion
- *  actually pins one against the other, rather than comparing a type to
- *  itself. */
+/** The failure kinds this classifier can add on top of `gh`'s own, independent of
+ *  `PipelineFailureKind` so `adapter.ts`'s assertion actually pins one against the other. */
 export type EnvelopeFailureKind = 'unparseable' | 'no-data' | 'repo-not-found' | 'rate-limited'
 
 export type FailureVerdict =
   | { readonly kind: 'ok' }
   | { readonly kind: Exclude<GhResult, { ok: true }>['kind'] | EnvelopeFailureKind; readonly message: string }
 
-/**
- * Classification order, first match wins (see the plan's **Data & contracts**
- * table):
- * 1. `gh` binary unresolved → `not-found`.
- * 2. `gh` classified the exit as anything other than its own `unknown`
- *    catch-all → that kind is authoritative, no envelope parsing needed.
- * 3. Otherwise (`gh` said `unknown`, or `gh` exited zero) — the exit code
- *    alone proves nothing (Decision 3), so the envelope decides:
- *    unparseable stdout → `unparseable`; any `RATE_LIMITED` error →
- *    `rate-limited` (this is the one case that overrides a classified
- *    `unknown`); no `data` → `no-data`; `data.repository` null →
- *    `repo-not-found`; otherwise → `ok`, whether or not `errors` is also
- *    present (a partial response is `unavailable` per alias, not a failure).
- */
+/** Classification order, first match wins: an unresolved `gh` binary, any non-`unknown` classified
+ *  exit, then the envelope itself (a partial response is `unavailable` per alias, not a failure). */
 export function classifyFailure(ghResult: GhResult, envelope: ParsedEnvelope | undefined): FailureVerdict {
   if (!ghResult.ok) {
     switch (ghResult.kind) {
@@ -110,10 +93,8 @@ export interface AliasInfo {
   readonly surface: PipelineItemKind
 }
 
-/** Maps `errors[].path` (`["repository", "<alias>", ...]`) to the alias
- *  table built alongside the query, so a partial failure names the label and
- *  surface it belongs to rather than a bare alias string. Each alias is
- *  reported at most once even if it appears in more than one error. */
+/** Maps `errors[].path` to the alias table built alongside the query, so a partial failure
+ *  names the label and surface rather than a bare alias string. */
 export function collectUnavailable(errors: readonly GraphQLErrorEntry[] | undefined, aliasIndex: ReadonlyMap<string, AliasInfo>): readonly UnavailableAlias[] {
   if (!errors) return []
   const seen = new Set<string>()
@@ -138,9 +119,8 @@ function isConnectionLike(value: unknown): value is ConnectionLike {
   return typeof value === 'object' && value !== null
 }
 
-/** Compares every aliased connection's `totalCount` against its `nodes`
- *  length — the only truncation signal there is, since the query never
- *  paginates (see the plan's `## Risks / notes`). */
+/** Compares every aliased connection's `totalCount` against its `nodes` length — the only
+ *  truncation signal there is, since the query never paginates. */
 export function collectTruncated(repository: Readonly<Record<string, unknown>>, aliasIndex: ReadonlyMap<string, AliasInfo>): readonly TruncatedSet[] {
   const result: TruncatedSet[] = []
   for (const [alias, info] of aliasIndex) {

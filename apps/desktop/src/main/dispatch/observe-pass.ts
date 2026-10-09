@@ -1,10 +1,5 @@
-// #292: the observation pass itself, split out of `dispatcher.ts` to keep
-// that file under the 500-line limit (docs/ENGINEERING.md §7) — `dispatcher.ts`'s
-// own `considerRepo` is the only caller. In report order, skip an item this
-// process already wrote at or after the repository's current read (the read
-// has not caught up to that write yet), otherwise build and run the write. A
-// throw from the write itself becomes `outcome: 'failed'`, never a pass that
-// stops partway through the rest of the list.
+// The observation pass, split out of dispatcher.ts to keep it under the file-size limit. A throw
+// from the write becomes `outcome: 'failed'`, never a pass that stops partway through.
 import type { ReadyEntry } from '../actions/apply'
 import type { ApplyObservationParams, ApplyObservationResult } from '../actions/observe'
 import type { ObservationRecord } from '../../shared/dispatch/types'
@@ -24,16 +19,13 @@ export interface ObservationPassDeps {
   readonly onChange: () => void
 }
 
-/** The mutable slice of `RepoDispatcherState` this pass reads and writes —
- *  `dispatcher.ts` passes its own state object directly, since both already
- *  agree on this shape. */
+/** The mutable slice of `RepoDispatcherState` this pass reads and writes. */
 export interface ObservationPassState {
   observed: ObservationRecord[]
   observedWriteAt: Map<number, string>
 }
 
-/** `main/actions/observe.ts`'s own `WriteOutcome` → `ObservationRecord.outcome`
- *  mapping (plan's own **ObservationRecord** table). */
+/** `WriteOutcome` → `ObservationRecord.outcome` mapping. */
 function observationOutcomeOf(outcome: WriteOutcome): ObservationRecord['outcome'] {
   switch (outcome.kind) {
     case 'applied':

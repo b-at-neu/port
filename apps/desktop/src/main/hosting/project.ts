@@ -1,19 +1,5 @@
-// #219: a pure projector turning the live SDK message stream into the same
-// `TranscriptEntry` shape #83/#84 already derive from a session's on-disk
-// `.jsonl` — one normalizer, one renderer, never a second pairing
-// implementation (the three-renderers trap #123 flagged). It narrows every
-// message structurally (`isRecord`), never trusting the SDK's own declared
-// types at runtime, and never throws — a message this projector cannot
-// recognize is skipped, the same "untrusted input from disk" posture
-// `transcript-entries.ts` already takes with a real transcript.
-//
-// A live session's message is not a `.jsonl` record: a `tool_use_result` on
-// disk is `tool_use_result` (snake_case) on the wire, and the deriver's own
-// pairing state (`createDeriver`) is reused unchanged by feeding it records
-// shaped exactly like the on-disk ones this app already parses. Meta rows
-// (turn complete, denials, retries, compaction) are never on disk in this
-// shape, so they are built directly here and interleaved into the same
-// absolute index space the deriver's own `appended`/`patched` occupy.
+// A pure projector turning the live SDK message stream into the same TranscriptEntry shape
+// already derived from a session's on-disk .jsonl. Never throws: an unrecognized message is skipped.
 import type { EntryPatch, MetaEntry, TranscriptEntry } from '../../shared/sessions/transcript'
 import { MAX_PAYLOAD_CHARS } from '../../shared/sessions/transcript'
 import { isRecord } from '../../shared/guards'
@@ -21,26 +7,19 @@ import { createDeriver, sanitize } from '../sessions/transcript-entries'
 import type { LiveBlock, LiveBlockKind, PartialUpdate, SessionEntriesDelta } from '../../shared/hosting/types'
 
 export interface CreateSessionProjectorParams {
-  /** The session's own `cwd` — passed straight through to `createDeriver`,
-   *  used only to shorten a headline path, never to resolve or open
-   *  anything. */
+  /** Used only to shorten a headline path, never to resolve or open anything. */
   readonly cwd: string
 }
 
-/** The bounded ring's size — a live session's window, never a growing
- *  per-session array (the same "small, focused" memory rule `REPLAY_LIMIT`
- *  already applies to the raw envelope ring). */
+/** The bounded ring's size — a live session's window, never a growing per-session array. */
 export const ENTRY_RETAIN_LIMIT = 500
 
-/** `push`/`recordSend`'s own return shape — everything `SessionEntriesDelta`
- *  carries except `sessionKey`, which only `handle.ts` (the one caller that
- *  knows it) adds. */
+/** Everything `SessionEntriesDelta` carries except `sessionKey`, which only `handle.ts` adds. */
 export type ProjectedDelta = Omit<SessionEntriesDelta, 'sessionKey'>
 
 export interface SessionProjectorWindow {
   readonly entries: readonly TranscriptEntry[]
-  /** The absolute index of `entries[0]` — `0` when nothing has ever been
-   *  evicted, greater once the ring has dropped its oldest rows. */
+  /** The absolute index of `entries[0]`; `0` until the ring has dropped its oldest rows. */
   readonly firstIndex: number
   readonly partial: LiveBlock | null
   readonly pendingSends: readonly string[]
@@ -48,25 +27,14 @@ export interface SessionProjectorWindow {
 }
 
 export interface SessionProjector {
-  /** Narrows one raw SDK message and folds it into this projector's state,
-   *  returning this call's own delta — `null` when the message produced no
-   *  visible change (an unrecognized type, a subagent frame, a mid-stream
-   *  event that isn't a text/thinking delta). Never throws: a message this
-   *  projector cannot make sense of is skipped, the same untrusted-input
-   *  posture the on-disk deriver already takes. */
+  /** `null` when the message produced no visible change. Never throws: an unrecognized message is skipped. */
   push(message: unknown, receivedAt: string): ProjectedDelta | null
-  /** Pushes the operator's own turn through the same deriver a `user-text`
-   *  record on disk would produce, and marks its uuid pending until an
-   *  `assistant`/`stream_event` frame or a `result` acknowledges it. */
+  /** Marks the turn's uuid pending until an `assistant`/`stream_event` frame or a `result` acknowledges it. */
   recordSend(uuid: string, text: string, at: string): ProjectedDelta
-  /** The current bounded state — what `session:attach` hands a reconnecting
-   *  renderer. */
+  /** The current bounded state — what `session:attach` hands a reconnecting renderer. */
   window(): SessionProjectorWindow
 }
 
-/** `user_message_uuids ?? [user_message_uuid]`, the exact fallback the plan
- *  states — every ack site (an `assistant` frame, the first `stream_event`
- *  of a turn) reads it the same way. */
 function ackUuidsOf(message: Record<string, unknown>): readonly string[] {
   const many = message['user_message_uuids']
   if (Array.isArray(many)) return many.filter((item): item is string => typeof item === 'string')
@@ -86,19 +54,13 @@ function formatSeconds(durationMs: unknown): string {
 export function createSessionProjector(params: CreateSessionProjectorParams): SessionProjector {
   const deriver = createDeriver({ cwd: params.cwd })
 
-  // The merged absolute-index window — deriver-produced entries and
-  // directly-built meta rows share one sequence, so a renderer holding
-  // `appended` in arrival order needs no second numbering.
+  // Deriver-produced entries and directly-built meta rows share one absolute-index sequence.
   let ring: TranscriptEntry[] = []
   let firstIndex = 0
   let nextAbsoluteIndex = 0
 
-  // Mirrors the deriver's own running `nextIndex` — it increments exactly
-  // once per entry the deriver's own `push` emits, so a patch's `index`
-  // (deriver-space) resolves through this map to this projector's absolute
-  // space. Held only while a tool call is still open; deleted the moment its
-  // result pairs (ENGINEERING's "held only while pending" idiom, same as the
-  // deriver's own `pendingById`).
+  // Mirrors the deriver's own running index, resolving a patch's deriver-space index to this
+  // projector's absolute space. Held only while a tool call is still open.
   let mirrorIndex = 0
   const openToolCalls = new Map<number, number>()
 
@@ -123,15 +85,12 @@ export function createSessionProjector(params: CreateSessionProjectorParams): Se
 
   function patchWindow(absoluteIndex: number, entry: TranscriptEntry): void {
     const relative = absoluteIndex - firstIndex
-    // Evicted from the ring already — the patch still crosses the boundary
-    // (the caller folds it into this call's own `patched`), it just has
-    // nothing left here to overwrite.
+    // Evicted from the ring already; the patch still crosses the boundary but has nothing to overwrite here.
     if (relative < 0 || relative >= ring.length) return
     ring[relative] = entry
   }
 
-  /** Folds one deriver `push` result into the window, translating every
-   *  patch's deriver-space index through `openToolCalls`. */
+  /** Folds one deriver `push` result into the window, translating each patch's index through `openToolCalls`. */
   function ingestDerived(appended: readonly TranscriptEntry[], patched: readonly EntryPatch[]): { appended: TranscriptEntry[]; patched: EntryPatch[] } {
     const outAppended: TranscriptEntry[] = []
     for (const entry of appended) {
@@ -221,10 +180,7 @@ export function createSessionProjector(params: CreateSessionProjectorParams): Se
 
     const partial = clearLiveBlock()
 
-    // Fallback for producers that omit the per-frame ack stamp entirely — a
-    // result whose queue is empty (or that names no queue at all) means
-    // every send this turn consumed is done, so nothing should still show
-    // `Queued`.
+    // Fallback: an empty or absent queue means every send this turn consumed is done.
     const queuedTurnCount = message['queued_turn_count']
     let pendingSendsUpdate: readonly string[] | null = null
     if ((typeof queuedTurnCount !== 'number' || queuedTurnCount <= 0) && pendingSends.size > 0) {
@@ -339,9 +295,7 @@ export function createSessionProjector(params: CreateSessionProjectorParams): Se
     },
 
     window() {
-      // A snapshot, never a live reference — `ring` itself keeps mutating in
-      // place as later pushes/patches land, and a caller (session:attach)
-      // must not see those land inside a window it already received.
+      // A snapshot, never a live reference — `ring` keeps mutating in place as later pushes land.
       return { entries: ring.slice(), firstIndex, partial: liveBlock, pendingSends: [...pendingSends], revision }
     },
   }

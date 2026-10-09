@@ -1,7 +1,5 @@
-// Split out of plan.test.ts (#292) to keep that file under the 500-line
-// limit (docs/ENGINEERING.md §7) — behaviour-identical, just the cycle-cap/
-// zero-diff gate (#108) and refresh-wins/mergeability gate (#265) coverage,
-// which share no state with the rest of that file's describe blocks.
+// Split out of plan.test.ts to keep that file under the file-size limit: the cycle-cap/zero-diff
+// and refresh-wins/mergeability gate coverage, which shares no state with the rest of that file.
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../../shared/repos'
 import type { ReconciledItem, RepositoryState } from '../../shared/state/types'
@@ -224,11 +222,8 @@ describe('planTick — refresh-wins veto and mergeability gate (#265)', () => {
   })
 
   it('a needsRevision item that also carries refreshBranch is vetoed, never dispatched to revise — the refresh itself still dispatches (#292)', () => {
-    // Both are trigger-role, so this stays in triggerItems (unlike
-    // `refreshing`, which is in-flight-role and already excluded by
-    // precedence before the veto could ever run) — `needsRevision` listed
-    // first so `stageKeyOf` resolves to it, matching the realistic case the
-    // veto exists for.
+    // Both are trigger-role, so this stays in triggerItems. needsRevision listed first so
+    // stageKeyOf resolves to it, matching the realistic case the veto exists for.
     const repo = readyRepo([reviseItem({ stages: [...reviseItem().stages, { key: 'refreshBranch', name: 'refresh branch', role: 'trigger' }] })])
     const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
     expect(report.actionable).toEqual([{ number: 204, kind: 'pull-request', trigger: 'refreshBranch', agent: 'revise', unchecked: false, cycle: null }])

@@ -114,8 +114,7 @@ describe('fetchPipelineItems', () => {
     expect(result.vocabulary.verdict).toBe('unverified')
   })
 
-  // #94: viewer resolves when present, and is null (never a guess) when the
-  // alias is absent or a partial response drops it.
+  // viewer resolves when present, and is null (never a guess) when the alias is absent or dropped.
   it.each([
     ['present', { login: 'op' }, false, 'op'],
     ['absent', undefined, false, null],
@@ -421,14 +420,8 @@ describe('fetchClaimPreflight', () => {
   })
 })
 
-// Gated exactly as `git.test.ts`/`gh.test.ts` gate their own live cases —
-// `ctx.skip()` when `gh` is not authenticated, so the suite still runs in an
-// unauthenticated CI environment. Resolves the repository with
-// `gh repo view` rather than a hardcoded slug, so it is correct in a fork.
-// Both gating calls are bounded well under this test's own 30s timeout
-// (#200 review): the default 30s command timeout races the test framework's
-// own timeout on a slow CI runner, which fails the test on a hang instead of
-// classifying as `timeout` (not ok) and skipping cleanly.
+// ctx.skip() when gh is not authenticated, so the suite still runs in an unauthenticated CI
+// environment. Resolves the repository with gh repo view rather than a hardcoded slug.
 describe('fetchPipelineItems / fetchItemStates — live', () => {
   it('matches this repository — every matchedKeys is non-empty, vocabulary is verified, rateLimit.cost is present', async (ctx) => {
     const auth = await ghAuthStatus({ timeoutMs: 8_000 })
@@ -457,7 +450,6 @@ describe('fetchPipelineItems / fetchItemStates — live', () => {
     for (const item of result.items) {
       expect(item.matchedKeys.length).toBeGreaterThan(0)
     }
-    // Measured cost for #76's pull request `## Notes`.
     console.info(`fetchPipelineItems rateLimit.cost = ${result.rateLimit.cost}`)
   }, 30_000)
 
@@ -478,8 +470,7 @@ describe('fetchPipelineItems / fetchItemStates — live', () => {
       return
     }
 
-    // #76 itself — open at the time this suite was written, and re-checking
-    // its own tracking issue's state is exactly fetchItemStates's purpose.
+    // A known-open tracking issue; re-checking its state is exactly fetchItemStates's purpose.
     const result = await fetchItemStates({ repo: { owner, name }, items: [{ kind: 'issue', number: 76 }] })
 
     expect(result.ok).toBe(true)

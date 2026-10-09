@@ -62,9 +62,8 @@ describe('mapPipelineItems', () => {
     expect(mapPipelineItems({}, [queriedLabel('ready', 0)], 'r')).toEqual([])
   })
 
-  // #108: headRefOid/reviews/comments feed the cycle-cap and zero-diff
-  // gates — populated only for a pull request, null for an issue. #265:
-  // mergeable feeds the mergeability gate the same way.
+  // headRefOid/reviews/comments feed the cycle-cap and zero-diff gates, populated only for a pull
+  // request; mergeable feeds the mergeability gate the same way.
   it('a pull request node carries headRefOid, mergeable, reviews, and comments', () => {
     const node = {
       number: 5,
