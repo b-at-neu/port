@@ -30,6 +30,8 @@ import { createSessionProjector } from './project'
 import type { ProjectedDelta, SessionProjectorWindow } from './project'
 import { createCapabilityTracker } from './capabilities'
 import { readRateLimit } from './rate-limit'
+import { readUsage } from './usage'
+import type { UsageReading } from './usage'
 import { promptTitle } from './title'
 import { buildUserContent } from './content'
 import type { ContentBlock } from './content'
@@ -163,6 +165,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
   let titled: boolean | null = null
   let title: string | null = params.initialTitle
   let rateLimit: SessionRateLimit | null = null
+  let usageReading: UsageReading | null = null
   let closeRequested = false
   let seq = 0
   const ring: SessionEventEnvelope[] = []
@@ -185,6 +188,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
       rateLimit,
       controls: controls.current(),
       models: controls.models(),
+      usage: usageReading?.usage ?? null,
     }
   }
 
@@ -216,6 +220,12 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     if (reading !== null) {
       rateLimit = reading
       emitStatus()
+    }
+    const nextUsage = readUsage(message, usageReading, observedAt)
+    if (nextUsage !== usageReading) {
+      usageReading = nextUsage
+      // 'result' already emits below; only an assistant-driven change needs its own push.
+      if (message.type === 'assistant') emitStatus()
     }
     if (message.type === 'system' && message.subtype === 'init') {
       const firstInit = claudeSessionId === null

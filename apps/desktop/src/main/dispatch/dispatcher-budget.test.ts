@@ -91,6 +91,7 @@ function sessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): Hosted
     rateLimit: null,
     controls: TEST_CONTROLS,
     models: TEST_MODELS,
+    usage: null,
     ...overrides,
   }
 }
@@ -141,6 +142,12 @@ function fakeStore(overrides: Partial<HostedStore> = {}): HostedStore {
     },
     rename: () => {
       throw new Error('rename should not be invoked in this case')
+    },
+    marks: () => {
+      throw new Error('marks should not be invoked in this case')
+    },
+    setMark: () => {
+      throw new Error('setMark should not be invoked in this case')
     },
     ...overrides,
   }

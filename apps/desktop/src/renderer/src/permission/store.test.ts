@@ -40,6 +40,7 @@ function snapshotWith(permissionIds: readonly string[]): HostedSessionSnapshot {
     rateLimit: null,
     controls: TEST_CONTROLS,
     models: TEST_MODELS,
+    usage: null,
   }
 }
 

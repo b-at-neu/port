@@ -26,6 +26,7 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     rateLimit: null,
     controls: TEST_CONTROLS,
     models: TEST_MODELS,
+    usage: null,
     ...overrides,
   }
 }

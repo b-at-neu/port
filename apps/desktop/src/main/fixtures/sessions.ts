@@ -106,9 +106,21 @@ export function fixturePermissionSnapshots(now: Date): readonly HostedSessionSna
       rateLimit: null,
       controls: FIXTURE_CONTROLS,
       models: FIXTURE_MODELS,
+      usage: null,
     },
   ]
 }
+
+const FIXTURE_USAGE = {
+  costUsd: 0.42,
+  inputTokens: 180_000,
+  outputTokens: 12_000,
+  cacheReadTokens: 15_000,
+  cacheWriteTokens: 3_000,
+  contextTokens: 84_000,
+  contextWindow: 200_000,
+  observedAt: new Date(0).toISOString(),
+} as const
 
 export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapshot[] {
   const t = (minutesAgo: number) => new Date(now.getTime() - minutesAgo * MINUTE).toISOString()
@@ -131,6 +143,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       rateLimit: null,
       controls: FIXTURE_CONTROLS,
       models: FIXTURE_MODELS,
+      usage: { ...FIXTURE_USAGE, observedAt: t(0) },
     },
     {
       sessionKey: ENDED_KEY,
@@ -148,6 +161,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       rateLimit: null,
       controls: FIXTURE_CONTROLS,
       models: FIXTURE_MODELS,
+      usage: null,
     },
     {
       sessionKey: STARTING_KEY,
@@ -165,6 +179,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       rateLimit: null,
       controls: FIXTURE_CONTROLS,
       models: { kind: 'pending' },
+      usage: null,
     },
     {
       sessionKey: QUESTION_KEY,
@@ -210,6 +225,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       rateLimit: null,
       controls: FIXTURE_CONTROLS,
       models: FIXTURE_MODELS,
+      usage: null,
     },
     {
       sessionKey: PLAN_KEY,
@@ -245,6 +261,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       rateLimit: null,
       controls: { permissionMode: 'plan', model: 'sonnet', effort: null },
       models: FIXTURE_MODELS,
+      usage: null,
     },
   ]
 }
