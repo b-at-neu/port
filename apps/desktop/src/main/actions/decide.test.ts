@@ -8,7 +8,8 @@ import type { RepoId } from '../../shared/repos'
 import type { BoardSnapshot } from '../../shared/board/types'
 import type { ReconciledItem, RepositoryState, StageLabel } from '../../shared/state/types'
 import type { ItemsByNumberFetch, ResolvedItem } from '../../shared/github/types'
-import type { WriteOutcome } from '../../shared/writes/types'
+import type { AuditEntry, LabelAuditEntry, WriteOutcome } from '../../shared/writes/types'
+import { isLabelAuditEntry } from '../../shared/writes/types'
 import { readAuditLog } from '../writes/audit'
 import type { GhRunner } from '../writes/apply'
 import type { GitRunner } from '../dispatch/ownership'
@@ -359,11 +360,15 @@ describe('applyItemDecision — real writers', () => {
     const log = await readAuditLog(auditDir)
     if (!log.ok) throw new Error('unreachable')
     expect(log.entries).toHaveLength(2)
-    expect(log.entries[0]?.commentBytes).not.toBeNull()
-    expect(log.entries[0]?.action).toBe('unblock')
-    expect(log.entries[1]?.action).toBe('unblock')
-    expect(log.entries[1]?.commentBytes).toBeNull()
-    const outcomes: readonly WriteOutcome[] = log.entries.map((e) => e.result)
+    const labelEntries: readonly LabelAuditEntry[] = log.entries.map((e: AuditEntry) => {
+      if (!isLabelAuditEntry(e)) throw new Error('unreachable: expected a label audit entry')
+      return e
+    })
+    expect(labelEntries[0]?.commentBytes).not.toBeNull()
+    expect(labelEntries[0]?.action).toBe('unblock')
+    expect(labelEntries[1]?.action).toBe('unblock')
+    expect(labelEntries[1]?.commentBytes).toBeNull()
+    const outcomes: readonly WriteOutcome[] = labelEntries.map((e) => e.result)
     expect(outcomes.every((o) => o.kind === 'applied')).toBe(true)
   })
 })

@@ -91,6 +91,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 **`apps/desktop/src/main/reclaimer/`**
 - drives the shipped `worktrees.mjs` script; never re-implements its classification
 - calls no `git worktree` itself; only `node` is spawnable here
+- may run `reclaim` (never `--unlock`/`--force-dirty`); every attempt is audited via `main/writes/audit.ts`'s `appendAudit`, from `main/channels/worktrees.ts` — this directory itself never writes the audit log
 
 **`apps/desktop/src/main/registry/effective.ts`**
 - resolves effective config: `CLAUDE.md` overrides folded over port-resolved values

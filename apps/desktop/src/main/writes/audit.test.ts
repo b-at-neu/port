@@ -2,13 +2,14 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '../../shared/repos'
-import type { AuditEntry } from '../../shared/writes/types'
+import type { AuditEntry, LabelAuditEntry } from '../../shared/writes/types'
+import { isLabelAuditEntry } from '../../shared/writes/types'
 import { appendAudit, readAuditLog } from './audit'
 import { makeTempDir } from '../../testing/fixtures'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 
-function makeEntry(overrides: Partial<AuditEntry> = {}): AuditEntry {
+function makeEntry(overrides: Partial<LabelAuditEntry> = {}): LabelAuditEntry {
   return {
     at: '2026-01-01T00:00:00Z',
     repo: 'o/r',
@@ -35,7 +36,7 @@ describe('appendAudit / readAuditLog', () => {
     expect(read.ok).toBe(true)
     if (!read.ok) return
     expect(read.entries).toHaveLength(2)
-    expect(read.entries.map((e) => e.number)).toEqual([1, 2])
+    expect(read.entries.map((e: AuditEntry) => (isLabelAuditEntry(e) ? e.number : null))).toEqual([1, 2])
     expect(read.malformed).toBe(0)
   })
 
@@ -94,6 +95,6 @@ describe('appendAudit / readAuditLog', () => {
     }
     const read = await readAuditLog(dir, { limit: 2 })
     if (!read.ok) throw new Error('unreachable')
-    expect(read.entries.map((e) => e.number)).toEqual([3, 4])
+    expect(read.entries.map((e: AuditEntry) => (isLabelAuditEntry(e) ? e.number : null))).toEqual([3, 4])
   })
 })

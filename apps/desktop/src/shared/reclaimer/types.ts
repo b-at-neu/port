@@ -73,3 +73,20 @@ export type WorktreesReport =
       readonly readAt: string
     }
   | ({ readonly ok: false; readonly readAt: string } & ReclaimerFailure)
+
+// One reclaimed candidate, off `reclaim --json`'s own `results` array.
+// `error`/`branchDeleted` are populated only when `outcome` is not `'kept'`.
+export interface ReclaimedWorktree {
+  readonly path: string
+  readonly pathBasename: string
+  readonly issue: number | null
+  readonly outcome: 'removed' | 'kept' | 'failed'
+  readonly error: string | null
+  readonly branchDeleted: boolean | null
+}
+
+// `runReclaim`'s own result — `ok: true` covers both a full and a partial
+// success, with every candidate's own outcome in `results`.
+export type WorktreesReclaimResult =
+  | { readonly ok: true; readonly removed: number; readonly results: readonly ReclaimedWorktree[]; readonly readAt: string }
+  | ({ readonly ok: false; readonly readAt: string } & ReclaimerFailure)

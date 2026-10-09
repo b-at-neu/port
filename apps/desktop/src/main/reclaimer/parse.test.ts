@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createPathOps } from '../platform/paths'
-import { parseReportPayload } from './parse'
+import { parseReclaimPayload, parseReportPayload } from './parse'
 
 const posixPathOps = createPathOps('posix', { home: '/home/op' })
 const win32PathOps = createPathOps('win32', { home: 'C:\\Users\\op' })
@@ -158,5 +158,56 @@ describe('parseReportPayload', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.orphanDirs).toEqual(['/repo/.claude/worktrees/junk'])
+  })
+})
+
+describe('parseReclaimPayload', () => {
+  it('classifies a removed candidate', () => {
+    const payload = basePayload()
+    firstCandidate(payload).removed = true
+    firstCandidate(payload).branchDeleted = true
+    const result = parseReclaimPayload(JSON.stringify(payload), posixPathOps)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.removed).toBe(1)
+    expect(result.results).toEqual([
+      { path: '/repo/.claude/worktrees/impl-42', pathBasename: 'impl-42', issue: 42, outcome: 'removed', error: null, branchDeleted: true },
+    ])
+  })
+
+  it('classifies a failed candidate from a non-null error', () => {
+    const payload = basePayload()
+    firstCandidate(payload).removed = false
+    firstCandidate(payload).error = 'a review session is still attached'
+    const result = parseReclaimPayload(JSON.stringify(payload), posixPathOps)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.removed).toBe(0)
+    expect(result.results[0]?.outcome).toBe('failed')
+    expect(result.results[0]?.error).toBe('a review session is still attached')
+  })
+
+  it('classifies a kept candidate: not removed, no error', () => {
+    const payload = basePayload()
+    firstCandidate(payload).removed = false
+    firstCandidate(payload).error = null
+    const result = parseReclaimPayload(JSON.stringify(payload), posixPathOps)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.results[0]?.outcome).toBe('kept')
+  })
+
+  it('fails when removed is missing or not a boolean', () => {
+    const payload = basePayload()
+    delete (firstCandidate(payload) as { removed?: unknown }).removed
+    const result = parseReclaimPayload(JSON.stringify(payload), posixPathOps)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.message).toContain('removed')
+  })
+
+  it('fails on unparseable JSON, the same as parseReportPayload', () => {
+    const result = parseReclaimPayload('not json at all', posixPathOps)
+    expect(result.ok).toBe(false)
   })
 })

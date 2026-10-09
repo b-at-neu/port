@@ -10,7 +10,7 @@ import type { RepositoryState } from '../../shared/state/types'
 import { reconcileRepository } from '../state/reconcile'
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '../tick/ledger'
 import { planTick } from '../tick/plan'
-import { FIXTURE_REPOSITORIES, LEGACY_SITE_ID, WIDGETS_ID, WIDGETS_VOCABULARY_REPORT } from './repos'
+import { FIXTURE_REPOSITORIES, GADGETS_ID, GADGETS_VOCABULARY_REPORT, LEGACY_SITE_ID, WIDGETS_ID, WIDGETS_VOCABULARY_REPORT } from './repos'
 import type { FixtureScenario } from './mode'
 
 const VIEWER = 'octo-dev'
@@ -31,10 +31,16 @@ function legacySiteEntry() {
   return entry
 }
 
-function repositoryHealth(now: Date): RepositoryHealth {
+function gadgetsEntry() {
+  const entry = FIXTURE_REPOSITORIES.find((repository) => repository.id === GADGETS_ID)
+  if (entry === undefined || !('config' in entry)) throw new Error('fixtures: acme/gadgets is missing its resolved config')
+  return entry
+}
+
+function repositoryHealth(repoId: typeof WIDGETS_ID | typeof GADGETS_ID, now: Date): RepositoryHealth {
   const at = now.toISOString()
   const source = (kind: SourceKind) => ({ lastSuccessAt: at, lastAttemptAt: at, consecutiveFailures: 0, lastError: null, intervalMs: SOURCE_BASE_INTERVAL_MS[kind], deferredUntil: null })
-  return { repoId: WIDGETS_ID, github: source('github'), sessions: source('sessions'), worktrees: source('worktrees'), denials: source('denials') }
+  return { repoId, github: source('github'), sessions: source('sessions'), worktrees: source('worktrees'), denials: source('denials') }
 }
 
 interface ItemSeed {
@@ -151,11 +157,42 @@ function notReadyRepositoryState(): RepositoryState {
   return { ok: false, repoId: entry.id, displayName: entry.displayName, reason: 'not-ready', problem: entry.problem }
 }
 
+// acme/gadgets: a third, ready repository with no items, whose own GitHub
+// read carries no vocabulary label at all, so its Overview renders mis-resolved.
+function gadgetsRepositoryState(now: Date): RepositoryState {
+  const entry = gadgetsEntry()
+  const vocabulary = entry.config.vocabulary
+
+  const pipelineFetch: PipelineFetch = {
+    ok: true,
+    items: [],
+    queried: queriedLabelsFor(vocabulary),
+    disabled: vocabulary.disabled,
+    vocabulary: GADGETS_VOCABULARY_REPORT,
+    unavailable: [],
+    truncated: [],
+    rateLimit: { cost: 1, remaining: 4987, resetAt: offsetMinutes(now, 60) },
+    viewer: VIEWER,
+    fetchedAt: now.toISOString(),
+  }
+
+  return reconcileRepository({
+    entry,
+    pipelineFetch,
+    itemsByNumberFetch: null,
+    repoSessions: { agents: [], sessions: [], available: true, freshness: { at: now.toISOString() } },
+    worktrees: { ok: true, mainPath: '/home/you/src/gadgets', entries: [], subjectsAvailable: true, readAt: now.toISOString() },
+    denials: { ok: true, present: false, path: '/home/you/src/gadgets/.agents/denials.log', readAt: now.toISOString() },
+  })
+}
+
 /** `tick` is built with the real `planTick` over a fresh ledger, same as the real app gets on every restart. No dispatcher is wired in fixture mode — nothing in this module spawns anything. */
 export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'populated'): BoardSnapshot {
   const ready = readyRepositoryState(now, scenario)
   const notReady = notReadyRepositoryState()
+  const gadgets = gadgetsRepositoryState(now)
   const readyEntry = widgetsEntry()
+  const gadgetsEntryConfig = gadgetsEntry()
 
   const ledger = createDispatchLedger()
   const unknownStreaks = createUnknownStreaks()
@@ -163,15 +200,16 @@ export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'pop
   const nextDecisionAt = new Date(now.getTime() + SOURCE_BASE_INTERVAL_MS.github)
 
   const tickParams = { ledger, unknownStreaks, nextDecisionAt, now: () => now, reviewCycleCap: readyEntry.config.reviewCycleCap, startedTasks: [], refreshMemo, checkDispositions: readyEntry.config.checkDispositions }
-  const tick = [planTick({ repository: ready, ...tickParams }), planTick({ repository: notReady, ...tickParams })]
+  const gadgetsTickParams = { ...tickParams, reviewCycleCap: gadgetsEntryConfig.config.reviewCycleCap, checkDispositions: gadgetsEntryConfig.config.checkDispositions }
+  const tick = [planTick({ repository: ready, ...tickParams }), planTick({ repository: notReady, ...tickParams }), planTick({ repository: gadgets, ...gadgetsTickParams })]
 
   return {
     state: {
-      repositories: [ready, notReady],
+      repositories: [ready, notReady, gadgets],
       sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 1, scanMs: 1, scannedAt: now.toISOString() },
       readAt: now.toISOString(),
     },
-    health: [repositoryHealth(now)],
+    health: [repositoryHealth(WIDGETS_ID, now), repositoryHealth(GADGETS_ID, now)],
     policy: DEFAULT_POLL_POLICY,
     tick,
     // acme/widgets reads `dispatching` — the ordinary, nothing-paused state a fresh registration starts in.

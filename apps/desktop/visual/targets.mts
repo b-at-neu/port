@@ -83,9 +83,11 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
     container: '#app',
     ready: '[role="tablist"]',
     variants: [
-      { name: 'worktrees', hash: '#/repositories/fixture-acme-widgets?tab=worktrees', click: 'text=Inspect worktrees', ready: '[data-slot="worktree-row"]' },
+      { name: 'worktrees', hash: '#/repositories/fixture-acme-widgets?tab=worktrees', ready: '[data-slot="worktree-row"]' },
+      { name: 'worktrees-reclaim', hash: '#/repositories/fixture-acme-widgets?tab=worktrees', click: 'text=Reclaim 1', ready: '[data-slot="alert-dialog-content"]' },
       { name: 'denials', hash: '#/repositories/fixture-acme-widgets?tab=denials', ready: 'text=No denial bursts' },
       { name: 'problem', hash: '#/repositories/fixture-acme-legacy-site', ready: '[role="alert"]' },
+      { name: 'mis-resolved', hash: '#/repositories/fixture-acme-gadgets', ready: '[data-slot="label-verdict"]' },
     ],
   },
   history: { hash: '#/history', container: '#app', ready: '[data-slot="session-row"]' },

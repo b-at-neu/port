@@ -11,6 +11,7 @@ import type { AssertEqual } from '../../shared/assert-type'
 import type { GithubResolutionState, InspectedWorktree, PorcelainJoinState, ReclaimerFailureKind, WorktreesReport } from '../../shared/reclaimer/types'
 import { isReclaimableState } from '../../shared/reclaimer/types'
 import { parseNodeCommand } from './command'
+import { describeCommandFailure } from './command-failure'
 import { parseReportPayload } from './parse'
 
 // Fails to compile if a new `CommandResult` failure kind is added without `ReclaimerFailureKind` growing to match.
@@ -39,26 +40,6 @@ export interface ReadWorktreeReportParams {
 function firstFailLine(stderr: string): string {
   const line = stderr.split(/\r?\n/).find((l) => l.startsWith(SCRIPT_FAIL_PREFIX))
   return (line ?? stderr.trim()).slice(0, 2000)
-}
-
-// Maps a platform-layer failure straight through, never re-classifying.
-function describeCommandFailure(result: Exclude<CommandResult, { ok: true }>): { kind: CommandResultFailureKind; message: string } {
-  switch (result.kind) {
-    case 'not-found':
-      return { kind: 'not-found', message: `node not found on PATH (searched: ${result.searched.join(', ')})` }
-    case 'cwd-missing':
-      return { kind: 'cwd-missing', message: `working directory does not exist: ${result.cwd}` }
-    case 'nonzero':
-      return { kind: 'nonzero', message: result.stderr.trim() || `node exited with code ${result.code}` }
-    case 'signalled':
-      return { kind: 'signalled', message: `node was killed by signal ${result.signal}` }
-    case 'timeout':
-      return { kind: 'timeout', message: `node timed out after ${result.timeoutMs}ms` }
-    case 'output-too-large':
-      return { kind: 'output-too-large', message: `node output exceeded ${result.maxBytes} bytes` }
-    case 'spawn-failed':
-      return { kind: 'spawn-failed', message: result.message }
-  }
 }
 
 // Retries exactly once with `--offline` appended when the first attempt's stderr carries the sentinel.

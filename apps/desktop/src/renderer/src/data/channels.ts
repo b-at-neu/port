@@ -37,6 +37,7 @@ export const MUTATION_CHANNELS = [
   'transcript:tail:poll',
   'transcript:tail:close',
   'board:refresh',
+  'worktrees:reclaim',
   'claim:apply',
   'item:action',
   'item:decide',

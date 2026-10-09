@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { labelName, resolveVocabulary } from '../labels/vocabulary'
 import type { RepoId } from '../repos'
 import type { ReconciledItem, StageLabel } from '../state/types'
-import type { AuditEntry } from '../writes/types'
+import type { LabelAuditEntry } from '../writes/types'
 import { RETRY_TRIGGER, actionsFor, pausedTriggerFrom } from './plan'
 
 const VOCABULARY = resolveVocabulary({})
@@ -263,7 +263,7 @@ describe('RETRY_TRIGGER', () => {
 })
 
 describe('pausedTriggerFrom', () => {
-  function auditEntry(present: readonly string[]): AuditEntry {
+  function auditEntry(present: readonly string[]): LabelAuditEntry {
     return {
       at: '2026-01-01T00:00:00Z',
       repo: 'o/r',

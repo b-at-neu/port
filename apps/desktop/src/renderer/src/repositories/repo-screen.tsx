@@ -114,14 +114,14 @@ export function RepoScreen() {
             <TabsTrigger value="denials">Denials</TabsTrigger>
           </TabsList>
           <div className="flex-1 overflow-y-auto">
-            {tab === 'overview' ? <OverviewTab entry={entry} /> : null}
-            {tab === 'worktrees' ? <WorktreesTab repoId={repoId as RepoId} commandsWorktrees={entry.config.commands.worktrees} /> : null}
+            {tab === 'overview' ? <OverviewTab entry={entry} repoId={repoId as RepoId} /> : null}
+            {tab === 'worktrees' ? <WorktreesTab repoId={repoId as RepoId} entry={entry} /> : null}
             {tab === 'denials' ? <DenialsTab repoId={repoId as RepoId} /> : null}
           </div>
         </Tabs>
       ) : (
         <div className="flex-1 overflow-y-auto">
-          <OverviewTab entry={entry} />
+          <OverviewTab entry={entry} repoId={repoId as RepoId} />
         </div>
       )}
     </div>

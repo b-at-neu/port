@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest'
 import { resolveVocabulary } from '../../shared/labels/vocabulary'
 import type { LabelVocabulary } from '../../shared/labels/vocabulary'
 import type { RepoId } from '../../shared/repos'
-import type { CommentRequest, LabelWriteRequest, WriteOutcome } from '../../shared/writes/types'
+import type { AuditEntry, CommentRequest, LabelAuditEntry, LabelWriteRequest, WriteOutcome } from '../../shared/writes/types'
+import { isLabelAuditEntry } from '../../shared/writes/types'
 import type { CommandResult } from '../platform/run'
 import type { GhResult } from '../platform/gh'
 import type { ItemsByNumberFetch, ResolvedItem } from '../../shared/github/types'
@@ -42,6 +43,11 @@ function request(overrides: Partial<LabelWriteRequest> = {}): LabelWriteRequest 
     action: 'test',
     ...overrides,
   }
+}
+
+function labelEntry(entry: AuditEntry | undefined): LabelAuditEntry {
+  if (entry === undefined || !isLabelAuditEntry(entry)) throw new Error('unreachable: expected a label audit entry')
+  return entry
 }
 
 function resolvedItem(overrides: Partial<ResolvedItem> = {}): ResolvedItem {
@@ -85,8 +91,8 @@ describe('applyLabels — ownership', () => {
     const log = await readAuditLog(auditDir)
     if (!log.ok) throw new Error('unreachable')
     expect(log.entries).toHaveLength(1)
-    expect(log.entries[0]?.ownership).toBe('terminal')
-    expect(log.entries[0]?.result.kind).toBe('terminal-owned')
+    expect(labelEntry(log.entries[0]).ownership).toBe('terminal')
+    expect(labelEntry(log.entries[0]).result.kind).toBe('terminal-owned')
   })
 
   it('refuses with ownership-unreadable for malformed cockpit.json', async () => {
@@ -101,7 +107,7 @@ describe('applyLabels — ownership', () => {
 
     const log = await readAuditLog(auditDir)
     if (!log.ok) throw new Error('unreachable')
-    expect(log.entries[0]?.ownership).toBe('unreadable')
+    expect(labelEntry(log.entries[0]).ownership).toBe('unreadable')
   })
 
   it('proceeds to a real write while this app owns the repo', async () => {
@@ -122,7 +128,7 @@ describe('applyLabels — ownership', () => {
 
     const log = await readAuditLog(auditDir)
     if (!log.ok) throw new Error('unreachable')
-    expect(log.entries[0]?.ownership).toBe('app')
+    expect(labelEntry(log.entries[0]).ownership).toBe('app')
   })
 
   it('proceeds to a real write when nobody owns the repo yet', async () => {
@@ -136,7 +142,7 @@ describe('applyLabels — ownership', () => {
 
     const log = await readAuditLog(auditDir)
     if (!log.ok) throw new Error('unreachable')
-    expect(log.entries[0]?.ownership).toBe('absent')
+    expect(labelEntry(log.entries[0]).ownership).toBe('absent')
   })
 })
 
@@ -235,7 +241,7 @@ describe('postComment', () => {
     const log = await readAuditLog(auditDir)
     if (!log.ok) throw new Error('unreachable')
     expect(log.entries).toHaveLength(1)
-    expect(log.entries[0]?.commentBytes).toBe(Buffer.byteLength('secret content', 'utf8'))
+    expect(labelEntry(log.entries[0]).commentBytes).toBe(Buffer.byteLength('secret content', 'utf8'))
     expect(JSON.stringify(log.entries[0])).not.toContain('secret content')
   })
 

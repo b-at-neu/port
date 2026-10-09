@@ -1,6 +1,6 @@
 // Every pure string the Repositories screen's own Worktrees tab renders.
 // No DOM here.
-import type { InspectedWorktree, WorktreesReport } from '../../../shared/reclaimer/types'
+import type { InspectedWorktree, ReclaimedWorktree, WorktreesReclaimResult, WorktreesReport } from '../../../shared/reclaimer/types'
 
 /** One line per kind, naming what was refused — the plan's own **UX
  *  states** copy, verbatim where the plan gives an exact sentence. */
@@ -41,4 +41,41 @@ export function producerCopy(producer: InspectedWorktree['producer']): string | 
 
 export function needsAttentionCount(worktrees: readonly InspectedWorktree[]): number {
   return worktrees.filter((w) => !w.reclaimable && (w.state === 'locked' || w.state === 'dirty' || w.state === 'unresolved')).length
+}
+
+// --- Reclaim -------------------------------------------------------------
+
+// One named worktree when reclaiming a single row, the count otherwise.
+export function reclaimDialogTitle(count: number, singleName: string | null): string {
+  if (count === 1 && singleName !== null) return `Reclaim ${singleName}?`
+  return `Reclaim ${String(count)} worktree${count === 1 ? '' : 's'}?`
+}
+
+export function reclaimDialogBody(): string {
+  return 'Removes each finished worktree’s directory and deletes its merged branch. Locked or dirty worktrees are kept.'
+}
+
+export function reclaimDialogConfirmLabel(): string {
+  return 'Reclaim worktrees'
+}
+
+export function reclaimNothingToReclaimTooltip(): string {
+  return 'Nothing to reclaim. Only merged or empty worktrees can be.'
+}
+
+function failedEntryCopy(entry: ReclaimedWorktree): string {
+  return `${entry.pathBasename}: ${entry.error ?? 'unknown reason'}`
+}
+
+/** The post-reclaim toast — the plan's own three example lines, generalized
+ *  over however many candidates were reclaimed. */
+export function reclaimResultToast(result: Extract<WorktreesReclaimResult, { ok: true }>): string {
+  const failed = result.results.filter((r) => r.outcome === 'failed')
+  const total = result.results.length
+  if (failed.length === 0) return `Reclaimed ${String(result.removed)} worktree${result.removed === 1 ? '' : 's'}.`
+  return `Reclaimed ${String(result.removed)} of ${String(total)}. ${failed.map(failedEntryCopy).join('; ')}`
+}
+
+export function reclaimFailureToast(result: Extract<WorktreesReclaimResult, { ok: false }>): string {
+  return failureCopy(result)
 }
