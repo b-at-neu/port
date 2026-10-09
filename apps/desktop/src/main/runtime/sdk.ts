@@ -1,22 +1,9 @@
-// #97: the second lazy Agent SDK seam, alongside `sessions/sdk.ts` (#78) —
-// the `desktop-sessions` layer 1 check's own allowlist names both. One
-// `query()` turn, fixed short prompt, `maxTurns: 1`, always with
-// `pathToClaudeCodeExecutable` set to the resolved path — the probe never
-// lets the SDK fall back to its own bundled binary. The environment is run
-// as-is: `ANTHROPIC_API_KEY` is never stripped, only reported
-// (`apiKeyInEnvironment`, read by the composition root in `preflight.ts`),
-// since silently editing an operator's environment is worse than reporting
-// it, and a `verified` verdict reached with a key present is not evidence
-// that subscription auth works on its own.
+// One `query()` turn, fixed short prompt, `maxTurns: 1`, always with `pathToClaudeCodeExecutable` set so the probe never falls back to the SDK's bundled binary. `ANTHROPIC_API_KEY` is never stripped, only reported.
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
 import type { CredentialsTell, RuntimeDiagnosis } from '../../shared/runtime/types'
 import { classifyProbeFailure } from './classify'
 
-/** Only the fields this probe reads off a result message, so `sdk.test.ts`
- *  builds plain fixtures rather than every required field of the real
- *  `SDKResultMessage` union — every real `SDKMessage` variant still
- *  structurally satisfies this (only `type` is required here), so the real
- *  `query()`'s return type remains assignable to `SdkQuery` unchanged. */
+/** Only the fields this probe reads off a result message, so `sdk.test.ts` builds plain fixtures rather than every field of the real `SDKResultMessage` union. */
 interface ProbeMessage {
   readonly type: string
   readonly subtype?: string
@@ -57,12 +44,7 @@ function resultText(message: ProbeMessage): string {
   return (message.errors ?? []).join('; ')
 }
 
-/** `createRuntimeProbe` is a factory, not a bare export, so a test can
- *  inject a fake `importSdk` that never touches the real package — the
- *  default parameter is the **only** call in this tree that does, a lazy
- *  dynamic `import()` inside the returned closure, never at module load
- *  (the same idiom `sessions/sdk.ts`'s `createSdkSessionReader` already
- *  uses). */
+/** A factory, not a bare export, so a test can inject a fake `importSdk`; the default is a lazy dynamic `import()`, never at module load. */
 export function createRuntimeProbe(importSdk: () => Promise<{ query: SdkQuery }> = () => import('@anthropic-ai/claude-agent-sdk')): RuntimeProbeFn {
   return async (params) => {
     let sdk: { query: SdkQuery }
@@ -74,12 +56,7 @@ export function createRuntimeProbe(importSdk: () => Promise<{ query: SdkQuery }>
     }
 
     const timeoutMs = params.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS
-    // A runtime-native deadline via the standard `AbortSignal` factory below
-    // — never a manually scheduled callback of this app's own: `main/state/
-    // watcher.ts` is the only file under `main/` allowed to name one (#80
-    // Decision 2, pinned by `desktop-board`'s "one clock" guard), and a
-    // probe's bounded wait is not that clock. No manual abort call is needed
-    // either — the signal fires on its own once `timeoutMs` elapses.
+    // A runtime-native deadline via `AbortSignal`, never a manually scheduled callback — `watcher.ts` is the only file allowed to name a timer. No manual abort call is needed either.
     const abortController: NonNullable<Options['abortController']> = { signal: AbortSignal.timeout(timeoutMs), abort: () => undefined }
 
     try {

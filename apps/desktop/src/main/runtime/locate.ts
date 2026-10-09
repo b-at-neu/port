@@ -1,8 +1,4 @@
-// #97: resolves the `claude` executable the SDK should be pointed at, and
-// refuses the Agent SDK's own bundled per-platform binary
-// (`@anthropic-ai/claude-agent-sdk-{platform}-{arch}/claude`, ~327MB) — a
-// silent fallback to that path is a bug to surface, never a degradation to
-// accept, since passing the override is what lets a shipped build avoid it.
+// Resolves the `claude` executable the SDK should point at, and refuses the Agent SDK's own bundled per-platform binary (~327MB) — a silent fallback to that path is a bug to surface.
 import { createPathOps } from '../platform/paths'
 import { which as defaultWhich } from '../platform/which'
 import type { PathOps } from '../platform/paths'
@@ -19,27 +15,14 @@ export interface ResolveClaudeExecutableOptions {
   readonly which?: (options: WhichOptions) => Promise<WhichResult>
 }
 
-/** Every package name the Agent SDK's own `optionalDependencies` carry
- *  (`sdk/package.json`): the main package plus one per real platform/arch
- *  pair, all siblings under the same `@anthropic-ai/` scope directory. A
- *  resolved `claude` sitting inside any of them is the SDK's own bundled
- *  binary, never the operator's own install. The platform/arch tokens are
- *  whitelisted rather than a generic `[a-z0-9]+-[a-z0-9]+` shape, so an
- *  unrelated sibling package that merely shares the string prefix (e.g.
- *  `claude-agent-sdk-extra-tool`) is never mistaken for one. */
+/** Platform/arch tokens are whitelisted rather than a generic shape, so an unrelated sibling package sharing the string prefix is never mistaken for one. */
 const SDK_PACKAGE_DIR_RE = /^claude-agent-sdk(-(?:linux|darwin|win32)-(?:x64|arm64)(-musl)?)?$/
 
 function pathOpsFor(platform: NodeJS.Platform): PathOps {
   return createPathOps(platform === 'win32' ? 'win32' : 'posix', { home: '' })
 }
 
-/** Walks every ancestor of `resolvedPath` looking for a
- *  `@anthropic-ai/claude-agent-sdk*` package directory. Segment-matched
- *  first (cheap, and what actually finds the candidate), then the match
- *  itself is confirmed with `ops.contains` rather than trusted as a
- *  substring `startsWith` would be — a sibling directory sharing the same
- *  string prefix (`claude-agent-sdk-extra`) would pass a naive prefix check
- *  wrongly; walking ancestors and comparing whole path segments never can. */
+/** Segment-matched first, then confirmed with `ops.contains` rather than a naive `startsWith`, which a sibling sharing the same string prefix would pass wrongly. */
 export function bundledSdkPackageDir(resolvedPath: string, ops: PathOps): string | null {
   let current = resolvedPath
   for (;;) {
@@ -54,9 +37,7 @@ export function bundledSdkPackageDir(resolvedPath: string, ops: PathOps): string
   }
 }
 
-/** Resolves the executable through `which`, then refuses a bundled-SDK path
- *  before ever calling it usable — the ladder `main/runtime/classify.ts`
- *  consumes starts here. */
+/** Refuses a bundled-SDK path before ever calling it usable — the ladder `classify.ts` consumes starts here. */
 export async function resolveClaudeExecutable(options: ResolveClaudeExecutableOptions): Promise<LocateResult> {
   const whichFn = options.which ?? defaultWhich
   const result = await whichFn({ command: 'claude', env: options.env, platform: options.platform })

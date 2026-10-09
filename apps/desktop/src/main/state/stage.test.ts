@@ -43,9 +43,7 @@ describe('stageOf', () => {
 
   it('a module-disabled key never appears in stages', () => {
     const vocabulary = resolveVocabulary({ modules: {} })
-    // No shipped label is module-gated (#189) — resolveVocabulary itself
-    // never disables anything today. This asserts the skip behaviour holds
-    // for any key the vocabulary genuinely does not resolve.
+    // Asserts the skip behaviour holds for any key the vocabulary genuinely does not resolve.
     const result = stageOf(['ready'], { ...vocabulary, labels: vocabulary.labels.filter((l) => l.key !== 'ready') })
     expect(result.stages).toEqual([])
     expect(result.stage).toBeNull()

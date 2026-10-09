@@ -1,8 +1,4 @@
-// The app-level registry file: read, dedupe, version gate, atomic write.
-// Holds only what the operator chose to add — everything else about a
-// repository is derived on read by inspect.ts. Takes its directory as a
-// parameter (main passes `app.getPath('userData')`, tests pass a
-// `mkdtemp`), so nothing in this module imports Electron.
+// The app-level registry file: read, dedupe, version gate, atomic write. Takes its directory as a parameter, so nothing in this module imports Electron.
 import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '../platform/files'
 import { pathOps } from '../platform/paths'
 import type { PathOps } from '../platform/paths'
@@ -23,10 +19,7 @@ interface RegistryFileShape {
   readonly repositories: readonly RegistryEntry[]
 }
 
-/** Exported separately from the file I/O so a win32-flavoured dedupe (drive
- *  letter case, trailing separator) is testable on any host, the same
- *  reason `paths.ts`'s own ops take a flavour parameter rather than reading
- *  `process.platform`. */
+/** Exported separately from the file I/O so a win32-flavoured dedupe is testable on any host. */
 export function dedupePaths(paths: readonly string[], ops: PathOps = pathOps): readonly string[] {
   const seen = new Map<string, string>()
   for (const path of paths) {
@@ -40,10 +33,7 @@ function registryPath(dir: string): string {
   return pathOps.join(dir, REGISTRY_FILE)
 }
 
-/** File absent is a value, never an exception: first launch is empty, not
- *  broken. Unparseable JSON or an unsupported `version` are reported and
- *  never written over — refusing beats clobbering a list the operator can
- *  still recover by hand. */
+/** File absent is a value, never an exception. Unparseable JSON or an unsupported `version` are reported and never written over. */
 export async function readRegistry(dir: string): Promise<ReadRegistryResult> {
   const result = await readJsonFile<RegistryFileShape>(registryPath(dir))
   if (!result.ok) {
@@ -72,10 +62,7 @@ export async function readRegistry(dir: string): Promise<ReadRegistryResult> {
 
 export type WriteRegistryResult = { readonly ok: true } | { readonly ok: false; readonly kind: 'registry-unwritable'; readonly message: string }
 
-/** Writes the deduplicated path list atomically. Callers must never write
- *  when the corresponding read failed — a malformed or newer-version file
- *  must survive untouched, which is why this function does not itself
- *  read first. */
+/** Writes the deduplicated path list atomically. Callers must never write when the corresponding read failed, which is why this does not itself read first. */
 export async function writeRegistry(dir: string, paths: readonly string[]): Promise<WriteRegistryResult> {
   const ensured = await ensureDirectory(dir)
   if (!ensured.ok) return { ok: false, kind: 'registry-unwritable', message: ensured.message }

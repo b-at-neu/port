@@ -47,11 +47,7 @@ describe('sessionRequiredAt', () => {
     expect(sessionRequiredAt(body, 'issue')).toBe(false)
   })
 
-  // This repository's own issue #79 (this very ticket): its plan block's
-  // first non-empty line under `## Implementation Plan` is `## Overview`,
-  // never the marker — even though the plan's prose discusses
-  // `SESSION REQUIRED` at length further down. A real, unmodified fixture
-  // for "discusses the marker but does not carry it at the slot".
+  // A real fixture for "discusses the marker in prose but does not carry it at the slot".
   it('a body with no ## Implementation Plan and no Closes is not detected (this repository\'s own #61)', () => {
     const body = [
       'The cockpit types `port.config.json` **key** names into `gh --label` filters instead of the label names those keys resolve to.',

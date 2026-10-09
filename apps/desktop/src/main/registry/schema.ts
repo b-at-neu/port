@@ -1,8 +1,4 @@
-// The registry's single point of contact with the config contract. Every
-// consumer under src/main/registry/ reads CONFIG_DEFAULTS and validateConfig
-// from here — never a hand-transcribed default or a second validator — so a
-// renamed schema key fails `pnpm typecheck` here rather than silently
-// resolving `undefined` somewhere else (ENGINEERING §1, decisions 1 and 2).
+// The registry's single point of contact with the config contract — never a hand-transcribed default or a second validator.
 import Ajv2020 from 'ajv/dist/2020'
 import schema from '../../../../../schema/port.config.schema.json'
 import type { SchemaViolation } from '../../shared/repos'
@@ -14,9 +10,7 @@ export interface ValidateConfigResult {
   readonly violations: readonly SchemaViolation[]
 }
 
-/** Runs the real, shipped schema over an untrusted parsed config. `allErrors`
- *  is set on the Ajv instance, so a config with three mistakes reports all
- *  three rather than stopping at the first. */
+/** `allErrors` is set on the Ajv instance, so a config with three mistakes reports all three rather than stopping at the first. */
 export function validateConfig(value: unknown): ValidateConfigResult {
   const isValid = validate(value)
   if (isValid) return { violations: [] }
@@ -38,15 +32,11 @@ export interface ConfigDefaults {
   readonly reviewCycleCap: number
   readonly commands: { readonly worktrees: string | null; readonly budget: string | null }
   readonly concurrency: { readonly sharedFiles: readonly string[]; readonly overlapThreshold: number }
-  /** The port's own seed for a `sessionRequiredPaths +=` override (#300) —
-   *  nothing else in the app consumes the resolved list. */
+  /** The port's own seed for a `sessionRequiredPaths +=` override — nothing else in the app consumes the resolved list. */
   readonly sessionRequiredPaths: readonly string[]
 }
 
-/** Every default read off the schema import above — never a typed-out
- *  literal — so a schema edit that renames or removes a default is a
- *  compile error here, not a silently-`undefined` value at inspection
- *  time. */
+/** Every default read off the schema import above, never a typed-out literal, so a renamed default is a compile error here. */
 export const CONFIG_DEFAULTS: ConfigDefaults = {
   branches: {
     integration: schema.properties.branches.properties.integration.default,

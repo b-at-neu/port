@@ -53,10 +53,7 @@ function readyEntry(id: string, path: string, repo: string): Extract<RepositoryE
   }
 }
 
-/** Every alias this fake resolves to an empty connection — `mapPipelineItems`
- *  reads an unrecognised alias as `undefined` and simply skips it, so this
- *  is a valid "no items" response regardless of how many labels the
- *  vocabulary enables. */
+/** `mapPipelineItems` reads an unrecognised alias as `undefined` and skips it, so this is a valid "no items" response regardless of the vocabulary. */
 const EMPTY_PIPELINE_STDOUT = JSON.stringify({ data: { repository: {}, rateLimit: { cost: 1, remaining: 4999, resetAt: '2026-01-01T00:00:00Z' } } })
 
 function fakeGit(): (args: readonly string[], cwd: string) => Promise<CommandResult> {
@@ -171,9 +168,7 @@ describe('readPipelineState', () => {
   })
 })
 
-// Gated exactly as gh.test.ts gates on ghAuthStatus() and sessions'
-// adapter.test.ts gates on <claudeHome>/projects existing — this machine's
-// real state is the fixture, so CI (which has neither) skips it.
+// This machine's real state is the fixture, so CI (which has neither) skips it.
 const REAL_CLAUDE_HOME = join(homedir(), '.claude')
 const hasRealProjects = await pathExists(join(REAL_CLAUDE_HOME, 'projects'))
 

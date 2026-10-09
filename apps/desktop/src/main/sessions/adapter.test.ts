@@ -37,9 +37,7 @@ function rawSession(overrides: Partial<RawSession> & { sessionId: string }): Raw
   }
 }
 
-/** Lays out `<claudeHome>/projects/<projectName>/<sessionId>.jsonl` (and,
- *  when `agents` is given, a `subagents/` directory beside it) — the fixture
- *  shape `locate.test.ts` also builds. */
+/** Lays out `<claudeHome>/projects/<projectName>/<sessionId>.jsonl`, plus a `subagents/` directory when `agents` is given. */
 async function makeSession(
   claudeHome: string,
   projectName: string,
@@ -244,16 +242,11 @@ describe('readSessionState', () => {
   })
 })
 
-// Gated exactly as gh.test.ts gates on ghAuthStatus() — this machine's real
-// <claudeHome>/projects is the fixture, so CI (which has none) skips it and
-// the unit suites above stay the acceptance evidence everywhere else.
+// This machine's real <claudeHome>/projects is the fixture, so CI (which has none) skips it.
 const REAL_CLAUDE_HOME = join(homedir(), '.claude')
 const hasRealProjects = await pathExists(join(REAL_CLAUDE_HOME, 'projects'))
 
-/** A dispatched agent's own worktree carries no session history of its own
- *  yet — the real history sits on the checkout it was cut from. Registering
- *  both roots is what makes this case pass from an agent's own worktree as
- *  well as from an operator's ordinary checkout. */
+/** Registers both roots, so this case passes from an agent's own worktree as well as an operator's ordinary checkout. */
 function candidateRepoRoots(): readonly string[] {
   const worktreeRoot = resolve(process.cwd(), '..')
   const marker = `${sep}.claude${sep}worktrees${sep}`
@@ -277,9 +270,7 @@ describe.skipIf(!hasRealProjects)('readSessionState — live', () => {
       expect(result.scannedProjects).toBeGreaterThan(0)
       expect(result.sessions.some((s) => s.repoId !== null)).toBe(true)
       expect(result.agents.filter((a) => a.stage !== null).every((a) => a.itemNumber !== null)).toBe(true)
-      // #78: the measured cost is recorded in the pull request's ## Notes,
-      // per the plan's testing step — printed rather than asserted, since
-      // there is no "correct" value to check it against.
+      // Printed rather than asserted — there is no "correct" value to check it against.
       console.log(`readSessionState live case: scanMs=${String(result.scanMs)} scannedProjects=${String(result.scannedProjects)}`)
     },
     30_000,

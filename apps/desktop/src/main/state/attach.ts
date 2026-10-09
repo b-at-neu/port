@@ -1,20 +1,15 @@
-// The agent, session, and worktree attachment ladders (#79 Decision 3), plus
-// the orphan-number collector (Decision 4) — pure, no I/O.
+// The agent, session, and worktree attachment ladders, plus the orphan-number collector — pure, no I/O.
 import type { AgentRecord, SessionRecord } from '../../shared/sessions/types'
 import type { WorktreeEntry } from '../../shared/local/types'
 import type { AttachedAgent, AttachedSession, AttachedWorktree } from '../../shared/state/types'
 
 export interface AttachTarget {
   readonly number: number
-  /** This item's linked counterpart (issue ↔ pull request), or `null` — the
-   *  `match: 'linked'` rung is how a `review #<pr>` dispatch, whose
-   *  `itemNumber` names the pull request, attaches to the issue instead. */
+  /** This item's linked counterpart (issue ↔ pull request), or `null` — how a `review #<pr>` dispatch attaches to the issue instead. */
   readonly linked: number | null
 }
 
-/** Direct number match first, then the linked counterpart — an agent record
- *  with `itemNumber: null` (a non-port agent like `Explore`) attaches to
- *  nothing. */
+/** Direct number match first, then the linked counterpart — an agent with `itemNumber: null` attaches to nothing. */
 export function attachAgents(item: AttachTarget, agents: readonly AgentRecord[]): readonly AttachedAgent[] {
   const attached: AttachedAgent[] = []
   for (const agent of agents) {
@@ -35,10 +30,7 @@ export function attachAgents(item: AttachTarget, agents: readonly AgentRecord[])
   return attached
 }
 
-/** The same ladder as `attachAgents`, over `SessionRecord`s instead — a
- *  `SESSION REQUIRED` ticket's `/port:implement` session carries
- *  `role: 'implement'` and its own `itemNumber` (from the `impl-<n>`
- *  worktree name), and matches here even though it spawns no subagent. */
+/** The same ladder as `attachAgents`, over `SessionRecord`s — an `/port:implement` session matches even though it spawns no subagent. */
 export function attachSessions(item: AttachTarget, sessions: readonly SessionRecord[]): readonly AttachedSession[] {
   const attached: AttachedSession[] = []
   for (const session of sessions) {
@@ -58,9 +50,7 @@ export function attachSessions(item: AttachTarget, sessions: readonly SessionRec
   return attached
 }
 
-/** A worktree whose `unresolved` is set never attaches to anything here — it
- *  goes to the repository-level `uncorrelatedWorktrees` instead, with its
- *  reason intact (`reconcile.ts`'s job, not this ladder's). */
+/** A worktree with no correlation never attaches here — it goes to `uncorrelatedWorktrees` instead, which is `reconcile.ts`'s job. */
 export function attachWorktrees(item: AttachTarget, worktrees: readonly WorktreeEntry[]): readonly AttachedWorktree[] {
   const attached: AttachedWorktree[] = []
   for (const worktree of worktrees) {
@@ -78,13 +68,7 @@ export function attachWorktrees(item: AttachTarget, worktrees: readonly Worktree
   return attached
 }
 
-/**
- * Every number a worktree's correlation or an agent record's `itemNumber`
- * names, absent from the open sweep's own item numbers — the deduplicated
- * re-check set `fetchItemsByNumber` (#79 Decision 4) resolves. `#0` is
- * already excluded at both sources (`correlate.ts`, `itemNumberOf`), so it
- * never reaches here.
- */
+/** Every number a worktree's correlation or an agent's `itemNumber` names, absent from the open sweep's own item numbers. `#0` is excluded at both sources, so it never reaches here. */
 export function collectOrphanNumbers(
   items: readonly { readonly number: number }[],
   worktrees: readonly WorktreeEntry[],

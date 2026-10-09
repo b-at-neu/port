@@ -18,9 +18,7 @@ const SESSION_B = '22222222-2222-2222-2222-222222222222'
 
 describe('buildProjectIndex', () => {
   it('resolves a session under a project directory whose name is not derivable from any mangling of its cwd', async () => {
-    // The load-bearing case: a real worktree's project directory carries a
-    // hash suffix (`-home-...-issue-396-1d2d9e`) that no dashed rewrite of
-    // the cwd produces. A mangling-based implementation fails exactly here.
+    // A real worktree's project directory carries a hash suffix no dashed rewrite of the cwd produces.
     const claudeHome = await makeClaudeHome()
     const projectDir = await makeProjectDir(claudeHome, '-home-user-project--claude-worktrees-issue-42-a1b2c3', [SESSION_A])
 

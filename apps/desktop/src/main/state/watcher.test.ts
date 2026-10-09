@@ -13,10 +13,7 @@ import type { TimerFactory, TimerHandle } from './watcher'
 
 const EMPTY_PIPELINE_STDOUT = JSON.stringify({ data: { repository: {}, rateLimit: { cost: 1, remaining: 4999, resetAt: '2026-01-01T00:00:00Z' } } })
 
-/** A real `fetchPipelineItems` reply carrying exactly one `ready`-labelled
- *  issue node, every other alias empty — built off the same
- *  `buildPipelineQuery` the adapter itself uses, so this fixture can never
- *  drift from the alias layout a real response actually carries (#105). */
+/** Built off the same `buildPipelineQuery` the adapter uses, so this fixture can never drift from the alias layout a real response carries. */
 function readyItemStdout(signedInLogin: string, assignees: readonly string[]): string {
   const { aliases } = buildPipelineQuery(resolveVocabulary({}))
   const repository: Record<string, unknown> = {}
@@ -162,10 +159,7 @@ describe('createPipelineWatcher — in-flight guard', () => {
     const pending: { resolve: (() => void) | null } = { resolve: null }
     const gh = (): Promise<GhResult> => {
       ghCalls += 1
-      // The very first call (priming the watcher below) resolves right
-      // away; every call after that hangs until the test resolves it by
-      // hand — the point of this test is what happens while one is still
-      // outstanding.
+      // The first call resolves right away; every call after hangs until the test resolves it by hand.
       if (ghCalls === 1) return Promise.resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' })
       return new Promise((resolve) => {
         pending.resolve = () => resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' })
@@ -182,9 +176,7 @@ describe('createPipelineWatcher — in-flight guard', () => {
       sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
     })
 
-    // Prime every source once, so `now` being fixed means nothing but a
-    // forced source is due for the rest of this test — the in-flight race
-    // below is isolated to `github` alone.
+    // Prime every source once, so the in-flight race below is isolated to `github` alone.
     await watcher.refresh()
     expect(ghCalls).toBe(1)
 

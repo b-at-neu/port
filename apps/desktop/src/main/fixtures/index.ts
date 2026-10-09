@@ -1,7 +1,4 @@
-// Fixture mode's own IPC registrar (#317) — the mirror of `main/ipc.ts`'s
-// `registerIpc`, over the canned `FixtureHandlers` table instead of a live
-// adapter chain. No watcher, no hosted-session store, no drain store: every
-// request this process ever answers comes from `fixtureHandlers` alone.
+// The mirror of `main/ipc.ts`'s `registerIpc`, over the canned `FixtureHandlers` table instead of a live adapter chain.
 import { ipcMain } from 'electron'
 import { IPC_CHANNELS } from '../../shared/ipc'
 import type { IpcChannel } from '../../shared/ipc'
@@ -14,9 +11,7 @@ export function registerFixtureIpc(scenario: FixtureScenario): void {
 
   for (const channel of IPC_CHANNELS) {
     registered.add(channel)
-    // The one cast this file needs: `handlers[channel]` is exact per key, but
-    // this loop erases that to the union `IpcChannel`, the same trade
-    // `main/ipc.ts`'s own generic `handle<C>` makes for the live registrar.
+    // The one cast this file needs: the loop erases `handlers[channel]`'s per-key type to the union `IpcChannel`.
     const handler = handlers[channel] as (request: unknown) => unknown
     ipcMain.handle(channel, (_event, request: unknown) => handler(request))
   }

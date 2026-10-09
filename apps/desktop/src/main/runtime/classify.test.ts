@@ -1,7 +1,4 @@
-// Runs both exported classifiers over the shared case table
-// (`classify.cases.json`) — the same file `scripts/checks/desktop-runtime.ts`
-// resolves every case against, so a case that names a function this module
-// no longer exports fails loudly rather than being silently skipped.
+// Runs both exported classifiers over the shared case table, so a case naming a function this module no longer exports fails loudly.
 import { describe, expect, it } from 'vitest'
 import { classifyPreflight, classifyProbeFailure } from './classify'
 import type { ClassifyPreflightInput, ClassifyProbeFailureInput } from './classify'
