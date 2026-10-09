@@ -11,7 +11,7 @@ import { EmptyState } from '../components/empty-state'
 import { ErrorBanner } from '../components/error-banner'
 import { StatusPill } from '../components/status-pill'
 import type { PillStatus } from '../components/status-pill'
-import { ipcQueryOptions } from '../data/query'
+import { ipcQueryOptions, useIpcQuery } from '../data/query'
 import { invoke } from '../data/invoke'
 import type { InspectedWorktree, WorktreesReport } from '../../../shared/reclaimer/types'
 import type { RepoId, RepositoryEntry } from '../../../shared/repos'
@@ -100,7 +100,10 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
   const [selected, setSelected] = useState<string | null>(null)
   const [confirmIssue, setConfirmIssue] = useState<number | 'all' | null>(null)
   const [reclaiming, setReclaiming] = useState(false)
-  const query = useQuery(ipcQueryOptions('worktrees:report', { id: repoId }))
+  const snapshotQuery = useIpcQuery('board:snapshot')
+  const worktreesLastSuccessAt = snapshotQuery.data?.health.find((h) => h.repoId === repoId)?.worktrees.lastSuccessAt ?? null
+  const reportOptions = ipcQueryOptions('worktrees:report', { id: repoId })
+  const query = useQuery({ ...reportOptions, queryKey: [...reportOptions.queryKey, worktreesLastSuccessAt] })
 
   if (commandsWorktrees === null) {
     return (

@@ -11,6 +11,7 @@ import { reconcileRepository } from '../state/reconcile'
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '../tick/ledger'
 import { planTick } from '../tick/plan'
 import { FIXTURE_REPOSITORIES, GADGETS_ID, GADGETS_VOCABULARY_REPORT, LEGACY_SITE_ID, WIDGETS_ID, WIDGETS_VOCABULARY_REPORT } from './repos'
+import type { RepoId } from '../../shared/repos'
 import type { FixtureScenario } from './mode'
 
 const VIEWER = 'octo-dev'
@@ -37,7 +38,7 @@ function gadgetsEntry() {
   return entry
 }
 
-function repositoryHealth(repoId: typeof WIDGETS_ID | typeof GADGETS_ID, now: Date): RepositoryHealth {
+function repositoryHealth(repoId: RepoId, now: Date): RepositoryHealth {
   const at = now.toISOString()
   const source = (kind: SourceKind) => ({ lastSuccessAt: at, lastAttemptAt: at, consecutiveFailures: 0, lastError: null, intervalMs: SOURCE_BASE_INTERVAL_MS[kind], deferredUntil: null })
   return { repoId, github: source('github'), sessions: source('sessions'), worktrees: source('worktrees'), denials: source('denials') }

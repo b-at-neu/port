@@ -84,7 +84,7 @@ describe('overviewHealth', () => {
     const cfg = config(vocabulary, overrides)
     const snapshot = snapshotWith(readyState(vocabulary, verdict))
 
-    const result = overviewHealth(cfg, REPO_ID, snapshot, NOW)
+    const result = overviewHealth(cfg, REPO_ID, snapshot)
 
     expect(result.labels).not.toBeNull()
     expect(result.labels?.verdict).toBe('mis-resolved')
@@ -97,7 +97,7 @@ describe('overviewHealth', () => {
   it('gives labels and sources as null for a repository missing from the snapshot', () => {
     const vocabulary = resolveVocabulary({ modules: { approvalGate: true, release: false, scope: true } })
     const cfg = config(vocabulary)
-    const result = overviewHealth(cfg, REPO_ID, undefined, NOW)
+    const result = overviewHealth(cfg, REPO_ID, undefined)
 
     expect(result.labels).toBeNull()
     expect(result.sources).toBeNull()
@@ -107,7 +107,7 @@ describe('overviewHealth', () => {
   it('reports modules in a fixed order, each as its own flag', () => {
     const vocabulary = resolveVocabulary({ modules: { approvalGate: true, release: false, scope: true } })
     const cfg = config(vocabulary)
-    const result = overviewHealth(cfg, REPO_ID, undefined, NOW)
+    const result = overviewHealth(cfg, REPO_ID, undefined)
     expect(result.modules).toEqual([
       { name: 'approvalGate', on: true },
       { name: 'release', on: false },
@@ -120,7 +120,7 @@ describe('overviewHealth', () => {
     const verdict = verifyVocabulary(vocabulary, { ok: false, reason: 'rate limited' })
     const cfg = config(vocabulary)
     const snapshot = snapshotWith(readyState(vocabulary, verdict))
-    const result = overviewHealth(cfg, REPO_ID, snapshot, NOW)
+    const result = overviewHealth(cfg, REPO_ID, snapshot)
     expect(result.labels?.verdict).toBe('unverified')
     expect(result.labels?.rows.every((r) => r.present === null)).toBe(true)
   })

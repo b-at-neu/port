@@ -51,7 +51,7 @@ function roleDisplayFor(key: LabelKey): string {
   return key === 'marker' ? 'Marker' : 'Auto-plan'
 }
 
-export function overviewHealth(config: ResolvedRepoConfig, repoId: RepoId, snapshot: BoardSnapshot | undefined, _now: Date): OverviewHealth {
+export function overviewHealth(config: ResolvedRepoConfig, repoId: RepoId, snapshot: BoardSnapshot | undefined): OverviewHealth {
   const health = snapshot?.health.find((h) => h.repoId === repoId) ?? null
   const state = snapshot?.state.repositories.find((r) => r.ok && r.repoId === repoId) ?? null
   const repoState = state !== null && state.ok ? state : null
