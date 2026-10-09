@@ -125,6 +125,13 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - appends to `.agents/desktop-events.jsonl`; every failure swallowed, never surfaced
 - called fire-and-forget from the watcher, never awaited
 
+**`apps/desktop/src/main/workspace/`** (#404)
+- sole creator/remover of session worktrees (`worktree.ts`); never deletes a branch; never forces removal without an explicit caller choice
+- `main/local/` stays the only reader of the worktree list — this directory never reads it back
+- `resolve.ts`'s `resolveWorkspace`/`toFolderEntry` are the only callers of a session's `GitRunner` for workspace identity; `changes.ts` reuses the same `GitRunner` contract for the Changes diff, never a second invocation shape
+- `diff.ts` is pure — no `GitRunner`, no filesystem; `changes.ts` owns every git invocation and hands it parsed output
+- `recents.ts` is `folders.json`'s only writer, the same recoverable-state shape `hosting/persist.ts` already follows
+
 **`apps/desktop/src/main/writes/`**
 - only GitHub writer; only `command.ts` names `--add-label`/`--remove-label`
 - never `merge`, `close`, `--delete-branch`, or `ready`

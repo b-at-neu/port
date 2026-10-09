@@ -6,6 +6,9 @@ import type { WorktreesReport } from '../shared/reclaimer/types'
 import { SOURCE_KINDS } from '../shared/board/types'
 import type { BoardSnapshot } from '../shared/board/types'
 import { chooseDirectory } from './dialogs'
+import { defaultWorkspaceChannelDeps, resolveFoldersChoose, resolveFoldersList, resolveSessionChanges } from './channels/workspace'
+import { resolveWorkspace } from './workspace/resolve'
+import type { SessionKey } from '../shared/hosting/types'
 import { applyItemAction } from './actions/apply'
 import { applyItemDecision } from './actions/decide'
 import { gateAnswer, gatePreflight } from './actions/gate'
@@ -53,7 +56,7 @@ import {
 import { git } from './platform/git'
 import { readWorktreeReport } from './reclaimer/report'
 import type { ReadWorktreeReportParams } from './reclaimer/report'
-import { addRepository, listRepositories, removeRepository, requireReadyRepo } from './registry'
+import { addRepository, isReadyEntry, listRepositories, removeRepository, requireReadyRepo } from './registry'
 import type { RegistryDeps } from './registry'
 import { createPipelineWatcher } from './state/watcher'
 import type { PipelineWatcher } from './state/watcher'
@@ -368,6 +371,27 @@ export function registerIpc(): RegisteredIpc {
   handle('session:restore', (_event, request) => resolveSessionRestore(registryDeps, request, hostingChannelDeps))
 
   handle('session:restore:discard', (_event, request) => resolveSessionRestoreDiscard(request, hostingChannelDeps))
+
+  // Interim lookup: no session carries a worktree yet, so this resolves the registered repo's own
+  // path — the same non-worktree semantics `resolve.ts` already handles for any other folder.
+  async function workspaceOf(sessionKey: string) {
+    const snapshot = hostedStore.snapshotOf(sessionKey as SessionKey)
+    if (snapshot === null) return null
+    const list = await listRepositories(registryDeps)
+    if (!list.ok) return null
+    const entry = list.repositories.find((repository) => repository.id === snapshot.repoId)
+    if (entry === undefined || !isReadyEntry(entry)) return null
+    const { workspace } = await resolveWorkspace(entry.path, { git: registryDeps.git, repositories: list.repositories })
+    return workspace
+  }
+
+  const workspaceChannelDeps = defaultWorkspaceChannelDeps(app.getPath('userData'), workspaceOf)
+
+  handle('folders:list', (_event, request) => resolveFoldersList(registryDeps, request, workspaceChannelDeps))
+
+  handle('folders:choose', (_event, request) => resolveFoldersChoose(registryDeps, request, workspaceChannelDeps))
+
+  handle('session:changes', (_event, request) => resolveSessionChanges(request, workspaceChannelDeps))
 
   for (const channel of IPC_CHANNELS) {
     if (!registered.has(channel)) {

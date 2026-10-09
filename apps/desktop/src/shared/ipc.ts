@@ -37,6 +37,7 @@ import type {
 } from './hosting/types'
 import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SetControlsResult } from './hosting/controls'
 import type { ComposerAttachment } from './hosting/attachments'
+import type { FolderEntry, SessionChanges } from './workspace/types'
 
 export interface AppInfo {
   app: string
@@ -279,6 +280,21 @@ export interface IpcMap {
     request: { sessionKey: SessionKey }
     response: SessionFilesResult
   }
+  /** The folder picker's own read — ready registry repos first, then recents, deduped by path. */
+  'folders:list': {
+    request: void
+    response: { folders: readonly FolderEntry[] }
+  }
+  /** The folder picker's own write — the native directory dialog. Records the chosen folder in recents. */
+  'folders:choose': {
+    request: void
+    response: { outcome: 'chosen'; folder: FolderEntry } | { outcome: 'cancelled' }
+  }
+  /** The Changes tab's own read — a session's diff against its recorded base. */
+  'session:changes': {
+    request: { sessionKey: SessionKey }
+    response: SessionChanges
+  }
 }
 
 export const IPC_CHANNELS = [
@@ -327,6 +343,9 @@ export const IPC_CHANNELS = [
   'session:question:answer',
   'session:plan:answer',
   'session:files',
+  'folders:list',
+  'folders:choose',
+  'session:changes',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]

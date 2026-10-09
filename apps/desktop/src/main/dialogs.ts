@@ -15,6 +15,17 @@ export async function chooseDirectory(): Promise<string | null> {
   return result.filePaths[0] ?? null
 }
 
+/** The workspace folder picker — any folder, not only a port-managed repository. */
+export async function chooseFolder(): Promise<string | null> {
+  const result = await dialog.showOpenDialog({
+    title: 'Choose a folder',
+    buttonLabel: 'Open',
+    properties: ['openDirectory'],
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0] ?? null
+}
+
 /** `defaultId`/`cancelId` both point at Cancel, so Enter and Esc both land on the safe choice. */
 export async function confirmQuit(window: BrowserWindow | null, copy: QuitWarningCopy): Promise<boolean> {
   const options = {
