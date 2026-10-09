@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkComponents, checkPluginLoad, composeInvocation, validateCommandName } from './verify'
+import { checkComponents, checkPluginLoad, composeInvocation, isPipelineCommand, validateCommandName } from './verify'
 import type { InitPlugin } from './verify'
 import type { PluginRequest } from '../../shared/hosting/types'
 
@@ -103,6 +103,23 @@ describe('validateCommandName', () => {
   it('rejects a backslash anywhere, including trailing', () => {
     expect(validateCommandName('pipe\\line').ok).toBe(false)
     expect(validateCommandName('pipeline\\').ok).toBe(false)
+  })
+})
+
+describe('isPipelineCommand', () => {
+  it('is true for port:pipeline regardless of the unqualified flag', () => {
+    expect(isPipelineCommand('port:pipeline', false)).toBe(true)
+    expect(isPipelineCommand('port:pipeline', true)).toBe(true)
+  })
+
+  it('is true for a bare pipeline only when the session reports no unqualified pipeline of its own', () => {
+    expect(isPipelineCommand('pipeline', false)).toBe(true)
+    expect(isPipelineCommand('pipeline', true)).toBe(false)
+  })
+
+  it('never matches on a substring', () => {
+    expect(isPipelineCommand('pipeline-report', false)).toBe(false)
+    expect(isPipelineCommand('port:pipeline-status', false)).toBe(false)
   })
 })
 

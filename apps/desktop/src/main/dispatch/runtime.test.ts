@@ -33,6 +33,7 @@ function fakeStore(): HostedStore {
       throw new Error('unused')
     },
     snapshotOf: () => null,
+    cwdOf: () => null,
     capacity: () => Promise.resolve({ limit: 4, ceiling: 8 }),
     setLimit: () => Promise.reject(new Error('unused')),
     restorable: () => Promise.resolve([]),

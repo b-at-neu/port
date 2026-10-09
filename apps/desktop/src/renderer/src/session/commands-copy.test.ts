@@ -20,6 +20,7 @@ describe('chipCopy', () => {
       request: REPO_REQUEST,
       commands: [],
       agents: [],
+      slashCommands: [],
       plugin: { kind: 'unconfirmed' },
       components: { kind: 'unchecked', reason: 'no-plugin-path' },
     }
@@ -32,6 +33,7 @@ describe('chipCopy', () => {
       request: INSTALLED_REQUEST,
       commands: [],
       agents: [],
+      slashCommands: [],
       plugin: { kind: 'loaded', path: '/x', version: '0.3.1' },
       components: { kind: 'complete' },
     }
@@ -44,6 +46,7 @@ describe('chipCopy', () => {
       request: INSTALLED_REQUEST,
       commands: [],
       agents: [],
+      slashCommands: [],
       plugin: { kind: 'loaded', path: '/x', version: null },
       components: { kind: 'complete' },
     }
@@ -56,6 +59,7 @@ describe('chipCopy', () => {
       request: REPO_REQUEST,
       commands: [],
       agents: [],
+      slashCommands: [],
       plugin: { kind: 'loaded', path: '/x', version: '0.3.1' },
       components: { kind: 'unchecked', reason: 'unreadable' },
     }
@@ -68,6 +72,7 @@ describe('chipCopy', () => {
       request: REPO_REQUEST,
       commands: [],
       agents: [],
+      slashCommands: [],
       plugin: { kind: 'loaded', path: '/x', version: '0.3.1' },
       components: { kind: 'incomplete', missingSkills: ['scope'], missingAgents: ['plan-agent'] },
     }
@@ -80,6 +85,7 @@ describe('chipCopy', () => {
       request: REPO_REQUEST,
       commands: [],
       agents: [],
+      slashCommands: [],
       plugin: { kind: 'missing' },
       components: { kind: 'unchecked', reason: 'no-plugin-path' },
     }
@@ -92,6 +98,7 @@ describe('chipCopy', () => {
       request: REPO_REQUEST,
       commands: [],
       agents: [],
+      slashCommands: [],
       plugin: { kind: 'shadowed', path: '/other', version: null },
       components: { kind: 'unchecked', reason: 'no-plugin-path' },
     }
@@ -104,6 +111,7 @@ describe('chipCopy', () => {
       request: INSTALLED_REQUEST,
       commands: [],
       agents: [],
+      slashCommands: [],
       plugin: { kind: 'duplicate', paths: ['/a', '/b'] },
       components: { kind: 'unchecked', reason: 'no-plugin-path' },
     }
@@ -129,6 +137,7 @@ describe('bannerCopy', () => {
       request: INSTALLED_REQUEST,
       commands: [],
       agents: [],
+      slashCommands: [],
       plugin: { kind: 'loaded', path: '/x', version: null },
       components: { kind: 'complete' },
     }
@@ -141,6 +150,7 @@ describe('bannerCopy', () => {
       request: INSTALLED_REQUEST,
       commands: [],
       agents: [],
+      slashCommands: [],
       plugin: { kind: 'loaded', path: '/x', version: null },
       components: { kind: 'unchecked', reason: 'no-plugin-path' },
     }
@@ -153,6 +163,7 @@ describe('bannerCopy', () => {
       request: REPO_REQUEST,
       commands: [],
       agents: [],
+      slashCommands: [],
       plugin: { kind: 'loaded', path: '/x', version: null },
       components: { kind: 'unchecked', reason: 'unreadable' },
     }
@@ -165,6 +176,7 @@ describe('bannerCopy', () => {
       request: REPO_REQUEST,
       commands: [],
       agents: [],
+      slashCommands: [],
       plugin: { kind: 'missing' },
       components: { kind: 'unchecked', reason: 'no-plugin-path' },
     }
@@ -177,6 +189,7 @@ describe('bannerCopy', () => {
       request: INSTALLED_REQUEST,
       commands: [],
       agents: [],
+      slashCommands: [],
       plugin: { kind: 'missing' },
       components: { kind: 'unchecked', reason: 'no-plugin-path' },
     }
@@ -189,6 +202,7 @@ describe('bannerCopy', () => {
       request: REPO_REQUEST,
       commands: [],
       agents: [],
+      slashCommands: [],
       plugin: { kind: 'loaded', path: '/x', version: null },
       components: { kind: 'incomplete', missingSkills: ['release'], missingAgents: [] },
     }
@@ -201,6 +215,7 @@ describe('bannerCopy', () => {
       request: INSTALLED_REQUEST,
       commands: [],
       agents: [],
+      slashCommands: [],
       plugin: { kind: 'duplicate', paths: ['/a', '/b'] },
       components: { kind: 'unchecked', reason: 'no-plugin-path' },
     }
@@ -213,6 +228,7 @@ describe('bannerCopy', () => {
       request: INSTALLED_REQUEST,
       commands: [],
       agents: [],
+      slashCommands: [],
       plugin: { kind: 'duplicate', paths: ['/a', '/b', '/c'] },
       components: { kind: 'unchecked', reason: 'no-plugin-path' },
     }

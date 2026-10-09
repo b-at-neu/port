@@ -5,6 +5,7 @@ import { MAX_PAYLOAD_CHARS } from '../../shared/sessions/transcript'
 import { isRecord } from '../../shared/guards'
 import { createDeriver, sanitize } from '../sessions/transcript-entries'
 import type { LiveBlock, LiveBlockKind, PartialUpdate, SessionEntriesDelta } from '../../shared/hosting/types'
+import type { ContentBlock } from './content'
 
 export interface CreateSessionProjectorParams {
   /** Used only to shorten a headline path, never to resolve or open anything. */
@@ -29,8 +30,8 @@ export interface SessionProjectorWindow {
 export interface SessionProjector {
   /** `null` when the message produced no visible change. Never throws: an unrecognized message is skipped. */
   push(message: unknown, receivedAt: string): ProjectedDelta | null
-  /** Marks the turn's uuid pending until an `assistant`/`stream_event` frame or a `result` acknowledges it. */
-  recordSend(uuid: string, text: string, at: string): ProjectedDelta
+  /** Marks the uuid pending until an ack frame or a `result` arrives; `content` is a plain string with no attachments. */
+  recordSend(uuid: string, content: string | ContentBlock[], at: string): ProjectedDelta
   /** The current bounded state — what `session:attach` hands a reconnecting renderer. */
   window(): SessionProjectorWindow
 }
@@ -285,9 +286,9 @@ export function createSessionProjector(params: CreateSessionProjectorParams): Se
       return null // live-edge ephemera — the on-disk transcript is the record
     },
 
-    recordSend(uuid, text, at) {
+    recordSend(uuid, content, at) {
       pendingSends.add(uuid)
-      const record = { uuid, timestamp: at, message: { role: 'user', content: text } }
+      const record = { uuid, timestamp: at, message: { role: 'user', content } }
       const { appended, patched } = deriver.push([record])
       const { appended: outAppended, patched: outPatched } = ingestDerived(appended, patched)
       revision += 1

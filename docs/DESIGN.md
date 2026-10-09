@@ -167,7 +167,8 @@ Scoping epics, releases and analytics are out of scope for the first release.
 | F2 | Rename session |
 | Enter / Shift+Enter | Send / new line in the composer |
 | Shift+Tab | Cycle the permission mode in the composer |
-| Esc | Stop Claude's turn when the composer is focused; otherwise close the pane or dialog |
+| ↑ / ↓ | Previous / next sent prompt when the composer is empty |
+| Esc | Close suggestions, else stop Claude's turn when the composer is focused; otherwise close the pane or dialog |
 | J / K, then Enter | Move through Board and Backlog rows, open the selected one |
 
 ## 4. Component treatments

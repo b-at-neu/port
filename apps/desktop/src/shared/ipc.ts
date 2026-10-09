@@ -23,6 +23,7 @@ import type {
   SessionDefaults,
   SessionDismissResult,
   SessionEntriesDelta,
+  SessionFilesResult,
   SessionInterruptResult,
   SessionInvokeResult,
   SessionKey,
@@ -35,6 +36,7 @@ import type {
   SessionStartResult,
 } from './hosting/types'
 import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SetControlsResult } from './hosting/controls'
+import type { ComposerAttachment } from './hosting/attachments'
 
 export interface AppInfo {
   app: string
@@ -168,9 +170,9 @@ export interface IpcMap {
     request: { repoId: RepoId; mode: SessionStartMode }
     response: SessionStartResult
   }
-  /** Always accepted, never refused mid-turn — the SDK owns the queue. */
+  /** Always accepted, never refused mid-turn; `text` may be empty only with at least one attachment. */
   'session:send': {
-    request: { sessionKey: SessionKey; text: string }
+    request: { sessionKey: SessionKey; text: string; attachments?: readonly ComposerAttachment[] }
     response: SessionSendResult
   }
   'session:interrupt': {
@@ -272,6 +274,11 @@ export interface IpcMap {
     request: { sessionKey: SessionKey; permissionId: string; decision: PlanDecision }
     response: PlanAnswerResult
   }
+  /** The `@` suggestion list's own file source, resolved from the session's own cwd. */
+  'session:files': {
+    request: { sessionKey: SessionKey }
+    response: SessionFilesResult
+  }
 }
 
 export const IPC_CHANNELS = [
@@ -319,6 +326,7 @@ export const IPC_CHANNELS = [
   'session:controls:set',
   'session:question:answer',
   'session:plan:answer',
+  'session:files',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]

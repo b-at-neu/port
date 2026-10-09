@@ -1,6 +1,7 @@
 // Streaming input mode, always, so interrupt()/setPermissionMode() stay available for the handle's whole life.
 // end() closes the iterator, the SDK's own graceful-shutdown trigger — never process.kill or a signal.
 import type { SDKUserMessage } from './sdk'
+import type { ContentBlock } from './content'
 
 export interface PushResult {
   readonly uuid: string
@@ -9,8 +10,8 @@ export interface PushResult {
 export interface HostedInput {
   /** Iterable exactly once. */
   readonly stream: AsyncIterable<SDKUserMessage>
-  /** Always accepted; dropped silently once `end()` has been called. */
-  push(text: string): PushResult
+  /** Always accepted; dropped silently once `end()` has been called — a plain string when there are no attachments. */
+  push(content: string | ContentBlock[]): PushResult
   /** Idempotent: a second call is a no-op. */
   end(): void
 }
@@ -52,9 +53,9 @@ export function createHostedInput(): HostedInput {
 
   return {
     stream,
-    push(text) {
+    push(content) {
       const uuid = globalThis.crypto.randomUUID()
-      deliver({ type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null, uuid })
+      deliver({ type: 'user', message: { role: 'user', content }, parent_tool_use_id: null, uuid })
       return { uuid }
     },
     end() {

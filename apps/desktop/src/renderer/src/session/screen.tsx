@@ -9,16 +9,16 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '../components/empty-state'
 import { ErrorBanner } from '../components/error-banner'
 import { ScreenHeader } from '../components/screen-header'
-import { Composer } from '../components/composer'
 import { ConversationList } from '../components/conversation-list'
 import { useIpcQuery } from '../data/query'
 import { invoke } from '../data/invoke'
 import { ROUTE_IDS } from '../router/routes'
 import type { RepoId, RepositoryEntry } from '../../../shared/repos'
+import type { ComposerAttachment } from '../../../shared/hosting/attachments'
 import type { HostedSessionSnapshot, SessionKey } from '../../../shared/hosting/types'
 import { setSelectedSession } from './selection'
 import { useSessionEntries } from './entries-store'
-import { useDraft, setDraft } from './drafts'
+import { setDraft, clearDraftAttachments } from './drafts'
 import { answerPlan, answerQuestion, close, dismiss, send, setControls, startNewSession, stop, usePendingStart, useStartFailure } from './actions'
 import { SessionHeader } from './header'
 import { EndPanel } from './end-panel'
@@ -30,6 +30,8 @@ import { PlanCard } from './plan-card'
 import { nextMode } from './controls-model'
 import { QUESTION_SKIPPED_MESSAGE, COMPOSER_PLAN_PLACEHOLDER, COMPOSER_QUESTION_PLACEHOLDER, modeToast } from './interaction-copy'
 import { toast } from 'sonner'
+import { PromptInput } from './prompt-input'
+import { PIPELINE_SEND_BLOCKED } from './composer-copy'
 import { COMPOSER_HINT, composerCopy, CLOSE_CONFIRM_NO, CLOSE_CONFIRM_PROMPT, EMPTY_TITLE, interruptNote, RECONNECTING, SEND_FAILED_UNKNOWN_SESSION, SEND_FAILED_UNREACHABLE, startingCopy, windowNote } from './copy'
 
 function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { status: 'ready' }> {
@@ -130,24 +132,27 @@ function StartingPanel({ repoLabel }: { readonly repoLabel: string }) {
 
 function SessionLive({ snapshot, repoLabel }: { readonly snapshot: HostedSessionSnapshot; readonly repoLabel: string }) {
   const key = snapshot.sessionKey
-  const draft = useDraft(key)
   const entries = useSessionEntries(key)
   const [sendError, setSendError] = useState<string | null>(null)
   const [closeConfirming, setCloseConfirming] = useState(false)
   const [interruptNoteText, setInterruptNoteText] = useState<string | null>(null)
   const [sessionGone, setSessionGone] = useState(false)
 
-  async function handleSend(): Promise<void> {
-    const text = draft.trim()
-    if (text === '') return
+  async function handleSend(text: string, attachments: readonly ComposerAttachment[]): Promise<void> {
+    const trimmed = text.trim()
+    if (trimmed === '' && attachments.length === 0) return
     setDraft(key, '')
+    clearDraftAttachments(key)
     setSendError(null)
-    const outcome = await send(key, text)
+    const outcome = await send(key, trimmed, attachments)
     if (!outcome.ok) {
-      setDraft(key, text)
+      setDraft(key, trimmed)
       if (outcome.error === 'unknown-session') {
         setSessionGone(true)
         setSendError(SEND_FAILED_UNKNOWN_SESSION)
+      } else if (outcome.error === 'blocked-command') {
+        setDraft(key, trimmed)
+        setSendError(PIPELINE_SEND_BLOCKED)
       } else {
         setSendError(SEND_FAILED_UNREACHABLE)
       }
@@ -252,10 +257,11 @@ function SessionLive({ snapshot, repoLabel }: { readonly snapshot: HostedSession
         {interaction !== null && interaction.kind === 'plan' ? (
           <PlanCard plan={interaction.plan} sending={planSending} error={planError} onApprove={(mode) => void handlePlanApprove(mode)} onKeepPlanning={(feedback) => void handleKeepPlanning(feedback)} />
         ) : null}
-        <Composer
-          value={draft}
-          onChange={(value) => setDraft(key, value)}
-          onSend={() => void handleSend()}
+        <PromptInput
+          sessionKey={key}
+          repoId={snapshot.repoId}
+          snapshot={snapshot}
+          onSend={(text, attachments) => void handleSend(text, attachments)}
           onEscape={(event) => {
             if (snapshot.phase === 'streaming' || snapshot.phase === 'interrupting') {
               event.preventDefault()

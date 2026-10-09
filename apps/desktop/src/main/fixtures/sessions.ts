@@ -72,7 +72,7 @@ export function fixtureAttachEntries(now: Date): readonly TranscriptEntry[] {
  *  so this would pop up over every other screenshot target otherwise. */
 export function fixturePermissionSnapshots(now: Date): readonly HostedSessionSnapshot[] {
   const t = (minutesAgo: number) => new Date(now.getTime() - minutesAgo * MINUTE).toISOString()
-  const capabilities = { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [], plugin: { kind: 'loaded', path: '/home/you/.claude/plugins/port', version: '0.2.1' }, components: { kind: 'complete' } } as const
+  const capabilities = { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [], plugin: { kind: 'loaded', path: '/home/you/.claude/plugins/port', version: '0.2.1' }, components: { kind: 'complete' }, slashCommands: [] } as const
 
   return [
     {
@@ -112,7 +112,7 @@ export function fixturePermissionSnapshots(now: Date): readonly HostedSessionSna
 
 export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapshot[] {
   const t = (minutesAgo: number) => new Date(now.getTime() - minutesAgo * MINUTE).toISOString()
-  const capabilities = { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [], plugin: { kind: 'loaded', path: '/home/you/.claude/plugins/port', version: '0.2.1' }, components: { kind: 'complete' } } as const
+  const capabilities = { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [], plugin: { kind: 'loaded', path: '/home/you/.claude/plugins/port', version: '0.2.1' }, components: { kind: 'complete' }, slashCommands: [] } as const
 
   return [
     {

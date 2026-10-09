@@ -38,8 +38,8 @@ export function ipcQueryOptions<C extends QueryChannel>(channel: C, request?: Ip
   })
 }
 
-export function useIpcQuery<C extends QueryChannel>(channel: C, request?: IpcMap[C]['request']) {
-  return useQuery(ipcQueryOptions(channel, request))
+export function useIpcQuery<C extends QueryChannel>(channel: C, request?: IpcMap[C]['request'], options?: { readonly enabled?: boolean }) {
+  return useQuery({ ...ipcQueryOptions(channel, request), enabled: options?.enabled })
 }
 
 export function useIpcMutation<C extends MutationChannel>(channel: C) {

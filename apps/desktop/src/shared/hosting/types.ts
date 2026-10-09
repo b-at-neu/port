@@ -77,8 +77,11 @@ export type SessionStartResult =
   /** A `resume`/`resume-at` whose `sessionId` already names a live handle — fails closed, since two `claude` processes appending to one transcript is unrecoverable. */
   | { readonly ok: false; readonly kind: 'already-open'; readonly sessionKey: SessionKey }
 
-/** `'session:send'`'s response — always `queued` rather than refusing mid-turn, since the SDK owns the queue. */
-export type SessionSendResult = { readonly ok: true; readonly uuid: string; readonly queued: boolean } | { readonly ok: false; readonly kind: 'unknown-session' }
+/** `'session:send'`'s response — always `queued` rather than refusing mid-turn, since the SDK owns the queue. `blocked-command` is `/port:pipeline` (or bare `pipeline`, when this session reports no unqualified command of its own) sent by hand — an operator action, not a bug, so it is a typed value rather than a thrown refusal. */
+export type SessionSendResult =
+  | { readonly ok: true; readonly uuid: string; readonly queued: boolean }
+  | { readonly ok: false; readonly kind: 'unknown-session' }
+  | { readonly ok: false; readonly kind: 'blocked-command'; readonly name: string }
 
 /** `'session:interrupt'`'s response — `queuedAfterInterrupt` is `null` exactly when the CLI's receipt carried none, never coerced to `0`. */
 export type SessionInterruptResult = { readonly ok: true; readonly queuedAfterInterrupt: number | null } | { readonly ok: false; readonly kind: 'unknown-session' }
@@ -180,6 +183,13 @@ export interface CommandSummary {
   readonly argumentHint: string
 }
 
+/** One slash command or skill this session reports, unfiltered by the `port:` prefix `CommandSummary` narrows to. */
+export interface SlashCommandSummary {
+  readonly name: string
+  readonly description: string
+  readonly argumentHint: string
+}
+
 /** One `port:` agent, renderer-safe — `model` is `null` when the agent's frontmatter names none. */
 export interface AgentSummary {
   readonly name: string
@@ -198,6 +208,8 @@ export type SessionCapabilities =
       readonly agents: readonly AgentSummary[]
       readonly plugin: PluginLoad
       readonly components: ComponentCheck
+      /** The composer's own `/` autocomplete source, sorted, pipeline already dropped. */
+      readonly slashCommands: readonly SlashCommandSummary[]
     }
 
 /** `'session:invoke'`'s response — a typed refusal for a name that fails the SDK's canonical-name rules or isn't in this session's current command list. */
@@ -266,3 +278,9 @@ export const SESSION_TITLE_MAX = 80
 
 // `not-ready` is a handle with no claudeSessionId yet; the title changes only after the rename lands.
 export type SessionRenameResult = { readonly ok: true } | { readonly ok: false; readonly kind: 'unknown-session' | 'not-ready' } | { readonly ok: false; readonly kind: 'rename-failed'; readonly message: string }
+
+/** `'session:files'`'s response — `files` are forward-slashed, relative to `cwd`; a failed read is `unreadable`, never an empty list. */
+export type SessionFilesResult =
+  | { readonly ok: true; readonly files: readonly string[]; readonly truncated: boolean }
+  | { readonly ok: false; readonly kind: 'unknown-session' }
+  | { readonly ok: false; readonly kind: 'unreadable'; readonly message: string }

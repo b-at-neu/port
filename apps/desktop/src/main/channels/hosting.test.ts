@@ -95,6 +95,9 @@ function storeStub(overrides: Partial<HostedStore> = {}): HostedStore {
     snapshotOf: () => {
       throw new Error('snapshotOf should not be invoked in this case')
     },
+    cwdOf: () => {
+      throw new Error('cwdOf should not be invoked in this case')
+    },
     capacity: () => {
       throw new Error('capacity should not be invoked in this case')
     },
@@ -136,6 +139,9 @@ function depsWith(overrides: Partial<HostingChannelDeps> = {}): HostingChannelDe
   return {
     listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
     store: storeStub(),
+    listSessionFiles: () => {
+      throw new Error('listSessionFiles should not be invoked in this case')
+    },
     ...overrides,
   }
 }
@@ -199,15 +205,16 @@ describe('resolveSessionSend', () => {
     )
   })
 
-  it('rejects empty text', () => {
-    expect(() => resolveSessionSend({ sessionKey: SESSION_KEY, text: '' }, depsWith())).toThrow("'session:send' requires a non-empty 'text'")
+  it('rejects empty text with no attachments', () => {
+    expect(() => resolveSessionSend({ sessionKey: SESSION_KEY, text: '' }, depsWith())).toThrow("'session:send' requires a non-empty 'text' when there are no attachments")
   })
 
   it('delegates to the store', () => {
     const send = vi.fn(() => ({ ok: true as const, uuid: 'u', queued: true }))
     resolveSessionSend({ sessionKey: SESSION_KEY, text: 'hi' }, depsWith({ store: storeStub({ send }) }))
-    expect(send).toHaveBeenCalledWith(SESSION_KEY, 'hi')
+    expect(send).toHaveBeenCalledWith(SESSION_KEY, 'hi', [])
   })
+
 })
 
 describe('resolveSessionInterrupt / resolveSessionClose / resolveSessionAttach', () => {

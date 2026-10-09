@@ -2,6 +2,7 @@
 // A start past the current limit returns at-capacity, counted against live handles only.
 import type { RepoId } from '../../shared/repos'
 import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SetControlsResult } from '../../shared/hosting/controls'
+import type { ComposerAttachment } from '../../shared/hosting/attachments'
 import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
 import type {
   HostedSessionSnapshot,
@@ -93,7 +94,7 @@ export interface StartSessionParams {
 
 export interface HostedStore {
   start(params: StartSessionParams): Promise<SessionStartResult>
-  send(sessionKey: SessionKey, text: string): SessionSendResult
+  send(sessionKey: SessionKey, text: string, attachments?: readonly ComposerAttachment[]): SessionSendResult
   interrupt(sessionKey: SessionKey): Promise<SessionInterruptResult>
   close(sessionKey: SessionKey): Promise<SessionCloseResult>
   attach(sessionKey: SessionKey): SessionAttachResult
@@ -107,6 +108,8 @@ export interface HostedStore {
   /** Removes an ended handle — `still-open` for any other phase. */
   dismiss(sessionKey: SessionKey): SessionDismissResult
   snapshotOf(sessionKey: SessionKey): HostedSessionSnapshot | null
+  /** This handle's own `cwd` — `null` for a key naming no live handle. */
+  cwdOf(sessionKey: SessionKey): string | null
   capacity(): Promise<HostingCapacity>
   /** Persists the new limit and never closes a session, even below the current open count. */
   setLimit(limit: number): Promise<HostingCapacity>
@@ -267,10 +270,11 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     return { ok: true, snapshot: handle.snapshot() }
   }
 
-  function send(sessionKey: SessionKey, text: string): SessionSendResult {
+  function send(sessionKey: SessionKey, text: string, attachments: readonly ComposerAttachment[] = []): SessionSendResult {
     const handle = handles.get(sessionKey)
     if (!handle) return { ok: false, kind: 'unknown-session' }
-    const result = handle.send(text)
+    const result = handle.send(text, attachments)
+    if (!result.ok) return result
     return { ok: true, uuid: result.uuid, queued: result.queued }
   }
 
@@ -343,6 +347,10 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
 
   function snapshotOf(sessionKey: SessionKey): HostedSessionSnapshot | null {
     return handles.get(sessionKey)?.snapshot() ?? null
+  }
+
+  function cwdOf(sessionKey: SessionKey): string | null {
+    return handles.get(sessionKey)?.cwd ?? null
   }
 
   async function capacity(): Promise<HostingCapacity> {
@@ -423,6 +431,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     answerPlan,
     dismiss,
     snapshotOf,
+    cwdOf,
     capacity,
     setLimit,
     defaults: getDefaults,

@@ -7,6 +7,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { invoke } from '../data/invoke'
 import type { AgentSummary, CommandSummary, HostedSessionSnapshot, SessionKey } from '../../../shared/hosting/types'
 import { argumentRequired, bannerCopy, chipCopy, INVOKE_REJECTED, invokeFailureCopy } from './commands-copy'
+import { AGENTS_DISCLOSURE_NOTE } from './composer-copy'
 
 interface OpenRow {
   readonly commandName: string
@@ -136,7 +137,7 @@ function AgentsDisclosure({ agents }: { readonly agents: readonly AgentSummary[]
             {agent.description !== '' ? <span className="text-muted-foreground">{agent.description}</span> : null}
           </div>
         ))}
-        <p className="text-meta text-muted-foreground">Stage agents are dispatched by /port:pipeline, never started from here.</p>
+        <p className="text-meta text-muted-foreground">{AGENTS_DISCLOSURE_NOTE}</p>
       </CollapsibleContent>
     </Collapsible>
   )

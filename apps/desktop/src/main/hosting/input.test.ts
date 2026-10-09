@@ -79,6 +79,15 @@ describe('createHostedInput', () => {
     expect(() => input.end()).not.toThrow()
   })
 
+  it('accepts a content-block array and delivers it verbatim', async () => {
+    const input = createHostedInput()
+    const content = [{ type: 'text' as const, text: 'hi' }]
+    input.push(content)
+    const result = await next(input)
+    if (result.done) throw new Error('unreachable')
+    expect(result.value.message).toEqual({ role: 'user', content })
+  })
+
   it('parent_tool_use_id is always null — this queue never addresses a subagent', async () => {
     const input = createHostedInput()
     input.push('hi')

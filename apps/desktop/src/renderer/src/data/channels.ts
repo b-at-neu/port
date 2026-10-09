@@ -23,6 +23,7 @@ export const QUERY_CHANNELS = [
   'gh:status',
   'session:defaults',
   'backlog:list',
+  'session:files',
 ] as const
 
 export type QueryChannel = (typeof QUERY_CHANNELS)[number]

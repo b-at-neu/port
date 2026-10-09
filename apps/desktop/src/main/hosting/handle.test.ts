@@ -275,8 +275,26 @@ describe('createHostedHandle', () => {
     const fake = fakeQuery()
     const handle = createHostedHandle(baseParams(), () => fake.query)
     const result = handle.send('do the thing')
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
     expect(result.queued).toBe(true)
     expect(result.uuid.length).toBeGreaterThan(0)
+  })
+
+  it('send() refuses a hand-typed /port:pipeline as blocked-command, pushing nothing', () => {
+    const fake = fakeQuery()
+    const handle = createHostedHandle(baseParams(), () => fake.query)
+    const before = handle.entriesWindow().entries.length
+    const result = handle.send('/port:pipeline go')
+    expect(result).toEqual({ ok: false, kind: 'blocked-command', name: 'port:pipeline' })
+    expect(handle.entriesWindow().entries.length).toBe(before)
+  })
+
+  it('send() refuses a bare /pipeline when this session reports no unqualified pipeline of its own', () => {
+    const fake = fakeQuery()
+    const handle = createHostedHandle(baseParams(), () => fake.query)
+    const result = handle.send('/pipeline')
+    expect(result).toEqual({ ok: false, kind: 'blocked-command', name: 'pipeline' })
   })
 
   it('interrupt() moves to interrupting, then records still_queued.length from the receipt', async () => {
@@ -402,7 +420,7 @@ describe('createHostedHandle', () => {
   })
 
   describe('invoke()', () => {
-    async function readyHandle(commands: readonly { name: string; description: string; argumentHint: string }[] = [{ name: 'port:pipeline', description: 'Cockpit', argumentHint: '' }]) {
+    async function readyHandle(commands: readonly { name: string; description: string; argumentHint: string }[] = [{ name: 'port:scope', description: 'Scope a feature', argumentHint: '' }]) {
       const fake = fakeQuery({ commands })
       const handle = createHostedHandle(baseParams(), () => fake.query)
       await flush()
@@ -411,7 +429,7 @@ describe('createHostedHandle', () => {
 
     it('refuses a leading-slash name as invalid-command, without sending anything', async () => {
       const { fake, handle } = await readyHandle()
-      const result = handle.invoke('/port:pipeline', '')
+      const result = handle.invoke('/port:scope', '')
       expect(result.ok).toBe(false)
       if (result.ok) return
       expect(result.kind).toBe('invalid-command')
@@ -427,11 +445,17 @@ describe('createHostedHandle', () => {
 
     it('composes and sends a known, valid command, queuing it like any other send', async () => {
       const { handle } = await readyHandle()
-      const result = handle.invoke('pipeline', 'status')
+      const result = handle.invoke('scope', 'status')
       expect(result.ok).toBe(true)
       if (!result.ok) return
       expect(result.queued).toBe(true)
       expect(handle.entriesWindow().pendingSends).toEqual([result.uuid])
+    })
+
+    it("refuses pipeline as unknown-command, since it is dropped from this session's own command list", async () => {
+      const { handle } = await readyHandle([{ name: 'port:pipeline', description: 'Cockpit', argumentHint: '' }])
+      const result = handle.invoke('pipeline', '')
+      expect(result).toEqual({ ok: false, kind: 'unknown-command', name: 'pipeline' })
     })
 
     it('reports unknown-session once the handle is closing', async () => {

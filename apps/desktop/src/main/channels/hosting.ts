@@ -3,12 +3,15 @@
 import type { IpcMap, ReposListResponse } from '../../shared/ipc'
 import type { RepoId, RepoProblem } from '../../shared/repos'
 import { PERMISSION_DECISIONS, SESSION_MODELS, SESSION_PERMISSION_MODES, SESSION_TITLE_MAX } from '../../shared/hosting/types'
-import type { RestorableSession, SessionKey, SessionModel, SessionPermissionMode, SessionStartMode } from '../../shared/hosting/types'
+import type { RestorableSession, SessionFilesResult, SessionKey, SessionModel, SessionPermissionMode, SessionStartMode } from '../../shared/hosting/types'
 import { SESSION_EFFORTS } from '../../shared/hosting/controls'
 import type { PlanDecision } from '../../shared/hosting/controls'
 import { isRecord } from '../../shared/guards'
+import { IMAGE_MEDIA_TYPES, MAX_ATTACHMENT_NAME_LENGTH, MAX_ATTACHMENTS, MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_TEXT_BYTES, MAX_TOTAL_BYTES } from '../../shared/hosting/attachments'
+import type { ComposerAttachment } from '../../shared/hosting/attachments'
 import type { HostedStore } from '../hosting/store'
 import { SESSION_LIMIT_CEILING } from '../hosting/store'
+import { listSessionFiles } from '../hosting/files'
 import { isReadyEntry, listRepositories, requireReadyRepo, requireRepoId } from '../registry'
 import type { RegistryDeps } from '../registry'
 import type { ReadyEntry } from '../actions/apply'
@@ -16,9 +19,11 @@ import type { ReadyEntry } from '../actions/apply'
 export interface HostingChannelDeps {
   readonly listRepositories: typeof listRepositories
   readonly store: HostedStore
+  /** Injectable so a test never touches a real `git` subprocess or filesystem. */
+  readonly listSessionFiles: typeof listSessionFiles
 }
 
-export const defaultHostingChannelDeps = (store: HostedStore): HostingChannelDeps => ({ listRepositories, store })
+export const defaultHostingChannelDeps = (store: HostedStore): HostingChannelDeps => ({ listRepositories, store, listSessionFiles })
 
 function resolveReadyEntry(registryDeps: RegistryDeps, repoId: unknown, deps: HostingChannelDeps, channel: string): Promise<ReadyEntry> {
   return requireReadyRepo(registryDeps, `'${channel}'`, requireRepoId(repoId, `'${channel}'`), deps.listRepositories)
@@ -65,10 +70,95 @@ export async function resolveSessionStart(registryDeps: RegistryDeps, request: I
   return deps.store.start({ repoId: entry.id, mode: request.mode, cwd: entry.path })
 }
 
+const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/
+
+/** The byte count a base64 string already matching `BASE64_PATTERN` decodes to. */
+function base64ByteLength(data: string): number {
+  const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0
+  return (data.length / 4) * 3 - padding
+}
+
+function hasControlCharacter(value: string): boolean {
+  for (const char of value) {
+    const codePoint = char.codePointAt(0) ?? 0
+    if (codePoint <= 0x1f || codePoint === 0x7f) return true
+  }
+  return false
+}
+
+function requireAttachmentName(name: unknown): string {
+  if (typeof name !== 'string' || name === '' || name.length > MAX_ATTACHMENT_NAME_LENGTH || hasControlCharacter(name)) {
+    throw new Error(`'session:send' requires every attachment 'name' to be non-empty, at most ${String(MAX_ATTACHMENT_NAME_LENGTH)} characters, and free of control characters`)
+  }
+  return name
+}
+
+/** Every field a stale renderer could get wrong throws here — these limits
+ *  are already enforced client-side, so a value breaking one is a bug. */
+function requireAttachments(value: unknown): ComposerAttachment[] {
+  if (!Array.isArray(value)) throw new Error("'session:send' requires 'attachments' to be an array")
+  if (value.length > MAX_ATTACHMENTS) throw new Error(`'session:send' requires at most ${String(MAX_ATTACHMENTS)} attachments`)
+
+  let totalBytes = 0
+  const attachments: ComposerAttachment[] = value.map((raw) => {
+    if (typeof raw !== 'object' || raw === null) throw new Error("'session:send' requires every attachment to be an object")
+    const record = raw as Record<string, unknown>
+    const name = requireAttachmentName(record['name'])
+    const kind = record['kind']
+
+    if (kind === 'image') {
+      const mediaType = record['mediaType']
+      if (typeof mediaType !== 'string' || !(IMAGE_MEDIA_TYPES as readonly string[]).includes(mediaType)) {
+        throw new Error(`'session:send' requires an image attachment's 'mediaType' to be one of ${IMAGE_MEDIA_TYPES.join(', ')}`)
+      }
+      const data = record['data']
+      if (typeof data !== 'string' || !BASE64_PATTERN.test(data)) throw new Error("'session:send' requires an image attachment's 'data' to be base64")
+      totalBytes += base64ByteLength(data)
+      if (base64ByteLength(data) > MAX_IMAGE_BYTES) throw new Error(`'session:send' requires an image attachment to be at most ${String(MAX_IMAGE_BYTES)} bytes`)
+      return { kind: 'image', name, mediaType: mediaType as (typeof IMAGE_MEDIA_TYPES)[number], data }
+    }
+
+    if (kind === 'pdf') {
+      const data = record['data']
+      if (typeof data !== 'string' || !BASE64_PATTERN.test(data)) throw new Error("'session:send' requires a pdf attachment's 'data' to be base64")
+      totalBytes += base64ByteLength(data)
+      if (base64ByteLength(data) > MAX_PDF_BYTES) throw new Error(`'session:send' requires a pdf attachment to be at most ${String(MAX_PDF_BYTES)} bytes`)
+      return { kind: 'pdf', name, data }
+    }
+
+    if (kind === 'text') {
+      const text = record['text']
+      if (typeof text !== 'string') throw new Error("'session:send' requires a text attachment's 'text' to be a string")
+      const bytes = Buffer.byteLength(text, 'utf8')
+      totalBytes += bytes
+      if (bytes > MAX_TEXT_BYTES) throw new Error(`'session:send' requires a text attachment to be at most ${String(MAX_TEXT_BYTES)} bytes`)
+      return { kind: 'text', name, text }
+    }
+
+    throw new Error("'session:send' requires every attachment 'kind' to be one of image, pdf, text")
+  })
+
+  if (totalBytes > MAX_TOTAL_BYTES) throw new Error(`'session:send' requires attachments to total at most ${String(MAX_TOTAL_BYTES)} bytes`)
+  return attachments
+}
+
 export function resolveSessionSend(request: IpcMap['session:send']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['send']> {
   const sessionKey = requireSessionKey(request?.sessionKey, 'session:send')
-  if (typeof request.text !== 'string' || request.text === '') throw new Error("'session:send' requires a non-empty 'text'")
-  return deps.store.send(sessionKey, request.text)
+  const attachments = request?.attachments === undefined ? [] : requireAttachments(request.attachments)
+  if (typeof request.text !== 'string') throw new Error("'session:send' requires 'text' to be a string")
+  if (request.text === '' && attachments.length === 0) throw new Error("'session:send' requires a non-empty 'text' when there are no attachments")
+  return deps.store.send(sessionKey, request.text, attachments)
+}
+
+/** The `@` suggestion list's own file source — `sessionKey` resolves only to
+ *  its own handle's `cwd`, so the renderer never names a path directly. */
+export async function resolveSessionFiles(request: IpcMap['session:files']['request'], deps: HostingChannelDeps): Promise<SessionFilesResult> {
+  const sessionKey = requireSessionKey(request?.sessionKey, 'session:files')
+  const cwd = deps.store.cwdOf(sessionKey)
+  if (cwd === null) return { ok: false, kind: 'unknown-session' }
+  const result = await deps.listSessionFiles(cwd)
+  if (!result.ok) return { ok: false, kind: 'unreadable', message: result.message }
+  return { ok: true, files: result.files, truncated: result.truncated }
 }
 
 export function resolveSessionInterrupt(request: IpcMap['session:interrupt']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['interrupt']> {

@@ -22,6 +22,7 @@ function fakeQuery(commands: unknown[], agents: unknown[]): HostedQuery {
 const PIPELINE_COMMAND = { name: 'port:pipeline', description: 'Cockpit', argumentHint: '' }
 const SCOPE_COMMAND = { name: 'port:scope', description: 'Scope\u0007 a feature', argumentHint: '<feature description>' }
 const NON_PORT_COMMAND = { name: 'other:cmd', description: 'Not ours', argumentHint: '' }
+const UNQUALIFIED_PIPELINE = { name: 'pipeline', description: "The repository's own command", argumentHint: '' }
 const PLAN_AGENT = { name: 'port:plan-agent', description: 'Plans', model: 'opus' }
 
 describe('createCapabilityTracker', () => {
@@ -30,7 +31,7 @@ describe('createCapabilityTracker', () => {
     expect(tracker.current()).toEqual({ kind: 'pending', request: INSTALLED })
   })
 
-  it('reaches ready with only port: commands and agents, sorted by name and sanitized', async () => {
+  it('reaches ready with only port: commands and agents, sorted by name and sanitized — pipeline dropped from both command lists', async () => {
     const onChange = vi.fn()
     const tracker = createCapabilityTracker({ request: INSTALLED, readExpectedComponents: () => Promise.resolve(null), samePath, onChange })
     await tracker.start(fakeQuery([SCOPE_COMMAND, PIPELINE_COMMAND, NON_PORT_COMMAND], [PLAN_AGENT]))
@@ -38,16 +39,37 @@ describe('createCapabilityTracker', () => {
     const state = tracker.current()
     expect(state.kind).toBe('ready')
     if (state.kind !== 'ready') return
-    expect(state.commands.map((c) => c.name)).toEqual(['pipeline', 'scope'])
+    expect(state.commands.map((c) => c.name)).toEqual(['scope'])
     expect(state.commands.find((c) => c.name === 'scope')?.description).toBe('Scope a feature')
     expect(state.agents).toEqual([{ name: 'plan-agent', description: 'Plans', model: 'opus' }])
     expect(onChange).toHaveBeenCalled()
   })
 
-  it('has() reports membership by the namespace-stripped name', async () => {
+  it('slashCommands carries every reported command, namespace intact, with pipeline dropped', async () => {
     const tracker = createCapabilityTracker({ request: INSTALLED, readExpectedComponents: () => Promise.resolve(null), samePath, onChange: vi.fn() })
-    await tracker.start(fakeQuery([PIPELINE_COMMAND], []))
-    expect(tracker.has('pipeline')).toBe(true)
+    await tracker.start(fakeQuery([SCOPE_COMMAND, PIPELINE_COMMAND, NON_PORT_COMMAND], []))
+
+    const state = tracker.current()
+    expect(state.kind).toBe('ready')
+    if (state.kind !== 'ready') return
+    expect(state.slashCommands.map((c) => c.name)).toEqual(['other:cmd', 'port:scope'])
+  })
+
+  it('slashCommands keeps a bare pipeline command when the session reports it as its own, unqualified', async () => {
+    const tracker = createCapabilityTracker({ request: INSTALLED, readExpectedComponents: () => Promise.resolve(null), samePath, onChange: vi.fn() })
+    await tracker.start(fakeQuery([UNQUALIFIED_PIPELINE, PIPELINE_COMMAND], []))
+
+    const state = tracker.current()
+    expect(state.kind).toBe('ready')
+    if (state.kind !== 'ready') return
+    expect(state.slashCommands.map((c) => c.name)).toEqual(['pipeline'])
+  })
+
+  it('has() reports membership by the namespace-stripped name, never true for pipeline', async () => {
+    const tracker = createCapabilityTracker({ request: INSTALLED, readExpectedComponents: () => Promise.resolve(null), samePath, onChange: vi.fn() })
+    await tracker.start(fakeQuery([SCOPE_COMMAND, PIPELINE_COMMAND], []))
+    expect(tracker.has('scope')).toBe(true)
+    expect(tracker.has('pipeline')).toBe(false)
     expect(tracker.has('nope')).toBe(false)
   })
 
@@ -82,25 +104,25 @@ describe('createCapabilityTracker', () => {
   })
 
   it('for the repository source, reads expected components from request.path at start, and reports incomplete', async () => {
-    const readExpectedComponents = vi.fn(() => Promise.resolve({ skills: ['pipeline', 'scope'], agents: ['plan-agent'] }))
+    const readExpectedComponents = vi.fn(() => Promise.resolve({ skills: ['scope', 'plan-agent-skill'], agents: ['plan-agent'] }))
     const tracker = createCapabilityTracker({ request: REPOSITORY, readExpectedComponents, samePath, onChange: vi.fn() })
-    await tracker.start(fakeQuery([PIPELINE_COMMAND], []))
+    await tracker.start(fakeQuery([SCOPE_COMMAND], []))
     expect(readExpectedComponents).toHaveBeenCalledWith('/repo/plugins/port')
     const state = tracker.current()
     expect(state.kind).toBe('ready')
     if (state.kind !== 'ready') return
-    expect(state.components).toEqual({ kind: 'incomplete', missingSkills: ['scope'], missingAgents: ['plan-agent'] })
+    expect(state.components).toEqual({ kind: 'incomplete', missingSkills: ['plan-agent-skill'], missingAgents: ['plan-agent'] })
   })
 
   it('observe(init) resolves the plugin load and recomputes components', async () => {
     const onChange = vi.fn()
     const tracker = createCapabilityTracker({
       request: REPOSITORY,
-      readExpectedComponents: () => Promise.resolve({ skills: ['pipeline'], agents: [] }),
+      readExpectedComponents: () => Promise.resolve({ skills: ['scope'], agents: [] }),
       samePath,
       onChange,
     })
-    await tracker.start(fakeQuery([PIPELINE_COMMAND], []))
+    await tracker.start(fakeQuery([SCOPE_COMMAND], []))
     onChange.mockClear()
 
     tracker.observe({ type: 'system', subtype: 'init', plugins: [{ name: 'port', path: '/repo/plugins/port', version: '0.3.1' }] })
@@ -114,9 +136,9 @@ describe('createCapabilityTracker', () => {
   })
 
   it('for the installed source, reads expected components from the first loaded path reported by init', async () => {
-    const readExpectedComponents = vi.fn(() => Promise.resolve({ skills: ['pipeline'], agents: [] }))
+    const readExpectedComponents = vi.fn(() => Promise.resolve({ skills: ['scope'], agents: [] }))
     const tracker = createCapabilityTracker({ request: INSTALLED, readExpectedComponents, samePath, onChange: vi.fn() })
-    await tracker.start(fakeQuery([PIPELINE_COMMAND], []))
+    await tracker.start(fakeQuery([SCOPE_COMMAND], []))
     expect(readExpectedComponents).not.toHaveBeenCalled()
 
     tracker.observe({ type: 'system', subtype: 'init', plugins: [{ name: 'port', path: '/home/op/.claude/plugins/cache/port', version: '0.3.1' }] })
@@ -129,27 +151,27 @@ describe('createCapabilityTracker', () => {
   it('observe(commands_changed) replaces the command list and re-runs the component check', async () => {
     const tracker = createCapabilityTracker({
       request: REPOSITORY,
-      readExpectedComponents: () => Promise.resolve({ skills: ['pipeline', 'scope'], agents: [] }),
+      readExpectedComponents: () => Promise.resolve({ skills: ['scope'], agents: [] }),
       samePath,
       onChange: vi.fn(),
     })
-    await tracker.start(fakeQuery([PIPELINE_COMMAND], []))
+    await tracker.start(fakeQuery([], []))
     const before = tracker.current()
     expect(before.kind).toBe('ready')
     if (before.kind === 'ready') expect(before.components.kind).toBe('incomplete')
 
-    tracker.observe({ type: 'system', subtype: 'commands_changed', commands: [PIPELINE_COMMAND, SCOPE_COMMAND] })
+    tracker.observe({ type: 'system', subtype: 'commands_changed', commands: [SCOPE_COMMAND] })
 
     const state = tracker.current()
     expect(state.kind).toBe('ready')
     if (state.kind !== 'ready') return
-    expect(state.commands.map((c) => c.name)).toEqual(['pipeline', 'scope'])
+    expect(state.commands.map((c) => c.name)).toEqual(['scope'])
     expect(state.components).toEqual({ kind: 'complete' })
   })
 
   it('installed source, before init: unchecked with no-plugin-path, never unreadable', async () => {
     const tracker = createCapabilityTracker({ request: INSTALLED, readExpectedComponents: () => Promise.resolve(null), samePath, onChange: vi.fn() })
-    await tracker.start(fakeQuery([PIPELINE_COMMAND], []))
+    await tracker.start(fakeQuery([SCOPE_COMMAND], []))
     const state = tracker.current()
     expect(state.kind).toBe('ready')
     if (state.kind !== 'ready') return
@@ -164,7 +186,7 @@ describe('createCapabilityTracker', () => {
       samePath,
       onChange,
     })
-    await tracker.start(fakeQuery([PIPELINE_COMMAND], []))
+    await tracker.start(fakeQuery([SCOPE_COMMAND], []))
     const state = tracker.current()
     expect(state.kind).toBe('ready')
     if (state.kind !== 'ready') return
