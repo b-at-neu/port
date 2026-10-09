@@ -1,7 +1,7 @@
 // Pure classifier for the agent-guard PreToolUse hook — kept separate from agent-guard.mjs's
 // stdin/stdout plumbing so layer 1 checks can unit-test decision logic directly.
-import { readFileSync, existsSync } from 'node:fs';
-import { relative, resolve } from 'node:path';
+import { readFileSync, existsSync, realpathSync } from 'node:fs';
+import { dirname, basename, relative, resolve } from 'node:path';
 import {
   gateClearAttempt,
   pluginInstallMutation,
@@ -11,6 +11,20 @@ import {
 } from './command-rules.mjs';
 import { cockpitWriteDenial, dispatchDenial } from './ownership-rules.mjs';
 import { operatorNamed } from './operator-rules.mjs';
+
+/** Canonicalizes `p` via realpath, falling back a directory level for a not-yet-created leaf. */
+export function realCanonical(p) {
+  const resolved = resolve(p);
+  try {
+    return realpathSync(resolved);
+  } catch {
+    try {
+      return resolve(realpathSync(dirname(resolved)), basename(resolved));
+    } catch {
+      return resolved;
+    }
+  }
+}
 
 /** Compiles a glob (`**` → any depth, `*` → one path segment, else escaped) into an
  *  anchored RegExp, for `sessionRequiredPaths` globs against an already-relativized path. */
@@ -247,7 +261,7 @@ export function decide({
     // `cockpitWriteDenial` itself carves out (a terminal's own preflight write).
     if (cockpitFilePath && typeof filePath === 'string' && filePath.length > 0) {
       const resolvedPath = resolve(root, filePath);
-      if (resolvedPath === cockpitFilePath) {
+      if (realCanonical(resolvedPath) === realCanonical(cockpitFilePath)) {
         const denial = cockpitWriteDenial({
           toolName,
           who,

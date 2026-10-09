@@ -3,7 +3,7 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { allowMatchers, decide, callerKind, invokedCockpitSkill } from './lib/guard-rules.mjs';
+import { allowMatchers, decide, callerKind, invokedCockpitSkill, realCanonical } from './lib/guard-rules.mjs';
 import { gateClearAttempt, switchesBranch } from './lib/command-rules.mjs';
 import { classifyOwnership } from './lib/ownership-rules.mjs';
 import { recentOperatorMessages } from './lib/operator-rules.mjs';
@@ -78,7 +78,7 @@ if (configRoot) {
       isWriteToolCall &&
       typeof payload?.tool_input?.file_path === 'string' &&
       payload.tool_input.file_path.length > 0 &&
-      resolve(configRoot, payload.tool_input.file_path) === cockpitFilePath;
+      realCanonical(resolve(configRoot, payload.tool_input.file_path)) === realCanonical(cockpitFilePath);
 
     // Reads and classifies the ownership record for an Agent call or a write targeting it.
     let ownership;
