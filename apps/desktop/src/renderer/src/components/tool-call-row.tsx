@@ -38,7 +38,7 @@ function ToolIcon({ name, className }: { readonly name: string; readonly classNa
 
 export function ToolCallRow({ row, childNodes }: { readonly row: Extract<RowView, { readonly kind: 'tool-call' }>; readonly childNodes: readonly GroupedNode[] }) {
   const [open, setOpen] = useState(() => defaultOpen(row))
-  const summary = toolSummary(row)
+  const summary = toolSummary(row, childNodes.length)
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} data-slot="tool-call-row">

@@ -78,6 +78,7 @@ export interface HostedStoreDeps {
   readonly persistence: HostingPersistence
   /** Removes a worktree on an explicit `dismiss` choice — the default wraps `removeSessionWorktreeAt` with a real `GitRunner`. */
   readonly removeWorktree: (path: string, force: boolean) => Promise<RemoveSessionWorktreeOutcome>
+  readonly readHistory: typeof readHistory
 }
 
 export const defaultHostedStoreDeps: HostedStoreDeps = {
@@ -96,6 +97,7 @@ export const defaultHostedStoreDeps: HostedStoreDeps = {
   samePath: (a: string, b: string) => pathOps.samePath(a, b),
   persistence: createInMemoryHostingPersistence(),
   removeWorktree: (path, force) => removeSessionWorktreeAt({ path, force, git: defaultGitRunner() }),
+  readHistory,
 }
 
 export interface StartSessionParams {
@@ -234,7 +236,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     }
 
     const cwd = params.workspace.folder
-    const [credentials, sdk, plugin, history] = await Promise.all([deps.readCredentialsTell(), deps.getSdk(), deps.resolvePluginRequest(cwd), readHistory(params.mode)])
+    const [credentials, sdk, plugin, history] = await Promise.all([deps.readCredentialsTell(), deps.getSdk(), deps.resolvePluginRequest(cwd), deps.readHistory(params.mode)])
     const sessionKey = toSessionKey(nextId)
     nextId += 1
     const mode = params.mode

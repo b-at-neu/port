@@ -39,6 +39,7 @@ function baseDeps(overrides: Partial<HostedStoreDeps> = {}): HostedStoreDeps {
     samePath: (a: string, b: string) => a === b,
     persistence: createInMemoryHostingPersistence(),
     removeWorktree: () => Promise.resolve({ outcome: 'removed' }),
+    readHistory: () => Promise.resolve({ kind: 'none' }),
     ...overrides,
   }
 }
@@ -284,6 +285,27 @@ describe('createHostedStore', () => {
     if (!first.ok) throw new Error('unreachable')
     const forked = await store.start({ repoId: REPO_ID, mode: { kind: 'fork', sessionId: 'parent-1' }, workspace: WORKSPACE })
     expect(forked.ok).toBe(true)
+  })
+
+  it('a resume start threads deps.readHistory through to the handle, never the real filesystem', async () => {
+    const readHistory = vi.fn(() => Promise.resolve({ kind: 'loaded' as const, entries: [], omittedBefore: 0, sourceSessionId: 'parent-1' }))
+    const store = createHostedStore(baseDeps({ readHistory }))
+    const result = await store.start({ repoId: REPO_ID, mode: { kind: 'resume', sessionId: 'parent-1' }, cwd: '/repo' })
+    if (!result.ok) throw new Error('unreachable')
+    expect(readHistory).toHaveBeenCalledWith({ kind: 'resume', sessionId: 'parent-1' })
+    const attached = store.attach(result.snapshot.sessionKey)
+    if (!attached.ok) throw new Error('unreachable')
+    expect(attached.history).toEqual({ kind: 'loaded', entries: [], omittedBefore: 0, sourceSessionId: 'parent-1' })
+  })
+
+  it('a fork start surfaces a failed history read on the handle rather than throwing', async () => {
+    const readHistory = vi.fn(() => Promise.resolve({ kind: 'failed' as const, message: 'disk error' }))
+    const store = createHostedStore(baseDeps({ readHistory }))
+    const result = await store.start({ repoId: REPO_ID, mode: { kind: 'fork', sessionId: 'parent-1' }, cwd: '/repo' })
+    if (!result.ok) throw new Error('unreachable')
+    const attached = store.attach(result.snapshot.sessionKey)
+    if (!attached.ok) throw new Error('unreachable')
+    expect(attached.history).toEqual({ kind: 'failed', message: 'disk error' })
   })
 
   it('setLimit lowers the limit without closing any session, only refusing a new start', async () => {

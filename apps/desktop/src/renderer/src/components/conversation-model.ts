@@ -115,8 +115,8 @@ function pluralize(count: number, noun: string): string {
   return `${String(count)} ${noun}${count === 1 ? '' : 's'}`
 }
 
-/** The tool row's own one-line result summary (right side, DESIGN §4). */
-export function toolSummary(row: Extract<RowView, { readonly kind: 'tool-call' }>): string {
+/** The tool row's own one-line result summary (right side, DESIGN §4). `stepCount` is a Task/Agent row's own nested child count. */
+export function toolSummary(row: Extract<RowView, { readonly kind: 'tool-call' }>, stepCount = 0): string {
   const detail = row.detail
   if (detail?.kind === 'bash') {
     if (detail.interrupted) return 'interrupted'
@@ -136,8 +136,9 @@ export function toolSummary(row: Extract<RowView, { readonly kind: 'tool-call' }
     return `${String(done)} of ${String(detail.items.length)} done`
   }
   if (detail?.kind === 'task') {
-    const status = row.result.kind === 'error' ? 'error' : row.result.kind === 'ok' ? 'done' : 'running'
-    return status
+    if (row.result.kind === 'error') return 'error'
+    const status = row.result.kind === 'ok' ? 'done' : 'running'
+    return `${pluralize(stepCount, 'step')} · ${status}`
   }
   if (row.result.kind === 'none') return 'no result'
   return row.result.kind === 'error' ? 'error' : 'ok'

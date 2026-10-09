@@ -106,9 +106,19 @@ describe('toolSummary', () => {
     expect(toolSummary(rowFor(entry))).toBe('1 of 2 done')
   })
 
-  it('reports a running subagent', () => {
+  it('reports a running subagent with its step count', () => {
     const entry = toolCall('s1', { name: 'Task', detail: { kind: 'task', description: 'x', subagentType: null } })
-    expect(toolSummary(rowFor(entry))).toBe('running')
+    expect(toolSummary(rowFor(entry), 4)).toBe('4 steps · running')
+  })
+
+  it('reports a done subagent with its step count', () => {
+    const entry = toolCall('s2', { name: 'Task', detail: { kind: 'task', description: 'x', subagentType: null }, result: { isError: false, payload: PAYLOAD } })
+    expect(toolSummary(rowFor(entry), 1)).toBe('1 step · done')
+  })
+
+  it('reports a failed subagent without a step count', () => {
+    const entry = toolCall('s3', { name: 'Task', detail: { kind: 'task', description: 'x', subagentType: null }, result: { isError: true, payload: PAYLOAD } })
+    expect(toolSummary(rowFor(entry), 4)).toBe('error')
   })
 })
 
