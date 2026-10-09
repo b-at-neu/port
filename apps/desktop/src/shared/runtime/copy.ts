@@ -1,17 +1,7 @@
-// The runtime strip's operator-facing copy table (#97) — one entry per
-// `RuntimeDiagnosis`, never a shared "error" catch-all, in the shape
-// `board/copy.ts` already uses for its own unions: a new diagnosis is a
-// compile error here, never a silently blank line. Pure data; no DOM here.
+// The runtime strip's operator-facing copy table — one entry per `RuntimeDiagnosis`, never a shared "error" catch-all. A new diagnosis is a compile error here, never a silently blank line.
 import type { RuntimeDiagnosis } from './types'
 
-/** What kind of remedy a diagnosis implies — `retry` covers "try again",
- *  possibly after a config change (`bundled-fallback`) or a binary install
- *  (`cli-missing`); `login`/`update` name a concrete external step;
- *  `account-owner` names one the app cannot offer as a button at all. Never
- *  an `'api-key'` member — the `desktop-runtime` check pins that absence,
- *  and `unauthenticated`/`token-stale` are pinned to `login` specifically,
- *  since #145's two-week cost was exactly this pair being misread as an API
- *  key problem instead. */
+/** What kind of remedy a diagnosis implies — `retry` covers "try again"; `login`/`update` name a concrete external step; `account-owner` names one the app cannot offer as a button. Never an `'api-key'` member. */
 export type RuntimeAction = 'install' | 'login' | 'update' | 'account-owner' | 'retry'
 
 export interface RuntimeCopy {
@@ -20,17 +10,7 @@ export interface RuntimeCopy {
   readonly action: RuntimeAction | null
 }
 
-/** Every `RuntimeDiagnosis` member, both directions pinned by
- *  `desktop-runtime.ts` — a variant added to the union with no entry here
- *  is a compile error (`Record`'s exhaustiveness), and an entry with no
- *  corresponding variant is dead copy the check also rejects.
- *
- *  Ambiguous probe text resolves toward `unauthenticated`, never
- *  `policy-refused` (`main/runtime/classify.ts`'s own header states the same
- *  direction): a wrong `unauthenticated` costs one `claude` login the
- *  operator was going to run anyway, while a wrong `policy-refused` sends
- *  them to their account owner over what might be nothing but a stale
- *  token — the exact two-week failure #145 recorded. */
+/** Every `RuntimeDiagnosis` member, both directions pinned. Ambiguous probe text resolves toward `unauthenticated`, never `policy-refused`: a wrong `unauthenticated` costs one login, while a wrong `policy-refused` sends the operator to their account owner over what might be a stale token. */
 export const RUNTIME_COPY: Readonly<Record<RuntimeDiagnosis, RuntimeCopy>> = {
   unverified: {
     title: 'Not verified yet',
@@ -79,27 +59,14 @@ export const RUNTIME_COPY: Readonly<Record<RuntimeDiagnosis, RuntimeCopy>> = {
   },
 }
 
-/** The one advisory line shown *beside* another diagnosis, never alone as a
- *  block (`belowMinimum` on `RuntimePreflight['version']`) — not itself a
- *  `RuntimeDiagnosis`, since the policy is "try it and see": an old CLI
- *  still gets a real probe, this is only ever a note appended to whatever
- *  the probe or preflight actually reported. */
+/** The one advisory line shown beside another diagnosis, never alone as a block — not itself a `RuntimeDiagnosis`, since an old CLI still gets a real probe. */
 export const CLI_OUTDATED_COPY: RuntimeCopy = {
   title: 'Claude Code is older than the version this app expects.',
   body: 'It may still work — this is advisory only.',
   action: 'update',
 }
 
-/**
- * The runtime strip's (and, since #316, the Settings screen's) own inline
- * strings — shared by `renderer/src/runtime.ts` and
- * `renderer/src/settings/runtime-model.ts` so there is one copy of each,
- * never a second one drifting inside the Settings screen. Deliberately
- * **not** entries on `RUNTIME_COPY`: that record's keys are pinned
- * one-for-one against `RuntimeDiagnosis` (`desktop-runtime.ts`), and these
- * strings are not per-diagnosis — the API-key note, for one, can appear
- * beside any diagnosis at all.
- */
+/** Shared by the runtime strip and the Settings screen so there is one copy of each. Deliberately not entries on `RUNTIME_COPY`, since these strings are not per-diagnosis. */
 export const RUNTIME_STRIP_LOADING = 'Checking the Claude Code runtime…'
 export const RUNTIME_STRIP_ERROR = "Couldn't reach the main process to check the Claude Code runtime."
 export const RUNTIME_UNVERIFIED_STRIP_NOTE = 'Not verified yet — a test runs one short turn.'
@@ -107,9 +74,7 @@ export const RUNTIME_PROBE_ERROR = "Couldn't reach the main process to test the 
 export const RUNTIME_API_KEY_NOTE = 'An ANTHROPIC_API_KEY is set in this environment — this turn may not have used your subscription.'
 export const RUNTIME_NO_READY_REPO_NOTE = 'Register a repository to test the connection.'
 
-/** `'Test connection'` for the honest resting state, `'Retry'` for every
- *  other actionable diagnosis, and no button at all for `verified`/
- *  `policy-refused` — neither names a next step the app can offer. */
+/** `'Test connection'` for the honest resting state, `'Retry'` otherwise, no button for `verified`/`policy-refused`. */
 export function runtimeActionLabel(diagnosis: RuntimeDiagnosis): string | null {
   if (diagnosis === 'verified' || diagnosis === 'policy-refused') return null
   if (diagnosis === 'unverified') return 'Test connection'
