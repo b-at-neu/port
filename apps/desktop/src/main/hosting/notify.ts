@@ -30,7 +30,7 @@ export function notificationFor(previous: HostedSessionSnapshot | null, next: Ho
     return { kind: 'needs-you', title, body: `Allow or deny ${newPermission.toolName}: Claude is waiting for your permission.` }
   }
 
-  if ((next.phase === 'streaming' || next.phase === 'interrupting') === false && (previous.phase === 'streaming' || previous.phase === 'interrupting') && next.pendingPermissions.length === 0) {
+  if (next.phase === 'ready' && (previous.phase === 'streaming' || previous.phase === 'interrupting') && next.pendingPermissions.length === 0) {
     return { kind: 'finished', title, body: "Claude finished. Reply when you're ready." }
   }
 
