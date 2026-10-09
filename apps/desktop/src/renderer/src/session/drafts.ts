@@ -39,8 +39,11 @@ export function useDraft(key: SessionKey | null): string {
 // The draft's own attachment chips, same lifetime rule as the text above — its own map, since every existing text caller only ever wants the text.
 const draftAttachments = new Map<SessionKey, readonly ComposerAttachment[]>()
 
+// Stable "no attachments" reference — useSyncExternalStore needs the same value back when nothing changed.
+const NO_ATTACHMENTS: readonly ComposerAttachment[] = []
+
 export function draftAttachmentsFor(key: SessionKey): readonly ComposerAttachment[] {
-  return draftAttachments.get(key) ?? []
+  return draftAttachments.get(key) ?? NO_ATTACHMENTS
 }
 
 export function setDraftAttachments(key: SessionKey, value: readonly ComposerAttachment[]): void {
@@ -56,5 +59,5 @@ export function clearDraftAttachments(key: SessionKey): void {
 }
 
 export function useDraftAttachments(key: SessionKey | null): readonly ComposerAttachment[] {
-  return useSyncExternalStore(subscribe, () => (key === null ? [] : draftAttachmentsFor(key)))
+  return useSyncExternalStore(subscribe, () => (key === null ? NO_ATTACHMENTS : draftAttachmentsFor(key)))
 }
