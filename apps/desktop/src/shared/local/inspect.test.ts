@@ -176,7 +176,7 @@ describe('inspectDenials — SessionAttribution', () => {
 
 // Regression: miss lines and session-actor deny lines are not agent denials
 
-describe('inspectDenials — regression', () => {
+describe('inspectDenials — #63 regression', () => {
   it('an all-human-session log (miss lines plus session-actor deny) reports zero agent attribution', () => {
     const read = present(
       [
