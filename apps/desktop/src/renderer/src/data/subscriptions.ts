@@ -32,7 +32,8 @@ export interface Subscriptions {
 function attachTo<E extends SubscribableEvent>(bridge: SubscriptionBridge, event: E, onPayload: (payload: IpcEventMap[E]) => void): () => void {
   if (event === 'board:update') return bridge.onBoardUpdate(onPayload as EventListener<'board:update'>)
   if (event === 'session:status') return bridge.onSessionStatus(onPayload as EventListener<'session:status'>)
-  return bridge.onSessionEntries(onPayload as EventListener<'session:entries'>)
+  if (event === 'session:entries') return bridge.onSessionEntries(onPayload as EventListener<'session:entries'>)
+  return bridge.onAppCommand(onPayload as EventListener<'app:command'>)
 }
 
 /** Attaches one bridge listener per event, lazily — the first `subscribe`

@@ -1,6 +1,6 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, Menu } from 'electron'
 import { isAbsolute, join } from 'node:path'
-import { registerIpc } from './ipc'
+import { registerIpc, broadcastAppCommand } from './ipc'
 import { registerFixtureIpc } from './fixtures'
 import { fixtureMode } from './fixtures/mode'
 import type { PipelineWatcher } from './state/watcher'
@@ -10,6 +10,7 @@ import type { Dispatcher } from './dispatch/dispatcher'
 import { confirmQuit } from './dialogs'
 import { applyNavigationGuards } from './navigation'
 import { ABOUT_NOTICE, ABOUT_POWERED_BY } from '../shared/about/copy'
+import { menuTemplate } from './menu'
 
 // A dev-only `pnpm install` never runs as root, so `chrome-sandbox` ships without the root-owned
 // permissions Chromium requires. Packaged builds are unaffected.
@@ -108,6 +109,7 @@ if (fixture.kind === 'invalid') {
         dispatcher = registered.dispatcher
         shutdownDispatch = registered.shutdownDispatch
       }
+      Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform, app.isPackaged, broadcastAppCommand)))
       createWindow()
 
       app.on('activate', () => {

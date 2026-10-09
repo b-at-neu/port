@@ -82,10 +82,17 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `plugin.ts`'s `resolvePluginRequest` (#101) prefers the repository's own `plugins/port/` over the installed cache, and fails loud — an unreadable manifest still resolves to `repository`, never a silent fallback
 - `capabilities.ts`'s per-session tracker races `supportedCommands()`/`supportedAgents()` against a timeout, going `unavailable` rather than ever reading either as an empty list
 - an operator's own session defaults (`options.ts`'s `defaults` param) apply only to an operator-role start — the dispatcher role always keeps its own `model` and `permissionMode: 'default'`, never bypass/dontAsk/auto
+- `usage.ts`'s `readUsage` narrows `assistant`/`result` messages structurally, the same rule as `rate-limit.ts`; the figures are cumulative for this `claude` process, so a resumed session's totals mean "since port opened it," never lifetime cost
+- `notify.ts`'s `notificationFor` is the one notification decider; `createNotifier` fires only when no port window is focused, and a focused transition still updates the baseline so refocusing then blurring never replays a stale one
+- `marks.ts`'s pin/archive sets persist only through `persist.ts`; `store.ts` is their one composition point, never a second writer
 
 **`apps/desktop/src/main/local/`**
 - only reader of worktrees and the denial log
 - no `gh`; no item-state resolution
+
+**`apps/desktop/src/main/menu.ts`**
+- `menuTemplate` is pure — `platform`/`isPackaged` are passed in rather than read from `process`/`app`, so it is testable without Electron running
+- every command item carries `registerAccelerator: false`; `shell/keyboard.ts`'s module-level listener stays the one place a key press actually fires
 
 **`apps/desktop/src/main/platform/`**
 - only importer of `node:child_process` / `node:fs` under `apps/desktop/src/`
