@@ -1,20 +1,9 @@
-// #97: two pure functions, both driven by the authoritative decision-case
-// table (`classify.cases.json`, pinned by `desktop-runtime.ts` per
-// ENGINEERING §2) — no I/O here, so every rung is exercised without a real
-// `claude` binary or a real credentials file.
+// Two pure functions, driven by the decision-case table — no I/O, so every rung is exercised without a real `claude` binary or credentials file.
 //
-// Direction, stated once: ambiguous probe text resolves toward
-// `unauthenticated`, never `policy-refused`. A wrong `unauthenticated` costs
-// one `claude` login the operator was going to run anyway; a wrong
-// `policy-refused` sends them to their account owner over what might be
-// nothing but a stale token — the exact two-week failure #145 recorded.
-// That is why the login-wording check below runs before the
-// policy-wording check, not after.
+// Ambiguous probe text resolves toward `unauthenticated`, never `policy-refused`: a wrong `unauthenticated` costs one login, a wrong `policy-refused` sends the operator to their account owner over what might be a stale token.
 import type { CredentialsTell, RuntimeDiagnosis } from '../../shared/runtime/types'
 
-/** `now` is an explicit input, never `Date.now()` read internally, so both
- *  functions stay pure and `classify.cases.json` can encode a
- *  deterministic, permanently-valid "in the past" instant. */
+/** `now` is explicit, never `Date.now()` read internally, so both functions stay pure. */
 function isTokenStale(tell: CredentialsTell | null, now: number): boolean {
   if (tell === null || !tell.present || !tell.hasRefreshToken) return false
   return tell.expiresAt !== null && tell.expiresAt <= now
@@ -27,11 +16,7 @@ export interface ClassifyPreflightInput {
   readonly now: number
 }
 
-/** The preflight ladder: `cli-missing` → `bundled-fallback` → `cli-unusable`
- *  → `token-stale` → otherwise `unverified`. `unverified` is a first-class
- *  state, not a synonym for ready — the cheap preflight can never prove
- *  auth works, only a completed turn can (ENGINEERING §4's "an absent
- *  signal is never read as a passing one" applied to the happy path). */
+/** `unverified` is a first-class state, not a synonym for ready — the cheap preflight can never prove auth works, only a completed turn can. */
 export function classifyPreflight(input: ClassifyPreflightInput): RuntimeDiagnosis {
   if (input.locate === 'not-found') return 'cli-missing'
   if (input.locate === 'bundled-fallback') return 'bundled-fallback'
@@ -50,11 +35,7 @@ export interface ClassifyProbeFailureInput {
   readonly now: number
 }
 
-/** First match wins: the credentials tell, then OAuth/refresh wording →
- *  `token-stale`; login wording → `unauthenticated`; unambiguous
- *  policy/organization wording → `policy-refused`; otherwise
- *  `probe-failed`, carrying the underlying message verbatim (never
- *  invented — every worded sentence lives in the copy table instead). */
+/** First match wins; `probe-failed` carries the underlying message verbatim, never invented. */
 export function classifyProbeFailure(input: ClassifyProbeFailureInput): RuntimeDiagnosis {
   if (isTokenStale(input.credentials, input.now)) return 'token-stale'
   if (OAUTH_REFRESH_RE.test(input.text)) return 'token-stale'

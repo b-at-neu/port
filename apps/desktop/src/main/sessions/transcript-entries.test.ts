@@ -4,11 +4,7 @@ import type { DeriveEntriesOptions } from './transcript-entries'
 import type { TranscriptEntry } from '../../shared/sessions/transcript'
 import sharedCaseTable from './transcript.cases.json'
 
-/** Not part of `transcript-entries.ts`'s own public surface — this test
- *  suite's only caller wants "push the whole record set once, apply the
- *  patches, hand back the final array" rather than `createDeriver`'s own
- *  incremental `push()`, so the batching stays local to the suite that
- *  needs it. */
+/** Not part of `transcript-entries.ts`'s own public surface — batches `createDeriver`'s incremental `push()` for this suite only. */
 function deriveEntries(records: readonly unknown[], options?: DeriveEntriesOptions): TranscriptEntry[] {
   const deriver = createDeriver(options)
   const { appended, patched } = deriver.push(records)
@@ -157,11 +153,7 @@ describe('deriveEntries', () => {
   })
 
   it('still fills the cap when sanitizing strips more than the slack out of the prefix', () => {
-    // #83: the bounded-prefix optimization read only `cap + CAP_SLACK`
-    // characters, so control-heavy output -- exactly what the sanitizer
-    // exists to defend against -- came back short of `cap` while unread
-    // content still followed. Nine stripped bytes per kept character puts
-    // the ratio far past the slack.
+    // The bounded-prefix optimization can read short of `cap` on control-heavy output; nine stripped bytes per kept character puts the ratio past the slack.
     const esc = String.fromCharCode(27)
     const noisy = `x${esc.repeat(9)}`.repeat(500)
     const result = capPayload(noisy, 100)
@@ -224,9 +216,7 @@ describe('createDeriver', () => {
 
 describe('sanitize', () => {
   it('strips the ESC control byte out of an ANSI escape run, leaving the inert bracket text', () => {
-    // Sanitizing removes only the control byte, never a parsed escape
-    // sequence — the remaining "[31m"/"[0m" text is inert once the ESC
-    // byte is gone, rather than rendering as colour.
+    // Sanitizing removes only the control byte, so "[31m"/"[0m" stays inert text rather than rendering as colour.
     const esc = String.fromCharCode(27)
     const withEscape = `before${esc}[31mred${esc}[0mafter`
     expect(sanitize(withEscape)).toBe('before[31mred[0mafter')

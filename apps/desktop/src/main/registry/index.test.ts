@@ -17,9 +17,7 @@ function ok(stdout: string): CommandResult {
   return { ok: true, stdout, stderr: '' }
 }
 
-/** Every repository directory this suite creates is its own git root — the
- *  fake runner just echoes back whatever `cwd` it is asked about, so a
- *  subdirectory query resolves to the deepest repo root that contains it. */
+/** The fake runner echoes back whatever `cwd` it is asked about, so a subdirectory query resolves to the deepest repo root that contains it. */
 const NOT_FOUND: CommandResult = { ok: false, kind: 'not-found', command: 'git', searched: [] }
 
 function fakeGit(roots: readonly string[]): GitRunner {

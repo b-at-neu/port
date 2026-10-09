@@ -1,8 +1,4 @@
-// The pure join and the status ladder (#79) — reconcileRepository takes
-// already-fetched results from the four adapters (#74/#76/#77/#78) plus the
-// registry's own RepositoryEntry, and builds one repository's reconciled
-// view. No I/O, no `gh`, no `git`, no filesystem — main/state/read.ts is the
-// thin orchestrator that does the fetching this function composes.
+// No I/O, no `gh`, no `git`, no filesystem — main/state/read.ts is the thin orchestrator that does the fetching this function composes.
 import type { LabelRole } from '../../shared/labels/defaults'
 import type {
   ItemsByNumberFetch,
@@ -30,11 +26,7 @@ import { stageOf } from './stage'
 import { codeReviewCount } from '../../../../../scripts/port-tick/gates'
 import { parseFilesBlock } from '../../../../../scripts/port-tick/contention'
 
-/** The repository-scoped slice of #78's whole-machine `SessionScan` — never
- *  a second scan. `available` is `false` only when the scan itself failed
- *  (Decision 2: a check that could not run is not a check that found
- *  nothing); `freshness` is the one scan's own `scannedAt`/failure message,
- *  copied onto every repository that shares it (Decision 5). */
+/** The repository-scoped slice of the whole-machine `SessionScan`, never a second scan. `available` is `false` only when the scan itself failed. */
 export interface RepoSessionSlice {
   readonly agents: readonly AgentRecord[]
   readonly sessions: readonly SessionRecord[]
@@ -64,12 +56,7 @@ function denialsFreshness(denials: DenialsRead): FreshnessEntry {
   return denials.ok ? { at: denials.readAt } : { unavailable: denials.message }
 }
 
-/**
- * The status table (#79 Decision 2), first hit wins within the `in-flight`
- * role: a session scan that could not run is `sessions-unavailable`, never
- * `stalled` — over-reporting a stall costs a glance, under-reporting hides
- * exactly the condition this ticket exists to surface.
- */
+/** First hit wins within the `in-flight` role: a session scan that could not run is `sessions-unavailable`, never `stalled`. */
 function statusOf(
   role: LabelRole | null,
   sessionsAvailable: boolean,
@@ -87,10 +74,7 @@ function statusOf(
   return { status: 'stalled', statusEvidence: 'no-claimant' }
 }
 
-/** Whichever source named the number first — worktree rung checked before
- *  the agent ladder, matching `collectOrphanNumbers`'s own build order. A
- *  failed re-check yields `recheck-unavailable`, never collapsed into
- *  `number-not-found` (#79 Decision, Data & contracts). */
+/** Whichever source named the number first. A failed re-check yields `recheck-unavailable`, never collapsed into `number-not-found`. */
 function resolveOrphan(number: number, fetch: ItemsByNumberFetch | null, worktreeEntries: readonly WorktreeEntry[]): OrphanItem {
   const from: OrphanItem['from'] = worktreeEntries.some((w) => w.correlation?.number === number) ? 'worktree' : 'agent'
   if (fetch === null || !fetch.ok) {
@@ -131,9 +115,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
   const worktreeEntries = worktrees.ok ? worktrees.entries : []
   const orphanNumbers = collectOrphanNumbers(pipelineFetch.items, worktreeEntries, repoSessions.agents)
 
-  // The closing-keyword join, both directions — a pull request's own body
-  // names the issue it closes; the issue's own `linked` is the first pull
-  // request found naming it back.
+  // The closing-keyword join, both directions: a pull request's body names the issue it closes, and the issue's `linked` is the first pull request naming it back.
   const prLinks = new Map<number, number>()
   for (const item of pipelineFetch.items) {
     if (item.kind !== 'pull-request') continue
@@ -148,9 +130,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
   const items: ReconciledItem[] = pipelineFetch.items.map((item) => {
     const stageResult = stageOf(item.matchedKeys, vocabulary)
     const linked = item.kind === 'pull-request' ? (prLinks.get(item.number) ?? null) : (issueLinks.get(item.number) ?? null)
-    // An issue carrying `prOpened` names a pull request that must exist
-    // somewhere — if none in the open sweep links back to it, that pull
-    // request is no longer open (merged or closed), never "awaiting merge".
+    // An issue carrying `prOpened` with no link in the open sweep means that pull request is no longer open, never "awaiting merge".
     const linkReason: LinkReason | null =
       linked !== null ? null : item.kind === 'pull-request' || !item.matchedKeys.includes('prOpened') ? 'no-closing-keyword' : 'counterpart-not-open'
 
@@ -168,12 +148,10 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     if (agents.length > 0 || sessions.length > 0) sources.push('sessions')
     if (worktreeAttachments.length > 0) sources.push('worktrees')
 
-    // Parsed for issues only — a pull request's `## Changes` block is prose,
-    // not a fence, and the occupied set PIPELINE.md defines is issue-based.
+    // Parsed for issues only — a pull request's `## Changes` block is prose, not a fence.
     const claimedFiles = item.kind === 'issue' ? parseFilesBlock(item.body) : null
 
-    // Precomputed here so the renderer never re-derives it from raw review
-    // bodies (#108) — `null` for an issue, mirroring `item.reviews` itself.
+    // Precomputed so the renderer never re-derives it from raw review bodies; `null` for an issue.
     const reviewCycleCount = item.kind === 'pull-request' ? codeReviewCount(item.reviews ?? undefined) : null
 
     return {
@@ -217,10 +195,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     .filter((w): w is WorktreeEntry & { unresolved: UnresolvedReason } => w.unresolved !== null)
     .map((w) => ({ path: w.path, reason: w.unresolved }))
 
-  // #80 Decision 6 — null, never 0, when the read itself failed; otherwise
-  // registered is every entry, attached is what actually reached an item
-  // (never the correlated-to-an-orphan residue, which is exactly the gap
-  // this field exists to surface), uncorrelated is the unresolved rung.
+  // `null`, never 0, when the read itself failed; otherwise registered is every entry, attached is what actually reached an item.
   const worktreeTotals = worktrees.ok
     ? { registered: worktreeEntries.length, attached: items.reduce((sum, item) => sum + item.worktrees.length, 0), uncorrelated: uncorrelatedWorktrees.length }
     : null

@@ -1,8 +1,4 @@
-// The #52 half of the ticket: what a registered repository's checkout looks
-// like to the harness that would actually dispatch agents in it. Every step
-// degrades to a diagnostic rather than a failure — `git` absent or failing
-// never invalidates a repository, since the config read inspect.ts does is
-// filesystem-only and stands on its own.
+// What a registered repository's checkout looks like to the harness that would actually dispatch agents in it. Every step degrades to a diagnostic rather than a failure.
 import { pathOps } from '../platform/paths'
 import { readJsonFile } from '../platform/files'
 import type { GitRunner } from '../platform/git'
@@ -29,13 +25,7 @@ export async function currentBranch(git: GitRunner, cwd: string): Promise<Curren
 
 export type RefsCarryingConfig = { readonly ok: true; readonly refs: readonly string[] } | { readonly ok: false }
 
-/** No branch on this checkout carries the config the harness needs, or the
- *  branch on disk deleted it — look everywhere the pipeline's own commit
- *  history has ever put one. Capped at 20 candidates, and every candidate is
- *  confirmed with `ls-tree` so a branch that later deleted the config is
- *  excluded rather than falsely offered. Git pathspecs use a literal `/`,
- *  never `pathOps.join` — pathspec syntax is POSIX-shaped on every
- *  platform. */
+/** Capped at 20 candidates, each confirmed with `ls-tree` so a branch that later deleted the config is excluded. Git pathspecs use a literal `/`, never `pathOps.join`. */
 const MAX_CANDIDATES = 20
 const CONFIG_PATHSPEC = '.claude/port.config.json'
 
@@ -67,11 +57,7 @@ interface SettingsShape {
   readonly permissions?: { readonly allow?: unknown }
 }
 
-/** Filesystem-only, never `git` — the same condition the cockpit's own
- *  startup preflight checks (#52): `permissions.allow` absent, unparseable,
- *  or unreadable all collapse to `missing`, since every one of them means
- *  "there is no usable allowlist on this checkout" from an operator's
- *  point of view. */
+/** Filesystem-only, never `git` — `permissions.allow` absent, unparseable, or unreadable all collapse to `missing`. */
 export async function permissionsState(root: string): Promise<PermissionsState> {
   const settingsPath = pathOps.join(root, '.claude', 'settings.json')
   const result = await readJsonFile<SettingsShape>(settingsPath)

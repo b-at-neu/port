@@ -1,29 +1,12 @@
-// The role precedence, the stage winner, and the marker split (#79 Decision
-// 1) — pure, no I/O. Reads `role` off each matched label's own resolved
-// vocabulary entry, never a second key→stage table.
+// Reads `role` off each matched label's own resolved vocabulary entry, never a second key→stage table.
 import type { LabelKey, LabelVocabulary } from '../../shared/labels/vocabulary'
 import type { LabelRole } from '../../shared/labels/defaults'
 import type { StageResult } from '../../shared/state/types'
 
-/**
- * First hit wins, one line each:
- * - `in-flight` — a refresh deliberately leaves other labels in place
- *   (PIPELINE.md → "Preview-database concurrency"), and "something is
- *   running" is the single most actionable fact an operator can read.
- * - `gate` — an item at `blocked` carrying a trigger is stopped, not queued.
- * - `trigger` — a live trigger outranks a finished stage on the same item.
- * - `terminal` — the fallback: nothing else is present.
- */
+/** First hit wins: in-flight (something is running) beats gate (stopped, not queued) beats trigger beats terminal (the fallback). */
 export const STAGE_PRECEDENCE: readonly LabelRole[] = ['in-flight', 'gate', 'trigger', 'terminal']
 
-/**
- * `matchedKeys` names every label this item's own alias matched (#76's
- * `mapPipelineItems`); `vocabulary` resolves each key to its name and role.
- * A key the vocabulary does not resolve (module-disabled) is silently
- * skipped — it cannot have matched an alias in the first place. Marker
- * labels (`marker`/`autoPlan`) never enter `stages` or the precedence — they
- * surface as the dedicated `marked`/`autoPlan` booleans instead.
- */
+/** A key the vocabulary does not resolve (module-disabled) is silently skipped. Marker labels never enter `stages` or the precedence — they surface as the dedicated booleans instead. */
 export function stageOf(matchedKeys: readonly LabelKey[], vocabulary: LabelVocabulary): StageResult {
   const stages: StageResult['stages'][number][] = []
   let marked = false

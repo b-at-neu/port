@@ -1,12 +1,4 @@
-// Fixture mode's own canned IPC handlers (#317) — one per `IpcChannel`, so
-// the exhaustive `FixtureHandlers` type fails `pnpm typecheck` the moment a
-// new channel ships with no fixture. Builders take `now: Date`; every
-// timestamp a handler returns is `now` minus a fixed offset, so "5m ago"
-// renders the same on every run. Fixture requests are not validated — a
-// canned answer has nothing to protect — and no handler throws, because a
-// rejected invoke renders as an `ErrorBanner` and would misrepresent the
-// screen. A write never causes a side effect: each returns its type's own
-// "nothing happened" variant where one exists, and otherwise the minimal ok.
+// One handler per `IpcChannel`, so the exhaustive `FixtureHandlers` type fails `pnpm typecheck` when a new channel ships with none. No handler throws or causes a side effect.
 import type { IpcChannel, IpcMap } from '../../shared/ipc'
 import type { RepoRunState } from '../../shared/dispatch/types'
 import { RUN_TARGET } from '../../shared/dispatch/types'

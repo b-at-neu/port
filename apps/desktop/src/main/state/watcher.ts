@@ -1,8 +1,4 @@
-// The only clock in the main process (#80 Decision 2) — one timer,
-// rescheduled to the earliest `nextDueAt` across every (repository, source),
-// never a fixed tick that wakes to do nothing and never one timer per
-// source. `schedule.ts` decides *when*; this file is the only place under
-// `src/main/` allowed to name `setTimeout`.
+// The only clock in main — one timer, rescheduled to the earliest `nextDueAt`. `schedule.ts` decides *when*; this file is the only place under `src/main/` allowed to name `setTimeout`.
 import type { GhRunner } from '../github/adapter'
 import type { GitRunner } from '../local/worktrees'
 import { readSessionState } from '../sessions/adapter'
@@ -38,23 +34,14 @@ const defaultSetTimer: TimerFactory = (callback, ms) => {
   return { clear: () => clearTimeout(handle) }
 }
 
-/** The same seam `gh`/`git`/`sessionReader` already declare below — injected
- *  so `watcher.test.ts` never touches a real filesystem for the trajectory
- *  record either (#111). */
+/** Injected so `watcher.test.ts` never touches a real filesystem for the trajectory record. */
 export type RecordTickFn = (repoRoot: string, event: DesktopTickEvent, deps?: RecordTickDeps) => Promise<void>
 
 export interface CreatePipelineWatcherParams {
-  /** A static list, or a provider re-invoked on the GitHub cadence — so a
-   *  repository added or removed on the Repositories view appears on the
-   *  board without a restart. */
+  /** A static list, or a provider re-invoked on the GitHub cadence, so a repository added or removed appears on the board without a restart. */
   readonly repositories: readonly RepositoryEntry[] | (() => Promise<readonly RepositoryEntry[]>)
   readonly onSnapshot: (snapshot: BoardSnapshot) => void
-  /** #326: fired right after `buildSnapshot()` on the timer path and in
-   *  `refresh()` — never in `republish()`, so a dispatch pass considers
-   *  every *fresh* snapshot (a real poll) and never re-triggers itself off
-   *  its own state change. This is the one fix that collapses the old
-   *  "every pass ends with onChange → republish() → consider() again" loop
-   *  into a single clock. */
+  /** Fired after `buildSnapshot()` on the timer path and in `refresh()` — never in `republish()`, so a dispatch pass never re-triggers itself off its own state change. */
   readonly onTick?: (snapshot: BoardSnapshot) => void
   readonly gh?: GhRunner
   readonly git?: GitRunner
@@ -63,33 +50,16 @@ export interface CreatePipelineWatcherParams {
   readonly now?: () => Date
   readonly setTimer?: TimerFactory
   readonly recordTick?: RecordTickFn
-  /** #314: every registered repository's own run state — read fresh on
-   *  every `buildSnapshot()`, never cached, so a run-state change applied
-   *  mid-session is visible on the very next snapshot. Defaults to every
-   *  named repository reading paused, the same default a repository with
-   *  no run-state source at all reads as. */
+  /** Read fresh on every `buildSnapshot()`, never cached. Defaults to every repository reading paused. */
   readonly runStates?: (repoIds: readonly RepoId[]) => RunStatesSnapshot
-  /** Injectable the same way `drain` is (#265) — a dispatcher built after
-   *  the watcher needs the *same* ledger/streak memo this watcher's own
-   *  `planTick` calls read and write, never a second instance that would
-   *  disagree with what the board just reported. Defaulting to a fresh one
-   *  keeps every existing caller (and test) unchanged. */
+  /** A dispatcher built after the watcher needs this same ledger/streak memo, never a second instance that would disagree with what the board just reported. */
   readonly ledger?: DispatchLedger
   readonly unknownStreaks?: UnknownStreaks
-  /** #292: the app's own process-scoped refresh memo, shared with the
-   *  dispatcher's own observation pass the same way `ledger`/`unknownStreaks`
-   *  already are — never a second instance that would disagree with what the
-   *  dispatcher just wrote. */
+  /** Shared with the dispatcher's own observation pass, never a second instance that would disagree with what the dispatcher just wrote. */
   readonly refreshMemo?: RefreshMemo
-  /** #292: `dispatcher.startedTasks` — this repository's own dispatcher
-   *  session's `started` tasks, as descriptions. `undefined` (every caller
-   *  until `main/ipc.ts` wires one) reads as `[]` for every repository. */
+  /** This repository's own dispatcher session's `started` tasks, as descriptions. `undefined` reads as `[]`. */
   readonly startedTasks?: (repoId: RepoId) => readonly string[]
-  /** #265: the dispatcher's own `status()` — read fresh inside
-   *  `buildSnapshot()`, the same "never cached" rule `drain` above follows,
-   *  so a claim taken or released mid-session is reflected on the very next
-   *  snapshot. `undefined` (every caller until `main/ipc.ts` wires one)
-   *  reads as `[]`. */
+  /** Read fresh inside `buildSnapshot()`, never cached. `undefined` reads as `[]`. */
   readonly dispatchStatus?: () => readonly RepoDispatchStatus[]
 }
 
@@ -97,11 +67,7 @@ export interface PipelineWatcher {
   readonly refresh: (request?: RefreshRequest) => Promise<BoardSnapshot>
   readonly snapshot: () => BoardSnapshot
   readonly stop: () => void
-  /** #265: re-reads `dispatchStatus()` onto the existing snapshot and pushes
-   *  it through `onSnapshot` — never a second `buildSnapshot()` call, so the
-   *  dispatcher's own `onChange` (firing between ticks, as its state moves)
-   *  never produces a duplicate trajectory-record line or re-runs a poll.
-   *  `emittedAt` still advances, since this is a real, newly-observed state. */
+  /** Re-reads `dispatchStatus()` onto the existing snapshot — never a second `buildSnapshot()` call, so it never produces a duplicate trajectory-record line or re-runs a poll. */
   readonly republish: () => void
 }
 
@@ -128,20 +94,14 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
   let hasListedRepositories = Array.isArray(params.repositories)
   let stopped = false
   let timer: TimerHandle | null = null
-  // One process-scoped ledger, this watcher's whole lifetime (#105) — a
-  // restarted app gets a fresh one, so every in-flight item reads
-  // `no-record` on the first tick after a restart, never a false reset.
+  // One process-scoped ledger, this watcher's whole lifetime — a restarted app gets a fresh one, so every in-flight item reads `no-record`, never a false reset.
   const ledger = params.ledger ?? createDispatchLedger()
-  // This app's own process-scoped mergeability-UNKNOWN memo (#265) — same
-  // lifetime and restart behaviour as `ledger` above.
+  // Same lifetime and restart behaviour as `ledger` above.
   const unknownStreaks = params.unknownStreaks ?? createUnknownStreaks()
-  // The app's own process-scoped refresh memo (#292) — same lifetime and
-  // restart behaviour as `ledger`/`unknownStreaks` above.
+  // Same lifetime and restart behaviour as `ledger`/`unknownStreaks` above.
   const refreshMemo = params.refreshMemo ?? createRefreshMemo()
   const startedTasks = params.startedTasks ?? ((): readonly string[] => [])
-  // The trajectory record's one appender for this watcher's whole lifetime
-  // (#111) — injectable the same way `gh`/`git`/`sessionReader` already are,
-  // so a test never touches a real filesystem for it.
+  // Injectable the same way `gh`/`git`/`sessionReader` already are, so a test never touches a real filesystem for it.
   const recordTickFn: RecordTickFn = params.recordTick ?? defaultRecordTick
   const runStatesOf =
     params.runStates ??
@@ -169,10 +129,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     return created
   }
 
-  /** The earliest instant across every (repository, source) — shared by
-   *  `scheduleNext()`'s own `setTimeout` delay and `buildSnapshot()`'s
-   *  `nextWakeupAt`, so the UI can never announce a wakeup this watcher did
-   *  not actually schedule (#62). */
+  /** Shared by `scheduleNext()`'s `setTimeout` delay and `buildSnapshot()`'s `nextWakeupAt`, so the UI never announces a wakeup this watcher did not actually schedule. */
   function earliestDueAt(): Date {
     const readyEntries = repositories.filter(isReady)
     const candidates = [nextDueAt(sessionsHealth, now()).getTime()]
@@ -190,15 +147,9 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       const h = ensureHealth(entry.id)
       return { ...h, sessions: sessionsHealth }
     })
-    // One TickReport per ready repository (#105) — over the same
-    // PipelineState above, never a second poll or a second cadence. Each
-    // repository's own `nextDecisionAt` is its GitHub source's next-due
-    // instant, the same `nextDueAt` call `dueSources`/`isDue` already make.
+    // One TickReport per ready repository, over the same PipelineState above, never a second poll or cadence.
     const readyIds = new Set(readyEntries.map((entry) => entry.id))
-    // `entry.config.reviewCycleCap` per repository (#108) — read from config,
-    // never hardcoded; guarded the same way `gated.dispatch`'s lookup already
-    // is in `plan.ts`: `readyIds`/`cycleCapByRepo` are built from the same
-    // `readyEntries`, so a miss here is a defect, not a runtime case.
+    // Read from config, never hardcoded; a miss here is a defect, not a runtime case.
     const cycleCapByRepo = new Map(readyEntries.map((entry) => [entry.id, entry.config.reviewCycleCap]))
     const checkDispositionsByRepo = new Map(readyEntries.map((entry) => [entry.id, entry.config.checkDispositions]))
     const tick = state.repositories
@@ -221,12 +172,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
         })
       })
 
-    // The trajectory record's desktop-side twin (#111) — fire-and-forget,
-    // right after computing tick, never awaited and never part of the
-    // BoardSnapshot returned below: a write failure here must not change
-    // what the board renders. Skipped for a blind report — an empty
-    // dispatch/held/claims set standing in for "nothing recorded" would be
-    // exactly the ambiguity a blind tick exists to remove.
+    // Fire-and-forget, never part of the BoardSnapshot returned below — a write failure here must not change what the board renders. Skipped for a blind report.
     const entryById = new Map(readyEntries.map((entry) => [entry.id, entry] as const))
     for (const report of tick) {
       if (report.blind !== null) continue
@@ -271,8 +217,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       let updated: SourceHealth
       if (outcome.ok) {
         updated = afterSuccess(previous, kind, now())
-        // A known reset instant always beats a doubled guess, even on a
-        // success whose own window reports low headroom (Decision 4).
+        // A known reset instant always beats a doubled guess, even on a success whose own window reports low headroom.
         if (kind === 'github') {
           const defer = deferredUntil(outcome.rateLimit ?? null, null)
           if (defer !== null) updated = { ...updated, deferredUntil: defer }
@@ -325,9 +270,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     }
 
     for (const entry of readyEntries) {
-      // `dueSources` sorts github last, so a cheap local read due the same
-      // tick as a GitHub call never waits behind it (#80 R2-M1) — forced
-      // sources join the same ordered run, not a separate unordered pass.
+      // `dueSources` sorts github last, so a cheap local read due the same tick never waits behind it.
       const entryHealth = ensureHealth(entry.id)
       const toRun = new Set<SourceKind>(dueSources(entryHealth, now()))
       for (const kind of SOURCE_KINDS) {
@@ -373,8 +316,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       stopped = true
       if (timer !== null) timer.clear()
       timer = null
-      // The honest rendering of "no wakeup scheduled" (#62) — applied to the
-      // cached snapshot directly, since a stopped watcher never rebuilds one.
+      // The honest rendering of "no wakeup scheduled" — applied to the cached snapshot directly, since a stopped watcher never rebuilds one.
       latest = { ...latest, nextWakeupAt: null }
     },
     republish(): void {

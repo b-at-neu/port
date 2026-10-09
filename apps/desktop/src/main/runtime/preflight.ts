@@ -1,11 +1,4 @@
-// #97: the two composition roots `main/ipc.ts` calls — `runtimePreflight`
-// (locate → version → credentials → classify, no network, no subprocess
-// beyond `claude --version`, safe on every app start) and `runtimeProbe`
-// (registry lookup → locate → credentials → one probe turn), the same
-// registry-composing-business-function shape `main/claim.ts`'s own
-// `claimPreflight`/`claimApply` already use, so `main/ipc.ts` only ever
-// validates the request shape and delegates. Neither ever strips
-// `ANTHROPIC_API_KEY`; both only report whether it is present.
+// The two composition roots `main/ipc.ts` calls, which only ever validates the request shape and delegates. Neither strips `ANTHROPIC_API_KEY`; both only report whether it is present.
 import { ensureDirectory } from '../platform/files'
 import { readCredentialsTell } from './credentials'
 import { resolveClaudeExecutable } from './locate'
@@ -103,16 +96,11 @@ export interface RunRuntimeProbeParams {
   /** `null` runs the probe repository-free, against `probeDir` instead of a
    *  registered repository — no registry lookup at all. */
   readonly repoId: RepoId | null
-  /** The app-owned directory a repository-free probe runs in
-   *  (`join(app.getPath('userData'), 'runtime-probe')`), created if absent.
-   *  Unused in repository mode. */
+  /** The app-owned directory a repository-free probe runs in, created if absent. Unused in repository mode. */
   readonly probeDir: string
 }
 
-/** Resolves the repository (or, in repository-free mode, `params.probeDir`),
- *  then locate → credentials → one probe turn. `repo` in the response is the
- *  resolved `config.repo` display name, `null` in repository-free mode —
- *  "Test connection" never silently picks one without saying which. */
+/** `repo` in the response is `null` in repository-free mode — "Test connection" never silently picks one without saying which. */
 export async function runtimeProbe(params: RunRuntimeProbeParams, deps: RuntimeProbeDeps = defaultRuntimeProbeDeps): Promise<RuntimeProbe> {
   const started = deps.now()
   const checkedAt = new Date(started).toISOString()

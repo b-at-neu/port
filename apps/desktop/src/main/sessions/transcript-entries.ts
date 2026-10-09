@@ -1,16 +1,10 @@
-// Pure normalizer (#83): already-parsed `.jsonl` records -> renderer-safe
-// `TranscriptEntry[]`. No filesystem or SDK access here -- `transcript.ts`
-// owns the read, this module only derives. A `tool_use` block and the
-// `tool_result` block that later carries its id collapse into one entry;
-// an unpaired call (the result never arrived within the read window) keeps
-// `result: null` rather than being dropped.
+// A `tool_use` block and the `tool_result` that later carries its id collapse into one entry; an unpaired call keeps `result: null` rather than being dropped.
 import type { DiffHunk, DiffLine, DiffSign, EntryPatch, FileDiff, MetaEntry, Payload, ToolCallEntry, TranscriptEntry } from '../../shared/sessions/transcript'
 import { MAX_PAYLOAD_CHARS } from '../../shared/sessions/transcript'
 import { isRecord } from '../../shared/guards'
 
 export interface DeriveEntriesOptions {
-  /** The session's own `cwd`, used only to shorten a headline path -- never
-   *  to resolve or open anything. `null` when the record carried none. */
+  /** Used only to shorten a headline path, never to resolve or open anything. */
   readonly cwd: string | null
 }
 
@@ -18,12 +12,7 @@ const DEFAULT_OPTIONS: DeriveEntriesOptions = { cwd: null }
 
 type CodePointRange = readonly [number, number]
 
-/** C0/C1 control characters other than tab (0x09) and newline (0x0A), plus
- *  the bidi override characters -- every bound is a numeric code point,
- *  never a literal character, so this source file stays plain ASCII. A
- *  tool result is attacker-influenced text: an ANSI escape run renders as
- *  garbage, and a bidi override silently reverses how a path or command
- *  reads. */
+/** A tool result is attacker-influenced text: an ANSI escape run renders as garbage, a bidi override silently reverses how a path reads. */
 const CONTROL_RANGES: readonly CodePointRange[] = [
   [0x00, 0x08],
   [0x0b, 0x1f],
@@ -51,22 +40,11 @@ export function sanitize(text: string): string {
   return out
 }
 
-/** How far past the characters still needed each sanitize slice reaches, so
- *  a slice holding a few stripped control/bidi characters still fills `cap`
- *  in one pass instead of immediately needing another. */
+/** So a slice holding a few stripped control/bidi characters still fills `cap` in one pass. */
 const CAP_SLACK = 256
 
 export function capPayload(text: string, cap: number = MAX_PAYLOAD_CHARS): Payload {
-  // Sanitizing advances in bounded slices rather than over the whole string,
-  // so a large tool result (the ticket anticipates "tens of KB", e.g. a big
-  // `git log`) never pays the full pass for content that is discarded past
-  // `cap` anyway. Reading has to continue while the kept text is still short
-  // of `cap`: sanitizing can strip an arbitrary amount of any one slice --
-  // control-heavy output is exactly what it defends against -- and stopping
-  // after a fixed prefix would return fewer than `cap` characters while real
-  // content still followed. Each slice ends at least `CAP_SLACK` past the
-  // last, so the loop advances and the total work stays linear in what is
-  // actually read.
+  // Sanitizing advances in bounded slices so a large tool result never pays the full pass for content discarded past `cap`.
   let read = 0
   let sanitized = ''
   while (sanitized.length <= cap && read < text.length) {
@@ -75,10 +53,7 @@ export function capPayload(text: string, cap: number = MAX_PAYLOAD_CHARS): Paylo
     read = next
   }
 
-  // The never-read remainder is counted raw, so `omittedChars` can slightly
-  // over-count when that tail holds characters sanitizing would have
-  // stripped -- an approximate count of unread input, deliberately, rather
-  // than an exact one bought with the full O(n) pass this avoids.
+  // The never-read remainder is counted raw, so `omittedChars` is an approximate count, deliberately, not an exact one.
   const rawRemainder = text.length - read
   if (sanitized.length > cap) return { text: sanitized.slice(0, cap), omittedChars: rawRemainder + (sanitized.length - cap) }
   return { text: sanitized, omittedChars: rawRemainder }
@@ -109,12 +84,7 @@ function relativeToCwd(filePath: string, cwd: string | null): string {
   return filePath
 }
 
-/** `Bash` -> first line of `command`; `Read`/`Write`/`Edit`/`NotebookEdit` ->
- *  `file_path`, relative to `cwd` when it sits under it; `Grep` -> `pattern`
- *  then `path`; `Glob` -> `pattern`; `Task` -> `description`; `TodoWrite` ->
- *  the todo count; `WebFetch` -> `url`; anything else -> the first
- *  string-valued input field, else the tool name alone. Capped at 200
- *  characters. */
+/** Per-tool field extraction, falling back to the first string-valued input field or the tool name. Capped at 200 characters. */
 export function headlineFor(name: string, input: unknown, cwd: string | null): string {
   const fields = isRecord(input) ? input : {}
   let headline: string
@@ -159,11 +129,7 @@ export function headlineFor(name: string, input: unknown, cwd: string | null): s
     }
   }
 
-  // Sanitized after the tool-specific extraction, same as every other
-  // rendered field -- the headline is the one line that is always visible
-  // without expanding a `<details>`, so it is the sink a bidi override or
-  // control character would reach first (R4-M1). `sanitize` can only
-  // shrink the string, so the length cap still applies after.
+  // The headline is always visible without expanding a `<details>`, so it is sanitized here too; `sanitize` only shrinks, so the length cap still applies after.
   const sanitized = sanitize(headline)
   return sanitized.length > HEADLINE_MAX ? sanitized.slice(0, HEADLINE_MAX) : sanitized
 }
@@ -177,10 +143,7 @@ function imagePlaceholder(block: Record<string, unknown>): string {
   return `[image, ${kb} KB -- not shown]`
 }
 
-/** A `tool_result`'s `content` is either a plain string or an array of
- *  sub-blocks (text and, sometimes, an image) -- array-form is joined into
- *  one payload, with an image replaced by a placeholder rather than a
- *  `data:` URL the CSP would otherwise permit. */
+/** Array-form content is joined into one payload, with an image replaced by a placeholder rather than a `data:` URL the CSP would otherwise permit. */
 function resultTextOf(content: unknown): string {
   if (typeof content === 'string') return content
   if (!Array.isArray(content)) return ''
@@ -216,12 +179,7 @@ function countSign(hunks: readonly DiffHunk[], sign: DiffSign): number {
   return hunks.reduce((sum, hunk) => sum + hunk.lines.filter((line) => line.sign === sign).length, 0)
 }
 
-/** Derives a `FileDiff` from an Edit/Write/NotebookEdit's sibling
- *  `toolUseResult`. `structuredPatch`'s lines already carry their leading
- *  `+`/`-`/space, so `text` is kept verbatim and `sign` is derived for
- *  styling. A `Write` create carries an empty `structuredPatch` (observed on
- *  a real transcript), so that case synthesizes one all-additions hunk from
- *  the paired `tool_use`'s own `input.content` instead. */
+/** A `Write` create carries an empty `structuredPatch`, so that case synthesizes one all-additions hunk from the paired `tool_use`'s `input.content` instead. */
 function diffFromToolUseResult(toolUseResult: unknown, rawInput: unknown): FileDiff | null {
   if (!isRecord(toolUseResult)) return null
   const filePath = toolUseResult['filePath']
@@ -275,36 +233,11 @@ export interface DerivedChunk {
 }
 
 export interface Deriver {
-  /** Walks one more batch of already-parsed `.jsonl` records, in order,
-   *  continuing the pairing state from every previous `push` on this same
-   *  deriver. Returns only this batch's delta -- new rows plus in-place
-   *  patches to rows a previous `push` already returned -- never the whole
-   *  transcript, so a caller can apply it directly onto a list it is already
-   *  holding. */
+  /** Returns only this batch's delta, never the whole transcript, so a caller can apply it directly onto a list it already holds. */
   push(records: readonly unknown[]): DerivedChunk
 }
 
-/** Pairs a `tool_use` with the `tool_result` that later carries its id, by
- *  id, never by position -- even across two separate `push` calls, which is
- *  exactly what following a growing transcript needs (a `tool_use` at the
- *  end of one poll's chunk, its `tool_result` at the start of the next). A
- *  record this module cannot recognize (missing `uuid`, an unknown `type`)
- *  is skipped rather than thrown on, since a transcript is untrusted input
- *  from disk.
- *
- *  `EntryPatch.index` is the absolute index of the patched entry across the
- *  whole transcript this deriver has walked -- exactly the row index a
- *  renderer holding every `appended` entry in order needs, with no
- *  translation.
- *
- *  A tool call pairs **once** -- the pending entry for its id is removed the
- *  moment a `tool_result` claims it, before the patch is even built, so a
- *  duplicate `tool_result` for the same id (observed on real transcripts)
- *  can never overwrite a real diff with a `null` one. `rawInputById` is
- *  pruned at the same moment, for the same reason `capPayload` exists: a
- *  `Write` create's `tool_use.input.content` is the whole new file, and
- *  holding it beyond the one diff it is needed for would grow unboundedly
- *  over a long-followed transcript. */
+/** Pairs a `tool_use` with its `tool_result` by id, never position, even across separate `push` calls. A record this module cannot recognize is skipped rather than thrown on. A tool call pairs once: its pending entry and raw input are pruned the moment a result claims it, so a duplicate result cannot overwrite a real diff and inputs never accumulate unboundedly. */
 export function createDeriver(options: DeriveEntriesOptions = DEFAULT_OPTIONS): Deriver {
   let nextIndex = 0
   const pendingById = new Map<string, { readonly index: number; readonly entry: ToolCallEntry }>()
@@ -382,9 +315,7 @@ export function createDeriver(options: DeriveEntriesOptions = DEFAULT_OPTIONS): 
           const id = block['tool_use_id']
           const pending = pendingById.get(id)
           if (pending === undefined) continue
-          // First result wins -- removed before the patch is built, so a
-          // duplicate tool_result for the same id is a no-op rather than a
-          // second, overwriting patch.
+          // First result wins — removed before the patch is built, so a duplicate is a no-op.
           pendingById.delete(id)
           const rawInput = rawInputById.get(id)
           rawInputById.delete(id)

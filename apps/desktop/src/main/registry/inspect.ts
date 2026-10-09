@@ -1,6 +1,4 @@
-// One directory to one RepositoryEntry — the registry's actual inspection
-// logic. `index.ts` is the only caller; everything here is pure given its
-// injected `git` runner, so tests need no real repository.
+// One directory to one RepositoryEntry — pure given its injected `git` runner, so tests need no real repository.
 import { basename } from 'node:path'
 import { pathOps } from '../platform/paths'
 import { readJsonFile, statPath } from '../platform/files'
@@ -19,9 +17,7 @@ export interface InspectDeps {
 const CONFIG_RELATIVE_SEGMENTS = ['.claude', 'port.config.json'] as const
 
 function toRepoId(root: string): RepoId {
-  // Documented cast: `pathOps.pathKey` mints a `RepoKey`-branded string, and
-  // `RepoId` is the registry's own brand over the same underlying value —
-  // main is the only place either is minted from a real path.
+  // Documented cast: main is the only place either brand is minted from a real path.
   return pathOps.pathKey(root) as unknown as RepoId
 }
 
@@ -29,9 +25,7 @@ function problemEntry(root: string, problem: RepoProblem, diagnostics: readonly 
   return { id: toRepoId(root), path: root, displayName: basename(root), problem, diagnostics }
 }
 
-/** Also used by `index.ts`'s `addRepository`, which must resolve a picked
- *  directory to its git root *before* the duplicate check, so a
- *  subdirectory and its root register as one entry. */
+/** Also used by `addRepository`, so a subdirectory and its root register as one entry. */
 export async function resolveGitRoot(git: GitRunner, cwd: string): Promise<{ readonly ok: true; readonly root: string } | { readonly ok: false }> {
   const result = await git(['rev-parse', '--show-toplevel'], cwd)
   if (!result.ok) return { ok: false }
@@ -63,11 +57,7 @@ function asLooseConfig(value: unknown): LooseConfig {
   return typeof value === 'object' && value !== null ? value : {}
 }
 
-/** Uses `raw` only when it is present and no violation was reported at
- *  exactly `path` — a field present but wrong-shaped (e.g.
- *  `reviewCycleCap: "five"`) must fall back to its default rather than
- *  carry the malformed value through, even though `??` alone would not
- *  catch it. */
+/** Uses `raw` only when present and not violated — a wrong-shaped field must fall back to its default, which `??` alone would not catch. */
 function resolveField<T>(raw: unknown, path: string, violatedPaths: ReadonlySet<string>, fallback: T): T {
   if (violatedPaths.has(path)) return fallback
   return raw === undefined ? fallback : (raw as T)
@@ -152,12 +142,7 @@ export async function inspectRepository(path: string, deps: InspectDeps): Promis
   }
   const sessionRequiredPaths = resolveField(cfg.sessionRequiredPaths, '/sessionRequiredPaths', violatedPaths, CONFIG_DEFAULTS.sessionRequiredPaths)
 
-  // #300: fold a root CLAUDE.md's port-overrides block over the
-  // port-resolved values above — never a second, hand-rolled resolution.
-  // An unreadable CLAUDE.md or approval-check.yml fails the whole repository
-  // closed (effective-config-unreadable): either file can rename a label or
-  // change a gate, so this app refuses to act on it rather than silently
-  // running on port defaults for a block it could not actually read.
+  // Folds a root CLAUDE.md's port-overrides block over the port-resolved values above — never a second, hand-rolled resolution.
   const portResolved: PortResolved = { branches, models, modules, reviewCycleCap, concurrency, sessionRequiredPaths }
   const effective = await resolveEffectiveConfig(root, portResolved, cfg.labels ?? {})
   if (!effective.ok) {

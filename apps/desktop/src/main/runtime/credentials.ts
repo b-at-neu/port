@@ -1,20 +1,10 @@
-// #97: a best-effort, read-only tell of the CLI's own OAuth credentials
-// file — never a token value, and nothing here is logged. Reuses
-// `defaultClaudeHome()` (#83) rather than re-reading `CLAUDE_CONFIG_DIR` a
-// second time, the same single-source-of-truth rule `locate.ts` states for
-// itself's sibling module. macOS keeps this file in the Keychain instead,
-// so a missing file is `unknown`, never `unauthenticated` — the caller's
-// classification ladder falls through to the probe rather than trusting
-// either reading of an absent file.
+// A best-effort, read-only tell of the CLI's own OAuth credentials file — never a token value, nothing logged. macOS keeps this file in the Keychain instead, so a missing file falls through to the probe rather than trusting either reading of an absent file.
 import { readJsonFile } from '../platform/files'
 import { defaultClaudeHome } from '../sessions/locate'
 import { pathOps } from '../platform/paths'
 import type { CredentialsTell } from '../../shared/runtime/types'
 
-/** The on-disk shape this file defends against being wrong about: any
- *  missing or malformed field yields `present: false` rather than a thrown
- *  error, since this read is advisory-only wherever the classification
- *  ladder cannot otherwise decide. */
+/** Any missing or malformed field yields `present: false` rather than a thrown error — this read is advisory-only. */
 interface CredentialsFileShape {
   readonly claudeAiOauth?: {
     readonly accessToken?: string

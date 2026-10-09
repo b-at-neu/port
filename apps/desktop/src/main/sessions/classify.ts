@@ -1,21 +1,13 @@
-// Pure, I/O-free classification (#78): attribution, role, stage, item
-// number, and activity. Nothing here touches the filesystem or the SDK —
-// `adapter.ts` is the only orchestration layer, so every rule below is
-// testable without a real transcript on disk.
+// Pure, I/O-free classification only — `adapter.ts` is the orchestration layer, so every rule below is testable without a real transcript on disk.
 import { pathOps } from '../platform/paths'
 import type { RepoId } from '../../shared/repos'
 import { ACTIVE_WITHIN_MS, IDLE_WITHIN_MS } from '../../shared/sessions/types'
 import type { Activity, PortStageAgent, RoleEvidence, SessionRole } from '../../shared/sessions/types'
 
-/** The four port pipeline stage agents — the one place this union is
- *  declared; `classify.test.ts` and the `desktop-sessions` layer 1 check
- *  both pin it against `plugins/port/agents/`'s real basenames. */
+/** The one place this union is declared; pinned against `plugins/port/agents/`'s real basenames. */
 export const PORT_STAGE_AGENTS: readonly PortStageAgent[] = ['plan-agent', 'impl-agent', 'review-agent', 'revise-agent']
 
-/** The repository reference this adapter takes from its caller — #74's
- *  `RepositoryEntry` narrowed to exactly what attribution needs. This
- *  adapter reads no config and enumerates no worktrees; `root` is supplied
- *  by the caller, never derived here. */
+/** This adapter reads no config and enumerates no worktrees; `root` is supplied by the caller, never derived here. */
 export interface RepoRef {
   readonly id: RepoId
   readonly root: string
@@ -44,9 +36,7 @@ function basenameOf(path: string): string {
   return segments[segments.length - 1] ?? ''
 }
 
-/** True when `path`'s immediate parent is `.claude/worktrees` (either
- *  separator), so rung 1 of the role ladder does not fire on an unrelated
- *  directory that merely happens to be named `impl-<n>`. */
+/** So rung 1 of the role ladder does not fire on an unrelated directory merely named `impl-<n>`. */
 function isUnderClaudeWorktrees(path: string): boolean {
   const segments = path.split(/[\\/]+/).filter((segment) => segment !== '')
   const len = segments.length
@@ -67,21 +57,7 @@ export interface RoleVerdict {
   readonly itemNumber: number | null
 }
 
-/**
- * `SessionRole`'s ladder, first hit wins, structural evidence before
- * heuristic:
- *
- * 1. `cwd` basename matches `^impl-(\d+)$` directly under `.claude/worktrees`
- *    → `implement`, `worktree-name`, the captured number is `itemNumber`.
- * 2. At least one of `agentTypes` resolves to a port stage agent (via
- *    `stageOf`) → `cockpit`, `stage-agent`.
- * 3. `firstPrompt` matches `^/<prefix>:(pipeline|implement)` as a whole word
- *    (not followed by `[\w-]`, so `pipeline-old` does not match) — the prefix
- *    is a wildcard, never the literal `port`, since an adopter installs the
- *    plugin under whatever name they chose → `cockpit`/`implement`,
- *    `first-prompt`.
- * 4. Otherwise `other`, no evidence.
- */
+/** First hit wins, structural evidence before heuristic: worktree name, then a port stage agent type, then the first-prompt command, else `other`. */
 export function sessionRole(session: RoleInput, agentTypes: readonly string[]): RoleVerdict {
   if (session.cwd !== null) {
     const match = IMPL_WORKTREE_DIRNAME.exec(basenameOf(session.cwd))
@@ -104,19 +80,14 @@ export function sessionRole(session: RoleInput, agentTypes: readonly string[]): 
   return { role: 'other', evidence: null, itemNumber: null }
 }
 
-/** Matched prefix-agnostically: everything up to and including the last `:`
- *  is stripped before matching, since real records on this machine carry
- *  both `"port:plan-agent"` and a bare `"plan-agent"`. `null` for a non-port
- *  agent (`Explore`, `general-purpose`). */
+/** Matched prefix-agnostically — everything up to the last `:` is stripped first, since records carry both `"port:plan-agent"` and a bare `"plan-agent"`. */
 export function stageOf(agentType: string): PortStageAgent | null {
   const colonIndex = agentType.lastIndexOf(':')
   const bare = colonIndex === -1 ? agentType : agentType.slice(colonIndex + 1)
   return (PORT_STAGE_AGENTS as readonly string[]).includes(bare) ? (bare as PortStageAgent) : null
 }
 
-/** `/#(\d+)\b/`, first match, `#0` excluded — the same rule as
- *  `PIPELINE.md`'s worktree correlation ladder. The stage word itself is
- *  never parsed; only the number is. */
+/** First `#N` match, `#0` excluded — the stage word itself is never parsed, only the number. */
 export function itemNumberOf(description: string | null): number | null {
   if (description === null) return null
   const match = /#(\d+)\b/.exec(description)
@@ -131,8 +102,7 @@ export interface ActivityResult {
   readonly activity: Activity
 }
 
-/** Recency, never liveness (Decision 4) — the two exported thresholds are
- *  the single definition `#79` and every test share. */
+/** Recency, never liveness — the two exported thresholds are the single definition every test shares. */
 export function activityOf(modifiedAt: string, now: Date): ActivityResult {
   const idleMs = Math.max(0, now.getTime() - new Date(modifiedAt).getTime())
   const activity: Activity = idleMs <= ACTIVE_WITHIN_MS ? 'active' : idleMs <= IDLE_WITHIN_MS ? 'idle' : 'dormant'
@@ -150,9 +120,7 @@ export interface ParsedAgentMeta {
 
 export type ParseAgentMetaResult = { readonly ok: true; readonly value: ParsedAgentMeta } | { readonly ok: false; readonly message: string }
 
-/** Never throws on a shape it did not expect — a record or a reported
- *  reason, matched by the caller into a `MetaProblem` with the file's own
- *  `sessionId`/`agentId` context, which this pure function does not have. */
+/** Never throws on a shape it did not expect; the caller matches a failure into a `MetaProblem` with context this pure function does not have. */
 export function parseAgentMeta(raw: unknown): ParseAgentMetaResult {
   if (typeof raw !== 'object' || raw === null) {
     return { ok: false, message: 'meta.json is not an object' }

@@ -1,10 +1,4 @@
-// Fixture mode's own canned registry (#317) — two entries, built the same
-// way `main/registry/inspect.ts` resolves a real one: `CONFIG_DEFAULTS` plus
-// `resolveVocabulary`, never a hand-retyped config shape. `acme/widgets` is
-// `ready`; `acme/legacy-site` is `config-invalid`, with one violation, so the
-// Repositories screen's fixture shows both a healthy and a broken card.
-// Display paths are plain strings — main is the minting side, so `as RepoId`
-// is the one cast this file needs.
+// Built the same way `main/registry/inspect.ts` resolves a real one, never a hand-retyped config shape. `acme/widgets` is `ready`; `acme/legacy-site` is `config-invalid`.
 import { CONFIG_DEFAULTS } from '../registry/schema'
 import { resolveVocabulary, verifyVocabulary } from '../../shared/labels/vocabulary'
 import type { VocabularyReport } from '../../shared/labels/vocabulary'
@@ -31,9 +25,7 @@ const WIDGETS_CONFIG: ResolvedRepoConfig = {
   overrides: [],
 }
 
-/** Every vocabulary label reads back present — the fixture's own GitHub read
- *  always carries every label it resolved, so `verifyVocabulary` reports
- *  `verified` rather than a fixture needing its own "missing label" case. */
+/** The fixture's own GitHub read always carries every label it resolved, so `verifyVocabulary` reports `verified`. */
 export const WIDGETS_VOCABULARY_REPORT: VocabularyReport = verifyVocabulary(WIDGETS_VOCABULARY, { ok: true, names: WIDGETS_VOCABULARY.labels.map((label) => label.name) })
 
 export const FIXTURE_REPOSITORIES: readonly RepositoryEntry[] = [

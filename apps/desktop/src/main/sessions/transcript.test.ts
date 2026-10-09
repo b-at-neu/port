@@ -270,9 +270,7 @@ describe('advanceTranscript', () => {
     const claudeHome = await makeClaudeHome()
     const { path, cursor } = await openAt(claudeHome)
 
-    // The deriver caps rendered payload text at MAX_PAYLOAD_CHARS regardless
-    // of the underlying record's size, so assert on a leading marker rather
-    // than the whole (deliberately oversized) content.
+    // The deriver caps rendered payload text at MAX_PAYLOAD_CHARS, so assert on a leading marker rather than the whole content.
     const bigContent = 'START-MARKER-' + 'x'.repeat(20 * 1024 * 1024)
     await appendFile(path, jsonl([record('u2', '2026-01-01T00:00:01.000Z', bigContent)]))
     const advanced = await advanceTranscript(cursor)

@@ -30,9 +30,7 @@ function ok(stdout: string): CommandResult {
   return { ok: true, stdout, stderr: '' }
 }
 
-/** A `git` runner that resolves `root` as the repository's own toplevel and
- *  reports a plain `dev` branch with no config history — enough for every
- *  case that isn't specifically exercising branch or history detection. */
+/** Resolves `root` as toplevel and reports a plain `dev` branch — enough for every case not specifically exercising branch or history detection. */
 const NOT_FOUND: CommandResult = { ok: false, kind: 'not-found', command: 'git', searched: [] }
 
 function fakeGit(root: string, overrides: Partial<Record<string, (args: readonly string[]) => CommandResult>> = {}): GitRunner {
@@ -282,9 +280,7 @@ describe('inspectRepository — CLAUDE.md port-overrides (#300)', () => {
   it('reports effective-config-unreadable when CLAUDE.md cannot be read as a file', async () => {
     const root = await makeRepoDir()
     await writeConfig(root, JSON.stringify({ repo: 'o/n' }))
-    // A directory named CLAUDE.md fails every platform's readFile the same
-    // way (EISDIR), the cross-platform stand-in for a permission failure
-    // this suite cannot portably arrange otherwise.
+    // A directory named CLAUDE.md fails every platform's readFile the same way (EISDIR) — a portable stand-in for a permission failure.
     await mkdir(join(root, 'CLAUDE.md'), { recursive: true })
     const entry = await inspectRepository(root, { git: fakeGit(root) })
     if (!('problem' in entry) || entry.problem.kind !== 'effective-config-unreadable') throw new Error('unreachable')

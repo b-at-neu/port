@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createRuntimeProbe } from './sdk'
 
-/** Mirrors `sdk.ts`'s own (unexported) `ProbeMessage` shape — every real
- *  `SDKMessage` variant satisfies it too, so this fixture stays faithful to
- *  what the real stream actually carries without pulling in every required
- *  field of the real `SDKResultMessage` union. */
+/** Mirrors `sdk.ts`'s own `ProbeMessage` shape, so this fixture stays faithful without pulling in every field of the real `SDKResultMessage` union. */
 interface FakeMessage {
   readonly type: string
   readonly subtype?: string

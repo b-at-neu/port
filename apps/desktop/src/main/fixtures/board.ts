@@ -1,12 +1,4 @@
-// Fixture mode's own canned board (#317) — the canned GitHub, session,
-// worktree and denial reads pass through the real, pure `reconcileRepository`
-// (`../state/reconcile`, never the `../state` barrel, which pulls in the
-// watcher) and `planTick` (`../tick`), so a screenshot shows exactly what the
-// real derivation produces. One populated scenario only — empty and error
-// variants belong to the screen tickets that extend this module as they
-// build those regions (ENGINEERING §7: no placeholder content for a later
-// ticket). Every timestamp is `now` minus a fixed offset, so "5m ago" renders
-// the same on every run, never "just now".
+// Canned reads pass through the real, pure `reconcileRepository` and `planTick`, so a screenshot shows exactly what the real derivation produces. Every timestamp is `now` plus a fixed offset, so "5m ago" renders the same on every run.
 import { labelName } from '../../shared/labels/vocabulary'
 import type { LabelKey, LabelVocabulary } from '../../shared/labels/vocabulary'
 import { LABEL_DEFAULTS } from '../../shared/labels/defaults'
@@ -50,16 +42,11 @@ interface ItemSeed {
   readonly number: number
   readonly title: string
   readonly stageKey: LabelKey
-  // Defaults to [VIEWER] — only #319's own unowned-held seed overrides it.
+  // Defaults to [VIEWER] — only the unowned-held seed overrides it.
   readonly assignees?: readonly string[]
 }
 
-/** #41 → `planReview`, #38 → `inProgress` (with its own active `impl-agent`
- *  below), #44 → `ready`, #36 (a pull request) → `approved`, #35 (a pull
- *  request) → `needsRevision` — one item per stage family the board groups
- *  by, so the screenshot shows every group non-empty. #315: #50 →
- *  `needsHuman` and #51 → `blocked` seed the Needs you screen's own two
- *  label-kinds the board itself does not otherwise exercise. */
+/** One item per stage family the board groups by, so the screenshot shows every group non-empty, plus two seeds for the Needs you screen's own label-kinds. */
 const POPULATED_ITEM_SEEDS: readonly ItemSeed[] = [
   { kind: 'issue', number: 41, title: 'Add CSV export to the reports page', stageKey: 'planReview' },
   { kind: 'issue', number: 38, title: 'Retry failed webhook deliveries', stageKey: 'inProgress' },
@@ -68,13 +55,11 @@ const POPULATED_ITEM_SEEDS: readonly ItemSeed[] = [
   { kind: 'pull-request', number: 35, title: 'Cache avatar thumbnails', stageKey: 'needsRevision' },
   { kind: 'issue', number: 50, title: 'Rotate the webhook signing secret', stageKey: 'needsHuman' },
   { kind: 'issue', number: 51, title: 'Backfill order totals for Q3', stageKey: 'blocked' },
-  // #319: unassigned and queued, so planTick's own ownership partition holds
-  // it with reason 'unowned' — the Board's "Waiting on you" row needs one.
+  // Unassigned and queued, so planTick's ownership partition holds it with reason 'unowned' — the Board's "Waiting on you" row needs one.
   { kind: 'issue', number: 52, title: 'Add a dark-mode icon for the tray', stageKey: 'ready', assignees: [] },
 ]
 
-// The empty scenario keeps only the routine, non-"needs you" seeds, so the
-// Needs you screen renders its empty state while the Board stays non-empty.
+// Keeps only the routine, non-"needs you" seeds, so the Needs you screen renders its empty state while the Board stays non-empty.
 const EMPTY_ITEM_SEEDS: readonly ItemSeed[] = [
   { kind: 'issue', number: 38, title: 'Retry failed webhook deliveries', stageKey: 'inProgress' },
   { kind: 'issue', number: 44, title: 'Show the build number in the footer', stageKey: 'ready' },
@@ -133,9 +118,7 @@ function readyRepositoryState(now: Date, scenario: FixtureScenario): RepositoryS
     fetchedAt: now.toISOString(),
   }
 
-  // #38's own active `impl-agent` — the one agent a reconciled item attaches
-  // to in this fixture, so the board shows an in-flight row with a real
-  // agent behind it rather than every trigger-staged item looking the same.
+  // The one agent a reconciled item attaches to in this fixture, so the board shows an in-flight row with a real agent behind it.
   const agent: AgentRecord = {
     sessionId: 'fixture-session-impl-38',
     repoId: WIDGETS_ID,
@@ -168,13 +151,7 @@ function notReadyRepositoryState(): RepositoryState {
   return { ok: false, repoId: entry.id, displayName: entry.displayName, reason: 'not-ready', problem: entry.problem }
 }
 
-/** `tick` is built with the real `planTick`, over a fresh `createDispatchLedger`
- *  — a process-scoped ledger, same as the real app gets on every restart, so
- *  a single invocation never carries state across repositories. `dispatch`
- *  carries one `escalated` budget note on #44, the Needs you screen's own
- *  `budget` kind — no dispatcher is wired in fixture mode otherwise
- *  (PIPELINE.md's own "no gh or claude calls" rule applies here too: nothing
- *  in this module spawns anything). */
+/** `tick` is built with the real `planTick` over a fresh ledger, same as the real app gets on every restart. No dispatcher is wired in fixture mode — nothing in this module spawns anything. */
 export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'populated'): BoardSnapshot {
   const ready = readyRepositoryState(now, scenario)
   const notReady = notReadyRepositoryState()
@@ -197,8 +174,7 @@ export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'pop
     health: [repositoryHealth(now)],
     policy: DEFAULT_POLL_POLICY,
     tick,
-    // #314: acme/widgets reads `dispatching` — the ordinary, nothing-paused
-    // state a fresh registration starts in.
+    // acme/widgets reads `dispatching` — the ordinary, nothing-paused state a fresh registration starts in.
     runStates: { store: { kind: 'loaded' }, repositories: [{ repoId: WIDGETS_ID, state: 'dispatching', since: now.toISOString() }] },
     nextWakeupAt: nextDecisionAt.toISOString(),
     emittedAt: now.toISOString(),
