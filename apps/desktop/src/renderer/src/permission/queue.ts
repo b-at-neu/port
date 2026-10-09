@@ -58,7 +58,7 @@ export function ordered(queue: PermissionQueue): readonly QueuedPermission[] {
   const items: QueuedPermission[] = []
   for (const [sessionKey, entry] of queue) {
     for (const permission of entry.permissions) {
-      if ((permission.interaction ?? null) !== null) continue
+      if (permission.interaction !== null) continue
       items.push({ sessionKey, repoId: entry.repoId, title: entry.title, origin: entry.origin, startedAt: entry.startedAt, permission })
     }
   }
@@ -74,7 +74,7 @@ export function interactionCount(queue: PermissionQueue): number {
   let count = 0
   for (const entry of queue.values()) {
     for (const permission of entry.permissions) {
-      if ((permission.interaction ?? null) !== null) count += 1
+      if (permission.interaction !== null) count += 1
     }
   }
   return count

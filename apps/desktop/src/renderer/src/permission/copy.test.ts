@@ -15,6 +15,7 @@ function permission(overrides: Partial<PendingPermission> = {}): PendingPermissi
     agentId: null,
     requestedAt: '2026-01-01T00:00:00.000Z',
     sessionGrant: null,
+    interaction: null,
     ...overrides,
   }
 }

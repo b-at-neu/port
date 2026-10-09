@@ -168,7 +168,7 @@ function SessionLive({ snapshot, repoLabel }: { readonly snapshot: HostedSession
   const copy = composerCopy(snapshot.phase, sessionGone)
   const windowNoteVisible = entries.firstIndex > 0
 
-  const interactionEntry = snapshot.pendingPermissions.filter((permission) => (permission.interaction ?? null) !== null).sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))[0] ?? null
+  const interactionEntry = snapshot.pendingPermissions.filter((permission) => permission.interaction !== null).sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))[0] ?? null
   const interaction = interactionEntry?.interaction ?? null
   const [questionSending, setQuestionSending] = useState(false)
   const [questionError, setQuestionError] = useState<string | null>(null)
@@ -208,9 +208,7 @@ function SessionLive({ snapshot, repoLabel }: { readonly snapshot: HostedSession
   }
 
   async function handleShiftTab(): Promise<void> {
-    const controls = snapshot.controls
-    if (controls === undefined) return
-    const mode = nextMode(controls.permissionMode)
+    const mode = nextMode(snapshot.controls.permissionMode)
     const result = await setControls(key, { permissionMode: mode })
     if (result.ok) toast(modeToast(mode === 'default' ? 'Ask before edits' : mode === 'acceptEdits' ? 'Accept edits' : 'Plan mode'))
   }
@@ -270,15 +268,13 @@ function SessionLive({ snapshot, repoLabel }: { readonly snapshot: HostedSession
           placeholder={composerPlaceholder}
           sendLabel={copy.sendLabel}
         />
-        {snapshot.controls !== undefined ? (
-          <ControlsBar
-            sessionKey={key}
-            controls={snapshot.controls}
-            models={snapshot.models ?? { kind: 'pending' }}
-            disabled={snapshot.phase === 'starting' || snapshot.phase === 'closing' || snapshot.phase === 'ended'}
-            disabledReason={snapshot.phase === 'starting' ? 'Waiting for the session to start.' : snapshot.phase === 'closing' ? 'This session is closing.' : snapshot.phase === 'ended' ? 'This session has ended.' : null}
-          />
-        ) : null}
+        <ControlsBar
+          sessionKey={key}
+          controls={snapshot.controls}
+          models={snapshot.models}
+          disabled={snapshot.phase === 'starting' || snapshot.phase === 'closing' || snapshot.phase === 'ended'}
+          disabledReason={snapshot.phase === 'starting' ? 'Waiting for the session to start.' : snapshot.phase === 'closing' ? 'This session is closing.' : snapshot.phase === 'ended' ? 'This session has ended.' : null}
+        />
         {interruptNoteText !== null ? <p className="text-meta text-muted-foreground">{interruptNoteText}</p> : null}
         <p className="text-meta text-muted-foreground">{COMPOSER_HINT}</p>
       </div>

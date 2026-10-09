@@ -102,7 +102,7 @@ export function createPermissionBroker(params: CreatePermissionBrokerParams): Pe
       return { ok: true }
     }
 
-    if ((entry.pending.interaction ?? null) !== null) return { ok: false, kind: 'interaction-prompt' }
+    if (entry.pending.interaction !== null) return { ok: false, kind: 'interaction-prompt' }
 
     if (decision === 'allow-session') {
       if (entry.grantUpdates === null) return { ok: false, kind: 'no-session-grant' }
@@ -118,7 +118,7 @@ export function createPermissionBroker(params: CreatePermissionBrokerParams): Pe
   function answerQuestion(permissionId: string, answers: Readonly<Record<string, string>>): QuestionAnswerResult {
     const entry = entries.get(permissionId)
     if (!entry) return { ok: false, kind: 'unknown-permission' }
-    const interaction = entry.pending.interaction ?? null
+    const interaction = entry.pending.interaction
     if (interaction === null || interaction.kind !== 'question') return { ok: false, kind: 'not-a-question' }
     if (!answersMatch(interaction, answers)) return { ok: false, kind: 'answers-mismatch' }
     settle(permissionId, questionResult(entry.input, answers, entry.toolUseID))
@@ -128,7 +128,7 @@ export function createPermissionBroker(params: CreatePermissionBrokerParams): Pe
   function answerPlan(permissionId: string, decision: PlanDecision): PlanAnswerResult {
     const entry = entries.get(permissionId)
     if (!entry) return { ok: false, kind: 'unknown-permission' }
-    const interaction = entry.pending.interaction ?? null
+    const interaction = entry.pending.interaction
     if (interaction === null || interaction.kind !== 'plan') return { ok: false, kind: 'not-a-plan' }
     if (decision.kind === 'approve') {
       settle(permissionId, planApproveResult(entry.input, decision.mode, entry.toolUseID))

@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { dropAdopted, mintRestorable, nextPersisted, persistedOpen } from './restore'
 import type { HostedSessionSnapshot, SessionKey } from '../../shared/hosting/types'
+import type { SessionControls, SessionModels } from '../../shared/hosting/controls'
 import type { RepoId } from '../../shared/repos'
 
 const REPO_ID = 'repo-1' as RepoId
+
+const TEST_CONTROLS: SessionControls = { permissionMode: 'default', model: null, effort: null }
+const TEST_MODELS: SessionModels = { kind: 'pending' }
 
 function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSessionSnapshot {
   return {
@@ -20,6 +24,8 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     capabilities: { kind: 'pending', request: { source: 'installed' } },
     title: 'Fix the thing',
     rateLimit: null,
+    controls: TEST_CONTROLS,
+    models: TEST_MODELS,
     ...overrides,
   }
 }

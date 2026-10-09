@@ -25,7 +25,7 @@ function repoTag(repos: readonly RepositoryEntry[] | undefined, repoId: RepoId):
 }
 
 function dotFor(session: HostedSessionSnapshot): { readonly className: string; readonly label: string } {
-  const oldestInteraction = session.pendingPermissions.filter((permission) => (permission.interaction ?? null) !== null).sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))[0] ?? null
+  const oldestInteraction = session.pendingPermissions.filter((permission) => permission.interaction !== null).sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))[0] ?? null
   if (oldestInteraction !== null && oldestInteraction.interaction) return { className: 'bg-attention-dot animate-pulse', label: sidebarDotLabel(oldestInteraction.interaction.kind) }
   if (session.pendingPermissions.length > 0) return { className: 'bg-attention-dot animate-pulse', label: 'Waiting for your permission' }
   if (session.phase === 'starting' || session.phase === 'streaming') return { className: 'bg-working-dot', label: 'Working' }

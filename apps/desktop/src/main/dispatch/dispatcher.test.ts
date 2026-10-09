@@ -3,6 +3,7 @@ import { resolveVocabulary } from '../../shared/labels/vocabulary'
 import type { RepoId } from '../../shared/repos'
 import type { BoardSnapshot } from '../../shared/board/types'
 import type { HostedSessionSnapshot, SessionKey } from '../../shared/hosting/types'
+import type { SessionControls, SessionModels } from '../../shared/hosting/controls'
 import type { HostedStore } from '../hosting/store'
 import type { TickActionable, TickReport } from '../../shared/tick/types'
 import type { ReadyEntry } from '../actions/apply'
@@ -64,6 +65,9 @@ const OWNED_BY_APP: OwnershipRead = { kind: 'app', since: '2026-01-01T00:00:00Z'
 const ABSENT_OWNERSHIP: OwnershipRead = { kind: 'absent', path: '/repo/.agents/cockpit.json', readAt: 'r' }
 const UNREADABLE_OWNERSHIP: OwnershipRead = { kind: 'unreadable', message: 'bad', path: '/repo/.agents/cockpit.json', readAt: 'r' }
 
+const TEST_CONTROLS: SessionControls = { permissionMode: 'default', model: null, effort: null }
+const TEST_MODELS: SessionModels = { kind: 'pending' }
+
 function sessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSessionSnapshot {
   return {
     sessionKey: 'hosted-1' as SessionKey,
@@ -79,6 +83,8 @@ function sessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): Hosted
     capabilities: { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [], plugin: { kind: 'loaded', path: 'p', version: null }, components: { kind: 'complete' } },
     title: null,
     rateLimit: null,
+    controls: TEST_CONTROLS,
+    models: TEST_MODELS,
     ...overrides,
   }
 }

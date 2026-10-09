@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { applySnapshot, EMPTY_QUEUE, interactionCount, ordered, seed } from './queue'
 import type { HostedSessionSnapshot, PendingPermission, SessionKey } from '../../../shared/hosting/types'
+import type { SessionControls, SessionModels } from '../../../shared/hosting/controls'
 import type { RepoId } from '../../../shared/repos'
 
 const REPO_A = 'repo-a' as RepoId
 const REPO_B = 'repo-b' as RepoId
+
+const TEST_CONTROLS: SessionControls = { permissionMode: 'default', model: null, effort: null }
+const TEST_MODELS: SessionModels = { kind: 'pending' }
 
 function permission(overrides: Partial<PendingPermission> = {}): PendingPermission {
   return {
@@ -19,6 +23,7 @@ function permission(overrides: Partial<PendingPermission> = {}): PendingPermissi
     agentId: null,
     requestedAt: '2026-01-01T00:00:00.000Z',
     sessionGrant: null,
+    interaction: null,
     ...overrides,
   }
 }
@@ -38,6 +43,8 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     capabilities: { kind: 'pending', request: { source: 'installed' } },
     title: null,
     rateLimit: null,
+    controls: TEST_CONTROLS,
+    models: TEST_MODELS,
     ...overrides,
   }
 }

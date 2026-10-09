@@ -120,7 +120,7 @@ describe('setControls / answerQuestion / answerPlan', () => {
     const permissionId = handle.snapshot().pendingPermissions[0]?.permissionId as string
 
     expect(handle.answerPlan(permissionId, { kind: 'approve', mode: 'acceptEdits' })).toEqual({ ok: true })
-    expect(handle.snapshot().controls?.permissionMode).toBe('acceptEdits')
+    expect(handle.snapshot().controls.permissionMode).toBe('acceptEdits')
     expect(fake.setPermissionMode).not.toHaveBeenCalled()
   })
 })
