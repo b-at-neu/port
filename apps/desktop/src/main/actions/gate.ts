@@ -1,8 +1,4 @@
-// The plan gate's composition root (#92): registry lookup, the preflight
-// fetch, pure classification, the ownership read, and — for an answer —
-// the ordered comment-then-swap write. No `gh` import here — the read comes
-// from `../github`, the write from `../writes`, exactly the `main/claim.ts`
-// idiom of composing rather than reaching into either directly.
+// No `gh` import here — the read comes from `../github`, the write from `../writes`.
 import { buildAutoApprovePlan, buildGatePlan, classifyGate } from '../../shared/gate/classify'
 import type { GateClassifyItem, GatePlan } from '../../shared/gate/classify'
 import type { GateAction, GateAnswerResponse, GateDecision, GatePreflight, GatePreflightResponse } from '../../shared/gate/types'
@@ -19,10 +15,6 @@ import { applyLabels, postComment } from '../writes/apply'
 import { readOwnership, toOwnershipSummary } from '../dispatch/ownership'
 import type { ApplyLabelsParams, PostCommentParams } from '../writes/apply'
 
-/** The seam every composition below is testable through, without Electron,
- *  a real registry, or a real `gh`/`git` — the same idiom `main/claim.ts`'s
- *  own `ClaimDeps` gives. Every default export is what production wiring
- *  supplies. */
 export interface GateDeps {
   readonly listRepositories: typeof listRepositories
   readonly fetchGatePreflight: typeof fetchGatePreflight
@@ -51,11 +43,7 @@ function resolveReadyEntry(registryDeps: RegistryDeps, repoId: RepoId, deps: Pic
   )
 }
 
-/** Splits the fetched issue body at `IMPLEMENTATION_PLAN_HEADING` — the
- *  ticket half above it (trimmed of trailing blank lines), the plan half
- *  (heading included) below, `null` when the heading is absent entirely —
- *  the same "no plan section" case the Reviewing step's own no-plan note
- *  renders. */
+/** Splits at `IMPLEMENTATION_PLAN_HEADING`; `null` plan half when the heading is absent. */
 function splitBody(body: string): { readonly ticketMarkdown: string; readonly planMarkdown: string | null } {
   const idx = body.indexOf(IMPLEMENTATION_PLAN_HEADING)
   if (idx === -1) return { ticketMarkdown: body, planMarkdown: null }
@@ -95,11 +83,7 @@ export interface GatePreflightParams {
   readonly number: number
 }
 
-/** `'gate:preflight'`'s composition: resolve the `ready` entry, read
- *  ownership, then fetch and classify against that entry's own resolved
- *  vocabulary — never a second config read. Ownership rides along on every
- *  response arm, since the dialog's controls are disabled under `terminal`/
- *  `unreadable` regardless of whether the item itself resolved. */
+// Ownership rides along on every response arm; the dialog disables controls under terminal/unreadable regardless.
 export async function gatePreflight(params: GatePreflightParams, deps: GateDeps = defaultGateDeps): Promise<GatePreflightResponse> {
   const entry = await resolveReadyEntry(params.registryDeps, params.repoId, deps)
   const ownership: OwnershipSummary = toOwnershipSummary(await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now }))
@@ -135,27 +119,14 @@ export interface GateAnswerParams {
   readonly repoId: RepoId
   readonly number: number
   readonly decision: GateDecision
-  /** The operator's own feedback text, verbatim — required for
-   *  `request-changes` unless `skipComment` is set; ignored for `approve`. */
   readonly feedback: string | null
-  /** `true` only on a retry after a comment already landed and the label
-   *  swap alone failed — suppresses the comment, never widens the write
-   *  (plan's own **Ordering**: a renderer-supplied `skipComment` can only
-   *  ever suppress a write, never widen one). */
+  /** A renderer-supplied `skipComment` can only ever suppress the comment write, never widen it. */
   readonly skipComment: boolean
   readonly auditDir: string
   readonly scratchDir: string
 }
 
-/**
- * `'gate:answer'`'s composition, in the plan's own fixed order: resolve
- * entry → fetch preflight → classify (refuse anything but `answerable`) →
- * for `request-changes` with `skipComment: false`, `postComment` — a
- * non-`applied` outcome aborts as `comment-failed`, with no label ever
- * touched — → `applyLabels`. The feedback comment is the operator's text
- * verbatim, with no heading added, so `plan-agent` in revision mode sees one
- * artifact regardless of which writer produced it.
- */
+// A non-`applied` comment outcome aborts as `comment-failed`, with no label ever touched.
 export async function gateAnswer(params: GateAnswerParams, deps: GateDeps = defaultGateDeps): Promise<GateAnswerResponse> {
   const entry = await resolveReadyEntry(params.registryDeps, params.repoId, deps)
   const fetch = await deps.fetchGatePreflight({ repo: { owner: entry.config.owner, name: entry.config.name }, number: params.number })
@@ -194,15 +165,7 @@ export interface AutoApprovePlanParams {
   readonly auditDir: string
 }
 
-/**
- * #313: `main/dispatch/auto-plan.ts`'s own write — the app's analogue of
- * the cockpit's unprompted `autoPlan` swap (`docs/COORDINATION.md` → "The
- * decision"), made only while this app owns the repository. No ownership
- * read here — the caller already confirmed it before calling, and
- * `applyLabels` re-checks at write time regardless, the same two-layer check
- * every other ownership-gated write follows. Posts no comment — unlike
- * `gateAnswer`, there is no operator feedback to attach.
- */
+// No ownership read here — the caller already confirmed it, and `applyLabels` re-checks at write time.
 export async function autoApprovePlan(params: AutoApprovePlanParams, deps: GateDeps = defaultGateDeps): Promise<WriteOutcome> {
   const plan = buildAutoApprovePlan({ vocabulary: params.entry.config.vocabulary, assignees: params.item.assignees })
   return deps.applyLabels({ request: buildWriteRequest(params.entry, params.item.number, plan, 'auto-approve-plan'), repoRoot: params.entry.path, auditDir: params.auditDir })

@@ -1,9 +1,5 @@
-// Validates `bin/worktrees.mjs report --json`'s stdout field by field
-// into `ParsedWorktree[]` plus `orphanDirs`/`mainRoot`/`integrationRef`/
-// `registered`/`byState`. A missing field, a non-array `candidates`, or a
-// `state` outside `WORKTREE_STATES` fails the whole payload as
-// `report-unparseable`, naming the field — never a partial list (ENGINEERING
-// §4: an absent signal is never read as a passing one).
+// A missing field, a non-array `candidates`, or an unknown `state` fails the whole payload,
+// naming the field — never a partial list.
 import type { PathOps } from '../platform/paths'
 import type { CorrelationRung } from '../../shared/local/types'
 import type { WorktreeState } from '../../shared/reclaimer/types'
@@ -97,10 +93,7 @@ function parseCandidate(raw: unknown, index: number, pathOps: PathOps): ParsedWo
   }
 }
 
-/** Parses the script's `--json` stdout. Every path is run through
- *  `pathOps.toNative` — the script emits `C:/Users/…`-style paths even on
- *  Windows, and #77's join (in `report.ts`) compares by `pathOps.pathKey`,
- *  which requires the same native form on both sides. */
+// Every path is run through `pathOps.toNative` — the script emits `C:/Users/…`-style paths even on Windows.
 export function parseReportPayload(stdout: string, pathOps: PathOps): ParsedReport {
   let value: unknown
   try {

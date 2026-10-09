@@ -1,5 +1,3 @@
-// Relocated verbatim from `main/ipc.test.ts` (#92) alongside the resolvers
-// they cover — no behaviour change in this move.
 import { describe, expect, it } from 'vitest'
 import type { TranscriptTailOpen, TranscriptTailPoll } from '../../shared/sessions/transcript'
 import { resolveTranscriptTailClose, resolveTranscriptTailOpen, resolveTranscriptTailPoll } from './sessions'

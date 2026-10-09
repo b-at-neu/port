@@ -1,7 +1,4 @@
-// Runs the TypeScript `correlate` over the shared case table
-// (`correlation.cases.json`) — the same file `scripts/checks/desktop-local.mjs`
-// runs the reclaimer's own `correlate` export over, so the two ladders can
-// never silently disagree.
+// Runs over the shared case table also run against the reclaimer's own `correlate` export, so the two ladders can never silently disagree.
 import { describe, expect, it } from 'vitest'
 import { correlate } from './correlate'
 import type { CorrelationInput } from './correlate'

@@ -1,8 +1,4 @@
-// readDenials: parses `.agents/denials.log` (PIPELINE.md → "Denial
-// visibility") into the app's own denial model. The current four-field form
-// and the legacy three-field form coexist in a real file (this repository's
-// own log measured 322 current-form lines against ~444 legacy), so both are
-// parsed rather than one being treated as noise.
+// Both the current four-field form and the legacy three-field form coexist in a real log, so both are parsed.
 import { defaultGitRunner, resolveGitBaseRoot } from '../platform/git'
 import { pathOps as defaultPathOps } from '../platform/paths'
 import { readTextFile } from '../platform/files'
@@ -17,8 +13,7 @@ export type { GitRunner }
 export interface ReadDenialsParams {
   readonly repoRoot: string
   readonly git?: GitRunner
-  /** The newest N lines kept in `entries`, oldest first — `summary` always
-   *  counts the whole file regardless. Defaults to 500. */
+  /** The newest N lines kept in `entries`; `summary` always counts the whole file. Defaults to 500. */
   readonly limit?: number
   readonly now?: () => Date
   readonly pathOps?: PathOps
@@ -26,11 +21,7 @@ export interface ReadDenialsParams {
 
 const DEFAULT_LIMIT = 500
 
-/** Fails to compile if the platform layer's `FileFailureKind` changes
- *  without `DenialsFailureKind` (`shared/local/types.ts`) growing to match —
- *  the same pin `worktrees.ts` establishes for `LocalFailureKind`.
- *  `not-found` becomes `present: false` and a text read can never be
- *  `unparseable`, so both are excluded here. */
+/** Fails to compile if `FileFailureKind` changes without `DenialsFailureKind` growing to match. */
 type FileFailureKindExcludingHandled = Exclude<FileFailureKind, 'not-found' | 'unparseable'>
 export const _kindsCoverFileFailureKind: AssertEqual<DenialsFailureKind, FileFailureKindExcludingHandled> = true
 
@@ -47,10 +38,8 @@ function isStageAgent(value: string): value is StageAgentName {
   return STAGE_AGENTS.has(value as StageAgentName)
 }
 
-/** The doubled `port:port:<type>` prefix is real, not a typo — the hook
- *  writes `port:${agent_type}` and `agent_type` is itself plugin-namespaced
- *  (`port:impl-agent`). A leading `port:` is stripped once and a second is
- *  tolerated. */
+/** The doubled `port:port:<type>` prefix is real, not a typo — a leading `port:` is stripped once
+ *  and a second is tolerated. */
 function parseActor(raw: string): DenialActor {
   if (raw.startsWith('session:')) return { kind: 'session', sessionId: raw.slice('session:'.length) }
   if (raw.startsWith('subagent:')) return { kind: 'subagent-signal', signal: raw.slice('subagent:'.length) }
@@ -63,11 +52,8 @@ function parseActor(raw: string): DenialActor {
   return { kind: 'unattributed', raw }
 }
 
-/** Form discrimination is semantic, never positional: field count alone
- *  cannot tell a legacy line's tab-containing command from a current-form
- *  line, since the current form's subject is collapsed and capped at 500
- *  characters by the hook (never carries a tab), while a legacy line's
- *  subject is the raw, unmodified command. */
+/** Form discrimination is semantic, never positional: field count alone cannot tell a legacy
+ *  line's command from a current-form one. */
 function parseLine(raw: string): DenialEntry {
   const fields = raw.split('\t')
   if (fields.length < 2) {
@@ -85,13 +71,8 @@ function parseLine(raw: string): DenialEntry {
   return { raw, form: 'legacy', timestamp, decision: null, actor: parseActor(who), subject: command }
 }
 
-/** The buckets a consumer must not re-derive (Data & contracts): `deny` from
- *  a `stage-agent`/`subagent`/`subagent-signal` actor is `agentDenials`
- *  (`subagent-signal` is still known to be a subagent, just via a weaker
- *  attribution rung — PIPELINE.md's own ladder — so it counts the same way);
- *  `deny` from a `session` actor is `railDenials` — a rail held, never a
- *  missing permission — and never folded into `agentDenials`. `miss`/
- *  `gate-clear`/`hook-error` are never denials at all. */
+/** A `deny` from a `session` actor is `railDenials` (a rail held, never a missing permission),
+ *  never folded into `agentDenials`. */
 function buildSummary(entries: readonly DenialEntry[]): DenialSummary {
   let agentDenials = 0
   let railDenials = 0
@@ -132,9 +113,7 @@ function buildSummary(entries: readonly DenialEntry[]): DenialSummary {
   return { agentDenials, railDenials, misses, gateClears, hookErrors, legacy, malformed, total: entries.length }
 }
 
-/** An absent log is a distinct healthy state, never an error and never an
- *  empty `entries` list that reads as "no denials" — the whole point of a
- *  dedicated `present` flag. */
+/** An absent log is a distinct healthy state, never an error or an empty `entries` list. */
 export async function readDenials(params: ReadDenialsParams): Promise<DenialsRead> {
   const git = params.git ?? defaultGitRunner()
   const pathOps = params.pathOps ?? defaultPathOps

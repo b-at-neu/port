@@ -99,9 +99,7 @@ describe('recoverPausedTrigger', () => {
   })
 
   it('reports unresolvable for a recorded key with neither a trigger role nor an in-flight role', async () => {
-    // `stop` never actually removes a marker — this exercises the "neither
-    // role" fallback defensively, the same way `retryPlan`'s own absent-key
-    // guard is asserted even though every real in-flight key maps.
+    // Defensive: no real in-flight key actually lacks a mapped role.
     const entries = [pauseEntry({ action: 'stop', precondition: { present: ['marker'], absent: [], assignees: { kind: 'any' } } })]
     const result = await recoverPausedTrigger({ auditDir: '/tmp/audit', repo: 'o/r', number: 148, vocabulary: VOCABULARY, readAuditLog: fakeRead(entries) })
     expect(result).toEqual({ kind: 'unresolvable' })

@@ -1,14 +1,5 @@
-// recordTick: appends one DesktopTickEvent line to
-// `<base repo root>/.agents/desktop-events.jsonl` (#111) — the app's own
-// twin to `scripts/port-tick/events.ts`'s `appendEvent`, so a parity read
-// (`scripts/port-tick/report.ts --desktop-events`) has something on the app
-// side to diff the cockpit's own trajectory record against. `main/tick/`
-// itself stays read-only per its own pinned rail (`desktop-tick`'s check
-// 2) — this module is a separate sibling the watcher calls *after*
-// `planTick` returns, never a write reachable from inside the tick
-// computation. The base root is resolved with `main/platform/git.ts`'s
-// shared `resolveGitBaseRoot`, the same helper `main/local/denials.ts` and
-// `main/writes/claim.ts` use.
+// `main/tick/` itself stays read-only; this module is a separate sibling the watcher calls
+// *after* `planTick` returns, never a write reachable from inside the tick computation.
 import { appendTextFile, ensureDirectory, renamePath, statPath } from '../platform/files'
 import { defaultGitRunner, resolveGitBaseRoot } from '../platform/git'
 import { pathOps as defaultPathOps } from '../platform/paths'
@@ -28,11 +19,8 @@ export interface RecordTickDeps {
   readonly pathOps?: PathOps
 }
 
-/** Pure: one repository's `TickReport` (`main/tick/plan.ts`'s whole result)
- *  to the line `recordTick` appends. `repo` is the `owner/name` slug —
- *  `report.repoId` alone is not a fact `scripts/port-tick/parity.ts` can
- *  join a cockpit tick event on, since the cockpit's own record never
- *  carries this app's `RepoId`. */
+/** `repo` is the `owner/name` slug — `report.repoId` alone is not joinable against the cockpit's
+ *  own record. */
 export function buildDesktopTickEvent(params: { readonly repo: string; readonly report: TickReport; readonly now: () => Date }): DesktopTickEvent {
   const { repo, report, now } = params
   return {
@@ -47,13 +35,8 @@ export function buildDesktopTickEvent(params: { readonly repo: string; readonly 
   }
 }
 
-/** Best-effort and out-of-band, the same direction `scripts/port-tick/events.ts`'s
- *  own `appendEvent` already takes: a disk-full or permission error must
- *  never fail a poll, so every failure here is swallowed rather than
- *  surfaced to the caller (`main/state/watcher.ts`'s `buildSnapshot()` never
- *  awaits this call at all). Rotates to `desktop-events.prev.jsonl` at the
- *  same 8 MB cap `scripts/port-tick/events.ts` uses, so the two trajectory
- *  files age at the same rate. */
+// Best-effort and out-of-band: a disk-full or permission error must never fail a poll, so every
+// failure here is swallowed rather than surfaced to the caller.
 export async function recordTick(repoRoot: string, event: DesktopTickEvent, deps: RecordTickDeps = {}): Promise<void> {
   try {
     const pathOps = deps.pathOps ?? defaultPathOps
@@ -62,9 +45,7 @@ export async function recordTick(repoRoot: string, event: DesktopTickEvent, deps
     const path = pathOps.join(baseRoot, '.agents', LOG_FILE)
     const prevPath = pathOps.join(baseRoot, '.agents', PREV_LOG_FILE)
 
-    // `.agents/` may not exist yet in a fresh checkout — the same order
-    // `main/dispatch/ownership.ts`'s `takeOwnership` follows before its own
-    // first write under that directory.
+    // `.agents/` may not exist yet in a fresh checkout.
     await ensureDirectory(pathOps.dirname(path))
 
     const size = await statPath(path)
@@ -74,7 +55,6 @@ export async function recordTick(repoRoot: string, event: DesktopTickEvent, deps
 
     await appendTextFile(path, `${JSON.stringify(event)}\n`)
   } catch {
-    // Deliberately swallowed — see header comment. A write failure here must
-    // never change what buildSnapshot() returns or block a poll.
+    // Deliberately swallowed — a write failure here must never block a poll.
   }
 }

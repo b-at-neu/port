@@ -22,28 +22,16 @@ export type WhichResult =
   | { readonly ok: true; readonly path: string }
   | { readonly ok: false; readonly kind: 'not-found'; readonly command: string; readonly searched: readonly string[] }
 
-/** The macOS-launched-from-Finder case: a GUI process inherits no login-shell
- *  `PATH`, so Homebrew and the standard prefixes need a fallback. Windows
- *  ships neither by default, so the CLIs' own installer locations stand in. A
- *  login shell is never spawned to harvest `PATH` — that is exactly the
- *  POSIX-only shell-out this layer forbids. */
-// `C:\Program Files\nodejs` covers the GUI-launched case for `node` the same
-// way the Git/GitHub CLI entries above it do (#86) — the desktop app's own
-// `commands.worktrees` spawn is the first caller that needs a `node`
-// resolution on Windows with a truncated PATH.
+// A GUI-launched process inherits no login-shell `PATH`; a login shell is never spawned to harvest
+// one — that is exactly the POSIX-only shell-out this layer forbids.
 const FALLBACK_DIRS: Readonly<Record<WhichPlatform, readonly string[]>> = {
   darwin: ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin'],
   linux: ['/usr/local/bin', '/usr/bin'],
   win32: ['C:\\Program Files\\Git\\cmd', 'C:\\Program Files\\Git\\bin', 'C:\\Program Files\\GitHub CLI', 'C:\\Program Files\\nodejs'],
 }
 
-/** Per-command, env-derived fallback directories, consulted after the static
- *  `FALLBACK_DIRS` above miss. `claude` is commonly installed somewhere no
- *  static list can anticipate (a version manager, a user-local prefix), so
- *  its own installer locations are derived from the injected `env` rather
- *  than hard-coded — never `os.homedir()`, or a simulated win32-from-Linux
- *  test would silently read the host's real home directory instead of the
- *  fixture it was given (#97). */
+/** Derived from the injected `env`, never `os.homedir()` — the latter would leak the host's real
+ *  home directory into a simulated test. */
 const COMMAND_FALLBACK_DIRS: Readonly<Record<string, (env: WhichEnv, platform: WhichPlatform) => readonly string[]>> = {
   claude: (env, platform) => {
     const impl = pathImplFor(platform)
@@ -71,10 +59,8 @@ function normalizePlatform(platform: NodeJS.Platform): WhichPlatform {
   return 'linux'
 }
 
-/** The target platform's own `path.join`/`delimiter` — never the host's.
- *  `which` is exercised against a simulated `win32` from a Linux test host
- *  (and vice versa), so joining candidate paths with the host's separator
- *  would silently mangle them. */
+/** The target platform's own `path.join` — never the host's, since `which` is exercised against
+ *  a simulated platform from either test host. */
 function pathImplFor(platform: WhichPlatform) {
   return platform === 'win32' ? win32Impl : posixImpl
 }
@@ -103,11 +89,7 @@ async function defaultProbe(candidate: string): Promise<boolean> {
   }
 }
 
-/**
- * `which` is cached per instance — `createWhich()` gives tests a fresh,
- * isolated cache, while the default export below is the one process-lifetime
- * instance every adapter shares.
- */
+// `createWhich()` gives tests a fresh cache; the default export is the one process-lifetime instance.
 export function createWhich(): { which: (options: WhichOptions) => Promise<WhichResult> } {
   const cache = new Map<string, string>()
 

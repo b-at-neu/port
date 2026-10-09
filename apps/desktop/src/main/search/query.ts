@@ -1,8 +1,5 @@
-// The search orchestrator (#87): scope -> index skip -> budgeted scan ->
-// warm-on-read. Indexing is not a separate pass -- it is the side effect of
-// scanning: a transcript with no fresh signature is a candidate, read
-// through `openTranscript` (the barrel, never a deep `../sessions/*`
-// import), matched, and its signature rebuilt from the same entries.
+// scope -> index skip -> budgeted scan -> warm-on-read. Indexing is not a separate pass -- it is
+// the side effect of scanning.
 import { statPath } from '../platform/files'
 import { buildProjectIndex, defaultClaudeHome, resolveTranscriptPath } from '../sessions/locate'
 import { openTranscript } from '../sessions/transcript'
@@ -21,8 +18,6 @@ import type { SignatureIndexEntry } from './store'
 
 export interface RunSearchParams {
   readonly scan: SessionScan
-  /** Where `search-index.json` lives -- main passes `app.getPath('userData')`,
-   *  the same directory `main/registry/store.ts`'s `registry.json` sits in. */
   readonly indexDir: string
   readonly query: string
   readonly scope: SearchScope
@@ -51,11 +46,7 @@ function fromAgent(agent: AgentRecord): Candidate {
   return { sessionId: agent.sessionId, agentId: agent.agentId, repoId: agent.repoId, label: agentLabel(agent), itemNumber: agent.itemNumber, idleMs: agent.idleMs }
 }
 
-/** `repo` filters on `repoId`; `all` includes every session and agent,
- *  including the `repoId: null` ones no registered repository claims --
- *  those are only ever reachable under `all` (Scope, in the plan). Sorted
- *  newest-activity-first (`idleMs` ascending) so a budget cutoff loses the
- *  coldest transcripts first. */
+// Sorted newest-activity-first (`idleMs` ascending) so a budget cutoff loses the coldest transcripts first.
 function candidatesFor(scan: Extract<SessionScan, { ok: true }>, scope: SearchScope): readonly Candidate[] {
   const inScope = (repoId: RepoId | null): boolean => scope.kind === 'all' || repoId === scope.repoId
   const candidates = [...scan.sessions.filter((s) => inScope(s.repoId)).map(fromSession), ...scan.agents.filter((a) => inScope(a.repoId)).map(fromAgent)]
@@ -115,9 +106,7 @@ export async function runSearch(params: RunSearchParams): Promise<SearchResult> 
     const manifestEntry = manifest.get(key)
     const upToDate = manifestEntry !== undefined && manifestEntry.path === resolved.path && manifestEntry.sizeBytes === stat.value.size && manifestEntry.modifiedAt === stat.value.modifiedAt
 
-    // Direction of failure: closed on the answer. The index may only ever
-    // remove work it can *prove* unnecessary -- an absent or stale
-    // signature is always a candidate, never a skip.
+    // The index may only ever remove work it can *prove* unnecessary.
     if (upToDate) {
       const signature = decodeSignature(manifestEntry.bits, manifestEntry.signature)
       const provablyAbsent = parsed.terms.some((term) => !mightContain(signature, term))
@@ -127,9 +116,7 @@ export async function runSearch(params: RunSearchParams): Promise<SearchResult> 
       }
     }
 
-    // Both budgets gate *before* the open -- once either is exhausted, every
-    // remaining candidate is unreached, never opened just to discard its
-    // hits (that would spend the scan budget on results nobody sees).
+    // Both budgets gate *before* the open -- an exhausted budget never opens a transcript just to discard its hits.
     budgetExhausted ||= now().getTime() - start >= SCAN_BUDGET_MS
     const hitsBudgetExhausted = totalHits >= MAX_TOTAL_HITS
     if (budgetExhausted || hitsBudgetExhausted) {

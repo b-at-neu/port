@@ -1,25 +1,15 @@
-// The only file under apps/desktop/src/ allowed to import `node:child_process`
-// — the `desktop-platform-layer` check in scripts/checks.mjs pins this
-// mechanically, so a POSIX shell-out elsewhere is a layer 1 failure, not a
-// review comment.
+// The only file under apps/desktop/src/ allowed to import `node:child_process`.
 import { execFile } from 'node:child_process'
 import { stat } from 'node:fs/promises'
 import { which as defaultWhich } from './which'
 import type { WhichEnv, WhichResult } from './which'
 
-/** The spawnable executables are a literal union, so an adapter reaching for
- *  a POSIX-only utility (`grep`, `find`, …) is a compile-time error rather
- *  than a Windows-only runtime failure. Extend this union as new commands
- *  need to be spawned. */
+/** A literal union, so an adapter reaching for a POSIX-only utility is a compile-time error. */
 export const KNOWN_COMMANDS = ['git', 'gh', 'node', 'claude'] as const
 
 export type KnownCommand = (typeof KNOWN_COMMANDS)[number]
 
-/**
- * One error rule, everywhere: a condition a human could cause is a value; a
- * programmer mistake is a throw. Every member below is something an operator
- * or environment can legitimately produce.
- */
+// One error rule, everywhere: a condition a human could cause is a value; a programmer mistake is a throw.
 export type CommandResult =
   | { readonly ok: true; readonly stdout: string; readonly stderr: string }
   | { readonly ok: false; readonly kind: 'not-found'; readonly command: string; readonly searched: readonly string[] }
@@ -45,11 +35,8 @@ export interface SpawnParams {
   readonly env: NodeJS.ProcessEnv
 }
 
-/** The injectable seam `run.test.ts` uses for its classification table — no
- *  real process is spawned to exercise `not-found`/`nonzero`/`timeout`/etc.
- *  Rejects with a plain, duck-typed failure (never required to be an `Error`
- *  instance), so a fake spawner in a test needs no real `child_process`
- *  error shape. */
+/** Rejects with a plain, duck-typed failure, so a fake spawner in a test needs no real
+ *  `child_process` error shape. */
 export type Spawner = (absPath: string, args: readonly string[], params: SpawnParams) => Promise<SpawnOutcome>
 
 interface SpawnFailureLike {
@@ -95,15 +82,13 @@ function classifySpawnError(error: unknown, absPath: string, ctx: { timeoutMs: n
   const failure = asFailure(error)
   const stderr = typeof failure.stderr === 'string' ? failure.stderr : ''
 
-  // Order matches the documented mapping exactly: ETIMEDOUT/killed first (a
-  // numeric exit code can coexist with `killed` on some platforms and must
-  // not be misread as a normal nonzero exit).
+  // ETIMEDOUT/killed first — a numeric exit code can coexist with `killed` and must not be
+  // misread as a normal nonzero exit.
   if (failure.code === 'ETIMEDOUT' || failure.killed === true) {
     return { ok: false, kind: 'timeout', timeoutMs: ctx.timeoutMs, stderr }
   }
   if (failure.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
-    // No partial stdout carried — truncated output must never reach a JSON
-    // parse (ENGINEERING §4, "an absent signal is never read as a passing one").
+    // No partial stdout carried — truncated output must never reach a JSON parse.
     return { ok: false, kind: 'output-too-large', maxBytes: ctx.maxBytes }
   }
   if (failure.code === 'ENOENT') {
@@ -127,8 +112,7 @@ export interface RunExecutableOptions {
   readonly spawner?: Spawner
 }
 
-/** The internal primitive: spawns an already-resolved absolute path. Exported
- *  so tests can exercise the classification table without touching `which`. */
+/** Spawns an already-resolved absolute path; exported so tests can skip `which`. */
 export async function runExecutable(
   absPath: string,
   args: readonly string[],
@@ -166,9 +150,7 @@ async function cwdExists(cwd: string): Promise<boolean> {
   }
 }
 
-/** Resolves a `KnownCommand` on `PATH` (see `which.ts`), pre-checks `cwd`,
- *  then delegates to `runExecutable`. This is the entry point every
- *  higher-level adapter actually calls. */
+// The entry point every higher-level adapter actually calls.
 export async function runCommand(command: KnownCommand, args: readonly string[], options: RunCommandOptions = {}): Promise<CommandResult> {
   if (options.cwd !== undefined && !(await cwdExists(options.cwd))) {
     return { ok: false, kind: 'cwd-missing', cwd: options.cwd }

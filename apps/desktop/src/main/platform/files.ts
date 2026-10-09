@@ -4,16 +4,12 @@ import { randomUUID } from 'node:crypto'
 import { appendFile, mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
-/** ENOENT is a value, never an exception — `.agents/denials.log` legitimately
- *  does not exist, and callers must distinguish "no config" from "unreadable
- *  config". */
+/** ENOENT is a value, never an exception — callers must distinguish "no config" from "unreadable". */
 export type FileFailureKind = 'not-found' | 'not-a-file' | 'permission-denied' | 'too-large' | 'unparseable' | 'io'
 
 export type FileResult<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly kind: FileFailureKind; readonly message: string }
 
-/** Keeps a runaway denials log from OOM-ing the main process; streaming
- *  support for tailing large logs is out of scope and extends this module
- *  when it lands. */
+// Keeps a runaway denials log from OOM-ing the main process.
 const MAX_BYTES = 16 * 1024 * 1024
 
 interface ErrnoLike {
@@ -99,11 +95,7 @@ export interface StatInfo {
   readonly modifiedAt: string
 }
 
-/** `modifiedAt` (`info.mtime.toISOString()`) is the only per-agent activity
- *  source a local read can produce (#78) — a transcript's own mtime, read
- *  beside its `meta.json`. `main/platform/` is the only place under `src/`
- *  allowed to reach `node:fs`, so every activity signal in the app comes
- *  through here rather than a second `stat` call elsewhere. */
+// `main/platform/` is the only place under `src/` allowed to reach `node:fs`.
 export async function statPath(path: string): Promise<FileResult<StatInfo>> {
   try {
     const info = await stat(path)
@@ -114,9 +106,7 @@ export async function statPath(path: string): Promise<FileResult<StatInfo>> {
   }
 }
 
-/** Creates `path` and every missing parent, succeeding silently when it
- *  already exists — the registry's userData directory may or may not exist
- *  on first launch, and both cases are the same "make sure it's there". */
+/** Succeeds silently when `path` already exists — both cases are "make sure it's there". */
 export async function ensureDirectory(path: string): Promise<FileResult<void>> {
   try {
     await mkdir(path, { recursive: true })
@@ -132,34 +122,16 @@ export interface ReadLinesFromOptions {
 
 export interface ReadLinesFromValue {
   readonly lines: readonly string[]
-  /** Exactly the bytes (starting at `start`) that produced a complete line —
-   *  the caller's next `start`. A partial trailing line (no terminating
-   *  `\n` yet, e.g. a `.jsonl` mid-append) is never counted here and never
-   *  appears in `lines`, so a resumed read picks it back up whole. */
+  /** The caller's next `start`. A partial trailing line is never counted here, so a resumed read picks it up whole. */
   readonly bytesConsumed: number
-  /** `bytesRead === maxBytes` — the only honest "there may be more past this
-   *  window" signal. A caller must not read `nextOffset < size` as that
-   *  signal: a partial trailing line makes it permanently true and would
-   *  spin a poller. */
+  /** The only honest "there may be more past this window" signal; `nextOffset < size` is not one. */
   readonly filledBudget: boolean
 }
 
 export type ReadLinesFromResult = FileResult<ReadLinesFromValue>
 
-/** Streams raw `Buffer` chunks from `path` starting at byte offset `start`
- *  (no `encoding`, so this stays exact — a `readline`-split, already
- *  `\r`-stripped string cannot be turned back into byte arithmetic), through
- *  at most `maxBytes`. Finds the **last** `0x0A` in the accumulated buffer,
- *  decodes only the bytes before it as UTF-8 (a range ending on a newline
- *  byte can never split a multi-byte sequence, so this needs no
- *  `StringDecoder` carry-over), and splits on `\n` with one trailing `\r`
- *  stripped per line — the CRLF-safe equivalent of `readline`'s own
- *  `crlfDelay: Infinity`. No newline anywhere in the window yields
- *  `bytesConsumed: 0, lines: []`; `bytesConsumed === 0` while the read
- *  filled `maxBytes` means one line longer than the whole budget, which
- *  would never advance the caller's offset, so that case reports
- *  `too-large` instead of spinning. `start` past EOF is a value, not an
- *  error — an empty read, zero bytes. */
+/** Finds the **last** newline in the window and decodes only the bytes before it, so a multi-byte
+ *  sequence is never split. A full window with no newline reports `too-large` instead of spinning. */
 export async function readLinesFrom(path: string, start: number, options: ReadLinesFromOptions): Promise<ReadLinesFromResult> {
   return new Promise((resolve) => {
     let settled = false
@@ -203,10 +175,7 @@ export async function readLinesFrom(path: string, start: number, options: ReadLi
   })
 }
 
-/** Writes `text` to `path`, creating it if absent and overwriting it whole
- *  otherwise — the plain (non-atomic) counterpart to `writeJsonFileAtomic`,
- *  for a caller (`main/writes/claim.ts`'s scratch comment file) that already
- *  owns the whole write and deletes the file itself in a `finally`. */
+/** The plain (non-atomic) counterpart to `writeJsonFileAtomic`. */
 export async function writeTextFile(path: string, text: string): Promise<FileResult<void>> {
   try {
     await writeFile(path, text, 'utf8')
@@ -216,10 +185,7 @@ export async function writeTextFile(path: string, text: string): Promise<FileRes
   }
 }
 
-/** Appends `text` to `path`, creating it if absent — the only way anything
- *  under `src/` may grow a file line by line. `main/writes/audit.ts` is this
- *  helper's one caller, so no second path can write an audit entry that
- *  skipped the chokepoint. */
+// The only way anything under `src/` may grow a file line by line.
 export async function appendTextFile(path: string, text: string): Promise<FileResult<void>> {
   try {
     await appendFile(path, text, 'utf8')
@@ -229,10 +195,8 @@ export async function appendTextFile(path: string, text: string): Promise<FileRe
   }
 }
 
-/** Deletes `path`, reporting `not-found` rather than throwing when it is
- *  already gone — `main/dispatch/ownership.ts`'s `releaseOwnership` treats
- *  that as success, since the caller's intent ("the record should not exist") is
- *  already satisfied. */
+/** Reports `not-found` rather than throwing when `path` is already gone — the caller's intent
+ *  is already satisfied. */
 export async function removeFile(path: string): Promise<FileResult<void>> {
   try {
     await unlink(path)
@@ -242,10 +206,7 @@ export async function removeFile(path: string): Promise<FileResult<void>> {
   }
 }
 
-/** Renames `from` to `to`, replacing an existing file at `to` atomically on
- *  POSIX and on Windows alike — `main/writes/audit.ts`'s log-rotation step
- *  (`writes.jsonl` → `writes.prev.jsonl`) is the one caller that needs this
- *  outside `writeJsonFileAtomic`'s own internal use. */
+/** Replaces an existing file at `to` atomically on POSIX and on Windows alike. */
 export async function renamePath(from: string, to: string): Promise<FileResult<void>> {
   try {
     await rename(from, to)
@@ -255,13 +216,8 @@ export async function renamePath(from: string, to: string): Promise<FileResult<v
   }
 }
 
-/** Writes `value` as JSON to `path` without ever leaving a half-written file
- *  behind: serialize first (a circular value throws before anything touches
- *  disk), write a uuid-suffixed temp file beside the target, then `rename`
- *  over it — `rename` replaces an existing file atomically on POSIX and on
- *  Windows alike, unlike a plain `writeFile` to the target path. The temp
- *  file is written in the target's own directory so the rename never crosses
- *  a filesystem boundary, and a best-effort unlink cleans it up on failure. */
+/** Writes a uuid-suffixed temp file beside the target, then renames over it, so a half-written
+ *  file never lands at `path`, and the rename never crosses a filesystem boundary. */
 export async function writeJsonFileAtomic(path: string, value: unknown): Promise<FileResult<void>> {
   const text = JSON.stringify(value, null, 2)
   const tempPath = join(dirname(path), `${randomUUID()}.tmp`)

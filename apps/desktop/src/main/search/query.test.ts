@@ -177,10 +177,7 @@ describe('runSearch', () => {
 
   it('counts a candidate whose transcript path never resolves as unreached, never as read -- never a false complete: true', async () => {
     const claudeHome = await makeClaudeHome()
-    // A decoy transcript populates `claudeHome/projects` so `buildProjectIndex`
-    // succeeds, but no file is ever written for SESSION_A itself, so
-    // `resolveTranscriptPath` fails to resolve it -- a candidate the scan
-    // knows about with nothing corresponding on disk.
+    // A decoy transcript lets `buildProjectIndex` succeed, but nothing resolves for SESSION_A itself.
     await writeSessionTranscript(claudeHome, 'project-a', '99999999-9999-9999-9999-999999999999', 'unrelated text')
     const scan = scanOf([session()])
 
@@ -194,9 +191,7 @@ describe('runSearch', () => {
 
   it('stops opening candidates once MAX_TOTAL_HITS is reached, marking the rest unreached rather than reading and discarding their hits', async () => {
     const claudeHome = await makeClaudeHome()
-    // Each transcript maxes out at MAX_HITS_PER_TRANSCRIPT hits, so exactly
-    // enough of them saturate MAX_TOTAL_HITS -- one further candidate must
-    // then be skipped without ever being opened.
+    // Exactly enough transcripts saturate MAX_TOTAL_HITS; one further candidate must be skipped unopened.
     const transcriptsToFill = Math.ceil(MAX_TOTAL_HITS / MAX_HITS_PER_TRANSCRIPT)
     const sessions: SessionRecord[] = []
     for (let i = 0; i < transcriptsToFill; i++) {

@@ -1,9 +1,5 @@
-// applyLabels / postComment — the write chokepoint's two entry points.
-// Every observed state comes from `fetchItemsByNumber` (`../github`), never
-// a second query-building caller; every ownership read comes from
-// `../dispatch/ownership`, never a second `.agents/cockpit.json` reader.
-// Both functions append exactly one audit entry per attempt, aborts
-// included.
+// The write chokepoint's two entry points. Both functions append exactly one audit entry per
+// attempt, aborts included.
 import { randomUUID } from 'node:crypto'
 import { gh as defaultGh } from '../platform/gh'
 import type { GhResult, GhRunner } from '../platform/gh'
@@ -24,10 +20,7 @@ import { evaluate, wouldChangeNothing } from './scope'
 
 export type { GhRunner }
 
-/** Fails to compile if the platform layer's `GhResult` grows a failure kind
- *  without `GhWriteFailureKind` (`shared/writes/types.ts`) growing to
- *  match — the same pin `main/github/adapter.ts` establishes for
- *  `PipelineFailureKind`. */
+// Fails to compile if `GhResult` grows a failure kind without `GhWriteFailureKind` growing to match.
 type GhResultFailureKind = Exclude<GhResult, { ok: true }>['kind']
 export const _kindsCoverGhResult: AssertEqual<GhWriteFailureKind, GhResultFailureKind> = true
 
@@ -41,11 +34,7 @@ function dedupeKeys(keys: readonly LabelKey[]): readonly LabelKey[] {
   return [...new Set(keys)]
 }
 
-/** Four `CommandResult` kinds carry no `stderr` at all (`not-found`,
- *  `cwd-missing`, `output-too-large`, `spawn-failed`) — this describes each
- *  from its own fields, the same idiom `main/reclaimer/report.ts`'s
- *  `describeCommandFailure` uses, so `result.stderr` is never read where
- *  the type does not guarantee it exists. */
+// Four kinds carry no `stderr` at all — described from their own fields instead.
 function describeGhFailure(result: Exclude<GhResult, { ok: true }>): string {
   switch (result.kind) {
     case 'not-found':
@@ -64,8 +53,6 @@ function describeGhFailure(result: Exclude<GhResult, { ok: true }>): string {
 export interface ApplyLabelsParams {
   readonly request: LabelWriteRequest
   readonly repoRoot: string
-  /** `app.getPath('userData')` at the composition root — where
-   *  `writes.jsonl` lives. */
   readonly auditDir: string
   readonly gh?: GhRunner
   readonly git?: OwnershipGitRunner
@@ -100,15 +87,7 @@ async function recordLabelAudit(auditDir: string, ctx: AuditContext, outcome: Wr
   await appendAudit(auditDir, entry)
 }
 
-/**
- * Fixed order (plan's own **Implementation**): resolve names → read
- * ownership (every write needs it now, not only a plan-review-touching one) →
- * the authoritative read → evaluate the precondition → short-circuit
- * `no-op` → `gh(argv)` → on failure only, one best-effort re-read. Every
- * branch appends exactly one audit entry, aborts included. A successful
- * outcome carries no resulting label set — the next poll reports what is
- * actually there.
- */
+// A successful outcome carries no resulting label set — the next poll reports what is actually there.
 export async function applyLabels(params: ApplyLabelsParams): Promise<WriteOutcome> {
   const now = params.now ?? (() => new Date())
   const pathOps = params.pathOps ?? defaultPathOps
@@ -211,15 +190,8 @@ export interface PostCommentParams {
   readonly pathOps?: PathOps
 }
 
-/** Writes the body to a scratch file under `request.scratchDir` and passes
- *  `--body-file`, deleting the file in a `finally` — argv-length limits on
- *  Windows, not shell quoting, are the reason: the platform layer spawns
- *  with `shell: false`, so a fence in an inline `--body` is inert but a long
- *  body is not. The comment is audited with its byte length and target,
- *  never its text. Reads ownership first, the same as `applyLabels` — a
- *  comment is a GitHub write like any other, and `gateAnswer`'s own
- *  comment-then-swap order means a feedback comment can land before the
- *  label write ever checks ownership itself. */
+/** Passes `--body-file` from a scratch file, deleted in a `finally` — argv-length limits on Windows
+ *  are the reason, not shell quoting. Audited with byte length, never the text. */
 export async function postComment(params: PostCommentParams): Promise<WriteOutcome> {
   const now = params.now ?? (() => new Date())
   const pathOps = params.pathOps ?? defaultPathOps

@@ -1,10 +1,5 @@
-// readWorktrees: parses `git worktree list --porcelain` into the app's own
-// worktree model. Local-only (Decision 1) — no `gh` call, no item state, no
-// removal; that stays `bin/worktrees.mjs`'s job and #79's join. Three
-// batched `git` invocations per repository, independent of worktree count
-// (Decision 3): one `worktree list --porcelain`, one `config --get-regexp`
-// for every upstream at once, one `log --no-walk=unsorted` for every head at
-// once.
+// Local-only: no `gh` call, no item state, no removal. Three batched `git` invocations per repository,
+// independent of worktree count.
 import { git as defaultGit, parsePorcelainStanzas } from '../platform/git'
 import { pathOps as defaultPathOps } from '../platform/paths'
 import type { CommandResult } from '../platform/run'
@@ -20,16 +15,11 @@ export interface ReadWorktreesParams {
   readonly repoRoot: string
   readonly git?: GitRunner
   readonly now?: () => Date
-  /** Defaults to the host-bound singleton — injectable, the same idiom as
-   *  `registry/store.ts`'s `dedupePaths`, so a win32-flavoured case
-   *  (`git` emits `C:/Users/…` on Windows) is exercised on any host. */
+  /** Injectable so a win32-flavoured case is exercised on any host. */
   readonly pathOps?: PathOps
 }
 
-/** Fails to compile if a new `CommandResult` failure kind is added to the
- *  platform layer without `LocalFailureKind` (`shared/local/types.ts`)
- *  growing to match — the same pin `main/github/adapter.ts` establishes for
- *  `PipelineFailureKind`. */
+/** Fails to compile if a new `CommandResult` failure kind is added without `LocalFailureKind` growing to match. */
 type CommandResultFailureKind = Exclude<CommandResult, { ok: true }>['kind']
 export const _kindsCoverCommandResult: AssertEqual<LocalFailureKind, CommandResultFailureKind | 'not-a-repository'> = true
 
@@ -45,8 +35,7 @@ function describeFailure(result: Exclude<CommandResult, { ok: true }>): { kind: 
     case 'cwd-missing':
       return { kind: 'cwd-missing', message: `working directory does not exist: ${result.cwd}` }
     case 'nonzero':
-      // Exit 128 outside a repository, matching `gitRepoRoot`'s own mapping
-      // (main/platform/git.ts) rather than a generic nonzero.
+      // Exit 128 outside a repository, matching `gitRepoRoot`'s own mapping rather than a generic nonzero.
       if (result.code === 128) return { kind: 'not-a-repository', message: result.stderr.trim() || 'not a git repository' }
       return { kind: 'nonzero', message: result.stderr.trim() || `git exited with code ${result.code}` }
     case 'signalled':
@@ -62,10 +51,7 @@ function describeFailure(result: Exclude<CommandResult, { ok: true }>): { kind: 
 
 const UPSTREAM_KEY_PATTERN = /^branch\.(.*)\.merge$/
 
-/** Strips the `branch.` prefix and the *last* `.merge` suffix — never split
- *  on `.`, which would silently mis-key a branch name containing dots
- *  (`branch.release.1.merge`). The `.*` is greedy, so it backtracks to the
- *  final `.merge` in the key rather than the first. */
+/** The `.*` is greedy, backtracking to the final `.merge` in the key rather than the first. */
 function parseUpstreamMap(lines: readonly string[]): ReadonlyMap<string, string> {
   const map = new Map<string, string>()
   for (const line of lines) {
@@ -130,8 +116,7 @@ function parseRawEntries(stdout: string, pathOps: PathOps): readonly RawEntry[] 
   })
 }
 
-/** Local facts only, per the plan's field table — no `gh`, no item state, no
- *  removal decision. `#0` is never a correlation (see `correlate.ts`). */
+/** Local facts only — no `gh`, no item state, no removal decision. */
 export async function readWorktrees(params: ReadWorktreesParams): Promise<WorktreesRead> {
   const git = params.git ?? ((args, cwd) => defaultGit(args, { cwd }))
   const now = params.now ?? (() => new Date())
@@ -147,10 +132,7 @@ export async function readWorktrees(params: ReadWorktreesParams): Promise<Worktr
   const rawEntries = parseRawEntries(listResult.stdout, pathOps)
   const mainPath = rawEntries[0]?.path ?? params.repoRoot
 
-  // `git config --get-regexp` exits 1 when nothing matches — an empty
-  // upstream set, never a failure of the whole read. Any other failure
-  // kind is a real problem worth reporting, since it means the same `git`
-  // that just answered `worktree list` could not answer this call.
+  // Exit 1 means an empty upstream set, never a failure of the whole read.
   const upstreamResult = await git(['config', '--get-regexp', '^branch\\..*\\.merge'], params.repoRoot)
   let upstreamMap: ReadonlyMap<string, string>
   if (upstreamResult.ok) {
@@ -162,10 +144,7 @@ export async function readWorktrees(params: ReadWorktreesParams): Promise<Worktr
     return { ok: false, kind, message, readAt }
   }
 
-  // A rung that could not run is not a rung that found nothing (ENGINEERING
-  // §4) — a failing batch `git log --no-walk` degrades every entry relying
-  // on it to `unresolved: 'subjects-unavailable'`, rather than failing the
-  // whole read.
+  // A failing batch `git log --no-walk` degrades every entry to `unresolved: 'subjects-unavailable'`.
   const heads = [...new Set(rawEntries.map((entry) => entry.head).filter((head): head is string => head !== null))]
   let subjectMap: ReadonlyMap<string, string> = new Map()
   let subjectsAvailable = true
