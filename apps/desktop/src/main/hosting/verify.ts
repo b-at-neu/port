@@ -92,3 +92,9 @@ export function composeInvocation(name: string, args: string): string {
   const trimmed = args.trim()
   return trimmed === '' ? `/${name}` : `/${name} ${trimmed}`
 }
+
+/** True for `port:pipeline`, and for a bare `pipeline` only when `hasUnqualifiedPipeline` is false. Never a substring match. */
+export function isPipelineCommand(name: string, hasUnqualifiedPipeline: boolean): boolean {
+  if (name === `${PLUGIN_NAME}:pipeline`) return true
+  return name === 'pipeline' && !hasUnqualifiedPipeline
+}

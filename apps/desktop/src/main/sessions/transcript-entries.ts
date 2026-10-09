@@ -143,6 +143,18 @@ function imagePlaceholder(block: Record<string, unknown>): string {
   return `[image, ${kb} KB -- not shown]`
 }
 
+/** A user-sent attachment block, kept visible rather than dropped — `[image, N KB]` or `[file: <title>]`. */
+function attachmentBlockPlaceholder(block: Record<string, unknown>): string {
+  if (block['type'] === 'image') {
+    const source = block['source']
+    let kb = 0
+    if (isRecord(source) && typeof source['data'] === 'string') kb = Math.round((source['data'].length * 0.75) / 1024)
+    return `[image, ${kb} KB]`
+  }
+  const title = block['title']
+  return `[file: ${typeof title === 'string' ? title : 'attachment'}]`
+}
+
 /** Array-form content is joined into one payload, with an image replaced by a placeholder rather than a `data:` URL the CSP would otherwise permit. */
 function resultTextOf(content: unknown): string {
   if (typeof content === 'string') return content
@@ -288,6 +300,11 @@ export function createDeriver(options: DeriveEntriesOptions = DEFAULT_OPTIONS): 
 
         if (blockType === 'thinking' && typeof block['thinking'] === 'string') {
           emit({ type: 'thinking', uuid, timestamp, text: capPayload(block['thinking']) })
+          continue
+        }
+
+        if (role === 'user' && (blockType === 'image' || blockType === 'document')) {
+          emit({ type: 'user-text', uuid, timestamp, text: capPayload(attachmentBlockPlaceholder(block)) })
           continue
         }
 

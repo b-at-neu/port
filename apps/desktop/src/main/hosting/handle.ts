@@ -19,6 +19,7 @@ import type {
   SessionStartMode,
 } from '../../shared/hosting/types'
 import type { RepoId } from '../../shared/repos'
+import type { ComposerAttachment } from '../../shared/hosting/attachments'
 import { createHostedInput } from './input'
 import { buildSessionOptions } from './options'
 import { classifyEnd } from './classify'
@@ -30,7 +31,9 @@ import type { ProjectedDelta, SessionProjectorWindow } from './project'
 import { createCapabilityTracker } from './capabilities'
 import { readRateLimit } from './rate-limit'
 import { promptTitle } from './title'
-import { composeInvocation, validateCommandName } from './verify'
+import { buildUserContent } from './content'
+import type { ContentBlock } from './content'
+import { composeInvocation, isPipelineCommand, validateCommandName } from './verify'
 import type { ExpectedComponents } from './plugin'
 import type { HostedQuery, Options, SDKMessage, SDKUserMessage } from './sdk'
 
@@ -78,6 +81,9 @@ export interface HostedSendResult {
   readonly queued: boolean
 }
 
+/** `blocked-command` is an operator action, not a bug — a typed value, never a thrown refusal. */
+export type HostedSendOutcome = ({ readonly ok: true } & HostedSendResult) | { readonly ok: false; readonly kind: 'blocked-command'; readonly name: string }
+
 export interface HostedHandle {
   readonly sessionKey: SessionKey
   /** `mode.sessionId` for `resume`/`resume-at`, `null` otherwise. */
@@ -85,8 +91,8 @@ export interface HostedHandle {
   readonly cwd: string
   snapshot(): HostedSessionSnapshot
   replay(): HostedHandleReplay
-  /** Always accepts and returns `{ uuid, queued: true }` — the SDK owns the queue. */
-  send(text: string): HostedSendResult
+  /** Refuses `/port:pipeline` (or an unreported bare `/pipeline`) as `blocked-command`, pushing nothing. */
+  send(text: string, attachments?: readonly ComposerAttachment[]): HostedSendOutcome
   /** The interrupt receipt's `still_queued` count, or `null` when the CLI returned no receipt. */
   interrupt(): Promise<number | null>
   /** Ends the input iterator, waits up to `CLOSE_GRACE_MS`, then forces `query.close()`. */
@@ -260,14 +266,25 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     emitStatus()
   }
 
-  function doSend(text: string): HostedSendResult {
-    if (title === null) title = promptTitle(text)
-    const { uuid } = input.push(text)
-    emitEntries(projector.recordSend(uuid, text, new Date(params.now()).toISOString()))
+  /** `titleText`/`firstAttachmentName` back `promptTitle`'s own fallback —
+   *  `invoke()` passes the composed `/name args` text and no attachment. */
+  function doSend(content: string | ContentBlock[], titleText: string, firstAttachmentName: string | null): HostedSendResult {
+    if (title === null) title = promptTitle(titleText, firstAttachmentName)
+    const { uuid } = input.push(content)
+    emitEntries(projector.recordSend(uuid, content, new Date(params.now()).toISOString()))
     // Streaming input mode accepts a send immediately; the CLI never echoes it back without --replay-user-messages.
     if (phase === 'starting' || phase === 'ready') phase = 'streaming'
     emitStatus()
     return { uuid, queued: true }
+  }
+
+  /** The first whitespace-delimited token, with its leading `/` stripped —
+   *  `null` when the trimmed text does not start with `/`. */
+  function leadingCommandName(text: string): string | null {
+    const trimmed = text.trimStart()
+    if (!trimmed.startsWith('/')) return null
+    const token = trimmed.slice(1).split(/\s/, 1)[0]
+    return token === undefined || token === '' ? null : token
   }
 
   const pumpDone = pump()
@@ -280,8 +297,14 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     replay() {
       return { events: [...ring], droppedBefore }
     },
-    send(text) {
-      return doSend(text)
+    send(text, attachments = []) {
+      const commandName = leadingCommandName(text)
+      if (commandName !== null && isPipelineCommand(commandName, capabilities.hasOwnPipelineCommand())) {
+        return { ok: false, kind: 'blocked-command', name: commandName }
+      }
+      const content = buildUserContent(text, attachments)
+      const result = doSend(content, text, attachments[0]?.name ?? null)
+      return { ok: true, ...result }
     },
     async interrupt() {
       if (phase === 'ended') return queuedAfterInterrupt
@@ -326,7 +349,8 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
       const validation = validateCommandName(name)
       if (!validation.ok) return { ok: false, kind: 'invalid-command', reason: validation.reason }
       if (!capabilities.has(name)) return { ok: false, kind: 'unknown-command', name }
-      const { uuid } = doSend(composeInvocation(name, args))
+      const composed = composeInvocation(name, args)
+      const { uuid } = doSend(composed, composed, null)
       return { ok: true, uuid, queued: true }
     },
     async setControls(patch) {

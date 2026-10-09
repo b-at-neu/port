@@ -80,7 +80,7 @@ function sessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): Hosted
     end: null,
     titled: null,
     pendingPermissions: [],
-    capabilities: { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [], plugin: { kind: 'loaded', path: 'p', version: null }, components: { kind: 'complete' } },
+    capabilities: { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [], plugin: { kind: 'loaded', path: 'p', version: null }, components: { kind: 'complete' }, slashCommands: [] },
     title: null,
     rateLimit: null,
     controls: TEST_CONTROLS,
@@ -114,6 +114,7 @@ function fakeStore(overrides: Partial<HostedStore> = {}): HostedStore {
       throw new Error('dismiss should not be invoked in this case')
     },
     snapshotOf: () => null,
+    cwdOf: () => null,
     capacity: () => Promise.resolve({ limit: 4, ceiling: 8 }),
     setLimit: () => {
       throw new Error('setLimit should not be invoked in this case')

@@ -102,5 +102,6 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'session:controls:set': () => ({ ok: false, kind: 'unknown-session' }),
     'session:question:answer': () => ({ ok: false, kind: 'unknown-session' }),
     'session:plan:answer': () => ({ ok: false, kind: 'unknown-session' }),
+    'session:files': () => ({ ok: false, kind: 'unknown-session' }),
   }
 }

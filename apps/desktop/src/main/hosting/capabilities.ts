@@ -1,8 +1,8 @@
 // A timeout or rejected read-back must never look like an empty capability list.
-import type { AgentSummary, CommandSummary, PluginRequest, SessionCapabilities } from '../../shared/hosting/types'
+import type { AgentSummary, CommandSummary, PluginRequest, SessionCapabilities, SlashCommandSummary } from '../../shared/hosting/types'
 import { isRecord } from '../../shared/guards'
 import { sanitize } from '../sessions/transcript-entries'
-import { checkComponents, checkPluginLoad, PLUGIN_NAME } from './verify'
+import { checkComponents, checkPluginLoad, isPipelineCommand, PLUGIN_NAME } from './verify'
 import type { InitPlugin } from './verify'
 import type { ExpectedComponents } from './plugin'
 import type { AgentInfo, HostedQuery, SlashCommand } from './sdk'
@@ -26,16 +26,33 @@ export interface CapabilityTracker {
   observe(message: unknown): void
   current(): SessionCapabilities
   has(name: string): boolean
+  /** Whether this session's own command list names an unqualified `pipeline` of its own. */
+  hasOwnPipelineCommand(): boolean
 }
 
 function isPortQualified(name: string): boolean {
   return name.startsWith(QUALIFIER) && name.length > QUALIFIER.length
 }
 
+function hasUnqualifiedPipeline(raw: readonly SlashCommand[]): boolean {
+  return raw.some((command) => command.name === 'pipeline')
+}
+
 function toCommandSummaries(raw: readonly SlashCommand[]): CommandSummary[] {
+  const unqualifiedPipeline = hasUnqualifiedPipeline(raw)
   return raw
-    .filter((command) => isPortQualified(command.name))
+    .filter((command) => isPortQualified(command.name) && !isPipelineCommand(command.name, unqualifiedPipeline))
     .map((command) => ({ name: command.name.slice(QUALIFIER.length), description: sanitize(command.description), argumentHint: command.argumentHint }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** The composer's `/` autocomplete source — every reported command, namespace
+ *  intact, unlike `toCommandSummaries`'s own `port:`-qualified filter. */
+function toSlashCommandSummaries(raw: readonly SlashCommand[]): SlashCommandSummary[] {
+  const unqualifiedPipeline = hasUnqualifiedPipeline(raw)
+  return raw
+    .filter((command) => !isPipelineCommand(command.name, unqualifiedPipeline))
+    .map((command) => ({ name: command.name, description: sanitize(command.description), argumentHint: command.argumentHint }))
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
@@ -66,6 +83,8 @@ export function createCapabilityTracker(params: CreateCapabilityTrackerParams): 
   let expectedSettled = false
   let commands: CommandSummary[] = []
   let agents: AgentSummary[] = []
+  let slashCommands: SlashCommandSummary[] = []
+  let ownPipelineCommand = false
   let initPlugins: readonly InitPlugin[] | null = null
 
   function recompute(): void {
@@ -76,7 +95,7 @@ export function createCapabilityTracker(params: CreateCapabilityTrackerParams): 
       commandNames: commands.map((command) => command.name),
       agentNames: agents.map((agent) => agent.name),
     })
-    state = { kind: 'ready', request: params.request, commands, agents, plugin, components }
+    state = { kind: 'ready', request: params.request, commands, agents, plugin, components, slashCommands }
   }
 
   async function ensureExpected(pluginPath: string): Promise<void> {
@@ -93,6 +112,8 @@ export function createCapabilityTracker(params: CreateCapabilityTrackerParams): 
       const [rawCommands, rawAgents] = await Promise.race([Promise.all([query.supportedCommands(), query.supportedAgents()]), timeoutRejection(params.timeoutMs ?? CAPABILITIES_TIMEOUT_MS)])
       commands = toCommandSummaries(rawCommands)
       agents = toAgentSummaries(rawAgents)
+      slashCommands = toSlashCommandSummaries(rawCommands)
+      ownPipelineCommand = hasUnqualifiedPipeline(rawCommands)
       recompute()
     } catch (error) {
       state = { kind: 'unavailable', request: params.request, message: error instanceof Error ? error.message : String(error) }
@@ -123,6 +144,8 @@ export function createCapabilityTracker(params: CreateCapabilityTrackerParams): 
       const rawCommands = message['commands']
       if (!Array.isArray(rawCommands)) return
       commands = toCommandSummaries(rawCommands as SlashCommand[])
+      slashCommands = toSlashCommandSummaries(rawCommands as SlashCommand[])
+      ownPipelineCommand = hasUnqualifiedPipeline(rawCommands as SlashCommand[])
       recompute()
       params.onChange()
     }
@@ -133,5 +156,6 @@ export function createCapabilityTracker(params: CreateCapabilityTrackerParams): 
     observe,
     current: () => state,
     has: (name) => commands.some((command) => command.name === name),
+    hasOwnPipelineCommand: () => ownPipelineCommand,
   }
 }

@@ -29,6 +29,18 @@ describe('promptTitle', () => {
     const result = promptTitle(long)
     expect(result).toBe(`${'a'.repeat(60)}…`)
   })
+
+  it('falls back to the first attachment name when the text is empty', () => {
+    expect(promptTitle('', 'photo.png')).toBe('photo.png')
+  })
+
+  it('prefers the text over the attachment name when both are present', () => {
+    expect(promptTitle('describe this', 'photo.png')).toBe('describe this')
+  })
+
+  it('returns null when both the text and the attachment name are empty', () => {
+    expect(promptTitle('', null)).toBeNull()
+  })
 })
 
 describe('recordTitle', () => {

@@ -41,6 +41,9 @@ function storeStub(overrides: Partial<HostedStore> = {}): HostedStore {
     snapshotOf: () => {
       throw new Error('unused in this test')
     },
+    cwdOf: () => {
+      throw new Error('cwdOf should not be invoked in this case')
+    },
     capacity: () => {
       throw new Error('unused in this test')
     },
@@ -82,6 +85,9 @@ function depsWith(overrides: Partial<HostingChannelDeps> = {}): HostingChannelDe
   return {
     listRepositories: () => Promise.resolve({ ok: true, repositories: [] }),
     store: storeStub(),
+    listSessionFiles: () => {
+      throw new Error('listSessionFiles should not be invoked in this case')
+    },
     ...overrides,
   }
 }

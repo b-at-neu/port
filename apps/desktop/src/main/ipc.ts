@@ -35,6 +35,7 @@ import {
   resolveSessionDefaults,
   resolveSessionDefaultsSet,
   resolveSessionDismiss,
+  resolveSessionFiles,
   resolveSessionInterrupt,
   resolveSessionInvoke,
   resolveSessionList,
@@ -294,6 +295,8 @@ export function registerIpc(): RegisteredIpc {
   handle('session:question:answer', (_event, request) => resolveSessionQuestionAnswer(request, hostingChannelDeps))
 
   handle('session:plan:answer', (_event, request) => resolveSessionPlanAnswer(request, hostingChannelDeps))
+
+  handle('session:files', (_event, request) => resolveSessionFiles(request, hostingChannelDeps))
 
   handle('item:action', (_event, request) =>
     resolveItemAction(registryDeps, request, app.getPath('userData'), { listRepositories, applyItemAction, snapshot: watcher.snapshot, refresh: watcher.refresh }),

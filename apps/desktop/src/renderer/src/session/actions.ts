@@ -9,9 +9,10 @@ import type { RepoId, RepositoryEntry } from '../../../shared/repos'
 import type { ReposListResponse } from '../../../shared/ipc'
 import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '../../../shared/hosting/types'
 import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SessionEffort, SetControlsResult } from '../../../shared/hosting/controls'
+import type { ComposerAttachment } from '../../../shared/hosting/attachments'
 import { startFailureCopy, START_UNREACHABLE } from './copy'
 import type { StartFailureCopy } from './copy'
-import { clearDraft } from './drafts'
+import { clearDraft, clearDraftAttachments } from './drafts'
 import { forgetSessionEntries } from './entries-store'
 
 let queryClient: QueryClient | null = null
@@ -145,15 +146,19 @@ export function selectSession(key: SessionKey): void {
 export interface SendOutcome {
   readonly ok: boolean
   readonly error: string | null
+  /** The blocked command's own name, set only when `error` is `'blocked-command'`. */
+  readonly blockedCommandName: string | null
 }
 
-export async function send(key: SessionKey, text: string): Promise<SendOutcome> {
+export async function send(key: SessionKey, text: string, attachments: readonly ComposerAttachment[] = []): Promise<SendOutcome> {
   try {
-    const result = await invoke('session:send', { sessionKey: key, text })
-    return result.ok ? { ok: true, error: null } : { ok: false, error: 'unknown-session' }
+    const result = await invoke('session:send', { sessionKey: key, text, attachments })
+    if (result.ok) return { ok: true, error: null, blockedCommandName: null }
+    if (result.kind === 'blocked-command') return { ok: false, error: 'blocked-command', blockedCommandName: result.name }
+    return { ok: false, error: 'unknown-session', blockedCommandName: null }
   } catch (error) {
     console.error('Failed to reach the main process sending a message', error)
-    return { ok: false, error: 'unreachable' }
+    return { ok: false, error: 'unreachable', blockedCommandName: null }
   }
 }
 
@@ -182,6 +187,7 @@ export async function dismiss(key: SessionKey): Promise<boolean> {
     removeSession(key)
     forgetSessionEntries(key)
     clearDraft(key)
+    clearDraftAttachments(key)
     return true
   } catch (error) {
     console.error('Failed to reach the main process dismissing a session', error)

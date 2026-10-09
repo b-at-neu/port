@@ -139,6 +139,35 @@ describe('deriveEntries', () => {
     expect(entries).toEqual([{ type: 'thinking', uuid: 'u1', timestamp: '2026-01-01T00:00:00.000Z', text: { text: 'pondering', omittedChars: 0 } }])
   })
 
+  it('renders a user-sent image block as a visible placeholder, never silently dropped', () => {
+    const records = [
+      {
+        uuid: 'u1',
+        timestamp: '2026-01-01T00:00:00.000Z',
+        type: 'user',
+        message: { role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } }] },
+      },
+    ]
+    const entries = deriveEntries(records)
+    expect(entries).toHaveLength(1)
+    const entry = entries[0]
+    if (entry?.type !== 'user-text') throw new Error('unreachable')
+    expect(entry.text.text).toMatch(/^\[image, \d+ KB\]$/)
+  })
+
+  it('renders a user-sent document block naming its title', () => {
+    const records = [
+      {
+        uuid: 'u1',
+        timestamp: '2026-01-01T00:00:00.000Z',
+        type: 'user',
+        message: { role: 'user', content: [{ type: 'document', source: { type: 'text', media_type: 'text/plain', data: 'hi' }, title: 'notes.txt' }] },
+      },
+    ]
+    const entries = deriveEntries(records)
+    expect(entries).toEqual([{ type: 'user-text', uuid: 'u1', timestamp: '2026-01-01T00:00:00.000Z', text: { text: '[file: notes.txt]', omittedChars: 0 } }])
+  })
+
   it('renders an attachment record as a meta entry, never dropping it', () => {
     const records = [{ uuid: 'u1', timestamp: '2026-01-01T00:00:00.000Z', type: 'attachment', attachment: { type: 'skill_listing', skillCount: 40 } }]
     const entries = deriveEntries(records)

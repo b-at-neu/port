@@ -14,9 +14,11 @@ function normalize(text: string): string | null {
   return collapsed.length > MAX_TITLE_LENGTH ? `${collapsed.slice(0, MAX_TITLE_LENGTH)}…` : collapsed
 }
 
-/** A fresh session's own title source: the first prompt it was sent. */
-export function promptTitle(text: string): string | null {
-  return normalize(text)
+/** A fresh session's title source: the first prompt sent, or its first attachment's name when the text is empty. */
+export function promptTitle(text: string, firstAttachmentName: string | null = null): string | null {
+  const fromText = normalize(text)
+  if (fromText !== null) return fromText
+  return firstAttachmentName === null ? null : normalize(firstAttachmentName)
 }
 
 /** A resumed or forked session's title source: the disk record's own
