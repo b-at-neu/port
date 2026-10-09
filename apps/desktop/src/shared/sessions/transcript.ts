@@ -1,17 +1,9 @@
-// Renderer-safe transcript shapes (#83). No import here may reach a Node
-// builtin or the Agent SDK — `main/sessions/transcript-entries.ts` derives
-// these from a session's or subagent's raw `.jsonl` records, and the
-// renderer is the eventual consumer over IPC, so this file compiles under
-// `typecheck:web` too (the same contract `shared/sessions/types.ts` already
-// holds).
+// Renderer-safe transcript shapes. No import here may reach a Node builtin or the Agent SDK — `main/sessions/transcript-entries.ts` derives these from raw `.jsonl` records.
 
-/** Caps a single rendered payload — the whole response is already bounded by
- *  `readTranscript`'s file-size cap; this protects one DOM node from a
- *  single oversized tool result or input. */
+/** Caps a single rendered payload, protecting one DOM node from a single oversized tool result or input. */
 export const MAX_PAYLOAD_CHARS = 32_000
 
-/** `omittedChars > 0` is the truncation signal a renderer foots with
- *  "N characters not shown" — never silently dropped. */
+/** `omittedChars > 0` is the truncation signal a renderer foots with "N characters not shown" — never silently dropped. */
 export interface Payload {
   readonly text: string
   readonly omittedChars: number
@@ -19,10 +11,7 @@ export interface Payload {
 
 export type DiffSign = 'add' | 'del' | 'context'
 
-/** `text` is the `structuredPatch` line verbatim, leading `+`/`-`/space
- *  included — `sign` is derived from that same leading character for
- *  styling, so the sign carries the meaning and colour stays redundant
- *  (ENGINEERING §5). */
+/** `text` is the `structuredPatch` line verbatim; `sign` is derived from the same leading character so colour stays redundant with it. */
 export interface DiffLine {
   readonly sign: DiffSign
   readonly text: string
@@ -69,10 +58,7 @@ export interface ToolResult {
   readonly payload: Payload
 }
 
-/** The `tool_use` block and the `tool_result` block that carries its `id`
- *  collapse into one entry — an unpaired call (the result never arrived, or
- *  arrived past the read window) keeps `result: null` rather than being
- *  dropped. */
+/** The `tool_use` block and the matching `tool_result` collapse into one entry — an unpaired call keeps `result: null` rather than being dropped. */
 export interface ToolCallEntry extends TranscriptEntryBase {
   readonly type: 'tool-call'
   readonly name: string
@@ -82,8 +68,7 @@ export interface ToolCallEntry extends TranscriptEntryBase {
   readonly diff: FileDiff | null
 }
 
-/** Attachments and system notices — rendered, never dropped, since silently
- *  discarding a record misrepresents the transcript. */
+/** Attachments and system notices — rendered, never dropped. */
 export interface MetaEntry extends TranscriptEntryBase {
   readonly type: 'meta'
   readonly label: string
@@ -91,11 +76,7 @@ export interface MetaEntry extends TranscriptEntryBase {
 
 export type TranscriptEntry = UserTextEntry | AssistantTextEntry | ThinkingEntry | ToolCallEntry | MetaEntry
 
-/** A prior `appended` entry whose `tool-call` result arrived later —
- *  `index` is that entry's absolute position across the whole transcript,
- *  the same numbering `appended` itself is in. Only a `ToolCallEntry` is
- *  ever patched: every other entry kind is complete the moment it is
- *  derived. */
+/** A prior `appended` entry whose `tool-call` result arrived later. Only a `ToolCallEntry` is ever patched: every other kind is complete the moment it is derived. */
 export interface EntryPatch {
   readonly index: number
   readonly entry: ToolCallEntry
@@ -106,8 +87,7 @@ export interface TranscriptSource {
   readonly agentId: string | null
   readonly path: string
   readonly sizeBytes: number
-  /** Activity, never liveness (Decision 4, carried from #78) — no
-   *  `running`/`alive`/`isLive`-shaped field belongs here. */
+  /** Activity, never liveness — no `running`/`alive`/`isLive`-shaped field belongs here. */
   readonly modifiedAt: string
   readonly recordCount: number
   readonly malformedLines: number
@@ -115,39 +95,20 @@ export interface TranscriptSource {
 
 export type TranscriptFailureKind = 'invalid-id' | 'session-unresolved' | 'not-found' | 'too-large' | 'unreadable'
 
-/**
- * Direction of failure: closed on the answer, open on reporting. No path
- * returns `entries: []` for a read that did not succeed — an empty
- * transcript is the one output an operator reads as "this agent did
- * nothing". A file whose lines partly fail to parse is the single partial
- * case: `ok: true`, with `malformedLines` counted and named rather than
- * dropped.
- */
+/** Fails closed on the answer, open on reporting. No path returns `entries: []` for a read that did not succeed; a partly-malformed file is `ok: true` with `malformedLines` counted. */
 export type TranscriptRead =
   | { readonly ok: true; readonly source: TranscriptSource; readonly entries: readonly TranscriptEntry[] }
   | { readonly ok: false; readonly kind: TranscriptFailureKind; readonly message: string; readonly path: string | null }
 
-/** `transcript:tail:open`'s response. `tailId` is an opaque token minted by
- *  `main/sessions/tail.ts` — the renderer never constructs or parses one,
- *  only holds it and hands it back to `poll`/`close`. */
+/** `transcript:tail:open`'s response. `tailId` is an opaque token — the renderer never constructs or parses one, only holds it and hands it back. */
 export type TranscriptTailOpen =
   | { readonly ok: true; readonly tailId: string; readonly source: TranscriptSource; readonly entries: readonly TranscriptEntry[] }
   | { readonly ok: false; readonly kind: TranscriptFailureKind; readonly message: string; readonly path: string | null }
 
-/** `unknown-tail` — the id is not (or no longer) open, an expected answer
- *  after `TAIL_IDLE_MS` of inactivity, not a bug. `truncated` — the file on
- *  disk is smaller than the cursor's own offset (rewritten or compacted).
- *  Both direct the renderer to re-open from the start; neither is ever
- *  reported as "no new messages", which an operator would misread as the
- *  agent having stopped. */
+/** `unknown-tail` is an expected answer after idle expiry, not a bug. `truncated` is a file smaller than the cursor's offset. Both re-open from the start, never reported as "no new messages". */
 export type TranscriptTailFailureKind = TranscriptFailureKind | 'unknown-tail' | 'truncated'
 
-/** `transcript:tail:poll`'s response. A poll with nothing new returns empty
- *  `appended`/`patched` and asserts nothing else — idle is never reported as
- *  finished, since nothing readable from a file on disk proves a process
- *  ended. `hasMore` is the streamed catch-up signal: true means this poll's
- *  chunk hit `MAX_CHUNK_BYTES`, so the caller should poll again on the next
- *  macrotask rather than waiting the full interval. */
+/** `transcript:tail:poll`'s response. Nothing new returns empty `appended`/`patched`, never reported as finished. `hasMore` means this chunk hit `MAX_CHUNK_BYTES`, so the caller should poll again immediately. */
 export type TranscriptTailPoll =
   | {
       readonly ok: true

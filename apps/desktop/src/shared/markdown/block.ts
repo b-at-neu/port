@@ -1,12 +1,4 @@
-// Block parse (#92) — pure, no DOM, no `node:` import (`shared/markdown/`
-// compiles under `typecheck:web`). Recognizes exactly the bounded subset the
-// plan decided: ATX headings, paragraphs, fenced code, blockquote, `-`/`*`
-// and `1.` lists with one level of nesting and GitHub task items, GFM pipe
-// tables, thematic breaks. Anything else — raw HTML, images, footnotes,
-// reference links, deeper nesting — is never specially recognized, so it
-// falls into an ordinary paragraph's own literal `text` inline nodes:
-// rendered as characters via `textContent`, never dropped, never
-// interpreted.
+// Block parse — pure, no DOM, no `node:` import. Recognizes a bounded subset: ATX headings, paragraphs, fenced code, blockquote, lists with one level of nesting and task items, GFM pipe tables, thematic breaks. Anything else falls into an ordinary paragraph's literal text, never dropped or interpreted.
 import { parseInline } from './inline'
 import type { BlockNode, ListItem, TableAlign, TableRow } from './types'
 
@@ -36,9 +28,7 @@ function splitTableRow(line: string): readonly string[] {
   return trimmed.split('|').map((cell) => cell.trim())
 }
 
-/** A blank line or the start of anything block-shaped stops a paragraph — a
- *  paragraph is one inline run in this bounded subset, its source lines
- *  joined with a single space, never preserved line-by-line. */
+/** A blank line or the start of anything block-shaped stops a paragraph; its source lines join with a single space, never preserved line-by-line. */
 function paragraphLines(lines: readonly string[], start: number): { readonly text: string; readonly next: number } {
   const collected: string[] = []
   let i = start
@@ -87,10 +77,7 @@ function parseBlockquote(lines: readonly string[], start: number): { readonly no
   return { node: { kind: 'blockquote', children: parseMarkdown(inner.join('\n')) }, next: i }
 }
 
-/** Collects one list's worth of top-level items. A following line indented
- *  more than its own item's marker becomes that item's `children` — one
- *  level of nested list, dedented and re-parsed as its own `parseList` call,
- *  never a second level (the plan's own bounded subset). */
+/** Collects one list's worth of top-level items. A more-indented following line becomes that item's `children` — one level of nested list, never a second. */
 function parseList(lines: readonly string[], start: number, ordered: boolean): { readonly node: BlockNode; readonly next: number } {
   const items: ListItem[] = []
   const markerRe = ordered ? ORDERED_ITEM : UNORDERED_ITEM
@@ -143,9 +130,7 @@ function toAlign(cell: string): TableAlign {
   return null
 }
 
-/** GFM pipe table: a header row immediately followed by a delimiter row
- *  (`---`/`:--`/`--:`/`:-:` per cell) — `null` when the second line is not a
- *  delimiter row at all, so the caller falls back to an ordinary paragraph. */
+/** GFM pipe table: a header row immediately followed by a delimiter row; `null` when the second line isn't one, so the caller falls back to a paragraph. */
 function parseTable(lines: readonly string[], start: number): { readonly node: BlockNode; readonly next: number } | null {
   const headerLine = lines[start]
   const delimiterLine = lines[start + 1]

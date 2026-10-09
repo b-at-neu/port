@@ -15,10 +15,7 @@ import {
 export type PortBridge = {
   [C in IpcChannel as BridgeMethod<C>]: (request?: IpcMap[C]['request']) => Promise<IpcMap[C]['response']>
 } & {
-  /** The listener receives the payload only — never the Electron event
-   *  object, which would hand `sender` to a sandboxed renderer. Returns an
-   *  unsubscribe function, the same shape every DOM `addEventListener`
-   *  caller already expects. */
+  /** Payload only — the Electron event would hand `sender` to a sandboxed renderer. */
   [E in IpcEvent as BridgeListener<E>]: (listener: (payload: IpcEventMap[E]) => void) => () => void
 }
 

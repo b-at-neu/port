@@ -1,37 +1,23 @@
-// The renderer-safe node values `shared/markdown/block.ts`/`inline.ts` parse
-// into (#92) — rendering is `renderer/src/components/markdown.tsx`'s job
-// alone; this file contains no browser or Node API and no markup string
-// anywhere.
-// Anything the block/inline parsers do not recognize (raw HTML, images,
-// footnotes, reference links, deeper list nesting) is carried inside an
-// ordinary `paragraph`'s own `text` inline nodes — rendered as literal
-// characters via `textContent`, never dropped and never interpreted.
+// The renderer-safe node values block.ts/inline.ts parse into — rendering is `markdown.tsx`'s job alone. Anything unrecognized carries through as an ordinary paragraph's literal text node.
 export type InlineNode =
   | { readonly kind: 'text'; readonly value: string }
   | { readonly kind: 'code'; readonly value: string }
   | { readonly kind: 'strong'; readonly children: readonly InlineNode[] }
   | { readonly kind: 'emphasis'; readonly children: readonly InlineNode[] }
-  /** Emitted only for an `http://`/`https://` href (`inline.ts`'s own scheme
-   *  allowlist) — every other scheme renders as the literal `[text](href)`
-   *  text instead, since a `javascript:` href in an Electron renderer is a
-   *  code-execution sink and a relative GitHub path would be broken anyway. */
+  /** Emitted only for an `http://`/`https://` href; every other scheme renders as literal `[text](href)` text instead. */
   | { readonly kind: 'link'; readonly text: string; readonly href: string }
 
 export interface ListItem {
   readonly inline: readonly InlineNode[]
-  /** `null` for an ordinary list item, `true`/`false` for a GitHub task item
-   *  (`- [ ]`/`- [x]`). */
+  /** `null` for an ordinary list item, `true`/`false` for a GitHub task item. */
   readonly checked: boolean | null
-  /** One level of nesting only, the plan's own bounded subset — a nested
-   *  list under this item, or `[]` when there is none. */
+  /** One level of nesting only — a nested list under this item, or `[]` when there is none. */
   readonly children: readonly BlockNode[]
 }
 
 export type TableAlign = 'left' | 'center' | 'right' | null
 
-/** One table cell's own inline run — a row is `readonly TableCell[]`, a
- *  table's `rows` a `readonly TableRow[]`, so the nesting reads the same way
- *  three levels deep as it does one. */
+/** One table cell's own inline run, nesting the same way three levels deep as it does one. */
 export type TableCell = readonly InlineNode[]
 export type TableRow = readonly TableCell[]
 

@@ -1,23 +1,4 @@
-// The one place the denial log (#77's `readDenials`) is turned into
-// something an operator can act on (#85). Pure — no `gh`, no filesystem, no
-// second reader of the log — so it compiles under `typecheck:web` and can be
-// called from both the renderer (over IPC'd data, #80) and main (#81) from
-// one implementation. Lives in `shared/`, not `main/local/`, because it
-// joins two adapters' outputs (`DenialsRead` and `SessionScan`) and
-// `main/local/` is explicitly a single-source adapter (ENGINEERING §1).
-//
-// Three decisions carry this file, restated here because they are the parts
-// a caller must not violate:
-//
-// - A shape is a grouping key, never a parse, and never a re-derivation of
-//   the hook's reasoning (`shapeOf` below never decides *which* rail fired
-//   on a `session`-actor `deny` — the log does not say, and ENGINEERING §3
-//   forbids guessing a harness decision from its inputs).
-// - Bursts are computed over `deny` entries only, so a run of `miss` lines
-//   (the #63 false-positive class) never reads as a signal worth acting on.
-// - Attribution fails toward "unknown", never toward a guessed role — a
-//   wrong attribution is unrecoverable misinformation; an honest "unknown
-//   session" only costs specificity.
+// Turns the denial log into something an operator can act on. Pure, so it compiles under `typecheck:web` and runs from both renderer and main. Lives in `shared/` because it joins two adapters' outputs. A shape is a grouping key, never a parse; bursts count only `deny` entries; attribution fails toward "unknown", never a guessed role.
 import type { RepoId } from '../repos'
 import type { SessionRecord, SessionRole, SessionScan } from '../sessions/types'
 import { shapeOf } from './shape'
@@ -25,26 +6,17 @@ import type { DenialActor, DenialDecision, DenialsFailureKind, DenialSummary, De
 
 export { shapeOf } from './shape'
 
-/** Idle-window idiom `shared/sessions/types.ts` established (`ACTIVE_WITHIN_MS`)
- *  — tests and #80 share these two constants rather than each carrying its
- *  own threshold. */
+/** Shared with tests rather than each carrying its own threshold. */
 export const BURST_MIN_COUNT = 3
 export const BURST_WINDOW_MS = 10 * 60 * 1000
 
-/** Set only for a `session` actor (Decision 4) — every other actor kind's
- *  attribution already lives in the actor field itself. A session id the
- *  scan cannot resolve is `unknown-session`, never guessed at a role; a scan
- *  that never ran or that failed is a third state, `attribution-unavailable`,
- *  never collapsed into `unknown-session` — the two mean different things to
- *  an operator deciding whether to re-scan. */
+/** Set only for a `session` actor. A session id the scan cannot resolve is `unknown-session`; a scan that never ran or failed is the distinct `attribution-unavailable`. */
 export type SessionAttribution =
   | { readonly kind: 'attributed'; readonly role: SessionRole; readonly repoId: RepoId | null; readonly label: string | null; readonly lastActivityAt: string }
   | { readonly kind: 'unknown-session' }
   | { readonly kind: 'attribution-unavailable'; readonly reason: 'not-scanned' | 'scan-failed' }
 
-/** Every analysed entry lands in exactly one bucket, summing to `analysed`.
- *  `unattributable` covers a legacy line's bare uuid and a malformed line —
- *  the ticket's "clearly mark lines that cannot be attributed". */
+/** Every analysed entry lands in exactly one bucket, summing to `analysed`. `unattributable` covers a legacy line's bare uuid and a malformed line. */
 export interface AttributionTally {
   readonly agentAttributed: number
   readonly sessionAttributed: number
@@ -53,10 +25,7 @@ export interface AttributionTally {
   readonly unattributable: number
 }
 
-/** `undecided` is a legacy or malformed line: it carries no decision field at
- *  all, so it is neither a denial nor a miss. The top-level `DenialSummary`
- *  (passed through verbatim, never recomputed here) already splits legacy
- *  from malformed; a group's own counts do not need to. */
+/** `undecided` is a legacy or malformed line, so it is neither a denial nor a miss. */
 export interface DecisionCounts {
   readonly deny: number
   readonly miss: number
@@ -66,10 +35,7 @@ export interface DecisionCounts {
   readonly total: number
 }
 
-/** One actor's own qualifying run of `deny` entries on one shape, inside
- *  `burstWindowMs`, reaching at least `burstMinCount` — the ticket's
- *  "highlight clustered repeats". At most one per shape group; the largest
- *  qualifying window across that shape's actors wins (see `bestWindowFor`). */
+/** One actor's qualifying run of `deny` entries on one shape, inside `burstWindowMs`, reaching at least `burstMinCount`. At most one per shape group; the largest window wins. */
 export interface Burst {
   readonly actorKey: string
   readonly count: number
@@ -77,10 +43,7 @@ export interface Burst {
   readonly endedAt: string
 }
 
-/** `key` is stable and collision-free — see `actorKeyOf`. `actor` is `null`
- *  only for the malformed lines folded in here (Decision: nothing vanishes,
- *  even a line the actor ladder could not parse). `attribution` is set only
- *  when `actor.kind === 'session'`. */
+/** `key` is stable and collision-free — see `actorKeyOf`. `actor` is `null` only for malformed lines. `attribution` is set only when `actor.kind === 'session'`. */
 export interface ActorGroup {
   readonly key: string
   readonly actor: DenialActor | null
@@ -91,10 +54,7 @@ export interface ActorGroup {
   readonly shapeCount: number
 }
 
-/** `sample` is the newest entry's subject verbatim, capped at 200 characters
- *  — the operator's one piece of real text per group. Malformed lines carry
- *  no subject and never form a shape (excluded here; still counted in
- *  `AttributionTally.unattributable` and `analysed`). */
+/** `sample` is the newest entry's subject verbatim, capped at 200 characters. Malformed lines carry no subject and never form a shape. */
 export interface ShapeGroup {
   readonly shape: string
   readonly counts: DecisionCounts
@@ -105,8 +65,7 @@ export interface ShapeGroup {
   readonly burst: Burst | null
 }
 
-/** Mirrors `DenialsRead`'s three-arm union exactly, so an absent log stays a
- *  distinct healthy state end to end and can never render as "no denials". */
+/** Mirrors `DenialsRead`'s three-arm union, so an absent log stays a distinct healthy state and never renders as "no denials". */
 export type DenialInspection =
   | { readonly ok: true; readonly present: false; readonly path: string; readonly readAt: string }
   | {
@@ -114,8 +73,7 @@ export type DenialInspection =
       readonly present: true
       readonly path: string
       readonly readAt: string
-      /** #77's `DenialSummary`, passed through by reference — never
-       *  recomputed, so the two can never disagree (Data & contracts). */
+      /** Passed through by reference, never recomputed, so the two can never disagree. */
       readonly summary: DenialSummary
       readonly attribution: AttributionTally
       readonly byActor: readonly ActorGroup[]
@@ -127,9 +85,7 @@ export type DenialInspection =
 
 export interface InspectDenialsInput {
   readonly read: DenialsRead
-  /** `null` = the caller ran no session scan at all — distinct from a scan
-   *  that ran and failed (`sessions.ok === false`); both degrade every
-   *  session actor to `attribution-unavailable`, with a different `reason`. */
+  /** `null` = no session scan ran at all, distinct from a scan that ran and failed; both degrade to `attribution-unavailable` with a different `reason`. */
   readonly sessions: SessionScan | null
   readonly burstMinCount?: number
   readonly burstWindowMs?: number
@@ -138,9 +94,7 @@ export interface InspectDenialsInput {
 const SAMPLE_MAX_LENGTH = 200
 const LABEL_MAX_LENGTH = 120
 
-/** Stable, collision-free key for the actor grouping. A malformed entry
- *  carries `actor: null` (the ladder could not even attempt to parse it),
- *  so it groups under its own raw line rather than vanishing. */
+/** Stable, collision-free key for the actor grouping. A malformed entry groups under its own raw line rather than vanishing. */
 export function actorKeyOf(actor: DenialActor | null, raw: string): string {
   if (actor === null) return `unattributed:${raw}`
   switch (actor.kind) {
@@ -159,8 +113,7 @@ export function actorKeyOf(actor: DenialActor | null, raw: string): string {
 
 type SessionLookup = { readonly kind: 'available'; readonly index: ReadonlyMap<string, SessionRecord> } | { readonly kind: 'unavailable'; readonly reason: 'not-scanned' | 'scan-failed' }
 
-/** Built once over `scan.sessions` — never a scan per entry, or a 500-entry
- *  inspection would be O(entries × sessions). */
+/** Built once over `scan.sessions`, never a scan per entry, to avoid O(entries × sessions). */
 function buildSessionLookup(sessions: SessionScan | null): SessionLookup {
   if (sessions === null) return { kind: 'unavailable', reason: 'not-scanned' }
   if (!sessions.ok) return { kind: 'unavailable', reason: 'scan-failed' }
@@ -175,9 +128,7 @@ function labelFor(record: SessionRecord): string | null {
   return raw.length > LABEL_MAX_LENGTH ? raw.slice(0, LABEL_MAX_LENGTH) : raw
 }
 
-/** `null` for every actor kind but `session` — its attribution already lives
- *  in the actor field. Fails toward `unknown-session`/`attribution-unavailable`,
- *  never toward a guessed role (Decision 4). */
+/** `null` for every actor kind but `session`. Fails toward `unknown-session`/`attribution-unavailable`, never a guessed role. */
 function attributionFor(actor: DenialActor | null, lookup: SessionLookup): SessionAttribution | null {
   if (actor === null || actor.kind !== 'session') return null
   if (lookup.kind === 'unavailable') return { kind: 'attribution-unavailable', reason: lookup.reason }
@@ -226,9 +177,7 @@ function tallyAttribution(
   }
 }
 
-/** An entry whose timestamp will not parse still counts everywhere else, but
- *  never sets first/last and never participates in a burst — an unreadable
- *  clock is not a clock reading zero. */
+/** An entry whose timestamp will not parse still counts everywhere else, but never sets first/last or participates in a burst. */
 function parseEpoch(timestamp: string | null): number | null {
   if (timestamp === null) return null
   const epoch = Date.parse(timestamp)
@@ -271,9 +220,7 @@ interface CandidateWindow {
   readonly endedAt: string
 }
 
-/** A wider or later window never beats a bigger one — "the largest such
- *  window wins" reads as most entries first, then the longer span, then the
- *  earlier start, so the result is deterministic across runs. */
+/** The largest window wins: most entries first, then the longer span, then the earlier start — deterministic across runs. */
 function isBetterWindow(a: CandidateWindow, b: CandidateWindow): boolean {
   if (a.count !== b.count) return a.count > b.count
   const aDuration = a.endEpoch - a.startEpoch
@@ -282,9 +229,7 @@ function isBetterWindow(a: CandidateWindow, b: CandidateWindow): boolean {
   return a.startEpoch < b.startEpoch
 }
 
-/** Sliding window over one actor's own `deny` timestamps on one shape,
- *  ascending. Never combines two actors' entries — a burst is what *one*
- *  actor did, not a shape's aggregate traffic. */
+/** Sliding window over one actor's own `deny` timestamps on one shape, ascending. Never combines two actors' entries. */
 function bestWindowFor(points: readonly TimedPoint[], minCount: number, windowMs: number): CandidateWindow | null {
   let left = 0
   let best: CandidateWindow | null = null
@@ -305,9 +250,7 @@ function bestWindowFor(points: readonly TimedPoint[], minCount: number, windowMs
   return best
 }
 
-/** Pure over an already-read `DenialsRead` and an already-scanned
- *  `SessionScan` — no `gh`, no filesystem, no second read of the log
- *  (`main/local/` already did that). */
+/** Pure over an already-read `DenialsRead` and an already-scanned `SessionScan` — no `gh`, no filesystem, no second read of the log. */
 export function inspectDenials(input: InspectDenialsInput): DenialInspection {
   const { read, sessions } = input
   const burstMinCount = input.burstMinCount ?? BURST_MIN_COUNT
@@ -340,8 +283,7 @@ export function inspectDenials(input: InspectDenialsInput): DenialInspection {
 
   const actorGroups = new Map<string, WorkingActorGroup>()
   const shapeGroups = new Map<string, WorkingShapeGroup>()
-  // shape -> actorKey -> this actor's own deny timestamps on that shape,
-  // never mixed across actors (bursts are per-actor, per shape).
+  // shape -> actorKey -> this actor's own deny timestamps on that shape, never mixed across actors.
   const denyPoints = new Map<string, Map<string, TimedPoint[]>>()
 
   for (const entry of read.entries) {
@@ -359,8 +301,7 @@ export function inspectDenials(input: InspectDenialsInput): DenialInspection {
     incrementCounts(actorGroup.counts, entry.decision)
     updateSeen(actorGroup.seen, entry.timestamp, epoch)
 
-    // Malformed entries have no subject, so they never form a shape — still
-    // counted above in the tally and below in `analysed`, so nothing vanishes.
+    // Malformed entries have no subject, so they never form a shape — still counted in the tally and in `analysed`.
     if (entry.form === 'malformed' || entry.subject === null) continue
 
     const shape = shapeOf(entry.subject)
@@ -425,8 +366,7 @@ export function inspectDenials(input: InspectDenialsInput): DenialInspection {
     burst: bursts.get(shape) ?? null,
   }))
 
-  // Both orderings are total and deterministic, so a re-render never
-  // reshuffles rows (Data & contracts → "Both orderings are total").
+  // Both orderings are total and deterministic, so a re-render never reshuffles rows.
   const lastSeenEpoch = (value: string | null): number => {
     if (value === null) return -Infinity
     const epoch = Date.parse(value)

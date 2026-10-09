@@ -2,11 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CLI_OUTDATED_COPY, RUNTIME_COPY } from './copy'
 import type { RuntimeDiagnosis } from './types'
 
-// `RUNTIME_COPY`'s type (`Readonly<Record<RuntimeDiagnosis, RuntimeCopy>>`)
-// already fails to compile if a diagnosis is missing or an extra key is
-// added, so this list exists only to drive the runtime assertions below —
-// `scripts/checks/desktop-runtime.ts` cross-checks it against the real
-// union so the two can never silently drift apart.
+// This list exists only to drive the runtime assertions below — pinned against the real union so the two can never silently drift apart.
 const ALL_DIAGNOSES: readonly RuntimeDiagnosis[] = [
   'unverified',
   'verified',

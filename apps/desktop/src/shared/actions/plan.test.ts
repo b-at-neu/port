@@ -284,9 +284,7 @@ describe('pausedTriggerFrom', () => {
     const it1 = item({ stage: 'trigger', stages: [stageLabel('planApproved', 'trigger')] })
     const result = actionsFor({ item: it1, viewer: 'op', approvalGate: true })
     if (!result.pause.available) throw new Error('expected pause to be available')
-    // A real audit entry's `precondition.present` carries resolved *names*
-    // (`apply.ts`'s `recordLabelAudit`), never the bare `LabelKey`s a plan
-    // itself carries — the round trip must go through that same resolution.
+    // A real audit entry carries resolved names, never bare LabelKeys, so the round trip must go through that same resolution.
     const names = result.pause.plan.expect.present.map((key) => labelName(VOCABULARY, key) ?? key)
     const entry = auditEntry(names)
     expect(pausedTriggerFrom(entry, VOCABULARY)).toBe('planApproved')

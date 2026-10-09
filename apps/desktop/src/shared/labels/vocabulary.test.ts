@@ -3,11 +3,7 @@ import template from '../../../../../plugins/port/data/labels.json'
 import { LABEL_DEFAULTS } from './defaults'
 import { LABEL_KEYS, labelName, resolveVocabulary, verifyVocabulary, type RepoLabels } from './vocabulary'
 
-// --- Anti-drift invariant: LABEL_KEYS and the template agree both directions,
-// and every LABEL_DEFAULTS entry matches the template's name/module for that
-// key. Imported with the same relative specifier as the source files rather
-// than re-read through node:fs, so there is no path construction to get
-// wrong on Windows.
+// Anti-drift invariant: LABEL_KEYS and LABEL_DEFAULTS agree with the template, both directions.
 describe('LABEL_KEYS / LABEL_DEFAULTS match the shipped template', () => {
   const templateKeys = template.labels.map((l) => l.key)
 

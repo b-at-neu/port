@@ -1,23 +1,12 @@
-// The deliberate single point of contact with the shipped template: every
-// other file under labels/ reads LABEL_DEFAULTS below, never this relative
-// import or `plugins/port/data/labels.json` directly.
+// The deliberate single point of contact with the shipped template: every other file under labels/ reads LABEL_DEFAULTS below, never this import directly.
 import template from '../../../../../plugins/port/data/labels.json'
 import type { LabelKey } from './vocabulary'
 
-/**
- * Modules a label default can be gated behind, mirroring `port.config.json`'s
- * `modules` keys plus the `core` sentinel for a label that is always
- * created regardless of config.
- */
+/** Modules a label default can be gated behind, plus the `core` sentinel for a label always created regardless of config. */
 export const LABEL_MODULES = ['core', 'approvalGate', 'release', 'scope'] as const
 export type LabelModule = (typeof LABEL_MODULES)[number]
 
-/**
- * `labels.json`'s own machine-readable authority on what kind of label each
- * one is — PIPELINE.md's two label tables transcribed as data, never as a
- * fourth prose copy (#79 Decision 1). `scripts/checks/labels.mjs` pins this
- * against `labels.json`'s real `role` values, both directions.
- */
+/** `labels.json`'s own machine-readable authority on what kind of label each one is. */
 export const LABEL_ROLES = ['marker', 'trigger', 'in-flight', 'gate', 'terminal'] as const
 export type LabelRole = (typeof LABEL_ROLES)[number]
 
@@ -30,12 +19,7 @@ export interface LabelDefault {
   readonly description: string
 }
 
-// This does not cross-check against `LABEL_KEYS` — that would need a runtime
-// (not merely type-level) import from vocabulary.ts, and this module is
-// reachable from the renderer, where a load-time throw on a mismatch is a
-// white screen. The both-directions agreement between this template and
-// `LABEL_KEYS` is asserted at test time (vocabulary.test.ts) and at
-// `scripts/checks.mjs` time (`desktop-label-defaults`) instead.
+// Does not cross-check against `LABEL_KEYS` — a runtime import would risk a load-time throw reaching the renderer as a white screen; the agreement is asserted at test time instead.
 function isLabelDefault(entry: unknown): entry is LabelDefault {
   if (typeof entry !== 'object' || entry === null) return false
   const candidate = entry as Record<string, unknown>
@@ -54,8 +38,5 @@ function isLabelDefault(entry: unknown): entry is LabelDefault {
   )
 }
 
-// Cast to `unknown[]` before filtering: TypeScript's generic filter overload
-// requires `LabelDefault` to extend the JSON's own inferred element type,
-// which is `string` for every field the JSON import widens. The predicate
-// itself still verifies every field this module actually needs.
+// Cast to `unknown[]` before filtering: a JSON import's inferred element type widens every field to `string`, which `LabelDefault` cannot extend directly.
 export const LABEL_DEFAULTS: readonly LabelDefault[] = (template.labels as unknown[]).filter(isLabelDefault)
