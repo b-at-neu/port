@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { DetailPane } from '../components/detail-pane'
 import { EmptyState } from '../components/empty-state'
 import { ErrorBanner } from '../components/error-banner'
@@ -184,15 +185,16 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
               <Button variant="ghost" size="small" onClick={() => void query.refetch()}>
                 Refresh
               </Button>
-              <Button
-                variant="outline"
-                size="small"
-                disabled={reclaimableCount === 0}
-                title={reclaimableCount === 0 ? reclaimNothingToReclaimTooltip() : undefined}
-                onClick={() => setConfirmIssue('all')}
-              >
-                Reclaim {reclaimableCount}
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button variant="outline" size="small" disabled={reclaimableCount === 0} onClick={() => setConfirmIssue('all')}>
+                      Reclaim {reclaimableCount}
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {reclaimableCount === 0 ? <TooltipContent>{reclaimNothingToReclaimTooltip()}</TooltipContent> : null}
+              </Tooltip>
             </div>
           </div>
         </div>
