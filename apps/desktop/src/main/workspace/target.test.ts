@@ -1,7 +1,8 @@
-import { createHash } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import { resolveStartTarget } from './target'
 import type { ResolveStartTargetDeps } from './target'
+import { toFolderId } from './resolve'
+import { pathOps } from '../platform/paths'
 import type { RepositoryEntry } from '../../shared/repos'
 import type { RepoId } from '../../shared/repos'
 
@@ -21,9 +22,9 @@ function baseDeps(overrides: Partial<ResolveStartTargetDeps> = {}): ResolveStart
 }
 
 function folderIdFor(path: string): string {
-  // Mirrors `resolve.ts`'s own `toFolderId` without importing it, so the test exercises the
-  // same lookup `resolveFolderPath` performs against registry/recents paths.
-  return createHash('sha1').update(path).digest('hex')
+  // Reuses the real `toFolderId`/`pathKey` so the test exercises the same platform-normalized
+  // lookup `resolveFolderPath` performs against registry/recents paths.
+  return toFolderId(pathOps.pathKey(path))
 }
 
 describe('resolveStartTarget', () => {
@@ -34,14 +35,14 @@ describe('resolveStartTarget', () => {
 
   it('returns folder-missing for a registered folder that no longer exists', async () => {
     const deps = baseDeps({ exists: () => Promise.resolve(false) })
-    const folderId = `folder-${folderIdFor(REPO_PATH)}`
+    const folderId = folderIdFor(REPO_PATH)
     const result = await resolveStartTarget({ kind: 'folder', folderId, worktree: false }, { kind: 'fresh' }, deps)
     expect(result).toEqual({ ok: false, kind: 'folder-missing', path: REPO_PATH })
   })
 
   it('returns not-git when worktree is requested on a non-git folder', async () => {
     const deps = baseDeps()
-    const folderId = `folder-${folderIdFor(REPO_PATH)}`
+    const folderId = folderIdFor(REPO_PATH)
     const result = await resolveStartTarget({ kind: 'folder', folderId, worktree: true }, { kind: 'fresh' }, deps)
     expect(result).toEqual({ ok: false, kind: 'not-git' })
   })
@@ -49,7 +50,7 @@ describe('resolveStartTarget', () => {
   it('returns worktree-failed when creation fails', async () => {
     const git = vi.fn(() => Promise.resolve({ ok: true, stdout: '/home/you/src/widgets\n', stderr: '', code: 0 })) as unknown as ResolveStartTargetDeps['git']
     const deps = baseDeps({ git, createWorktree: () => Promise.resolve({ ok: false, message: 'collision' }) })
-    const folderId = `folder-${folderIdFor(REPO_PATH)}`
+    const folderId = folderIdFor(REPO_PATH)
     const result = await resolveStartTarget({ kind: 'folder', folderId, worktree: true }, { kind: 'fresh' }, deps)
     expect(result).toEqual({ ok: false, kind: 'worktree-failed', message: 'collision' })
   })

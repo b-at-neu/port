@@ -110,7 +110,7 @@ export function startFailureCopy(result: RenderableStartFailure): StartFailureCo
     return { title: 'Not a git repository', body: "This folder isn't a git repository.", detail: null }
   }
   if (result.kind === 'worktree-failed') {
-    return { title: "Couldn't create the worktree", body: "Couldn't create the worktree", detail: result.message }
+    return { title: "Couldn't create the worktree", body: "Port couldn't create a worktree for this session.", detail: result.message }
   }
   const copy = RUNTIME_COPY[result.diagnosis]
   return { title: copy.title, body: copy.body, detail: result.detail }
