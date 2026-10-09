@@ -1,6 +1,7 @@
 // One hosted session: builds options, opens the query, runs the pump loop. The ring
 // exists only so a renderer attaching mid-stream is not blank; the on-disk transcript is the history.
 import type { CredentialsTell } from '../../shared/runtime/types'
+import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls } from '../../shared/hosting/controls'
 import type {
   HostedSessionSnapshot,
   PermissionDecision,
@@ -21,6 +22,8 @@ import type { RepoId } from '../../shared/repos'
 import { createHostedInput } from './input'
 import { buildSessionOptions } from './options'
 import { classifyEnd } from './classify'
+import { createControlsTracker } from './controls'
+import type { ControlsTracker } from './controls'
 import { createPermissionBroker } from './permissions'
 import { createSessionProjector } from './project'
 import type { ProjectedDelta, SessionProjectorWindow } from './project'
@@ -97,6 +100,10 @@ export interface HostedHandle {
   entriesWindow(): SessionProjectorWindow
   /** `invalid-command` on a malformed name, `unknown-command` outside this session's `port:` list. */
   invoke(name: string, args: string): SessionInvokeResult
+  // unknown-session once closing/ended, not-ready before init.
+  setControls(patch: { readonly permissionMode?: SessionControls['permissionMode']; readonly model?: string; readonly effort?: SessionControls['effort'] }): Promise<Awaited<ReturnType<ControlsTracker['set']>> | { readonly ok: false; readonly kind: 'unknown-session' | 'not-ready' }>
+  answerQuestion(permissionId: string, answers: Readonly<Record<string, string>>): QuestionAnswerResult
+  answerPlan(permissionId: string, decision: PlanDecision): PlanAnswerResult
 }
 
 function resumeTargetFor(mode: SessionStartMode): string | null {
@@ -125,8 +132,9 @@ function grace(ms: number): Promise<void> {
 
 export function createHostedHandle(params: CreateHostedHandleParams, query: HostedQueryFn): HostedHandle {
   const input = createHostedInput()
+  const controls = createControlsTracker({ defaults: params.defaults, onChange: () => emitStatus() })
   // Created before buildSessionOptions so an un-preapproved tool call routes through canUseTool, not a silent auto-deny.
-  const broker = createPermissionBroker({ now: params.now, onChange: () => emitStatus() })
+  const broker = createPermissionBroker({ now: params.now, onChange: () => emitStatus(), onPlanApproved: (mode) => controls.adoptApprovedMode(mode) })
   const options = buildSessionOptions({ mode: params.mode, cwd: params.cwd, executablePath: params.executablePath, canUseTool: broker.canUseTool, plugin: params.plugin, defaults: params.defaults })
   const startedAt = new Date(params.now()).toISOString()
   const projector = createSessionProjector({ cwd: params.cwd })
@@ -169,6 +177,8 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
       capabilities: capabilities.current(),
       title,
       rateLimit,
+      controls: controls.current(),
+      models: controls.models(),
     }
   }
 
@@ -194,6 +204,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
 
   function applyMessage(message: SDKMessage): void {
     capabilities.observe(message)
+    controls.observe(message)
     const observedAt = new Date(params.now()).toISOString()
     const reading = readRateLimit(message, observedAt)
     if (reading !== null) {
@@ -222,6 +233,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
   // buildSessionOptions sets pathToClaudeCodeExecutable unconditionally, never the SDK's own bundled fallback.
   const stream = query({ prompt: input.stream, options })
   void capabilities.start(stream)
+  void controls.start(stream)
 
   async function pump(): Promise<void> {
     try {
@@ -316,6 +328,17 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
       if (!capabilities.has(name)) return { ok: false, kind: 'unknown-command', name }
       const { uuid } = doSend(composeInvocation(name, args))
       return { ok: true, uuid, queued: true }
+    },
+    async setControls(patch) {
+      if (phase === 'closing' || phase === 'ended') return { ok: false, kind: 'unknown-session' }
+      if (claudeSessionId === null) return { ok: false, kind: 'not-ready' }
+      return controls.set(stream, patch)
+    },
+    answerQuestion(permissionId, answers) {
+      return broker.answerQuestion(permissionId, answers)
+    },
+    answerPlan(permissionId, decision) {
+      return broker.answerPlan(permissionId, decision)
     },
   }
 }

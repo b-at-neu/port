@@ -2,7 +2,7 @@
 // `createPermissionStore` is the injectable, directly-testable factory.
 import { useSyncExternalStore } from 'react'
 import type { HostedSessionSnapshot, PermissionDecision, SessionPermissionAnswerResult } from '../../../shared/hosting/types'
-import { applySnapshot, EMPTY_QUEUE, ordered, seed } from './queue'
+import { applySnapshot, EMPTY_QUEUE, interactionCount, ordered, seed } from './queue'
 import type { PermissionQueue, QueuedPermission } from './queue'
 import { IPC_FAILURE_MESSAGE } from './copy'
 import { invoke } from '../data/invoke'
@@ -104,7 +104,8 @@ export function createPermissionStore(deps: PermissionStoreDeps): PermissionStor
         error: errorFor === permissionId ? error : null,
       }
     }
-    deps.setDocumentTitle(documentTitleFor(items.length))
+    // A question/plan card counts toward "N waiting" even though it never appears in `items`.
+    deps.setDocumentTitle(documentTitleFor(items.length + interactionCount(queue)))
     for (const listener of listeners) listener()
   }
 

@@ -38,6 +38,9 @@ import {
   resolveSessionInvoke,
   resolveSessionList,
   resolveSessionPermissionAnswer,
+  resolveSessionControlsSet,
+  resolveSessionQuestionAnswer,
+  resolveSessionPlanAnswer,
   resolveSessionRename,
   resolveSessionRestore,
   resolveSessionRestoreDiscard,
@@ -282,6 +285,12 @@ export function registerIpc(): RegisteredIpc {
   handle('session:defaults:set', (_event, request) => resolveSessionDefaultsSet(request, hostingChannelDeps))
 
   handle('session:rename', (_event, request) => resolveSessionRename(request, hostingChannelDeps))
+
+  handle('session:controls:set', (_event, request) => resolveSessionControlsSet(request, hostingChannelDeps))
+
+  handle('session:question:answer', (_event, request) => resolveSessionQuestionAnswer(request, hostingChannelDeps))
+
+  handle('session:plan:answer', (_event, request) => resolveSessionPlanAnswer(request, hostingChannelDeps))
 
   handle('item:action', (_event, request) =>
     resolveItemAction(registryDeps, request, app.getPath('userData'), { listRepositories, applyItemAction, snapshot: watcher.snapshot, refresh: watcher.refresh }),

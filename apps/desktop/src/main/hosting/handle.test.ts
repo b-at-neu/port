@@ -21,12 +21,20 @@ function fakeQuery(options: { readonly commands?: readonly { name: string; descr
   const close = vi.fn()
   const supportedCommands = vi.fn(() => Promise.resolve(options.commands ?? []))
   const supportedAgents = vi.fn(() => Promise.resolve(options.agents ?? []))
+  const setPermissionMode = vi.fn(() => Promise.resolve())
+  const setModel = vi.fn(() => Promise.resolve())
+  const applyFlagSettings = vi.fn(() => Promise.resolve())
+  const supportedModels = vi.fn(() => Promise.resolve([]))
 
   const query: HostedQuery = {
     interrupt,
     close,
     supportedCommands,
     supportedAgents,
+    setPermissionMode,
+    setModel,
+    applyFlagSettings,
+    supportedModels,
     [Symbol.asyncIterator]() {
       return {
         next(): Promise<IteratorResult<unknown>> {
@@ -48,6 +56,10 @@ function fakeQuery(options: { readonly commands?: readonly { name: string; descr
     close,
     supportedCommands,
     supportedAgents,
+    setPermissionMode,
+    setModel,
+    applyFlagSettings,
+    supportedModels,
     push(message: unknown) {
       if (pendingResolve) {
         const resolve = pendingResolve
@@ -433,5 +445,4 @@ describe('createHostedHandle', () => {
       await closePromise
     })
   })
-
 })

@@ -2,9 +2,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { createPermissionStore } from './store'
 import type { PermissionStoreDeps } from './store'
 import type { HostedSessionSnapshot, PermissionDecision, SessionKey } from '../../../shared/hosting/types'
+import type { SessionControls, SessionModels } from '../../../shared/hosting/controls'
 import type { RepoId } from '../../../shared/repos'
 
 const KEY = 'hosted-1' as SessionKey
+
+const TEST_CONTROLS: SessionControls = { permissionMode: 'default', model: null, effort: null }
+const TEST_MODELS: SessionModels = { kind: 'pending' }
 
 function snapshotWith(permissionIds: readonly string[]): HostedSessionSnapshot {
   return {
@@ -29,10 +33,13 @@ function snapshotWith(permissionIds: readonly string[]): HostedSessionSnapshot {
       agentId: null,
       requestedAt: new Date().toISOString(),
       sessionGrant: null,
+      interaction: null,
     })),
     capabilities: { kind: 'pending', request: { source: 'installed' } },
     title: null,
     rateLimit: null,
+    controls: TEST_CONTROLS,
+    models: TEST_MODELS,
   }
 }
 

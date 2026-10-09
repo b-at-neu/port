@@ -2,6 +2,7 @@
 import type { RepoId } from '../repos'
 import type { RuntimeDiagnosis } from '../runtime/types'
 import type { EntryPatch, TranscriptEntry } from '../sessions/transcript'
+import type { PendingInteraction, SessionControls, SessionModels } from './controls'
 
 declare const sessionKeyBrand: unique symbol
 
@@ -54,6 +55,10 @@ export interface HostedSessionSnapshot {
   readonly title: string | null
   /** The newest reading off a `rate_limit_event` message — `null` until the first one arrives, never synthesized. */
   readonly rateLimit: SessionRateLimit | null
+  /** This handle's own live controls tracker — every real handle sets it before the first snapshot is pushed. */
+  readonly controls: SessionControls
+  /** The model picker's own read-back — `pending` before the first read settles. */
+  readonly models: SessionModels
 }
 
 /** `session:event`'s payload — the SDK message crosses the boundary opaque; this app never narrows, interprets or executes it. `receivedAt` is this process's own clock, never the SDK's. */
@@ -143,10 +148,13 @@ export interface PendingPermission {
   readonly agentId: string | null
   readonly requestedAt: string
   readonly sessionGrant: readonly SessionGrantItem[] | null
+  /** Non-`null` for an `AskUserQuestion`/`ExitPlanMode` call — the Session
+   *  screen renders its own card for these instead of the generic dialog. */
+  readonly interaction: PendingInteraction | null
 }
 
-/** `'session:permission:answer'`'s response. `unknown-session`/`unknown-permission` are ordinary races, reported as values, never thrown. `no-session-grant` is `allow-session` sent for a `null` `sessionGrant`. */
-export type SessionPermissionAnswerResult = { readonly ok: true } | { readonly ok: false; readonly kind: 'unknown-session' | 'unknown-permission' | 'no-session-grant' }
+/** `'session:permission:answer'`'s response: ordinary races and `no-session-grant`/`interaction-prompt` refusals are reported as values, never thrown. */
+export type SessionPermissionAnswerResult = { readonly ok: true } | { readonly ok: false; readonly kind: 'unknown-session' | 'unknown-permission' | 'no-session-grant' | 'interaction-prompt' }
 
 /** Which plugin path a session asked for — the repository's own copy (self-hosting) or the operator's installed one. Resolved once before spawn, carried on the snapshot so the operator sees it even before `init` confirms what loaded. */
 export type PluginRequest = { readonly source: 'repository'; readonly path: string } | { readonly source: 'installed' }

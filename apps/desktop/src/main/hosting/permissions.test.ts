@@ -150,6 +150,59 @@ describe('createPermissionBroker', () => {
     expect(pending.map((p) => p.toolName)).toEqual(['Bash', 'Write'])
   })
 
+  it('narrows an AskUserQuestion call into a question interaction', () => {
+    const broker = createPermissionBroker({ now: () => 1_000, onChange: vi.fn() })
+    void broker.canUseTool('AskUserQuestion', { questions: [{ question: 'Which?', header: 'H', multiSelect: false, options: [{ label: 'A' }] }] }, baseOptions())
+    expect(broker.pending()[0]?.interaction).toEqual({ kind: 'question', questions: [{ question: 'Which?', header: 'H', multiSelect: false, options: [{ label: 'A', description: null }] }] })
+  })
+
+  it('answer() refuses an allow decision on an interaction entry with interaction-prompt, but deny still works', async () => {
+    const broker = createPermissionBroker({ now: () => 1_000, onChange: vi.fn() })
+    const promise = broker.canUseTool('ExitPlanMode', { plan: 'Do the thing' }, baseOptions())
+    const permissionId = broker.pending()[0]?.permissionId as string
+    expect(broker.answer(permissionId, 'allow-once', null)).toEqual({ ok: false, kind: 'interaction-prompt' })
+    expect(broker.pending()).toHaveLength(1)
+    expect(broker.answer(permissionId, 'deny', null)).toEqual({ ok: true })
+    await expect(promise).resolves.toEqual({ behavior: 'deny', message: DEFAULT_DENY_MESSAGE, toolUseID: 'tool-use-1' })
+  })
+
+  it('answerQuestion settles allow with the merged answers, refusing a non-question entry and a mismatched answer set', async () => {
+    const broker = createPermissionBroker({ now: () => 1_000, onChange: vi.fn() })
+    const promise = broker.canUseTool('AskUserQuestion', { questions: [{ question: 'Which?', header: 'H', multiSelect: false, options: [{ label: 'A' }] }] }, baseOptions())
+    const permissionId = broker.pending()[0]?.permissionId as string
+
+    expect(broker.answerQuestion(permissionId, { Other: 'x' })).toEqual({ ok: false, kind: 'answers-mismatch' })
+    expect(broker.answerQuestion(permissionId, { 'Which?': 'A' })).toEqual({ ok: true })
+    await expect(promise).resolves.toEqual({ behavior: 'allow', updatedInput: { questions: [{ question: 'Which?', header: 'H', multiSelect: false, options: [{ label: 'A' }] }], answers: { 'Which?': 'A' } }, toolUseID: 'tool-use-1' })
+
+    const second = broker.canUseTool('Bash', {}, baseOptions())
+    const secondId = broker.pending()[0]?.permissionId as string
+    expect(broker.answerQuestion(secondId, { x: 'y' })).toEqual({ ok: false, kind: 'not-a-question' })
+    void second
+  })
+
+  it('answerPlan approve pins the mode and fires onPlanApproved; keep-planning denies with the feedback', async () => {
+    const onPlanApproved = vi.fn()
+    const broker = createPermissionBroker({ now: () => 1_000, onChange: vi.fn(), onPlanApproved })
+    const promise = broker.canUseTool('ExitPlanMode', { plan: 'Steps' }, baseOptions())
+    const permissionId = broker.pending()[0]?.permissionId as string
+    expect(broker.answerPlan(permissionId, { kind: 'approve', mode: 'acceptEdits' })).toEqual({ ok: true })
+    expect(onPlanApproved).toHaveBeenCalledWith('acceptEdits')
+    await expect(promise).resolves.toEqual({ behavior: 'allow', updatedInput: { plan: 'Steps' }, updatedPermissions: [{ type: 'setMode', mode: 'acceptEdits', destination: 'session' }], toolUseID: 'tool-use-1' })
+
+    const second = broker.canUseTool('ExitPlanMode', { plan: 'More' }, baseOptions())
+    const secondId = broker.pending()[0]?.permissionId as string
+    expect(broker.answerPlan(secondId, { kind: 'keep-planning', feedback: 'Add tests' })).toEqual({ ok: true })
+    await expect(second).resolves.toEqual({ behavior: 'deny', message: 'Add tests', toolUseID: 'tool-use-1' })
+  })
+
+  it('answerPlan refuses not-a-plan for a non-plan entry', () => {
+    const broker = createPermissionBroker({ now: () => 1_000, onChange: vi.fn() })
+    void broker.canUseTool('Bash', {}, baseOptions())
+    const permissionId = broker.pending()[0]?.permissionId as string
+    expect(broker.answerPlan(permissionId, { kind: 'keep-planning', feedback: 'x' })).toEqual({ ok: false, kind: 'not-a-plan' })
+  })
+
   it('cancelAll settles every pending request as deny and empties the list', async () => {
     const onChange = vi.fn()
     const broker = createPermissionBroker({ now: () => 1_000, onChange })

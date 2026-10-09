@@ -5,6 +5,7 @@ import { resolveVocabulary } from '../../shared/labels/vocabulary'
 import type { RepoId } from '../../shared/repos'
 import type { BoardSnapshot } from '../../shared/board/types'
 import type { HostedSessionSnapshot, SessionKey } from '../../shared/hosting/types'
+import type { SessionControls, SessionModels } from '../../shared/hosting/controls'
 import type { HostedStore } from '../hosting/store'
 import type { TickReport } from '../../shared/tick/types'
 import type { EscalateToHumanParams } from '../actions/escalate'
@@ -70,6 +71,9 @@ const ABSENT_OWNERSHIP: OwnershipRead = { kind: 'absent', path: '/repo/.agents/c
 
 const IMPL_CANDIDATE = { number: 52, kind: 'issue' as const, trigger: 'planApproved' as const, agent: 'impl' as const, unchecked: false, cycle: null }
 
+const TEST_CONTROLS: SessionControls = { permissionMode: 'default', model: null, effort: null }
+const TEST_MODELS: SessionModels = { kind: 'pending' }
+
 function sessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSessionSnapshot {
   return {
     sessionKey: 'hosted-1' as SessionKey,
@@ -85,6 +89,8 @@ function sessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): Hosted
     capabilities: { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [], plugin: { kind: 'loaded', path: 'p', version: null }, components: { kind: 'complete' } },
     title: null,
     rateLimit: null,
+    controls: TEST_CONTROLS,
+    models: TEST_MODELS,
     ...overrides,
   }
 }
@@ -123,6 +129,9 @@ function fakeStore(overrides: Partial<HostedStore> = {}): HostedStore {
       throw new Error('restore should not be invoked in this case')
     },
     discardRestorable: () => Promise.resolve({ ok: true }),
+    setControls: () => Promise.resolve({ ok: false, kind: 'unknown-session' }),
+    answerQuestion: () => ({ ok: false, kind: 'unknown-session' }),
+    answerPlan: () => ({ ok: false, kind: 'unknown-session' }),
     defaults: () => {
       throw new Error('defaults should not be invoked in this case')
     },

@@ -1,6 +1,7 @@
 // Map<sessionKey, Handle>, the process-lifetime instance main/ipc.ts binds, plus closeAll().
 // A start past the current limit returns at-capacity, counted against live handles only.
 import type { RepoId } from '../../shared/repos'
+import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SetControlsResult } from '../../shared/hosting/controls'
 import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
 import type {
   HostedSessionSnapshot,
@@ -100,6 +101,9 @@ export interface HostedStore {
   closeAll(): Promise<void>
   answerPermission(sessionKey: SessionKey, permissionId: string, decision: PermissionDecision, message: string | null): SessionPermissionAnswerResult
   invoke(sessionKey: SessionKey, name: string, args: string): SessionInvokeResult
+  setControls(sessionKey: SessionKey, patch: { readonly permissionMode?: SessionControls['permissionMode']; readonly model?: string; readonly effort?: SessionControls['effort'] }): Promise<SetControlsResult>
+  answerQuestion(sessionKey: SessionKey, permissionId: string, answers: Readonly<Record<string, string>>): QuestionAnswerResult
+  answerPlan(sessionKey: SessionKey, permissionId: string, decision: PlanDecision): PlanAnswerResult
   /** Removes an ended handle — `still-open` for any other phase. */
   dismiss(sessionKey: SessionKey): SessionDismissResult
   snapshotOf(sessionKey: SessionKey): HostedSessionSnapshot | null
@@ -310,6 +314,24 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     return handle.invoke(name, args)
   }
 
+  async function setControls(sessionKey: SessionKey, patch: { readonly permissionMode?: SessionControls['permissionMode']; readonly model?: string; readonly effort?: SessionControls['effort'] }): Promise<SetControlsResult> {
+    const handle = handles.get(sessionKey)
+    if (!handle) return { ok: false, kind: 'unknown-session' }
+    return handle.setControls(patch)
+  }
+
+  function answerQuestion(sessionKey: SessionKey, permissionId: string, answers: Readonly<Record<string, string>>): QuestionAnswerResult {
+    const handle = handles.get(sessionKey)
+    if (!handle) return { ok: false, kind: 'unknown-session' }
+    return handle.answerQuestion(permissionId, answers)
+  }
+
+  function answerPlan(sessionKey: SessionKey, permissionId: string, decision: PlanDecision): PlanAnswerResult {
+    const handle = handles.get(sessionKey)
+    if (!handle) return { ok: false, kind: 'unknown-session' }
+    return handle.answerPlan(permissionId, decision)
+  }
+
   function dismiss(sessionKey: SessionKey): SessionDismissResult {
     const handle = handles.get(sessionKey)
     if (!handle) return { ok: false, kind: 'unknown-session' }
@@ -396,6 +418,9 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     closeAll,
     answerPermission,
     invoke,
+    setControls,
+    answerQuestion,
+    answerPlan,
     dismiss,
     snapshotOf,
     capacity,

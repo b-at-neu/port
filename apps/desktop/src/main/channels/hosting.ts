@@ -4,6 +4,9 @@ import type { IpcMap, ReposListResponse } from '../../shared/ipc'
 import type { RepoId, RepoProblem } from '../../shared/repos'
 import { PERMISSION_DECISIONS, SESSION_MODELS, SESSION_PERMISSION_MODES, SESSION_TITLE_MAX } from '../../shared/hosting/types'
 import type { RestorableSession, SessionKey, SessionModel, SessionPermissionMode, SessionStartMode } from '../../shared/hosting/types'
+import { SESSION_EFFORTS } from '../../shared/hosting/controls'
+import type { PlanDecision } from '../../shared/hosting/controls'
+import { isRecord } from '../../shared/guards'
 import type { HostedStore } from '../hosting/store'
 import { SESSION_LIMIT_CEILING } from '../hosting/store'
 import { isReadyEntry, listRepositories, requireReadyRepo, requireRepoId } from '../registry'
@@ -229,4 +232,57 @@ export function resolveSessionRename(request: IpcMap['session:rename']['request'
     throw new Error(`'session:rename' requires 'title' to be non-empty and at most ${String(SESSION_TITLE_MAX)} characters once trimmed`)
   }
   return deps.store.rename(sessionKey, title)
+}
+
+// At least one of permissionMode/model/effort must be present, each an allowlisted value.
+export function resolveSessionControlsSet(request: IpcMap['session:controls:set']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['setControls']> {
+  const sessionKey = requireSessionKey(request?.sessionKey, 'session:controls:set')
+  const { permissionMode, model, effort } = request
+  if (permissionMode === undefined && model === undefined && effort === undefined) {
+    throw new Error("'session:controls:set' requires at least one of 'permissionMode', 'model', or 'effort'")
+  }
+  if (permissionMode !== undefined && !(SESSION_PERMISSION_MODES as readonly string[]).includes(permissionMode)) {
+    throw new Error(`'session:controls:set' requires 'permissionMode' to be one of ${SESSION_PERMISSION_MODES.join(', ')}`)
+  }
+  if (model !== undefined && (typeof model !== 'string' || model === '' || model.length > 200)) {
+    throw new Error("'session:controls:set' requires 'model' to be a non-empty string of at most 200 characters")
+  }
+  if (effort !== undefined && effort !== null && !(SESSION_EFFORTS as readonly string[]).includes(effort)) {
+    throw new Error(`'session:controls:set' requires 'effort' to be null or one of ${SESSION_EFFORTS.join(', ')}`)
+  }
+  return deps.store.setControls(sessionKey, { permissionMode, model, effort })
+}
+
+// answers must be a plain object of strings up to 2000 characters; membership is the broker's own job.
+export function resolveSessionQuestionAnswer(request: IpcMap['session:question:answer']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['answerQuestion']> {
+  const sessionKey = requireSessionKey(request?.sessionKey, 'session:question:answer')
+  if (typeof request.permissionId !== 'string' || request.permissionId === '') throw new Error("'session:question:answer' requires a non-empty 'permissionId'")
+  const answers = request.answers
+  if (typeof answers !== 'object' || answers === null || Array.isArray(answers)) throw new Error("'session:question:answer' requires 'answers' to be a plain object")
+  for (const value of Object.values(answers)) {
+    if (typeof value !== 'string' || value.length > 2000) throw new Error("'session:question:answer' requires every 'answers' value to be a string of at most 2000 characters")
+  }
+  return deps.store.answerQuestion(sessionKey, request.permissionId, answers)
+}
+
+// feedback is 1-2000 characters; approving into 'plan' itself is refused here, never reaching the store.
+export function resolveSessionPlanAnswer(request: IpcMap['session:plan:answer']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['answerPlan']> {
+  const sessionKey = requireSessionKey(request?.sessionKey, 'session:plan:answer')
+  if (typeof request.permissionId !== 'string' || request.permissionId === '') throw new Error("'session:plan:answer' requires a non-empty 'permissionId'")
+  const decision: unknown = request.decision
+  if (!isRecord(decision)) throw new Error("'session:plan:answer' requires a 'decision' object")
+  if (decision['kind'] === 'approve') {
+    if (decision['mode'] !== 'default' && decision['mode'] !== 'acceptEdits') {
+      throw new Error("'session:plan:answer' requires an approve decision's 'mode' to be 'default' or 'acceptEdits'")
+    }
+    return deps.store.answerPlan(sessionKey, request.permissionId, decision as PlanDecision)
+  }
+  if (decision['kind'] === 'keep-planning') {
+    const feedback = decision['feedback']
+    if (typeof feedback !== 'string' || feedback.length < 1 || feedback.length > 2000) {
+      throw new Error("'session:plan:answer' requires a keep-planning decision's 'feedback' to be 1-2000 characters")
+    }
+    return deps.store.answerPlan(sessionKey, request.permissionId, decision as PlanDecision)
+  }
+  throw new Error("'session:plan:answer' requires 'decision.kind' to be 'approve' or 'keep-planning'")
 }

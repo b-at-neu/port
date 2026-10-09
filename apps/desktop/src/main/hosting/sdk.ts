@@ -1,16 +1,20 @@
-// One of three lazy Agent SDK seams; the only file in main/hosting/ naming the package specifier,
+// One of three lazy Agent SDK seams, the only file in main/hosting/ naming the package specifier,
 // exposing exactly `query` and `renameSession`. Every other file imports its types from here.
-import type { AgentInfo, CanUseTool, Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage, SlashCommand } from '@anthropic-ai/claude-agent-sdk'
+import type { AgentInfo, CanUseTool, EffortLevel, ModelInfo, Options, PermissionMode, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage, SlashCommand } from '@anthropic-ai/claude-agent-sdk'
 
-export type { AgentInfo, CanUseTool, Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage, SlashCommand }
+export type { AgentInfo, CanUseTool, EffortLevel, ModelInfo, Options, PermissionMode, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage, SlashCommand }
 
-/** The narrow structural slice of the real `Query` this app needs — a test fake needs no
- *  unrelated method off the real 20-plus-method interface. */
+/** The narrow structural slice of the real `Query` this app needs, so a test fake
+ *  needs no unrelated method off the real interface. */
 export interface HostedQuery extends AsyncIterable<SDKMessage> {
   interrupt(): Promise<{ readonly still_queued: readonly string[] } | undefined>
   close(): void
   supportedCommands(): Promise<SlashCommand[]>
   supportedAgents(): Promise<AgentInfo[]>
+  setPermissionMode(mode: PermissionMode): Promise<void>
+  setModel(model?: string): Promise<void>
+  applyFlagSettings(settings: { effortLevel?: EffortLevel | null }): Promise<void>
+  supportedModels(): Promise<ModelInfo[]>
 }
 
 /** Typed narrowly rather than re-exporting the SDK's own module type. */

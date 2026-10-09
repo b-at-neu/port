@@ -98,5 +98,8 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'session:defaults': () => DEFAULT_SESSION_DEFAULTS,
     'session:defaults:set': (request) => request,
     'session:rename': () => ({ ok: false, kind: 'unknown-session' }),
+    'session:controls:set': () => ({ ok: false, kind: 'unknown-session' }),
+    'session:question:answer': () => ({ ok: false, kind: 'unknown-session' }),
+    'session:plan:answer': () => ({ ok: false, kind: 'unknown-session' }),
   }
 }

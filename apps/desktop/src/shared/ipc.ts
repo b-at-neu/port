@@ -34,6 +34,7 @@ import type {
   SessionStartMode,
   SessionStartResult,
 } from './hosting/types'
+import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SetControlsResult } from './hosting/controls'
 
 export interface AppInfo {
   app: string
@@ -251,6 +252,21 @@ export interface IpcMap {
     request: { sessionKey: SessionKey; title: string }
     response: SessionRenameResult
   }
+  /** The controls bar's own write, one allowlisted field per SDK call. */
+  'session:controls:set': {
+    request: { sessionKey: SessionKey; permissionMode?: SessionControls['permissionMode']; model?: string; effort?: SessionControls['effort'] }
+    response: SetControlsResult
+  }
+  /** The question card's own write — `answers` keyed by each question's own text. */
+  'session:question:answer': {
+    request: { sessionKey: SessionKey; permissionId: string; answers: Record<string, string> }
+    response: QuestionAnswerResult
+  }
+  /** The plan card's own write. */
+  'session:plan:answer': {
+    request: { sessionKey: SessionKey; permissionId: string; decision: PlanDecision }
+    response: PlanAnswerResult
+  }
 }
 
 export const IPC_CHANNELS = [
@@ -294,6 +310,9 @@ export const IPC_CHANNELS = [
   'session:defaults',
   'session:defaults:set',
   'session:rename',
+  'session:controls:set',
+  'session:question:answer',
+  'session:plan:answer',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]

@@ -8,6 +8,7 @@ import { invoke } from '../data/invoke'
 import type { RepoId, RepositoryEntry } from '../../../shared/repos'
 import type { ReposListResponse } from '../../../shared/ipc'
 import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '../../../shared/hosting/types'
+import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SessionEffort, SetControlsResult } from '../../../shared/hosting/controls'
 import { startFailureCopy, START_UNREACHABLE } from './copy'
 import type { StartFailureCopy } from './copy'
 import { clearDraft } from './drafts'
@@ -186,6 +187,19 @@ export async function dismiss(key: SessionKey): Promise<boolean> {
     console.error('Failed to reach the main process dismissing a session', error)
     return false
   }
+}
+
+// Lets a rejected call reach the caller directly, rather than swallowing it the way send/stop/close do.
+export async function setControls(sessionKey: SessionKey, patch: { readonly permissionMode?: SessionControls['permissionMode']; readonly model?: string; readonly effort?: SessionEffort | null }): Promise<SetControlsResult> {
+  return invoke('session:controls:set', { sessionKey, ...patch })
+}
+
+export async function answerQuestion(sessionKey: SessionKey, permissionId: string, answers: Record<string, string>): Promise<QuestionAnswerResult> {
+  return invoke('session:question:answer', { sessionKey, permissionId, answers })
+}
+
+export async function answerPlan(sessionKey: SessionKey, permissionId: string, decision: PlanDecision): Promise<PlanAnswerResult> {
+  return invoke('session:plan:answer', { sessionKey, permissionId, decision })
 }
 
 export async function startFromTranscript(repoId: RepoId, sessionId: string, kind: 'resume' | 'fork'): Promise<void> {

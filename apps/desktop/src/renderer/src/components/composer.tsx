@@ -14,12 +14,19 @@ export interface ComposerProps {
   /** `null` hides the send button entirely (closing, ended). */
   readonly sendLabel: string | null
   readonly autoFocus?: boolean
+  // Shift+Tab cycles the permission mode; left unset, Tab keeps its ordinary focus-move behaviour.
+  readonly onShiftTab?: () => void
 }
 
-export function Composer({ value, onChange, onSend, onEscape, disabled, placeholder, sendLabel, autoFocus }: ComposerProps) {
+export function Composer({ value, onChange, onSend, onEscape, disabled, placeholder, sendLabel, autoFocus, onShiftTab }: ComposerProps) {
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
     if (event.key === 'Escape') {
       onEscape?.(event)
+      return
+    }
+    if (event.key === 'Tab' && event.shiftKey && onShiftTab !== undefined) {
+      event.preventDefault()
+      onShiftTab()
       return
     }
     if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return

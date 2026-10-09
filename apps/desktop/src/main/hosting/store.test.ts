@@ -96,6 +96,9 @@ describe('createHostedStore', () => {
     expect(store.attach(key)).toEqual({ ok: false, kind: 'unknown-session' })
     expect(store.answerPermission(key, 'perm-1', 'deny', null)).toEqual({ ok: false, kind: 'unknown-session' })
     expect(store.invoke(key, 'pipeline', '')).toEqual({ ok: false, kind: 'unknown-session' })
+    await expect(store.setControls(key, { permissionMode: 'acceptEdits' })).resolves.toEqual({ ok: false, kind: 'unknown-session' })
+    expect(store.answerQuestion(key, 'perm-1', {})).toEqual({ ok: false, kind: 'unknown-session' })
+    expect(store.answerPlan(key, 'perm-1', { kind: 'keep-planning', feedback: 'x' })).toEqual({ ok: false, kind: 'unknown-session' })
   })
 
   it('start() resolves the plugin request for the installed source and passes no plugins to buildSessionOptions', async () => {
