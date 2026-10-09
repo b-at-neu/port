@@ -8,7 +8,9 @@ import type { HostedSessionSnapshot, PendingPermission, SessionKey, SessionOrigi
 import type { RepoId } from '../../../shared/repos'
 
 interface SessionEntry {
-  readonly repoId: RepoId
+  readonly repoId: RepoId | null
+  /** This session's folder, for a null-`repoId` session's own display label. */
+  readonly folder: string
   /** #103: carried alongside the pending list so the dialog's context line
    *  can name the session with the same `sessionDisplayLabel` the rail
    *  shows — never the raw `sessionKey`. */
@@ -24,7 +26,8 @@ export const EMPTY_QUEUE: PermissionQueue = new Map()
 
 export interface QueuedPermission {
   readonly sessionKey: SessionKey
-  readonly repoId: RepoId
+  readonly repoId: RepoId | null
+  readonly folder: string
   readonly title: string | null
   readonly origin: SessionOrigin
   readonly startedAt: string
@@ -39,7 +42,14 @@ export function applySnapshot(queue: PermissionQueue, snapshot: HostedSessionSna
   if (snapshot.pendingPermissions.length === 0) {
     next.delete(snapshot.sessionKey)
   } else {
-    next.set(snapshot.sessionKey, { repoId: snapshot.repoId, title: snapshot.title, origin: snapshot.origin, startedAt: snapshot.startedAt, permissions: snapshot.pendingPermissions })
+    next.set(snapshot.sessionKey, {
+      repoId: snapshot.repoId,
+      folder: snapshot.workspace.folder,
+      title: snapshot.title,
+      origin: snapshot.origin,
+      startedAt: snapshot.startedAt,
+      permissions: snapshot.pendingPermissions,
+    })
   }
   return next
 }
@@ -59,7 +69,7 @@ export function ordered(queue: PermissionQueue): readonly QueuedPermission[] {
   for (const [sessionKey, entry] of queue) {
     for (const permission of entry.permissions) {
       if (permission.interaction !== null) continue
-      items.push({ sessionKey, repoId: entry.repoId, title: entry.title, origin: entry.origin, startedAt: entry.startedAt, permission })
+      items.push({ sessionKey, repoId: entry.repoId, folder: entry.folder, title: entry.title, origin: entry.origin, startedAt: entry.startedAt, permission })
     }
   }
   items.sort((a, b) => {

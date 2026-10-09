@@ -7,9 +7,14 @@ import { describe, expect, it } from 'vitest'
 import { createHostedStore, defaultHostedStoreDeps } from './store'
 import type { RepoId } from '../../shared/repos'
 import type { HostedSessionSnapshot, PendingPermission, SessionEntriesDelta, SessionKey } from '../../shared/hosting/types'
+import type { SessionWorkspace } from '../../shared/workspace/types'
 
 const live = process.env['PORT_LIVE_SDK'] === '1'
 const cwd = process.env['PORT_LIVE_SDK_CWD']
+
+function workspaceFor(folder: string): SessionWorkspace {
+  return { folder, root: null, worktree: null, base: null }
+}
 
 describe.skipIf(!live || !cwd)('hosting — live SDK acceptance (PORT_LIVE_SDK=1)', () => {
   it('starts, streams a turn, interrupts, closes, resumes, and forks', async () => {
@@ -17,7 +22,7 @@ describe.skipIf(!live || !cwd)('hosting — live SDK acceptance (PORT_LIVE_SDK=1
     const store = createHostedStore(defaultHostedStoreDeps)
     const repoId = 'live-acceptance' as RepoId
 
-    const started = await store.start({ repoId, mode: { kind: 'fresh' }, cwd })
+    const started = await store.start({ repoId, mode: { kind: 'fresh' }, workspace: workspaceFor(cwd) })
     expect(started.ok).toBe(true)
     if (!started.ok) return
     const sessionKey = started.snapshot.sessionKey
@@ -34,11 +39,11 @@ describe.skipIf(!live || !cwd)('hosting — live SDK acceptance (PORT_LIVE_SDK=1
     expect(claudeSessionId).not.toBeNull()
     if (claudeSessionId === null) return
 
-    const resumed = await store.start({ repoId, mode: { kind: 'resume', sessionId: claudeSessionId }, cwd })
+    const resumed = await store.start({ repoId, mode: { kind: 'resume', sessionId: claudeSessionId }, workspace: workspaceFor(cwd) })
     expect(resumed.ok).toBe(true)
     if (resumed.ok) await store.close(resumed.snapshot.sessionKey)
 
-    const forked = await store.start({ repoId, mode: { kind: 'fork', sessionId: claudeSessionId }, cwd })
+    const forked = await store.start({ repoId, mode: { kind: 'fork', sessionId: claudeSessionId }, workspace: workspaceFor(cwd) })
     expect(forked.ok).toBe(true)
     if (!forked.ok) return
     expect(forked.snapshot.origin).toEqual({ kind: 'forked', from: claudeSessionId, atMessageUuid: null })
@@ -57,7 +62,7 @@ describe.skipIf(!live || !cwd)('hosting — live SDK acceptance (PORT_LIVE_SDK=1
     const repoId = 'live-permission-acceptance' as RepoId
 
     try {
-      const started = await store.start({ repoId, mode: { kind: 'fresh' }, cwd })
+      const started = await store.start({ repoId, mode: { kind: 'fresh' }, workspace: workspaceFor(cwd) })
       expect(started.ok).toBe(true)
       if (!started.ok) return
       const sessionKey = started.snapshot.sessionKey
@@ -94,7 +99,7 @@ describe.skipIf(!live || !cwd)('hosting — live SDK acceptance (PORT_LIVE_SDK=1
     })
     const repoId = 'live-entries-acceptance' as RepoId
 
-    const started = await store.start({ repoId, mode: { kind: 'fresh' }, cwd })
+    const started = await store.start({ repoId, mode: { kind: 'fresh' }, workspace: workspaceFor(cwd) })
     expect(started.ok).toBe(true)
     if (!started.ok) return
     const sessionKey = started.snapshot.sessionKey
@@ -127,7 +132,7 @@ describe.skipIf(!live || !cwd)('hosting — live SDK acceptance (PORT_LIVE_SDK=1
     const store = createHostedStore({ ...defaultHostedStoreDeps, onStatus: (snapshot) => (latest = snapshot) })
     const repoId = 'live-capabilities-acceptance' as RepoId
 
-    const started = await store.start({ repoId, mode: { kind: 'fresh' }, cwd })
+    const started = await store.start({ repoId, mode: { kind: 'fresh' }, workspace: workspaceFor(cwd) })
     expect(started.ok).toBe(true)
     if (!started.ok) return
     const sessionKey = started.snapshot.sessionKey
@@ -158,8 +163,8 @@ describe.skipIf(!live || !cwd)('hosting — live SDK acceptance (PORT_LIVE_SDK=1
     const store = createHostedStore({ ...defaultHostedStoreDeps, onEvent: (envelope) => envelopes.push(envelope) })
     const repoId = 'live-concurrent-acceptance' as RepoId
 
-    const first = await store.start({ repoId, mode: { kind: 'fresh' }, cwd })
-    const second = await store.start({ repoId, mode: { kind: 'fresh' }, cwd })
+    const first = await store.start({ repoId, mode: { kind: 'fresh' }, workspace: workspaceFor(cwd) })
+    const second = await store.start({ repoId, mode: { kind: 'fresh' }, workspace: workspaceFor(cwd) })
     expect(first.ok).toBe(true)
     expect(second.ok).toBe(true)
     if (!first.ok || !second.ok) return
@@ -185,7 +190,7 @@ describe.skipIf(!live || !cwd)('hosting — live SDK acceptance (PORT_LIVE_SDK=1
     expect(firstClaudeSessionId).not.toBeNull()
     if (firstClaudeSessionId === null) return
 
-    const refused = await store.start({ repoId, mode: { kind: 'resume', sessionId: firstClaudeSessionId }, cwd })
+    const refused = await store.start({ repoId, mode: { kind: 'resume', sessionId: firstClaudeSessionId }, workspace: workspaceFor(cwd) })
     expect(refused).toEqual({ ok: false, kind: 'already-open', sessionKey: firstKey })
 
     await store.close(firstKey)

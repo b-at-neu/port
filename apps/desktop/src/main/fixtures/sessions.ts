@@ -2,6 +2,7 @@
 // states, plus the entries `session:attach` replays for the streaming one.
 import type { SessionControls, SessionModels } from '../../shared/hosting/controls'
 import type { HostedSessionSnapshot, SessionAttachResult, SessionKey } from '../../shared/hosting/types'
+import type { SessionWorkspace } from '../../shared/workspace/types'
 import type { TranscriptEntry } from '../../shared/sessions/transcript'
 import type { SearchResult } from '../../shared/search/types'
 import type { AgentRecord, SessionRecord, SessionScan } from '../../shared/sessions/types'
@@ -13,6 +14,14 @@ export const ENDED_KEY = 'fixture-session-ended' as SessionKey
 export const STARTING_KEY = 'fixture-session-starting' as SessionKey
 export const QUESTION_KEY = 'fixture-session-question' as SessionKey
 export const PLAN_KEY = 'fixture-session-plan' as SessionKey
+
+const NON_WORKTREE_WORKSPACE: SessionWorkspace = { folder: '/home/you/src/widgets', root: '/home/you/src/widgets', worktree: null, base: null }
+const WORKTREE_WORKSPACE: SessionWorkspace = {
+  folder: '/home/you/src/widgets/.claude/worktrees/session-ab12cd',
+  root: '/home/you/src/widgets',
+  worktree: { path: '/home/you/src/widgets/.claude/worktrees/session-ab12cd', branch: 'session/ab12cd' },
+  base: { sha: '3eb526c', label: 'session/ab12cd' },
+}
 
 const FIXTURE_CONTROLS: SessionControls = { permissionMode: 'default', model: 'sonnet', effort: null }
 
@@ -79,6 +88,7 @@ export function fixturePermissionSnapshots(now: Date): readonly HostedSessionSna
       sessionKey: PERMISSION_KEY,
       claudeSessionId: 'fixture-claude-2',
       repoId: WIDGETS_ID,
+      workspace: NON_WORKTREE_WORKSPACE,
       phase: 'ready',
       origin: { kind: 'fresh' },
       startedAt: t(12),
@@ -119,6 +129,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       sessionKey: STREAMING_KEY,
       claudeSessionId: 'fixture-claude-1',
       repoId: WIDGETS_ID,
+      workspace: WORKTREE_WORKSPACE,
       phase: 'streaming',
       origin: { kind: 'fresh' },
       startedAt: t(5),
@@ -136,6 +147,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       sessionKey: ENDED_KEY,
       claudeSessionId: 'fixture-claude-3',
       repoId: WIDGETS_ID,
+      workspace: NON_WORKTREE_WORKSPACE,
       phase: 'ended',
       origin: { kind: 'fresh' },
       startedAt: t(30),
@@ -153,6 +165,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       sessionKey: STARTING_KEY,
       claudeSessionId: null,
       repoId: WIDGETS_ID,
+      workspace: NON_WORKTREE_WORKSPACE,
       phase: 'starting',
       origin: { kind: 'fresh' },
       startedAt: t(0),
@@ -170,6 +183,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       sessionKey: QUESTION_KEY,
       claudeSessionId: 'fixture-claude-4',
       repoId: WIDGETS_ID,
+      workspace: NON_WORKTREE_WORKSPACE,
       phase: 'streaming',
       origin: { kind: 'fresh' },
       startedAt: t(2),
@@ -215,6 +229,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       sessionKey: PLAN_KEY,
       claudeSessionId: 'fixture-claude-5',
       repoId: WIDGETS_ID,
+      workspace: NON_WORKTREE_WORKSPACE,
       phase: 'streaming',
       origin: { kind: 'fresh' },
       startedAt: t(3),

@@ -15,6 +15,7 @@ function snapshotWith(permissionIds: readonly string[]): HostedSessionSnapshot {
     sessionKey: KEY,
     claudeSessionId: 'c1',
     repoId: 'r1' as RepoId,
+    workspace: { folder: '/repo', root: '/repo', worktree: null, base: null },
     phase: 'streaming',
     origin: { kind: 'fresh' },
     startedAt: new Date().toISOString(),
@@ -103,7 +104,7 @@ describe('createPermissionStore', () => {
     store.subscribe(() => {})
     await flush()
 
-    await store.answer({ sessionKey: KEY, repoId: 'r1' as RepoId, title: null, origin: { kind: 'fresh' }, startedAt: 't', permission: snapshotWith(['p1']).pendingPermissions[0]! }, 'deny' satisfies PermissionDecision)
+    await store.answer({ sessionKey: KEY, repoId: 'r1' as RepoId, folder: '/repo', title: null, origin: { kind: 'fresh' }, startedAt: 't', permission: snapshotWith(['p1']).pendingPermissions[0]! }, 'deny' satisfies PermissionDecision)
     expect(store.getSnapshot().current?.permission.permissionId).toBe('p1')
     expect(store.getSnapshot().error).not.toBeNull()
 

@@ -8,6 +8,7 @@ import { usePermissionState, answer, setMessage } from './store'
 import { useSelectedSession } from '../session/selection'
 import { useIpcQuery } from '../data/query'
 import { sessionDisplayLabel, startedClock } from '../../../shared/hosting/label'
+import { folderLabel } from '../../../shared/workspace/label'
 import type { RepositoryEntry } from '../../../shared/repos'
 import {
   ALLOW_ONCE_LABEL,
@@ -48,7 +49,8 @@ export function PermissionDialog() {
   const { permission } = current
   const busy = sending !== null
   const otherSession = selectedKey !== null && selectedKey !== current.sessionKey
-  const sessionLabel = sessionDisplayLabel({ title: current.title, origin: current.origin }, repoLabelFor(repos.data?.ok === true ? repos.data.repositories : undefined, current.repoId))
+  const repoLabel = current.repoId !== null ? repoLabelFor(repos.data?.ok === true ? repos.data.repositories : undefined, current.repoId) : folderLabel(current.folder)
+  const sessionLabel = sessionDisplayLabel({ title: current.title, origin: current.origin }, repoLabel)
   const started = startedClock(current.startedAt, now)
   const formatted = formatInput(permission.input)
 

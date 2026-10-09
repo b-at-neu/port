@@ -1,6 +1,7 @@
 // Sole creator/remover of session worktrees. Never deletes a branch; never forces removal without an explicit caller choice. Through `GitRunner` only — never a direct subprocess call.
 import { randomBytes } from 'node:crypto'
 import type { GitRunner } from '../platform/git'
+import { resolveGitBaseRoot } from '../platform/git'
 import { pathOps as defaultPathOps } from '../platform/paths'
 import type { PathOps } from '../platform/paths'
 import { readTextFile, writeTextFile } from '../platform/files'
@@ -112,4 +113,19 @@ export async function removeSessionWorktree(params: RemoveSessionWorktreeParams)
     return { outcome: 'dirty' }
   }
   return { outcome: 'failed', message }
+}
+
+export interface RemoveSessionWorktreeAtParams {
+  readonly path: string
+  readonly force: boolean
+  readonly git: GitRunner
+  readonly pathOps?: PathOps
+}
+
+/** Resolves the worktree's own base root before removing — `git worktree remove` must run from
+ *  outside the tree it is removing, never from inside it. */
+export async function removeSessionWorktreeAt(params: RemoveSessionWorktreeAtParams): Promise<RemoveSessionWorktreeOutcome> {
+  const ops = params.pathOps ?? defaultPathOps
+  const root = await resolveGitBaseRoot(params.git, params.path, ops)
+  return removeSessionWorktree({ root, path: params.path, force: params.force, git: params.git })
 }

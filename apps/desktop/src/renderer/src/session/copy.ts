@@ -89,14 +89,28 @@ export interface StartFailureCopy {
 /** `already-open` is deliberately excluded from this type — the controller
  *  switches to the existing session for that result, with no banner at all,
  *  rather than rendering a failure screen for it. */
-export type RenderableStartFailure = Extract<SessionStartResult, { readonly ok: false; readonly kind: 'at-capacity' | 'runtime' }>
+export type RenderableStartFailure = Extract<SessionStartResult, { readonly ok: false; readonly kind: 'at-capacity' | 'runtime' | 'folder-missing' | 'folder-busy' | 'not-git' | 'worktree-failed' }>
 
 /** `at-capacity` names the limit and points at the rail rather than a bare
  *  refusal; `runtime` reuses #97's own `RUNTIME_COPY`, never a second error
- *  vocabulary. */
+ *  vocabulary. The four workspace-resolution kinds are the bridge's own copy. */
 export function startFailureCopy(result: RenderableStartFailure): StartFailureCopy {
   if (result.kind === 'at-capacity') {
     return { title: 'Port is busy', body: `Port is already hosting ${String(result.limit)} sessions — the limit. Close one or raise the limit in the session list.`, detail: null }
+  }
+  if (result.kind === 'folder-busy') {
+    return { title: 'Folder in use', body: 'Another session is already working in this folder. Start it in a new worktree.', detail: null }
+  }
+  if (result.kind === 'folder-missing') {
+    return result.path !== null
+      ? { title: 'Folder missing', body: 'That folder no longer exists. Choose another.', detail: result.path }
+      : { title: 'Folder missing', body: "Port couldn't find this session's folder.", detail: null }
+  }
+  if (result.kind === 'not-git') {
+    return { title: 'Not a git repository', body: "This folder isn't a git repository.", detail: null }
+  }
+  if (result.kind === 'worktree-failed') {
+    return { title: "Couldn't create the worktree", body: "Couldn't create the worktree", detail: result.message }
   }
   const copy = RUNTIME_COPY[result.diagnosis]
   return { title: copy.title, body: copy.body, detail: result.detail }

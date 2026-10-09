@@ -88,6 +88,20 @@ function depsWith(overrides: Partial<HostingChannelDeps> = {}): HostingChannelDe
     listSessionFiles: () => {
       throw new Error('listSessionFiles should not be invoked in this case')
     },
+    resolveStartTarget: () => {
+      throw new Error('resolveStartTarget should not be invoked in this case')
+    },
+    targetDeps: {
+      git: () => {
+        throw new Error('git should not be invoked in this case')
+      },
+      recents: { load: () => Promise.resolve([]), record: () => Promise.resolve() },
+      exists: () => Promise.resolve(true),
+      readSessions: () => Promise.resolve({ ok: true, sessions: [] }),
+      createWorktree: () => Promise.resolve({ ok: false, message: 'should not be called' }),
+    },
+    now: () => new Date('2026-01-01T00:00:00.000Z'),
+    removeCreatedWorktree: () => Promise.resolve(),
     ...overrides,
   }
 }

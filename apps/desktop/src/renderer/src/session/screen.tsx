@@ -16,6 +16,7 @@ import { ROUTE_IDS } from '../router/routes'
 import type { RepoId, RepositoryEntry } from '../../../shared/repos'
 import type { ComposerAttachment } from '../../../shared/hosting/attachments'
 import type { HostedSessionSnapshot, SessionKey } from '../../../shared/hosting/types'
+import { folderLabel } from '../../../shared/workspace/label'
 import { setSelectedSession } from './selection'
 import { useSessionEntries } from './entries-store'
 import { setDraft, clearDraftAttachments } from './drafts'
@@ -38,9 +39,10 @@ function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { st
   return 'config' in entry
 }
 
-function repoLabelFor(repos: readonly RepositoryEntry[] | undefined, repoId: RepoId): string {
-  const entry = repos?.find((candidate) => candidate.id === repoId)
-  if (entry === undefined) return repoId
+function repoLabelFor(repos: readonly RepositoryEntry[] | undefined, snapshot: HostedSessionSnapshot): string {
+  if (snapshot.repoId === null) return folderLabel(snapshot.workspace.folder)
+  const entry = repos?.find((candidate) => candidate.id === snapshot.repoId)
+  if (entry === undefined) return snapshot.repoId
   return 'config' in entry ? entry.config.repo : entry.displayName
 }
 
@@ -61,7 +63,7 @@ export function SessionScreen() {
     <div className="flex h-full flex-col gap-3">
       <RestoreBanner />
       {snapshot !== null ? (
-        <SessionLive key={snapshot.sessionKey} snapshot={snapshot} repoLabel={repoLabelFor(repos.data?.ok === true ? repos.data.repositories : undefined, snapshot.repoId)} />
+        <SessionLive key={snapshot.sessionKey} snapshot={snapshot} repoLabel={repoLabelFor(repos.data?.ok === true ? repos.data.repositories : undefined, snapshot)} />
       ) : pendingStart !== null ? (
         <StartingPanel repoLabel={pendingStart.repoLabel} />
       ) : startFailure !== null ? (
@@ -249,7 +251,7 @@ function SessionLive({ snapshot, repoLabel }: { readonly snapshot: HostedSession
       <div className="mx-auto flex w-full max-w-[680px] min-h-0 flex-1 flex-col gap-3">
         {windowNoteVisible ? <p className="text-meta text-muted-foreground">{windowNote()}</p> : null}
         <ConversationList entries={entries.entries} baseIndex={entries.firstIndex} live={entries.live} focusIndex={null} />
-        {snapshot.phase === 'ended' && snapshot.end !== null ? <EndPanel end={snapshot.end} onNewSession={() => startNewSession(snapshot.repoId)} /> : null}
+        {snapshot.phase === 'ended' && snapshot.end !== null && snapshot.repoId !== null ? <EndPanel end={snapshot.end} onNewSession={() => startNewSession(snapshot.repoId as RepoId)} /> : null}
         <CommandStrip snapshot={snapshot} />
         {interaction !== null && interaction.kind === 'question' ? (
           <QuestionCard questions={interaction.questions} sending={questionSending} error={questionError} onSend={(answers) => void handleQuestionSend(answers)} onSkip={() => void handleQuestionSkip()} />

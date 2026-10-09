@@ -50,7 +50,8 @@ function removeSession(key: SessionKey): void {
   )
 }
 
-function repoLabelFor(repoId: RepoId): string {
+function repoLabelFor(repoId: RepoId | null): string {
+  if (repoId === null) return ''
   const data = queryClient?.getQueryData<ReposListResponse>(ipcQueryOptions('repos:list').queryKey)
   if (data?.ok !== true) return repoId
   const entry = data.repositories.find((candidate: RepositoryEntry) => candidate.id === repoId)
@@ -119,12 +120,20 @@ function handleStartResult(result: SessionStartResult): void {
   setStartFailure(startFailureCopy(result))
 }
 
+// Starts by repo through `folders:list`, the first folder whose own `repoId` matches.
 async function startSession(repoId: RepoId): Promise<void> {
   setPendingStart({ repoLabel: repoLabelFor(repoId) })
   setStartFailure(null)
   void router.navigate({ to: ROUTE_IDS.session, search: {} })
   try {
-    const result = await invoke('session:start', { repoId, mode: { kind: 'fresh' } })
+    const folders = await invoke('folders:list')
+    const folder = folders.folders.find((candidate) => candidate.repoId === repoId)
+    if (folder === undefined) {
+      setPendingStart(null)
+      setStartFailure(startFailureCopy({ ok: false, kind: 'folder-missing', path: null }))
+      return
+    }
+    const result = await invoke('session:start', { target: { kind: 'folder', folderId: folder.id, worktree: false }, mode: { kind: 'fresh' } })
     handleStartResult(result)
   } catch (error) {
     console.error('Failed to reach the main process starting a session', error)
@@ -182,7 +191,7 @@ export async function close(key: SessionKey): Promise<void> {
 
 export async function dismiss(key: SessionKey): Promise<boolean> {
   try {
-    const result = await invoke('session:dismiss', { sessionKey: key })
+    const result = await invoke('session:dismiss', { sessionKey: key, worktree: 'keep' })
     if (!result.ok) return false
     removeSession(key)
     forgetSessionEntries(key)
@@ -208,9 +217,9 @@ export async function answerPlan(sessionKey: SessionKey, permissionId: string, d
   return invoke('session:plan:answer', { sessionKey, permissionId, decision })
 }
 
-export async function startFromTranscript(repoId: RepoId, sessionId: string, kind: 'resume' | 'fork'): Promise<void> {
+export async function startFromTranscript(sessionId: string, kind: 'resume' | 'fork'): Promise<void> {
   try {
-    const result = await invoke('session:start', { repoId, mode: { kind, sessionId } })
+    const result = await invoke('session:start', { target: { kind: 'transcript' }, mode: { kind, sessionId } })
     handleStartResult(result)
   } catch (error) {
     console.error('Failed to reach the main process starting a session from a transcript', error)

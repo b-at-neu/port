@@ -54,6 +54,7 @@ function baseParams(overrides: Partial<Parameters<typeof createHostedHandle>[0]>
   return {
     sessionKey: SESSION_KEY,
     repoId: REPO_ID,
+    workspace: { folder: '/repo', root: '/repo', worktree: null, base: null },
     mode: { kind: 'fresh' as const },
     cwd: '/repo',
     executablePath: '/usr/local/bin/claude',

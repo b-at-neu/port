@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { useIpcMutation, useIpcQuery } from '../data/query'
 import type { RestorableSession } from '../../../shared/hosting/types'
 import type { RepositoryEntry } from '../../../shared/repos'
+import { folderLabel } from '../../../shared/workspace/label'
 import { adoptSession, selectSession } from './actions'
 import { startFailureCopy } from './copy'
 import { RESTORE_DISMISS, RESTORE_FORGET, RESTORE_RESUME_ALL, RESTORE_RESUME_ONE, RESTORE_REVIEW, restoreBannerLine, restoreOpenedLine, restorePartialLine, restoreUnavailableLine } from './rail-copy'
@@ -12,6 +13,11 @@ function repoLabelFor(repos: readonly RepositoryEntry[] | undefined, repoId: str
   const entry = repos?.find((candidate) => candidate.id === repoId)
   if (entry === undefined) return repoId
   return 'config' in entry ? entry.config.repo : entry.displayName
+}
+
+function labelFor(repos: readonly RepositoryEntry[] | undefined, entry: RestorableSession): string {
+  if (entry.repoId !== null) return repoLabelFor(repos, entry.repoId)
+  return entry.folder !== null ? folderLabel(entry.folder) : 'Unknown folder'
 }
 
 export function RestoreBanner() {
@@ -115,7 +121,7 @@ export function RestoreBanner() {
               <div key={entry.restoreId} className="flex items-center justify-between gap-2 rounded-md bg-background/50 px-2 py-1">
                 <div className="flex flex-col">
                   <span className="text-foreground">
-                    {repoLabelFor(repos.data?.ok === true ? repos.data.repositories : undefined, entry.repoId)} · {label}
+                    {labelFor(repos.data?.ok === true ? repos.data.repositories : undefined, entry)} · {label}
                   </span>
                   <span className="text-meta">{restoreOpenedLine(entry.startedAt, now)}</span>
                   {!entry.availability.ok ? <span className="text-meta">{restoreUnavailableLine(entry.availability.reason)}</span> : null}

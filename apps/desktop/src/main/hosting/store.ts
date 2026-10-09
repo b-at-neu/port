@@ -24,6 +24,7 @@ import type {
   SessionSendResult,
   SessionStartMode,
   SessionStartResult,
+  WorktreeChoice,
 } from '../../shared/hosting/types'
 import { createHostedHandle } from './handle'
 import type { HostedHandle, HostedQueryFn } from './handle'
@@ -36,10 +37,15 @@ import { createInMemoryHostingPersistence, DEFAULT_SESSION_LIMIT, SESSION_LIMIT_
 import type { HostingPersistence } from './persist'
 import { dropAdopted, mintRestorable, nextPersisted, persistedOpen } from './restore'
 import type { MintedRestorable } from './restore'
+import { findAlreadyOpen, findFolderBusy } from './occupancy'
 import type { SessionReader } from '../sessions/sdk'
 import { readCredentialsTell } from '../runtime/credentials'
 import { resolveClaudeExecutable } from '../runtime/locate'
 import { pathOps } from '../platform/paths'
+import { defaultGitRunner } from '../platform/git'
+import { removeSessionWorktreeAt } from '../workspace/worktree'
+import type { RemoveSessionWorktreeOutcome } from '../workspace/worktree'
+import type { SessionWorkspace } from '../../shared/workspace/types'
 
 export { DEFAULT_SESSION_LIMIT, SESSION_LIMIT_CEILING } from './persist'
 
@@ -64,6 +70,8 @@ export interface HostedStoreDeps {
   readonly samePath: (a: string, b: string) => boolean
   /** `main/ipc.ts` supplies the real file-backed one; the default here is disk-free, for tests. */
   readonly persistence: HostingPersistence
+  /** Removes a worktree on an explicit `dismiss` choice — the default wraps `removeSessionWorktreeAt` with a real `GitRunner`. */
+  readonly removeWorktree: (path: string, force: boolean) => Promise<RemoveSessionWorktreeOutcome>
 }
 
 export const defaultHostedStoreDeps: HostedStoreDeps = {
@@ -81,13 +89,14 @@ export const defaultHostedStoreDeps: HostedStoreDeps = {
   readExpectedComponents: (pluginPath: string) => readExpectedComponents(pluginPath, defaultReadExpectedComponentsDeps),
   samePath: (a: string, b: string) => pathOps.samePath(a, b),
   persistence: createInMemoryHostingPersistence(),
+  removeWorktree: (path, force) => removeSessionWorktreeAt({ path, force, git: defaultGitRunner() }),
 }
 
 export interface StartSessionParams {
-  readonly repoId: RepoId
+  readonly repoId: RepoId | null
   readonly mode: SessionStartMode
-  /** Resolved by the caller, never re-derived here. */
-  readonly cwd: string
+  /** Resolved by the caller, never re-derived here — `workspace.folder` is this session's `cwd`. */
+  readonly workspace: SessionWorkspace
   /** The restore path's own resolved title — omitted for every other start path. */
   readonly initialTitle?: string | null
 }
@@ -105,8 +114,8 @@ export interface HostedStore {
   setControls(sessionKey: SessionKey, patch: { readonly permissionMode?: SessionControls['permissionMode']; readonly model?: string; readonly effort?: SessionControls['effort'] }): Promise<SetControlsResult>
   answerQuestion(sessionKey: SessionKey, permissionId: string, answers: Readonly<Record<string, string>>): QuestionAnswerResult
   answerPlan(sessionKey: SessionKey, permissionId: string, decision: PlanDecision): PlanAnswerResult
-  /** Removes an ended handle — `still-open` for any other phase. */
-  dismiss(sessionKey: SessionKey): SessionDismissResult
+  /** Removes an ended handle — `still-open` for any other phase. A worktree session's `'remove'`/`'force'` choice removes the worktree first; `'dirty'`/`'failed'` outcomes leave the handle in place. */
+  dismiss(sessionKey: SessionKey, worktree: WorktreeChoice): Promise<SessionDismissResult>
   snapshotOf(sessionKey: SessionKey): HostedSessionSnapshot | null
   /** This handle's own `cwd` — `null` for a key naming no live handle. */
   cwdOf(sessionKey: SessionKey): string | null
@@ -119,7 +128,7 @@ export interface HostedStore {
   rename(sessionKey: SessionKey, title: string): Promise<SessionRenameResult>
   restorable(): Promise<readonly MintedRestorable[]>
   /** Starts through the normal `start` path, so capacity and `already-open` still apply. */
-  restore(restoreId: string, cwd: string): Promise<SessionRestoreResult>
+  restore(restoreId: string, resolved: { readonly repoId: RepoId | null; readonly workspace: SessionWorkspace }): Promise<SessionRestoreResult>
   discardRestorable(restoreId: string | null): Promise<SessionRestoreDiscardResult>
 }
 
@@ -185,23 +194,17 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     persistSave()
   }
 
-  /** Compares a live handle's `claudeSessionId ?? resumeTarget` against the requested `sessionId`.
-   *  Never checked for `fork`: a fork of an open session gets a new id, so it is always allowed. */
-  function findAlreadyOpen(sessionId: string): HostedHandle | null {
-    for (const handle of handles.values()) {
-      if (handle.snapshot().phase === 'ended') continue
-      const target = handle.snapshot().claudeSessionId ?? handle.resumeTarget
-      if (target === sessionId) return handle
-    }
-    return null
-  }
-
   async function start(params: StartSessionParams): Promise<SessionStartResult> {
     await ensureLoaded()
 
     if (params.mode.kind === 'resume' || params.mode.kind === 'resume-at') {
-      const existing = findAlreadyOpen(params.mode.sessionId)
+      const existing = findAlreadyOpen(handles, params.mode.sessionId)
       if (existing !== null) return { ok: false, kind: 'already-open', sessionKey: existing.sessionKey }
+    }
+
+    if (params.workspace.worktree === null) {
+      const busy = findFolderBusy(handles, params.workspace.folder, deps.samePath)
+      if (busy !== null) return { ok: false, kind: 'folder-busy', sessionKey: busy.sessionKey }
     }
 
     if (liveCount() >= limit) {
@@ -218,7 +221,8 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
       }
     }
 
-    const [credentials, sdk, plugin] = await Promise.all([deps.readCredentialsTell(), deps.getSdk(), deps.resolvePluginRequest(params.cwd)])
+    const cwd = params.workspace.folder
+    const [credentials, sdk, plugin] = await Promise.all([deps.readCredentialsTell(), deps.getSdk(), deps.resolvePluginRequest(cwd)])
     const sessionKey = toSessionKey(nextId)
     nextId += 1
     const mode = params.mode
@@ -229,20 +233,20 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
       restorable = dropAdopted(restorable, claudeSessionId)
       if (mode.kind === 'fork') {
         void titleFork(
-          { parentSessionId: mode.sessionId, forkedSessionId: claudeSessionId, cwd: params.cwd },
+          { parentSessionId: mode.sessionId, forkedSessionId: claudeSessionId, cwd },
           { listSessions: deps.listSessionsForFork, renameSession: sdk.renameSession },
         ).then((titled) => handles.get(sessionKey)?.setTitled(titled))
       }
       persistSave()
     }
 
-
     const handle = createHostedHandle(
       {
         sessionKey,
         repoId: params.repoId,
+        workspace: params.workspace,
         mode,
-        cwd: params.cwd,
+        cwd,
         executablePath: located.path,
         credentials,
         now: deps.now,
@@ -336,10 +340,18 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     return handle.answerPlan(permissionId, decision)
   }
 
-  function dismiss(sessionKey: SessionKey): SessionDismissResult {
+  async function dismiss(sessionKey: SessionKey, worktree: WorktreeChoice): Promise<SessionDismissResult> {
     const handle = handles.get(sessionKey)
     if (!handle) return { ok: false, kind: 'unknown-session' }
     if (handle.snapshot().phase !== 'ended') return { ok: false, kind: 'still-open' }
+
+    const sessionWorktree = handle.snapshot().workspace.worktree
+    if (sessionWorktree !== null && worktree !== 'keep') {
+      const outcome = await deps.removeWorktree(sessionWorktree.path, worktree === 'force')
+      if (outcome.outcome === 'dirty') return { ok: false, kind: 'worktree-dirty' }
+      if (outcome.outcome === 'failed') return { ok: false, kind: 'worktree-remove-failed', message: outcome.message }
+    }
+
     forgetHandle(sessionKey)
     persistSave()
     return { ok: true }
@@ -397,11 +409,11 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     return restorable
   }
 
-  async function restore(restoreId: string, cwd: string): Promise<SessionRestoreResult> {
+  async function restore(restoreId: string, resolved: { readonly repoId: RepoId | null; readonly workspace: SessionWorkspace }): Promise<SessionRestoreResult> {
     await ensureLoaded()
     const entry = restorable.find((candidate) => candidate.restoreId === restoreId)
     if (entry === undefined) return { ok: false, kind: 'unknown-restore' }
-    const result = await start({ repoId: entry.repoId, mode: { kind: 'resume', sessionId: entry.claudeSessionId }, cwd, initialTitle: entry.title })
+    const result = await start({ repoId: resolved.repoId, mode: { kind: 'resume', sessionId: entry.claudeSessionId }, workspace: resolved.workspace, initialTitle: entry.title })
     if (result.ok || result.kind === 'already-open') {
       restorable = restorable.filter((candidate) => candidate.restoreId !== restoreId)
       persistSave()

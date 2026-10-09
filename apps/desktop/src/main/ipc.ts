@@ -7,7 +7,10 @@ import { SOURCE_KINDS } from '../shared/board/types'
 import type { BoardSnapshot } from '../shared/board/types'
 import { chooseDirectory } from './dialogs'
 import { defaultWorkspaceChannelDeps, resolveFoldersChoose, resolveFoldersList, resolveSessionChanges } from './channels/workspace'
-import { resolveWorkspace } from './workspace/resolve'
+import { createRecentsStore } from './workspace/recents'
+import { createSessionWorktree } from './workspace/worktree'
+import { defaultForkListSessions } from './hosting/fork'
+import { statPath } from './platform/files'
 import type { SessionKey } from '../shared/hosting/types'
 import { applyItemAction } from './actions/apply'
 import { applyItemDecision } from './actions/decide'
@@ -56,7 +59,7 @@ import {
 import { git } from './platform/git'
 import { readWorktreeReport } from './reclaimer/report'
 import type { ReadWorktreeReportParams } from './reclaimer/report'
-import { addRepository, isReadyEntry, listRepositories, removeRepository, requireReadyRepo } from './registry'
+import { addRepository, listRepositories, removeRepository, requireReadyRepo } from './registry'
 import type { RegistryDeps } from './registry'
 import { createPipelineWatcher } from './state/watcher'
 import type { PipelineWatcher } from './state/watcher'
@@ -225,6 +228,9 @@ export function registerIpc(): RegisteredIpc {
 
   handle('search:query', (_event, request) => resolveSearchQuery(registryDeps, request, app.getPath('userData')))
 
+  // Shared by the workspace and hosting channels — `folders.json`'s one writer either way.
+  const recents = createRecentsStore({ dir: app.getPath('userData') })
+
   // One hosted-session store for the process lifetime, created before the watcher — the dispatcher
   // sits between the two and needs this store first.
   const hostedStore = createHostedStore({
@@ -233,7 +239,13 @@ export function registerIpc(): RegisteredIpc {
     onEntries: (delta) => broadcast('session:entries', delta),
     persistence: createHostingPersistence({ dir: app.getPath('userData') }),
   })
-  const hostingChannelDeps = defaultHostingChannelDeps(hostedStore)
+  const hostingChannelDeps = defaultHostingChannelDeps(hostedStore, {
+    git: (args, cwd) => git(args, { cwd }),
+    recents,
+    exists: async (path) => (await statPath(path)).ok,
+    readSessions: defaultForkListSessions,
+    createWorktree: createSessionWorktree,
+  })
 
   // `launch: null` is the honest state until a real `StageLauncher` lands — a candidate sits
   // visibly at `no-launcher` rather than silently idle.
@@ -372,20 +384,11 @@ export function registerIpc(): RegisteredIpc {
 
   handle('session:restore:discard', (_event, request) => resolveSessionRestoreDiscard(request, hostingChannelDeps))
 
-  // Interim lookup: no session carries a worktree yet, so this resolves the registered repo's own
-  // path — the same non-worktree semantics `resolve.ts` already handles for any other folder.
-  async function workspaceOf(sessionKey: string) {
-    const snapshot = hostedStore.snapshotOf(sessionKey as SessionKey)
-    if (snapshot === null) return null
-    const list = await listRepositories(registryDeps)
-    if (!list.ok) return null
-    const entry = list.repositories.find((repository) => repository.id === snapshot.repoId)
-    if (entry === undefined || !isReadyEntry(entry)) return null
-    const { workspace } = await resolveWorkspace(entry.path, { git: registryDeps.git, repositories: list.repositories })
-    return workspace
+  function workspaceOf(sessionKey: string) {
+    return Promise.resolve(hostedStore.snapshotOf(sessionKey as SessionKey)?.workspace ?? null)
   }
 
-  const workspaceChannelDeps = defaultWorkspaceChannelDeps(app.getPath('userData'), workspaceOf)
+  const workspaceChannelDeps = defaultWorkspaceChannelDeps(app.getPath('userData'), workspaceOf, recents)
 
   handle('folders:list', (_event, request) => resolveFoldersList(registryDeps, request, workspaceChannelDeps))
 

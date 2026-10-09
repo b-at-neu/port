@@ -34,6 +34,8 @@ import type {
   SessionSendResult,
   SessionStartMode,
   SessionStartResult,
+  SessionStartTarget,
+  WorktreeChoice,
 } from './hosting/types'
 import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SetControlsResult } from './hosting/controls'
 import type { ComposerAttachment } from './hosting/attachments'
@@ -166,9 +168,9 @@ export interface IpcMap {
     request: { repoId: RepoId; number: number; decision: GateDecision; feedback: string | null; skipComment: boolean }
     response: GateAnswerResponse
   }
-  /** Owns the full lifecycle of a hosted session in the main process — the renderer only sends intents and receives events. `repoId` must name a currently registered, `ready` repository. */
+  /** Owns the full lifecycle of a hosted session in the main process — the renderer only sends intents and receives events. `target` resolves only against a folder main already holds (registry or recents) or a transcript's own cwd; the renderer never sends a path. */
   'session:start': {
-    request: { repoId: RepoId; mode: SessionStartMode }
+    request: { target: SessionStartTarget; mode: SessionStartMode }
     response: SessionStartResult
   }
   /** Always accepted, never refused mid-turn; `text` may be empty only with at least one attachment. */
@@ -205,9 +207,9 @@ export interface IpcMap {
     request: { sessionKey: SessionKey; name: string; args: string }
     response: SessionInvokeResult
   }
-  /** Removes an ended handle from the rail — `still-open` for any other phase. */
+  /** Removes an ended handle from the rail — `still-open` for any other phase. `worktree` is required and never forces removal without the operator's explicit `'force'`. */
   'session:dismiss': {
-    request: { sessionKey: SessionKey }
+    request: { sessionKey: SessionKey; worktree: WorktreeChoice }
     response: SessionDismissResult
   }
   /** The rail's own limit/open count — takes no payload. */

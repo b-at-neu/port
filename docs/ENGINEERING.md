@@ -70,6 +70,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 
 **`apps/desktop/src/main/hosting/`**
 - owns a hosted session's full lifecycle (#98); the renderer only sends intents (nine `session:*` channels) and receives events, never drives the child directly. #326 removes the dispatcher role: no `SessionOptionsRole`, no per-session task tracker, no `allowedTools`
+- `store.ts`'s `start()` refuses `folder-busy` so two sessions never share one working tree; `dismiss` removes a worktree only on the operator's explicit `remove`/`force`
 - `content.ts`'s `buildUserContent` (#324) is the one place text and attachments resolve into the Messages API's `string | ContentBlock[]`, called by `handle.send` and nothing else — `input.ts`'s `push` and `project.ts`'s `recordSend` take its output verbatim, never a second shape
 - `files.ts`'s `listSessionFiles` (#324) is the `@` suggestion list's own read: `git ls-files` when `cwd` is a work tree, a bounded depth-8 walk otherwise, both capped at `MAX_FILES` and reporting `truncated`, never an empty list for a failed read
 - `verify.ts`'s `isPipelineCommand` (#324) is the one place `port:pipeline`/bare `pipeline` is recognised — `capabilities.ts` reads it to drop pipeline entries from both the `port:`-qualified and the composer's own `slashCommands` lists, and `handle.send`'s own guard reads it before ever composing a `tool_use`
@@ -127,6 +128,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 
 **`apps/desktop/src/main/workspace/`** (#404)
 - sole creator/remover of session worktrees (`worktree.ts`); never deletes a branch; never forces removal without an explicit caller choice
+- `target.ts` is the only place a start target becomes a cwd; it creates a worktree only on an explicit `worktree: true`
 - `main/local/` stays the only reader of the worktree list — this directory never reads it back
 - `resolve.ts`'s `resolveWorkspace`/`toFolderEntry` are the only callers of a session's `GitRunner` for workspace identity; `changes.ts` reuses the same `GitRunner` contract for the Changes diff, never a second invocation shape
 - `diff.ts` is pure — no `GitRunner`, no filesystem; `changes.ts` owns every git invocation and hands it parsed output
