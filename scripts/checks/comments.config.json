@@ -1,7 +1,16 @@
 {
   "$comment": "The comment ratchet (docs/ENGINEERING.md \u00a77): per-area ceilings on issue-citing comment lines and comment blocks over two lines, scanned by scripts/checks/comments.ts. A ceiling is an upper bound on the area's current total \u2014 it may only be lowered, never raised, and a file not on 'grandfathered' must have zero of either. Lower a ceiling whenever a comment-ratchet note says the area sits under it. 'grandfathered' lists every file the ratchet found already over zero at the time this file was generated; remove an entry once a note says it is gone or clean.",
   "areas": [
-    { "path": "apps/desktop/src/main/", "citations": 310, "longBlocks": 637 },
+    { "path": "apps/desktop/src/main/hosting/", "citations": 60, "longBlocks": 112 },
+    { "path": "apps/desktop/src/main/dispatch/", "citations": 26, "longBlocks": 59 },
+    { "path": "apps/desktop/src/main/tick/", "citations": 35, "longBlocks": 46 },
+    { "path": "apps/desktop/src/main/github/", "citations": 30, "longBlocks": 43 },
+    { "path": "apps/desktop/src/main/sessions/", "citations": 15, "longBlocks": 57 },
+    { "path": "apps/desktop/src/main/state/", "citations": 42, "longBlocks": 60 },
+    { "path": "apps/desktop/src/main/fixtures/", "citations": 14, "longBlocks": 11 },
+    { "path": "apps/desktop/src/main/runtime/", "citations": 9, "longBlocks": 21 },
+    { "path": "apps/desktop/src/main/registry/", "citations": 9, "longBlocks": 32 },
+    { "path": "apps/desktop/src/main/", "citations": 70, "longBlocks": 196 },
     { "path": "apps/desktop/src/renderer/", "citations": 65, "longBlocks": 135 },
     { "path": "apps/desktop/src/shared/", "citations": 202, "longBlocks": 336 },
     { "path": "apps/desktop/", "citations": 11, "longBlocks": 36 },
