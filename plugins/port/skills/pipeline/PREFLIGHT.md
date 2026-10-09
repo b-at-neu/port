@@ -209,16 +209,17 @@ If the file does not exist, baseline at `0`. Every field after this step is writ
 
 **Step 9 — budget reset.** Read `commands.budget` (a `string | null` field — the full command prefix, e.g. `node scripts/port-budget.mjs`); **absent or `null` → skip silently, say nothing** for the rest of the session — no dispatch ceiling and no cost reporting, matching `commands.artifacts`. **Set** → run `<commands.budget> reset` once, before the first tick, closing any open dispatch a crashed prior session left running (flushed to its ticket's ledger as `lost`); echo its output only if it closed anything.
 
-**Step 10 — gate claim.** Full contract: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "External gate claim". A second surface (a desktop application) can claim the plan-review gate, dispatch itself (#265), or both, for itself; this step is what makes the cockpit notice and stand down from whichever it holds, once at startup and again every tick (see Tick procedure → Housekeeping for the per-tick re-read).
+**Step 10 — cockpit ownership.** Full contract: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Cockpit ownership". One cockpit runs a checkout at a time (#331) — this terminal skill or a desktop application, never both; this step is what decides which, once at startup and again every tick (see Tick procedure → Housekeeping for the per-tick re-read).
 
-1. **Resolve `<base-root>`**: `git rev-parse --git-common-dir`, then take that path's parent directory (resolved against `<root>` when the output is relative, e.g. a bare `.git`) — the same resolution `.agents/denials.log` already uses, so every worktree of a checkout sees the one claim rather than a per-worktree copy.
-2. **Read `<base-root>/.agents/gate-claim.json`** (Read tool).
-3. **Classify into exactly one of three verdicts**, mirroring the desktop app's own claim reader field-for-field:
-   - **`absent`** — the file does not exist, or it parses but its `repo` field names a different repository than this session's `<repo>`. Say nothing; both gates are answered as always for the rest of this session.
-   - **`held`** — parses as a JSON object, `repo` matches, and `owner`/`claimedAt` are both strings. `scopes` (an array) is checked for each recognized entry independently — `"plan-gate"` and `"dispatch"` never imply anything about the other: if it includes `"plan-gate"`, the plan-review gate is claimed — report the matching **UX states** message below and hold this verdict for the rest of the session (see Human gates → Plan review, and Tick procedure step 3). If it includes `"dispatch"`, this session dispatches no stage agent at all — report **Dispatch claimed** (**UX states** below) and hold this verdict the same way (see Safety rails, Dispatching, Tick procedure step 3). Report any entry in `scopes` that is neither as an unrecognized scope (**UX states**, appended clause) — never silently dropped, and never itself a reason to stand down from either gate. A `held` claim naming no recognized scope at all answers both gates normally.
-   - **`unreadable`** — the file exists but fails to parse as JSON, does not parse to an object, or is missing `owner` or `claimedAt`. Treat exactly like a `held` claim naming **both** `plan-gate` and `dispatch` — report both matching **UX states** messages, naming the parse reason, and hold this verdict for the rest of the session. A malformed claim's only ambiguity is which writer owns which gate; standing both down is the one reading that cannot produce an unintended decision.
+1. **Resolve `<base-root>`**: `git rev-parse --git-common-dir`, then take that path's parent directory (resolved against `<root>` when the output is relative, e.g. a bare `.git`) — the same resolution `.agents/denials.log` already uses, so every worktree of a checkout sees the one record rather than a per-worktree copy.
+2. **Read `<base-root>/.agents/cockpit.json`** (Read tool).
+3. **Classify into exactly one of four verdicts**, mirroring the app's own classifier field-for-field:
+   - **`absent`** — the file does not exist, or it parses but its `repo` field names a different repository than this session's `<repo>`. **Write** `{repo: <repo>, owner: "terminal", since: <now, ISO 8601>}` to the same path (Write tool) — this session takes ownership. Report **Taken** (**UX states** below) and proceed; the rest of the session runs normally.
+   - **`app`** — parses as a JSON object, `repo` matches, `owner` is `"app"`, and `since` is a string. Report **App owns it** (**UX states** below) and **end the session** — no `ScheduleWakeup`. The app runs this checkout; this session makes no write and launches no stage agent.
+   - **`terminal`** — same, `owner` is `"terminal"`. Proceed without writing again — re-entrant, so a crashed earlier terminal session resumes under the same record.
+   - **`unreadable`** — the file exists but fails to parse as JSON, does not parse to an object, has an `owner` that is neither `"app"` nor `"terminal"`, or is missing `since`. Report **Unreadable** (**UX states** below), naming the parse reason, and **end the session** — no `ScheduleWakeup`. The ambiguity is which side should run the checkout; standing both down is the one reading that cannot produce an unintended decision.
 
-**Never compare `claimedAt` against a clock.** A claim never expires — expiring it would silently transfer the gate back to this session, which is a wrong decision dressed as a timeout, never this step's call to make.
+**Never compare `since` against a clock.** The record never expires — expiring it would silently transfer ownership, which is a wrong decision dressed as a timeout, never this step's call to make.
 
 ## UX states (startup preflight)
 
@@ -300,22 +301,14 @@ Exact copy, one message per state, `<…>` substituted:
 
   > ⚠️ `commands.worktrees` isn't set, so I can't reclaim worktrees — and the pipeline creates one per ticket. Re-run `/port:init` to install the script, or run `/port:worktree-clean` by hand.
 
-- **Plan gate claimed** (at startup, then again **every** tick while it holds — see `SKILL.md` → "Tick procedure" → Housekeeping — deliberately not change-only, unlike the unowned and ungated sweeps, because a silent omission is indistinguishable from a gate nobody is watching):
+- **App owns it** (at preflight, and again every tick if taken over mid-session — see `SKILL.md` → "Tick procedure" → Housekeeping — deliberately not change-only, unlike the unowned and ungated sweeps, because a silent omission is indistinguishable from nobody watching):
 
-  > 🖥️ **Plan gate claimed by `port-desktop`** since 2026-09-05T14:02Z. 2 issues wait at `plan review`: #148, #151 — I won't approve or bounce them. Release the claim in the app, or delete `.agents/gate-claim.json`, to take the gate back.
+  > 🖥️ **port-desktop runs `<repo>`** since 2026-10-06T14:02Z. One cockpit per repository — this one won't start here. Pause the repo in the app (that hands it back), then run `/port:pipeline` again.
 
-  With no issues currently at `<labels.planReview>`, keep the first sentence and drop the rest — the claim is still worth stating, since it changes what this session will do the moment one arrives.
+- **Unreadable** (the loud stall the fail direction chooses — nobody can tell who should run the checkout):
 
-- **Dispatch claimed** (#265 — same cadence as "Plan gate claimed" above, and independent of it: a repository can hold neither, either, or both at once):
+  > ⚠️ `.agents/cockpit.json` can't be read (`<reason>`). One cockpit per repository can't be decided, so this one won't start. Fix or delete the file.
 
-  > 🖥️ **Dispatch claimed by `port-desktop`** since 2026-09-05T14:02Z. 2 items are actionable this tick: plan #105, impl #52 — I won't launch a stage agent for either, and the app makes the refresh, escalation, and approval-withdrawal writes here. Release the claim in the app, or delete `.agents/gate-claim.json`, to take dispatch back.
+- **Taken** (`absent` → wrote `terminal`; at preflight only, one line):
 
-  With nothing currently actionable, keep the first sentence and drop the rest, the same carve-out "Plan gate claimed" takes.
-
-- **Claim unreadable** (the loud stall the fail direction chooses for **both** gates at once — same cadence as the two states above):
-
-  > ⚠️ `.agents/gate-claim.json` can't be read (`<reason>`). Until it's valid or removed, I stand down from the plan gate and from dispatch exactly as if both were claimed — nothing will answer an issue at `plan review`, and I'll launch no stage agent. Fix or delete the file.
-
-- **Unrecognized scope** (appended to whichever of the lines above applies):
-
-  > · it also claims `<scope>`, which I don't recognize — that claim is reported, never acted on.
+  > This terminal cockpit now runs `<repo>` — the app won't run it until you choose Take over there.
