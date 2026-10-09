@@ -1,10 +1,4 @@
-// Renderer-safe reconciled shapes for the unified state model (#79). No
-// import here may reach a Node builtin — apps/desktop/src/main/state/ is the
-// only place that joins the four adapters (#74/#76/#77/#78), but the
-// renderer is the eventual consumer of these shapes over IPC (#80), so this
-// file compiles under `typecheck:web` too. The error rule is #72's,
-// unchanged: a condition a human or the environment could cause is a value,
-// never a throw.
+// Renderer-safe reconciled shapes for the unified state model. No import here may reach a Node builtin — only `main/state/` joins the four adapters. A condition a human or the environment could cause is a value, never a throw.
 import type { LabelKey, VocabularyReport } from '../labels/vocabulary'
 import type { LabelRole } from '../labels/defaults'
 import type { CheckContext, Mergeable, PipelineFailureKind, PipelineItemKind, PullRequestCommentNode, RateLimitInfo, ReviewNode, TruncatedSet, UnavailableAlias } from '../github/types'
@@ -12,24 +6,14 @@ import type { RepoDiagnostic, RepoId, RepoProblem } from '../repos'
 import type { DenialsRead, UnresolvedReason } from '../local/types'
 import type { PortStageAgent, SessionScan } from '../sessions/types'
 
-/** One role-bearing label this item carries — every co-present label stays
- *  here even though `stage` resolves a single winner (Decision, the
- *  precedence never discards a fact). Markers (`claude`, `auto plan`) are
- *  excluded — they surface separately as `marked`/`autoPlan`. */
+/** One role-bearing label this item carries — every co-present label stays here even though `stage` resolves a single winner. Markers are excluded — they surface separately as `marked`/`autoPlan`. */
 export interface StageLabel {
   readonly key: LabelKey
   readonly name: string
   readonly role: LabelRole
 }
 
-/**
- * `stageOf`'s result. `stage: null` is a real state (`status: 'unstaged'`),
- * never an error — an item carrying only markers has no stage at all.
- * `stageAmbiguous` is `true` when more than one distinct role is present
- * (e.g. a preview-database refresh deliberately leaves `approved` in place
- * beside `refreshing`) — the precedence still resolves `stage`, it never
- * hides the co-presence.
- */
+/** `stageOf`'s result. `stage: null` is a real state, never an error. `stageAmbiguous` is `true` when more than one distinct role is present; the precedence still resolves `stage`, it never hides the co-presence. */
 export interface StageResult {
   readonly stages: readonly StageLabel[]
   readonly stage: LabelRole | null
@@ -38,29 +22,13 @@ export interface StageResult {
   readonly autoPlan: boolean
 }
 
-/**
- * From `stage.role` plus the attachment ladder (Decision 2). `stalled` is a
- * **report, never a proof** — `TaskList` is the only real liveness evidence
- * and this app has none (RECOVERY.md → "Liveness"). A session scan that
- * could not run, or a repository with no session slice, is *absence of
- * evidence* and never produces this verdict — a check that could not run is
- * not a check that found nothing.
- */
+/** From `stage.role` plus the attachment ladder. `stalled` is a report, never a proof — a session scan that could not run is absence of evidence and never produces this verdict. */
 export type ItemStatus = 'waiting' | 'in-flight' | 'stalled' | 'gated' | 'terminal' | 'unstaged'
 
-/** Why `status` reads the way it does — named so an operator can tell
- *  "nothing claims this" (`no-claimant`) from "the transcript has not moved
- *  in an hour" (`all-dormant`) from "the app could not even check"
- *  (`sessions-unavailable`). */
+/** Why `status` reads the way it does — distinguishes "nothing claims this" from "the transcript hasn't moved" from "the app couldn't even check". */
 export type StatusEvidence = 'sessions-unavailable' | 'agent-active' | 'session-active' | 'all-dormant' | 'no-claimant'
 
-/**
- * Accompanies `status: 'waiting'`, first hit wins:
- * - `nobody` — unassigned, so no cockpit's assignee-filtered tick can see it.
- * - `operator-session` — the `SESSION REQUIRED` marker slot holds — the item
- *   keeps its trigger label and is never dispatched by any cockpit.
- * - `cockpit` — otherwise, the ordinary case.
- */
+/** Accompanies `status: 'waiting'`, first hit wins: `nobody` is unassigned; `operator-session` means the `SESSION REQUIRED` marker holds; `cockpit` is the ordinary case. */
 export type WaitingOn = 'cockpit' | 'operator-session' | 'nobody'
 
 /** Why `linked` is `null` — an issue at `pr opened` whose pull request
@@ -69,8 +37,7 @@ export type LinkReason = 'no-closing-keyword' | 'counterpart-not-open'
 
 export type AgentAttachMatch = 'direct' | 'linked'
 
-/** The ticket's "in-flight agent with stage/model/id" — an `AgentRecord`
- *  (#78) matched to this item, directly or via its linked counterpart. */
+/** An `AgentRecord` matched to this item, directly or via its linked counterpart. */
 export interface AttachedAgent {
   readonly agentId: string
   readonly agentType: string
@@ -82,9 +49,7 @@ export interface AttachedAgent {
   readonly match: AgentAttachMatch
 }
 
-/** A `SessionRecord` (#78) matched to this item — carries `role`/
- *  `roleEvidence` so an operator-session claim is visibly a session, never
- *  indistinguishable from a dispatched subagent. */
+/** A `SessionRecord` matched to this item — carries `role`/`roleEvidence` so an operator-session claim is visibly a session, never indistinguishable from a dispatched subagent. */
 export interface AttachedSession {
   readonly sessionId: string
   readonly role: 'cockpit' | 'implement' | 'other'
@@ -95,10 +60,7 @@ export interface AttachedSession {
   readonly match: AgentAttachMatch
 }
 
-/** A `WorktreeEntry` (#77) whose `correlation.number` matches this item. An
- *  entry with `unresolved` set is never guessed onto an item — it lands in
- *  the repository-level `uncorrelatedWorktrees` instead, with its reason
- *  intact. */
+/** A `WorktreeEntry` whose `correlation.number` matches this item. An entry with `unresolved` set is never guessed onto an item — it lands in `uncorrelatedWorktrees` instead. */
 export interface AttachedWorktree {
   readonly path: string
   readonly branch: string | null
@@ -108,10 +70,7 @@ export interface AttachedWorktree {
   readonly prunable: boolean
 }
 
-/** Why a number named by a worktree or an agent record never appeared in the
- *  open-only sweep (#79 Decision 4) — resolved through `fetchItemsByNumber`,
- *  never inferred. `recheck-unavailable` is its own value: a failed re-check
- *  is never collapsed into `number-not-found`. */
+/** Why a number named by a worktree or an agent record never appeared in the open-only sweep — resolved through `fetchItemsByNumber`, never inferred. `recheck-unavailable` is never collapsed into `number-not-found`. */
 export type OrphanReason = 'item-merged' | 'item-closed' | 'item-open-unlabelled' | 'number-not-found' | 'recheck-unavailable'
 
 export interface OrphanItem {
@@ -121,9 +80,7 @@ export interface OrphanItem {
   readonly reason: OrphanReason
 }
 
-/** Every shape one reconciled item carries. `sources` names which adapters
- *  actually contributed a fact to *this* item — freshness itself lives once
- *  per repository (Decision 5), not copied per item. */
+/** Every shape one reconciled item carries. `sources` names which adapters actually contributed a fact to this item — freshness lives once per repository, not copied per item. */
 export interface ReconciledItem {
   readonly repoId: RepoId
   readonly repo: string
@@ -150,37 +107,21 @@ export interface ReconciledItem {
   readonly mergedAt: string | null
   readonly matchedKeys: readonly LabelKey[]
   readonly sources: readonly ('github' | 'itemStates' | 'sessions' | 'worktrees' | 'denials')[]
-  /** The plan's own ` ```files ` fence, parsed for issues only (#106) — a
-   *  pull request's body is prose, not a fence, so its `claimedFiles` is
-   *  always `null`. `null` is "no file list" (dispatches unchecked); `[]` is
-   *  a fence that parsed to nothing (contends with nothing) — the two are
-   *  never collapsed. */
+  /** The plan's own ` ```files ` fence, parsed for issues only. `null` is "no file list" (dispatches unchecked); `[]` is a fence that parsed to nothing — the two are never collapsed. */
   readonly claimedFiles: readonly string[] | null
-  /** Copied straight off `PipelineItem`, pull-request only (#108) — `null`
-   *  for an issue, the same direction `claimedFiles` takes in reverse. Feed
-   *  `scripts/port-tick/gates.ts`'s `cycleCapExceeded`/`zeroDiffGate`. */
+  /** Copied straight off `PipelineItem`, pull-request only — `null` for an issue. Feeds `scripts/port-tick/gates.ts`'s `cycleCapExceeded`/`zeroDiffGate`. */
   readonly headRefOid: string | null
-  /** Copied straight off `PipelineItem`, pull-request only (#265) — `null`
-   *  for an issue, same direction as `headRefOid`. Feeds
-   *  `scripts/port-tick/gates.ts`'s `mergeabilityRoute`. */
+  /** Copied straight off `PipelineItem`, pull-request only — `null` for an issue. Feeds `scripts/port-tick/gates.ts`'s `mergeabilityRoute`. */
   readonly mergeable: Mergeable
   readonly reviews: readonly ReviewNode[] | null
   readonly comments: readonly PullRequestCommentNode[] | null
-  /** `codeReviewCount(reviews)`, precomputed here so the renderer never
-   *  re-derives it from raw review bodies (#108) — `null` for an issue,
-   *  mirroring `reviews` itself. */
+  /** `codeReviewCount(reviews)`, precomputed here so the renderer never re-derives it from raw review bodies — `null` for an issue. */
   readonly reviewCycleCount: number | null
-  /** Copied straight off `PipelineItem`, pull-request only (#292) — `null`
-   *  for an issue, same direction as `headRefOid`/`mergeable`. Feeds
-   *  `scripts/port-tick/checks.ts`'s `rollupVerdict` for the approval-withdrawal
-   *  observation. */
+  /** Copied straight off `PipelineItem`, pull-request only — `null` for an issue. Feeds `scripts/port-tick/checks.ts`'s `rollupVerdict` for the approval-withdrawal observation. */
   readonly checkRollup: readonly CheckContext[] | null
 }
 
-/** `{ at }` when the source answered, `{ unavailable: <reason> }` when it did
- *  not — never a stale-looking timestamp standing in for "did not run".
- *  `itemStates` additionally reports `'no re-check needed'`, a distinct
- *  value from an actual failure, when there were no orphan numbers to check. */
+/** `{ at }` when the source answered, `{ unavailable: <reason> }` when it did not — never a stale-looking timestamp standing in for "did not run". */
 export type FreshnessEntry = { readonly at: string } | { readonly unavailable: string }
 
 export interface RepositoryFreshness {
@@ -191,29 +132,14 @@ export interface RepositoryFreshness {
   readonly denials: FreshnessEntry
 }
 
-/** The board's one addition to #79's own shape (#80 Decision 6) — a
- *  worktree correlated to a number the open sweep never returned attaches to
- *  no `ReconciledItem` and would otherwise vanish entirely: present in
- *  `orphans` as a bare number, absent from every count. `registered` is
- *  every entry `readWorktrees` returned; `attached` is the sum of
- *  `ReconciledItem.worktrees.length` across every item; `uncorrelated` is
- *  `uncorrelatedWorktrees.length`. `null`, never `0`, when the worktree
- *  source itself failed — an unread source is not an empty one. */
+/** A worktree correlated to a number the open sweep never returned would otherwise vanish entirely. `registered` is every entry `readWorktrees` returned; `null`, never `0`, when the worktree source itself failed. */
 export interface WorktreeTotals {
   readonly registered: number
   readonly attached: number
   readonly uncorrelated: number
 }
 
-/**
- * One repository's reconciled view. A non-`ready` entry is a `RepositoryState`
- * too, never a dropped row — it carries #74's own `RepoProblem` verbatim,
- * because silently omitting a misconfigured repository from a cross-repo
- * board is the invisibility class this app is organised against. Direction
- * of failure: closed on the answer, open on reporting — a partial GitHub
- * response is the one case returning `ok: true` alongside `unavailable`; no
- * path returns `items: []` for a read that did not succeed.
- */
+/** One repository's reconciled view. A non-`ready` entry is a `RepositoryState` too, never a dropped row — it carries `RepoProblem` verbatim rather than silently omitting a misconfigured repository. */
 export type RepositoryState =
   | {
       readonly ok: true
@@ -231,28 +157,15 @@ export type RepositoryState =
       readonly rateLimit: RateLimitInfo
       readonly freshness: RepositoryFreshness
       readonly worktreeTotals: WorktreeTotals | null
-      /** The signed-in account's own login (#94's ownership check), carried
-       *  straight off `PipelineFetch.viewer` — `null`, never a guess, when
-       *  the fetch itself could not resolve it. */
+      /** The signed-in account's own login, carried straight off `PipelineFetch.viewer` — `null`, never a guess, when unresolvable. */
       readonly viewer: string | null
-      /** `entry.config.modules.approvalGate`, copied onto every item read so
-       *  `shared/board/project.ts`'s ungated selection and
-       *  `shared/actions/plan.ts`'s `actionsFor` never need a second config
-       *  read to know whether the gate module is even on. */
+      /** `entry.config.modules.approvalGate`, copied onto every item read so the ungated selection and `actionsFor` never need a second config read. */
       readonly approvalGate: boolean
-      /** `PipelineFetch.disabled`, carried straight off `LabelVocabulary`'s
-       *  own `disabled` list (#105's tick engine) — every module-gated
-       *  label key this repository currently has turned off, so `planTick`
-       *  never needs a second config read to report a gated stage as
-       *  absent rather than a stage rendered at zero. */
+      /** Every module-gated label key this repository currently has turned off, so `planTick` never needs a second config read to report a gated stage as absent. */
       readonly disabled: readonly LabelKey[]
-      /** `entry.config.concurrency`, copied the same way `approvalGate`
-       *  already is (#106) — so `planTick`'s file-contention gate never
-       *  needs a second config read to know this repository's own
-       *  `sharedFiles`/`overlapThreshold`. */
+      /** `entry.config.concurrency`, copied the same way `approvalGate` is, so `planTick`'s file-contention gate never needs a second config read. */
       readonly concurrency: { readonly sharedFiles: readonly string[]; readonly overlapThreshold: number }
-      /** `entry.config.reviewCycleCap`, copied the same way `approvalGate`
-       *  already is — so `decisionsFor` never needs a second config read. */
+      /** `entry.config.reviewCycleCap`, copied the same way `approvalGate` is, so `decisionsFor` never needs a second config read. */
       readonly reviewCycleCap: number
     }
   | {
@@ -273,10 +186,7 @@ export type RepositoryState =
       readonly freshness: RepositoryFreshness
     }
 
-/** The top-level result `readPipelineState` returns — `sessions` is #78's
- *  whole `SessionScan` at this level, never per repository (Decision 5): it
- *  is one machine-wide call, and its `unattributed`/`unresolved` counts are
- *  machine-level facts, not any one repository's. */
+/** The top-level result `readPipelineState` returns — `sessions` is the whole `SessionScan` at this level, never per repository: one machine-wide call, machine-level facts. */
 export interface PipelineState {
   readonly repositories: readonly RepositoryState[]
   readonly sessions: SessionScan
