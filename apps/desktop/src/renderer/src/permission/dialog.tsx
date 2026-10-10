@@ -26,6 +26,7 @@ import {
   INPUT_UNRENDERABLE_MESSAGE,
   OTHER_SESSION_LINE,
   primaryLine,
+  protectedPathLine,
   SENDING_LABEL,
 } from './copy'
 
@@ -63,6 +64,7 @@ export function PermissionDialog() {
       <AlertDialogContent key={permission.permissionId}>
         <AlertDialogHeader>
           {otherSession ? <p className="text-small text-attention-pill-foreground">{OTHER_SESSION_LINE}</p> : null}
+          {permission.protectedPath !== null ? <p className="text-small font-medium">{protectedPathLine(permission.protectedPath)}</p> : null}
           <AlertDialogTitle>{headingText(permission)}</AlertDialogTitle>
           <p className="text-small text-muted-foreground">{contextLine(sessionLabel, started, permission.agentId, 1, total)}</p>
         </AlertDialogHeader>

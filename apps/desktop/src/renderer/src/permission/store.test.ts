@@ -44,6 +44,8 @@ function snapshotWith(permissionIds: readonly string[]): HostedSessionSnapshot {
     models: TEST_MODELS,
     usage: null,
     backgroundTasks: [],
+    stage: null,
+    lastResult: null,
   }
 }
 

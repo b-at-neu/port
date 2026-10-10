@@ -3,8 +3,9 @@
 // `pipeline-status.tsx` routes the Take over button's click to
 // `board/dispatch.ts`'s `takeOver`, the same split every other board control
 // already follows. #293: the budget clause and its per-candidate notes.
-import type { BudgetNote, BudgetStatus, DispatcherState, ObservationRecord, RepoDispatchStatus } from '../../../shared/dispatch/types'
+import type { BudgetNote, BudgetStatus, DispatcherState, DispatchRecord, ObservationRecord, RepoDispatchStatus } from '../../../shared/dispatch/types'
 import type { TickObservationKind } from '../../../shared/tick/types'
+import { formatCost } from '../../../shared/hosting/usage'
 import { writeOutcomeCopy } from '../claim/copy'
 
 function timeOf(iso: string): string {
@@ -13,17 +14,44 @@ function timeOf(iso: string): string {
   return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
+/** The newest record carrying an `outcome`'s own clause, appended to the owner line — one line per `StageOutcomeKind`, a new member is a compile error here rather than a silently blank line. */
+function outcomeClause(recent: readonly DispatchRecord[]): string {
+  const withOutcome = recent.filter((r): r is DispatchRecord & { readonly outcome: NonNullable<DispatchRecord['outcome']> } => r.outcome !== null)
+  if (withOutcome.length === 0) return ''
+  const newest = withOutcome.reduce((a, b) => (Date.parse(a.at) > Date.parse(b.at) ? a : b))
+  const named = `${newest.agent} #${String(newest.number)}`
+  const outcome = newest.outcome
+  switch (outcome.kind) {
+    case 'completed': {
+      const cost = outcome.costUsd !== null ? ` (${formatCost(outcome.costUsd)})` : ''
+      const dirty = outcome.worktree === 'kept-dirty' ? ' — worktree kept, it has uncommitted changes' : ''
+      return ` · ${named} handed back${cost}${dirty}`
+    }
+    case 'questions':
+      return ` · ${named} has questions — open its session to answer`
+    case 'blocked':
+      return ` · ${named} is blocked — open its session`
+    case 'error':
+      return ` · ${named} ended with an error${outcome.detail !== null ? ` (${outcome.detail})` : ''}`
+    case 'usage-limit':
+      return ` · ${named} hit the usage limit${outcome.resetsAt !== null ? `, resets ${timeOf(outcome.resetsAt)}` : ''}`
+    case 'interrupted':
+      return ` · ${named} was interrupted${outcome.detail !== null ? ` (${outcome.detail})` : ''}`
+  }
+}
+
 function activeLine(state: Extract<DispatcherState, { readonly kind: 'active' }>, ownedSince: string | null): string {
   const live = state.recent.filter((r) => r.state === 'started')
   const sincePart = ownedSince !== null ? ` · since ${timeOf(ownedSince)}` : ''
   const newestFailed = [...state.recent].reverse().find((r) => r.state === 'failed')
   const failedClause = newestFailed !== null && newestFailed !== undefined ? ` · couldn't start ${newestFailed.agent} #${String(newestFailed.number)} (${newestFailed.detail ?? 'unknown error'}).` : ''
+  const outcome = outcomeClause(state.recent)
   if (live.length === 0) {
-    return `▶ Dispatch: this app${sincePart} · nothing to dispatch.${failedClause}`
+    return `▶ Dispatch: this app${sincePart} · nothing to dispatch.${failedClause}${outcome}`
   }
   const newest = live.reduce((a, b) => (Date.parse(a.at) > Date.parse(b.at) ? a : b))
   const named = live.map((r) => `${r.agent} #${String(r.number)}`).join(', ')
-  return `▶ Dispatch: this app · started ${named} at ${timeOf(newest.at)}.${failedClause}`
+  return `▶ Dispatch: this app · started ${named} at ${timeOf(newest.at)}.${failedClause}${outcome}`
 }
 
 /** #292, #331: per-kind phrasing for the owner line's "newest observation"

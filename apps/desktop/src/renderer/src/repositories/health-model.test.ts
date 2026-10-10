@@ -59,7 +59,6 @@ function readyState(vocabulary: LabelVocabulary, verdict: ReturnType<typeof veri
     approvalGate: true,
     disabled: [],
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
-    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
     reviewCycleCap: 3,
   }
 }

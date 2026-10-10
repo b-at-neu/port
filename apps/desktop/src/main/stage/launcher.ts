@@ -1,4 +1,4 @@
-// The real StageLauncher: a worktree, a hosted session, a send, and the hand-back watcher that closes and removes it. #326's seam, finally wired to real I/O.
+// The real StageLauncher: a worktree, a hosted session, a send, and the hand-back watcher that closes and removes it.
 import type { GitRunner } from '../platform/git'
 import type { CreateSessionWorktreeParams, CreateSessionWorktreeResult, RemoveSessionWorktreeOutcome } from '../workspace/worktree'
 import type { StageLaunchRequest, StageLaunchResult, StageLauncher } from '../dispatch/launch'

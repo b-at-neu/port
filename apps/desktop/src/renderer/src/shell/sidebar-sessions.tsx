@@ -97,7 +97,8 @@ export function SidebarSessions() {
   const sessions = useIpcQuery('session:list')
   const repos = useIpcQuery('repos:list')
   const selectedKey = useSelectedSession()
-  const live = (sessions.data ?? []).filter((s) => s.phase !== 'ended')
+  // Stage sessions (this app's own pipeline dispatches) live in the Pipelines section, never here.
+  const live = (sessions.data ?? []).filter((s) => s.phase !== 'ended' && s.stage === null)
 
   return (
     <div>

@@ -356,4 +356,58 @@ export default async function ({ expect, fail, ok }: Reporter) {
       fail('desktop-dispatch', `${autoPlanFile} does not exist — the guard cannot pass vacuously`);
     }
   }
+
+  // --- main/ipc.ts passes launch: stageLauncher and never launch: null — a null launcher was
+  // the honest placeholder state before the real StageLauncher existed. ---
+  {
+    const ipcFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/main/ipc.ts');
+    if (!ipcFile) {
+      fail('desktop-dispatch', 'apps/desktop/src/main/ipc.ts does not exist');
+    } else {
+      const text = readFileSync(ipcFile, 'utf8');
+      if (/launch:\s*null\b/.test(text)) {
+        fail('desktop-dispatch', "apps/desktop/src/main/ipc.ts still passes 'launch: null' — the real StageLauncher must be wired");
+      } else expect(/launch:\s*stageLauncher\b/.test(text), 'desktop-dispatch', "apps/desktop/src/main/ipc.ts does not pass 'launch: stageLauncher'");
+    }
+  }
+
+  // --- main/stage/handback.ts's QUESTIONS FOR HUMAN:/BLOCKED: prefixes each appear verbatim in
+  // the pipeline skill's own completion-handling text, both sides of the same contract. ---
+  {
+    const handbackFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/main/stage/handback.ts');
+    if (!handbackFile) {
+      fail('desktop-dispatch', 'apps/desktop/src/main/stage/handback.ts does not exist');
+    } else {
+      const text = readFileSync(handbackFile, 'utf8');
+      const questionsMatch = /QUESTIONS_PREFIX\s*=\s*'([^']+)'/.exec(text);
+      const blockedMatch = /BLOCKED_PREFIX\s*=\s*'([^']+)'/.exec(text);
+      if (!questionsMatch || !blockedMatch) {
+        fail('desktop-dispatch', "apps/desktop/src/main/stage/handback.ts does not declare both QUESTIONS_PREFIX and BLOCKED_PREFIX as string literals");
+      } else {
+        const skillText = pipelineSkillText();
+        const questionsOk = skillText.includes(questionsMatch[1]);
+        const blockedOk = skillText.includes(blockedMatch[1]);
+        if (!questionsOk) fail('desktop-dispatch', `pipeline skill text never carries handback.ts's QUESTIONS_PREFIX ('${questionsMatch[1]}') verbatim`);
+        if (!blockedOk) fail('desktop-dispatch', `pipeline skill text never carries handback.ts's BLOCKED_PREFIX ('${blockedMatch[1]}') verbatim`);
+        if (questionsOk && blockedOk) ok();
+      }
+    }
+  }
+
+  // --- No file under main/stage/ calls --force or passes 'force' to dismiss — worktree removal
+  // on a stage hand-back never forces, so it fails toward keeping work. ---
+  {
+    const stageDir = 'apps/desktop/src/main/stage';
+    const stageFiles = allFiles.filter((f) => relOf(f).startsWith(`${stageDir}/`) && !relOf(f).endsWith('.test.ts'));
+    let found = false;
+    for (const f of stageFiles) {
+      const rel = relOf(f);
+      const text = readFileSync(f, 'utf8');
+      if (text.includes('--force') || /dismiss\([^)]*'force'/.test(text)) {
+        found = true;
+        fail('desktop-dispatch', `${rel} forces a worktree removal — a stage hand-back must fail toward keeping the worktree`);
+      }
+    }
+    if (!found) ok();
+  }
 }

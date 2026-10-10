@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId, RepositoryEntry } from '../../../shared/repos'
 import type { AttachedAgent, PipelineState, ReconciledItem, RepositoryState } from '../../../shared/state/types'
 import type { BoardSnapshot } from '../../../shared/board/types'
+import type { HostedSessionSnapshot } from '../../../shared/hosting/types'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '../../../shared/board/types'
 import type { PipelineRow, ReadyPipelineRow } from './pipelines-model'
 import { pipelinesModel } from './pipelines-model'
@@ -83,7 +84,6 @@ function readyRepoState(overrides: Partial<Extract<RepositoryState, { ok: true }
     approvalGate: true,
     disabled: [],
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
-    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
     reviewCycleCap: 5,
     ...overrides,
   }
@@ -148,7 +148,7 @@ describe('pipelinesModel', () => {
     const dormant = item({ number: 43, agents: [agent({ activity: 'dormant' })] })
     const snapshot = snapshotOf([readyRepoState({ items: [live, dormant] })])
     const row = assertReady(pipelinesModel([readyEntry()], snapshot)[0])
-    expect(row.sessions).toEqual([{ key: `${REPO_ID}-42`, number: 42, label: '#42 Implementing', dot: 'working' }])
+    expect(row.sessions).toEqual([{ key: `${REPO_ID}-42`, number: 42, label: '#42 Implementing', dot: 'working', sessionKey: null }])
   })
 
   it('marks a session attention when its item needs the operator', () => {
@@ -157,6 +157,35 @@ describe('pipelinesModel', () => {
     const row = assertReady(pipelinesModel([readyEntry()], snapshot)[0])
     expect(row.sessions[0]?.dot).toBe('attention')
     expect(row.needsYou).toBe(true)
+  })
+
+  it('a stage session row replaces an item-derived row for the same number', () => {
+    const live = item({ agents: [agent({ activity: 'active' })] })
+    const snapshot = snapshotOf([readyRepoState({ items: [live] })])
+    const stageSnapshot: HostedSessionSnapshot = {
+      sessionKey: 'hosted-1' as HostedSessionSnapshot['sessionKey'],
+      claudeSessionId: 's1',
+      repoId: REPO_ID,
+      workspace: { folder: '/repo', root: '/repo', worktree: null, base: null },
+      phase: 'streaming',
+      origin: { kind: 'fresh' },
+      startedAt: NOW.toISOString(),
+      queuedAfterInterrupt: null,
+      end: null,
+      titled: null,
+      pendingPermissions: [],
+      capabilities: { kind: 'pending', request: { source: 'installed' } },
+      title: null,
+      rateLimit: null,
+      controls: { permissionMode: 'default', model: null, effort: null },
+      models: { kind: 'pending' },
+      usage: null,
+      stage: { agent: 'impl', number: 42, kind: 'issue', trigger: 'planApproved' },
+      lastResult: null,
+    }
+    const row = assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [stageSnapshot])[0])
+    expect(row.sessions).toHaveLength(1)
+    expect(row.sessions[0]).toMatchObject({ number: 42, sessionKey: 'hosted-1' })
   })
 
   it('reads the persisted run state into the pill', () => {
