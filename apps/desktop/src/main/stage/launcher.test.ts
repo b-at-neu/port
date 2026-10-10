@@ -33,6 +33,7 @@ function baseSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSes
     usage: null,
     stage: { agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved' },
     lastResult: null,
+    backgroundTasks: [],
     ...overrides,
   }
 }

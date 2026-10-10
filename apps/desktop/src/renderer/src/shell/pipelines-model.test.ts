@@ -182,6 +182,7 @@ describe('pipelinesModel', () => {
       usage: null,
       stage: { agent: 'impl', number: 42, kind: 'issue', trigger: 'planApproved' },
       lastResult: null,
+      backgroundTasks: [],
     }
     const row = assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [stageSnapshot])[0])
     expect(row.sessions).toHaveLength(1)
