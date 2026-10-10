@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { ErrorBanner } from '../components/error-banner'
 import { useIpcQuery } from '../data/query'
 import { invoke } from '../data/invoke'
+import type { RepositoryEntry } from '../../../shared/repos'
 import type { FolderEntry, FolderId } from '../../../shared/workspace/types'
 import { closeNewSessionDialog, useNewSessionDialog } from '../shell/stores'
 import { effectiveWorktree, initialFolderId, orderFolders, worktreeControl, worktreeHint } from './new-session-model'
@@ -26,11 +27,18 @@ export function NewSessionDialog() {
   )
 }
 
+function slugFor(repos: readonly RepositoryEntry[] | undefined, folder: FolderEntry): string {
+  const entry = repos?.find((candidate) => candidate.id === folder.repoId)
+  if (entry === undefined) return folder.name
+  return 'config' in entry ? entry.config.repo : entry.displayName
+}
+
 function NewSessionDialogContent({ preselect }: { readonly preselect: Parameters<typeof initialFolderId>[1] }) {
   const folders = useIpcQuery('folders:list')
   const sessions = useIpcQuery('session:list')
+  const repos = useIpcQuery('repos:list')
   const list = folders.data?.folders ?? []
-  const { repos, recents } = orderFolders(list)
+  const { repos: repoFolders, recents } = orderFolders(list)
 
   const [selectedId, setSelectedId] = useState<FolderId | null>(() => initialFolderId(list, preselect))
   const [userChecked, setUserChecked] = useState(false)
@@ -95,11 +103,11 @@ function NewSessionDialogContent({ preselect }: { readonly preselect: Parameters
             <SelectValue placeholder="Choose a folder" />
           </SelectTrigger>
           <SelectContent>
-            {repos.map((folder) => (
-              <FolderOption key={folder.id} folder={folder} />
+            {repoFolders.map((folder) => (
+              <FolderOption key={folder.id} folder={folder} label={slugFor(repos.data?.ok === true ? repos.data.repositories : undefined, folder)} />
             ))}
             {recents.map((folder) => (
-              <FolderOption key={folder.id} folder={folder} />
+              <FolderOption key={folder.id} folder={folder} label={folder.name} />
             ))}
           </SelectContent>
         </Select>
@@ -139,11 +147,11 @@ function NewSessionDialogContent({ preselect }: { readonly preselect: Parameters
   )
 }
 
-function FolderOption({ folder }: { readonly folder: FolderEntry }) {
+function FolderOption({ folder, label }: { readonly folder: FolderEntry; readonly label: string }) {
   return (
     <SelectItem value={folder.id}>
       <div className="flex flex-col">
-        <span>{folder.name}</span>
+        <span>{label}</span>
         <span className="font-mono text-meta text-muted-foreground">{folder.path}</span>
       </div>
     </SelectItem>

@@ -58,9 +58,7 @@ export type WorktreeControl = { readonly kind: 'free' } | { readonly kind: 'forc
 const NOT_GIT_REASON = "This folder isn't a git repository."
 const BUSY_REASON = 'Another session is already working in this folder.'
 
-/** `forced-on` when a live, non-worktree session already sits in this folder — "busy" means a
- *  non-`ended` snapshot whose `workspace.worktree` is `null` and whose `workspace.folder`
- *  matches this folder's own path. */
+// `forced-on` when a live, non-`ended` snapshot has `workspace.worktree: null` at this folder's own path.
 export function worktreeControl(folder: FolderEntry, snapshots: readonly HostedSessionSnapshot[]): WorktreeControl {
   if (folder.git === null) return { kind: 'disabled-off', reason: NOT_GIT_REASON }
   const busy = snapshots.some((snapshot) => snapshot.phase !== 'ended' && snapshot.workspace.worktree === null && samePathHint(snapshot.workspace.folder, folder.path))
