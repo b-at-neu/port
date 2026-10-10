@@ -5,7 +5,6 @@ import { History, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { toast } from 'sonner'
 import type { HostedSessionSnapshot } from '../../../shared/hosting/types'
@@ -13,10 +12,9 @@ import { sessionTitle } from '../../../shared/hosting/label'
 import { folderLabel } from '../../../shared/workspace/label'
 import type { RepositoryEntry } from '../../../shared/repos'
 import { useIpcMutation, useIpcQuery } from '../data/query'
-import { startNewSession } from '../session/actions'
 import { useSelectedSession } from '../session/selection'
 import { sidebarDotLabel } from '../session/interaction-copy'
-import { useRenaming, setRenaming } from './stores'
+import { useRenaming, setRenaming, openNewSessionDialog } from './stores'
 import { ROUTE_IDS } from '../router/routes'
 
 function repoTag(repos: readonly RepositoryEntry[] | undefined, session: HostedSessionSnapshot): string {
@@ -100,12 +98,6 @@ export function SidebarSessions() {
   const repos = useIpcQuery('repos:list')
   const selectedKey = useSelectedSession()
   const live = (sessions.data ?? []).filter((s) => s.phase !== 'ended')
-  const readyRepos = repos.data?.ok === true ? repos.data.repositories.filter((r): r is Extract<RepositoryEntry, { status: 'ready' }> => 'config' in r) : []
-
-  function handleNewSession(): void {
-    const only = readyRepos.length === 1 ? readyRepos[0] : undefined
-    if (only !== undefined) startNewSession(only.id)
-  }
 
   return (
     <div>
@@ -122,34 +114,14 @@ export function SidebarSessions() {
         live.map((session) => <SessionRow key={session.sessionKey} session={session} repos={repos.data?.ok === true ? repos.data.repositories : undefined} selected={session.sessionKey === selectedKey} />)
       )}
 
-      {readyRepos.length <= 1 ? (
-        <button
-          type="button"
-          onClick={handleNewSession}
-          disabled={readyRepos.length === 0}
-          title={readyRepos.length === 0 ? 'Register a repository to start a session.' : undefined}
-          className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-small text-foreground-secondary hover:bg-accent disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <Plus className="size-4 shrink-0" />
-          New session
-        </button>
-      ) : (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-small text-foreground-secondary hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring">
-              <Plus className="size-4 shrink-0" />
-              New session
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            {readyRepos.map((repo) => (
-              <DropdownMenuItem key={repo.id} onSelect={() => startNewSession(repo.id)}>
-                New session in {repo.config.repo}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+      <button
+        type="button"
+        onClick={() => openNewSessionDialog()}
+        className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-small text-foreground-secondary hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <Plus className="size-4 shrink-0" />
+        New session
+      </button>
 
       <button
         type="button"

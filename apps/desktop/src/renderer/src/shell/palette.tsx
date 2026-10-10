@@ -5,10 +5,10 @@ import { needsYouItems } from '../../../shared/board/needs-you'
 import { sessionTitle } from '../../../shared/hosting/label'
 import type { RepositoryEntry } from '../../../shared/repos'
 import { useIpcQuery } from '../data/query'
-import { startNewSession, selectSession } from '../session/actions'
+import { selectSession } from '../session/actions'
 import { openClaimDialog } from '../claim/controller'
 import { useThemePreference } from '../theme/store'
-import { usePaletteState, closePalette, setPaletteOpen, toggleSidebarCollapsed } from './stores'
+import { usePaletteState, closePalette, openNewSessionDialog, setPaletteOpen, toggleSidebarCollapsed } from './stores'
 import { useRunStateCommand } from './run-state-command'
 import { ROUTE_IDS } from '../router/routes'
 import { setSidebarCollapsed } from './prefs'
@@ -18,7 +18,7 @@ function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { st
 }
 
 export function CommandPalette() {
-  const { open, page } = usePaletteState()
+  const { open } = usePaletteState()
   const navigate = useNavigate()
   const snapshot = useIpcQuery('board:snapshot')
   const sessions = useIpcQuery('session:list')
@@ -33,30 +33,6 @@ export function CommandPalette() {
   function go(to: string): void {
     void navigate({ to })
     closePalette()
-  }
-
-  if (page === 'new-session') {
-    return (
-      <CommandDialog open={open} onOpenChange={setPaletteOpen}>
-        <CommandInput placeholder="Type a command or search…" />
-        <CommandList>
-          <CommandEmpty>No matching commands.</CommandEmpty>
-          <CommandGroup heading="New session">
-            {readyRepos.map((repo) => (
-              <CommandItem
-                key={repo.id}
-                onSelect={() => {
-                  startNewSession(repo.id)
-                  closePalette()
-                }}
-              >
-                New session in {repo.config.repo}
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        </CommandList>
-      </CommandDialog>
-    )
   }
 
   return (
@@ -75,17 +51,15 @@ export function CommandPalette() {
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="Sessions">
-          {readyRepos.length === 1 ? (
-            <CommandItem
-              onSelect={() => {
-                startNewSession(readyRepos[0]!.id)
-                closePalette()
-              }}
-            >
-              New session
-              <CommandShortcut>⌘N</CommandShortcut>
-            </CommandItem>
-          ) : null}
+          <CommandItem
+            onSelect={() => {
+              openNewSessionDialog()
+              closePalette()
+            }}
+          >
+            New session
+            <CommandShortcut>⌘N</CommandShortcut>
+          </CommandItem>
           {live.map((session) => (
             <CommandItem
               key={session.sessionKey}

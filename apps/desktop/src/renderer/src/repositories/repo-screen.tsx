@@ -14,7 +14,7 @@ import { ROUTE_IDS } from '../router/routes'
 import type { DenialsGroup } from '../router/routes'
 import type { ReposListResponse } from '../../../shared/ipc'
 import type { RepoId, RepositoryEntry } from '../../../shared/repos'
-import { startNewSession } from '../session/actions'
+import { openNewSessionDialog } from '../shell/stores'
 import { DenialsTab } from './denials-tab'
 import { OverviewTab } from './overview-tab'
 import { WorktreesTab } from './worktrees-tab'
@@ -79,7 +79,7 @@ export function RepoScreen() {
         </div>
         <div className="flex items-center gap-2">
           {ready ? (
-            <Button variant="outline" size="small" onClick={() => startNewSession(repoId as RepoId)}>
+            <Button variant="outline" size="small" onClick={() => openNewSessionDialog({ kind: 'repo', repoId: repoId as RepoId })}>
               New session
             </Button>
           ) : null}

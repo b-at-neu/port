@@ -83,10 +83,11 @@ describe('startFailureCopy', () => {
     expect(startFailureCopy(result).body).toContain("isn't a git repository")
   })
 
-  it('carries the git message as detail for worktree-failed', () => {
+  it('carries the git message in the body for worktree-failed, with no detail', () => {
     const result: RenderableStartFailure = { ok: false, kind: 'worktree-failed', message: 'collision' }
     const copy = startFailureCopy(result)
-    expect(copy.detail).toBe('collision')
+    expect(copy.body).toBe("Couldn't create the worktree: collision.")
+    expect(copy.detail).toBeNull()
   })
 })
 

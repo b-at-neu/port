@@ -9,6 +9,7 @@ import { ClaimDialog } from '../claim/dialog'
 import { GateDialog } from '../gate/dialog'
 import { DecisionDialog } from '../decision/dialog'
 import { PermissionDialog } from '../permission/dialog'
+import { NewSessionDialog } from '../session/new-session-dialog'
 
 export function ShellLayout() {
   return (
@@ -24,6 +25,7 @@ export function ShellLayout() {
       <GateDialog />
       <DecisionDialog />
       <PermissionDialog />
+      <NewSessionDialog />
       <Toaster />
     </>
   )
