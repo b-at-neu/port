@@ -114,6 +114,7 @@ function baseParams(overrides: Partial<Parameters<typeof createHostedHandle>[0]>
     initialTitle: null,
     defaults: DEFAULT_SESSION_DEFAULTS,
     history: { kind: 'none' as const },
+    stage: null,
     ...overrides,
   }
 }

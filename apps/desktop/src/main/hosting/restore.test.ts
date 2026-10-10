@@ -31,6 +31,8 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     models: TEST_MODELS,
     usage: null,
     backgroundTasks: [],
+    stage: null,
+    lastResult: null,
     ...overrides,
   }
 }
@@ -46,6 +48,10 @@ describe('persistedOpen', () => {
 
   it('excludes closing and ended handles', () => {
     expect(persistedOpen([snapshot({ phase: 'closing' }), snapshot({ phase: 'ended' })])).toEqual([])
+  })
+
+  it('excludes a stage session — it belongs to the dispatch loop, never the operator restore banner', () => {
+    expect(persistedOpen([snapshot({ stage: { agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved' } })])).toEqual([])
   })
 })
 

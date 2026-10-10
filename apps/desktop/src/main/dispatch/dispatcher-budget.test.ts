@@ -95,6 +95,8 @@ function sessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): Hosted
     models: TEST_MODELS,
     usage: null,
     backgroundTasks: [],
+    stage: null,
+    lastResult: null,
     ...overrides,
   }
 }

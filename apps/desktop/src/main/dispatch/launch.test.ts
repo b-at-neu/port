@@ -28,12 +28,14 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     models: TEST_MODELS,
     usage: null,
     backgroundTasks: [],
+    stage: null,
+    lastResult: null,
     ...overrides,
   }
 }
 
 function record(overrides: Partial<StageRecord> = {}): StageRecord {
-  return { sessionKey: 'hosted-1' as SessionKey, agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved', state: 'started', at: '2026-01-01T00:00:00Z', detail: null, ...overrides }
+  return { sessionKey: 'hosted-1' as SessionKey, agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved', state: 'started', at: '2026-01-01T00:00:00Z', detail: null, outcome: null, ...overrides }
 }
 
 describe('liveCount / freeSlots', () => {

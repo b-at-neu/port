@@ -89,6 +89,8 @@ function sessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): Hosted
     models: TEST_MODELS,
     usage: null,
     backgroundTasks: [],
+    stage: null,
+    lastResult: null,
     ...overrides,
   }
 }
@@ -310,7 +312,7 @@ describe('createDispatcher — launching', () => {
     const state = dispatcher.status()[0]?.state
     expect(state?.kind).toBe('active')
     if (state?.kind !== 'active') return
-    expect(state.recent).toEqual([{ agent: 'impl', number: 52, kind: 'issue', state: 'started', at: '2026-01-01T00:00:00.000Z', detail: null }])
+    expect(state.recent).toEqual([{ agent: 'impl', number: 52, kind: 'issue', state: 'started', at: '2026-01-01T00:00:00.000Z', detail: null, outcome: null }])
   })
 
   it('calls ledger.record only after a launch returns ok', async () => {
@@ -334,7 +336,7 @@ describe('createDispatcher — launching', () => {
     const state = dispatcher.status()[0]?.state
     expect(state?.kind).toBe('active')
     if (state?.kind !== 'active') return
-    expect(state.recent).toEqual([{ agent: 'impl', number: 52, kind: 'issue', state: 'failed', at: '2026-01-01T00:00:00.000Z', detail: 'boom' }])
+    expect(state.recent).toEqual([{ agent: 'impl', number: 52, kind: 'issue', state: 'failed', at: '2026-01-01T00:00:00.000Z', detail: 'boom', outcome: null }])
   })
 
   it('never launches while zero slots are free', async () => {

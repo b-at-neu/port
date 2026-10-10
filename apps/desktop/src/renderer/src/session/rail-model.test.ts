@@ -43,7 +43,7 @@ describe('rowStatus', () => {
   })
 
   it('overrides any open phase with Needs you when a permission is pending', () => {
-    const pending = [{ permissionId: 'p', toolName: 'Bash', input: {}, title: null, displayName: null, description: null, decisionReason: null, blockedPath: null, agentId: null, requestedAt: 't', sessionGrant: null, interaction: null }]
+    const pending = [{ permissionId: 'p', toolName: 'Bash', input: {}, title: null, displayName: null, description: null, decisionReason: null, blockedPath: null, protectedPath: null, agentId: null, requestedAt: 't', sessionGrant: null, interaction: null }]
     expect(rowStatus(snapshot({ phase: 'streaming', pendingPermissions: pending }))).toEqual({ glyph: '◆', word: 'Needs you' })
   })
 

@@ -13,22 +13,24 @@ export interface BuildSessionOptionsParams {
   readonly canUseTool: CanUseTool
   /** `repository` adds a local plugin entry overriding the installed copy; `installed` passes none. */
   readonly plugin: PluginRequest
-  /** `model` is set only when non-null, matching Claude Code's own default. */
+  /** `model` is set only when non-null, matching Claude Code's own default. Ignored entirely when `stage` is set. */
   readonly defaults: SessionDefaults
+  /** Non-null only for a stage session: `agent`/`model` come from here and `permissionMode` is always `'default'` — `defaults` is never read. */
+  readonly stage: { readonly agentName: string; readonly model: string } | null
 }
 
-/** `permissionMode` is always explicit, so a `bypassPermissions` default can't silently skip the host prompt. */
+/** `permissionMode` is always explicit, so a `bypassPermissions` default can't silently skip the host prompt. The stage branch never reads `defaults` and never adds `tools:`/`allowedTools`/`systemPrompt`/`bypassPermissions`. */
 export function buildSessionOptions(params: BuildSessionOptionsParams): Options {
   const base: Options = {
     cwd: params.cwd,
     pathToClaudeCodeExecutable: params.executablePath,
     persistSession: true,
     includePartialMessages: true,
-    permissionMode: params.defaults.permissionMode,
+    permissionMode: params.stage !== null ? 'default' : params.defaults.permissionMode,
     canUseTool: params.canUseTool,
     settingSources: [...SETTING_SOURCES],
     ...(params.plugin.source === 'repository' ? { plugins: [{ type: 'local' as const, path: params.plugin.path }] } : {}),
-    ...(params.defaults.model !== null ? { model: params.defaults.model } : {}),
+    ...(params.stage !== null ? { agent: params.stage.agentName, model: params.stage.model } : params.defaults.model !== null ? { model: params.defaults.model } : {}),
   }
 
   switch (params.mode.kind) {

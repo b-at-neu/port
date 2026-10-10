@@ -7,7 +7,7 @@ import type { PluginRequest } from '../../shared/hosting/types'
 const canUseTool = vi.fn() as unknown as CanUseTool
 const INSTALLED: PluginRequest = { source: 'installed' }
 const REPOSITORY: PluginRequest = { source: 'repository', path: '/repo/plugins/port' }
-const BASE = { cwd: '/repo', executablePath: '/home/operator/.local/bin/claude', canUseTool, plugin: INSTALLED, defaults: DEFAULT_SESSION_DEFAULTS }
+const BASE = { cwd: '/repo', executablePath: '/home/operator/.local/bin/claude', canUseTool, plugin: INSTALLED, defaults: DEFAULT_SESSION_DEFAULTS, stage: null }
 
 describe('buildSessionOptions', () => {
   it('every mode carries the shared constants', () => {
@@ -109,5 +109,22 @@ describe('buildSessionOptions — operator session defaults (#364)', () => {
 
     const withModel = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, defaults: { model: 'opus', permissionMode: 'default' } })
     expect(withModel.model).toBe('opus')
+  })
+})
+
+describe('buildSessionOptions — stage branch (#327)', () => {
+  it('sets agent, model and permissionMode: default from stage, never reading defaults', () => {
+    const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, defaults: { model: 'haiku', permissionMode: 'acceptEdits' }, stage: { agentName: 'port:impl-agent', model: 'sonnet' } })
+    expect(options.permissionMode).toBe('default')
+    expect(options.model).toBe('sonnet')
+    expect((options as Record<string, unknown>)['agent']).toBe('port:impl-agent')
+  })
+
+  it('adds no tools, allowedTools, systemPrompt or bypassPermissions', () => {
+    const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, stage: { agentName: 'port:plan-agent', model: 'opus' } }) as Record<string, unknown>
+    expect(options['tools']).toBeUndefined()
+    expect(options['allowedTools']).toBeUndefined()
+    expect(options['systemPrompt']).toBeUndefined()
+    expect(options['bypassPermissions']).toBeUndefined()
   })
 })

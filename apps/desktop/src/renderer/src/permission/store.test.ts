@@ -31,6 +31,7 @@ function snapshotWith(permissionIds: readonly string[]): HostedSessionSnapshot {
       description: null,
       decisionReason: null,
       blockedPath: null,
+      protectedPath: null,
       agentId: null,
       requestedAt: new Date().toISOString(),
       sessionGrant: null,

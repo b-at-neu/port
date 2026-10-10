@@ -4,6 +4,7 @@ import type { RuntimeDiagnosis } from '../runtime/types'
 import type { EntryPatch, TranscriptEntry } from '../sessions/transcript'
 import type { SessionWorkspace } from '../workspace/types'
 import type { PendingInteraction, SessionControls, SessionModels } from './controls'
+import type { SessionResult, StageTag } from './stage'
 import type { SessionUsage } from './usage'
 
 declare const sessionKeyBrand: unique symbol
@@ -67,6 +68,10 @@ export interface HostedSessionSnapshot {
   readonly usage: SessionUsage | null
   /** Live, non-ambient background tasks — `[]` before any level message arrives and after `ended`. */
   readonly backgroundTasks: readonly BackgroundTask[]
+  /** Non-`null` exactly for a session this app launched to run a pipeline stage — `null` for every operator-started session. */
+  readonly stage: StageTag | null
+  /** A structural read of this session's newest `result` message — `null` until one arrives. */
+  readonly lastResult: SessionResult | null
 }
 
 /** Pin and archive marks, keyed by `claudeSessionId` — app-local, persisted in `hosting.json`. */
@@ -180,6 +185,8 @@ export interface PendingPermission {
   readonly description: string | null
   readonly decisionReason: string | null
   readonly blockedPath: string | null
+  /** Set only for a stage session's edit paused by `stagePolicy` as matching `sessionRequiredPaths` — the repo-relative path, for the dialog's protected-path lead line. */
+  readonly protectedPath: string | null
   readonly agentId: string | null
   readonly requestedAt: string
   readonly sessionGrant: readonly SessionGrantItem[] | null

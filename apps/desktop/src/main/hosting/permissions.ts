@@ -5,6 +5,7 @@ import type { PendingPermission, PermissionDecision, SessionPermissionAnswerResu
 import { narrowSessionGrant } from './grant'
 import { answersMatch, narrowInteraction, planApproveResult, planKeepResult, questionResult } from './interactions'
 import type { CanUseTool, PermissionResult, PermissionUpdate } from './sdk'
+import type { StagePolicyDecision } from './stage-policy'
 
 export const DEFAULT_DENY_MESSAGE = 'The operator denied this tool call.'
 
@@ -13,6 +14,8 @@ export interface CreatePermissionBrokerParams {
   readonly onChange: () => void
   // Fired after a plan is approved into a mode, so the controls snapshot reflects it without a second SDK call.
   readonly onPlanApproved?: (mode: 'default' | 'acceptEdits') => void
+  /** Set only for a stage session. Evaluated before the SDK's own suggestions: `deny` resolves immediately and creates no pending entry; `ask` creates the normal entry with `protectedPath` set, forcing `sessionGrant: null` so "allow for this session" is never offered on a protected edit. */
+  readonly policy?: (toolName: string, input: Readonly<Record<string, unknown>>) => StagePolicyDecision
 }
 
 export interface PermissionBroker {
@@ -57,7 +60,14 @@ export function createPermissionBroker(params: CreatePermissionBrokerParams): Pe
         return
       }
 
+      const decision = params.policy?.(toolName, input) ?? null
+      if (decision?.kind === 'deny') {
+        resolve({ behavior: 'deny', message: decision.message, toolUseID: options.toolUseID })
+        return
+      }
+
       const grant = narrowSessionGrant(options.suggestions)
+      const protectedPath = decision?.kind === 'ask' ? decision.protectedPath : null
       const entry: Entry = {
         pending: {
           permissionId,
@@ -68,14 +78,15 @@ export function createPermissionBroker(params: CreatePermissionBrokerParams): Pe
           description: options.description ?? null,
           decisionReason: options.decisionReason ?? null,
           blockedPath: options.blockedPath ?? null,
+          protectedPath,
           agentId: options.agentID ?? null,
           requestedAt: new Date(params.now()).toISOString(),
-          sessionGrant: grant?.summary ?? null,
+          sessionGrant: protectedPath !== null ? null : (grant?.summary ?? null),
           interaction: narrowInteraction(toolName, input),
         },
         toolUseID: options.toolUseID,
         input,
-        grantUpdates: grant?.updates ?? null,
+        grantUpdates: protectedPath !== null ? null : (grant?.updates ?? null),
         resolve,
       }
       entries.set(permissionId, entry)

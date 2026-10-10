@@ -5,6 +5,7 @@ import type { HostedSessionSnapshot, SessionKey } from '../../shared/hosting/typ
 import type { PipelineItemKind } from '../../shared/github/types'
 import type { LabelKey } from '../../shared/labels/vocabulary'
 import type { StageAgent } from '../../shared/tick/types'
+import type { StageOutcome } from '../../shared/hosting/stage'
 
 export interface StageLaunchRequest {
   readonly entry: ReadyEntry
@@ -34,6 +35,8 @@ export interface StageRecord {
   readonly state: 'started' | 'ended' | 'failed'
   readonly at: string
   readonly detail: string | null
+  /** `null` until the launcher classifies a hand-back for this record's session; never set for a `failed` record. */
+  readonly outcome: StageOutcome | null
 }
 
 // Hosted snapshots whose `phase !== 'ended'` — operator and stage sessions

@@ -4,6 +4,7 @@ import type { ItemActionResult } from '../actions/types'
 import type { RepoId } from '../repos'
 import type { StageAgent, TickObservationKind } from '../tick/types'
 import type { WriteOutcome } from '../writes/types'
+import type { StageOutcome } from '../hosting/stage'
 
 /** `dispatch.json`'s own per-repository run state — `dispatching`, `draining` (scoped to one repository), or `paused` (the hard stop: the transition into it also stops every in-flight agent). */
 export const RUN_STATES = ['dispatching', 'draining', 'paused'] as const
@@ -87,6 +88,8 @@ export interface DispatchRecord {
   readonly state: 'started' | 'ended' | 'failed'
   readonly at: string
   readonly detail: string | null
+  /** `null` until the launcher classifies a hand-back for this record's session; never set for a `failed` record. */
+  readonly outcome: StageOutcome | null
 }
 
 /** This app's own dispatch state for one ready repository, rendered only while `owner === 'app'`. `idle` covers both "nothing launched yet" and "nothing to report"; `no-launcher` holds while candidates exist but no `StageLauncher` is wired. */
