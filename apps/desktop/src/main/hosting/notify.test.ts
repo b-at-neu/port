@@ -19,7 +19,6 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     workspace: TEST_WORKSPACE,
     phase: 'streaming',
     origin: { kind: 'fresh' },
-    workspace: { folder: '/repo', root: '/repo', worktree: null, base: null },
     startedAt: '2026-01-01T00:00:00.000Z',
     queuedAfterInterrupt: null,
     end: null,
