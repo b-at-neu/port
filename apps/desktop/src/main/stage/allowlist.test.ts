@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { join } from 'node:path'
 import { allowRule } from './allowlist'
 import type { FileResult } from '../platform/files'
 
@@ -17,8 +18,8 @@ function fakeFs(initial: Record<string, unknown>) {
   return { files, readJson, writeJsonAtomic }
 }
 
-const settingsPath = '/repo/.claude/settings.json'
-const configPath = '/repo/.claude/port.config.json'
+const settingsPath = join('/repo', '.claude', 'settings.json')
+const configPath = join('/repo', '.claude', 'port.config.json')
 
 describe('allowRule', () => {
   it('appends the rule to both files', async () => {
