@@ -88,6 +88,13 @@ function NewSessionDialogContent({ preselect }: { readonly preselect: Parameters
 
   return (
     <DialogContent data-slot="new-session-dialog">
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (selected !== null && !pending) void handleStart()
+        }}
+      >
       <DialogHeader>
         <DialogTitle>{NEW_SESSION_DIALOG_TITLE}</DialogTitle>
       </DialogHeader>
@@ -112,7 +119,7 @@ function NewSessionDialogContent({ preselect }: { readonly preselect: Parameters
           </SelectContent>
         </Select>
       )}
-      <Button variant="outline" size="small" className="self-start" onClick={() => void chooseFolder()}>
+      <Button type="button" variant="outline" size="small" className="self-start" onClick={() => void chooseFolder()}>
         {NEW_SESSION_CHOOSE_FOLDER}
       </Button>
       {selected !== null ? (
@@ -136,13 +143,14 @@ function NewSessionDialogContent({ preselect }: { readonly preselect: Parameters
         </>
       ) : null}
       <DialogFooter>
-        <Button variant="outline" onClick={closeNewSessionDialog}>
+        <Button type="button" variant="outline" onClick={closeNewSessionDialog}>
           {NEW_SESSION_CANCEL}
         </Button>
-        <Button disabled={selected === null || pending} onClick={() => void handleStart()}>
+        <Button type="submit" disabled={selected === null || pending}>
           {pending ? NEW_SESSION_STARTING : NEW_SESSION_START}
         </Button>
       </DialogFooter>
+      </form>
     </DialogContent>
   )
 }
