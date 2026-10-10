@@ -96,11 +96,13 @@ export function searchSearchFromRaw(search: Readonly<Record<string, unknown>>): 
 
 export interface SessionSearch {
   readonly key?: string | null
+  /** `pane=changes` opens the Changes pane; anything else reads as closed. */
+  readonly pane?: 'changes' | null
 }
 
 export function sessionSearchFromRaw(search: Readonly<Record<string, unknown>>): SessionSearch {
-  const { key } = search
-  return { key: typeof key === 'string' && key !== '' ? key : null }
+  const { key, pane } = search
+  return { key: typeof key === 'string' && key !== '' ? key : null, pane: pane === 'changes' ? 'changes' : null }
 }
 
 export interface TranscriptSearch {

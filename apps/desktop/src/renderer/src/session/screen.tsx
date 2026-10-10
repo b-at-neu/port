@@ -1,6 +1,6 @@
 // The Session screen — conversation, composer, and every UX state from the empty screen to ended.
 import { useState } from 'react'
-import { useSearch } from '@tanstack/react-router'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { MessageSquare } from 'lucide-react'
 import { AlertDialog, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,8 @@ import { ConversationList } from '../components/conversation-list'
 import { useIpcQuery } from '../data/query'
 import { invoke } from '../data/invoke'
 import { ROUTE_IDS } from '../router/routes'
+import type { SessionSearch } from '../router/routes'
+import { ChangesPane } from './changes-pane'
 import type { RepositoryEntry } from '../../../shared/repos'
 import type { ComposerAttachment } from '../../../shared/hosting/attachments'
 import type { HostedSessionSnapshot, SessionKey } from '../../../shared/hosting/types'
@@ -58,7 +60,12 @@ export function SessionScreen() {
     <div className="flex h-full flex-col gap-3">
       <RestoreBanner />
       {snapshot !== null ? (
-        <SessionLive key={snapshot.sessionKey} snapshot={snapshot} repoLabel={repoLabelFor(repos.data?.ok === true ? repos.data.repositories : undefined, snapshot)} />
+        <SessionLive
+          key={snapshot.sessionKey}
+          snapshot={snapshot}
+          repoLabel={repoLabelFor(repos.data?.ok === true ? repos.data.repositories : undefined, snapshot)}
+          paneOpen={search.pane === 'changes'}
+        />
       ) : key !== null && sessions.status === 'pending' ? (
         <div className="flex flex-1 flex-col gap-2">
           <ScreenHeader>{RECONNECTING}</ScreenHeader>
@@ -82,8 +89,9 @@ function EmptyPanel() {
   )
 }
 
-function SessionLive({ snapshot, repoLabel }: { readonly snapshot: HostedSessionSnapshot; readonly repoLabel: string }) {
+function SessionLive({ snapshot, repoLabel, paneOpen }: { readonly snapshot: HostedSessionSnapshot; readonly repoLabel: string; readonly paneOpen: boolean }) {
   const key = snapshot.sessionKey
+  const navigate = useNavigate()
   const entries = useSessionEntries(key)
   const [sendError, setSendError] = useState<string | null>(null)
   const [closeConfirming, setCloseConfirming] = useState(false)
@@ -121,6 +129,14 @@ function SessionLive({ snapshot, repoLabel }: { readonly snapshot: HostedSession
   function handleCloseClick(): void {
     if (snapshot.phase === 'streaming' || snapshot.phase === 'interrupting') setCloseConfirming(true)
     else void close(key)
+  }
+
+  function toggleChanges(): void {
+    void navigate({ to: ROUTE_IDS.session, search: (prev: SessionSearch) => ({ ...prev, pane: prev.pane === 'changes' ? null : ('changes' as const) }) })
+  }
+
+  function closeChanges(): void {
+    void navigate({ to: ROUTE_IDS.session, search: (prev: SessionSearch) => ({ ...prev, pane: null }) })
   }
 
   function handleDismiss(): void {
@@ -184,7 +200,15 @@ function SessionLive({ snapshot, repoLabel }: { readonly snapshot: HostedSession
 
   return (
     <>
-      <SessionHeader snapshot={snapshot} repoLabel={repoLabel} onStop={() => void handleStop()} onClose={handleCloseClick} onDismiss={handleDismiss} />
+      <SessionHeader
+        snapshot={snapshot}
+        repoLabel={repoLabel}
+        changesOpen={paneOpen}
+        onToggleChanges={toggleChanges}
+        onStop={() => void handleStop()}
+        onClose={handleCloseClick}
+        onDismiss={handleDismiss}
+      />
       <ArchiveDialog snapshot={snapshot} open={archiving} onOpenChange={setArchiving} />
       <AlertDialog open={closeConfirming} onOpenChange={(open) => !open && setCloseConfirming(false)}>
         <AlertDialogContent>
@@ -208,6 +232,7 @@ function SessionLive({ snapshot, repoLabel }: { readonly snapshot: HostedSession
         </AlertDialogContent>
       </AlertDialog>
       {sendError !== null ? <ErrorBanner message={sendError} className="mx-auto w-full max-w-[680px]" /> : null}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
       <div className="mx-auto flex w-full max-w-[680px] min-h-0 flex-1 flex-col gap-3">
         {windowNoteVisible ? <p className="text-meta text-muted-foreground">{windowNote()}</p> : null}
         <ConversationList
@@ -255,6 +280,8 @@ function SessionLive({ snapshot, repoLabel }: { readonly snapshot: HostedSession
         />
         {interruptNoteText !== null ? <p className="text-meta text-muted-foreground">{interruptNoteText}</p> : null}
         <p className="text-meta text-muted-foreground">{COMPOSER_HINT}</p>
+      </div>
+      {paneOpen && snapshot.workspace.root !== null ? <ChangesPane snapshot={snapshot} onClose={closeChanges} /> : null}
       </div>
     </>
   )
