@@ -18,6 +18,7 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     workspace: TEST_WORKSPACE,
     phase: 'streaming',
     origin: { kind: 'fresh' },
+    stage: null,
     startedAt: '2026-01-01T00:00:00.000Z',
     queuedAfterInterrupt: null,
     end: null,
@@ -30,6 +31,7 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     models: TEST_MODELS,
     usage: null,
     backgroundTasks: [],
+    lastResult: null,
     ...overrides,
   }
 }

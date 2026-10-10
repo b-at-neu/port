@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { root, readJson, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 import { globToRegExp as hookGlobToRegExp } from '../../plugins/port/hooks/lib/guard-rules.mjs';
@@ -351,7 +352,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!stagePolicyFile) {
       fail('desktop-hosting', `${hostingDir}/stage-policy.ts does not exist`);
     } else {
-      const module = (await import(stagePolicyFile)) as { readonly globToRegExp?: (glob: string) => RegExp };
+      const module = (await import(pathToFileURL(stagePolicyFile).href)) as { readonly globToRegExp?: (glob: string) => RegExp };
       if (typeof module.globToRegExp !== 'function') {
         fail('desktop-hosting', `${hostingDir}/stage-policy.ts does not export 'globToRegExp'`);
       } else {
