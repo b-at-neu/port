@@ -15,6 +15,7 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     repoId: 'repo-1' as RepoId,
     phase: 'streaming',
     origin: { kind: 'fresh' },
+    workspace: { folder: '/repo', root: '/repo', worktree: null, base: null },
     startedAt: '2026-01-01T00:00:00.000Z',
     queuedAfterInterrupt: null,
     end: null,

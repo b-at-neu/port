@@ -92,6 +92,12 @@ function storeStub(overrides: Partial<HostedStore> = {}): HostedStore {
     setDefaults: () => {
       throw new Error('setDefaults should not be invoked in this case')
     },
+    marks: () => {
+      throw new Error('marks should not be invoked in this case')
+    },
+    setMark: () => {
+      throw new Error('setMark should not be invoked in this case')
+    },
     rename: () => {
       throw new Error('rename should not be invoked in this case')
     },
