@@ -40,12 +40,13 @@ function NewSessionDialogContent({ preselect }: { readonly preselect: Parameters
   const list = folders.data?.folders ?? []
   const { repos: repoFolders, recents } = orderFolders(list)
 
-  const [selectedId, setSelectedId] = useState<FolderId | null>(() => initialFolderId(list, preselect))
+  const [userSelectedId, setSelectedId] = useState<FolderId | null>(null)
   const [userChecked, setUserChecked] = useState(false)
   const [busyOverride, setBusyOverride] = useState(false)
   const [pending, setPending] = useState(false)
   const [failure, setFailure] = useState<{ readonly title: string; readonly body: string; readonly detail: string | null } | null>(null)
 
+  const selectedId = userSelectedId ?? initialFolderId(list, preselect)
   const selected = list.find((folder) => folder.id === selectedId) ?? null
   const control = selected !== null ? worktreeControl(selected, sessions.data ?? []) : { kind: 'free' as const }
   const checked = selected !== null ? effectiveWorktree(control, userChecked, busyOverride) : false
