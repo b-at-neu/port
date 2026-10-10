@@ -63,6 +63,8 @@ export interface ResolvedRepoConfig {
   readonly commands: { readonly worktrees: string | null; readonly budget: string | null }
   /** The file-contention gate's own tuning — `sharedFiles` never contributes to a hold, `overlapThreshold` is how many non-shared paths an in-flight item must share with a candidate before it holds. */
   readonly concurrency: { readonly sharedFiles: readonly string[]; readonly overlapThreshold: number }
+  /** The effective `sessionRequiredPaths` list (after `CLAUDE.md` overrides) — a stage session's protected-path policy reads this, never the port-config default. */
+  readonly sessionRequiredPaths: readonly string[]
   /** The approval-withdrawal observation's own check dispositions. The approval-gate's own excusal folds in first, then every applied `checks.<name>` `CLAUDE.md` override, a later entry overwriting the same key. */
   readonly checkDispositions: Readonly<Record<string, CheckDisposition>>
   /** Every `CLAUDE.md` `port-overrides` entry this repository's config actually applied, in block order. Refused lines are reported as diagnostics instead, never silently dropped. */

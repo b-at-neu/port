@@ -82,7 +82,7 @@ function readyRepo(items: readonly ReconciledItem[], overrides: Partial<Extract<
 describe('planTick — blind first', () => {
   it('a not-ready repository is blind, never a dispatch or held count', () => {
     const repo: RepositoryState = { ok: false, repoId: REPO, displayName: 'o/a', reason: 'not-ready', problem: { kind: 'directory-missing' } }
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.blind).toEqual({ reason: 'not-ready' })
     expect(report.actionable).toEqual([])
     expect(report.held).toEqual([])
@@ -102,27 +102,27 @@ describe('planTick — blind first', () => {
       message: 'rate limited',
       freshness: { github: { unavailable: 'rate limited' }, itemStates: { unavailable: 'no re-check needed' }, sessions: { at: NOW.toISOString() }, worktrees: { at: NOW.toISOString() }, denials: { at: NOW.toISOString() } },
     }
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.blind).toEqual({ reason: 'github-unavailable', message: 'rate limited' })
   })
 
   it('an unresolvable viewer is blind, never read as another operator owning everything', () => {
     const repo = readyRepo([], { viewer: null })
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.blind).toEqual({ reason: 'viewer-unknown' })
   })
 
   it('a GitHub read older than the base interval plus the stale grace is blind, with its age', () => {
     const staleAt = new Date(NOW.getTime() - (60_000 + 30_000 + 1))
     const repo = readyRepo([], { freshness: { github: { at: staleAt.toISOString() }, itemStates: { unavailable: 'no re-check needed' }, sessions: { at: NOW.toISOString() }, worktrees: { at: NOW.toISOString() }, denials: { at: NOW.toISOString() } } })
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.blind).toEqual({ reason: 'stale-read', ageMs: 60_000 + 30_000 + 1 })
   })
 
   it('a read within the grace window is not blind', () => {
     const freshAt = new Date(NOW.getTime() - 60_000)
     const repo = readyRepo([], { freshness: { github: { at: freshAt.toISOString() }, itemStates: { unavailable: 'no re-check needed' }, sessions: { at: NOW.toISOString() }, worktrees: { at: NOW.toISOString() }, denials: { at: NOW.toISOString() } } })
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.blind).toBeNull()
     expect(report.nextTickAt).toBe(NEXT_DECISION_AT.toISOString())
   })
@@ -131,26 +131,39 @@ describe('planTick — blind first', () => {
 describe('planTick — trigger-stage items: actionable vs held', () => {
   it('an unassigned trigger item is held, unowned — never actionable', () => {
     const repo = readyRepo([item({ assignees: [] })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.held).toEqual([{ number: 1, kind: 'issue', trigger: 'ready', reason: 'unowned', contention: null, escalation: null }])
     expect(report.actionable).toEqual([])
   })
 
   it('a trigger item assigned to another operator is held, other-operator', () => {
     const repo = readyRepo([item({ assignees: ['someone-else'] })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.held).toEqual([{ number: 1, kind: 'issue', trigger: 'ready', reason: 'other-operator', contention: null, escalation: null }])
   })
 
   it('a session-required trigger item owned by the viewer is held, session-required', () => {
     const repo = readyRepo([item({ sessionRequired: true })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.held).toEqual([{ number: 1, kind: 'issue', trigger: 'ready', reason: 'session-required', contention: null, escalation: null }])
+  })
+
+  it('holdSessionRequired: false dispatches a marked ticket and leaves every other gate intact', () => {
+    const repo = readyRepo([item({ sessionRequired: true })])
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: false })
+    expect(report.held).toEqual([])
+    expect(report.actionable).toEqual([{ number: 1, kind: 'issue', trigger: 'ready', agent: 'plan', unchecked: false, cycle: null }])
+  })
+
+  it('holdSessionRequired: false still holds an other-operator item — the session-required rung is the only one it skips', () => {
+    const repo = readyRepo([item({ sessionRequired: true, assignees: ['someone-else'] })])
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: false })
+    expect(report.held).toEqual([{ number: 1, kind: 'issue', trigger: 'ready', reason: 'other-operator', contention: null, escalation: null }])
   })
 
   it('an ordinary owned trigger item is actionable with its routed agent', () => {
     const repo = readyRepo([item()])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([{ number: 1, kind: 'issue', trigger: 'ready', agent: 'plan', unchecked: false, cycle: null }])
     expect(report.held).toEqual([])
   })
@@ -160,7 +173,7 @@ describe('planTick — trigger-stage items: actionable vs held', () => {
       item({ number: 2, stages: [{ key: 'planApproved', name: 'plan approved', role: 'trigger' }], claimedFiles: ['a.ts'] }),
       item({ number: 3, kind: 'pull-request', stages: [{ key: 'needsRevision', name: 'needs revision', role: 'trigger' }] }),
     ])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([
       { number: 3, kind: 'pull-request', trigger: 'needsRevision', agent: 'revise', unchecked: false, cycle: null },
       { number: 2, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null },
@@ -169,7 +182,7 @@ describe('planTick — trigger-stage items: actionable vs held', () => {
 
   it('an item with no trigger/in-flight stage at all is neither actionable nor held', () => {
     const repo = readyRepo([item({ stage: null, stages: [] })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([])
     expect(report.held).toEqual([])
     expect(report.claims).toEqual([])
@@ -194,21 +207,21 @@ describe('planTick — file-contention gate (#106)', () => {
 
   it('a plan with no files fence dispatches unchecked, never held', () => {
     const repo = readyRepo([inProgressItem(), candidateItem({ claimedFiles: null })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([{ number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: true, cycle: null }])
     expect(report.held).toEqual([])
   })
 
   it('below the overlap threshold dispatches freely', () => {
     const repo = readyRepo([inProgressItem(), candidateItem()])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([{ number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null }])
     expect(report.held).toEqual([])
   })
 
   it('at or above the threshold holds, contended, with the blocker and contended paths named', () => {
     const repo = readyRepo([inProgressItem(), candidateItem({ claimedFiles: ['src/lib/auth.ts', 'src/lib/session.ts'] })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([])
     expect(report.held).toEqual([
       {
@@ -226,7 +239,7 @@ describe('planTick — file-contention gate (#106)', () => {
     const repo = readyRepo([inProgressItem({ claimedFiles: ['src/lib/registry.ts'] }), candidateItem({ claimedFiles: ['src/lib/registry.ts'] })], {
       concurrency: { sharedFiles: ['src/lib/registry.ts'], overlapThreshold: 1 },
     })
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable).toEqual([{ number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null }])
     expect(report.held).toEqual([])
   })
@@ -239,7 +252,7 @@ describe('planTick — file-contention gate (#106)', () => {
       claimedFiles: ['src/lib/auth.ts', 'src/lib/session.ts'],
     })
     const repo = readyRepo([prOpenedItem, candidateItem({ claimedFiles: ['src/lib/auth.ts', 'src/lib/session.ts'] })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.held).toEqual([
       {
         number: 52,
@@ -256,7 +269,7 @@ describe('planTick — file-contention gate (#106)', () => {
     const repo = readyRepo([candidateItem({ number: 10, claimedFiles: ['a.ts'] }), candidateItem({ number: 11, claimedFiles: ['a.ts', 'b.ts'] })], {
       concurrency: { sharedFiles: [], overlapThreshold: 1 },
     })
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable.map((a) => a.number)).toEqual([10])
     expect(report.held.map((h) => h.number)).toEqual([11])
   })
@@ -269,19 +282,25 @@ describe('planTick — in-flight items: claims', () => {
 
   it('a session-required in-flight item is never reported as a stall', () => {
     const repo = readyRepo([inFlightItem({ sessionRequired: true })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.claims).toEqual([{ number: 1, kind: 'issue', inFlight: 'inProgress', class: 'session-required', retryKey: null }])
+  })
+
+  it('holdSessionRequired: false matches a session-required in-flight item through startedTasks like any other', () => {
+    const repo = readyRepo([inFlightItem({ sessionRequired: true })])
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: ['impl #1'], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: false })
+    expect(report.claims).toEqual([{ number: 1, kind: 'issue', inFlight: 'inProgress', class: 'matched', retryKey: null }])
   })
 
   it('an item this app itself found active is matched', () => {
     const repo = readyRepo([inFlightItem({ status: 'in-flight', statusEvidence: 'agent-active' })])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.claims).toEqual([{ number: 1, kind: 'issue', inFlight: 'inProgress', class: 'matched', retryKey: null }])
   })
 
   it('an unmatched claim with no ledger row is no-record, and never offers a retry', () => {
     const repo = readyRepo([inFlightItem()])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.claims).toEqual([{ number: 1, kind: 'issue', inFlight: 'inProgress', class: 'no-record', retryKey: null }])
   })
 
@@ -294,13 +313,13 @@ describe('planTick — in-flight items: claims', () => {
     const repoAt = (readAt: string): Extract<RepositoryState, { ok: true }> =>
       readyRepo([inFlightItem()], { freshness: { github: { at: readAt }, itemStates: { unavailable: 'no re-check needed' }, sessions: { at: readAt }, worktrees: { at: readAt }, denials: { at: readAt } } })
 
-    const first = planTick({ repository: repoAt(readAtOf(0)), ledger, unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const first = planTick({ repository: repoAt(readAtOf(0)), ledger, unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(first.claims).toEqual([{ number: 1, kind: 'issue', inFlight: 'inProgress', class: 'suspect', retryKey: null }])
 
-    const second = planTick({ repository: repoAt(readAtOf(1)), ledger, unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const second = planTick({ repository: repoAt(readAtOf(1)), ledger, unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(second.claims).toEqual([{ number: 1, kind: 'issue', inFlight: 'inProgress', class: 'stalled-confirmed', retryKey: 'planApproved' }])
 
-    const third = planTick({ repository: repoAt(readAtOf(2)), ledger, unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const third = planTick({ repository: repoAt(readAtOf(2)), ledger, unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(third.claims).toEqual([{ number: 1, kind: 'issue', inFlight: 'inProgress', class: 'capped', retryKey: null }])
   })
 
@@ -310,12 +329,12 @@ describe('planTick — in-flight items: claims', () => {
     ledger.record(REPO, 1)
     const repo = readyRepo([inFlightItem()])
 
-    const first = planTick({ repository: repo, ledger, unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const first = planTick({ repository: repo, ledger, unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(first.claims).toEqual([{ number: 1, kind: 'issue', inFlight: 'inProgress', class: 'suspect', retryKey: null }])
 
     // Same repository snapshot (same `freshness.github.at`) — never advances
     // again, exactly as a second UI poll over the same GitHub read must not.
-    const second = planTick({ repository: repo, ledger, unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const second = planTick({ repository: repo, ledger, unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(second.claims).toEqual([{ number: 1, kind: 'issue', inFlight: 'inProgress', class: 'suspect', retryKey: null }])
   })
 })
@@ -323,7 +342,7 @@ describe('planTick — in-flight items: claims', () => {
 describe('planTick — disabledStages', () => {
   it('carries RepositoryState.disabled through unchanged', () => {
     const repo = readyRepo([], { disabled: ['refreshBranch'] })
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.disabledStages).toEqual(['refreshBranch'])
   })
 })
@@ -332,7 +351,7 @@ describe('planTick — autoApprovals (#313)', () => {
   it('reports an autoPlan issue at planReview alone, assigned to the viewer', () => {
     const autoPlanItem = item({ number: 7, autoPlan: true, stage: 'gate', stages: [{ key: 'planReview', name: 'plan review', role: 'gate' }] })
     const repo = readyRepo([autoPlanItem])
-    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS })
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.autoApprovals).toEqual([{ number: 7 }])
   })
 })

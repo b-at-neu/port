@@ -18,6 +18,7 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     workspace: TEST_WORKSPACE,
     phase: 'streaming',
     origin: { kind: 'fresh' },
+    stage: null,
     startedAt: '2026-01-01T00:00:00.000Z',
     queuedAfterInterrupt: null,
     end: null,
@@ -30,6 +31,7 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     models: TEST_MODELS,
     usage: null,
     backgroundTasks: [],
+    lastResult: null,
     ...overrides,
   }
 }
@@ -41,7 +43,7 @@ describe('notificationFor', () => {
 
   it('notifies needs-you for a new pending permission', () => {
     const previous = snapshot({ pendingPermissions: [] })
-    const next = snapshot({ pendingPermissions: [{ permissionId: 'p1', toolName: 'Bash', input: {}, title: null, displayName: null, description: null, decisionReason: null, blockedPath: null, agentId: null, requestedAt: 't', sessionGrant: null, interaction: null }] })
+    const next = snapshot({ pendingPermissions: [{ permissionId: 'p1', toolName: 'Bash', input: {}, title: null, displayName: null, description: null, decisionReason: null, blockedPath: null, protectedPath: null, agentId: null, requestedAt: 't', sessionGrant: null, interaction: null }] })
     const result = notificationFor(previous, next, 'widgets')
     expect(result?.kind).toBe('needs-you')
     expect(result?.body).toContain('Bash')
@@ -54,7 +56,7 @@ describe('notificationFor', () => {
   })
 
   it('does not notify finished when a permission is still pending', () => {
-    const permission = { permissionId: 'p1', toolName: 'Bash', input: {}, title: null, displayName: null, description: null, decisionReason: null, blockedPath: null, agentId: null, requestedAt: 't', sessionGrant: null, interaction: null }
+    const permission = { permissionId: 'p1', toolName: 'Bash', input: {}, title: null, displayName: null, description: null, decisionReason: null, blockedPath: null, protectedPath: null, agentId: null, requestedAt: 't', sessionGrant: null, interaction: null }
     const previous = snapshot({ phase: 'streaming', pendingPermissions: [permission] })
     const next = snapshot({ phase: 'ready', pendingPermissions: [permission] })
     expect(notificationFor(previous, next, 'widgets')).toBeNull()

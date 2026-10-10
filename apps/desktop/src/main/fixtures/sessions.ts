@@ -65,6 +65,7 @@ export function fixturePermissionSnapshots(now: Date): readonly HostedSessionSna
           description: null,
           decisionReason: null,
           blockedPath: null,
+          protectedPath: null,
           agentId: null,
           requestedAt: t(0),
           sessionGrant: null,
@@ -78,6 +79,8 @@ export function fixturePermissionSnapshots(now: Date): readonly HostedSessionSna
       models: FIXTURE_MODELS,
       usage: null,
       backgroundTasks: [],
+      stage: null,
+      lastResult: null,
     },
   ]
 }
@@ -120,6 +123,8 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
         { taskId: 'fixture-task-1', type: 'bash', description: 'pnpm --filter @port/desktop screenshots', toolUseId: null },
         { taskId: 'fixture-task-2', type: 'agent', description: 'Checking the release checklist', toolUseId: null },
       ],
+      stage: null,
+      lastResult: null,
     },
     {
       sessionKey: ENDED_KEY,
@@ -140,6 +145,8 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       models: FIXTURE_MODELS,
       usage: null,
       backgroundTasks: [],
+      stage: null,
+      lastResult: null,
     },
     {
       sessionKey: STARTING_KEY,
@@ -160,6 +167,8 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       models: { kind: 'pending' },
       usage: null,
       backgroundTasks: [],
+      stage: null,
+      lastResult: null,
     },
     {
       sessionKey: QUESTION_KEY,
@@ -182,6 +191,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
           description: null,
           decisionReason: null,
           blockedPath: null,
+          protectedPath: null,
           agentId: null,
           requestedAt: t(0),
           sessionGrant: null,
@@ -208,6 +218,8 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       models: FIXTURE_MODELS,
       usage: null,
       backgroundTasks: [],
+      stage: null,
+      lastResult: null,
     },
     {
       sessionKey: PLAN_KEY,
@@ -230,6 +242,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
           description: null,
           decisionReason: null,
           blockedPath: null,
+          protectedPath: null,
           agentId: null,
           requestedAt: t(0),
           sessionGrant: null,
@@ -246,6 +259,8 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       models: FIXTURE_MODELS,
       usage: null,
       backgroundTasks: [],
+      stage: null,
+      lastResult: null,
     },
     {
       sessionKey: RESUMED_KEY,
@@ -266,6 +281,8 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       models: FIXTURE_MODELS,
       usage: null,
       backgroundTasks: [],
+      stage: null,
+      lastResult: null,
     },
   ]
 }

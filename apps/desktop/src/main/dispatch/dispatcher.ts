@@ -27,6 +27,7 @@ import { boundRecords, freeSlots, refreshRecords } from './launch'
 import type { StageLauncher, StageRecord } from './launch'
 import type { StageSessionSummary } from './quit'
 import type { TickActionable, TickReport } from '../../shared/tick/types'
+import type { StageOutcome } from '../../shared/hosting/stage'
 
 const RECENT_LIMIT = 20
 const NOTE_LIMIT = 20
@@ -78,6 +79,10 @@ export interface Dispatcher {
   liveStageSessions(): readonly StageSessionSummary[]
   /** Stops new launches — called before `closeAll()` on quit. */
   shutdown(): void
+  /** Records a stage launcher's hand-back classification against its matching record, by session key. A no-op if the key is not tracked. */
+  recordOutcome(repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome): void
+  /** `true` unless this app currently owns `repoId` — an unread repository (`'none'`) holds, the fail direction for `SESSION REQUIRED`. */
+  holdsSessionRequired(repoId: RepoId): boolean
 }
 
 interface RepoDispatcherState {
@@ -163,7 +168,27 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
 
   function activeOrIdle(repoId: RepoId): DispatcherState {
     const records = stateFor(repoId).records
-    return records.length > 0 ? { kind: 'active', recent: records.map((r) => ({ agent: r.agent, number: r.number, kind: r.kind, state: r.state, at: r.at, detail: r.detail })) } : { kind: 'idle' }
+    return records.length > 0
+      ? { kind: 'active', recent: records.map((r) => ({ agent: r.agent, number: r.number, kind: r.kind, state: r.state, at: r.at, detail: r.detail, outcome: r.outcome })) }
+      : { kind: 'idle' }
+  }
+
+  function recordOutcome(repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome): void {
+    const state = repoStates.get(repoId)
+    if (state === undefined) return
+    const idx = state.records.findIndex((r) => r.sessionKey === sessionKey)
+    if (idx === -1) return
+    const next = [...state.records]
+    // Never reassigned, so a non-null `Infinity`-bounds index access stays well-typed.
+    const existing = next[idx]
+    if (existing === undefined) return
+    next[idx] = { ...existing, outcome }
+    state.records = next
+    deps.onChange()
+  }
+
+  function holdsSessionRequired(repoId: RepoId): boolean {
+    return stateFor(repoId).owner !== 'app'
   }
 
   async function considerRepo(entry: ReadyEntry, tick: TickReport | undefined, viewer: string | null): Promise<void> {
@@ -325,17 +350,17 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
               void deps.store.close(result.sessionKey)
               continue
             }
-            pushRecord(entry.id, { sessionKey: result.sessionKey, agent: candidate.agent, number: candidate.number, kind: candidate.kind, trigger: candidate.trigger, state: 'started', at, detail: null })
+            pushRecord(entry.id, { sessionKey: result.sessionKey, agent: candidate.agent, number: candidate.number, kind: candidate.kind, trigger: candidate.trigger, state: 'started', at, detail: null, outcome: null })
             deps.ledger.record(entry.id, candidate.number)
           } else if (result.kind === 'at-capacity') {
             waiting += 1
           } else {
-            pushRecord(entry.id, { sessionKey: null, agent: candidate.agent, number: candidate.number, kind: candidate.kind, trigger: candidate.trigger, state: 'failed', at, detail: result.message })
+            pushRecord(entry.id, { sessionKey: null, agent: candidate.agent, number: candidate.number, kind: candidate.kind, trigger: candidate.trigger, state: 'failed', at, detail: result.message, outcome: null })
           }
         } catch (error) {
           const at = deps.now().toISOString()
           const message = error instanceof Error ? error.message : String(error)
-          pushRecord(entry.id, { sessionKey: null, agent: candidate.agent, number: candidate.number, kind: candidate.kind, trigger: candidate.trigger, state: 'failed', at, detail: message })
+          pushRecord(entry.id, { sessionKey: null, agent: candidate.agent, number: candidate.number, kind: candidate.kind, trigger: candidate.trigger, state: 'failed', at, detail: message, outcome: null })
         }
       }
     })
@@ -442,5 +467,5 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     stopped = true
   }
 
-  return { consider, status, stopFor, standDown, liveStages, liveStageSessions, shutdown }
+  return { consider, status, stopFor, standDown, liveStages, liveStageSessions, shutdown, recordOutcome, holdsSessionRequired }
 }

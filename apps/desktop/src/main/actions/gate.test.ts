@@ -38,6 +38,7 @@ const READY_ENTRY = {
     vocabulary: VOCABULARY,
     commands: { worktrees: null, budget: null },
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
+    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
     checkDispositions: {},
     overrides: [],
   },

@@ -29,6 +29,7 @@ const READY_ENTRY = {
     modules: { approvalGate: true, release: true, scope: true },
     reviewCycleCap: 3,
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
+    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
     checkDispositions: {},
     overrides: [],
     vocabulary: {} as never,

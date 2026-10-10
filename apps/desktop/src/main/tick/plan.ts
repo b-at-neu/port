@@ -35,6 +35,8 @@ export interface PlanTickParams {
   readonly refreshMemo: RefreshMemo
   /** Read from config per repository, feeds the approval-withdrawal observation's `rollupVerdict` call. */
   readonly checkDispositions: Readonly<Record<string, Disposition>>
+  /** `false` exactly when this app owns the repository and dispatches stage sessions itself — `SESSION REQUIRED` then holds nothing: `heldReasonOf` skips the `session-required` rung and `claimsOf` skips the `session-required` class. `true` (the terminal-cockpit default) is byte-identical to this field never having existed. */
+  readonly holdSessionRequired: boolean
 }
 
 function emptyReport(repoId: RepoId, displayName: string, blind: TickBlind): TickReport {
@@ -50,10 +52,15 @@ function stageKeyOf(item: Pick<ReconciledItem, 'stage' | 'stages'>): LabelKey | 
 
 /** Held reasons, first hit wins: unowned before other-operator before session-required. `contended`
  *  is the file-contention gate's own reason, applied afterward, never returned here. */
-function heldReasonOf(item: ReconciledItem, unowned: ReadonlySet<number>, others: ReadonlySet<number>): Exclude<TickHeld['reason'], 'contended' | 'cycle-cap' | 'zero-diff'> | null {
+function heldReasonOf(
+  item: ReconciledItem,
+  unowned: ReadonlySet<number>,
+  others: ReadonlySet<number>,
+  holdSessionRequired: boolean,
+): Exclude<TickHeld['reason'], 'contended' | 'cycle-cap' | 'zero-diff'> | null {
   if (unowned.has(item.number)) return 'unowned'
   if (others.has(item.number)) return 'other-operator'
-  if (item.sessionRequired) return 'session-required'
+  if (holdSessionRequired && item.sessionRequired) return 'session-required'
   return null
 }
 
@@ -110,6 +117,7 @@ function actionableAndHeld(
   reviewCycleCap: number,
   repoId: RepoId,
   unknownStreaks: UnknownStreaks,
+  holdSessionRequired: boolean,
 ): { readonly actionable: readonly TickActionable[]; readonly held: readonly TickHeld[] } {
   const held: TickHeld[] = []
   const refreshBranchNumbers = numbersCarrying(items, 'refreshBranch')
@@ -135,7 +143,7 @@ function actionableAndHeld(
     const trigger = stageKeyOf(item)
     if (trigger === null) continue
 
-    const reason = heldReasonOf(item, unownedNumbers, othersNumbers)
+    const reason = heldReasonOf(item, unownedNumbers, othersNumbers, holdSessionRequired)
 
     // A refreshBranch trigger co-present with another trigger label never wins stageKeyOf's own
     // first-match resolution, so this yields a second, independent entry for refreshBranch itself.
@@ -230,14 +238,14 @@ function actionableAndHeld(
   return { actionable: [...ungated, ...gatedActionable], held }
 }
 
-function claimsOf(items: readonly ReconciledItem[], repoId: RepoId, ledger: DispatchLedger, startedTasks: readonly string[], readAt: string | null): readonly TickClaim[] {
+function claimsOf(items: readonly ReconciledItem[], repoId: RepoId, ledger: DispatchLedger, startedTasks: readonly string[], readAt: string | null, holdSessionRequired: boolean): readonly TickClaim[] {
   const claims: TickClaim[] = []
   for (const item of items) {
     if (item.stage !== 'in-flight') continue
     const inFlight = stageKeyOf(item)
     if (inFlight === null) continue
 
-    if (item.sessionRequired) {
+    if (holdSessionRequired && item.sessionRequired) {
       claims.push({ number: item.number, kind: item.kind, inFlight, class: 'session-required', retryKey: null })
       continue
     }
@@ -260,7 +268,7 @@ function claimsOf(items: readonly ReconciledItem[], repoId: RepoId, ledger: Disp
 }
 
 export function planTick(params: PlanTickParams): TickReport {
-  const { repository, ledger, nextDecisionAt, now, reviewCycleCap, unknownStreaks, startedTasks, refreshMemo, checkDispositions } = params
+  const { repository, ledger, nextDecisionAt, now, reviewCycleCap, unknownStreaks, startedTasks, refreshMemo, checkDispositions, holdSessionRequired } = params
 
   if (!repository.ok) {
     const blind: TickBlind = repository.reason === 'not-ready' ? { reason: 'not-ready' } : { reason: 'github-unavailable', message: repository.message }
@@ -282,8 +290,8 @@ export function planTick(params: PlanTickParams): TickReport {
     }
   }
 
-  const { actionable, held } = actionableAndHeld(repository.items, repository.viewer, repository.concurrency, reviewCycleCap, repository.repoId, unknownStreaks)
-  const claims = claimsOf(repository.items, repository.repoId, ledger, startedTasks, readAt)
+  const { actionable, held } = actionableAndHeld(repository.items, repository.viewer, repository.concurrency, reviewCycleCap, repository.repoId, unknownStreaks, holdSessionRequired)
+  const claims = claimsOf(repository.items, repository.repoId, ledger, startedTasks, readAt, holdSessionRequired)
   const observations: readonly TickObservation[] = observationsOf({
     repoId: repository.repoId,
     items: repository.items,

@@ -5,7 +5,7 @@ import type { SessionKey } from '../../shared/hosting/types'
 import type { TickActionable } from '../../shared/tick/types'
 
 function record(overrides: Partial<StageRecord> = {}): StageRecord {
-  return { sessionKey: 'hosted-1' as SessionKey, agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved', state: 'started', at: '2026-09-05T14:00:00.000Z', detail: null, ...overrides }
+  return { sessionKey: 'hosted-1' as SessionKey, agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved', state: 'started', at: '2026-09-05T14:00:00.000Z', detail: null, outcome: null, ...overrides }
 }
 
 describe('resetArgs / sweepArgs / dispatchArgs', () => {

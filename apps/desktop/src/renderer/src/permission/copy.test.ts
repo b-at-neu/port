@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blockedPathLine, contextLine, decisionReasonLine, documentTitle, formatInput, grantLines, grantSummaryLine, headingText, OTHER_SESSION_LINE, primaryLine } from './copy'
+import { blockedPathLine, contextLine, decisionReasonLine, documentTitle, formatInput, grantLines, grantSummaryLine, headingText, OTHER_SESSION_LINE, primaryLine, protectedPathLine } from './copy'
 import type { PendingPermission } from '../../../shared/hosting/types'
 
 function permission(overrides: Partial<PendingPermission> = {}): PendingPermission {
@@ -12,6 +12,7 @@ function permission(overrides: Partial<PendingPermission> = {}): PendingPermissi
     description: null,
     decisionReason: null,
     blockedPath: null,
+    protectedPath: null,
     agentId: null,
     requestedAt: '2026-01-01T00:00:00.000Z',
     sessionGrant: null,
@@ -62,6 +63,12 @@ describe('decisionReasonLine / blockedPathLine', () => {
   it('render their prefix verbatim', () => {
     expect(decisionReasonLine('outside allowed directories')).toBe("Why you're being asked: outside allowed directories")
     expect(blockedPathLine('/etc')).toBe('Outside the allowed directories: /etc')
+  })
+})
+
+describe('protectedPathLine', () => {
+  it('names the protected path', () => {
+    expect(protectedPathLine('.claude/settings.json')).toBe('This stage wants to edit a protected path: .claude/settings.json')
   })
 })
 

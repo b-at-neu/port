@@ -25,6 +25,7 @@ function entry(): Extract<RepositoryEntry, { status: 'ready' }> {
       reviewCycleCap: 5,
       vocabulary: VOCABULARY,
       concurrency: { sharedFiles: [], overlapThreshold: 2 },
+    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
       checkDispositions: {},
       overrides: [],
     },

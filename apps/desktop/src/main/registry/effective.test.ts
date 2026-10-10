@@ -45,6 +45,7 @@ describe('fromShape', () => {
       modules: BASE.modules,
       reviewCycleCap: 5,
       concurrency: { sharedFiles: [], overlapThreshold: 2 },
+      sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
     })
   })
 

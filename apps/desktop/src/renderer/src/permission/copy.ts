@@ -49,6 +49,11 @@ export function blockedPathLine(blockedPath: string): string {
   return `Outside the allowed directories: ${blockedPath}`
 }
 
+/** The lead line for a stage session's protected-path pause — rendered above the normal heading, never in place of it. */
+export function protectedPathLine(protectedPath: string): string {
+  return `This stage wants to edit a protected path: ${protectedPath}`
+}
+
 const FILE_PATH_TOOLS = new Set(['Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit'])
 
 function stringField(input: Readonly<Record<string, unknown>>, key: string): string | null {

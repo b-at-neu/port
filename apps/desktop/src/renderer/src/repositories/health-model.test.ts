@@ -22,6 +22,7 @@ function config(vocabulary: LabelVocabulary, overrides: ResolvedRepoConfig['over
     vocabulary,
     commands: { worktrees: 'node w.mjs', budget: null },
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
+      sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
     checkDispositions: {},
     overrides,
   }

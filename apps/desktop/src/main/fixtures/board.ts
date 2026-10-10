@@ -228,7 +228,7 @@ export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'pop
   const refreshMemo = createRefreshMemo()
   const nextDecisionAt = new Date(now.getTime() + SOURCE_BASE_INTERVAL_MS.github)
 
-  const tickParams = { ledger, unknownStreaks, nextDecisionAt, now: () => now, reviewCycleCap: readyEntry.config.reviewCycleCap, startedTasks: [], refreshMemo, checkDispositions: readyEntry.config.checkDispositions }
+  const tickParams = { ledger, unknownStreaks, nextDecisionAt, now: () => now, reviewCycleCap: readyEntry.config.reviewCycleCap, startedTasks: [], refreshMemo, checkDispositions: readyEntry.config.checkDispositions, holdSessionRequired: true }
   const gadgetsTickParams = { ...tickParams, reviewCycleCap: gadgetsEntryConfig.config.reviewCycleCap, checkDispositions: gadgetsEntryConfig.config.checkDispositions }
   const tick = [planTick({ repository: ready, ...tickParams }), planTick({ repository: notReady, ...tickParams }), planTick({ repository: gadgets, ...gadgetsTickParams })]
 

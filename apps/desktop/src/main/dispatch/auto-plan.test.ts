@@ -28,6 +28,7 @@ function entry(): ReadyEntry {
       branches: { integration: 'dev', production: 'main' },
       commands: { worktrees: null, budget: null },
       concurrency: { sharedFiles: [], overlapThreshold: 2 },
+      sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
       checkDispositions: {},
       overrides: [],
       models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },

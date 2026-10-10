@@ -8,7 +8,9 @@ import type { BoardSnapshot } from '../shared/board/types'
 import { chooseDirectory } from './dialogs'
 import { defaultWorkspaceChannelDeps, resolveFoldersChoose, resolveFoldersList, resolveSessionChanges } from './channels/workspace'
 import { createRecentsStore } from './workspace/recents'
-import { createSessionWorktree } from './workspace/worktree'
+import { createSessionWorktree, removeSessionWorktreeAt } from './workspace/worktree'
+import { createStageLauncher } from './stage/launcher'
+import type { StageLauncherHandle } from './stage/launcher'
 import { defaultForkListSessions } from './hosting/fork'
 import { statPath } from './platform/files'
 import type { SessionKey } from '../shared/hosting/types'
@@ -60,7 +62,7 @@ import {
   resolveSessionStart,
   resolveSessionTaskStop,
 } from './channels/hosting'
-import { git } from './platform/git'
+import { defaultGitRunner, git } from './platform/git'
 import { readWorktreeReport } from './reclaimer/report'
 import type { ReadWorktreeReportParams } from './reclaimer/report'
 import { addRepository, listRepositories, removeRepository, requireReadyRepo } from './registry'
@@ -262,14 +264,28 @@ export function registerIpc(): RegisteredIpc {
     },
   })
 
+  // Assigned right after createDispatchRuntime below — stageLauncher's onOutcome closes over it,
+  // so construction order between the launcher and the dispatcher that owns recordOutcome stays acyclic.
+  let dispatcherRef: Dispatcher | null = null
+
   const hostedStore = createHostedStore({
     ...defaultHostedStoreDeps,
     onStatus: (snapshot) => {
       broadcast('session:status', snapshot)
       notifier.observe(snapshot)
+      stageLauncher.observe(snapshot)
     },
     onEntries: (delta) => broadcast('session:entries', delta),
     persistence: createHostingPersistence({ dir: app.getPath('userData') }),
+  })
+
+  const stageLauncher: StageLauncherHandle = createStageLauncher({
+    store: hostedStore,
+    git: defaultGitRunner(),
+    createWorktree: createSessionWorktree,
+    removeWorktree: (path, force) => removeSessionWorktreeAt({ path, force, git: defaultGitRunner() }),
+    now: () => new Date(),
+    onOutcome: (repoId, sessionKey, outcome) => dispatcherRef?.recordOutcome(repoId, sessionKey, outcome),
   })
   const hostingChannelDeps = defaultHostingChannelDeps(hostedStore, {
     git: (args, cwd) => git(args, { cwd }),
@@ -279,11 +295,9 @@ export function registerIpc(): RegisteredIpc {
     createWorktree: createSessionWorktree,
   })
 
-  // `launch: null` is the honest state until a real `StageLauncher` lands — a candidate sits
-  // visibly at `no-launcher` rather than silently idle.
   const { watcherDeps, dispatcher, autoPlanner, bindWatcher, shutdown } = createDispatchRuntime({
     store: hostedStore,
-    launch: null,
+    launch: stageLauncher,
     runState: (repoId) => runStates.current(repoId).state,
     readOwnership,
     takeOwnership,
@@ -293,6 +307,7 @@ export function registerIpc(): RegisteredIpc {
     dirs: { audit: app.getPath('userData'), scratch: app.getPath('temp') },
     now: () => new Date(),
   })
+  dispatcherRef = dispatcher
 
   // One watcher for the process lifetime. `onTick` fires only on a fresh poll, never awaited —
   // a pass must never block the broadcast the renderer is waiting on.

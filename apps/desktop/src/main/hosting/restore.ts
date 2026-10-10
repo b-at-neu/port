@@ -3,12 +3,13 @@ import type { RepoId } from '../../shared/repos'
 import type { HostedSessionSnapshot } from '../../shared/hosting/types'
 import type { PersistedOpenEntry } from './persist'
 
-/** Not `closing`/`ended`, and carrying a real `claudeSessionId` — a session without one cannot be resumed. `cwd` comes from `workspace.folder`, so a restore reopens the exact folder or worktree. */
+/** Not `closing`/`ended`, and carrying a real `claudeSessionId` — a session without one cannot be resumed. `cwd` comes from `workspace.folder`, so a restore reopens the exact folder or worktree. A stage session (`stage !== null`) is never persisted — it belongs to this app's dispatch loop, never the operator restore banner. */
 export function persistedOpen(handles: readonly HostedSessionSnapshot[]): readonly PersistedOpenEntry[] {
   const result: PersistedOpenEntry[] = []
   for (const handle of handles) {
     if (handle.phase === 'closing' || handle.phase === 'ended') continue
     if (handle.claudeSessionId === null) continue
+    if (handle.stage !== null) continue
     result.push({ repoId: handle.repoId, claudeSessionId: handle.claudeSessionId, title: handle.title, startedAt: handle.startedAt, cwd: handle.workspace.folder })
   }
   return result

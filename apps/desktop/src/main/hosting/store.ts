@@ -52,6 +52,7 @@ import { defaultGitRunner } from '../platform/git'
 import { removeSessionWorktreeAt } from '../workspace/worktree'
 import type { RemoveSessionWorktreeOutcome } from '../workspace/worktree'
 import type { SessionWorkspace } from '../../shared/workspace/types'
+import type { StageTag } from '../../shared/hosting/stage'
 
 export { DEFAULT_SESSION_LIMIT, SESSION_LIMIT_CEILING } from './persist'
 
@@ -107,6 +108,8 @@ export interface StartSessionParams {
   readonly workspace: SessionWorkspace
   /** The restore path's own resolved title — omitted for every other start path. */
   readonly initialTitle?: string | null
+  /** Non-null only for a stage launch — passed straight through to the handle; `main/stage/` is the only caller that sets it. */
+  readonly stage?: { readonly tag: StageTag; readonly agentName: string; readonly model: string; readonly sessionRequiredPaths: readonly string[] } | null
 }
 
 export interface HostedStore {
@@ -274,6 +277,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
         initialTitle,
         defaults,
         history,
+        stage: params.stage ?? null,
       },
       queryFn,
     )

@@ -42,6 +42,7 @@ function readyRepo(path: string): RepositoryEntry {
       vocabulary: { labels: [], disabled: [], problems: [] },
       commands: { worktrees: null, budget: null },
       concurrency: { sharedFiles: [], overlapThreshold: 2 },
+      sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
       checkDispositions: {},
       overrides: [],
     },

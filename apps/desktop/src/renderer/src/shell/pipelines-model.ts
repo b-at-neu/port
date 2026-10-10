@@ -4,6 +4,7 @@ import type { RepoId, RepositoryEntry } from '../../../shared/repos'
 import type { BoardSnapshot } from '../../../shared/board/types'
 import type { DispatchOwner } from '../../../shared/dispatch/types'
 import type { ReconciledItem } from '../../../shared/state/types'
+import type { HostedSessionSnapshot, SessionKey } from '../../../shared/hosting/types'
 import { needsYouItems, repoNeedsYou } from '../../../shared/board/needs-you'
 import { PHASE_NAMES } from '../lib/phase'
 import type { PillStatus } from '../components/status-pill'
@@ -13,6 +14,8 @@ export interface PipelineSessionRow {
   readonly number: number
   readonly label: string
   readonly dot: 'attention' | 'working' | 'idle'
+  /** Non-`null` for a row backed by one of this app's own stage sessions — the row then links to that session, not the board. */
+  readonly sessionKey: SessionKey | null
 }
 
 export interface ReadyPipelineRow {
@@ -48,9 +51,18 @@ function sessionsFor(repoId: RepoId, items: readonly ReconciledItem[], needsYouN
     const activity = liveAgent?.activity ?? liveSession?.activity ?? 'dormant'
     const dot: PipelineSessionRow['dot'] = needsYouNumbers.has(item.number) ? 'attention' : activity === 'active' ? 'working' : 'idle'
 
-    rows.push({ key: `${repoId}-${item.number}`, number: item.number, label: `#${item.number} ${phaseName}`, dot })
+    rows.push({ key: `${repoId}-${item.number}`, number: item.number, label: `#${item.number} ${phaseName}`, dot, sessionKey: null })
   }
   return rows
+}
+
+/** A live stage session's own row, following `sidebar-sessions.tsx`'s own dot rules. */
+function stageRowFor(session: HostedSessionSnapshot): PipelineSessionRow {
+  const stage = session.stage
+  if (stage === null) throw new Error('stageRowFor called with a non-stage snapshot')
+  const phaseName = PHASE_NAMES[stage.trigger] ?? stage.agent
+  const dot: PipelineSessionRow['dot'] = session.pendingPermissions.length > 0 ? 'attention' : session.phase === 'starting' || session.phase === 'streaming' ? 'working' : 'idle'
+  return { key: session.sessionKey, number: stage.number, label: `#${String(stage.number)} ${phaseName}`, dot, sessionKey: session.sessionKey }
 }
 
 /** Ownership gates the pill ahead of run state — `terminal`/`unreadable` each have their
@@ -71,7 +83,12 @@ function pillFor(snapshot: BoardSnapshot | undefined, repoId: RepoId, owner: Dis
 
 /** A not-`ready` repository gets a bare row with no menu. `snapshot` may be
  *  `undefined` before the first read; a ready row then falls back to paused. */
-export function pipelinesModel(repos: readonly RepositoryEntry[], snapshot: BoardSnapshot | undefined, now: Date = new Date()): readonly PipelineRow[] {
+export function pipelinesModel(
+  repos: readonly RepositoryEntry[],
+  snapshot: BoardSnapshot | undefined,
+  now: Date = new Date(),
+  sessions: readonly HostedSessionSnapshot[] = [],
+): readonly PipelineRow[] {
   const needsYou = snapshot !== undefined ? needsYouItems(snapshot, now) : []
   const needsYouNumbers = new Map<RepoId, Set<number>>()
   for (const item of needsYou) {
@@ -91,6 +108,10 @@ export function pipelinesModel(repos: readonly RepositoryEntry[], snapshot: Boar
     const dispatchStatus = snapshot?.dispatch.find((d) => d.repoId === entry.id)
     const owner: DispatchOwner = dispatchStatus?.owner ?? 'none'
 
+    const itemRows = sessionsFor(entry.id, items, numbers)
+    const stageRows = sessions.filter((s) => s.phase !== 'ended' && s.stage !== null && s.repoId === entry.id).map(stageRowFor)
+    const stageNumbers = new Set(stageRows.map((r) => r.number))
+
     return {
       ready: true,
       repoId: entry.id,
@@ -100,7 +121,7 @@ export function pipelinesModel(repos: readonly RepositoryEntry[], snapshot: Boar
       unreadableMessage: dispatchStatus?.unreadableMessage ?? null,
       inFlight: tick?.claims.length ?? 0,
       needsYou: repoNeedsYou(needsYou, entry.id) > 0,
-      sessions: sessionsFor(entry.id, items, numbers),
+      sessions: [...itemRows.filter((row) => !stageNumbers.has(row.number)), ...stageRows],
     }
   })
 }

@@ -23,17 +23,20 @@ import type {
 import type { RepoId } from '../../shared/repos'
 import type { SessionWorkspace } from '../../shared/workspace/types'
 import type { ComposerAttachment } from '../../shared/hosting/attachments'
+import type { SessionResult, StageTag } from '../../shared/hosting/stage'
 import { createHostedInput } from './input'
 import { buildSessionOptions } from './options'
 import { classifyEnd } from './classify'
 import { createControlsTracker } from './controls'
 import type { ControlsTracker } from './controls'
 import { createPermissionBroker } from './permissions'
+import { stagePolicy } from './stage-policy'
 import { createSessionProjector } from './project'
 import type { ProjectedDelta, SessionProjectorWindow } from './project'
 import { createCapabilityTracker } from './capabilities'
 import { createTaskTracker } from './tasks'
 import { readRateLimit } from './rate-limit'
+import { readResult } from './result'
 import { readUsage } from './usage'
 import type { UsageReading } from './usage'
 import { promptTitle } from './title'
@@ -42,6 +45,7 @@ import type { ContentBlock } from './content'
 import { composeInvocation, isPipelineCommand, validateCommandName } from './verify'
 import type { ExpectedComponents } from './plugin'
 import type { HostedQuery, Options, SDKMessage, SDKUserMessage } from './sdk'
+import { pathOps } from '../platform/paths'
 
 export type { HostedQuery } from './sdk'
 
@@ -78,6 +82,8 @@ export interface CreateHostedHandleParams {
   readonly onEntries?: (delta: SessionEntriesDelta) => void
   /** Read before spawn and kept frozen on the handle for its whole life. */
   readonly history: SessionHistory
+  /** Non-null only for a stage session: carried on the snapshot, drives `buildSessionOptions`'s stage branch, and builds the `stagePolicy` the permission broker consults first. */
+  readonly stage: { readonly tag: StageTag; readonly agentName: string; readonly model: string; readonly sessionRequiredPaths: readonly string[] } | null
 }
 
 export interface HostedHandleReplay {
@@ -152,8 +158,21 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
   const input = createHostedInput()
   const controls = createControlsTracker({ defaults: params.defaults, onChange: () => emitStatus() })
   // Created before buildSessionOptions so an un-preapproved tool call routes through canUseTool, not a silent auto-deny.
-  const broker = createPermissionBroker({ now: params.now, onChange: () => emitStatus(), onPlanApproved: (mode) => controls.adoptApprovedMode(mode) })
-  const options = buildSessionOptions({ mode: params.mode, cwd: params.cwd, executablePath: params.executablePath, canUseTool: broker.canUseTool, plugin: params.plugin, defaults: params.defaults })
+  const broker = createPermissionBroker({
+    now: params.now,
+    onChange: () => emitStatus(),
+    onPlanApproved: (mode) => controls.adoptApprovedMode(mode),
+    ...(params.stage !== null ? { policy: stagePolicy({ cwd: params.cwd, sessionRequiredPaths: params.stage.sessionRequiredPaths, pathOps }) } : {}),
+  })
+  const options = buildSessionOptions({
+    mode: params.mode,
+    cwd: params.cwd,
+    executablePath: params.executablePath,
+    canUseTool: broker.canUseTool,
+    plugin: params.plugin,
+    defaults: params.defaults,
+    stage: params.stage !== null ? { agentName: params.stage.agentName, model: params.stage.model } : null,
+  })
   const startedAt = new Date(params.now()).toISOString()
   const projector = createSessionProjector({ cwd: params.cwd })
   const capabilities = createCapabilityTracker({
@@ -177,6 +196,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
   let title: string | null = params.initialTitle
   let rateLimit: SessionRateLimit | null = null
   let usageReading: UsageReading | null = null
+  let lastResult: SessionResult | null = null
   let closeRequested = false
   let seq = 0
   const ring: SessionEventEnvelope[] = []
@@ -202,6 +222,8 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
       models: controls.models(),
       usage: usageReading?.usage ?? null,
       backgroundTasks: tasks.current(),
+      stage: params.stage?.tag ?? null,
+      lastResult,
     }
   }
 
@@ -251,6 +273,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
       return
     }
     if (message.type === 'result') {
+      lastResult = readResult(message, observedAt)
       const queuedTurnCount = queuedTurnCountOf(message)
       // A positive queued_turn_count means the next turn already dequeued, so the session is still working.
       if ((phase === 'streaming' || phase === 'interrupting') && !(typeof queuedTurnCount === 'number' && queuedTurnCount > 0)) {

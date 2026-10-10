@@ -20,6 +20,7 @@ function permission(overrides: Partial<PendingPermission> = {}): PendingPermissi
     description: null,
     decisionReason: null,
     blockedPath: null,
+    protectedPath: null,
     agentId: null,
     requestedAt: '2026-01-01T00:00:00.000Z',
     sessionGrant: null,
@@ -48,6 +49,8 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     models: TEST_MODELS,
     usage: null,
     backgroundTasks: [],
+    stage: null,
+    lastResult: null,
     ...overrides,
   }
 }

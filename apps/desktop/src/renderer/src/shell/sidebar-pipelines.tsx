@@ -84,7 +84,12 @@ function RepoRow({ row, collapsed, onToggle }: { readonly row: PipelineRow; read
       {!collapsed && row.sessions.length > 0 ? (
         <div className="flex flex-col">
           {row.sessions.map((session) => (
-            <Link key={session.key} to={ROUTE_IDS.board} className="flex h-6.5 items-center gap-1.5 rounded-md py-0 pr-2 pl-8 text-small text-foreground-secondary hover:bg-accent">
+            <Link
+              key={session.key}
+              to={session.sessionKey !== null ? ROUTE_IDS.session : ROUTE_IDS.board}
+              search={session.sessionKey !== null ? { key: session.sessionKey } : undefined}
+              className="flex h-6.5 items-center gap-1.5 rounded-md py-0 pr-2 pl-8 text-small text-foreground-secondary hover:bg-accent"
+            >
               <span
                 aria-hidden="true"
                 className={cn(
@@ -105,6 +110,7 @@ function RepoRow({ row, collapsed, onToggle }: { readonly row: PipelineRow; read
 export function SidebarPipelines() {
   const repos = useIpcQuery('repos:list')
   const snapshot = useIpcQuery('board:snapshot')
+  const sessions = useIpcQuery('session:list')
   const navigate = useNavigate()
   const [collapsedRepos, setCollapsedRepos] = useState<ReadonlySet<string>>(() => new Set(shellPrefs().collapsedRepos))
 
@@ -129,7 +135,7 @@ export function SidebarPipelines() {
       ) : repos.data.repositories.length === 0 ? (
         <EmptyState icon={ChevronRight} message="No repositories yet." action={{ label: 'Add a repository', onClick: () => void navigate({ to: ROUTE_IDS.repos }) }} className="px-2 py-2 text-left" />
       ) : (
-        pipelinesModel(repos.data.repositories, snapshot.data).map((row) => (
+        pipelinesModel(repos.data.repositories, snapshot.data, new Date(), sessions.data ?? []).map((row) => (
           <RepoRow key={row.repoId} row={row} collapsed={row.ready && collapsedRepos.has(row.repoId)} onToggle={() => toggle(row.repoId)} />
         ))
       )}

@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { root, readJson, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
+import { globToRegExp as hookGlobToRegExp } from '../../plugins/port/hooks/lib/guard-rules.mjs';
 
 // apps/desktop/src/main/hosting/ owns the full lifecycle of a hosted session in the main
 // process. These assertions pin its plan's decisions mechanically.
@@ -342,6 +344,61 @@ export default async function ({ expect, fail, ok }: Reporter) {
     } else if (!dialogFile || !/sessionDisplayLabel/.test(readFileSync(dialogFile, 'utf8'))) {
       fail('desktop-hosting', 'apps/desktop/src/renderer/src/permission/dialog.tsx does not import sessionDisplayLabel');
     } else expect(!(!copyFile || /function contextLine\([^)]*sessionKey/.test(readFileSync(copyFile, 'utf8'))), 'desktop-hosting', "apps/desktop/src/renderer/src/permission/copy.ts's contextLine must take no 'sessionKey' parameter");
+  }
+
+  // --- stage-policy.ts's own globToRegExp agrees with guard-rules.mjs's over a shared case list, both directions. ---
+  {
+    const stagePolicyFile = allFiles.find((f) => relOf(f) === `${hostingDir}/stage-policy.ts`);
+    if (!stagePolicyFile) {
+      fail('desktop-hosting', `${hostingDir}/stage-policy.ts does not exist`);
+    } else {
+      const module = (await import(pathToFileURL(stagePolicyFile).href)) as { readonly globToRegExp?: (glob: string) => RegExp };
+      if (typeof module.globToRegExp !== 'function') {
+        fail('desktop-hosting', `${hostingDir}/stage-policy.ts does not export 'globToRegExp'`);
+      } else {
+        const appGlobToRegExp = module.globToRegExp;
+        const cases: readonly { readonly glob: string; readonly path: string; readonly matches: boolean }[] = [
+          { glob: 'CLAUDE.md', path: 'CLAUDE.md', matches: true },
+          { glob: 'CLAUDE.md', path: 'src/CLAUDE.md', matches: false },
+          { glob: '.claude/**', path: '.claude/settings.json', matches: true },
+          { glob: '.claude/**', path: '.claude/sub/dir/file.json', matches: true },
+          { glob: '.claude/**', path: '.claudexyz', matches: false },
+          { glob: 'src/*.ts', path: 'src/index.ts', matches: true },
+          { glob: 'src/*.ts', path: 'src/sub/index.ts', matches: false },
+          { glob: 'infra/**', path: 'infra', matches: false },
+        ];
+        let allAgree = true;
+        for (const { glob, path, matches } of cases) {
+          const hook = hookGlobToRegExp(glob).test(path);
+          const app = appGlobToRegExp(glob).test(path);
+          if (hook !== matches || app !== matches) {
+            allAgree = false;
+            fail('desktop-hosting', `globToRegExp parity: glob ${glob} against ${path} — guard-rules.mjs says ${String(hook)}, stage-policy.ts says ${String(app)}, expected ${String(matches)}`);
+          }
+        }
+        if (allAgree) ok();
+      }
+    }
+  }
+
+  // --- The stage branch under options.ts names permissionMode: 'default' and never dontAsk/bypassPermissions; no file under main/stage/ names systemPrompt. ---
+  {
+    const optionsFile = allFiles.find((f) => relOf(f) === `${hostingDir}/options.ts`);
+    if (!optionsFile) {
+      fail('desktop-hosting', `${hostingDir}/options.ts does not exist`);
+    } else {
+      const text = stripComments(readFileSync(optionsFile, 'utf8'));
+      if (!/permissionMode:\s*params\.stage\s*!==\s*null\s*\?\s*'default'/.test(text)) {
+        fail('desktop-hosting', `${hostingDir}/options.ts's stage branch does not name permissionMode: 'default'`);
+      } else if (/dontAsk|bypassPermissions/.test(text)) {
+        fail('desktop-hosting', `${hostingDir}/options.ts names a dontAsk/bypassPermissions escape hatch`);
+      } else ok();
+    }
+
+    const stageDir = 'apps/desktop/src/main/stage';
+    const stageFiles = allFiles.filter((f) => relOf(f).startsWith(`${stageDir}/`) && !relOf(f).endsWith('.test.ts'));
+    const systemPromptStray = stageFiles.filter((f) => /systemPrompt/.test(stripComments(readFileSync(f, 'utf8'))));
+    expect(!(systemPromptStray.length > 0), 'desktop-hosting', `main/stage/ names 'systemPrompt': ${systemPromptStray.map(relOf).join(', ')} — the agent file's own system prompt is the only instruction source`);
   }
 }
 
