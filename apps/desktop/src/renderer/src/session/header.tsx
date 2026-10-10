@@ -29,12 +29,16 @@ const PHASE_LABEL: Readonly<Record<Exclude<SessionPhase, 'ended'>, string>> = {
 export function SessionHeader({
   snapshot,
   repoLabel,
+  changesOpen,
+  onToggleChanges,
   onStop,
   onClose,
   onDismiss,
 }: {
   readonly snapshot: HostedSessionSnapshot
   readonly repoLabel: string
+  readonly changesOpen: boolean
+  readonly onToggleChanges: () => void
   readonly onStop: () => void
   readonly onClose: () => void
   readonly onDismiss: () => void
@@ -58,6 +62,11 @@ export function SessionHeader({
         ) : null}
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        {snapshot.workspace.root !== null ? (
+          <Button variant={changesOpen ? 'secondary' : 'outline'} size="small" aria-pressed={changesOpen} onClick={onToggleChanges}>
+            Changes
+          </Button>
+        ) : null}
         {phaseCopy.stop !== 'hidden' ? (
           <Button variant="outline" size="small" disabled={phaseCopy.stop === 'disabled' || phaseCopy.stop === 'stopping'} onClick={onStop}>
             {phaseCopy.stop === 'stopping' ? 'Stopping…' : 'Stop'}

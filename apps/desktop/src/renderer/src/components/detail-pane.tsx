@@ -7,9 +7,10 @@ export interface DetailPaneProps {
   readonly onClose: () => void
   readonly children: ReactNode
   readonly className?: string
+  readonly 'data-slot'?: string
 }
 
-export function DetailPane({ onClose, children, className }: DetailPaneProps) {
+export function DetailPane({ onClose, children, className, 'data-slot': dataSlot }: DetailPaneProps) {
   function handleKeyDown(event: KeyboardEvent): void {
     if (event.key === 'Escape') {
       event.stopPropagation()
@@ -21,6 +22,7 @@ export function DetailPane({ onClose, children, className }: DetailPaneProps) {
     <div
       ref={(el) => el?.focus()}
       role="complementary"
+      data-slot={dataSlot}
       tabIndex={-1}
       onKeyDown={handleKeyDown}
       className={cn(

@@ -82,4 +82,14 @@ describe('sessionSearchFromRaw', () => {
     expect(sessionSearchFromRaw({}).key).toBeNull()
     expect(sessionSearchFromRaw({ key: '' }).key).toBeNull()
   })
+
+  it('reads pane=changes, null for anything else', () => {
+    expect(sessionSearchFromRaw({ pane: 'changes' }).pane).toBe('changes')
+    expect(sessionSearchFromRaw({}).pane).toBeNull()
+    expect(sessionSearchFromRaw({ pane: '' }).pane).toBeNull()
+    expect(sessionSearchFromRaw({ pane: 'CHANGES' }).pane).toBeNull()
+    expect(sessionSearchFromRaw({ pane: 'diff' }).pane).toBeNull()
+    expect(sessionSearchFromRaw({ pane: 42 }).pane).toBeNull()
+    expect(sessionSearchFromRaw({ pane: { kind: 'changes' } }).pane).toBeNull()
+  })
 })
