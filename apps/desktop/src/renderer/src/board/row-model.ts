@@ -12,6 +12,7 @@ import { actionRefusalNote, actionResultCopy, decisionButtonLabel, decisionRefus
 // Mirrors board/sections.ts's own waiting-on-you predicate, so a row's
 // section and its pill colour can never disagree.
 export function pillStatusFor(row: BoardItemRow): PillStatus {
+  if (row.displayStatus.status === 'interrupted') return 'attention'
   if (needsYouReasonOf(row.stageLabel?.key) !== undefined) return 'attention'
   if (row.displayStatus.status === 'stalled') return 'danger'
   if (row.displayStatus.status === 'in-flight') return 'working'

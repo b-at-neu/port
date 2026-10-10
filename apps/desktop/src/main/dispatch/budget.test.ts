@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { budgetLiveSets, budgetRoute, dispatchArgs, escalationBody, parseSweepLine, parseVerdict, resetArgs, sweepArgs } from './budget'
+import { budgetLiveSets, budgetRoute, dispatchArgs, escalationBody, parseSweepLine, parseVerdict, resetArgs, sumCostUsd, sweepArgs } from './budget'
 import type { StageRecord } from './launch'
 import type { SessionKey } from '../../shared/hosting/types'
 import type { TickActionable } from '../../shared/tick/types'
@@ -88,8 +88,8 @@ describe('budgetLiveSets', () => {
     expect(live).toContain('impl #52')
   })
 
-  it('an ended record not covered by a live record is completed', () => {
-    const { completed, live } = budgetLiveSets([record({ state: 'ended' })])
+  it('an ended record whose outcome is completed, not covered by a live record, is completed', () => {
+    const { completed, live } = budgetLiveSets([record({ state: 'ended', outcome: { kind: 'completed', detail: null, costUsd: 1, resetsAt: null, worktree: 'removed' } })])
     expect(completed).toEqual(['impl #52'])
     expect(live).not.toContain('impl #52')
   })
@@ -100,11 +100,31 @@ describe('budgetLiveSets', () => {
     expect(completed).not.toContain('impl #52')
   })
 
+  it('an ended record that crashed or errored closes as lost, not completed', () => {
+    const { completed, live } = budgetLiveSets([record({ state: 'ended', outcome: { kind: 'error', detail: 'boom', costUsd: 1, resetsAt: null, worktree: 'kept' } })])
+    expect(live).not.toContain('impl #52')
+    expect(completed).not.toContain('impl #52')
+  })
+
   it('a live record for a description wins over an ended one for the same description', () => {
-    const records = [record({ sessionKey: 's1' as SessionKey, state: 'ended' }), record({ sessionKey: 's2' as SessionKey, state: 'started' })]
+    const records = [
+      record({ sessionKey: 's1' as SessionKey, state: 'ended', outcome: { kind: 'completed', detail: null, costUsd: 1, resetsAt: null, worktree: 'removed' } }),
+      record({ sessionKey: 's2' as SessionKey, state: 'started' }),
+    ]
     const { live, completed } = budgetLiveSets(records)
     expect(live).toContain('impl #52')
     expect(completed).not.toContain('impl #52')
+  })
+})
+
+describe('sumCostUsd', () => {
+  it('sums every record carrying a known cost', () => {
+    const records = [record({ outcome: { kind: 'completed', detail: null, costUsd: 1.5, resetsAt: null, worktree: 'removed' } }), record({ sessionKey: 's2' as SessionKey, outcome: { kind: 'error', detail: null, costUsd: 0.5, resetsAt: null, worktree: 'kept' } })]
+    expect(sumCostUsd(records)).toBe(2)
+  })
+
+  it('returns null when no record carries a known cost', () => {
+    expect(sumCostUsd([record({ outcome: null })])).toBeNull()
   })
 })
 

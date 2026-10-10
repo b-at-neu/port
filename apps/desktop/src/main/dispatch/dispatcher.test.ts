@@ -203,7 +203,7 @@ describe('createDispatcher — ownership', () => {
     const dispatcher = createDispatcher(baseDeps())
     await dispatcher.consider(snapshotWith([tickReport()]))
     expect(dispatcher.status()).toEqual([
-      { repoId: REPO_ID, owner: 'none', state: { kind: 'idle' }, runState: 'dispatching', ownedSince: null, unreadableMessage: null, budget: null, observed: [] },
+      { repoId: REPO_ID, owner: 'none', state: { kind: 'idle' }, runState: 'dispatching', ownedSince: null, unreadableMessage: null, budget: null, observed: [], denials: [], interrupted: [] },
     ])
   })
 
@@ -211,7 +211,7 @@ describe('createDispatcher — ownership', () => {
     const dispatcher = createDispatcher(baseDeps({ readOwnership: () => Promise.resolve(UNREADABLE_OWNERSHIP) }))
     await dispatcher.consider(snapshotWith([tickReport()]))
     expect(dispatcher.status()).toEqual([
-      { repoId: REPO_ID, owner: 'unreadable', state: { kind: 'idle' }, runState: 'dispatching', ownedSince: null, unreadableMessage: 'bad', budget: null, observed: [] },
+      { repoId: REPO_ID, owner: 'unreadable', state: { kind: 'idle' }, runState: 'dispatching', ownedSince: null, unreadableMessage: 'bad', budget: null, observed: [], denials: [], interrupted: [] },
     ])
   })
 
@@ -258,6 +258,21 @@ describe('createDispatcher — re-take on relaunch (#331)', () => {
     )
     await dispatcher.consider(snapshotWith([tickReport()]))
     expect(took).toBe(false)
+  })
+})
+
+describe('createDispatcher — stageLiveness', () => {
+  it('is null for a repository this app does not own', async () => {
+    const dispatcher = createDispatcher(baseDeps())
+    await dispatcher.consider(snapshotWith([tickReport()]))
+    expect(dispatcher.stageLiveness(REPO_ID)).toBeNull()
+  })
+
+  it('reports live and interrupted descriptions once this app owns the repository', async () => {
+    const interrupted = [{ id: 'i1', repoId: REPO_ID, agent: 'plan' as const, number: 7, kind: 'issue' as const, trigger: 'ready' as const, inFlight: 'planning' as const, model: 'opus', claudeSessionId: null, worktree: { path: '/wt', branch: 'b', baseSha: 's' }, startedAt: 't', reason: 'crash' as const, detail: null, resetsAt: null, costUsd: null }]
+    const dispatcher = createDispatcher(baseDeps({ readOwnership: () => Promise.resolve(OWNED_BY_APP), interrupted: () => interrupted }))
+    await dispatcher.consider(snapshotWith([tickReport()]))
+    expect(dispatcher.stageLiveness(REPO_ID)).toEqual({ live: [], interrupted: ['plan #7'] })
   })
 })
 

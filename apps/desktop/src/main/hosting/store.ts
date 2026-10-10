@@ -108,8 +108,8 @@ export interface StartSessionParams {
   readonly workspace: SessionWorkspace
   /** The restore path's own resolved title — omitted for every other start path. */
   readonly initialTitle?: string | null
-  /** Non-null only for a stage launch — passed straight through to the handle; `main/stage/` is the only caller that sets it. */
-  readonly stage?: { readonly tag: StageTag; readonly agentName: string; readonly model: string; readonly sessionRequiredPaths: readonly string[] } | null
+  /** Non-null only for a stage launch — passed straight through to the handle; `main/stage/` is the only caller that sets it. `onDeny` fires once per denied tool call, never for a protected-path or interaction `ask`. */
+  readonly stage?: { readonly tag: StageTag; readonly agentName: string; readonly model: string; readonly sessionRequiredPaths: readonly string[]; readonly onDeny?: (toolName: string, input: Readonly<Record<string, unknown>>) => void } | null
 }
 
 export interface HostedStore {

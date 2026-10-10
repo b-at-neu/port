@@ -116,5 +116,10 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'session:pin:set': (request) => ({ ok: true, marks: { ...FIXTURE_MARKS, pinned: request.pinned ? [...FIXTURE_MARKS.pinned, request.sessionId] : FIXTURE_MARKS.pinned.filter((id) => id !== request.sessionId) } }),
     'session:archive:set': (request) => ({ ok: true, marks: { ...FIXTURE_MARKS, archived: request.archived ? [...FIXTURE_MARKS.archived, request.sessionId] : FIXTURE_MARKS.archived.filter((id) => id !== request.sessionId) } }),
     'session:task:stop': () => ({ ok: true }),
+
+    'stage:allow': () => ({ kind: 'unknown-denial' }),
+    'stage:dismiss-denial': () => undefined,
+    'stage:resume': () => ({ kind: 'unknown-stage' }),
+    'stage:restart': () => ({ kind: 'unknown-stage' }),
   }
 }

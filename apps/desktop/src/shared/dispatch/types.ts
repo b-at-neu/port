@@ -5,6 +5,7 @@ import type { RepoId } from '../repos'
 import type { StageAgent, TickObservationKind } from '../tick/types'
 import type { WriteOutcome } from '../writes/types'
 import type { StageOutcome } from '../hosting/stage'
+import type { InterruptedStage, StageDenial } from '../stage/types'
 
 /** `dispatch.json`'s own per-repository run state — `dispatching`, `draining` (scoped to one repository), or `paused` (the hard stop: the transition into it also stops every in-flight agent). */
 export const RUN_STATES = ['dispatching', 'draining', 'paused'] as const
@@ -124,6 +125,8 @@ export interface BudgetStatus {
   readonly line: string | null
   readonly problem: string | null
   readonly notes: readonly BudgetNote[]
+  /** The sum of every tracked outcome's `costUsd` this app run — `null` when none is known yet. Accounting only; the shipped ceiling stays wall-clock. */
+  readonly costUsd: number | null
 }
 
 /** `BoardSnapshot.dispatch`'s own one-row-per-ready-repository shape — `state` is always `{ kind: 'idle' }` when `owner !== 'app'`. */
@@ -141,4 +144,8 @@ export interface RepoDispatchStatus {
   readonly budget: BudgetStatus | null
   /** The machine-observation writes this app has made for this repository, newest last — `[]` while `owner !== 'app'`, or before the first observation pass runs. */
   readonly observed: readonly ObservationRecord[]
+  /** Off-allowlist tool calls a stage session's policy denied, deduped by proposed rule and bounded to 20 — in-memory only, dropped on relaunch. */
+  readonly denials: readonly StageDenial[]
+  /** Stage sessions that ended without reaching a hand-back — survive a relaunch through `stage-sessions.json`, cleared once the item no longer carries the in-flight label. */
+  readonly interrupted: readonly InterruptedStage[]
 }

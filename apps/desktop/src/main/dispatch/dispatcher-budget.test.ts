@@ -220,7 +220,7 @@ describe('createDispatcher — budget bookkeeping', () => {
     await dispatcher.consider(snapshotWith([tickReport()]))
     expect(resetCalls).toBe(1)
     expect(sweepCalls).toBe(1)
-    expect(dispatcher.status()[0]?.budget).toEqual({ line: 'session 1 dispatch · 2m 00s agent wall-clock', problem: null, notes: [] })
+    expect(dispatcher.status()[0]?.budget).toEqual({ line: 'session 1 dispatch · 2m 00s agent wall-clock', problem: null, notes: [], costUsd: null })
 
     await dispatcher.consider(snapshotWith([tickReport()]))
     expect(resetCalls).toBe(1) // never resets twice

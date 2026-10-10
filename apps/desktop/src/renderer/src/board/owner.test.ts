@@ -11,7 +11,7 @@ const WRITE_FAILED = { kind: 'write-failed' as const, classification: 'unknown' 
 const REPO_ID = 'repo-a' as RepoId
 
 function status(overrides: Partial<RepoDispatchStatus> = {}): RepoDispatchStatus {
-  return { repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, runState: 'dispatching', ownedSince: null, unreadableMessage: null, budget: null, observed: [], ...overrides }
+  return { repoId: REPO_ID, owner: 'app', state: { kind: 'idle' }, runState: 'dispatching', ownedSince: null, unreadableMessage: null, budget: null, observed: [], denials: [], interrupted: [], ...overrides }
 }
 
 function record(overrides: Partial<ObservationRecord> = {}): ObservationRecord {
@@ -114,7 +114,7 @@ describe('ownerLineCopy', () => {
   })
 
   it('the budget clause is appended for every owner, including terminal and unreadable', () => {
-    const budget = { line: 'session 2 dispatches · 41m 12s agent wall-clock', problem: null, notes: [] }
+    const budget = { line: 'session 2 dispatches · 41m 12s agent wall-clock', problem: null, notes: [], costUsd: null }
     expect(ownerLineCopy(status({ budget }))).toContain('Budget: session 2 dispatches')
     expect(ownerLineCopy(status({ owner: 'terminal', budget }))).toContain('Budget: session 2 dispatches')
     expect(ownerLineCopy(status({ owner: 'unreadable', budget }))).toContain('Budget: session 2 dispatches')
@@ -122,6 +122,16 @@ describe('ownerLineCopy', () => {
 
   it('no budget clause when the status carries none', () => {
     expect(ownerLineCopy(status())).not.toContain('Budget:')
+  })
+
+  it('appends the spent clause when costUsd is known', () => {
+    const budget = { line: 'session 2 dispatches', problem: null, notes: [], costUsd: 4.123 }
+    expect(ownerLineCopy(status({ budget }))).toContain('· $4.12 spent')
+  })
+
+  it('omits the spent clause when costUsd is unknown', () => {
+    const budget = { line: 'session 2 dispatches', problem: null, notes: [], costUsd: null }
+    expect(ownerLineCopy(status({ budget }))).not.toContain('spent')
   })
 
   it('no-launcher holds visibly', () => {
@@ -232,7 +242,7 @@ describe('controlFor', () => {
 
 describe('budgetNoteLines', () => {
   it('empty when this app does not own dispatch, even with a budget present', () => {
-    const budget = { line: null, problem: null, notes: [{ kind: 'held' as const, number: 1, line: 'held' }] }
+    const budget = { line: null, problem: null, notes: [{ kind: 'held' as const, number: 1, line: 'held' }], costUsd: null }
     expect(budgetNoteLines(status({ owner: 'terminal', budget }))).toEqual([])
   })
 
@@ -241,7 +251,7 @@ describe('budgetNoteLines', () => {
   })
 
   it('one line per note, plus the sweep problem line when present', () => {
-    const budget = { line: null, problem: 'timed out', notes: [{ kind: 'held' as const, number: 1, line: 'held note' }] }
+    const budget = { line: null, problem: 'timed out', notes: [{ kind: 'held' as const, number: 1, line: 'held note' }], costUsd: null }
     const lines = budgetNoteLines(status({ budget }))
     expect(lines).toEqual(['held note', '⚠ Budget sweep failed (timed out) — finished dispatches stay open and keep counting until a sweep succeeds.'])
   })

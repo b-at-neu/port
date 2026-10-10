@@ -51,7 +51,8 @@ export interface TickHeld {
 }
 
 /** An in-flight claim's resolution. `session-required` never reaches `classifyUnmatched` — an operator's own interactive session has no `TaskList` entry, so it must never read as a stall. `matched` is this app's analogue of a live `TaskList` hit. `reset` is renamed `stalled-confirmed` here, since this app resets nothing. */
-export type TickClaimClass = 'session-required' | 'matched' | 'no-record' | 'suspect' | 'stalled-confirmed' | 'capped'
+/** `interrupted` is a new claim class the stall ladder never resets — a transcript is activity, never liveness; only Resume/Restart (operator-only) ever clears it. */
+export type TickClaimClass = 'session-required' | 'matched' | 'no-record' | 'suspect' | 'stalled-confirmed' | 'capped' | 'interrupted'
 
 export interface TickClaim {
   readonly number: number

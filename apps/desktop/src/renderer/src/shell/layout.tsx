@@ -10,6 +10,8 @@ import { GateDialog } from '../gate/dialog'
 import { DecisionDialog } from '../decision/dialog'
 import { PermissionDialog } from '../permission/dialog'
 import { NewSessionDialog } from '../session/new-session-dialog'
+import { AllowDialog } from '../needs-you/allow-dialog'
+import { RestartDialog } from '../needs-you/restart-dialog'
 
 export function ShellLayout() {
   return (
@@ -26,6 +28,8 @@ export function ShellLayout() {
       <DecisionDialog />
       <PermissionDialog />
       <NewSessionDialog />
+      <AllowDialog />
+      <RestartDialog />
       <Toaster />
     </>
   )

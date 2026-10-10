@@ -63,6 +63,8 @@ export interface CreatePipelineWatcherParams {
   readonly dispatchStatus?: () => readonly RepoDispatchStatus[]
   /** `planTick`'s own `holdSessionRequired` input, read fresh per repository. `undefined` reads as `true` — the terminal-cockpit default, unchanged. */
   readonly holdSessionRequired?: (repoId: RepoId) => boolean
+  /** `planTick`'s own `stageLiveness` input, read fresh per repository. `undefined` reads as `null` for every repository — byte-identical to today. */
+  readonly stageLiveness?: (repoId: RepoId) => { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null
 }
 
 export interface PipelineWatcher {
@@ -172,6 +174,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
           refreshMemo,
           checkDispositions,
           holdSessionRequired: params.holdSessionRequired?.(repository.repoId) ?? true,
+          stageLiveness: params.stageLiveness?.(repository.repoId) ?? null,
         })
       })
 

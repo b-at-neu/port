@@ -37,6 +37,8 @@ export interface PlanTickParams {
   readonly checkDispositions: Readonly<Record<string, Disposition>>
   /** `false` exactly when this app owns the repository and dispatches stage sessions itself — `SESSION REQUIRED` then holds nothing: `heldReasonOf` skips the `session-required` rung and `claimsOf` skips the `session-required` class. `true` (the terminal-cockpit default) is byte-identical to this field never having existed. */
   readonly holdSessionRequired: boolean
+  /** App-owned repositories only: this repository's own live and interrupted stage sessions, as `${agent} #${number}` descriptions. `null`/`undefined` (terminal-owned or unowned) is byte-identical to today — `item.status`/`startedTasks` still decide. Non-null ignores `item.status` entirely: a `live` claim is `matched`, an `interrupted` one is `interrupted`, anything else goes straight to the ledger ladder. */
+  readonly stageLiveness?: { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null
 }
 
 function emptyReport(repoId: RepoId, displayName: string, blind: TickBlind): TickReport {
@@ -238,7 +240,15 @@ function actionableAndHeld(
   return { actionable: [...ungated, ...gatedActionable], held }
 }
 
-function claimsOf(items: readonly ReconciledItem[], repoId: RepoId, ledger: DispatchLedger, startedTasks: readonly string[], readAt: string | null, holdSessionRequired: boolean): readonly TickClaim[] {
+function claimsOf(
+  items: readonly ReconciledItem[],
+  repoId: RepoId,
+  ledger: DispatchLedger,
+  startedTasks: readonly string[],
+  readAt: string | null,
+  holdSessionRequired: boolean,
+  stageLiveness: { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null,
+): readonly TickClaim[] {
   const claims: TickClaim[] = []
   for (const item of items) {
     if (item.stage !== 'in-flight') continue
@@ -249,13 +259,28 @@ function claimsOf(items: readonly ReconciledItem[], repoId: RepoId, ledger: Disp
       claims.push({ number: item.number, kind: item.kind, inFlight, class: 'session-required', retryKey: null })
       continue
     }
-    // Either source is enough to hold a reset back, so a reset never fires against an agent this
-    // process itself just dispatched before the session scan has caught up to it.
+
     const agentForInFlight = AGENT_FOR_IN_FLIGHT[inFlight]
-    const matchedByTask = agentForInFlight !== undefined && startedTasks.includes(`${agentForInFlight} #${String(item.number)}`)
-    if (item.status === 'in-flight' || matchedByTask) {
-      claims.push({ number: item.number, kind: item.kind, inFlight, class: 'matched', retryKey: null })
-      continue
+    const description = agentForInFlight !== undefined ? `${agentForInFlight} #${String(item.number)}` : null
+
+    if (stageLiveness !== null) {
+      if (description !== null && stageLiveness.live.includes(description)) {
+        claims.push({ number: item.number, kind: item.kind, inFlight, class: 'matched', retryKey: null })
+        continue
+      }
+      if (description !== null && stageLiveness.interrupted.includes(description)) {
+        claims.push({ number: item.number, kind: item.kind, inFlight, class: 'interrupted', retryKey: null })
+        continue
+      }
+      // A transcript `in-flight` status alone is no longer matched once this app owns liveness.
+    } else {
+      // Either source is enough to hold a reset back, so a reset never fires against an agent this
+      // process itself just dispatched before the session scan has caught up to it.
+      const matchedByTask = description !== null && startedTasks.includes(description)
+      if (item.status === 'in-flight' || matchedByTask) {
+        claims.push({ number: item.number, kind: item.kind, inFlight, class: 'matched', retryKey: null })
+        continue
+      }
     }
 
     const result = ledger.observeUnmatched(repoId, item.number, readAt)
@@ -269,6 +294,7 @@ function claimsOf(items: readonly ReconciledItem[], repoId: RepoId, ledger: Disp
 
 export function planTick(params: PlanTickParams): TickReport {
   const { repository, ledger, nextDecisionAt, now, reviewCycleCap, unknownStreaks, startedTasks, refreshMemo, checkDispositions, holdSessionRequired } = params
+  const stageLiveness = params.stageLiveness ?? null
 
   if (!repository.ok) {
     const blind: TickBlind = repository.reason === 'not-ready' ? { reason: 'not-ready' } : { reason: 'github-unavailable', message: repository.message }
@@ -291,7 +317,7 @@ export function planTick(params: PlanTickParams): TickReport {
   }
 
   const { actionable, held } = actionableAndHeld(repository.items, repository.viewer, repository.concurrency, reviewCycleCap, repository.repoId, unknownStreaks, holdSessionRequired)
-  const claims = claimsOf(repository.items, repository.repoId, ledger, startedTasks, readAt, holdSessionRequired)
+  const claims = claimsOf(repository.items, repository.repoId, ledger, startedTasks, readAt, holdSessionRequired, stageLiveness)
   const observations: readonly TickObservation[] = observationsOf({
     repoId: repository.repoId,
     items: repository.items,

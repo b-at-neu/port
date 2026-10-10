@@ -13,6 +13,7 @@ import type { DispatchControlResult } from './dispatch/types'
 import type { RuntimePreflight, RuntimeProbe } from './runtime/types'
 import type { GhStatus } from './gh/types'
 import type { BacklogResponse } from './backlog/types'
+import type { StageAllowResult, StageResumeResult, StageRestartResult } from './stage/types'
 import type {
   HostedSessionSnapshot,
   HostingCapacity,
@@ -321,6 +322,25 @@ export interface IpcMap {
     request: { sessionId: string; archived: boolean }
     response: SessionMarkResult
   }
+  /** The denial dialog's own write — `rule` is re-validated main-side, the renderer's edit is never trusted. The repository root comes from the registry by `repoId`, never a renderer-named path. */
+  'stage:allow': {
+    request: { repoId: RepoId; denialId: string; rule: string }
+    response: StageAllowResult
+  }
+  /** The denial row's own Dismiss — clears the item without touching the allowlist. */
+  'stage:dismiss-denial': {
+    request: { repoId: RepoId; denialId: string }
+    response: void
+  }
+  /** `id` is an app-minted registry id, never a `claudeSessionId`. */
+  'stage:resume': {
+    request: { id: string }
+    response: StageResumeResult
+  }
+  'stage:restart': {
+    request: { id: string }
+    response: StageRestartResult
+  }
 }
 
 export const IPC_CHANNELS = [
@@ -376,6 +396,10 @@ export const IPC_CHANNELS = [
   'session:pin:set',
   'session:archive:set',
   'session:task:stop',
+  'stage:allow',
+  'stage:dismiss-denial',
+  'stage:resume',
+  'stage:restart',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]

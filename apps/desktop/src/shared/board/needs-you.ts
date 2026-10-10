@@ -1,6 +1,9 @@
 // Pure "needs you" derivation, built on `projectBoard`'s own rows so
 // `actions`/`decisions` availability is reused, never re-derived.
 import type { BudgetNote } from '../dispatch/types'
+import type { HostedSessionSnapshot, SessionKey } from '../hosting/types'
+import type { AskQuestion } from '../hosting/controls'
+import type { StageDenial, InterruptedStage } from '../stage/types'
 import type { RepoId } from '../repos'
 import type { RepositoryState } from '../state/types'
 import type { TickClaim, TickHeld } from '../tick/types'
@@ -10,7 +13,7 @@ import type { BoardItemRow, BoardSnapshot } from './types'
 /** The four label-keyed kinds, each carrying the row they came from. */
 export type RowNeedsYouKind = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'blocked'
 
-export type NeedsYouKind = RowNeedsYouKind | 'budget' | 'held' | 'stalled'
+export type NeedsYouKind = RowNeedsYouKind | 'budget' | 'held' | 'stalled' | 'stage-question' | 'stage-questions' | 'stage-blocked' | 'stage-denial' | 'stage-interrupted'
 
 interface NeedsYouItemBase {
   readonly repoId: RepoId | null
@@ -33,6 +36,10 @@ export type NeedsYouItem =
   | (NeedsYouItemBase & { readonly kind: 'budget'; readonly note: BudgetNote })
   | (NeedsYouItemBase & { readonly kind: 'held'; readonly held: TickHeld })
   | (NeedsYouItemBase & { readonly kind: 'stalled'; readonly claim: TickClaim })
+  | (NeedsYouItemBase & { readonly kind: 'stage-question'; readonly sessionKey: SessionKey; readonly permissionId: string; readonly questions: readonly AskQuestion[] })
+  | (NeedsYouItemBase & { readonly kind: 'stage-questions' | 'stage-blocked'; readonly sessionKey: SessionKey; readonly text: string | null })
+  | (NeedsYouItemBase & { readonly kind: 'stage-denial'; readonly denial: StageDenial })
+  | (NeedsYouItemBase & { readonly kind: 'stage-interrupted'; readonly interrupted: InterruptedStage })
 
 // Every other stage key carries no "needs you" kind at all.
 const ROW_KIND: Readonly<Partial<Record<string, RowNeedsYouKind>>> = {
@@ -74,8 +81,15 @@ function compareItems(a: NeedsYouItem, b: NeedsYouItem, displayNameOf: ReadonlyM
   return (b.number ?? 0) - (a.number ?? 0)
 }
 
-/** One entry per (repoId, number, kind), newest `at` first where known, then by repo then number descending. */
-export function needsYouItems(snapshot: BoardSnapshot, now: Date): readonly NeedsYouItem[] {
+const STAGE_HANDBACK_TEXT_CAP = 120
+
+function stageHandbackText(result: HostedSessionSnapshot['lastResult']): string | null {
+  if (result?.text === null || result?.text === undefined) return null
+  return result.text.length > STAGE_HANDBACK_TEXT_CAP ? `${result.text.slice(0, STAGE_HANDBACK_TEXT_CAP)}…` : result.text
+}
+
+/** One entry per (repoId, number, kind), newest `at` first where known, then by repo then number descending. `sessions` is `session:list`'s own read — `[]` when the caller has none (the empty default keeps every pre-existing call site byte-identical). */
+export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: readonly HostedSessionSnapshot[] = []): readonly NeedsYouItem[] {
   const projection = projectBoard({ snapshot, groupBy: 'repo', now })
   const rows = projection.groups.flatMap((group) => group.rows)
   const rowByKey = new Map<string, BoardItemRow>(rows.map((row) => [rowKey(row.item.repoId, row.item.number), row]))
@@ -83,6 +97,70 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date): readonly Need
   const displayNameOf = new Map<RepoId, string>(readyRepos(snapshot).map((repo) => [repo.repoId, repo.displayName]))
 
   const items: NeedsYouItem[] = []
+
+  // A live stage session with a pending AskUserQuestion never also produces a `stage-questions` item.
+  const stageQuestionNumbers = new Set<string>()
+  for (const session of sessions) {
+    if (session.stage === null || session.repoId === null) continue
+    const oldest = [...session.pendingPermissions].sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))[0]
+    if (oldest === undefined || oldest.interaction?.kind !== 'question') continue
+    stageQuestionNumbers.add(`${session.repoId}:${String(session.stage.number)}`)
+    const matched = rowByKey.get(rowKey(session.repoId, session.stage.number)) ?? null
+    items.push({
+      kind: 'stage-question',
+      repoId: session.repoId,
+      repo: matched?.item.repo ?? null,
+      number: session.stage.number,
+      title: matched?.item.title ?? null,
+      url: matched?.item.url ?? null,
+      at: oldest.requestedAt,
+      matchedRow: matched,
+      sessionKey: session.sessionKey,
+      permissionId: oldest.permissionId,
+      questions: oldest.interaction.questions,
+    })
+  }
+
+  for (const session of sessions) {
+    if (session.stage === null || session.repoId === null || session.phase === 'ended') continue
+    const outcomeKind = session.lastResult?.text?.startsWith('BLOCKED:') === true ? 'stage-blocked' : session.lastResult?.text?.includes('QUESTIONS FOR HUMAN:') === true ? 'stage-questions' : null
+    if (outcomeKind === null) continue
+    if (stageQuestionNumbers.has(`${session.repoId}:${String(session.stage.number)}`)) continue
+    const matched = rowByKey.get(rowKey(session.repoId, session.stage.number)) ?? null
+    items.push({
+      kind: outcomeKind,
+      repoId: session.repoId,
+      repo: matched?.item.repo ?? null,
+      number: session.stage.number,
+      title: matched?.item.title ?? null,
+      url: matched?.item.url ?? null,
+      at: session.lastResult?.at ?? null,
+      matchedRow: matched,
+      sessionKey: session.sessionKey,
+      text: stageHandbackText(session.lastResult),
+    })
+  }
+
+  for (const dispatch of snapshot.dispatch) {
+    for (const denial of dispatch.denials) {
+      const matched = rowByKey.get(rowKey(dispatch.repoId, denial.number)) ?? null
+      items.push({ kind: 'stage-denial', repoId: dispatch.repoId, repo: matched?.item.repo ?? null, number: denial.number, title: matched?.item.title ?? null, url: matched?.item.url ?? null, at: denial.at, matchedRow: matched, denial })
+    }
+    for (const interrupted of dispatch.interrupted) {
+      const matched = rowByKey.get(rowKey(dispatch.repoId, interrupted.number)) ?? null
+      items.push({
+        kind: 'stage-interrupted',
+        repoId: dispatch.repoId,
+        repo: matched?.item.repo ?? null,
+        number: interrupted.number,
+        title: matched?.item.title ?? null,
+        url: matched?.item.url ?? null,
+        at: interrupted.startedAt,
+        matchedRow: matched,
+        interrupted,
+      })
+    }
+  }
 
   for (const row of rows) {
     const kind = needsYouReasonOf(row.stageLabel?.key)

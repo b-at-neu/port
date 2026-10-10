@@ -18,6 +18,7 @@ export interface TicketRowProps {
 }
 
 function phaseLabel(row: BoardItemRow): string {
+  if (row.displayStatus.status === 'interrupted') return 'Interrupted'
   return row.stageLabel !== null ? (PHASE_NAMES[row.stageLabel.key] ?? row.stageLabel.key) : 'Unstaged'
 }
 
