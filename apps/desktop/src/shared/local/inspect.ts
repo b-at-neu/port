@@ -2,6 +2,7 @@
 import type { RepoId } from '../repos'
 import type { SessionRecord, SessionRole, SessionScan } from '../sessions/types'
 import { shapeOf } from './shape'
+import { summarizeDenials } from './summary'
 import type { DenialActor, DenialDecision, DenialsFailureKind, DenialSummary, DenialsRead } from './types'
 
 export { shapeOf } from './shape'
@@ -73,8 +74,10 @@ export type DenialInspection =
       readonly present: true
       readonly path: string
       readonly readAt: string
-      /** Passed through by reference, never recomputed, so the two can never disagree. */
+      /** The whole file's own total, passed through by reference, never recomputed — "of N in the log" in the meta strip, independent of `limit`. */
       readonly summary: DenialSummary
+      /** The analysed entries' own total — every grouping invariant is reconciled against this, never `summary`. */
+      readonly window: DenialSummary
       readonly attribution: AttributionTally
       readonly byActor: readonly ActorGroup[]
       readonly byShape: readonly ShapeGroup[]
@@ -395,6 +398,7 @@ export function inspectDenials(input: InspectDenialsInput): DenialInspection {
     path: read.path,
     readAt: read.readAt,
     summary: read.summary,
+    window: summarizeDenials(read.entries),
     attribution: tally,
     byActor,
     byShape,
