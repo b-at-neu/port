@@ -1,7 +1,4 @@
-// Every pure string the Repositories screen's Denials tab renders. No DOM
-// here. Every count is reconciled against `window` (the analysed entries),
-// never `summary` (the whole log) — a denial log's line count is never
-// presented as a denial count (ENGINEERING §4).
+// Every pure string the Repositories screen's Denials tab renders. Every count comes from `window`, never the whole-file `summary`.
 import type { AttributionTally, SessionAttribution } from '../../../shared/local/inspect'
 import type { DenialActor, DenialSummary } from '../../../shared/local/types'
 
