@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, type Mock } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createStageLauncher } from './launcher'
 import type { StageLaunchRequest } from '../dispatch/launch'
 import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '../../shared/hosting/types'
@@ -54,7 +54,7 @@ describe('createStageLauncher.launch', () => {
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date('2026-01-01T00:00:00Z') })
     const result = await launcher.launch(request())
     expect(result).toEqual({ ok: true, sessionKey: 'hosted-1' })
-    expect(deps.store.start as Mock).toHaveBeenCalledWith(
+    expect(vi.mocked(deps.store.start)).toHaveBeenCalledWith(
       expect.objectContaining({ repoId: WIDGETS_ID, mode: { kind: 'fresh' }, stage: expect.objectContaining({ agentName: 'port:impl-agent', model: 'sonnet' }) }),
     )
     expect(deps.send).toHaveBeenCalledWith('hosted-1', 'Run your pipeline stage for #52.')
