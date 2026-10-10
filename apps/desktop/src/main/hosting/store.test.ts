@@ -290,7 +290,7 @@ describe('createHostedStore', () => {
   it('a resume start threads deps.readHistory through to the handle, never the real filesystem', async () => {
     const readHistory = vi.fn(() => Promise.resolve({ kind: 'loaded' as const, entries: [], omittedBefore: 0, sourceSessionId: 'parent-1' }))
     const store = createHostedStore(baseDeps({ readHistory }))
-    const result = await store.start({ repoId: REPO_ID, mode: { kind: 'resume', sessionId: 'parent-1' }, cwd: '/repo' })
+    const result = await store.start({ repoId: REPO_ID, mode: { kind: 'resume', sessionId: 'parent-1' }, workspace: WORKSPACE })
     if (!result.ok) throw new Error('unreachable')
     expect(readHistory).toHaveBeenCalledWith({ kind: 'resume', sessionId: 'parent-1' })
     const attached = store.attach(result.snapshot.sessionKey)
@@ -301,7 +301,7 @@ describe('createHostedStore', () => {
   it('a fork start surfaces a failed history read on the handle rather than throwing', async () => {
     const readHistory = vi.fn(() => Promise.resolve({ kind: 'failed' as const, message: 'disk error' }))
     const store = createHostedStore(baseDeps({ readHistory }))
-    const result = await store.start({ repoId: REPO_ID, mode: { kind: 'fork', sessionId: 'parent-1' }, cwd: '/repo' })
+    const result = await store.start({ repoId: REPO_ID, mode: { kind: 'fork', sessionId: 'parent-1' }, workspace: WORKSPACE })
     if (!result.ok) throw new Error('unreachable')
     const attached = store.attach(result.snapshot.sessionKey)
     if (!attached.ok) throw new Error('unreachable')
@@ -450,55 +450,5 @@ describe('createHostedStore', () => {
     expect(store.attach(started.snapshot.sessionKey)).toMatchObject({ ok: true })
   })
 
-  it('rename() reports unknown-session and not-ready before renaming on disk', async () => {
-    const store = createHostedStore(baseDeps())
-    const key = 'hosted-999' as import('../../shared/hosting/types').SessionKey
-    await expect(store.rename(key, 'New title')).resolves.toEqual({ ok: false, kind: 'unknown-session' })
-    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
-    if (!started.ok) throw new Error('unreachable')
-    await expect(store.rename(started.snapshot.sessionKey, 'New title')).resolves.toEqual({ ok: false, kind: 'not-ready' })
-  })
-
-  it('rename() renames on disk then applies the title to the handle', async () => {
-    const renameSession = vi.fn(() => Promise.resolve(undefined))
-    const box: { deliver: ((message: unknown) => void) | null } = { deliver: null }
-    const query = (): HostedQuery =>
-      ({
-        interrupt: vi.fn(),
-        close: vi.fn(),
-        [Symbol.asyncIterator]() {
-          return { next: () => new Promise<IteratorResult<unknown>>((resolve) => (box.deliver = (message) => resolve({ done: false, value: message }))) }
-        },
-      }) as unknown as HostedQuery
-    const store = createHostedStore(baseDeps({ getSdk: () => Promise.resolve({ query, renameSession }) }))
-    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
-    if (!started.ok) throw new Error('unreachable')
-    box.deliver?.({ type: 'system', subtype: 'init', session_id: 'claude-1' })
-    await flush()
-    const result = await store.rename(started.snapshot.sessionKey, 'New title')
-    expect(result).toEqual({ ok: true })
-    expect(renameSession).toHaveBeenCalledWith('claude-1', 'New title', { dir: '/repo' })
-    expect(store.attach(started.snapshot.sessionKey)).toMatchObject({ snapshot: { title: 'New title' } })
-  })
-
-  it('rename() reports rename-failed and leaves the title unchanged on a rejection', async () => {
-    const renameSession = vi.fn(() => Promise.reject(new Error('disk full')))
-    const box: { deliver: ((message: unknown) => void) | null } = { deliver: null }
-    const query = (): HostedQuery =>
-      ({
-        interrupt: vi.fn(),
-        close: vi.fn(),
-        [Symbol.asyncIterator]() {
-          return { next: () => new Promise<IteratorResult<unknown>>((resolve) => (box.deliver = (message) => resolve({ done: false, value: message }))) }
-        },
-      }) as unknown as HostedQuery
-    const store = createHostedStore(baseDeps({ getSdk: () => Promise.resolve({ query, renameSession }) }))
-    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
-    if (!started.ok) throw new Error('unreachable')
-    box.deliver?.({ type: 'system', subtype: 'init', session_id: 'claude-1' })
-    await flush()
-    const result = await store.rename(started.snapshot.sessionKey, 'New title')
-    expect(result).toEqual({ ok: false, kind: 'rename-failed', message: 'disk full' })
-    expect(store.attach(started.snapshot.sessionKey)).toMatchObject({ snapshot: { title: null } })
-  })
+  // `rename()` behaviour has its own file, store-rename.test.ts, to stay under the line limit.
 })
