@@ -3,6 +3,7 @@ import type { RepoId } from '../../shared/repos'
 import type { SessionKey } from '../../shared/hosting/types'
 import type { RegistryDeps } from '../registry'
 import type { HostedStore } from '../hosting/store'
+import type { ResolveStartTargetDeps, ResolvedStartTarget } from '../workspace/target'
 import {
   MAX_INVOKE_ARGS_CHARS,
   resolveSessionAttach,
@@ -17,9 +18,6 @@ import {
   resolveSessionList,
   resolveSessionPermissionAnswer,
   resolveSessionRename,
-  resolveSessionRestore,
-  resolveSessionRestoreDiscard,
-  resolveSessionRestoreList,
   resolveSessionSend,
   resolveSessionStart,
 } from './hosting'
@@ -58,7 +56,21 @@ const READY_ENTRY = {
   diagnostics: [],
 }
 
-const NOT_READY_ENTRY = { id: REPO_ID, path: '/repo', displayName: 'widgets', problem: { kind: 'directory-missing' as const }, diagnostics: [] }
+const WORKSPACE = { folder: '/repo', root: '/repo', worktree: null, base: null }
+const FOLDER_TARGET = { kind: 'folder' as const, folderId: 'folder-1', worktree: false }
+
+function targetDepsStub(overrides: Partial<ResolveStartTargetDeps> = {}): Omit<ResolveStartTargetDeps, 'repositories'> {
+  return {
+    git: () => {
+      throw new Error('git should not be invoked directly in this case')
+    },
+    recents: { load: () => Promise.resolve([]), record: () => Promise.resolve() },
+    exists: () => Promise.resolve(true),
+    readSessions: () => Promise.resolve({ ok: true, sessions: [] }),
+    createWorktree: () => Promise.resolve({ ok: false, message: 'should not be called' }),
+    ...overrides,
+  }
+}
 
 function storeStub(overrides: Partial<HostedStore> = {}): HostedStore {
   return {
@@ -148,59 +160,75 @@ function depsWith(overrides: Partial<HostingChannelDeps> = {}): HostingChannelDe
     listSessionFiles: () => {
       throw new Error('listSessionFiles should not be invoked in this case')
     },
+    resolveStartTarget: () => Promise.resolve({ ok: true, cwd: '/repo', workspace: WORKSPACE, repoId: REPO_ID, createdWorktree: null, recordPath: '/repo' } satisfies ResolvedStartTarget),
+    targetDeps: targetDepsStub(),
+    now: () => new Date('2026-01-01T00:00:00.000Z'),
+    removeCreatedWorktree: () => Promise.resolve(),
     ...overrides,
   }
 }
 
 describe('resolveSessionStart', () => {
-  it('rejects a missing repoId', async () => {
-    await expect(resolveSessionStart(registryDeps, { repoId: undefined as unknown as RepoId, mode: { kind: 'fresh' } }, depsWith())).rejects.toThrow(
-      "'session:start' requires a non-empty 'repoId'",
-    )
-  })
-
-  it('rejects an unregistered repoId', async () => {
-    const deps = depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [] }) })
-    await expect(resolveSessionStart(registryDeps, { repoId: REPO_ID, mode: { kind: 'fresh' } }, deps)).rejects.toThrow(
-      `found no repository registered with id '${REPO_ID}'`,
-    )
-  })
-
-  it('rejects a non-ready repoId', async () => {
-    const deps = depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [NOT_READY_ENTRY] }) })
-    await expect(resolveSessionStart(registryDeps, { repoId: REPO_ID, mode: { kind: 'fresh' } }, deps)).rejects.toThrow("requires a 'ready' repository")
-  })
-
   it('rejects an unrecognised mode.kind', async () => {
-    await expect(resolveSessionStart(registryDeps, { repoId: REPO_ID, mode: { kind: 'bogus' } as never }, depsWith())).rejects.toThrow(
+    await expect(resolveSessionStart(registryDeps, { target: FOLDER_TARGET, mode: { kind: 'bogus' } as never }, depsWith())).rejects.toThrow(
       "'session:start' requires 'mode.kind' to be one of fresh | resume | resume-at | fork",
     )
   })
 
   it('rejects resume with no sessionId', async () => {
-    await expect(resolveSessionStart(registryDeps, { repoId: REPO_ID, mode: { kind: 'resume', sessionId: '' } as never }, depsWith())).rejects.toThrow(
+    await expect(resolveSessionStart(registryDeps, { target: FOLDER_TARGET, mode: { kind: 'resume', sessionId: '' } as never }, depsWith())).rejects.toThrow(
       "'session:start' requires 'mode.kind'",
     )
   })
 
   it('rejects resume-at with no messageUuid', async () => {
     await expect(
-      resolveSessionStart(registryDeps, { repoId: REPO_ID, mode: { kind: 'resume-at', sessionId: 'x', messageUuid: '' } as never }, depsWith()),
+      resolveSessionStart(registryDeps, { target: FOLDER_TARGET, mode: { kind: 'resume-at', sessionId: 'x', messageUuid: '' } as never }, depsWith()),
     ).rejects.toThrow("'session:start' requires 'mode.kind'")
   })
 
-  it('accepts fresh and delegates to the store with the ready entry path as cwd', async () => {
-    const start = vi.fn(() => Promise.resolve({ ok: true as const, snapshot: {} as never }))
-    const deps = depsWith({ store: storeStub({ start }) })
-    await resolveSessionStart(registryDeps, { repoId: REPO_ID, mode: { kind: 'fresh' } }, deps)
-    expect(start).toHaveBeenCalledWith({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+  it('rejects a malformed target', async () => {
+    await expect(resolveSessionStart(registryDeps, { target: { kind: 'bogus' } as never, mode: { kind: 'fresh' } }, depsWith())).rejects.toThrow(
+      "'session:start' requires 'target.kind'",
+    )
   })
 
-  it('accepts resume-at with resumeDropsTurn omitted', async () => {
+  it('rejects a transcript target with mode.kind fresh', async () => {
+    await expect(resolveSessionStart(registryDeps, { target: { kind: 'transcript' }, mode: { kind: 'fresh' } }, depsWith())).rejects.toThrow(
+      "'session:start' requires 'target.kind'",
+    )
+  })
+
+  it('resolves the target and delegates to the store with its workspace', async () => {
     const start = vi.fn(() => Promise.resolve({ ok: true as const, snapshot: {} as never }))
     const deps = depsWith({ store: storeStub({ start }) })
-    await resolveSessionStart(registryDeps, { repoId: REPO_ID, mode: { kind: 'resume-at', sessionId: 'x', messageUuid: 'y' } as never }, deps)
-    expect(start).toHaveBeenCalledTimes(1)
+    await resolveSessionStart(registryDeps, { target: FOLDER_TARGET, mode: { kind: 'fresh' } }, deps)
+    expect(start).toHaveBeenCalledWith({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
+  })
+
+  it('records recents on a successful start with a non-null recordPath', async () => {
+    const start = vi.fn(() => Promise.resolve({ ok: true as const, snapshot: {} as never }))
+    const record = vi.fn(() => Promise.resolve())
+    const deps = depsWith({ store: storeStub({ start }), targetDeps: targetDepsStub({ recents: { load: () => Promise.resolve([]), record } }) })
+    await resolveSessionStart(registryDeps, { target: FOLDER_TARGET, mode: { kind: 'fresh' } }, deps)
+    expect(record).toHaveBeenCalledWith('/repo', expect.any(Date))
+  })
+
+  it('removes a created worktree when the store start fails', async () => {
+    const start = vi.fn(() => Promise.resolve({ ok: false as const, kind: 'at-capacity' as const, limit: 4 }))
+    const removeCreatedWorktree = vi.fn(() => Promise.resolve())
+    const deps = depsWith({
+      store: storeStub({ start }),
+      resolveStartTarget: () => Promise.resolve({ ok: true, cwd: '/repo/.claude/worktrees/session-a', workspace: WORKSPACE, repoId: REPO_ID, createdWorktree: { path: '/repo/.claude/worktrees/session-a' }, recordPath: '/repo' }),
+      removeCreatedWorktree,
+    })
+    await resolveSessionStart(registryDeps, { target: { ...FOLDER_TARGET, worktree: true }, mode: { kind: 'fresh' } }, deps)
+    expect(removeCreatedWorktree).toHaveBeenCalledWith('/repo/.claude/worktrees/session-a')
+  })
+
+  it('returns a typed target failure without ever reaching the store', async () => {
+    const deps = depsWith({ resolveStartTarget: () => Promise.resolve({ ok: false, kind: 'not-git' }) })
+    await expect(resolveSessionStart(registryDeps, { target: { ...FOLDER_TARGET, worktree: true }, mode: { kind: 'fresh' } }, deps)).resolves.toEqual({ ok: false, kind: 'not-git' })
   })
 })
 
@@ -316,13 +344,29 @@ describe('resolveSessionPermissionAnswer', () => {
 
 describe('resolveSessionDismiss', () => {
   it('rejects a missing sessionKey', () => {
-    expect(() => resolveSessionDismiss({ sessionKey: '' as SessionKey }, depsWith())).toThrow("'session:dismiss' requires a non-empty 'sessionKey'")
+    expect(() => resolveSessionDismiss({ sessionKey: '' as SessionKey, worktree: 'keep' }, depsWith({ store: storeStub({ snapshotOf: () => null }) }))).toThrow(
+      "'session:dismiss' requires a non-empty 'sessionKey'",
+    )
+  })
+
+  it('rejects an unrecognised worktree choice', () => {
+    expect(() => resolveSessionDismiss({ sessionKey: SESSION_KEY, worktree: 'bogus' as never }, depsWith({ store: storeStub({ snapshotOf: () => null }) }))).toThrow(
+      "'session:dismiss' requires 'worktree' to be one of keep, remove, force",
+    )
+  })
+
+  it('rejects a non-keep choice for a non-worktree session', () => {
+    const snapshotOf = () => ({ workspace: { folder: '/repo', root: '/repo', worktree: null, base: null } }) as never
+    expect(() => resolveSessionDismiss({ sessionKey: SESSION_KEY, worktree: 'remove' }, depsWith({ store: storeStub({ snapshotOf }) }))).toThrow(
+      "'session:dismiss' requires 'worktree' to be 'keep' for a non-worktree session",
+    )
   })
 
   it('delegates to the store', () => {
-    const dismiss = vi.fn(() => ({ ok: true as const }))
-    resolveSessionDismiss({ sessionKey: SESSION_KEY }, depsWith({ store: storeStub({ dismiss }) }))
-    expect(dismiss).toHaveBeenCalledWith(SESSION_KEY)
+    const dismiss = vi.fn(() => Promise.resolve({ ok: true as const }))
+    const snapshotOf = () => null
+    void resolveSessionDismiss({ sessionKey: SESSION_KEY, worktree: 'keep' }, depsWith({ store: storeStub({ dismiss, snapshotOf }) }))
+    expect(dismiss).toHaveBeenCalledWith(SESSION_KEY, 'keep')
   })
 })
 
@@ -355,83 +399,6 @@ describe('resolveSessionCapacitySet', () => {
     const setLimit = vi.fn(() => Promise.resolve({ limit: 3, ceiling: 8 }))
     void resolveSessionCapacitySet({ limit: 3 }, depsWith({ store: storeStub({ setLimit }) }))
     expect(setLimit).toHaveBeenCalledWith(3)
-  })
-})
-
-describe('resolveSessionRestoreList', () => {
-  it('rejects a payload', async () => {
-    await expect(resolveSessionRestoreList(registryDeps, {} as unknown as void, depsWith())).rejects.toThrow("'session:restore:list' takes no payload")
-  })
-
-  it('marks a ready repository available', async () => {
-    const restorable = vi.fn(() =>
-      Promise.resolve([{ restoreId: 'restore-1', repoId: REPO_ID, claudeSessionId: 'session-1', title: 'Title', startedAt: 't1' }]),
-    )
-    const result = await resolveSessionRestoreList(registryDeps, undefined, depsWith({ store: storeStub({ restorable }) }))
-    expect(result.entries).toEqual([
-      { restoreId: 'restore-1', repoId: REPO_ID, title: 'Title', origin: { kind: 'resumed', from: 'session-1' }, startedAt: 't1', availability: { ok: true } },
-    ])
-  })
-
-  it('marks a not-ready repository unavailable with its problem reason', async () => {
-    const restorable = vi.fn(() =>
-      Promise.resolve([{ restoreId: 'restore-1', repoId: REPO_ID, claudeSessionId: 'session-1', title: null, startedAt: 't1' }]),
-    )
-    const deps = depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [NOT_READY_ENTRY] }), store: storeStub({ restorable }) })
-    const result = await resolveSessionRestoreList(registryDeps, undefined, deps)
-    expect(result.entries[0]?.availability).toEqual({ ok: false, reason: 'its folder is gone' })
-  })
-
-  it('marks every entry unavailable when the listing itself fails', async () => {
-    const restorable = vi.fn(() =>
-      Promise.resolve([{ restoreId: 'restore-1', repoId: REPO_ID, claudeSessionId: 'session-1', title: null, startedAt: 't1' }]),
-    )
-    const deps = depsWith({ listRepositories: () => Promise.resolve({ ok: false, kind: 'registry-unreadable', message: 'nope' }), store: storeStub({ restorable }) })
-    const result = await resolveSessionRestoreList(registryDeps, undefined, deps)
-    expect(result.entries[0]?.availability).toEqual({ ok: false, reason: 'nope' })
-  })
-})
-
-describe('resolveSessionRestore', () => {
-  it('rejects a missing restoreId', async () => {
-    await expect(resolveSessionRestore(registryDeps, { restoreId: '' }, depsWith())).rejects.toThrow("'session:restore' requires a non-empty 'restoreId'")
-  })
-
-  it('reports unknown-restore for an id no entry carries', async () => {
-    const deps = depsWith({ store: storeStub({ restorable: () => Promise.resolve([]) }) })
-    await expect(resolveSessionRestore(registryDeps, { restoreId: 'restore-1' }, deps)).resolves.toEqual({ ok: false, kind: 'unknown-restore' })
-  })
-
-  it('reports repo-unavailable rather than throwing when the repository is not ready', async () => {
-    const restorable = () => Promise.resolve([{ restoreId: 'restore-1', repoId: REPO_ID, claudeSessionId: 'session-1', title: null, startedAt: 't1' }])
-    const deps = depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [NOT_READY_ENTRY] }), store: storeStub({ restorable }) })
-    await expect(resolveSessionRestore(registryDeps, { restoreId: 'restore-1' }, deps)).resolves.toEqual({ ok: false, kind: 'repo-unavailable', reason: 'its folder is gone' })
-  })
-
-  it('resolves the ready path itself and delegates to the store', async () => {
-    const restorable = () => Promise.resolve([{ restoreId: 'restore-1', repoId: REPO_ID, claudeSessionId: 'session-1', title: null, startedAt: 't1' }])
-    const restore = vi.fn(() => Promise.resolve({ ok: true as const, snapshot: {} as never }))
-    const deps = depsWith({ store: storeStub({ restorable, restore }) })
-    await resolveSessionRestore(registryDeps, { restoreId: 'restore-1' }, deps)
-    expect(restore).toHaveBeenCalledWith('restore-1', '/repo')
-  })
-})
-
-describe('resolveSessionRestoreDiscard', () => {
-  it('rejects an empty-string restoreId', () => {
-    expect(() => resolveSessionRestoreDiscard({ restoreId: '' }, depsWith())).toThrow("'session:restore:discard' requires 'restoreId' to be null or a non-empty string")
-  })
-
-  it('delegates null through to discard every entry', () => {
-    const discardRestorable = vi.fn(() => Promise.resolve({ ok: true as const }))
-    void resolveSessionRestoreDiscard({ restoreId: null }, depsWith({ store: storeStub({ discardRestorable }) }))
-    expect(discardRestorable).toHaveBeenCalledWith(null)
-  })
-
-  it('delegates a specific restoreId', () => {
-    const discardRestorable = vi.fn(() => Promise.resolve({ ok: true as const }))
-    void resolveSessionRestoreDiscard({ restoreId: 'restore-1' }, depsWith({ store: storeStub({ discardRestorable }) }))
-    expect(discardRestorable).toHaveBeenCalledWith('restore-1')
   })
 })
 

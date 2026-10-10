@@ -63,6 +63,31 @@ describe('createHostingPersistence', () => {
     await expect(persistence.load()).resolves.toEqual({ limit: 4, open: [], defaults: { model: 'opus', permissionMode: 'plan' }, marks: EMPTY_MARKS })
   })
 
+  it('load() accepts a v1 entry without cwd, loading with cwd undefined', async () => {
+    const dir = await makeTempDir()
+    await writeFile(join(dir, 'hosting.json'), JSON.stringify({ version: 1, limit: 4, open: [ENTRY] }))
+    const persistence = createHostingPersistence({ dir })
+    const loaded = await persistence.load()
+    expect(loaded.open).toEqual([ENTRY])
+    expect(loaded.open[0]?.cwd).toBeUndefined()
+  })
+
+  it('load() accepts a null repoId paired with a cwd', async () => {
+    const dir = await makeTempDir()
+    const entry = { repoId: null, claudeSessionId: 'session-2', title: null, startedAt: '2026-01-01T00:00:00.000Z', cwd: '/home/you/src/widgets' }
+    await writeFile(join(dir, 'hosting.json'), JSON.stringify({ version: 1, limit: 4, open: [entry] }))
+    const persistence = createHostingPersistence({ dir })
+    await expect(persistence.load()).resolves.toEqual({ limit: 4, open: [entry], defaults: DEFAULT_SESSION_DEFAULTS })
+  })
+
+  it('load() drops a null repoId with no cwd — it could never be restored', async () => {
+    const dir = await makeTempDir()
+    const entry = { repoId: null, claudeSessionId: 'session-2', title: null, startedAt: '2026-01-01T00:00:00.000Z' }
+    await writeFile(join(dir, 'hosting.json'), JSON.stringify({ version: 1, limit: 4, open: [entry] }))
+    const persistence = createHostingPersistence({ dir })
+    await expect(persistence.load()).resolves.toEqual({ limit: 4, open: [], defaults: DEFAULT_SESSION_DEFAULTS })
+  })
+
   it('load() falls back to the full default when defaults itself is missing or malformed', async () => {
     const dir = await makeTempDir()
     await writeFile(join(dir, 'hosting.json'), JSON.stringify({ version: 1, limit: 4, open: [], defaults: 'nope' }))

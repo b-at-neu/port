@@ -59,6 +59,35 @@ describe('startFailureCopy', () => {
     expect(copy.title).toContain("isn't installed")
     expect(copy.detail).toBe('not on PATH')
   })
+
+  it('names the folder for folder-busy', () => {
+    const result: RenderableStartFailure = { ok: false, kind: 'folder-busy', sessionKey: 'hosted-1' as never }
+    expect(startFailureCopy(result).body).toContain('new worktree')
+  })
+
+  it('carries the path as detail for folder-missing with a path', () => {
+    const result: RenderableStartFailure = { ok: false, kind: 'folder-missing', path: '/gone' }
+    const copy = startFailureCopy(result)
+    expect(copy.detail).toBe('/gone')
+  })
+
+  it('has no path for folder-missing with a null path', () => {
+    const result: RenderableStartFailure = { ok: false, kind: 'folder-missing', path: null }
+    const copy = startFailureCopy(result)
+    expect(copy.detail).toBeNull()
+    expect(copy.body).toContain("couldn't find")
+  })
+
+  it('names the problem for not-git', () => {
+    const result: RenderableStartFailure = { ok: false, kind: 'not-git' }
+    expect(startFailureCopy(result).body).toContain("isn't a git repository")
+  })
+
+  it('carries the git message as detail for worktree-failed', () => {
+    const result: RenderableStartFailure = { ok: false, kind: 'worktree-failed', message: 'collision' }
+    const copy = startFailureCopy(result)
+    expect(copy.detail).toBe('collision')
+  })
 })
 
 describe('interruptNote', () => {

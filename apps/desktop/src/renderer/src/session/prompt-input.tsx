@@ -62,7 +62,7 @@ function readerDeps() {
 
 export interface PromptInputProps {
   readonly sessionKey: SessionKey
-  readonly repoId: RepoId
+  readonly repoId: RepoId | null
   readonly snapshot: HostedSessionSnapshot
   readonly disabled: boolean
   readonly placeholder: string
@@ -173,7 +173,7 @@ export function PromptInput({ sessionKey, repoId, snapshot, disabled, placeholde
       return false
     }
 
-    const history = historyFor(repoId)
+    const history = repoId === null ? [] : historyFor(repoId)
     if (event.key === 'ArrowUp' && !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey && atRecallBoundary(history)) {
       event.preventDefault()
       const next = recallOlder(history, recall)
@@ -223,7 +223,7 @@ export function PromptInput({ sessionKey, repoId, snapshot, disabled, placeholde
   function handleSend(): void {
     setNotice(null)
     setRecall(NOT_RECALLING)
-    if (draft.trim() !== '') recordSent(repoId, draft.trim())
+    if (draft.trim() !== '' && repoId !== null) recordSent(repoId, draft.trim())
     onSend(draft, attachments)
   }
 

@@ -14,10 +14,12 @@ export const DEFAULT_SESSION_LIMIT = 4
 export const SESSION_LIMIT_CEILING = 8
 
 export interface PersistedOpenEntry {
-  readonly repoId: RepoId
+  readonly repoId: RepoId | null
   readonly claudeSessionId: string
   readonly title: string | null
   readonly startedAt: string
+  /** Additive, no version bump — a v1 file without it still restores through the registry path. */
+  readonly cwd?: string
 }
 
 export interface HostingPersistedState {
@@ -79,9 +81,13 @@ function resolveDefaults(value: unknown): SessionDefaults {
 function isValidOpenEntry(value: unknown): value is PersistedOpenEntry {
   if (typeof value !== 'object' || value === null) return false
   const entry = value as Record<string, unknown>
+  const repoIdValid = entry.repoId === null || (typeof entry.repoId === 'string' && entry.repoId !== '')
+  const cwdValid = entry.cwd === undefined || (typeof entry.cwd === 'string' && entry.cwd !== '')
+  // A null repoId with no cwd could never be restored — dropped as invalid rather than kept dead.
+  if (entry.repoId === null && entry.cwd === undefined) return false
   return (
-    typeof entry.repoId === 'string' &&
-    entry.repoId !== '' &&
+    repoIdValid &&
+    cwdValid &&
     typeof entry.claudeSessionId === 'string' &&
     entry.claudeSessionId !== '' &&
     (entry.title === null || typeof entry.title === 'string') &&

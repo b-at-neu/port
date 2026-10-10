@@ -4,9 +4,11 @@ import type { HostedQuery } from './handle'
 import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
 import type { PluginRequest, SessionEntriesDelta, SessionEventEnvelope, SessionKey } from '../../shared/hosting/types'
 import type { RepoId } from '../../shared/repos'
+import type { SessionWorkspace } from '../../shared/workspace/types'
 
 const SESSION_KEY = 'hosted-1' as SessionKey
 const REPO_ID = 'repo-1' as RepoId
+const WORKSPACE: SessionWorkspace = { folder: '/repo', root: '/repo', worktree: null, base: null }
 const INSTALLED_PLUGIN: PluginRequest = { source: 'installed' }
 
 /** `push` delivers the next message to whichever `next()` is currently waiting. */
@@ -95,6 +97,7 @@ function baseParams(overrides: Partial<Parameters<typeof createHostedHandle>[0]>
   return {
     sessionKey: SESSION_KEY,
     repoId: REPO_ID,
+    workspace: WORKSPACE,
     mode: { kind: 'fresh' as const },
     cwd: '/repo',
     executablePath: '/usr/local/bin/claude',

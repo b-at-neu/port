@@ -3,13 +3,13 @@ import type { RepoId } from '../../shared/repos'
 import type { HostedSessionSnapshot } from '../../shared/hosting/types'
 import type { PersistedOpenEntry } from './persist'
 
-/** Not `closing`/`ended`, and carrying a real `claudeSessionId` — a session without one cannot be resumed. */
+/** Not `closing`/`ended`, and carrying a real `claudeSessionId` — a session without one cannot be resumed. `cwd` comes from `workspace.folder`, so a restore reopens the exact folder or worktree. */
 export function persistedOpen(handles: readonly HostedSessionSnapshot[]): readonly PersistedOpenEntry[] {
   const result: PersistedOpenEntry[] = []
   for (const handle of handles) {
     if (handle.phase === 'closing' || handle.phase === 'ended') continue
     if (handle.claudeSessionId === null) continue
-    result.push({ repoId: handle.repoId, claudeSessionId: handle.claudeSessionId, title: handle.title, startedAt: handle.startedAt })
+    result.push({ repoId: handle.repoId, claudeSessionId: handle.claudeSessionId, title: handle.title, startedAt: handle.startedAt, cwd: handle.workspace.folder })
   }
   return result
 }
@@ -17,10 +17,11 @@ export function persistedOpen(handles: readonly HostedSessionSnapshot[]): readon
 /** An app-local `restoreId`, never persisted itself; the renderer-facing shape omits `claudeSessionId`. */
 export interface MintedRestorable {
   readonly restoreId: string
-  readonly repoId: RepoId
+  readonly repoId: RepoId | null
   readonly claudeSessionId: string
   readonly title: string | null
   readonly startedAt: string
+  readonly cwd?: string
 }
 
 /** Assigns `restore-<n>` ids by position — called once, after `persistence.load()`. */
@@ -46,7 +47,7 @@ export function nextPersisted(params: NextPersistedParams): { readonly limit: nu
   for (const entry of params.restorable) {
     if (seen.has(entry.claudeSessionId)) continue
     seen.add(entry.claudeSessionId)
-    open.push({ repoId: entry.repoId, claudeSessionId: entry.claudeSessionId, title: entry.title, startedAt: entry.startedAt })
+    open.push({ repoId: entry.repoId, claudeSessionId: entry.claudeSessionId, title: entry.title, startedAt: entry.startedAt, cwd: entry.cwd })
   }
   return { limit: params.limit, open }
 }

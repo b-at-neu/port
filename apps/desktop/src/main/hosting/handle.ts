@@ -19,6 +19,7 @@ import type {
   SessionStartMode,
 } from '../../shared/hosting/types'
 import type { RepoId } from '../../shared/repos'
+import type { SessionWorkspace } from '../../shared/workspace/types'
 import type { ComposerAttachment } from '../../shared/hosting/attachments'
 import { createHostedInput } from './input'
 import { buildSessionOptions } from './options'
@@ -52,7 +53,8 @@ export type HostedQueryFn = (params: { prompt: AsyncIterable<SDKUserMessage>; op
 
 export interface CreateHostedHandleParams {
   readonly sessionKey: SessionKey
-  readonly repoId: RepoId
+  readonly repoId: RepoId | null
+  readonly workspace: SessionWorkspace
   readonly mode: SessionStartMode
   readonly cwd: string
   readonly executablePath: string
@@ -176,6 +178,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
       sessionKey: params.sessionKey,
       claudeSessionId,
       repoId: params.repoId,
+      workspace: params.workspace,
       phase,
       origin: originFor(params.mode),
       startedAt,

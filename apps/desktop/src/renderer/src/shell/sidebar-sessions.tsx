@@ -10,7 +10,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { toast } from 'sonner'
 import type { HostedSessionSnapshot } from '../../../shared/hosting/types'
 import { sessionTitle } from '../../../shared/hosting/label'
-import type { RepoId, RepositoryEntry } from '../../../shared/repos'
+import { folderLabel } from '../../../shared/workspace/label'
+import type { RepositoryEntry } from '../../../shared/repos'
 import { useIpcMutation, useIpcQuery } from '../data/query'
 import { startNewSession } from '../session/actions'
 import { useSelectedSession } from '../session/selection'
@@ -18,9 +19,10 @@ import { sidebarDotLabel } from '../session/interaction-copy'
 import { useRenaming, setRenaming } from './stores'
 import { ROUTE_IDS } from '../router/routes'
 
-function repoTag(repos: readonly RepositoryEntry[] | undefined, repoId: RepoId): string {
-  const entry = repos?.find((r) => r.id === repoId)
-  if (entry === undefined) return repoId
+function repoTag(repos: readonly RepositoryEntry[] | undefined, session: HostedSessionSnapshot): string {
+  if (session.repoId === null) return folderLabel(session.workspace.folder)
+  const entry = repos?.find((r) => r.id === session.repoId)
+  if (entry === undefined) return session.repoId
   return 'config' in entry ? entry.config.repo : entry.displayName
 }
 
@@ -87,7 +89,7 @@ function SessionRow({ session, repos, selected }: { readonly session: HostedSess
         <TooltipContent>{dot.label}</TooltipContent>
       </Tooltip>
       <span className="flex-1 truncate">{sessionTitle(session)}</span>
-      <span className="shrink-0 truncate text-meta text-muted-foreground">{repoTag(repos, session.repoId)}</span>
+      <span className="shrink-0 truncate text-meta text-muted-foreground">{repoTag(repos, session)}</span>
     </button>
   )
 }

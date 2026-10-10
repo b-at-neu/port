@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { defaultGitRunner } from '../platform/git'
-import { createSessionWorktree, removeSessionWorktree } from './worktree'
+import { createSessionWorktree, removeSessionWorktree, removeSessionWorktreeAt } from './worktree'
 
 const git = defaultGitRunner()
 
@@ -173,5 +173,23 @@ describe('worktree — real git integration', () => {
     const root = await makeRepo()
     const removed = await removeSessionWorktree({ root, path: join(root, 'nonexistent'), force: false, git })
     expect(removed.outcome).toBe('failed')
+  })
+
+  it('removeSessionWorktreeAt resolves the base root itself, from inside the linked worktree', async (ctx) => {
+    if (!gitAvailable) {
+      ctx.skip()
+      return
+    }
+    const root = await makeRepo()
+    const created = await createSessionWorktree({ root, git })
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+
+    const removed = await removeSessionWorktreeAt({ path: created.path, force: false, git })
+    expect(removed).toEqual({ outcome: 'removed' })
+
+    const branches = await git(['branch', '--list', created.branch], root)
+    expect(branches.ok).toBe(true)
+    if (branches.ok) expect(branches.stdout).toContain(created.branch.replace('session/', ''))
   })
 })

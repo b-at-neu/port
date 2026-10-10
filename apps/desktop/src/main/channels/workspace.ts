@@ -22,8 +22,8 @@ export interface WorkspaceChannelDeps {
   readonly git: GitRunner
   readonly exists: (path: string) => Promise<boolean>
   readonly now: () => Date
-  /** Resolves the live session's `SessionWorkspace` — until #322b puts `workspace` on the hosted
-   *  snapshot, `main/ipc.ts` wires this through `resolveWorkspace` directly. `null` is `unknown-session`. */
+  /** Resolves the live session's `SessionWorkspace` straight off its snapshot — `main/ipc.ts` wires
+   *  this through `hostedStore.snapshotOf`. `null` is `unknown-session`. */
   readonly workspaceOf: (sessionKey: string) => Promise<SessionWorkspace | null>
   readonly computeSessionChanges: typeof defaultComputeSessionChanges
   readonly pathOps?: PathOps
@@ -34,10 +34,10 @@ async function defaultExists(path: string): Promise<boolean> {
   return result.ok
 }
 
-export function defaultWorkspaceChannelDeps(userDataDir: string, workspaceOf: WorkspaceChannelDeps['workspaceOf']): WorkspaceChannelDeps {
+export function defaultWorkspaceChannelDeps(userDataDir: string, workspaceOf: WorkspaceChannelDeps['workspaceOf'], recents?: RecentsStore): WorkspaceChannelDeps {
   return {
     listRepositories,
-    recents: createRecentsStore({ dir: userDataDir }),
+    recents: recents ?? createRecentsStore({ dir: userDataDir }),
     chooseFolder: defaultChooseFolder,
     git: defaultGitRunner(),
     exists: defaultExists,

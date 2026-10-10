@@ -2,6 +2,7 @@
 import type { RepoId } from '../repos'
 import type { RuntimeDiagnosis } from '../runtime/types'
 import type { EntryPatch, TranscriptEntry } from '../sessions/transcript'
+import type { SessionWorkspace } from '../workspace/types'
 import type { PendingInteraction, SessionControls, SessionModels } from './controls'
 import type { SessionUsage } from './usage'
 
@@ -42,7 +43,9 @@ export interface SessionEnd {
 export interface HostedSessionSnapshot {
   readonly sessionKey: SessionKey
   readonly claudeSessionId: string | null
-  readonly repoId: RepoId
+  readonly repoId: RepoId | null
+  /** This session's resolved folder, worktree (if any), and diff base — carried on the snapshot rather than a second lookup. */
+  readonly workspace: SessionWorkspace
   readonly phase: SessionPhase
   readonly origin: SessionOrigin
   readonly startedAt: string
@@ -81,13 +84,27 @@ export interface SessionEventEnvelope {
   readonly message: unknown
 }
 
-/** `'session:start'`'s response — `at-capacity` names the limit rather than a bare refusal; `runtime` carries the existing `RuntimeDiagnosis`/`detail`, never a new error vocabulary. */
+/** A `session:start` target — a registered/recent folder by its `FolderId`, or the cwd of a named transcript. `worktree: true` on a folder target creates a session worktree before starting. */
+export type SessionStartTarget = { readonly kind: 'folder'; readonly folderId: string; readonly worktree: boolean } | { readonly kind: 'transcript' }
+
+/** `'keep'`/`'remove'`/`'force'` — a worktree session's dismiss choice. Never forces without the caller's explicit `'force'`. */
+export type WorktreeChoice = 'keep' | 'remove' | 'force'
+
+/** `'session:start'`'s response — `at-capacity` names the limit rather than a bare refusal; `runtime` carries the existing `RuntimeDiagnosis`/`detail`, never a new error vocabulary. The four workspace-resolution kinds are the operator-reachable half of `main/workspace/target.ts`'s own contract — a malformed target throws instead. */
 export type SessionStartResult =
   | { readonly ok: true; readonly snapshot: HostedSessionSnapshot }
   | { readonly ok: false; readonly kind: 'at-capacity'; readonly limit: number }
   | { readonly ok: false; readonly kind: 'runtime'; readonly diagnosis: RuntimeDiagnosis; readonly detail: string | null }
   /** A `resume`/`resume-at` whose `sessionId` already names a live handle — fails closed, since two `claude` processes appending to one transcript is unrecoverable. */
   | { readonly ok: false; readonly kind: 'already-open'; readonly sessionKey: SessionKey }
+  /** The target folder no longer exists — `path` is `null` for a transcript target whose session carries no `cwd`. */
+  | { readonly ok: false; readonly kind: 'folder-missing'; readonly path: string | null }
+  /** A non-worktree start refused because a live, non-worktree session is already open in this folder. */
+  | { readonly ok: false; readonly kind: 'folder-busy'; readonly sessionKey: SessionKey }
+  /** `worktree: true` against a folder that is not a git repository. */
+  | { readonly ok: false; readonly kind: 'not-git' }
+  /** `worktree: true` whose `git worktree add` failed. */
+  | { readonly ok: false; readonly kind: 'worktree-failed'; readonly message: string }
 
 /** `'session:send'`'s response — always `queued` rather than refusing mid-turn, since the SDK owns the queue. `blocked-command` is `/port:pipeline` (or bare `pipeline`, when this session reports no unqualified command of its own) sent by hand — an operator action, not a bug, so it is a typed value rather than a thrown refusal. */
 export type SessionSendResult =
@@ -248,15 +265,21 @@ export interface HostingCapacity {
 /** One entry offered by the restore banner at boot — app-minted `restoreId`, never the persisted `claudeSessionId` itself, so the renderer can never send that id back verbatim. */
 export interface RestorableSession {
   readonly restoreId: string
-  readonly repoId: RepoId
+  readonly repoId: RepoId | null
+  /** The persisted `cwd`, `null` for an older entry with none — the registry path backs its restore instead. */
+  readonly folder: string | null
   readonly title: string | null
   readonly origin: { readonly kind: 'resumed'; readonly from: string }
   readonly startedAt: string
   readonly availability: { readonly ok: true } | { readonly ok: false; readonly reason: string }
 }
 
-/** `'session:dismiss'`'s response — an ended handle's row leaving the rail. */
-export type SessionDismissResult = { readonly ok: true } | { readonly ok: false; readonly kind: 'unknown-session' | 'still-open' }
+/** `'session:dismiss'`'s response — an ended handle's row leaving the rail. `worktree-dirty`/`worktree-remove-failed` leave the handle in place; nothing else dismisses on those two. */
+export type SessionDismissResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly kind: 'unknown-session' | 'still-open' }
+  | { readonly ok: false; readonly kind: 'worktree-dirty' }
+  | { readonly ok: false; readonly kind: 'worktree-remove-failed'; readonly message: string }
 
 /** `'session:restore'`'s response — `SessionStartResult`'s own branches plus the two ways a restore entry can fail to resolve. */
 export type SessionRestoreResult =

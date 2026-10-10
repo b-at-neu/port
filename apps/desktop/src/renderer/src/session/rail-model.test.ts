@@ -14,6 +14,7 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     sessionKey: 'hosted-1' as SessionKey,
     claudeSessionId: null,
     repoId: REPO_ID,
+    workspace: { folder: '/repo', root: '/repo', worktree: null, base: null },
     phase: 'ready',
     origin: { kind: 'fresh' },
     startedAt: '2026-01-01T00:00:00.000Z',

@@ -3,8 +3,10 @@ import { dropAdopted, mintRestorable, nextPersisted, persistedOpen } from './res
 import type { HostedSessionSnapshot, SessionKey } from '../../shared/hosting/types'
 import type { SessionControls, SessionModels } from '../../shared/hosting/controls'
 import type { RepoId } from '../../shared/repos'
+import type { SessionWorkspace } from '../../shared/workspace/types'
 
 const REPO_ID = 'repo-1' as RepoId
+const WORKSPACE: SessionWorkspace = { folder: '/repo', root: '/repo', worktree: null, base: null }
 
 const TEST_CONTROLS: SessionControls = { permissionMode: 'default', model: null, effort: null }
 const TEST_MODELS: SessionModels = { kind: 'pending' }
@@ -14,6 +16,7 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     sessionKey: 'hosted-1' as SessionKey,
     claudeSessionId: 'session-1',
     repoId: REPO_ID,
+    workspace: WORKSPACE,
     phase: 'ready',
     origin: { kind: 'fresh' },
     startedAt: '2026-01-01T00:00:00.000Z',
@@ -32,8 +35,8 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
 }
 
 describe('persistedOpen', () => {
-  it('includes a live handle with a real claudeSessionId', () => {
-    expect(persistedOpen([snapshot()])).toEqual([{ repoId: REPO_ID, claudeSessionId: 'session-1', title: 'Fix the thing', startedAt: '2026-01-01T00:00:00.000Z' }])
+  it('includes a live handle with a real claudeSessionId, carrying cwd from its workspace', () => {
+    expect(persistedOpen([snapshot()])).toEqual([{ repoId: REPO_ID, claudeSessionId: 'session-1', title: 'Fix the thing', startedAt: '2026-01-01T00:00:00.000Z', cwd: '/repo' }])
   })
 
   it('excludes a handle with no claudeSessionId yet', () => {

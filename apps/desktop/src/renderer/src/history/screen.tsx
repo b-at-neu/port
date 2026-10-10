@@ -138,7 +138,7 @@ function SessionRow({
   readonly onOpen: (sessionId: string, agentId: string | null, title: string) => void
 }) {
   const label = sessionLabel(session)
-  const hostRepoId = session.worktreePath === null ? session.repoId : null
+  const canHost = session.worktreePath === null
   const metaParts = [session.role !== 'other' ? session.role : null, session.itemNumber !== null ? `#${String(session.itemNumber)}` : null, session.gitBranch, relativeTime(session.idleMs)].filter(
     (part): part is string => part !== null && part !== '',
   )
@@ -151,12 +151,12 @@ function SessionRow({
           <span className="shrink-0 truncate text-meta text-muted-foreground">{metaParts.join(' · ')}</span>
         </button>
         <span className="shrink-0 text-meta text-muted-foreground">{repoTag}</span>
-        {hostRepoId !== null ? (
+        {canHost ? (
           <div className="flex shrink-0 gap-1">
-            <Button variant="outline" size="small" onClick={() => void startFromTranscript(hostRepoId, session.sessionId, 'resume')}>
+            <Button variant="outline" size="small" onClick={() => void startFromTranscript(session.sessionId, 'resume')}>
               Resume
             </Button>
-            <Button variant="outline" size="small" onClick={() => void startFromTranscript(hostRepoId, session.sessionId, 'fork')}>
+            <Button variant="outline" size="small" onClick={() => void startFromTranscript(session.sessionId, 'fork')}>
               Fork
             </Button>
           </div>

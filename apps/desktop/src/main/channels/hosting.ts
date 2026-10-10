@@ -1,9 +1,9 @@
 // Everything a stale renderer could get wrong throws here, never a value `main/hosting/store.ts`
 // has to defend against.
 import type { IpcMap, ReposListResponse } from '../../shared/ipc'
-import type { RepoId, RepoProblem } from '../../shared/repos'
+import type { RepoId, RepoProblem, RepositoryEntry } from '../../shared/repos'
 import { PERMISSION_DECISIONS, SESSION_MODELS, SESSION_PERMISSION_MODES, SESSION_TITLE_MAX } from '../../shared/hosting/types'
-import type { RestorableSession, SessionFilesResult, SessionKey, SessionModel, SessionPermissionMode, SessionStartMode } from '../../shared/hosting/types'
+import type { RestorableSession, SessionFilesResult, SessionKey, SessionModel, SessionPermissionMode, SessionStartMode, SessionStartTarget, WorktreeChoice } from '../../shared/hosting/types'
 import { SESSION_EFFORTS } from '../../shared/hosting/controls'
 import type { PlanDecision } from '../../shared/hosting/controls'
 import { isRecord } from '../../shared/guards'
@@ -12,21 +12,38 @@ import type { ComposerAttachment } from '../../shared/hosting/attachments'
 import type { HostedStore } from '../hosting/store'
 import { SESSION_LIMIT_CEILING } from '../hosting/store'
 import { listSessionFiles } from '../hosting/files'
-import { isReadyEntry, listRepositories, requireReadyRepo, requireRepoId } from '../registry'
+import { isReadyEntry, listRepositories } from '../registry'
 import type { RegistryDeps } from '../registry'
-import type { ReadyEntry } from '../actions/apply'
+import { resolveStartTarget } from '../workspace/target'
+import type { ResolveStartTargetDeps } from '../workspace/target'
+import { removeSessionWorktreeAt } from '../workspace/worktree'
+import { resolveWorkspace } from '../workspace/resolve'
 
 export interface HostingChannelDeps {
   readonly listRepositories: typeof listRepositories
   readonly store: HostedStore
   /** Injectable so a test never touches a real `git` subprocess or filesystem. */
   readonly listSessionFiles: typeof listSessionFiles
+  readonly resolveStartTarget: (target: SessionStartTarget, mode: SessionStartMode, deps: ResolveStartTargetDeps) => ReturnType<typeof resolveStartTarget>
+  readonly targetDeps: Omit<ResolveStartTargetDeps, 'repositories'>
+  readonly now: () => Date
+  /** Best-effort cleanup for a worktree created ahead of a start that then failed — logged, never surfaced over the start result. */
+  readonly removeCreatedWorktree: (path: string) => Promise<void>
 }
 
-export const defaultHostingChannelDeps = (store: HostedStore): HostingChannelDeps => ({ listRepositories, store, listSessionFiles })
-
-function resolveReadyEntry(registryDeps: RegistryDeps, repoId: unknown, deps: HostingChannelDeps, channel: string): Promise<ReadyEntry> {
-  return requireReadyRepo(registryDeps, `'${channel}'`, requireRepoId(repoId, `'${channel}'`), deps.listRepositories)
+export function defaultHostingChannelDeps(store: HostedStore, targetDeps: Omit<ResolveStartTargetDeps, 'repositories'>): HostingChannelDeps {
+  return {
+    listRepositories,
+    store,
+    listSessionFiles,
+    resolveStartTarget,
+    targetDeps,
+    now: () => new Date(),
+    removeCreatedWorktree: async (path) => {
+      const outcome = await removeSessionWorktreeAt({ path, force: false, git: targetDeps.git })
+      if (outcome.outcome === 'failed') console.error(`[hosting] could not clean up worktree '${path}' after a failed start: ${outcome.message}`)
+    },
+  }
 }
 
 function requireSessionKey(sessionKey: unknown, channel: string): SessionKey {
@@ -60,14 +77,38 @@ function isValidStartMode(value: unknown): value is SessionStartMode {
   }
 }
 
+function isValidStartTarget(value: unknown, mode: SessionStartMode): value is SessionStartTarget {
+  if (typeof value !== 'object' || value === null) return false
+  const target = value as Record<string, unknown>
+  if (target['kind'] === 'transcript') return mode.kind !== 'fresh'
+  if (target['kind'] !== 'folder') return false
+  return typeof target['folderId'] === 'string' && target['folderId'] !== '' && typeof target['worktree'] === 'boolean'
+}
+
 export async function resolveSessionStart(registryDeps: RegistryDeps, request: IpcMap['session:start']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['start']> {
-  const entry = await resolveReadyEntry(registryDeps, request?.repoId, deps, 'session:start')
-  if (!isValidStartMode(request.mode)) {
+  if (!isValidStartMode(request?.mode)) {
     throw new Error(
       "'session:start' requires 'mode.kind' to be one of fresh | resume | resume-at | fork, with a non-empty 'sessionId' for the latter three and a non-empty 'messageUuid' for resume-at",
     )
   }
-  return deps.store.start({ repoId: entry.id, mode: request.mode, cwd: entry.path })
+  if (!isValidStartTarget(request.target, request.mode)) {
+    throw new Error("'session:start' requires 'target.kind' to be 'folder' (a non-empty 'folderId' and boolean 'worktree') or 'transcript' (never with mode.kind 'fresh')")
+  }
+
+  const list = await deps.listRepositories(registryDeps)
+  const repositories = list.ok ? list.repositories : []
+  const resolved = await deps.resolveStartTarget(request.target, request.mode, { ...deps.targetDeps, repositories })
+  if (!resolved.ok) return resolved
+
+  const result = await deps.store.start({ repoId: resolved.repoId, mode: request.mode, workspace: resolved.workspace })
+
+  if (!result.ok && resolved.createdWorktree !== null) {
+    await deps.removeCreatedWorktree(resolved.createdWorktree.path)
+  }
+  if (result.ok && resolved.recordPath !== null) {
+    await deps.targetDeps.recents.record(resolved.recordPath, deps.now())
+  }
+  return result
 }
 
 const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/
@@ -208,8 +249,18 @@ export function resolveSessionPermissionAnswer(
   return deps.store.answerPermission(sessionKey, request.permissionId, request.decision, message)
 }
 
+const WORKTREE_CHOICES: readonly WorktreeChoice[] = ['keep', 'remove', 'force']
+
 export function resolveSessionDismiss(request: IpcMap['session:dismiss']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['dismiss']> {
-  return deps.store.dismiss(requireSessionKey(request?.sessionKey, 'session:dismiss'))
+  const sessionKey = requireSessionKey(request?.sessionKey, 'session:dismiss')
+  if (!(WORKTREE_CHOICES as readonly string[]).includes(request?.worktree)) {
+    throw new Error(`'session:dismiss' requires 'worktree' to be one of ${WORKTREE_CHOICES.join(', ')}`)
+  }
+  const snapshot = deps.store.snapshotOf(sessionKey)
+  if (snapshot !== null && snapshot.workspace.worktree === null && request.worktree !== 'keep') {
+    throw new Error("'session:dismiss' requires 'worktree' to be 'keep' for a non-worktree session")
+  }
+  return deps.store.dismiss(sessionKey, request.worktree)
 }
 
 export function resolveSessionCapacity(request: IpcMap['session:capacity']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['capacity']> {
@@ -252,23 +303,32 @@ function availabilityFor(repoId: RepoId, list: ReposListResponse): RestorableSes
   return { ok: true }
 }
 
-/** A listing failure marks every entry unavailable with its message, never an empty list. */
+/** A listing failure marks every registry-backed entry unavailable with its message, never an empty
+ *  list. An entry carrying `cwd` restores by folder instead — its availability is just `exists(cwd)`. */
 export async function resolveSessionRestoreList(registryDeps: RegistryDeps, request: IpcMap['session:restore:list']['request'], deps: HostingChannelDeps): Promise<IpcMap['session:restore:list']['response']> {
   if (request !== undefined) throw new Error("'session:restore:list' takes no payload")
   const [entries, list] = await Promise.all([deps.store.restorable(), deps.listRepositories(registryDeps)])
+  const availability = await Promise.all(
+    entries.map(async (entry) =>
+      entry.cwd !== undefined
+        ? (await deps.targetDeps.exists(entry.cwd)) ? ({ ok: true } as const) : ({ ok: false, reason: "This session's folder is gone." } as const)
+        : availabilityFor(entry.repoId as RepoId, list),
+    ),
+  )
   return {
-    entries: entries.map((entry) => ({
+    entries: entries.map((entry, index) => ({
       restoreId: entry.restoreId,
       repoId: entry.repoId,
+      folder: entry.cwd ?? null,
       title: entry.title,
       origin: { kind: 'resumed' as const, from: entry.claudeSessionId },
       startedAt: entry.startedAt,
-      availability: availabilityFor(entry.repoId, list),
+      availability: availability[index] as RestorableSession['availability'],
     })),
   }
 }
 
-/** Returns `repo-unavailable` as a value rather than throwing — an operator can hit this in normal use. */
+/** Returns `repo-unavailable`/`folder-missing` as values rather than throwing — an operator can hit either in normal use. */
 export async function resolveSessionRestore(registryDeps: RegistryDeps, request: IpcMap['session:restore']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['restore']> {
   if (typeof request?.restoreId !== 'string' || request.restoreId === '') throw new Error("'session:restore' requires a non-empty 'restoreId'")
 
@@ -277,12 +337,25 @@ export async function resolveSessionRestore(registryDeps: RegistryDeps, request:
   if (entry === undefined) return { ok: false, kind: 'unknown-restore' }
 
   const list = await deps.listRepositories(registryDeps)
+  const repositories = list.ok ? list.repositories : []
+
+  if (entry.cwd !== undefined) {
+    if (!(await deps.targetDeps.exists(entry.cwd))) return { ok: false, kind: 'folder-missing', path: entry.cwd }
+    const { workspace, repoId } = await resolveWorkspaceForRestore(entry.cwd, deps, repositories)
+    return deps.store.restore(request.restoreId, { repoId, workspace })
+  }
+
   if (!list.ok) return { ok: false, kind: 'repo-unavailable', reason: list.message }
   const repository = list.repositories.find((candidate) => candidate.id === entry.repoId)
   if (repository === undefined) return { ok: false, kind: 'repo-unavailable', reason: 'This repository is no longer registered.' }
   if (!isReadyEntry(repository)) return { ok: false, kind: 'repo-unavailable', reason: problemReason(repository.problem) }
 
-  return deps.store.restore(request.restoreId, repository.path)
+  const { workspace, repoId } = await resolveWorkspaceForRestore(repository.path, deps, repositories)
+  return deps.store.restore(request.restoreId, { repoId, workspace })
+}
+
+async function resolveWorkspaceForRestore(path: string, deps: HostingChannelDeps, repositories: readonly RepositoryEntry[]) {
+  return resolveWorkspace(path, { git: deps.targetDeps.git, repositories })
 }
 
 /** `restoreId: null` discards every entry, idempotently either way. */

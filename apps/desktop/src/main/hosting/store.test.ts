@@ -5,8 +5,11 @@ import { createInMemoryHostingPersistence } from './persist'
 import type { HostedQuery } from './handle'
 import type { RepoId } from '../../shared/repos'
 import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
+import type { SessionWorkspace } from '../../shared/workspace/types'
 
 const REPO_ID = 'repo-1' as RepoId
+// Worktree-shaped so repeated starts against it never trip folder-busy, exercised separately below.
+const WORKSPACE: SessionWorkspace = { folder: '/repo', root: '/repo', worktree: { path: '/repo', branch: 'session/shared' }, base: null }
 
 /** A never-emitting fake query — enough for tests that only care about store-level bookkeeping. */
 function idleQuery(): HostedQuery {
@@ -35,6 +38,7 @@ function baseDeps(overrides: Partial<HostedStoreDeps> = {}): HostedStoreDeps {
     readExpectedComponents: () => Promise.resolve(null),
     samePath: (a: string, b: string) => a === b,
     persistence: createInMemoryHostingPersistence(),
+    removeWorktree: () => Promise.resolve({ outcome: 'removed' }),
     ...overrides,
   }
 }
@@ -48,7 +52,7 @@ async function flush(): Promise<void> {
 describe('createHostedStore', () => {
   it('start() returns a ready snapshot naming the repo', async () => {
     const store = createHostedStore(baseDeps())
-    const result = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    const result = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error('unreachable')
     expect(result.snapshot.repoId).toBe(REPO_ID)
@@ -57,8 +61,8 @@ describe('createHostedStore', () => {
 
   it('a second start() mints a distinct sessionKey', async () => {
     const store = createHostedStore(baseDeps())
-    const a = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
-    const b = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    const a = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
+    const b = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
     if (!a.ok || !b.ok) throw new Error('unreachable')
     expect(a.snapshot.sessionKey).not.toBe(b.snapshot.sessionKey)
   })
@@ -66,24 +70,24 @@ describe('createHostedStore', () => {
   it('refuses at-capacity once DEFAULT_SESSION_LIMIT live handles exist', async () => {
     const store = createHostedStore(baseDeps())
     for (let i = 0; i < DEFAULT_SESSION_LIMIT; i += 1) {
-      const result = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+      const result = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
       expect(result.ok).toBe(true)
     }
-    const refused = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    const refused = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
     expect(refused).toEqual({ ok: false, kind: 'at-capacity', limit: DEFAULT_SESSION_LIMIT })
   })
 
   it('returns the runtime branch, never starting a handle, when the executable cannot be located', async () => {
     const onEvent = vi.fn()
     const store = createHostedStore(baseDeps({ resolveClaudeExecutable: () => Promise.resolve({ ok: false, kind: 'not-found', searched: ['/usr/bin'] }), onEvent }))
-    const result = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    const result = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
     expect(result).toEqual({ ok: false, kind: 'runtime', diagnosis: 'cli-missing', detail: null })
     expect(store.list()).toEqual([])
   })
 
   it('reports bundled-fallback with the path as detail', async () => {
     const store = createHostedStore(baseDeps({ resolveClaudeExecutable: () => Promise.resolve({ ok: false, kind: 'bundled-fallback', path: '/bundled/claude' }) }))
-    const result = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    const result = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
     expect(result).toEqual({ ok: false, kind: 'runtime', diagnosis: 'bundled-fallback', detail: '/bundled/claude' })
   })
 
@@ -109,7 +113,7 @@ describe('createHostedStore', () => {
       return idleQuery()
     }
     const store = createHostedStore(baseDeps({ resolvePluginRequest, getSdk: () => Promise.resolve({ query, renameSession: vi.fn(() => Promise.resolve(undefined)) }) }))
-    await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
     expect(resolvePluginRequest).toHaveBeenCalledWith('/repo')
     expect(capturedOptions?.plugins).toBeUndefined()
   })
@@ -122,13 +126,13 @@ describe('createHostedStore', () => {
       return idleQuery()
     }
     const store = createHostedStore(baseDeps({ resolvePluginRequest, getSdk: () => Promise.resolve({ query, renameSession: vi.fn(() => Promise.resolve(undefined)) }) }))
-    await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
     expect(capturedOptions?.plugins).toEqual([{ type: 'local', path: '/repo/plugins/port' }])
   })
 
   it('answerPermission on a live session delegates to that handle, refusing an unknown permission id', async () => {
     const store = createHostedStore(baseDeps())
-    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
     if (!started.ok) throw new Error('unreachable')
     const result = store.answerPermission(started.snapshot.sessionKey, 'nonexistent', 'deny', null)
     expect(result).toEqual({ ok: false, kind: 'unknown-permission' })
@@ -136,7 +140,7 @@ describe('createHostedStore', () => {
 
   it('send() on a live session delegates to the handle and returns queued: true', async () => {
     const store = createHostedStore(baseDeps())
-    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
     if (!started.ok) throw new Error('unreachable')
     const result = store.send(started.snapshot.sessionKey, 'hello')
     expect(result.ok).toBe(true)
@@ -146,7 +150,7 @@ describe('createHostedStore', () => {
 
   it('attach() returns the snapshot plus an empty replay and entries window for a freshly started session', async () => {
     const store = createHostedStore(baseDeps())
-    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
     if (!started.ok) throw new Error('unreachable')
     const result = store.attach(started.snapshot.sessionKey)
     expect(result).toEqual({
@@ -164,7 +168,7 @@ describe('createHostedStore', () => {
 
   it('attach() reflects a sent message in the entries window', async () => {
     const store = createHostedStore(baseDeps())
-    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
     if (!started.ok) throw new Error('unreachable')
     store.send(started.snapshot.sessionKey, 'hello')
     const result = store.attach(started.snapshot.sessionKey)
@@ -178,8 +182,8 @@ describe('createHostedStore', () => {
 
   it('list() reports every started session', async () => {
     const store = createHostedStore(baseDeps())
-    await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
-    await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
+    await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
     expect(store.list().length).toBe(2)
   })
 
@@ -202,8 +206,8 @@ describe('createHostedStore', () => {
         } as unknown as HostedQuery
       }
       const store = createHostedStore(baseDeps({ getSdk: () => Promise.resolve({ query, renameSession: vi.fn(() => Promise.resolve(undefined)) }) }))
-      await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
-      await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+      await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
+      await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
       await store.closeAll()
       expect(closeSpy).toHaveBeenCalledTimes(2)
     },
@@ -234,7 +238,7 @@ describe('createHostedStore', () => {
           Promise.resolve({ ok: true, sessions: [{ sessionId: 'parent-1', summary: 'Parent title', lastModified: 'x', customTitle: null, firstPrompt: null, gitBranch: null, cwd: null }] }),
       }),
     )
-    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fork', sessionId: 'parent-1' }, cwd: '/repo' })
+    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fork', sessionId: 'parent-1' }, workspace: WORKSPACE })
     if (!started.ok) throw new Error('unreachable')
 
     box.deliver?.({ type: 'system', subtype: 'init', session_id: 'fork-session-1' })
@@ -248,9 +252,9 @@ describe('createHostedStore', () => {
 
   it('refuses already-open for a resume whose sessionId a handle is already resuming (before init)', async () => {
     const store = createHostedStore(baseDeps())
-    const first = await store.start({ repoId: REPO_ID, mode: { kind: 'resume', sessionId: 'parent-1' }, cwd: '/repo' })
+    const first = await store.start({ repoId: REPO_ID, mode: { kind: 'resume', sessionId: 'parent-1' }, workspace: WORKSPACE })
     if (!first.ok) throw new Error('unreachable')
-    const second = await store.start({ repoId: REPO_ID, mode: { kind: 'resume', sessionId: 'parent-1' }, cwd: '/repo' })
+    const second = await store.start({ repoId: REPO_ID, mode: { kind: 'resume', sessionId: 'parent-1' }, workspace: WORKSPACE })
     expect(second).toEqual({ ok: false, kind: 'already-open', sessionKey: first.snapshot.sessionKey })
   })
 
@@ -265,30 +269,30 @@ describe('createHostedStore', () => {
         },
       }) as unknown as HostedQuery
     const store = createHostedStore(baseDeps({ getSdk: () => Promise.resolve({ query, renameSession: vi.fn(() => Promise.resolve(undefined)) }) }))
-    const first = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    const first = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
     if (!first.ok) throw new Error('unreachable')
     box.deliver?.({ type: 'system', subtype: 'init', session_id: 'adopted-1' })
     await flush()
-    const second = await store.start({ repoId: REPO_ID, mode: { kind: 'resume', sessionId: 'adopted-1' }, cwd: '/repo' })
+    const second = await store.start({ repoId: REPO_ID, mode: { kind: 'resume', sessionId: 'adopted-1' }, workspace: WORKSPACE })
     expect(second).toEqual({ ok: false, kind: 'already-open', sessionKey: first.snapshot.sessionKey })
   })
 
   it('allows a fork of an open session id, since a fork gets a new id', async () => {
     const store = createHostedStore(baseDeps())
-    const first = await store.start({ repoId: REPO_ID, mode: { kind: 'resume', sessionId: 'parent-1' }, cwd: '/repo' })
+    const first = await store.start({ repoId: REPO_ID, mode: { kind: 'resume', sessionId: 'parent-1' }, workspace: WORKSPACE })
     if (!first.ok) throw new Error('unreachable')
-    const forked = await store.start({ repoId: REPO_ID, mode: { kind: 'fork', sessionId: 'parent-1' }, cwd: '/repo' })
+    const forked = await store.start({ repoId: REPO_ID, mode: { kind: 'fork', sessionId: 'parent-1' }, workspace: WORKSPACE })
     expect(forked.ok).toBe(true)
   })
 
   it('setLimit lowers the limit without closing any session, only refusing a new start', async () => {
     const store = createHostedStore(baseDeps())
-    await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
-    await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
-    await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
+    await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
+    await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
     await store.setLimit(1)
     expect(store.list().filter((snapshot) => snapshot.phase !== 'ended')).toHaveLength(3)
-    const refused = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    const refused = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
     expect(refused).toEqual({ ok: false, kind: 'at-capacity', limit: 1 })
   })
 
@@ -311,16 +315,16 @@ describe('createHostedStore', () => {
 
   it('dismiss refuses still-open and removes an ended handle', async () => {
     const openStore = createHostedStore(baseDeps())
-    const openStarted = await openStore.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    const openStarted = await openStore.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
     if (!openStarted.ok) throw new Error('unreachable')
-    expect(openStore.dismiss(openStarted.snapshot.sessionKey)).toEqual({ ok: false, kind: 'still-open' })
+    await expect(openStore.dismiss(openStarted.snapshot.sessionKey, 'keep')).resolves.toEqual({ ok: false, kind: 'still-open' })
 
     const store = createHostedStore(baseDeps({ getSdk: () => Promise.resolve({ query: endedQuery, renameSession: vi.fn(() => Promise.resolve(undefined)) }) }))
-    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
     if (!started.ok) throw new Error('unreachable')
     await flush()
     expect(store.list().find((snapshot) => snapshot.sessionKey === started.snapshot.sessionKey)?.phase).toBe('ended')
-    expect(store.dismiss(started.snapshot.sessionKey)).toEqual({ ok: true })
+    await expect(store.dismiss(started.snapshot.sessionKey, 'keep')).resolves.toEqual({ ok: true })
     expect(store.list()).toEqual([])
   })
 
@@ -328,7 +332,7 @@ describe('createHostedStore', () => {
     const store = createHostedStore(baseDeps({ getSdk: () => Promise.resolve({ query: endedQuery, renameSession: vi.fn(() => Promise.resolve(undefined)) }) }))
     const keys: string[] = []
     for (let i = 0; i < ENDED_RETAIN_LIMIT + 3; i += 1) {
-      const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+      const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
       if (!started.ok) throw new Error('unreachable')
       keys.push(started.snapshot.sessionKey)
       await flush()
@@ -343,18 +347,18 @@ describe('createHostedStore', () => {
     const persistence = createInMemoryHostingPersistence()
     persistence.save({ limit: 1, open: [{ repoId: REPO_ID, claudeSessionId: 'parent-1', title: 'Old title', startedAt: 't0' }], defaults: DEFAULT_SESSION_DEFAULTS, marks: { pinned: [], archived: [] } })
     const store = createHostedStore(baseDeps({ persistence }))
-    await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
 
     const entries = await store.restorable()
     expect(entries).toHaveLength(1)
     const restoreId = entries[0]?.restoreId as string
 
-    const refused = await store.restore(restoreId, '/repo')
+    const refused = await store.restore(restoreId, { repoId: REPO_ID, workspace: WORKSPACE })
     expect(refused).toEqual({ ok: false, kind: 'at-capacity', limit: 1 })
     expect(await store.restorable()).toHaveLength(1)
 
     await store.setLimit(2)
-    const succeeded = await store.restore(restoreId, '/repo')
+    const succeeded = await store.restore(restoreId, { repoId: REPO_ID, workspace: WORKSPACE })
     expect(succeeded.ok).toBe(true)
     expect(await store.restorable()).toHaveLength(0)
   })
@@ -399,7 +403,7 @@ describe('createHostedStore', () => {
       }
       const persistence = createInMemoryHostingPersistence()
       const store = createHostedStore(baseDeps({ getSdk: () => Promise.resolve({ query, renameSession: vi.fn(() => Promise.resolve(undefined)) }), persistence }))
-      const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+      const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
       if (!started.ok) throw new Error('unreachable')
       box.deliver?.({ type: 'system', subtype: 'init', session_id: 'adopted-1' })
       await flush()
@@ -415,7 +419,7 @@ describe('createHostedStore', () => {
   it('defaults()/setDefaults() persist and never touch an open session', async () => {
     const store = createHostedStore(baseDeps())
     await expect(store.defaults()).resolves.toEqual(DEFAULT_SESSION_DEFAULTS)
-    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
     if (!started.ok) throw new Error('unreachable')
     const next = { model: 'opus' as const, permissionMode: 'acceptEdits' as const }
     await expect(store.setDefaults(next)).resolves.toEqual(next)
@@ -427,7 +431,7 @@ describe('createHostedStore', () => {
     const store = createHostedStore(baseDeps())
     const key = 'hosted-999' as import('../../shared/hosting/types').SessionKey
     await expect(store.rename(key, 'New title')).resolves.toEqual({ ok: false, kind: 'unknown-session' })
-    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
     if (!started.ok) throw new Error('unreachable')
     await expect(store.rename(started.snapshot.sessionKey, 'New title')).resolves.toEqual({ ok: false, kind: 'not-ready' })
   })
@@ -444,7 +448,7 @@ describe('createHostedStore', () => {
         },
       }) as unknown as HostedQuery
     const store = createHostedStore(baseDeps({ getSdk: () => Promise.resolve({ query, renameSession }) }))
-    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
     if (!started.ok) throw new Error('unreachable')
     box.deliver?.({ type: 'system', subtype: 'init', session_id: 'claude-1' })
     await flush()
@@ -466,7 +470,7 @@ describe('createHostedStore', () => {
         },
       }) as unknown as HostedQuery
     const store = createHostedStore(baseDeps({ getSdk: () => Promise.resolve({ query, renameSession }) }))
-    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
+    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
     if (!started.ok) throw new Error('unreachable')
     box.deliver?.({ type: 'system', subtype: 'init', session_id: 'claude-1' })
     await flush()
