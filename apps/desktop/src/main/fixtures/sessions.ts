@@ -251,6 +251,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       sessionKey: RESUMED_KEY,
       claudeSessionId: 'fixture-claude-6',
       repoId: WIDGETS_ID,
+      workspace: NON_WORKTREE_WORKSPACE,
       phase: 'ready',
       origin: { kind: 'resumed', from: 'fixture-history-1' },
       startedAt: t(1),
@@ -263,6 +264,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       rateLimit: null,
       controls: FIXTURE_CONTROLS,
       models: FIXTURE_MODELS,
+      usage: null,
       backgroundTasks: [],
     },
   ]
