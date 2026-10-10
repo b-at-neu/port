@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, Notification } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { join } from 'node:path'
 import { IPC_CHANNELS, type IpcChannel, type IpcEvent, type IpcEventMap, type IpcMap } from '../shared/ipc'
@@ -46,6 +46,9 @@ import {
   resolveSessionControlsSet,
   resolveSessionQuestionAnswer,
   resolveSessionPlanAnswer,
+  resolveSessionArchiveSet,
+  resolveSessionMarks,
+  resolveSessionPinSet,
   resolveSessionRename,
   resolveSessionRestore,
   resolveSessionRestoreDiscard,
@@ -64,6 +67,7 @@ import { runtimePreflight } from './runtime/preflight'
 import { createHostedStore, defaultHostedStoreDeps } from './hosting/store'
 import { createHostingPersistence } from './hosting/persist'
 import type { HostedStore } from './hosting/store'
+import { createNotifier } from './hosting/notify'
 
 type AppInfo = IpcMap['app:info']['response']
 
@@ -91,6 +95,11 @@ function broadcast<E extends IpcEvent>(event: E, payload: IpcEventMap[E]): void 
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) window.webContents.send(event, payload)
   }
+}
+
+/** `main/index.ts`'s own menu click handler — the app menu has no other way to reach the renderer. */
+export function broadcastAppCommand(command: IpcEventMap['app:command']): void {
+  broadcast('app:command', command)
 }
 
 function getAppInfo(): AppInfo {
@@ -227,9 +236,31 @@ export function registerIpc(): RegisteredIpc {
 
   // One hosted-session store for the process lifetime, created before the watcher — the dispatcher
   // sits between the two and needs this store first.
+  const notifier = createNotifier({
+    isAppFocused: () => BrowserWindow.getFocusedWindow() !== null,
+    repoLabel: (snapshot) => String(snapshot.repoId),
+    show: (notification, snapshot) => {
+      if (!Notification.isSupported()) return
+      const native = new Notification({ title: notification.title, body: notification.body })
+      native.on('click', () => {
+        const [window] = BrowserWindow.getAllWindows()
+        if (window !== undefined) {
+          if (window.isMinimized()) window.restore()
+          window.show()
+          window.focus()
+        }
+        broadcast('app:command', { kind: 'open-session', sessionKey: snapshot.sessionKey })
+      })
+      native.show()
+    },
+  })
+
   const hostedStore = createHostedStore({
     ...defaultHostedStoreDeps,
-    onStatus: (snapshot) => broadcast('session:status', snapshot),
+    onStatus: (snapshot) => {
+      broadcast('session:status', snapshot)
+      notifier.observe(snapshot)
+    },
     onEntries: (delta) => broadcast('session:entries', delta),
     persistence: createHostingPersistence({ dir: app.getPath('userData') }),
   })
@@ -300,6 +331,12 @@ export function registerIpc(): RegisteredIpc {
   handle('session:plan:answer', (_event, request) => resolveSessionPlanAnswer(request, hostingChannelDeps))
 
   handle('session:files', (_event, request) => resolveSessionFiles(request, hostingChannelDeps))
+
+  handle('session:marks', (_event, request) => resolveSessionMarks(request, hostingChannelDeps))
+
+  handle('session:pin:set', (_event, request) => resolveSessionPinSet(request, hostingChannelDeps))
+
+  handle('session:archive:set', (_event, request) => resolveSessionArchiveSet(request, hostingChannelDeps))
 
   handle('item:action', (_event, request) =>
     resolveItemAction(registryDeps, request, app.getPath('userData'), { listRepositories, applyItemAction, snapshot: watcher.snapshot, refresh: watcher.refresh }),

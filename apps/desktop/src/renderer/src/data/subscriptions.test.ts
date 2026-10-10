@@ -5,12 +5,14 @@ import type { SubscribableEvent, SubscriptionBridge } from './subscriptions'
 import { ipcQueryOptions } from './query'
 import type { BoardSnapshot } from '../../../shared/board/types'
 import type { HostedSessionSnapshot, SessionEntriesDelta } from '../../../shared/hosting/types'
+import type { AppCommand } from '../../../shared/shell/commands'
 
 function fakeBridge(): SubscriptionBridge & { fire: (event: SubscribableEvent, payload: unknown) => void } {
   const sets: Record<SubscribableEvent, Set<(payload: unknown) => void>> = {
     'board:update': new Set(),
     'session:status': new Set(),
     'session:entries': new Set(),
+    'app:command': new Set(),
   }
   const onBoardUpdate = vi.fn((listener: (payload: BoardSnapshot) => void) => {
     sets['board:update'].add(listener as (payload: unknown) => void)
@@ -24,10 +26,15 @@ function fakeBridge(): SubscriptionBridge & { fire: (event: SubscribableEvent, p
     sets['session:entries'].add(listener as (payload: unknown) => void)
     return () => sets['session:entries'].delete(listener as (payload: unknown) => void)
   })
+  const onAppCommand = vi.fn((listener: (payload: AppCommand) => void) => {
+    sets['app:command'].add(listener as (payload: unknown) => void)
+    return () => sets['app:command'].delete(listener as (payload: unknown) => void)
+  })
   return {
     onBoardUpdate,
     onSessionStatus,
     onSessionEntries,
+    onAppCommand,
     fire: (event, payload) => {
       for (const listener of sets[event]) listener(payload)
     },

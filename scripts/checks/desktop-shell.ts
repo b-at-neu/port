@@ -50,6 +50,59 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     expect(!(JSON.stringify(codeKeys) !== JSON.stringify(designKeys)), 'desktop-shell', `shell/key-bindings.ts's KEY_BINDINGS and DESIGN.md §3's keyboard table disagree — only in code: ${codeKeys.filter((k) => !designKeys.includes(k)).join(', ') || 'none'}, only in design: ${designKeys.filter((k) => !codeKeys.includes(k)).join(', ') || 'none'}`);
   }
 
+  // --- pin: shell/key-bindings.ts's global KEY_BINDINGS <-> shared/shell/commands.ts's APP_COMMANDS
+  {
+    const bindingsMod = await import(pathToFileURL(join(root, 'apps/desktop/src/renderer/src/shell/key-bindings.ts')).href);
+    const commandsMod = await import(pathToFileURL(join(root, 'apps/desktop/src/shared/shell/commands.ts')).href);
+    const globalBindings = (bindingsMod.KEY_BINDINGS as { readonly action: string; readonly scope: string }[]).filter((b) => b.scope === 'global');
+    const appCommandKinds = (commandsMod.APP_COMMANDS as { readonly kind: string }[]).map((c) => c.kind);
+
+    // Explicit map from a global binding's `action` text to the `APP_COMMANDS` kind(s)
+    // it drives — pinned so a rename or an addition on either side fails loudly.
+    const ACTION_TO_KINDS: Record<string, readonly string[]> = {
+      'Command palette': ['palette'],
+      'New session': ['new-session'],
+      'Jump to session': ([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).map((n) => `jump-to-session-${n}`),
+      'Next session': ['next-session'],
+      'Toggle sidebar': ['toggle-sidebar'],
+      'Rename session': ['rename-session'],
+    };
+
+    let violated = false;
+    for (const binding of globalBindings) {
+      const kinds = ACTION_TO_KINDS[binding.action];
+      if (kinds === undefined) {
+        violated = true;
+        fail('desktop-shell', `shell/key-bindings.ts's global binding "${binding.action}" has no entry in desktop-shell.ts's ACTION_TO_KINDS map`);
+        continue;
+      }
+      for (const kind of kinds) {
+        if (!appCommandKinds.includes(kind)) {
+          violated = true;
+          fail('desktop-shell', `shell/key-bindings.ts's global binding "${binding.action}" maps to APP_COMMANDS kind "${kind}", which shared/shell/commands.ts does not define`);
+        }
+      }
+    }
+
+    const mappedKinds = new Set(Object.values(ACTION_TO_KINDS).flat());
+    for (const kind of appCommandKinds) {
+      if (!mappedKinds.has(kind)) {
+        violated = true;
+        fail('desktop-shell', `shared/shell/commands.ts's APP_COMMANDS kind "${kind}" maps back to no shell/key-bindings.ts global binding`);
+      }
+    }
+
+    const boundActions = new Set(globalBindings.map((b) => b.action));
+    for (const action of Object.keys(ACTION_TO_KINDS)) {
+      if (!boundActions.has(action)) {
+        violated = true;
+        fail('desktop-shell', `desktop-shell.ts's ACTION_TO_KINDS map names "${action}", which is not a scope: 'global' binding in shell/key-bindings.ts`);
+      }
+    }
+
+    if (!violated) ok();
+  }
+
   // --- guard: no data-action= under shell/, backlog/, components/ ---------
   {
     const scanDirs = [

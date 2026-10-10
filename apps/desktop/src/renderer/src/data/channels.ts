@@ -26,6 +26,7 @@ export const QUERY_CHANNELS = [
   'session:files',
   'folders:list',
   'session:changes',
+  'session:marks',
 ] as const
 
 export type QueryChannel = (typeof QUERY_CHANNELS)[number]
@@ -64,6 +65,8 @@ export const MUTATION_CHANNELS = [
   'session:question:answer',
   'session:plan:answer',
   'folders:choose',
+  'session:pin:set',
+  'session:archive:set',
 ] as const
 
 export type MutationChannel = (typeof MUTATION_CHANNELS)[number]

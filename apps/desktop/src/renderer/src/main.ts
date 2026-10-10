@@ -9,11 +9,13 @@ import { themeStore } from './theme/store'
 import { trackLastRoute } from './shell/prefs'
 import { initSidebarCollapsed, listNavigatorFor, openPalette, setRenaming, toggleSidebarCollapsed } from './shell/stores'
 import { shellPrefs, setSidebarCollapsed } from './shell/prefs'
-import { installKeyboardMap } from './shell/keyboard'
+import { installKeyboardMap, runAppCommand } from './shell/keyboard'
+import type { KeyboardDeps } from './shell/keyboard'
 import { liveSessionKeys, selectSession, setSessionsQueryClient, startNewSession } from './session/actions'
 import { selectedSession } from './session/selection'
 import { toast } from 'sonner'
 import { shouldRedirectToSetup } from './setup/launch-redirect'
+import { sharedSubscriptions } from './data/subscriptions'
 import type { RepositoryEntry } from '../../shared/repos'
 import type { ReposListResponse } from '../../shared/ipc'
 
@@ -43,7 +45,8 @@ setSessionsQueryClient(queryClient)
 initSidebarCollapsed(shellPrefs().sidebarCollapsed)
 if (app) mountReact(app, queryClient)
 
-installKeyboardMap({
+// Built once so the keymap and the app-menu/notification push run the identical action.
+const actionDeps: KeyboardDeps = {
   openPalette,
   readyRepoIds: () => currentRepositories(queryClient).filter((r) => 'config' in r).map((r) => r.id),
   startNewSession,
@@ -62,7 +65,10 @@ installKeyboardMap({
     return screen !== null ? listNavigatorFor(screen) : undefined
   },
   noReadyRepoToast: () => toast('Register a repository to start a session.'),
-})
+}
+
+installKeyboardMap(actionDeps)
+sharedSubscriptions().subscribe('app:command', (command) => runAppCommand(command, actionDeps))
 
 async function boot(): Promise<void> {
   router.subscribe('onResolved', () => {

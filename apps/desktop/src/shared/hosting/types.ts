@@ -3,6 +3,7 @@ import type { RepoId } from '../repos'
 import type { RuntimeDiagnosis } from '../runtime/types'
 import type { EntryPatch, TranscriptEntry } from '../sessions/transcript'
 import type { PendingInteraction, SessionControls, SessionModels } from './controls'
+import type { SessionUsage } from './usage'
 
 declare const sessionKeyBrand: unique symbol
 
@@ -59,7 +60,18 @@ export interface HostedSessionSnapshot {
   readonly controls: SessionControls
   /** The model picker's own read-back — `pending` before the first read settles. */
   readonly models: SessionModels
+  /** The newest cost/token/context reading off this process's own messages — `null` until the first usable one arrives. */
+  readonly usage: SessionUsage | null
 }
+
+/** Pin and archive marks, keyed by `claudeSessionId` — app-local, persisted in `hosting.json`. */
+export interface SessionMarks {
+  readonly pinned: readonly string[]
+  readonly archived: readonly string[]
+}
+
+/** `'session:pin:set'`/`'session:archive:set'`'s response — an empty or over-long id is a value, shown as a toast. */
+export type SessionMarkResult = { readonly ok: true; readonly marks: SessionMarks } | { readonly ok: false; readonly kind: 'invalid-session-id' }
 
 /** `session:event`'s payload — the SDK message crosses the boundary opaque; this app never narrows, interprets or executes it. `receivedAt` is this process's own clock, never the SDK's. */
 export interface SessionEventEnvelope {

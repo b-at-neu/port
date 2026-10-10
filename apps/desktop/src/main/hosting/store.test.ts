@@ -341,7 +341,7 @@ describe('createHostedStore', () => {
 
   it('restore() removes the entry on a successful start, but keeps it when at-capacity', async () => {
     const persistence = createInMemoryHostingPersistence()
-    persistence.save({ limit: 1, open: [{ repoId: REPO_ID, claudeSessionId: 'parent-1', title: 'Old title', startedAt: 't0' }], defaults: DEFAULT_SESSION_DEFAULTS })
+    persistence.save({ limit: 1, open: [{ repoId: REPO_ID, claudeSessionId: 'parent-1', title: 'Old title', startedAt: 't0' }], defaults: DEFAULT_SESSION_DEFAULTS, marks: { pinned: [], archived: [] } })
     const store = createHostedStore(baseDeps({ persistence }))
     await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, cwd: '/repo' })
 
@@ -368,6 +368,7 @@ describe('createHostedStore', () => {
         { repoId: REPO_ID, claudeSessionId: 'b', title: null, startedAt: 't2' },
       ],
       defaults: DEFAULT_SESSION_DEFAULTS,
+      marks: { pinned: [], archived: [] },
     })
     const store = createHostedStore(baseDeps({ persistence }))
     const entries = await store.restorable()

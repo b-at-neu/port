@@ -2,7 +2,7 @@
 // an empty state rather than refusing to load. Pinned as the sole writer by desktop-hosting.ts.
 import type { RepoId } from '../../shared/repos'
 import { DEFAULT_SESSION_DEFAULTS, SESSION_MODELS, SESSION_PERMISSION_MODES } from '../../shared/hosting/types'
-import type { SessionDefaults, SessionModel, SessionPermissionMode } from '../../shared/hosting/types'
+import type { SessionDefaults, SessionMarks, SessionModel, SessionPermissionMode } from '../../shared/hosting/types'
 import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '../platform/files'
 import { pathOps } from '../platform/paths'
 
@@ -24,6 +24,7 @@ export interface HostingPersistedState {
   readonly limit: number
   readonly open: readonly PersistedOpenEntry[]
   readonly defaults: SessionDefaults
+  readonly marks: SessionMarks
 }
 
 interface HostingFileShape {
@@ -31,6 +32,27 @@ interface HostingFileShape {
   readonly limit: number
   readonly open: readonly unknown[]
   readonly defaults?: unknown
+  readonly marks?: unknown
+}
+
+const MARKS_ID_MAX = 200
+const EMPTY_MARKS: SessionMarks = { pinned: [], archived: [] }
+
+function resolveMarkList(value: unknown): readonly string[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  for (const entry of value) {
+    if (typeof entry === 'string' && entry !== '' && entry.length <= MARKS_ID_MAX) seen.add(entry)
+  }
+  return [...seen]
+}
+
+// Each field falls back to an empty list on its own, the same per-field fallback resolveDefaults uses —
+// a malformed 'archived' never drops a valid 'pinned', or vice versa.
+function resolveMarks(value: unknown): SessionMarks {
+  if (typeof value !== 'object' || value === null) return EMPTY_MARKS
+  const marks = value as Record<string, unknown>
+  return { pinned: resolveMarkList(marks.pinned), archived: resolveMarkList(marks.archived) }
 }
 
 // `model: null` is itself valid (Claude Code's own default); anything else
@@ -73,7 +95,7 @@ function isValidLimit(value: unknown): value is number {
 }
 
 function emptyState(): HostingPersistedState {
-  return { limit: DEFAULT_SESSION_LIMIT, open: [], defaults: DEFAULT_SESSION_DEFAULTS }
+  return { limit: DEFAULT_SESSION_LIMIT, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS }
 }
 
 export interface CreateHostingPersistenceParams {
@@ -111,7 +133,8 @@ export function createHostingPersistence(params: CreateHostingPersistenceParams)
     const limit = isValidLimit(value.limit) ? value.limit : DEFAULT_SESSION_LIMIT
     const open = Array.isArray(value.open) ? value.open.filter(isValidOpenEntry) : []
     const defaults = resolveDefaults(value.defaults)
-    return { limit, open, defaults }
+    const marks = resolveMarks(value.marks)
+    return { limit, open, defaults, marks }
   }
 
   function startWrite(state: HostingPersistedState, json: string): void {
@@ -132,7 +155,7 @@ export function createHostingPersistence(params: CreateHostingPersistenceParams)
   }
 
   function enqueue(state: HostingPersistedState): void {
-    const json = JSON.stringify({ version: CURRENT_VERSION, limit: state.limit, open: state.open, defaults: state.defaults })
+    const json = JSON.stringify({ version: CURRENT_VERSION, limit: state.limit, open: state.open, defaults: state.defaults, marks: state.marks })
     if (json === lastWrittenJson) return
     if (writing !== null) {
       pending = state
