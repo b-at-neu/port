@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createStageLauncher } from './launcher'
 import type { StageLaunchRequest } from '../dispatch/launch'
 import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '../../shared/hosting/types'
+import type { StartSessionParams } from '../hosting/store'
 import { WIDGETS_ID, FIXTURE_REPOSITORIES } from '../fixtures/repos'
 import type { ReadyEntry } from '../actions/apply'
 
@@ -41,11 +42,12 @@ function fakeDeps(overrides: Partial<{ start: SessionStartResult }> = {}) {
   const close = vi.fn().mockResolvedValue({ ok: true })
   const dismiss = vi.fn().mockResolvedValue({ ok: true })
   const send = vi.fn().mockReturnValue({ ok: true, uuid: 'u1', queued: true })
-  const store = { start: vi.fn().mockResolvedValue(started), send, close, dismiss } as unknown as Parameters<typeof createStageLauncher>[0]['store']
+  const start = vi.fn<(params: StartSessionParams) => Promise<SessionStartResult>>().mockResolvedValue(started)
+  const store = { start, send, close, dismiss } as unknown as Parameters<typeof createStageLauncher>[0]['store']
   const removeWorktree = vi.fn().mockResolvedValue({ outcome: 'removed' })
   const createWorktree = vi.fn().mockResolvedValue({ ok: true, path: '/repo/.claude/worktrees/session-abc123', branch: 'session/abc123', baseSha: 'abc' })
   const onOutcome = vi.fn()
-  return { store, removeWorktree, createWorktree, onOutcome, close, dismiss, send }
+  return { store, removeWorktree, createWorktree, onOutcome, close, dismiss, send, start }
 }
 
 describe('createStageLauncher.launch', () => {
@@ -54,8 +56,12 @@ describe('createStageLauncher.launch', () => {
     const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date('2026-01-01T00:00:00Z') })
     const result = await launcher.launch(request())
     expect(result).toEqual({ ok: true, sessionKey: 'hosted-1' })
-    expect(vi.mocked(deps.store.start)).toHaveBeenCalledWith(
-      expect.objectContaining({ repoId: WIDGETS_ID, mode: { kind: 'fresh' }, stage: expect.objectContaining({ agentName: 'port:impl-agent', model: 'sonnet' }) }),
+    expect(deps.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repoId: WIDGETS_ID,
+        mode: { kind: 'fresh' },
+        stage: expect.objectContaining({ agentName: 'port:impl-agent', model: 'sonnet' }) as unknown as StartSessionParams['stage'],
+      }),
     )
     expect(deps.send).toHaveBeenCalledWith('hosted-1', 'Run your pipeline stage for #52.')
   })
