@@ -203,7 +203,7 @@ describe('createDispatcher — ownership', () => {
     const dispatcher = createDispatcher(baseDeps())
     await dispatcher.consider(snapshotWith([tickReport()]))
     expect(dispatcher.status()).toEqual([
-      { repoId: REPO_ID, owner: 'none', state: { kind: 'idle' }, runState: 'dispatching', ownedSince: null, unreadableMessage: null, budget: null, observed: [] },
+      { repoId: REPO_ID, owner: 'none', state: { kind: 'idle' }, runState: 'dispatching', ownedSince: null, unreadableMessage: null, budget: null, observed: [], denials: [], interrupted: [] },
     ])
   })
 
@@ -211,7 +211,7 @@ describe('createDispatcher — ownership', () => {
     const dispatcher = createDispatcher(baseDeps({ readOwnership: () => Promise.resolve(UNREADABLE_OWNERSHIP) }))
     await dispatcher.consider(snapshotWith([tickReport()]))
     expect(dispatcher.status()).toEqual([
-      { repoId: REPO_ID, owner: 'unreadable', state: { kind: 'idle' }, runState: 'dispatching', ownedSince: null, unreadableMessage: 'bad', budget: null, observed: [] },
+      { repoId: REPO_ID, owner: 'unreadable', state: { kind: 'idle' }, runState: 'dispatching', ownedSince: null, unreadableMessage: 'bad', budget: null, observed: [], denials: [], interrupted: [] },
     ])
   })
 

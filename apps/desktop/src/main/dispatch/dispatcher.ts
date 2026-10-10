@@ -21,7 +21,9 @@ import type { ItemsByNumberFetch } from '../../shared/github/types'
 import { labelName } from '../../shared/labels/vocabulary'
 import { runObservationPass } from './observe-pass'
 import { commentFailureMessage, selectDispatches, survived } from './select'
-import { budgetLiveSets, budgetRoute, escalationBody } from './budget'
+import { budgetLiveSets, budgetRoute, escalationBody, sumCostUsd } from './budget'
+import type { StageDenial, InterruptedStage } from '../../shared/stage/types'
+import { withDenial, withoutDenialId, withoutDenialRule } from './attention'
 import type { BudgetGate } from './budget-gate'
 import { boundRecords, freeSlots, refreshRecords } from './launch'
 import type { StageLauncher, StageRecord } from './launch'
@@ -63,6 +65,8 @@ export interface CreateDispatcherParams {
   readonly dirs: { readonly audit: string; readonly scratch: string }
   readonly onChange: () => void
   readonly now: () => Date
+  /** Interrupted stage sessions for a repository, read from `main/stage/registry.ts` — `[]` when none is wired (tests, or before the registry loads). */
+  readonly interrupted?: (repoId: RepoId) => readonly InterruptedStage[]
 }
 
 export interface Dispatcher {
@@ -83,6 +87,10 @@ export interface Dispatcher {
   recordOutcome(repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome): void
   /** `true` unless this app currently owns `repoId` — an unread repository (`'none'`) holds, the fail direction for `SESSION REQUIRED`. */
   holdsSessionRequired(repoId: RepoId): boolean
+  /** Stage-denial bookkeeping: record (deduped by rule, bounded to 20), dismiss by id (operator's own Dismiss), or clear every denial proposing a given rule (once Allow succeeds or reports `already-allowed`). */
+  recordDenial(repoId: RepoId, denial: StageDenial): void
+  dismissDenial(repoId: RepoId, id: string): void
+  clearDenialsFor(repoId: RepoId, rule: string): void
 }
 
 interface RepoDispatcherState {
@@ -97,6 +105,7 @@ interface RepoDispatcherState {
   budget: BudgetStatus | null
   observed: ObservationRecord[]
   observedWriteAt: Map<number, string>
+  denials: StageDenial[]
 }
 
 function emptyRepoState(): RepoDispatcherState {
@@ -112,6 +121,7 @@ function emptyRepoState(): RepoDispatcherState {
     budget: null,
     observed: [],
     observedWriteAt: new Map(),
+    denials: [],
   }
 }
 
@@ -191,6 +201,21 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     return stateFor(repoId).owner !== 'app'
   }
 
+  function recordDenial(repoId: RepoId, denial: StageDenial): void {
+    stateFor(repoId).denials = [...withDenial(stateFor(repoId).denials, denial)]
+    deps.onChange()
+  }
+  function dismissDenial(repoId: RepoId, id: string): void {
+    const state = repoStates.get(repoId)
+    if (state !== undefined) state.denials = [...withoutDenialId(state.denials, id)]
+    deps.onChange()
+  }
+  function clearDenialsFor(repoId: RepoId, rule: string): void {
+    const state = repoStates.get(repoId)
+    if (state !== undefined) state.denials = [...withoutDenialRule(state.denials, rule)]
+    deps.onChange()
+  }
+
   async function considerRepo(entry: ReadyEntry, tick: TickReport | undefined, viewer: string | null): Promise<void> {
     if (stopped) return
     if (inFlight.has(entry.id)) return
@@ -227,7 +252,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
         if (state.budgetReset) {
           const sets = budgetLiveSets(state.records)
           const sweepResult = await deps.budget.sweep(entry, sets)
-          state.budget = { line: sweepResult.line, problem: sweepResult.problem, notes: state.budget?.notes ?? [] }
+          state.budget = { line: sweepResult.line, problem: sweepResult.problem, notes: state.budget?.notes ?? [], costUsd: sumCostUsd(state.records) }
         }
       }
 
@@ -320,7 +345,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
         await escalateOverBudget(entry, candidate, result.line, notes, viewer)
       }
       gated = kept
-      state.budget = { line: state.budget?.line ?? null, problem: state.budget?.problem ?? null, notes: notes.length > NOTE_LIMIT ? notes.slice(notes.length - NOTE_LIMIT) : notes }
+      state.budget = { line: state.budget?.line ?? null, problem: state.budget?.problem ?? null, costUsd: state.budget?.costUsd ?? null, notes: notes.length > NOTE_LIMIT ? notes.slice(notes.length - NOTE_LIMIT) : notes }
     }
 
     if (gated.length === 0) {
@@ -419,6 +444,8 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       unreadableMessage: s.unreadableMessage,
       budget: s.budget,
       observed: s.observed,
+      denials: s.denials,
+      interrupted: deps.interrupted?.(repoId) ?? [],
     }))
   }
 
@@ -467,5 +494,5 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     stopped = true
   }
 
-  return { consider, status, stopFor, standDown, liveStages, liveStageSessions, shutdown, recordOutcome, holdsSessionRequired }
+  return { consider, status, stopFor, standDown, liveStages, liveStageSessions, shutdown, recordOutcome, holdsSessionRequired, recordDenial, dismissDenial, clearDenialsFor }
 }

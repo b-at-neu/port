@@ -105,6 +105,8 @@ function dispatchStatus(overrides: Partial<RepoDispatchStatus> = {}): RepoDispat
     unreadableMessage: null,
     budget: null,
     observed: [],
+    denials: [],
+    interrupted: [],
     ...overrides,
   }
 }
@@ -177,8 +179,8 @@ describe('needsYouItems', () => {
 
   it('budget notes keep only escalated and escalation-failed', () => {
     const dispatch = [
-      dispatchStatus({ budget: { line: null, problem: null, notes: [{ kind: 'escalated', number: 5, needsHumanLabel: 'needs human', commentFailedMessage: null }] } }),
-      dispatchStatus({ repoId: 'repo-b' as RepoId, budget: { line: null, problem: null, notes: [{ kind: 'held', number: 6, line: 'held' }] } }),
+      dispatchStatus({ budget: { line: null, problem: null, costUsd: null, notes: [{ kind: 'escalated', number: 5, needsHumanLabel: 'needs human', commentFailedMessage: null }] } }),
+      dispatchStatus({ repoId: 'repo-b' as RepoId, budget: { line: null, problem: null, costUsd: null, notes: [{ kind: 'held', number: 6, line: 'held' }] } }),
     ]
     const items = needsYouItems(snapshotOf([], { dispatch }), NOW)
     expect(items).toHaveLength(1)
