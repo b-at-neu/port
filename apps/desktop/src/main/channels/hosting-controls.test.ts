@@ -83,6 +83,9 @@ function storeStub(overrides: Partial<HostedStore> = {}): HostedStore {
     answerPlan: () => {
       throw new Error('answerPlan should not be invoked in this case')
     },
+    stopTask: () => {
+      throw new Error('unused in this test')
+    },
     ...overrides,
   }
 }

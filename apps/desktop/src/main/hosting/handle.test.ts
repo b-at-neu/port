@@ -27,6 +27,7 @@ function fakeQuery(options: { readonly commands?: readonly { name: string; descr
   const setModel = vi.fn(() => Promise.resolve())
   const applyFlagSettings = vi.fn(() => Promise.resolve())
   const supportedModels = vi.fn(() => Promise.resolve([]))
+  const stopTask = vi.fn(() => Promise.resolve())
 
   const query: HostedQuery = {
     interrupt,
@@ -37,6 +38,7 @@ function fakeQuery(options: { readonly commands?: readonly { name: string; descr
     setModel,
     applyFlagSettings,
     supportedModels,
+    stopTask,
     [Symbol.asyncIterator]() {
       return {
         next(): Promise<IteratorResult<unknown>> {
@@ -62,6 +64,7 @@ function fakeQuery(options: { readonly commands?: readonly { name: string; descr
     setModel,
     applyFlagSettings,
     supportedModels,
+    stopTask,
     push(message: unknown) {
       if (pendingResolve) {
         const resolve = pendingResolve
@@ -110,6 +113,7 @@ function baseParams(overrides: Partial<Parameters<typeof createHostedHandle>[0]>
     samePath: (a: string, b: string) => a === b,
     initialTitle: null,
     defaults: DEFAULT_SESSION_DEFAULTS,
+    history: { kind: 'none' as const },
     ...overrides,
   }
 }

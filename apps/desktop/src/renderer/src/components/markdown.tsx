@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { parseMarkdown } from '../../../shared/markdown/block'
 import type { BlockNode, InlineNode, ListItem, TableAlign } from '../../../shared/markdown/types'
 import { cn } from '@/lib/utils'
+import { CodeBlock } from './code-block'
 
 function renderInline(nodes: readonly InlineNode[]): ReactNode {
   return nodes.map((node, index): ReactNode => {
@@ -65,13 +66,7 @@ function MarkdownBlocks({ nodes }: { readonly nodes: readonly BlockNode[] }) {
               </p>
             )
           case 'code':
-            return (
-              <pre key={index} className="overflow-x-auto rounded-lg bg-muted p-2">
-                <code className="font-mono text-small" data-language={node.language ?? undefined}>
-                  {node.code}
-                </code>
-              </pre>
-            )
+            return <CodeBlock key={index} code={node.code} language={node.language} />
           case 'blockquote':
             return (
               <blockquote key={index} className="border-l-2 border-border pl-3 text-muted-foreground">

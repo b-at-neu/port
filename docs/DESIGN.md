@@ -34,6 +34,11 @@ Components use roles, never values. Tailwind arbitrary colour values (`bg-[#…]
 | `brand` | `#172554` | `#172554`, with a 1px `#4b5f8f` border | The mark's tile (§8), never anything else |
 | `brand-foreground` | `#ffffff` | `#ffffff` | The mark's own strokes inside its `brand` tile (§8) — never inverts, since the tile's background does not either |
 | `overlay` | `rgb(0 0 0 / 50%)` | `rgb(0 0 0 / 50%)` | The Dialog/AlertDialog/CommandDialog scrim — dims what is behind it rather than reading as a surface of its own |
+| `syntax-keyword` | `#cf222e` | `#ff7b72` | Highlighted code: keywords, built-ins, selectors |
+| `syntax-string` | `#0a3069` | `#a5d6ff` | Highlighted code: strings, regexes, attributes |
+| `syntax-comment` | `#57606a` | `#8b949e` | Highlighted code: comments |
+| `syntax-constant` | `#0550ae` | `#79c0ff` | Highlighted code: numbers, literals |
+| `syntax-function` | `#8250df` | `#d2a8ff` | Highlighted code: function/type names |
 
 **Navy is the brand; blue is a status.** Navy marks what you can act on and port's own identity. Blue appears only as the `working` status below. The two never stand in for each other.
 
@@ -70,6 +75,11 @@ WCAG ratios for the pairings the interface uses. The requirement itself is in `E
 | `working` pill text on its background | 5.5 | 7.7 |
 | Status pill text on its background | 6.4 – 6.8 | 8.9 – 10.6 |
 | Diff text on its background | 6.8 / 7.6 | 11.8 / 9.6 |
+| `syntax-keyword` on `muted` | 5.3 | 7.9 |
+| `syntax-string` on `muted` | 12.9 | 11.2 |
+| `syntax-comment` on `muted` | 4.6 | 6.6 |
+| `syntax-constant` on `muted` | 6.1 | 9.8 |
+| `syntax-function` on `muted` | 5.9 | 6.7 |
 
 Two rules follow from the failures:
 - **Text on `muted` or `accent` surfaces uses `foreground` or `foreground-secondary`,** never `muted-foreground`.
@@ -187,7 +197,8 @@ Scoping epics, releases and analytics are out of scope for the first release.
 | `PhaseBar` | Six 10×4px segments with a 2px gap, for plan, plan review, implement, review, revision, merge. Finished segments use the `working` pill background, the current one the `working` dot, waiting-on-you `attention`, complete `success`, the rest `accent`. Tooltip names the phase |
 | `PhaseList` | Vertical version for the detail pane: an 8px dot per phase, with who and when ("Plan approved by you · 2h ago") and live cost and time on the current phase |
 | `TicketRow`, `RepoPipelineRow`, `SessionRow`, `NeedsYouItem` | The list rows (§3) |
-| `ToolCallRow`, `DiffView`, `Markdown`, `Composer`, `ContextMeter` | Session pieces. `ContextMeter` is a 56×4px bar plus a percentage |
+| `ToolCallRow`, `DiffView`, `Markdown`, `CodeBlock`, `Composer`, `ContextMeter` | Session pieces. `ContextMeter` is a 56×4px bar plus a percentage. `ToolCallRow` carries a per-tool one-line summary and default-open rule (edits with a diff, TodoWrite, a running subagent, a failed Bash); its body delegates to `ToolCallDetail`'s Bash/TodoWrite/Task/lookup views. A subagent's children nest recursively under its row, indented with a `border-l` rule; an orphaned child (its parent row evicted from the window) carries the label "Subagent · parent call not shown" |
+| `BackgroundTasksPanel` | A `border` card between the command strip and composer, hidden when empty. Header `Background tasks · N`; each 36px row shows a type icon, a truncating description with a tooltip, a mono type tag, and a `Stop` ghost button that opens a confirm dialog |
 | `DetailPane`, `EmptyState`, `ErrorBanner` | Layout and states |
 
 **If a pattern appears twice, it becomes a shared component.** One-off styling inside a screen file is a finding.

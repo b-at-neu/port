@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { buildRow, diffSummary, hunkHeader } from './conversation-model'
+import { buildRow, defaultOpen, diffSummary, groupEntries, hunkHeader, toolSummary } from './conversation-model'
+import type { RowView } from './conversation-model'
 import type { TranscriptEntry } from '../../../shared/sessions/transcript'
 
 const PAYLOAD = { text: 'hello', omittedChars: 0 } as const
@@ -41,5 +42,99 @@ describe('diffSummary / hunkHeader', () => {
     const diff = { path: 'a.ts', isNewFile: true, additions: 3, deletions: 1, hunks: [] }
     expect(diffSummary(diff)).toBe('(new file) a.ts  +3 -1')
     expect(hunkHeader({ oldStart: 1, oldLines: 2, newStart: 1, newLines: 3, lines: [] })).toBe('@@ -1,2 +1,3 @@')
+  })
+})
+
+function toolCall(uuid: string, overrides: Partial<Extract<TranscriptEntry, { type: 'tool-call' }>> = {}): TranscriptEntry {
+  return { type: 'tool-call', uuid, timestamp: 't', name: 'Task', headline: 'x', input: PAYLOAD, result: null, diff: null, ...overrides }
+}
+
+describe('groupEntries', () => {
+  it('nests a child under its parent toolUseId', () => {
+    const parent = toolCall('p', { toolUseId: 'tu1' })
+    const child: TranscriptEntry = { type: 'user-text', uuid: 'c', timestamp: 't', text: PAYLOAD, parentToolUseId: 'tu1' }
+    const grouped = groupEntries([parent, child])
+    expect(grouped).toHaveLength(1)
+    expect(grouped[0]?.children).toHaveLength(1)
+    expect(grouped[0]?.children[0]?.entry.uuid).toBe('c')
+  })
+
+  it('flags an orphan whose parent is not in the window, keeping it top-level', () => {
+    const child: TranscriptEntry = { type: 'user-text', uuid: 'c', timestamp: 't', text: PAYLOAD, parentToolUseId: 'missing' }
+    const grouped = groupEntries([child])
+    expect(grouped).toHaveLength(1)
+    expect(grouped[0]?.orphanSubagent).toBe(true)
+  })
+
+  it('nests grandchildren recursively', () => {
+    const grandparent = toolCall('gp', { toolUseId: 'tu-gp' })
+    const parent: TranscriptEntry = { ...toolCall('p', { toolUseId: 'tu-p' }), parentToolUseId: 'tu-gp' }
+    const child: TranscriptEntry = { type: 'user-text', uuid: 'c', timestamp: 't', text: PAYLOAD, parentToolUseId: 'tu-p' }
+    const grouped = groupEntries([grandparent, parent, child])
+    expect(grouped).toHaveLength(1)
+    expect(grouped[0]?.children[0]?.children[0]?.entry.uuid).toBe('c')
+  })
+})
+
+function rowFor(entry: TranscriptEntry): Extract<RowView, { readonly kind: 'tool-call' }> {
+  const row = buildRow(entry)
+  if (row.kind !== 'tool-call') throw new Error('expected a tool-call row')
+  return row
+}
+
+describe('toolSummary', () => {
+  it('reports a known Bash exit code', () => {
+    const entry = toolCall('b1', { name: 'Bash', detail: { kind: 'bash', command: 'ls', exitCode: 0, interrupted: false } })
+    expect(toolSummary(rowFor(entry))).toBe('exit 0')
+  })
+
+  it('reports Read as a line count', () => {
+    const entry = toolCall('r1', { name: 'Read', detail: { kind: 'lookup', count: 120 } })
+    expect(toolSummary(rowFor(entry))).toBe('120 lines')
+  })
+
+  it('reports Grep with No matches', () => {
+    const entry = toolCall('g1', { name: 'Grep', detail: { kind: 'lookup', count: 0 } })
+    expect(toolSummary(rowFor(entry))).toBe('No matches')
+  })
+
+  it('reports TodoWrite progress', () => {
+    const entry = toolCall('t1', {
+      name: 'TodoWrite',
+      detail: { kind: 'todos', items: [{ content: 'a', status: 'completed' }, { content: 'b', status: 'pending' }], droppedCount: 0 },
+    })
+    expect(toolSummary(rowFor(entry))).toBe('1 of 2 done')
+  })
+
+  it('reports a running subagent with its step count', () => {
+    const entry = toolCall('s1', { name: 'Task', detail: { kind: 'task', description: 'x', subagentType: null } })
+    expect(toolSummary(rowFor(entry), 4)).toBe('4 steps · running')
+  })
+
+  it('reports a done subagent with its step count', () => {
+    const entry = toolCall('s2', { name: 'Task', detail: { kind: 'task', description: 'x', subagentType: null }, result: { isError: false, payload: PAYLOAD } })
+    expect(toolSummary(rowFor(entry), 1)).toBe('1 step · done')
+  })
+
+  it('reports a failed subagent without a step count', () => {
+    const entry = toolCall('s3', { name: 'Task', detail: { kind: 'task', description: 'x', subagentType: null }, result: { isError: true, payload: PAYLOAD } })
+    expect(toolSummary(rowFor(entry), 4)).toBe('error')
+  })
+})
+
+describe('defaultOpen', () => {
+  it('opens a diff by default', () => {
+    const entry = toolCall('d1', { name: 'Edit', diff: { path: 'a.ts', isNewFile: false, additions: 1, deletions: 0, hunks: [] } })
+    expect(defaultOpen(rowFor(entry))).toBe(true)
+  })
+
+  it('opens a failed Bash by default', () => {
+    const entry = toolCall('b2', { name: 'Bash', result: { isError: true, payload: PAYLOAD }, detail: { kind: 'bash', command: 'false', exitCode: 1, interrupted: false } })
+    expect(defaultOpen(rowFor(entry))).toBe(true)
+  })
+
+  it('leaves a successful Read closed by default', () => {
+    const entry = toolCall('r2', { name: 'Read', result: { isError: false, payload: PAYLOAD }, detail: { kind: 'lookup', count: 10 } })
+    expect(defaultOpen(rowFor(entry))).toBe(false)
   })
 })

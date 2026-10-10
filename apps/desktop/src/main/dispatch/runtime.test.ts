@@ -44,6 +44,7 @@ function fakeStore(): HostedStore {
     rename: () => Promise.reject(new Error('unused')),
     marks: () => Promise.reject(new Error('unused')),
     setMark: () => Promise.reject(new Error('unused')),
+    stopTask: () => Promise.reject(new Error('unused')),
   }
 }
 

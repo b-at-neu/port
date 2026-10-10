@@ -1,9 +1,15 @@
 // Pinned to the bottom while near it, a floating "N new below" button
 // otherwise, and rows above 500 reveal in chunks across animation frames.
-import { useRef, useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { Link } from '@tanstack/react-router'
+import { ChevronDown, ChevronRight } from 'lucide-react'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ConversationEntry } from './conversation-entry'
-import type { LiveBlock } from '../../../shared/hosting/types'
+import { Markdown } from './markdown'
+import { groupEntries } from './conversation-model'
+import { ErrorBanner } from './error-banner'
+import { ROUTE_IDS } from '../router/routes'
+import type { LiveBlock, SessionHistory } from '../../../shared/hosting/types'
 import type { TranscriptEntry } from '../../../shared/sessions/transcript'
 
 const NEAR_BOTTOM_PX = 64
@@ -19,11 +25,58 @@ function liveSignature(block: LiveBlock | null): string {
 }
 
 function LiveRow({ block }: { readonly block: LiveBlock }) {
-  if (block.kind === 'thinking') return <div className="text-small text-muted-foreground">Thinking…</div>
+  if (block.kind === 'thinking') {
+    return (
+      <Collapsible data-slot="thinking-row">
+        <CollapsibleTrigger className="flex h-7 items-center gap-1.5 rounded-md px-1 text-left text-small text-muted-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring">
+          <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 transition-transform [[data-state=open]_&]:rotate-90" />
+          Thinking…
+        </CollapsibleTrigger>
+        <CollapsibleContent className="px-1 py-1 text-small text-muted-foreground">
+          <pre className="overflow-x-auto font-sans whitespace-pre-wrap">{block.text}</pre>
+        </CollapsibleContent>
+      </Collapsible>
+    )
+  }
   return (
     <div>
       <span className="mb-1 block text-meta font-medium text-muted-foreground">Claude</span>
-      <pre className="overflow-x-auto font-sans text-body leading-[1.6] whitespace-pre-wrap">{block.text}</pre>
+      <Markdown source={block.text} />
+    </div>
+  )
+}
+
+function HistorySection({ history, dividerLabel }: { readonly history: SessionHistory; readonly dividerLabel: string }) {
+  if (history.kind === 'none') return null
+  if (history.kind === 'failed') {
+    return <ErrorBanner message={`Couldn't load the earlier conversation: ${history.message}. Open it from History.`} />
+  }
+
+  const grouped = groupEntries(history.entries)
+  return (
+    <div className="flex flex-col gap-3">
+      <span className="text-meta font-medium text-muted-foreground">Earlier conversation</span>
+      {history.omittedBefore > 0 ? (
+        <p className="text-meta text-muted-foreground">
+          {history.omittedBefore} earlier entries not shown.{' '}
+          <Link
+            to={ROUTE_IDS.transcript}
+            params={{ sessionId: history.sourceSessionId }}
+            search={{ agentId: null, from: 'history', focusIndex: null, title: '' }}
+            className="text-primary-text hover:underline"
+          >
+            Open the full transcript
+          </Link>
+        </p>
+      ) : null}
+      {grouped.map((node) => (
+        <ConversationEntry key={node.entry.uuid} node={node} />
+      ))}
+      <div data-slot="history-divider" title={history.entries[history.entries.length - 1]?.timestamp ?? ''} className="flex items-center gap-2 text-meta text-muted-foreground">
+        <div className="h-px flex-1 bg-border" />
+        {dividerLabel}
+        <div className="h-px flex-1 bg-border" />
+      </div>
     </div>
   )
 }
@@ -39,9 +92,13 @@ export interface ConversationListProps {
   readonly focusIndex: number | null
   /** Bumping this number scrolls to the bottom — the transcript header's own Jump to latest. */
   readonly jumpSignal?: number
+  /** Rendered above the live entries — absent (`{ kind: 'none' }`) renders nothing extra. */
+  readonly history?: SessionHistory
+  /** `'Forked here'` for a fork, `'Resumed here'` otherwise — ignored when `history` is `{ kind: 'none' }`. */
+  readonly historyDividerLabel?: string
 }
 
-export function ConversationList({ entries, baseIndex, live, focusIndex, jumpSignal }: ConversationListProps) {
+export function ConversationList({ entries, baseIndex, live, focusIndex, jumpSignal, history = { kind: 'none' }, historyDividerLabel = 'Resumed here' }: ConversationListProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const wasNearBottomRef = useRef(true)
   const hasScrolledOnceRef = useRef(false)
@@ -114,16 +171,18 @@ export function ConversationList({ entries, baseIndex, live, focusIndex, jumpSig
   }
 
   const visibleEntries = entries.slice(0, visibleCount)
+  const groupedVisible = useMemo(() => groupEntries(visibleEntries), [visibleEntries])
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <div ref={containerRefCallback} onScroll={handleScroll} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
-        {visibleEntries.map((entry, relativeIndex) => {
+        <HistorySection history={history} dividerLabel={historyDividerLabel} />
+        {groupedVisible.map((node, relativeIndex) => {
           const absoluteIndex = relativeIndex + baseIndex
           const isFocus = absoluteIndex === focusIndex
           return (
-            <div key={entry.uuid} ref={isFocus ? focusRowRef : undefined} className={isFocus ? 'rounded-md ring-2 ring-ring' : undefined}>
-              <ConversationEntry entry={entry} />
+            <div key={node.entry.uuid} ref={isFocus ? focusRowRef : undefined} className={isFocus ? 'rounded-md ring-2 ring-ring' : undefined}>
+              <ConversationEntry node={node} />
             </div>
           )
         })}

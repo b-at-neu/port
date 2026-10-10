@@ -15,6 +15,12 @@ export interface CreateSessionProjectorParams {
 /** The bounded ring's size — a live session's window, never a growing per-session array. */
 export const ENTRY_RETAIN_LIMIT = 500
 
+/** Resolves a deriver's own running mirror index to this projector's absolute ring index — one instance per deriver (top-level or one per live subagent). */
+interface MirrorState {
+  mirrorIndex: number
+  readonly openToolCalls: Map<number, number>
+}
+
 /** Everything `SessionEntriesDelta` carries except `sessionKey`, which only `handle.ts` adds. */
 export type ProjectedDelta = Omit<SessionEntriesDelta, 'sessionKey'>
 
@@ -62,8 +68,24 @@ export function createSessionProjector(params: CreateSessionProjectorParams): Se
 
   // Mirrors the deriver's own running index, resolving a patch's deriver-space index to this
   // projector's absolute space. Held only while a tool call is still open.
-  let mirrorIndex = 0
-  const openToolCalls = new Map<number, number>()
+  const topMirror: MirrorState = { mirrorIndex: 0, openToolCalls: new Map() }
+
+  // One deriver per live subagent (`parent_tool_use_id`), each with its own mirror-index map —
+  // the same translation the top level does. Deleted once the parent's own tool call pairs.
+  interface ChildState {
+    readonly deriver: ReturnType<typeof createDeriver>
+    readonly mirror: MirrorState
+  }
+  const childStates = new Map<string, ChildState>()
+
+  function childStateFor(parentToolUseId: string): ChildState {
+    let state = childStates.get(parentToolUseId)
+    if (state === undefined) {
+      state = { deriver: createDeriver({ cwd: params.cwd }), mirror: { mirrorIndex: 0, openToolCalls: new Map() } }
+      childStates.set(parentToolUseId, state)
+    }
+    return state
+  }
 
   let liveBlock: LiveBlock | null = null
   let liveBlockStopped = false
@@ -91,22 +113,25 @@ export function createSessionProjector(params: CreateSessionProjectorParams): Se
     ring[relative] = entry
   }
 
-  /** Folds one deriver `push` result into the window, translating each patch's index through `openToolCalls`. */
-  function ingestDerived(appended: readonly TranscriptEntry[], patched: readonly EntryPatch[]): { appended: TranscriptEntry[]; patched: EntryPatch[] } {
+  /** Folds one deriver `push` result into the window, translating each patch's index through `mirror.openToolCalls`. `parentToolUseId` stamps every nested entry/patch and, once a patch pairs that parent's own tool call, deletes its child deriver — held only while the subagent is running. */
+  function ingestDerived(appended: readonly TranscriptEntry[], patched: readonly EntryPatch[], mirror: MirrorState = topMirror, parentToolUseId?: string): { appended: TranscriptEntry[]; patched: EntryPatch[] } {
     const outAppended: TranscriptEntry[] = []
-    for (const entry of appended) {
+    for (const rawEntry of appended) {
+      const entry = parentToolUseId !== undefined ? { ...rawEntry, parentToolUseId } : rawEntry
       const absoluteIndex = pushToWindow(entry)
-      if (entry.type === 'tool-call') openToolCalls.set(mirrorIndex, absoluteIndex)
-      mirrorIndex += 1
+      if (entry.type === 'tool-call') mirror.openToolCalls.set(mirror.mirrorIndex, absoluteIndex)
+      mirror.mirrorIndex += 1
       outAppended.push(entry)
     }
     const outPatched: EntryPatch[] = []
-    for (const patch of patched) {
-      const absoluteIndex = openToolCalls.get(patch.index)
-      openToolCalls.delete(patch.index)
+    for (const rawPatch of patched) {
+      const absoluteIndex = mirror.openToolCalls.get(rawPatch.index)
+      mirror.openToolCalls.delete(rawPatch.index)
       if (absoluteIndex === undefined) continue
-      patchWindow(absoluteIndex, patch.entry)
-      outPatched.push({ index: absoluteIndex, entry: patch.entry })
+      const entry = parentToolUseId !== undefined ? { ...rawPatch.entry, parentToolUseId } : rawPatch.entry
+      patchWindow(absoluteIndex, entry)
+      outPatched.push({ index: absoluteIndex, entry })
+      if (parentToolUseId === undefined && entry.type === 'tool-call' && entry.toolUseId !== undefined) childStates.delete(entry.toolUseId)
     }
     return { appended: outAppended, patched: outPatched }
   }
@@ -138,20 +163,22 @@ export function createSessionProjector(params: CreateSessionProjectorParams): Se
     return { revision, appended, patched, partial, pendingSends: pendingSendsUpdate }
   }
 
-  function handleAssistant(message: Record<string, unknown>, receivedAt: string): ProjectedDelta | null {
+  function handleAssistant(message: Record<string, unknown>, receivedAt: string, parentToolUseId?: string): ProjectedDelta | null {
     const uuid = typeof message['uuid'] === 'string' ? message['uuid'] : `live-${(syntheticSeq += 1)}`
     const timestamp = typeof message['timestamp'] === 'string' ? message['timestamp'] : receivedAt
     const record = { uuid, timestamp, message: message['message'] }
-    const { appended, patched } = deriver.push([record])
-    const { appended: outAppended, patched: outPatched } = ingestDerived(appended, patched)
+    const target = parentToolUseId !== undefined ? childStateFor(parentToolUseId) : { deriver, mirror: topMirror }
+    const { appended, patched } = target.deriver.push([record])
+    const { appended: outAppended, patched: outPatched } = ingestDerived(appended, patched, target.mirror, parentToolUseId)
 
-    const pendingSendsUpdate = ackSends(message)
-    const partial = liveBlockStopped ? clearLiveBlock() : null
+    // A subagent's own stream_events are skipped (never a live partial for it), so only the top level tracks pendingSends/liveBlock.
+    const pendingSendsUpdate = parentToolUseId === undefined ? ackSends(message) : null
+    const partial = parentToolUseId === undefined && liveBlockStopped ? clearLiveBlock() : null
 
     return buildDelta({ appended: outAppended, patched: outPatched, partial, pendingSends: pendingSendsUpdate })
   }
 
-  function handleUser(message: Record<string, unknown>, receivedAt: string): ProjectedDelta | null {
+  function handleUser(message: Record<string, unknown>, receivedAt: string, parentToolUseId?: string): ProjectedDelta | null {
     // Already recorded by `recordSend` — a replayed echo of our own turn,
     // never a second entry for it.
     if (message['isReplay'] === true) return null
@@ -161,8 +188,9 @@ export function createSessionProjector(params: CreateSessionProjectorParams): Se
     const record: Record<string, unknown> = { uuid, timestamp, message: message['message'] }
     if ('tool_use_result' in message) record['toolUseResult'] = message['tool_use_result']
 
-    const { appended, patched } = deriver.push([record])
-    const { appended: outAppended, patched: outPatched } = ingestDerived(appended, patched)
+    const target = parentToolUseId !== undefined ? childStateFor(parentToolUseId) : { deriver, mirror: topMirror }
+    const { appended, patched } = target.deriver.push([record])
+    const { appended: outAppended, patched: outPatched } = ingestDerived(appended, patched, target.mirror, parentToolUseId)
     return buildDelta({ appended: outAppended, patched: outPatched })
   }
 
@@ -270,14 +298,18 @@ export function createSessionProjector(params: CreateSessionProjectorParams): Se
   return {
     push(message, receivedAt) {
       if (!isRecord(message)) return null
-      const parentToolUseId = message['parent_tool_use_id']
-      if (typeof parentToolUseId === 'string') return null // subagent traffic — the Task row shows its result
+      const rawParentToolUseId = message['parent_tool_use_id']
+      const parentToolUseId = typeof rawParentToolUseId === 'string' ? rawParentToolUseId : undefined
 
       const type = message['type']
       const subtype = message['subtype']
 
-      if (type === 'assistant') return handleAssistant(message, receivedAt)
-      if (type === 'user') return handleUser(message, receivedAt)
+      // Subagent stream_events are still skipped — a subagent never has a live partial.
+      if (parentToolUseId !== undefined && type === 'stream_event') return null
+
+      if (type === 'assistant') return handleAssistant(message, receivedAt, parentToolUseId)
+      if (type === 'user') return handleUser(message, receivedAt, parentToolUseId)
+      if (parentToolUseId !== undefined) return null // every other subagent frame — the Task row shows its own result
       if (type === 'result') return handleResult(message, receivedAt)
       if (type === 'stream_event') return handleStreamEvent(message)
       if (type === 'system' && subtype === 'permission_denied') return handlePermissionDenied(message, receivedAt)

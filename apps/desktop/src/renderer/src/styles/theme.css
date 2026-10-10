@@ -57,6 +57,13 @@
   --diff-removed: #fef2f2;
   --diff-removed-foreground: #991b1b;
 
+  /* Syntax highlighting (DESIGN §1 "Measured contrast") — each measured against `muted` */
+  --syntax-keyword: #cf222e;
+  --syntax-string: #0a3069;
+  --syntax-comment: #57606a;
+  --syntax-constant: #0550ae;
+  --syntax-function: #8250df;
+
   /* Names shadcn needs that §1 does not separately list — aliases of a §1
    * role, never a new value. */
   --card-foreground: var(--foreground);
@@ -120,6 +127,12 @@
   --diff-removed: #2a0b0b;
   --diff-removed-foreground: #fca5a5;
 
+  --syntax-keyword: #ff7b72;
+  --syntax-string: #a5d6ff;
+  --syntax-comment: #8b949e;
+  --syntax-constant: #79c0ff;
+  --syntax-function: #d2a8ff;
+
   --card-foreground: var(--foreground);
   --popover-foreground: var(--foreground);
   --accent-foreground: var(--foreground);
@@ -181,6 +194,12 @@
   --color-diff-added-foreground: var(--diff-added-foreground);
   --color-diff-removed: var(--diff-removed);
   --color-diff-removed-foreground: var(--diff-removed-foreground);
+
+  --color-syntax-keyword: var(--syntax-keyword);
+  --color-syntax-string: var(--syntax-string);
+  --color-syntax-comment: var(--syntax-comment);
+  --color-syntax-constant: var(--syntax-constant);
+  --color-syntax-function: var(--syntax-function);
 
   /* Fonts */
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;

@@ -36,6 +36,8 @@ export interface FileDiff {
 interface TranscriptEntryBase {
   readonly uuid: string
   readonly timestamp: string
+  /** The tool call whose frame this entry nested under — absent on the top-level conversation. */
+  readonly parentToolUseId?: string
 }
 
 export interface UserTextEntry extends TranscriptEntryBase {
@@ -58,6 +60,13 @@ export interface ToolResult {
   readonly payload: Payload
 }
 
+/** Per-tool structured detail, derived once in `main/sessions/tool-detail.ts` so the live and on-disk views render the same card. */
+export type ToolDetail =
+  | { readonly kind: 'bash'; readonly command: string; readonly exitCode: number | null; readonly interrupted: boolean }
+  | { readonly kind: 'todos'; readonly items: readonly { readonly content: string; readonly status: 'pending' | 'in_progress' | 'completed' }[]; readonly droppedCount: number }
+  | { readonly kind: 'task'; readonly description: string; readonly subagentType: string | null }
+  | { readonly kind: 'lookup'; readonly count: number | null }
+
 /** The `tool_use` block and the matching `tool_result` collapse into one entry — an unpaired call keeps `result: null` rather than being dropped. */
 export interface ToolCallEntry extends TranscriptEntryBase {
   readonly type: 'tool-call'
@@ -66,6 +75,10 @@ export interface ToolCallEntry extends TranscriptEntryBase {
   readonly input: Payload
   readonly result: ToolResult | null
   readonly diff: FileDiff | null
+  /** The `tool_use` block's own id — present on every tool call, used to nest a subagent's children under it. */
+  readonly toolUseId?: string
+  /** Per-tool structured detail (Bash/TodoWrite/Task/Read/Grep/Glob) — absent for Edit/Write, which use `diff` instead. */
+  readonly detail?: ToolDetail
 }
 
 /** Attachments and system notices — rendered, never dropped. */

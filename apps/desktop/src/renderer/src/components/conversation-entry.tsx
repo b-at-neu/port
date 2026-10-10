@@ -1,12 +1,12 @@
 // DESIGN §3 Conversation — one shared row per `TranscriptEntry`, reused by
 // the live session view and the on-disk transcript view.
 import { useState } from 'react'
+import { ChevronRight } from 'lucide-react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Markdown } from './markdown'
 import { ToolCallRow } from './tool-call-row'
 import { buildRow, PROMPT_CLAMP_LINES } from './conversation-model'
-import type { RowView } from './conversation-model'
-import type { TranscriptEntry } from '../../../shared/sessions/transcript'
+import type { GroupedNode, RowView } from './conversation-model'
 
 function PromptText({ row }: { readonly row: Extract<RowView, { readonly kind: 'user-text' }> }) {
   const [expanded, setExpanded] = useState(false)
@@ -32,6 +32,7 @@ function ThinkingRow({ row }: { readonly row: Extract<RowView, { readonly kind: 
   return (
     <Collapsible data-slot="thinking-row">
       <CollapsibleTrigger className="flex h-7 items-center gap-1.5 rounded-md px-1 text-left text-small text-muted-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring">
+        <ChevronRightIcon />
         Thinking · {row.wordCount} words
       </CollapsibleTrigger>
       <CollapsibleContent className="px-1 py-1 text-small text-muted-foreground">
@@ -41,8 +42,12 @@ function ThinkingRow({ row }: { readonly row: Extract<RowView, { readonly kind: 
   )
 }
 
-export function ConversationEntry({ entry }: { readonly entry: TranscriptEntry }) {
-  const row = buildRow(entry)
+function ChevronRightIcon() {
+  return <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground transition-transform [[data-state=open]_&]:rotate-90" />
+}
+
+function EntryBody({ node }: { readonly node: GroupedNode }) {
+  const row = buildRow(node.entry)
   switch (row.kind) {
     case 'user-text':
       return <PromptText row={row} />
@@ -56,8 +61,18 @@ export function ConversationEntry({ entry }: { readonly entry: TranscriptEntry }
     case 'thinking':
       return <ThinkingRow row={row} />
     case 'tool-call':
-      return <ToolCallRow row={row} />
+      return <ToolCallRow row={row} childNodes={node.children} />
     case 'meta':
       return <div className="text-meta text-muted-foreground">System · {row.label}</div>
   }
+}
+
+export function ConversationEntry({ node }: { readonly node: GroupedNode }) {
+  if (!node.orphanSubagent) return <EntryBody node={node} />
+  return (
+    <div>
+      <p className="mb-1 text-meta text-muted-foreground">Subagent · parent call not shown</p>
+      <EntryBody node={node} />
+    </div>
+  )
 }

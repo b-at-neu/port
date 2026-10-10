@@ -4,7 +4,7 @@ import type { IpcChannel } from '../../shared/ipc'
 import { needsYouItems } from '../../shared/board/needs-you'
 import type { RepoId } from '../../shared/repos'
 import { fixtureHandlers } from './handlers'
-import { STREAMING_KEY } from './sessions'
+import { RESUMED_KEY, STREAMING_KEY } from './sessions'
 
 const WIDGETS = 'fixture-acme-widgets' as RepoId
 
@@ -143,9 +143,9 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
     expect(report.orphanDirs).toHaveLength(1)
   })
 
-  it.runIf(scenario === 'populated')('reports session:list with five snapshots covering streaming, ended, starting, a question, and a plan', () => {
+  it.runIf(scenario === 'populated')('reports session:list with six snapshots covering streaming, ended, starting, a question, a plan, and a resumed session', () => {
     const snapshots = handlers['session:list'](undefined)
-    expect(snapshots.map((s) => s.phase).sort()).toEqual(['ended', 'starting', 'streaming', 'streaming', 'streaming'])
+    expect(snapshots.map((s) => s.phase).sort()).toEqual(['ended', 'ready', 'starting', 'streaming', 'streaming', 'streaming'])
     expect(snapshots.find((s) => s.phase === 'ended')?.end?.diagnosis).not.toBeNull()
     expect(snapshots.filter((s) => s.pendingPermissions.some((p) => p.interaction?.kind === 'question'))).toHaveLength(1)
     expect(snapshots.filter((s) => s.pendingPermissions.some((p) => p.interaction?.kind === 'plan'))).toHaveLength(1)
@@ -159,10 +159,19 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
     expect(snapshots[0]?.pendingPermissions).toHaveLength(1)
   })
 
-  it('reports session:attach for the streaming fixture with a user, assistant, tool-call and thinking entry', () => {
+  it('reports session:attach for the streaming fixture with tool cards and a nested subagent', () => {
     const result = handlers['session:attach']({ sessionKey: STREAMING_KEY })
     if (!result.ok) throw new Error('fixture session:attach unexpectedly failed')
-    expect(result.entries.map((e) => e.type)).toEqual(['user-text', 'assistant-text', 'tool-call', 'thinking'])
+    expect(result.entries[0]?.type).toBe('user-text')
+    expect(result.entries.filter((e) => e.type === 'tool-call')).not.toHaveLength(0)
+    expect(result.entries.some((e) => e.parentToolUseId !== undefined)).toBe(true)
+    expect(result.history).toEqual({ kind: 'none' })
+  })
+
+  it('reports session:attach for the resumed fixture with loaded history', () => {
+    const result = handlers['session:attach']({ sessionKey: RESUMED_KEY })
+    if (!result.ok) throw new Error('fixture session:attach unexpectedly failed')
+    expect(result.history.kind).toBe('loaded')
   })
 
   it('reports sessions:scan with at least one session and one agent', () => {

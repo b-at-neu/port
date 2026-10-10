@@ -1,7 +1,7 @@
 // One external store per `sessionKey` — attach, re-attach, buffering and
 // revision gaps. `createEntriesRegistry` is the injectable, directly-testable factory; `useSessionEntries` is its one app-wide hook.
 import { useCallback, useSyncExternalStore } from 'react'
-import type { LiveBlock, SessionAttachResult, SessionEntriesDelta, SessionKey } from '../../../shared/hosting/types'
+import type { LiveBlock, SessionAttachResult, SessionEntriesDelta, SessionHistory, SessionKey } from '../../../shared/hosting/types'
 import type { EntryPatch, TranscriptEntry } from '../../../shared/sessions/transcript'
 import { accept, drainBuffered } from './sequence'
 import { sharedSubscriptions } from '../data/subscriptions'
@@ -13,9 +13,10 @@ export interface SessionEntriesSnapshot {
   readonly live: LiveBlock | null
   readonly attaching: boolean
   readonly gone: boolean
+  readonly history: SessionHistory
 }
 
-const EMPTY_SNAPSHOT: SessionEntriesSnapshot = { entries: [], firstIndex: 0, live: null, attaching: false, gone: false }
+const EMPTY_SNAPSHOT: SessionEntriesSnapshot = { entries: [], firstIndex: 0, live: null, attaching: false, gone: false, history: { kind: 'none' } }
 
 interface EntriesState {
   entries: TranscriptEntry[]
@@ -25,6 +26,7 @@ interface EntriesState {
   buffered: SessionEntriesDelta[]
   attaching: boolean
   gone: boolean
+  history: SessionHistory
   generation: number
   refCount: number
   snapshot: SessionEntriesSnapshot
@@ -32,7 +34,7 @@ interface EntriesState {
 }
 
 function freshState(): EntriesState {
-  return { entries: [], firstIndex: 0, live: null, lastRevision: 0, buffered: [], attaching: false, gone: false, generation: 0, refCount: 0, snapshot: EMPTY_SNAPSHOT, listeners: new Set() }
+  return { entries: [], firstIndex: 0, live: null, lastRevision: 0, buffered: [], attaching: false, gone: false, history: { kind: 'none' }, generation: 0, refCount: 0, snapshot: EMPTY_SNAPSHOT, listeners: new Set() }
 }
 
 function applyPartial(state: EntriesState, delta: SessionEntriesDelta): void {
@@ -87,7 +89,7 @@ export function createEntriesRegistry(deps: EntriesRegistryDeps): EntriesRegistr
   }
 
   function notify(state: EntriesState): void {
-    state.snapshot = { entries: state.entries, firstIndex: state.firstIndex, live: state.live, attaching: state.attaching, gone: state.gone }
+    state.snapshot = { entries: state.entries, firstIndex: state.firstIndex, live: state.live, attaching: state.attaching, gone: state.gone, history: state.history }
     for (const listener of state.listeners) listener()
   }
 
@@ -112,6 +114,7 @@ export function createEntriesRegistry(deps: EntriesRegistryDeps): EntriesRegistr
         state.live = result.partial
         state.lastRevision = result.revision
         state.gone = false
+        state.history = result.history
 
         const toDrain = state.buffered
         state.buffered = []

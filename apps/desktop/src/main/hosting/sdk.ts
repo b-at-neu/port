@@ -15,6 +15,7 @@ export interface HostedQuery extends AsyncIterable<SDKMessage> {
   setModel(model?: string): Promise<void>
   applyFlagSettings(settings: { effortLevel?: EffortLevel | null }): Promise<void>
   supportedModels(): Promise<ModelInfo[]>
+  stopTask(taskId: string): Promise<void>
 }
 
 /** Typed narrowly rather than re-exporting the SDK's own module type. */

@@ -48,6 +48,7 @@ function baseDeps(overrides: Partial<HostedStoreDeps> = {}): HostedStoreDeps {
     samePath: (a: string, b: string) => a === b,
     persistence: createInMemoryHostingPersistence(),
     removeWorktree: () => Promise.resolve({ outcome: 'removed' }),
+    readHistory: () => Promise.resolve({ kind: 'none' }),
     ...overrides,
   }
 }

@@ -1,12 +1,12 @@
 // Fixture mode's canned hosted-session data — the Session screen's own
-// states, plus the entries `session:attach` replays for the streaming one.
+// states. Transcript entries live in `./entries`, split out to keep this file under the line limit.
 import type { SessionControls, SessionModels } from '../../shared/hosting/controls'
-import type { HostedSessionSnapshot, SessionAttachResult, SessionKey } from '../../shared/hosting/types'
+import type { HostedSessionSnapshot, SessionAttachResult, SessionHistory, SessionKey } from '../../shared/hosting/types'
 import type { SessionWorkspace } from '../../shared/workspace/types'
-import type { TranscriptEntry } from '../../shared/sessions/transcript'
 import type { SearchResult } from '../../shared/search/types'
 import type { AgentRecord, SessionRecord, SessionScan } from '../../shared/sessions/types'
 import { WIDGETS_ID } from './repos'
+import { fixtureAttachEntries, fixtureHistoryEntries } from './entries'
 
 export const STREAMING_KEY = 'fixture-session-streaming' as SessionKey
 export const PERMISSION_KEY = 'fixture-session-permission' as SessionKey
@@ -14,6 +14,7 @@ export const ENDED_KEY = 'fixture-session-ended' as SessionKey
 export const STARTING_KEY = 'fixture-session-starting' as SessionKey
 export const QUESTION_KEY = 'fixture-session-question' as SessionKey
 export const PLAN_KEY = 'fixture-session-plan' as SessionKey
+export const RESUMED_KEY = 'fixture-session-resumed' as SessionKey
 
 const NON_WORKTREE_WORKSPACE: SessionWorkspace = { folder: '/home/you/src/widgets', root: '/home/you/src/widgets', worktree: null, base: null }
 const WORKTREE_WORKSPACE: SessionWorkspace = {
@@ -35,47 +36,6 @@ const FIXTURE_MODELS: SessionModels = {
 }
 
 const MINUTE = 60_000
-
-function payload(text: string) {
-  return { text, omittedChars: 0 }
-}
-
-export function fixtureAttachEntries(now: Date): readonly TranscriptEntry[] {
-  const t = (minutesAgo: number) => new Date(now.getTime() - minutesAgo * MINUTE).toISOString()
-  return [
-    { type: 'user-text', uuid: 'fixture-1', timestamp: t(4), text: payload('Add a loading state to the repositories table.') },
-    { type: 'assistant-text', uuid: 'fixture-2', timestamp: t(3), text: payload("I'll add a `Skeleton` row while the query is pending.") },
-    {
-      type: 'tool-call',
-      uuid: 'fixture-3',
-      timestamp: t(2),
-      name: 'Edit',
-      headline: 'src/renderer/src/repositories/screen.tsx',
-      input: payload('{"file_path":"src/renderer/src/repositories/screen.tsx"}'),
-      result: { isError: false, payload: payload('Edit applied.') },
-      diff: {
-        path: 'src/renderer/src/repositories/screen.tsx',
-        isNewFile: false,
-        additions: 2,
-        deletions: 1,
-        hunks: [
-          {
-            oldStart: 10,
-            oldLines: 1,
-            newStart: 10,
-            newLines: 2,
-            lines: [
-              { sign: 'del', text: '-  if (loading) return null' },
-              { sign: 'add', text: '+  if (loading) return <Skeleton className="h-9 w-full" />' },
-              { sign: 'add', text: '+  // loading state' },
-            ],
-          },
-        ],
-      },
-    },
-    { type: 'thinking', uuid: 'fixture-4', timestamp: t(1), text: payload('Checking whether any other screen already renders this pattern.') },
-  ]
-}
 
 /** Kept out of `fixtureSessionSnapshots` — the permission dialog is app-wide,
  *  so this would pop up over every other screenshot target otherwise. */
@@ -117,6 +77,7 @@ export function fixturePermissionSnapshots(now: Date): readonly HostedSessionSna
       controls: FIXTURE_CONTROLS,
       models: FIXTURE_MODELS,
       usage: null,
+      backgroundTasks: [],
     },
   ]
 }
@@ -155,6 +116,10 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       controls: FIXTURE_CONTROLS,
       models: FIXTURE_MODELS,
       usage: { ...FIXTURE_USAGE, observedAt: t(0) },
+      backgroundTasks: [
+        { taskId: 'fixture-task-1', type: 'bash', description: 'pnpm --filter @port/desktop screenshots', toolUseId: null },
+        { taskId: 'fixture-task-2', type: 'agent', description: 'Checking the release checklist', toolUseId: null },
+      ],
     },
     {
       sessionKey: ENDED_KEY,
@@ -174,6 +139,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       controls: FIXTURE_CONTROLS,
       models: FIXTURE_MODELS,
       usage: null,
+      backgroundTasks: [],
     },
     {
       sessionKey: STARTING_KEY,
@@ -193,6 +159,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       controls: FIXTURE_CONTROLS,
       models: { kind: 'pending' },
       usage: null,
+      backgroundTasks: [],
     },
     {
       sessionKey: QUESTION_KEY,
@@ -240,6 +207,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       controls: FIXTURE_CONTROLS,
       models: FIXTURE_MODELS,
       usage: null,
+      backgroundTasks: [],
     },
     {
       sessionKey: PLAN_KEY,
@@ -277,6 +245,27 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       controls: { permissionMode: 'plan', model: 'sonnet', effort: null },
       models: FIXTURE_MODELS,
       usage: null,
+      backgroundTasks: [],
+    },
+    {
+      sessionKey: RESUMED_KEY,
+      claudeSessionId: 'fixture-claude-6',
+      repoId: WIDGETS_ID,
+      workspace: NON_WORKTREE_WORKSPACE,
+      phase: 'ready',
+      origin: { kind: 'resumed', from: 'fixture-history-1' },
+      startedAt: t(1),
+      queuedAfterInterrupt: null,
+      end: null,
+      titled: null,
+      pendingPermissions: [],
+      capabilities,
+      title: 'Build the Worktrees tab',
+      rateLimit: null,
+      controls: FIXTURE_CONTROLS,
+      models: FIXTURE_MODELS,
+      usage: null,
+      backgroundTasks: [],
     },
   ]
 }
@@ -285,7 +274,8 @@ export function fixtureSessionAttach(sessionKey: SessionKey, now: Date): Session
   const snapshot = [...fixtureSessionSnapshots(now), ...fixturePermissionSnapshots(now)].find((candidate) => candidate.sessionKey === sessionKey)
   if (snapshot === undefined) return { ok: false, kind: 'unknown-session' }
   const entries = sessionKey === STREAMING_KEY ? fixtureAttachEntries(now) : []
-  return { ok: true, snapshot, replay: [], droppedBefore: 0, entries, firstIndex: 0, partial: null, pendingSends: [], revision: entries.length }
+  const history: SessionHistory = sessionKey === RESUMED_KEY ? { kind: 'loaded', entries: fixtureHistoryEntries(now), omittedBefore: 0, sourceSessionId: 'fixture-history-1' } : { kind: 'none' }
+  return { ok: true, snapshot, replay: [], droppedBefore: 0, entries, firstIndex: 0, partial: null, pendingSends: [], revision: entries.length, history }
 }
 
 export function fixtureSessionsScan(now: Date): Extract<SessionScan, { readonly ok: true }> {

@@ -58,6 +58,7 @@ import {
   resolveSessionRestoreList,
   resolveSessionSend,
   resolveSessionStart,
+  resolveSessionTaskStop,
 } from './channels/hosting'
 import { git } from './platform/git'
 import { readWorktreeReport } from './reclaimer/report'
@@ -410,6 +411,8 @@ export function registerIpc(): RegisteredIpc {
   handle('session:invoke', (_event, request) => resolveSessionInvoke(request, hostingChannelDeps))
 
   handle('session:dismiss', (_event, request) => resolveSessionDismiss(request, hostingChannelDeps))
+
+  handle('session:task:stop', (_event, request) => resolveSessionTaskStop(request, hostingChannelDeps))
 
   handle('session:capacity', (_event, request) => resolveSessionCapacity(request, hostingChannelDeps))
 

@@ -75,6 +75,8 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `files.ts`'s `listSessionFiles` (#324) is the `@` suggestion list's own read: `git ls-files` when `cwd` is a work tree, a bounded depth-8 walk otherwise, both capped at `MAX_FILES` and reporting `truncated`, never an empty list for a failed read
 - `verify.ts`'s `isPipelineCommand` (#324) is the one place `port:pipeline`/bare `pipeline` is recognised — `capabilities.ts` reads it to drop pipeline entries from both the `port:`-qualified and the composer's own `slashCommands` lists, and `handle.send`'s own guard reads it before ever composing a `tool_use`
 - `project.ts`'s `createSessionProjector` (#219) reuses `createDeriver` for the same `TranscriptEntry` shape `main/sessions/` derives on disk, rather than a second `tool_use`/`tool_result` pairing (#123); `session:attach` replays its bounded window so a reload rebuilds from the same state a mid-stream push already describes
+- `project.ts`'s per-parent child derivers (#323) nest a subagent's own frames under its `Task` tool call rather than dropping them: one `createDeriver` and mirror-index map per live `parent_tool_use_id`, stamping every child entry and patch with `parentToolUseId`, deleted once the parent's own tool call pairs
+- `hosting/tasks.ts`'s `createTaskTracker` (#323) is the one background-task reader, observing `system/background_tasks_changed` (REPLACE semantics, `ambient` excluded) and `system/task_started`; `hosting/history.ts`'s `readHistory` (#323) is the one earlier-conversation read for resume/resume-at/fork, run before spawn and kept frozen on the handle
 - streaming input only, always: `input.ts`'s push-driven `AsyncIterable<SDKUserMessage>` keeps `interrupt()`/`setPermissionMode()` available for the handle's whole life — a string prompt would silently disable both
 - `sdk.ts` is the third lazy Agent SDK seam (alongside `sessions/sdk.ts` #78, `runtime/sdk.ts` #97), the only file here naming the package specifier
 - `permissions.ts`'s per-session broker (#99) turns every `canUseTool` call into a pending request on the handle's own snapshot; `grant.ts` narrows the SDK's suggestions to an allowlist of three, and a grant never writes `settings.local.json`/`settings.json`
@@ -182,6 +184,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - pure, bounded-subset markdown parser — no `node:` import, nothing from `main/`
 - link scheme allowlist is `http://`/`https://` only; everything else renders as literal text
 - `renderer/src/components/markdown.tsx` is its only consumer; renders React elements, never `dangerouslySetInnerHTML`
+- `renderer/src/components/code-block.tsx` (#323) is the highlighted-code renderer `markdown.tsx`'s fenced blocks and `tool-call-detail.tsx`'s Bash body both go through; `highlight.ts`'s fixed-language `lowlight` instance renders React spans only, never partially on a throw or an over-cap input
 
 ## 2. Data and integrity
 

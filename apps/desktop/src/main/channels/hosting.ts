@@ -268,6 +268,17 @@ export function resolveSessionCapacity(request: IpcMap['session:capacity']['requ
   return deps.store.capacity()
 }
 
+/** `taskId` is scoped by `HostedStore.stopTask`/`HostedHandle.stopTask` to this session's own `backgroundTasks` — a malformed id throws here, an id from another session is `unknown-task`, never forwarded. */
+export const MAX_TASK_ID_CHARS = 128
+
+export function resolveSessionTaskStop(request: IpcMap['session:task:stop']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['stopTask']> {
+  const sessionKey = requireSessionKey(request?.sessionKey, 'session:task:stop')
+  if (typeof request.taskId !== 'string' || request.taskId === '' || request.taskId.length > MAX_TASK_ID_CHARS) {
+    throw new Error(`'session:task:stop' requires 'taskId' to be a non-empty string of at most ${MAX_TASK_ID_CHARS} characters`)
+  }
+  return deps.store.stopTask(sessionKey, request.taskId)
+}
+
 export function resolveSessionCapacitySet(request: IpcMap['session:capacity:set']['request'], deps: HostingChannelDeps): ReturnType<HostedStore['setLimit']> {
   if (typeof request?.limit !== 'number' || !Number.isInteger(request.limit) || request.limit < 1 || request.limit > SESSION_LIMIT_CEILING) {
     throw new Error(`'session:capacity:set' requires 'limit' to be an integer from 1 to ${String(SESSION_LIMIT_CEILING)}`)

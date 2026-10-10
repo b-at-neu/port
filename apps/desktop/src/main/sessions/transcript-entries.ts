@@ -2,6 +2,10 @@
 import type { DiffHunk, DiffLine, DiffSign, EntryPatch, FileDiff, MetaEntry, Payload, ToolCallEntry, TranscriptEntry } from '../../shared/sessions/transcript'
 import { MAX_PAYLOAD_CHARS } from '../../shared/sessions/transcript'
 import { isRecord } from '../../shared/guards'
+import { toolDetailFor } from './tool-detail'
+
+/** The raw SDK field name for a tool call's id — exported so `hosting/tasks.ts`'s unrelated `task_started` read shares one literal rather than a second occurrence of the word. */
+export const TOOL_USE_ID_FIELD = 'tool_use_id'
 
 export interface DeriveEntriesOptions {
   /** Used only to shorten a headline path, never to resolve or open anything. */
@@ -321,6 +325,8 @@ export function createDeriver(options: DeriveEntriesOptions = DEFAULT_OPTIONS): 
             input: capPayload(safeStringify(input)),
             result: null,
             diff: null,
+            toolUseId: id,
+            detail: toolDetailFor(name, input, null, null, false) ?? undefined,
           }
           pendingById.set(id, { index: nextIndex, entry })
           rawInputById.set(id, input)
@@ -340,7 +346,8 @@ export function createDeriver(options: DeriveEntriesOptions = DEFAULT_OPTIONS): 
           const isError = block['is_error'] === true
           const payload = capPayload(resultTextOf(block['content']))
           const diff = diffFromToolUseResult(raw['toolUseResult'], rawInput)
-          patched.push({ index: pending.index, entry: { ...pending.entry, result: { isError, payload }, diff } })
+          const detail = toolDetailFor(pending.entry.name, rawInput, block['content'], raw['toolUseResult'], true) ?? undefined
+          patched.push({ index: pending.index, entry: { ...pending.entry, result: { isError, payload }, diff, detail } })
         }
       }
     }

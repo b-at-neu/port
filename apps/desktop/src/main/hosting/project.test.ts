@@ -58,10 +58,31 @@ describe('createSessionProjector', () => {
     expect(result?.patched[0]?.entry.result).toEqual({ isError: false, payload: { text: 'ok', omittedChars: 0 } })
   })
 
-  it('skips a subagent frame (a non-null parent_tool_use_id)', () => {
+  it('nests a subagent frame (a non-null parent_tool_use_id) rather than dropping it, stamped with parentToolUseId', () => {
     const projector = createSessionProjector({ cwd: '/repo' })
     const delta = projector.push({ type: 'assistant', uuid: 'a-1', parent_tool_use_id: 'tool-1', message: { role: 'assistant', content: [{ type: 'text', text: 'subagent chatter' }] } }, NOW)
+    expect(delta?.appended).toHaveLength(1)
+    expect(delta?.appended[0]).toMatchObject({ type: 'assistant-text', parentToolUseId: 'tool-1', text: { text: 'subagent chatter' } })
+  })
+
+  it('skips a subagent stream_event — never a live partial for a subagent', () => {
+    const projector = createSessionProjector({ cwd: '/repo' })
+    const delta = projector.push({ type: 'stream_event', parent_tool_use_id: 'tool-1', event: { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } } }, NOW)
     expect(delta).toBeNull()
+  })
+
+  it('nests a subagent child under the parent tool call, then deletes the child deriver once the parent pairs', () => {
+    const projector = createSessionProjector({ cwd: '/repo' })
+    projector.push({ type: 'assistant', uuid: 'a-1', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tool-1', name: 'Task', input: { description: 'd' } }] } }, NOW)
+    const child = projector.push({ type: 'assistant', uuid: 'a-2', parent_tool_use_id: 'tool-1', message: { role: 'assistant', content: [{ type: 'text', text: 'child text' }] } }, NOW)
+    expect(child?.appended[0]).toMatchObject({ parentToolUseId: 'tool-1' })
+
+    const result = projector.push(
+      { type: 'user', uuid: 'u-1', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tool-1', content: 'done' }] } },
+      NOW,
+    )
+    expect(result?.patched).toHaveLength(1)
+    expect(result?.patched[0]?.entry).toMatchObject({ type: 'tool-call', result: { isError: false } })
   })
 
   it('renders a permission_denied frame as a meta row', () => {

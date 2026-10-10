@@ -6,10 +6,9 @@ import type { RepoId } from '../../shared/repos'
 import type { SessionKey } from '../../shared/hosting/types'
 import type { SessionWorkspace } from '../../shared/workspace/types'
 
-const TEST_WORKSPACE: SessionWorkspace = { folder: '/repo', root: '/repo', worktree: null, base: null }
-
 const TEST_CONTROLS: SessionControls = { permissionMode: 'default', model: null, effort: null }
 const TEST_MODELS: SessionModels = { kind: 'pending' }
+const TEST_WORKSPACE: SessionWorkspace = { folder: '/repo', root: '/repo', worktree: null, base: null }
 
 function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSessionSnapshot {
   return {
@@ -30,6 +29,7 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     controls: TEST_CONTROLS,
     models: TEST_MODELS,
     usage: null,
+    backgroundTasks: [],
     ...overrides,
   }
 }
