@@ -1,12 +1,14 @@
 // Pinned to the bottom while near it, a floating "N new below" button
 // otherwise, and rows above 500 reveal in chunks across animation frames.
 import { useMemo, useRef, useState } from 'react'
+import { Link } from '@tanstack/react-router'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ConversationEntry } from './conversation-entry'
 import { Markdown } from './markdown'
 import { groupEntries } from './conversation-model'
 import { ErrorBanner } from './error-banner'
+import { ROUTE_IDS } from '../router/routes'
 import type { LiveBlock, SessionHistory } from '../../../shared/hosting/types'
 import type { TranscriptEntry } from '../../../shared/sessions/transcript'
 
@@ -57,9 +59,14 @@ function HistorySection({ history, dividerLabel }: { readonly history: SessionHi
       {history.omittedBefore > 0 ? (
         <p className="text-meta text-muted-foreground">
           {history.omittedBefore} earlier entries not shown.{' '}
-          <a href={`#/transcript/${history.sourceSessionId}`} className="text-primary-text hover:underline">
+          <Link
+            to={ROUTE_IDS.transcript}
+            params={{ sessionId: history.sourceSessionId }}
+            search={{ agentId: null, from: 'history', focusIndex: null, title: '' }}
+            className="text-primary-text hover:underline"
+          >
             Open the full transcript
-          </a>
+          </Link>
         </p>
       ) : null}
       {grouped.map((node) => (
