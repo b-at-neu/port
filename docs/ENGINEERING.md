@@ -84,7 +84,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `store.ts`'s `Map<sessionKey, Handle>` is bounded by an operator-settable, persisted session limit; `start()`'s already-open refusal fails closed on a live `sessionId`, since two `claude` processes must never append to one transcript
 - `plugin.ts`'s `resolvePluginRequest` (#101) prefers the repository's own `plugins/port/` over the installed cache, and fails loud — an unreadable manifest still resolves to `repository`, never a silent fallback
 - `capabilities.ts`'s per-session tracker races `supportedCommands()`/`supportedAgents()` against a timeout, going `unavailable` rather than ever reading either as an empty list
-- an operator's own session defaults (`options.ts`'s `defaults` param) apply only to an operator-role start — the dispatcher role always keeps its own `model` and `permissionMode: 'default'`, never bypass/dontAsk/auto
+- an operator's own session defaults (`options.ts`'s `defaults` param) apply only to an operator-role start — the stage role (#327) always uses `permissionMode: 'default'` and its own `stagePolicy`, reading `agent`/`model` from `main/stage/`'s own request instead of `defaults`, never bypass/dontAsk/auto
 - `usage.ts`'s `readUsage` narrows `assistant`/`result` messages structurally, the same rule as `rate-limit.ts`; the figures are cumulative for this `claude` process, so a resumed session's totals mean "since port opened it," never lifetime cost
 - `notify.ts`'s `notificationFor` is the one notification decider; `createNotifier` fires only when no port window is focused, and a focused transition still updates the baseline so refocusing then blurring never replays a stale one
 - `marks.ts`'s pin/archive sets persist only through `persist.ts`; `store.ts` is their one composition point, never a second writer
@@ -124,6 +124,13 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - the SDK runtime adapter's composition root: locate → version → credentials → classify
 - `main/ipc.ts` calls only `runtimePreflight`/`runtimeProbe`, never resolves the registry itself
 
+**`apps/desktop/src/main/stage/`** (#327)
+- implements `main/dispatch/launch.ts`'s `StageLauncher` seam: a session worktree, a hosted session started with the `agent:` option, the prompt sent, and the hand-back watched
+- `agents.ts`'s `STAGE_AGENT_NAMES` is the only place a bare `StageAgent` key becomes an `agent:` value — instructions come from the plugin agent file itself, never a second system prompt
+- `handback.ts`'s `classifyHandback` is pure; its `QUESTIONS FOR HUMAN:`/`BLOCKED:` prefixes are pinned against the pipeline skill's own completion text
+- removes a worktree only on `completed`, never forced; every other outcome keeps it
+- writes no label itself (phase 1) — stage sessions still write their own, the same way a terminal-dispatched agent does
+
 **`apps/desktop/src/main/tick/`**
 - `RepositoryState` → `TickReport`; computes, never writes
 - imports `scripts/port-tick/`'s own decision modules directly, checked against shared case tables
@@ -137,7 +144,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 
 **`apps/desktop/src/main/workspace/`** (#404)
 - sole creator/remover of session worktrees (`worktree.ts`); never deletes a branch; never forces removal without an explicit caller choice
-- `target.ts` is the only place a start target becomes a cwd; it creates a worktree only on an explicit `worktree: true`
+- `target.ts` is the only place a start target becomes a cwd; it creates a worktree only on an explicit `worktree: true`. `main/stage/launcher.ts` is the second `createSessionWorktree` caller
 - `main/local/` stays the only reader of the worktree list — this directory never reads it back
 - `resolve.ts`'s `resolveWorkspace`/`toFolderEntry` are the only callers of a session's `GitRunner` for workspace identity; `changes.ts` reuses the same `GitRunner` contract for the Changes diff, never a second invocation shape
 - `diff.ts` is pure — no `GitRunner`, no filesystem; `changes.ts` owns every git invocation and hands it parsed output
@@ -204,7 +211,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 
 **The guard's rails are not subagent-only.** Two apply to any caller including the cockpit's own session, because the cockpit violated them under throughput pressure: no `gh`/`git` inside a shell loop, and no clearing `<labels.needsHuman>` unless a recent operator message names that item. A third denies plugin install or marketplace mutation from inside any worktree, since every scope resolves to the same on-disk `installPath` and would silently repoint every session on the machine.
 
-**`sessionRequiredPaths` is a harness-level boundary no dispatched subagent can cross, and settings cannot grant it back.** A plan writing under those paths routes to `/port:implement` in an operator session; it is never worked around.
+**`sessionRequiredPaths` is a harness-level boundary no dispatched subagent can cross, and settings cannot grant it back.** A plan writing under those paths routes to `/port:implement` in an operator session; it is never worked around. In the desktop app (#327), a stage session's edit under one of those paths pauses for operator approval instead — `main/hosting/stage-policy.ts`'s own routing, never a second `/port:implement`.
 
 **A hook returns immediately outside a port-managed repository.** Installed at user scope the plugin loads in every session, so without that guard, installing it changes behaviour in every unrelated project on the machine.
 
