@@ -19,6 +19,7 @@ export interface WatcherDeps {
   readonly refreshMemo: RefreshMemo
   readonly startedTasks: (repoId: RepoId) => readonly string[]
   readonly dispatchStatus: () => readonly RepoDispatchStatus[]
+  readonly holdSessionRequired: (repoId: RepoId) => boolean
 }
 
 export interface DispatchRuntime {
@@ -63,6 +64,7 @@ export function createDispatchRuntime(deps: Omit<CreateDispatcherParams, 'ledger
       refreshMemo,
       startedTasks: (repoId) => dispatcher.liveStages(repoId),
       dispatchStatus: () => dispatcher.status(),
+      holdSessionRequired: (repoId) => dispatcher.holdsSessionRequired(repoId),
     },
     bindWatcher: (republish) => {
       republishFn = republish
