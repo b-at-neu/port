@@ -3,7 +3,8 @@ import type { AttributionTally, SessionAttribution } from '../../../shared/local
 import type { DenialActor, DenialSummary } from '../../../shared/local/types'
 
 export function metaStripCopy(window: DenialSummary): string {
-  return `${String(window.agentDenials)} denials · ${String(window.misses)} allowlist misses · ${String(window.railDenials)} rail holds · ${String(window.hookErrors)} hook errors`
+  const hookErrorNoun = window.hookErrors === 1 ? 'hook error' : 'hook errors'
+  return `${String(window.agentDenials)} denials · ${String(window.misses)} allowlist misses · ${String(window.railDenials)} rail holds · ${String(window.hookErrors)} ${hookErrorNoun}`
 }
 
 /** Shown under the meta strip only while `capped`. */

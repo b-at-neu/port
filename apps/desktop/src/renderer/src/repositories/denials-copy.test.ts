@@ -13,7 +13,7 @@ function tally(overrides: Partial<AttributionTally> = {}): AttributionTally {
 
 describe('metaStripCopy', () => {
   it('names denials, misses, rail holds and hook errors from window', () => {
-    expect(metaStripCopy(summary({ agentDenials: 3, misses: 5, railDenials: 2, hookErrors: 1 }))).toBe('3 denials · 5 allowlist misses · 2 rail holds · 1 hook errors')
+    expect(metaStripCopy(summary({ agentDenials: 3, misses: 5, railDenials: 2, hookErrors: 1 }))).toBe('3 denials · 5 allowlist misses · 2 rail holds · 1 hook error')
   })
 })
 

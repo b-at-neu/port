@@ -39,7 +39,12 @@ function ShapeRow({ group, now, selected, onSelect }: { readonly group: ShapeGro
       role="button"
       tabIndex={0}
       onClick={onSelect}
-      onKeyDown={(event) => event.key === 'Enter' && onSelect()}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onSelect()
+        }
+      }}
       className={`flex h-9 cursor-pointer items-center gap-3 px-4 text-small outline-none ${selected ? 'bg-selection ring-2 ring-ring ring-inset' : ''}`}
     >
       <span className="w-56 shrink-0 truncate font-mono text-foreground">{group.shape}</span>
@@ -61,7 +66,12 @@ function ActorRow({ group, now, selected, onSelect }: { readonly group: ActorGro
       role="button"
       tabIndex={0}
       onClick={onSelect}
-      onKeyDown={(event) => event.key === 'Enter' && onSelect()}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onSelect()
+        }
+      }}
       className={`flex h-9 cursor-pointer items-center gap-3 px-4 text-small outline-none ${selected ? 'bg-selection ring-2 ring-ring ring-inset' : ''}`}
     >
       <span className="w-48 shrink-0 truncate font-mono text-foreground">{group.key}</span>
