@@ -61,14 +61,17 @@ export function boardSearchFromRaw(search: Readonly<Record<string, unknown>>): B
 }
 
 export type RepoTab = 'overview' | 'worktrees' | 'denials'
+export type DenialsGroup = 'command' | 'actor'
 
 export interface RepoSearch {
   readonly tab?: RepoTab
+  /** The Denials tab's own tabs-in-tab, persisted so a reload keeps the chosen grouping. Irrelevant outside `tab=denials`, but harmless to carry. Named distinctly from `BoardSearch.group` — TanStack Router's search params are typed across the whole route tree, so two routes sharing a key must share its type. */
+  readonly denialsGroup?: DenialsGroup
 }
 
 export function repoSearchFromRaw(search: Readonly<Record<string, unknown>>): RepoSearch {
-  const { tab } = search
-  return { tab: tab === 'worktrees' || tab === 'denials' ? tab : 'overview' }
+  const { tab, denialsGroup } = search
+  return { tab: tab === 'worktrees' || tab === 'denials' ? tab : 'overview', denialsGroup: denialsGroup === 'actor' ? 'actor' : 'command' }
 }
 
 export interface HistorySearch {

@@ -85,7 +85,9 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
     variants: [
       { name: 'worktrees', hash: '#/repositories/fixture-acme-widgets?tab=worktrees', ready: '[data-slot="worktree-row"]' },
       { name: 'worktrees-reclaim', hash: '#/repositories/fixture-acme-widgets?tab=worktrees', click: 'text=Reclaim 1', ready: '[data-slot="alert-dialog-content"]' },
-      { name: 'denials', hash: '#/repositories/fixture-acme-widgets?tab=denials', ready: 'text=No denial bursts' },
+      { name: 'denials', hash: '#/repositories/fixture-acme-widgets?tab=denials', ready: '[data-slot="denial-shape-row"]' },
+      { name: 'denials-actor', hash: '#/repositories/fixture-acme-widgets?tab=denials&denialsGroup=actor', ready: '[data-slot="denial-actor-row"]' },
+      { name: 'denials-empty', hash: '#/repositories/fixture-acme-gadgets?tab=denials', ready: 'text=No denial log yet' },
       { name: 'problem', hash: '#/repositories/fixture-acme-legacy-site', ready: '[role="alert"]' },
       { name: 'mis-resolved', hash: '#/repositories/fixture-acme-gadgets', ready: '[data-slot="label-verdict"]' },
     ],

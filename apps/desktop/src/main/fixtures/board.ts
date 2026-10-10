@@ -6,6 +6,7 @@ import type { PipelineFetch, PipelineItem, QueriedLabel } from '../../shared/git
 import type { AgentRecord } from '../../shared/sessions/types'
 import { DEFAULT_POLL_POLICY, SOURCE_BASE_INTERVAL_MS } from '../../shared/board/types'
 import type { BoardSnapshot, RepositoryHealth, SourceKind } from '../../shared/board/types'
+import type { DenialEntry, DenialsRead } from '../../shared/local/types'
 import type { RepositoryState } from '../../shared/state/types'
 import { reconcileRepository } from '../state/reconcile'
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '../tick/ledger'
@@ -149,8 +150,35 @@ function readyRepositoryState(now: Date, scenario: FixtureScenario): RepositoryS
     itemsByNumberFetch: null,
     repoSessions: { agents: [agent], sessions: [], available: true, freshness: { at: now.toISOString() } },
     worktrees: { ok: true, mainPath: '/home/you/src/widgets', entries: [], subjectsAvailable: true, readAt: now.toISOString() },
-    denials: { ok: true, present: false, path: '/home/you/src/widgets/.agents/denials.log', readAt: now.toISOString() },
+    denials: widgetsDenialsRead(now, '/home/you/src/widgets/.agents/denials.log'),
   })
+}
+
+function denialEntry(raw: DenialEntry['raw'], timestamp: string, decision: DenialEntry['decision'], actor: DenialEntry['actor'], subject: string): DenialEntry {
+  return { raw, form: 'current', timestamp, decision, actor, subject }
+}
+
+/** The newest 8 lines of a longer log: one burst (three `impl-agent` denies on the same command), one unknown session, and a mix of misses/gate-clear/hook-error so the meta strip and both groupings have something to show. `capped: true` with `summary` counting a larger whole-file total than these entries alone. */
+function widgetsDenialsRead(now: Date, path: string): DenialsRead {
+  const entries: readonly DenialEntry[] = [
+    denialEntry('l1', offsetMinutes(now, -25), 'deny', { kind: 'stage-agent', agent: 'impl-agent' }, 'node scripts/checks.ts'),
+    denialEntry('l2', offsetMinutes(now, -24), 'deny', { kind: 'stage-agent', agent: 'impl-agent' }, 'node scripts/checks.ts'),
+    denialEntry('l3', offsetMinutes(now, -23), 'deny', { kind: 'stage-agent', agent: 'impl-agent' }, 'node scripts/checks.ts'),
+    denialEntry('l4', offsetMinutes(now, -20), 'miss', { kind: 'subagent', agentType: 'gh' }, 'gh pr list --repo acme/widgets'),
+    denialEntry('l5', offsetMinutes(now, -18), 'deny', { kind: 'session', sessionId: 'session-not-on-this-machine' }, 'git push origin main'),
+    denialEntry('l6', offsetMinutes(now, -12), 'miss', { kind: 'stage-agent', agent: 'review-agent' }, 'git status'),
+    denialEntry('l7', offsetMinutes(now, -6), 'gate-clear', { kind: 'stage-agent', agent: 'revise-agent' }, 'gh issue edit 44'),
+    denialEntry('l8', offsetMinutes(now, -2), 'hook-error', { kind: 'unattributed', raw: '' }, 'guard hook crashed'),
+  ]
+  return {
+    ok: true,
+    present: true,
+    path,
+    entries,
+    summary: { agentDenials: 10, railDenials: 3, misses: 15, gateClears: 2, hookErrors: 1, legacy: 0, malformed: 0, total: 31 },
+    capped: true,
+    readAt: now.toISOString(),
+  }
 }
 
 function notReadyRepositoryState(): RepositoryState {

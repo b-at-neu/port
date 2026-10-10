@@ -53,6 +53,12 @@ describe('repoSearchFromRaw', () => {
     expect(repoSearchFromRaw({ tab: 'denials' }).tab).toBe('denials')
     expect(repoSearchFromRaw({ tab: 'nonsense' }).tab).toBe('overview')
   })
+
+  it('defaults the Denials tab grouping to command, accepts actor', () => {
+    expect(repoSearchFromRaw({}).denialsGroup).toBe('command')
+    expect(repoSearchFromRaw({ denialsGroup: 'actor' }).denialsGroup).toBe('actor')
+    expect(repoSearchFromRaw({ denialsGroup: 'nonsense' }).denialsGroup).toBe('command')
+  })
 })
 
 describe('historySearchFromRaw', () => {
