@@ -1,7 +1,4 @@
-// DESIGN §3 Session "Changes opens the session's diff in the detail pane" —
-// a `DetailPane` polling `session:changes` every 5s while mounted, with no
-// `useEffect`. The "stale: none" behaviour (#322): a background refetch
-// keeps the last result on screen, never flashing the loading skeletons.
+// Polls session:changes every 5s while mounted, without useEffect.
 import { FileDiff as FileDiffIcon, RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'

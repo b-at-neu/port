@@ -1,7 +1,4 @@
-// Pure copy for the Changes pane — no React import, so every string is
-// unit-testable directly. `changesErrorCopy` is exhaustive over
-// `SessionChangesFailureKind` plus `'unreachable'` (the query itself
-// rejected, distinct from a typed `{ ok: false }` response).
+// Pure copy for the Changes pane.
 import type { SessionChangesFailureKind } from '../../../shared/workspace/types'
 
 export function shortSha(sha: string): string {
@@ -53,10 +50,7 @@ export function numstatLine({ additions, deletions }: { readonly additions: numb
 export const REFRESH_CHANGES = 'Refresh changes'
 export const CLOSE_CHANGES = 'Close changes'
 
-/** Every `SessionChangesFailureKind` plus `'unreachable'` (the query
- *  rejected rather than returning a typed failure). `unknown-session` and
- *  `not-git` are reachable only through a race, since the Changes button is
- *  gated on `workspace.root !== null`. */
+/** Reachable only through a race, since the Changes button is gated on `workspace.root !== null`. */
 export function changesErrorCopy(failure: { readonly kind: SessionChangesFailureKind; readonly message: string } | 'unreachable', baseSha: string | null): string {
   if (failure === 'unreachable') return 'Could not reach the main process.'
   switch (failure.kind) {
