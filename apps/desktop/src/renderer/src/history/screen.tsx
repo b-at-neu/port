@@ -138,7 +138,7 @@ function SessionRow({
   readonly onOpen: (sessionId: string, agentId: string | null, title: string) => void
 }) {
   const label = sessionLabel(session)
-  const canHost = session.worktreePath === null
+  const canHost = session.cwd !== null
   const metaParts = [session.role !== 'other' ? session.role : null, session.itemNumber !== null ? `#${String(session.itemNumber)}` : null, session.gitBranch, relativeTime(session.idleMs)].filter(
     (part): part is string => part !== null && part !== '',
   )

@@ -2,6 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { createHostingPersistence, DEFAULT_SESSION_LIMIT } from './persist'
+import type { HostingPersistedState, HostingPersistence } from './persist'
 import type { RepoId } from '../../shared/repos'
 import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
 import { makeTempDir } from '../../testing/fixtures'
@@ -12,6 +13,21 @@ const EMPTY_MARKS = { pinned: [], archived: [] }
 /** `save()` is fire-and-forget over real filesystem I/O, which needs a real macrotask turn to settle. */
 async function flush(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 20))
+}
+
+/** Polls `load()` until it matches, instead of a fixed `flush()` count that can undershoot on a slow CI disk. */
+async function waitForState(persistence: HostingPersistence, expected: HostingPersistedState): Promise<void> {
+  const deadline = Date.now() + 2000
+  for (;;) {
+    const state = await persistence.load()
+    try {
+      expect(state).toEqual(expected)
+      return
+    } catch (error) {
+      if (Date.now() >= deadline) throw error
+      await flush()
+    }
+  }
 }
 
 describe('createHostingPersistence', () => {
@@ -125,10 +141,8 @@ describe('createHostingPersistence', () => {
     persistence.save({ limit: 4, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
     persistence.save({ limit: 4, open: [ENTRY], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
     persistence.save({ limit: 2, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
-    await flush()
-    await flush()
     const reloaded = createHostingPersistence({ dir })
-    await expect(reloaded.load()).resolves.toEqual({ limit: 2, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
+    await waitForState(reloaded, { limit: 2, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
   })
 
   it('load() falls back to empty marks without dropping open/defaults, when marks is missing or malformed', async () => {

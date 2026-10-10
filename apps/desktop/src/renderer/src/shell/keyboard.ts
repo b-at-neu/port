@@ -1,6 +1,5 @@
 // One module-level `keydown` listener, no `useEffect`. `resolveKey` is pure;
 // `installKeyboardMap` wires its result to real effects.
-import type { RepoId } from '../../../shared/repos'
 import type { SessionKey } from '../../../shared/hosting/types'
 import type { AppCommand } from '../../../shared/shell/commands'
 
@@ -50,16 +49,14 @@ function isDialogOpen(): boolean {
 }
 
 export interface KeyboardDeps {
-  readonly openPalette: (page: 'root' | 'new-session') => void
-  readonly readyRepoIds: () => readonly RepoId[]
-  readonly startNewSession: (repoId: RepoId) => void
+  readonly openPalette: (page: 'root') => void
+  readonly openNewSessionDialog: () => void
   readonly liveSessionKeys: () => readonly SessionKey[]
   readonly currentSessionKey: () => SessionKey | null
   readonly selectSession: (key: SessionKey) => void
   readonly toggleSidebar: () => void
   readonly startRename: () => void
   readonly currentListNavigator: () => { next(): void; prev(): void; open(): void } | undefined
-  readonly noReadyRepoToast: () => void
 }
 
 /** The keymap's own effects, shared with the app menu's `app:command` push — extracted so
@@ -69,13 +66,9 @@ export function runAction(action: KeyboardAction, deps: KeyboardDeps): void {
     case 'palette':
       deps.openPalette('root')
       return
-    case 'new-session': {
-      const ready = deps.readyRepoIds()
-      if (ready.length === 1 && ready[0] !== undefined) deps.startNewSession(ready[0])
-      else if (ready.length > 1) deps.openPalette('new-session')
-      else deps.noReadyRepoToast()
+    case 'new-session':
+      deps.openNewSessionDialog()
       return
-    }
     case 'jump-to-session': {
       const key = deps.liveSessionKeys()[action.index]
       if (key !== undefined) deps.selectSession(key)

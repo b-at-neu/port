@@ -1,5 +1,6 @@
 // DESIGN §3 Session header — 44px, title, phase pill, Stop/Close, the "…" menu.
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ScreenHeader } from '../components/screen-header'
 import { StatusPill } from '../components/status-pill'
 import type { PillStatus } from '../components/status-pill'
@@ -47,6 +48,14 @@ export function SessionHeader({
       <div className="flex min-w-0 items-center gap-2">
         <span className="truncate">{sessionDisplayLabel({ title: snapshot.title, origin: snapshot.origin }, repoLabel)}</span>
         <StatusPill status={PHASE_STATUS[phase]} label={label} />
+        {snapshot.workspace.worktree !== null ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="truncate font-mono text-meta text-muted-foreground">{snapshot.workspace.worktree.branch}</span>
+            </TooltipTrigger>
+            <TooltipContent>{snapshot.workspace.worktree.path}</TooltipContent>
+          </Tooltip>
+        ) : null}
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {phaseCopy.stop !== 'hidden' ? (

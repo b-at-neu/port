@@ -7,26 +7,16 @@ import { connectItemActionPruning } from './board/screen'
 import { mountReact } from './react/mount'
 import { themeStore } from './theme/store'
 import { trackLastRoute } from './shell/prefs'
-import { initSidebarCollapsed, listNavigatorFor, openPalette, setRenaming, toggleSidebarCollapsed } from './shell/stores'
+import { initSidebarCollapsed, listNavigatorFor, openNewSessionDialog, openPalette, setRenaming, toggleSidebarCollapsed } from './shell/stores'
 import { shellPrefs, setSidebarCollapsed } from './shell/prefs'
 import { installKeyboardMap, runAppCommand } from './shell/keyboard'
 import type { KeyboardDeps } from './shell/keyboard'
-import { liveSessionKeys, selectSession, setSessionsQueryClient, startNewSession } from './session/actions'
+import { liveSessionKeys, selectSession, setSessionsQueryClient } from './session/actions'
 import { selectedSession } from './session/selection'
-import { toast } from 'sonner'
 import { shouldRedirectToSetup } from './setup/launch-redirect'
 import { sharedSubscriptions } from './data/subscriptions'
-import type { RepositoryEntry } from '../../shared/repos'
-import type { ReposListResponse } from '../../shared/ipc'
 
 const app = document.querySelector<HTMLDivElement>('#app')
-
-/** Reads the repository list from the query cache — the Repositories
- *  screen's own query keeps it current; `boot()` seeds it once below. */
-function currentRepositories(client: ReturnType<typeof createQueryClient>): readonly RepositoryEntry[] {
-  const data = client.getQueryData<ReposListResponse>(ipcQueryOptions('repos:list').queryKey)
-  return data?.ok === true ? data.repositories : []
-}
 
 function currentListScreen(): 'board' | 'backlog' | 'needsYou' | null {
   const pathname = router.state.location.pathname
@@ -48,8 +38,7 @@ if (app) mountReact(app, queryClient)
 // Built once so the keymap and the app-menu/notification push run the identical action.
 const actionDeps: KeyboardDeps = {
   openPalette,
-  readyRepoIds: () => currentRepositories(queryClient).filter((r) => 'config' in r).map((r) => r.id),
-  startNewSession,
+  openNewSessionDialog,
   liveSessionKeys,
   currentSessionKey: () => selectedSession(),
   selectSession,
@@ -64,7 +53,6 @@ const actionDeps: KeyboardDeps = {
     const screen = currentListScreen()
     return screen !== null ? listNavigatorFor(screen) : undefined
   },
-  noReadyRepoToast: () => toast('Register a repository to start a session.'),
 }
 
 installKeyboardMap(actionDeps)

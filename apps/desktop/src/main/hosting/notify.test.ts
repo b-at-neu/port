@@ -4,6 +4,9 @@ import type { HostedSessionSnapshot } from '../../shared/hosting/types'
 import type { SessionControls, SessionModels } from '../../shared/hosting/controls'
 import type { RepoId } from '../../shared/repos'
 import type { SessionKey } from '../../shared/hosting/types'
+import type { SessionWorkspace } from '../../shared/workspace/types'
+
+const TEST_WORKSPACE: SessionWorkspace = { folder: '/repo', root: '/repo', worktree: null, base: null }
 
 const TEST_CONTROLS: SessionControls = { permissionMode: 'default', model: null, effort: null }
 const TEST_MODELS: SessionModels = { kind: 'pending' }
@@ -13,9 +16,9 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     sessionKey: 'hosted-1' as SessionKey,
     claudeSessionId: 'c1',
     repoId: 'repo-1' as RepoId,
+    workspace: TEST_WORKSPACE,
     phase: 'streaming',
     origin: { kind: 'fresh' },
-    workspace: { folder: '/repo', root: '/repo', worktree: null, base: null },
     startedAt: '2026-01-01T00:00:00.000Z',
     queuedAfterInterrupt: null,
     end: null,

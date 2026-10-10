@@ -2,6 +2,7 @@
 // anywhere: every writer calls `set` directly from an event handler.
 import { useSyncExternalStore } from 'react'
 import type { RepoId } from '../../../shared/repos'
+import type { NewSessionPreselect } from '../session/new-session-model'
 
 function createStore<T>(initial: T) {
   let value = initial
@@ -24,7 +25,7 @@ function createStore<T>(initial: T) {
   }
 }
 
-export type PalettePage = 'root' | 'new-session'
+export type PalettePage = 'root'
 
 export interface PaletteState {
   readonly open: boolean
@@ -51,6 +52,25 @@ export function setPaletteOpen(open: boolean): void {
 
 export function usePaletteState(): PaletteState {
   return useSyncExternalStore(paletteStore.subscribe, paletteStore.get)
+}
+
+export interface NewSessionDialogState {
+  readonly open: boolean
+  readonly preselect: NewSessionPreselect
+}
+
+const newSessionDialogStore = createStore<NewSessionDialogState>({ open: false, preselect: null })
+
+export function openNewSessionDialog(preselect: NewSessionPreselect = null): void {
+  newSessionDialogStore.set({ open: true, preselect })
+}
+
+export function closeNewSessionDialog(): void {
+  newSessionDialogStore.set({ open: false, preselect: null })
+}
+
+export function useNewSessionDialog(): NewSessionDialogState {
+  return useSyncExternalStore(newSessionDialogStore.subscribe, newSessionDialogStore.get)
 }
 
 export interface PauseRequest {

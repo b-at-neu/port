@@ -114,6 +114,7 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'starting', hash: '#/session?key=fixture-session-starting', ready: 'text=Starting' },
       { name: 'question', hash: '#/session?key=fixture-session-question', ready: '[data-slot="question-card"]' },
       { name: 'plan', hash: '#/session?key=fixture-session-plan', ready: '[data-slot="plan-card"]' },
+      { name: 'new-session', click: '[data-slot="session-empty"] button', ready: '[data-slot="new-session-dialog"]' },
     ],
   },
   settings: { hash: '#/settings', container: '#app', ready: '#app h2' },

@@ -110,7 +110,7 @@ export function startFailureCopy(result: RenderableStartFailure): StartFailureCo
     return { title: 'Not a git repository', body: "This folder isn't a git repository.", detail: null }
   }
   if (result.kind === 'worktree-failed') {
-    return { title: "Couldn't create the worktree", body: "Port couldn't create a worktree for this session.", detail: result.message }
+    return { title: "Couldn't create the worktree", body: `Couldn't create the worktree: ${result.message}.`, detail: null }
   }
   const copy = RUNTIME_COPY[result.diagnosis]
   return { title: copy.title, body: copy.body, detail: result.detail }
@@ -128,10 +128,6 @@ export function interruptNote(queuedAfterInterrupt: number | null): string | nul
 export const EMPTY_TITLE = 'No session open.'
 export const RECONNECTING = 'Reconnecting to your session…'
 
-export function startingCopy(repoLabel: string): string {
-  return `Starting a session in ${repoLabel}…`
-}
-
 export const SEND_FAILED_UNKNOWN_SESSION = "Port no longer has this session. It may have ended when the app restarted."
 export const SEND_FAILED_UNREACHABLE = "Couldn't reach the main process. Your message wasn't sent."
 export const START_UNREACHABLE = "Couldn't reach the main process."
@@ -148,3 +144,32 @@ export const STOP_BUTTON = 'Stop'
 export const CLOSE_BUTTON = 'Close session'
 
 export const COMPOSER_HINT = 'Enter to send · Shift+Enter for a new line'
+
+export const NEW_SESSION_DIALOG_TITLE = 'New session'
+export const NEW_SESSION_EMPTY_LINE = 'Pick a folder to start a session in.'
+export const NEW_SESSION_CHOOSE_FOLDER = 'Choose folder…'
+export const NEW_SESSION_FOLDERS_FAILED = "Couldn't load your folders."
+export const NEW_SESSION_WORKTREE_LABEL = 'Create a new worktree'
+export const NEW_SESSION_CANCEL = 'Cancel'
+export const NEW_SESSION_START = 'Start session'
+export const NEW_SESSION_STARTING = 'Starting…'
+
+export const ARCHIVE_DIALOG_TITLE = "Remove this session's worktree?"
+export const ARCHIVE_DIRTY_BODY = 'The worktree has uncommitted or untracked changes. Removing it deletes them.'
+export const ARCHIVE_KEEP = 'Keep worktree'
+export const ARCHIVE_REMOVE = 'Remove worktree'
+export const ARCHIVE_REMOVE_ANYWAY = 'Remove anyway'
+
+export function archiveBody(path: string, branch: string): string {
+  return `${path} on branch ${branch}. The branch is kept.`
+}
+
+export function archiveRemoveFailedToast(message: string): string {
+  return `Couldn't remove the worktree: ${message}`
+}
+
+export const ARCHIVE_UNREACHABLE_TOAST = "Couldn't reach the main process."
+
+export function folderMissingToast(path: string | null): string {
+  return path !== null ? `This session's folder is gone: ${path}` : "Port couldn't find this session's folder."
+}

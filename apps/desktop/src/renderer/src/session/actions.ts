@@ -1,17 +1,16 @@
 // Session start/send/stop/close/dismiss, plus the cross-screen entry points the sidebar, palette and keyboard map call directly.
-import { useSyncExternalStore } from 'react'
+import { toast } from 'sonner'
 import type { QueryClient } from '@tanstack/react-query'
 import { router } from '../router/router'
 import { ROUTE_IDS } from '../router/routes'
 import { ipcQueryOptions } from '../data/query'
 import { invoke } from '../data/invoke'
-import type { RepoId, RepositoryEntry } from '../../../shared/repos'
-import type { ReposListResponse } from '../../../shared/ipc'
-import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '../../../shared/hosting/types'
+import type { HostedSessionSnapshot, SessionDismissResult, SessionKey, SessionStartResult, WorktreeChoice } from '../../../shared/hosting/types'
 import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SessionEffort, SetControlsResult } from '../../../shared/hosting/controls'
 import type { ComposerAttachment } from '../../../shared/hosting/attachments'
-import { startFailureCopy, START_UNREACHABLE } from './copy'
-import type { StartFailureCopy } from './copy'
+import type { FolderId } from '../../../shared/workspace/types'
+import { folderMissingToast, startFailureCopy, START_UNREACHABLE } from './copy'
+import type { RenderableStartFailure, StartFailureCopy } from './copy'
 import { clearDraft, clearDraftAttachments } from './drafts'
 import { forgetSessionEntries } from './entries-store'
 
@@ -50,101 +49,35 @@ function removeSession(key: SessionKey): void {
   )
 }
 
-function repoLabelFor(repoId: RepoId | null): string {
-  if (repoId === null) return ''
-  const data = queryClient?.getQueryData<ReposListResponse>(ipcQueryOptions('repos:list').queryKey)
-  if (data?.ok !== true) return repoId
-  const entry = data.repositories.find((candidate: RepositoryEntry) => candidate.id === repoId)
-  if (entry === undefined) return repoId
-  return 'config' in entry ? entry.config.repo : entry.displayName
-}
-
 export function liveSessionKeys(): readonly SessionKey[] {
   const data = queryClient?.getQueryData<readonly HostedSessionSnapshot[]>(sessionListKey()) ?? []
   return data.filter((snapshot) => snapshot.phase !== 'ended').map((snapshot) => snapshot.sessionKey)
 }
 
-export interface PendingStart {
-  readonly repoLabel: string
-}
-
-const pendingStartListeners = new Set<() => void>()
-let pendingStart: PendingStart | null = null
-
-function setPendingStart(next: PendingStart | null): void {
-  pendingStart = next
-  for (const listener of pendingStartListeners) listener()
-}
-
-export function usePendingStart(): PendingStart | null {
-  return useSyncExternalStore(
-    (listener) => {
-      pendingStartListeners.add(listener)
-      return () => pendingStartListeners.delete(listener)
-    },
-    () => pendingStart,
-  )
-}
-
-const startFailureListeners = new Set<() => void>()
-let startFailure: StartFailureCopy | null = null
-
-function setStartFailure(next: StartFailureCopy | null): void {
-  startFailure = next
-  for (const listener of startFailureListeners) listener()
-}
-
-export function useStartFailure(): StartFailureCopy | null {
-  return useSyncExternalStore(
-    (listener) => {
-      startFailureListeners.add(listener)
-      return () => startFailureListeners.delete(listener)
-    },
-    () => startFailure,
-  )
-}
-
 function handleStartResult(result: SessionStartResult): void {
-  setPendingStart(null)
   if (result.ok) {
-    setStartFailure(null)
     adoptSession(result.snapshot)
     void router.navigate({ to: ROUTE_IDS.session, search: { key: result.snapshot.sessionKey } })
     return
   }
-  if (result.kind === 'already-open') {
-    setStartFailure(null)
-    void router.navigate({ to: ROUTE_IDS.session, search: { key: result.sessionKey } })
-    return
-  }
-  setStartFailure(startFailureCopy(result))
+  if (result.kind === 'already-open') void router.navigate({ to: ROUTE_IDS.session, search: { key: result.sessionKey } })
 }
 
-// Starts by repo through `folders:list`, the first folder whose own `repoId` matches.
-async function startSession(repoId: RepoId): Promise<void> {
-  setPendingStart({ repoLabel: repoLabelFor(repoId) })
-  setStartFailure(null)
-  void router.navigate({ to: ROUTE_IDS.session, search: {} })
+export type StartInFolderOutcome = { readonly kind: 'started' } | { readonly kind: 'failed'; readonly copy: StartFailureCopy; readonly result: RenderableStartFailure | null }
+
+/** The New session dialog's own start — stays open on failure so the dialog can show the inline banner. */
+export async function startInFolder(folderId: FolderId, worktree: boolean): Promise<StartInFolderOutcome> {
   try {
-    const folders = await invoke('folders:list')
-    const folder = folders.folders.find((candidate) => candidate.repoId === repoId)
-    if (folder === undefined) {
-      setPendingStart(null)
-      setStartFailure(startFailureCopy({ ok: false, kind: 'folder-missing', path: null }))
-      return
+    const result = await invoke('session:start', { target: { kind: 'folder', folderId, worktree }, mode: { kind: 'fresh' } })
+    if (result.ok || result.kind === 'already-open') {
+      handleStartResult(result)
+      return { kind: 'started' }
     }
-    const result = await invoke('session:start', { target: { kind: 'folder', folderId: folder.id, worktree: false }, mode: { kind: 'fresh' } })
-    handleStartResult(result)
+    return { kind: 'failed', copy: startFailureCopy(result), result }
   } catch (error) {
     console.error('Failed to reach the main process starting a session', error)
-    setPendingStart(null)
-    setStartFailure({ title: 'Could not start a session', body: START_UNREACHABLE, detail: null })
+    return { kind: 'failed', copy: { title: 'Could not start a session', body: START_UNREACHABLE, detail: null }, result: null }
   }
-}
-
-/** The sidebar's and palette's **New session** entry point. */
-export function startNewSession(repoId: RepoId): void {
-  void startSession(repoId)
 }
 
 /** The sidebar's own session row click, and the keyboard map's jump/next. */
@@ -189,18 +122,20 @@ export async function close(key: SessionKey): Promise<void> {
   }
 }
 
-export async function dismiss(key: SessionKey): Promise<boolean> {
+// Dismisses with the given worktree choice; clears local state only on `ok`.
+export async function dismiss(key: SessionKey, choice: WorktreeChoice): Promise<SessionDismissResult | 'unreachable'> {
   try {
-    const result = await invoke('session:dismiss', { sessionKey: key, worktree: 'keep' })
-    if (!result.ok) return false
-    removeSession(key)
-    forgetSessionEntries(key)
-    clearDraft(key)
-    clearDraftAttachments(key)
-    return true
+    const result = await invoke('session:dismiss', { sessionKey: key, worktree: choice })
+    if (result.ok) {
+      removeSession(key)
+      forgetSessionEntries(key)
+      clearDraft(key)
+      clearDraftAttachments(key)
+    }
+    return result
   } catch (error) {
     console.error('Failed to reach the main process dismissing a session', error)
-    return false
+    return 'unreachable'
   }
 }
 
@@ -220,6 +155,10 @@ export async function answerPlan(sessionKey: SessionKey, permissionId: string, d
 export async function startFromTranscript(sessionId: string, kind: 'resume' | 'fork'): Promise<void> {
   try {
     const result = await invoke('session:start', { target: { kind: 'transcript' }, mode: { kind, sessionId } })
+    if (!result.ok && result.kind === 'folder-missing') {
+      toast(folderMissingToast(result.path))
+      return
+    }
     handleStartResult(result)
   } catch (error) {
     console.error('Failed to reach the main process starting a session from a transcript', error)

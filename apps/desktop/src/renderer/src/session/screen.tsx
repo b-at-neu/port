@@ -4,7 +4,6 @@ import { useSearch } from '@tanstack/react-router'
 import { MessageSquare } from 'lucide-react'
 import { AlertDialog, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '../components/empty-state'
 import { ErrorBanner } from '../components/error-banner'
@@ -13,18 +12,20 @@ import { ConversationList } from '../components/conversation-list'
 import { useIpcQuery } from '../data/query'
 import { invoke } from '../data/invoke'
 import { ROUTE_IDS } from '../router/routes'
-import type { RepoId, RepositoryEntry } from '../../../shared/repos'
+import type { RepositoryEntry } from '../../../shared/repos'
 import type { ComposerAttachment } from '../../../shared/hosting/attachments'
 import type { HostedSessionSnapshot, SessionKey } from '../../../shared/hosting/types'
 import { folderLabel } from '../../../shared/workspace/label'
+import { openNewSessionDialog } from '../shell/stores'
 import { setSelectedSession } from './selection'
 import { useSessionEntries } from './entries-store'
 import { setDraft, clearDraftAttachments } from './drafts'
-import { answerPlan, answerQuestion, close, dismiss, send, setControls, startNewSession, stop, usePendingStart, useStartFailure } from './actions'
+import { answerPlan, answerQuestion, close, dismiss, send, setControls, stop } from './actions'
 import { SessionHeader } from './header'
 import { EndPanel } from './end-panel'
 import { CommandStrip } from './command-strip'
 import { RestoreBanner } from './restore-banner'
+import { ArchiveDialog } from './archive-dialog'
 import { ControlsBar } from './controls-bar'
 import { QuestionCard } from './question-card'
 import { PlanCard } from './plan-card'
@@ -33,11 +34,7 @@ import { QUESTION_SKIPPED_MESSAGE, COMPOSER_PLAN_PLACEHOLDER, COMPOSER_QUESTION_
 import { toast } from 'sonner'
 import { PromptInput } from './prompt-input'
 import { PIPELINE_SEND_BLOCKED } from './composer-copy'
-import { COMPOSER_HINT, composerCopy, CLOSE_CONFIRM_NO, CLOSE_CONFIRM_PROMPT, EMPTY_TITLE, interruptNote, RECONNECTING, SEND_FAILED_UNKNOWN_SESSION, SEND_FAILED_UNREACHABLE, startingCopy, windowNote } from './copy'
-
-function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { status: 'ready' }> {
-  return 'config' in entry
-}
+import { COMPOSER_HINT, composerCopy, CLOSE_CONFIRM_NO, CLOSE_CONFIRM_PROMPT, EMPTY_TITLE, interruptNote, RECONNECTING, SEND_FAILED_UNKNOWN_SESSION, SEND_FAILED_UNREACHABLE, windowNote } from './copy'
 
 function repoLabelFor(repos: readonly RepositoryEntry[] | undefined, snapshot: HostedSessionSnapshot): string {
   if (snapshot.repoId === null) return folderLabel(snapshot.workspace.folder)
@@ -50,28 +47,17 @@ export function SessionScreen() {
   const search = useSearch({ from: ROUTE_IDS.session })
   const sessions = useIpcQuery('session:list')
   const repos = useIpcQuery('repos:list')
-  const pendingStart = usePendingStart()
-  const startFailure = useStartFailure()
   const key = (search.key ?? null) as SessionKey | null
 
   setSelectedSession(key)
 
   const snapshot = key !== null ? (sessions.data ?? []).find((candidate) => candidate.sessionKey === key) ?? null : null
-  const readyRepos = repos.data?.ok === true ? repos.data.repositories.filter(isReady) : []
 
   return (
     <div className="flex h-full flex-col gap-3">
       <RestoreBanner />
       {snapshot !== null ? (
         <SessionLive key={snapshot.sessionKey} snapshot={snapshot} repoLabel={repoLabelFor(repos.data?.ok === true ? repos.data.repositories : undefined, snapshot)} />
-      ) : pendingStart !== null ? (
-        <StartingPanel repoLabel={pendingStart.repoLabel} />
-      ) : startFailure !== null ? (
-        <div className="flex flex-1 flex-col gap-2">
-          <ScreenHeader>Session</ScreenHeader>
-          <ErrorBanner message={`${startFailure.title}. ${startFailure.body}`} className="m-4" />
-          {startFailure.detail !== null ? <pre className="mx-4 overflow-x-auto rounded-md bg-muted p-2 font-mono text-meta whitespace-pre-wrap">{startFailure.detail}</pre> : null}
-        </div>
       ) : key !== null && sessions.status === 'pending' ? (
         <div className="flex flex-1 flex-col gap-2">
           <ScreenHeader>{RECONNECTING}</ScreenHeader>
@@ -81,53 +67,16 @@ export function SessionScreen() {
           </div>
         </div>
       ) : (
-        <EmptyPanel readyRepos={readyRepos} />
+        <EmptyPanel />
       )}
     </div>
   )
 }
 
-function EmptyPanel({ readyRepos }: { readonly readyRepos: readonly Extract<RepositoryEntry, { status: 'ready' }>[] }) {
-  const [repoId, setRepoId] = useState<RepoId | null>(null)
-  const only = readyRepos.length === 1 ? readyRepos[0] : undefined
-  const chosen = readyRepos.find((repo) => repo.id === repoId) ?? only
-
+function EmptyPanel() {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3">
-      <EmptyState
-        icon={MessageSquare}
-        message={EMPTY_TITLE}
-        className="py-0"
-        data-slot="session-empty"
-        action={readyRepos.length === 0 ? undefined : { label: 'New session', onClick: () => chosen !== undefined && startNewSession(chosen.id) }}
-      />
-      {readyRepos.length === 0 ? (
-        <p title="Register a repository to start a session." className="text-small text-muted-foreground">
-          Register a repository to start a session.
-        </p>
-      ) : readyRepos.length > 1 ? (
-        <Select value={repoId ?? undefined} onValueChange={(value) => setRepoId(value as RepoId)}>
-          <SelectTrigger className="w-64">
-            <SelectValue placeholder="Pick a repository" />
-          </SelectTrigger>
-          <SelectContent>
-            {readyRepos.map((repo) => (
-              <SelectItem key={repo.id} value={repo.id}>
-                {repo.config.repo}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      ) : null}
-    </div>
-  )
-}
-
-function StartingPanel({ repoLabel }: { readonly repoLabel: string }) {
-  return (
-    <div className="flex flex-1 flex-col gap-2">
-      <ScreenHeader>Starting</ScreenHeader>
-      <p className="px-4 text-small text-muted-foreground">{startingCopy(repoLabel)}</p>
+      <EmptyState icon={MessageSquare} message={EMPTY_TITLE} className="py-0" data-slot="session-empty" action={{ label: 'New session', onClick: () => openNewSessionDialog() }} />
     </div>
   )
 }
@@ -137,6 +86,7 @@ function SessionLive({ snapshot, repoLabel }: { readonly snapshot: HostedSession
   const entries = useSessionEntries(key)
   const [sendError, setSendError] = useState<string | null>(null)
   const [closeConfirming, setCloseConfirming] = useState(false)
+  const [archiving, setArchiving] = useState(false)
   const [interruptNoteText, setInterruptNoteText] = useState<string | null>(null)
   const [sessionGone, setSessionGone] = useState(false)
 
@@ -170,6 +120,14 @@ function SessionLive({ snapshot, repoLabel }: { readonly snapshot: HostedSession
   function handleCloseClick(): void {
     if (snapshot.phase === 'streaming' || snapshot.phase === 'interrupting') setCloseConfirming(true)
     else void close(key)
+  }
+
+  function handleDismiss(): void {
+    if (snapshot.workspace.worktree !== null) {
+      setArchiving(true)
+      return
+    }
+    void dismiss(key, 'keep')
   }
 
   const copy = composerCopy(snapshot.phase, sessionGone)
@@ -225,7 +183,8 @@ function SessionLive({ snapshot, repoLabel }: { readonly snapshot: HostedSession
 
   return (
     <>
-      <SessionHeader snapshot={snapshot} repoLabel={repoLabel} onStop={() => void handleStop()} onClose={handleCloseClick} onDismiss={() => void dismiss(key)} />
+      <SessionHeader snapshot={snapshot} repoLabel={repoLabel} onStop={() => void handleStop()} onClose={handleCloseClick} onDismiss={handleDismiss} />
+      <ArchiveDialog snapshot={snapshot} open={archiving} onOpenChange={setArchiving} />
       <AlertDialog open={closeConfirming} onOpenChange={(open) => !open && setCloseConfirming(false)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -251,8 +210,10 @@ function SessionLive({ snapshot, repoLabel }: { readonly snapshot: HostedSession
       <div className="mx-auto flex w-full max-w-[680px] min-h-0 flex-1 flex-col gap-3">
         {windowNoteVisible ? <p className="text-meta text-muted-foreground">{windowNote()}</p> : null}
         <ConversationList entries={entries.entries} baseIndex={entries.firstIndex} live={entries.live} focusIndex={null} />
-        {snapshot.phase === 'ended' && snapshot.end !== null && snapshot.repoId !== null ? <EndPanel end={snapshot.end} onNewSession={() => startNewSession(snapshot.repoId as RepoId)} /> : null}
-        <CommandStrip snapshot={snapshot} />
+        {snapshot.phase === 'ended' && snapshot.end !== null ? (
+          <EndPanel end={snapshot.end} onNewSession={() => openNewSessionDialog({ kind: 'path', path: snapshot.workspace.root ?? snapshot.workspace.folder })} />
+        ) : null}
+        {snapshot.repoId !== null ? <CommandStrip snapshot={snapshot} /> : null}
         {interaction !== null && interaction.kind === 'question' ? (
           <QuestionCard questions={interaction.questions} sending={questionSending} error={questionError} onSend={(answers) => void handleQuestionSend(answers)} onSkip={() => void handleQuestionSkip()} />
         ) : null}
@@ -289,4 +250,3 @@ function SessionLive({ snapshot, repoLabel }: { readonly snapshot: HostedSession
     </>
   )
 }
-
