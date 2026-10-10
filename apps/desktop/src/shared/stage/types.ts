@@ -1,6 +1,5 @@
 // Renderer-safe types for stage-session "needs you" attention: a denied tool call waiting on an
-// allowlist decision, and a stage session interrupted before it reached a hand-back. No import
-// here may reach a Node builtin, so this file compiles under `typecheck:web`.
+// allowlist decision, and a stage session interrupted before it reached a hand-back.
 import type { PipelineItemKind } from '../github/types'
 import type { LabelKey } from '../labels/vocabulary'
 import type { StageAgent } from '../tick/types'

@@ -47,7 +47,7 @@ describe('createStageRegistry', () => {
     const deps = fakeDeps({ ok: false })
     const registry = createStageRegistry({ path: '/tmp/stage-sessions.json', readJson: deps.readJson, writeJsonAtomic: deps.writeJsonAtomic, now: () => new Date() })
     registry.recordRunning(entry)
-    registry.markAllQuit()
+    void registry.markAllQuit()
     expect(registry.list()).toHaveLength(1)
     expect(registry.list()[0]?.reason).toBe('quit')
   })

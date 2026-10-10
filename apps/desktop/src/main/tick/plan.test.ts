@@ -337,6 +337,30 @@ describe('planTick — in-flight items: claims', () => {
     const second = planTick({ repository: repo, ledger, unknownStreaks, nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(second.claims).toEqual([{ number: 1, kind: 'issue', inFlight: 'inProgress', class: 'suspect', retryKey: null }])
   })
+
+  function tickWith(repo: Extract<RepositoryState, { ok: true }>, stageLiveness: { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null) {
+    return planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true, stageLiveness })
+  }
+
+  it('stageLiveness: null is byte-identical to today — a transcript in-flight status still matches', () => {
+    const repo = readyRepo([inFlightItem({ status: 'in-flight', statusEvidence: 'agent-active' })])
+    expect(tickWith(repo, null).claims).toEqual([{ number: 1, kind: 'issue', inFlight: 'inProgress', class: 'matched', retryKey: null }])
+  })
+
+  it('stageLiveness: a live description matches, ignoring item.status entirely', () => {
+    const repo = readyRepo([inFlightItem()])
+    expect(tickWith(repo, { live: ['impl #1'], interrupted: [] }).claims).toEqual([{ number: 1, kind: 'issue', inFlight: 'inProgress', class: 'matched', retryKey: null }])
+  })
+
+  it('stageLiveness: an interrupted description reports class interrupted, with no retryKey', () => {
+    const repo = readyRepo([inFlightItem()])
+    expect(tickWith(repo, { live: [], interrupted: ['impl #1'] }).claims).toEqual([{ number: 1, kind: 'issue', inFlight: 'inProgress', class: 'interrupted', retryKey: null }])
+  })
+
+  it('stageLiveness non-null: a transcript in-flight status alone is no longer matched', () => {
+    const repo = readyRepo([inFlightItem({ status: 'in-flight', statusEvidence: 'agent-active' })])
+    expect(tickWith(repo, { live: [], interrupted: [] }).claims).toEqual([{ number: 1, kind: 'issue', inFlight: 'inProgress', class: 'no-record', retryKey: null }])
+  })
 })
 
 describe('planTick — disabledStages', () => {

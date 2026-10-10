@@ -51,7 +51,8 @@ export interface StageRegistry {
   setSessionId(id: string, claudeSessionId: string): void
   markInterrupted(id: string, reason: InterruptedReason, detail: string | null, resetsAt: string | null, costUsd: number | null): void
   /** Marks every currently-`running` entry `quit` — called on the quit path before `closeAll()`. */
-  markAllQuit(): void
+  /** Awaited at the quit path, with a timeout the caller applies — a hung write must never block quitting. */
+  markAllQuit(): Promise<void>
   remove(id: string): void
   list(): readonly InterruptedStage[]
 }
@@ -82,8 +83,8 @@ function toInterrupted(entries: readonly StoredEntry[]): readonly InterruptedSta
 export function createStageRegistry(params: CreateStageRegistryParams): StageRegistry {
   let entries: StoredEntry[] = []
 
-  function persist(): void {
-    void params.writeJsonAtomic(params.path, { version: CURRENT_VERSION, entries }).then((result) => {
+  function persist(): Promise<void> {
+    return params.writeJsonAtomic(params.path, { version: CURRENT_VERSION, entries }).then((result) => {
       if (!result.ok) console.error(`[stage] could not write ${params.path}: ${result.message}`)
     })
   }
@@ -102,13 +103,13 @@ export function createStageRegistry(params: CreateStageRegistryParams): StageReg
     const valid = value.entries.filter(isStoredEntry)
     // Every `running` entry at boot means the process died before it could mark itself otherwise.
     entries = valid.map((e) => (e.state === 'running' ? { ...e, state: 'interrupted', reason: 'crash', detail: null } : e))
-    persist()
+    void persist()
     return toInterrupted(entries)
   }
 
   function recordRunning(entry: Omit<InterruptedStage, 'reason' | 'detail' | 'resetsAt' | 'costUsd'>): void {
     entries = [...entries, { ...entry, reason: 'crash', detail: null, resetsAt: null, costUsd: null, state: 'running' }]
-    persist()
+    void persist()
   }
 
   function setSessionId(id: string, claudeSessionId: string): void {
@@ -119,7 +120,7 @@ export function createStageRegistry(params: CreateStageRegistryParams): StageReg
     if (existing === undefined) return
     next[idx] = { ...existing, claudeSessionId }
     entries = next
-    persist()
+    void persist()
   }
 
   function markInterrupted(id: string, reason: InterruptedReason, detail: string | null, resetsAt: string | null, costUsd: number | null): void {
@@ -130,17 +131,17 @@ export function createStageRegistry(params: CreateStageRegistryParams): StageReg
     if (existing === undefined) return
     next[idx] = { ...existing, state: 'interrupted', reason, detail, resetsAt, costUsd }
     entries = next
-    persist()
+    void persist()
   }
 
-  function markAllQuit(): void {
+  function markAllQuit(): Promise<void> {
     entries = entries.map((e) => (e.state === 'running' ? { ...e, state: 'interrupted', reason: 'quit', detail: null } : e))
-    persist()
+    return persist()
   }
 
   function remove(id: string): void {
     entries = entries.filter((e) => e.id !== id)
-    persist()
+    void persist()
   }
 
   function list(): readonly InterruptedStage[] {

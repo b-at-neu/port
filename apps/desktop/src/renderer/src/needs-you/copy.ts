@@ -1,6 +1,9 @@
 // Every lead-copy string the Needs you screen renders, one switch over
 // `NeedsYouItem.kind` — a new kind is a compile error, never a blank row.
 import type { NeedsYouItem } from '../../../shared/board/needs-you'
+import type { StageAgent } from '../../../shared/tick/types'
+
+const STAGE_PHASE_NAME: Readonly<Record<StageAgent, string>> = { plan: 'Planning', impl: 'Implementing', review: 'Reviewing', revise: 'Revising' }
 
 function labelOf(item: Pick<NeedsYouItem, 'number'>): string {
   return item.number !== null ? `#${String(item.number)}` : 'this item'
@@ -48,5 +51,27 @@ export function needsYouLeadCopy(item: NeedsYouItem): string {
       }
     case 'stalled':
       return `Retry ${label}: its agent stopped responding`
+    case 'stage-question':
+      return `${label} is asking: ${item.questions[0]?.header ?? 'a question'}`
+    case 'stage-questions':
+      return `${label} has questions for you — open its session to answer`
+    case 'stage-blocked':
+      return `${label} is blocked: ${item.text ?? 'see its session'}`
+    case 'stage-denial':
+      return `${STAGE_PHASE_NAME[item.denial.agent]} ${label} was denied ${item.denial.rule}`
+    case 'stage-interrupted': {
+      const i = item.interrupted
+      const phase = STAGE_PHASE_NAME[i.agent]
+      switch (i.reason) {
+        case 'quit':
+          return `${phase} ${label} was interrupted when port quit`
+        case 'crash':
+          return `${phase} ${label} stopped unexpectedly`
+        case 'usage-limit':
+          return `${phase} ${label} hit the usage limit${i.resetsAt !== null ? `, resets ${new Date(i.resetsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}`
+        case 'error':
+          return `${phase} ${label} ended with an error${i.detail !== null ? ` (${i.detail})` : ''}`
+      }
+    }
   }
 }

@@ -209,6 +209,7 @@ export function stalledDetailCopy(claim: TickClaim, owner: DispatchOwner = 'none
       return `#${n} ${name} — stalled again after this app already reset it once. Reporting only.`
     case 'matched':
     case 'session-required':
+    case 'interrupted':
       return null
   }
 }

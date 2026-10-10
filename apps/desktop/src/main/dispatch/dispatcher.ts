@@ -79,6 +79,8 @@ export interface Dispatcher {
   /** Closes every remaining live stage session in a repository. */
   standDown(repoId: RepoId): Promise<boolean>
   liveStages(repoId: RepoId): readonly string[]
+  /** `null` unless this app owns `repoId` — `main/tick/plan.ts`'s own `stageLiveness` input. */
+  stageLiveness(repoId: RepoId): { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null
   /** Every live stage session across every repository, for the quit guard. */
   liveStageSessions(): readonly StageSessionSummary[]
   /** Stops new launches — called before `closeAll()` on quit. */
@@ -196,11 +198,9 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     state.records = next
     deps.onChange()
   }
-
   function holdsSessionRequired(repoId: RepoId): boolean {
     return stateFor(repoId).owner !== 'app'
   }
-
   function recordDenial(repoId: RepoId, denial: StageDenial): void {
     stateFor(repoId).denials = [...withDenial(stateFor(repoId).denials, denial)]
     deps.onChange()
@@ -454,7 +454,10 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     if (state === undefined) return []
     return state.records.filter((r) => r.state === 'started').map((r) => `${r.agent} #${String(r.number)}`)
   }
-
+  function stageLiveness(repoId: RepoId): { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null {
+    if (stateFor(repoId).owner !== 'app') return null
+    return { live: liveStages(repoId), interrupted: (deps.interrupted?.(repoId) ?? []).map((i) => `${i.agent} #${String(i.number)}`) }
+  }
   function liveStageSessions(): readonly StageSessionSummary[] {
     const summaries: StageSessionSummary[] = []
     for (const [repoId, state] of repoStates.entries()) {
@@ -465,7 +468,6 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     }
     return summaries
   }
-
   async function stopFor(repoId: RepoId, number: number): Promise<boolean> {
     const state = repoStates.get(repoId)
     if (state === undefined) return false
@@ -494,5 +496,5 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     stopped = true
   }
 
-  return { consider, status, stopFor, standDown, liveStages, liveStageSessions, shutdown, recordOutcome, holdsSessionRequired, recordDenial, dismissDenial, clearDenialsFor }
+  return { consider, status, stopFor, standDown, liveStages, stageLiveness, liveStageSessions, shutdown, recordOutcome, holdsSessionRequired, recordDenial, dismissDenial, clearDenialsFor }
 }

@@ -13,8 +13,10 @@ import { needsYouItems } from '../../../shared/board/needs-you'
 import type { NeedsYouItem as NeedsYouItemModel } from '../../../shared/board/needs-you'
 import { registerListNavigator } from '../shell/stores'
 import { needsYouLeadCopy } from './copy'
-import { actionFor, runAction } from './actions'
+import { actionFor, runAction, runSecondaryAction } from './actions'
 import { toast } from 'sonner'
+import { QuestionCard } from '../session/question-card'
+import { invoke } from '../data/invoke'
 
 function itemKey(item: NeedsYouItemModel): string {
   return `${item.kind}:${String(item.repoId)}:${String(item.number)}`
@@ -22,6 +24,9 @@ function itemKey(item: NeedsYouItemModel): string {
 
 function hasDetail(item: NeedsYouItemModel): boolean {
   if (item.kind === 'held') return item.held.reason === 'contended' && item.held.contention !== null
+  if (item.kind === 'stage-question') return true
+  if (item.kind === 'stage-denial') return true
+  if (item.kind === 'stage-blocked') return item.text !== null
   return false
 }
 
@@ -40,18 +45,59 @@ function DetailBody({ item }: { readonly item: NeedsYouItemModel }) {
       </div>
     )
   }
+  if (item.kind === 'stage-question') {
+    return (
+      <div className="border-t border-border px-4 py-2">
+        <StageQuestionCard item={item} />
+      </div>
+    )
+  }
+  if (item.kind === 'stage-denial') {
+    return (
+      <div className="border-t border-border px-4 py-2 text-meta text-muted-foreground">
+        <p className="font-mono">
+          {item.denial.toolName}: {item.denial.inputSummary}
+        </p>
+      </div>
+    )
+  }
+  if (item.kind === 'stage-blocked' && item.text !== null) {
+    return <div className="border-t border-border px-4 py-2 font-mono text-meta text-muted-foreground">{item.text}</div>
+  }
   return null
+}
+
+function StageQuestionCard({ item }: { readonly item: Extract<NeedsYouItemModel, { readonly kind: 'stage-question' }> }) {
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function send(answers: Record<string, string>): Promise<void> {
+    setSending(true)
+    setError(null)
+    try {
+      const result = await invoke('session:question:answer', { sessionKey: item.sessionKey, permissionId: item.permissionId, answers })
+      if (!result.ok) setError(result.kind)
+    } catch (err) {
+      console.error('Failed to reach the main process while answering a stage question', err)
+      setError('unreachable')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return <QuestionCard questions={item.questions} sending={sending} error={error} onSend={(answers) => void send(answers)} onSkip={() => undefined} />
 }
 
 export function NeedsYouScreen() {
   const snapshotQuery = useIpcQuery('board:snapshot')
+  const sessionsQuery = useIpcQuery('session:list')
   const queryClient = useQueryClient()
   const [selection, setSelection] = useState(0)
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
   const [pendingKey, setPendingKey] = useState<string | null>(null)
   const now = new Date()
 
-  const items = snapshotQuery.data !== undefined ? needsYouItems(snapshotQuery.data, now) : []
+  const items = snapshotQuery.data !== undefined ? needsYouItems(snapshotQuery.data, now, sessionsQuery.data ?? []) : []
   const clampedSelection = items.length === 0 ? 0 : Math.min(selection, items.length - 1)
 
   registerListNavigator('needsYou', {
@@ -168,6 +214,8 @@ function Row({
         actionDisabledReason={action.disabledReason}
         actionPending={pending}
         onAction={onAction}
+        secondaryActionLabel={action.secondaryLabel}
+        onSecondaryAction={action.secondaryLabel !== undefined ? () => runSecondaryAction(item, { onToast: () => undefined }) : undefined}
         expandable={hasDetail(item)}
         expanded={expanded}
         onToggleExpand={onToggle}

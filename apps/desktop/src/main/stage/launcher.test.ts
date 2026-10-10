@@ -48,7 +48,11 @@ function fakeDeps(overrides: Partial<{ start: SessionStartResult }> = {}) {
   const removeWorktree = vi.fn().mockResolvedValue({ outcome: 'removed' })
   const createWorktree = vi.fn().mockResolvedValue({ ok: true, path: '/repo/.claude/worktrees/session-abc123', branch: 'session/abc123', baseSha: 'abc' })
   const onOutcome = vi.fn()
-  return { store, removeWorktree, createWorktree, onOutcome, close, dismiss, send, start }
+  const registry = { recordRunning: vi.fn(), setSessionId: vi.fn(), markInterrupted: vi.fn(), markAllQuit: vi.fn(), remove: vi.fn(), list: vi.fn(() => []), load: vi.fn() } as unknown as Parameters<typeof createStageLauncher>[0]['registry']
+  const onDenial = vi.fn()
+  let nextId = 0
+  const newId = vi.fn(() => `id-${String((nextId += 1))}`)
+  return { store, removeWorktree, createWorktree, onOutcome, close, dismiss, send, start, registry, onDenial, newId }
 }
 
 describe('createStageLauncher.launch', () => {
