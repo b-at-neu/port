@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EmptyState } from '../components/empty-state'
 import { ipcQueryOptions, useIpcMutation, useIpcQuery } from '../data/query'
 import { ROUTE_IDS } from '../router/routes'
+import type { DenialsGroup } from '../router/routes'
 import type { ReposListResponse } from '../../../shared/ipc'
 import type { RepoId, RepositoryEntry } from '../../../shared/repos'
 import { startNewSession } from '../session/actions'
@@ -43,9 +44,14 @@ export function RepoScreen() {
   const ready = 'config' in entry
   const name = repoName(entry)
   const tab = search.tab ?? 'overview'
+  const denialsGroup = search.denialsGroup ?? 'command'
 
   function setTab(next: 'overview' | 'worktrees' | 'denials'): void {
-    void navigate({ to: ROUTE_IDS.repo, params: { repoId }, search: { tab: next } })
+    void navigate({ to: ROUTE_IDS.repo, params: { repoId }, search: { tab: next, denialsGroup } })
+  }
+
+  function setDenialsGroup(next: DenialsGroup): void {
+    void navigate({ to: ROUTE_IDS.repo, params: { repoId }, search: { tab: 'denials', denialsGroup: next } })
   }
 
   async function handleRemove(): Promise<void> {
@@ -116,7 +122,7 @@ export function RepoScreen() {
           <div className="flex-1 overflow-y-auto">
             {tab === 'overview' ? <OverviewTab entry={entry} repoId={repoId as RepoId} /> : null}
             {tab === 'worktrees' ? <WorktreesTab repoId={repoId as RepoId} entry={entry} /> : null}
-            {tab === 'denials' ? <DenialsTab repoId={repoId as RepoId} /> : null}
+            {tab === 'denials' ? <DenialsTab repoId={repoId as RepoId} group={denialsGroup} onGroupChange={setDenialsGroup} /> : null}
           </div>
         </Tabs>
       ) : (

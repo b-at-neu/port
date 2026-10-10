@@ -379,6 +379,33 @@ describe('actorKeyOf', () => {
   })
 })
 
+// --- window vs summary: the scope mismatch a capped read introduces --------
+
+describe('inspectDenials — window', () => {
+  it('summarizes only the analysed entries, distinct from the whole-file summary when capped', () => {
+    const analysedEntries = [
+      entry({ decision: 'miss', actor: { kind: 'session', sessionId: 'human-1' } }),
+      entry({ decision: 'deny', actor: { kind: 'stage-agent', agent: 'impl-agent' } }),
+    ]
+    // The whole file held more misses than made it into the capped `entries` window.
+    const read = present(analysedEntries, { capped: true, summary: emptySummary({ total: 20, misses: 9, agentDenials: 1 }) })
+    const result = inspectDenials({ read, sessions: null })
+    if (!result.ok || !result.present) throw new Error('expected present')
+
+    expect(result.window).toEqual(emptySummary({ total: 2, misses: 1, agentDenials: 1 }))
+    expect(result.summary).toBe(read.summary) // whole-file total, still passed through by reference
+    const missAcrossActors = result.byActor.reduce((sum, group) => sum + group.counts.miss, 0)
+    expect(missAcrossActors).toBe(result.window.misses)
+  })
+
+  it('matches summary exactly when the read is not capped', () => {
+    const read = present([entry({ decision: 'miss', actor: { kind: 'session', sessionId: 'human-1' } })], { summary: emptySummary({ total: 1, misses: 1 }) })
+    const result = inspectDenials({ read, sessions: null })
+    if (!result.ok || !result.present) throw new Error('expected present')
+    expect(result.window).toEqual(result.summary)
+  })
+})
+
 // --- Sort orders -------------------------------------------------------
 
 describe('inspectDenials — sort orders', () => {

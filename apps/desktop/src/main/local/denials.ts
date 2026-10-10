@@ -6,7 +6,8 @@ import type { FileFailureKind } from '../platform/files'
 import type { GitRunner } from '../platform/git'
 import type { PathOps } from '../platform/paths'
 import type { AssertEqual } from '../../shared/assert-type'
-import type { DenialActor, DenialDecision, DenialEntry, DenialsFailureKind, DenialSummary, DenialsRead } from '../../shared/local/types'
+import { summarizeDenials } from '../../shared/local/summary'
+import type { DenialActor, DenialDecision, DenialEntry, DenialsFailureKind, DenialsRead } from '../../shared/local/types'
 
 export type { GitRunner }
 
@@ -71,48 +72,6 @@ function parseLine(raw: string): DenialEntry {
   return { raw, form: 'legacy', timestamp, decision: null, actor: parseActor(who), subject: command }
 }
 
-/** A `deny` from a `session` actor is `railDenials` (a rail held, never a missing permission),
- *  never folded into `agentDenials`. */
-function buildSummary(entries: readonly DenialEntry[]): DenialSummary {
-  let agentDenials = 0
-  let railDenials = 0
-  let misses = 0
-  let gateClears = 0
-  let hookErrors = 0
-  let legacy = 0
-  let malformed = 0
-
-  for (const entry of entries) {
-    if (entry.form === 'legacy') legacy++
-    if (entry.form === 'malformed') malformed++
-
-    switch (entry.decision) {
-      case 'miss':
-        misses++
-        break
-      case 'gate-clear':
-        gateClears++
-        break
-      case 'hook-error':
-        hookErrors++
-        break
-      case 'deny':
-        if (entry.actor?.kind === 'session') railDenials++
-        else if (
-          entry.actor?.kind === 'stage-agent' ||
-          entry.actor?.kind === 'subagent' ||
-          entry.actor?.kind === 'subagent-signal'
-        )
-          agentDenials++
-        break
-      default:
-        break
-    }
-  }
-
-  return { agentDenials, railDenials, misses, gateClears, hookErrors, legacy, malformed, total: entries.length }
-}
-
 /** An absent log is a distinct healthy state, never an error or an empty `entries` list. */
 export async function readDenials(params: ReadDenialsParams): Promise<DenialsRead> {
   const git = params.git ?? defaultGitRunner()
@@ -135,7 +94,7 @@ export async function readDenials(params: ReadDenialsParams): Promise<DenialsRea
 
   const lines = fileResult.value.split(/\r?\n/).filter((line) => line !== '')
   const allEntries = lines.map(parseLine)
-  const summary = buildSummary(allEntries)
+  const summary = summarizeDenials(allEntries)
   const capped = allEntries.length > limit
   const entries = capped ? allEntries.slice(-limit) : allEntries
 

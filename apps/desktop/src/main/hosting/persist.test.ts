@@ -77,7 +77,7 @@ describe('createHostingPersistence', () => {
     const entry = { repoId: null, claudeSessionId: 'session-2', title: null, startedAt: '2026-01-01T00:00:00.000Z', cwd: '/home/you/src/widgets' }
     await writeFile(join(dir, 'hosting.json'), JSON.stringify({ version: 1, limit: 4, open: [entry] }))
     const persistence = createHostingPersistence({ dir })
-    await expect(persistence.load()).resolves.toEqual({ limit: 4, open: [entry], defaults: DEFAULT_SESSION_DEFAULTS })
+    await expect(persistence.load()).resolves.toEqual({ limit: 4, open: [entry], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
   })
 
   it('load() drops a null repoId with no cwd — it could never be restored', async () => {
@@ -85,7 +85,7 @@ describe('createHostingPersistence', () => {
     const entry = { repoId: null, claudeSessionId: 'session-2', title: null, startedAt: '2026-01-01T00:00:00.000Z' }
     await writeFile(join(dir, 'hosting.json'), JSON.stringify({ version: 1, limit: 4, open: [entry] }))
     const persistence = createHostingPersistence({ dir })
-    await expect(persistence.load()).resolves.toEqual({ limit: 4, open: [], defaults: DEFAULT_SESSION_DEFAULTS })
+    await expect(persistence.load()).resolves.toEqual({ limit: 4, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS })
   })
 
   it('load() falls back to the full default when defaults itself is missing or malformed', async () => {
