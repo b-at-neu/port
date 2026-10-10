@@ -17,6 +17,7 @@ import { actionFor, runAction, runSecondaryAction } from './actions'
 import { toast } from 'sonner'
 import { QuestionCard } from '../session/question-card'
 import { invoke } from '../data/invoke'
+import { QUESTION_SKIPPED_MESSAGE } from '../session/interaction-copy'
 
 function itemKey(item: NeedsYouItemModel): string {
   return `${item.kind}:${String(item.repoId)}:${String(item.number)}`
@@ -85,7 +86,11 @@ function StageQuestionCard({ item }: { readonly item: Extract<NeedsYouItemModel,
     }
   }
 
-  return <QuestionCard questions={item.questions} sending={sending} error={error} onSend={(answers) => void send(answers)} onSkip={() => undefined} />
+  async function skip(): Promise<void> {
+    await invoke('session:permission:answer', { sessionKey: item.sessionKey, permissionId: item.permissionId, decision: 'deny', message: QUESTION_SKIPPED_MESSAGE })
+  }
+
+  return <QuestionCard questions={item.questions} sending={sending} error={error} onSend={(answers) => void send(answers)} onSkip={() => void skip()} />
 }
 
 export function NeedsYouScreen() {

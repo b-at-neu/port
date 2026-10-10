@@ -3,6 +3,7 @@ import type { RepoId } from '../repos'
 import type { PipelineState, ReconciledItem, RepositoryState } from '../state/types'
 import type { TickReport } from '../tick/types'
 import type { RepoDispatchStatus } from '../dispatch/types'
+import type { SessionKey } from '../hosting/types'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from './types'
 import type { BoardSnapshot } from './types'
 import { needsYouCount, needsYouItems, repoNeedsYou } from './needs-you'
@@ -219,7 +220,7 @@ describe('needsYouItems', () => {
 
   it('a live stage session with a pending question never also produces a stage-questions item', () => {
     const session = {
-      sessionKey: 'hosted-1',
+      sessionKey: 'hosted-1' as SessionKey,
       claudeSessionId: 's1',
       repoId: 'repo-a' as RepoId,
       workspace: { folder: '/wt', root: '/repo', worktree: null, base: null },
