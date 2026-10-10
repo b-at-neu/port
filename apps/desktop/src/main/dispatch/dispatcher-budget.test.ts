@@ -33,6 +33,7 @@ function entry(overrides: Partial<ReadyEntry['config']> = {}): ReadyEntry {
       branches: { integration: 'dev', production: 'main' },
       commands: { worktrees: null, budget: BUDGET_COMMAND },
       concurrency: { sharedFiles: [], overlapThreshold: 2 },
+    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
       checkDispositions: {},
       overrides: [],
       models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },

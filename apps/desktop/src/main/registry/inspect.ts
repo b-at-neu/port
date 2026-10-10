@@ -162,6 +162,7 @@ export async function inspectRepository(path: string, deps: InspectDeps): Promis
     vocabulary,
     commands,
     concurrency: effective.concurrency,
+    sessionRequiredPaths: effective.sessionRequiredPaths,
     checkDispositions: effective.checkDispositions,
     overrides: effective.applied,
   }

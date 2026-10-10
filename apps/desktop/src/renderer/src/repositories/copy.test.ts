@@ -14,6 +14,7 @@ function baseConfig(overrides: Partial<ResolvedRepoConfig> = {}): ResolvedRepoCo
     vocabulary: { labels: Array.from({ length: 15 }, () => ({ key: 'ready', name: 'ready', source: 'default', module: 'core', role: 'trigger' })), disabled: [], problems: [] } as never,
     commands: { worktrees: null, budget: null },
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
+    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
     checkDispositions: {},
     overrides: [],
     ...overrides,

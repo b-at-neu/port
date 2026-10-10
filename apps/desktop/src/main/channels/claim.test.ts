@@ -31,6 +31,7 @@ const READY_ENTRY = {
     vocabulary: {} as never,
     commands: { worktrees: 'node scripts/worktrees.mjs', budget: null },
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
+    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
     checkDispositions: {},
     overrides: [],
   },

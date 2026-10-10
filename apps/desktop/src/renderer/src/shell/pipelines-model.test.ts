@@ -83,6 +83,7 @@ function readyRepoState(overrides: Partial<Extract<RepositoryState, { ok: true }
     approvalGate: true,
     disabled: [],
     concurrency: { sharedFiles: [], overlapThreshold: 2 },
+    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
     reviewCycleCap: 5,
     ...overrides,
   }
@@ -124,6 +125,7 @@ function readyEntry(): RepositoryEntry {
       vocabulary: { labels: [], disabled: [], problems: [] },
       commands: { worktrees: null, budget: null },
       concurrency: { sharedFiles: [], overlapThreshold: 2 },
+    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
       checkDispositions: {},
       overrides: [],
     },

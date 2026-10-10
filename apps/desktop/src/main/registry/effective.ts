@@ -27,6 +27,7 @@ export type EffectiveConfigResult =
       readonly modules: { readonly approvalGate: boolean; readonly release: boolean; readonly scope: boolean }
       readonly reviewCycleCap: number
       readonly concurrency: { readonly sharedFiles: readonly string[]; readonly overlapThreshold: number }
+      readonly sessionRequiredPaths: readonly string[]
       readonly labelOverrides: Readonly<Partial<Record<LabelKey, string>>>
       readonly checkDispositions: Readonly<Record<string, CheckDisposition>>
       readonly applied: readonly AppliedOverride[]
@@ -66,14 +67,17 @@ export function toShape(portResolved: PortResolved, rawLabels: Readonly<Record<s
   }
 }
 
-/** The inverse of `toShape` — `labels` folds into the label vocabulary separately, and `sessionRequiredPaths` has no consumer here. */
-export function fromShape(shape: EffectiveConfigShape): Pick<EffectiveConfigResult & { readonly ok: true }, 'branches' | 'models' | 'modules' | 'reviewCycleCap' | 'concurrency'> {
+/** The inverse of `toShape` — `labels` folds into the label vocabulary separately. */
+export function fromShape(
+  shape: EffectiveConfigShape,
+): Pick<EffectiveConfigResult & { readonly ok: true }, 'branches' | 'models' | 'modules' | 'reviewCycleCap' | 'concurrency' | 'sessionRequiredPaths'> {
   return {
     branches: { integration: shape.integration, production: shape.production },
     models: { ...shape.models },
     modules: { ...shape.modules },
     reviewCycleCap: shape.reviewCycleCap,
     concurrency: { sharedFiles: [...shape.concurrency.sharedFiles], overlapThreshold: shape.concurrency.overlapThreshold },
+    sessionRequiredPaths: [...shape.sessionRequiredPaths],
   }
 }
 

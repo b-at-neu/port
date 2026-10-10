@@ -22,6 +22,7 @@ const WIDGETS_CONFIG: ResolvedRepoConfig = {
   // A real commands.worktrees, not CONFIG_DEFAULTS' own null, so the Worktrees tab has an Inspect button.
   commands: { ...CONFIG_DEFAULTS.commands, worktrees: 'node plugins/port/bin/worktrees.mjs' },
   concurrency: CONFIG_DEFAULTS.concurrency,
+  sessionRequiredPaths: CONFIG_DEFAULTS.sessionRequiredPaths,
   checkDispositions: {},
   overrides: [],
 }
@@ -47,6 +48,7 @@ const GADGETS_CONFIG: ResolvedRepoConfig = {
   vocabulary: GADGETS_VOCABULARY,
   commands: { ...CONFIG_DEFAULTS.commands, worktrees: 'node plugins/port/bin/worktrees.mjs' },
   concurrency: CONFIG_DEFAULTS.concurrency,
+  sessionRequiredPaths: CONFIG_DEFAULTS.sessionRequiredPaths,
   checkDispositions: {},
   overrides: [{ path: 'labels.ready', value: 'queued', reason: 'CLAUDE.md port-overrides', portDefault: 'ready', source: 'CLAUDE.md' }],
 }

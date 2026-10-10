@@ -27,6 +27,7 @@ function entry(budget: string | null): ReadyEntry {
       vocabulary: VOCABULARY,
       commands: { worktrees: null, budget },
       concurrency: { sharedFiles: [], overlapThreshold: 2 },
+    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
       checkDispositions: {},
       overrides: [],
     },
