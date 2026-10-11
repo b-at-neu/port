@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { narrowSessionGrant } from './grant'
-import type { PermissionUpdate } from './sdk'
+import { narrowSessionGrant } from '@/main/hosting/grant'
+import type { PermissionUpdate } from '@/main/hosting/sdk'
 
 describe('narrowSessionGrant', () => {
   it('returns null for undefined or empty suggestions', () => {

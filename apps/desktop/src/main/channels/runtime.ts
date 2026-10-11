@@ -1,8 +1,8 @@
-import type { IpcMap } from '../../shared/ipc'
-import type { RuntimeProbe } from '../../shared/runtime/types'
-import { runtimeProbe } from '../runtime/preflight'
-import type { RegistryDeps } from '../registry'
-import type { RepoId } from '../../shared/repos'
+import type { IpcMap } from '@/shared/ipc'
+import type { RuntimeProbe } from '@/shared/runtime/types'
+import { runtimeProbe } from '@/main/runtime/preflight'
+import type { RegistryDeps } from '@/main/registry'
+import type { RepoId } from '@/shared/repos'
 
 /** `repoId` must be a non-empty string or exactly `null` — explicit, so a caller can't drop the key by accident. */
 function requireRepoIdOrNull(repoId: unknown, channel: string): RepoId | null {

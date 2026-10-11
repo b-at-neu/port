@@ -1,9 +1,9 @@
 // The mirror of `main/ipc.ts`'s `registerIpc`, over the canned `FixtureHandlers` table instead of a live adapter chain.
 import { ipcMain } from 'electron'
-import { IPC_CHANNELS } from '../../shared/ipc'
-import type { IpcChannel } from '../../shared/ipc'
-import type { FixtureScenario } from './mode'
-import { fixtureHandlers } from './handlers'
+import { IPC_CHANNELS } from '@/shared/ipc'
+import type { IpcChannel } from '@/shared/ipc'
+import type { FixtureScenario } from '@/main/fixtures/mode'
+import { fixtureHandlers } from '@/main/fixtures/handlers'
 
 export function registerFixtureIpc(scenario: FixtureScenario): void {
   const handlers = fixtureHandlers(new Date(), scenario)

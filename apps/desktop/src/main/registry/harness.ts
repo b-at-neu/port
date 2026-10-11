@@ -1,7 +1,7 @@
 // What a registered repository's checkout looks like to the harness that would actually dispatch agents in it. Every step degrades to a diagnostic rather than a failure.
-import { pathOps } from '../platform/paths'
-import { readJsonFile } from '../platform/files'
-import type { GitRunner } from '../platform/git'
+import { pathOps } from '@/main/platform/paths'
+import { readJsonFile } from '@/main/platform/files'
+import type { GitRunner } from '@/main/platform/git'
 
 export type { GitRunner }
 

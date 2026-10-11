@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { answersMatch, narrowInteraction, planApproveResult, planKeepResult, questionResult } from './interactions'
+import { answersMatch, narrowInteraction, planApproveResult, planKeepResult, questionResult } from '@/main/hosting/interactions'
 
 describe('narrowInteraction', () => {
   it('narrows a well-formed AskUserQuestion input', () => {

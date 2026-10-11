@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { SessionKey } from '../../shared/hosting/types'
-import type { HostedStore } from '../hosting/store'
-import { resolveSessionControlsSet, resolveSessionPlanAnswer, resolveSessionQuestionAnswer } from './hosting'
-import type { HostingChannelDeps } from './hosting'
+import type { SessionKey } from '@/shared/hosting/types'
+import type { HostedStore } from '@/main/hosting/store'
+import { resolveSessionControlsSet, resolveSessionPlanAnswer, resolveSessionQuestionAnswer } from '@/main/channels/hosting'
+import type { HostingChannelDeps } from '@/main/channels/hosting'
 
 const SESSION_KEY = 'hosted-1' as SessionKey
 

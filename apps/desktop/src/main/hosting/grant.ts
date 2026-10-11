@@ -1,6 +1,6 @@
 // Fails closed: keeps only addRules(allow)/addDirectories/setMode(acceptEdits), rewriting destination to 'session'.
-import type { SessionGrantItem } from '../../shared/hosting/types'
-import type { PermissionUpdate } from './sdk'
+import type { SessionGrantItem } from '@/shared/hosting/types'
+import type { PermissionUpdate } from '@/main/hosting/sdk'
 
 export interface SessionGrant {
   readonly updates: readonly PermissionUpdate[]

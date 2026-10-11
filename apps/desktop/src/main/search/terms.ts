@@ -1,6 +1,6 @@
 // `foldCase` is length-preserving, so every offset `indexOfFolded` reports stays aligned to the
 // original, untouched text.
-import { MIN_TERM_CHARS } from '../../shared/search/types'
+import { MIN_TERM_CHARS } from '@/shared/search/types'
 
 /** A code point whose lowercase mapping expands (German `ß` -> `ss`, ...) keeps its original
  *  form, so folding never changes the string's length. */

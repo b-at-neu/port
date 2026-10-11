@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { ACTIVE_WITHIN_MS, IDLE_WITHIN_MS } from '../../shared/sessions/types'
-import { attributeSession, activityOf, itemNumberOf, parseAgentMeta, sessionRole, stageOf } from './classify'
-import type { RepoRef } from './classify'
+import { ACTIVE_WITHIN_MS, IDLE_WITHIN_MS } from '@/shared/sessions/types'
+import { attributeSession, activityOf, itemNumberOf, parseAgentMeta, sessionRole, stageOf } from '@/main/sessions/classify'
+import type { RepoRef } from '@/main/sessions/classify'
 
 const REPO_A = { id: 'repo-a', root: '/home/user/projects/port' } as unknown as RepoRef
 const REPO_PORTFOLIO = { id: 'repo-b', root: '/home/user/projects/portfolio' } as unknown as RepoRef

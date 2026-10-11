@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildSessionOptions, SETTING_SOURCES } from './options'
-import type { CanUseTool } from './sdk'
-import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
-import type { PluginRequest } from '../../shared/hosting/types'
+import { buildSessionOptions, SETTING_SOURCES } from '@/main/hosting/options'
+import type { CanUseTool } from '@/main/hosting/sdk'
+import { DEFAULT_SESSION_DEFAULTS } from '@/shared/hosting/types'
+import type { PluginRequest } from '@/shared/hosting/types'
 
 const canUseTool = vi.fn() as unknown as CanUseTool
 const INSTALLED: PluginRequest = { source: 'installed' }

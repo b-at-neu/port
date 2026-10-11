@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readClaudeVersion } from './version'
+import { readClaudeVersion } from '@/main/runtime/version'
 
 describe('readClaudeVersion', () => {
   it('parses a plain version string', async () => {

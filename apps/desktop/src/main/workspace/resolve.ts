@@ -1,13 +1,13 @@
 // Resolves a folder/cwd to its `SessionWorkspace` and `repoId` — the registry's own path-key
 // identity, never a second normalisation.
 import { createHash } from 'node:crypto'
-import type { GitRunner } from '../platform/git'
-import { resolveGitBaseRoot } from '../platform/git'
-import { pathOps as defaultPathOps } from '../platform/paths'
-import type { PathOps } from '../platform/paths'
-import type { RepoId, RepositoryEntry } from '../../shared/repos'
-import type { FolderEntry, FolderId, SessionWorkspace } from '../../shared/workspace/types'
-import { isReadyEntry } from '../registry'
+import type { GitRunner } from '@/main/platform/git'
+import { resolveGitBaseRoot } from '@/main/platform/git'
+import { pathOps as defaultPathOps } from '@/main/platform/paths'
+import type { PathOps } from '@/main/platform/paths'
+import type { RepoId, RepositoryEntry } from '@/shared/repos'
+import type { FolderEntry, FolderId, SessionWorkspace } from '@/shared/workspace/types'
+import { isReadyEntry } from '@/main/registry'
 
 function toFolderId(pathKey: string): FolderId {
   return `folder-${createHash('sha1').update(pathKey).digest('hex')}` as FolderId

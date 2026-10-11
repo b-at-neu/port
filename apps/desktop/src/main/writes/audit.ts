@@ -1,11 +1,11 @@
 // Rotates at 8 MB by renaming to `writes.prev.jsonl`, so the reader can report "older entries
 // exist" rather than presenting a rotated file's remainder as the whole history.
-import { appendTextFile, readLinesFrom, renamePath, statPath } from '../platform/files'
-import { pathOps as defaultPathOps } from '../platform/paths'
-import type { FileFailureKind } from '../platform/files'
-import type { PathOps } from '../platform/paths'
-import type { AuditEntry, AuditRead, AuditReadFailureKind, ReadAuditLogParams } from '../../shared/writes/types'
-import { isLabelAuditEntry } from '../../shared/writes/types'
+import { appendTextFile, readLinesFrom, renamePath, statPath } from '@/main/platform/files'
+import { pathOps as defaultPathOps } from '@/main/platform/paths'
+import type { FileFailureKind } from '@/main/platform/files'
+import type { PathOps } from '@/main/platform/paths'
+import type { AuditEntry, AuditRead, AuditReadFailureKind, ReadAuditLogParams } from '@/shared/writes/types'
+import { isLabelAuditEntry } from '@/shared/writes/types'
 
 const LOG_FILE = 'writes.jsonl'
 const PREV_LOG_FILE = 'writes.prev.jsonl'

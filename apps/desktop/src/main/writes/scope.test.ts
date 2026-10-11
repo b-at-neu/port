@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { evaluate, wouldChangeNothing } from './scope'
+import { evaluate, wouldChangeNothing } from '@/main/writes/scope'
 
 describe('evaluate', () => {
   const base = { presentNames: ['plan review'], absentNames: ['plan approved'], assignees: { kind: 'any' as const } }

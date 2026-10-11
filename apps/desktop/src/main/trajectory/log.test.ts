@@ -1,11 +1,11 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '../../shared/repos'
-import type { TickReport } from '../../shared/tick/types'
-import { buildDesktopTickEvent, recordTick } from './log'
-import type { GitRunner } from './log'
-import { makeTempDir } from '../../testing/fixtures'
+import type { RepoId } from '@/shared/repos'
+import type { TickReport } from '@/shared/tick/types'
+import { buildDesktopTickEvent, recordTick } from '@/main/trajectory/log'
+import type { GitRunner } from '@/main/trajectory/log'
+import { makeTempDir } from '@/testing/fixtures'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 const now = () => new Date('2026-01-01T00:00:00.000Z')

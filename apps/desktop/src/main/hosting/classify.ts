@@ -1,7 +1,7 @@
 // Unrecognised text is `stream-error` with the message carried verbatim, never a guessed reason.
-import type { CredentialsTell, RuntimeDiagnosis } from '../../shared/runtime/types'
-import type { SessionEndReason } from '../../shared/hosting/types'
-import { classifyProbeFailure } from '../runtime/classify'
+import type { CredentialsTell, RuntimeDiagnosis } from '@/shared/runtime/types'
+import type { SessionEndReason } from '@/shared/hosting/types'
+import { classifyProbeFailure } from '@/main/runtime/classify'
 
 /** The CLI's own refusal of a `resumeDropsTurn` fork point; checked first since its message also contains ordinary prose. */
 const RESUME_REJECTED_PREFIX = 'Resume rejected by --resume-drops-turn:'

@@ -1,9 +1,9 @@
 import { appendFile, mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { createTailStore } from './tail'
-import { advanceTranscript, openTranscript } from './transcript'
-import { makeClaudeHome } from '../../testing/fixtures'
+import { createTailStore } from '@/main/sessions/tail'
+import { advanceTranscript, openTranscript } from '@/main/sessions/transcript'
+import { makeClaudeHome } from '@/testing/fixtures'
 
 function jsonl(records: readonly unknown[]): string {
   return records.map((record) => JSON.stringify(record)).join('\n') + '\n'

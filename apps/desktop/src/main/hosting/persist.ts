@@ -1,10 +1,10 @@
 // hosting.json's only writer: recoverable app state, so a missing or malformed file resolves to
 // an empty state rather than refusing to load. Pinned as the sole writer by desktop-hosting.ts.
-import type { RepoId } from '../../shared/repos'
-import { DEFAULT_SESSION_DEFAULTS, SESSION_MODELS, SESSION_PERMISSION_MODES } from '../../shared/hosting/types'
-import type { SessionDefaults, SessionMarks, SessionModel, SessionPermissionMode } from '../../shared/hosting/types'
-import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '../platform/files'
-import { pathOps } from '../platform/paths'
+import type { RepoId } from '@/shared/repos'
+import { DEFAULT_SESSION_DEFAULTS, SESSION_MODELS, SESSION_PERMISSION_MODES } from '@/shared/hosting/types'
+import type { SessionDefaults, SessionMarks, SessionModel, SessionPermissionMode } from '@/shared/hosting/types'
+import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
+import { pathOps } from '@/main/platform/paths'
 
 const HOSTING_FILE = 'hosting.json'
 const CURRENT_VERSION = 1

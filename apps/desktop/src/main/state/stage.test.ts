@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '../../shared/labels/vocabulary'
-import { stageOf } from './stage'
+import { resolveVocabulary } from '@/shared/labels/vocabulary'
+import { stageOf } from '@/main/state/stage'
 
 const VOCABULARY = resolveVocabulary({})
 

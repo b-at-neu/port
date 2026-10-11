@@ -1,6 +1,6 @@
 // A fork is renamed away from its parent's title so the two never show as identical rows in the resumable list.
-import { createSdkSessionReader } from '../sessions/sdk'
-import type { SessionReader } from '../sessions/sdk'
+import { createSdkSessionReader } from '@/main/sessions/sdk'
+import type { SessionReader } from '@/main/sessions/sdk'
 
 /** Bounded to 80 characters so a very long parent title never produces an unreadable row. */
 const MAX_TITLE_LENGTH = 80

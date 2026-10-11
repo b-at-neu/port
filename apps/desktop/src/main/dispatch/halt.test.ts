@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '../../shared/labels/vocabulary'
-import type { RepoId } from '../../shared/repos'
-import type { BoardSnapshot } from '../../shared/board/types'
-import type { ReconciledItem, RepositoryState } from '../../shared/state/types'
-import type { ItemActionResult } from '../../shared/actions/types'
-import type { ReadyEntry } from '../actions/apply'
-import type { RunStateStore, SetRunStateResult } from './store'
-import { haltDispatch } from './halt'
+import { resolveVocabulary } from '@/shared/labels/vocabulary'
+import type { RepoId } from '@/shared/repos'
+import type { BoardSnapshot } from '@/shared/board/types'
+import type { ReconciledItem, RepositoryState } from '@/shared/state/types'
+import type { ItemActionResult } from '@/shared/actions/types'
+import type { ReadyEntry } from '@/main/actions/apply'
+import type { RunStateStore, SetRunStateResult } from '@/main/dispatch/store'
+import { haltDispatch } from '@/main/dispatch/halt'
 
 const VOCABULARY = resolveVocabulary({})
 const REPO_ID = 'repo-a' as RepoId

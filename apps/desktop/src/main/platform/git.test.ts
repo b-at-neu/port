@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { gitRepoRoot, parsePorcelainStanzas } from './git'
-import { pathOps } from './paths'
+import { gitRepoRoot, parsePorcelainStanzas } from '@/main/platform/git'
+import { pathOps } from '@/main/platform/paths'
 
 // A captured `git worktree list --porcelain` fixture covering the main
 // checkout, a linked worktree, `detached`, `bare`, and `locked <reason>`.

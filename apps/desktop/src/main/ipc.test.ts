@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '../shared/repos'
-import type { ReposListResponse } from '../shared/ipc'
-import type { WorktreesReport } from '../shared/reclaimer/types'
-import type { BoardSnapshot } from '../shared/board/types'
-import { resolveBoardRefresh, resolveWorktreesReport } from './ipc'
-import type { BoardRefreshDeps, WorktreesReportDeps } from './ipc'
-import type { RegistryDeps } from './registry'
+import type { RepoId } from '@/shared/repos'
+import type { ReposListResponse } from '@/shared/ipc'
+import type { WorktreesReport } from '@/shared/reclaimer/types'
+import type { BoardSnapshot } from '@/shared/board/types'
+import { resolveBoardRefresh, resolveWorktreesReport } from '@/main/ipc'
+import type { BoardRefreshDeps, WorktreesReportDeps } from '@/main/ipc'
+import type { RegistryDeps } from '@/main/registry'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 

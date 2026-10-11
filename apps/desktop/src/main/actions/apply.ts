@@ -1,16 +1,16 @@
 // A renderer-supplied `expectedStage` is only ever grounds to refuse, never to widen a plan.
-import { actionsFor, stageKeyOf } from '../../shared/actions/plan'
-import type { ActionPlan, ItemActionResult, OperatorAction } from '../../shared/actions/types'
-import { labelName } from '../../shared/labels/vocabulary'
-import type { LabelKey } from '../../shared/labels/vocabulary'
-import type { RepoId, RepositoryEntry } from '../../shared/repos'
-import type { BoardSnapshot } from '../../shared/board/types'
-import type { ReconciledItem, RepositoryState } from '../../shared/state/types'
-import type { LabelWriteRequest, WriteOutcome } from '../../shared/writes/types'
-import { applyLabels } from '../writes/apply'
-import type { ApplyLabelsParams } from '../writes/apply'
-import { recoverPausedTrigger } from './resume'
-import type { RecoverPausedTriggerParams, RecoverPausedTriggerResult } from './resume'
+import { actionsFor, stageKeyOf } from '@/shared/actions/plan'
+import type { ActionPlan, ItemActionResult, OperatorAction } from '@/shared/actions/types'
+import { labelName } from '@/shared/labels/vocabulary'
+import type { LabelKey } from '@/shared/labels/vocabulary'
+import type { RepoId, RepositoryEntry } from '@/shared/repos'
+import type { BoardSnapshot } from '@/shared/board/types'
+import type { ReconciledItem, RepositoryState } from '@/shared/state/types'
+import type { LabelWriteRequest, WriteOutcome } from '@/shared/writes/types'
+import { applyLabels } from '@/main/writes/apply'
+import type { ApplyLabelsParams } from '@/main/writes/apply'
+import { recoverPausedTrigger } from '@/main/actions/resume'
+import type { RecoverPausedTriggerParams, RecoverPausedTriggerResult } from '@/main/actions/resume'
 
 export type ReadyEntry = Extract<RepositoryEntry, { readonly status: 'ready' }>
 

@@ -1,7 +1,7 @@
 // One hosted session: builds options, opens the query, runs the pump loop. The ring
 // exists only so a renderer attaching mid-stream is not blank; the on-disk transcript is the history.
-import type { CredentialsTell } from '../../shared/runtime/types'
-import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls } from '../../shared/hosting/controls'
+import type { CredentialsTell } from '@/shared/runtime/types'
+import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls } from '@/shared/hosting/controls'
 import type {
   HostedSessionSnapshot,
   PermissionDecision,
@@ -19,35 +19,35 @@ import type {
   SessionRateLimit,
   SessionStartMode,
   SessionTaskStopResult,
-} from '../../shared/hosting/types'
-import type { RepoId } from '../../shared/repos'
-import type { SessionWorkspace } from '../../shared/workspace/types'
-import type { ComposerAttachment } from '../../shared/hosting/attachments'
-import type { SessionResult, StageTag } from '../../shared/hosting/stage'
-import { createHostedInput } from './input'
-import { buildSessionOptions } from './options'
-import { classifyEnd } from './classify'
-import { createControlsTracker } from './controls'
-import type { ControlsTracker } from './controls'
-import { createPermissionBroker } from './permissions'
-import { stagePolicy } from './stage-policy'
-import { createSessionProjector } from './project'
-import type { ProjectedDelta, SessionProjectorWindow } from './project'
-import { createCapabilityTracker } from './capabilities'
-import { createTaskTracker } from './tasks'
-import { readRateLimit } from './rate-limit'
-import { readResult } from './result'
-import { readUsage } from './usage'
-import type { UsageReading } from './usage'
-import { promptTitle } from './title'
-import { buildUserContent } from './content'
-import type { ContentBlock } from './content'
-import { composeInvocation, isPipelineCommand, validateCommandName } from './verify'
-import type { ExpectedComponents } from './plugin'
-import type { HostedQuery, Options, SDKMessage, SDKUserMessage } from './sdk'
-import { pathOps } from '../platform/paths'
+} from '@/shared/hosting/types'
+import type { RepoId } from '@/shared/repos'
+import type { SessionWorkspace } from '@/shared/workspace/types'
+import type { ComposerAttachment } from '@/shared/hosting/attachments'
+import type { SessionResult, StageTag } from '@/shared/hosting/stage'
+import { createHostedInput } from '@/main/hosting/input'
+import { buildSessionOptions } from '@/main/hosting/options'
+import { classifyEnd } from '@/main/hosting/classify'
+import { createControlsTracker } from '@/main/hosting/controls'
+import type { ControlsTracker } from '@/main/hosting/controls'
+import { createPermissionBroker } from '@/main/hosting/permissions'
+import { stagePolicy } from '@/main/hosting/stage-policy'
+import { createSessionProjector } from '@/main/hosting/project'
+import type { ProjectedDelta, SessionProjectorWindow } from '@/main/hosting/project'
+import { createCapabilityTracker } from '@/main/hosting/capabilities'
+import { createTaskTracker } from '@/main/hosting/tasks'
+import { readRateLimit } from '@/main/hosting/rate-limit'
+import { readResult } from '@/main/hosting/result'
+import { readUsage } from '@/main/hosting/usage'
+import type { UsageReading } from '@/main/hosting/usage'
+import { promptTitle } from '@/main/hosting/title'
+import { buildUserContent } from '@/main/hosting/content'
+import type { ContentBlock } from '@/main/hosting/content'
+import { composeInvocation, isPipelineCommand, validateCommandName } from '@/main/hosting/verify'
+import type { ExpectedComponents } from '@/main/hosting/plugin'
+import type { HostedQuery, Options, SDKMessage, SDKUserMessage } from '@/main/hosting/sdk'
+import { pathOps } from '@/main/platform/paths'
 
-export type { HostedQuery } from './sdk'
+export type { HostedQuery } from '@/main/hosting/sdk'
 
 /** The bounded replay ring's size — never a growing per-session array. */
 export const REPLAY_LIMIT = 500

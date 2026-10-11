@@ -1,13 +1,13 @@
 // The observation pass, split out of dispatcher.ts to keep it under the file-size limit. A throw
 // from the write becomes `outcome: 'failed'`, never a pass that stops partway through.
-import type { ReadyEntry } from '../actions/apply'
-import type { ApplyObservationParams, ApplyObservationResult } from '../actions/observe'
-import type { ObservationRecord } from '../../shared/dispatch/types'
-import type { RefreshMemo } from '../tick/ledger'
-import type { RepositoryState } from '../../shared/state/types'
-import type { TickObservation } from '../../shared/tick/types'
-import type { WriteOutcome } from '../../shared/writes/types'
-import type { WriteObservation } from './observation'
+import type { ReadyEntry } from '@/main/actions/apply'
+import type { ApplyObservationParams, ApplyObservationResult } from '@/main/actions/observe'
+import type { ObservationRecord } from '@/shared/dispatch/types'
+import type { RefreshMemo } from '@/main/tick/ledger'
+import type { RepositoryState } from '@/shared/state/types'
+import type { TickObservation } from '@/shared/tick/types'
+import type { WriteOutcome } from '@/shared/writes/types'
+import type { WriteObservation } from '@/main/dispatch/observation'
 
 const OBSERVED_LIMIT = 20
 

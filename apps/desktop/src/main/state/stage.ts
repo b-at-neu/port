@@ -1,7 +1,7 @@
 // Reads `role` off each matched label's own resolved vocabulary entry, never a second key→stage table.
-import type { LabelKey, LabelVocabulary } from '../../shared/labels/vocabulary'
-import type { LabelRole } from '../../shared/labels/defaults'
-import type { StageResult } from '../../shared/state/types'
+import type { LabelKey, LabelVocabulary } from '@/shared/labels/vocabulary'
+import type { LabelRole } from '@/shared/labels/defaults'
+import type { StageResult } from '@/shared/state/types'
 
 /** First hit wins: in-flight (something is running) beats gate (stopped, not queued) beats trigger beats terminal (the fallback). */
 export const STAGE_PRECEDENCE: readonly LabelRole[] = ['in-flight', 'gate', 'trigger', 'terminal']

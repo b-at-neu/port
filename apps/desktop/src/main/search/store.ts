@@ -1,6 +1,6 @@
 // Takes its directory as a parameter so nothing here imports Electron; every test passes a `mkdtemp`.
-import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '../platform/files'
-import { pathOps } from '../platform/paths'
+import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
+import { pathOps } from '@/main/platform/paths'
 
 const SEARCH_INDEX_FILE = 'search-index.json'
 const CURRENT_VERSION = 1

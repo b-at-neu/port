@@ -1,12 +1,12 @@
 // A pure consumer of the caller's repository list: reads no config, enumerates no worktrees, reconciles nothing against labels.
-import { listDirectory, readJsonFile, statPath } from '../platform/files'
-import { pathOps } from '../platform/paths'
-import type { AgentRecord, MetaProblem, SessionRecord, SessionRef, SessionScan } from '../../shared/sessions/types'
-import { activityOf, attributeSession, itemNumberOf, parseAgentMeta, sessionRole, stageOf } from './classify'
-import type { RepoRef } from './classify'
-import { buildProjectIndex, defaultClaudeHome, resolveSessionDir } from './locate'
-import { createSdkSessionReader } from './sdk'
-import type { SessionReader } from './sdk'
+import { listDirectory, readJsonFile, statPath } from '@/main/platform/files'
+import { pathOps } from '@/main/platform/paths'
+import type { AgentRecord, MetaProblem, SessionRecord, SessionRef, SessionScan } from '@/shared/sessions/types'
+import { activityOf, attributeSession, itemNumberOf, parseAgentMeta, sessionRole, stageOf } from '@/main/sessions/classify'
+import type { RepoRef } from '@/main/sessions/classify'
+import { buildProjectIndex, defaultClaudeHome, resolveSessionDir } from '@/main/sessions/locate'
+import { createSdkSessionReader } from '@/main/sessions/sdk'
+import type { SessionReader } from '@/main/sessions/sdk'
 
 export interface ReadSessionStateParams {
   readonly repos: readonly RepoRef[]

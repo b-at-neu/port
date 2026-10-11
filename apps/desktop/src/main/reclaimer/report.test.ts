@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { createPathOps } from '../platform/paths'
-import type { CommandResult } from '../platform/run'
-import type { GitRunner as WorktreesGitRunner } from '../local/worktrees'
-import { GH_RESOLUTION_FAILED_SENTINEL, readWorktreeReport, SCRIPT_FAIL_PREFIX } from './report'
-import type { NodeRunner } from './report'
+import { createPathOps } from '@/main/platform/paths'
+import type { CommandResult } from '@/main/platform/run'
+import type { GitRunner as WorktreesGitRunner } from '@/main/local/worktrees'
+import { GH_RESOLUTION_FAILED_SENTINEL, readWorktreeReport, SCRIPT_FAIL_PREFIX } from '@/main/reclaimer/report'
+import type { NodeRunner } from '@/main/reclaimer/report'
 
 const posixPathOps = createPathOps('posix', { home: '/home/op' })
 const win32PathOps = createPathOps('win32', { home: 'C:\\Users\\op' })

@@ -1,7 +1,7 @@
 // Two pure functions, driven by the decision-case table — no I/O, so every rung is exercised without a real `claude` binary or credentials file.
 //
 // Ambiguous probe text resolves toward `unauthenticated`, never `policy-refused`: a wrong `unauthenticated` costs one login, a wrong `policy-refused` sends the operator to their account owner over what might be a stale token.
-import type { CredentialsTell, RuntimeDiagnosis } from '../../shared/runtime/types'
+import type { CredentialsTell, RuntimeDiagnosis } from '@/shared/runtime/types'
 
 /** `now` is explicit, never `Date.now()` read internally, so both functions stay pure. */
 function isTokenStale(tell: CredentialsTell | null, now: number): boolean {

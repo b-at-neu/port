@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '../../shared/labels/vocabulary'
-import type { LabelVocabulary } from '../../shared/labels/vocabulary'
-import type { RepoId } from '../../shared/repos'
-import type { WriteOutcome } from '../../shared/writes/types'
-import { escalateToHuman } from './escalate'
-import type { EscalateToHumanDeps, EscalateToHumanParams } from './escalate'
-import type { ReadyEntry } from './apply'
+import { resolveVocabulary } from '@/shared/labels/vocabulary'
+import type { LabelVocabulary } from '@/shared/labels/vocabulary'
+import type { RepoId } from '@/shared/repos'
+import type { WriteOutcome } from '@/shared/writes/types'
+import { escalateToHuman } from '@/main/actions/escalate'
+import type { EscalateToHumanDeps, EscalateToHumanParams } from '@/main/actions/escalate'
+import type { ReadyEntry } from '@/main/actions/apply'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 const VOCABULARY: LabelVocabulary = resolveVocabulary({})

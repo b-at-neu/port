@@ -1,10 +1,10 @@
 // The per-session controls tracker — live mode/model/effort state, changed
 // only once its SDK call actually resolves.
-import { isRecord } from '../../shared/guards'
-import type { SessionControls, SessionEffort, SessionModelOption, SessionModels } from '../../shared/hosting/controls'
-import { SESSION_EFFORTS } from '../../shared/hosting/controls'
-import type { SessionDefaults } from '../../shared/hosting/types'
-import type { HostedQuery, ModelInfo } from './sdk'
+import { isRecord } from '@/shared/guards'
+import type { SessionControls, SessionEffort, SessionModelOption, SessionModels } from '@/shared/hosting/controls'
+import { SESSION_EFFORTS } from '@/shared/hosting/controls'
+import type { SessionDefaults } from '@/shared/hosting/types'
+import type { HostedQuery, ModelInfo } from '@/main/hosting/sdk'
 
 // A stalled supportedModels() call must never park the model select forever.
 export const MODELS_TIMEOUT_MS = 30_000

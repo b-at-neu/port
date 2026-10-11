@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { toolDetailFor } from './tool-detail'
+import { toolDetailFor } from '@/main/sessions/tool-detail'
 
 describe('toolDetailFor', () => {
   it('reads a numeric exitCode off toolUseResult', () => {

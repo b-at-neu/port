@@ -1,7 +1,7 @@
 // `folders.json`'s only writer — a recoverable recents store, cap 10, deduped by `samePath`.
-import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '../platform/files'
-import { pathOps as defaultPathOps } from '../platform/paths'
-import type { PathOps } from '../platform/paths'
+import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
+import { pathOps as defaultPathOps } from '@/main/platform/paths'
+import type { PathOps } from '@/main/platform/paths'
 
 const FOLDERS_FILE = 'folders.json'
 const CURRENT_VERSION = 1

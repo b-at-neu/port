@@ -1,11 +1,11 @@
 // The registry module's only public surface: list/add/remove orchestration. Every later adapter takes its config from the entries this returns, rather than reading a config itself.
-import { pathOps } from '../platform/paths'
-import type { ReposAddResponse, ReposListResponse, ReposRemoveResponse } from '../../shared/ipc'
-import type { RepoId, RepositoryEntry } from '../../shared/repos'
-import type { ReadyEntry } from '../actions/apply'
-import type { GitRunner } from './harness'
-import { inspectRepository, resolveGitRoot } from './inspect'
-import { readRegistry, writeRegistry } from './store'
+import { pathOps } from '@/main/platform/paths'
+import type { ReposAddResponse, ReposListResponse, ReposRemoveResponse } from '@/shared/ipc'
+import type { RepoId, RepositoryEntry } from '@/shared/repos'
+import type { ReadyEntry } from '@/main/actions/apply'
+import type { GitRunner } from '@/main/registry/harness'
+import { inspectRepository, resolveGitRoot } from '@/main/registry/inspect'
+import { readRegistry, writeRegistry } from '@/main/registry/store'
 
 export interface RegistryDeps {
   readonly registryDir: string

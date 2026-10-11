@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createNotifier, notificationFor } from './notify'
-import type { HostedSessionSnapshot } from '../../shared/hosting/types'
-import type { SessionControls, SessionModels } from '../../shared/hosting/controls'
-import type { RepoId } from '../../shared/repos'
-import type { SessionKey } from '../../shared/hosting/types'
-import type { SessionWorkspace } from '../../shared/workspace/types'
+import { createNotifier, notificationFor } from '@/main/hosting/notify'
+import type { HostedSessionSnapshot } from '@/shared/hosting/types'
+import type { SessionControls, SessionModels } from '@/shared/hosting/controls'
+import type { RepoId } from '@/shared/repos'
+import type { SessionKey } from '@/shared/hosting/types'
+import type { SessionWorkspace } from '@/shared/workspace/types'
 
 const TEST_CONTROLS: SessionControls = { permissionMode: 'default', model: null, effort: null }
 const TEST_MODELS: SessionModels = { kind: 'pending' }

@@ -1,14 +1,14 @@
 // Runs the shipped bin/budget.mjs through commands.budget and classifies its outcome into values
 // the dispatcher can report — never a throw, and an absent signal is never read as a passing one.
-import { node as defaultNode } from '../platform/node'
-import type { CommandResult } from '../platform/run'
-import type { NodeRunner } from '../platform/node'
-import { parseNodeCommand } from '../reclaimer/command'
-import { SCRIPT_FAIL_PREFIX } from '../reclaimer/report'
-import type { ReadyEntry } from '../actions/apply'
-import type { TickActionable } from '../../shared/tick/types'
-import { dispatchArgs, OUTDATED_SCRIPT_SENTINEL, parseSweepLine, parseVerdict, resetArgs, sweepArgs } from './budget'
-import type { BudgetVerdict } from './budget'
+import { node as defaultNode } from '@/main/platform/node'
+import type { CommandResult } from '@/main/platform/run'
+import type { NodeRunner } from '@/main/platform/node'
+import { parseNodeCommand } from '@/main/reclaimer/command'
+import { SCRIPT_FAIL_PREFIX } from '@/main/reclaimer/report'
+import type { ReadyEntry } from '@/main/actions/apply'
+import type { TickActionable } from '@/shared/tick/types'
+import { dispatchArgs, OUTDATED_SCRIPT_SENTINEL, parseSweepLine, parseVerdict, resetArgs, sweepArgs } from '@/main/dispatch/budget'
+import type { BudgetVerdict } from '@/main/dispatch/budget'
 
 export type { NodeRunner }
 

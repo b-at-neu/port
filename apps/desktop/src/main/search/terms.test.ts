@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { foldCase, indexOfFolded, parseQuery } from './terms'
+import { foldCase, indexOfFolded, parseQuery } from '@/main/search/terms'
 
 describe('foldCase', () => {
   it('lowercases ASCII text', () => {

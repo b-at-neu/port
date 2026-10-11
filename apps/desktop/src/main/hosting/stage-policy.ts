@@ -1,5 +1,5 @@
 // Pure routing for a stage session's `canUseTool`: `AskUserQuestion`/`ExitPlanMode` always pause, an edit under `sessionRequiredPaths` pauses as protected, and everything else the repository's own allowlist did not already auto-approve is denied at once.
-import type { PathOps } from '../platform/paths'
+import type { PathOps } from '@/main/platform/paths'
 
 /** Mirrors `plugins/port/hooks/lib/guard-rules.mjs`'s own `globToRegExp` byte-for-byte — a test asserts both sides agree over a shared case list. `**` → any depth, `*` → one path segment, else escaped. */
 export function globToRegExp(glob: string): RegExp {

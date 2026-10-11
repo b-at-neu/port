@@ -1,8 +1,8 @@
 // Resolves the `claude` executable the SDK should point at, and refuses the Agent SDK's own bundled per-platform binary (~327MB) — a silent fallback to that path is a bug to surface.
-import { createPathOps } from '../platform/paths'
-import { which as defaultWhich } from '../platform/which'
-import type { PathOps } from '../platform/paths'
-import type { WhichEnv, WhichOptions, WhichResult } from '../platform/which'
+import { createPathOps } from '@/main/platform/paths'
+import { which as defaultWhich } from '@/main/platform/which'
+import type { PathOps } from '@/main/platform/paths'
+import type { WhichEnv, WhichOptions, WhichResult } from '@/main/platform/which'
 
 export type LocateResult =
   | { readonly ok: true; readonly path: string }

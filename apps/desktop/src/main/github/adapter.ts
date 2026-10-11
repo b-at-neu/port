@@ -1,12 +1,12 @@
 // The public logic behind fetchPipelineItems/fetchItemStates: building the document, calling the
 // injected gh, then composing envelope.ts and map.ts. The caller supplies the LabelVocabulary.
-import type { GhResult, GhRunner } from '../platform/gh'
-import { gh as defaultGh } from '../platform/gh'
+import type { GhResult, GhRunner } from '@/main/platform/gh'
+import { gh as defaultGh } from '@/main/platform/gh'
 
 export type { GhRunner }
-import { verifyVocabulary } from '../../shared/labels/vocabulary'
-import type { LabelVocabulary, RepoLabels } from '../../shared/labels/vocabulary'
-import type { AssertEqual } from '../../shared/assert-type'
+import { verifyVocabulary } from '@/shared/labels/vocabulary'
+import type { LabelVocabulary, RepoLabels } from '@/shared/labels/vocabulary'
+import type { AssertEqual } from '@/shared/assert-type'
 import type {
   BlockerRead,
   ClaimBlocker,
@@ -21,11 +21,11 @@ import type {
   PipelineItemKind,
   RateLimitInfo,
   ResolvedItem,
-} from '../../shared/github/types'
-import { classifyFailure, collectTruncated, collectUnavailable, parseEnvelope } from './envelope'
-import type { AliasInfo, EnvelopeFailureKind, GraphQLErrorEntry } from './envelope'
-import { applyItemStates, fieldListOf, mapPipelineItems } from './map'
-import { buildClaimPreflightQuery, buildItemStatesQuery, buildItemsByNumberQuery, buildPipelineQuery } from './query'
+} from '@/shared/github/types'
+import { classifyFailure, collectTruncated, collectUnavailable, parseEnvelope } from '@/main/github/envelope'
+import type { AliasInfo, EnvelopeFailureKind, GraphQLErrorEntry } from '@/main/github/envelope'
+import { applyItemStates, fieldListOf, mapPipelineItems } from '@/main/github/map'
+import { buildClaimPreflightQuery, buildItemStatesQuery, buildItemsByNumberQuery, buildPipelineQuery } from '@/main/github/query'
 
 /** Fails to compile if a failure kind is added to the platform layer or `envelope.ts` without the
  *  hand-maintained, renderer-safe `PipelineFailureKind` growing to match. */

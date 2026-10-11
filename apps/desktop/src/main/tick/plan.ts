@@ -1,22 +1,22 @@
 // planTick — one RepositoryState to one TickReport. Pure: no gh, no timer, no write. This app
 // computes the decision and the report; it never writes the escalation itself.
-import type { PipelineItemKind } from '../../shared/github/types'
-import type { LabelKey } from '../../shared/labels/vocabulary'
-import type { RepoId } from '../../shared/repos'
-import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '../../shared/board/types'
-import type { ReconciledItem, RepositoryState } from '../../shared/state/types'
-import type { EndedStage, TickActionable, TickBlind, TickClaim, TickHeld, TickHeldReason, TickObservation, TickReport } from '../../shared/tick/types'
+import type { PipelineItemKind } from '@/shared/github/types'
+import type { LabelKey } from '@/shared/labels/vocabulary'
+import type { RepoId } from '@/shared/repos'
+import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/shared/board/types'
+import type { ReconciledItem, RepositoryState } from '@/shared/state/types'
+import type { EndedStage, TickActionable, TickBlind, TickClaim, TickHeld, TickHeldReason, TickObservation, TickReport } from '@/shared/tick/types'
 import type { ClaimedItem, OccupiedEntry } from '../../../../../scripts/port-tick/contention'
 import { gateCandidates } from '../../../../../scripts/port-tick/contention'
 import type { Disposition } from '../../../../../scripts/port-tick/checks'
 import { cycleCapExceeded, cycleGrantCount, mergeabilityRoute, refreshWins, zeroDiffGate } from '../../../../../scripts/port-tick/gates'
-import type { DispatchLedger, RefreshMemo, UnknownStreaks } from './ledger'
+import type { DispatchLedger, RefreshMemo, UnknownStreaks } from '@/main/tick/ledger'
 import { RETRY_TRIGGER } from '../../../../../scripts/port-tick/liveness'
-import { observationsOf } from './observe'
+import { observationsOf } from '@/main/tick/observe'
 import { partitionOwnership } from '../../../../../scripts/port-tick/classify'
-import { AGENT_FOR_IN_FLIGHT, AGENT_FOR_TRIGGER } from './routing'
-import { autoApprovalsOf } from './auto-plan'
-import { repairsOf } from './repair'
+import { AGENT_FOR_IN_FLIGHT, AGENT_FOR_TRIGGER } from '@/main/tick/routing'
+import { autoApprovalsOf } from '@/main/tick/auto-plan'
+import { repairsOf } from '@/main/tick/repair'
 
 export interface PlanTickParams {
   readonly repository: RepositoryState

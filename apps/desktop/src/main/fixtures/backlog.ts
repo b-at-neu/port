@@ -1,7 +1,7 @@
 // Fixture mode's own canned backlog: one populated scenario for `acme/widgets`.
-import type { BacklogResponse } from '../../shared/backlog/types'
-import type { RepoId } from '../../shared/repos'
-import { WIDGETS_ID } from './repos'
+import type { BacklogResponse } from '@/shared/backlog/types'
+import type { RepoId } from '@/shared/repos'
+import { WIDGETS_ID } from '@/main/fixtures/repos'
 
 const VIEWER = 'octo-dev'
 

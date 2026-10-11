@@ -1,15 +1,15 @@
 // The two composition roots `main/ipc.ts` calls, which only ever validates the request shape and delegates. Neither strips `ANTHROPIC_API_KEY`; both only report whether it is present.
-import { ensureDirectory } from '../platform/files'
-import { readCredentialsTell } from './credentials'
-import { resolveClaudeExecutable } from './locate'
-import { readClaudeVersion } from './version'
-import { classifyPreflight } from './classify'
-import { createRuntimeProbe } from './sdk'
-import type { RuntimeProbeFn } from './sdk'
-import type { RuntimePreflight, RuntimeProbe } from '../../shared/runtime/types'
-import { listRepositories, requireReadyRepo } from '../registry'
-import type { RegistryDeps } from '../registry'
-import type { RepoId } from '../../shared/repos'
+import { ensureDirectory } from '@/main/platform/files'
+import { readCredentialsTell } from '@/main/runtime/credentials'
+import { resolveClaudeExecutable } from '@/main/runtime/locate'
+import { readClaudeVersion } from '@/main/runtime/version'
+import { classifyPreflight } from '@/main/runtime/classify'
+import { createRuntimeProbe } from '@/main/runtime/sdk'
+import type { RuntimeProbeFn } from '@/main/runtime/sdk'
+import type { RuntimePreflight, RuntimeProbe } from '@/shared/runtime/types'
+import { listRepositories, requireReadyRepo } from '@/main/registry'
+import type { RegistryDeps } from '@/main/registry'
+import type { RepoId } from '@/shared/repos'
 
 function apiKeyInEnvironment(env: NodeJS.ProcessEnv): boolean {
   const value = env['ANTHROPIC_API_KEY']

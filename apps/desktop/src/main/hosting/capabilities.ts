@@ -1,11 +1,11 @@
 // A timeout or rejected read-back must never look like an empty capability list.
-import type { AgentSummary, CommandSummary, PluginRequest, SessionCapabilities, SlashCommandSummary } from '../../shared/hosting/types'
-import { isRecord } from '../../shared/guards'
-import { sanitize } from '../sessions/transcript-entries'
-import { checkComponents, checkPluginLoad, isPipelineCommand, PLUGIN_NAME } from './verify'
-import type { InitPlugin } from './verify'
-import type { ExpectedComponents } from './plugin'
-import type { AgentInfo, HostedQuery, SlashCommand } from './sdk'
+import type { AgentSummary, CommandSummary, PluginRequest, SessionCapabilities, SlashCommandSummary } from '@/shared/hosting/types'
+import { isRecord } from '@/shared/guards'
+import { sanitize } from '@/main/sessions/transcript-entries'
+import { checkComponents, checkPluginLoad, isPipelineCommand, PLUGIN_NAME } from '@/main/hosting/verify'
+import type { InitPlugin } from '@/main/hosting/verify'
+import type { ExpectedComponents } from '@/main/hosting/plugin'
+import type { AgentInfo, HostedQuery, SlashCommand } from '@/main/hosting/sdk'
 
 /** Control requests answered before the first turn, costing no tokens. */
 export const CAPABILITIES_TIMEOUT_MS = 30_000

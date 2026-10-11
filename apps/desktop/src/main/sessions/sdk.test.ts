@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createSdkSessionReader } from './sdk'
+import { createSdkSessionReader } from '@/main/sessions/sdk'
 
 describe('createSdkSessionReader — the mapper, no SDK ever loaded', () => {
   it('maps a full SDKSessionInfo fixture, carrying every field', async () => {

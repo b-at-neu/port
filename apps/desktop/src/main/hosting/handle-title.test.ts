@@ -1,10 +1,10 @@
 // title/rateLimit/resumeTarget, split out of handle.test.ts to stay under the file-size limit.
 import { describe, expect, it, vi } from 'vitest'
-import { createHostedHandle } from './handle'
-import type { HostedQuery } from './handle'
-import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
-import type { PluginRequest, SessionKey } from '../../shared/hosting/types'
-import type { RepoId } from '../../shared/repos'
+import { createHostedHandle } from '@/main/hosting/handle'
+import type { HostedQuery } from '@/main/hosting/handle'
+import { DEFAULT_SESSION_DEFAULTS } from '@/shared/hosting/types'
+import type { PluginRequest, SessionKey } from '@/shared/hosting/types'
+import type { RepoId } from '@/shared/repos'
 
 const SESSION_KEY = 'hosted-1' as SessionKey
 const REPO_ID = 'repo-1' as RepoId

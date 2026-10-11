@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '../../shared/labels/vocabulary'
-import type { LabelVocabulary } from '../../shared/labels/vocabulary'
-import type { RepoId } from '../../shared/repos'
-import type { CommandResult } from '../platform/run'
-import type { ReadyEntry } from '../actions/apply'
-import { createBudgetGate } from './budget-gate'
-import type { NodeRunner } from './budget-gate'
+import { resolveVocabulary } from '@/shared/labels/vocabulary'
+import type { LabelVocabulary } from '@/shared/labels/vocabulary'
+import type { RepoId } from '@/shared/repos'
+import type { CommandResult } from '@/main/platform/run'
+import type { ReadyEntry } from '@/main/actions/apply'
+import { createBudgetGate } from '@/main/dispatch/budget-gate'
+import type { NodeRunner } from '@/main/dispatch/budget-gate'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 const VOCABULARY: LabelVocabulary = resolveVocabulary({})

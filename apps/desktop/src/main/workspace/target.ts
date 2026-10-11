@@ -1,16 +1,16 @@
 // Resolves a `session:start` target to a cwd/workspace/repoId, creating a session worktree only on
 // an explicit `worktree: true` — the only place a start target becomes a cwd.
-import type { GitRunner } from '../platform/git'
-import { pathOps as defaultPathOps } from '../platform/paths'
-import type { PathOps } from '../platform/paths'
-import type { RepoId, RepositoryEntry } from '../../shared/repos'
-import type { SessionStartMode, SessionStartResult, SessionStartTarget } from '../../shared/hosting/types'
-import type { SessionWorkspace } from '../../shared/workspace/types'
-import { isReadyEntry } from '../registry'
-import type { RecentsStore } from './recents'
-import type { CreateSessionWorktreeParams, CreateSessionWorktreeResult } from './worktree'
-import { resolveWorkspace, toFolderId } from './resolve'
-import type { SessionReader } from '../sessions/sdk'
+import type { GitRunner } from '@/main/platform/git'
+import { pathOps as defaultPathOps } from '@/main/platform/paths'
+import type { PathOps } from '@/main/platform/paths'
+import type { RepoId, RepositoryEntry } from '@/shared/repos'
+import type { SessionStartMode, SessionStartResult, SessionStartTarget } from '@/shared/hosting/types'
+import type { SessionWorkspace } from '@/shared/workspace/types'
+import { isReadyEntry } from '@/main/registry'
+import type { RecentsStore } from '@/main/workspace/recents'
+import type { CreateSessionWorktreeParams, CreateSessionWorktreeResult } from '@/main/workspace/worktree'
+import { resolveWorkspace, toFolderId } from '@/main/workspace/resolve'
+import type { SessionReader } from '@/main/sessions/sdk'
 
 export type ResolvedStartTarget =
   | {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { ReconciledItem } from '../../shared/state/types'
-import type { EndedStage } from '../../shared/tick/types'
-import { repairsOf } from './repair'
+import type { ReconciledItem } from '@/shared/state/types'
+import type { EndedStage } from '@/shared/tick/types'
+import { repairsOf } from '@/main/tick/repair'
 
 const VIEWER = 'op'
 const READ_AT = '2026-01-01T01:00:00.000Z'

@@ -1,8 +1,8 @@
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { makeTempDir } from '../../testing/fixtures'
-import { createRecentsStore, pruneMissing, RECENTS_CAP } from './recents'
+import { makeTempDir } from '@/testing/fixtures'
+import { createRecentsStore, pruneMissing, RECENTS_CAP } from '@/main/workspace/recents'
 
 describe('createRecentsStore', () => {
   it('load() returns an empty list when the file is absent', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createRuntimeProbe } from './sdk'
+import { createRuntimeProbe } from '@/main/runtime/sdk'
 
 /** Mirrors `sdk.ts`'s own `ProbeMessage` shape, so this fixture stays faithful without pulling in every field of the real `SDKResultMessage` union. */
 interface FakeMessage {

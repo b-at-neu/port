@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
-import { resumeStage, restartStage, RESUME_PROMPT } from './recover'
-import { createStageRegistry } from './registry'
-import type { FileResult } from '../platform/files'
-import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '../../shared/hosting/types'
-import type { RemoveSessionWorktreeOutcome } from '../workspace/worktree'
-import type { StartSessionParams } from '../hosting/store'
-import type { InterruptedStage } from '../../shared/stage/types'
-import type { RepoId } from '../../shared/repos'
+import { resumeStage, restartStage, RESUME_PROMPT } from '@/main/stage/recover'
+import { createStageRegistry } from '@/main/stage/registry'
+import type { FileResult } from '@/main/platform/files'
+import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '@/shared/hosting/types'
+import type { RemoveSessionWorktreeOutcome } from '@/main/workspace/worktree'
+import type { StartSessionParams } from '@/main/hosting/store'
+import type { InterruptedStage } from '@/shared/stage/types'
+import type { RepoId } from '@/shared/repos'
 
 function noopFs() {
   function readJson<T>(): Promise<FileResult<T>> {

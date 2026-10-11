@@ -1,9 +1,9 @@
 // Fixture mode's canned claim and plan-review preflights — the plan gate
 // owned by this app so its dialog screenshots with every step reachable.
-import type { GatePreflightResponse } from '../../shared/gate/types'
-import type { ClaimPreflightResponse } from '../../shared/claim/types'
-import type { OwnershipSummary } from '../../shared/writes/types'
-import { LABEL_DEFAULTS } from '../../shared/labels/defaults'
+import type { GatePreflightResponse } from '@/shared/gate/types'
+import type { ClaimPreflightResponse } from '@/shared/claim/types'
+import type { OwnershipSummary } from '@/shared/writes/types'
+import { LABEL_DEFAULTS } from '@/shared/labels/defaults'
 
 const VIEWER = 'octo-dev'
 

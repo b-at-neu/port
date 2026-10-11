@@ -1,8 +1,8 @@
 // The only file under apps/desktop/src/ allowed to import `node:child_process`.
 import { execFile } from 'node:child_process'
 import { stat } from 'node:fs/promises'
-import { which as defaultWhich } from './which'
-import type { WhichEnv, WhichResult } from './which'
+import { which as defaultWhich } from '@/main/platform/which'
+import type { WhichEnv, WhichResult } from '@/main/platform/which'
 
 /** A literal union, so an adapter reaching for a POSIX-only utility is a compile-time error. */
 export const KNOWN_COMMANDS = ['git', 'gh', 'node', 'claude'] as const

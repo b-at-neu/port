@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { listSessionFiles, MAX_FILES } from './files'
-import type { FileListingDeps } from './files'
-import type { DirEntry } from '../platform/files'
+import { listSessionFiles, MAX_FILES } from '@/main/hosting/files'
+import type { FileListingDeps } from '@/main/hosting/files'
+import type { DirEntry } from '@/main/platform/files'
 
 function depsWithGit(lines: readonly string[]): FileListingDeps {
   return {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { findAlreadyOpen, findFolderBusy } from './occupancy'
-import type { HostedHandle } from './handle'
-import type { HostedSessionSnapshot, SessionKey } from '../../shared/hosting/types'
-import type { SessionWorkspace } from '../../shared/workspace/types'
+import { findAlreadyOpen, findFolderBusy } from '@/main/hosting/occupancy'
+import type { HostedHandle } from '@/main/hosting/handle'
+import type { HostedSessionSnapshot, SessionKey } from '@/shared/hosting/types'
+import type { SessionWorkspace } from '@/shared/workspace/types'
 
 const NON_WORKTREE: SessionWorkspace = { folder: '/repo', root: '/repo', worktree: null, base: null }
 const WORKTREE: SessionWorkspace = { folder: '/repo/.claude/worktrees/session-a', root: '/repo', worktree: { path: '/repo/.claude/worktrees/session-a', branch: 'session/a' }, base: null }

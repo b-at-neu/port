@@ -1,6 +1,6 @@
 // The quit warning's own pure copy and guard — no electron import.
-import type { StageAgent } from '../../shared/tick/types'
-import type { LabelKey } from '../../shared/labels/vocabulary'
+import type { StageAgent } from '@/shared/tick/types'
+import type { LabelKey } from '@/shared/labels/vocabulary'
 
 // One live stage session, as the quit guard needs it — `repoName` is the
 // display name (`owner/name`), printed verbatim by the copy below.

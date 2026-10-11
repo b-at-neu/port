@@ -1,10 +1,10 @@
 // A missing field, a non-array `candidates`, or an unknown `state` fails the whole payload,
 // naming the field — never a partial list.
-import type { PathOps } from '../platform/paths'
-import type { CorrelationRung } from '../../shared/local/types'
-import type { ReclaimedWorktree, WorktreeState } from '../../shared/reclaimer/types'
-import { WORKTREE_STATES } from '../../shared/reclaimer/types'
-import { isRecord } from '../../shared/guards'
+import type { PathOps } from '@/main/platform/paths'
+import type { CorrelationRung } from '@/shared/local/types'
+import type { ReclaimedWorktree, WorktreeState } from '@/shared/reclaimer/types'
+import { WORKTREE_STATES } from '@/shared/reclaimer/types'
+import { isRecord } from '@/shared/guards'
 
 const RUNGS: ReadonlySet<string> = new Set<CorrelationRung>(['upstream-branch', 'branch-name', 'directory-basename', 'head-subject'])
 const STATES: ReadonlySet<string> = new Set<string>(WORKTREE_STATES)

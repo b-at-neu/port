@@ -1,9 +1,9 @@
 // Split out of ipc.test.ts once that file crossed the 500-line limit.
 import { describe, expect, it } from 'vitest'
-import type { SearchResult } from '../shared/search/types'
-import { resolveSearchQuery } from './channels/sessions'
-import type { SearchQueryDeps } from './channels/sessions'
-import type { RegistryDeps } from './registry'
+import type { SearchResult } from '@/shared/search/types'
+import { resolveSearchQuery } from '@/main/channels/sessions'
+import type { SearchQueryDeps } from '@/main/channels/sessions'
+import type { RegistryDeps } from '@/main/registry'
 
 const registryDeps: RegistryDeps = {
   registryDir: '/registry',

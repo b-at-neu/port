@@ -4,8 +4,8 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { defaultGitRunner } from '../platform/git'
-import { createSessionWorktree, removeSessionWorktree, removeSessionWorktreeAt } from './worktree'
+import { defaultGitRunner } from '@/main/platform/git'
+import { createSessionWorktree, removeSessionWorktree, removeSessionWorktreeAt } from '@/main/workspace/worktree'
 
 const git = defaultGitRunner()
 

@@ -1,9 +1,9 @@
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '../../shared/repos'
-import { makeTempDir } from '../../testing/fixtures'
-import { createRunStateStore } from './store'
+import type { RepoId } from '@/shared/repos'
+import { makeTempDir } from '@/testing/fixtures'
+import { createRunStateStore } from '@/main/dispatch/store'
 
 const REPO_A = 'repo-a' as RepoId
 const REPO_B = 'repo-b' as RepoId

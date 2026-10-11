@@ -1,7 +1,7 @@
 // A git worktree's project directory carries a hash suffix no mangling of its `cwd` can derive, so the directory is resolved by listing, never mangled.
-import { listDirectory } from '../platform/files'
-import { pathOps } from '../platform/paths'
-import type { SessionFailureKind } from '../../shared/sessions/types'
+import { listDirectory } from '@/main/platform/files'
+import { pathOps } from '@/main/platform/paths'
+import type { SessionFailureKind } from '@/shared/sessions/types'
 
 /** Shared core so the bare-id validator and the filename matcher never drift apart. */
 const SESSION_ID_CORE = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'

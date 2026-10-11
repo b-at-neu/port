@@ -1,6 +1,6 @@
 // Pure array transforms for a repository's own stage-denial bookkeeping — split out of
 // dispatcher.ts to keep it under the file-size ceiling (docs/ENGINEERING.md §7).
-import type { StageDenial } from '../../shared/stage/types'
+import type { StageDenial } from '@/shared/stage/types'
 
 export const DENIAL_LIMIT = 20
 

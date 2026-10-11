@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { STAGE_AGENT_NAMES } from './agents'
+import { STAGE_AGENT_NAMES } from '@/main/stage/agents'
 
 const PLUGIN_ROOT = join(__dirname, '../../../../../plugins/port')
 

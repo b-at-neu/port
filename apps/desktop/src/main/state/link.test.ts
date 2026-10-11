@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { closingReference, sessionRequiredAt, sessionRequiredMarkerAt, SESSION_REQUIRED_PREFIX } from './link'
+import { closingReference, sessionRequiredAt, sessionRequiredMarkerAt, SESSION_REQUIRED_PREFIX } from '@/main/state/link'
 
 describe('closingReference', () => {
   it.each(['Closes #79', 'closes #79', 'Fixes #79', 'resolves #79'])('links on %s', (line) => {

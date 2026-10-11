@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { TRIGRAM_SIZE } from '../../shared/search/types'
-import { buildSignature, decodeSignature, encodeSignature, mightContain } from './signature'
-import { foldCase } from './terms'
+import { TRIGRAM_SIZE } from '@/shared/search/types'
+import { buildSignature, decodeSignature, encodeSignature, mightContain } from '@/main/search/signature'
+import { foldCase } from '@/main/search/terms'
 
 function randomText(length: number, seed: number): string {
   const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789 '

@@ -1,15 +1,15 @@
 // The 'dispatch:control' channel's own validation and composition — all the branching lives here,
 // not in main/ipc.ts, the same split every other multi-call channel in this app follows.
-import { DISPATCH_COMMANDS, RUN_TARGET } from '../../shared/dispatch/types'
-import type { DispatchCommand, DispatchControlResult, HaltReport } from '../../shared/dispatch/types'
-import type { BoardSnapshot } from '../../shared/board/types'
-import type { RefreshRequest } from '../state/watcher'
-import type { RepoId } from '../../shared/repos'
-import { isReadyEntry, listRepositories } from '../registry'
-import type { RegistryDeps } from '../registry'
-import { releaseOwnership, takeOwnership } from './ownership'
-import type { HaltDispatchDeps, HaltDispatchParams } from './halt'
-import type { RunStateStore } from './store'
+import { DISPATCH_COMMANDS, RUN_TARGET } from '@/shared/dispatch/types'
+import type { DispatchCommand, DispatchControlResult, HaltReport } from '@/shared/dispatch/types'
+import type { BoardSnapshot } from '@/shared/board/types'
+import type { RefreshRequest } from '@/main/state/watcher'
+import type { RepoId } from '@/shared/repos'
+import { isReadyEntry, listRepositories } from '@/main/registry'
+import type { RegistryDeps } from '@/main/registry'
+import { releaseOwnership, takeOwnership } from '@/main/dispatch/ownership'
+import type { HaltDispatchDeps, HaltDispatchParams } from '@/main/dispatch/halt'
+import type { RunStateStore } from '@/main/dispatch/store'
 
 export interface ResolveDispatchControlDeps {
   readonly listRepositories: typeof listRepositories

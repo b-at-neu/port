@@ -1,11 +1,11 @@
 // `'claim:preflight'`/`'claim:apply'`'s own validation, the same per-topic
 // split every other channel here follows.
-import { PLAN_GATE_CHOICES } from '../../shared/claim/types'
-import type { IpcMap } from '../../shared/ipc'
-import { claimApply, claimPreflight, defaultClaimDeps } from '../claim'
-import type { ClaimDeps } from '../claim'
-import type { RegistryDeps } from '../registry'
-import { requireRepoId } from '../registry'
+import { PLAN_GATE_CHOICES } from '@/shared/claim/types'
+import type { IpcMap } from '@/shared/ipc'
+import { claimApply, claimPreflight, defaultClaimDeps } from '@/main/claim'
+import type { ClaimDeps } from '@/main/claim'
+import type { RegistryDeps } from '@/main/registry'
+import { requireRepoId } from '@/main/registry'
 
 // `repoId` must name a currently registered repository, `number` a positive integer.
 export async function resolveClaimPreflight(

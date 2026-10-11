@@ -1,10 +1,10 @@
 // Swaps the trigger label for `needsHuman`, then comments — a failed swap never posts a
 // comment that would repeat on every poll.
-import type { LabelKey } from '../../shared/labels/vocabulary'
-import type { LabelWriteRequest, WriteOutcome } from '../../shared/writes/types'
-import { applyLabels, postComment } from '../writes/apply'
-import type { ApplyLabelsParams, PostCommentParams } from '../writes/apply'
-import type { ReadyEntry } from './apply'
+import type { LabelKey } from '@/shared/labels/vocabulary'
+import type { LabelWriteRequest, WriteOutcome } from '@/shared/writes/types'
+import { applyLabels, postComment } from '@/main/writes/apply'
+import type { ApplyLabelsParams, PostCommentParams } from '@/main/writes/apply'
+import type { ReadyEntry } from '@/main/actions/apply'
 
 export interface EscalateToHumanParams {
   readonly entry: ReadyEntry

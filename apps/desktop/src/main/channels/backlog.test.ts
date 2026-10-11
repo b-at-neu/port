@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '../../shared/repos'
-import type { ReposListResponse } from '../../shared/ipc'
-import { resolveVocabulary } from '../../shared/labels/vocabulary'
-import { resolveBacklogList } from './backlog'
-import type { BacklogListDeps } from './backlog'
-import type { RegistryDeps } from '../registry'
+import type { RepoId } from '@/shared/repos'
+import type { ReposListResponse } from '@/shared/ipc'
+import { resolveVocabulary } from '@/shared/labels/vocabulary'
+import { resolveBacklogList } from '@/main/channels/backlog'
+import type { BacklogListDeps } from '@/main/channels/backlog'
+import type { RegistryDeps } from '@/main/registry'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 

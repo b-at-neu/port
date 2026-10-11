@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createQuitGuard, quitWarningCopy, stagePhaseName } from './quit'
-import type { StageSessionSummary } from './quit'
+import { createQuitGuard, quitWarningCopy, stagePhaseName } from '@/main/dispatch/quit'
+import type { StageSessionSummary } from '@/main/dispatch/quit'
 
 function session(overrides: Partial<StageSessionSummary> = {}): StageSessionSummary {
   return { agent: 'impl', number: 300, trigger: 'planApproved', repoName: 'acme/widgets', ...overrides }

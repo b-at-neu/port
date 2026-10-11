@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary, type LabelVocabulary } from '../../shared/labels/vocabulary'
-import { buildClaimPreflightQuery, buildGatePreflightQuery, buildItemStatesQuery, buildItemsByNumberQuery, buildPipelineQuery, graphqlStringLiteral } from './query'
+import { resolveVocabulary, type LabelVocabulary } from '@/shared/labels/vocabulary'
+import { buildClaimPreflightQuery, buildGatePreflightQuery, buildItemStatesQuery, buildItemsByNumberQuery, buildPipelineQuery, graphqlStringLiteral } from '@/main/github/query'
 
 describe('graphqlStringLiteral', () => {
   it('round-trips a name containing a double quote, a backslash, and a newline', () => {

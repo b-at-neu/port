@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { createPathOps } from '../platform/paths'
-import { parseReclaimPayload, parseReportPayload } from './parse'
+import { createPathOps } from '@/main/platform/paths'
+import { parseReclaimPayload, parseReportPayload } from '@/main/reclaimer/parse'
 
 const posixPathOps = createPathOps('posix', { home: '/home/op' })
 const win32PathOps = createPathOps('win32', { home: 'C:\\Users\\op' })

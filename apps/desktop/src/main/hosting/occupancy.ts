@@ -1,7 +1,7 @@
 // Pure occupancy checks over live handles — moved out of store.ts so folder-busy's own search sits
 // beside the already-open one it composes with, never duplicated inline.
-import type { HostedHandle } from './handle'
-import type { SessionKey } from '../../shared/hosting/types'
+import type { HostedHandle } from '@/main/hosting/handle'
+import type { SessionKey } from '@/shared/hosting/types'
 
 /** Compares a live handle's `claudeSessionId ?? resumeTarget` against the requested `sessionId`.
  *  Never checked for `fork`: a fork of an open session gets a new id, so it is always allowed. */

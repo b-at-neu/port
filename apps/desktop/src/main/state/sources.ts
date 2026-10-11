@@ -1,16 +1,16 @@
 // One refresh primitive per source, each keeping the previous good value in place on a failed attempt. `watcher.ts` decides *when* to call these; no file here names a timer.
-import { fetchItemsByNumber, fetchPipelineItems } from '../github/adapter'
-import type { GhRunner } from '../github/adapter'
-import { collectOrphanNumbers } from './attach'
-import { readDenials } from '../local/denials'
-import { readWorktrees } from '../local/worktrees'
-import type { GitRunner } from '../local/worktrees'
-import { readSessionState } from '../sessions/adapter'
-import type { RepoId } from '../../shared/repos'
-import type { LabelVocabulary } from '../../shared/labels/vocabulary'
-import type { DenialsRead, WorktreeEntry, WorktreesRead } from '../../shared/local/types'
-import type { AgentRecord, SessionScan } from '../../shared/sessions/types'
-import type { ItemsByNumberFetch, PipelineFailureKind, PipelineFetch, RateLimitInfo } from '../../shared/github/types'
+import { fetchItemsByNumber, fetchPipelineItems } from '@/main/github/adapter'
+import type { GhRunner } from '@/main/github/adapter'
+import { collectOrphanNumbers } from '@/main/state/attach'
+import { readDenials } from '@/main/local/denials'
+import { readWorktrees } from '@/main/local/worktrees'
+import type { GitRunner } from '@/main/local/worktrees'
+import { readSessionState } from '@/main/sessions/adapter'
+import type { RepoId } from '@/shared/repos'
+import type { LabelVocabulary } from '@/shared/labels/vocabulary'
+import type { DenialsRead, WorktreeEntry, WorktreesRead } from '@/shared/local/types'
+import type { AgentRecord, SessionScan } from '@/shared/sessions/types'
+import type { ItemsByNumberFetch, PipelineFailureKind, PipelineFetch, RateLimitInfo } from '@/shared/github/types'
 
 export interface SourceCache {
   readonly github: Map<RepoId, PipelineFetch>

@@ -1,8 +1,8 @@
 // Narrows `AskUserQuestion`/`ExitPlanMode` canUseTool calls away from the
 // generic dialog, and builds the PermissionResults their answers send back.
-import { isRecord } from '../../shared/guards'
-import type { AskQuestion, AskQuestionOption, PendingInteraction } from '../../shared/hosting/controls'
-import type { PermissionResult, PermissionUpdate } from './sdk'
+import { isRecord } from '@/shared/guards'
+import type { AskQuestion, AskQuestionOption, PendingInteraction } from '@/shared/hosting/controls'
+import type { PermissionResult, PermissionUpdate } from '@/main/hosting/sdk'
 
 function narrowOption(value: unknown): AskQuestionOption | null {
   if (!isRecord(value) || typeof value['label'] !== 'string' || value['label'] === '') return null

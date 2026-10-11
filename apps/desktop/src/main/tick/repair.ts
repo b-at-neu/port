@@ -1,10 +1,10 @@
 // Pure: sorts a half-labelled ticket into a repair or a `half-labelled` report, never a guess.
-import type { ReconciledItem } from '../../shared/state/types'
-import type { EndedStage, TickLabelRepair, TickObservation } from '../../shared/tick/types'
+import type { ReconciledItem } from '@/shared/state/types'
+import type { EndedStage, TickLabelRepair, TickObservation } from '@/shared/tick/types'
 import { RETRY_TRIGGER } from '../../../../../scripts/port-tick/liveness'
-import type { LabelKey } from '../../shared/labels/vocabulary'
-import { isContradictory } from './observe'
-import { AGENT_FOR_IN_FLIGHT } from './routing'
+import type { LabelKey } from '@/shared/labels/vocabulary'
+import { isContradictory } from '@/main/tick/observe'
+import { AGENT_FOR_IN_FLIGHT } from '@/main/tick/routing'
 
 export interface RepairsOfParams {
   readonly items: readonly ReconciledItem[]

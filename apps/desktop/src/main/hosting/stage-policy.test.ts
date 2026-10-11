@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { createPathOps } from '../platform/paths'
-import { globToRegExp, stagePolicy } from './stage-policy'
-import type { StagePolicyParams } from './stage-policy'
+import { createPathOps } from '@/main/platform/paths'
+import { globToRegExp, stagePolicy } from '@/main/hosting/stage-policy'
+import type { StagePolicyParams } from '@/main/hosting/stage-policy'
 
 const posixOps = createPathOps('posix', { home: '/home/op' })
 

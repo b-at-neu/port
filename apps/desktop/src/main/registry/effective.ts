@@ -1,10 +1,10 @@
 // Resolves a repository's *effective* config: the port-resolved values `inspect.ts` built, with a root `CLAUDE.md` `port-overrides` block folded on top. Composition only — `overrides.ts` does the actual parsing and validation.
-import { pathOps } from '../platform/paths'
-import { readTextFile } from '../platform/files'
-import { LABEL_DEFAULTS } from '../../shared/labels/defaults'
-import { LABEL_KEYS } from '../../shared/labels/vocabulary'
-import type { LabelKey } from '../../shared/labels/vocabulary'
-import type { AppliedOverride, CheckDisposition, RepoConfigReadFailureKind, RepoProblem } from '../../shared/repos'
+import { pathOps } from '@/main/platform/paths'
+import { readTextFile } from '@/main/platform/files'
+import { LABEL_DEFAULTS } from '@/shared/labels/defaults'
+import { LABEL_KEYS } from '@/shared/labels/vocabulary'
+import type { LabelKey } from '@/shared/labels/vocabulary'
+import type { AppliedOverride, CheckDisposition, RepoConfigReadFailureKind, RepoProblem } from '@/shared/repos'
 import { applyOverrides, parseOverrides } from '../../../../../scripts/port-tick/overrides'
 import type { EffectiveConfigShape } from '../../../../../scripts/port-tick/overrides'
 
