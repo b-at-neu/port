@@ -4,7 +4,7 @@ import type { ReadyEntry } from '../actions/apply'
 import type { HostedSessionSnapshot, SessionKey } from '../../shared/hosting/types'
 import type { PipelineItemKind } from '../../shared/github/types'
 import type { LabelKey } from '../../shared/labels/vocabulary'
-import type { StageAgent } from '../../shared/tick/types'
+import type { EndedStage, StageAgent } from '../../shared/tick/types'
 import type { StageOutcome } from '../../shared/hosting/stage'
 
 export interface StageLaunchRequest {
@@ -60,6 +60,18 @@ export function refreshRecords(records: readonly StageRecord[], snapshotOf: (ses
     const withSnap = { ...record, claudeSessionId: snap.claudeSessionId, operatorJoinedAt: snap.operatorJoinedAt }
     return snap.phase !== 'ended' ? withSnap : { ...withSnap, state: 'ended' as const }
   })
+}
+
+// This repository's own ended stage-session records, newest per number — `main/tick/repair.ts`'s session-shape evidence, projected here rather than in `dispatcher.ts` to keep that file under its line limit.
+export function endedStagesOf(records: readonly StageRecord[]): readonly EndedStage[] {
+  const newestByNumber = new Map<number, EndedStage>()
+  for (const record of records) {
+    if (record.state === 'started' || record.outcome === null) continue
+    const candidate: EndedStage = { agent: record.agent, number: record.number, outcome: record.outcome.kind, at: record.at }
+    const existing = newestByNumber.get(record.number)
+    if (existing === undefined || Date.parse(candidate.at) > Date.parse(existing.at)) newestByNumber.set(record.number, candidate)
+  }
+  return [...newestByNumber.values()]
 }
 
 // Drops the oldest non-live records first, never a live one, down to `limit`.

@@ -137,6 +137,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - imports `scripts/port-tick/`'s own decision modules directly, checked against shared case tables
 - blind read → no actionable, held or claim counts at all
 - `auto-plan.ts`'s `autoApprovalsOf` (#313) ignores `sessionRequired` deliberately — the cockpit's own rule is that the swap still happens; `dispatchable.ts`'s `autoApprovableFrom` is the only reader of `.autoApprovals` under `main/`
+- `repair.ts`'s `repairsOf` (#330) detects a half-labelled ticket a crashed stage session left behind; it repairs only `stage-error` (a `liveness-reset` with `evidence: 'stage-error'`) and `plan-missing` through the observation pass, and reports every other shape (`handback-unlabelled`, `contradictory`, `plan-missing-approved`, `pr-missing`) on `TickReport.labelRepairs` for a human to resolve — it never repairs an `interrupted`/`usage-limit` session, since those wait on the operator's own Resume/Restart
 
 **`apps/desktop/src/main/trajectory/`**
 - the one write `main/tick/` itself never makes — computes there, writes here

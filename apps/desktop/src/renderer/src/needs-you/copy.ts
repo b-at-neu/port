@@ -16,6 +16,43 @@ function unblockReason(item: NeedsYouItem): string | null {
   return 'reason' in decision.context ? decision.context.reason : null
 }
 
+/** The repository's own resolved label name for a repair's label key — the matched row's `item.stages`
+ *  already carries every label's resolved name, so this never re-derives one from the bare key. */
+function repairLabelName(item: Extract<NeedsYouItem, { readonly kind: 'half-labelled' }>, key: string): string {
+  return item.matchedRow?.item.stages.find((s) => s.key === key)?.name ?? key
+}
+
+function interruptedCopy(item: Extract<NeedsYouItem, { readonly kind: 'stage-interrupted' }>, label: string): string {
+  const i = item.interrupted
+  const phase = STAGE_PHASE_NAME[i.agent]
+  switch (i.reason) {
+    case 'quit':
+      return `${phase} ${label} was interrupted when port quit`
+    case 'crash':
+      return `${phase} ${label} stopped unexpectedly`
+    case 'usage-limit':
+      return `${phase} ${label} hit the usage limit${i.resetsAt !== null ? `, resets ${new Date(i.resetsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}`
+    case 'error':
+      return `${phase} ${label} ended with an error${i.detail !== null ? ` (${i.detail})` : ''}`
+  }
+}
+
+function halfLabelledCopy(item: Extract<NeedsYouItem, { readonly kind: 'half-labelled' }>, label: string): string {
+  const names = item.repair.labels.map((key) => repairLabelName(item, key))
+  switch (item.repair.shape) {
+    case 'handback-unlabelled': {
+      const agentName = item.repair.agent !== null ? STAGE_PHASE_NAME[item.repair.agent].toLowerCase() : 'stage'
+      return `${label}'s ${agentName} session finished, but its label is still "${names[0] ?? 'in flight'}". Check the ticket and set the right label.`
+    }
+    case 'contradictory':
+      return `${label} has conflicting labels: ${names.map((n) => `"${n}"`).join(', ')}. Remove the one that's wrong.`
+    case 'plan-missing-approved':
+      return `${label} is approved, but its body has no implementation plan. Restore the plan or move it back to "ready".`
+    case 'pr-missing':
+      return `${label} says a pull request is open, but none is. Reopen it or move the issue back.`
+  }
+}
+
 export function needsYouLeadCopy(item: NeedsYouItem): string {
   const label = labelOf(item)
   switch (item.kind) {
@@ -59,19 +96,9 @@ export function needsYouLeadCopy(item: NeedsYouItem): string {
       return `${label} is blocked: ${item.text ?? 'see its session'}`
     case 'stage-denial':
       return `${STAGE_PHASE_NAME[item.denial.agent]} ${label} was denied ${item.denial.rule}`
-    case 'stage-interrupted': {
-      const i = item.interrupted
-      const phase = STAGE_PHASE_NAME[i.agent]
-      switch (i.reason) {
-        case 'quit':
-          return `${phase} ${label} was interrupted when port quit`
-        case 'crash':
-          return `${phase} ${label} stopped unexpectedly`
-        case 'usage-limit':
-          return `${phase} ${label} hit the usage limit${i.resetsAt !== null ? `, resets ${new Date(i.resetsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}`
-        case 'error':
-          return `${phase} ${label} ended with an error${i.detail !== null ? ` (${i.detail})` : ''}`
-      }
-    }
+    case 'stage-interrupted':
+      return interruptedCopy(item, label)
+    case 'half-labelled':
+      return halfLabelledCopy(item, label)
   }
 }

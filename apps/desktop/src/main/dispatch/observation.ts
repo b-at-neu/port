@@ -46,7 +46,8 @@ export function observationWrite(observation: WriteObservation, item: Reconciled
   switch (observation.kind) {
     case 'liveness-reset': {
       const add: readonly LabelKey[] = [observation.retryKey]
-      return { add, remove: [observation.inFlight], expect: precondition(item, vocabulary, add), action: 'observe-liveness-reset', comment: null }
+      const action = observation.evidence === 'stage-error' ? 'observe-stage-error-reset' : 'observe-liveness-reset'
+      return { add, remove: [observation.inFlight], expect: precondition(item, vocabulary, add), action, comment: null }
     }
     case 'cycle-cap': {
       const add: readonly LabelKey[] = ['needsHuman']
@@ -74,6 +75,13 @@ export function observationWrite(observation: WriteObservation, item: Reconciled
     case 'withdraw-approval': {
       const add: readonly LabelKey[] = ['needsRevision']
       return { add, remove: ['approved'], expect: precondition(item, vocabulary, add), action: 'observe-withdraw-approval', comment: approvalWithdrawnComment(observation.red, observation.headRefOid) }
+    }
+    case 'plan-missing': {
+      const add: readonly LabelKey[] = ['ready']
+      const planReviewName = vocabulary.labels.find((l) => l.key === 'planReview')?.name ?? 'planReview'
+      const readyName = vocabulary.labels.find((l) => l.key === 'ready')?.name ?? 'ready'
+      const comment = `## Plan missing\nThis issue was at \`${planReviewName}\` but its body has no \`## Implementation Plan\` section, so it was moved back to \`${readyName}\` to be planned again.`
+      return { add, remove: ['planReview'], expect: precondition(item, vocabulary, add), action: 'observe-plan-missing', comment }
     }
   }
 }

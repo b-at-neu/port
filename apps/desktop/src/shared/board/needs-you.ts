@@ -6,14 +6,14 @@ import type { AskQuestion } from '../hosting/controls'
 import type { StageDenial, InterruptedStage } from '../stage/types'
 import type { RepoId } from '../repos'
 import type { RepositoryState } from '../state/types'
-import type { TickClaim, TickHeld } from '../tick/types'
+import type { TickClaim, TickHeld, TickLabelRepair } from '../tick/types'
 import { projectBoard } from './project'
 import type { BoardItemRow, BoardSnapshot } from './types'
 
 /** The four label-keyed kinds, each carrying the row they came from. */
 export type RowNeedsYouKind = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'blocked'
 
-export type NeedsYouKind = RowNeedsYouKind | 'budget' | 'held' | 'stalled' | 'stage-question' | 'stage-questions' | 'stage-blocked' | 'stage-denial' | 'stage-interrupted'
+export type NeedsYouKind = RowNeedsYouKind | 'budget' | 'held' | 'stalled' | 'stage-question' | 'stage-questions' | 'stage-blocked' | 'stage-denial' | 'stage-interrupted' | 'half-labelled'
 
 interface NeedsYouItemBase {
   readonly repoId: RepoId | null
@@ -40,6 +40,7 @@ export type NeedsYouItem =
   | (NeedsYouItemBase & { readonly kind: 'stage-questions' | 'stage-blocked'; readonly sessionKey: SessionKey; readonly text: string | null })
   | (NeedsYouItemBase & { readonly kind: 'stage-denial'; readonly denial: StageDenial })
   | (NeedsYouItemBase & { readonly kind: 'stage-interrupted'; readonly interrupted: InterruptedStage })
+  | (NeedsYouItemBase & { readonly kind: 'half-labelled'; readonly repair: TickLabelRepair })
 
 // Every other stage key carries no "needs you" kind at all.
 const ROW_KIND: Readonly<Partial<Record<string, RowNeedsYouKind>>> = {
@@ -189,6 +190,23 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
       if (!BUDGET_KINDS.has(note.kind)) continue
       const matched = rowByKey.get(rowKey(dispatch.repoId, note.number)) ?? null
       items.push({ kind: 'budget', repoId: dispatch.repoId, repo: matched?.item.repo ?? null, number: note.number, title: matched?.item.title ?? null, url: matched?.item.url ?? null, at: null, matchedRow: matched, note })
+    }
+  }
+
+  for (const report of snapshot.tick) {
+    for (const repair of report.labelRepairs) {
+      const matched = rowByKey.get(rowKey(report.repoId, repair.number)) ?? null
+      items.push({
+        kind: 'half-labelled',
+        repoId: report.repoId,
+        repo: matched?.item.repo ?? report.displayName,
+        number: repair.number,
+        title: matched?.item.title ?? null,
+        url: matched?.item.url ?? null,
+        at: null,
+        matchedRow: matched,
+        repair,
+      })
     }
   }
 

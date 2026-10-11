@@ -43,6 +43,7 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     comments: null,
     reviewCycleCount: null,
     checkRollup: null,
+    planPresent: null,
     ...overrides,
   }
 }
@@ -377,5 +378,38 @@ describe('planTick — autoApprovals (#313)', () => {
     const repo = readyRepo([autoPlanItem])
     const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.autoApprovals).toEqual([{ number: 7 }])
+  })
+})
+
+describe('planTick — endedStages / labelRepairs (#330)', () => {
+  it('a stage-error number yields one liveness-reset (evidence: stage-error) and no second ledger reset', () => {
+    const repo = readyRepo([item({ stage: 'in-flight', stages: [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }], status: 'stalled', statusEvidence: 'no-claimant' })])
+    const report = planTick({
+      repository: repo,
+      ledger: createDispatchLedger(),
+      unknownStreaks: createUnknownStreaks(),
+      nextDecisionAt: NEXT_DECISION_AT,
+      now: () => NOW,
+      reviewCycleCap: 5,
+      startedTasks: [],
+      refreshMemo: createRefreshMemo(),
+      checkDispositions: NO_CHECK_DISPOSITIONS,
+      holdSessionRequired: true,
+      endedStages: [{ agent: 'impl', number: 1, outcome: 'error', at: '2025-12-31T00:00:00.000Z' }],
+    })
+    const resets = report.observations.filter((o) => o.kind === 'liveness-reset')
+    expect(resets).toEqual([{ kind: 'liveness-reset', number: 1, itemKind: 'issue', inFlight: 'inProgress', retryKey: 'planApproved', evidence: 'stage-error' }])
+  })
+
+  it('labelRepairs is [] on a blind report', () => {
+    const repo: RepositoryState = { ok: false, repoId: REPO, displayName: 'o/a', reason: 'not-ready', problem: { kind: 'directory-missing' } }
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    expect(report.labelRepairs).toEqual([])
+  })
+
+  it('every existing case still passes with endedStages: [] (the default)', () => {
+    const repo = readyRepo([item()])
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true, endedStages: [] })
+    expect(report.labelRepairs).toEqual([])
   })
 })

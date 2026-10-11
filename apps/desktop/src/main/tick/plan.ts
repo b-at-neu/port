@@ -5,7 +5,7 @@ import type { LabelKey } from '../../shared/labels/vocabulary'
 import type { RepoId } from '../../shared/repos'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '../../shared/board/types'
 import type { ReconciledItem, RepositoryState } from '../../shared/state/types'
-import type { TickActionable, TickBlind, TickClaim, TickHeld, TickHeldReason, TickObservation, TickReport } from '../../shared/tick/types'
+import type { EndedStage, TickActionable, TickBlind, TickClaim, TickHeld, TickHeldReason, TickObservation, TickReport } from '../../shared/tick/types'
 import type { ClaimedItem, OccupiedEntry } from '../../../../../scripts/port-tick/contention'
 import { gateCandidates } from '../../../../../scripts/port-tick/contention'
 import type { Disposition } from '../../../../../scripts/port-tick/checks'
@@ -16,6 +16,7 @@ import { observationsOf } from './observe'
 import { partitionOwnership } from '../../../../../scripts/port-tick/classify'
 import { AGENT_FOR_IN_FLIGHT, AGENT_FOR_TRIGGER } from './routing'
 import { autoApprovalsOf } from './auto-plan'
+import { repairsOf } from './repair'
 
 export interface PlanTickParams {
   readonly repository: RepositoryState
@@ -39,10 +40,12 @@ export interface PlanTickParams {
   readonly holdSessionRequired: boolean
   /** App-owned repositories only: this repository's own live and interrupted stage sessions, as `${agent} #${number}` descriptions. `null`/`undefined` (terminal-owned or unowned) is byte-identical to today — `item.status`/`startedTasks` still decide. Non-null ignores `item.status` entirely: a `live` claim is `matched`, an `interrupted` one is `interrupted`, anything else goes straight to the ledger ladder. */
   readonly stageLiveness?: { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null
+  /** This app's own ended stage-session records for this repository, newest per number — `main/tick/repair.ts`'s session-shape evidence. `undefined`/`[]` is byte-identical: no session shape ever fires. */
+  readonly endedStages?: readonly EndedStage[]
 }
 
 function emptyReport(repoId: RepoId, displayName: string, blind: TickBlind): TickReport {
-  return { repoId, displayName, blind, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [], autoApprovals: [] }
+  return { repoId, displayName, blind, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [], autoApprovals: [], labelRepairs: [] }
 }
 
 /** The winning `StageLabel`'s own key — `null` only when `item.stage` is `null`. A local copy
@@ -295,6 +298,7 @@ function claimsOf(
 export function planTick(params: PlanTickParams): TickReport {
   const { repository, ledger, nextDecisionAt, now, reviewCycleCap, unknownStreaks, startedTasks, refreshMemo, checkDispositions, holdSessionRequired } = params
   const stageLiveness = params.stageLiveness ?? null
+  const endedStages = params.endedStages ?? []
 
   if (!repository.ok) {
     const blind: TickBlind = repository.reason === 'not-ready' ? { reason: 'not-ready' } : { reason: 'github-unavailable', message: repository.message }
@@ -318,15 +322,30 @@ export function planTick(params: PlanTickParams): TickReport {
 
   const { actionable, held } = actionableAndHeld(repository.items, repository.viewer, repository.concurrency, reviewCycleCap, repository.repoId, unknownStreaks, holdSessionRequired)
   const claims = claimsOf(repository.items, repository.repoId, ledger, startedTasks, readAt, holdSessionRequired, stageLiveness)
-  const observations: readonly TickObservation[] = observationsOf({
-    repoId: repository.repoId,
+
+  const liveNumbers = new Set(startedTasks.map((description) => Number(description.split('#')[1])).filter((n) => !Number.isNaN(n)))
+  const { observations: repairObservations, reports: labelRepairs } = repairsOf({
     items: repository.items,
-    claims,
-    held,
+    endedStages,
+    liveNumbers,
     viewer: repository.viewer,
-    refreshMemo,
-    checkDispositions,
+    readAt,
   })
+  const repaired = new Set(repairObservations.filter((o) => o.kind === 'liveness-reset').map((o) => o.number))
+
+  const observations: readonly TickObservation[] = [
+    ...repairObservations,
+    ...observationsOf({
+      repoId: repository.repoId,
+      items: repository.items,
+      claims,
+      held,
+      viewer: repository.viewer,
+      refreshMemo,
+      checkDispositions,
+      repaired,
+    }),
+  ]
 
   return {
     repoId: repository.repoId,
@@ -339,5 +358,6 @@ export function planTick(params: PlanTickParams): TickReport {
     nextTickAt: nextDecisionAt.toISOString(),
     observations,
     autoApprovals: autoApprovalsOf(repository.items, repository.viewer),
+    labelRepairs,
   }
 }

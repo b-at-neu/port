@@ -19,10 +19,12 @@ export interface ObservationsOfParams {
   readonly refreshMemo: RefreshMemo
   /** The cockpit's own disposition map, passed directly to `rollupVerdict`. */
   readonly checkDispositions: Readonly<Record<string, Disposition>>
+  /** Numbers `main/tick/repair.ts`'s `stage-error` shape already emitted a `liveness-reset` for this pass — skipped here so one item never gets two writes. `undefined` reads as empty. */
+  readonly repaired?: ReadonlySet<number>
 }
 
 /** At most one role-bearing key outside `REFRESH_PAIR`, or both at once. */
-function isContradictory(item: Pick<ReconciledItem, 'stages'>): boolean {
+export function isContradictory(item: Pick<ReconciledItem, 'stages'>): boolean {
   const roleBearing = item.stages.filter((s) => s.role !== 'marker').map((s) => s.key)
   const nonRefresh = roleBearing.filter((k) => !REFRESH_PAIR.includes(k))
   const bothRefresh = REFRESH_PAIR.every((k) => roleBearing.includes(k))
@@ -37,13 +39,19 @@ function carries(item: ReconciledItem, key: LabelKey): boolean {
   return item.stages.some((s) => s.key === key)
 }
 
-function livenessResetObservations(claims: readonly TickClaim[], itemByNumber: ReadonlyMap<number, ReconciledItem>, viewer: string): readonly TickObservation[] {
+function livenessResetObservations(
+  claims: readonly TickClaim[],
+  itemByNumber: ReadonlyMap<number, ReconciledItem>,
+  viewer: string,
+  repaired: ReadonlySet<number>,
+): readonly TickObservation[] {
   const out: TickObservation[] = []
   for (const claim of claims) {
     if (claim.class !== 'stalled-confirmed' || claim.retryKey === null) continue
+    if (repaired.has(claim.number)) continue
     const item = itemByNumber.get(claim.number)
     if (item === undefined || !eligible(item, viewer)) continue
-    out.push({ kind: 'liveness-reset', number: claim.number, itemKind: claim.kind, inFlight: claim.inFlight, retryKey: claim.retryKey })
+    out.push({ kind: 'liveness-reset', number: claim.number, itemKind: claim.kind, inFlight: claim.inFlight, retryKey: claim.retryKey, evidence: 'ledger' })
   }
   return out
 }
@@ -152,13 +160,13 @@ function clearResolvedRefreshMemos(items: readonly ReconciledItem[], repoId: Rep
 }
 
 export function observationsOf(params: ObservationsOfParams): readonly TickObservation[] {
-  const { repoId, items, claims, held, viewer, refreshMemo, checkDispositions } = params
+  const { repoId, items, claims, held, viewer, refreshMemo, checkDispositions, repaired } = params
   const itemByNumber = new Map(items.map((item) => [item.number, item] as const))
 
   clearResolvedRefreshMemos(items, repoId, refreshMemo)
 
   return [
-    ...livenessResetObservations(claims, itemByNumber, viewer),
+    ...livenessResetObservations(claims, itemByNumber, viewer, repaired ?? new Set()),
     ...escalationObservations(held, itemByNumber, viewer),
     ...refreshObservations(held, items, viewer, repoId, refreshMemo, checkDispositions),
     ...withdrawApprovalObservations(items, viewer, checkDispositions),

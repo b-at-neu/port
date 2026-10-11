@@ -2,9 +2,18 @@
 import type { PipelineItemKind } from '../github/types'
 import type { LabelKey } from '../labels/vocabulary'
 import type { RepoId } from '../repos'
+import type { StageOutcomeKind } from '../hosting/stage'
 
 /** A bare four-way key, never the session index's hyphenated `PortStageAgent` — this one names *what to dispatch next*, matching `models.<key>`, not *what already ran*. */
 export type StageAgent = 'plan' | 'impl' | 'review' | 'revise'
+
+/** One stage session this app's own launcher recorded as ended, projected from `DispatchRecord`s that are not `started` and carry a non-`null` outcome — `main/tick/repair.ts`'s own session-shape evidence, newest per number. */
+export interface EndedStage {
+  readonly agent: StageAgent
+  readonly number: number
+  readonly outcome: StageOutcomeKind
+  readonly at: string
+}
 
 /** Why a trigger-stage item is held rather than actionable — first hit wins: `unowned` before `other-operator` before `session-required` before `contended`. `cycle-cap`/`zero-diff` are checked per-item after that ladder; this app computes the decision and the report, never the write. */
 export type TickHeldReason =
@@ -70,8 +79,8 @@ export type TickBlind =
   | { readonly reason: 'viewer-unknown' }
   | { readonly reason: 'stale-read'; readonly ageMs: number }
 
-/** The machine-observation write families this app ports from the cockpit's cadence, plus one report-only kind (`refresh-deferred`) that authorises no write of its own. `observe.ts`'s `observationsOf` is the only producer. */
-export type TickObservationKind = 'liveness-reset' | 'cycle-cap' | 'zero-diff' | 'refresh' | 'refresh-stuck' | 'refresh-deferred' | 'withdraw-approval'
+/** The machine-observation write families this app ports from the cockpit's cadence, plus one report-only kind (`refresh-deferred`) that authorises no write of its own. `observe.ts`'s `observationsOf` is the only producer, except for `plan-missing`, which `main/tick/repair.ts`'s `repairsOf` produces. */
+export type TickObservationKind = 'liveness-reset' | 'cycle-cap' | 'zero-diff' | 'refresh' | 'refresh-stuck' | 'refresh-deferred' | 'withdraw-approval' | 'plan-missing'
 
 interface TickObservationBase {
   readonly number: number
@@ -79,7 +88,13 @@ interface TickObservationBase {
 }
 
 export type TickObservation =
-  | (TickObservationBase & { readonly kind: 'liveness-reset'; readonly inFlight: LabelKey; readonly retryKey: LabelKey })
+  | (TickObservationBase & {
+      readonly kind: 'liveness-reset'
+      readonly inFlight: LabelKey
+      readonly retryKey: LabelKey
+      /** `'ledger'` is the ordinary stall ladder; `'stage-error'` is `main/tick/repair.ts`'s own session-crash evidence — same write, so the audit log can still tell the two apart. */
+      readonly evidence: 'ledger' | 'stage-error'
+    })
   | (TickObservationBase & { readonly kind: 'cycle-cap'; readonly count: number; readonly cap: number })
   | (TickObservationBase & { readonly kind: 'zero-diff'; readonly count: number; readonly headRefOid: string })
   | (TickObservationBase & { readonly kind: 'refresh'; readonly sourceLabel: LabelKey; readonly headRefOid: string; readonly count: number })
@@ -96,10 +111,22 @@ export type TickObservation =
       readonly red: readonly { readonly name: string | null; readonly conclusion: string | null; readonly url: string | null }[]
       readonly headRefOid: string
     })
+  | (TickObservationBase & { readonly kind: 'plan-missing' })
 
 /** One `autoPlan` issue at `planReview` alone, assigned to the viewer — the app's own auto-plan swap acts on this set while it owns the repository. */
 export interface TickAutoApproval {
   readonly number: number
+}
+
+/** `main/tick/repair.ts`'s own report-only shapes — a human decision is needed, since repairing any of these would be a guess. */
+export type TickLabelRepairShape = 'handback-unlabelled' | 'contradictory' | 'plan-missing-approved' | 'pr-missing'
+
+export interface TickLabelRepair {
+  readonly number: number
+  readonly kind: PipelineItemKind
+  readonly shape: TickLabelRepairShape
+  readonly labels: readonly LabelKey[]
+  readonly agent: StageAgent | null
 }
 
 /** One repository's own tick — `planTick`'s whole result. `disabledStages` is always `[]` on a blind repository. */
@@ -118,4 +145,6 @@ export interface TickReport {
   readonly nextTickAt: string | null
   /** The machine-observation writes the app would make (or has made) this pass, under the `dispatch` claim — always `[]` on a blind report. */
   readonly observations: readonly TickObservation[]
+  /** Every half-labelled ticket `main/tick/repair.ts` could not repair unambiguously this pass — always `[]` on a blind report. */
+  readonly labelRepairs: readonly TickLabelRepair[]
 }
