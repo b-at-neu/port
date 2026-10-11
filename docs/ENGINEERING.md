@@ -30,6 +30,8 @@ This is **this repository's own** standards document, not a template — `plugin
 
 **Anything shipped may only reference other shipped paths.** A reference from a file under `plugins/port/` to a repository-only doc or script — `docs/USAGE.md`, `CONTRIBUTING.md`, `scripts/checks.ts` — dangles in every adopter's plugin cache, which carries only `plugins/port/` (`scripts/checks.ts` → "Shipped references stay inside plugins/port/").
 
+**Inside `apps/desktop/src`, a cross-folder import uses `@/<top-level>/…`, rooted at `src`** — `@/main/…`, `@/preload/…`, `@/renderer/…`, `@/shared/…` — never a per-folder alias and never `@types/` (it collides with npm's `@types/*` scope). A `./` sibling import is fine; a `../` parent import is a `port/no-parent-import` warning today, an error once the whole tree is rewritten; an import that leaves `src` (`scripts/port-tick/*`, `plugins/port/data/labels.json`) stays relative, since no alias covers it. `apps/desktop/scripts/alias-imports.mjs` rewrites a directory's imports for you (`--check` reports without writing).
+
 ### Module boundaries
 
 Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
