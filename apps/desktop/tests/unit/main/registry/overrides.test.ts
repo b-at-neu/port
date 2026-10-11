@@ -1,8 +1,8 @@
 // Runs `parseOverrides`/`applyOverrides` over the tick engine's own shared case table — a direct import, no local copy.
 import { describe, expect, it } from 'vitest'
-import { applyOverrides, parseOverrides } from '../../../../../scripts/port-tick/overrides'
-import type { EffectiveConfigShape, OverrideEntry } from '../../../../../scripts/port-tick/overrides'
-import cases from '../../../../../scripts/port-tick/cases/overrides.cases.json'
+import { applyOverrides, parseOverrides } from '../../../../../../scripts/port-tick/overrides'
+import type { EffectiveConfigShape, OverrideEntry } from '../../../../../../scripts/port-tick/overrides'
+import cases from '../../../../../../scripts/port-tick/cases/overrides.cases.json'
 
 interface ParseCase {
   readonly function: 'parseOverrides'
