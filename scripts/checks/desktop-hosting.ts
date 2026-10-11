@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, readJson, walk, relOf } from '#lib/files.ts';
+import { root, readJson, walk, relOf, unitTestPath } from '#lib/files.ts';
 import type { Reporter } from '#lib/report.ts';
 import { globToRegExp as hookGlobToRegExp } from '#plugins/port/hooks/lib/guard-rules.mjs';
 
@@ -158,14 +158,14 @@ export default async function ({ expect, fail, ok }: Reporter) {
   // --- live.test.ts references PORT_LIVE_SDK and a skip guard — the acceptance run must
   // stay opt-in, or it spawns a real `claude` child in every default test run. ---
   {
-    const liveFile = allFiles.find((f) => relOf(f) === `${hostingDir}/live.test.ts`);
-    if (!liveFile) {
-      fail('desktop-hosting', `${hostingDir}/live.test.ts does not exist`);
+    const rel = unitTestPath('main/hosting/live.test.ts');
+    if (!rel) {
+      fail('desktop-hosting', 'main/hosting/live.test.ts exists under neither apps/desktop/src/ nor apps/desktop/tests/unit/');
     } else {
-      const text = readFileSync(liveFile, 'utf8');
+      const text = readFileSync(join(root, rel), 'utf8');
       if (!text.includes('PORT_LIVE_SDK')) {
-        fail('desktop-hosting', `${hostingDir}/live.test.ts does not reference PORT_LIVE_SDK`);
-      } else expect(/skipIf/.test(text), 'desktop-hosting', `${hostingDir}/live.test.ts has no 'skipIf' guard — it must stay opt-in`);
+        fail('desktop-hosting', `${rel} does not reference PORT_LIVE_SDK`);
+      } else expect(/skipIf/.test(text), 'desktop-hosting', `${rel} has no 'skipIf' guard — it must stay opt-in`);
     }
   }
 
