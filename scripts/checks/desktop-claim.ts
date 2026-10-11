@@ -9,7 +9,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
   const githubDir = 'apps/desktop/src/main/github';
   const queryFile = `${githubDir}/query.ts`;
   const adapterFile = `${githubDir}/adapter.ts`;
-  const classifyFile = 'apps/desktop/src/shared/claim/classify.ts';
+  const classifyFile = 'apps/desktop/src/main/claim/classify.ts';
   const skillFile = 'plugins/port/skills/pipeline/SKILL.md';
 
   const srcDir = join(root, 'apps/desktop/src');
@@ -85,7 +85,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(/absent:\s*\['marker'\]/.test(text), 'desktop-claim', `${classifyFile} does not set 'absent: ['marker']' — the two-stage-label guard must not be quietly dropped`);
   }
 
-  // pin: `shared/claim/classify.ts`'s opt-in key set (`CLAIM_LABEL_KEYS` + `AUTO_PLAN_KEY`) ↔ `plugins/port/skills/pipeline/SKILL.md`'s "work on #N" paragraph's `<labels.X>` keys, both directions
+  // pin: `main/claim/classify.ts`'s opt-in key set (`CLAIM_LABEL_KEYS` + `AUTO_PLAN_KEY`) ↔ `plugins/port/skills/pipeline/SKILL.md`'s "work on #N" paragraph's `<labels.X>` keys, both directions
   {
     const text = readFileSync(join(root, classifyFile), 'utf8');
     const claimKeysMatch = /CLAIM_LABEL_KEYS[^=]*=\s*\[([^\]]*)\]/.exec(text);

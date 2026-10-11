@@ -10,22 +10,22 @@ export default async function ({ expect, fail, ok }: Reporter) {
   const runtimeDir = 'apps/desktop/src/main/runtime';
   const allFiles = walk(srcDir).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
 
-  const typesFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/shared/runtime/types.ts');
-  const copyFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/shared/runtime/copy.ts');
+  const typesFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/types/runtime.ts');
+  const copyFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/renderer/runtime/copy.ts');
 
-  // pin: `shared/runtime/types.ts`'s `RuntimeDiagnosis` ↔ `shared/runtime/copy.ts`'s `RUNTIME_COPY`, both directions
+  // pin: `types/runtime.ts`'s `RuntimeDiagnosis` ↔ `renderer/runtime/copy.ts`'s `RUNTIME_COPY`, both directions
   {
     if (!typesFile || !copyFile) {
-      fail('desktop-runtime', 'shared/runtime/types.ts or shared/runtime/copy.ts does not exist');
+      fail('desktop-runtime', 'types/runtime.ts or renderer/runtime/copy.ts does not exist');
     } else {
       const typesText = readFileSync(typesFile, 'utf8');
       const copyText = readFileSync(copyFile, 'utf8');
       const unionMatch = /export type RuntimeDiagnosis\s*=\s*([^\n]+)/.exec(typesText);
       const copyMatch = /export const RUNTIME_COPY:[^=]*=\s*\{([\s\S]*?)\n\}/.exec(copyText);
       if (!unionMatch) {
-        fail('desktop-runtime', 'shared/runtime/types.ts has no `export type RuntimeDiagnosis = ...` declaration');
+        fail('desktop-runtime', 'types/runtime.ts has no `export type RuntimeDiagnosis = ...` declaration');
       } else if (!copyMatch) {
-        fail('desktop-runtime', 'shared/runtime/copy.ts has no `export const RUNTIME_COPY = { ... }` declaration');
+        fail('desktop-runtime', 'renderer/runtime/copy.ts has no `export const RUNTIME_COPY = { ... }` declaration');
       } else {
         const members = new Set([...unionMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]));
         const keys = new Set([...copyMatch[1].matchAll(/^\s{2}(?:'([^']+)'|([a-zA-Z]+)):\s*\{/gm)].map((m) => m[1] ?? m[2]));

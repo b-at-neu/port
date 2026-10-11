@@ -1,5 +1,5 @@
 // Every string the Backlog screen renders for a failure or an edge case — pure, one function per concern.
-import type { PipelineFailureKind } from '@/shared/github/types'
+import type { PipelineFailureKind } from '@/types/github'
 
 // The plan's own UX-states table, verbatim.
 export function backlogFailureCopy(repo: string, kind: PipelineFailureKind, message: string): string {

@@ -2,11 +2,11 @@
 // from the write becomes `outcome: 'failed'`, never a pass that stops partway through.
 import type { ReadyEntry } from '@/main/actions/apply'
 import type { ApplyObservationParams, ApplyObservationResult } from '@/main/actions/observe'
-import type { ObservationRecord } from '@/shared/dispatch/types'
+import type { ObservationRecord } from '@/types/dispatch'
 import type { RefreshMemo } from '@/main/tick/ledger'
-import type { RepositoryState } from '@/shared/state/types'
-import type { TickObservation } from '@/shared/tick/types'
-import type { WriteOutcome } from '@/shared/writes/types'
+import type { RepositoryState } from '@/types/state'
+import type { TickObservation } from '@/types/tick'
+import type { WriteOutcome } from '@/types/writes'
 import type { WriteObservation } from '@/main/dispatch/observation'
 
 const OBSERVED_LIMIT = 20

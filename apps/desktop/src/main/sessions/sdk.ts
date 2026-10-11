@@ -1,6 +1,6 @@
 // The only file under apps/desktop/src/ that may reference `@anthropic-ai/claude-agent-sdk` — pinned mechanically by the `desktop-sessions` layer 1 check.
 import type { SDKSessionInfo } from '@anthropic-ai/claude-agent-sdk'
-import type { SessionFailureKind } from '@/shared/sessions/types'
+import type { SessionFailureKind } from '@/types/sessions'
 
 /** Mapped from the SDK's `SDKSessionInfo` — optional fields carried as `null`, and `lastModified` normalized to an ISO string here. */
 export interface RawSession {

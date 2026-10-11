@@ -1,6 +1,6 @@
 // Every string the decision dialog renders — one function per union, pure.
-import { LABEL_DEFAULTS } from '@/shared/labels/defaults'
-import type { ItemDecisionResult, OperatorDecision, ReviseContext, UnblockContext, UnblockRoute } from '@/shared/actions/types'
+import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
+import type { ItemDecisionResult, OperatorDecision, ReviseContext, UnblockContext, UnblockRoute } from '@/types/actions'
 
 function labelNameOf(key: string): string {
   return LABEL_DEFAULTS.find((def) => def.key === key)?.name ?? key

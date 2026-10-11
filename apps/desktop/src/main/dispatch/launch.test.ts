@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { boundRecords, freeSlots, liveCount, refreshRecords } from '@/main/dispatch/launch'
 import type { StageRecord } from '@/main/dispatch/launch'
-import type { HostedSessionSnapshot, SessionKey } from '@/shared/hosting/types'
-import type { SessionControls, SessionModels } from '@/shared/hosting/controls'
-import type { RepoId } from '@/shared/repos'
+import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
+import type { SessionControls, SessionModels } from '@/utils/hosting/controls'
+import type { RepoId } from '@/utils/repos'
 
 const TEST_CONTROLS: SessionControls = { permissionMode: 'default', model: null, effort: null }
 const TEST_MODELS: SessionModels = { kind: 'pending' }

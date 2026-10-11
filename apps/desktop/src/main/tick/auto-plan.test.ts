@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '@/shared/repos'
-import type { ReconciledItem } from '@/shared/state/types'
+import type { RepoId } from '@/utils/repos'
+import type { ReconciledItem } from '@/types/state'
 import { autoApprovalsOf } from '@/main/tick/auto-plan'
 
 const REPO = 'repo-a' as RepoId

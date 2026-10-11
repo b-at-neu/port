@@ -5,7 +5,7 @@ import { Textarea } from '@/renderer/components/ui/textarea'
 import { Button } from '@/renderer/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/renderer/components/ui/collapsible'
 import { invoke } from '@/renderer/data/invoke'
-import type { AgentSummary, CommandSummary, HostedSessionSnapshot, SessionKey } from '@/shared/hosting/types'
+import type { AgentSummary, CommandSummary, HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import { argumentRequired, bannerCopy, chipCopy, INVOKE_REJECTED, invokeFailureCopy } from '@/renderer/session/commands-copy'
 import { AGENTS_DISCLOSURE_NOTE } from '@/renderer/session/composer-copy'
 

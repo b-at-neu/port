@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { dropAdopted, mintRestorable, nextPersisted, persistedOpen } from '@/main/hosting/restore'
-import type { HostedSessionSnapshot, SessionKey } from '@/shared/hosting/types'
-import type { SessionControls, SessionModels } from '@/shared/hosting/controls'
-import type { RepoId } from '@/shared/repos'
-import type { SessionWorkspace } from '@/shared/workspace/types'
+import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
+import type { SessionControls, SessionModels } from '@/utils/hosting/controls'
+import type { RepoId } from '@/utils/repos'
+import type { SessionWorkspace } from '@/types/workspace'
 
 const REPO_ID = 'repo-1' as RepoId
 const WORKSPACE: SessionWorkspace = { folder: '/repo', root: '/repo', worktree: null, base: null }

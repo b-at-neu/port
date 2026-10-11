@@ -1,6 +1,6 @@
 // A pure background-task tracker — `observe` narrows level messages with REPLACE semantics, `current()` sorts by first-seen.
-import { isRecord } from '@/shared/guards'
-import type { BackgroundTask } from '@/shared/hosting/types'
+import { isRecord } from '@/main/guards'
+import type { BackgroundTask } from '@/types/hosting'
 import { TOOL_USE_ID_FIELD } from '@/main/sessions/transcript-entries'
 
 export interface TaskTracker {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { ReconciledItem } from '@/shared/state/types'
-import type { EndedStage } from '@/shared/tick/types'
+import type { ReconciledItem } from '@/types/state'
+import type { EndedStage } from '@/types/tick'
 import { repairsOf } from '@/main/tick/repair'
 
 const VIEWER = 'op'

@@ -4,8 +4,8 @@ import { createHostedStore } from '@/main/hosting/store'
 import type { HostedStoreDeps } from '@/main/hosting/store'
 import { createInMemoryHostingPersistence } from '@/main/hosting/persist'
 import type { HostedQuery } from '@/main/hosting/handle'
-import type { RepoId } from '@/shared/repos'
-import type { SessionWorkspace } from '@/shared/workspace/types'
+import type { RepoId } from '@/utils/repos'
+import type { SessionWorkspace } from '@/types/workspace'
 
 const REPO_ID = 'repo-1' as RepoId
 const PLAIN_WORKSPACE: SessionWorkspace = { folder: '/repo', root: '/repo', worktree: null, base: null }

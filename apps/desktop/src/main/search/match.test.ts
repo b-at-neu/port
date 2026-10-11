@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { TranscriptEntry } from '@/shared/sessions/transcript'
+import type { TranscriptEntry } from '@/utils/sessions/transcript'
 import { hitsFor, searchableFields } from '@/main/search/match'
 import { parseQuery } from '@/main/search/terms'
 

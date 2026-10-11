@@ -1,6 +1,6 @@
 // Narrows assistant/result messages structurally, the same rule as rate-limit.ts. Cumulative
 // for this claude process: a resumed session's totals mean "since port opened it."
-import type { SessionUsage } from '@/shared/hosting/usage'
+import type { SessionUsage } from '@/utils/hosting/usage'
 
 function numberOrNull(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null

@@ -1,7 +1,7 @@
 // `stage:allow`, `stage:dismiss-denial`, `stage:resume`, `stage:restart` — the renderer's own
 // seam into `main/stage/`'s allow/resume/restart compositions. Nothing else may call these.
-import type { IpcMap } from '@/shared/ipc'
-import type { StageAllowResult, StageDenial, StageResumeResult, StageRestartResult } from '@/shared/stage/types'
+import type { IpcMap } from '@/types/ipc'
+import type { StageAllowResult, StageDenial, StageResumeResult, StageRestartResult } from '@/types/stage'
 import type { RegistryDeps } from '@/main/registry'
 import { listRepositories, requireReadyRepo } from '@/main/registry'
 import { allowRule } from '@/main/stage/allowlist'
@@ -12,10 +12,10 @@ import type { Dispatcher } from '@/main/dispatch/dispatcher'
 import type { HostedStore } from '@/main/hosting/store'
 import type { RemoveSessionWorktreeOutcome } from '@/main/workspace/worktree'
 import type { ApplyItemActionParams } from '@/main/actions/apply'
-import type { ItemActionResult } from '@/shared/actions/types'
-import type { BoardSnapshot } from '@/shared/board/types'
+import type { ItemActionResult } from '@/types/actions'
+import type { BoardSnapshot } from '@/types/board'
 import type { FileResult } from '@/main/platform/files'
-import type { RepoId } from '@/shared/repos'
+import type { RepoId } from '@/utils/repos'
 
 export interface StageChannelDeps {
   readonly listRepositories: typeof listRepositories

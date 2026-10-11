@@ -2,8 +2,8 @@
 // (#319) — both now exported directly for `pipeline-status.tsx` to consume,
 // in place of the deleted `buildOwnerLine`'s own DOM.
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '@/shared/repos'
-import type { ObservationRecord, RepoDispatchStatus } from '@/shared/dispatch/types'
+import type { RepoId } from '@/utils/repos'
+import type { ObservationRecord, RepoDispatchStatus } from '@/types/dispatch'
 import { budgetNoteLines, controlFor, noteCopy, observationClause, observationTitle, ownerLineCopy, runStateSuffix } from '@/renderer/board/owner'
 
 const WRITE_FAILED = { kind: 'write-failed' as const, classification: 'unknown' as const, stderr: 'boom', reread: null }

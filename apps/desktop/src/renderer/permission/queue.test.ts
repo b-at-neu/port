@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { applySnapshot, EMPTY_QUEUE, interactionCount, ordered, seed } from '@/renderer/permission/queue'
-import type { HostedSessionSnapshot, PendingPermission, SessionKey } from '@/shared/hosting/types'
-import type { SessionControls, SessionModels } from '@/shared/hosting/controls'
-import type { RepoId } from '@/shared/repos'
+import type { HostedSessionSnapshot, PendingPermission, SessionKey } from '@/types/hosting'
+import type { SessionControls, SessionModels } from '@/utils/hosting/controls'
+import type { RepoId } from '@/utils/repos'
 
 const REPO_A = 'repo-a' as RepoId
 const REPO_B = 'repo-b' as RepoId

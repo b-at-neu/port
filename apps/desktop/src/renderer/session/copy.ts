@@ -5,10 +5,10 @@
 // entry here is a compile error, never a silently blank pill. `Record`
 // exhaustiveness is the #99 hand-off named in the plan — adding an
 // awaiting-permission phase later fails typecheck until its own copy exists
-// here. End diagnoses reuse `RUNTIME_COPY` from `shared/runtime/copy.ts`,
+// here. End diagnoses reuse `RUNTIME_COPY` from `renderer/runtime/copy.ts`,
 // never new wording of their own.
-import type { HostedSessionSnapshot, SessionEnd, SessionEndReason, SessionPhase, SessionStartResult } from '@/shared/hosting/types'
-import { RUNTIME_COPY } from '@/shared/runtime/copy'
+import type { HostedSessionSnapshot, SessionEnd, SessionEndReason, SessionPhase, SessionStartResult } from '@/types/hosting'
+import { RUNTIME_COPY } from '@/renderer/runtime/copy'
 
 export type StopState = 'enabled' | 'disabled' | 'stopping' | 'hidden'
 export type CloseState = 'enabled' | 'confirm' | 'closing' | 'hidden'

@@ -1,6 +1,6 @@
 // Pure per-tool detail derivation — never throws, every string sanitized and capped by the caller.
-import type { ToolDetail } from '@/shared/sessions/transcript'
-import { isRecord } from '@/shared/guards'
+import type { ToolDetail } from '@/utils/sessions/transcript'
+import { isRecord } from '@/main/guards'
 
 const TODO_STATUSES = new Set(['pending', 'in_progress', 'completed'])
 

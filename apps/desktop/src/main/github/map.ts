@@ -1,7 +1,7 @@
 // Nodes → PipelineItem, merging by kind + number and unioning matchedKeys. Never reconstruct a
 // label key by comparing strings — matchedKeys comes from the alias table query.ts built.
-import type { LabelKey } from '@/shared/labels/vocabulary'
-import type { CheckContext, ItemState, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, QueriedLabel, ReviewNode } from '@/shared/github/types'
+import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { CheckContext, ItemState, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, QueriedLabel, ReviewNode } from '@/types/github'
 
 interface ConnectionLike {
   readonly totalCount?: unknown

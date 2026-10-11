@@ -9,7 +9,7 @@ export const DESKTOP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..
 export const SRC_ROOT = join(DESKTOP_ROOT, 'src')
 
 /** Top-level src/ folders — a @/x specifier starting with one of these is left alone by --retarget-renderer. */
-export const TOP_LEVEL_AREAS = new Set(['main', 'preload', 'renderer', 'shared', 'testing', 'types', 'utils'])
+export const TOP_LEVEL_AREAS = new Set(['main', 'preload', 'renderer', 'testing', 'types', 'utils'])
 
 const EXTENSIONS = ['.ts', '.tsx', '.mts']
 
@@ -52,6 +52,11 @@ export function retargetRendererSpecifier(spec) {
   return `@/renderer/${rest}`
 }
 
+/** Returns `moves[spec]` on an exact match, or `spec` unchanged otherwise. */
+export function remapSpecifier(spec, moves) {
+  return Object.hasOwn(moves, spec) ? moves[spec] : spec
+}
+
 function applyPattern(content, pattern, specIndex, quoteIndex, rewrite, counter) {
   return content.replace(pattern, (whole, ...rest) => {
     const groups = rest.slice(0, -2) // drop offset and full string, keep only the capture groups
@@ -82,9 +87,9 @@ function rewriteFileContent(content, rewrite) {
 
 /** Rewrites one file in place (or just reports, when `write` is false).
  *  Returns the number of specifiers changed. */
-function processFile(file, { retargetRenderer, write }) {
+function processFile(file, { retargetRenderer, moves, write }) {
   const original = readFileSync(file, 'utf8')
-  const rewrite = retargetRenderer ? (spec) => retargetRendererSpecifier(spec) : (spec) => rewriteSpecifier(file, spec, SRC_ROOT)
+  const rewrite = moves ? (spec) => remapSpecifier(spec, moves) : retargetRenderer ? (spec) => retargetRendererSpecifier(spec) : (spec) => rewriteSpecifier(file, spec, SRC_ROOT)
   const { content, count } = rewriteFileContent(original, rewrite)
   if (count > 0 && write) writeFileSync(file, content)
   return count
@@ -93,23 +98,26 @@ function processFile(file, { retargetRenderer, write }) {
 function parseArgs(argv) {
   const check = argv.includes('--check')
   const retargetRenderer = argv.includes('--retarget-renderer')
-  const dirs = argv.filter((a) => a !== '--check' && a !== '--retarget-renderer')
-  return { check, retargetRenderer, dirs }
+  const remapIndex = argv.indexOf('--remap')
+  const remapFile = remapIndex === -1 ? null : argv[remapIndex + 1]
+  const dirs = argv.filter((a, i) => a !== '--check' && a !== '--retarget-renderer' && a !== '--remap' && i !== remapIndex + 1)
+  return { check, retargetRenderer, remapFile, dirs }
 }
 
 function main() {
-  const { check, retargetRenderer, dirs } = parseArgs(process.argv.slice(2))
+  const { check, retargetRenderer, remapFile, dirs } = parseArgs(process.argv.slice(2))
   if (dirs.length === 0) {
-    console.error('usage: node scripts/alias-imports.mjs [--check] [--retarget-renderer] <dir>...')
+    console.error('usage: node scripts/alias-imports.mjs [--check] [--retarget-renderer] [--remap <file.json>] <dir>...')
     process.exit(2)
   }
+  const moves = remapFile ? JSON.parse(readFileSync(resolve(DESKTOP_ROOT, remapFile), 'utf8')) : null
 
   const changed = []
   let total = 0
   for (const dir of dirs) {
     const absDir = resolve(DESKTOP_ROOT, dir)
     for (const file of walkSourceFiles(absDir)) {
-      const count = processFile(file, { retargetRenderer, write: !check })
+      const count = processFile(file, { retargetRenderer, moves, write: !check })
       if (count > 0) {
         changed.push(`${toPosix(relative(DESKTOP_ROOT, file))} (${String(count)})`)
         total += count

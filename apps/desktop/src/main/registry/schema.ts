@@ -1,7 +1,7 @@
 // The registry's single point of contact with the config contract — never a hand-transcribed default or a second validator.
 import Ajv2020 from 'ajv/dist/2020'
 import schema from '../../../../../schema/port.config.schema.json'
-import type { SchemaViolation } from '@/shared/repos'
+import type { SchemaViolation } from '@/utils/repos'
 
 const ajv = new Ajv2020({ allErrors: true })
 const validate = ajv.compile(schema)

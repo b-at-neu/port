@@ -1,7 +1,7 @@
 // Pure GraphQL document builders — no network, no config read, no gh. One alias per (label ×
 // surface); GraphQL `search` is never used since it is index-backed with ingestion lag.
-import type { LabelVocabulary, ResolvedLabel } from '@/shared/labels/vocabulary'
-import type { ItemRef, PipelineItemKind, QueriedLabel } from '@/shared/github/types'
+import type { LabelVocabulary, ResolvedLabel } from '@/utils/labels/vocabulary'
+import type { ItemRef, PipelineItemKind, QueriedLabel } from '@/types/github'
 
 const PAGE_SIZE = 100
 const REPO_LABEL_PAGE_SIZE = 100

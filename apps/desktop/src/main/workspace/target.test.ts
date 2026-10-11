@@ -3,8 +3,8 @@ import { resolveStartTarget } from '@/main/workspace/target'
 import type { ResolveStartTargetDeps } from '@/main/workspace/target'
 import { toFolderId } from '@/main/workspace/resolve'
 import { pathOps } from '@/main/platform/paths'
-import type { RepositoryEntry } from '@/shared/repos'
-import type { RepoId } from '@/shared/repos'
+import type { RepositoryEntry } from '@/utils/repos'
+import type { RepoId } from '@/utils/repos'
 
 const REPO_PATH = '/home/you/src/widgets'
 const REPO_ID = 'repo-1' as RepoId

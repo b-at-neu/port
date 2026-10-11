@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildRow, defaultOpen, diffSummary, groupEntries, hunkHeader, toolSummary } from '@/renderer/components/conversation-model'
 import type { RowView } from '@/renderer/components/conversation-model'
-import type { TranscriptEntry } from '@/shared/sessions/transcript'
+import type { TranscriptEntry } from '@/utils/sessions/transcript'
 
 const PAYLOAD = { text: 'hello', omittedChars: 0 } as const
 

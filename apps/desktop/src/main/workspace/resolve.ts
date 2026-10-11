@@ -5,8 +5,8 @@ import type { GitRunner } from '@/main/platform/git'
 import { resolveGitBaseRoot } from '@/main/platform/git'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
 import type { PathOps } from '@/main/platform/paths'
-import type { RepoId, RepositoryEntry } from '@/shared/repos'
-import type { FolderEntry, FolderId, SessionWorkspace } from '@/shared/workspace/types'
+import type { RepoId, RepositoryEntry } from '@/utils/repos'
+import type { FolderEntry, FolderId, SessionWorkspace } from '@/types/workspace'
 import { isReadyEntry } from '@/main/registry'
 
 function toFolderId(pathKey: string): FolderId {

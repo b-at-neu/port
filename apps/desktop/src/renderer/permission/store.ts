@@ -1,7 +1,7 @@
 // The permission dialog's queue, arming, drafts and sending state.
 // `createPermissionStore` is the injectable, directly-testable factory.
 import { useSyncExternalStore } from 'react'
-import type { HostedSessionSnapshot, PermissionDecision, SessionPermissionAnswerResult } from '@/shared/hosting/types'
+import type { HostedSessionSnapshot, PermissionDecision, SessionPermissionAnswerResult } from '@/types/hosting'
 import { applySnapshot, EMPTY_QUEUE, interactionCount, ordered, seed } from '@/renderer/permission/queue'
 import type { PermissionQueue, QueuedPermission } from '@/renderer/permission/queue'
 import { IPC_FAILURE_MESSAGE } from '@/renderer/permission/copy'

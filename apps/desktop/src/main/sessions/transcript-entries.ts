@@ -1,7 +1,7 @@
 // A `tool_use` block and the `tool_result` that later carries its id collapse into one entry; an unpaired call keeps `result: null` rather than being dropped.
-import type { DiffHunk, DiffLine, DiffSign, EntryPatch, FileDiff, MetaEntry, Payload, ToolCallEntry, TranscriptEntry } from '@/shared/sessions/transcript'
-import { MAX_PAYLOAD_CHARS } from '@/shared/sessions/transcript'
-import { isRecord } from '@/shared/guards'
+import type { DiffHunk, DiffLine, DiffSign, EntryPatch, FileDiff, MetaEntry, Payload, ToolCallEntry, TranscriptEntry } from '@/utils/sessions/transcript'
+import { MAX_PAYLOAD_CHARS } from '@/utils/sessions/transcript'
+import { isRecord } from '@/main/guards'
 import { toolDetailFor } from '@/main/sessions/tool-detail'
 
 /** The raw SDK field name for a tool call's id — exported so `hosting/tasks.ts`'s unrelated `task_started` read shares one literal rather than a second occurrence of the word. */

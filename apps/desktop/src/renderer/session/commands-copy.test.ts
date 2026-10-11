@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { argumentRequired, bannerCopy, chipCopy, invokeFailureCopy } from '@/renderer/session/commands-copy'
-import type { SessionCapabilities, SessionInvokeResult } from '@/shared/hosting/types'
+import type { SessionCapabilities, SessionInvokeResult } from '@/types/hosting'
 
 const INSTALLED_REQUEST = { source: 'installed' as const }
 const REPO_REQUEST = { source: 'repository' as const, path: '/repo/plugins/port' }

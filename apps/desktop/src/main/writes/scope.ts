@@ -1,5 +1,5 @@
 // Pure precondition evaluation — no `gh`, no filesystem, no `git`.
-import type { AssigneeExpectation, ObservedItem } from '@/shared/writes/types'
+import type { AssigneeExpectation, ObservedItem } from '@/types/writes'
 
 export type PreconditionVerdict = { readonly satisfied: true } | { readonly satisfied: false; readonly expected: readonly string[]; readonly observed: readonly string[] }
 

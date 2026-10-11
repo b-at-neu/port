@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { createStageRegistry } from '@/main/stage/registry'
 import type { FileResult } from '@/main/platform/files'
-import type { InterruptedStage } from '@/shared/stage/types'
-import type { RepoId } from '@/shared/repos'
+import type { InterruptedStage } from '@/types/stage'
+import type { RepoId } from '@/utils/repos'
 
 function fakeDeps(initial: { readonly ok: true; readonly value: unknown } | { readonly ok: false }) {
   const writes: unknown[] = []

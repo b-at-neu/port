@@ -1,7 +1,7 @@
 // #103: pure decision logic for the session rail — row ordering, row status,
 // capacity, the usage notice, and the fallback selection after a dismiss.
 // No DOM here; `rail.ts` renders from these.
-import type { HostedSessionSnapshot, SessionKey, SessionRateLimit } from '@/shared/hosting/types'
+import type { HostedSessionSnapshot, SessionKey, SessionRateLimit } from '@/types/hosting'
 import { END_COPY } from '@/renderer/session/copy'
 
 export interface RailRowStatus {
@@ -19,7 +19,7 @@ const STATUS_BY_OPEN_PHASE: Readonly<Record<Exclude<HostedSessionSnapshot['phase
 
 /** `pendingPermissions.length > 0` overrides every open phase with `Needs
  *  you` — a prompt arriving mid-turn is not a new phase of its own
- *  (`shared/hosting/types.ts`'s own note on `HostedSessionSnapshot`). An
+ *  (`types/hosting.ts`'s own note on `HostedSessionSnapshot`). An
  *  `ended` session always uses `END_COPY`'s title, regardless of pending
  *  permissions (an ended session reports none — `handle.ts`'s
  *  `broker.cancelAll()`). */

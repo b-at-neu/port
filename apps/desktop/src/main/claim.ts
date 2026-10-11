@@ -1,14 +1,14 @@
 // No `gh` import here — the read comes from `./github`, the write from `./actions`.
-import { classifyPreflight, buildClaimRequest } from '@/shared/claim/classify'
-import type { ClaimApplyResponse, ClaimPreflight, ClaimPreflightResponse, PlanGateChoice } from '@/shared/claim/types'
-import type { ClaimPreflightFetch } from '@/shared/github/types'
-import type { RepoId } from '@/shared/repos'
+import { classifyPreflight, buildClaimRequest } from '@/main/claim/classify'
+import type { ClaimApplyResponse, ClaimPreflight, ClaimPreflightResponse, PlanGateChoice } from '@/types/claim'
+import type { ClaimPreflightFetch } from '@/types/github'
+import type { RepoId } from '@/utils/repos'
 import { fetchClaimPreflight } from '@/main/github/adapter'
 import { listRepositories, requireReadyRepo } from '@/main/registry'
 import type { RegistryDeps } from '@/main/registry'
 import { applyClaimLabels } from '@/main/actions/claim'
 import type { ApplyLabelsParams } from '@/main/writes/apply'
-import type { WriteOutcome } from '@/shared/writes/types'
+import type { WriteOutcome } from '@/types/writes'
 
 export interface ClaimDeps {
   readonly listRepositories: typeof listRepositories

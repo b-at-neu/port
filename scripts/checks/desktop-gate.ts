@@ -6,13 +6,13 @@ import type { Reporter } from '#lib/report.ts';
 // The plan gate's own eight mechanical rails — dependency-free, regex-based, reading
 // directories by explicit path, never walk('apps/').
 export default async function ({ expect, fail, ok }: Reporter) {
-  const sharedGateDir = 'apps/desktop/src/shared/gate';
-  const sharedMarkdownDir = 'apps/desktop/src/shared/markdown';
+  const mainGateDir = 'apps/desktop/src/main/gate';
+  const rendererMarkdownDir = 'apps/desktop/src/renderer/markdown';
   const mainActionsDir = 'apps/desktop/src/main/actions';
   const rendererGateDir = 'apps/desktop/src/renderer/gate';
-  const classifyFile = `${sharedGateDir}/classify.ts`;
-  const typesFile = `${sharedGateDir}/types.ts`;
-  const inlineFile = `${sharedMarkdownDir}/inline.ts`;
+  const classifyFile = `${mainGateDir}/classify.ts`;
+  const typesFile = 'apps/desktop/src/types/gate.ts';
+  const inlineFile = `${rendererMarkdownDir}/inline.ts`;
   const gateActionFile = `${mainActionsDir}/gate.ts`;
   const decideActionFile = `${mainActionsDir}/decide.ts`;
   const escalateActionFile = `${mainActionsDir}/escalate.ts`;
@@ -25,15 +25,15 @@ export default async function ({ expect, fail, ok }: Reporter) {
   const srcDir = join(root, 'apps/desktop/src');
   const allFiles = walk(srcDir).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
   const rendererFiles = allFiles.filter((f) => relOf(f).startsWith('apps/desktop/src/renderer/'));
-  const sharedGateFiles = allFiles.filter((f) => relOf(f).startsWith(`${sharedGateDir}/`));
-  const sharedMarkdownFiles = allFiles.filter((f) => relOf(f).startsWith(`${sharedMarkdownDir}/`) && !relOf(f).endsWith('.test.ts'));
+  const mainGateFiles = allFiles.filter((f) => relOf(f).startsWith(`${mainGateDir}/`));
+  const rendererMarkdownFiles = allFiles.filter((f) => relOf(f).startsWith(`${rendererMarkdownDir}/`) && !relOf(f).endsWith('.test.ts'));
 
-  if (sharedGateFiles.filter((f) => !relOf(f).endsWith('.test.ts')).length === 0) {
-    fail('desktop-gate', `${sharedGateDir} has no source files — the guard cannot pass vacuously if the directory is deleted`);
+  if (mainGateFiles.filter((f) => !relOf(f).endsWith('.test.ts')).length === 0) {
+    fail('desktop-gate', `${mainGateDir} has no source files — the guard cannot pass vacuously if the directory is deleted`);
     return;
   }
-  if (sharedMarkdownFiles.length === 0) {
-    fail('desktop-gate', `${sharedMarkdownDir} has no source files — the guard cannot pass vacuously if the directory is deleted`);
+  if (rendererMarkdownFiles.length === 0) {
+    fail('desktop-gate', `${rendererMarkdownDir} has no source files — the guard cannot pass vacuously if the directory is deleted`);
     return;
   }
 
@@ -96,15 +96,15 @@ export default async function ({ expect, fail, ok }: Reporter) {
     else if (!found) ok();
   }
 
-  // --- shared/markdown/ imports no node: builtin and nothing from main/; renderer/
+  // --- renderer/markdown/ imports no node: builtin and nothing from main/; renderer/
   // components/markdown.tsx is the only renderer file importing it, the one DOM-building consumer. ---
   {
     let impure = false;
-    for (const f of sharedMarkdownFiles) {
+    for (const f of rendererMarkdownFiles) {
       const text = readFileSync(f, 'utf8');
       if (/from\s+'node:/.test(text) || /from\s+'.*\/main\//.test(text) || /from\s+'\.\.\/\.\.\/main\//.test(text)) {
         impure = true;
-        fail('desktop-gate', `${relOf(f)} imports a node: builtin or a main/ path — shared/markdown/ must compile under typecheck:web`);
+        fail('desktop-gate', `${relOf(f)} imports a node: builtin or a main/ path — renderer/markdown/ must compile under typecheck:web`);
       }
     }
     let found = false;
@@ -112,15 +112,16 @@ export default async function ({ expect, fail, ok }: Reporter) {
     for (const f of rendererFiles) {
       const rel = relOf(f);
       if (rel.endsWith('.test.ts')) continue;
+      if (rel.startsWith(`${rendererMarkdownDir}/`)) continue;
       const text = readFileSync(f, 'utf8');
-      if (!text.includes('shared/markdown')) continue;
+      if (!text.includes('@/renderer/markdown')) continue;
       if (rel === markdownFile) sawMarkdownFile = true;
       else {
         found = true;
-        fail('desktop-gate', `${rel} imports shared/markdown/ — only ${markdownFile} may, under renderer/`);
+        fail('desktop-gate', `${rel} imports renderer/markdown/ — only ${markdownFile} may, under renderer/`);
       }
     }
-    if (!sawMarkdownFile) fail('desktop-gate', `${markdownFile} does not import shared/markdown/ — the guard cannot pass vacuously`);
+    if (!sawMarkdownFile) fail('desktop-gate', `${markdownFile} does not import renderer/markdown/ — the guard cannot pass vacuously`);
     else if (!found && !impure) ok();
   }
 
@@ -150,7 +151,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(!(missing.length > 0), 'desktop-gate', `${copyFile} is missing: ${missing.join(', ')}`);
   }
 
-  // --- No file under shared/gate/, main/actions/, or renderer/gate/ names a literal
+  // --- No file under main/gate/, main/actions/, or renderer/gate/ names a literal
   // label name instead of resolving through the vocabulary as a LabelKey. ---
   {
     const mainActionsFiles = allFiles.filter((f) => relOf(f).startsWith(`${mainActionsDir}/`));
@@ -159,7 +160,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
       .labels.filter((l: any) => l.key !== l.name)
       .map((l: any) => l.name);
     let found = false;
-    for (const f of [...sharedGateFiles, ...mainActionsFiles, ...rendererGateFiles]) {
+    for (const f of [...mainGateFiles, ...mainActionsFiles, ...rendererGateFiles]) {
       const rel = relOf(f);
       if (rel.endsWith('.test.ts')) continue;
       const text = readFileSync(f, 'utf8');

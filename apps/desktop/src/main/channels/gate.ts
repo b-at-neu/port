@@ -1,9 +1,9 @@
 // Forces one `board:refresh` on an `applied` label outcome; a refresh failure is swallowed and
 // logged so it can never mask the write's own success.
-import { GATE_DECISIONS } from '@/shared/gate/types'
-import type { GateAnswerResponse, GateDecision, GatePreflightResponse } from '@/shared/gate/types'
-import type { BoardSnapshot } from '@/shared/board/types'
-import type { IpcMap } from '@/shared/ipc'
+import { GATE_DECISIONS } from '@/types/gate'
+import type { GateAnswerResponse, GateDecision, GatePreflightResponse } from '@/types/gate'
+import type { BoardSnapshot } from '@/types/board'
+import type { IpcMap } from '@/types/ipc'
 import type { RegistryDeps } from '@/main/registry'
 import { requireRepoId } from '@/main/registry'
 import type { GateAnswerParams, GatePreflightParams } from '@/main/actions/gate'

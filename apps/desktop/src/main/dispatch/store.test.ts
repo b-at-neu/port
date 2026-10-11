@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '@/shared/repos'
+import type { RepoId } from '@/utils/repos'
 import { makeTempDir } from '@/testing/fixtures'
 import { createRunStateStore } from '@/main/dispatch/store'
 

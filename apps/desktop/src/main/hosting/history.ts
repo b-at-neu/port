@@ -1,5 +1,5 @@
 // Reads and slices the earlier conversation for resume/resume-at/fork — read before spawn, kept frozen on the handle.
-import type { SessionHistory, SessionStartMode } from '@/shared/hosting/types'
+import type { SessionHistory, SessionStartMode } from '@/types/hosting'
 import { openTranscript } from '@/main/sessions/transcript'
 import type { OpenTranscriptParams } from '@/main/sessions/transcript'
 

@@ -50,10 +50,10 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     expect(!(JSON.stringify(codeKeys) !== JSON.stringify(designKeys)), 'desktop-shell', `shell/key-bindings.ts's KEY_BINDINGS and DESIGN.md §3's keyboard table disagree — only in code: ${codeKeys.filter((k) => !designKeys.includes(k)).join(', ') || 'none'}, only in design: ${designKeys.filter((k) => !codeKeys.includes(k)).join(', ') || 'none'}`);
   }
 
-  // --- pin: shell/key-bindings.ts's global KEY_BINDINGS <-> shared/shell/commands.ts's APP_COMMANDS
+  // --- pin: shell/key-bindings.ts's global KEY_BINDINGS <-> utils/shell/commands.ts's APP_COMMANDS
   {
     const bindingsMod = await import(pathToFileURL(join(root, 'apps/desktop/src/renderer/shell/key-bindings.ts')).href);
-    const commandsMod = await import(pathToFileURL(join(root, 'apps/desktop/src/shared/shell/commands.ts')).href);
+    const commandsMod = await import(pathToFileURL(join(root, 'apps/desktop/src/utils/shell/commands.ts')).href);
     const globalBindings = (bindingsMod.KEY_BINDINGS as { readonly action: string; readonly scope: string }[]).filter((b) => b.scope === 'global');
     const appCommandKinds = (commandsMod.APP_COMMANDS as { readonly kind: string }[]).map((c) => c.kind);
 
@@ -79,7 +79,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       for (const kind of kinds) {
         if (!appCommandKinds.includes(kind)) {
           violated = true;
-          fail('desktop-shell', `shell/key-bindings.ts's global binding "${binding.action}" maps to APP_COMMANDS kind "${kind}", which shared/shell/commands.ts does not define`);
+          fail('desktop-shell', `shell/key-bindings.ts's global binding "${binding.action}" maps to APP_COMMANDS kind "${kind}", which utils/shell/commands.ts does not define`);
         }
       }
     }
@@ -88,7 +88,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     for (const kind of appCommandKinds) {
       if (!mappedKinds.has(kind)) {
         violated = true;
-        fail('desktop-shell', `shared/shell/commands.ts's APP_COMMANDS kind "${kind}" maps back to no shell/key-bindings.ts global binding`);
+        fail('desktop-shell', `utils/shell/commands.ts's APP_COMMANDS kind "${kind}" maps back to no shell/key-bindings.ts global binding`);
       }
     }
 
@@ -126,12 +126,12 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     if (!violated) ok();
   }
 
-  // --- guard: shared/board/needs-you.ts imports nothing from main/ or node: ---
+  // --- guard: renderer/board/needs-you.ts imports nothing from main/ or node: ---
   {
-    const file = join(root, 'apps/desktop/src/shared/board/needs-you.ts');
+    const file = join(root, 'apps/desktop/src/renderer/board/needs-you.ts');
     const imports = Array.from(readFileSync(file, 'utf8').matchAll(/^import .* from '([^']+)'/gm)).map((m) => m[1]);
     const bad = imports.filter((spec) => spec.startsWith('node:') || spec.includes('/main/'));
-    expect(!(bad.length > 0), 'desktop-shell', `shared/board/needs-you.ts imports from ${bad.join(', ')} — it must stay renderer-safe`);
+    expect(!(bad.length > 0), 'desktop-shell', `renderer/board/needs-you.ts imports from ${bad.join(', ')} — it must stay renderer-safe`);
   }
 
   note(`desktop-shell: scanned ${walk(shellDir).length} shell files`);

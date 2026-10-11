@@ -2,9 +2,9 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '@/shared/labels/vocabulary'
-import type { RepoId } from '@/shared/repos'
-import type { LabelWriteRequest } from '@/shared/writes/types'
+import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import type { RepoId } from '@/utils/repos'
+import type { LabelWriteRequest } from '@/types/writes'
 import { applyClaimLabels } from '@/main/actions/claim'
 
 const VOCABULARY = resolveVocabulary({})

@@ -1,6 +1,6 @@
 // Pure option lists and the mode cycle for the controls bar — no DOM, no IPC.
-import type { SessionControls, SessionEffort, SessionModels } from '@/shared/hosting/controls'
-import type { SessionPermissionMode } from '@/shared/hosting/types'
+import type { SessionControls, SessionEffort, SessionModels } from '@/utils/hosting/controls'
+import type { SessionPermissionMode } from '@/types/hosting'
 
 // Shift+Tab's own cycle: default (ask before edits) -> acceptEdits -> plan -> default.
 export const MODE_CYCLE: readonly SessionPermissionMode[] = ['default', 'acceptEdits', 'plan']

@@ -1,6 +1,6 @@
 // A timeout or rejected read-back must never look like an empty capability list.
-import type { AgentSummary, CommandSummary, PluginRequest, SessionCapabilities, SlashCommandSummary } from '@/shared/hosting/types'
-import { isRecord } from '@/shared/guards'
+import type { AgentSummary, CommandSummary, PluginRequest, SessionCapabilities, SlashCommandSummary } from '@/types/hosting'
+import { isRecord } from '@/main/guards'
 import { sanitize } from '@/main/sessions/transcript-entries'
 import { checkComponents, checkPluginLoad, isPipelineCommand, PLUGIN_NAME } from '@/main/hosting/verify'
 import type { InitPlugin } from '@/main/hosting/verify'

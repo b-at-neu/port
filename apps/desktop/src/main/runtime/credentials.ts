@@ -2,7 +2,7 @@
 import { readJsonFile } from '@/main/platform/files'
 import { defaultClaudeHome } from '@/main/sessions/locate'
 import { pathOps } from '@/main/platform/paths'
-import type { CredentialsTell } from '@/shared/runtime/types'
+import type { CredentialsTell } from '@/types/runtime'
 
 /** Any missing or malformed field yields `present: false` rather than a thrown error — this read is advisory-only. */
 interface CredentialsFileShape {

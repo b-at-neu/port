@@ -1,8 +1,8 @@
 // Built the same way `main/registry/inspect.ts` resolves a real one, never a hand-retyped config shape. `acme/widgets` is `ready`; `acme/legacy-site` is `config-invalid`.
 import { CONFIG_DEFAULTS } from '@/main/registry/schema'
-import { resolveVocabulary, verifyVocabulary } from '@/shared/labels/vocabulary'
-import type { VocabularyReport } from '@/shared/labels/vocabulary'
-import type { RepoId, RepositoryEntry, ResolvedRepoConfig } from '@/shared/repos'
+import { resolveVocabulary, verifyVocabulary } from '@/utils/labels/vocabulary'
+import type { VocabularyReport } from '@/utils/labels/vocabulary'
+import type { RepoId, RepositoryEntry, ResolvedRepoConfig } from '@/utils/repos'
 
 export const WIDGETS_ID = 'fixture-acme-widgets' as RepoId
 export const LEGACY_SITE_ID = 'fixture-acme-legacy-site' as RepoId

@@ -6,10 +6,10 @@ import { readClaudeVersion } from '@/main/runtime/version'
 import { classifyPreflight } from '@/main/runtime/classify'
 import { createRuntimeProbe } from '@/main/runtime/sdk'
 import type { RuntimeProbeFn } from '@/main/runtime/sdk'
-import type { RuntimePreflight, RuntimeProbe } from '@/shared/runtime/types'
+import type { RuntimePreflight, RuntimeProbe } from '@/types/runtime'
 import { listRepositories, requireReadyRepo } from '@/main/registry'
 import type { RegistryDeps } from '@/main/registry'
-import type { RepoId } from '@/shared/repos'
+import type { RepoId } from '@/utils/repos'
 
 function apiKeyInEnvironment(env: NodeJS.ProcessEnv): boolean {
   const value = env['ANTHROPIC_API_KEY']

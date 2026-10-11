@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '@/shared/labels/vocabulary'
-import type { LabelVocabulary } from '@/shared/labels/vocabulary'
+import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import { ghAuthStatus, ghJson } from '@/main/platform/gh'
 import type { GhResult } from '@/main/platform/gh'
 import { fetchClaimPreflight, fetchItemsByNumber, fetchItemStates, fetchPipelineItems } from '@/main/github/adapter'

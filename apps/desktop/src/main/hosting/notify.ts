@@ -1,7 +1,7 @@
 // The one notification decider. Fires only when no port window is focused — a missing nudge
 // costs one glance, a spurious one trains the operator to ignore them.
-import type { HostedSessionSnapshot } from '@/shared/hosting/types'
-import { sessionDisplayLabel } from '@/shared/hosting/label'
+import type { HostedSessionSnapshot } from '@/types/hosting'
+import { sessionDisplayLabel } from '@/utils/hosting/label'
 
 export type NotificationKind = 'needs-you' | 'finished' | 'ended'
 

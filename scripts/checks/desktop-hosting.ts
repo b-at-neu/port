@@ -9,13 +9,14 @@ import { globToRegExp as hookGlobToRegExp } from '#plugins/port/hooks/lib/guard-
 // process. These assertions pin its plan's decisions mechanically.
 export default async function ({ expect, fail, ok }: Reporter) {
   const hostingDir = 'apps/desktop/src/main/hosting';
-  const sharedHostingDir = 'apps/desktop/src/shared/hosting';
+  const hostingTypesFile = 'apps/desktop/src/types/hosting.ts';
+  const utilsHostingDir = 'apps/desktop/src/utils/hosting';
   const srcDir = join(root, 'apps/desktop/src');
   const allFiles = walk(srcDir).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
   const hostingFiles = allFiles.filter((f) => relOf(f).startsWith(`${hostingDir}/`));
   const hostingProdFiles = hostingFiles.filter((f) => !relOf(f).endsWith('.test.ts'));
-  const sharedHostingFiles = allFiles.filter((f) => relOf(f).startsWith(`${sharedHostingDir}/`));
-  const sharedHostingProdFiles = sharedHostingFiles.filter((f) => !relOf(f).endsWith('.test.ts'));
+  const utilsHostingFiles = allFiles.filter((f) => relOf(f) === hostingTypesFile || relOf(f).startsWith(`${utilsHostingDir}/`));
+  const utilsHostingProdFiles = utilsHostingFiles.filter((f) => !relOf(f).endsWith('.test.ts'));
 
   // --- No string prompt anywhere under main/hosting/ — streaming input mode, always, since
   // `interrupt()`/`setPermissionMode()` need it or Stop becomes impossible. ---
@@ -51,17 +52,17 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- shared/hosting/ never names an SDK message variant type, and stays message: unknown
+  // --- types/hosting.ts never names an SDK message variant type, and stays message: unknown
   // — SDKMessage is a large open union, and a shared type re-deriving a narrowing here would compete with the one true renderer. ---
   {
-    const typesFile = allFiles.find((f) => relOf(f) === `${sharedHostingDir}/types.ts`);
+    const typesFile = allFiles.find((f) => relOf(f) === hostingTypesFile);
     if (!typesFile) {
-      fail('desktop-hosting', `${sharedHostingDir}/types.ts does not exist`);
+      fail('desktop-hosting', `${hostingTypesFile} does not exist`);
     } else {
       const text = readFileSync(typesFile, 'utf8');
       if (/\bSDK[A-Za-z]+Message\b/.test(text)) {
-        fail('desktop-hosting', `${sharedHostingDir}/types.ts names an SDK message variant type — the envelope must stay opaque (message: unknown)`);
-      } else expect(/message:\s*unknown/.test(text), 'desktop-hosting', `${sharedHostingDir}/types.ts's event envelope does not carry 'message: unknown'`);
+        fail('desktop-hosting', `${hostingTypesFile} names an SDK message variant type — the envelope must stay opaque (message: unknown)`);
+      } else expect(/message:\s*unknown/.test(text), 'desktop-hosting', `${hostingTypesFile}'s event envelope does not carry 'message: unknown'`);
     }
   }
 
@@ -95,18 +96,18 @@ export default async function ({ expect, fail, ok }: Reporter) {
     } else expect(/export function classifyEnd\(/.test(readFileSync(classifyFile, 'utf8')), 'desktop-hosting', `${hostingDir}/classify.ts does not export 'classifyEnd'`);
   }
 
-  // pin: `shared/hosting/types.ts`'s `SessionPhase` ↔ `main/hosting/handle.ts`'s own phase assignments, both directions
+  // pin: `types/hosting.ts`'s `SessionPhase` ↔ `main/hosting/handle.ts`'s own phase assignments, both directions
   {
-    const typesFile = allFiles.find((f) => relOf(f) === `${sharedHostingDir}/types.ts`);
+    const typesFile = allFiles.find((f) => relOf(f) === hostingTypesFile);
     const handleFile = allFiles.find((f) => relOf(f) === `${hostingDir}/handle.ts`);
     if (!typesFile || !handleFile) {
-      fail('desktop-hosting', `${sharedHostingDir}/types.ts or ${hostingDir}/handle.ts does not exist`);
+      fail('desktop-hosting', `${hostingTypesFile} or ${hostingDir}/handle.ts does not exist`);
     } else {
       const typesText = readFileSync(typesFile, 'utf8');
       const handleText = readFileSync(handleFile, 'utf8');
       const unionMatch = /export type SessionPhase\s*=\s*([^\n]+)/.exec(typesText);
       if (!unionMatch) {
-        fail('desktop-hosting', `${sharedHostingDir}/types.ts has no 'export type SessionPhase = ...' declaration`);
+        fail('desktop-hosting', `${hostingTypesFile} has no 'export type SessionPhase = ...' declaration`);
       } else {
         const members = new Set([...unionMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]));
         // Matches both a reassignment and the initial type-annotated declaration.
@@ -183,18 +184,18 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- No bypass/dontAsk escape hatch under main/hosting/ or shared/hosting/ ---
+  // --- No bypass/dontAsk escape hatch under main/hosting/, types/hosting.ts, or utils/hosting/ ---
   // guard: nothing under either tree may silently widen past the host prompt.
   {
     const forbidden = ['bypassPermissions', 'allowDangerouslySkipPermissions', "'dontAsk'"];
     let found = false;
-    for (const f of [...hostingProdFiles, ...sharedHostingProdFiles]) {
+    for (const f of [...hostingProdFiles, ...utilsHostingProdFiles]) {
       const rel = relOf(f);
       const code = stripComments(readFileSync(f, 'utf8'));
       for (const term of forbidden) {
         if (code.includes(term)) {
           found = true;
-          fail('desktop-hosting', `${rel} contains '${term}' — main/hosting/ and shared/hosting/ must never bypass the operator's own permission prompt`);
+          fail('desktop-hosting', `${rel} contains '${term}' — main/hosting/, types/hosting.ts, and utils/hosting/ must never bypass the operator's own permission prompt`);
         }
       }
     }
@@ -329,16 +330,16 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(!(stray.length > 0), 'desktop-hosting', `writeJsonFileAtomic or 'hosting.json' appears outside ${hostingDir}/persist.ts, in: ${stray.map(relOf).join(', ')} — a second writer could skip freeze() on quit`);
   }
 
-  // pin: shared/hosting/label.ts's sessionDisplayLabel ↔ its two consumers — if the dialog
+  // pin: utils/hosting/label.ts's sessionDisplayLabel ↔ its two consumers — if the dialog
   // and the rail named a session differently, the operator could not tell which prompt belongs where.
   {
     const declarations = allFiles.filter((f) => !relOf(f).endsWith('.test.ts')).filter((f) => /export function sessionDisplayLabel\(/.test(readFileSync(f, 'utf8')));
-    const declaredOnlyInLabel = declarations.length === 1 && relOf(declarations[0] ?? '') === `${sharedHostingDir}/label.ts`;
+    const declaredOnlyInLabel = declarations.length === 1 && relOf(declarations[0] ?? '') === `${utilsHostingDir}/label.ts`;
     const headerFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/renderer/session/header.tsx');
     const dialogFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/renderer/permission/dialog.tsx');
     const copyFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/renderer/permission/copy.ts');
     if (!declaredOnlyInLabel) {
-      fail('desktop-hosting', `sessionDisplayLabel must be declared only in ${sharedHostingDir}/label.ts, found in: ${declarations.map(relOf).join(', ') || '(nowhere)'}`);
+      fail('desktop-hosting', `sessionDisplayLabel must be declared only in ${utilsHostingDir}/label.ts, found in: ${declarations.map(relOf).join(', ') || '(nowhere)'}`);
     } else if (!headerFile || !/sessionDisplayLabel/.test(readFileSync(headerFile, 'utf8'))) {
       fail('desktop-hosting', 'apps/desktop/src/renderer/session/header.tsx does not import sessionDisplayLabel');
     } else if (!dialogFile || !/sessionDisplayLabel/.test(readFileSync(dialogFile, 'utf8'))) {

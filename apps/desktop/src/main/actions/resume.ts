@@ -1,9 +1,9 @@
 // Never guessed: an unrecoverable inverse is reported rather than assumed.
-import { RETRY_TRIGGER, pausedTriggerFrom } from '@/shared/actions/plan'
-import { LABEL_DEFAULTS } from '@/shared/labels/defaults'
-import type { LabelKey, LabelVocabulary } from '@/shared/labels/vocabulary'
-import type { AuditEntry, AuditRead, LabelAuditEntry } from '@/shared/writes/types'
-import { isLabelAuditEntry } from '@/shared/writes/types'
+import { RETRY_TRIGGER, pausedTriggerFrom } from '@/utils/actions/plan'
+import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
+import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { AuditEntry, AuditRead, LabelAuditEntry } from '@/types/writes'
+import { isLabelAuditEntry } from '@/types/writes'
 import { readAuditLog } from '@/main/writes/audit'
 
 export type RecoverPausedTriggerResult = { readonly kind: 'recovered'; readonly trigger: LabelKey } | { readonly kind: 'no-record' } | { readonly kind: 'unresolvable' }

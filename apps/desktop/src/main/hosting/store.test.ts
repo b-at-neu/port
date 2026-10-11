@@ -3,9 +3,9 @@ import { createHostedStore, DEFAULT_SESSION_LIMIT, ENDED_RETAIN_LIMIT } from '@/
 import type { HostedStoreDeps } from '@/main/hosting/store'
 import { createInMemoryHostingPersistence } from '@/main/hosting/persist'
 import type { HostedQuery } from '@/main/hosting/handle'
-import type { RepoId } from '@/shared/repos'
-import { DEFAULT_SESSION_DEFAULTS } from '@/shared/hosting/types'
-import type { SessionWorkspace } from '@/shared/workspace/types'
+import type { RepoId } from '@/utils/repos'
+import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
+import type { SessionWorkspace } from '@/types/workspace'
 
 const REPO_ID = 'repo-1' as RepoId
 // Worktree-shaped so repeated starts against it never trip folder-busy, exercised separately below.
@@ -94,7 +94,7 @@ describe('createHostedStore', () => {
 
   it('send/interrupt/close/attach/answerPermission/invoke all report unknown-session for a key that was never started', async () => {
     const store = createHostedStore(baseDeps())
-    const key = 'hosted-999' as import('@/shared/hosting/types').SessionKey
+    const key = 'hosted-999' as import('@/types/hosting').SessionKey
     expect(store.send(key, 'hi')).toEqual({ ok: false, kind: 'unknown-session' })
     await expect(store.interrupt(key)).resolves.toEqual({ ok: false, kind: 'unknown-session' })
     await expect(store.close(key)).resolves.toEqual({ ok: false, kind: 'unknown-session' })

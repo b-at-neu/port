@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { IPC_CHANNELS } from '@/shared/ipc'
-import type { IpcChannel } from '@/shared/ipc'
-import { needsYouItems } from '@/shared/board/needs-you'
-import type { RepoId } from '@/shared/repos'
+import { IPC_CHANNELS } from '@/types/ipc'
+import type { IpcChannel } from '@/types/ipc'
+import { needsYouItems } from '@/renderer/board/needs-you'
+import type { RepoId } from '@/utils/repos'
 import { fixtureHandlers } from '@/main/fixtures/handlers'
 import { RESUMED_KEY, STREAMING_KEY } from '@/main/fixtures/sessions'
 

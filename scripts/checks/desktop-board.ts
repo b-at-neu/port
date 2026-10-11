@@ -3,19 +3,19 @@ import { join } from 'node:path';
 import { root, walk, relOf } from '#lib/files.ts';
 import type { Reporter } from '#lib/report.ts';
 
-// apps/desktop/src/shared/board/ and renderer/board/ are a pure projection plus
+// apps/desktop/src/renderer/board/ is a pure projection plus
 // plain-DOM rendering, reading nothing itself. Reads directories by explicit path, never walk('apps/').
 export default async function ({ expect, fail, ok }: Reporter) {
-  const boardDir = 'apps/desktop/src/shared/board';
   const rendererBoardDir = 'apps/desktop/src/renderer/board';
-  const stateTypesFile = 'apps/desktop/src/shared/state/types.ts';
+  const boardTypesFile = 'apps/desktop/src/types/board.ts';
+  const stateTypesFile = 'apps/desktop/src/types/state.ts';
   const mainDir = 'apps/desktop/src/main';
 
-  const boardFiles = walk(join(root, boardDir)).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
+  const boardFiles = walk(join(root, rendererBoardDir)).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
 
   // --- The directory has source files, so nothing below passes vacuously once deleted. ---
   if (boardFiles.length === 0) {
-    fail('desktop-board', `${boardDir} has no source files — the guard cannot pass vacuously if the directory is deleted`);
+    fail('desktop-board', `${rendererBoardDir} has no source files — the guard cannot pass vacuously if the directory is deleted`);
     return;
   }
   ok();
@@ -23,7 +23,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
   // --- The board screen reads nothing itself ----------------------------------
   // No file here imports src/main/, a node: builtin, or calls gh(/runCommand( — every fact arrives over IPC.
   {
-    const dirs = [join(root, boardDir), join(root, 'apps/desktop/src/renderer')];
+    const dirs = [join(root, 'apps/desktop/src/renderer')];
     let found = false;
     for (const dir of dirs) {
       for (const f of walk(dir).filter((p) => (p.endsWith('.ts') || p.endsWith('.tsx')) && !p.endsWith('.test.ts'))) {
@@ -63,14 +63,13 @@ export default async function ({ expect, fail, ok }: Reporter) {
 
   // --- SOURCE_KINDS and RepositoryFreshness's keys agree, itemStates excepted. ---
   {
-    const boardTypesFile = join(root, boardDir, 'types.ts');
-    const boardTypesText = readFileSync(boardTypesFile, 'utf8');
+    const boardTypesText = readFileSync(join(root, boardTypesFile), 'utf8');
     const sourceKindsMatch = /SOURCE_KINDS\s*=\s*\[([^\]]*)\]/.exec(boardTypesText);
     const stateTypesText = readFileSync(join(root, stateTypesFile), 'utf8');
     const freshnessMatch = /interface RepositoryFreshness\s*{([^}]*)}/.exec(stateTypesText);
 
     if (!sourceKindsMatch) {
-      fail('desktop-board', `${boardDir}/types.ts has no 'SOURCE_KINDS' array literal to check`);
+      fail('desktop-board', `${boardTypesFile} has no 'SOURCE_KINDS' array literal to check`);
     } else if (!freshnessMatch) {
       fail('desktop-board', `${stateTypesFile} has no 'RepositoryFreshness' interface to check`);
     } else {
@@ -90,7 +89,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
 
   // --- No running/alive/isLive identifier outside a comment — a stall is a report, never liveness. ---
   {
-    const dirs = [join(root, boardDir), join(root, rendererBoardDir)];
+    const dirs = [join(root, rendererBoardDir)];
     const forbidden = ['running', 'alive', 'isLive'];
     let found = false;
     for (const dir of dirs) {

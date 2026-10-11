@@ -5,9 +5,9 @@ import { readTextFile } from '@/main/platform/files'
 import type { FileFailureKind } from '@/main/platform/files'
 import type { GitRunner } from '@/main/platform/git'
 import type { PathOps } from '@/main/platform/paths'
-import type { AssertEqual } from '@/shared/assert-type'
-import { summarizeDenials } from '@/shared/local/summary'
-import type { DenialActor, DenialDecision, DenialEntry, DenialsFailureKind, DenialsRead } from '@/shared/local/types'
+import type { AssertEqual } from '@/types/assert-type'
+import { summarizeDenials } from '@/utils/local/summary'
+import type { DenialActor, DenialDecision, DenialEntry, DenialsFailureKind, DenialsRead } from '@/types/local'
 
 export type { GitRunner }
 

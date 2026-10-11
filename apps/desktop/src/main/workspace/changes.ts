@@ -1,8 +1,8 @@
 // A session's diff against its recorded base — size-capped, with an `output-too-large` fallback to `--numstat`. Through `GitRunner` only.
 import { git as realGit } from '@/main/platform/git'
 import type { GitRunner } from '@/main/platform/git'
-import type { SessionChanges } from '@/shared/workspace/types'
-import type { SessionWorkspace } from '@/shared/workspace/types'
+import type { SessionChanges } from '@/types/workspace'
+import type { SessionWorkspace } from '@/types/workspace'
 import { parseUnifiedDiff } from '@/main/workspace/diff'
 
 /** Caps the one call whose output scales with the diff itself; every other call here is metadata-sized. */

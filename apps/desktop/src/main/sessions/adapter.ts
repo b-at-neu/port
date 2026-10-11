@@ -1,7 +1,7 @@
 // A pure consumer of the caller's repository list: reads no config, enumerates no worktrees, reconciles nothing against labels.
 import { listDirectory, readJsonFile, statPath } from '@/main/platform/files'
 import { pathOps } from '@/main/platform/paths'
-import type { AgentRecord, MetaProblem, SessionRecord, SessionRef, SessionScan } from '@/shared/sessions/types'
+import type { AgentRecord, MetaProblem, SessionRecord, SessionRef, SessionScan } from '@/types/sessions'
 import { activityOf, attributeSession, itemNumberOf, parseAgentMeta, sessionRole, stageOf } from '@/main/sessions/classify'
 import type { RepoRef } from '@/main/sessions/classify'
 import { buildProjectIndex, defaultClaudeHome, resolveSessionDir } from '@/main/sessions/locate'

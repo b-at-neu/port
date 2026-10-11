@@ -1,6 +1,6 @@
 // Pure restore-set bookkeeping. No I/O here; persist.ts owns the file, store.ts composes both.
-import type { RepoId } from '@/shared/repos'
-import type { HostedSessionSnapshot } from '@/shared/hosting/types'
+import type { RepoId } from '@/utils/repos'
+import type { HostedSessionSnapshot } from '@/types/hosting'
 import type { PersistedOpenEntry } from '@/main/hosting/persist'
 
 /** Not `closing`/`ended`, and carrying a real `claudeSessionId` — a session without one cannot be resumed. `cwd` comes from `workspace.folder`, so a restore reopens the exact folder or worktree. A stage session (`stage !== null`) is never persisted — it belongs to this app's dispatch loop, never the operator restore banner. */

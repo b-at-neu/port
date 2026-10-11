@@ -3,7 +3,7 @@ import { useSyncExternalStore } from 'react'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/renderer/components/ui/alert-dialog'
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
-import type { InterruptedStage, StageRestartResult } from '@/shared/stage/types'
+import type { InterruptedStage, StageRestartResult } from '@/types/stage'
 import { invoke } from '@/renderer/data/invoke'
 import { ipcQueryOptions } from '@/renderer/data/query'
 

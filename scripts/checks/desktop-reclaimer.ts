@@ -34,9 +34,9 @@ export default async function ({ fail, ok }: Reporter) {
     if (!violated) ok();
   }
 
-  // pin: `bin/worktrees.mjs`'s state vocabulary (`describeReason`'s cases, and which states `classifyCandidate` returns `removable: true` for) ↔ `shared/reclaimer/types.ts`'s `WORKTREE_STATES`/`RECLAIMABLE_STATES`
+  // pin: `bin/worktrees.mjs`'s state vocabulary (`describeReason`'s cases, and which states `classifyCandidate` returns `removable: true` for) ↔ `types/reclaimer.ts`'s `WORKTREE_STATES`/`RECLAIMABLE_STATES`
   {
-    const typesPath = join(root, 'apps/desktop/src/shared/reclaimer/types.ts');
+    const typesPath = join(root, 'apps/desktop/src/types/reclaimer.ts');
     const typesText = readFileSync(typesPath, 'utf8');
 
     const statesMatch = /WORKTREE_STATES\s*=\s*\[([^\]]*)\]\s*as const/.exec(typesText);

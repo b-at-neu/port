@@ -1,6 +1,6 @@
 // One `query()` turn, fixed short prompt, `maxTurns: 1`, always with `pathToClaudeCodeExecutable` set so the probe never falls back to the SDK's bundled binary. `ANTHROPIC_API_KEY` is never stripped, only reported.
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
-import type { CredentialsTell, RuntimeDiagnosis } from '@/shared/runtime/types'
+import type { CredentialsTell, RuntimeDiagnosis } from '@/types/runtime'
 import { classifyProbeFailure } from '@/main/runtime/classify'
 
 /** Only the fields this probe reads off a result message, so `sdk.test.ts` builds plain fixtures rather than every field of the real `SDKResultMessage` union. */

@@ -7,8 +7,8 @@
 // called directly from `pipeline-status.tsx`'s own button — no DOM click
 // delegation, and `window.confirm` rather than a second `AlertDialog`, the
 // same idiom this owner line already used for the claim button it replaces.
-import type { HaltReport } from '@/shared/dispatch/types'
-import type { RepoId } from '@/shared/repos'
+import type { HaltReport } from '@/types/dispatch'
+import type { RepoId } from '@/utils/repos'
 import { haltAbortedCopy, haltHeadingCopy, haltItemLine } from '@/renderer/board/halt-copy'
 
 type PendingCommand = 'halt' | null

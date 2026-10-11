@@ -11,7 +11,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
   const writesDir = 'apps/desktop/src/main/writes';
   const commandFile = `${writesDir}/command.ts`;
   const ownershipFile = 'apps/desktop/src/main/dispatch/ownership.ts';
-  const typesFile = 'apps/desktop/src/shared/writes/types.ts';
+  const typesFile = 'apps/desktop/src/types/writes.ts';
   const coordinationFile = 'docs/COORDINATION.md';
 
   const srcDir = join(root, 'apps/desktop/src');
@@ -104,7 +104,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // pin: `shared/writes/types.ts`'s `Conflict` union ↔ `docs/COORDINATION.md`'s fenced `type Conflict` block — kind literals and field-name sets, both directions, not byte-identity
+  // pin: `types/writes.ts`'s `Conflict` union ↔ `docs/COORDINATION.md`'s fenced `type Conflict` block — kind literals and field-name sets, both directions, not byte-identity
   {
     const typesText = readFileSync(join(root, typesFile), 'utf8');
     const typesMatch = /export type Conflict =\n([\s\S]*?)\n\n/.exec(typesText);

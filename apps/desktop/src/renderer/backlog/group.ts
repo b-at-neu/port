@@ -1,6 +1,6 @@
 // Pure projection from one repository's `backlog:list` query state into what `screen.tsx` renders — no DOM, no IPC call.
-import type { BacklogResponse } from '@/shared/backlog/types'
-import type { RepoId } from '@/shared/repos'
+import type { BacklogResponse } from '@/types/backlog'
+import type { RepoId } from '@/utils/repos'
 import { backlogFailureCopy, backlogInvokeErrorCopy, backlogTruncatedCopy } from '@/renderer/backlog/copy'
 
 export interface BacklogRowView {

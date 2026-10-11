@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '@/shared/repos'
+import type { RepoId } from '@/utils/repos'
 import type { HostedStore } from '@/main/hosting/store'
 import { createDispatchRuntime } from '@/main/dispatch/runtime'
 

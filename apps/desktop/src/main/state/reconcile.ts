@@ -1,12 +1,12 @@
 // No I/O, no `gh`, no `git`, no filesystem — main/state/read.ts is the thin orchestrator that does the fetching this function composes.
-import type { LabelRole } from '@/shared/labels/defaults'
+import type { LabelRole } from '@/utils/labels/defaults'
 import type {
   ItemsByNumberFetch,
   PipelineFetch,
-} from '@/shared/github/types'
-import type { AgentRecord, SessionRecord } from '@/shared/sessions/types'
-import type { DenialsRead, UnresolvedReason, WorktreeEntry, WorktreesRead } from '@/shared/local/types'
-import type { RepositoryEntry } from '@/shared/repos'
+} from '@/types/github'
+import type { AgentRecord, SessionRecord } from '@/types/sessions'
+import type { DenialsRead, UnresolvedReason, WorktreeEntry, WorktreesRead } from '@/types/local'
+import type { RepositoryEntry } from '@/utils/repos'
 import type {
   AttachedAgent,
   AttachedSession,
@@ -19,7 +19,7 @@ import type {
   RepositoryState,
   StatusEvidence,
   WaitingOn,
-} from '@/shared/state/types'
+} from '@/types/state'
 import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers } from '@/main/state/attach'
 import { closingReference, IMPLEMENTATION_PLAN_HEADING, sessionRequiredAt } from '@/main/state/link'
 import { stageOf } from '@/main/state/stage'

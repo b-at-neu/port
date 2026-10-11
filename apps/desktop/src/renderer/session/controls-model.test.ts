@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { controlsBarState, effortOptions, modelOptions, nextMode } from '@/renderer/session/controls-model'
-import type { SessionModels } from '@/shared/hosting/controls'
+import type { SessionModels } from '@/utils/hosting/controls'
 
 const READY: SessionModels = {
   kind: 'ready',

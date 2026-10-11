@@ -1,6 +1,6 @@
 // Fixture mode's canned transcript entries — the streaming session's own
 // replay, plus the resumed session's history backfill.
-import type { TranscriptEntry } from '@/shared/sessions/transcript'
+import type { TranscriptEntry } from '@/utils/sessions/transcript'
 
 const MINUTE = 60_000
 

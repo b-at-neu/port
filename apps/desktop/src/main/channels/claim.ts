@@ -1,7 +1,7 @@
 // `'claim:preflight'`/`'claim:apply'`'s own validation, the same per-topic
 // split every other channel here follows.
-import { PLAN_GATE_CHOICES } from '@/shared/claim/types'
-import type { IpcMap } from '@/shared/ipc'
+import { PLAN_GATE_CHOICES } from '@/types/claim'
+import type { IpcMap } from '@/types/ipc'
 import { claimApply, claimPreflight, defaultClaimDeps } from '@/main/claim'
 import type { ClaimDeps } from '@/main/claim'
 import type { RegistryDeps } from '@/main/registry'

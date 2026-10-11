@@ -1,11 +1,11 @@
 // The seam between the main-process dispatch loop and whatever actually
 // starts a stage session — no I/O, no SDK import.
 import type { ReadyEntry } from '@/main/actions/apply'
-import type { HostedSessionSnapshot, SessionKey } from '@/shared/hosting/types'
-import type { PipelineItemKind } from '@/shared/github/types'
-import type { LabelKey } from '@/shared/labels/vocabulary'
-import type { EndedStage, StageAgent } from '@/shared/tick/types'
-import type { StageOutcome } from '@/shared/hosting/stage'
+import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
+import type { PipelineItemKind } from '@/types/github'
+import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { EndedStage, StageAgent } from '@/types/tick'
+import type { StageOutcome } from '@/types/stage-session'
 
 export interface StageLaunchRequest {
   readonly entry: ReadyEntry

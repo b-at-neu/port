@@ -4,9 +4,9 @@ import type { GhResult, GhRunner } from '@/main/platform/gh'
 import { gh as defaultGh } from '@/main/platform/gh'
 
 export type { GhRunner }
-import { verifyVocabulary } from '@/shared/labels/vocabulary'
-import type { LabelVocabulary, RepoLabels } from '@/shared/labels/vocabulary'
-import type { AssertEqual } from '@/shared/assert-type'
+import { verifyVocabulary } from '@/utils/labels/vocabulary'
+import type { LabelVocabulary, RepoLabels } from '@/utils/labels/vocabulary'
+import type { AssertEqual } from '@/types/assert-type'
 import type {
   BlockerRead,
   ClaimBlocker,
@@ -21,7 +21,7 @@ import type {
   PipelineItemKind,
   RateLimitInfo,
   ResolvedItem,
-} from '@/shared/github/types'
+} from '@/types/github'
 import { classifyFailure, collectTruncated, collectUnavailable, parseEnvelope } from '@/main/github/envelope'
 import type { AliasInfo, EnvelopeFailureKind, GraphQLErrorEntry } from '@/main/github/envelope'
 import { applyItemStates, fieldListOf, mapPipelineItems } from '@/main/github/map'

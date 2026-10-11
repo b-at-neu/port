@@ -8,7 +8,7 @@ import type { Reporter } from '#lib/report.ts';
 
 const TICK_DIR = 'scripts/port-tick';
 const TYPES_FILE = 'apps/desktop/src/main/trajectory/types.ts';
-const TICK_TYPES_FILE = 'apps/desktop/src/shared/tick/types.ts';
+const TICK_TYPES_FILE = 'apps/desktop/src/types/tick.ts';
 
 async function importEngine(rel: string): Promise<any> {
   return import(pathToFileURL(join(root, rel)).href);

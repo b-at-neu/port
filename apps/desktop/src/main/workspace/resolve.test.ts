@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { CommandResult } from '@/main/platform/run'
 import type { GitRunner } from '@/main/platform/git'
 import { createPathOps } from '@/main/platform/paths'
-import type { RepoId, RepositoryEntry } from '@/shared/repos'
+import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import { resolveWorkspace, toFolderEntry } from '@/main/workspace/resolve'
 
 // Fixed posix flavour, never the host-bound default: these fixtures are posix-shaped paths, and

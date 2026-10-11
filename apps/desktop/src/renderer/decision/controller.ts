@@ -1,10 +1,10 @@
 // The decision dialog's state machine — a `useSyncExternalStore` store, the
 // same shape `gate/controller.ts` already establishes.
 import { invoke } from '@/renderer/data/invoke'
-import { reviseNoteProblem } from '@/shared/actions/decide'
-import type { ItemDecisionResult, OperatorDecision, ReviseContext, UnblockContext, UnblockRoute } from '@/shared/actions/types'
-import type { LabelKey } from '@/shared/labels/vocabulary'
-import type { RepoId } from '@/shared/repos'
+import { reviseNoteProblem } from '@/utils/actions/decide'
+import type { ItemDecisionResult, OperatorDecision, ReviseContext, UnblockContext, UnblockRoute } from '@/types/actions'
+import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { RepoId } from '@/utils/repos'
 
 export type DecisionState =
   | { readonly step: 'closed' }

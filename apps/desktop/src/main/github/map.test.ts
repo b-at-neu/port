@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyItemStates, mapPipelineItems } from '@/main/github/map'
-import type { QueriedLabel } from '@/shared/github/types'
+import type { QueriedLabel } from '@/types/github'
 
 function queriedLabel(key: QueriedLabel['key'], idx: number): QueriedLabel {
   return { key, name: key, source: 'default', issueAlias: `i${idx}`, prAlias: `p${idx}` }

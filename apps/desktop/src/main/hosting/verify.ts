@@ -1,6 +1,6 @@
 // Pure verification logic over a hosted session's plugin load and command/agent inventory, read
 // back rather than assumed. Split from capabilities.ts's I/O and timing shell.
-import type { ComponentCheck, PluginLoad, PluginRequest } from '@/shared/hosting/types'
+import type { ComponentCheck, PluginLoad, PluginRequest } from '@/types/hosting'
 
 export const PLUGIN_NAME = 'port'
 

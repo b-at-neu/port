@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { BACKOFF_CEILING_MS, SOURCE_BASE_INTERVAL_MS, initialHealth } from '@/shared/board/types'
-import type { SourceHealth } from '@/shared/board/types'
+import { BACKOFF_CEILING_MS, SOURCE_BASE_INTERVAL_MS, initialHealth } from '@/types/board'
+import type { SourceHealth } from '@/types/board'
 import { afterFailure, afterSuccess, deferredUntil, dueSources, nextDueAt } from '@/main/state/schedule'
 
 const NOW = new Date('2026-01-01T00:10:00.000Z')

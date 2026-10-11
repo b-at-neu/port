@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '@/shared/repos'
-import type { ReconciledItem, RepositoryState } from '@/shared/state/types'
+import type { RepoId } from '@/utils/repos'
+import type { ReconciledItem, RepositoryState } from '@/types/state'
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
 import { planTick } from '@/main/tick/plan'
 

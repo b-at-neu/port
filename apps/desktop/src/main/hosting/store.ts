@@ -1,9 +1,9 @@
 // Map<sessionKey, Handle>, the process-lifetime instance main/ipc.ts binds, plus closeAll().
 // A start past the current limit returns at-capacity, counted against live handles only.
-import type { RepoId } from '@/shared/repos'
-import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SetControlsResult } from '@/shared/hosting/controls'
-import type { ComposerAttachment } from '@/shared/hosting/attachments'
-import { DEFAULT_SESSION_DEFAULTS } from '@/shared/hosting/types'
+import type { RepoId } from '@/utils/repos'
+import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SetControlsResult } from '@/utils/hosting/controls'
+import type { ComposerAttachment } from '@/utils/hosting/attachments'
+import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
 import type {
   HostedSessionSnapshot,
   HostingCapacity,
@@ -28,7 +28,7 @@ import type {
   SessionStartResult,
   SessionTaskStopResult,
   WorktreeChoice,
-} from '@/shared/hosting/types'
+} from '@/types/hosting'
 import { createHostedHandle } from '@/main/hosting/handle'
 import { createSessionMarks } from '@/main/hosting/marks'
 import type { SessionMarksTracker } from '@/main/hosting/marks'
@@ -51,8 +51,8 @@ import { pathOps } from '@/main/platform/paths'
 import { defaultGitRunner } from '@/main/platform/git'
 import { removeSessionWorktreeAt } from '@/main/workspace/worktree'
 import type { RemoveSessionWorktreeOutcome } from '@/main/workspace/worktree'
-import type { SessionWorkspace } from '@/shared/workspace/types'
-import type { StageTag } from '@/shared/hosting/stage'
+import type { SessionWorkspace } from '@/types/workspace'
+import type { StageTag } from '@/types/stage-session'
 
 export { DEFAULT_SESSION_LIMIT, SESSION_LIMIT_CEILING } from '@/main/hosting/persist'
 

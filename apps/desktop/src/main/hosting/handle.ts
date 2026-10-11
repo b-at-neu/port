@@ -1,7 +1,7 @@
 // One hosted session: builds options, opens the query, runs the pump loop. The ring
 // exists only so a renderer attaching mid-stream is not blank; the on-disk transcript is the history.
-import type { CredentialsTell } from '@/shared/runtime/types'
-import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls } from '@/shared/hosting/controls'
+import type { CredentialsTell } from '@/types/runtime'
+import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls } from '@/utils/hosting/controls'
 import type {
   HostedSessionSnapshot,
   PermissionDecision,
@@ -19,11 +19,11 @@ import type {
   SessionRateLimit,
   SessionStartMode,
   SessionTaskStopResult,
-} from '@/shared/hosting/types'
-import type { RepoId } from '@/shared/repos'
-import type { SessionWorkspace } from '@/shared/workspace/types'
-import type { ComposerAttachment } from '@/shared/hosting/attachments'
-import type { SessionResult, StageTag } from '@/shared/hosting/stage'
+} from '@/types/hosting'
+import type { RepoId } from '@/utils/repos'
+import type { SessionWorkspace } from '@/types/workspace'
+import type { ComposerAttachment } from '@/utils/hosting/attachments'
+import type { SessionResult, StageTag } from '@/types/stage-session'
 import { createHostedInput } from '@/main/hosting/input'
 import { buildSessionOptions } from '@/main/hosting/options'
 import { classifyEnd } from '@/main/hosting/classify'

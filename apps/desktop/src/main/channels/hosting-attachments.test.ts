@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { SessionKey } from '@/shared/hosting/types'
+import type { SessionKey } from '@/types/hosting'
 import type { HostedStore } from '@/main/hosting/store'
 import { resolveSessionFiles, resolveSessionSend } from '@/main/channels/hosting'
 import type { HostingChannelDeps } from '@/main/channels/hosting'

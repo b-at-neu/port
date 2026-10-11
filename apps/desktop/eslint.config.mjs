@@ -31,11 +31,10 @@ export default tseslint.config(
       '@typescript-eslint/no-misused-promises': 'error'
     }
   },
-  // port/no-parent-import is a warning for now; it becomes an error once the rewrite finishes everywhere.
   {
     files: ['src/**/*.{ts,tsx}'],
     rules: {
-      'port/no-parent-import': 'warn'
+      'port/no-parent-import': 'error'
     }
   },
   {

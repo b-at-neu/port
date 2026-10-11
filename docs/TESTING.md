@@ -151,4 +151,4 @@ The pipeline's own two evaluation tiers — end-to-end (`evals/`) and component-
 | The 8 MB rotation cap is a literal | `scripts/checks/tick-events.ts` |
 | `SKILL.md` names `<commands.tick> start` and `--live`; `TICK-PROSE.md` carries the moved "Denial report" section | `scripts/checks/tick.ts` |
 | `computeParity` asserted against every row of `parity.cases.json`; `parity.ts` imports neither `events.ts` nor `report.ts`; `report.ts`'s `--desktop-events` mode calls `computeParity` rather than re-deriving the diff | `scripts/checks/tick-parity.ts` |
-| The dispatch/contention join-key field names (`item`/`stage`, `blocker`/`depth`) pinned between `apps/desktop/src/main/trajectory/types.ts` / `shared/tick/types.ts` and `events.ts`'s `tickEventPayload`, both directions | `scripts/checks/tick-parity.ts` |
+| The dispatch/contention join-key field names (`item`/`stage`, `blocker`/`depth`) pinned between `apps/desktop/src/main/trajectory/types.ts` / `types/tick.ts` and `events.ts`'s `tickEventPayload`, both directions | `scripts/checks/tick-parity.ts` |

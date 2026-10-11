@@ -14,9 +14,9 @@ import { StatusPill } from '@/renderer/components/status-pill'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { runtimeDiagnosisModel } from '@/renderer/settings/runtime-model'
 import type { ReadyRepo } from '@/renderer/settings/runtime-model'
-import type { ReposListResponse } from '@/shared/ipc'
-import type { RepoId } from '@/shared/repos'
-import type { RuntimeProbe } from '@/shared/runtime/types'
+import type { ReposListResponse } from '@/types/ipc'
+import type { RepoId } from '@/utils/repos'
+import type { RuntimeProbe } from '@/types/runtime'
 
 function firstReadyRepo(result: ReposListResponse | undefined): ReadyRepo | null {
   if (result === undefined || !result.ok) return null

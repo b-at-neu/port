@@ -7,7 +7,7 @@ import type { Reporter } from '#lib/report.ts';
 // reconciled view and reads nothing itself. These assertions pin its plan's decisions mechanically.
 export default async function ({ expect, fail, ok }: Reporter) {
   const stateDir = 'apps/desktop/src/main/state';
-  const sharedStateDir = 'apps/desktop/src/shared/state';
+  const stateTypesFile = 'apps/desktop/src/types/state.ts';
   const files = walk(join(root, stateDir)).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
 
   // --- The directory has source files, so nothing below passes vacuously once deleted. ---
@@ -64,19 +64,16 @@ export default async function ({ expect, fail, ok }: Reporter) {
   // --- No `running`/`alive`/`isLive` identifier or string literal in production code — a
   // reconciled stall verdict must never be reported as liveness. ---
   {
-    const dirs = [join(root, stateDir), join(root, sharedStateDir)];
     const forbidden = ['running', 'alive', 'isLive'];
     let found = false;
-    for (const dir of dirs) {
-      for (const f of walk(dir).filter((p) => (p.endsWith('.ts') || p.endsWith('.tsx')) && !p.endsWith('.test.ts'))) {
-        const rel = relOf(f);
-        const code = stripComments(readFileSync(f, 'utf8'));
-        for (const word of forbidden) {
-          const pattern = new RegExp(`\\b${word}\\b`);
-          if (pattern.test(code)) {
-            found = true;
-            fail('desktop-state', `${rel} contains '${word}' outside a comment — a stall is a report, never liveness (#79 Decision 2)`);
-          }
+    for (const f of [...walk(join(root, stateDir)).filter((p) => (p.endsWith('.ts') || p.endsWith('.tsx')) && !p.endsWith('.test.ts')), join(root, stateTypesFile)]) {
+      const rel = relOf(f);
+      const code = stripComments(readFileSync(f, 'utf8'));
+      for (const word of forbidden) {
+        const pattern = new RegExp(`\\b${word}\\b`);
+        if (pattern.test(code)) {
+          found = true;
+          fail('desktop-state', `${rel} contains '${word}' outside a comment — a stall is a report, never liveness (#79 Decision 2)`);
         }
       }
     }

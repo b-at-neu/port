@@ -10,7 +10,7 @@ import {
   type IpcEvent,
   type IpcEventMap,
   type IpcMap,
-} from '@/shared/ipc'
+} from '@/types/ipc'
 
 export type PortBridge = {
   [C in IpcChannel as BridgeMethod<C>]: (request?: IpcMap[C]['request']) => Promise<IpcMap[C]['response']>

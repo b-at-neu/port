@@ -2,7 +2,7 @@
 // wins over the installed cache when this checkout's manifest names `port`.
 import { listDirectory, readJsonFile } from '@/main/platform/files'
 import { pathOps } from '@/main/platform/paths'
-import type { PluginRequest } from '@/shared/hosting/types'
+import type { PluginRequest } from '@/types/hosting'
 
 export interface PluginManifest {
   readonly name?: string
