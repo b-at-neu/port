@@ -6,11 +6,11 @@ import { readDenials } from '@/main/local/denials'
 import { readWorktrees } from '@/main/local/worktrees'
 import type { GitRunner } from '@/main/local/worktrees'
 import { readSessionState } from '@/main/sessions/adapter'
-import type { RepoId } from '@/shared/repos'
-import type { LabelVocabulary } from '@/shared/labels/vocabulary'
-import type { DenialsRead, WorktreeEntry, WorktreesRead } from '@/shared/local/types'
-import type { AgentRecord, SessionScan } from '@/shared/sessions/types'
-import type { ItemsByNumberFetch, PipelineFailureKind, PipelineFetch, RateLimitInfo } from '@/shared/github/types'
+import type { RepoId } from '@/utils/repos'
+import type { LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { DenialsRead, WorktreeEntry, WorktreesRead } from '@/types/local'
+import type { AgentRecord, SessionScan } from '@/types/sessions'
+import type { ItemsByNumberFetch, PipelineFailureKind, PipelineFetch, RateLimitInfo } from '@/types/github'
 
 export interface SourceCache {
   readonly github: Map<RepoId, PipelineFetch>

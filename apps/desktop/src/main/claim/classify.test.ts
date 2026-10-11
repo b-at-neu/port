@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '@/shared/labels/vocabulary'
-import type { RepoId } from '@/shared/repos'
-import { buildClaimRequest, classifyPreflight } from '@/shared/claim/classify'
-import type { ClaimPreflight, ClaimVerdict } from '@/shared/claim/types'
+import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import type { RepoId } from '@/utils/repos'
+import { buildClaimRequest, classifyPreflight } from '@/main/claim/classify'
+import type { ClaimPreflight, ClaimVerdict } from '@/types/claim'
 
 const VOCABULARY = resolveVocabulary({})
 const REPO_ID = 'repo-1' as unknown as RepoId

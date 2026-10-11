@@ -1,11 +1,11 @@
-// Lives here, not in `shared/local/inspect.test.ts`, which must import nothing from `src/main/`.
+// Lives here, not in `renderer/local/inspect.test.ts`, which must import nothing from `src/main/`.
 import { describe, expect, it } from 'vitest'
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { CommandResult } from '@/main/platform/run'
-import { inspectDenials } from '@/shared/local/inspect'
+import { inspectDenials } from '@/renderer/local/inspect'
 import { readDenials } from '@/main/local/denials'
 import type { GitRunner } from '@/main/local/denials'
 

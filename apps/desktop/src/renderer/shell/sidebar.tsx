@@ -4,7 +4,7 @@ import { useSidebarCollapsed, toggleSidebarCollapsed } from '@/renderer/shell/st
 import { FolderGit2, Inbox, LayoutList, ListTodo, PanelLeftClose, PanelLeftOpen, Settings } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { cn } from '@/renderer/lib/utils'
-import { needsYouItems } from '@/shared/board/needs-you'
+import { needsYouItems } from '@/renderer/board/needs-you'
 import { useIpcQuery } from '@/renderer/data/query'
 import { PortMark } from '@/renderer/components/port-mark'
 import { SidebarScreens } from '@/renderer/shell/sidebar-screens'

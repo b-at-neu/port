@@ -1,13 +1,13 @@
 // Pure operator-decision derivation — the sibling `decisionsFor` to
 // `plan.ts`'s own `actionsFor`.
-import type { LabelKey } from '@/shared/labels/vocabulary'
-import type { AssigneeExpectation, LabelPrecondition } from '@/shared/writes/types'
-import type { PullRequestCommentNode } from '@/shared/github/types'
-import type { ReconciledItem } from '@/shared/state/types'
+import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { AssigneeExpectation, LabelPrecondition } from '@/types/writes'
+import type { PullRequestCommentNode } from '@/types/github'
+import type { ReconciledItem } from '@/types/state'
 import { cycleGrantCount } from '../../../../../scripts/port-tick/gates'
-import { CYCLE_CAP_ESCALATION_MARKER, PIPELINE_ESCALATION_HEADING } from '@/shared/actions/bodies'
-import type { DecisionAvailability, DecisionRefusal, OperatorDecision, UnblockRoute } from '@/shared/actions/types'
-import { MAX_REVISE_NOTE_CHARS } from '@/shared/actions/types'
+import { CYCLE_CAP_ESCALATION_MARKER, PIPELINE_ESCALATION_HEADING } from '@/utils/actions/bodies'
+import type { DecisionAvailability, DecisionRefusal, OperatorDecision, UnblockRoute } from '@/types/actions'
+import { MAX_REVISE_NOTE_CHARS } from '@/types/actions'
 
 export interface Escalation {
   readonly reason: string | null

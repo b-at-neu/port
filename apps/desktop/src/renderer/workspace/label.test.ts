@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { folderLabel } from '@/shared/workspace/label'
+import { folderLabel } from '@/renderer/workspace/label'
 
 describe('folderLabel', () => {
   it('returns the last posix segment', () => {

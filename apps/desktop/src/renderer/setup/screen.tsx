@@ -14,8 +14,8 @@ import { ipcQueryOptions, useIpcMutation, useIpcQuery } from '@/renderer/data/qu
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { setupModel } from '@/renderer/setup/model'
 import type { SetupAction, SetupStep } from '@/renderer/setup/model'
-import type { RuntimeProbe } from '@/shared/runtime/types'
-import type { ReposListResponse } from '@/shared/ipc'
+import type { RuntimeProbe } from '@/types/runtime'
+import type { ReposListResponse } from '@/types/ipc'
 
 const PENDING_LABEL: Record<SetupAction['kind'], string> = {
   test: 'Testing…',

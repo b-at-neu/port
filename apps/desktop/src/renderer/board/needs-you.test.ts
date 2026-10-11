@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '@/shared/repos'
-import type { PipelineState, ReconciledItem, RepositoryState } from '@/shared/state/types'
-import type { TickReport } from '@/shared/tick/types'
-import type { RepoDispatchStatus } from '@/shared/dispatch/types'
-import type { SessionKey } from '@/shared/hosting/types'
-import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/shared/board/types'
-import type { BoardSnapshot } from '@/shared/board/types'
-import { needsYouCount, needsYouItems, repoNeedsYou } from '@/shared/board/needs-you'
+import type { RepoId } from '@/utils/repos'
+import type { PipelineState, ReconciledItem, RepositoryState } from '@/types/state'
+import type { TickReport } from '@/types/tick'
+import type { RepoDispatchStatus } from '@/types/dispatch'
+import type { SessionKey } from '@/types/hosting'
+import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/types/board'
+import type { BoardSnapshot } from '@/types/board'
+import { needsYouCount, needsYouItems, repoNeedsYou } from '@/renderer/board/needs-you'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 

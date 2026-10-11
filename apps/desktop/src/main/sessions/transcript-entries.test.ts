@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { capPayload, createDeriver, headlineFor, sanitize } from '@/main/sessions/transcript-entries'
 import type { DeriveEntriesOptions } from '@/main/sessions/transcript-entries'
-import type { TranscriptEntry } from '@/shared/sessions/transcript'
+import type { TranscriptEntry } from '@/utils/sessions/transcript'
 import sharedCaseTable from '@/main/sessions/transcript.cases.json'
 
 /** Not part of `transcript-entries.ts`'s own public surface — batches `createDeriver`'s incremental `push()` for this suite only. */

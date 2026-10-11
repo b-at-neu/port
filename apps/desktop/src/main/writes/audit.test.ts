@@ -1,9 +1,9 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '@/shared/repos'
-import type { AuditEntry, LabelAuditEntry } from '@/shared/writes/types'
-import { isLabelAuditEntry } from '@/shared/writes/types'
+import type { RepoId } from '@/utils/repos'
+import type { AuditEntry, LabelAuditEntry } from '@/types/writes'
+import { isLabelAuditEntry } from '@/types/writes'
 import { appendAudit, readAuditLog } from '@/main/writes/audit'
 import { makeTempDir } from '@/testing/fixtures'
 

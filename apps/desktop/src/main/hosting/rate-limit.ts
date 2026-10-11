@@ -1,6 +1,6 @@
 // Narrows a rate limit event structurally rather than importing the SDK's own event type.
 // `utilization` is deliberately never read: its unit is undocumented and would misinform an operator.
-import type { SessionRateLimit } from '@/shared/hosting/types'
+import type { SessionRateLimit } from '@/types/hosting'
 
 const STATUS_MAP: Readonly<Record<string, SessionRateLimit['status'] | undefined>> = {
   allowed: 'allowed',

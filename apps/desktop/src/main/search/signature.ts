@@ -1,5 +1,5 @@
 // Main-only: a `Signature` never crosses IPC, so the base64 round trip is the persisted form only.
-import { SIGNATURE_HASHES, TRIGRAM_SIZE } from '@/shared/search/types'
+import { SIGNATURE_HASHES, TRIGRAM_SIZE } from '@/types/search'
 import { foldCase } from '@/main/search/terms'
 
 const MIN_BITS = 1024

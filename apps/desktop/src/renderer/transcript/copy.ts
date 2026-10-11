@@ -1,5 +1,5 @@
 // Every string the transcript screen renders — pure, no DOM.
-import type { TranscriptFailureKind, TranscriptSource, TranscriptTailFailureKind } from '@/shared/sessions/transcript'
+import type { TranscriptFailureKind, TranscriptSource, TranscriptTailFailureKind } from '@/utils/sessions/transcript'
 
 export function openFailureCopy(kind: TranscriptFailureKind, message: string, path: string | null): string {
   const p = path ?? ''

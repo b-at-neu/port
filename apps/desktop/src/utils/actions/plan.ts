@@ -1,10 +1,10 @@
 // Pure action derivation — decides whether an action applies and its label-level plan; `main/actions/apply.ts` turns a plan into a `LabelWriteRequest` and writes.
-import { LABEL_DEFAULTS } from '@/shared/labels/defaults'
-import type { LabelRole } from '@/shared/labels/defaults'
-import type { LabelKey, LabelVocabulary } from '@/shared/labels/vocabulary'
-import type { AssigneeExpectation, LabelAuditEntry, LabelPrecondition } from '@/shared/writes/types'
-import type { ReconciledItem } from '@/shared/state/types'
-import type { ActionAvailability, ActionPlan, ActionRefusal, OperatorAction } from '@/shared/actions/types'
+import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
+import type { LabelRole } from '@/utils/labels/defaults'
+import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { AssigneeExpectation, LabelAuditEntry, LabelPrecondition } from '@/types/writes'
+import type { ReconciledItem } from '@/types/state'
+import type { ActionAvailability, ActionPlan, ActionRefusal, OperatorAction } from '@/types/actions'
 import { RETRY_TRIGGER as ENGINE_RETRY_TRIGGER } from '../../../../../scripts/port-tick/liveness'
 
 /** Reused directly from the tick engine's own `RETRY_TRIGGER`, so there is no second copy to drift; retry reads it forward, pause reads it inverted. */
@@ -18,7 +18,7 @@ const IN_FLIGHT_FOR_TRIGGER: Readonly<Partial<Record<LabelKey, LabelKey>>> = Obj
 /** Derived from `LABEL_DEFAULTS` so a new label is covered automatically. */
 const ALL_STAGE_KEYS: readonly LabelKey[] = LABEL_DEFAULTS.filter((def) => def.role !== 'marker').map((def) => def.key)
 
-/** Not imported from `shared/board/project.ts`'s equivalent to avoid a `shared/board` → `shared/actions` dependency neither module needs. */
+/** Not imported from `renderer/board/project.ts`'s equivalent to avoid a `renderer/board` → `utils/actions` dependency neither module needs. */
 export function stageKeyOf(item: Pick<ReconciledItem, 'stage' | 'stages'>): LabelKey | null {
   if (item.stage === null) return null
   return item.stages.find((label) => label.role === item.stage)?.key ?? null

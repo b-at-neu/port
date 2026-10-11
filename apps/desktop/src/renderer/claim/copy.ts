@@ -2,8 +2,8 @@
 // a new variant is a compile error rather than a silently blank line, the
 // same rule `board/copy.ts`'s own header states. Pure string functions; no
 // DOM here.
-import type { ClaimVerdict, PlanGateChoice } from '@/shared/claim/types'
-import type { WriteOutcome } from '@/shared/writes/types'
+import type { ClaimVerdict, PlanGateChoice } from '@/types/claim'
+import type { WriteOutcome } from '@/types/writes'
 
 /** Shared between the claim dialog's own review step and the Backlog
  *  screen's Work on menu, so the two surfaces never drift on label or hint. */
@@ -77,7 +77,7 @@ export function writeOutcomeCopy(number: number, outcome: WriteOutcome): { reado
       return { line: `#${String(number)} already carries those labels.`, note: 'Nothing was written.' }
     case 'precondition-failed': {
       // `applyLabels` only ever produces the `precondition-failed` arm of
-      // `Conflict` here (`shared/writes/types.ts`'s own comment on
+      // `Conflict` here (`types/writes.ts`'s own comment on
       // `WriteOutcome`) — the other two arms belong to the reconciler and
       // are unreachable from a claim write, but the type is the whole
       // union, so this still narrows explicitly rather than assuming it.

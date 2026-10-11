@@ -1,8 +1,8 @@
 // Pure link resolution from dispatch records to a board item's stage sessions — renderer-safe, no I/O.
-import type { DispatchRecord } from '@/shared/dispatch/types'
-import type { PipelineItemKind } from '@/shared/github/types'
-import type { SessionKey } from '@/shared/hosting/types'
-import type { StageAgent } from '@/shared/tick/types'
+import type { DispatchRecord } from '@/types/dispatch'
+import type { PipelineItemKind } from '@/types/github'
+import type { SessionKey } from '@/types/hosting'
+import type { StageAgent } from '@/types/tick'
 
 export type StageLink =
   | { readonly kind: 'live'; readonly agent: StageAgent; readonly sessionKey: SessionKey; readonly at: string; readonly operatorJoined: boolean }

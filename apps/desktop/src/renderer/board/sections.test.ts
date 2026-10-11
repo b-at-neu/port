@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '@/shared/repos'
-import { OPERATOR_ACTIONS, OPERATOR_DECISIONS } from '@/shared/actions/types'
-import type { ActionAvailability, DecisionAvailability, OperatorAction, OperatorDecision } from '@/shared/actions/types'
-import type { BoardItemRow } from '@/shared/board/types'
-import type { ReconciledItem, StageLabel } from '@/shared/state/types'
+import type { RepoId } from '@/utils/repos'
+import { OPERATOR_ACTIONS, OPERATOR_DECISIONS } from '@/types/actions'
+import type { ActionAvailability, DecisionAvailability, OperatorAction, OperatorDecision } from '@/types/actions'
+import type { BoardItemRow } from '@/types/board'
+import type { ReconciledItem, StageLabel } from '@/types/state'
 import { boardSections } from '@/renderer/board/sections'
 
 const NO_ACTIONS = Object.fromEntries(OPERATOR_ACTIONS.map((a): [OperatorAction, ActionAvailability] => [a, { available: false, reason: 'not-applicable' }])) as Record<OperatorAction, ActionAvailability>

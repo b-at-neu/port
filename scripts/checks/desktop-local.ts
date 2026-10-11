@@ -93,8 +93,9 @@ export default async function ({ expect, fail, ok }: Reporter) {
 
   // --- (5) inspect.ts exists and exports inspectDenials, and carries all three attribution
   // literals — must never collapse a distinct SessionAttribution arm into another. ---
-  const sharedLocalDir = 'apps/desktop/src/shared/local';
-  const inspectRel = `${sharedLocalDir}/inspect.ts`;
+  const rendererLocalDir = 'apps/desktop/src/renderer/local';
+  const utilsLocalDir = 'apps/desktop/src/utils/local';
+  const inspectRel = `${rendererLocalDir}/inspect.ts`;
   const inspectPath = join(root, inspectRel);
 
   if (!existsSync(inspectPath)) {
@@ -113,16 +114,16 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!literalMissing) ok();
   }
 
-  // --- (6) Decision 2: shared/local/ imports no node: builtin and nothing from src/main/,
-  // preserving the purity that lets it compile under typecheck:web. ---
+  // --- (6) Decision 2: renderer/local/ and utils/local/ import no node: builtin and nothing from src/main/,
+  // preserving the purity that lets them compile under typecheck:web. ---
   {
     let violated = false;
-    for (const f of walk(join(root, sharedLocalDir)).filter((p) => (p.endsWith('.ts') || p.endsWith('.tsx')) && !p.endsWith('.test.ts'))) {
+    for (const f of [...walk(join(root, rendererLocalDir)), ...walk(join(root, utilsLocalDir))].filter((p) => (p.endsWith('.ts') || p.endsWith('.tsx')) && !p.endsWith('.test.ts'))) {
       const rel = relOf(f);
       const codeOnly = stripComments(readFileSync(f, 'utf8'));
       if (/from\s+['"]node:/.test(codeOnly)) {
         violated = true;
-        fail('desktop-local-inspector', `${rel} imports a node: builtin — shared/local/ must compile under typecheck:web with no Node types (Decision 2)`);
+        fail('desktop-local-inspector', `${rel} imports a node: builtin — renderer/local/ and utils/local/ must compile under typecheck:web with no Node types (Decision 2)`);
       }
       if (/from\s+['"][^'"]*\bmain\//.test(codeOnly)) {
         violated = true;

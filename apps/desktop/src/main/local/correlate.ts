@@ -1,5 +1,5 @@
 // Byte-for-byte the same ladder as the reclaimer's own copy; `correlation.cases.json` pins the two together.
-import type { CorrelationRung, WorktreeCorrelation } from '@/shared/local/types'
+import type { CorrelationRung, WorktreeCorrelation } from '@/types/local'
 
 export interface CorrelationInput {
   readonly upstreamMergeRef: string | null

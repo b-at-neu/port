@@ -1,6 +1,6 @@
 // `'backlog:list'`'s composition: registry lookup, then the one round trip `fetchBacklog` makes.
-import type { BacklogResponse } from '@/shared/backlog/types'
-import type { IpcMap } from '@/shared/ipc'
+import type { BacklogResponse } from '@/types/backlog'
+import type { IpcMap } from '@/types/ipc'
 import { fetchBacklog } from '@/main/github/backlog'
 import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/registry'
 import type { RegistryDeps } from '@/main/registry'

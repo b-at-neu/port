@@ -1,7 +1,7 @@
 // No imports, same layout as no-raw-colour.mjs, so a check can dynamically import this with no node_modules.
 // Flags a `../` specifier whose target is still inside `src`, worked out with string arithmetic, not a filesystem read.
 
-const MESSAGE = 'Relative parent import — use the @/ alias (@/main/…, @/renderer/…, @/shared/…).'
+const MESSAGE = 'Relative parent import — use the @/ alias (@/main/…, @/renderer/…, @/types/…, @/utils/…).'
 
 /** How many `../` segments a specifier opens with. */
 function leadingParentCount(spec) {
@@ -36,10 +36,10 @@ export function isParentImport(file, spec) {
 }
 
 export const CASES = [
-  { file: '/repo/apps/desktop/src/shared/hosting/types.ts', spec: '../repos', flagged: true },
-  { file: '/repo/apps/desktop/src/shared/local/inspect.ts', spec: './shape', flagged: false },
-  { file: '/repo/apps/desktop/src/shared/ipc.ts', spec: '@/repos', flagged: false },
-  { file: '/repo/apps/desktop/src/shared/labels/defaults.ts', spec: '../../../../../plugins/port/data/labels.json', flagged: false },
+  { file: '/repo/apps/desktop/src/types/hosting.ts', spec: '../utils/repos', flagged: true },
+  { file: '/repo/apps/desktop/src/renderer/local/inspect.ts', spec: './shape', flagged: false },
+  { file: '/repo/apps/desktop/src/types/ipc.ts', spec: '@/utils/repos', flagged: false },
+  { file: '/repo/apps/desktop/src/utils/labels/defaults.ts', spec: '../../../../../plugins/port/data/labels.json', flagged: false },
 ]
 
 function checkSpecifier(context, node, spec) {

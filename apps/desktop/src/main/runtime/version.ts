@@ -2,7 +2,7 @@
 import { claude } from '@/main/platform/claude'
 import type { ClaudeOptions } from '@/main/platform/claude'
 import type { CommandResult } from '@/main/platform/run'
-import { MINIMUM_CLAUDE_CODE_VERSION } from '@/shared/runtime/types'
+import { MINIMUM_CLAUDE_CODE_VERSION } from '@/types/runtime'
 
 const VERSION_RE = /(\d+)\.(\d+)\.(\d+)/
 

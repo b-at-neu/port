@@ -8,9 +8,9 @@ import { DiffView } from '@/renderer/components/diff-view'
 import { EmptyState } from '@/renderer/components/empty-state'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { useIpcQuery } from '@/renderer/data/query'
-import type { HostedSessionSnapshot, SessionKey } from '@/shared/hosting/types'
-import type { FileDiff } from '@/shared/sessions/transcript'
-import type { SessionChanges } from '@/shared/workspace/types'
+import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
+import type { FileDiff } from '@/utils/sessions/transcript'
+import type { SessionChanges } from '@/types/workspace'
 import { CLOSE_CHANGES, REFRESH_CHANGES, binaryLine, changesEmpty, changesErrorCopy, changesHeader, changesTooLarge, numstatLine, untrackedLine } from '@/renderer/session/changes-copy'
 
 function sortedFiles(files: readonly FileDiff[]): readonly FileDiff[] {

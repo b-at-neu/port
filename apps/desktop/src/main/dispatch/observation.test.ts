@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { LabelKey, LabelVocabulary, ResolvedLabel } from '@/shared/labels/vocabulary'
-import type { ReconciledItem } from '@/shared/state/types'
-import type { TickObservation } from '@/shared/tick/types'
+import type { LabelKey, LabelVocabulary, ResolvedLabel } from '@/utils/labels/vocabulary'
+import type { ReconciledItem } from '@/types/state'
+import type { TickObservation } from '@/types/tick'
 import { observationWrite } from '@/main/dispatch/observation'
 import type { WriteObservation } from '@/main/dispatch/observation'
 

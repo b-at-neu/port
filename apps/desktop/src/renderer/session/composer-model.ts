@@ -1,5 +1,5 @@
 // Pure composer logic: trigger detection, suggestion acceptance, and ranking — no DOM, no React.
-import type { SlashCommandSummary } from '@/shared/hosting/types'
+import type { SlashCommandSummary } from '@/types/hosting'
 
 export type TriggerKind = 'command' | 'file'
 

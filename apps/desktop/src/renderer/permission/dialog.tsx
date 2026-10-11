@@ -7,9 +7,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/u
 import { usePermissionState, answer, setMessage } from '@/renderer/permission/store'
 import { useSelectedSession } from '@/renderer/session/selection'
 import { useIpcQuery } from '@/renderer/data/query'
-import { sessionDisplayLabel, startedClock } from '@/shared/hosting/label'
-import { folderLabel } from '@/shared/workspace/label'
-import type { RepositoryEntry } from '@/shared/repos'
+import { sessionDisplayLabel, startedClock } from '@/utils/hosting/label'
+import { folderLabel } from '@/renderer/workspace/label'
+import type { RepositoryEntry } from '@/utils/repos'
 import {
   ALLOW_ONCE_LABEL,
   ALLOW_SESSION_LABEL,

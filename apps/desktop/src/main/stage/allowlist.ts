@@ -1,8 +1,8 @@
 // "Allow from now on" writes: the one place a stage denial's proposed rule is appended to both
 // `.claude/settings.json` and `.claude/port.config.json`, in the repository's main checkout.
 import { join } from 'node:path'
-import type { StageAllowResult } from '@/shared/stage/types'
-import { validateRule } from '@/shared/stage/rule'
+import type { StageAllowResult } from '@/types/stage'
+import { validateRule } from '@/main/stage/rule'
 import type { FileResult } from '@/main/platform/files'
 
 interface SettingsShape {

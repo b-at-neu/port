@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary, type LabelVocabulary } from '@/shared/labels/vocabulary'
+import { resolveVocabulary, type LabelVocabulary } from '@/utils/labels/vocabulary'
 import { buildClaimPreflightQuery, buildGatePreflightQuery, buildItemStatesQuery, buildItemsByNumberQuery, buildPipelineQuery, graphqlStringLiteral } from '@/main/github/query'
 
 describe('graphqlStringLiteral', () => {

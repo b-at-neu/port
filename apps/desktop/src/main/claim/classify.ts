@@ -1,9 +1,9 @@
 // Pure claim-scope classification and request-building — no `gh`, no filesystem. The caller supplies the already-fetched `ClaimPreflight`.
-import { labelName } from '@/shared/labels/vocabulary'
-import type { LabelKey, LabelVocabulary } from '@/shared/labels/vocabulary'
-import type { LabelWriteRequest } from '@/shared/writes/types'
-import type { RepoId } from '@/shared/repos'
-import type { ClaimPreflight, ClaimVerdict, PlanGateChoice } from '@/shared/claim/types'
+import { labelName } from '@/utils/labels/vocabulary'
+import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { LabelWriteRequest } from '@/types/writes'
+import type { RepoId } from '@/utils/repos'
+import type { ClaimPreflight, ClaimVerdict, PlanGateChoice } from '@/types/claim'
 
 /** `autoPlan` is kept separate from `CLAIM_LABEL_KEYS`, conditional on the operator's plan-review choice while the other two never are. */
 export const CLAIM_LABEL_KEYS: readonly LabelKey[] = ['marker', 'ready']

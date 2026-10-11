@@ -5,8 +5,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { ipcQueryOptions, useIpcMutation, useIpcQuery } from '@/renderer/data/query'
-import { SESSION_MODELS, SESSION_PERMISSION_MODES } from '@/shared/hosting/types'
-import type { SessionDefaults, SessionModel, SessionPermissionMode } from '@/shared/hosting/types'
+import { SESSION_MODELS, SESSION_PERMISSION_MODES } from '@/types/hosting'
+import type { SessionDefaults, SessionModel, SessionPermissionMode } from '@/types/hosting'
 
 type ModelOption = SessionModel | 'default'
 

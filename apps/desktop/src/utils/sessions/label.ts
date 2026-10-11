@@ -1,5 +1,5 @@
 // One copy of the session/agent label derivation — the sessions picker, the transcript header, and search all show the same string, decided only here. No import here may reach a Node builtin or the Agent SDK.
-import type { AgentRecord, SessionRecord } from '@/shared/sessions/types'
+import type { AgentRecord, SessionRecord } from '@/types/sessions'
 
 const LABEL_MAX = 80
 

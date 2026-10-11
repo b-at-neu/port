@@ -1,7 +1,7 @@
 // `actionFor` resolves each row's single inline action; `runAction`
 // dispatches it, one switch over `NeedsYouItem.kind`.
-import type { DecisionRefusal } from '@/shared/actions/types'
-import type { NeedsYouItem } from '@/shared/board/needs-you'
+import type { DecisionRefusal } from '@/types/actions'
+import type { NeedsYouItem } from '@/renderer/board/needs-you'
 import { openReviewDialog } from '@/renderer/gate/controller'
 import { openDecision } from '@/renderer/decision/controller'
 import { openAllowDialog } from '@/renderer/needs-you/allow-dialog'

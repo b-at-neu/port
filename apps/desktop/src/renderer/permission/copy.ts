@@ -2,7 +2,7 @@
 // concern — a new tool kind or grant kind is a compile error rather than a
 // silently blank line, the same rule `claim/copy.ts`'s own header states.
 // Pure string functions; no DOM here.
-import type { PendingPermission, SessionGrantItem } from '@/shared/hosting/types'
+import type { PendingPermission, SessionGrantItem } from '@/types/hosting'
 
 export const DENY_MESSAGE_LABEL = 'Tell Claude why (optional)'
 export const DENY_MESSAGE_PLACEHOLDER = 'Sent back to Claude with your denial.'
@@ -27,7 +27,7 @@ export function headingText(permission: PendingPermission): string {
  *  a subagent asked, plus a `<index> of <total> waiting` counter once more
  *  than one request is queued across every hosted session. The raw
  *  `sessionKey` is never shown — `sessionLabel` is `sessionDisplayLabel`'s
- *  own output (`shared/hosting/label.ts`), the same label the rail shows. */
+ *  own output (`utils/hosting/label.ts`), the same label the rail shows. */
 export function contextLine(sessionLabel: string, started: string, agentId: string | null, index: number, total: number): string {
   const parts = [`${sessionLabel} · started ${started}`]
   if (agentId !== null) parts.push(`subagent ${agentId}`)

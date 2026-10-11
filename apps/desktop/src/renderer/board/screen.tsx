@@ -12,9 +12,9 @@ import { ipcQueryOptions, observeIpcQuery, useIpcQuery } from '@/renderer/data/q
 import { invoke } from '@/renderer/data/invoke'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import type { BoardItemRef, BoardSearch } from '@/renderer/router/routes'
-import { projectBoard } from '@/shared/board/project'
-import type { BoardItemRow } from '@/shared/board/types'
-import type { RepoId } from '@/shared/repos'
+import { projectBoard } from '@/renderer/board/project'
+import type { BoardItemRow } from '@/types/board'
+import type { RepoId } from '@/utils/repos'
 import { registerListNavigator } from '@/renderer/shell/stores'
 import { pruneItemActionStates } from '@/renderer/board/actions'
 import { BoardBanners } from '@/renderer/board/banners'
@@ -24,7 +24,7 @@ import { PipelineStatus } from '@/renderer/board/pipeline-status'
 import { boardSections } from '@/renderer/board/sections'
 import type { BoardGroupBy } from '@/renderer/board/sections'
 import { operatorJoinedOf } from '@/renderer/board/row-model'
-import type { DispatchRecord } from '@/shared/dispatch/types'
+import type { DispatchRecord } from '@/types/dispatch'
 
 // Registered once from main.ts's boot — never a useEffect inside the
 // component.

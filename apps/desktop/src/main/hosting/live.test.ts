@@ -5,9 +5,9 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
 import { createHostedStore, defaultHostedStoreDeps } from '@/main/hosting/store'
-import type { RepoId } from '@/shared/repos'
-import type { HostedSessionSnapshot, PendingPermission, SessionEntriesDelta, SessionKey } from '@/shared/hosting/types'
-import type { SessionWorkspace } from '@/shared/workspace/types'
+import type { RepoId } from '@/utils/repos'
+import type { HostedSessionSnapshot, PendingPermission, SessionEntriesDelta, SessionKey } from '@/types/hosting'
+import type { SessionWorkspace } from '@/types/workspace'
 
 const live = process.env['PORT_LIVE_SDK'] === '1'
 const cwd = process.env['PORT_LIVE_SDK_CWD']

@@ -9,7 +9,7 @@ import { createQuitGuard } from '@/main/dispatch/quit'
 import type { Dispatcher } from '@/main/dispatch/dispatcher'
 import { confirmQuit } from '@/main/dialogs'
 import { applyNavigationGuards } from '@/main/navigation'
-import { ABOUT_NOTICE, ABOUT_POWERED_BY } from '@/shared/about/copy'
+import { ABOUT_NOTICE, ABOUT_POWERED_BY } from '@/utils/about/copy'
 import { menuTemplate } from '@/main/menu'
 import type { StageRegistry } from '@/main/stage/registry'
 

@@ -3,7 +3,7 @@
 // `window.port` call or a `useEffect` fetch.
 import { QueryClient, QueryObserver, useMutation, useQuery, queryOptions } from '@tanstack/react-query'
 import type { QueryObserverResult } from '@tanstack/react-query'
-import type { IpcMap } from '@/shared/ipc'
+import type { IpcMap } from '@/types/ipc'
 import { invoke } from '@/renderer/data/invoke'
 import type { MutationChannel, QueryChannel } from '@/renderer/data/channels'
 

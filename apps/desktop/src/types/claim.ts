@@ -1,6 +1,6 @@
 // Renderer-safe contract for the claim dialog (the "work on #N" flow). No import here may reach a Node builtin — only `main/claim.ts` resolves a repository, spawns `gh`, or writes a label.
-import type { BlockerRead, PipelineItemKind } from '@/shared/github/types'
-import type { WriteOutcome } from '@/shared/writes/types'
+import type { BlockerRead, PipelineItemKind } from '@/types/github'
+import type { WriteOutcome } from '@/types/writes'
 
 /** IPC-validated at `main/ipc.ts` against this exact list — a literal union carries no runtime list of its own to check a request against. */
 export const PLAN_GATE_CHOICES = ['review', 'auto'] as const

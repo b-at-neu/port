@@ -2,10 +2,10 @@
 // `(preflight, probe, readyRepo, probeError) → display model`, so
 // `screen.tsx`/`runtime-section.tsx` only ever render what this function
 // returns, and every UX-state decision is unit-tested here rather than in a
-// component. Shares `shared/runtime/copy.ts`'s copy table rather than
+// component. Shares `renderer/runtime/copy.ts`'s copy table rather than
 // redeclaring any of it.
-import type { RuntimeDiagnosis, RuntimePreflight, RuntimeProbe } from '@/shared/runtime/types'
-import { CLI_OUTDATED_COPY, RUNTIME_API_KEY_NOTE, RUNTIME_COPY, RUNTIME_NO_READY_REPO_NOTE, RUNTIME_PROBE_ERROR, runtimeActionLabel } from '@/shared/runtime/copy'
+import type { RuntimeDiagnosis, RuntimePreflight, RuntimeProbe } from '@/types/runtime'
+import { CLI_OUTDATED_COPY, RUNTIME_API_KEY_NOTE, RUNTIME_COPY, RUNTIME_NO_READY_REPO_NOTE, RUNTIME_PROBE_ERROR, runtimeActionLabel } from '@/renderer/runtime/copy'
 import type { PillStatus } from '@/renderer/components/status-pill'
 
 export interface ReadyRepo {

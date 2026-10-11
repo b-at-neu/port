@@ -28,8 +28,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
         fail('desktop-packaging', `${relOf(noticePath)} must carry exactly two lines, found ${noticeLines.length}`);
       } else expect(!(noticeLines[0] !== designLine1 || noticeLines[1] !== designLine2), 'desktop-packaging', `${relOf(noticePath)} (${JSON.stringify(noticeLines)}) does not match docs/DESIGN.md §6's About: line (${JSON.stringify([designLine1, designLine2])})`);
 
-      // pin: `apps/desktop/src/shared/about/copy.ts` ↔ `docs/DESIGN.md` §6's `About:` line
-      const copyPath = join(appDir, 'src/shared/about/copy.ts');
+      // pin: `apps/desktop/src/utils/about/copy.ts` ↔ `docs/DESIGN.md` §6's `About:` line
+      const copyPath = join(appDir, 'src/utils/about/copy.ts');
       if (!existsSync(copyPath)) {
         fail('desktop-packaging', `${relOf(copyPath)} does not exist`);
       } else {

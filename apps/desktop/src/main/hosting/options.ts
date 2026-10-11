@@ -1,6 +1,6 @@
 // Pure mapping from SessionStartMode to Options. sessionId is deliberately never passed; init stays the single source.
 import type { CanUseTool, Options } from '@/main/hosting/sdk'
-import type { PluginRequest, SessionDefaults, SessionStartMode } from '@/shared/hosting/types'
+import type { PluginRequest, SessionDefaults, SessionStartMode } from '@/types/hosting'
 
 /** Explicit, never omitted — `[]` would drop the repository's deny rules, plugins, and `CLAUDE.md`. */
 export const SETTING_SOURCES: readonly ('user' | 'project' | 'local')[] = ['user', 'project', 'local']

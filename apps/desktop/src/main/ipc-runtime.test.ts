@@ -1,7 +1,7 @@
 // Kept in its own file rather than added to `ipc.test.ts`, which sits at the 500-line ratchet
 // with no room left.
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '@/shared/repos'
+import type { RepoId } from '@/utils/repos'
 import { resolveRuntimeProbe } from '@/main/channels/runtime'
 import type { RegistryDeps } from '@/main/registry'
 

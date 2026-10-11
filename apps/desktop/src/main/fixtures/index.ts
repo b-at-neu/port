@@ -1,7 +1,7 @@
 // The mirror of `main/ipc.ts`'s `registerIpc`, over the canned `FixtureHandlers` table instead of a live adapter chain.
 import { ipcMain } from 'electron'
-import { IPC_CHANNELS } from '@/shared/ipc'
-import type { IpcChannel } from '@/shared/ipc'
+import { IPC_CHANNELS } from '@/types/ipc'
+import type { IpcChannel } from '@/types/ipc'
 import type { FixtureScenario } from '@/main/fixtures/mode'
 import { fixtureHandlers } from '@/main/fixtures/handlers'
 

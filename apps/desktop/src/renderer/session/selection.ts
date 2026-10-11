@@ -3,7 +3,7 @@
 // the one on screen. `session/controller.ts` is the only writer; anything
 // else only reads through `selectedSession()`/`onSelectionChange()`.
 import { useSyncExternalStore } from 'react'
-import type { SessionKey } from '@/shared/hosting/types'
+import type { SessionKey } from '@/types/hosting'
 
 let current: SessionKey | null = null
 const listeners = new Set<() => void>()

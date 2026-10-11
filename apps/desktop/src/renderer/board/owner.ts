@@ -3,9 +3,9 @@
 // `pipeline-status.tsx` routes the Take over button's click to
 // `board/dispatch.ts`'s `takeOver`, the same split every other board control
 // already follows. #293: the budget clause and its per-candidate notes.
-import type { BudgetNote, BudgetStatus, DispatcherState, DispatchRecord, ObservationRecord, RepoDispatchStatus } from '@/shared/dispatch/types'
-import type { TickObservationKind } from '@/shared/tick/types'
-import { formatCost } from '@/shared/hosting/usage'
+import type { BudgetNote, BudgetStatus, DispatcherState, DispatchRecord, ObservationRecord, RepoDispatchStatus } from '@/types/dispatch'
+import type { TickObservationKind } from '@/types/tick'
+import { formatCost } from '@/utils/hosting/usage'
 import { writeOutcomeCopy } from '@/renderer/claim/copy'
 
 function timeOf(iso: string): string {

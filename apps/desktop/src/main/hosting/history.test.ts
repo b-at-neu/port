@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HISTORY_LIMIT, readHistory } from '@/main/hosting/history'
 import type { ReadHistoryDeps } from '@/main/hosting/history'
-import type { TranscriptEntry } from '@/shared/sessions/transcript'
+import type { TranscriptEntry } from '@/utils/sessions/transcript'
 
 function entry(uuid: string): TranscriptEntry {
   return { type: 'meta', uuid, timestamp: '2024-01-01T00:00:00.000Z', label: uuid }

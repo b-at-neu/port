@@ -1,7 +1,7 @@
 // A structural read of the SDK's final `result` message — narrows without a type import from the SDK's own result union, the same rule `readRateLimit`/`readUsage` already follow.
 import type { SDKMessage } from '@/main/hosting/sdk'
-import type { SessionResult } from '@/shared/hosting/stage'
-import { SESSION_RESULT_TEXT_CAP } from '@/shared/hosting/stage'
+import type { SessionResult } from '@/types/stage-session'
+import { SESSION_RESULT_TEXT_CAP } from '@/types/stage-session'
 
 /** `message.type === 'result'` only — anything else is `null`, never guessed. `result` is read only when it is a string; a missing or non-string field leaves `text` `null` rather than coercing. */
 export function readResult(message: SDKMessage, at: string): SessionResult | null {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { aggregateUsage, contextPercent, formatCost, formatTokens } from '@/shared/hosting/usage'
-import type { SessionUsage } from '@/shared/hosting/usage'
+import { aggregateUsage, contextPercent, formatCost, formatTokens } from '@/utils/hosting/usage'
+import type { SessionUsage } from '@/utils/hosting/usage'
 
 const OBSERVED_AT = '2026-01-05T12:00:00.000Z'
 

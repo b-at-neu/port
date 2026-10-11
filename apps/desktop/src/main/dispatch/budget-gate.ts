@@ -6,7 +6,7 @@ import type { NodeRunner } from '@/main/platform/node'
 import { parseNodeCommand } from '@/main/reclaimer/command'
 import { SCRIPT_FAIL_PREFIX } from '@/main/reclaimer/report'
 import type { ReadyEntry } from '@/main/actions/apply'
-import type { TickActionable } from '@/shared/tick/types'
+import type { TickActionable } from '@/types/tick'
 import { dispatchArgs, OUTDATED_SCRIPT_SENTINEL, parseSweepLine, parseVerdict, resetArgs, sweepArgs } from '@/main/dispatch/budget'
 import type { BudgetVerdict } from '@/main/dispatch/budget'
 

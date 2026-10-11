@@ -12,7 +12,7 @@ import { ScreenHeader } from '@/renderer/components/screen-header'
 import { StatusPill } from '@/renderer/components/status-pill'
 import { useIpcMutation, useIpcQuery } from '@/renderer/data/query'
 import { ROUTE_IDS } from '@/renderer/router/routes'
-import type { RepoId, RepositoryEntry } from '@/shared/repos'
+import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import { problemLabel, registryBannerCopy } from '@/renderer/repositories/copy'
 
 function repoName(entry: RepositoryEntry): string {

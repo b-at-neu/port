@@ -1,9 +1,9 @@
 // Pure Overview view-model: folds a ready repository's config with the
 // board's own `BoardSnapshot` into the Sources, Labels, Config sections.
-import type { BoardSnapshot, RepositoryHealth, SourceKind } from '@/shared/board/types'
-import { SOURCE_KINDS } from '@/shared/board/types'
-import type { LabelKey, LabelSource, VocabularyProblem, VocabularyVerdict } from '@/shared/labels/vocabulary'
-import type { AppliedOverride, RepoId, ResolvedRepoConfig } from '@/shared/repos'
+import type { BoardSnapshot, RepositoryHealth, SourceKind } from '@/types/board'
+import { SOURCE_KINDS } from '@/types/board'
+import type { LabelKey, LabelSource, VocabularyProblem, VocabularyVerdict } from '@/utils/labels/vocabulary'
+import type { AppliedOverride, RepoId, ResolvedRepoConfig } from '@/utils/repos'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
 
 export interface OverviewSourceSection {
@@ -42,7 +42,7 @@ export interface OverviewHealth {
 }
 
 /** Keeps `plugins/port/data/labels.json`'s own declaration order, the same
- *  order `shared/actions/types.ts`'s `MODULE_LABELS` iterates. */
+ *  order `types/actions.ts`'s `MODULE_LABELS` iterates. */
 const MODULE_FLAG_NAMES: readonly ModuleFlagName[] = ['approvalGate', 'release', 'scope']
 
 function roleDisplayFor(key: LabelKey): string {

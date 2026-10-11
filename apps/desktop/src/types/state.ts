@@ -1,10 +1,10 @@
 // Renderer-safe reconciled shapes for the unified state model. No import here may reach a Node builtin — only `main/state/` joins the four adapters. A condition a human or the environment could cause is a value, never a throw.
-import type { LabelKey, VocabularyReport } from '@/shared/labels/vocabulary'
-import type { LabelRole } from '@/shared/labels/defaults'
-import type { CheckContext, Mergeable, PipelineFailureKind, PipelineItemKind, PullRequestCommentNode, RateLimitInfo, ReviewNode, TruncatedSet, UnavailableAlias } from '@/shared/github/types'
-import type { RepoDiagnostic, RepoId, RepoProblem } from '@/shared/repos'
-import type { DenialsRead, UnresolvedReason } from '@/shared/local/types'
-import type { PortStageAgent, SessionScan } from '@/shared/sessions/types'
+import type { LabelKey, VocabularyReport } from '@/utils/labels/vocabulary'
+import type { LabelRole } from '@/utils/labels/defaults'
+import type { CheckContext, Mergeable, PipelineFailureKind, PipelineItemKind, PullRequestCommentNode, RateLimitInfo, ReviewNode, TruncatedSet, UnavailableAlias } from '@/types/github'
+import type { RepoDiagnostic, RepoId, RepoProblem } from '@/utils/repos'
+import type { DenialsRead, UnresolvedReason } from '@/types/local'
+import type { PortStageAgent, SessionScan } from '@/types/sessions'
 
 /** One role-bearing label this item carries — every co-present label stays here even though `stage` resolves a single winner. Markers are excluded — they surface separately as `marked`/`autoPlan`. */
 export interface StageLabel {

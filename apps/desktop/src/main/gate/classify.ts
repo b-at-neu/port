@@ -1,9 +1,9 @@
 // Pure plan-review-gate classification and label-level plan building — no `gh`, no filesystem. The caller supplies the already-fetched `GateClassifyItem`; this module never touches a body string.
-import { labelName } from '@/shared/labels/vocabulary'
-import type { LabelKey, LabelVocabulary } from '@/shared/labels/vocabulary'
-import type { LabelPrecondition } from '@/shared/writes/types'
-import type { PipelineItemKind } from '@/shared/github/types'
-import type { GateDecision, GateVerdict } from '@/shared/gate/types'
+import { labelName } from '@/utils/labels/vocabulary'
+import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { LabelPrecondition } from '@/types/writes'
+import type { PipelineItemKind } from '@/types/github'
+import type { GateDecision, GateVerdict } from '@/types/gate'
 
 export interface GateClassifyItem {
   readonly kind: PipelineItemKind

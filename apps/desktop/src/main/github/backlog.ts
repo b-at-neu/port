@@ -1,8 +1,8 @@
 // fetchBacklog: every open issue, dropping anything carrying a vocabulary label.
 import { gh as defaultGh } from '@/main/platform/gh'
 import type { GhResult, GhRunner } from '@/main/platform/gh'
-import type { LabelVocabulary } from '@/shared/labels/vocabulary'
-import type { BacklogItem, BacklogResponse } from '@/shared/backlog/types'
+import type { LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { BacklogItem, BacklogResponse } from '@/types/backlog'
 import { classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'
 import type { RepoRef } from '@/main/github/adapter'

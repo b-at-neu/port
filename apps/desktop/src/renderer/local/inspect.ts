@@ -1,11 +1,11 @@
-// Turns the denial log into something an operator can act on. Pure, so it compiles under `typecheck:web` and runs from both renderer and main. Lives in `shared/` because it joins two adapters' outputs. A shape is a grouping key, never a parse; bursts count only `deny` entries; attribution fails toward "unknown", never a guessed role.
-import type { RepoId } from '@/shared/repos'
-import type { SessionRecord, SessionRole, SessionScan } from '@/shared/sessions/types'
-import { shapeOf } from '@/shared/local/shape'
-import { summarizeDenials } from '@/shared/local/summary'
-import type { DenialActor, DenialDecision, DenialsFailureKind, DenialSummary, DenialsRead } from '@/shared/local/types'
+// Turns the denial log into something an operator can act on. Pure, so it compiles under `typecheck:web` and runs from both renderer and main. Lives in `renderer/` because it joins two adapters' outputs. A shape is a grouping key, never a parse; bursts count only `deny` entries; attribution fails toward "unknown", never a guessed role.
+import type { RepoId } from '@/utils/repos'
+import type { SessionRecord, SessionRole, SessionScan } from '@/types/sessions'
+import { shapeOf } from '@/renderer/local/shape'
+import { summarizeDenials } from '@/utils/local/summary'
+import type { DenialActor, DenialDecision, DenialsFailureKind, DenialSummary, DenialsRead } from '@/types/local'
 
-export { shapeOf } from '@/shared/local/shape'
+export { shapeOf } from '@/renderer/local/shape'
 
 /** Shared with tests rather than each carrying its own threshold. */
 export const BURST_MIN_COUNT = 3

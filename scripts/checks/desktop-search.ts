@@ -7,7 +7,7 @@ import type { Reporter } from '#lib/report.ts';
 // already parse. These assertions pin its plan's decisions mechanically.
 export default async function ({ expect, fail, ok }: Reporter) {
   const searchDir = 'apps/desktop/src/main/search';
-  const sharedSearchTypesFile = 'apps/desktop/src/shared/search/types.ts';
+  const sharedSearchTypesFile = 'apps/desktop/src/types/search.ts';
   const rendererSearchCopyFile = 'apps/desktop/src/renderer/search/copy.ts';
   const srcDir = join(root, 'apps/desktop/src');
   const allFiles = walk(srcDir).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
@@ -42,7 +42,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // --- shared/search/types.ts declares every honesty field; the renderer reads 'complete'
+  // --- types/search.ts declares every honesty field; the renderer reads 'complete'
   // before rendering an empty result — a partial search must never render as exhaustive. ---
   {
     const typesFile = allFiles.find((f) => relOf(f) === sharedSearchTypesFile);

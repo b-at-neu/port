@@ -2,7 +2,7 @@
 import { sanitize } from '@/main/sessions/transcript-entries'
 import type { RawSession, SessionReader } from '@/main/sessions/sdk'
 import { forkTitle } from '@/main/hosting/fork'
-import type { SessionStartMode } from '@/shared/hosting/types'
+import type { SessionStartMode } from '@/types/hosting'
 
 const MAX_TITLE_LENGTH = 60
 

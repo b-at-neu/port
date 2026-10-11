@@ -5,8 +5,8 @@ import { pathOps as defaultPathOps } from '@/main/platform/paths'
 import type { CommandResult } from '@/main/platform/run'
 import type { GitRunner } from '@/main/platform/git'
 import type { PathOps } from '@/main/platform/paths'
-import type { AssertEqual } from '@/shared/assert-type'
-import type { LocalFailureKind, WorktreeEntry, WorktreeProducer, WorktreesRead } from '@/shared/local/types'
+import type { AssertEqual } from '@/types/assert-type'
+import type { LocalFailureKind, WorktreeEntry, WorktreeProducer, WorktreesRead } from '@/types/local'
 import { correlate } from '@/main/local/correlate'
 
 export type { GitRunner }

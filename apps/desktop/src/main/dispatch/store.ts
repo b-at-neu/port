@@ -2,9 +2,9 @@
 // parameter so nothing in this module imports Electron.
 import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
 import { pathOps } from '@/main/platform/paths'
-import type { RepoId } from '@/shared/repos'
-import { RUN_STATES, RUN_TARGET } from '@/shared/dispatch/types'
-import type { RepoRunState, RunState, RunStatesSnapshot, RunStateStoreStatus } from '@/shared/dispatch/types'
+import type { RepoId } from '@/utils/repos'
+import { RUN_STATES, RUN_TARGET } from '@/types/dispatch'
+import type { RepoRunState, RunState, RunStatesSnapshot, RunStateStoreStatus } from '@/types/dispatch'
 
 const DISPATCH_FILE = 'dispatch.json'
 const CURRENT_VERSION = 2

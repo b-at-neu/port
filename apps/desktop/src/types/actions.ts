@@ -1,6 +1,6 @@
 // Renderer-safe contract for the single-label operator actions: pause, resume, retry, stop, gate. No import here may reach a Node builtin.
-import type { LabelKey } from '@/shared/labels/vocabulary'
-import type { LabelPrecondition, WriteOutcome } from '@/shared/writes/types'
+import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { LabelPrecondition, WriteOutcome } from '@/types/writes'
 
 /** Recorded verbatim as `AuditEntry.action`; `refresh` needs no comment or operator choice, so it stays out of `OperatorDecision` below. */
 export const OPERATOR_ACTIONS = ['pause', 'resume', 'retry', 'stop', 'gate', 'refresh'] as const

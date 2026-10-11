@@ -18,8 +18,8 @@ import { ROUTE_IDS } from '@/renderer/router/routes'
 import { buildBacklogGroup, relativeAge, exactTime, staleSinceAt } from '@/renderer/backlog/group'
 import type { BacklogGroupView, BacklogRowView } from '@/renderer/backlog/group'
 import { backlogEmptyGroupCopy, backlogNotReadyCopy } from '@/renderer/backlog/copy'
-import { isReadyRepo } from '@/shared/repos'
-import type { RepoId } from '@/shared/repos'
+import { isReadyRepo } from '@/utils/repos'
+import type { RepoId } from '@/utils/repos'
 
 interface ReadyRepo {
   readonly id: RepoId

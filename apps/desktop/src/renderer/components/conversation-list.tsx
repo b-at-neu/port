@@ -9,8 +9,8 @@ import { Markdown } from '@/renderer/components/markdown'
 import { groupEntries } from '@/renderer/components/conversation-model'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { ROUTE_IDS } from '@/renderer/router/routes'
-import type { LiveBlock, SessionHistory } from '@/shared/hosting/types'
-import type { TranscriptEntry } from '@/shared/sessions/transcript'
+import type { LiveBlock, SessionHistory } from '@/types/hosting'
+import type { TranscriptEntry } from '@/utils/sessions/transcript'
 
 const NEAR_BOTTOM_PX = 64
 const CHUNK_THRESHOLD = 500

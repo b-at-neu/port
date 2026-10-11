@@ -1,8 +1,8 @@
 // Builds the Electron application menu from the shared APP_COMMANDS table. Pure template
 // construction — main/index.ts calls Menu.buildFromTemplate(menuTemplate(...)) in whenReady.
 import type { MenuItemConstructorOptions } from 'electron'
-import { APP_COMMANDS } from '@/shared/shell/commands'
-import type { AppCommand, AppCommandSpec } from '@/shared/shell/commands'
+import { APP_COMMANDS } from '@/utils/shell/commands'
+import type { AppCommand, AppCommandSpec } from '@/utils/shell/commands'
 
 function commandItem(spec: AppCommandSpec, send: (command: AppCommand) => void): MenuItemConstructorOptions {
   // registerAccelerator: false shows the chord but never lets the native menu swallow the

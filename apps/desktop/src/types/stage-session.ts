@@ -1,7 +1,7 @@
 // Renderer-safe types for a stage session — a hosted session the app itself launched to run a pipeline stage, never an operator's own.
-import type { PipelineItemKind } from '@/shared/github/types'
-import type { LabelKey } from '@/shared/labels/vocabulary'
-import type { StageAgent } from '@/shared/tick/types'
+import type { PipelineItemKind } from '@/types/github'
+import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { StageAgent } from '@/types/tick'
 
 /** Carried on a stage session's snapshot so the renderer can tell it apart from an operator session without a second lookup. */
 export interface StageTag {

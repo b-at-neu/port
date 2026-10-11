@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '@/shared/labels/vocabulary'
-import type { PipelineFetch, PipelineItem } from '@/shared/github/types'
-import type { RepositoryEntry } from '@/shared/repos'
-import type { WorktreeEntry, WorktreesRead } from '@/shared/local/types'
-import type { AgentRecord, SessionRecord } from '@/shared/sessions/types'
+import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import type { PipelineFetch, PipelineItem } from '@/types/github'
+import type { RepositoryEntry } from '@/utils/repos'
+import type { WorktreeEntry, WorktreesRead } from '@/types/local'
+import type { AgentRecord, SessionRecord } from '@/types/sessions'
 import { reconcileRepository, type RepoSessionSlice } from '@/main/state/reconcile'
 
 const VOCABULARY = resolveVocabulary({})

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '@/shared/labels/vocabulary'
-import type { LabelVocabulary } from '@/shared/labels/vocabulary'
-import type { RepoId } from '@/shared/repos'
-import type { LabelWriteRequest } from '@/shared/writes/types'
+import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import type { LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { RepoId } from '@/utils/repos'
+import type { LabelWriteRequest } from '@/types/writes'
 import { buildCommand } from '@/main/writes/command'
 
 const VOCABULARY: LabelVocabulary = resolveVocabulary({})

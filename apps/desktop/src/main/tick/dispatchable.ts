@@ -1,7 +1,7 @@
 // The dispatch gate: the only function that turns a TickReport into a set anything may act on.
 // Pure: no gh, no filesystem, no timer. The dispatcher must never read `report.actionable` directly.
-import type { RunState } from '@/shared/dispatch/types'
-import type { TickActionable, TickAutoApproval, TickObservation, TickReport } from '@/shared/tick/types'
+import type { RunState } from '@/types/dispatch'
+import type { TickActionable, TickAutoApproval, TickObservation, TickReport } from '@/types/tick'
 
 export function dispatchableFrom(report: TickReport, runState: RunState): readonly TickActionable[] {
   if (runState !== 'dispatching') return []

@@ -1,14 +1,14 @@
 // Pure "needs you" derivation, built on `projectBoard`'s own rows so
 // `actions`/`decisions` availability is reused, never re-derived.
-import type { BudgetNote } from '@/shared/dispatch/types'
-import type { HostedSessionSnapshot, SessionKey } from '@/shared/hosting/types'
-import type { AskQuestion } from '@/shared/hosting/controls'
-import type { StageDenial, InterruptedStage } from '@/shared/stage/types'
-import type { RepoId } from '@/shared/repos'
-import type { RepositoryState } from '@/shared/state/types'
-import type { TickClaim, TickHeld, TickLabelRepair } from '@/shared/tick/types'
-import { projectBoard } from '@/shared/board/project'
-import type { BoardItemRow, BoardSnapshot } from '@/shared/board/types'
+import type { BudgetNote } from '@/types/dispatch'
+import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
+import type { AskQuestion } from '@/utils/hosting/controls'
+import type { StageDenial, InterruptedStage } from '@/types/stage'
+import type { RepoId } from '@/utils/repos'
+import type { RepositoryState } from '@/types/state'
+import type { TickClaim, TickHeld, TickLabelRepair } from '@/types/tick'
+import { projectBoard } from '@/renderer/board/project'
+import type { BoardItemRow, BoardSnapshot } from '@/types/board'
 
 /** The four label-keyed kinds, each carrying the row they came from. */
 export type RowNeedsYouKind = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'blocked'

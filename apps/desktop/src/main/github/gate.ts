@@ -2,7 +2,7 @@
 // file-size ratchet; reuses envelope.ts's parsing rather than hand-rolling a second reader.
 import { gh as defaultGh } from '@/main/platform/gh'
 import type { GhResult, GhRunner } from '@/main/platform/gh'
-import type { GatePreflightFetch, GatePreflightItem } from '@/shared/github/types'
+import type { GatePreflightFetch, GatePreflightItem } from '@/types/github'
 import { classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'
 import { buildGatePreflightQuery } from '@/main/github/query'

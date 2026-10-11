@@ -2,7 +2,7 @@
 // one next-action link; every operator action lives in the detail pane.
 import type { KeyboardEvent, MouseEvent } from 'react'
 import { cn } from '@/renderer/lib/utils'
-import type { BoardItemRow } from '@/shared/board/types'
+import type { BoardItemRow } from '@/types/board'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
 import { autoPlanTagLabel, autoPlanTagTitle, operatorJoinedTagLabel, operatorJoinedTagTitle } from '@/renderer/board/copy'
 import { nextActionFor, pillStatusFor } from '@/renderer/board/row-model'

@@ -1,12 +1,12 @@
 // Renderer-safe contract for operator control over dispatch: per-repository run state (run/drain/pause) and halt everything. No import here may reach a Node builtin.
-import type { PipelineItemKind } from '@/shared/github/types'
-import type { ItemActionResult } from '@/shared/actions/types'
-import type { RepoId } from '@/shared/repos'
-import type { StageAgent, TickObservationKind } from '@/shared/tick/types'
-import type { WriteOutcome } from '@/shared/writes/types'
-import type { StageOutcome } from '@/shared/hosting/stage'
-import type { SessionKey } from '@/shared/hosting/types'
-import type { InterruptedStage, StageDenial } from '@/shared/stage/types'
+import type { PipelineItemKind } from '@/types/github'
+import type { ItemActionResult } from '@/types/actions'
+import type { RepoId } from '@/utils/repos'
+import type { StageAgent, TickObservationKind } from '@/types/tick'
+import type { WriteOutcome } from '@/types/writes'
+import type { StageOutcome } from '@/types/stage-session'
+import type { SessionKey } from '@/types/hosting'
+import type { InterruptedStage, StageDenial } from '@/types/stage'
 
 /** `dispatch.json`'s own per-repository run state — `dispatching`, `draining` (scoped to one repository), or `paused` (the hard stop: the transition into it also stops every in-flight agent). */
 export const RUN_STATES = ['dispatching', 'draining', 'paused'] as const

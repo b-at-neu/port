@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { historyFor, MAX_ENTRIES, NOT_RECALLING, recallNewer, recallOlder, recallText, recordSent } from '@/renderer/session/prompt-history'
 import type { PromptHistoryStorage } from '@/renderer/session/prompt-history'
-import type { RepoId } from '@/shared/repos'
+import type { RepoId } from '@/utils/repos'
 
 const REPO = 'repo-1' as RepoId
 const OTHER_REPO = 'repo-2' as RepoId

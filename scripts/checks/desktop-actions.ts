@@ -7,50 +7,50 @@ import type { Reporter } from '#lib/report.ts';
 // The single-label operator actions and operator decisions — mechanical, dependency-free,
 // regex-based rails, reading directories by explicit path, never walk('apps/').
 export default async function ({ expect, fail, ok }: Reporter) {
-  const sharedActionsDir = 'apps/desktop/src/shared/actions';
+  const utilsActionsDir = 'apps/desktop/src/utils/actions';
   const mainActionsDir = 'apps/desktop/src/main/actions';
-  const bodiesFile = `${sharedActionsDir}/bodies.ts`;
-  const projectFile = 'apps/desktop/src/shared/board/project.ts';
+  const bodiesFile = `${utilsActionsDir}/bodies.ts`;
+  const projectFile = 'apps/desktop/src/renderer/board/project.ts';
   const scriptsPortTickGatesFile = 'scripts/port-tick/gates.ts';
   const observationFile = 'apps/desktop/src/main/dispatch/observation.ts';
   const formatsFile = 'plugins/port/docs/FORMATS.md';
 
   const srcDir = join(root, 'apps/desktop/src');
   const allFiles = walk(srcDir).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
-  const sharedActionsFiles = allFiles.filter((f) => relOf(f).startsWith(`${sharedActionsDir}/`));
+  const utilsActionsFiles = allFiles.filter((f) => relOf(f).startsWith(`${utilsActionsDir}/`));
   const mainActionsFiles = allFiles.filter((f) => relOf(f).startsWith(`${mainActionsDir}/`));
 
-  // --- shared/actions/ has source files, so deleting the directory cannot pass vacuously. ---
-  if (sharedActionsFiles.filter((f) => !relOf(f).endsWith('.test.ts')).length === 0) {
-    fail('desktop-actions', `${sharedActionsDir} has no source files — the guard cannot pass vacuously if the directory is deleted`);
+  // --- utils/actions/ has source files, so deleting the directory cannot pass vacuously. ---
+  if (utilsActionsFiles.filter((f) => !relOf(f).endsWith('.test.ts')).length === 0) {
+    fail('desktop-actions', `${utilsActionsDir} has no source files — the guard cannot pass vacuously if the directory is deleted`);
     return;
   }
 
-  // shared/actions/plan.ts's RETRY_TRIGGER derives from scripts/port-tick/liveness.ts's
+  // utils/actions/plan.ts's RETRY_TRIGGER derives from scripts/port-tick/liveness.ts's
   // export directly, so the assignment itself typechecks against LabelKey.
 
-  // --- No file under shared/actions/ imports a node: builtin or a main/ path — the pure
+  // --- No file under utils/actions/ imports a node: builtin or a main/ path — the pure
   // action-derivation layer must keep its `typecheck:web` compatibility. ---
   {
     let found = false;
-    for (const f of sharedActionsFiles) {
+    for (const f of utilsActionsFiles) {
       const text = readFileSync(f, 'utf8');
       if (/from\s+'node:/.test(text) || /from\s+'.*\/main\//.test(text) || /from\s+'\.\.\/\.\.\/main\//.test(text)) {
         found = true;
-        fail('desktop-actions', `${relOf(f)} imports a node: builtin or a main/ path — shared/actions/ must compile under typecheck:web`);
+        fail('desktop-actions', `${relOf(f)} imports a node: builtin or a main/ path — utils/actions/ must compile under typecheck:web`);
       }
     }
     if (!found) ok();
   }
 
-  // --- No non-test file under shared/actions/ or main/actions/ retypes a hand-typed label
+  // --- No non-test file under utils/actions/ or main/actions/ retypes a hand-typed label
   // name instead of resolving through the vocabulary. Checked only where key !== name. ---
   {
     const mismatched = readJson('plugins/port/data/labels.json')
       .labels.filter((l: any) => l.key !== l.name)
       .map((l: any) => l.name);
     let found = false;
-    for (const f of [...sharedActionsFiles, ...mainActionsFiles]) {
+    for (const f of [...utilsActionsFiles, ...mainActionsFiles]) {
       const rel = relOf(f);
       if (rel.endsWith('.test.ts')) continue;
       const text = readFileSync(f, 'utf8');
@@ -86,7 +86,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     else if (!found) ok();
   }
 
-  // --- shared/board/project.ts's ungated selection names approvalGate, so the section is
+  // --- renderer/board/project.ts's ungated selection names approvalGate, so the section is
   // absent entirely when the module is off, never rendering regardless. ---
   {
     const text = readFileSync(join(root, projectFile), 'utf8');

@@ -1,5 +1,5 @@
 // Per-repository prompt history — sent text only, newest first, capped and duplicate-collapsed, persisted in localStorage.
-import type { RepoId } from '@/shared/repos'
+import type { RepoId } from '@/utils/repos'
 
 export const MAX_ENTRIES = 100
 

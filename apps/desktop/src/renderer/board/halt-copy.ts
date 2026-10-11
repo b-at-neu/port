@@ -3,7 +3,7 @@
 // repository) and `board/run-state.ts`'s per-repository `Pause`. Split out
 // of `dispatch.ts` so the two modules never form a circular import between
 // them.
-import type { HaltItemOutcome, HaltReport } from '@/shared/dispatch/types'
+import type { HaltItemOutcome, HaltReport } from '@/types/dispatch'
 import { actionResultCopy } from '@/renderer/board/copy'
 
 function skippedLine(outcome: Extract<HaltItemOutcome, { readonly kind: 'skipped' }>): string {

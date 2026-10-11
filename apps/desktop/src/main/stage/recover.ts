@@ -1,7 +1,7 @@
 // Resume and Restart compositions for an interrupted stage session — operator-only, never called
 // from the dispatch loop itself. Nothing here restarts anything on its own.
-import type { ItemActionResult } from '@/shared/actions/types'
-import type { InterruptedStage, StageResumeResult, StageRestartResult } from '@/shared/stage/types'
+import type { ItemActionResult } from '@/types/actions'
+import type { InterruptedStage, StageResumeResult, StageRestartResult } from '@/types/stage'
 import type { HostedStore } from '@/main/hosting/store'
 import type { RemoveSessionWorktreeOutcome } from '@/main/workspace/worktree'
 import type { StageRegistry } from '@/main/stage/registry'

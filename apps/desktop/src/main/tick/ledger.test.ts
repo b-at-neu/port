@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '@/shared/repos'
+import type { RepoId } from '@/utils/repos'
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
 import { classifyUnmatched } from '../../../../../scripts/port-tick/liveness'
 

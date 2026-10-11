@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseInline } from '@/shared/markdown/inline'
+import { parseInline } from '@/renderer/markdown/inline'
 
 describe('parseInline', () => {
   it('parses a plain literal run as one text node', () => {

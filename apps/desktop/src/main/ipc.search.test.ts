@@ -1,6 +1,6 @@
 // Split out of ipc.test.ts once that file crossed the 500-line limit.
 import { describe, expect, it } from 'vitest'
-import type { SearchResult } from '@/shared/search/types'
+import type { SearchResult } from '@/types/search'
 import { resolveSearchQuery } from '@/main/channels/sessions'
 import type { SearchQueryDeps } from '@/main/channels/sessions'
 import type { RegistryDeps } from '@/main/registry'

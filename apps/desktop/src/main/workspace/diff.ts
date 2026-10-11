@@ -1,5 +1,5 @@
 // Pure parser: `git diff` unified output -> `FileDiff[]`. No `GitRunner`, no filesystem — `changes.ts` owns invocation.
-import type { DiffHunk, DiffLine, DiffSign, FileDiff } from '@/shared/sessions/transcript'
+import type { DiffHunk, DiffLine, DiffSign, FileDiff } from '@/utils/sessions/transcript'
 
 const DIFF_GIT_LINE = /^diff --git /
 const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/

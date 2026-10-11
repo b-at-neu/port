@@ -1,6 +1,6 @@
 // Block parse — pure, no DOM, no `node:` import. Recognizes a bounded subset: ATX headings, paragraphs, fenced code, blockquote, lists with one level of nesting and task items, GFM pipe tables, thematic breaks. Anything else falls into an ordinary paragraph's literal text, never dropped or interpreted.
-import { parseInline } from '@/shared/markdown/inline'
-import type { BlockNode, ListItem, TableAlign, TableRow } from '@/shared/markdown/types'
+import { parseInline } from '@/renderer/markdown/inline'
+import type { BlockNode, ListItem, TableAlign, TableRow } from '@/types/markdown'
 
 const ATX_HEADING = /^(#{1,6})\s+(.*)$/
 const THEMATIC_BREAK = /^(?:-{3,}|\*{3,}|_{3,})$/

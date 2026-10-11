@@ -1,6 +1,6 @@
 // Unrecognised text is `stream-error` with the message carried verbatim, never a guessed reason.
-import type { CredentialsTell, RuntimeDiagnosis } from '@/shared/runtime/types'
-import type { SessionEndReason } from '@/shared/hosting/types'
+import type { CredentialsTell, RuntimeDiagnosis } from '@/types/runtime'
+import type { SessionEndReason } from '@/types/hosting'
 import { classifyProbeFailure } from '@/main/runtime/classify'
 
 /** The CLI's own refusal of a `resumeDropsTurn` fork point; checked first since its message also contains ordinary prose. */

@@ -1,10 +1,10 @@
 // Pure redispatch-floor filtering, the re-read survivor test, and the budget note's
 // comment-failure clause, moved here to keep dispatcher.ts under the file-size limit.
 import type { StageRecord } from '@/main/dispatch/launch'
-import type { ResolvedItem } from '@/shared/github/types'
-import type { LabelVocabulary } from '@/shared/labels/vocabulary'
-import type { TickActionable } from '@/shared/tick/types'
-import type { WriteOutcome } from '@/shared/writes/types'
+import type { ResolvedItem } from '@/types/github'
+import type { LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { TickActionable } from '@/types/tick'
+import type { WriteOutcome } from '@/types/writes'
 
 /** The cockpit's own tick floor — a slow label swap must never look like "nothing sent yet"
  *  and double-dispatch the same candidate within one tick's worth of time. */

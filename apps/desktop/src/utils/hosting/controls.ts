@@ -1,6 +1,6 @@
 // A hosted session's live controls (mode, model, effort), plus the two
 // canUseTool calls narrowed away from the generic permission dialog.
-import type { SessionPermissionMode } from '@/shared/hosting/types'
+import type { SessionPermissionMode } from '@/types/hosting'
 
 export const SESSION_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
 

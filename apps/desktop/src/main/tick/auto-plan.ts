@@ -1,6 +1,6 @@
 // Pure decision for the cockpit's unprompted `autoPlan` swap; `main/dispatch/auto-plan.ts` reads the claim and writes.
-import type { ReconciledItem } from '@/shared/state/types'
-import type { TickAutoApproval } from '@/shared/tick/types'
+import type { ReconciledItem } from '@/types/state'
+import type { TickAutoApproval } from '@/types/tick'
 import { partitionOwnership } from '../../../../../scripts/port-tick/classify'
 
 /** Qualifies when carrying `autoPlan`, `stages` is exactly one entry at `planReview`, and the viewer is an assignee. */

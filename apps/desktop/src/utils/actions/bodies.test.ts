@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CHANGES_REQUESTED_HEADING, CYCLE_GRANT_LINE, GATE_CLEARED_HEADING, changesRequestedBody, gateClearedBody } from '@/shared/actions/bodies'
+import { CHANGES_REQUESTED_HEADING, CYCLE_GRANT_LINE, GATE_CLEARED_HEADING, changesRequestedBody, gateClearedBody } from '@/utils/actions/bodies'
 
 describe('gateClearedBody', () => {
   it('names revision for the revision route', () => {

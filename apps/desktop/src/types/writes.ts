@@ -1,7 +1,7 @@
 // Renderer-safe contract for the write chokepoint: every mutation the app makes to GitHub is expressed in `LabelKey` values and a stated precondition, never a raw argv or a bypassing `gh` call. No import here may reach a Node builtin.
-import type { LabelKey, LabelVocabulary } from '@/shared/labels/vocabulary'
-import type { RepoId } from '@/shared/repos'
-import type { ReclaimerFailureKind } from '@/shared/reclaimer/types'
+import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { RepoId } from '@/utils/repos'
+import type { ReclaimerFailureKind } from '@/types/reclaimer'
 
 export type AssigneeExpectation = { readonly kind: 'any' } | { readonly kind: 'unassigned' } | { readonly kind: 'exactly'; readonly logins: readonly string[] }
 

@@ -1,5 +1,5 @@
 // No runtime imports: a pin checks this against the design doc directly.
-import type { LabelKey } from '@/shared/labels/vocabulary'
+import type { LabelKey } from '@/utils/labels/vocabulary'
 
 /** `null` means the role is never shown as a phase. */
 export const PHASE_NAMES: Readonly<Record<LabelKey, string | null>> = {

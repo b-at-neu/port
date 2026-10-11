@@ -1,7 +1,7 @@
 // The trigger-key to stage-agent map, pinned by scripts/checks/desktop-tick.ts against
 // plugins/port/data/labels.json's own trigger-role keys, both directions.
-import type { LabelKey } from '@/shared/labels/vocabulary'
-import type { StageAgent } from '@/shared/tick/types'
+import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { StageAgent } from '@/types/tick'
 
 export const AGENT_FOR_TRIGGER: Readonly<Partial<Record<LabelKey, StageAgent>>> = {
   ready: 'plan',

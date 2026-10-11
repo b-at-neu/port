@@ -1,5 +1,5 @@
 // Renderer-safe shapes for the worktree inspector: driving the shipped worktrees script and joining the local read for the one fact its JSON omits (`prunable`). No import here may reach a Node builtin.
-import type { CorrelationRung, WorktreeProducer } from '@/shared/local/types'
+import type { CorrelationRung, WorktreeProducer } from '@/types/local'
 
 /** Byte-for-byte `bin/worktrees.mjs`'s own state vocabulary. A `state` the app does not know is never widened to a string; `parse.ts` fails the whole payload with `report-unparseable` instead. */
 export const WORKTREE_STATES = ['active', 'done', 'no-work', 'locked', 'dirty', 'outside', 'unresolved'] as const

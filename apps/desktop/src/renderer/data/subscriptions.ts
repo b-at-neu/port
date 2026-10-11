@@ -3,8 +3,8 @@
 // all subscribe through this module instead of the bridge directly, so a
 // pushed event is attached once no matter how many screens care about it.
 import type { QueryClient } from '@tanstack/react-query'
-import type { BridgeListener, IpcEvent, IpcEventMap } from '@/shared/ipc'
-import type { HostedSessionSnapshot } from '@/shared/hosting/types'
+import type { BridgeListener, IpcEvent, IpcEventMap } from '@/types/ipc'
+import type { HostedSessionSnapshot } from '@/types/hosting'
 import { ipcQueryOptions } from '@/renderer/data/query'
 
 export type SubscribableEvent = IpcEvent

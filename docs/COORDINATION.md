@@ -55,7 +55,7 @@ This replaces the two gate-claim scopes (`plan-gate`, `dispatch`) #92/#265/#292 
 
 The copy below is decided here, for #92 and #79 to implement verbatim.
 
-**The reconciler's conflict state.** One state on the item, discriminated by reason — mirroring `RepoProblem`/`RepoDiagnostic` in `apps/desktop/src/shared/repos.ts`, not a new parallel mechanism. It is not folded into `stalled`: a stall is nothing happening, a conflict is two things happening.
+**The reconciler's conflict state.** One state on the item, discriminated by reason — mirroring `RepoProblem`/`RepoDiagnostic` in `apps/desktop/src/utils/repos.ts`, not a new parallel mechanism. It is not folded into `stalled`: a stall is nothing happening, a conflict is two things happening.
 
 ```ts
 type Conflict =

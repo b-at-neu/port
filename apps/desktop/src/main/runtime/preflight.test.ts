@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { runtimePreflight, runtimeProbe } from '@/main/runtime/preflight'
 import type { RuntimeProbeDeps } from '@/main/runtime/preflight'
 import type { RegistryDeps } from '@/main/registry'
-import type { RepoId } from '@/shared/repos'
+import type { RepoId } from '@/utils/repos'
 
 const NOW = 1_700_000_000_000
 const REPO_ID = 'repo-1' as unknown as RepoId

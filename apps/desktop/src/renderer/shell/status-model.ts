@@ -1,8 +1,8 @@
 // The sidebar footer's one status dot — pure over the two queries' result
 // shape, so it is testable with a plain object. Read-only.
 import type { QueryObserverResult } from '@tanstack/react-query'
-import type { RuntimePreflight } from '@/shared/runtime/types'
-import type { GhStatus } from '@/shared/gh/types'
+import type { RuntimePreflight } from '@/types/runtime'
+import type { GhStatus } from '@/types/gh'
 
 export type FooterStatusKind = 'success' | 'danger' | 'idle'
 

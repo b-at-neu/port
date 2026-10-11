@@ -1,10 +1,10 @@
 // #103: every string the rail and the restore banner render — pure, no DOM.
-// Window names and the reset clock reuse `startedClock` (`shared/hosting/
+// Window names and the reset clock reuse `startedClock` (`utils/hosting/
 // label.ts`), the same "14:02 today, else Mon 14:02" rule the rail's own row
 // meta line and the restore banner's "opened" line both need too.
-import type { SessionRateLimit } from '@/shared/hosting/types'
+import type { SessionRateLimit } from '@/types/hosting'
 import type { UsageNotice } from '@/renderer/session/rail-model'
-import { startedClock } from '@/shared/hosting/label'
+import { startedClock } from '@/utils/hosting/label'
 
 export const LIMIT_STEPPER_TITLE = "Each session is its own Claude Code process. They all share your subscription's usage limit."
 export const CAPACITY_SET_FAILED = "Couldn't reach the main process. The limit wasn't changed."

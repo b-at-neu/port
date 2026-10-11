@@ -8,10 +8,10 @@ import type { Reporter } from '#lib/report.ts';
 // TickReport — it computes, it never writes. These assertions pin its decisions mechanically.
 export default async function ({ expect, fail, ok }: Reporter) {
   const mainDir = 'apps/desktop/src/main/tick';
-  const sharedDir = 'apps/desktop/src/shared/tick';
+  const tickTypesFile = 'apps/desktop/src/types/tick.ts';
   const mainFiles = walk(join(root, mainDir)).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
   const mainAllFiles = walk(join(root, mainDir)).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
-  const sharedFiles = walk(join(root, sharedDir)).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
+  const sharedFiles = [join(root, tickTypesFile)];
 
   // --- (1) main/tick/ has source files at all, so this cannot pass vacuously once deleted. ---
   if (mainFiles.length === 0) {
@@ -68,7 +68,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- (6) running/alive/isLive banned under shared/tick/ and main/tick/ — liveness is a
+  // --- (6) running/alive/isLive banned under types/tick.ts and main/tick/ — liveness is a
   // TaskList call, never a label inference. ---
   {
     let violated = false;
@@ -88,10 +88,10 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!violated) ok();
   }
 
-  // --- (7) shared/tick/types.ts's nextTickAt-shaped fields are string | null — a bare
+  // --- (7) types/tick.ts's nextTickAt-shaped fields are string | null — a bare
   // `string` cannot express "no timer". ---
   {
-    const typesFile = `${sharedDir}/types.ts`;
+    const typesFile = tickTypesFile;
     const text = readFileSync(join(root, typesFile), 'utf8');
     const fieldRe = /readonly\s+(\w*[Nn]ext[Tt]ick[Aa]t\w*)\s*:\s*([^\n]+)/g;
     const matches = [...text.matchAll(fieldRe)];
@@ -267,7 +267,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
   // pin: observation.ts's inlined CYCLE_CAP_ESCALATION_MARKER ↔ bodies.ts's exported constant
   {
     const observationSource = readFileSync(join(root, 'apps/desktop/src/main/dispatch/observation.ts'), 'utf8');
-    const bodiesPath = join(root, 'apps/desktop/src/shared/actions/bodies.ts');
+    const bodiesPath = join(root, 'apps/desktop/src/utils/actions/bodies.ts');
     const bodiesModule = await import(pathToFileURL(bodiesPath).href);
     const literalMatch = /CYCLE_CAP_ESCALATION_MARKER = '([^']+)'/.exec(observationSource);
     if (literalMatch?.[1] !== bodiesModule.CYCLE_CAP_ESCALATION_MARKER) {

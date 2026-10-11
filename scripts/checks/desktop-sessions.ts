@@ -7,7 +7,7 @@ import type { Reporter } from '#lib/report.ts';
 // These assertions pin its plan's decisions mechanically.
 export default async function ({ expect, fail, ok }: Reporter) {
   const sessionsDir = 'apps/desktop/src/main/sessions';
-  const sharedSessionsDir = 'apps/desktop/src/shared/sessions';
+  const utilsSessionsDir = 'apps/desktop/src/utils/sessions';
   const srcDir = join(root, 'apps/desktop/src');
   const sdkRel = `${sessionsDir}/sdk.ts`;
   const runtimeSdkRel = 'apps/desktop/src/main/runtime/sdk.ts';
@@ -83,19 +83,18 @@ export default async function ({ expect, fail, ok }: Reporter) {
   // --- No `running`/`alive`/`isLive` identifier or string literal in production code — a
   // local transcript's recency must never be reported as liveness. Comments are stripped first. ---
   {
-    const dirs = [join(root, sessionsDir), join(root, sharedSessionsDir), join(root, 'apps/desktop/src/main/search'), join(root, 'apps/desktop/src/shared/search')];
+    const dirs = [join(root, sessionsDir), join(root, utilsSessionsDir), join(root, 'apps/desktop/src/main/search')];
+    const singleFiles = [join(root, 'apps/desktop/src/types/search.ts')];
     const forbidden = ['running', 'alive', 'isLive'];
     let found = false;
-    for (const dir of dirs) {
-      for (const f of walk(dir).filter((p) => (p.endsWith('.ts') || p.endsWith('.tsx')) && !p.endsWith('.test.ts'))) {
-        const rel = relOf(f);
-        const code = stripComments(readFileSync(f, 'utf8'));
-        for (const word of forbidden) {
-          const pattern = new RegExp(`\\b${word}\\b`);
-          if (pattern.test(code)) {
-            found = true;
-            fail('desktop-sessions', `${rel} contains '${word}' outside a comment — this adapter reports activity, never liveness (Decision 4)`);
-          }
+    for (const f of [...dirs.flatMap((dir) => walk(dir).filter((p) => (p.endsWith('.ts') || p.endsWith('.tsx')) && !p.endsWith('.test.ts'))), ...singleFiles]) {
+      const rel = relOf(f);
+      const code = stripComments(readFileSync(f, 'utf8'));
+      for (const word of forbidden) {
+        const pattern = new RegExp(`\\b${word}\\b`);
+        if (pattern.test(code)) {
+          found = true;
+          fail('desktop-sessions', `${rel} contains '${word}' outside a comment — this adapter reports activity, never liveness (Decision 4)`);
         }
       }
     }
@@ -105,14 +104,14 @@ export default async function ({ expect, fail, ok }: Reporter) {
   // --- transcript:tail:poll's response is a delta, never a full entries list — the ok branch
   // must carry `appended`/`patched`, never `entries`, or the byte cursor's whole point is defeated. ---
   {
-    const file = allFiles.find((f) => relOf(f) === `${sharedSessionsDir}/transcript.ts`);
+    const file = allFiles.find((f) => relOf(f) === `${utilsSessionsDir}/transcript.ts`);
     if (!file) {
-      fail('desktop-sessions', `${sharedSessionsDir}/transcript.ts does not exist`);
+      fail('desktop-sessions', `${utilsSessionsDir}/transcript.ts does not exist`);
     } else {
       const text = readFileSync(file, 'utf8');
       const m = /export type TranscriptTailPoll =\s*([\s\S]*?)\n(?:export|$)/.exec(text);
       if (!m) {
-        fail('desktop-sessions', `${sharedSessionsDir}/transcript.ts has no 'export type TranscriptTailPoll' declaration`);
+        fail('desktop-sessions', `${utilsSessionsDir}/transcript.ts has no 'export type TranscriptTailPoll' declaration`);
       } else {
         const block = m[1];
         const hasAppended = /\bappended\s*:/.test(block);

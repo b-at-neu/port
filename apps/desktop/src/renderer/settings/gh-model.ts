@@ -1,5 +1,5 @@
 // Pure `GhStatus → pill, body` for the Settings screen.
-import type { GhStatus } from '@/shared/gh/types'
+import type { GhStatus } from '@/types/gh'
 import type { PillStatus } from '@/renderer/components/status-pill'
 
 export interface GhStatusModel {

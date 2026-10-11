@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ACTIVE_WITHIN_MS, IDLE_WITHIN_MS } from '@/shared/sessions/types'
+import { ACTIVE_WITHIN_MS, IDLE_WITHIN_MS } from '@/types/sessions'
 import { attributeSession, activityOf, itemNumberOf, parseAgentMeta, sessionRole, stageOf } from '@/main/sessions/classify'
 import type { RepoRef } from '@/main/sessions/classify'
 

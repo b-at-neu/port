@@ -1,9 +1,9 @@
 // Pure types and constants for the board projection. No import here may reach a Node builtin or `src/main/`, so this file compiles under `typecheck:web`.
-import type { RepoId } from '@/shared/repos'
-import type { ItemStatus, PipelineState, ReconciledItem, RepositoryState, StageLabel } from '@/shared/state/types'
-import type { ActionAvailability, DecisionAvailability, OperatorAction, OperatorDecision } from '@/shared/actions/types'
-import type { TickReport } from '@/shared/tick/types'
-import type { RepoDispatchStatus, RunStatesSnapshot } from '@/shared/dispatch/types'
+import type { RepoId } from '@/utils/repos'
+import type { ItemStatus, PipelineState, ReconciledItem, RepositoryState, StageLabel } from '@/types/state'
+import type { ActionAvailability, DecisionAvailability, OperatorAction, OperatorDecision } from '@/types/actions'
+import type { TickReport } from '@/types/tick'
+import type { RepoDispatchStatus, RunStatesSnapshot } from '@/types/dispatch'
 
 /** The four sources the watcher polls independently; `itemStates` is a dependent re-check fired internally, never independently schedulable. */
 export const SOURCE_KINDS = ['github', 'sessions', 'worktrees', 'denials'] as const

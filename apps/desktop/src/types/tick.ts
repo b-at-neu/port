@@ -1,8 +1,8 @@
 // Renderer-safe shapes for the tick engine — what one repository's tick would dispatch, what it holds back and why, and what each in-flight claim resolves to. No import here may reach a Node builtin — only `main/tick/` computes these.
-import type { PipelineItemKind } from '@/shared/github/types'
-import type { LabelKey } from '@/shared/labels/vocabulary'
-import type { RepoId } from '@/shared/repos'
-import type { StageOutcomeKind } from '@/shared/hosting/stage'
+import type { PipelineItemKind } from '@/types/github'
+import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { RepoId } from '@/utils/repos'
+import type { StageOutcomeKind } from '@/types/stage-session'
 
 /** A bare four-way key, never the session index's hyphenated `PortStageAgent` — this one names *what to dispatch next*, matching `models.<key>`, not *what already ran*. */
 export type StageAgent = 'plan' | 'impl' | 'review' | 'revise'

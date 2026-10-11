@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseMarkdown } from '@/shared/markdown/block'
+import { parseMarkdown } from '@/renderer/markdown/block'
 
 describe('parseMarkdown — headings', () => {
   it('parses an ATX heading at every level', () => {

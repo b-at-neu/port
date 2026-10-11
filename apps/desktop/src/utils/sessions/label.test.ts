@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '@/shared/repos'
-import type { AgentRecord, SessionRecord } from '@/shared/sessions/types'
-import { agentLabel, sessionLabel } from '@/shared/sessions/label'
+import type { RepoId } from '@/utils/repos'
+import type { AgentRecord, SessionRecord } from '@/types/sessions'
+import { agentLabel, sessionLabel } from '@/utils/sessions/label'
 
 function session(overrides: Partial<SessionRecord> = {}): SessionRecord {
   return {

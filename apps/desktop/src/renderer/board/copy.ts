@@ -2,14 +2,14 @@
 // new variant is a compile error rather than a silently blank row (#80),
 // the same rule `worktrees.ts`'s own header states. Pure string functions;
 // no DOM here.
-import type { ItemStatus, LinkReason, RepositoryFreshness, RepositoryState, StatusEvidence, WaitingOn } from '@/shared/state/types'
-import type { DisplayStatus, SourceHealth, SourceKind } from '@/shared/board/types'
-import type { RepoProblem } from '@/shared/repos'
-import { LABEL_DEFAULTS } from '@/shared/labels/defaults'
-import { RETRY_TRIGGER } from '@/shared/actions/plan'
-import type { ActionPlan, ActionRefusal, ItemActionResult, OperatorAction, OperatorDecision } from '@/shared/actions/types'
-import type { Conflict } from '@/shared/writes/types'
-import type { StageLink } from '@/shared/board/stage-links'
+import type { ItemStatus, LinkReason, RepositoryFreshness, RepositoryState, StatusEvidence, WaitingOn } from '@/types/state'
+import type { DisplayStatus, SourceHealth, SourceKind } from '@/types/board'
+import type { RepoProblem } from '@/utils/repos'
+import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
+import { RETRY_TRIGGER } from '@/utils/actions/plan'
+import type { ActionPlan, ActionRefusal, ItemActionResult, OperatorAction, OperatorDecision } from '@/types/actions'
+import type { Conflict } from '@/types/writes'
+import type { StageLink } from '@/renderer/board/stage-links'
 
 const STAGE_NAME: Readonly<Record<StageLink['agent'], string>> = { plan: 'Planning', impl: 'Implementing', review: 'Reviewing', revise: 'Revising' }
 
@@ -283,7 +283,7 @@ function appliedCopy(action: OperatorAction, number: number, plan: ActionPlan | 
 }
 
 /** `pause`'s own absent-key guard reads back as `not <name>` in the
- *  conflict's `expected` list (`shared/writes/scope.ts`'s `absentLabelName`)
+ *  conflict's `expected` list (`main/writes/scope.ts`'s `absentLabelName`)
  *  — detected here rather than duplicated, so the two can never drift. */
 function preconditionFailedCopy(action: OperatorAction, number: number, conflict: Conflict, now: Date): string {
   const n = String(number)

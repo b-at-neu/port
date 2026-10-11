@@ -4,8 +4,8 @@ import { appendTextFile, readLinesFrom, renamePath, statPath } from '@/main/plat
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
 import type { FileFailureKind } from '@/main/platform/files'
 import type { PathOps } from '@/main/platform/paths'
-import type { AuditEntry, AuditRead, AuditReadFailureKind, ReadAuditLogParams } from '@/shared/writes/types'
-import { isLabelAuditEntry } from '@/shared/writes/types'
+import type { AuditEntry, AuditRead, AuditReadFailureKind, ReadAuditLogParams } from '@/types/writes'
+import { isLabelAuditEntry } from '@/types/writes'
 
 const LOG_FILE = 'writes.jsonl'
 const PREV_LOG_FILE = 'writes.prev.jsonl'

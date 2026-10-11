@@ -1,11 +1,11 @@
 // planTick — one RepositoryState to one TickReport. Pure: no gh, no timer, no write. This app
 // computes the decision and the report; it never writes the escalation itself.
-import type { PipelineItemKind } from '@/shared/github/types'
-import type { LabelKey } from '@/shared/labels/vocabulary'
-import type { RepoId } from '@/shared/repos'
-import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/shared/board/types'
-import type { ReconciledItem, RepositoryState } from '@/shared/state/types'
-import type { EndedStage, TickActionable, TickBlind, TickClaim, TickHeld, TickHeldReason, TickObservation, TickReport } from '@/shared/tick/types'
+import type { PipelineItemKind } from '@/types/github'
+import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { RepoId } from '@/utils/repos'
+import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/types/board'
+import type { ReconciledItem, RepositoryState } from '@/types/state'
+import type { EndedStage, TickActionable, TickBlind, TickClaim, TickHeld, TickHeldReason, TickObservation, TickReport } from '@/types/tick'
 import type { ClaimedItem, OccupiedEntry } from '../../../../../scripts/port-tick/contention'
 import { gateCandidates } from '../../../../../scripts/port-tick/contention'
 import type { Disposition } from '../../../../../scripts/port-tick/checks'
@@ -49,7 +49,7 @@ function emptyReport(repoId: RepoId, displayName: string, blind: TickBlind): Tic
 }
 
 /** The winning `StageLabel`'s own key — `null` only when `item.stage` is `null`. A local copy
- *  rather than an import from `shared/actions/plan.ts`, since that module answers a different question. */
+ *  rather than an import from `utils/actions/plan.ts`, since that module answers a different question. */
 function stageKeyOf(item: Pick<ReconciledItem, 'stage' | 'stages'>): LabelKey | null {
   if (item.stage === null) return null
   return item.stages.find((label) => label.role === item.stage)?.key ?? null

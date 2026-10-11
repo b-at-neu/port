@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { setupModel } from '@/renderer/setup/model'
 import type { QueryState } from '@/renderer/setup/model'
-import type { RuntimePreflight, RuntimeProbe } from '@/shared/runtime/types'
-import type { GhStatus } from '@/shared/gh/types'
-import type { ReposListResponse } from '@/shared/ipc'
+import type { RuntimePreflight, RuntimeProbe } from '@/types/runtime'
+import type { GhStatus } from '@/types/gh'
+import type { ReposListResponse } from '@/types/ipc'
 
 function preflight(overrides: Partial<RuntimePreflight> = {}): QueryState<RuntimePreflight> {
   return {

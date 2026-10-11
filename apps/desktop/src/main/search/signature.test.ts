@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { TRIGRAM_SIZE } from '@/shared/search/types'
+import { TRIGRAM_SIZE } from '@/types/search'
 import { buildSignature, decodeSignature, encodeSignature, mightContain } from '@/main/search/signature'
 import { foldCase } from '@/main/search/terms'
 

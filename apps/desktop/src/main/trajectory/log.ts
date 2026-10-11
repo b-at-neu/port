@@ -5,7 +5,7 @@ import { defaultGitRunner, resolveGitBaseRoot } from '@/main/platform/git'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
 import type { GitRunner } from '@/main/platform/git'
 import type { PathOps } from '@/main/platform/paths'
-import type { TickReport } from '@/shared/tick/types'
+import type { TickReport } from '@/types/tick'
 import type { DesktopTickEvent } from '@/main/trajectory/types'
 
 export type { GitRunner }

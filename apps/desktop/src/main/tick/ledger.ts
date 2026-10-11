@@ -1,6 +1,6 @@
 // The process-scoped dispatch ledger: this app's own analogue of the cockpit's session-scoped
 // dispatch log, in memory rather than on disk. A restarted app has an empty ledger, never a false reset.
-import type { RepoId } from '@/shared/repos'
+import type { RepoId } from '@/utils/repos'
 import type { LedgerRow, LedgerState, UnmatchedResult } from '../../../../../scripts/port-tick/liveness'
 import { classifyUnmatched } from '../../../../../scripts/port-tick/liveness'
 import type { RefreshMemoEntry } from '../../../../../scripts/port-tick/gates'

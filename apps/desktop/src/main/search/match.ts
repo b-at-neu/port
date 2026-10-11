@@ -1,6 +1,6 @@
 // Pure over a `TranscriptEntry[]` already parsed by `main/sessions/` -- no filesystem, no signature.
-import type { SearchField, SearchHit, SearchSnippet } from '@/shared/search/types'
-import type { FileDiff, TranscriptEntry } from '@/shared/sessions/transcript'
+import type { SearchField, SearchHit, SearchSnippet } from '@/types/search'
+import type { FileDiff, TranscriptEntry } from '@/utils/sessions/transcript'
 import { foldCase, indexOfFolded } from '@/main/search/terms'
 
 // Either side of a match, in the original (unfolded) text.

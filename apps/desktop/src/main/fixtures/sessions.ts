@@ -1,10 +1,10 @@
 // Fixture mode's canned hosted-session data — the Session screen's own
 // states. Transcript entries live in `./entries`, split out to keep this file under the line limit.
-import type { SessionControls, SessionModels } from '@/shared/hosting/controls'
-import type { HostedSessionSnapshot, SessionAttachResult, SessionHistory, SessionKey } from '@/shared/hosting/types'
-import type { SessionWorkspace } from '@/shared/workspace/types'
-import type { SearchResult } from '@/shared/search/types'
-import type { AgentRecord, SessionRecord, SessionScan } from '@/shared/sessions/types'
+import type { SessionControls, SessionModels } from '@/utils/hosting/controls'
+import type { HostedSessionSnapshot, SessionAttachResult, SessionHistory, SessionKey } from '@/types/hosting'
+import type { SessionWorkspace } from '@/types/workspace'
+import type { SearchResult } from '@/types/search'
+import type { AgentRecord, SessionRecord, SessionScan } from '@/types/sessions'
 import { WIDGETS_ID } from '@/main/fixtures/repos'
 import { fixtureAttachEntries, fixtureHistoryEntries } from '@/main/fixtures/entries'
 

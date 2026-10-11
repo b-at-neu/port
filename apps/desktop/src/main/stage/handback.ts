@@ -1,7 +1,7 @@
 // Pure classification of a stage session's final state into a StageOutcome — the hand-back contract's own decision logic, no I/O.
-import type { SessionEnd, SessionRateLimit } from '@/shared/hosting/types'
-import type { SessionResult, StageOutcome } from '@/shared/hosting/stage'
-import type { SessionUsage } from '@/shared/hosting/usage'
+import type { SessionEnd, SessionRateLimit } from '@/types/hosting'
+import type { SessionResult, StageOutcome } from '@/types/stage-session'
+import type { SessionUsage } from '@/utils/hosting/usage'
 
 /** Pinned byte-identical to `plugins/port/skills/pipeline/SKILL.md`'s own completion-handling prefixes, by the `desktop-dispatch` check. */
 export const QUESTIONS_PREFIX = 'QUESTIONS FOR HUMAN:'

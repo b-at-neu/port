@@ -1,8 +1,8 @@
 // The Board detail pane's PhaseList — six phases, each an 8px dot in the
 // same states PhaseBar uses; only the current phase carries an extra line.
 import { cn } from '@/renderer/lib/utils'
-import type { LabelKey } from '@/shared/labels/vocabulary'
-import type { PipelineItemKind } from '@/shared/github/types'
+import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { PipelineItemKind } from '@/types/github'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
 import { phaseSegmentsFor } from '@/renderer/board/phase-model'
 import type { PhaseKey, PhaseSegmentState } from '@/renderer/board/phase-model'

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '@/shared/labels/vocabulary'
-import type { LabelVocabulary } from '@/shared/labels/vocabulary'
-import { buildAutoApprovePlan, buildGatePlan, classifyGate } from '@/shared/gate/classify'
-import type { GateClassifyItem } from '@/shared/gate/classify'
+import { resolveVocabulary } from '@/utils/labels/vocabulary'
+import type { LabelVocabulary } from '@/utils/labels/vocabulary'
+import { buildAutoApprovePlan, buildGatePlan, classifyGate } from '@/main/gate/classify'
+import type { GateClassifyItem } from '@/main/gate/classify'
 
 const VOCABULARY: LabelVocabulary = resolveVocabulary({})
 

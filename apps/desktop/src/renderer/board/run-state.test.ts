@@ -2,8 +2,8 @@
 // #316) — the row and its buttons live in `shell/sidebar-pipelines.tsx` now,
 // driven by `shell/run-state-command.ts`'s mutation.
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '@/shared/repos'
-import type { RepoRunState, RunStatesSnapshot } from '@/shared/dispatch/types'
+import type { RepoId } from '@/utils/repos'
+import type { RepoRunState, RunStatesSnapshot } from '@/types/dispatch'
 import { runStateLineCopy, runStateResultNote } from '@/renderer/board/run-state'
 
 const REPO_ID = 'repo-a' as RepoId

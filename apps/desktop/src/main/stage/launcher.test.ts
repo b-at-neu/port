@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createStageLauncher } from '@/main/stage/launcher'
 import type { StageLaunchRequest } from '@/main/dispatch/launch'
-import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '@/shared/hosting/types'
+import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '@/types/hosting'
 import type { StartSessionParams } from '@/main/hosting/store'
 import { WIDGETS_ID, FIXTURE_REPOSITORIES } from '@/main/fixtures/repos'
 import type { ReadyEntry } from '@/main/actions/apply'

@@ -1,5 +1,5 @@
 // Renderer-safe contract for the Backlog screen's list; no import here may reach a Node builtin.
-import type { PipelineFailureKind } from '@/shared/github/types'
+import type { PipelineFailureKind } from '@/types/github'
 
 // An open issue carrying no vocabulary label — genuinely unclaimed.
 export interface BacklogItem {

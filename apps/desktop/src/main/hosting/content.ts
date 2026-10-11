@@ -1,5 +1,5 @@
 // Pure content-block building — a string passes through untouched, so a send with no attachments keeps today's wire shape.
-import type { ComposerAttachment, ImageMediaType } from '@/shared/hosting/attachments'
+import type { ComposerAttachment, ImageMediaType } from '@/utils/hosting/attachments'
 
 /** The three Anthropic Messages API content-block shapes this app ever builds, never the SDK's own wider union. */
 export type ContentBlock =

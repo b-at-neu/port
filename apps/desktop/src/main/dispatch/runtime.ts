@@ -2,8 +2,8 @@
 // instead of wiring several by hand.
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
 import type { DispatchLedger, RefreshMemo, UnknownStreaks } from '@/main/tick/ledger'
-import type { RepoId } from '@/shared/repos'
-import type { RepoDispatchStatus } from '@/shared/dispatch/types'
+import type { RepoId } from '@/utils/repos'
+import type { RepoDispatchStatus } from '@/types/dispatch'
 import { applyObservation } from '@/main/actions/observe'
 import { autoApprovePlan } from '@/main/actions/gate'
 import { escalateToHuman } from '@/main/actions/escalate'
@@ -12,7 +12,7 @@ import { createDispatcher } from '@/main/dispatch/dispatcher'
 import type { CreateDispatcherParams, Dispatcher } from '@/main/dispatch/dispatcher'
 import { createAutoPlanner } from '@/main/dispatch/auto-plan'
 import type { AutoPlanner, AutoPlannerDeps } from '@/main/dispatch/auto-plan'
-import type { EndedStage } from '@/shared/tick/types'
+import type { EndedStage } from '@/types/tick'
 
 export interface WatcherDeps {
   readonly ledger: DispatchLedger

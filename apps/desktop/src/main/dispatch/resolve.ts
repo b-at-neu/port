@@ -1,10 +1,10 @@
 // The 'dispatch:control' channel's own validation and composition — all the branching lives here,
 // not in main/ipc.ts, the same split every other multi-call channel in this app follows.
-import { DISPATCH_COMMANDS, RUN_TARGET } from '@/shared/dispatch/types'
-import type { DispatchCommand, DispatchControlResult, HaltReport } from '@/shared/dispatch/types'
-import type { BoardSnapshot } from '@/shared/board/types'
+import { DISPATCH_COMMANDS, RUN_TARGET } from '@/types/dispatch'
+import type { DispatchCommand, DispatchControlResult, HaltReport } from '@/types/dispatch'
+import type { BoardSnapshot } from '@/types/board'
 import type { RefreshRequest } from '@/main/state/watcher'
-import type { RepoId } from '@/shared/repos'
+import type { RepoId } from '@/utils/repos'
 import { isReadyEntry, listRepositories } from '@/main/registry'
 import type { RegistryDeps } from '@/main/registry'
 import { releaseOwnership, takeOwnership } from '@/main/dispatch/ownership'

@@ -1,7 +1,7 @@
 // The per-session permission broker: every call becomes a pending request, settled by
 // an operator answer or by the SDK's own AbortSignal, never by a timer of its own.
-import type { QuestionAnswerResult, PlanAnswerResult, PlanDecision } from '@/shared/hosting/controls'
-import type { PendingPermission, PermissionDecision, SessionPermissionAnswerResult } from '@/shared/hosting/types'
+import type { QuestionAnswerResult, PlanAnswerResult, PlanDecision } from '@/utils/hosting/controls'
+import type { PendingPermission, PermissionDecision, SessionPermissionAnswerResult } from '@/types/hosting'
 import { narrowSessionGrant } from '@/main/hosting/grant'
 import { answersMatch, narrowInteraction, planApproveResult, planKeepResult, questionResult } from '@/main/hosting/interactions'
 import type { CanUseTool, PermissionResult, PermissionUpdate } from '@/main/hosting/sdk'

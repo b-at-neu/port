@@ -7,7 +7,7 @@ import type { Reporter } from '#lib/report.ts';
 // Operator control over dispatch and the app's own dispatch loop, plus the budget gate's own
 // rails — mechanical, dependency-free, regex-based rails.
 export default async function ({ expect, fail, ok }: Reporter) {
-  const sharedDispatchDir = 'apps/desktop/src/shared/dispatch';
+  const dispatchTypesFile = 'apps/desktop/src/types/dispatch.ts';
   const mainDispatchDir = 'apps/desktop/src/main/dispatch';
   const resolveFile = `${mainDispatchDir}/resolve.ts`;
   const haltFile = `${mainDispatchDir}/halt.ts`;
@@ -20,30 +20,30 @@ export default async function ({ expect, fail, ok }: Reporter) {
 
   const srcDir = join(root, 'apps/desktop/src');
   const allFiles = walk(srcDir).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
-  const sharedDispatchFiles = allFiles.filter((f) => relOf(f).startsWith(`${sharedDispatchDir}/`));
+  const dispatchTypesFiles = allFiles.filter((f) => relOf(f) === dispatchTypesFile);
   const mainDispatchFiles = allFiles.filter((f) => relOf(f).startsWith(`${mainDispatchDir}/`));
 
   // --- main/dispatch/ has source files, so nothing below passes vacuously once deleted. ---
   expect(!(mainDispatchFiles.filter((f) => !relOf(f).endsWith('.test.ts')).length === 0), 'desktop-dispatch', `${mainDispatchDir} has no source files — the guard cannot pass vacuously if the directory is deleted`);
 
-  // --- shared/dispatch/ compiles under typecheck:web, the same rail shared/actions/ holds. ---
+  // --- types/dispatch.ts compiles under typecheck:web, the same rail utils/actions/ holds. ---
   {
     let found = false;
-    for (const f of sharedDispatchFiles) {
+    for (const f of dispatchTypesFiles) {
       const text = readFileSync(f, 'utf8');
       if (/from\s+'node:/.test(text) || /from\s+'.*\/main\//.test(text)) {
         found = true;
-        fail('desktop-dispatch', `${relOf(f)} imports a node: builtin or a main/ path — shared/dispatch/ must compile under typecheck:web`);
+        fail('desktop-dispatch', `${relOf(f)} imports a node: builtin or a main/ path — types/dispatch.ts must compile under typecheck:web`);
       }
     }
     if (!found) ok();
   }
 
-  // --- running/alive/isLive banned under shared/dispatch/ and main/dispatch/ — never report
+  // --- running/alive/isLive banned under types/dispatch.ts and main/dispatch/ — never report
   // a recency or attachment fact as liveness. ---
   {
     let found = false;
-    for (const f of [...sharedDispatchFiles, ...mainDispatchFiles]) {
+    for (const f of [...dispatchTypesFiles, ...mainDispatchFiles]) {
       const rel = relOf(f);
       if (rel.endsWith('.test.ts')) continue;
       const text = readFileSync(f, 'utf8');

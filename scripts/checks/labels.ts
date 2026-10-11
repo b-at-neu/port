@@ -166,9 +166,9 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   }
 
   // --- Desktop app's LABEL_ROLES matches labels.json's role field, both directions — hand-
-  // maintained in shared/labels/defaults.ts since TypeScript widens JSON strings, so it must agree with every distinct role labels.json uses. ---
+  // maintained in utils/labels/defaults.ts since TypeScript widens JSON strings, so it must agree with every distinct role labels.json uses. ---
   {
-    const rel = 'apps/desktop/src/shared/labels/defaults.ts';
+    const rel = 'apps/desktop/src/utils/labels/defaults.ts';
     const text = readFileSync(join(root, rel), 'utf8');
     const m = /LABEL_ROLES\s*=\s*\[([^\]]*)\]\s*as const/.exec(text);
     if (!m) {
@@ -310,7 +310,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   // pin: `apps/desktop`'s `LABEL_KEYS` ↔ `labels.json` — the one literal union that can't be
   // derived from the JSON import (TypeScript widens JSON strings to `string`) must be diffed here instead.
   {
-    const rel = 'apps/desktop/src/shared/labels/vocabulary.ts';
+    const rel = 'apps/desktop/src/utils/labels/vocabulary.ts';
     const text = readFileSync(join(root, rel), 'utf8');
     const m = /LABEL_KEYS\s*=\s*\[([^\]]*)\]\s*as const/.exec(text);
     if (!m) {

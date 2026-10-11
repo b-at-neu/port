@@ -1,7 +1,7 @@
 // `'gh:status'`'s composition — the footer's status dot. This file never
 // throws for a gh failure itself; every outcome is a value.
-import type { GhStatus } from '@/shared/gh/types'
-import type { IpcMap } from '@/shared/ipc'
+import type { GhStatus } from '@/types/gh'
+import type { IpcMap } from '@/types/ipc'
 import { ghAuthStatus } from '@/main/platform/gh'
 import type { GhAuthStatusResult } from '@/main/platform/gh'
 

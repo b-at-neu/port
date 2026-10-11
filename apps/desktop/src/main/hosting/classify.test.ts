@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { classifyEnd } from '@/main/hosting/classify'
 import type { ClassifyEndInput, ClassifyEndResult } from '@/main/hosting/classify'
 import cases from '@/main/hosting/classify.cases.json'
-import type { SessionEndReason } from '@/shared/hosting/types'
+import type { SessionEndReason } from '@/types/hosting'
 
 interface Case {
   readonly name: string

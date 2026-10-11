@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { RepoId } from '@/shared/repos'
-import type { SessionKey } from '@/shared/hosting/types'
+import type { RepoId } from '@/utils/repos'
+import type { SessionKey } from '@/types/hosting'
 import type { RegistryDeps } from '@/main/registry'
 import type { HostedStore } from '@/main/hosting/store'
 import type { ResolveStartTargetDeps, ResolvedStartTarget } from '@/main/workspace/target'

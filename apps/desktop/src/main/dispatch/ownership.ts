@@ -6,7 +6,7 @@ import { pathOps as defaultPathOps } from '@/main/platform/paths'
 import type { FileFailureKind } from '@/main/platform/files'
 import type { GitRunner } from '@/main/platform/git'
 import type { PathOps } from '@/main/platform/paths'
-import type { OwnershipSummary } from '@/shared/writes/types'
+import type { OwnershipSummary } from '@/types/writes'
 
 export type { GitRunner }
 

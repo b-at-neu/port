@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CommandResult } from '@/main/platform/run'
 import type { GitRunner } from '@/main/platform/git'
-import type { SessionWorkspace } from '@/shared/workspace/types'
+import type { SessionWorkspace } from '@/types/workspace'
 import { computeSessionChanges } from '@/main/workspace/changes'
 
 function ok(stdout: string): CommandResult {
