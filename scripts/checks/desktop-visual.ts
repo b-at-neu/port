@@ -12,12 +12,12 @@ const FIXTURES_DIR = 'apps/desktop/src/main/fixtures';
 const ALLOWED_FIXTURE_IMPORTS: readonly RegExp[] = [
   /^electron$/,
   /^node:path$/,
-  /^\.\//,
-  /^\.\.\/\.\.\/shared\//,
-  /^\.\.\/registry\/schema$/,
-  /^\.\.\/state\/reconcile$/,
-  /^\.\.\/tick\/ledger$/,
-  /^\.\.\/tick\/plan$/,
+  /^@\/main\/fixtures\//,
+  /^@\/shared\//,
+  /^@\/main\/registry\/schema$/,
+  /^@\/main\/state\/reconcile$/,
+  /^@\/main\/tick\/ledger$/,
+  /^@\/main\/tick\/plan$/,
 ];
 
 const IMPORT_RE = /^\s*import\s+(?:type\s+)?[\s\S]*?\bfrom\s+['"]([^'"]+)['"]/gm;

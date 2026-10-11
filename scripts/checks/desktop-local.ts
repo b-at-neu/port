@@ -32,8 +32,8 @@ export default async function ({ expect, fail, ok }: Reporter) {
         violated = true;
         fail('desktop-local-adapter', `${relOf(f)} references gh(/ghJson(/main/github — this directory is local-only (Decision 1), never a second GitHub caller`);
       }
-      // The platform layer's barrel is gone — `git` arrives from `'../platform/git'` or still `'../platform'` for anything not yet re-pointed.
-      if (/import\s*\{[^}]*\bgit\b[^}]*\}\s*from\s*'\.\.\/platform(?:\/git)?'/.test(codeOnly)) {
+      // The platform layer's barrel is gone — `git` arrives from `'@/main/platform/git'` or still `'@/main/platform'` for anything not yet re-pointed.
+      if (/import\s*\{[^}]*\bgit\b[^}]*\}\s*from\s*'@\/main\/platform(?:\/git)?'/.test(codeOnly)) {
         usesGit = true;
       }
     }
