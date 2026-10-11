@@ -247,10 +247,10 @@ describe('resolveSessionSend', () => {
     expect(() => resolveSessionSend({ sessionKey: SESSION_KEY, text: '' }, depsWith())).toThrow("'session:send' requires a non-empty 'text' when there are no attachments")
   })
 
-  it('delegates to the store', () => {
+  it('delegates to the store, marking the send as the operator’s own', () => {
     const send = vi.fn(() => ({ ok: true as const, uuid: 'u', queued: true }))
     resolveSessionSend({ sessionKey: SESSION_KEY, text: 'hi' }, depsWith({ store: storeStub({ send }) }))
-    expect(send).toHaveBeenCalledWith(SESSION_KEY, 'hi', [])
+    expect(send).toHaveBeenCalledWith(SESSION_KEY, 'hi', [], { source: 'operator' })
   })
 
 })

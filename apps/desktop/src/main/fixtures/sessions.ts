@@ -81,6 +81,7 @@ export function fixturePermissionSnapshots(now: Date): readonly HostedSessionSna
       backgroundTasks: [],
       stage: null,
       lastResult: null,
+      operatorJoinedAt: null,
     },
   ]
 }
@@ -125,6 +126,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       ],
       stage: null,
       lastResult: null,
+      operatorJoinedAt: null,
     },
     {
       sessionKey: ENDED_KEY,
@@ -147,6 +149,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       backgroundTasks: [],
       stage: null,
       lastResult: null,
+      operatorJoinedAt: null,
     },
     {
       sessionKey: STARTING_KEY,
@@ -169,6 +172,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       backgroundTasks: [],
       stage: null,
       lastResult: null,
+      operatorJoinedAt: null,
     },
     {
       sessionKey: QUESTION_KEY,
@@ -220,6 +224,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       backgroundTasks: [],
       stage: null,
       lastResult: null,
+      operatorJoinedAt: null,
     },
     {
       sessionKey: PLAN_KEY,
@@ -261,6 +266,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       backgroundTasks: [],
       stage: null,
       lastResult: null,
+      operatorJoinedAt: null,
     },
     {
       sessionKey: RESUMED_KEY,
@@ -283,6 +289,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       backgroundTasks: [],
       stage: null,
       lastResult: null,
+      operatorJoinedAt: null,
     },
   ]
 }

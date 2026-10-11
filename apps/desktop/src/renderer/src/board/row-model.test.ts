@@ -4,7 +4,8 @@ import type { ActionAvailability, DecisionAvailability, OperatorAction, Operator
 import type { BoardItemRow } from '../../../shared/board/types'
 import type { AttachedAgent, AttachedSession, ReconciledItem, StageLabel } from '../../../shared/state/types'
 import type { RepoId } from '../../../shared/repos'
-import { agentSummaryOf, decisionNoteFor, nextActionFor, ownershipNoteFor, pillStatusFor, stopAttachedAgentNote } from './row-model'
+import type { DispatchRecord } from '../../../shared/dispatch/types'
+import { agentSummaryOf, decisionNoteFor, nextActionFor, operatorJoinedOf, ownershipNoteFor, pillStatusFor, stopAttachedAgentNote } from './row-model'
 
 const NO_ACTIONS = Object.fromEntries(OPERATOR_ACTIONS.map((a): [OperatorAction, ActionAvailability] => [a, { available: false, reason: 'not-applicable' }])) as Record<OperatorAction, ActionAvailability>
 const NO_DECISIONS = Object.fromEntries(OPERATOR_DECISIONS.map((d): [OperatorDecision, DecisionAvailability] => [d, { available: false, reason: 'not-applicable' }])) as Record<OperatorDecision, DecisionAvailability>
@@ -61,6 +62,24 @@ function row(overrides: {
     decisions: { ...NO_DECISIONS, ...overrides.decisions },
   }
 }
+
+function dispatchRecord(overrides: Partial<DispatchRecord> = {}): DispatchRecord {
+  return { agent: 'impl', number: 41, kind: 'issue', state: 'started', at: '2026-01-01T00:00:00.000Z', detail: null, outcome: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: null, ...overrides }
+}
+
+describe('operatorJoinedOf', () => {
+  it('is true when a matching record carries an operator join', () => {
+    expect(operatorJoinedOf([dispatchRecord({ operatorJoinedAt: '2026-01-01T00:05:00.000Z' })], row({}))).toBe(true)
+  })
+
+  it('is false when no matching record carries one', () => {
+    expect(operatorJoinedOf([dispatchRecord({})], row({}))).toBe(false)
+  })
+
+  it('ignores a record for a different item', () => {
+    expect(operatorJoinedOf([dispatchRecord({ number: 99, operatorJoinedAt: '2026-01-01T00:05:00.000Z' })], row({}))).toBe(false)
+  })
+})
 
 describe('agentSummaryOf', () => {
   it('prefers an active agent over a dormant one', () => {

@@ -106,8 +106,8 @@ export interface HostedHandle {
   readonly cwd: string
   snapshot(): HostedSessionSnapshot
   replay(): HostedHandleReplay
-  /** Refuses `/port:pipeline` (or an unreported bare `/pipeline`) as `blocked-command`, pushing nothing. */
-  send(text: string, attachments?: readonly ComposerAttachment[]): HostedSendOutcome
+  /** Refuses `/port:pipeline` (or an unreported bare `/pipeline`) as `blocked-command`, pushing nothing. `source` defaults to `'app'` — only a `'operator'` send into a stage session can ever stamp `operatorJoinedAt`. */
+  send(text: string, attachments?: readonly ComposerAttachment[], source?: 'operator' | 'app'): HostedSendOutcome
   /** The interrupt receipt's `still_queued` count, or `null` when the CLI returned no receipt. */
   interrupt(): Promise<number | null>
   /** Ends the input iterator, waits up to `CLOSE_GRACE_MS`, then forces `query.close()`. */
@@ -197,6 +197,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
   let rateLimit: SessionRateLimit | null = null
   let usageReading: UsageReading | null = null
   let lastResult: SessionResult | null = null
+  let operatorJoinedAt: string | null = null
   let closeRequested = false
   let seq = 0
   const ring: SessionEventEnvelope[] = []
@@ -224,6 +225,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
       backgroundTasks: tasks.current(),
       stage: params.stage?.tag ?? null,
       lastResult,
+      operatorJoinedAt,
     }
   }
 
@@ -345,13 +347,17 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     replay() {
       return { events: [...ring], droppedBefore }
     },
-    send(text, attachments = []) {
+    send(text, attachments = [], source = 'app') {
       const commandName = leadingCommandName(text)
       if (commandName !== null && isPipelineCommand(commandName, capabilities.hasOwnPipelineCommand())) {
         return { ok: false, kind: 'blocked-command', name: commandName }
       }
       const content = buildUserContent(text, attachments)
       const result = doSend(content, text, attachments[0]?.name ?? null)
+      if (source === 'operator' && params.stage !== null && operatorJoinedAt === null) {
+        operatorJoinedAt = new Date(params.now()).toISOString()
+        emitStatus()
+      }
       return { ok: true, ...result }
     },
     async interrupt() {

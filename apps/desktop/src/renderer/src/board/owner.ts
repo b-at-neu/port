@@ -21,22 +21,23 @@ function outcomeClause(recent: readonly DispatchRecord[]): string {
   const newest = withOutcome.reduce((a, b) => (Date.parse(a.at) > Date.parse(b.at) ? a : b))
   const named = `${newest.agent} #${String(newest.number)}`
   const outcome = newest.outcome
+  const joined = outcome.operatorJoined ? ' · operator joined' : ''
   switch (outcome.kind) {
     case 'completed': {
       const cost = outcome.costUsd !== null ? ` (${formatCost(outcome.costUsd)})` : ''
       const dirty = outcome.worktree === 'kept-dirty' ? ' — worktree kept, it has uncommitted changes' : ''
-      return ` · ${named} handed back${cost}${dirty}`
+      return ` · ${named} handed back${cost}${dirty}${joined}`
     }
     case 'questions':
-      return ` · ${named} has questions — open its session to answer`
+      return ` · ${named} has questions — open its session to answer${joined}`
     case 'blocked':
-      return ` · ${named} is blocked — open its session`
+      return ` · ${named} is blocked — open its session${joined}`
     case 'error':
-      return ` · ${named} ended with an error${outcome.detail !== null ? ` (${outcome.detail})` : ''}`
+      return ` · ${named} ended with an error${outcome.detail !== null ? ` (${outcome.detail})` : ''}${joined}`
     case 'usage-limit':
-      return ` · ${named} hit the usage limit${outcome.resetsAt !== null ? `, resets ${timeOf(outcome.resetsAt)}` : ''}`
+      return ` · ${named} hit the usage limit${outcome.resetsAt !== null ? `, resets ${timeOf(outcome.resetsAt)}` : ''}${joined}`
     case 'interrupted':
-      return ` · ${named} was interrupted${outcome.detail !== null ? ` (${outcome.detail})` : ''}`
+      return ` · ${named} was interrupted${outcome.detail !== null ? ` (${outcome.detail})` : ''}${joined}`
   }
 }
 
@@ -50,7 +51,7 @@ function activeLine(state: Extract<DispatcherState, { readonly kind: 'active' }>
     return `▶ Dispatch: this app${sincePart} · nothing to dispatch.${failedClause}${outcome}`
   }
   const newest = live.reduce((a, b) => (Date.parse(a.at) > Date.parse(b.at) ? a : b))
-  const named = live.map((r) => `${r.agent} #${String(r.number)}`).join(', ')
+  const named = live.map((r) => `${r.agent} #${String(r.number)}${r.operatorJoinedAt !== null ? ' (operator joined)' : ''}`).join(', ')
   return `▶ Dispatch: this app · started ${named} at ${timeOf(newest.at)}.${failedClause}${outcome}`
 }
 

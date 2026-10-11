@@ -52,8 +52,8 @@ describe('ownerLineCopy', () => {
         state: {
           kind: 'active',
           recent: [
-            { agent: 'plan', number: 105, kind: 'issue', state: 'started', at: '2026-01-01T14:00:00Z', detail: null, outcome: null },
-            { agent: 'impl', number: 52, kind: 'issue', state: 'started', at: '2026-01-01T14:07:00Z', detail: null, outcome: null },
+            { agent: 'plan', number: 105, kind: 'issue', state: 'started', at: '2026-01-01T14:00:00Z', detail: null, outcome: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: null },
+            { agent: 'impl', number: 52, kind: 'issue', state: 'started', at: '2026-01-01T14:07:00Z', detail: null, outcome: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: null },
           ],
         },
       }),
@@ -63,7 +63,14 @@ describe('ownerLineCopy', () => {
   })
 
   it('app, active — a failed record is never named as started, but appends its own clause', () => {
-    const line = ownerLineCopy(status({ state: { kind: 'active', recent: [{ agent: 'impl', number: 52, kind: 'issue', state: 'failed', at: '2026-01-01T14:07:00Z', detail: 'boom', outcome: null }] } }))
+    const line = ownerLineCopy(
+      status({
+        state: {
+          kind: 'active',
+          recent: [{ agent: 'impl', number: 52, kind: 'issue', state: 'failed', at: '2026-01-01T14:07:00Z', detail: 'boom', outcome: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: null }],
+        },
+      }),
+    )
     expect(line).toContain('nothing to dispatch')
     expect(line).toContain("couldn't start impl #52 (boom)")
   })
@@ -73,7 +80,20 @@ describe('ownerLineCopy', () => {
       status({
         state: {
           kind: 'active',
-          recent: [{ agent: 'impl', number: 52, kind: 'issue', state: 'ended', at: '2026-01-01T14:07:00Z', detail: null, outcome: { kind: 'completed', detail: null, costUsd: 1.84, resetsAt: null, worktree: 'removed' } }],
+          recent: [
+            {
+              agent: 'impl',
+              number: 52,
+              kind: 'issue',
+              state: 'ended',
+              at: '2026-01-01T14:07:00Z',
+              detail: null,
+              outcome: { kind: 'completed', detail: null, costUsd: 1.84, resetsAt: null, worktree: 'removed', operatorJoined: false },
+              sessionKey: null,
+              claudeSessionId: null,
+              operatorJoinedAt: null,
+            },
+          ],
         },
       }),
     )
@@ -85,7 +105,20 @@ describe('ownerLineCopy', () => {
       status({
         state: {
           kind: 'active',
-          recent: [{ agent: 'impl', number: 52, kind: 'issue', state: 'ended', at: '2026-01-01T14:07:00Z', detail: null, outcome: { kind: 'completed', detail: null, costUsd: null, resetsAt: null, worktree: 'kept-dirty' } }],
+          recent: [
+            {
+              agent: 'impl',
+              number: 52,
+              kind: 'issue',
+              state: 'ended',
+              at: '2026-01-01T14:07:00Z',
+              detail: null,
+              outcome: { kind: 'completed', detail: null, costUsd: null, resetsAt: null, worktree: 'kept-dirty', operatorJoined: false },
+              sessionKey: null,
+              claudeSessionId: null,
+              operatorJoinedAt: null,
+            },
+          ],
         },
       }),
     )
@@ -93,19 +126,68 @@ describe('ownerLineCopy', () => {
   })
 
   it('app, active — questions, blocked, usage-limit and interrupted each get their own clause', () => {
-    const base = { agent: 'plan' as const, number: 52, kind: 'issue' as const, state: 'started' as const, at: '2026-01-01T14:07:00Z', detail: null }
-    expect(ownerLineCopy(status({ state: { kind: 'active', recent: [{ ...base, outcome: { kind: 'questions', detail: null, costUsd: null, resetsAt: null, worktree: 'kept' } }] } }))).toContain(
-      'plan #52 has questions — open its session to answer',
-    )
-    expect(ownerLineCopy(status({ state: { kind: 'active', recent: [{ ...base, outcome: { kind: 'blocked', detail: 'BLOCKED: x', costUsd: null, resetsAt: null, worktree: 'kept' } }] } }))).toContain(
-      'plan #52 is blocked — open its session',
-    )
+    const base = { agent: 'plan' as const, number: 52, kind: 'issue' as const, state: 'started' as const, at: '2026-01-01T14:07:00Z', detail: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: null }
     expect(
-      ownerLineCopy(status({ state: { kind: 'active', recent: [{ ...base, outcome: { kind: 'usage-limit', detail: null, costUsd: null, resetsAt: '2026-01-01T15:00:00Z', worktree: 'kept' } }] } })),
+      ownerLineCopy(status({ state: { kind: 'active', recent: [{ ...base, outcome: { kind: 'questions', detail: null, costUsd: null, resetsAt: null, worktree: 'kept', operatorJoined: false } }] } })),
+    ).toContain('plan #52 has questions — open its session to answer')
+    expect(
+      ownerLineCopy(
+        status({ state: { kind: 'active', recent: [{ ...base, outcome: { kind: 'blocked', detail: 'BLOCKED: x', costUsd: null, resetsAt: null, worktree: 'kept', operatorJoined: false } }] } }),
+      ),
+    ).toContain('plan #52 is blocked — open its session')
+    expect(
+      ownerLineCopy(
+        status({
+          state: {
+            kind: 'active',
+            recent: [{ ...base, outcome: { kind: 'usage-limit', detail: null, costUsd: null, resetsAt: '2026-01-01T15:00:00Z', worktree: 'kept', operatorJoined: false } }],
+          },
+        }),
+      ),
     ).toContain('hit the usage limit, resets')
-    expect(ownerLineCopy(status({ state: { kind: 'active', recent: [{ ...base, outcome: { kind: 'interrupted', detail: 'closed', costUsd: null, resetsAt: null, worktree: 'kept' } }] } }))).toContain(
-      'plan #52 was interrupted (closed)',
+    expect(
+      ownerLineCopy(
+        status({ state: { kind: 'active', recent: [{ ...base, outcome: { kind: 'interrupted', detail: 'closed', costUsd: null, resetsAt: null, worktree: 'kept', operatorJoined: false } }] } }),
+      ),
+    ).toContain('plan #52 was interrupted (closed)')
+  })
+
+  it('appends operator joined to the outcome clause when the newest outcome carries it', () => {
+    const line = ownerLineCopy(
+      status({
+        state: {
+          kind: 'active',
+          recent: [
+            {
+              agent: 'plan',
+              number: 52,
+              kind: 'issue',
+              state: 'ended',
+              at: '2026-01-01T14:07:00Z',
+              detail: null,
+              outcome: { kind: 'completed', detail: null, costUsd: null, resetsAt: null, worktree: 'removed', operatorJoined: true },
+              sessionKey: null,
+              claudeSessionId: null,
+              operatorJoinedAt: '2026-01-01T14:08:00Z',
+            },
+          ],
+        },
+      }),
     )
+    expect(line).toContain('handed back')
+    expect(line).toContain('operator joined')
+  })
+
+  it('marks a live started record as operator joined in the started clause', () => {
+    const line = ownerLineCopy(
+      status({
+        state: {
+          kind: 'active',
+          recent: [{ agent: 'impl', number: 52, kind: 'issue', state: 'started', at: '2026-01-01T14:07:00Z', detail: null, outcome: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: '2026-01-01T14:08:00Z' }],
+        },
+      }),
+    )
+    expect(line).toContain('impl #52 (operator joined)')
   })
 
   it('budget-unavailable renders the pre-assembled message verbatim', () => {

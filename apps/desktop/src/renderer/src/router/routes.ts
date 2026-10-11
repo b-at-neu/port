@@ -107,7 +107,7 @@ export function sessionSearchFromRaw(search: Readonly<Record<string, unknown>>):
 
 export interface TranscriptSearch {
   readonly agentId: string | null
-  readonly from: 'history' | 'search'
+  readonly from: 'history' | 'search' | 'board'
   readonly focusIndex: number | null
   readonly title: string
 }
@@ -117,7 +117,7 @@ export function transcriptSearchFromRaw(search: Readonly<Record<string, unknown>
   const { agentId, from, focusIndex, title } = search
   return {
     agentId: typeof agentId === 'string' ? agentId : null,
-    from: from === 'search' ? 'search' : 'history',
+    from: from === 'search' ? 'search' : from === 'board' ? 'board' : 'history',
     focusIndex: typeof focusIndex === 'number' && Number.isFinite(focusIndex) ? focusIndex : null,
     title: typeof title === 'string' ? title : '',
   }

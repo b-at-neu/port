@@ -9,7 +9,20 @@ function actionable(overrides: Partial<TickActionable> = {}): TickActionable {
 }
 
 function record(overrides: Partial<StageRecord> = {}): StageRecord {
-  return { sessionKey: 'hosted-1' as SessionKey, agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved', state: 'started', at: '2026-09-05T14:00:00.000Z', detail: null, outcome: null, ...overrides }
+  return {
+    sessionKey: 'hosted-1' as SessionKey,
+    agent: 'impl',
+    number: 52,
+    kind: 'issue',
+    trigger: 'planApproved',
+    state: 'started',
+    at: '2026-09-05T14:00:00.000Z',
+    detail: null,
+    outcome: null,
+    claudeSessionId: null,
+    operatorJoinedAt: null,
+    ...overrides,
+  }
 }
 
 describe('selectDispatches', () => {

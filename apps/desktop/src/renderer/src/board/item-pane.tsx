@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from 'react'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useNavigate } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { DetailPane } from '../components/detail-pane'
@@ -11,13 +12,16 @@ import { StatusPill } from '../components/status-pill'
 import { OPERATOR_ACTIONS, OPERATOR_DECISIONS } from '../../../shared/actions/types'
 import type { OperatorAction } from '../../../shared/actions/types'
 import type { BoardItemRow } from '../../../shared/board/types'
-import type { DispatchOwner } from '../../../shared/dispatch/types'
+import { stageLinksFor } from '../../../shared/board/stage-links'
+import type { StageLink } from '../../../shared/board/stage-links'
+import type { DispatchOwner, DispatchRecord } from '../../../shared/dispatch/types'
 import type { TickReport } from '../../../shared/tick/types'
 import { PHASE_NAMES } from '../lib/phase'
+import { ROUTE_IDS } from '../router/routes'
 import { openDecision } from '../decision/controller'
 import { openReviewDialog } from '../gate/controller'
 import { itemActionState, runItemAction, subscribeItemActions } from './actions'
-import { actionButtonLabel, actionPendingLabel, actionResultCopy, decisionButtonLabel, reviewPlanButtonLabel } from './copy'
+import { actionButtonLabel, actionPendingLabel, actionResultCopy, decisionButtonLabel, reviewPlanButtonLabel, stageLinkLabel, stageSessionsSectionLabel } from './copy'
 import { actionNoteFor, agentSummaryOf, decisionNoteFor, pillStatusFor } from './row-model'
 import { itemDetailLines } from './tick'
 
@@ -25,6 +29,8 @@ export interface ItemPaneProps {
   readonly row: BoardItemRow
   readonly report: TickReport | undefined
   readonly owner: DispatchOwner
+  /** This item's repository's own dispatch records — `[]` for a repository this app doesn't dispatch. */
+  readonly records: readonly DispatchRecord[]
   readonly onClose: () => void
 }
 
@@ -32,8 +38,9 @@ function phaseLabel(row: BoardItemRow): string {
   return row.stageLabel !== null ? (PHASE_NAMES[row.stageLabel.key] ?? row.stageLabel.key) : 'Unstaged'
 }
 
-export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
+export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps) {
   const { item } = row
+  const navigate = useNavigate()
   const state = useSyncExternalStore(subscribeItemActions, () => itemActionState(item.repoId, item.number))
   const pendingAction = state?.kind === 'pending' ? state.action : null
 
@@ -41,6 +48,19 @@ export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
   const availableActions = OPERATOR_ACTIONS.filter((action) => row.actions[action].available)
   const availableDecisions = OPERATOR_DECISIONS.filter((decision) => row.decisions[decision].available)
   const agentSummary = agentSummaryOf(item.agents, item.sessions)
+  const stageLinks = stageLinksFor(records, item.number, item.kind)
+
+  function openStageLink(link: StageLink): void {
+    if (link.kind === 'live') {
+      void navigate({ to: ROUTE_IDS.session, search: { key: link.sessionKey, pane: null } })
+      return
+    }
+    void navigate({
+      to: ROUTE_IDS.transcript,
+      params: { sessionId: link.sessionId },
+      search: { agentId: null, from: 'board', focusIndex: null, title: item.title },
+    })
+  }
 
   async function handleAction(action: OperatorAction): Promise<void> {
     await runItemAction({ repoId: item.repoId, kind: item.kind, number: item.number, action, expectedStage: row.stageLabel?.key ?? null })
@@ -77,6 +97,21 @@ export function ItemPane({ row, report, owner, onClose }: ItemPaneProps) {
       </div>
       <StatusPill status={pillStatusFor(row)} label={phaseLabel(row)} />
       <PhaseList stageKey={row.stageLabel?.key ?? null} kind={item.kind} merged={item.mergedAt !== null} currentDetail={agentSummary} />
+      {stageLinks.length > 0 ? (
+        <div className="flex flex-col gap-1">
+          <span className="text-meta text-muted-foreground">{stageSessionsSectionLabel()}</span>
+          {stageLinks.map((link) => (
+            <button
+              key={link.kind === 'live' ? link.sessionKey : `${link.sessionId}-${link.at}`}
+              type="button"
+              onClick={() => openStageLink(link)}
+              className="text-left text-small text-primary-text hover:underline"
+            >
+              {stageLinkLabel(link)}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {heldLines.length > 0 ? (
         <div className="flex flex-col gap-1 rounded-md bg-muted px-3 py-2 text-meta text-muted-foreground">
           {heldLines.map((line) => (

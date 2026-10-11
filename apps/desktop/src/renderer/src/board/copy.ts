@@ -9,6 +9,37 @@ import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
 import { RETRY_TRIGGER } from '../../../shared/actions/plan'
 import type { ActionPlan, ActionRefusal, ItemActionResult, OperatorAction, OperatorDecision } from '../../../shared/actions/types'
 import type { Conflict } from '../../../shared/writes/types'
+import type { StageLink } from '../../../shared/board/stage-links'
+
+const STAGE_NAME: Readonly<Record<StageLink['agent'], string>> = { plan: 'Planning', impl: 'Implementing', review: 'Reviewing', revise: 'Revising' }
+
+function timeOf(iso: string): string {
+  const parsed = new Date(iso)
+  return Number.isNaN(parsed.getTime()) ? iso : parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+/** The item pane's "Stage sessions" section header. */
+export function stageSessionsSectionLabel(): string {
+  return 'Stage sessions'
+}
+
+/** One `StageLink`'s own row text — `live: Open live session · Implementing (plus operator joined)`, `transcript: View transcript · Planning · 14:07`. */
+export function stageLinkLabel(link: StageLink): string {
+  const name = STAGE_NAME[link.agent]
+  if (link.kind === 'live') {
+    return `Open live session · ${name}${link.operatorJoined ? ' · operator joined' : ''}`
+  }
+  return `View transcript · ${name} · ${timeOf(link.at)}`
+}
+
+/** The board row's "Operator joined" pill label and its accessible tooltip. */
+export function operatorJoinedTagLabel(): string {
+  return 'Operator joined'
+}
+
+export function operatorJoinedTagTitle(): string {
+  return "A person typed into this ticket's stage session"
+}
 
 export function statusWord(status: ItemStatus): string {
   switch (status) {

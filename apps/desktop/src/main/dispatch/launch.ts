@@ -37,6 +37,8 @@ export interface StageRecord {
   readonly detail: string | null
   /** `null` until the launcher classifies a hand-back for this record's session; never set for a `failed` record. */
   readonly outcome: StageOutcome | null
+  readonly claudeSessionId: string | null
+  readonly operatorJoinedAt: string | null
 }
 
 // Hosted snapshots whose `phase !== 'ended'` — operator and stage sessions
@@ -49,13 +51,14 @@ export function freeSlots(limit: number, snapshots: readonly HostedSessionSnapsh
   return Math.max(0, limit - liveCount(snapshots))
 }
 
-// A `started` record whose handle is `null` or `ended` becomes `ended`.
+// A `started` record whose handle is `null` or `ended` becomes `ended`. `claudeSessionId`/`operatorJoinedAt` are copied off the snapshot while it exists, including on the pass that marks the record `ended` — once the handle is gone, the last values stay.
 export function refreshRecords(records: readonly StageRecord[], snapshotOf: (sessionKey: SessionKey) => HostedSessionSnapshot | null): readonly StageRecord[] {
   return records.map((record) => {
     if (record.state !== 'started' || record.sessionKey === null) return record
     const snap = snapshotOf(record.sessionKey)
-    if (snap !== null && snap.phase !== 'ended') return record
-    return { ...record, state: 'ended' as const }
+    if (snap === null) return { ...record, state: 'ended' as const }
+    const withSnap = { ...record, claudeSessionId: snap.claudeSessionId, operatorJoinedAt: snap.operatorJoinedAt }
+    return snap.phase !== 'ended' ? withSnap : { ...withSnap, state: 'ended' as const }
   })
 }
 

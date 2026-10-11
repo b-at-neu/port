@@ -97,6 +97,7 @@ function sessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): Hosted
     backgroundTasks: [],
     stage: null,
     lastResult: null,
+    operatorJoinedAt: null,
     ...overrides,
   }
 }

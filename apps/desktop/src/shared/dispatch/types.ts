@@ -5,6 +5,7 @@ import type { RepoId } from '../repos'
 import type { StageAgent, TickObservationKind } from '../tick/types'
 import type { WriteOutcome } from '../writes/types'
 import type { StageOutcome } from '../hosting/stage'
+import type { SessionKey } from '../hosting/types'
 import type { InterruptedStage, StageDenial } from '../stage/types'
 
 /** `dispatch.json`'s own per-repository run state — `dispatching`, `draining` (scoped to one repository), or `paused` (the hard stop: the transition into it also stops every in-flight agent). */
@@ -91,6 +92,10 @@ export interface DispatchRecord {
   readonly detail: string | null
   /** `null` until the launcher classifies a hand-back for this record's session; never set for a `failed` record. */
   readonly outcome: StageOutcome | null
+  /** `null` for a `failed` record — no session was ever created to key. */
+  readonly sessionKey: SessionKey | null
+  readonly claudeSessionId: string | null
+  readonly operatorJoinedAt: string | null
 }
 
 /** This app's own dispatch state for one ready repository, rendered only while `owner === 'app'`. `idle` covers both "nothing launched yet" and "nothing to report"; `no-launcher` holds while candidates exist but no `StageLauncher` is wired. */

@@ -23,6 +23,8 @@ import { ItemPane } from './item-pane'
 import { PipelineStatus } from './pipeline-status'
 import { boardSections } from './sections'
 import type { BoardGroupBy } from './sections'
+import { operatorJoinedOf } from './row-model'
+import type { DispatchRecord } from '../../../shared/dispatch/types'
 
 // Registered once from main.ts's boot — never a useEffect inside the
 // component.
@@ -101,6 +103,11 @@ export function BoardScreen() {
   const report = selectedRow !== null && snapshot !== null ? snapshot.tick.find((r) => r.repoId === selectedRow.item.repoId) : undefined
   const owner = selectedRow !== null && snapshot !== null ? (snapshot.dispatch.find((d) => d.repoId === selectedRow.item.repoId)?.owner ?? 'none') : 'none'
 
+  function recordsFor(repoId: RepoId): readonly DispatchRecord[] {
+    const status = snapshot?.dispatch.find((d) => d.repoId === repoId)
+    return status !== undefined && status.state.kind === 'active' ? status.state.recent : []
+  }
+
   return (
     <div className="flex h-full flex-col">
       <BoardHeader
@@ -144,7 +151,13 @@ export function BoardScreen() {
                       <div key={group.key}>
                         <div className="px-4 py-0.5 text-meta text-muted-foreground">{group.name}</div>
                         {group.rows.map((row) => (
-                          <TicketRow key={rowKey(row)} row={row} selected={row === selectedRow} onSelect={() => selectRow(row)} />
+                          <TicketRow
+                            key={rowKey(row)}
+                            row={row}
+                            selected={row === selectedRow}
+                            onSelect={() => selectRow(row)}
+                            operatorJoined={operatorJoinedOf(recordsFor(row.item.repoId), row)}
+                          />
                         ))}
                       </div>
                     ))}
@@ -154,7 +167,7 @@ export function BoardScreen() {
             </>
           ) : null}
         </div>
-        {selectedRow !== null ? <ItemPane row={selectedRow} report={report} owner={owner} onClose={() => selectRow(null)} /> : null}
+        {selectedRow !== null ? <ItemPane row={selectedRow} report={report} owner={owner} records={recordsFor(selectedRow.item.repoId)} onClose={() => selectRow(null)} /> : null}
       </div>
     </div>
   )

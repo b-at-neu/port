@@ -120,7 +120,7 @@ describe('resolveSessionSend attachments', () => {
     const send = vi.fn(() => ({ ok: true as const, uuid: 'u', queued: true }))
     const attachments = [{ kind: 'text' as const, name: 'notes.txt', text: 'hi' }]
     resolveSessionSend({ sessionKey: SESSION_KEY, text: '', attachments }, depsWith({ store: storeStub({ send }) }))
-    expect(send).toHaveBeenCalledWith(SESSION_KEY, '', attachments)
+    expect(send).toHaveBeenCalledWith(SESSION_KEY, '', attachments, { source: 'operator' })
   })
 
   it('rejects an attachment with an unknown kind', () => {

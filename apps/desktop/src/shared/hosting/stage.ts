@@ -35,4 +35,6 @@ export interface StageOutcome {
   readonly costUsd: number | null
   readonly resetsAt: string | null
   readonly worktree: StageWorktreeOutcome
+  /** `true` when an operator sent a message into this stage session before it reached this outcome. */
+  readonly operatorJoined: boolean
 }

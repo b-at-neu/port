@@ -8,6 +8,7 @@ import { DEFAULT_POLL_POLICY, SOURCE_BASE_INTERVAL_MS } from '../../shared/board
 import type { BoardSnapshot, RepositoryHealth, SourceKind } from '../../shared/board/types'
 import type { DenialEntry, DenialsRead } from '../../shared/local/types'
 import type { RepositoryState } from '../../shared/state/types'
+import type { SessionKey } from '../../shared/hosting/types'
 import { reconcileRepository } from '../state/reconcile'
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '../tick/ledger'
 import { planTick } from '../tick/plan'
@@ -249,7 +250,38 @@ export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'pop
       {
         repoId: WIDGETS_ID,
         owner: 'app',
-        state: { kind: 'idle' },
+        state:
+          scenario === 'empty'
+            ? { kind: 'idle' }
+            : {
+                kind: 'active',
+                recent: [
+                  {
+                    agent: 'impl',
+                    number: 38,
+                    kind: 'issue',
+                    state: 'started',
+                    at: offsetMinutes(now, -2),
+                    detail: null,
+                    outcome: null,
+                    sessionKey: 'fixture-stage-impl-38' as SessionKey,
+                    claudeSessionId: 'fixture-session-impl-38',
+                    operatorJoinedAt: offsetMinutes(now, -1),
+                  },
+                  {
+                    agent: 'plan',
+                    number: 38,
+                    kind: 'issue',
+                    state: 'ended',
+                    at: offsetMinutes(now, -30),
+                    detail: null,
+                    outcome: { kind: 'completed', detail: null, costUsd: 0.42, resetsAt: null, worktree: 'removed', operatorJoined: false },
+                    sessionKey: null,
+                    claudeSessionId: 'fixture-session-plan-38',
+                    operatorJoinedAt: null,
+                  },
+                ],
+              },
         runState: 'dispatching',
         ownedSince: now.toISOString(),
         unreadableMessage: null,

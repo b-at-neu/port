@@ -130,6 +130,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `handback.ts`'s `classifyHandback` is pure; its `QUESTIONS FOR HUMAN:`/`BLOCKED:` prefixes are pinned against the pipeline skill's own completion text
 - removes a worktree only on `completed`, never forced; every other outcome keeps it
 - writes no label itself (phase 1) — stage sessions still write their own, the same way a terminal-dispatched agent does
+- "operator joined" is stamped by the hosted handle (`main/hosting/handle.ts`) on the first `session:send` into a stage session carrying `source: 'operator'`; the launcher's own prompt send never counts
 
 **`apps/desktop/src/main/tick/`**
 - `RepositoryState` → `TickReport`; computes, never writes

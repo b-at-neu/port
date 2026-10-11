@@ -30,12 +30,26 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     backgroundTasks: [],
     stage: null,
     lastResult: null,
+    operatorJoinedAt: null,
     ...overrides,
   }
 }
 
 function record(overrides: Partial<StageRecord> = {}): StageRecord {
-  return { sessionKey: 'hosted-1' as SessionKey, agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved', state: 'started', at: '2026-01-01T00:00:00Z', detail: null, outcome: null, ...overrides }
+  return {
+    sessionKey: 'hosted-1' as SessionKey,
+    agent: 'impl',
+    number: 52,
+    kind: 'issue',
+    trigger: 'planApproved',
+    state: 'started',
+    at: '2026-01-01T00:00:00Z',
+    detail: null,
+    outcome: null,
+    claudeSessionId: null,
+    operatorJoinedAt: null,
+    ...overrides,
+  }
 }
 
 describe('liveCount / freeSlots', () => {
@@ -73,6 +87,19 @@ describe('refreshRecords', () => {
     const failed = record({ state: 'failed', sessionKey: null, detail: 'boom' })
     const result = refreshRecords([ended, failed], () => null)
     expect(result).toEqual([ended, failed])
+  })
+
+  it('copies claudeSessionId and operatorJoinedAt off a still-live snapshot', () => {
+    const result = refreshRecords([record()], () => snapshot({ phase: 'streaming', claudeSessionId: 'sdk-1', operatorJoinedAt: '2026-01-01T00:05:00.000Z' }))
+    expect(result[0]?.claudeSessionId).toBe('sdk-1')
+    expect(result[0]?.operatorJoinedAt).toBe('2026-01-01T00:05:00.000Z')
+  })
+
+  it('keeps the newest copied values once the handle is gone', () => {
+    const result = refreshRecords([record()], () => snapshot({ phase: 'ended', claudeSessionId: 'sdk-1', operatorJoinedAt: '2026-01-01T00:05:00.000Z' }))
+    expect(result[0]?.state).toBe('ended')
+    expect(result[0]?.claudeSessionId).toBe('sdk-1')
+    expect(result[0]?.operatorJoinedAt).toBe('2026-01-01T00:05:00.000Z')
   })
 })
 

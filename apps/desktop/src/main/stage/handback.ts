@@ -13,6 +13,7 @@ export interface ClassifyHandbackParams {
   readonly rateLimit: SessionRateLimit | null
   readonly usage: SessionUsage | null
   readonly phase: 'starting' | 'ready' | 'streaming' | 'interrupting' | 'closing' | 'ended'
+  readonly operatorJoinedAt: string | null
 }
 
 /** The text's last non-blank paragraph — paragraphs split on a blank line, since the prefix sits at the very end of the final message. */
@@ -42,31 +43,32 @@ function blockedLineOutsideFence(text: string): string | null {
 /** `null` means still working — no outcome has been reached yet. */
 export function classifyHandback(params: ClassifyHandbackParams): StageOutcome | null {
   const costUsd = params.usage?.costUsd ?? null
+  const operatorJoined = params.operatorJoinedAt !== null
 
   if (params.phase !== 'ended' && params.lastResult === null) return null
 
   if (params.lastResult !== null && params.lastResult.isError) {
     if (params.rateLimit?.status === 'rejected') {
-      return { kind: 'usage-limit', detail: null, costUsd, resetsAt: params.rateLimit.resetsAt, worktree: 'kept' }
+      return { kind: 'usage-limit', detail: null, costUsd, resetsAt: params.rateLimit.resetsAt, worktree: 'kept', operatorJoined }
     }
     const firstLine = params.lastResult.text?.split('\n')[0] ?? null
     const detail = firstLine === null ? params.lastResult.subtype : `${params.lastResult.subtype}: ${firstLine}`
-    return { kind: 'error', detail, costUsd, resetsAt: null, worktree: 'kept' }
+    return { kind: 'error', detail, costUsd, resetsAt: null, worktree: 'kept', operatorJoined }
   }
 
   if (params.lastResult !== null) {
     const text = params.lastResult.text ?? ''
     const paragraph = lastParagraph(text)
     if (paragraph.startsWith(QUESTIONS_PREFIX)) {
-      return { kind: 'questions', detail: null, costUsd, resetsAt: null, worktree: 'kept' }
+      return { kind: 'questions', detail: null, costUsd, resetsAt: null, worktree: 'kept', operatorJoined }
     }
     const blocked = blockedLineOutsideFence(text)
     if (blocked !== null) {
-      return { kind: 'blocked', detail: blocked, costUsd, resetsAt: null, worktree: 'kept' }
+      return { kind: 'blocked', detail: blocked, costUsd, resetsAt: null, worktree: 'kept', operatorJoined }
     }
-    return { kind: 'completed', detail: null, costUsd, resetsAt: null, worktree: 'removed' }
+    return { kind: 'completed', detail: null, costUsd, resetsAt: null, worktree: 'removed', operatorJoined }
   }
 
   // phase === 'ended' with no lastResult at all.
-  return { kind: 'interrupted', detail: params.end?.reason ?? null, costUsd, resetsAt: null, worktree: 'kept' }
+  return { kind: 'interrupted', detail: params.end?.reason ?? null, costUsd, resetsAt: null, worktree: 'kept', operatorJoined }
 }

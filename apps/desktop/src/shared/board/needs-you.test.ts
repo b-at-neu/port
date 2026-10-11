@@ -256,6 +256,7 @@ describe('needsYouItems', () => {
       backgroundTasks: [],
       stage: { agent: 'impl' as const, number: 300, kind: 'issue' as const, trigger: 'planApproved' as const },
       lastResult: { subtype: 'success', isError: false, text: 'QUESTIONS FOR HUMAN:\nwhich branch?', at: NOW.toISOString() },
+      operatorJoinedAt: null,
     }
     const items = needsYouItems(snapshotOf([]), NOW, [session])
     expect(items).toHaveLength(1)
