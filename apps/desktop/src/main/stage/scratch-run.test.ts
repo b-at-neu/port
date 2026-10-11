@@ -1,7 +1,4 @@
-// #327's own Done-when: a scratch-repo run takes one ticket from `ready` to an opened PR entirely
-// through stage sessions, against a fake SDK. Composes the real store + launcher + dispatcher and
-// drives ticks through the real reconcileRepository/planTick — only the outer edges (SDK, git,
-// worktrees, GitHub, ownership, the stage registry, the budget gate) are faked.
+// A scratch-repo run takes one ticket from `ready` to an opened PR entirely through stage sessions, against a fake SDK; only the outer edges (SDK, git, worktrees, GitHub, ownership, the stage registry, the budget gate) are faked.
 import { describe, expect, it, vi } from 'vitest'
 import { labelName, resolveVocabulary, verifyVocabulary } from '../../shared/labels/vocabulary'
 import type { LabelKey, LabelVocabulary } from '../../shared/labels/vocabulary'
@@ -218,7 +215,7 @@ function createFakeSdk(seen: Options[], labels: LabelMap, prs: PrMap): HostedSdk
   }
 }
 
-describe('scratch run — ready to opened PR through real stage sessions (#327)', () => {
+describe('scratch run — ready to opened PR through real stage sessions', () => {
   it('composes the real store, launcher and dispatcher against a fake SDK', async () => {
     const entry = readyEntry()
     const labels: LabelMap = new Map([[7, new Set<LabelKey>(['marker', 'ready'])]])
@@ -396,7 +393,7 @@ describe('scratch run — ready to opened PR through real stage sessions (#327)'
     await tick()
     await waitForEndedCompleted(1)
 
-    // 2. Nothing launches — #7 is at planReview, awaiting the human gate.
+    // 2. Nothing launches — the issue is at planReview, awaiting the human gate.
     await tick()
     expect(seen).toHaveLength(1)
 
@@ -405,7 +402,7 @@ describe('scratch run — ready to opened PR through real stage sessions (#327)'
     await tick()
     await waitForEndedCompleted(2)
 
-    // 4. Final tick: no actionable item for #7.
+    // 4. Final tick: no actionable item remains.
     const beforeFinal = seen.length
     await tick()
     expect(seen).toHaveLength(beforeFinal)
