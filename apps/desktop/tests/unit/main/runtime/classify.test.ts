@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { classifyPreflight, classifyProbeFailure } from '@/main/runtime/classify'
 import type { ClassifyPreflightInput, ClassifyProbeFailureInput } from '@/main/runtime/classify'
-import cases from '@/main/runtime/classify.cases.json'
+import cases from './classify.cases.json'
 import type { RuntimeDiagnosis } from '@/types/runtime'
 
 type Case =
