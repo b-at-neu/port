@@ -74,6 +74,11 @@ import { createHostedStore, defaultHostedStoreDeps } from './hosting/store'
 import { createHostingPersistence } from './hosting/persist'
 import type { HostedStore } from './hosting/store'
 import { createNotifier } from './hosting/notify'
+import { createStageRegistry } from './stage/registry'
+import type { StageRegistry } from './stage/registry'
+import { readJsonFile, writeJsonFileAtomic } from './platform/files'
+import { resolveStageAllow, resolveStageDismissDenial, resolveStageResume, resolveStageRestart } from './channels/stage'
+import type { StageChannelDeps } from './channels/stage'
 
 type AppInfo = IpcMap['app:info']['response']
 
@@ -172,6 +177,7 @@ export interface RegisteredIpc {
   readonly hostedStore: HostedStore
   readonly dispatcher: Dispatcher
   readonly shutdownDispatch: () => void
+  readonly stageRegistry: StageRegistry
 }
 
 export function registerIpc(): RegisteredIpc {
@@ -268,6 +274,11 @@ export function registerIpc(): RegisteredIpc {
   // so construction order between the launcher and the dispatcher that owns recordOutcome stays acyclic.
   let dispatcherRef: Dispatcher | null = null
 
+  // stage-sessions.json's sole writer. Loaded once at boot — a `running` entry found then can only
+  // mean the process died before it marked itself otherwise, and promotes to `crash`.
+  const stageRegistry = createStageRegistry({ path: join(app.getPath('userData'), 'stage-sessions.json'), readJson: readJsonFile, writeJsonAtomic: writeJsonFileAtomic, now: () => new Date() })
+  void stageRegistry.load()
+
   const hostedStore = createHostedStore({
     ...defaultHostedStoreDeps,
     onStatus: (snapshot) => {
@@ -286,6 +297,9 @@ export function registerIpc(): RegisteredIpc {
     removeWorktree: (path, force) => removeSessionWorktreeAt({ path, force, git: defaultGitRunner() }),
     now: () => new Date(),
     onOutcome: (repoId, sessionKey, outcome) => dispatcherRef?.recordOutcome(repoId, sessionKey, outcome),
+    registry: stageRegistry,
+    onDenial: (repoId, denial) => dispatcherRef?.recordDenial(repoId, denial),
+    newId: () => globalThis.crypto.randomUUID(),
   })
   const hostingChannelDeps = defaultHostingChannelDeps(hostedStore, {
     git: (args, cwd) => git(args, { cwd }),
@@ -306,6 +320,7 @@ export function registerIpc(): RegisteredIpc {
     registryDeps,
     dirs: { audit: app.getPath('userData'), scratch: app.getPath('temp') },
     now: () => new Date(),
+    interrupted: (repoId) => stageRegistry.list().filter((entry) => entry.repoId === repoId),
   })
   dispatcherRef = dispatcher
 
@@ -451,11 +466,32 @@ export function registerIpc(): RegisteredIpc {
 
   handle('session:changes', (_event, request) => resolveSessionChanges(request, workspaceChannelDeps))
 
+  const stageChannelDeps: StageChannelDeps = {
+    listRepositories,
+    registry: stageRegistry,
+    dispatcher,
+    store: hostedStore,
+    removeWorktree: (path, force) => removeSessionWorktreeAt({ path, force, git: defaultGitRunner() }),
+    applyItemAction,
+    snapshot: watcher.snapshot,
+    auditDir: app.getPath('userData'),
+    readJson: readJsonFile,
+    writeJsonAtomic: writeJsonFileAtomic,
+  }
+
+  handle('stage:allow', (_event, request) => resolveStageAllow(registryDeps, request, stageChannelDeps))
+
+  handle('stage:dismiss-denial', (_event, request) => resolveStageDismissDenial(request, stageChannelDeps))
+
+  handle('stage:resume', (_event, request) => resolveStageResume(registryDeps, request, stageChannelDeps))
+
+  handle('stage:restart', (_event, request) => resolveStageRestart(registryDeps, request, stageChannelDeps))
+
   for (const channel of IPC_CHANNELS) {
     if (!registered.has(channel)) {
       throw new Error(`IPC channel '${channel}' is declared but has no handler`)
     }
   }
 
-  return { watcher, hostedStore, dispatcher, shutdownDispatch: shutdown }
+  return { watcher, hostedStore, dispatcher, shutdownDispatch: shutdown, stageRegistry }
 }

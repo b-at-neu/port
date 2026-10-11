@@ -23,7 +23,7 @@ export interface StageResult {
 }
 
 /** From `stage.role` plus the attachment ladder. `stalled` is a report, never a proof — a session scan that could not run is absence of evidence and never produces this verdict. */
-export type ItemStatus = 'waiting' | 'in-flight' | 'stalled' | 'gated' | 'terminal' | 'unstaged'
+export type ItemStatus = 'waiting' | 'in-flight' | 'stalled' | 'gated' | 'terminal' | 'unstaged' | 'interrupted'
 
 /** Why `status` reads the way it does — distinguishes "nothing claims this" from "the transcript hasn't moved" from "the app couldn't even check". */
 export type StatusEvidence = 'sessions-unavailable' | 'agent-active' | 'session-active' | 'all-dormant' | 'no-claimant'

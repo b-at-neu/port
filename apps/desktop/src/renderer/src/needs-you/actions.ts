@@ -4,13 +4,19 @@ import type { DecisionRefusal } from '../../../shared/actions/types'
 import type { NeedsYouItem } from '../../../shared/board/needs-you'
 import { openReviewDialog } from '../gate/controller'
 import { openDecision } from '../decision/controller'
+import { openAllowDialog } from './allow-dialog'
+import { openRestartDialog } from './restart-dialog'
+import { router } from '../router/router'
+import { ROUTE_IDS } from '../router/routes'
+import { invoke } from '../data/invoke'
 
-export type NeedsYouActionKind = 'review-plan' | 'open' | 'unblock' | 'retry' | 'refresh'
+export type NeedsYouActionKind = 'review-plan' | 'open' | 'unblock' | 'retry' | 'refresh' | 'answer' | 'allow' | 'resume' | 'restart'
 
 export interface NeedsYouAction {
   readonly label: string
   readonly kind: NeedsYouActionKind
   readonly disabledReason: string | null
+  readonly secondaryLabel?: string
 }
 
 function disabledReasonCopy(reason: DecisionRefusal): string {
@@ -59,6 +65,15 @@ export function actionFor(item: NeedsYouItem): NeedsYouAction {
       return heldAction(item)
     case 'stalled':
       return { label: 'Retry', kind: 'retry', disabledReason: null }
+    case 'stage-question':
+      return { label: 'Answer', kind: 'answer', disabledReason: null }
+    case 'stage-questions':
+    case 'stage-blocked':
+      return { label: 'Open session', kind: 'open', disabledReason: null }
+    case 'stage-denial':
+      return { label: 'Allow from now on', kind: 'allow', disabledReason: null }
+    case 'stage-interrupted':
+      return { label: 'Resume', kind: 'resume', disabledReason: item.interrupted.claudeSessionId === null ? "This session ended before Claude started it, so there's nothing to resume." : null, secondaryLabel: 'Restart' }
   }
 }
 
@@ -84,11 +99,60 @@ export function runAction(item: NeedsYouItem, deps: RunActionDeps): void {
       return
     }
     case 'open':
+      if (item.kind === 'stage-questions' || item.kind === 'stage-blocked') {
+        void router.navigate({ to: ROUTE_IDS.session, search: { key: item.sessionKey } })
+        return
+      }
       if (item.url !== null) window.open(item.url, '_blank')
+      return
+    case 'answer':
+      // Expands the row in place — the question card renders inline (`screen.tsx`'s own `hasDetail`).
+      return
+    case 'allow':
+      if (item.kind === 'stage-denial' && item.repoId !== null) openAllowDialog(item.repoId, item.denial)
+      return
+    case 'resume':
+      if (item.kind === 'stage-interrupted') void runStageResume(item.interrupted.id, item.interrupted.number, deps)
+      return
+    case 'restart':
+      if (item.kind === 'stage-interrupted') openRestartDialog(item.interrupted)
       return
     case 'retry':
     case 'refresh':
       void runLabelAction(item, action.kind, deps)
+  }
+}
+
+/** The Interrupted row's secondary action is Restart; its primary is Resume, handled here directly
+ *  (never a confirmation — only Restart has DESIGN §4 consequences). */
+export function runSecondaryAction(item: NeedsYouItem, deps: RunActionDeps): void {
+  const action = actionFor(item)
+  if (action.kind === 'resume' && item.kind === 'stage-interrupted') openRestartDialog(item.interrupted)
+  void deps
+}
+
+async function runStageResume(id: string, number: number, deps: RunActionDeps): Promise<void> {
+  try {
+    const result = await invoke('stage:resume', { id })
+    switch (result.kind) {
+      case 'ok':
+        deps.onToast(`Resumed #${String(number)}.`)
+        return
+      case 'at-capacity':
+        deps.onToast(`All ${String(result.limit)} session slots are busy. Close one, then resume.`)
+        return
+      case 'no-session-id':
+        deps.onToast(`#${String(number)} ended before Claude started it, so there's nothing to resume.`)
+        return
+      case 'start-failed':
+        deps.onToast(`Couldn't resume #${String(number)}: ${result.message}.`)
+        return
+      case 'unknown-stage':
+        deps.onToast(`#${String(number)} is no longer tracked as interrupted.`)
+    }
+  } catch (error) {
+    console.error('Failed to reach the main process while resuming a stage session', error)
+    deps.onToast(`Couldn't reach the main process to resume #${String(number)}.`)
   }
 }
 

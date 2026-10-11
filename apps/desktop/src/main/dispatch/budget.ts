@@ -58,13 +58,26 @@ export function budgetRoute(verdict: BudgetVerdict, priorHolds: number): { reado
   return priorHolds === 0 ? { action: 'hold', holds: 1 } : { action: 'dispatch', holds: 0 }
 }
 
-/** `live`: descriptions of every `started` record. `completed`: every `ended` record not already
- *  in `live` — a `failed` record is in neither set. */
+/** `live`: descriptions of every `started` record. `completed`: every `ended` record whose own hand-back `outcome.kind === 'completed'`, not already in `live` — a `failed` record, and an `ended` record that crashed/errored/hit the usage limit, are in neither set, closing as lost rather than completed. */
 export function budgetLiveSets(records: readonly StageRecord[]): { readonly live: readonly string[]; readonly completed: readonly string[] } {
   const live = [...new Set(records.filter((r) => r.state === 'started').map((r) => `${r.agent} #${String(r.number)}`))]
   const liveSet = new Set(live)
-  const completed = [...new Set(records.filter((r) => r.state === 'ended').map((r) => `${r.agent} #${String(r.number)}`).filter((d) => !liveSet.has(d)))]
+  const completed = [
+    ...new Set(
+      records
+        .filter((r) => r.state === 'ended' && r.outcome?.kind === 'completed')
+        .map((r) => `${r.agent} #${String(r.number)}`)
+        .filter((d) => !liveSet.has(d)),
+    ),
+  ]
   return { live, completed }
+}
+
+/** The sum of every record's own `outcome.costUsd` — `null` when no record carries one yet. */
+export function sumCostUsd(records: readonly StageRecord[]): number | null {
+  const known = records.map((r) => r.outcome?.costUsd).filter((c): c is number => c !== null && c !== undefined)
+  if (known.length === 0) return null
+  return known.reduce((a, b) => a + b, 0)
 }
 
 /** `## Pipeline Escalation`'s body — `line` is the script's own `exceeded` line, carried verbatim. */

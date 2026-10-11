@@ -83,7 +83,7 @@ export interface CreateHostedHandleParams {
   /** Read before spawn and kept frozen on the handle for its whole life. */
   readonly history: SessionHistory
   /** Non-null only for a stage session: carried on the snapshot, drives `buildSessionOptions`'s stage branch, and builds the `stagePolicy` the permission broker consults first. */
-  readonly stage: { readonly tag: StageTag; readonly agentName: string; readonly model: string; readonly sessionRequiredPaths: readonly string[] } | null
+  readonly stage: { readonly tag: StageTag; readonly agentName: string; readonly model: string; readonly sessionRequiredPaths: readonly string[]; readonly onDeny?: (toolName: string, input: Readonly<Record<string, unknown>>) => void } | null
 }
 
 export interface HostedHandleReplay {
@@ -162,7 +162,7 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
     now: params.now,
     onChange: () => emitStatus(),
     onPlanApproved: (mode) => controls.adoptApprovedMode(mode),
-    ...(params.stage !== null ? { policy: stagePolicy({ cwd: params.cwd, sessionRequiredPaths: params.stage.sessionRequiredPaths, pathOps }) } : {}),
+    ...(params.stage !== null ? { policy: stagePolicy({ cwd: params.cwd, sessionRequiredPaths: params.stage.sessionRequiredPaths, pathOps }), onDeny: params.stage.onDeny } : {}),
   })
   const options = buildSessionOptions({
     mode: params.mode,

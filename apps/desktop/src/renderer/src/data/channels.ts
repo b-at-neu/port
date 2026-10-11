@@ -68,6 +68,10 @@ export const MUTATION_CHANNELS = [
   'folders:choose',
   'session:pin:set',
   'session:archive:set',
+  'stage:allow',
+  'stage:dismiss-denial',
+  'stage:resume',
+  'stage:restart',
 ] as const
 
 export type MutationChannel = (typeof MUTATION_CHANNELS)[number]

@@ -11,6 +11,17 @@ import { confirmQuit } from './dialogs'
 import { applyNavigationGuards } from './navigation'
 import { ABOUT_NOTICE, ABOUT_POWERED_BY } from '../shared/about/copy'
 import { menuTemplate } from './menu'
+import type { StageRegistry } from './stage/registry'
+
+// A hung registry write must never block quitting.
+const MARK_ALL_QUIT_TIMEOUT_MS = 2_000
+
+function withTimeout(promise: Promise<void>, ms: number): Promise<void> {
+  const deadline = new Promise<void>((resolve) => {
+    AbortSignal.timeout(ms).addEventListener('abort', () => resolve(), { once: true })
+  })
+  return Promise.race([promise, deadline])
+}
 
 // A dev-only `pnpm install` never runs as root, so `chrome-sandbox` ships without the root-owned
 // permissions Chromium requires. Packaged builds are unaffected.
@@ -43,6 +54,7 @@ if (fixture.kind === 'invalid') {
     let hostedStore: HostedStore | null = null
     let dispatcher: Dispatcher | null = null
     let shutdownDispatch: (() => void) | null = null
+    let stageRegistry: StageRegistry | null = null
 
     app.on('second-instance', () => {
       if (!mainWindow) return
@@ -108,6 +120,7 @@ if (fixture.kind === 'invalid') {
         hostedStore = registered.hostedStore
         dispatcher = registered.dispatcher
         shutdownDispatch = registered.shutdownDispatch
+        stageRegistry = registered.stageRegistry
       }
       Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform, app.isPackaged, broadcastAppCommand)))
       createWindow()
@@ -135,7 +148,8 @@ if (fixture.kind === 'invalid') {
       if (quitGuard.intercept(() => event.preventDefault())) return
       shutdownDispatch?.()
       watcher?.stop()
-      void hostedStore?.closeAll()
+      const marked = stageRegistry !== null ? withTimeout(stageRegistry.markAllQuit(), MARK_ALL_QUIT_TIMEOUT_MS) : Promise.resolve()
+      void marked.then(() => hostedStore?.closeAll())
     })
   }
 }

@@ -3,6 +3,7 @@ import type { RepoId } from '../repos'
 import type { PipelineState, ReconciledItem, RepositoryState } from '../state/types'
 import type { TickReport } from '../tick/types'
 import type { RepoDispatchStatus } from '../dispatch/types'
+import type { SessionKey } from '../hosting/types'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from './types'
 import type { BoardSnapshot } from './types'
 import { needsYouCount, needsYouItems, repoNeedsYou } from './needs-you'
@@ -105,6 +106,8 @@ function dispatchStatus(overrides: Partial<RepoDispatchStatus> = {}): RepoDispat
     unreadableMessage: null,
     budget: null,
     observed: [],
+    denials: [],
+    interrupted: [],
     ...overrides,
   }
 }
@@ -177,14 +180,87 @@ describe('needsYouItems', () => {
 
   it('budget notes keep only escalated and escalation-failed', () => {
     const dispatch = [
-      dispatchStatus({ budget: { line: null, problem: null, notes: [{ kind: 'escalated', number: 5, needsHumanLabel: 'needs human', commentFailedMessage: null }] } }),
-      dispatchStatus({ repoId: 'repo-b' as RepoId, budget: { line: null, problem: null, notes: [{ kind: 'held', number: 6, line: 'held' }] } }),
+      dispatchStatus({ budget: { line: null, problem: null, costUsd: null, notes: [{ kind: 'escalated', number: 5, needsHumanLabel: 'needs human', commentFailedMessage: null }] } }),
+      dispatchStatus({ repoId: 'repo-b' as RepoId, budget: { line: null, problem: null, costUsd: null, notes: [{ kind: 'held', number: 6, line: 'held' }] } }),
     ]
     const items = needsYouItems(snapshotOf([], { dispatch }), NOW)
     expect(items).toHaveLength(1)
     expect(items[0]).toMatchObject({ kind: 'budget', number: 5 })
   })
 
+  it('derives a stage-denial item from dispatch[].denials', () => {
+    const denial = { id: 'd1', repoId: 'repo-a' as RepoId, agent: 'impl' as const, number: 300, toolName: 'Bash', inputSummary: 'pnpm exec playwright test', rule: 'Bash(pnpm *)', at: NOW.toISOString() }
+    const items = needsYouItems(snapshotOf([], { dispatch: [dispatchStatus({ denials: [denial] })] }), NOW)
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ kind: 'stage-denial', number: 300 })
+  })
+
+  it('derives a stage-interrupted item from dispatch[].interrupted', () => {
+    const interrupted = {
+      id: 'i1',
+      repoId: 'repo-a' as RepoId,
+      agent: 'plan' as const,
+      number: 301,
+      kind: 'issue' as const,
+      trigger: 'ready' as const,
+      inFlight: 'planning' as const,
+      model: 'opus',
+      claudeSessionId: null,
+      worktree: { path: '/wt', branch: 'b', baseSha: 's' },
+      startedAt: NOW.toISOString(),
+      reason: 'usage-limit' as const,
+      detail: null,
+      resetsAt: '2026-01-01T15:00:00.000Z',
+      costUsd: null,
+    }
+    const items = needsYouItems(snapshotOf([], { dispatch: [dispatchStatus({ interrupted: [interrupted] })] }), NOW)
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ kind: 'stage-interrupted', number: 301 })
+  })
+
+  it('a live stage session with a pending question never also produces a stage-questions item', () => {
+    const session = {
+      sessionKey: 'hosted-1' as SessionKey,
+      claudeSessionId: 's1',
+      repoId: 'repo-a' as RepoId,
+      workspace: { folder: '/wt', root: '/repo', worktree: null, base: null },
+      phase: 'streaming' as const,
+      origin: { kind: 'fresh' as const },
+      startedAt: NOW.toISOString(),
+      queuedAfterInterrupt: null,
+      end: null,
+      titled: null,
+      pendingPermissions: [
+        {
+          permissionId: 'p1',
+          toolName: 'AskUserQuestion',
+          input: {},
+          title: null,
+          displayName: null,
+          description: null,
+          decisionReason: null,
+          blockedPath: null,
+          protectedPath: null,
+          agentId: null,
+          requestedAt: NOW.toISOString(),
+          sessionGrant: null,
+          interaction: { kind: 'question' as const, questions: [{ question: 'Which branch?', header: 'Branch', multiSelect: false, options: [] }] },
+        },
+      ],
+      capabilities: { kind: 'pending' as const, request: { source: 'installed' as const } },
+      title: null,
+      rateLimit: null,
+      controls: { permissionMode: 'default' as const, model: null, effort: null },
+      models: { kind: 'pending' as const },
+      usage: null,
+      backgroundTasks: [],
+      stage: { agent: 'impl' as const, number: 300, kind: 'issue' as const, trigger: 'planApproved' as const },
+      lastResult: { subtype: 'success', isError: false, text: 'QUESTIONS FOR HUMAN:\nwhich branch?', at: NOW.toISOString() },
+    }
+    const items = needsYouItems(snapshotOf([]), NOW, [session])
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ kind: 'stage-question', number: 300 })
+  })
 })
 
 describe('needsYouCount / repoNeedsYou', () => {

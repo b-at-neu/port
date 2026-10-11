@@ -24,6 +24,8 @@ export function statusWord(status: ItemStatus): string {
       return 'Terminal'
     case 'unstaged':
       return 'Unstaged'
+    case 'interrupted':
+      return 'Interrupted'
   }
 }
 

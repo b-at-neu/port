@@ -256,9 +256,12 @@ export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'pop
         budget: {
           line: null,
           problem: null,
+          costUsd: null,
           notes: scenario === 'empty' ? [] : [{ kind: 'escalated', number: 44, needsHumanLabel: LABEL_DEFAULTS.find((def) => def.key === 'needsHuman')?.name ?? 'needsHuman', commentFailedMessage: null }],
         },
         observed: [],
+        denials: [],
+        interrupted: [],
       },
     ],
   }

@@ -16,6 +16,8 @@ export interface NeedsYouItemProps {
   readonly actionDisabledReason: string | null
   readonly actionPending: boolean
   readonly onAction: () => void
+  readonly secondaryActionLabel?: string
+  readonly onSecondaryAction?: () => void
   readonly expandable: boolean
   readonly expanded: boolean
   readonly onToggleExpand: () => void
@@ -31,6 +33,8 @@ export function NeedsYouItem({
   actionDisabledReason,
   actionPending,
   onAction,
+  secondaryActionLabel,
+  onSecondaryAction,
   expandable,
   expanded,
   onToggleExpand,
@@ -71,6 +75,11 @@ export function NeedsYouItem({
             {actionPending ? 'Working…' : actionLabel}
           </Button>
         )}
+        {secondaryActionLabel !== undefined && onSecondaryAction !== undefined ? (
+          <Button variant="outline" size="small" onClick={onSecondaryAction} disabled={actionPending} className="shrink-0">
+            {secondaryActionLabel}
+          </Button>
+        ) : null}
       </div>
       {expanded ? children : null}
     </div>

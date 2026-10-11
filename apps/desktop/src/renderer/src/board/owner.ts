@@ -176,7 +176,9 @@ export function observationTitle(observed: readonly ObservationRecord[]): string
  *  whenever there is nothing to append, so every caller can concatenate
  *  unconditionally. */
 function budgetClause(budget: BudgetStatus | null): string {
-  return budget !== null && budget.line !== null ? ` Budget: ${budget.line}` : ''
+  if (budget === null || budget.line === null) return ''
+  const spent = budget.costUsd !== null ? ` · $${budget.costUsd.toFixed(2)} spent` : ''
+  return ` Budget: ${budget.line}${spent}`
 }
 
 /** Exhaustive over `DispatchOwner` × `DispatcherState` (plan's own **UX
