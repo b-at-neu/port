@@ -2,7 +2,7 @@
 // models, modules, concurrency, the review cycle cap. No path is string-concatenated.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { message } from '../lib/errors.ts';
+import { message } from '#lib/errors.ts';
 import { parseOverrides, applyOverrides } from './overrides.ts';
 
 // Defaults and roles mirror plugins/port/data/labels.json exactly; scripts/checks/tick.ts pins both directions.

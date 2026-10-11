@@ -5,9 +5,9 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { root } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
-import { message } from '../lib/errors.ts';
+import { root } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
+import { message } from '#lib/errors.ts';
 
 export default async function ({ expect, fail, note, ok }: Reporter) {
   const scriptPath = join(root, 'plugins/port/bin/plugin-cache.mjs');

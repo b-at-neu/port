@@ -1,6 +1,6 @@
 import { basename, dirname, join } from 'node:path';
-import { root, walk, relOf, frontmatter } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, walk, relOf, frontmatter } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // --- Components parse and declare what they must: a malformed frontmatter is silently missing, never an error. ---
 export default async function ({ fail, ok }: Reporter) {

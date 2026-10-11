@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, walk, relOf, readJson } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, walk, relOf, readJson } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // apps/desktop/src/main/platform/ is the only place under apps/desktop/src/ that may touch
 // a child process, the filesystem, or a path string — a compile-time and layer 1 fact.

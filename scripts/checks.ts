@@ -3,9 +3,9 @@
 // This file only wires: discovers every topic module under scripts/checks/, imports and awaits each, then reports.
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
-import { createReporter } from './lib/report.ts';
-import type { CheckModule } from './lib/report.ts';
-import { root, walk } from './lib/files.ts';
+import { createReporter } from '#lib/report.ts';
+import type { CheckModule } from '#lib/report.ts';
+import { root, walk } from '#lib/files.ts';
 
 const reporter = createReporter();
 

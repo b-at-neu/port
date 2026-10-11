@@ -1,5 +1,5 @@
-import { pipelineSkillText } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { pipelineSkillText } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // The tick query, pacing ladder, busy-wait, and ownership/blind-tick blocks.
 export default async function ({ expect, fail, ok }: Reporter) {

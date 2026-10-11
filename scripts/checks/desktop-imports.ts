@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, walk, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
-import { TOP_LEVEL_AREAS } from '../../apps/desktop/scripts/alias-imports.mjs';
+import { root, walk, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
+import { TOP_LEVEL_AREAS } from '#desktop/scripts/alias-imports.mjs';
 
 // The @/ alias regression guard: port/no-parent-import's own good/bad cases both ways, then the
 // "Done when" assertion — no `../` import left inside src/ under preload/ or shared/.

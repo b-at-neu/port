@@ -5,8 +5,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, walk, relOf, frontmatter, pipelineSkillText } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, walk, relOf, frontmatter, pipelineSkillText } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 export default async function ({ expect, fail, ok }: Reporter) {
   const skillRel = 'plugins/port/skills/pipeline/SKILL.md';

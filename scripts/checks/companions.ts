@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // The mechanical guard against drift in the runner-plus-companions shape SKILL.md/PIPELINE.md
 // use — a split prose hub whose companion nobody reads is the documentation analogue of the unimported check module harness.ts already guards.

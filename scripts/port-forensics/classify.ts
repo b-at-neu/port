@@ -1,6 +1,6 @@
 // The six assertions, as pure functions over already-scanned events — no filesystem, no `gh`.
 // scan.ts is the only I/O; report.ts is the only place a finding's text reaches the operator.
-import { classifyRecord, pairToolResults, excerpt } from '../lib/transcript.ts';
+import { classifyRecord, pairToolResults, excerpt } from '#lib/transcript.ts';
 
 function isRecord(v: unknown): boolean {
   return typeof v === 'object' && v !== null && !Array.isArray(v);

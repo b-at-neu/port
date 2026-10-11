@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, walk, relOf, readJson } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, walk, relOf, readJson } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // The visual harness's own rails — each block opens with the failure it catches.
 

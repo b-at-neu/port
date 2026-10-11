@@ -1,7 +1,7 @@
 // Shared fixtures for the guard-hook classifier tests split across scripts/checks/
 // hooks-classifier.ts, hooks-cockpit-rules.ts, and hooks-gate-rule.ts, colocated outside scripts/checks/ so neither harness.ts nor guards.ts scans it.
 import { join } from 'node:path';
-import { allowMatchers } from '../../plugins/port/hooks/lib/guard-rules.mjs';
+import { allowMatchers } from '#plugins/port/hooks/lib/guard-rules.mjs';
 import { root } from './files.ts';
 
 /** Resolves the repository's real Bash allow entries once. `fail` is called

@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, walk, relOf, frontmatter } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, walk, relOf, frontmatter } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // --- Standards precedence: every Bash-granting agent carries the byte-identical
 // `standards-precedence` block. pin: that block ↔ its canonical copy in PIPELINE.md, and `docs.design`'s presence ↔ `docs.engineering`'s, both directions.

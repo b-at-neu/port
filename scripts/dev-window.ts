@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { message } from './lib/errors.ts';
+import { message } from '#lib/errors.ts';
 
 // Documented convention, not recovered from git history.
 export const DEV_SUFFIX = 'dev';

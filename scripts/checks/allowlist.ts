@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, readJson } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, readJson } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // Makes extraAllow coverage for commands.* mechanically checkable, so an entry missing its
 // trailing wildcard (denying any agent that limits a check's output) is caught, not a convention nobody re-verifies.

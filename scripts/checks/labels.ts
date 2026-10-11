@@ -1,8 +1,8 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join, sep } from 'node:path';
-import { root, readJson, walk, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
-import { message } from '../lib/errors.ts';
+import { root, readJson, walk, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
+import { message } from '#lib/errors.ts';
 
 /** Substitutes every `{{name}}` in `text` with `subs[name]`. A multi-line value has its
  *  continuation lines indented to its placeholder's own column. Throws naming any surviving placeholder, so a new one forces the caller's map to grow. */

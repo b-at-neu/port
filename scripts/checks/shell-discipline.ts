@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, walk, relOf, frontmatter } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, walk, relOf, frontmatter } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // --- Shell-discipline block stays byte-identical everywhere it fires, copied from PIPELINE.md. ---
 export default async function ({ expect, fail, note, ok }: Reporter) {

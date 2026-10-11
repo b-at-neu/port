@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, walk, relOf, sectionText } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, walk, relOf, sectionText } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 export default async function ({ expect, fail, note, ok }: Reporter) {
   const designText = readFileSync(join(root, 'docs/DESIGN.md'), 'utf8');

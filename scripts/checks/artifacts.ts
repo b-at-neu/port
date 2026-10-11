@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, readJson } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, readJson } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 export default async function ({ expect, fail, ok }: Reporter) {
   // --- Artifact validator's LABELS table matches labels.json: must agree on keys, names, and modules, both directions.

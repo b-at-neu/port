@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, walk, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, walk, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // apps/desktop/src/main/state/ is the app's spine — it composes the adapters into one
 // reconciled view and reads nothing itself. These assertions pin its plan's decisions mechanically.

@@ -3,9 +3,9 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, pipelineSkillText } from '../lib/files.ts';
-import { resolveMatchers, subagentPayload, plainPayload, operatorWorktreePayload, makeCheck, makeDecide } from '../lib/guard-fixtures.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, pipelineSkillText } from '#lib/files.ts';
+import { resolveMatchers, subagentPayload, plainPayload, operatorWorktreePayload, makeCheck, makeDecide } from '#lib/guard-fixtures.ts';
+import type { Reporter } from '#lib/report.ts';
 
 export default async function ({ fail, ok, expect, note }: Reporter) {
   const { classifyOwnership: hookClassify, dispatchDenial, cockpitWriteDenial } = await import(

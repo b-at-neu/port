@@ -1,9 +1,9 @@
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
-import { root, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
-import { message } from '../lib/errors.ts';
+import { root, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
+import { message } from '#lib/errors.ts';
 
 // One-contract-per-directory rail for the three-way split under plugins/port/: templates/
 // keeps only fill-in templates, bin/ only self-contained executables, data/ only canonical JSON.

@@ -3,8 +3,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync, symlinkSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // Checks cross-platform worktree removal: longpaths handling, an fs.rmSync fallback for a
 // half-succeeded git worktree remove, an orphan scan, and a cross-platform purge mode.

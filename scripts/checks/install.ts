@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { root, readJson, walk, relOf, frontmatter } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, readJson, walk, relOf, frontmatter } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // Structural equality for the small JSON-shaped values this module compares — never relies on key order, unlike JSON.stringify.
 function deepEqual(a: unknown, b: unknown): boolean {

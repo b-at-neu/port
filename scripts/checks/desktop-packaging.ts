@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, readJson, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, readJson, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // electron-builder.config.mjs and apps/desktop/scripts/ are the packaging boundary. These
 // assertions pin the installer build's own decisions mechanically.

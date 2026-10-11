@@ -2,9 +2,9 @@
 // or a quietly dropped runner must never ship to every adopter with nothing to object.
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, readJson } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
-import { message } from '../lib/errors.ts';
+import { root, readJson } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
+import { message } from '#lib/errors.ts';
 
 const CONFIG_REL = 'scripts/checks/portability.config.json';
 

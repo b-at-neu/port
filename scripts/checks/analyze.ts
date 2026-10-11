@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, frontmatter, parseFrontmatter } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, frontmatter, parseFrontmatter } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // Each pin below is the literal phrase (or absent phrase) constituting the fix, so a future
 // prose edit that quietly reverts one of the three fails here rather than in a live run.

@@ -1,8 +1,8 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { root, readJson, walk, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
-import { message } from '../lib/errors.ts';
+import { root, readJson, walk, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
+import { message } from '#lib/errors.ts';
 
 /** The branch-model coherence rule the schema cannot express: draft 2020-12 has no way to
  *  compare two sibling values. Returns a message, or `null` when coherent. Pure — no I/O. */

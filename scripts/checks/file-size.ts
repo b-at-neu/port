@@ -3,10 +3,10 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
-import { root, readJson } from '../lib/files.ts';
-import { globToRegExp } from '../../plugins/port/hooks/lib/guard-rules.mjs';
-import type { Reporter } from '../lib/report.ts';
-import { message } from '../lib/errors.ts';
+import { root, readJson } from '#lib/files.ts';
+import { globToRegExp } from '#plugins/port/hooks/lib/guard-rules.mjs';
+import type { Reporter } from '#lib/report.ts';
+import { message } from '#lib/errors.ts';
 
 const CONFIG_REL = 'scripts/checks/file-size.config.json';
 
