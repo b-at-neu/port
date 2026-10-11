@@ -1,8 +1,8 @@
 // DESIGN §4 PhaseBar — six segments, one Tooltip/aria-label for the bar.
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import type { LabelKey } from '../../../shared/labels/vocabulary'
-import type { PipelineItemKind } from '../../../shared/github/types'
+import type { LabelKey } from '../../shared/labels/vocabulary'
+import type { PipelineItemKind } from '../../shared/github/types'
 import { PHASE_NAMES } from '../lib/phase'
 import { phaseSegmentsFor } from '../board/phase-model'
 import type { PhaseSegmentState } from '../board/phase-model'

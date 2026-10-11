@@ -2,8 +2,8 @@
 // Ungated PRs.
 import { ErrorBanner } from '../components/error-banner'
 import { TicketRow } from '../components/ticket-row'
-import type { BoardItemRow, BoardProjection } from '../../../shared/board/types'
-import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
+import type { BoardItemRow, BoardProjection } from '../../shared/board/types'
+import { LABEL_DEFAULTS } from '../../shared/labels/defaults'
 import { notReadyCopy } from './copy'
 
 export interface BoardBannersProps {

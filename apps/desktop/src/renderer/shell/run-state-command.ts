@@ -1,10 +1,10 @@
 // Run/Drain/Pause for one repository, as a React mutation with toasts.
 import { toast } from 'sonner'
-import type { RepoId } from '../../../shared/repos'
-import type { DispatchControlResult } from '../../../shared/dispatch/types'
+import type { RepoId } from '../../shared/repos'
+import type { DispatchControlResult } from '../../shared/dispatch/types'
 import { useIpcMutation, ipcQueryOptions } from '../data/query'
 import { useQueryClient } from '@tanstack/react-query'
-import type { BoardSnapshot } from '../../../shared/board/types'
+import type { BoardSnapshot } from '../../shared/board/types'
 import { haltHeadingCopy, haltItemLine } from '../board/halt-copy'
 import { runStateResultNote, pauseReportNote, pauseAbortedCopy } from '../board/run-state'
 import { setPauseRequest, setTakeOverRequest } from './stores'

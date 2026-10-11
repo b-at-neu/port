@@ -1,7 +1,7 @@
 // #103: pure decision logic for the session rail — row ordering, row status,
 // capacity, the usage notice, and the fallback selection after a dismiss.
 // No DOM here; `rail.ts` renders from these.
-import type { HostedSessionSnapshot, SessionKey, SessionRateLimit } from '../../../shared/hosting/types'
+import type { HostedSessionSnapshot, SessionKey, SessionRateLimit } from '../../shared/hosting/types'
 import { END_COPY } from './copy'
 
 export interface RailRowStatus {

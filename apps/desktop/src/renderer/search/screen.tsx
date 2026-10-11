@@ -8,8 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useIpcQuery } from '../data/query'
 import { ROUTE_IDS } from '../router/routes'
 import { relativeTime } from '../lib/relative-time'
-import type { SearchResult, SearchScope } from '../../../shared/search/types'
-import { MIN_TERM_CHARS } from '../../../shared/search/types'
+import type { SearchResult, SearchScope } from '../../shared/search/types'
+import { MIN_TERM_CHARS } from '../../shared/search/types'
 import { emptyCopy, errorCopy, footnotes, groupHeader, IDLE_NOTICE, kindChip, SEARCH_HINT, SEARCHING_COPY, summaryLine, TOO_SHORT_COPY } from './copy'
 
 export function SearchScreen() {

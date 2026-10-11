@@ -2,7 +2,7 @@
 import { Link } from '@tanstack/react-router'
 import { FolderGit2, Inbox, LayoutList, ListTodo } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { needsYouItems } from '../../../shared/board/needs-you'
+import { needsYouItems } from '../../shared/board/needs-you'
 import { useIpcQuery } from '../data/query'
 import { ROUTE_IDS } from '../router/routes'
 

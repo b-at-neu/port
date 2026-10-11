@@ -6,8 +6,8 @@ import { StatusPill } from '../components/status-pill'
 import type { PillStatus } from '../components/status-pill'
 import { CapacityMenu } from './capacity-menu'
 import { END_COPY, PHASE_COPY } from './copy'
-import { sessionDisplayLabel } from '../../../shared/hosting/label'
-import type { HostedSessionSnapshot, SessionPhase } from '../../../shared/hosting/types'
+import { sessionDisplayLabel } from '../../shared/hosting/label'
+import type { HostedSessionSnapshot, SessionPhase } from '../../shared/hosting/types'
 
 const PHASE_STATUS: Readonly<Record<SessionPhase, PillStatus>> = {
   starting: 'working',

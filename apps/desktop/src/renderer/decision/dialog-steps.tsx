@@ -1,5 +1,5 @@
 // The decision dialog's own steps, the same split gate/dialog-steps.tsx uses.
-import { reviseNoteProblem } from '../../../shared/actions/decide'
+import { reviseNoteProblem } from '../../shared/actions/decide'
 import { Button } from '@/components/ui/button'
 import { DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'

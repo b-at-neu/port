@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { LabelKey } from '../../../shared/labels/vocabulary'
+import type { LabelKey } from '../../shared/labels/vocabulary'
 import { PHASE_KEYS, phaseSegmentsFor } from './phase-model'
 import type { PhaseKey } from './phase-model'
 

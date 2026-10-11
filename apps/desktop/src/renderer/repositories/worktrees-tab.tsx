@@ -14,8 +14,8 @@ import { StatusPill } from '../components/status-pill'
 import type { PillStatus } from '../components/status-pill'
 import { ipcQueryOptions, useIpcQuery } from '../data/query'
 import { invoke } from '../data/invoke'
-import type { InspectedWorktree, WorktreesReport } from '../../../shared/reclaimer/types'
-import type { RepoId, RepositoryEntry } from '../../../shared/repos'
+import type { InspectedWorktree, WorktreesReport } from '../../shared/reclaimer/types'
+import type { RepoId, RepositoryEntry } from '../../shared/repos'
 import {
   failureCopy,
   needsAttentionCount,

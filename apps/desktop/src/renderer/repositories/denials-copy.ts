@@ -1,6 +1,6 @@
 // Every pure string the Repositories screen's Denials tab renders. Every count comes from `window`, never the whole-file `summary`.
-import type { AttributionTally, SessionAttribution } from '../../../shared/local/inspect'
-import type { DenialActor, DenialSummary } from '../../../shared/local/types'
+import type { AttributionTally, SessionAttribution } from '../../shared/local/inspect'
+import type { DenialActor, DenialSummary } from '../../shared/local/types'
 
 export function metaStripCopy(window: DenialSummary): string {
   const hookErrorNoun = window.hookErrors === 1 ? 'hook error' : 'hook errors'

@@ -4,8 +4,8 @@
 // entries wholesale (an `ended` snapshot, or one with no pending requests,
 // clears them), so a request withdrawn by an interrupt, a session end, or
 // an SDK-side cancel disappears on the very next `session:status` push.
-import type { HostedSessionSnapshot, PendingPermission, SessionKey, SessionOrigin } from '../../../shared/hosting/types'
-import type { RepoId } from '../../../shared/repos'
+import type { HostedSessionSnapshot, PendingPermission, SessionKey, SessionOrigin } from '../../shared/hosting/types'
+import type { RepoId } from '../../shared/repos'
 
 interface SessionEntry {
   readonly repoId: RepoId | null

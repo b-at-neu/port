@@ -2,7 +2,7 @@
 // concern — a new tool kind or grant kind is a compile error rather than a
 // silently blank line, the same rule `claim/copy.ts`'s own header states.
 // Pure string functions; no DOM here.
-import type { PendingPermission, SessionGrantItem } from '../../../shared/hosting/types'
+import type { PendingPermission, SessionGrantItem } from '../../shared/hosting/types'
 
 export const DENY_MESSAGE_LABEL = 'Tell Claude why (optional)'
 export const DENY_MESSAGE_PLACEHOLDER = 'Sent back to Claude with your denial.'

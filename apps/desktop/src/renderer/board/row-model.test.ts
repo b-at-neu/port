@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { OPERATOR_ACTIONS, OPERATOR_DECISIONS } from '../../../shared/actions/types'
-import type { ActionAvailability, DecisionAvailability, OperatorAction, OperatorDecision } from '../../../shared/actions/types'
-import type { BoardItemRow } from '../../../shared/board/types'
-import type { AttachedAgent, AttachedSession, ReconciledItem, StageLabel } from '../../../shared/state/types'
-import type { RepoId } from '../../../shared/repos'
-import type { DispatchRecord } from '../../../shared/dispatch/types'
+import { OPERATOR_ACTIONS, OPERATOR_DECISIONS } from '../../shared/actions/types'
+import type { ActionAvailability, DecisionAvailability, OperatorAction, OperatorDecision } from '../../shared/actions/types'
+import type { BoardItemRow } from '../../shared/board/types'
+import type { AttachedAgent, AttachedSession, ReconciledItem, StageLabel } from '../../shared/state/types'
+import type { RepoId } from '../../shared/repos'
+import type { DispatchRecord } from '../../shared/dispatch/types'
 import { agentSummaryOf, decisionNoteFor, nextActionFor, operatorJoinedOf, ownershipNoteFor, pillStatusFor, stopAttachedAgentNote } from './row-model'
 
 const NO_ACTIONS = Object.fromEntries(OPERATOR_ACTIONS.map((a): [OperatorAction, ActionAvailability] => [a, { available: false, reason: 'not-applicable' }])) as Record<OperatorAction, ActionAvailability>

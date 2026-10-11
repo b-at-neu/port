@@ -1,5 +1,5 @@
 // Every string the Search screen renders — pure, no DOM.
-import type { SearchGroup, SearchHit, SearchResult } from '../../../shared/search/types'
+import type { SearchGroup, SearchHit, SearchResult } from '../../shared/search/types'
 
 export const IDLE_NOTICE = 'port reads transcripts from this machine only. Nothing is sent anywhere.'
 export const TOO_SHORT_COPY = 'Enter at least 3 characters — shorter terms match nearly everything.'

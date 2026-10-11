@@ -1,9 +1,9 @@
 // Pure Overview view-model: folds a ready repository's config with the
 // board's own `BoardSnapshot` into the Sources, Labels, Config sections.
-import type { BoardSnapshot, RepositoryHealth, SourceKind } from '../../../shared/board/types'
-import { SOURCE_KINDS } from '../../../shared/board/types'
-import type { LabelKey, LabelSource, VocabularyProblem, VocabularyVerdict } from '../../../shared/labels/vocabulary'
-import type { AppliedOverride, RepoId, ResolvedRepoConfig } from '../../../shared/repos'
+import type { BoardSnapshot, RepositoryHealth, SourceKind } from '../../shared/board/types'
+import { SOURCE_KINDS } from '../../shared/board/types'
+import type { LabelKey, LabelSource, VocabularyProblem, VocabularyVerdict } from '../../shared/labels/vocabulary'
+import type { AppliedOverride, RepoId, ResolvedRepoConfig } from '../../shared/repos'
 import { PHASE_NAMES } from '../lib/phase'
 
 export interface OverviewSourceSection {

@@ -1,6 +1,6 @@
 // One file's hunks, styled by the diff-added/diff-removed tokens, never a raw colour.
 import { cn } from '@/lib/utils'
-import type { DiffHunk, FileDiff } from '../../../shared/sessions/transcript'
+import type { DiffHunk, FileDiff } from '../../shared/sessions/transcript'
 import { diffSummary, hunkHeader } from './conversation-model'
 
 function HunkView({ hunk }: { readonly hunk: DiffHunk }) {

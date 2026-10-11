@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import type { AskQuestion } from '../../../shared/hosting/controls'
+import type { AskQuestion } from '../../shared/hosting/controls'
 import { initialState, isComplete, setOther, toAnswers, toggleOption } from './question-model'
 import type { QuestionsState } from './question-model'
 import { QUESTION_OTHER_LABEL, QUESTION_SEND, QUESTION_SKIP, questionAnswerFailed, questionProgress } from './interaction-copy'

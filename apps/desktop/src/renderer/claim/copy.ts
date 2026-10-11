@@ -2,8 +2,8 @@
 // a new variant is a compile error rather than a silently blank line, the
 // same rule `board/copy.ts`'s own header states. Pure string functions; no
 // DOM here.
-import type { ClaimVerdict, PlanGateChoice } from '../../../shared/claim/types'
-import type { WriteOutcome } from '../../../shared/writes/types'
+import type { ClaimVerdict, PlanGateChoice } from '../../shared/claim/types'
+import type { WriteOutcome } from '../../shared/writes/types'
 
 /** Shared between the claim dialog's own review step and the Backlog
  *  screen's Work on menu, so the two surfaces never drift on label or hint. */

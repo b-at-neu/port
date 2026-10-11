@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary, verifyVocabulary } from '../../../shared/labels/vocabulary'
-import type { LabelVocabulary } from '../../../shared/labels/vocabulary'
-import type { BoardSnapshot, RepositoryHealth } from '../../../shared/board/types'
-import { DEFAULT_POLL_POLICY, initialHealth } from '../../../shared/board/types'
-import type { RepoId, ResolvedRepoConfig } from '../../../shared/repos'
-import type { RepositoryState } from '../../../shared/state/types'
+import { resolveVocabulary, verifyVocabulary } from '../../shared/labels/vocabulary'
+import type { LabelVocabulary } from '../../shared/labels/vocabulary'
+import type { BoardSnapshot, RepositoryHealth } from '../../shared/board/types'
+import { DEFAULT_POLL_POLICY, initialHealth } from '../../shared/board/types'
+import type { RepoId, ResolvedRepoConfig } from '../../shared/repos'
+import type { RepositoryState } from '../../shared/state/types'
 import { overviewHealth } from './health-model'
 
 const REPO_ID = 'repo-gadgets' as RepoId

@@ -8,7 +8,7 @@ import {
   reclaimNothingToReclaimTooltip,
   reclaimResultToast,
 } from './worktrees-copy'
-import type { InspectedWorktree, ReclaimedWorktree, WorktreesReclaimResult, WorktreesReport } from '../../../shared/reclaimer/types'
+import type { InspectedWorktree, ReclaimedWorktree, WorktreesReclaimResult, WorktreesReport } from '../../shared/reclaimer/types'
 
 function worktree(overrides: Partial<InspectedWorktree> = {}): InspectedWorktree {
   return {

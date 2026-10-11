@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '../../../shared/repos'
-import type { BacklogResponse } from '../../../shared/backlog/types'
+import type { RepoId } from '../../shared/repos'
+import type { BacklogResponse } from '../../shared/backlog/types'
 import { buildBacklogGroup, exactTime, relativeAge, staleSinceAt } from './group'
 import type { BacklogQueryLike } from './group'
 

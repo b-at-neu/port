@@ -1,8 +1,8 @@
 // `BlockNode[]` to React elements — every node becomes its own element or
 // literal text child, never raw HTML injection.
 import type { ReactNode } from 'react'
-import { parseMarkdown } from '../../../shared/markdown/block'
-import type { BlockNode, InlineNode, ListItem, TableAlign } from '../../../shared/markdown/types'
+import { parseMarkdown } from '../../shared/markdown/block'
+import type { BlockNode, InlineNode, ListItem, TableAlign } from '../../shared/markdown/types'
 import { cn } from '@/lib/utils'
 import { CodeBlock } from './code-block'
 

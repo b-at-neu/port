@@ -2,7 +2,7 @@
 // `createTailStore` is the injectable, directly-testable factory.
 import { useCallback, useSyncExternalStore } from 'react'
 import { invoke } from '../data/invoke'
-import type { EntryPatch, TranscriptEntry, TranscriptSource, TranscriptTailOpen, TranscriptTailPoll } from '../../../shared/sessions/transcript'
+import type { EntryPatch, TranscriptEntry, TranscriptSource, TranscriptTailOpen, TranscriptTailPoll } from '../../shared/sessions/transcript'
 import { openFailureCopy, tailBannerKindFor } from './copy'
 import type { TailBannerKind } from './copy'
 

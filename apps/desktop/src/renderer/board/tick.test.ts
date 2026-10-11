@@ -1,13 +1,13 @@
 // Covers the strip's pure copy functions — `buildTickStrip` itself needs a
 // DOM, which this workspace's vitest config does not provide (`environment:
 // 'node'`, no jsdom/happy-dom installed), the same gap every other DOM
-// builder under `renderer/src/board/` already has.
+// builder under `renderer/board/` already has.
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '../../../shared/repos'
-import type { RepositoryHealth } from '../../../shared/board/types'
-import { initialHealth } from '../../../shared/board/types'
-import type { TickActionable, TickClaim, TickHeld, TickObservation, TickReport } from '../../../shared/tick/types'
-import type { RunState } from '../../../shared/dispatch/types'
+import type { RepoId } from '../../shared/repos'
+import type { RepositoryHealth } from '../../shared/board/types'
+import { initialHealth } from '../../shared/board/types'
+import type { TickActionable, TickClaim, TickHeld, TickObservation, TickReport } from '../../shared/tick/types'
+import type { RunState } from '../../shared/dispatch/types'
 import { clockLineCopy, cycleDetailCopy, heldDetailCopy, itemDetailLines, observationDetailCopy, repositoryDetailLines, repositoryLineCopy, stalledDetailCopy, storeLineFor, uncheckedDetailCopy } from './tick'
 
 const NOW = new Date('2026-01-01T00:00:00.000Z')

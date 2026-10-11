@@ -1,8 +1,8 @@
 // One external store per `sessionKey` — attach, re-attach, buffering and
 // revision gaps. `createEntriesRegistry` is the injectable, directly-testable factory; `useSessionEntries` is its one app-wide hook.
 import { useCallback, useSyncExternalStore } from 'react'
-import type { LiveBlock, SessionAttachResult, SessionEntriesDelta, SessionHistory, SessionKey } from '../../../shared/hosting/types'
-import type { EntryPatch, TranscriptEntry } from '../../../shared/sessions/transcript'
+import type { LiveBlock, SessionAttachResult, SessionEntriesDelta, SessionHistory, SessionKey } from '../../shared/hosting/types'
+import type { EntryPatch, TranscriptEntry } from '../../shared/sessions/transcript'
 import { accept, drainBuffered } from './sequence'
 import { sharedSubscriptions } from '../data/subscriptions'
 import type { Subscriptions } from '../data/subscriptions'

@@ -1,5 +1,5 @@
-import type { LabelKey } from '../../../shared/labels/vocabulary'
-import type { PipelineItemKind } from '../../../shared/github/types'
+import type { LabelKey } from '../../shared/labels/vocabulary'
+import type { PipelineItemKind } from '../../shared/github/types'
 
 export const PHASE_KEYS = ['plan', 'planReview', 'implement', 'review', 'revision', 'merge'] as const
 

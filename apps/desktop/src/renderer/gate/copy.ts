@@ -2,8 +2,8 @@
 // union — a new variant is a compile error rather than a silently blank
 // line, the same rule `claim/copy.ts`'s and `board/copy.ts`'s own headers
 // state. Pure string functions; no DOM here.
-import type { GateAnswerResponse, GateDecision, GateVerdict } from '../../../shared/gate/types'
-import type { OwnershipSummary } from '../../../shared/writes/types'
+import type { GateAnswerResponse, GateDecision, GateVerdict } from '../../shared/gate/types'
+import type { OwnershipSummary } from '../../shared/writes/types'
 
 /** #331: the Reviewing step's own disabled-controls reason — `null` while
  *  `ownership` is `'app'` or `'absent'`, since Approve/Request changes work

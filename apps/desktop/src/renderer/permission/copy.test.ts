@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { blockedPathLine, contextLine, decisionReasonLine, documentTitle, formatInput, grantLines, grantSummaryLine, headingText, OTHER_SESSION_LINE, primaryLine, protectedPathLine } from './copy'
-import type { PendingPermission } from '../../../shared/hosting/types'
+import type { PendingPermission } from '../../shared/hosting/types'
 
 function permission(overrides: Partial<PendingPermission> = {}): PendingPermission {
   return {

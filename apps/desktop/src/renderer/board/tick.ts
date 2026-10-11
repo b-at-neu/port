@@ -3,11 +3,11 @@
 // same rule `board/copy.ts`'s own header states. `board/pipeline-status.tsx`
 // renders this through `repositoryDetailLines`/`itemDetailLines` below,
 // re-reading on every poll so the countdown and the hover detail stay live.
-import type { RepositoryHealth } from '../../../shared/board/types'
-import type { DispatchOwner, RunState, RunStatesSnapshot } from '../../../shared/dispatch/types'
-import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
-import type { LabelKey } from '../../../shared/labels/vocabulary'
-import type { TickActionable, TickBlind, TickClaim, TickHeld, TickObservation, TickReport } from '../../../shared/tick/types'
+import type { RepositoryHealth } from '../../shared/board/types'
+import type { DispatchOwner, RunState, RunStatesSnapshot } from '../../shared/dispatch/types'
+import { LABEL_DEFAULTS } from '../../shared/labels/defaults'
+import type { LabelKey } from '../../shared/labels/vocabulary'
+import type { TickActionable, TickBlind, TickClaim, TickHeld, TickObservation, TickReport } from '../../shared/tick/types'
 
 function labelNameOf(key: LabelKey): string {
   return LABEL_DEFAULTS.find((def) => def.key === key)?.name ?? key

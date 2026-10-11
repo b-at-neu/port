@@ -1,8 +1,8 @@
 // The end-of-session panel below the conversation — title, body, the SDK's
 // own message, a runtime diagnosis when there is one, and New session.
 import { Button } from '@/components/ui/button'
-import { RUNTIME_COPY } from '../../../shared/runtime/copy'
-import type { SessionEnd } from '../../../shared/hosting/types'
+import { RUNTIME_COPY } from '../../shared/runtime/copy'
+import type { SessionEnd } from '../../shared/hosting/types'
 import { endBody, END_COPY, NEW_SESSION_BUTTON } from './copy'
 
 export function EndPanel({ end, onNewSession }: { readonly end: SessionEnd; readonly onNewSession: () => void }) {

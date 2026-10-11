@@ -2,7 +2,7 @@
 // repository with its own owner line and budget notes underneath.
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import type { BoardSnapshot } from '../../../shared/board/types'
+import type { BoardSnapshot } from '../../shared/board/types'
 import { budgetNoteLines, controlFor, observationClause, observationTitle, ownerLineCopy, runStateSuffix } from './owner'
 import { takeOver } from './dispatch'
 import { clockLineCopy, repositoryDetailLines, repositoryLineCopy, storeLineFor } from './tick'

@@ -1,5 +1,5 @@
 // Every string the composer's new input paths render, kept in one file the way `copy.ts` already does for the session view.
-import { MAX_ATTACHMENTS, MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_TEXT_BYTES, MAX_TOTAL_BYTES } from '../../../shared/hosting/attachments'
+import { MAX_ATTACHMENTS, MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_TEXT_BYTES, MAX_TOTAL_BYTES } from '../../shared/hosting/attachments'
 
 export const LOADING_COMMANDS = 'Loading commands…'
 export const COMMANDS_UNAVAILABLE = 'Commands unavailable in this session'

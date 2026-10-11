@@ -6,9 +6,9 @@
 // only entry point — the header's former repo-picker-then-claim-step is
 // gone along with the claim itself.
 import { invoke } from '../data/invoke'
-import type { RepoId } from '../../../shared/repos'
-import type { GateAnswerResponse, GateDecision, GatePreflight, GateVerdict } from '../../../shared/gate/types'
-import type { OwnershipSummary } from '../../../shared/writes/types'
+import type { RepoId } from '../../shared/repos'
+import type { GateAnswerResponse, GateDecision, GatePreflight, GateVerdict } from '../../shared/gate/types'
+import type { OwnershipSummary } from '../../shared/writes/types'
 
 type AnswerableVerdict = Extract<GateVerdict, { readonly kind: 'answerable' }>
 type RefusalVerdict = Exclude<GateVerdict, { readonly kind: 'answerable' }>

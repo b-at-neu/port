@@ -1,6 +1,6 @@
 // Pure `TranscriptEntry` → view-model mapping, shared by the live session
 // view and the on-disk transcript view. `buildRow`'s exact signature is pinned by `scripts/checks/desktop-renderer.ts`.
-import type { DiffHunk, FileDiff, Payload, ToolDetail, TranscriptEntry } from '../../../shared/sessions/transcript'
+import type { DiffHunk, FileDiff, Payload, ToolDetail, TranscriptEntry } from '../../shared/sessions/transcript'
 
 export const PROMPT_CLAMP_LINES = 12
 

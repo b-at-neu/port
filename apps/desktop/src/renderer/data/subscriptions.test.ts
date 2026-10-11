@@ -3,9 +3,9 @@ import { QueryClient } from '@tanstack/react-query'
 import { connectQueryCache, createSubscriptions } from './subscriptions'
 import type { SubscribableEvent, SubscriptionBridge } from './subscriptions'
 import { ipcQueryOptions } from './query'
-import type { BoardSnapshot } from '../../../shared/board/types'
-import type { HostedSessionSnapshot, SessionEntriesDelta } from '../../../shared/hosting/types'
-import type { AppCommand } from '../../../shared/shell/commands'
+import type { BoardSnapshot } from '../../shared/board/types'
+import type { HostedSessionSnapshot, SessionEntriesDelta } from '../../shared/hosting/types'
+import type { AppCommand } from '../../shared/shell/commands'
 
 function fakeBridge(): SubscriptionBridge & { fire: (event: SubscribableEvent, payload: unknown) => void } {
   const sets: Record<SubscribableEvent, Set<(payload: unknown) => void>> = {

@@ -1,5 +1,5 @@
 // Every string the History screen renders — pure, no DOM.
-import type { SessionFailureKind } from '../../../shared/sessions/types'
+import type { SessionFailureKind } from '../../shared/sessions/types'
 
 export function failureCopy(kind: SessionFailureKind, message: string): string {
   switch (kind) {

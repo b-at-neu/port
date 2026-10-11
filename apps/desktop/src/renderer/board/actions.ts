@@ -6,10 +6,10 @@
 // a React re-render needs neither a DOM click target to parse nor a second
 // string to detect "something changed" the store's own `notify()` already
 // signals directly.
-import type { RepoId } from '../../../shared/repos'
-import type { LabelKey } from '../../../shared/labels/vocabulary'
-import type { ItemActionResult, OperatorAction } from '../../../shared/actions/types'
-import type { BoardSnapshot } from '../../../shared/board/types'
+import type { RepoId } from '../../shared/repos'
+import type { LabelKey } from '../../shared/labels/vocabulary'
+import type { ItemActionResult, OperatorAction } from '../../shared/actions/types'
+import type { BoardSnapshot } from '../../shared/board/types'
 
 export type ItemActionState = { readonly kind: 'pending'; readonly action: OperatorAction } | { readonly kind: 'result'; readonly action: OperatorAction; readonly result: ItemActionResult }
 

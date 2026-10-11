@@ -1,8 +1,8 @@
 // Pure decision logic for the New session dialog — folder ordering, preselection, and the
 // worktree checkbox's forced/disabled/free state. No React, no IPC.
-import type { RepoId } from '../../../shared/repos'
-import type { FolderEntry, FolderId } from '../../../shared/workspace/types'
-import type { HostedSessionSnapshot } from '../../../shared/hosting/types'
+import type { RepoId } from '../../shared/repos'
+import type { FolderEntry, FolderId } from '../../shared/workspace/types'
+import type { HostedSessionSnapshot } from '../../shared/hosting/types'
 
 export type NewSessionPreselect = { readonly kind: 'repo'; readonly repoId: RepoId } | { readonly kind: 'path'; readonly path: string } | null
 

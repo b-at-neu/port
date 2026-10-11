@@ -5,7 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ScreenHeader } from '../components/screen-header'
 import { useIpcQuery } from '../data/query'
 import { ROUTE_IDS } from '../router/routes'
-import { ABOUT_NOTICE, ABOUT_POWERED_BY } from '../../../shared/about/copy'
+import { ABOUT_NOTICE, ABOUT_POWERED_BY } from '../../shared/about/copy'
 
 function VersionLine() {
   const query = useIpcQuery('app:info')

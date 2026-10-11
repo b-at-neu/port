@@ -11,9 +11,9 @@ import { useIpcQuery } from '../data/query'
 import { ROUTE_IDS } from '../router/routes'
 import { relativeTime } from '../lib/relative-time'
 import { startFromTranscript } from '../session/actions'
-import { agentLabel, sessionLabel } from '../../../shared/sessions/label'
-import type { AgentRecord, SessionRecord } from '../../../shared/sessions/types'
-import type { RepoId, RepositoryEntry } from '../../../shared/repos'
+import { agentLabel, sessionLabel } from '../../shared/sessions/label'
+import type { AgentRecord, SessionRecord } from '../../shared/sessions/types'
+import type { RepoId, RepositoryEntry } from '../../shared/repos'
 import { failureCopy, footnote } from './copy'
 
 function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { status: 'ready' }> {

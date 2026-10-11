@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { actorAttributionPill, attributionLineCopy, burstPillCopy, cappedLineCopy, emptyLogCopy, metaStripCopy, noEntriesCopy, readFailedCopy } from './denials-copy'
-import type { AttributionTally, SessionAttribution } from '../../../shared/local/inspect'
-import type { DenialActor, DenialSummary } from '../../../shared/local/types'
+import type { AttributionTally, SessionAttribution } from '../../shared/local/inspect'
+import type { DenialActor, DenialSummary } from '../../shared/local/types'
 
 function summary(overrides: Partial<DenialSummary> = {}): DenialSummary {
   return { agentDenials: 0, railDenials: 0, misses: 0, gateClears: 0, hookErrors: 0, legacy: 0, malformed: 0, total: 0, ...overrides }

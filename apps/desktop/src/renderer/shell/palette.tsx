@@ -1,9 +1,9 @@
 // The command palette (Ctrl/Cmd+K) — Go to, Sessions, Pipelines, Tickets, View.
 import { useNavigate } from '@tanstack/react-router'
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut } from '@/components/ui/command'
-import { needsYouItems } from '../../../shared/board/needs-you'
-import { sessionTitle } from '../../../shared/hosting/label'
-import type { RepositoryEntry } from '../../../shared/repos'
+import { needsYouItems } from '../../shared/board/needs-you'
+import { sessionTitle } from '../../shared/hosting/label'
+import type { RepositoryEntry } from '../../shared/repos'
 import { useIpcQuery } from '../data/query'
 import { selectSession } from '../session/actions'
 import { openClaimDialog } from '../claim/controller'

@@ -1,6 +1,6 @@
 // Every route id `router.tsx` registers, plus the search-param parsers each
 // route needs — the one literal spelling both files read, so they never drift.
-import type { RepoId } from '../../../shared/repos'
+import type { RepoId } from '../../shared/repos'
 
 export const ROUTE_IDS = {
   board: '/board',

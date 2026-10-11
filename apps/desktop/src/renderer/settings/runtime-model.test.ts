@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { runtimeDiagnosisModel } from './runtime-model'
-import type { RuntimeDiagnosis, RuntimePreflight, RuntimeProbe } from '../../../shared/runtime/types'
+import type { RuntimeDiagnosis, RuntimePreflight, RuntimeProbe } from '../../shared/runtime/types'
 
 const ALL_DIAGNOSES: readonly RuntimeDiagnosis[] = [
   'unverified',

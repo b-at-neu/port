@@ -1,7 +1,7 @@
 // Every lead-copy string the Needs you screen renders, one switch over
 // `NeedsYouItem.kind` — a new kind is a compile error, never a blank row.
-import type { NeedsYouItem } from '../../../shared/board/needs-you'
-import type { StageAgent } from '../../../shared/tick/types'
+import type { NeedsYouItem } from '../../shared/board/needs-you'
+import type { StageAgent } from '../../shared/tick/types'
 
 const STAGE_PHASE_NAME: Readonly<Record<StageAgent, string>> = { plan: 'Planning', impl: 'Implementing', review: 'Reviewing', revise: 'Revising' }
 

@@ -1,9 +1,9 @@
 // The Board's three-section split — Waiting on you, In progress, Queued —
 // each optionally broken into phase or repo sub-groups.
-import { needsYouReasonOf } from '../../../shared/board/needs-you'
-import type { BoardItemRow } from '../../../shared/board/types'
-import { LABEL_DEFAULTS } from '../../../shared/labels/defaults'
-import type { RepoId } from '../../../shared/repos'
+import { needsYouReasonOf } from '../../shared/board/needs-you'
+import type { BoardItemRow } from '../../shared/board/types'
+import { LABEL_DEFAULTS } from '../../shared/labels/defaults'
+import type { RepoId } from '../../shared/repos'
 import { PHASE_NAMES } from '../lib/phase'
 
 export type BoardGroupBy = 'phase' | 'repo'

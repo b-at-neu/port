@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { SessionEnd } from '../../../shared/hosting/types'
+import type { SessionEnd } from '../../shared/hosting/types'
 import { composerCopy, endBody, interruptNote, startFailureCopy } from './copy'
 import type { RenderableStartFailure } from './copy'
 

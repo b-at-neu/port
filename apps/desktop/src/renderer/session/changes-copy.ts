@@ -1,5 +1,5 @@
 // Pure copy for the Changes pane.
-import type { SessionChangesFailureKind } from '../../../shared/workspace/types'
+import type { SessionChangesFailureKind } from '../../shared/workspace/types'
 
 export function shortSha(sha: string): string {
   return sha.slice(0, 7)

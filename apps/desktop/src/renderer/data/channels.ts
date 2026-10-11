@@ -4,8 +4,8 @@
 // though it were a read. Both lists are hand-maintained, deliberately never
 // derived from each other or from `IPC_CHANNELS`: a new channel must be
 // classified by a human before it typechecks anywhere in `data/`.
-import type { IpcChannel } from '../../../shared/ipc'
-import type { AssertEqual } from '../../../shared/assert-type'
+import type { IpcChannel } from '../../shared/ipc'
+import type { AssertEqual } from '../../shared/assert-type'
 
 export const QUERY_CHANNELS = [
   'app:info',

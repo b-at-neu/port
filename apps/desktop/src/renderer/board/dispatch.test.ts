@@ -3,8 +3,8 @@
 // they are left untested here too; only the derived copy is asserted.
 // Per-repository run/drain/pause copy moved to `run-state.test.ts` (#314).
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '../../../shared/repos'
-import type { HaltItemOutcome, HaltReport } from '../../../shared/dispatch/types'
+import type { RepoId } from '../../shared/repos'
+import type { HaltItemOutcome, HaltReport } from '../../shared/dispatch/types'
 import { haltButtonLabel, haltAbortedCopy, haltHeadingCopy, haltItemLine } from './dispatch'
 
 describe('haltButtonLabel', () => {
