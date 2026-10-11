@@ -1,6 +1,6 @@
 // `markPaths` reads the canonical SVG's own path data, never a hand-copied shape.
 import { cn } from '@/lib/utils'
-import portMarkSvg from '../../../../../../docs/design/port-mark.svg?raw'
+import portMarkSvg from '../../../../../docs/design/port-mark.svg?raw'
 
 /** Pure: extracts every `<path d="…">` value, in document order. */
 export function markPaths(svg: string): readonly string[] {

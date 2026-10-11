@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import portMarkSvg from '../../../../../../docs/design/port-mark.svg?raw'
+import portMarkSvg from '../../../../../docs/design/port-mark.svg?raw'
 import { markPaths } from './port-mark'
 
 describe('markPaths', () => {
