@@ -58,7 +58,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   }
 
   // --- router.tsx's own paths stay inside ROUTE_IDS, '/' or '*' — a literal path would
-  // escape visual/targets.mts's exhaustive capture/skip table. ---
+  // escape tests/visual/targets.mts's exhaustive capture/skip table. ---
   {
     const text = readFileSync(join(root, 'apps/desktop/src/renderer/router/router.tsx'), 'utf8');
     const assignments = [...text.matchAll(/\bpath:\s*([^,}\n]+)/g)].map((m) => (m[1] ?? '').trim());
@@ -78,10 +78,10 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     expect(!names, 'desktop-visual', '.claude/port.config.json commands.checks names "screenshots" — that list runs on every dispatched agent');
   }
 
-  // --- visual/targets.mts's ROUTE_KEYS matches the real ROUTE_IDS, both ways
-  // pin: `visual/targets.mts`'s `ROUTE_KEYS` ↔ `router/routes.ts`'s `ROUTE_IDS` keys, both directions
+  // --- tests/visual/targets.mts's ROUTE_KEYS matches the real ROUTE_IDS, both ways
+  // pin: `tests/visual/targets.mts`'s `ROUTE_KEYS` ↔ `router/routes.ts`'s `ROUTE_IDS` keys, both directions
   {
-    const targetsUrl = pathToFileURL(join(root, 'apps/desktop/visual/targets.mts')).href;
+    const targetsUrl = pathToFileURL(join(root, 'apps/desktop/tests/visual/targets.mts')).href;
     const routesUrl = pathToFileURL(join(root, 'apps/desktop/src/renderer/router/routes.ts')).href;
     const targetsMod: { SCREENSHOT_TARGETS?: Record<string, unknown> } = await import(targetsUrl);
     const routesMod: { ROUTE_IDS?: Record<string, unknown> } = await import(routesUrl);
@@ -91,13 +91,13 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     const onlyInRoutes = [...routeKeys].filter((k) => !targetKeys.has(k));
     if (targetKeys.size === 0 || routeKeys.size === 0) {
       fail('desktop-visual', 'could not read SCREENSHOT_TARGETS or ROUTE_IDS as a non-empty object — the pin cannot pass vacuously if either export is removed');
-    } else expect(!(onlyInTargets.length > 0 || onlyInRoutes.length > 0), 'desktop-visual', `visual/targets.mts's ROUTE_KEYS and router/routes.ts's ROUTE_IDS disagree — only in targets: [${onlyInTargets.join(', ')}], only in ROUTE_IDS: [${onlyInRoutes.join(', ')}]`);
+    } else expect(!(onlyInTargets.length > 0 || onlyInRoutes.length > 0), 'desktop-visual', `tests/visual/targets.mts's ROUTE_KEYS and router/routes.ts's ROUTE_IDS disagree — only in targets: [${onlyInTargets.join(', ')}], only in ROUTE_IDS: [${onlyInRoutes.join(', ')}]`);
   }
 
-  // pin: `visual/targets.mts`'s `SCREENSHOT_DIR` ↔ `.github/workflows/visual.yml`, the root
+  // pin: `tests/visual/targets.mts`'s `SCREENSHOT_DIR` ↔ `.github/workflows/visual.yml`, the root
   // `package.json` script, and `docs/DESIGN.md` §7, all naming the same command and path.
   {
-    const targetsText = readFileSync(join(root, 'apps/desktop/visual/targets.mts'), 'utf8');
+    const targetsText = readFileSync(join(root, 'apps/desktop/tests/visual/targets.mts'), 'utf8');
     const workflowText = readFileSync(join(root, '.github/workflows/visual.yml'), 'utf8');
     const rootPackageText = readFileSync(join(root, 'package.json'), 'utf8');
     const designText = readFileSync(join(root, 'docs/DESIGN.md'), 'utf8');
@@ -105,7 +105,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     let violated = false;
     if (!targetsText.includes("SCREENSHOT_DIR = 'out/screenshots'")) {
       violated = true;
-      fail('desktop-visual', "visual/targets.mts no longer pins SCREENSHOT_DIR = 'out/screenshots'");
+      fail('desktop-visual', "tests/visual/targets.mts no longer pins SCREENSHOT_DIR = 'out/screenshots'");
     }
     if (!workflowText.includes('pnpm screenshots') || !workflowText.includes('apps/desktop/out/screenshots') || !workflowText.includes('name: screenshots')) {
       violated = true;
@@ -115,9 +115,9 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       violated = true;
       fail('desktop-visual', 'the root package.json no longer carries a "screenshots" script');
     }
-    if (!designText.includes('pnpm screenshots') || !designText.includes('apps/desktop/out/screenshots') || !designText.includes('visual/targets.mts')) {
+    if (!designText.includes('pnpm screenshots') || !designText.includes('apps/desktop/out/screenshots') || !designText.includes('tests/visual/targets.mts')) {
       violated = true;
-      fail('desktop-visual', "docs/DESIGN.md §7 no longer names 'pnpm screenshots' / 'apps/desktop/out/screenshots' / 'visual/targets.mts'");
+      fail('desktop-visual', "docs/DESIGN.md §7 no longer names 'pnpm screenshots' / 'apps/desktop/out/screenshots' / 'tests/visual/targets.mts'");
     }
     if (!violated) ok();
   }

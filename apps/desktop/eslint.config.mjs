@@ -114,7 +114,7 @@ export default tseslint.config(
   // parameter (`test.afterEach(async ({}, testInfo) => …)`); that shape is
   // the framework's own contract, never a lint complaint about real code.
   {
-    files: ['visual/**/*.mts'],
+    files: ['tests/visual/**/*.mts'],
     rules: {
       'no-empty-pattern': 'off'
     }
