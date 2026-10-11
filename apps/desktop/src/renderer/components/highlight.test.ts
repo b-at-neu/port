@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { highlightTokens, MAX_HIGHLIGHT_CHARS } from './highlight'
+import { highlightTokens, MAX_HIGHLIGHT_CHARS } from '@/renderer/components/highlight'
 
 describe('highlightTokens', () => {
   it('returns one plain-text run for a null language', () => {

@@ -9,7 +9,7 @@ export const DESKTOP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..
 export const SRC_ROOT = join(DESKTOP_ROOT, 'src')
 
 /** Top-level src/ folders — a @/x specifier starting with one of these is left alone by --retarget-renderer. */
-const TOP_LEVEL_AREAS = new Set(['main', 'preload', 'renderer', 'shared', 'testing', 'types', 'utils'])
+export const TOP_LEVEL_AREAS = new Set(['main', 'preload', 'renderer', 'shared', 'testing', 'types', 'utils'])
 
 const EXTENSIONS = ['.ts', '.tsx', '.mts']
 

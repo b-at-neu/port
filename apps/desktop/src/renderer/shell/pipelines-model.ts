@@ -1,13 +1,13 @@
 // Pure projection onto the sidebar's Pipelines section — one row per
 // registered repository.
-import type { RepoId, RepositoryEntry } from '../../shared/repos'
-import type { BoardSnapshot } from '../../shared/board/types'
-import type { DispatchOwner } from '../../shared/dispatch/types'
-import type { ReconciledItem } from '../../shared/state/types'
-import type { HostedSessionSnapshot, SessionKey } from '../../shared/hosting/types'
-import { needsYouItems, repoNeedsYou } from '../../shared/board/needs-you'
-import { PHASE_NAMES } from '../lib/phase'
-import type { PillStatus } from '../components/status-pill'
+import type { RepoId, RepositoryEntry } from '@/shared/repos'
+import type { BoardSnapshot } from '@/shared/board/types'
+import type { DispatchOwner } from '@/shared/dispatch/types'
+import type { ReconciledItem } from '@/shared/state/types'
+import type { HostedSessionSnapshot, SessionKey } from '@/shared/hosting/types'
+import { needsYouItems, repoNeedsYou } from '@/shared/board/needs-you'
+import { PHASE_NAMES } from '@/renderer/lib/phase'
+import type { PillStatus } from '@/renderer/components/status-pill'
 
 export interface PipelineSessionRow {
   readonly key: string

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { activeTrigger, applySuggestion, fuzzyRankFiles, rankCommands } from './composer-model'
-import type { SlashCommandSummary } from '../../shared/hosting/types'
+import { activeTrigger, applySuggestion, fuzzyRankFiles, rankCommands } from '@/renderer/session/composer-model'
+import type { SlashCommandSummary } from '@/shared/hosting/types'
 
 describe('activeTrigger', () => {
   it('opens / only at the start of the draft', () => {

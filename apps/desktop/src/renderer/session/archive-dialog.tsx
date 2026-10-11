@@ -3,9 +3,9 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import { AlertDialog, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/renderer/components/ui/alert-dialog'
 import { Button } from '@/renderer/components/ui/button'
-import type { HostedSessionSnapshot } from '../../shared/hosting/types'
-import { dismiss } from './actions'
-import { ARCHIVE_DIALOG_TITLE, ARCHIVE_DIRTY_BODY, ARCHIVE_KEEP, ARCHIVE_REMOVE, ARCHIVE_REMOVE_ANYWAY, ARCHIVE_UNREACHABLE_TOAST, archiveBody, archiveRemoveFailedToast } from './copy'
+import type { HostedSessionSnapshot } from '@/shared/hosting/types'
+import { dismiss } from '@/renderer/session/actions'
+import { ARCHIVE_DIALOG_TITLE, ARCHIVE_DIRTY_BODY, ARCHIVE_KEEP, ARCHIVE_REMOVE, ARCHIVE_REMOVE_ANYWAY, ARCHIVE_UNREACHABLE_TOAST, archiveBody, archiveRemoveFailedToast } from '@/renderer/session/copy'
 
 export function ArchiveDialog({ snapshot, open, onOpenChange }: { readonly snapshot: HostedSessionSnapshot; readonly open: boolean; readonly onOpenChange: (open: boolean) => void }) {
   const [dirty, setDirty] = useState(false)

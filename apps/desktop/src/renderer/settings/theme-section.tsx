@@ -3,8 +3,8 @@
 // `useEffect`: `useThemePreference` reads the store through
 // `useSyncExternalStore`.
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/renderer/components/ui/select'
-import { useThemePreference } from '../theme/store'
-import type { ThemePreference } from '../theme/store'
+import { useThemePreference } from '@/renderer/theme/store'
+import type { ThemePreference } from '@/renderer/theme/store'
 
 const LABEL: Readonly<Record<ThemePreference, string>> = {
   system: 'System',

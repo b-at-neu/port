@@ -3,9 +3,9 @@
 import type { ReactNode } from 'react'
 import { ChevronDown, Loader2 } from 'lucide-react'
 import { cn } from '@/renderer/lib/utils'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu'
-import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip'
-import type { PillStatus } from './status-pill'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/renderer/components/ui/dropdown-menu'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
+import type { PillStatus } from '@/renderer/components/status-pill'
 
 const DOT_CLASS: Readonly<Record<PillStatus, string>> = {
   working: 'bg-working-dot',

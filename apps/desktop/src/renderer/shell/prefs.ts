@@ -1,6 +1,6 @@
 // A malformed field falls back to its default rather than throwing — a
 // hand-edited or stale value must never crash the app on launch.
-import { RESTORABLE_ROUTES } from '../router/routes'
+import { RESTORABLE_ROUTES } from '@/renderer/router/routes'
 
 export interface ShellPrefs {
   readonly v: 1

@@ -3,10 +3,10 @@ import { useState } from 'react'
 import { Bot, ChevronRight, FileEdit, FileSearch, FileText, Globe, ListChecks, Search, SquareTerminal, Wrench } from 'lucide-react'
 import { cn } from '@/renderer/lib/utils'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/renderer/components/ui/collapsible'
-import { DiffView } from './diff-view'
-import { defaultOpen, toolSummary } from './conversation-model'
-import type { GroupedNode, RowView } from './conversation-model'
-import { BashBody, LookupBody, TaskBody, TodoBody } from './tool-call-detail'
+import { DiffView } from '@/renderer/components/diff-view'
+import { defaultOpen, toolSummary } from '@/renderer/components/conversation-model'
+import type { GroupedNode, RowView } from '@/renderer/components/conversation-model'
+import { BashBody, LookupBody, TaskBody, TodoBody } from '@/renderer/components/tool-call-detail'
 
 function ToolIcon({ name, className }: { readonly name: string; readonly className: string }) {
   switch (name) {

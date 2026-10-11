@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import portMarkSvg from '../../../../../docs/design/port-mark.svg?raw'
-import { markPaths } from './port-mark'
+import { markPaths } from '@/renderer/components/port-mark'
 
 describe('markPaths', () => {
   it('extracts every path d value from the real mark, in order', () => {

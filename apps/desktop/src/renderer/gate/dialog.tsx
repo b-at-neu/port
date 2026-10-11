@@ -2,8 +2,8 @@
 // useSyncExternalStore state. Esc or the scrim calls closeGateDialog.
 import { useSyncExternalStore } from 'react'
 import { Dialog, DialogContent } from '@/renderer/components/ui/dialog'
-import { closeGateDialog, getState, subscribe } from './controller'
-import { ErrorStep, FeedbackStep, LoadingStep, RefusedStep, ResultStep, ReviewingStep } from './dialog-steps'
+import { closeGateDialog, getState, subscribe } from '@/renderer/gate/controller'
+import { ErrorStep, FeedbackStep, LoadingStep, RefusedStep, ResultStep, ReviewingStep } from '@/renderer/gate/dialog-steps'
 
 function DialogBody() {
   const state = useSyncExternalStore(subscribe, getState)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { relativeTime } from './relative-time'
+import { relativeTime } from '@/renderer/lib/relative-time'
 
 describe('relativeTime', () => {
   it('reads under a minute as just now', () => {

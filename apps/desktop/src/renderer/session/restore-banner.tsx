@@ -1,13 +1,13 @@
 // The restore banner — offered once at boot when `session:restore:list` returns entries.
 import { useState } from 'react'
 import { Button } from '@/renderer/components/ui/button'
-import { useIpcMutation, useIpcQuery } from '../data/query'
-import type { RestorableSession } from '../../shared/hosting/types'
-import type { RepositoryEntry } from '../../shared/repos'
-import { folderLabel } from '../../shared/workspace/label'
-import { adoptSession, selectSession } from './actions'
-import { startFailureCopy } from './copy'
-import { RESTORE_DISMISS, RESTORE_FORGET, RESTORE_RESUME_ALL, RESTORE_RESUME_ONE, RESTORE_REVIEW, restoreBannerLine, restoreOpenedLine, restorePartialLine, restoreUnavailableLine } from './rail-copy'
+import { useIpcMutation, useIpcQuery } from '@/renderer/data/query'
+import type { RestorableSession } from '@/shared/hosting/types'
+import type { RepositoryEntry } from '@/shared/repos'
+import { folderLabel } from '@/shared/workspace/label'
+import { adoptSession, selectSession } from '@/renderer/session/actions'
+import { startFailureCopy } from '@/renderer/session/copy'
+import { RESTORE_DISMISS, RESTORE_FORGET, RESTORE_RESUME_ALL, RESTORE_RESUME_ONE, RESTORE_REVIEW, restoreBannerLine, restoreOpenedLine, restorePartialLine, restoreUnavailableLine } from '@/renderer/session/rail-copy'
 
 function repoLabelFor(repos: readonly RepositoryEntry[] | undefined, repoId: string): string {
   const entry = repos?.find((candidate) => candidate.id === repoId)

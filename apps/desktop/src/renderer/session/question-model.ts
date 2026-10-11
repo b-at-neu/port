@@ -1,5 +1,5 @@
 // Pure selection state for the question card, folded into the answers record the SDK itself expects.
-import type { AskQuestion } from '../../shared/hosting/controls'
+import type { AskQuestion } from '@/shared/hosting/controls'
 
 export interface QuestionState {
   readonly selected: ReadonlySet<string>

@@ -2,11 +2,11 @@
 // store now, with `claim/dialog.tsx` (a shadcn `Dialog`) as its one renderer
 // in place of the deleted `view.ts`'s native `<dialog>`. Every write goes
 // through `data/invoke.ts`'s `invoke`, never `window.port` directly.
-import { invoke } from '../data/invoke'
-import { isReadyRepo } from '../../shared/repos'
-import type { RepoId } from '../../shared/repos'
-import type { ClaimPreflight, ClaimVerdict, PlanGateChoice } from '../../shared/claim/types'
-import type { WriteOutcome } from '../../shared/writes/types'
+import { invoke } from '@/renderer/data/invoke'
+import { isReadyRepo } from '@/shared/repos'
+import type { RepoId } from '@/shared/repos'
+import type { ClaimPreflight, ClaimVerdict, PlanGateChoice } from '@/shared/claim/types'
+import type { WriteOutcome } from '@/shared/writes/types'
 
 export interface ReadyRepo {
   readonly id: RepoId

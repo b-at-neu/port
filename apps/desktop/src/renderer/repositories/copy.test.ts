@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { diagnosticCopy, labelSourceCopy, moduleFlagCopy, overrideLineCopy, problemCopy, problemLabel, registryBannerCopy, summaryParts, verdictCopy, vocabularyProblemCopy } from './copy'
-import type { AppliedOverride, ResolvedRepoConfig } from '../../shared/repos'
+import { diagnosticCopy, labelSourceCopy, moduleFlagCopy, overrideLineCopy, problemCopy, problemLabel, registryBannerCopy, summaryParts, verdictCopy, vocabularyProblemCopy } from '@/renderer/repositories/copy'
+import type { AppliedOverride, ResolvedRepoConfig } from '@/shared/repos'
 
 function baseConfig(overrides: Partial<ResolvedRepoConfig> = {}): ResolvedRepoConfig {
   return {

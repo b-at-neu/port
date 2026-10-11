@@ -3,10 +3,10 @@
 import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/renderer/components/ui/collapsible'
-import { Markdown } from './markdown'
-import { ToolCallRow } from './tool-call-row'
-import { buildRow, PROMPT_CLAMP_LINES } from './conversation-model'
-import type { GroupedNode, RowView } from './conversation-model'
+import { Markdown } from '@/renderer/components/markdown'
+import { ToolCallRow } from '@/renderer/components/tool-call-row'
+import { buildRow, PROMPT_CLAMP_LINES } from '@/renderer/components/conversation-model'
+import type { GroupedNode, RowView } from '@/renderer/components/conversation-model'
 
 function PromptText({ row }: { readonly row: Extract<RowView, { readonly kind: 'user-text' }> }) {
   const [expanded, setExpanded] = useState(false)

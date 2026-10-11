@@ -2,14 +2,14 @@
 // new variant is a compile error rather than a silently blank row (#80),
 // the same rule `worktrees.ts`'s own header states. Pure string functions;
 // no DOM here.
-import type { ItemStatus, LinkReason, RepositoryFreshness, RepositoryState, StatusEvidence, WaitingOn } from '../../shared/state/types'
-import type { DisplayStatus, SourceHealth, SourceKind } from '../../shared/board/types'
-import type { RepoProblem } from '../../shared/repos'
-import { LABEL_DEFAULTS } from '../../shared/labels/defaults'
-import { RETRY_TRIGGER } from '../../shared/actions/plan'
-import type { ActionPlan, ActionRefusal, ItemActionResult, OperatorAction, OperatorDecision } from '../../shared/actions/types'
-import type { Conflict } from '../../shared/writes/types'
-import type { StageLink } from '../../shared/board/stage-links'
+import type { ItemStatus, LinkReason, RepositoryFreshness, RepositoryState, StatusEvidence, WaitingOn } from '@/shared/state/types'
+import type { DisplayStatus, SourceHealth, SourceKind } from '@/shared/board/types'
+import type { RepoProblem } from '@/shared/repos'
+import { LABEL_DEFAULTS } from '@/shared/labels/defaults'
+import { RETRY_TRIGGER } from '@/shared/actions/plan'
+import type { ActionPlan, ActionRefusal, ItemActionResult, OperatorAction, OperatorDecision } from '@/shared/actions/types'
+import type { Conflict } from '@/shared/writes/types'
+import type { StageLink } from '@/shared/board/stage-links'
 
 const STAGE_NAME: Readonly<Record<StageLink['agent'], string>> = { plan: 'Planning', impl: 'Implementing', review: 'Reviewing', revise: 'Revising' }
 

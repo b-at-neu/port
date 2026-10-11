@@ -2,10 +2,10 @@
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
-import { useIpcQuery } from '../data/query'
-import { StatusPill } from '../components/status-pill'
-import { ErrorBanner } from '../components/error-banner'
-import { ghStatusModel } from './gh-model'
+import { useIpcQuery } from '@/renderer/data/query'
+import { StatusPill } from '@/renderer/components/status-pill'
+import { ErrorBanner } from '@/renderer/components/error-banner'
+import { ghStatusModel } from '@/renderer/settings/gh-model'
 
 export function GhSection() {
   const query = useIpcQuery('gh:status')

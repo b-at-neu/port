@@ -3,9 +3,9 @@ import { Link } from '@tanstack/react-router'
 import { Settings } from 'lucide-react'
 import { cn } from '@/renderer/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
-import { useIpcQuery } from '../data/query'
-import { footerStatus } from './status-model'
-import { ROUTE_IDS } from '../router/routes'
+import { useIpcQuery } from '@/renderer/data/query'
+import { footerStatus } from '@/renderer/shell/status-model'
+import { ROUTE_IDS } from '@/renderer/router/routes'
 
 const DOT_CLASS: Readonly<Record<'success' | 'danger' | 'idle', string>> = {
   success: 'bg-success-dot',

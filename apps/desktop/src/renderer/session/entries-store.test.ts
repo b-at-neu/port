@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createEntriesRegistry } from './entries-store'
-import type { SessionAttachResult, SessionEntriesDelta, SessionKey } from '../../shared/hosting/types'
-import type { TranscriptEntry } from '../../shared/sessions/transcript'
+import { createEntriesRegistry } from '@/renderer/session/entries-store'
+import type { SessionAttachResult, SessionEntriesDelta, SessionKey } from '@/shared/hosting/types'
+import type { TranscriptEntry } from '@/shared/sessions/transcript'
 
 const KEY = 'hosted-1' as SessionKey
 

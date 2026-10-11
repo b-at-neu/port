@@ -2,8 +2,8 @@
 // useSyncExternalStore state, the same shape gate/dialog.tsx establishes.
 import { useSyncExternalStore } from 'react'
 import { Dialog, DialogContent } from '@/renderer/components/ui/dialog'
-import { closeDecisionDialog, getState, subscribe } from './controller'
-import { ApplyingStep, ConfirmReviseStep, ConfirmUnblockStep, ResultStep } from './dialog-steps'
+import { closeDecisionDialog, getState, subscribe } from '@/renderer/decision/controller'
+import { ApplyingStep, ConfirmReviseStep, ConfirmUnblockStep, ResultStep } from '@/renderer/decision/dialog-steps'
 
 function DialogBody() {
   const state = useSyncExternalStore(subscribe, getState)

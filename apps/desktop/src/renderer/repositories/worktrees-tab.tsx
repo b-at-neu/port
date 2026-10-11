@@ -7,15 +7,15 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
-import { DetailPane } from '../components/detail-pane'
-import { EmptyState } from '../components/empty-state'
-import { ErrorBanner } from '../components/error-banner'
-import { StatusPill } from '../components/status-pill'
-import type { PillStatus } from '../components/status-pill'
-import { ipcQueryOptions, useIpcQuery } from '../data/query'
-import { invoke } from '../data/invoke'
-import type { InspectedWorktree, WorktreesReport } from '../../shared/reclaimer/types'
-import type { RepoId, RepositoryEntry } from '../../shared/repos'
+import { DetailPane } from '@/renderer/components/detail-pane'
+import { EmptyState } from '@/renderer/components/empty-state'
+import { ErrorBanner } from '@/renderer/components/error-banner'
+import { StatusPill } from '@/renderer/components/status-pill'
+import type { PillStatus } from '@/renderer/components/status-pill'
+import { ipcQueryOptions, useIpcQuery } from '@/renderer/data/query'
+import { invoke } from '@/renderer/data/invoke'
+import type { InspectedWorktree, WorktreesReport } from '@/shared/reclaimer/types'
+import type { RepoId, RepositoryEntry } from '@/shared/repos'
 import {
   failureCopy,
   needsAttentionCount,
@@ -26,7 +26,7 @@ import {
   reclaimFailureToast,
   reclaimNothingToReclaimTooltip,
   reclaimResultToast,
-} from './worktrees-copy'
+} from '@/renderer/repositories/worktrees-copy'
 
 const PILL_STATUS: Readonly<Record<InspectedWorktree['state'], PillStatus>> = {
   active: 'working',

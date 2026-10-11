@@ -1,6 +1,6 @@
 // Every pure string the Repositories screen's own Worktrees tab renders.
 // No DOM here.
-import type { InspectedWorktree, ReclaimedWorktree, WorktreesReclaimResult, WorktreesReport } from '../../shared/reclaimer/types'
+import type { InspectedWorktree, ReclaimedWorktree, WorktreesReclaimResult, WorktreesReport } from '@/shared/reclaimer/types'
 
 /** One line per kind, naming what was refused — the plan's own **UX
  *  states** copy, verbatim where the plan gives an exact sentence. */

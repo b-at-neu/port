@@ -2,10 +2,10 @@
 import { Button } from '@/renderer/components/ui/button'
 import { DialogFooter, DialogHeader, DialogTitle } from '@/renderer/components/ui/dialog'
 import { Textarea } from '@/renderer/components/ui/textarea'
-import { Markdown } from '../components/markdown'
-import type { GateState } from './controller'
-import { backToReview, closeGateDialog, openFeedback, retryLabelOnly, retryPreflight, setFeedbackText, submitApprove, submitFeedback, tryCommentAgain } from './controller'
-import { assigneeNoteCopy, autoPlanNoteCopy, feedbackHint, gateDisabledReason, noPlanNoteCopy, primaryApproveLabel, refusedVerdictCopy, resultCopy, sessionRequiredCopy } from './copy'
+import { Markdown } from '@/renderer/components/markdown'
+import type { GateState } from '@/renderer/gate/controller'
+import { backToReview, closeGateDialog, openFeedback, retryLabelOnly, retryPreflight, setFeedbackText, submitApprove, submitFeedback, tryCommentAgain } from '@/renderer/gate/controller'
+import { assigneeNoteCopy, autoPlanNoteCopy, feedbackHint, gateDisabledReason, noPlanNoteCopy, primaryApproveLabel, refusedVerdictCopy, resultCopy, sessionRequiredCopy } from '@/renderer/gate/copy'
 
 function Aside({ line, note }: { readonly line: string; readonly note: string | null }) {
   return (

@@ -1,18 +1,18 @@
 // The sidebar frame — expanded (248px) or a 48px collapsed rail.
 import { Link } from '@tanstack/react-router'
-import { useSidebarCollapsed, toggleSidebarCollapsed } from './stores'
+import { useSidebarCollapsed, toggleSidebarCollapsed } from '@/renderer/shell/stores'
 import { FolderGit2, Inbox, LayoutList, ListTodo, PanelLeftClose, PanelLeftOpen, Settings } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { cn } from '@/renderer/lib/utils'
-import { needsYouItems } from '../../shared/board/needs-you'
-import { useIpcQuery } from '../data/query'
-import { PortMark } from '../components/port-mark'
-import { SidebarScreens } from './sidebar-screens'
-import { SidebarPipelines } from './sidebar-pipelines'
-import { SidebarSessions } from './sidebar-sessions'
-import { SidebarFooter } from './sidebar-footer'
-import { setSidebarCollapsed } from './prefs'
-import { ROUTE_IDS } from '../router/routes'
+import { needsYouItems } from '@/shared/board/needs-you'
+import { useIpcQuery } from '@/renderer/data/query'
+import { PortMark } from '@/renderer/components/port-mark'
+import { SidebarScreens } from '@/renderer/shell/sidebar-screens'
+import { SidebarPipelines } from '@/renderer/shell/sidebar-pipelines'
+import { SidebarSessions } from '@/renderer/shell/sidebar-sessions'
+import { SidebarFooter } from '@/renderer/shell/sidebar-footer'
+import { setSidebarCollapsed } from '@/renderer/shell/prefs'
+import { ROUTE_IDS } from '@/renderer/router/routes'
 
 const RAIL_SCREENS = [
   { to: ROUTE_IDS.board, icon: Inbox, label: 'Needs you' },

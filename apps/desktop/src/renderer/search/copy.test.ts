@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { emptyCopy, errorCopy, footnotes, kindChip, summaryLine, TOO_SHORT_COPY } from './copy'
-import type { SearchHit, SearchResult } from '../../shared/search/types'
+import { emptyCopy, errorCopy, footnotes, kindChip, summaryLine, TOO_SHORT_COPY } from '@/renderer/search/copy'
+import type { SearchHit, SearchResult } from '@/shared/search/types'
 
 function hit(overrides: Partial<SearchHit>): SearchHit {
   return { entryIndex: 0, kind: 'user-text', toolName: null, field: 'text', timestamp: 't', snippet: { text: 'hi', matchStart: 0, matchLength: 2 }, ...overrides }

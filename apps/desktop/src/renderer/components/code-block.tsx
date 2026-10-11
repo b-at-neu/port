@@ -1,5 +1,5 @@
 // A highlighted code block — plain React elements and text nodes only, no raw-HTML injection.
-import { highlightTokens } from './highlight'
+import { highlightTokens } from '@/renderer/components/highlight'
 import { cn } from '@/renderer/lib/utils'
 
 const ROLE_CLASS = {

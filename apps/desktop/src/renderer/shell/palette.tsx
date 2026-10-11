@@ -1,17 +1,17 @@
 // The command palette (Ctrl/Cmd+K) — Go to, Sessions, Pipelines, Tickets, View.
 import { useNavigate } from '@tanstack/react-router'
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut } from '@/renderer/components/ui/command'
-import { needsYouItems } from '../../shared/board/needs-you'
-import { sessionTitle } from '../../shared/hosting/label'
-import type { RepositoryEntry } from '../../shared/repos'
-import { useIpcQuery } from '../data/query'
-import { selectSession } from '../session/actions'
-import { openClaimDialog } from '../claim/controller'
-import { useThemePreference } from '../theme/store'
-import { usePaletteState, closePalette, openNewSessionDialog, setPaletteOpen, toggleSidebarCollapsed } from './stores'
-import { useRunStateCommand } from './run-state-command'
-import { ROUTE_IDS } from '../router/routes'
-import { setSidebarCollapsed } from './prefs'
+import { needsYouItems } from '@/shared/board/needs-you'
+import { sessionTitle } from '@/shared/hosting/label'
+import type { RepositoryEntry } from '@/shared/repos'
+import { useIpcQuery } from '@/renderer/data/query'
+import { selectSession } from '@/renderer/session/actions'
+import { openClaimDialog } from '@/renderer/claim/controller'
+import { useThemePreference } from '@/renderer/theme/store'
+import { usePaletteState, closePalette, openNewSessionDialog, setPaletteOpen, toggleSidebarCollapsed } from '@/renderer/shell/stores'
+import { useRunStateCommand } from '@/renderer/shell/run-state-command'
+import { ROUTE_IDS } from '@/renderer/router/routes'
+import { setSidebarCollapsed } from '@/renderer/shell/prefs'
 
 function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { status: 'ready' }> {
   return 'config' in entry

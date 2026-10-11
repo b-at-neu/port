@@ -1,7 +1,7 @@
 // Every pure string the Repositories screens render. No DOM here.
-import type { AppliedOverride, RepoDiagnostic, RepoProblem, ResolvedRepoConfig } from '../../shared/repos'
-import type { LabelSource, VocabularyProblem, VocabularyVerdict } from '../../shared/labels/vocabulary'
-import type { OverviewModuleFlag } from './health-model'
+import type { AppliedOverride, RepoDiagnostic, RepoProblem, ResolvedRepoConfig } from '@/shared/repos'
+import type { LabelSource, VocabularyProblem, VocabularyVerdict } from '@/shared/labels/vocabulary'
+import type { OverviewModuleFlag } from '@/renderer/repositories/health-model'
 
 const MODULE_LABELS: { readonly [K in keyof ResolvedRepoConfig['modules']]: string } = {
   approvalGate: 'approval gate',

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { boardSearchFromRaw, historySearchFromRaw, repoSearchFromRaw, searchSearchFromRaw, sessionSearchFromRaw, transcriptSearchFromRaw } from './routes'
+import { boardSearchFromRaw, historySearchFromRaw, repoSearchFromRaw, searchSearchFromRaw, sessionSearchFromRaw, transcriptSearchFromRaw } from '@/renderer/router/routes'
 
 describe('transcriptSearchFromRaw', () => {
   it('reads an invalid focusIndex as null', () => {

@@ -1,12 +1,12 @@
 // The Settings screen — five sections: Appearance, Claude Code, GitHub CLI,
 // New sessions, About.
 import { Link } from '@tanstack/react-router'
-import { ScreenHeader } from '../components/screen-header'
-import { ThemeSection } from './theme-section'
-import { RuntimeSection } from './runtime-section'
-import { GhSection } from './gh-section'
-import { SessionDefaultsSection } from './session-defaults-section'
-import { ROUTE_IDS } from '../router/routes'
+import { ScreenHeader } from '@/renderer/components/screen-header'
+import { ThemeSection } from '@/renderer/settings/theme-section'
+import { RuntimeSection } from '@/renderer/settings/runtime-section'
+import { GhSection } from '@/renderer/settings/gh-section'
+import { SessionDefaultsSection } from '@/renderer/settings/session-defaults-section'
+import { ROUTE_IDS } from '@/renderer/router/routes'
 
 function AboutSection() {
   return (

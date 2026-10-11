@@ -1,19 +1,19 @@
 // Wires the composer's input paths for one session: the `/`/`@` trigger and suggestion list, attachments, and prompt history.
 import { useMemo, useState } from 'react'
 import type { KeyboardEvent } from 'react'
-import { Composer } from '../components/composer'
-import type { ComposerAttachmentChip } from '../components/composer'
-import { SuggestionList } from '../components/suggestion-list'
-import type { SuggestionRow } from '../components/suggestion-list'
-import { useIpcQuery } from '../data/query'
-import type { RepoId } from '../../shared/repos'
-import type { ComposerAttachment } from '../../shared/hosting/attachments'
-import type { HostedSessionSnapshot, SessionKey, SlashCommandSummary } from '../../shared/hosting/types'
-import { activeTrigger, applySuggestion, fuzzyRankFiles, rankCommands } from './composer-model'
-import { checkBatchLimits, readAttachment, sizeNotice } from './attachments'
-import type { FileLike } from './attachments'
-import { historyFor, NOT_RECALLING, recallNewer, recallOlder, recallText, recordSent } from './prompt-history'
-import type { RecallState } from './prompt-history'
+import { Composer } from '@/renderer/components/composer'
+import type { ComposerAttachmentChip } from '@/renderer/components/composer'
+import { SuggestionList } from '@/renderer/components/suggestion-list'
+import type { SuggestionRow } from '@/renderer/components/suggestion-list'
+import { useIpcQuery } from '@/renderer/data/query'
+import type { RepoId } from '@/shared/repos'
+import type { ComposerAttachment } from '@/shared/hosting/attachments'
+import type { HostedSessionSnapshot, SessionKey, SlashCommandSummary } from '@/shared/hosting/types'
+import { activeTrigger, applySuggestion, fuzzyRankFiles, rankCommands } from '@/renderer/session/composer-model'
+import { checkBatchLimits, readAttachment, sizeNotice } from '@/renderer/session/attachments'
+import type { FileLike } from '@/renderer/session/attachments'
+import { historyFor, NOT_RECALLING, recallNewer, recallOlder, recallText, recordSent } from '@/renderer/session/prompt-history'
+import type { RecallState } from '@/renderer/session/prompt-history'
 import {
   COMMANDS_UNAVAILABLE,
   filesTruncatedNote,
@@ -22,8 +22,8 @@ import {
   LOADING_FILES,
   NO_MATCHING_COMMANDS,
   NO_MATCHING_FILES,
-} from './composer-copy'
-import { draftAttachmentsFor, setDraft, setDraftAttachments, useDraft, useDraftAttachments } from './drafts'
+} from '@/renderer/session/composer-copy'
+import { draftAttachmentsFor, setDraft, setDraftAttachments, useDraft, useDraftAttachments } from '@/renderer/session/drafts'
 
 function sizeLabel(bytes: number): string {
   if (bytes < 1024) return `${String(bytes)} B`

@@ -2,10 +2,10 @@
 import { useNavigate } from '@tanstack/react-router'
 import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
-import { ScreenHeader } from '../components/screen-header'
-import { useIpcQuery } from '../data/query'
-import { ROUTE_IDS } from '../router/routes'
-import { ABOUT_NOTICE, ABOUT_POWERED_BY } from '../../shared/about/copy'
+import { ScreenHeader } from '@/renderer/components/screen-header'
+import { useIpcQuery } from '@/renderer/data/query'
+import { ROUTE_IDS } from '@/renderer/router/routes'
+import { ABOUT_NOTICE, ABOUT_POWERED_BY } from '@/shared/about/copy'
 
 function VersionLine() {
   const query = useIpcQuery('app:info')

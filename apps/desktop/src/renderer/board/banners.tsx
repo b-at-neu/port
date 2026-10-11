@@ -1,10 +1,10 @@
 // The Board's own banners, above the list, in a fixed order: Not reading,
 // Ungated PRs.
-import { ErrorBanner } from '../components/error-banner'
-import { TicketRow } from '../components/ticket-row'
-import type { BoardItemRow, BoardProjection } from '../../shared/board/types'
-import { LABEL_DEFAULTS } from '../../shared/labels/defaults'
-import { notReadyCopy } from './copy'
+import { ErrorBanner } from '@/renderer/components/error-banner'
+import { TicketRow } from '@/renderer/components/ticket-row'
+import type { BoardItemRow, BoardProjection } from '@/shared/board/types'
+import { LABEL_DEFAULTS } from '@/shared/labels/defaults'
+import { notReadyCopy } from '@/renderer/board/copy'
 
 export interface BoardBannersProps {
   readonly projection: BoardProjection

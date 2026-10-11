@@ -2,7 +2,7 @@
 // to `shell/sidebar-pipelines.tsx`'s `StatusPillMenu`, driven by
 // `shell/run-state-command.ts`'s mutation instead of this file's own
 // click-handler/pending-map pair. Only the pure copy survives here.
-import type { DispatchControlResult, HaltReport, RepoRunState, RunStatesSnapshot } from '../../shared/dispatch/types'
+import type { DispatchControlResult, HaltReport, RepoRunState, RunStatesSnapshot } from '@/shared/dispatch/types'
 
 function timeOf(iso: string): string {
   const parsed = new Date(iso)

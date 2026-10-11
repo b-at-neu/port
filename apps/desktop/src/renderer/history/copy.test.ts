@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { failureCopy, footnote } from './copy'
+import { failureCopy, footnote } from '@/renderer/history/copy'
 
 describe('failureCopy', () => {
   it('names the message for sdk-failed and projects-unreadable', () => {

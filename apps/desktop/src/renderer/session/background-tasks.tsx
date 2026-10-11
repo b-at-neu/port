@@ -5,10 +5,10 @@ import { toast } from 'sonner'
 import { AlertDialog, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/renderer/components/ui/alert-dialog'
 import { Button } from '@/renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
-import type { BackgroundTask } from '../../shared/hosting/types'
-import type { SessionKey } from '../../shared/hosting/types'
-import { stopTask } from './actions'
-import { TASK_KEEP_RUNNING, TASK_STOP_BUTTON, TASK_STOP_TITLE, TASK_STOP_UNKNOWN, TASK_STOP_UNKNOWN_SESSION, taskStopBody, taskStopFailed } from './copy'
+import type { BackgroundTask } from '@/shared/hosting/types'
+import type { SessionKey } from '@/shared/hosting/types'
+import { stopTask } from '@/renderer/session/actions'
+import { TASK_KEEP_RUNNING, TASK_STOP_BUTTON, TASK_STOP_TITLE, TASK_STOP_UNKNOWN, TASK_STOP_UNKNOWN_SESSION, taskStopBody, taskStopFailed } from '@/renderer/session/copy'
 
 function TaskIcon({ type, className }: { readonly type: string; readonly className: string }) {
   if (type === 'bash') return <SquareTerminal aria-hidden="true" className={className} />

@@ -1,8 +1,8 @@
 // The launch gate — three cheap reads through the query client, reusing
 // `setupModel`. A rejected fetch leaves the restored screen in place.
 import type { QueryClient } from '@tanstack/react-query'
-import { ipcQueryOptions } from '../data/query'
-import { setupModel } from './model'
+import { ipcQueryOptions } from '@/renderer/data/query'
+import { setupModel } from '@/renderer/setup/model'
 
 export async function shouldRedirectToSetup(queryClient: QueryClient): Promise<boolean> {
   try {

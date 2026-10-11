@@ -1,8 +1,8 @@
 // The composer's per-session draft, kept outside React so switching sessions
 // never loses what was half-typed (or half-attached) in another one.
 import { useSyncExternalStore } from 'react'
-import type { SessionKey } from '../../shared/hosting/types'
-import type { ComposerAttachment } from '../../shared/hosting/attachments'
+import type { SessionKey } from '@/shared/hosting/types'
+import type { ComposerAttachment } from '@/shared/hosting/attachments'
 
 const drafts = new Map<SessionKey, string>()
 const listeners = new Set<() => void>()

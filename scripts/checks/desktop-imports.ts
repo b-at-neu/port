@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { root, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
+import { TOP_LEVEL_AREAS } from '../../apps/desktop/scripts/alias-imports.mjs';
 
 // The @/ alias regression guard: port/no-parent-import's own good/bad cases both ways, then the
 // "Done when" assertion — no `../` import left inside src/ under preload/ or shared/.
@@ -24,9 +25,9 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- No ../ import left inside src/ under preload/ or shared/ — this ticket's "Done when". ---
+  // --- No ../ import left inside src/ under preload/, shared/ or renderer/ — this ticket's "Done when". ---
   {
-    const dirs = ['apps/desktop/src/preload', 'apps/desktop/src/shared'];
+    const dirs = ['apps/desktop/src/preload', 'apps/desktop/src/shared', 'apps/desktop/src/renderer'];
     let violated = false;
     let scanned = 0;
     for (const dir of dirs) {
@@ -46,9 +47,34 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
         }
       }
     }
-    if (scanned === 0) fail('desktop-imports', 'no files scanned under preload/ or shared/ — the guard cannot pass vacuously');
+    if (scanned === 0) fail('desktop-imports', 'no files scanned under preload/, shared/ or renderer/ — the guard cannot pass vacuously');
     else if (!violated) ok();
   }
 
-  note(`desktop-imports: scanned preload/ and shared/ for relative parent imports`);
+  // --- No renderer-rooted @/ import left under renderer/ — every @/ specifier's first segment is a top-level src/ area. ---
+  {
+    const files = walk(join(root, 'apps/desktop/src/renderer')).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx') || f.endsWith('.mts'));
+    let violated = false;
+    let scanned = 0;
+    for (const f of files) {
+      scanned++;
+      const rel = relOf(f);
+      const text = readFileSync(f, 'utf8');
+      const specifiers = [...text.matchAll(/\bfrom\s+['"]([^'"]+)['"]/g), ...text.matchAll(/\bimport\s+['"]([^'"]+)['"]/g), ...text.matchAll(/\bimport\(\s*['"]([^'"]+)['"]/g), ...text.matchAll(/\b(?:vi\.mock|vi\.importActual)\(\s*['"]([^'"]+)['"]/g)].map(
+        (m) => m[1],
+      );
+      for (const spec of specifiers) {
+        if (!spec.startsWith('@/')) continue;
+        const firstSegment = spec.slice(2).split('/')[0];
+        if (!TOP_LEVEL_AREAS.has(firstSegment)) {
+          violated = true;
+          fail('desktop-imports', `${rel} imports '${spec}' — renderer-rooted @/ is gone; use @/renderer/…`);
+        }
+      }
+    }
+    if (scanned === 0) fail('desktop-imports', 'no files scanned under renderer/ — the guard cannot pass vacuously');
+    else if (!violated) ok();
+  }
+
+  note(`desktop-imports: scanned preload/, shared/ and renderer/ for relative parent imports and renderer-rooted @/ imports`);
 }

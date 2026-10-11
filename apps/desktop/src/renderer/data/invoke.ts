@@ -1,9 +1,9 @@
 // The one place a request actually crosses the bridge (#316) — every
 // `useIpcQuery`/`useIpcMutation` call funnels through this function, never
 // `window.port` directly, so a future transport change touches one file.
-import { bridgeMethodName } from '../../shared/ipc'
-import type { IpcMap } from '../../shared/ipc'
-import type { MutationChannel, QueryChannel } from './channels'
+import { bridgeMethodName } from '@/shared/ipc'
+import type { IpcMap } from '@/shared/ipc'
+import type { MutationChannel, QueryChannel } from '@/renderer/data/channels'
 
 type DataChannel = QueryChannel | MutationChannel
 
