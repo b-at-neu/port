@@ -48,6 +48,36 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     else if (!violated) ok();
   }
 
+  // --- No ../ import left inside tests/unit/ or tests/fixtures/ that climbs into src/ — a moved
+  // unit test must import its source with @/. An empty tree is not a failure: it is empty by design. ---
+  {
+    const dirs = ['apps/desktop/tests/unit', 'apps/desktop/tests/fixtures'];
+    const files = dirs.flatMap((dir) => walk(join(root, dir))).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
+    let violated = false;
+    for (const f of files) {
+      const rel = relOf(f);
+      const text = readFileSync(f, 'utf8');
+      const specifiers = [...text.matchAll(/\bfrom\s+['"]([^'"]+)['"]/g), ...text.matchAll(/\bimport\s+['"]([^'"]+)['"]/g), ...text.matchAll(/\bimport\(\s*['"]([^'"]+)['"]/g), ...text.matchAll(/\b(?:vi\.mock|vi\.importActual)\(\s*['"]([^'"]+)['"]/g)].map(
+        (m) => m[1],
+      );
+      for (const spec of specifiers) {
+        if (mod.isParentImport(f, spec)) {
+          violated = true;
+          fail('desktop-imports', `${rel} still imports '${spec}' with a relative parent path that climbs into src/ — use the @/ alias`);
+        }
+        if (spec.startsWith('@/')) {
+          const firstSegment = spec.slice(2).split('/')[0];
+          if (!TOP_LEVEL_AREAS.has(firstSegment)) {
+            violated = true;
+            fail('desktop-imports', `${rel} imports '${spec}' — '${firstSegment}' is not a top-level src/ area`);
+          }
+        }
+      }
+    }
+    if (files.length === 0) note('desktop-imports: apps/desktop/tests/unit/ and tests/fixtures/ scanned 0 files — empty by design until the move tickets land');
+    else if (!violated) ok();
+  }
+
   // --- No renderer-rooted @/ import left under renderer/ — every @/ specifier's first segment is a top-level src/ area. ---
   {
     const files = walk(join(root, 'apps/desktop/src/renderer')).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx') || f.endsWith('.mts'));
@@ -137,5 +167,5 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  note(`desktop-imports: scanned apps/desktop/src for relative parent imports, renderer-rooted @/ imports, the absence of shared/, and utils/ reach from both sides`);
+  note(`desktop-imports: scanned apps/desktop/src, tests/unit/ and tests/fixtures/ for relative parent imports, renderer-rooted @/ imports, the absence of shared/, and utils/ reach from both sides`);
 }

@@ -24,6 +24,12 @@ The script reports full schema validation as **skipped**, because a draft 2020-1
 
 **Every guard-adding pull request stays out of this file.** A guard's own description lives on the check block that pins it, and a duplicated-content pin lives the same way (`docs/ENGINEERING.md` §2) — never restated here in prose, which is what regrew `docs/TESTING.md` into a hub after #217 first relieved it (#255).
 
+## Desktop app unit tests
+
+- Unit tests mirror `src/` under `apps/desktop/tests/unit/`: `src/main/hosting/store.ts` → `tests/unit/main/hosting/store.test.ts`.
+- Shared data, fakes and helpers used by more than one test live in `apps/desktop/tests/fixtures/`. A helper used by one test stays in that test.
+- Tests import source with `@/…`, never `../`. During the move, vitest reads both `src/` and `tests/unit/`; a new test goes in `tests/unit/`.
+
 ## Layer 2 — artifact assertions on real runs
 
 The output formats live in `FORMATS.md` prose and, until now, were asserted nowhere. The one that matters most is the review heading — the cockpit **counts** occurrences of the literal `## Code Review` to derive the cycle number, so renaming it silently breaks the cycle cap and the escalating bar, with no error anywhere. That is why the literal prefix is asserted separately from the rest of the heading.

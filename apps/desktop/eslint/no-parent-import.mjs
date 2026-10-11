@@ -1,45 +1,36 @@
 // No imports, same layout as no-raw-colour.mjs, so a check can dynamically import this with no node_modules.
-// Flags a `../` specifier whose target is still inside `src`, worked out with string arithmetic, not a filesystem read.
+// Flags a `../` specifier that resolves into `src/`, via a lexical join — no filesystem read.
 
 const MESSAGE = 'Relative parent import — use the @/ alias (@/main/…, @/renderer/…, @/types/…, @/utils/…).'
 
-/** How many `../` segments a specifier opens with. */
-function leadingParentCount(spec) {
-  let count = 0
-  let rest = spec
-  while (rest.startsWith('../')) {
-    count++
-    rest = rest.slice(3)
+/** Lexically resolves `spec` against `file`'s directory — a plain string join, not `path.resolve`. */
+function resolveSpecifier(file, spec) {
+  const segs = file.split('\\').join('/').split('/')
+  segs.pop() // drop the file's own basename, leaving its directory
+  for (const part of spec.split('/')) {
+    if (part === '' || part === '.') continue
+    if (part === '..') segs.pop()
+    else segs.push(part)
   }
-  return count
+  return segs.join('/')
 }
 
-/** How many path segments `file` sits below its nearest `src/` ancestor —
- *  `null` when `file` carries no `/src/` segment at all (outside the app). */
-function depthUnderSrc(file) {
-  const normalized = file.split('\\').join('/')
-  const marker = '/src/'
-  const idx = normalized.lastIndexOf(marker)
-  if (idx === -1) return null
-  const rel = normalized.slice(idx + marker.length)
-  // The file itself does not count as a directory level.
-  return rel.split('/').length - 1
-}
-
-/** True when `spec`, written from `file`, is a `../` import whose target still lands inside `src`. */
+/** True when `spec`, written from `file` (under `src/` or `tests/`), resolves into `src/`. */
 export function isParentImport(file, spec) {
   if (!spec.startsWith('../')) return false
-  const depth = depthUnderSrc(file)
-  if (depth === null) return false
-  const climbs = leadingParentCount(spec)
-  return climbs <= depth
+  const normalized = file.split('\\').join('/')
+  if (!normalized.includes('/src/') && !normalized.includes('/tests/')) return false
+  return resolveSpecifier(normalized, spec).includes('/src/')
 }
 
 export const CASES = [
-  { file: '/repo/apps/desktop/src/types/hosting.ts', spec: '../utils/repos', flagged: true },
+  { file: '/repo/apps/desktop/src/shared/hosting/types.ts', spec: '../repos', flagged: true },
   { file: '/repo/apps/desktop/src/renderer/local/inspect.ts', spec: './shape', flagged: false },
-  { file: '/repo/apps/desktop/src/types/ipc.ts', spec: '@/utils/repos', flagged: false },
-  { file: '/repo/apps/desktop/src/utils/labels/defaults.ts', spec: '../../../../../plugins/port/data/labels.json', flagged: false },
+  { file: '/repo/apps/desktop/src/shared/ipc.ts', spec: '@/repos', flagged: false },
+  { file: '/repo/apps/desktop/src/shared/labels/defaults.ts', spec: '../../../../../plugins/port/data/labels.json', flagged: false },
+  { file: '/repo/apps/desktop/tests/unit/main/hosting/store.test.ts', spec: '../../../../src/main/hosting/store', flagged: true },
+  { file: '/repo/apps/desktop/tests/unit/main/hosting/store.test.ts', spec: '../../fixtures/store-fixture', flagged: false },
+  { file: '/repo/apps/desktop/tests/unit/main/hosting/store.test.ts', spec: './helpers', flagged: false },
 ]
 
 function checkSpecifier(context, node, spec) {

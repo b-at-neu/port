@@ -54,6 +54,16 @@ export function frontmatter(file: string): Record<string, string> | null {
   return parseFrontmatter(readFileSync(file, 'utf8'));
 }
 
+/** The repo-relative path of a desktop unit test, given its path under `apps/desktop/src/`
+ *  (e.g. `main/hosting/live.test.ts`), wherever it lives today; null when neither exists. */
+export const unitTestPath = (srcRel: string): string | null => {
+  const underTests = `apps/desktop/tests/unit/${srcRel}`;
+  if (existsSync(join(root, underTests))) return underTests;
+  const underSrc = `apps/desktop/src/${srcRel}`;
+  if (existsSync(join(root, underSrc))) return underSrc;
+  return null;
+};
+
 /** The named `##`-level markdown section's body, up to the next `##` heading or end of file.
  *  `(?![\s\S])` is the true end-of-string test — a bare `$` with the `m` flag matches end-of-line too. */
 export function sectionText(text: string, heading: string): string {

@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, pipelineSkillText } from '#lib/files.ts';
+import { root, pipelineSkillText, unitTestPath } from '#lib/files.ts';
 import { resolveMatchers, subagentPayload, plainPayload, operatorWorktreePayload, makeCheck, makeDecide } from '#lib/guard-fixtures.ts';
 import type { Reporter } from '#lib/report.ts';
 
@@ -19,13 +19,17 @@ export default async function ({ fail, ok, expect, note }: Reporter) {
   // --- Classifier parity lives in ownership.test.ts, where vitest resolves the app's TS import
   // naturally — this pins that the test exists and exercises both classifiers. ---
   {
-    const testFile = 'apps/desktop/src/main/dispatch/ownership.test.ts';
-    const text = readFileSync(join(root, testFile), 'utf8');
-    if (!text.includes('ownership-rules.mjs')) {
-      fail('cockpit-ownership-parity', `${testFile} does not import plugins/port/hooks/lib/ownership-rules.mjs — the hook/app parity test is missing`);
-    } else if (!/hookClassify\(.*\)\)\.toEqual\(classifyOwnership\(/.test(text)) {
-      fail('cockpit-ownership-parity', `${testFile} imports the hook's classifier but never asserts it against the app's own classifyOwnership on a shared fixture`);
-    } else ok();
+    const testFile = unitTestPath('main/dispatch/ownership.test.ts');
+    if (!testFile) {
+      fail('cockpit-ownership-parity', 'main/dispatch/ownership.test.ts exists under neither apps/desktop/src/ nor apps/desktop/tests/unit/');
+    } else {
+      const text = readFileSync(join(root, testFile), 'utf8');
+      if (!text.includes('ownership-rules.mjs')) {
+        fail('cockpit-ownership-parity', `${testFile} does not import plugins/port/hooks/lib/ownership-rules.mjs — the hook/app parity test is missing`);
+      } else if (!/hookClassify\(.*\)\)\.toEqual\(classifyOwnership\(/.test(text)) {
+        fail('cockpit-ownership-parity', `${testFile} imports the hook's classifier but never asserts it against the app's own classifyOwnership on a shared fixture`);
+      } else ok();
+    }
   }
 
   // --- The hook's own classifier, exercised directly here — the half this check CAN run

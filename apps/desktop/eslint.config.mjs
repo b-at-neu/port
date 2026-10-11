@@ -32,7 +32,7 @@ export default tseslint.config(
     }
   },
   {
-    files: ['src/**/*.{ts,tsx}'],
+    files: ['src/**/*.{ts,tsx}', 'tests/**/*.{ts,tsx}'],
     rules: {
       'port/no-parent-import': 'error'
     }
@@ -51,7 +51,7 @@ export default tseslint.config(
   // The React stack (#316) — React and hooks rules, plus the local
   // port/no-raw-colour rule, scoped to the renderer only.
   {
-    files: ['src/renderer/**/*.{ts,tsx}'],
+    files: ['src/renderer/**/*.{ts,tsx}', 'tests/unit/renderer/**/*.{ts,tsx}'],
     plugins: {
       react,
       'react-hooks': reactHooks
