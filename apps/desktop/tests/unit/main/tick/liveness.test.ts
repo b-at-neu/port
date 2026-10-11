@@ -1,9 +1,9 @@
 // Runs classifyUnmatched over the tick engine's own shared case table; this module is the
 // engine's own, apps/desktop imports it directly with no local copy.
 import { describe, expect, it } from 'vitest'
-import { classifyUnmatched } from '../../../../../scripts/port-tick/liveness'
-import type { LedgerRow, UnmatchedResult } from '../../../../../scripts/port-tick/liveness'
-import cases from '../../../../../scripts/port-tick/cases/liveness.cases.json'
+import { classifyUnmatched } from '../../../../../../scripts/port-tick/liveness'
+import type { LedgerRow, UnmatchedResult } from '../../../../../../scripts/port-tick/liveness'
+import cases from '../../../../../../scripts/port-tick/cases/liveness.cases.json'
 
 interface Case {
   readonly name: string

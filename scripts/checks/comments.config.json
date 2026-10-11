@@ -32,8 +32,6 @@
     "apps/desktop/scripts/icon.mjs",
     "apps/desktop/scripts/screenshots.mjs",
     "apps/desktop/src/main/index.ts",
-    "apps/desktop/src/main/ipc-runtime.test.ts",
-    "apps/desktop/src/main/ipc.search.test.ts",
     "apps/desktop/src/main/ipc.ts",
     "apps/desktop/src/main/local/correlate.ts",
     "apps/desktop/src/main/local/denials.ts",

@@ -1,9 +1,9 @@
 // Runs reduceRollup/isConcluded/rollupVerdict over the tick engine's own shared case table; this
 // module is the engine's own, apps/desktop imports it directly with no local copy.
 import { describe, expect, it } from 'vitest'
-import { conclusionOf, isConcluded, reduceRollup, rollupVerdict } from '../../../../../scripts/port-tick/checks'
-import type { CheckContext, Disposition } from '../../../../../scripts/port-tick/checks'
-import cases from '../../../../../scripts/port-tick/cases/checks.cases.json'
+import { conclusionOf, isConcluded, reduceRollup, rollupVerdict } from '../../../../../../scripts/port-tick/checks'
+import type { CheckContext, Disposition } from '../../../../../../scripts/port-tick/checks'
+import cases from '../../../../../../scripts/port-tick/cases/checks.cases.json'
 
 interface RawContext {
   readonly __typename?: 'CheckRun' | 'StatusContext'
