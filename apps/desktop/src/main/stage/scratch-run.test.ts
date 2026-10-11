@@ -389,20 +389,18 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       })
     }
 
-    // 1. The plan stage launches and settles.
     await tick()
     await waitForEndedCompleted(1)
 
-    // 2. Nothing launches — the issue is at planReview, awaiting the human gate.
+    // The human gate hasn't been applied yet, so nothing new launches.
     await tick()
     expect(seen).toHaveLength(1)
 
-    // 3. Apply the gate, then the impl stage launches and settles.
     moveLabel(labels, 7, 'planReview', 'planApproved')
     await tick()
     await waitForEndedCompleted(2)
 
-    // 4. Final tick: no actionable item remains.
+    // No actionable item remains after the impl stage settles.
     const beforeFinal = seen.length
     await tick()
     expect(seen).toHaveLength(beforeFinal)
