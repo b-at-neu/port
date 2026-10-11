@@ -46,6 +46,7 @@ function snapshotWith(permissionIds: readonly string[]): HostedSessionSnapshot {
     backgroundTasks: [],
     stage: null,
     lastResult: null,
+    operatorJoinedAt: null,
   }
 }
 

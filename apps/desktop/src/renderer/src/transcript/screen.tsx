@@ -22,6 +22,7 @@ export function TranscriptScreen() {
 
   function back(): void {
     if (search.from === 'search') void navigate({ to: ROUTE_IDS.search, search: {} })
+    else if (search.from === 'board') void navigate({ to: ROUTE_IDS.board, search: {} })
     else void navigate({ to: ROUTE_IDS.history, search: {} })
   }
 

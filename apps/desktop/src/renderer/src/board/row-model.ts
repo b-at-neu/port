@@ -4,6 +4,8 @@ import { OPERATOR_DECISIONS } from '../../../shared/actions/types'
 import type { ActionAvailability, OperatorAction, OperatorDecision } from '../../../shared/actions/types'
 import { needsYouReasonOf } from '../../../shared/board/needs-you'
 import type { BoardItemRow } from '../../../shared/board/types'
+import { operatorJoinedOf as operatorJoinedOfRecords } from '../../../shared/board/stage-links'
+import type { DispatchRecord } from '../../../shared/dispatch/types'
 import type { AttachedAgent, AttachedSession } from '../../../shared/state/types'
 import type { PillStatus } from '../components/status-pill'
 import type { ItemActionState } from './actions'
@@ -17,6 +19,11 @@ export function pillStatusFor(row: BoardItemRow): PillStatus {
   if (row.displayStatus.status === 'stalled') return 'danger'
   if (row.displayStatus.status === 'in-flight') return 'working'
   return 'idle'
+}
+
+/** `stage-links.ts`'s own `operatorJoinedOf`, re-exported for the row — `true` when any dispatch record for this item carries an operator join. */
+export function operatorJoinedOf(records: readonly DispatchRecord[], row: BoardItemRow): boolean {
+  return operatorJoinedOfRecords(records, row.item.number, row.item.kind)
 }
 
 export function agentSummaryOf(agents: readonly AttachedAgent[], sessions: readonly AttachedSession[]): string | null {

@@ -72,6 +72,8 @@ export interface HostedSessionSnapshot {
   readonly stage: StageTag | null
   /** A structural read of this session's newest `result` message — `null` until one arrives. */
   readonly lastResult: SessionResult | null
+  /** Stamped once, on the first `session:send` with `source: 'operator'` into a stage session — `null` for every operator session and for a stage session no operator has typed into. */
+  readonly operatorJoinedAt: string | null
 }
 
 /** Pin and archive marks, keyed by `claudeSessionId` — app-local, persisted in `hosting.json`. */

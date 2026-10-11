@@ -145,7 +145,14 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     if (!newResult && !atEnd) return
     entry.lastSeenResultAt = resultAt
 
-    const outcome = classifyHandback({ lastResult: snapshot.lastResult, end: snapshot.end, rateLimit: snapshot.rateLimit, usage: snapshot.usage, phase: snapshot.phase })
+    const outcome = classifyHandback({
+      lastResult: snapshot.lastResult,
+      end: snapshot.end,
+      rateLimit: snapshot.rateLimit,
+      usage: snapshot.usage,
+      phase: snapshot.phase,
+      operatorJoinedAt: snapshot.operatorJoinedAt,
+    })
     if (outcome === null) return
 
     serialize(() => settle(snapshot.sessionKey, entry.repoId, entry.registryId, outcome))
@@ -180,7 +187,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
       tracked.delete(sessionKey)
       const message = error instanceof Error ? error.message : String(error)
       params.registry.markInterrupted(registryId, 'error', `hand-back settle failed: ${message}`, null, outcome.costUsd)
-      params.onOutcome(repoId, sessionKey, { kind: 'error', detail: `hand-back settle failed: ${message}`, costUsd: outcome.costUsd, resetsAt: null, worktree: 'remove-failed' })
+      params.onOutcome(repoId, sessionKey, { kind: 'error', detail: `hand-back settle failed: ${message}`, costUsd: outcome.costUsd, resetsAt: null, worktree: 'remove-failed', operatorJoined: outcome.operatorJoined })
     }
   }
 

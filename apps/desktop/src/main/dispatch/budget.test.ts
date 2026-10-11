@@ -5,7 +5,20 @@ import type { SessionKey } from '../../shared/hosting/types'
 import type { TickActionable } from '../../shared/tick/types'
 
 function record(overrides: Partial<StageRecord> = {}): StageRecord {
-  return { sessionKey: 'hosted-1' as SessionKey, agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved', state: 'started', at: '2026-09-05T14:00:00.000Z', detail: null, outcome: null, ...overrides }
+  return {
+    sessionKey: 'hosted-1' as SessionKey,
+    agent: 'impl',
+    number: 52,
+    kind: 'issue',
+    trigger: 'planApproved',
+    state: 'started',
+    at: '2026-09-05T14:00:00.000Z',
+    detail: null,
+    outcome: null,
+    claudeSessionId: null,
+    operatorJoinedAt: null,
+    ...overrides,
+  }
 }
 
 describe('resetArgs / sweepArgs / dispatchArgs', () => {
@@ -89,7 +102,7 @@ describe('budgetLiveSets', () => {
   })
 
   it('an ended record whose outcome is completed, not covered by a live record, is completed', () => {
-    const { completed, live } = budgetLiveSets([record({ state: 'ended', outcome: { kind: 'completed', detail: null, costUsd: 1, resetsAt: null, worktree: 'removed' } })])
+    const { completed, live } = budgetLiveSets([record({ state: 'ended', outcome: { kind: 'completed', detail: null, costUsd: 1, resetsAt: null, worktree: 'removed', operatorJoined: false } })])
     expect(completed).toEqual(['impl #52'])
     expect(live).not.toContain('impl #52')
   })
@@ -101,14 +114,14 @@ describe('budgetLiveSets', () => {
   })
 
   it('an ended record that crashed or errored closes as lost, not completed', () => {
-    const { completed, live } = budgetLiveSets([record({ state: 'ended', outcome: { kind: 'error', detail: 'boom', costUsd: 1, resetsAt: null, worktree: 'kept' } })])
+    const { completed, live } = budgetLiveSets([record({ state: 'ended', outcome: { kind: 'error', detail: 'boom', costUsd: 1, resetsAt: null, worktree: 'kept', operatorJoined: false } })])
     expect(live).not.toContain('impl #52')
     expect(completed).not.toContain('impl #52')
   })
 
   it('a live record for a description wins over an ended one for the same description', () => {
     const records = [
-      record({ sessionKey: 's1' as SessionKey, state: 'ended', outcome: { kind: 'completed', detail: null, costUsd: 1, resetsAt: null, worktree: 'removed' } }),
+      record({ sessionKey: 's1' as SessionKey, state: 'ended', outcome: { kind: 'completed', detail: null, costUsd: 1, resetsAt: null, worktree: 'removed', operatorJoined: false } }),
       record({ sessionKey: 's2' as SessionKey, state: 'started' }),
     ]
     const { live, completed } = budgetLiveSets(records)
@@ -119,7 +132,10 @@ describe('budgetLiveSets', () => {
 
 describe('sumCostUsd', () => {
   it('sums every record carrying a known cost', () => {
-    const records = [record({ outcome: { kind: 'completed', detail: null, costUsd: 1.5, resetsAt: null, worktree: 'removed' } }), record({ sessionKey: 's2' as SessionKey, outcome: { kind: 'error', detail: null, costUsd: 0.5, resetsAt: null, worktree: 'kept' } })]
+    const records = [
+      record({ outcome: { kind: 'completed', detail: null, costUsd: 1.5, resetsAt: null, worktree: 'removed', operatorJoined: false } }),
+      record({ sessionKey: 's2' as SessionKey, outcome: { kind: 'error', detail: null, costUsd: 0.5, resetsAt: null, worktree: 'kept', operatorJoined: false } }),
+    ]
     expect(sumCostUsd(records)).toBe(2)
   })
 

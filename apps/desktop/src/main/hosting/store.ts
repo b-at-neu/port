@@ -114,7 +114,8 @@ export interface StartSessionParams {
 
 export interface HostedStore {
   start(params: StartSessionParams): Promise<SessionStartResult>
-  send(sessionKey: SessionKey, text: string, attachments?: readonly ComposerAttachment[]): SessionSendResult
+  /** `options.source` defaults to `'app'` so an unmarked caller never fakes an operator join — `main/channels/hosting.ts`'s `resolveSessionSend` is the only `'operator'` caller. */
+  send(sessionKey: SessionKey, text: string, attachments?: readonly ComposerAttachment[], options?: { readonly source: 'operator' | 'app' }): SessionSendResult
   interrupt(sessionKey: SessionKey): Promise<SessionInterruptResult>
   close(sessionKey: SessionKey): Promise<SessionCloseResult>
   attach(sessionKey: SessionKey): SessionAttachResult
@@ -293,10 +294,10 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     return { ok: true, snapshot: handle.snapshot() }
   }
 
-  function send(sessionKey: SessionKey, text: string, attachments: readonly ComposerAttachment[] = []): SessionSendResult {
+  function send(sessionKey: SessionKey, text: string, attachments: readonly ComposerAttachment[] = [], options: { readonly source: 'operator' | 'app' } = { source: 'app' }): SessionSendResult {
     const handle = handles.get(sessionKey)
     if (!handle) return { ok: false, kind: 'unknown-session' }
-    const result = handle.send(text, attachments)
+    const result = handle.send(text, attachments, options.source)
     if (!result.ok) return result
     return { ok: true, uuid: result.uuid, queued: result.queued }
   }

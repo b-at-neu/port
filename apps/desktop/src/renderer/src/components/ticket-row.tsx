@@ -4,7 +4,7 @@ import type { KeyboardEvent, MouseEvent } from 'react'
 import { cn } from '@/lib/utils'
 import type { BoardItemRow } from '../../../shared/board/types'
 import { PHASE_NAMES } from '../lib/phase'
-import { autoPlanTagLabel, autoPlanTagTitle } from '../board/copy'
+import { autoPlanTagLabel, autoPlanTagTitle, operatorJoinedTagLabel, operatorJoinedTagTitle } from '../board/copy'
 import { nextActionFor, pillStatusFor } from '../board/row-model'
 import { openReviewDialog } from '../gate/controller'
 import { openDecision } from '../decision/controller'
@@ -15,6 +15,8 @@ export interface TicketRowProps {
   readonly row: BoardItemRow
   readonly selected: boolean
   readonly onSelect: () => void
+  /** `true` when an operator has typed into one of this item's stage sessions — renders an `Operator joined` tag after the phase pill. */
+  readonly operatorJoined?: boolean
 }
 
 function phaseLabel(row: BoardItemRow): string {
@@ -51,7 +53,7 @@ function NextActionLink({ row }: { readonly row: BoardItemRow }) {
   )
 }
 
-export function TicketRow({ row, selected, onSelect }: TicketRowProps) {
+export function TicketRow({ row, selected, onSelect, operatorJoined = false }: TicketRowProps) {
   const { item } = row
 
   function handleKeyDown(event: KeyboardEvent): void {
@@ -77,6 +79,11 @@ export function TicketRow({ row, selected, onSelect }: TicketRowProps) {
       ) : null}
       <PhaseBar stageKey={row.stageLabel?.key ?? null} kind={item.kind} merged={item.mergedAt !== null} className="shrink-0" />
       <StatusPill status={pillStatusFor(row)} label={phaseLabel(row)} className="shrink-0" />
+      {operatorJoined ? (
+        <span title={operatorJoinedTagTitle()} aria-label={operatorJoinedTagTitle()} className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-meta text-foreground-secondary">
+          {operatorJoinedTagLabel()}
+        </span>
+      ) : null}
       <NextActionLink row={row} />
     </div>
   )

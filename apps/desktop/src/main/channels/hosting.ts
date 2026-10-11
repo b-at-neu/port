@@ -188,7 +188,7 @@ export function resolveSessionSend(request: IpcMap['session:send']['request'], d
   const attachments = request?.attachments === undefined ? [] : requireAttachments(request.attachments)
   if (typeof request.text !== 'string') throw new Error("'session:send' requires 'text' to be a string")
   if (request.text === '' && attachments.length === 0) throw new Error("'session:send' requires a non-empty 'text' when there are no attachments")
-  return deps.store.send(sessionKey, request.text, attachments)
+  return deps.store.send(sessionKey, request.text, attachments, { source: 'operator' })
 }
 
 /** The `@` suggestion list's own file source — `sessionKey` resolves only to

@@ -91,6 +91,7 @@ function sessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): Hosted
     backgroundTasks: [],
     stage: null,
     lastResult: null,
+    operatorJoinedAt: null,
     ...overrides,
   }
 }
@@ -327,7 +328,9 @@ describe('createDispatcher — launching', () => {
     const state = dispatcher.status()[0]?.state
     expect(state?.kind).toBe('active')
     if (state?.kind !== 'active') return
-    expect(state.recent).toEqual([{ agent: 'impl', number: 52, kind: 'issue', state: 'started', at: '2026-01-01T00:00:00.000Z', detail: null, outcome: null }])
+    expect(state.recent).toEqual([
+      { agent: 'impl', number: 52, kind: 'issue', state: 'started', at: '2026-01-01T00:00:00.000Z', detail: null, outcome: null, sessionKey: 'hosted-1', claudeSessionId: null, operatorJoinedAt: null },
+    ])
   })
 
   it('calls ledger.record only after a launch returns ok', async () => {
@@ -351,7 +354,9 @@ describe('createDispatcher — launching', () => {
     const state = dispatcher.status()[0]?.state
     expect(state?.kind).toBe('active')
     if (state?.kind !== 'active') return
-    expect(state.recent).toEqual([{ agent: 'impl', number: 52, kind: 'issue', state: 'failed', at: '2026-01-01T00:00:00.000Z', detail: 'boom', outcome: null }])
+    expect(state.recent).toEqual([
+      { agent: 'impl', number: 52, kind: 'issue', state: 'failed', at: '2026-01-01T00:00:00.000Z', detail: 'boom', outcome: null, sessionKey: null, claudeSessionId: null, operatorJoinedAt: null },
+    ])
   })
 
   it('never launches while zero slots are free', async () => {

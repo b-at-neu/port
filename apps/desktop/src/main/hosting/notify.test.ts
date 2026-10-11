@@ -32,6 +32,7 @@ function snapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSession
     usage: null,
     backgroundTasks: [],
     lastResult: null,
+    operatorJoinedAt: null,
     ...overrides,
   }
 }

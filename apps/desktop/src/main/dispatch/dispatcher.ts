@@ -127,17 +127,12 @@ function emptyRepoState(): RepoDispatcherState {
   }
 }
 
+function newStageRecord(candidate: TickActionable, state: 'started' | 'failed', at: string, sessionKey: SessionKey | null, detail: string | null): StageRecord {
+  return { sessionKey, agent: candidate.agent, number: candidate.number, kind: candidate.kind, trigger: candidate.trigger, state, at, detail, outcome: null, claudeSessionId: null, operatorJoinedAt: null }
+}
+
 function ownerOf(ownership: OwnershipRead): DispatchOwner {
-  switch (ownership.kind) {
-    case 'absent':
-      return 'none'
-    case 'app':
-      return 'app'
-    case 'terminal':
-      return 'terminal'
-    case 'unreadable':
-      return 'unreadable'
-  }
+  return ownership.kind === 'absent' ? 'none' : ownership.kind
 }
 
 export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
@@ -181,7 +176,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
   function activeOrIdle(repoId: RepoId): DispatcherState {
     const records = stateFor(repoId).records
     return records.length > 0
-      ? { kind: 'active', recent: records.map((r) => ({ agent: r.agent, number: r.number, kind: r.kind, state: r.state, at: r.at, detail: r.detail, outcome: r.outcome })) }
+      ? { kind: 'active', recent: records.map((r) => ({ agent: r.agent, number: r.number, kind: r.kind, state: r.state, at: r.at, detail: r.detail, outcome: r.outcome, sessionKey: r.sessionKey, claudeSessionId: r.claudeSessionId, operatorJoinedAt: r.operatorJoinedAt })) }
       : { kind: 'idle' }
   }
 
@@ -375,17 +370,17 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
               void deps.store.close(result.sessionKey)
               continue
             }
-            pushRecord(entry.id, { sessionKey: result.sessionKey, agent: candidate.agent, number: candidate.number, kind: candidate.kind, trigger: candidate.trigger, state: 'started', at, detail: null, outcome: null })
+            pushRecord(entry.id, newStageRecord(candidate, 'started', at, result.sessionKey, null))
             deps.ledger.record(entry.id, candidate.number)
           } else if (result.kind === 'at-capacity') {
             waiting += 1
           } else {
-            pushRecord(entry.id, { sessionKey: null, agent: candidate.agent, number: candidate.number, kind: candidate.kind, trigger: candidate.trigger, state: 'failed', at, detail: result.message, outcome: null })
+            pushRecord(entry.id, newStageRecord(candidate, 'failed', at, null, result.message))
           }
         } catch (error) {
           const at = deps.now().toISOString()
           const message = error instanceof Error ? error.message : String(error)
-          pushRecord(entry.id, { sessionKey: null, agent: candidate.agent, number: candidate.number, kind: candidate.kind, trigger: candidate.trigger, state: 'failed', at, detail: message, outcome: null })
+          pushRecord(entry.id, newStageRecord(candidate, 'failed', at, null, message))
         }
       }
     })
