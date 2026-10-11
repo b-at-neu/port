@@ -32,7 +32,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   {
     const cssPatterns = mod.CSS_COLOUR_PATTERNS as { source: string; flags: string; id: string }[];
     const exemptRel = new Set<string>();
-    exemptRel.add(`${rendererDir}/src/styles/theme.css`);
+    exemptRel.add(`${rendererDir}/styles/theme.css`);
 
     for (const rel of exemptRel) {
       if (!existsAsFile(join(root, rel))) fail('desktop-react', `${rel} is in the legacy-stylesheet exemption list but does not exist on disk — shrink the list instead`);
@@ -58,7 +58,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   // push subscriber goes through that one module's `subscribe`. ---
   {
     const bridgeEventRe = /\.(onBoardUpdate|onSessionStatus|onSessionEntries)\b/;
-    const subscriptionsRel = `${rendererDir}/src/data/subscriptions.ts`;
+    const subscriptionsRel = `${rendererDir}/data/subscriptions.ts`;
     const files = walk(join(root, rendererDir)).filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.test.ts'));
     const matches = files.filter((f) => bridgeEventRe.test(readFileSync(f, 'utf8'))).map(relOf);
     if (!matches.includes(subscriptionsRel)) {

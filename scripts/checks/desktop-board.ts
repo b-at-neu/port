@@ -3,11 +3,11 @@ import { join } from 'node:path';
 import { root, walk, relOf } from '../lib/files.ts';
 import type { Reporter } from '../lib/report.ts';
 
-// apps/desktop/src/shared/board/ and renderer/src/board/ are a pure projection plus
+// apps/desktop/src/shared/board/ and renderer/board/ are a pure projection plus
 // plain-DOM rendering, reading nothing itself. Reads directories by explicit path, never walk('apps/').
 export default async function ({ expect, fail, ok }: Reporter) {
   const boardDir = 'apps/desktop/src/shared/board';
-  const rendererBoardDir = 'apps/desktop/src/renderer/src/board';
+  const rendererBoardDir = 'apps/desktop/src/renderer/board';
   const stateTypesFile = 'apps/desktop/src/shared/state/types.ts';
   const mainDir = 'apps/desktop/src/main';
 
@@ -23,7 +23,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
   // --- The board screen reads nothing itself ----------------------------------
   // No file here imports src/main/, a node: builtin, or calls gh(/runCommand( — every fact arrives over IPC.
   {
-    const dirs = [join(root, boardDir), join(root, 'apps/desktop/src/renderer/src')];
+    const dirs = [join(root, boardDir), join(root, 'apps/desktop/src/renderer')];
     let found = false;
     for (const dir of dirs) {
       for (const f of walk(dir).filter((p) => (p.endsWith('.ts') || p.endsWith('.tsx')) && !p.endsWith('.test.ts'))) {
@@ -109,7 +109,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // pin: `renderer/src/board/copy.ts`'s `autoPlanTagLabel()` ↔ `docs/DESIGN.md` §6's "Auto-plan" tag sentence
+  // pin: `renderer/board/copy.ts`'s `autoPlanTagLabel()` ↔ `docs/DESIGN.md` §6's "Auto-plan" tag sentence
   {
     const copyFile = join(root, rendererBoardDir, 'copy.ts');
     const copyText = readFileSync(copyFile, 'utf8');

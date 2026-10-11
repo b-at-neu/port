@@ -13,7 +13,7 @@ export default defineConfig({
   renderer: {
     resolve: {
       alias: {
-        '@': fileURLToPath(new URL('./src/renderer/src', import.meta.url))
+        '@': fileURLToPath(new URL('./src/renderer', import.meta.url))
       }
     },
     plugins: [react(), tailwindcss()]

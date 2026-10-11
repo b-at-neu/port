@@ -6,11 +6,11 @@ import type { Reporter } from '../lib/report.ts';
 
 export default async function ({ expect, fail, note, ok }: Reporter) {
   const designText = readFileSync(join(root, 'docs/DESIGN.md'), 'utf8');
-  const shellDir = join(root, 'apps/desktop/src/renderer/src/shell');
+  const shellDir = join(root, 'apps/desktop/src/renderer/shell');
 
   // --- pin: lib/phase.ts's PHASE_NAMES <-> DESIGN §6's role table ---------
   {
-    const mod = await import(pathToFileURL(join(root, 'apps/desktop/src/renderer/src/lib/phase.ts')).href);
+    const mod = await import(pathToFileURL(join(root, 'apps/desktop/src/renderer/lib/phase.ts')).href);
     const phaseNames: Record<string, string | null> = mod.PHASE_NAMES;
     const section = sectionText(designText, '6. Copy and tone');
     const fromDesign: Record<string, string | null> = {};
@@ -39,7 +39,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
 
   // --- pin: shell/key-bindings.ts's KEY_BINDINGS <-> DESIGN §3's keyboard table
   {
-    const mod = await import(pathToFileURL(join(root, 'apps/desktop/src/renderer/src/shell/key-bindings.ts')).href);
+    const mod = await import(pathToFileURL(join(root, 'apps/desktop/src/renderer/shell/key-bindings.ts')).href);
     const codeKeys = (mod.KEY_BINDINGS as { readonly keys: string }[]).map((b) => b.keys).sort();
     const layoutSection = sectionText(designText, '3. Layout');
     const keyboardText = layoutSection.slice(layoutSection.indexOf('**Keyboard:**'));
@@ -52,7 +52,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
 
   // --- pin: shell/key-bindings.ts's global KEY_BINDINGS <-> shared/shell/commands.ts's APP_COMMANDS
   {
-    const bindingsMod = await import(pathToFileURL(join(root, 'apps/desktop/src/renderer/src/shell/key-bindings.ts')).href);
+    const bindingsMod = await import(pathToFileURL(join(root, 'apps/desktop/src/renderer/shell/key-bindings.ts')).href);
     const commandsMod = await import(pathToFileURL(join(root, 'apps/desktop/src/shared/shell/commands.ts')).href);
     const globalBindings = (bindingsMod.KEY_BINDINGS as { readonly action: string; readonly scope: string }[]).filter((b) => b.scope === 'global');
     const appCommandKinds = (commandsMod.APP_COMMANDS as { readonly kind: string }[]).map((c) => c.kind);
@@ -106,13 +106,13 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   // --- guard: no data-action= under shell/, backlog/, components/ ---------
   {
     const scanDirs = [
-      'apps/desktop/src/renderer/src/shell',
-      'apps/desktop/src/renderer/src/backlog',
-      'apps/desktop/src/renderer/src/components',
-      'apps/desktop/src/renderer/src/board',
-      'apps/desktop/src/renderer/src/repositories',
-      'apps/desktop/src/renderer/src/claim',
-      'apps/desktop/src/renderer/src/gate',
+      'apps/desktop/src/renderer/shell',
+      'apps/desktop/src/renderer/backlog',
+      'apps/desktop/src/renderer/components',
+      'apps/desktop/src/renderer/board',
+      'apps/desktop/src/renderer/repositories',
+      'apps/desktop/src/renderer/claim',
+      'apps/desktop/src/renderer/gate',
     ];
     let violated = false;
     for (const dir of scanDirs) {

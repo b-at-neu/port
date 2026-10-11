@@ -156,30 +156,30 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - only GitHub writer; only `command.ts` names `--add-label`/`--remove-label`
 - never `merge`, `close`, `--delete-branch`, or `ready`
 
-**`apps/desktop/src/renderer/src/components/conversation-model.ts`/`conversation-list.tsx`**
+**`apps/desktop/src/renderer/components/conversation-model.ts`/`conversation-list.tsx`**
 - the one `TranscriptEntry` → view-model mapping and the one pin-to-bottom, chunked-reveal list
 - shared by the on-disk transcript view and the live session view, never a second copy
 - no `useEffect`: `conversation-list.tsx`'s scroll-pin and chunking both run from a plain ref callback, given a fresh function identity every render so React re-invokes it on each commit
 
-**`apps/desktop/src/renderer/src/data/`**
+**`apps/desktop/src/renderer/data/`**
 - the renderer's one TanStack Query composition root
 - `data/subscriptions.ts` is the only caller of a `window.port.on*` push listener
 - a typed `{ ok: false }` response is data, not an error — only a rejected invoke is
 - `session:status` upserts the `session:list` cache by `sessionKey` when it already holds an entry and nothing is mid-fetch; otherwise it invalidates
 
-**`apps/desktop/src/renderer/src/needs-you/`**
+**`apps/desktop/src/renderer/needs-you/`**
 - the Needs you screen (#315): its own copy (`copy.ts`), action resolution and dispatch (`actions.ts`), and the relay compose form (`relay-form.tsx`), ported out of `board/relay.ts`'s former banner
 - `screen.tsx` reads `board:snapshot` through `shared/board/needs-you.ts`'s `needsYouItems`, never a second derivation; writes go through the existing `item:action`/`item:decide` channels, no new IPC
 - `components/needs-you-item.tsx` is the shared row (DESIGN §4's `NeedsYouItem`); a screen never builds its own version
 
-**`apps/desktop/src/renderer/src/session/`**
+**`apps/desktop/src/renderer/session/`**
 - `entries-store.ts`'s `createEntriesRegistry` is the per-`sessionKey` attach/re-attach/buffering registry — injectable for its own tests, a thin app-wide singleton for `useSessionEntries`
 - `sequence.ts`'s `accept`/`drainBuffered` apply a `session:entries` delta only in revision order, never papering over a gap
 - `actions.ts` is the one place that writes the `session:list` query cache outside `data/subscriptions.ts`'s own push wiring — `adoptSession` after a start or a restore
 - `drafts.ts` keeps a composer draft per `sessionKey` outside React, so switching sessions and back never loses what was half-typed; `draftAttachmentsFor`/`setDraftAttachments` (#324) do the same for its attachment chips, in their own map
 - `composer-model.ts`/`attachments.ts`/`prompt-history.ts` (#324) are `prompt-input.tsx`'s pure decision logic — trigger detection and ranking, `File` classification and limits, and the per-repository recall cursor — each directly unit-tested; `prompt-input.tsx` itself is the one composition root that wires them to `components/composer.tsx` and `components/suggestion-list.tsx`
 
-**`apps/desktop/src/renderer/src/shell/`**
+**`apps/desktop/src/renderer/shell/`**
 - the one React root: `layout.tsx`'s `ShellLayout` renders the sidebar and the routed `<Outlet/>` directly into the main area — no portal, no legacy container
 - `keyboard.ts` installs one module-level listener, never `useEffect`
 - `prefs.ts` fails toward defaults on a malformed `localStorage` value, never throws
@@ -192,8 +192,8 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 **`apps/desktop/src/shared/markdown/`**
 - pure, bounded-subset markdown parser — no `node:` import, nothing from `main/`
 - link scheme allowlist is `http://`/`https://` only; everything else renders as literal text
-- `renderer/src/components/markdown.tsx` is its only consumer; renders React elements, never `dangerouslySetInnerHTML`
-- `renderer/src/components/code-block.tsx` (#323) is the highlighted-code renderer `markdown.tsx`'s fenced blocks and `tool-call-detail.tsx`'s Bash body both go through; `highlight.ts`'s fixed-language `lowlight` instance renders React spans only, never partially on a throw or an over-cap input
+- `renderer/components/markdown.tsx` is its only consumer; renders React elements, never `dangerouslySetInnerHTML`
+- `renderer/components/code-block.tsx` (#323) is the highlighted-code renderer `markdown.tsx`'s fenced blocks and `tool-call-detail.tsx`'s Bash body both go through; `highlight.ts`'s fixed-language `lowlight` instance renders React spans only, never partially on a throw or an over-cap input
 
 ## 2. Data and integrity
 

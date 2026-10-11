@@ -60,7 +60,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   // --- router.tsx's own paths stay inside ROUTE_IDS, '/' or '*' — a literal path would
   // escape visual/targets.mts's exhaustive capture/skip table. ---
   {
-    const text = readFileSync(join(root, 'apps/desktop/src/renderer/src/router/router.tsx'), 'utf8');
+    const text = readFileSync(join(root, 'apps/desktop/src/renderer/router/router.tsx'), 'utf8');
     const assignments = [...text.matchAll(/\bpath:\s*([^,}\n]+)/g)].map((m) => (m[1] ?? '').trim());
     const bad = assignments.filter((p) => p !== "'/'" && p !== "'*'" && !/^ROUTE_IDS\.\w+$/.test(p));
     if (assignments.length === 0) {
@@ -82,7 +82,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   // pin: `visual/targets.mts`'s `ROUTE_KEYS` ↔ `router/routes.ts`'s `ROUTE_IDS` keys, both directions
   {
     const targetsUrl = pathToFileURL(join(root, 'apps/desktop/visual/targets.mts')).href;
-    const routesUrl = pathToFileURL(join(root, 'apps/desktop/src/renderer/src/router/routes.ts')).href;
+    const routesUrl = pathToFileURL(join(root, 'apps/desktop/src/renderer/router/routes.ts')).href;
     const targetsMod: { SCREENSHOT_TARGETS?: Record<string, unknown> } = await import(targetsUrl);
     const routesMod: { ROUTE_IDS?: Record<string, unknown> } = await import(routesUrl);
     const targetKeys = new Set(Object.keys(targetsMod.SCREENSHOT_TARGETS ?? {}));
