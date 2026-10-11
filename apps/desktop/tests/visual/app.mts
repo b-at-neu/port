@@ -17,14 +17,14 @@ import { fileURLToPath } from 'node:url'
 // with no browser-download install step at all.
 import { _electron } from 'playwright-core'
 import type { ElectronApplication, Page } from 'playwright-core'
-import { FIXTURE_ENV } from '../src/main/fixtures/mode'
+import { FIXTURE_ENV } from '../../src/main/fixtures/mode'
 // `.mjs`, matching this `.mts` file's own emitted-ESM specifier rules — a
 // relative import from a `.mts` module must name the extension Node would
 // actually resolve, not the source extension.
 import type { CaptureVariant, Target, Theme } from './targets.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-const MAIN_ENTRY = join(HERE, '..', 'out', 'main', 'index.js')
+const MAIN_ENTRY = join(HERE, '..', '..', 'out', 'main', 'index.js')
 const WAIT_TIMEOUT_MS = 10_000
 
 export interface FixtureApp {

@@ -137,8 +137,8 @@
     "apps/desktop/src/renderer/settings/runtime-section.tsx",
     "apps/desktop/src/renderer/settings/theme-section.tsx",
     "apps/desktop/src/renderer/theme/store.ts",
-    "apps/desktop/visual/app.mts",
-    "apps/desktop/visual/screens.spec.mts",
-    "apps/desktop/visual/targets.mts"
+    "apps/desktop/tests/visual/app.mts",
+    "apps/desktop/tests/visual/screens.spec.mts",
+    "apps/desktop/tests/visual/targets.mts"
   ]
 }

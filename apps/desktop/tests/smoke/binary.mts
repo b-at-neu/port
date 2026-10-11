@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-const DIST_DIR = join(HERE, '..', 'dist')
+const DIST_DIR = join(HERE, '..', '..', 'dist')
 
 function candidatePaths(): readonly string[] {
   switch (process.platform) {
