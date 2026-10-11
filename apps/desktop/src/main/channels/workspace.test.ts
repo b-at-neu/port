@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import type { CommandResult } from '../platform/run'
-import type { GitRunner } from '../platform/git'
-import type { RegistryDeps } from '../registry'
-import type { RepoId, RepositoryEntry } from '../../shared/repos'
-import type { SessionWorkspace } from '../../shared/workspace/types'
-import type { SessionKey } from '../../shared/hosting/types'
-import type { RecentsStore } from '../workspace/recents'
-import { resolveFoldersChoose, resolveFoldersList, resolveSessionChanges } from './workspace'
-import type { WorkspaceChannelDeps } from './workspace'
+import type { CommandResult } from '@/main/platform/run'
+import type { GitRunner } from '@/main/platform/git'
+import type { RegistryDeps } from '@/main/registry'
+import type { RepoId, RepositoryEntry } from '@/shared/repos'
+import type { SessionWorkspace } from '@/shared/workspace/types'
+import type { SessionKey } from '@/shared/hosting/types'
+import type { RecentsStore } from '@/main/workspace/recents'
+import { resolveFoldersChoose, resolveFoldersList, resolveSessionChanges } from '@/main/channels/workspace'
+import type { WorkspaceChannelDeps } from '@/main/channels/workspace'
 
 function ok(stdout: string): CommandResult {
   return { ok: true, stdout, stderr: '' }

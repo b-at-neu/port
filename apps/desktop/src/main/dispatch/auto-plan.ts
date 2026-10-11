@@ -1,15 +1,15 @@
 // Honours the cockpit's unprompted `autoPlan` swap while this app owns the repository.
-import type { BoardSnapshot } from '../../shared/board/types'
-import type { RunState } from '../../shared/dispatch/types'
-import type { RepoId } from '../../shared/repos'
-import type { ReadyEntry } from '../actions/apply'
-import type { AutoApprovePlanParams } from '../actions/gate'
-import { autoApprovableFrom } from '../tick/dispatchable'
-import type { RegistryDeps } from '../registry'
-import { listRepositories as defaultListRepositories } from '../registry'
-import type { ReadOwnershipParams } from './ownership'
-import type { OwnershipRead } from './ownership'
-import type { WriteOutcome } from '../../shared/writes/types'
+import type { BoardSnapshot } from '@/shared/board/types'
+import type { RunState } from '@/shared/dispatch/types'
+import type { RepoId } from '@/shared/repos'
+import type { ReadyEntry } from '@/main/actions/apply'
+import type { AutoApprovePlanParams } from '@/main/actions/gate'
+import { autoApprovableFrom } from '@/main/tick/dispatchable'
+import type { RegistryDeps } from '@/main/registry'
+import { listRepositories as defaultListRepositories } from '@/main/registry'
+import type { ReadOwnershipParams } from '@/main/dispatch/ownership'
+import type { OwnershipRead } from '@/main/dispatch/ownership'
+import type { WriteOutcome } from '@/shared/writes/types'
 
 export interface AutoPlannerDeps {
   readonly listRepositories: typeof defaultListRepositories

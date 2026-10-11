@@ -1,12 +1,12 @@
 // Label-first, then (only on `applied`, and only when the plan carries one) the comment —
 // a failed comment must still leave the label write standing.
-import type { ReconciledItem } from '../../shared/state/types'
-import type { LabelWriteRequest, WriteOutcome } from '../../shared/writes/types'
-import { applyLabels, postComment } from '../writes/apply'
-import type { ApplyLabelsParams, PostCommentParams } from '../writes/apply'
-import { observationWrite } from '../dispatch/observation'
-import type { WriteObservation } from '../dispatch/observation'
-import type { ReadyEntry } from './apply'
+import type { ReconciledItem } from '@/shared/state/types'
+import type { LabelWriteRequest, WriteOutcome } from '@/shared/writes/types'
+import { applyLabels, postComment } from '@/main/writes/apply'
+import type { ApplyLabelsParams, PostCommentParams } from '@/main/writes/apply'
+import { observationWrite } from '@/main/dispatch/observation'
+import type { WriteObservation } from '@/main/dispatch/observation'
+import type { ReadyEntry } from '@/main/actions/apply'
 
 export interface ApplyObservationParams {
   readonly entry: ReadyEntry

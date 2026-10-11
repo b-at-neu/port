@@ -1,8 +1,8 @@
 // A best-effort, read-only tell of the CLI's own OAuth credentials file — never a token value, nothing logged. macOS keeps this file in the Keychain instead, so a missing file falls through to the probe rather than trusting either reading of an absent file.
-import { readJsonFile } from '../platform/files'
-import { defaultClaudeHome } from '../sessions/locate'
-import { pathOps } from '../platform/paths'
-import type { CredentialsTell } from '../../shared/runtime/types'
+import { readJsonFile } from '@/main/platform/files'
+import { defaultClaudeHome } from '@/main/sessions/locate'
+import { pathOps } from '@/main/platform/paths'
+import type { CredentialsTell } from '@/shared/runtime/types'
 
 /** Any missing or malformed field yields `present: false` rather than a thrown error — this read is advisory-only. */
 interface CredentialsFileShape {

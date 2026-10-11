@@ -1,12 +1,12 @@
 // No I/O, no `gh`, no `git`, no filesystem — main/state/read.ts is the thin orchestrator that does the fetching this function composes.
-import type { LabelRole } from '../../shared/labels/defaults'
+import type { LabelRole } from '@/shared/labels/defaults'
 import type {
   ItemsByNumberFetch,
   PipelineFetch,
-} from '../../shared/github/types'
-import type { AgentRecord, SessionRecord } from '../../shared/sessions/types'
-import type { DenialsRead, UnresolvedReason, WorktreeEntry, WorktreesRead } from '../../shared/local/types'
-import type { RepositoryEntry } from '../../shared/repos'
+} from '@/shared/github/types'
+import type { AgentRecord, SessionRecord } from '@/shared/sessions/types'
+import type { DenialsRead, UnresolvedReason, WorktreeEntry, WorktreesRead } from '@/shared/local/types'
+import type { RepositoryEntry } from '@/shared/repos'
 import type {
   AttachedAgent,
   AttachedSession,
@@ -19,10 +19,10 @@ import type {
   RepositoryState,
   StatusEvidence,
   WaitingOn,
-} from '../../shared/state/types'
-import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers } from './attach'
-import { closingReference, IMPLEMENTATION_PLAN_HEADING, sessionRequiredAt } from './link'
-import { stageOf } from './stage'
+} from '@/shared/state/types'
+import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers } from '@/main/state/attach'
+import { closingReference, IMPLEMENTATION_PLAN_HEADING, sessionRequiredAt } from '@/main/state/link'
+import { stageOf } from '@/main/state/stage'
 import { codeReviewCount } from '../../../../../scripts/port-tick/gates'
 import { parseFilesBlock } from '../../../../../scripts/port-tick/contention'
 

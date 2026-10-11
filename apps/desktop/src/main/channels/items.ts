@@ -1,14 +1,14 @@
 // The board's item-level writes — `item:action` and `item:decide`. Every
 // stale-renderer mistake throws here, never a value `main/actions/` defends.
-import { OPERATOR_ACTIONS, OPERATOR_DECISIONS, UNBLOCK_ROUTES } from '../../shared/actions/types'
-import type { ItemActionResult, ItemDecisionResult, OperatorDecision, UnblockRoute } from '../../shared/actions/types'
-import { MAX_REVISE_NOTE_CHARS } from '../../shared/actions/types'
-import type { BoardSnapshot } from '../../shared/board/types'
-import type { IpcMap } from '../../shared/ipc'
-import type { RegistryDeps } from '../registry'
-import { listRepositories, requireReadyRepo, requireRepoId } from '../registry'
-import type { ApplyItemActionParams } from '../actions/apply'
-import type { ApplyItemDecisionParams } from '../actions/decide'
+import { OPERATOR_ACTIONS, OPERATOR_DECISIONS, UNBLOCK_ROUTES } from '@/shared/actions/types'
+import type { ItemActionResult, ItemDecisionResult, OperatorDecision, UnblockRoute } from '@/shared/actions/types'
+import { MAX_REVISE_NOTE_CHARS } from '@/shared/actions/types'
+import type { BoardSnapshot } from '@/shared/board/types'
+import type { IpcMap } from '@/shared/ipc'
+import type { RegistryDeps } from '@/main/registry'
+import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/registry'
+import type { ApplyItemActionParams } from '@/main/actions/apply'
+import type { ApplyItemDecisionParams } from '@/main/actions/decide'
 
 export interface ItemActionDeps {
   readonly listRepositories: typeof listRepositories

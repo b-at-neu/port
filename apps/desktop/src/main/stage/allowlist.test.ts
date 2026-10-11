@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { join } from 'node:path'
-import { allowRule } from './allowlist'
-import type { FileResult } from '../platform/files'
+import { allowRule } from '@/main/stage/allowlist'
+import type { FileResult } from '@/main/platform/files'
 
 function fakeFs(initial: Record<string, unknown>) {
   const files = new Map<string, unknown>(Object.entries(initial))

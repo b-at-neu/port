@@ -1,10 +1,10 @@
 // Sole creator/remover of session worktrees. Never deletes a branch; never forces removal without an explicit caller choice. Through `GitRunner` only — never a direct subprocess call.
 import { randomBytes } from 'node:crypto'
-import type { GitRunner } from '../platform/git'
-import { resolveGitBaseRoot } from '../platform/git'
-import { pathOps as defaultPathOps } from '../platform/paths'
-import type { PathOps } from '../platform/paths'
-import { readTextFile, writeTextFile } from '../platform/files'
+import type { GitRunner } from '@/main/platform/git'
+import { resolveGitBaseRoot } from '@/main/platform/git'
+import { pathOps as defaultPathOps } from '@/main/platform/paths'
+import type { PathOps } from '@/main/platform/paths'
+import { readTextFile, writeTextFile } from '@/main/platform/files'
 
 export type CreateSessionWorktreeResult = { readonly ok: true; readonly path: string; readonly branch: string; readonly baseSha: string } | { readonly ok: false; readonly message: string }
 

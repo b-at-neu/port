@@ -1,13 +1,13 @@
 // Both the current four-field form and the legacy three-field form coexist in a real log, so both are parsed.
-import { defaultGitRunner, resolveGitBaseRoot } from '../platform/git'
-import { pathOps as defaultPathOps } from '../platform/paths'
-import { readTextFile } from '../platform/files'
-import type { FileFailureKind } from '../platform/files'
-import type { GitRunner } from '../platform/git'
-import type { PathOps } from '../platform/paths'
-import type { AssertEqual } from '../../shared/assert-type'
-import { summarizeDenials } from '../../shared/local/summary'
-import type { DenialActor, DenialDecision, DenialEntry, DenialsFailureKind, DenialsRead } from '../../shared/local/types'
+import { defaultGitRunner, resolveGitBaseRoot } from '@/main/platform/git'
+import { pathOps as defaultPathOps } from '@/main/platform/paths'
+import { readTextFile } from '@/main/platform/files'
+import type { FileFailureKind } from '@/main/platform/files'
+import type { GitRunner } from '@/main/platform/git'
+import type { PathOps } from '@/main/platform/paths'
+import type { AssertEqual } from '@/shared/assert-type'
+import { summarizeDenials } from '@/shared/local/summary'
+import type { DenialActor, DenialDecision, DenialEntry, DenialsFailureKind, DenialsRead } from '@/shared/local/types'
 
 export type { GitRunner }
 

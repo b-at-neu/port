@@ -4,10 +4,10 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { CommandResult } from '../platform/run'
-import { inspectDenials } from '../../shared/local/inspect'
-import { readDenials } from './denials'
-import type { GitRunner } from './denials'
+import type { CommandResult } from '@/main/platform/run'
+import { inspectDenials } from '@/shared/local/inspect'
+import { readDenials } from '@/main/local/denials'
+import type { GitRunner } from '@/main/local/denials'
 
 const realRead = await readDenials({ repoRoot: process.cwd() })
 const hasRealLog = realRead.ok && realRead.present

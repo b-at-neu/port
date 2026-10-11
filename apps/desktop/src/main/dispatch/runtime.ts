@@ -1,18 +1,18 @@
 // Bundles the dispatch loop's own process-lifetime state so main/ipc.ts creates one thing
 // instead of wiring several by hand.
-import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '../tick/ledger'
-import type { DispatchLedger, RefreshMemo, UnknownStreaks } from '../tick/ledger'
-import type { RepoId } from '../../shared/repos'
-import type { RepoDispatchStatus } from '../../shared/dispatch/types'
-import { applyObservation } from '../actions/observe'
-import { autoApprovePlan } from '../actions/gate'
-import { escalateToHuman } from '../actions/escalate'
-import { createBudgetGate } from './budget-gate'
-import { createDispatcher } from './dispatcher'
-import type { CreateDispatcherParams, Dispatcher } from './dispatcher'
-import { createAutoPlanner } from './auto-plan'
-import type { AutoPlanner, AutoPlannerDeps } from './auto-plan'
-import type { EndedStage } from '../../shared/tick/types'
+import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
+import type { DispatchLedger, RefreshMemo, UnknownStreaks } from '@/main/tick/ledger'
+import type { RepoId } from '@/shared/repos'
+import type { RepoDispatchStatus } from '@/shared/dispatch/types'
+import { applyObservation } from '@/main/actions/observe'
+import { autoApprovePlan } from '@/main/actions/gate'
+import { escalateToHuman } from '@/main/actions/escalate'
+import { createBudgetGate } from '@/main/dispatch/budget-gate'
+import { createDispatcher } from '@/main/dispatch/dispatcher'
+import type { CreateDispatcherParams, Dispatcher } from '@/main/dispatch/dispatcher'
+import { createAutoPlanner } from '@/main/dispatch/auto-plan'
+import type { AutoPlanner, AutoPlannerDeps } from '@/main/dispatch/auto-plan'
+import type { EndedStage } from '@/shared/tick/types'
 
 export interface WatcherDeps {
   readonly ledger: DispatchLedger

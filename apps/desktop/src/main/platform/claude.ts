@@ -1,5 +1,5 @@
-import { runCommand } from './run'
-import type { CommandResult, RunCommandOptions } from './run'
+import { runCommand } from '@/main/platform/run'
+import type { CommandResult, RunCommandOptions } from '@/main/platform/run'
 
 export type ClaudeOptions = Omit<RunCommandOptions, 'whichEnv' | 'platform'>
 

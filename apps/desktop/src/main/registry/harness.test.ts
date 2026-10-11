@@ -1,10 +1,10 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { CommandResult } from '../platform/run'
-import { currentBranch, permissionsState, refsCarryingConfig } from './harness'
-import type { GitRunner } from './harness'
-import { makeTempDir } from '../../testing/fixtures'
+import type { CommandResult } from '@/main/platform/run'
+import { currentBranch, permissionsState, refsCarryingConfig } from '@/main/registry/harness'
+import type { GitRunner } from '@/main/registry/harness'
+import { makeTempDir } from '@/testing/fixtures'
 
 function ok(stdout: string): CommandResult {
   return { ok: true, stdout, stderr: '' }

@@ -1,7 +1,7 @@
 // Fixture mode's canned `folders:list`/`session:changes` — one port repo, one plain folder, and a
 // two-file diff for the streaming session.
-import type { FolderEntry, FolderId, SessionChanges } from '../../shared/workspace/types'
-import { WIDGETS_ID } from './repos'
+import type { FolderEntry, FolderId, SessionChanges } from '@/shared/workspace/types'
+import { WIDGETS_ID } from '@/main/fixtures/repos'
 
 export function fixtureFolders(now: Date): readonly FolderEntry[] {
   return [

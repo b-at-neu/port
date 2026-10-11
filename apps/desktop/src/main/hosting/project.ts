@@ -1,11 +1,11 @@
 // A pure projector turning the live SDK message stream into the same TranscriptEntry shape
 // already derived from a session's on-disk .jsonl. Never throws: an unrecognized message is skipped.
-import type { EntryPatch, MetaEntry, TranscriptEntry } from '../../shared/sessions/transcript'
-import { MAX_PAYLOAD_CHARS } from '../../shared/sessions/transcript'
-import { isRecord } from '../../shared/guards'
-import { createDeriver, sanitize } from '../sessions/transcript-entries'
-import type { LiveBlock, LiveBlockKind, PartialUpdate, SessionEntriesDelta } from '../../shared/hosting/types'
-import type { ContentBlock } from './content'
+import type { EntryPatch, MetaEntry, TranscriptEntry } from '@/shared/sessions/transcript'
+import { MAX_PAYLOAD_CHARS } from '@/shared/sessions/transcript'
+import { isRecord } from '@/shared/guards'
+import { createDeriver, sanitize } from '@/main/sessions/transcript-entries'
+import type { LiveBlock, LiveBlockKind, PartialUpdate, SessionEntriesDelta } from '@/shared/hosting/types'
+import type { ContentBlock } from '@/main/hosting/content'
 
 export interface CreateSessionProjectorParams {
   /** Used only to shorten a headline path, never to resolve or open anything. */

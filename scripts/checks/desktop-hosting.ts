@@ -246,7 +246,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
       fail('desktop-hosting', `${hostingDir}/project.ts does not exist`);
     } else {
       const text = readFileSync(projectFile, 'utf8');
-      expect(!(!/createDeriver/.test(text) || !/from\s+['"]\.\.\/sessions\/transcript-entries['"]/.test(text)), 'desktop-hosting', `${hostingDir}/project.ts does not import 'createDeriver' from '../sessions/transcript-entries'`);
+      expect(!(!/createDeriver/.test(text) || !/from\s+['"]@\/main\/sessions\/transcript-entries['"]/.test(text)), 'desktop-hosting', `${hostingDir}/project.ts does not import 'createDeriver' from '@/main/sessions/transcript-entries'`);
     }
   }
 

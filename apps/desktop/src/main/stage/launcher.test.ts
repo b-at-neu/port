@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createStageLauncher } from './launcher'
-import type { StageLaunchRequest } from '../dispatch/launch'
-import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '../../shared/hosting/types'
-import type { StartSessionParams } from '../hosting/store'
-import { WIDGETS_ID, FIXTURE_REPOSITORIES } from '../fixtures/repos'
-import type { ReadyEntry } from '../actions/apply'
+import { createStageLauncher } from '@/main/stage/launcher'
+import type { StageLaunchRequest } from '@/main/dispatch/launch'
+import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '@/shared/hosting/types'
+import type { StartSessionParams } from '@/main/hosting/store'
+import { WIDGETS_ID, FIXTURE_REPOSITORIES } from '@/main/fixtures/repos'
+import type { ReadyEntry } from '@/main/actions/apply'
 
 const ENTRY = FIXTURE_REPOSITORIES.find((r) => r.id === WIDGETS_ID) as ReadyEntry
 

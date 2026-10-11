@@ -1,12 +1,12 @@
 // readOwnership / takeOwnership / releaseOwnership over `<base repo root>/.agents/cockpit.json`,
 // resolving the base root the same way every worktree of a checkout sees the one record.
-import { defaultGitRunner, resolveGitBaseRoot } from '../platform/git'
-import { ensureDirectory, readTextFile, removeFile, writeJsonFileAtomic } from '../platform/files'
-import { pathOps as defaultPathOps } from '../platform/paths'
-import type { FileFailureKind } from '../platform/files'
-import type { GitRunner } from '../platform/git'
-import type { PathOps } from '../platform/paths'
-import type { OwnershipSummary } from '../../shared/writes/types'
+import { defaultGitRunner, resolveGitBaseRoot } from '@/main/platform/git'
+import { ensureDirectory, readTextFile, removeFile, writeJsonFileAtomic } from '@/main/platform/files'
+import { pathOps as defaultPathOps } from '@/main/platform/paths'
+import type { FileFailureKind } from '@/main/platform/files'
+import type { GitRunner } from '@/main/platform/git'
+import type { PathOps } from '@/main/platform/paths'
+import type { OwnershipSummary } from '@/shared/writes/types'
 
 export type { GitRunner }
 

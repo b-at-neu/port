@@ -1,10 +1,10 @@
 // Split out of plan.test.ts to keep that file under the file-size limit: the cycle-cap/zero-diff
 // and refresh-wins/mergeability gate coverage, which shares no state with the rest of that file.
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '../../shared/repos'
-import type { ReconciledItem, RepositoryState } from '../../shared/state/types'
-import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from './ledger'
-import { planTick } from './plan'
+import type { RepoId } from '@/shared/repos'
+import type { ReconciledItem, RepositoryState } from '@/shared/state/types'
+import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
+import { planTick } from '@/main/tick/plan'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 const NEXT_DECISION_AT = new Date('2026-01-01T01:01:00.000Z')

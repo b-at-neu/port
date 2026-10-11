@@ -1,6 +1,6 @@
 // Pin and archive marks: an insertion-ordered, capped set per kind. Idempotent — setting
 // an id to its current state is a no-op rather than moving it to the end.
-import type { SessionMarks } from '../../shared/hosting/types'
+import type { SessionMarks } from '@/shared/hosting/types'
 
 /** Per-kind cap; the oldest id is dropped to make room for a new one. */
 export const MARKS_LIMIT = 500

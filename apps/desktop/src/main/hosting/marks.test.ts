@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createSessionMarks, MARKS_LIMIT } from './marks'
+import { createSessionMarks, MARKS_LIMIT } from '@/main/hosting/marks'
 
 describe('createSessionMarks', () => {
   it('starts from the given initial state', () => {

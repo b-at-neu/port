@@ -1,15 +1,15 @@
 // Pause-then-stop-every-claim. Every write goes through applyItemAction, the same chokepoint
 // the board's own row buttons use.
-import { actionsFor, stageKeyOf } from '../../shared/actions/plan'
-import type { ItemActionResult } from '../../shared/actions/types'
-import { labelName } from '../../shared/labels/vocabulary'
-import type { BoardSnapshot } from '../../shared/board/types'
-import type { HaltItemOutcome, HaltReport } from '../../shared/dispatch/types'
-import type { ReconciledItem } from '../../shared/state/types'
-import type { RepoId } from '../../shared/repos'
-import { applyItemAction as defaultApplyItemAction } from '../actions/apply'
-import type { ApplyItemActionParams, ReadyEntry } from '../actions/apply'
-import type { RunStateStore } from './store'
+import { actionsFor, stageKeyOf } from '@/shared/actions/plan'
+import type { ItemActionResult } from '@/shared/actions/types'
+import { labelName } from '@/shared/labels/vocabulary'
+import type { BoardSnapshot } from '@/shared/board/types'
+import type { HaltItemOutcome, HaltReport } from '@/shared/dispatch/types'
+import type { ReconciledItem } from '@/shared/state/types'
+import type { RepoId } from '@/shared/repos'
+import { applyItemAction as defaultApplyItemAction } from '@/main/actions/apply'
+import type { ApplyItemActionParams, ReadyEntry } from '@/main/actions/apply'
+import type { RunStateStore } from '@/main/dispatch/store'
 
 export interface HaltDispatchParams {
   readonly snapshot: BoardSnapshot

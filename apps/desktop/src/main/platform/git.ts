@@ -1,7 +1,7 @@
-import { pathOps } from './paths'
-import type { PathOps } from './paths'
-import { runCommand } from './run'
-import type { CommandResult, RunCommandOptions } from './run'
+import { pathOps } from '@/main/platform/paths'
+import type { PathOps } from '@/main/platform/paths'
+import { runCommand } from '@/main/platform/run'
+import type { CommandResult, RunCommandOptions } from '@/main/platform/run'
 
 export interface GitOptions extends Omit<RunCommandOptions, 'whichEnv' | 'platform'> {
   readonly cwd: string

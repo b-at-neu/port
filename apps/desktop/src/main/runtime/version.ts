@@ -1,8 +1,8 @@
 // No semver dependency — a three-number component-wise compare is all a `\d+\.\d+\.\d+` prefix needs. Below the minimum never blocks: the policy is "try it and see", so this only sets `belowMinimum`.
-import { claude } from '../platform/claude'
-import type { ClaudeOptions } from '../platform/claude'
-import type { CommandResult } from '../platform/run'
-import { MINIMUM_CLAUDE_CODE_VERSION } from '../../shared/runtime/types'
+import { claude } from '@/main/platform/claude'
+import type { ClaudeOptions } from '@/main/platform/claude'
+import type { CommandResult } from '@/main/platform/run'
+import { MINIMUM_CLAUDE_CODE_VERSION } from '@/shared/runtime/types'
 
 const VERSION_RE = /(\d+)\.(\d+)\.(\d+)/
 

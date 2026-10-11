@@ -1,7 +1,7 @@
 // The only file in the app allowed to name `--add-label`/`--remove-label`. Pure: no `gh`, no filesystem.
-import { labelName } from '../../shared/labels/vocabulary'
-import type { LabelKey, LabelVocabulary } from '../../shared/labels/vocabulary'
-import type { LabelWriteRequest } from '../../shared/writes/types'
+import { labelName } from '@/shared/labels/vocabulary'
+import type { LabelKey, LabelVocabulary } from '@/shared/labels/vocabulary'
+import type { LabelWriteRequest } from '@/shared/writes/types'
 
 export interface ResolvedNames {
   readonly addNames: readonly string[]

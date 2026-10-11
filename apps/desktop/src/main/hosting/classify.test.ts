@@ -1,9 +1,9 @@
 // Runs classifyEnd over the shared case table also read by scripts/checks/desktop-hosting.ts.
 import { describe, expect, it } from 'vitest'
-import { classifyEnd } from './classify'
-import type { ClassifyEndInput, ClassifyEndResult } from './classify'
-import cases from './classify.cases.json'
-import type { SessionEndReason } from '../../shared/hosting/types'
+import { classifyEnd } from '@/main/hosting/classify'
+import type { ClassifyEndInput, ClassifyEndResult } from '@/main/hosting/classify'
+import cases from '@/main/hosting/classify.cases.json'
+import type { SessionEndReason } from '@/shared/hosting/types'
 
 interface Case {
   readonly name: string

@@ -1,13 +1,13 @@
 // Local-only: no `gh` call, no item state, no removal. Three batched `git` invocations per repository,
 // independent of worktree count.
-import { git as defaultGit, parsePorcelainStanzas } from '../platform/git'
-import { pathOps as defaultPathOps } from '../platform/paths'
-import type { CommandResult } from '../platform/run'
-import type { GitRunner } from '../platform/git'
-import type { PathOps } from '../platform/paths'
-import type { AssertEqual } from '../../shared/assert-type'
-import type { LocalFailureKind, WorktreeEntry, WorktreeProducer, WorktreesRead } from '../../shared/local/types'
-import { correlate } from './correlate'
+import { git as defaultGit, parsePorcelainStanzas } from '@/main/platform/git'
+import { pathOps as defaultPathOps } from '@/main/platform/paths'
+import type { CommandResult } from '@/main/platform/run'
+import type { GitRunner } from '@/main/platform/git'
+import type { PathOps } from '@/main/platform/paths'
+import type { AssertEqual } from '@/shared/assert-type'
+import type { LocalFailureKind, WorktreeEntry, WorktreeProducer, WorktreesRead } from '@/shared/local/types'
+import { correlate } from '@/main/local/correlate'
 
 export type { GitRunner }
 

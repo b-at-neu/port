@@ -1,11 +1,11 @@
 // session:restore / :list / :discard — split out of hosting.test.ts to stay under the file size limit.
 import { describe, expect, it, vi } from 'vitest'
-import type { RepoId } from '../../shared/repos'
-import type { RegistryDeps } from '../registry'
-import type { HostedStore } from '../hosting/store'
-import type { ResolveStartTargetDeps, ResolvedStartTarget } from '../workspace/target'
-import { resolveSessionRestore, resolveSessionRestoreDiscard, resolveSessionRestoreList } from './hosting'
-import type { HostingChannelDeps } from './hosting'
+import type { RepoId } from '@/shared/repos'
+import type { RegistryDeps } from '@/main/registry'
+import type { HostedStore } from '@/main/hosting/store'
+import type { ResolveStartTargetDeps, ResolvedStartTarget } from '@/main/workspace/target'
+import { resolveSessionRestore, resolveSessionRestoreDiscard, resolveSessionRestoreList } from '@/main/channels/hosting'
+import type { HostingChannelDeps } from '@/main/channels/hosting'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 

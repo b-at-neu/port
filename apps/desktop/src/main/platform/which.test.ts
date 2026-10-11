@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createWhich } from './which'
+import { createWhich } from '@/main/platform/which'
 
 describe('which', () => {
   it('an override env var wins over PATH', async () => {

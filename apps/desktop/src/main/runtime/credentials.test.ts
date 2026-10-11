@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { readCredentialsTell } from './credentials'
-import { makeClaudeHome } from '../../testing/fixtures'
+import { readCredentialsTell } from '@/main/runtime/credentials'
+import { makeClaudeHome } from '@/testing/fixtures'
 
 describe('readCredentialsTell', () => {
   it('a healthy token reports present, its expiresAt, and hasRefreshToken', async () => {

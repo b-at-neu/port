@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createPermissionBroker, DEFAULT_DENY_MESSAGE } from './permissions'
-import type { PermissionUpdate } from './sdk'
+import { createPermissionBroker, DEFAULT_DENY_MESSAGE } from '@/main/hosting/permissions'
+import type { PermissionUpdate } from '@/main/hosting/sdk'
 
 function baseOptions(overrides: Record<string, unknown> = {}) {
   const controller = new AbortController()

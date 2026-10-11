@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import type { LabelKey, LabelVocabulary, ResolvedLabel } from '../../shared/labels/vocabulary'
-import type { ReconciledItem } from '../../shared/state/types'
-import type { TickObservation } from '../../shared/tick/types'
-import { observationWrite } from './observation'
-import type { WriteObservation } from './observation'
+import type { LabelKey, LabelVocabulary, ResolvedLabel } from '@/shared/labels/vocabulary'
+import type { ReconciledItem } from '@/shared/state/types'
+import type { TickObservation } from '@/shared/tick/types'
+import { observationWrite } from '@/main/dispatch/observation'
+import type { WriteObservation } from '@/main/dispatch/observation'
 
 const REPO_ID = 'repo-a' as ReconciledItem['repoId']
 

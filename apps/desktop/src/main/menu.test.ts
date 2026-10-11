@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { menuTemplate } from './menu'
+import { menuTemplate } from '@/main/menu'
 
 function labelsOf(submenu: unknown): string[] {
   if (!Array.isArray(submenu)) return []

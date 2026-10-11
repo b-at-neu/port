@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { createPathOps } from '../platform/paths'
-import type { CommandResult } from '../platform/run'
-import type { NodeRunner } from '../platform/node'
-import { SCRIPT_FAIL_PREFIX } from './report'
-import { runReclaim } from './reclaim'
+import { createPathOps } from '@/main/platform/paths'
+import type { CommandResult } from '@/main/platform/run'
+import type { NodeRunner } from '@/main/platform/node'
+import { SCRIPT_FAIL_PREFIX } from '@/main/reclaimer/report'
+import { runReclaim } from '@/main/reclaimer/reclaim'
 
 const posixPathOps = createPathOps('posix', { home: '/home/op' })
 

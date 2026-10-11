@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createHostedHandle } from './handle'
-import type { HostedQuery } from './handle'
-import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
-import type { PluginRequest, SessionKey } from '../../shared/hosting/types'
-import type { RepoId } from '../../shared/repos'
-import type { SessionWorkspace } from '../../shared/workspace/types'
+import { createHostedHandle } from '@/main/hosting/handle'
+import type { HostedQuery } from '@/main/hosting/handle'
+import { DEFAULT_SESSION_DEFAULTS } from '@/shared/hosting/types'
+import type { PluginRequest, SessionKey } from '@/shared/hosting/types'
+import type { RepoId } from '@/shared/repos'
+import type { SessionWorkspace } from '@/shared/workspace/types'
 
 const SESSION_KEY = 'hosted-1' as SessionKey
 const REPO_ID = 'repo-1' as RepoId

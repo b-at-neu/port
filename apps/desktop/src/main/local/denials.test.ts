@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { chmod, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { CommandResult } from '../platform/run'
-import { readDenials } from './denials'
-import type { GitRunner } from './denials'
+import type { CommandResult } from '@/main/platform/run'
+import { readDenials } from '@/main/local/denials'
+import type { GitRunner } from '@/main/local/denials'
 
 const NOT_A_REPO: CommandResult = { ok: false, kind: 'nonzero', code: 128, stdout: '', stderr: 'fatal: not a git repository' }
 const now = () => new Date('2026-01-01T00:00:00.000Z')

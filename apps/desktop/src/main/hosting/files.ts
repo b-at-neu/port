@@ -1,7 +1,7 @@
 // The `@` suggestion list's own file source: git's own listing when `cwd` is a work tree, a bounded walk otherwise.
-import { listDirectory } from '../platform/files'
-import { gitLines } from '../platform/git'
-import type { GitLinesResult } from '../platform/git'
+import { listDirectory } from '@/main/platform/files'
+import { gitLines } from '@/main/platform/git'
+import type { GitLinesResult } from '@/main/platform/git'
 
 export const MAX_FILES = 20_000
 

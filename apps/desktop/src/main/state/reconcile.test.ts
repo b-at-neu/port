@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '../../shared/labels/vocabulary'
-import type { PipelineFetch, PipelineItem } from '../../shared/github/types'
-import type { RepositoryEntry } from '../../shared/repos'
-import type { WorktreeEntry, WorktreesRead } from '../../shared/local/types'
-import type { AgentRecord, SessionRecord } from '../../shared/sessions/types'
-import { reconcileRepository, type RepoSessionSlice } from './reconcile'
+import { resolveVocabulary } from '@/shared/labels/vocabulary'
+import type { PipelineFetch, PipelineItem } from '@/shared/github/types'
+import type { RepositoryEntry } from '@/shared/repos'
+import type { WorktreeEntry, WorktreesRead } from '@/shared/local/types'
+import type { AgentRecord, SessionRecord } from '@/shared/sessions/types'
+import { reconcileRepository, type RepoSessionSlice } from '@/main/state/reconcile'
 
 const VOCABULARY = resolveVocabulary({})
 

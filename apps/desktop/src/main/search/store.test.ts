@@ -1,9 +1,9 @@
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { readSignatureIndex, writeSignatureIndex } from './store'
-import type { SignatureIndexEntry } from './store'
-import { makeTempDir } from '../../testing/fixtures'
+import { readSignatureIndex, writeSignatureIndex } from '@/main/search/store'
+import type { SignatureIndexEntry } from '@/main/search/store'
+import { makeTempDir } from '@/testing/fixtures'
 
 const ENTRY_A: SignatureIndexEntry = { path: '/a.jsonl', sizeBytes: 10, modifiedAt: '2026-01-01T00:00:00.000Z', bits: 1024, signature: 'AAAA' }
 

@@ -1,8 +1,8 @@
 // Pure title resolution, composed before spawn so the rail never shows a bare session id while init is in flight.
-import { sanitize } from '../sessions/transcript-entries'
-import type { RawSession, SessionReader } from '../sessions/sdk'
-import { forkTitle } from './fork'
-import type { SessionStartMode } from '../../shared/hosting/types'
+import { sanitize } from '@/main/sessions/transcript-entries'
+import type { RawSession, SessionReader } from '@/main/sessions/sdk'
+import { forkTitle } from '@/main/hosting/fork'
+import type { SessionStartMode } from '@/shared/hosting/types'
 
 const MAX_TITLE_LENGTH = 60
 

@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import { resolveStartTarget } from './target'
-import type { ResolveStartTargetDeps } from './target'
-import { toFolderId } from './resolve'
-import { pathOps } from '../platform/paths'
-import type { RepositoryEntry } from '../../shared/repos'
-import type { RepoId } from '../../shared/repos'
+import { resolveStartTarget } from '@/main/workspace/target'
+import type { ResolveStartTargetDeps } from '@/main/workspace/target'
+import { toFolderId } from '@/main/workspace/resolve'
+import { pathOps } from '@/main/platform/paths'
+import type { RepositoryEntry } from '@/shared/repos'
+import type { RepoId } from '@/shared/repos'
 
 const REPO_PATH = '/home/you/src/widgets'
 const REPO_ID = 'repo-1' as RepoId

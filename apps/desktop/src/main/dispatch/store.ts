@@ -1,10 +1,10 @@
 // The per-repository run-state store: read, version gate, atomic write. Takes its directory as a
 // parameter so nothing in this module imports Electron.
-import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '../platform/files'
-import { pathOps } from '../platform/paths'
-import type { RepoId } from '../../shared/repos'
-import { RUN_STATES, RUN_TARGET } from '../../shared/dispatch/types'
-import type { RepoRunState, RunState, RunStatesSnapshot, RunStateStoreStatus } from '../../shared/dispatch/types'
+import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
+import { pathOps } from '@/main/platform/paths'
+import type { RepoId } from '@/shared/repos'
+import { RUN_STATES, RUN_TARGET } from '@/shared/dispatch/types'
+import type { RepoRunState, RunState, RunStatesSnapshot, RunStateStoreStatus } from '@/shared/dispatch/types'
 
 const DISPATCH_FILE = 'dispatch.json'
 const CURRENT_VERSION = 2

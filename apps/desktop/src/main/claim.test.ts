@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '../shared/labels/vocabulary'
-import type { LabelVocabulary } from '../shared/labels/vocabulary'
-import type { RepoId } from '../shared/repos'
-import type { ClaimPreflightFetch } from '../shared/github/types'
-import type { LabelWriteRequest, WriteOutcome } from '../shared/writes/types'
-import type { ReposListResponse } from '../shared/ipc'
-import { claimApply, claimPreflight } from './claim'
-import type { ClaimDeps } from './claim'
-import type { RegistryDeps } from './registry'
+import { resolveVocabulary } from '@/shared/labels/vocabulary'
+import type { LabelVocabulary } from '@/shared/labels/vocabulary'
+import type { RepoId } from '@/shared/repos'
+import type { ClaimPreflightFetch } from '@/shared/github/types'
+import type { LabelWriteRequest, WriteOutcome } from '@/shared/writes/types'
+import type { ReposListResponse } from '@/shared/ipc'
+import { claimApply, claimPreflight } from '@/main/claim'
+import type { ClaimDeps } from '@/main/claim'
+import type { RegistryDeps } from '@/main/registry'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 const VOCABULARY: LabelVocabulary = resolveVocabulary({})

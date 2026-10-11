@@ -6,7 +6,7 @@ import type { Reporter } from '#lib/report.ts';
 import { TOP_LEVEL_AREAS } from '#desktop/scripts/alias-imports.mjs';
 
 // The @/ alias regression guard: port/no-parent-import's own good/bad cases both ways, then the
-// "Done when" assertion — no `../` import left inside src/ under preload/ or shared/.
+// "Done when" assertion — no `../` import left inside src/ under preload/, shared/, renderer/ or main/.
 export default async function ({ expect, fail, note, ok }: Reporter) {
   const ruleUrl = pathToFileURL(join(root, 'apps/desktop/eslint/no-parent-import.mjs')).href;
   const mod = await import(ruleUrl);
@@ -25,9 +25,9 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- No ../ import left inside src/ under preload/, shared/ or renderer/ — this ticket's "Done when". ---
+  // --- No ../ import left inside src/ under preload/, shared/, renderer/ or main/ — this ticket's "Done when". ---
   {
-    const dirs = ['apps/desktop/src/preload', 'apps/desktop/src/shared', 'apps/desktop/src/renderer'];
+    const dirs = ['apps/desktop/src/preload', 'apps/desktop/src/shared', 'apps/desktop/src/renderer', 'apps/desktop/src/main'];
     let violated = false;
     let scanned = 0;
     for (const dir of dirs) {
@@ -76,5 +76,5 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     else if (!violated) ok();
   }
 
-  note(`desktop-imports: scanned preload/, shared/ and renderer/ for relative parent imports and renderer-rooted @/ imports`);
+  note(`desktop-imports: scanned preload/, shared/, renderer/ and main/ for relative parent imports and renderer-rooted @/ imports`);
 }

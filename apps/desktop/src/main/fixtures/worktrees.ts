@@ -1,6 +1,6 @@
 // Fixture mode's canned worktrees:report — one each of active, done, dirty
 // and locked, plus one orphan directory.
-import type { InspectedWorktree, WorktreesReclaimResult, WorktreesReport } from '../../shared/reclaimer/types'
+import type { InspectedWorktree, WorktreesReclaimResult, WorktreesReport } from '@/shared/reclaimer/types'
 
 function worktree(overrides: Partial<InspectedWorktree> & Pick<InspectedWorktree, 'path' | 'pathBasename' | 'state' | 'reason'>): InspectedWorktree {
   return {

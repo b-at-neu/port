@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '../../shared/labels/vocabulary'
-import type { RepoId } from '../../shared/repos'
-import type { BoardSnapshot } from '../../shared/board/types'
-import type { ReconciledItem, RepositoryState } from '../../shared/state/types'
-import type { LabelWriteRequest, WriteOutcome } from '../../shared/writes/types'
-import type { ApplyLabelsParams } from '../writes/apply'
-import type { RecoverPausedTriggerResult } from './resume'
-import { applyItemAction } from './apply'
-import type { ApplyItemActionDeps, ItemActionRequest, ReadyEntry } from './apply'
+import { resolveVocabulary } from '@/shared/labels/vocabulary'
+import type { RepoId } from '@/shared/repos'
+import type { BoardSnapshot } from '@/shared/board/types'
+import type { ReconciledItem, RepositoryState } from '@/shared/state/types'
+import type { LabelWriteRequest, WriteOutcome } from '@/shared/writes/types'
+import type { ApplyLabelsParams } from '@/main/writes/apply'
+import type { RecoverPausedTriggerResult } from '@/main/actions/resume'
+import { applyItemAction } from '@/main/actions/apply'
+import type { ApplyItemActionDeps, ItemActionRequest, ReadyEntry } from '@/main/actions/apply'
 
 const VOCABULARY = resolveVocabulary({})
 const REPO_ID = 'repo-a' as RepoId

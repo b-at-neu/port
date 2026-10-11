@@ -1,13 +1,13 @@
 // `watcher.ts` calls the same two primitives (`refreshGithub` and friends, `projectFromCache`) on its own cadence rather than a second copy of this composition.
-import type { GhRunner } from '../github/adapter'
-import { readSessionState } from '../sessions/adapter'
-import type { GitRunner } from '../local/worktrees'
-import type { RepositoryEntry } from '../../shared/repos'
-import type { FreshnessEntry, PipelineState, RepositoryState } from '../../shared/state/types'
-import { reconcileRepository } from './reconcile'
-import type { RepoSessionSlice } from './reconcile'
-import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from './sources'
-import type { SourceCache } from './sources'
+import type { GhRunner } from '@/main/github/adapter'
+import { readSessionState } from '@/main/sessions/adapter'
+import type { GitRunner } from '@/main/local/worktrees'
+import type { RepositoryEntry } from '@/shared/repos'
+import type { FreshnessEntry, PipelineState, RepositoryState } from '@/shared/state/types'
+import { reconcileRepository } from '@/main/state/reconcile'
+import type { RepoSessionSlice } from '@/main/state/reconcile'
+import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/state/sources'
+import type { SourceCache } from '@/main/state/sources'
 
 export interface ReadPipelineStateParams {
   readonly repositories: readonly RepositoryEntry[]

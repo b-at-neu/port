@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createControlsTracker } from './controls'
-import type { HostedQuery } from './sdk'
+import { createControlsTracker } from '@/main/hosting/controls'
+import type { HostedQuery } from '@/main/hosting/sdk'
 
 function fakeQuery(overrides: Partial<HostedQuery> = {}): HostedQuery {
   return {

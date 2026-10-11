@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { foldDispositions, fromShape, labelOverridesOf, parseExcusedCheckName, toShape } from './effective'
-import type { PortResolved } from './effective'
-import type { AppliedOverride } from '../../shared/repos'
+import { foldDispositions, fromShape, labelOverridesOf, parseExcusedCheckName, toShape } from '@/main/registry/effective'
+import type { PortResolved } from '@/main/registry/effective'
+import type { AppliedOverride } from '@/shared/repos'
 
 const BASE: PortResolved = {
   branches: { integration: 'dev', production: 'main' },

@@ -1,11 +1,11 @@
 // Resume and Restart compositions for an interrupted stage session — operator-only, never called
 // from the dispatch loop itself. Nothing here restarts anything on its own.
-import type { ItemActionResult } from '../../shared/actions/types'
-import type { InterruptedStage, StageResumeResult, StageRestartResult } from '../../shared/stage/types'
-import type { HostedStore } from '../hosting/store'
-import type { RemoveSessionWorktreeOutcome } from '../workspace/worktree'
-import type { StageRegistry } from './registry'
-import { STAGE_AGENT_NAMES } from './agents'
+import type { ItemActionResult } from '@/shared/actions/types'
+import type { InterruptedStage, StageResumeResult, StageRestartResult } from '@/shared/stage/types'
+import type { HostedStore } from '@/main/hosting/store'
+import type { RemoveSessionWorktreeOutcome } from '@/main/workspace/worktree'
+import type { StageRegistry } from '@/main/stage/registry'
+import { STAGE_AGENT_NAMES } from '@/main/stage/agents'
 
 /** Byte-identical restatement sent after a resumed session's `init` — the label swap already ran, so the resumed agent must never repeat its Pre-flight. */
 export const RESUME_PROMPT = 'You were interrupted. Continue your pipeline stage for #<n> from where you stopped; your label swap has already happened.'

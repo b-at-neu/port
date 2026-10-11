@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '../../shared/repos'
-import type { GateAnswerResponse, GatePreflightResponse } from '../../shared/gate/types'
-import type { BoardSnapshot } from '../../shared/board/types'
-import type { RegistryDeps } from '../registry'
-import { resolveGateAnswer, resolveGatePreflight } from './gate'
-import type { GateChannelDeps } from './gate'
+import type { RepoId } from '@/shared/repos'
+import type { GateAnswerResponse, GatePreflightResponse } from '@/shared/gate/types'
+import type { BoardSnapshot } from '@/shared/board/types'
+import type { RegistryDeps } from '@/main/registry'
+import { resolveGateAnswer, resolveGatePreflight } from '@/main/channels/gate'
+import type { GateChannelDeps } from '@/main/channels/gate'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 const registryDeps: RegistryDeps = {

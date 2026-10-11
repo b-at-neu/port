@@ -1,9 +1,9 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { createPathOps } from '../platform/paths'
-import { dedupePaths, readRegistry, writeRegistry } from './store'
-import { makeTempDir } from '../../testing/fixtures'
+import { createPathOps } from '@/main/platform/paths'
+import { dedupePaths, readRegistry, writeRegistry } from '@/main/registry/store'
+import { makeTempDir } from '@/testing/fixtures'
 
 describe('readRegistry', () => {
   it('returns empty when the file is absent', async () => {

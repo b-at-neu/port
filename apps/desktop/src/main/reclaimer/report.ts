@@ -1,18 +1,18 @@
 // Joins `readWorktrees` for the one fact the script's JSON omits (`prunable`) — this directory
 // calls no `git` itself; the join is the only reader.
-import { node as defaultNode } from '../platform/node'
-import { pathOps as defaultPathOps } from '../platform/paths'
-import type { CommandResult } from '../platform/run'
-import type { NodeRunner } from '../platform/node'
-import type { PathOps } from '../platform/paths'
-import { readWorktrees } from '../local/worktrees'
-import type { GitRunner as WorktreesGitRunner } from '../local/worktrees'
-import type { AssertEqual } from '../../shared/assert-type'
-import type { GithubResolutionState, InspectedWorktree, PorcelainJoinState, ReclaimerFailureKind, WorktreesReport } from '../../shared/reclaimer/types'
-import { isReclaimableState } from '../../shared/reclaimer/types'
-import { parseNodeCommand } from './command'
-import { describeCommandFailure } from './command-failure'
-import { parseReportPayload } from './parse'
+import { node as defaultNode } from '@/main/platform/node'
+import { pathOps as defaultPathOps } from '@/main/platform/paths'
+import type { CommandResult } from '@/main/platform/run'
+import type { NodeRunner } from '@/main/platform/node'
+import type { PathOps } from '@/main/platform/paths'
+import { readWorktrees } from '@/main/local/worktrees'
+import type { GitRunner as WorktreesGitRunner } from '@/main/local/worktrees'
+import type { AssertEqual } from '@/shared/assert-type'
+import type { GithubResolutionState, InspectedWorktree, PorcelainJoinState, ReclaimerFailureKind, WorktreesReport } from '@/shared/reclaimer/types'
+import { isReclaimableState } from '@/shared/reclaimer/types'
+import { parseNodeCommand } from '@/main/reclaimer/command'
+import { describeCommandFailure } from '@/main/reclaimer/command-failure'
+import { parseReportPayload } from '@/main/reclaimer/parse'
 
 // Fails to compile if a new `CommandResult` failure kind is added without `ReclaimerFailureKind` growing to match.
 type CommandResultFailureKind = Exclude<CommandResult, { ok: true }>['kind']

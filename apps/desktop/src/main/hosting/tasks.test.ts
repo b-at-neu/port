@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createTaskTracker } from './tasks'
+import { createTaskTracker } from '@/main/hosting/tasks'
 
 function changed(taskId: string, type: string, description: string) {
   return { type: 'system', subtype: 'background_tasks_changed', tasks: [{ task_id: taskId, type, description }] }

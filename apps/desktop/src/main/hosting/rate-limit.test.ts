@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readRateLimit } from './rate-limit'
+import { readRateLimit } from '@/main/hosting/rate-limit'
 
 const OBSERVED_AT = '2026-01-05T12:00:00.000Z'
 

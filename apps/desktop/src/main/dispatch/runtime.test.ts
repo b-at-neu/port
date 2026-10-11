@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '../../shared/repos'
-import type { HostedStore } from '../hosting/store'
-import { createDispatchRuntime } from './runtime'
+import type { RepoId } from '@/shared/repos'
+import type { HostedStore } from '@/main/hosting/store'
+import { createDispatchRuntime } from '@/main/dispatch/runtime'
 
 function fakeStore(): HostedStore {
   return {

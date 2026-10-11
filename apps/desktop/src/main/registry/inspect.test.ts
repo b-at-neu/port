@@ -2,11 +2,11 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { labelName } from '../../shared/labels/vocabulary'
-import type { LabelKey } from '../../shared/labels/vocabulary'
-import type { CommandResult } from '../platform/run'
-import { inspectRepository } from './inspect'
-import type { GitRunner } from './harness'
+import { labelName } from '@/shared/labels/vocabulary'
+import type { LabelKey } from '@/shared/labels/vocabulary'
+import type { CommandResult } from '@/main/platform/run'
+import { inspectRepository } from '@/main/registry/inspect'
+import type { GitRunner } from '@/main/registry/harness'
 
 async function makeRepoDir(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'port-registry-inspect-'))

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyGhExit, gh, ghAuthStatus, ghJson } from './gh'
+import { classifyGhExit, gh, ghAuthStatus, ghJson } from '@/main/platform/gh'
 
 describe('classifyGhExit — pure classifier, no gh spawned', () => {
   it('exit code 4 is unauthenticated, ahead of any string match', () => {

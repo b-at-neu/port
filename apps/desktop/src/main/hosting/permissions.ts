@@ -1,11 +1,11 @@
 // The per-session permission broker: every call becomes a pending request, settled by
 // an operator answer or by the SDK's own AbortSignal, never by a timer of its own.
-import type { QuestionAnswerResult, PlanAnswerResult, PlanDecision } from '../../shared/hosting/controls'
-import type { PendingPermission, PermissionDecision, SessionPermissionAnswerResult } from '../../shared/hosting/types'
-import { narrowSessionGrant } from './grant'
-import { answersMatch, narrowInteraction, planApproveResult, planKeepResult, questionResult } from './interactions'
-import type { CanUseTool, PermissionResult, PermissionUpdate } from './sdk'
-import type { StagePolicyDecision } from './stage-policy'
+import type { QuestionAnswerResult, PlanAnswerResult, PlanDecision } from '@/shared/hosting/controls'
+import type { PendingPermission, PermissionDecision, SessionPermissionAnswerResult } from '@/shared/hosting/types'
+import { narrowSessionGrant } from '@/main/hosting/grant'
+import { answersMatch, narrowInteraction, planApproveResult, planKeepResult, questionResult } from '@/main/hosting/interactions'
+import type { CanUseTool, PermissionResult, PermissionUpdate } from '@/main/hosting/sdk'
+import type { StagePolicyDecision } from '@/main/hosting/stage-policy'
 
 export const DEFAULT_DENY_MESSAGE = 'The operator denied this tool call.'
 

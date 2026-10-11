@@ -1,11 +1,11 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { createHostingPersistence, DEFAULT_SESSION_LIMIT } from './persist'
-import type { HostingPersistedState, HostingPersistence } from './persist'
-import type { RepoId } from '../../shared/repos'
-import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
-import { makeTempDir } from '../../testing/fixtures'
+import { createHostingPersistence, DEFAULT_SESSION_LIMIT } from '@/main/hosting/persist'
+import type { HostingPersistedState, HostingPersistence } from '@/main/hosting/persist'
+import type { RepoId } from '@/shared/repos'
+import { DEFAULT_SESSION_DEFAULTS } from '@/shared/hosting/types'
+import { makeTempDir } from '@/testing/fixtures'
 
 const ENTRY = { repoId: 'repo-1' as RepoId, claudeSessionId: 'session-1', title: 'Title', startedAt: '2026-01-01T00:00:00.000Z' }
 const EMPTY_MARKS = { pinned: [], archived: [] }

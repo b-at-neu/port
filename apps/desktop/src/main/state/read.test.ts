@@ -2,13 +2,13 @@ import { mkdir, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { pathOps } from '../platform/paths'
-import type { CommandResult } from '../platform/run'
-import type { GhResult } from '../platform/gh'
-import type { RepositoryEntry } from '../../shared/repos'
-import { resolveVocabulary } from '../../shared/labels/vocabulary'
-import { readPipelineState } from './read'
-import { makeTempDir } from '../../testing/fixtures'
+import { pathOps } from '@/main/platform/paths'
+import type { CommandResult } from '@/main/platform/run'
+import type { GhResult } from '@/main/platform/gh'
+import type { RepositoryEntry } from '@/shared/repos'
+import { resolveVocabulary } from '@/shared/labels/vocabulary'
+import { readPipelineState } from '@/main/state/read'
+import { makeTempDir } from '@/testing/fixtures'
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -177,7 +177,7 @@ describe.skipIf(!hasRealProjects)('readPipelineState — live', () => {
   it(
     'every item carries a non-null status, every stalled item carries a statusEvidence, and freshness.github.at is populated',
     async (ctx) => {
-      const { ghAuthStatus, ghJson } = await import('../platform/gh')
+      const { ghAuthStatus, ghJson } = await import('@/main/platform/gh')
       const auth = await ghAuthStatus()
       if (!auth.ok || !auth.authenticated) {
         ctx.skip()

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { TranscriptTailOpen, TranscriptTailPoll } from '../../shared/sessions/transcript'
-import { resolveTranscriptTailClose, resolveTranscriptTailOpen, resolveTranscriptTailPoll } from './sessions'
-import type { TranscriptTailDeps } from './sessions'
+import type { TranscriptTailOpen, TranscriptTailPoll } from '@/shared/sessions/transcript'
+import { resolveTranscriptTailClose, resolveTranscriptTailOpen, resolveTranscriptTailPoll } from '@/main/channels/sessions'
+import type { TranscriptTailDeps } from '@/main/channels/sessions'
 
 function tailDepsWith(overrides: Partial<TranscriptTailDeps>): TranscriptTailDeps {
   return {

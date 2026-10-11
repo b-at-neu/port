@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createHostedInput } from './input'
+import { createHostedInput } from '@/main/hosting/input'
 
 async function next(input: ReturnType<typeof createHostedInput>) {
   const iterator = input.stream[Symbol.asyncIterator]()

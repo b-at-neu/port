@@ -1,14 +1,14 @@
 // One directory to one RepositoryEntry — pure given its injected `git` runner, so tests need no real repository.
 import { basename } from 'node:path'
-import { pathOps } from '../platform/paths'
-import { readJsonFile, statPath } from '../platform/files'
-import { resolveVocabulary } from '../../shared/labels/vocabulary'
-import type { RepoDiagnostic, RepoId, RepoProblem, RepositoryEntry, ResolvedRepoConfig, SchemaViolation } from '../../shared/repos'
-import { currentBranch, permissionsState, refsCarryingConfig } from './harness'
-import type { GitRunner } from './harness'
-import { resolveEffectiveConfig } from './effective'
-import type { PortResolved } from './effective'
-import { CONFIG_DEFAULTS, validateConfig } from './schema'
+import { pathOps } from '@/main/platform/paths'
+import { readJsonFile, statPath } from '@/main/platform/files'
+import { resolveVocabulary } from '@/shared/labels/vocabulary'
+import type { RepoDiagnostic, RepoId, RepoProblem, RepositoryEntry, ResolvedRepoConfig, SchemaViolation } from '@/shared/repos'
+import { currentBranch, permissionsState, refsCarryingConfig } from '@/main/registry/harness'
+import type { GitRunner } from '@/main/registry/harness'
+import { resolveEffectiveConfig } from '@/main/registry/effective'
+import type { PortResolved } from '@/main/registry/effective'
+import { CONFIG_DEFAULTS, validateConfig } from '@/main/registry/schema'
 
 export interface InspectDeps {
   readonly git: GitRunner

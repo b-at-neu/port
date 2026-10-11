@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { budgetLiveSets, budgetRoute, dispatchArgs, escalationBody, parseSweepLine, parseVerdict, resetArgs, sumCostUsd, sweepArgs } from './budget'
-import type { StageRecord } from './launch'
-import type { SessionKey } from '../../shared/hosting/types'
-import type { TickActionable } from '../../shared/tick/types'
+import { budgetLiveSets, budgetRoute, dispatchArgs, escalationBody, parseSweepLine, parseVerdict, resetArgs, sumCostUsd, sweepArgs } from '@/main/dispatch/budget'
+import type { StageRecord } from '@/main/dispatch/launch'
+import type { SessionKey } from '@/shared/hosting/types'
+import type { TickActionable } from '@/shared/tick/types'
 
 function record(overrides: Partial<StageRecord> = {}): StageRecord {
   return {

@@ -1,8 +1,8 @@
 // One line per ready repository per app poll — the desktop app's own twin to the cockpit's
 // trajectory event. Type-only, no function.
-import type { RepoId } from '../../shared/repos'
-import type { LabelKey } from '../../shared/labels/vocabulary'
-import type { StageAgent, TickBlind, TickClaimClass, TickContention, TickHeldReason } from '../../shared/tick/types'
+import type { RepoId } from '@/shared/repos'
+import type { LabelKey } from '@/shared/labels/vocabulary'
+import type { StageAgent, TickBlind, TickClaimClass, TickContention, TickHeldReason } from '@/shared/tick/types'
 
 /** `stage` is `` `${agent}-agent` ``, the same string the cockpit's own `planned.dispatch`
  *  entries carry. */

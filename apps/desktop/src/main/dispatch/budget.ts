@@ -1,7 +1,7 @@
 // Pure composition over the shipped bin/budget.mjs: argument builders, output parsing, and the
 // two-strike hold rule. No I/O — budget-gate.ts is what actually runs the script.
-import type { StageRecord } from './launch'
-import type { TickActionable } from '../../shared/tick/types'
+import type { StageRecord } from '@/main/dispatch/launch'
+import type { TickActionable } from '@/shared/tick/types'
 
 /** One session log per dispatcher — sharing one log with the cockpit would close rows this
  *  app's own agents are still working through. */

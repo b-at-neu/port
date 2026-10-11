@@ -14,8 +14,8 @@ import {
   statPath,
   writeJsonFileAtomic,
   writeTextFile,
-} from './files'
-import { makeTempDir } from '../../testing/fixtures'
+} from '@/main/platform/files'
+import { makeTempDir } from '@/testing/fixtures'
 
 describe('readTextFile', () => {
   it('reads an existing file', async () => {

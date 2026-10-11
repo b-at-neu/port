@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { GhResult } from '../platform/gh'
-import { resolveVocabulary } from '../../shared/labels/vocabulary'
-import { fetchBacklog } from './backlog'
-import type { GhRunner } from './backlog'
+import type { GhResult } from '@/main/platform/gh'
+import { resolveVocabulary } from '@/shared/labels/vocabulary'
+import { fetchBacklog } from '@/main/github/backlog'
+import type { GhRunner } from '@/main/github/backlog'
 
 function fakeRunner(result: GhResult): GhRunner {
   return () => Promise.resolve(result)

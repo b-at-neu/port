@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { TranscriptEntry } from '../../shared/sessions/transcript'
-import { hitsFor, searchableFields } from './match'
-import { parseQuery } from './terms'
+import type { TranscriptEntry } from '@/shared/sessions/transcript'
+import { hitsFor, searchableFields } from '@/main/search/match'
+import { parseQuery } from '@/main/search/terms'
 
 function payload(text: string): { text: string; omittedChars: number } {
   return { text, omittedChars: 0 }

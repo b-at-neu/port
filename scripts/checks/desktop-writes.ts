@@ -23,14 +23,14 @@ export default async function ({ expect, fail, ok }: Reporter) {
     return;
   }
 
-  // --- '../platform/gh' is imported under apps/desktop/src/ only from main/github/ and
+  // --- '@/main/platform/gh' is imported under apps/desktop/src/ only from main/github/ and
   // main/writes/, and both do import it. The import path is the mechanically checkable fact, since `gh`/`ghJson` are always called through an injected seam. ---
   {
     let sawGithub = false;
     let sawWrites = false;
-    // '../platform/gh' also exports `ghAuthStatus`/`classifyGhExit`, legitimately imported
+    // '@/main/platform/gh' also exports `ghAuthStatus`/`classifyGhExit`, legitimately imported
     // anywhere — only an import of `gh` or `ghJson` themselves is this rail's concern.
-    const importsGhOrGhJson = /import\s*(?:type\s*)?\{[^}]*\b(?:gh|ghJson)\b[^}]*\}\s*from\s*'\.\.\/platform\/gh'/;
+    const importsGhOrGhJson = /import\s*(?:type\s*)?\{[^}]*\b(?:gh|ghJson)\b[^}]*\}\s*from\s*'@\/main\/platform\/gh'/;
     for (const f of allFiles) {
       const rel = relOf(f);
       if (rel.startsWith(`${platformDir}/`) || rel.endsWith('.test.ts')) continue;
@@ -41,11 +41,11 @@ export default async function ({ expect, fail, ok }: Reporter) {
       } else if (rel.startsWith(`${writesDir}/`)) {
         sawWrites = true;
       } else {
-        fail('desktop-writes', `${rel} imports 'gh'/'ghJson' from '../platform/gh' — only main/github/ and main/writes/ may call gh/ghJson`);
+        fail('desktop-writes', `${rel} imports 'gh'/'ghJson' from '@/main/platform/gh' — only main/github/ and main/writes/ may call gh/ghJson`);
       }
     }
-    if (!sawGithub) fail('desktop-writes', `no file under ${githubDir} imports 'gh'/'ghJson' from '../platform/gh' — the guard cannot pass vacuously`);
-    if (!sawWrites) fail('desktop-writes', `no file under ${writesDir} imports 'gh'/'ghJson' from '../platform/gh' — the guard cannot pass vacuously`);
+    if (!sawGithub) fail('desktop-writes', `no file under ${githubDir} imports 'gh'/'ghJson' from '@/main/platform/gh' — the guard cannot pass vacuously`);
+    if (!sawWrites) fail('desktop-writes', `no file under ${writesDir} imports 'gh'/'ghJson' from '@/main/platform/gh' — the guard cannot pass vacuously`);
     if (sawGithub && sawWrites) ok();
   }
 

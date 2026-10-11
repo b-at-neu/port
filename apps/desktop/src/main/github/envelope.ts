@@ -1,8 +1,8 @@
 // Pure envelope parse and failure classification — no I/O. gh api graphql exits non-zero whenever
 // the response carries errors, even when data is still usable, so the envelope itself decides.
-import type { GhResult } from '../platform/gh'
-import type { LabelKey } from '../../shared/labels/vocabulary'
-import type { PipelineItemKind, TruncatedSet, UnavailableAlias } from '../../shared/github/types'
+import type { GhResult } from '@/main/platform/gh'
+import type { LabelKey } from '@/shared/labels/vocabulary'
+import type { PipelineItemKind, TruncatedSet, UnavailableAlias } from '@/shared/github/types'
 
 export interface GraphQLErrorEntry {
   readonly type?: string

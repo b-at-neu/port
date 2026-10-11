@@ -1,8 +1,8 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { buildProjectIndex, resolveSessionDir, resolveTranscriptPath } from './locate'
-import { makeClaudeHome } from '../../testing/fixtures'
+import { buildProjectIndex, resolveSessionDir, resolveTranscriptPath } from '@/main/sessions/locate'
+import { makeClaudeHome } from '@/testing/fixtures'
 
 async function makeProjectDir(claudeHome: string, name: string, sessionIds: readonly string[]): Promise<string> {
   const dir = join(claudeHome, 'projects', name)

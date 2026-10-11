@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { RepoId } from '../../shared/repos'
-import type { SessionKey } from '../../shared/hosting/types'
-import type { RegistryDeps } from '../registry'
-import type { HostedStore } from '../hosting/store'
-import type { ResolveStartTargetDeps, ResolvedStartTarget } from '../workspace/target'
+import type { RepoId } from '@/shared/repos'
+import type { SessionKey } from '@/shared/hosting/types'
+import type { RegistryDeps } from '@/main/registry'
+import type { HostedStore } from '@/main/hosting/store'
+import type { ResolveStartTargetDeps, ResolvedStartTarget } from '@/main/workspace/target'
 import {
   MAX_INVOKE_ARGS_CHARS,
   resolveSessionAttach,
@@ -20,8 +20,8 @@ import {
   resolveSessionRename,
   resolveSessionSend,
   resolveSessionStart,
-} from './hosting'
-import type { HostingChannelDeps } from './hosting'
+} from '@/main/channels/hosting'
+import type { HostingChannelDeps } from '@/main/channels/hosting'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 const SESSION_KEY = 'hosted-1' as SessionKey

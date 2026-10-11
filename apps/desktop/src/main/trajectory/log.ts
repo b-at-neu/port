@@ -1,12 +1,12 @@
 // `main/tick/` itself stays read-only; this module is a separate sibling the watcher calls
 // *after* `planTick` returns, never a write reachable from inside the tick computation.
-import { appendTextFile, ensureDirectory, renamePath, statPath } from '../platform/files'
-import { defaultGitRunner, resolveGitBaseRoot } from '../platform/git'
-import { pathOps as defaultPathOps } from '../platform/paths'
-import type { GitRunner } from '../platform/git'
-import type { PathOps } from '../platform/paths'
-import type { TickReport } from '../../shared/tick/types'
-import type { DesktopTickEvent } from './types'
+import { appendTextFile, ensureDirectory, renamePath, statPath } from '@/main/platform/files'
+import { defaultGitRunner, resolveGitBaseRoot } from '@/main/platform/git'
+import { pathOps as defaultPathOps } from '@/main/platform/paths'
+import type { GitRunner } from '@/main/platform/git'
+import type { PathOps } from '@/main/platform/paths'
+import type { TickReport } from '@/shared/tick/types'
+import type { DesktopTickEvent } from '@/main/trajectory/types'
 
 export type { GitRunner }
 

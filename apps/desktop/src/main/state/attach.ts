@@ -1,7 +1,7 @@
 // The agent, session, and worktree attachment ladders, plus the orphan-number collector — pure, no I/O.
-import type { AgentRecord, SessionRecord } from '../../shared/sessions/types'
-import type { WorktreeEntry } from '../../shared/local/types'
-import type { AttachedAgent, AttachedSession, AttachedWorktree } from '../../shared/state/types'
+import type { AgentRecord, SessionRecord } from '@/shared/sessions/types'
+import type { WorktreeEntry } from '@/shared/local/types'
+import type { AttachedAgent, AttachedSession, AttachedWorktree } from '@/shared/state/types'
 
 export interface AttachTarget {
   readonly number: number

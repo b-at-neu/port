@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { AgentRecord, SessionRecord } from '../../shared/sessions/types'
-import type { WorktreeEntry } from '../../shared/local/types'
-import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers } from './attach'
+import type { AgentRecord, SessionRecord } from '@/shared/sessions/types'
+import type { WorktreeEntry } from '@/shared/local/types'
+import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers } from '@/main/state/attach'
 
 function agent(overrides: Partial<AgentRecord> = {}): AgentRecord {
   return {

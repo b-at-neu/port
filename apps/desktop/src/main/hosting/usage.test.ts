@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readUsage } from './usage'
+import { readUsage } from '@/main/hosting/usage'
 
 const OBSERVED_AT = '2026-01-05T12:00:00.000Z'
 

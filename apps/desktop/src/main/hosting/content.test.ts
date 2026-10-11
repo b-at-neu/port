@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { buildUserContent } from './content'
-import type { ComposerAttachment } from '../../shared/hosting/attachments'
+import { buildUserContent } from '@/main/hosting/content'
+import type { ComposerAttachment } from '@/shared/hosting/attachments'
 
 describe('buildUserContent', () => {
   it('passes a string through untouched when there are no attachments', () => {

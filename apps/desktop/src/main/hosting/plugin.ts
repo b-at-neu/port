@@ -1,8 +1,8 @@
 // Resolves which plugin path a hosted session should request: the repository's own plugins/port/
 // wins over the installed cache when this checkout's manifest names `port`.
-import { listDirectory, readJsonFile } from '../platform/files'
-import { pathOps } from '../platform/paths'
-import type { PluginRequest } from '../../shared/hosting/types'
+import { listDirectory, readJsonFile } from '@/main/platform/files'
+import { pathOps } from '@/main/platform/paths'
+import type { PluginRequest } from '@/shared/hosting/types'
 
 export interface PluginManifest {
   readonly name?: string

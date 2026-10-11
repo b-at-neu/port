@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { GhResult } from '../platform/gh'
-import { fetchGatePreflight } from './gate'
-import type { GhRunner } from './gate'
+import type { GhResult } from '@/main/platform/gh'
+import { fetchGatePreflight } from '@/main/github/gate'
+import type { GhRunner } from '@/main/github/gate'
 
 function fakeRunner(result: GhResult): GhRunner {
   return () => Promise.resolve(result)

@@ -1,8 +1,8 @@
 // Pure: one machine-observation write's label plan, precondition, and comment body.
 // Mirrors scripts/port-tick/writes.ts exactly, pinned by scripts/checks/desktop-dispatch.ts.
-import type { LabelKey, LabelVocabulary } from '../../shared/labels/vocabulary'
-import type { ReconciledItem } from '../../shared/state/types'
-import type { TickObservation } from '../../shared/tick/types'
+import type { LabelKey, LabelVocabulary } from '@/shared/labels/vocabulary'
+import type { ReconciledItem } from '@/shared/state/types'
+import type { TickObservation } from '@/shared/tick/types'
 
 // A literal, not an import — this module loads standalone and can't resolve a relative import.
 const CYCLE_CAP_ESCALATION_MARKER = 'review cycles reached the cap of'

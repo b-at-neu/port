@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '../../shared/labels/vocabulary'
-import type { LabelVocabulary } from '../../shared/labels/vocabulary'
-import { ghAuthStatus, ghJson } from '../platform/gh'
-import type { GhResult } from '../platform/gh'
-import { fetchClaimPreflight, fetchItemsByNumber, fetchItemStates, fetchPipelineItems } from './adapter'
-import type { GhRunner } from './adapter'
+import { resolveVocabulary } from '@/shared/labels/vocabulary'
+import type { LabelVocabulary } from '@/shared/labels/vocabulary'
+import { ghAuthStatus, ghJson } from '@/main/platform/gh'
+import type { GhResult } from '@/main/platform/gh'
+import { fetchClaimPreflight, fetchItemsByNumber, fetchItemStates, fetchPipelineItems } from '@/main/github/adapter'
+import type { GhRunner } from '@/main/github/adapter'
 
 const VOCABULARY: LabelVocabulary = {
   labels: [

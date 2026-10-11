@@ -1,12 +1,12 @@
 // Fixture mode's canned hosted-session data — the Session screen's own
 // states. Transcript entries live in `./entries`, split out to keep this file under the line limit.
-import type { SessionControls, SessionModels } from '../../shared/hosting/controls'
-import type { HostedSessionSnapshot, SessionAttachResult, SessionHistory, SessionKey } from '../../shared/hosting/types'
-import type { SessionWorkspace } from '../../shared/workspace/types'
-import type { SearchResult } from '../../shared/search/types'
-import type { AgentRecord, SessionRecord, SessionScan } from '../../shared/sessions/types'
-import { WIDGETS_ID } from './repos'
-import { fixtureAttachEntries, fixtureHistoryEntries } from './entries'
+import type { SessionControls, SessionModels } from '@/shared/hosting/controls'
+import type { HostedSessionSnapshot, SessionAttachResult, SessionHistory, SessionKey } from '@/shared/hosting/types'
+import type { SessionWorkspace } from '@/shared/workspace/types'
+import type { SearchResult } from '@/shared/search/types'
+import type { AgentRecord, SessionRecord, SessionScan } from '@/shared/sessions/types'
+import { WIDGETS_ID } from '@/main/fixtures/repos'
+import { fixtureAttachEntries, fixtureHistoryEntries } from '@/main/fixtures/entries'
 
 export const STREAMING_KEY = 'fixture-session-streaming' as SessionKey
 export const PERMISSION_KEY = 'fixture-session-permission' as SessionKey

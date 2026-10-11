@@ -1,8 +1,8 @@
 // Runs over the shared case table also run against the reclaimer's own `correlate` export, so the two ladders can never silently disagree.
 import { describe, expect, it } from 'vitest'
-import { correlate } from './correlate'
-import type { CorrelationInput } from './correlate'
-import cases from './correlation.cases.json'
+import { correlate } from '@/main/local/correlate'
+import type { CorrelationInput } from '@/main/local/correlate'
+import cases from '@/main/local/correlation.cases.json'
 
 interface Case {
   readonly name: string

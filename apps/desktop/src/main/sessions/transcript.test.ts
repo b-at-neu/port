@@ -1,9 +1,9 @@
 import { appendFile, mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { advanceTranscript, openTranscript } from './transcript'
-import type { TranscriptCursor } from './transcript'
-import { makeClaudeHome } from '../../testing/fixtures'
+import { advanceTranscript, openTranscript } from '@/main/sessions/transcript'
+import type { TranscriptCursor } from '@/main/sessions/transcript'
+import { makeClaudeHome } from '@/testing/fixtures'
 
 const SESSION_ID = '11111111-2222-3333-4444-555555555555'
 const AGENT_ID = 'a1b2c3d4e5'

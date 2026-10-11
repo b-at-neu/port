@@ -2,12 +2,12 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '../../shared/repos'
-import type { SessionRecord, SessionScan } from '../../shared/sessions/types'
-import { MAX_HITS_PER_TRANSCRIPT, MAX_TOTAL_HITS, SCAN_BUDGET_MS } from '../../shared/search/types'
-import type { SearchScope } from '../../shared/search/types'
-import { runSearch } from './query'
-import { makeClaudeHome } from '../../testing/fixtures'
+import type { RepoId } from '@/shared/repos'
+import type { SessionRecord, SessionScan } from '@/shared/sessions/types'
+import { MAX_HITS_PER_TRANSCRIPT, MAX_TOTAL_HITS, SCAN_BUDGET_MS } from '@/shared/search/types'
+import type { SearchScope } from '@/shared/search/types'
+import { runSearch } from '@/main/search/query'
+import { makeClaudeHome } from '@/testing/fixtures'
 
 const REPO_A = 'repo-a' as RepoId
 const REPO_B = 'repo-b' as RepoId

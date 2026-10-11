@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseNodeCommand } from './command'
+import { parseNodeCommand } from '@/main/reclaimer/command'
 
 describe('parseNodeCommand', () => {
   it('accepts a plain node prefix', () => {

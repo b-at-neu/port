@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createSessionProjector, ENTRY_RETAIN_LIMIT } from './project'
+import { createSessionProjector, ENTRY_RETAIN_LIMIT } from '@/main/hosting/project'
 
 const NOW = '2026-01-01T00:00:00.000Z'
 

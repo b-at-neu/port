@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { classifyHandback } from './handback'
-import type { ClassifyHandbackParams } from './handback'
+import { classifyHandback } from '@/main/stage/handback'
+import type { ClassifyHandbackParams } from '@/main/stage/handback'
 
 const BASE: ClassifyHandbackParams = { lastResult: null, end: null, rateLimit: null, usage: null, phase: 'streaming', operatorJoinedAt: null }
 

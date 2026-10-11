@@ -1,7 +1,7 @@
 // Pure, clock passed in, no timer of its own — this module only ever answers "when is X next due" and "how does a read change X's health".
-import { BACKOFF_CEILING_MS, RATE_LIMIT_FLOOR, SOURCE_BASE_INTERVAL_MS, SOURCE_KINDS } from '../../shared/board/types'
-import type { SourceHealth, SourceKind } from '../../shared/board/types'
-import type { RateLimitInfo } from '../../shared/github/types'
+import { BACKOFF_CEILING_MS, RATE_LIMIT_FLOOR, SOURCE_BASE_INTERVAL_MS, SOURCE_KINDS } from '@/shared/board/types'
+import type { SourceHealth, SourceKind } from '@/shared/board/types'
+import type { RateLimitInfo } from '@/shared/github/types'
 
 /** A source with no prior attempt is due immediately. `deferredUntil` always wins over the interval math, since a known reset instant beats a doubled guess. */
 export function nextDueAt(health: SourceHealth, now: Date): Date {

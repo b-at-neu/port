@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import labels from '../../../../../plugins/port/data/labels.json'
-import { AGENT_FOR_IN_FLIGHT, AGENT_FOR_TRIGGER, REFRESH_PAIR } from './routing'
+import { AGENT_FOR_IN_FLIGHT, AGENT_FOR_TRIGGER, REFRESH_PAIR } from '@/main/tick/routing'
 
 describe('AGENT_FOR_TRIGGER', () => {
   it('has exactly one entry per trigger-role label key, both directions', () => {

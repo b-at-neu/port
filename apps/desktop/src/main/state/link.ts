@@ -1,5 +1,5 @@
 // Both implement PIPELINE.md rules exactly: "slot plus form, never a body-wide substring search" for the marker, "closing keyword immediately preceding #<n>" for the link.
-import type { PipelineItemKind } from '../../shared/github/types'
+import type { PipelineItemKind } from '@/shared/github/types'
 
 const CLOSING_KEYWORDS = 'close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved'
 

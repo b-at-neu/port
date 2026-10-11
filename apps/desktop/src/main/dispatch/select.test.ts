@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { REDISPATCH_FLOOR_MS, selectDispatches } from './select'
-import type { StageRecord } from './launch'
-import type { SessionKey } from '../../shared/hosting/types'
-import type { TickActionable } from '../../shared/tick/types'
+import { REDISPATCH_FLOOR_MS, selectDispatches } from '@/main/dispatch/select'
+import type { StageRecord } from '@/main/dispatch/launch'
+import type { SessionKey } from '@/shared/hosting/types'
+import type { TickActionable } from '@/shared/tick/types'
 
 function actionable(overrides: Partial<TickActionable> = {}): TickActionable {
   return { number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null, ...overrides }

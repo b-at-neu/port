@@ -1,9 +1,9 @@
 // Map<sessionKey, Handle>, the process-lifetime instance main/ipc.ts binds, plus closeAll().
 // A start past the current limit returns at-capacity, counted against live handles only.
-import type { RepoId } from '../../shared/repos'
-import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SetControlsResult } from '../../shared/hosting/controls'
-import type { ComposerAttachment } from '../../shared/hosting/attachments'
-import { DEFAULT_SESSION_DEFAULTS } from '../../shared/hosting/types'
+import type { RepoId } from '@/shared/repos'
+import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SetControlsResult } from '@/shared/hosting/controls'
+import type { ComposerAttachment } from '@/shared/hosting/attachments'
+import { DEFAULT_SESSION_DEFAULTS } from '@/shared/hosting/types'
 import type {
   HostedSessionSnapshot,
   HostingCapacity,
@@ -28,33 +28,33 @@ import type {
   SessionStartResult,
   SessionTaskStopResult,
   WorktreeChoice,
-} from '../../shared/hosting/types'
-import { createHostedHandle } from './handle'
-import { createSessionMarks } from './marks'
-import type { SessionMarksTracker } from './marks'
-import type { HostedHandle, HostedQueryFn } from './handle'
-import { createHostedSdk } from './sdk'
-import type { HostedSdk } from './sdk'
-import { readHistory } from './history'
-import { defaultForkListSessions, titleFork } from './fork'
-import { defaultReadExpectedComponentsDeps, readExpectedComponents, resolvePluginRequest } from './plugin'
-import { resolveStartTitle } from './title'
-import { createInMemoryHostingPersistence, DEFAULT_SESSION_LIMIT, SESSION_LIMIT_CEILING } from './persist'
-import type { HostingPersistence } from './persist'
-import { dropAdopted, mintRestorable, nextPersisted, persistedOpen } from './restore'
-import type { MintedRestorable } from './restore'
-import { findAlreadyOpen, findFolderBusy } from './occupancy'
-import type { SessionReader } from '../sessions/sdk'
-import { readCredentialsTell } from '../runtime/credentials'
-import { resolveClaudeExecutable } from '../runtime/locate'
-import { pathOps } from '../platform/paths'
-import { defaultGitRunner } from '../platform/git'
-import { removeSessionWorktreeAt } from '../workspace/worktree'
-import type { RemoveSessionWorktreeOutcome } from '../workspace/worktree'
-import type { SessionWorkspace } from '../../shared/workspace/types'
-import type { StageTag } from '../../shared/hosting/stage'
+} from '@/shared/hosting/types'
+import { createHostedHandle } from '@/main/hosting/handle'
+import { createSessionMarks } from '@/main/hosting/marks'
+import type { SessionMarksTracker } from '@/main/hosting/marks'
+import type { HostedHandle, HostedQueryFn } from '@/main/hosting/handle'
+import { createHostedSdk } from '@/main/hosting/sdk'
+import type { HostedSdk } from '@/main/hosting/sdk'
+import { readHistory } from '@/main/hosting/history'
+import { defaultForkListSessions, titleFork } from '@/main/hosting/fork'
+import { defaultReadExpectedComponentsDeps, readExpectedComponents, resolvePluginRequest } from '@/main/hosting/plugin'
+import { resolveStartTitle } from '@/main/hosting/title'
+import { createInMemoryHostingPersistence, DEFAULT_SESSION_LIMIT, SESSION_LIMIT_CEILING } from '@/main/hosting/persist'
+import type { HostingPersistence } from '@/main/hosting/persist'
+import { dropAdopted, mintRestorable, nextPersisted, persistedOpen } from '@/main/hosting/restore'
+import type { MintedRestorable } from '@/main/hosting/restore'
+import { findAlreadyOpen, findFolderBusy } from '@/main/hosting/occupancy'
+import type { SessionReader } from '@/main/sessions/sdk'
+import { readCredentialsTell } from '@/main/runtime/credentials'
+import { resolveClaudeExecutable } from '@/main/runtime/locate'
+import { pathOps } from '@/main/platform/paths'
+import { defaultGitRunner } from '@/main/platform/git'
+import { removeSessionWorktreeAt } from '@/main/workspace/worktree'
+import type { RemoveSessionWorktreeOutcome } from '@/main/workspace/worktree'
+import type { SessionWorkspace } from '@/shared/workspace/types'
+import type { StageTag } from '@/shared/hosting/stage'
 
-export { DEFAULT_SESSION_LIMIT, SESSION_LIMIT_CEILING } from './persist'
+export { DEFAULT_SESSION_LIMIT, SESSION_LIMIT_CEILING } from '@/main/hosting/persist'
 
 /** Ended handles retained up to this many; the oldest-ended is evicted on the next `end`. */
 export const ENDED_RETAIN_LIMIT = 20

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '../../shared/repos'
-import type { ReposListResponse } from '../../shared/ipc'
-import { resolveClaimApply, resolveClaimPreflight } from './claim'
-import type { ClaimDeps } from '../claim'
-import type { RegistryDeps } from '../registry'
+import type { RepoId } from '@/shared/repos'
+import type { ReposListResponse } from '@/shared/ipc'
+import { resolveClaimApply, resolveClaimPreflight } from '@/main/channels/claim'
+import type { ClaimDeps } from '@/main/claim'
+import type { RegistryDeps } from '@/main/registry'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 

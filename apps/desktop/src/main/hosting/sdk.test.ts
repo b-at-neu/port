@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createHostedSdk } from './sdk'
+import { createHostedSdk } from '@/main/hosting/sdk'
 
 describe('createHostedSdk — no SDK ever loaded', () => {
   it('resolves the injected fake, never the real package', async () => {

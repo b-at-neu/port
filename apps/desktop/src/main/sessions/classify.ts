@@ -1,8 +1,8 @@
 // Pure, I/O-free classification only — `adapter.ts` is the orchestration layer, so every rule below is testable without a real transcript on disk.
-import { pathOps } from '../platform/paths'
-import type { RepoId } from '../../shared/repos'
-import { ACTIVE_WITHIN_MS, IDLE_WITHIN_MS } from '../../shared/sessions/types'
-import type { Activity, PortStageAgent, RoleEvidence, SessionRole } from '../../shared/sessions/types'
+import { pathOps } from '@/main/platform/paths'
+import type { RepoId } from '@/shared/repos'
+import { ACTIVE_WITHIN_MS, IDLE_WITHIN_MS } from '@/shared/sessions/types'
+import type { Activity, PortStageAgent, RoleEvidence, SessionRole } from '@/shared/sessions/types'
 
 /** The one place this union is declared; pinned against `plugins/port/agents/`'s real basenames. */
 export const PORT_STAGE_AGENTS: readonly PortStageAgent[] = ['plan-agent', 'impl-agent', 'review-agent', 'revise-agent']

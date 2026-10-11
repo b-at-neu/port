@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { claude } from './claude'
+import { claude } from '@/main/platform/claude'
 
 describe('claude', () => {
   it('resolves and spawns through runCommand, the same seam as git/gh/node', async () => {

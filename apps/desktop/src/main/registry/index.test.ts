@@ -1,12 +1,12 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { CommandResult } from '../platform/run'
-import { pathOps } from '../platform/paths'
-import type { GitRunner } from './harness'
-import { addRepository, listRepositories, removeRepository } from './index'
-import { readRegistry } from './store'
-import { makeTempDir } from '../../testing/fixtures'
+import type { CommandResult } from '@/main/platform/run'
+import { pathOps } from '@/main/platform/paths'
+import type { GitRunner } from '@/main/registry/harness'
+import { addRepository, listRepositories, removeRepository } from '@/main/registry/index'
+import { readRegistry } from '@/main/registry/store'
+import { makeTempDir } from '@/testing/fixtures'
 
 async function makeRepo(root: string, repo = 'acme/widgets'): Promise<void> {
   await mkdir(join(root, '.claude'), { recursive: true })

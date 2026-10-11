@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { chmod, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { CommandResult } from '../platform/run'
-import type { GhResult } from '../platform/gh'
-import type { RepoId } from '../../shared/repos'
-import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from './sources'
+import type { CommandResult } from '@/main/platform/run'
+import type { GhResult } from '@/main/platform/gh'
+import type { RepoId } from '@/shared/repos'
+import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/state/sources'
 
 const EMPTY_PIPELINE_STDOUT = JSON.stringify({ data: { repository: {}, rateLimit: { cost: 1, remaining: 4999, resetAt: '2026-01-01T00:00:00Z' } } })
 

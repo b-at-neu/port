@@ -1,7 +1,7 @@
 // Gives the renderer a follow primitive without ever exposing a TranscriptCursor across IPC. tailId is a module-local counter, not randomUUID, since its whole scope is one main process.
-import type { TranscriptTailOpen, TranscriptTailPoll } from '../../shared/sessions/transcript'
-import { advanceTranscript, openTranscript } from './transcript'
-import type { OpenTranscriptParams, TranscriptCursor } from './transcript'
+import type { TranscriptTailOpen, TranscriptTailPoll } from '@/shared/sessions/transcript'
+import { advanceTranscript, openTranscript } from '@/main/sessions/transcript'
+import type { OpenTranscriptParams, TranscriptCursor } from '@/main/sessions/transcript'
 
 /** Swept lazily at the head of every `open`/`poll` -- no periodic timer or `webContents` bookkeeping. */
 const TAIL_IDLE_MS = 5 * 60_000

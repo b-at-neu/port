@@ -1,14 +1,14 @@
 // runReclaim: drives `bin/worktrees.mjs reclaim --json`, the write half of
 // report.ts's read. Never passes --unlock/--force-dirty/--offline, no retry.
-import { node as defaultNode } from '../platform/node'
-import { pathOps as defaultPathOps } from '../platform/paths'
-import type { NodeRunner } from '../platform/node'
-import type { PathOps } from '../platform/paths'
-import type { WorktreesReclaimResult } from '../../shared/reclaimer/types'
-import { parseNodeCommand } from './command'
-import { describeCommandFailure } from './command-failure'
-import { SCRIPT_FAIL_PREFIX } from './report'
-import { parseReclaimPayload } from './parse'
+import { node as defaultNode } from '@/main/platform/node'
+import { pathOps as defaultPathOps } from '@/main/platform/paths'
+import type { NodeRunner } from '@/main/platform/node'
+import type { PathOps } from '@/main/platform/paths'
+import type { WorktreesReclaimResult } from '@/shared/reclaimer/types'
+import { parseNodeCommand } from '@/main/reclaimer/command'
+import { describeCommandFailure } from '@/main/reclaimer/command-failure'
+import { SCRIPT_FAIL_PREFIX } from '@/main/reclaimer/report'
+import { parseReclaimPayload } from '@/main/reclaimer/parse'
 
 export interface RunReclaimParams {
   readonly repoRoot: string

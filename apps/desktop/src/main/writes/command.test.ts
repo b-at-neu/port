@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '../../shared/labels/vocabulary'
-import type { LabelVocabulary } from '../../shared/labels/vocabulary'
-import type { RepoId } from '../../shared/repos'
-import type { LabelWriteRequest } from '../../shared/writes/types'
-import { buildCommand } from './command'
+import { resolveVocabulary } from '@/shared/labels/vocabulary'
+import type { LabelVocabulary } from '@/shared/labels/vocabulary'
+import type { RepoId } from '@/shared/repos'
+import type { LabelWriteRequest } from '@/shared/writes/types'
+import { buildCommand } from '@/main/writes/command'
 
 const VOCABULARY: LabelVocabulary = resolveVocabulary({})
 const REPO_ID = 'repo-1' as unknown as RepoId

@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '../../shared/repos'
-import type { ReposListResponse } from '../../shared/ipc'
-import { resolveVocabulary } from '../../shared/labels/vocabulary'
-import type { ReclaimedWorktree } from '../../shared/reclaimer/types'
-import type { WorktreesReclaimResult } from '../../shared/reclaimer/types'
-import type { ReclaimAuditEntry } from '../../shared/writes/types'
-import { resolveWorktreesReclaim } from './worktrees'
-import type { WorktreesReclaimDeps } from './worktrees'
-import type { RegistryDeps } from '../registry'
+import type { RepoId } from '@/shared/repos'
+import type { ReposListResponse } from '@/shared/ipc'
+import { resolveVocabulary } from '@/shared/labels/vocabulary'
+import type { ReclaimedWorktree } from '@/shared/reclaimer/types'
+import type { WorktreesReclaimResult } from '@/shared/reclaimer/types'
+import type { ReclaimAuditEntry } from '@/shared/writes/types'
+import { resolveWorktreesReclaim } from '@/main/channels/worktrees'
+import type { WorktreesReclaimDeps } from '@/main/channels/worktrees'
+import type { RegistryDeps } from '@/main/registry'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '../../shared/repos'
-import type { ReposListResponse } from '../../shared/ipc'
-import type { BoardSnapshot } from '../../shared/board/types'
-import { resolveItemAction, resolveItemDecision } from './items'
-import type { ItemActionDeps, ItemDecisionDeps } from './items'
-import type { RegistryDeps } from '../registry'
+import type { RepoId } from '@/shared/repos'
+import type { ReposListResponse } from '@/shared/ipc'
+import type { BoardSnapshot } from '@/shared/board/types'
+import { resolveItemAction, resolveItemDecision } from '@/main/channels/items'
+import type { ItemActionDeps, ItemDecisionDeps } from '@/main/channels/items'
+import type { RegistryDeps } from '@/main/registry'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 
