@@ -3,10 +3,7 @@ import { join } from 'node:path';
 import { root, readJson, walk, relOf } from '#lib/files.ts';
 import type { Reporter } from '#lib/report.ts';
 
-/** Every import-like specifier in `text`: static `from '…'` and side-effect `import '…'`
- *  anchored at the start of a line (real import statements, never a string embedded inside
- *  an error message or a regex literal elsewhere in the file), plus dynamic `import('…')`
- *  and `vi.mock`/`vi.importActual` calls. */
+/** Every import-like specifier in `text`, static and side-effect forms anchored at line start so a string embedded in an error message never counts, plus dynamic `import('…')` and `vi.mock`/`vi.importActual`. */
 function specifiersOf(text: string): string[] {
   return [
     ...text.matchAll(/^import\s+(?:type\s+)?[\s\S]*?\bfrom\s+['"]([^'"]+)['"]/gm),
@@ -16,9 +13,7 @@ function specifiersOf(text: string): string[] {
   ].map((m) => m[1]);
 }
 
-// This ticket's "Done when": no `../` import left in scripts/, every `#` specifier resolves
-// against the root package.json's imports map, `./lib/` stays inside scripts/lib/, and the
-// desktop bundle never has to resolve a root `#` alias through a port-tick module it imports.
+// This ticket's "Done when": no `../` import left in scripts/, every `#` specifier resolves against the root package.json's imports map, and the desktop bundle never resolves a `#` alias through a port-tick module it imports.
 export default async function ({ expect, fail, note, ok }: Reporter) {
   const files = walk(join(root, 'scripts')).filter((f) => f.endsWith('.ts'));
   if (files.length === 0) {
