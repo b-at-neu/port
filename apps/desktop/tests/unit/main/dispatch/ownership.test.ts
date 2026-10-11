@@ -58,7 +58,7 @@ describe('classifyOwnership', () => {
   // no imports of its own, so a dynamic import of it resolves fine here.
   it('agrees with the guard hook\'s own classifier on a shared fixture set', async () => {
     // @ts-expect-error — plain .mjs with no declaration file, never part of this program's own module graph
-    const hookModule = (await import('../../../../../plugins/port/hooks/lib/ownership-rules.mjs')) as {
+    const hookModule = (await import('../../../../../../plugins/port/hooks/lib/ownership-rules.mjs')) as {
       readonly classifyOwnership: (exists: boolean, text: string | null, repo: string) => unknown
     }
     const hookClassify = hookModule.classifyOwnership
