@@ -334,16 +334,16 @@ export default async function ({ expect, fail, ok }: Reporter) {
   {
     const declarations = allFiles.filter((f) => !relOf(f).endsWith('.test.ts')).filter((f) => /export function sessionDisplayLabel\(/.test(readFileSync(f, 'utf8')));
     const declaredOnlyInLabel = declarations.length === 1 && relOf(declarations[0] ?? '') === `${sharedHostingDir}/label.ts`;
-    const headerFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/renderer/src/session/header.tsx');
-    const dialogFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/renderer/src/permission/dialog.tsx');
-    const copyFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/renderer/src/permission/copy.ts');
+    const headerFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/renderer/session/header.tsx');
+    const dialogFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/renderer/permission/dialog.tsx');
+    const copyFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/renderer/permission/copy.ts');
     if (!declaredOnlyInLabel) {
       fail('desktop-hosting', `sessionDisplayLabel must be declared only in ${sharedHostingDir}/label.ts, found in: ${declarations.map(relOf).join(', ') || '(nowhere)'}`);
     } else if (!headerFile || !/sessionDisplayLabel/.test(readFileSync(headerFile, 'utf8'))) {
-      fail('desktop-hosting', 'apps/desktop/src/renderer/src/session/header.tsx does not import sessionDisplayLabel');
+      fail('desktop-hosting', 'apps/desktop/src/renderer/session/header.tsx does not import sessionDisplayLabel');
     } else if (!dialogFile || !/sessionDisplayLabel/.test(readFileSync(dialogFile, 'utf8'))) {
-      fail('desktop-hosting', 'apps/desktop/src/renderer/src/permission/dialog.tsx does not import sessionDisplayLabel');
-    } else expect(!(!copyFile || /function contextLine\([^)]*sessionKey/.test(readFileSync(copyFile, 'utf8'))), 'desktop-hosting', "apps/desktop/src/renderer/src/permission/copy.ts's contextLine must take no 'sessionKey' parameter");
+      fail('desktop-hosting', 'apps/desktop/src/renderer/permission/dialog.tsx does not import sessionDisplayLabel');
+    } else expect(!(!copyFile || /function contextLine\([^)]*sessionKey/.test(readFileSync(copyFile, 'utf8'))), 'desktop-hosting', "apps/desktop/src/renderer/permission/copy.ts's contextLine must take no 'sessionKey' parameter");
   }
 
   // --- stage-policy.ts's own globToRegExp agrees with guard-rules.mjs's over a shared case list, both directions. ---

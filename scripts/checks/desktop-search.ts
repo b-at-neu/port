@@ -8,7 +8,7 @@ import type { Reporter } from '../lib/report.ts';
 export default async function ({ expect, fail, ok }: Reporter) {
   const searchDir = 'apps/desktop/src/main/search';
   const sharedSearchTypesFile = 'apps/desktop/src/shared/search/types.ts';
-  const rendererSearchCopyFile = 'apps/desktop/src/renderer/src/search/copy.ts';
+  const rendererSearchCopyFile = 'apps/desktop/src/renderer/search/copy.ts';
   const srcDir = join(root, 'apps/desktop/src');
   const allFiles = walk(srcDir).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
 

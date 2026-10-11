@@ -43,7 +43,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
   {
     const signature = /function buildRow\(entry:\s*TranscriptEntry\)/;
     const declarations = files.filter((f) => signature.test(readFileSync(f, 'utf8')));
-    const declaredElsewhere = declarations.filter((f) => relOf(f) !== 'apps/desktop/src/renderer/src/components/conversation-model.ts');
+    const declaredElsewhere = declarations.filter((f) => relOf(f) !== 'apps/desktop/src/renderer/components/conversation-model.ts');
     if (declarations.length === 0) {
       fail('desktop-renderer', 'no file under apps/desktop/src/renderer/ declares function buildRow(entry: TranscriptEntry) — components/conversation-model.ts should');
     } else expect(!(declaredElsewhere.length > 0), 'desktop-renderer', `function buildRow(entry: TranscriptEntry) is declared outside components/conversation-model.ts, in: ${declaredElsewhere.map(relOf).join(', ')}`);

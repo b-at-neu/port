@@ -9,7 +9,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
   const sharedGateDir = 'apps/desktop/src/shared/gate';
   const sharedMarkdownDir = 'apps/desktop/src/shared/markdown';
   const mainActionsDir = 'apps/desktop/src/main/actions';
-  const rendererGateDir = 'apps/desktop/src/renderer/src/gate';
+  const rendererGateDir = 'apps/desktop/src/renderer/gate';
   const classifyFile = `${sharedGateDir}/classify.ts`;
   const typesFile = `${sharedGateDir}/types.ts`;
   const inlineFile = `${sharedMarkdownDir}/inline.ts`;
@@ -19,7 +19,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
   const observeActionFile = `${mainActionsDir}/observe.ts`;
   const writesApplyFile = 'apps/desktop/src/main/writes/apply.ts';
   const copyFile = `${rendererGateDir}/copy.ts`;
-  const markdownFile = 'apps/desktop/src/renderer/src/components/markdown.tsx';
+  const markdownFile = 'apps/desktop/src/renderer/components/markdown.tsx';
   const coordinationFile = 'docs/COORDINATION.md';
 
   const srcDir = join(root, 'apps/desktop/src');
@@ -96,7 +96,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     else if (!found) ok();
   }
 
-  // --- shared/markdown/ imports no node: builtin and nothing from main/; renderer/src/
+  // --- shared/markdown/ imports no node: builtin and nothing from main/; renderer/
   // components/markdown.tsx is the only renderer file importing it, the one DOM-building consumer. ---
   {
     let impure = false;
@@ -150,7 +150,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     expect(!(missing.length > 0), 'desktop-gate', `${copyFile} is missing: ${missing.join(', ')}`);
   }
 
-  // --- No file under shared/gate/, main/actions/, or renderer/src/gate/ names a literal
+  // --- No file under shared/gate/, main/actions/, or renderer/gate/ names a literal
   // label name instead of resolving through the vocabulary as a LabelKey. ---
   {
     const mainActionsFiles = allFiles.filter((f) => relOf(f).startsWith(`${mainActionsDir}/`));

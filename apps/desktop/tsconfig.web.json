@@ -7,8 +7,8 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "paths": {
-      "@/*": ["./src/renderer/src/*"]
+      "@/*": ["./src/renderer/*"]
     }
   },
-  "include": ["src/renderer/src/**/*", "src/shared/**/*", "src/preload/index.d.ts", "../../scripts/port-tick/liveness.ts", "../../scripts/port-tick/overrides.ts", "../../scripts/port-tick/gates.ts"]
+  "include": ["src/renderer/**/*", "src/shared/**/*", "src/preload/index.d.ts", "../../scripts/port-tick/liveness.ts", "../../scripts/port-tick/overrides.ts", "../../scripts/port-tick/gates.ts"]
 }
