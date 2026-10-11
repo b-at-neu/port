@@ -1,7 +1,7 @@
 import type { ComponentProps } from 'react'
 import * as SelectPrimitive from '@radix-ui/react-select'
 import { Check, ChevronDown } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/renderer/lib/utils'
 
 // shadcn's `new-york` Select. The one change from shipped: `SelectContent`
 // animates as DESIGN §5's 150ms ease-out fade plus a 4px slide, never a

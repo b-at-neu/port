@@ -1,4 +1,4 @@
-import type { PortBridge } from './index'
+import type { PortBridge } from '@/preload/index'
 
 declare global {
   interface Window {

@@ -1,8 +1,8 @@
 // The controls bar: mode, model, and effort selects, each reverting to the snapshot value on rejection.
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/renderer/components/ui/select'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import type { SessionControls, SessionEffort, SessionModels } from '../../shared/hosting/controls'
 import type { SessionKey } from '../../shared/hosting/types'
 import { DEFAULT_SELECT_VALUE, MODE_OPTIONS, controlsBarState, effortLabel } from './controls-model'

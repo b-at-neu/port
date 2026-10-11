@@ -1,7 +1,7 @@
 // The Board's pipeline status strip: store/clock lines, then one line per
 // repository with its own owner line and budget notes underneath.
-import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Button } from '@/renderer/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import type { BoardSnapshot } from '../../shared/board/types'
 import { budgetNoteLines, controlFor, observationClause, observationTitle, ownerLineCopy, runStateSuffix } from './owner'
 import { takeOver } from './dispatch'

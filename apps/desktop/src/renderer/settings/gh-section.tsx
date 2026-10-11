@@ -1,7 +1,7 @@
 // Reads `gh:status` as a query; `gh-model.ts` decides what to show.
 import { Loader2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Button } from '@/renderer/components/ui/button'
+import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { useIpcQuery } from '../data/query'
 import { StatusPill } from '../components/status-pill'
 import { ErrorBanner } from '../components/error-banner'

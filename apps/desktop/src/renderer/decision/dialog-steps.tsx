@@ -1,8 +1,8 @@
 // The decision dialog's own steps, the same split gate/dialog-steps.tsx uses.
 import { reviseNoteProblem } from '../../shared/actions/decide'
-import { Button } from '@/components/ui/button'
-import { DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Textarea } from '@/components/ui/textarea'
+import { Button } from '@/renderer/components/ui/button'
+import { DialogFooter, DialogHeader, DialogTitle } from '@/renderer/components/ui/dialog'
+import { Textarea } from '@/renderer/components/ui/textarea'
 import type { DecisionState } from './controller'
 import { closeDecisionDialog, retryLabelOnly, setReviseText, submitRevise, submitUnblock } from './controller'
 import { decisionResultCopy, dialogTitle, reviseConsequence, reviseNoteHint, unblockCapNote, unblockConsequence, unblockReasonLine } from './copy'

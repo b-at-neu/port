@@ -1,5 +1,5 @@
 // Renderer-safe contract for the plan gate dialog. No import here may reach a Node builtin — only `main/actions/gate.ts` resolves a repository, spawns `gh`, or reads `.agents/cockpit.json`.
-import type { OwnershipSummary, WriteOutcome } from '../writes/types'
+import type { OwnershipSummary, WriteOutcome } from '@/shared/writes/types'
 
 /** The two decisions the dialog's Reviewing step offers — validated at `main/channels/gate.ts` against this exact list. */
 export const GATE_DECISIONS = ['approve', 'request-changes'] as const

@@ -1,10 +1,10 @@
 // The claim dialog — a shadcn Dialog over claim/controller.ts's
 // useSyncExternalStore state. Esc or the scrim calls closeClaimDialog.
 import { useSyncExternalStore } from 'react'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Button } from '@/renderer/components/ui/button'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/renderer/components/ui/dialog'
+import { Input } from '@/renderer/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/renderer/components/ui/select'
 import type { ClaimVerdict, PlanGateChoice } from '../../shared/claim/types'
 import type { RepoId } from '../../shared/repos'
 import { backToPick, closeClaimDialog, confirmClaim, getState, retryPreflight, setClaimNumber, setClaimRepo, setPlanGate, submitPick, subscribe } from './controller'

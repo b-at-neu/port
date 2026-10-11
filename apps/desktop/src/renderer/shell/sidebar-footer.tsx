@@ -1,8 +1,8 @@
 // The sidebar footer — Settings, plus the claude/gh status dot.
 import { Link } from '@tanstack/react-router'
 import { Settings } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { cn } from '@/renderer/lib/utils'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { useIpcQuery } from '../data/query'
 import { footerStatus } from './status-model'
 import { ROUTE_IDS } from '../router/routes'

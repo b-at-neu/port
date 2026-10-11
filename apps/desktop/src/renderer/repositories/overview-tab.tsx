@@ -1,8 +1,8 @@
 // The repo page's Overview tab — Sources, Labels, Config, then Overrides and Warnings.
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Button } from '@/renderer/components/ui/button'
+import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { ErrorBanner } from '../components/error-banner'
 import { StatusPill } from '../components/status-pill'
 import type { PillStatus } from '../components/status-pill'

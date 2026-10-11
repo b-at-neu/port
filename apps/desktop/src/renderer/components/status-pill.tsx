@@ -1,7 +1,7 @@
 // DESIGN §4 StatusPill — dot then label, the dot `aria-hidden` since status
 // is never colour-only (ENGINEERING §5). No menu: the repo run-state pill
 // with Run/Pause/Drain belongs to #314/#318, not this ticket.
-import { cn } from '@/lib/utils'
+import { cn } from '@/renderer/lib/utils'
 
 export type PillStatus = 'working' | 'attention' | 'success' | 'danger' | 'idle'
 

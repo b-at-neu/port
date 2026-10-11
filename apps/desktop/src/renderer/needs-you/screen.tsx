@@ -2,7 +2,7 @@
 // each with its action inline.
 import { useState } from 'react'
 import { RefreshCw, Inbox } from 'lucide-react'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { ScreenHeader } from '../components/screen-header'
 import { EmptyState } from '../components/empty-state'
 import { ErrorBanner } from '../components/error-banner'

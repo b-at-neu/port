@@ -1,19 +1,19 @@
-import type { AssertEqual } from './assert-type'
-import type { RepoId, RepositoryEntry } from './repos'
-import type { WorktreesReclaimResult, WorktreesReport } from './reclaimer/types'
-import type { SessionScan } from './sessions/types'
-import type { TranscriptTailOpen, TranscriptTailPoll } from './sessions/transcript'
-import type { SearchQuery, SearchResult } from './search/types'
-import type { BoardSnapshot, SourceKind } from './board/types'
-import type { ClaimApplyResponse, ClaimPreflightResponse, PlanGateChoice } from './claim/types'
-import type { GateAnswerResponse, GateDecision, GatePreflightResponse } from './gate/types'
-import type { LabelKey } from './labels/vocabulary'
-import type { ItemActionResult, ItemDecisionResult, OperatorAction, OperatorDecision, UnblockRoute } from './actions/types'
-import type { DispatchControlResult } from './dispatch/types'
-import type { RuntimePreflight, RuntimeProbe } from './runtime/types'
-import type { GhStatus } from './gh/types'
-import type { BacklogResponse } from './backlog/types'
-import type { StageAllowResult, StageResumeResult, StageRestartResult } from './stage/types'
+import type { AssertEqual } from '@/shared/assert-type'
+import type { RepoId, RepositoryEntry } from '@/shared/repos'
+import type { WorktreesReclaimResult, WorktreesReport } from '@/shared/reclaimer/types'
+import type { SessionScan } from '@/shared/sessions/types'
+import type { TranscriptTailOpen, TranscriptTailPoll } from '@/shared/sessions/transcript'
+import type { SearchQuery, SearchResult } from '@/shared/search/types'
+import type { BoardSnapshot, SourceKind } from '@/shared/board/types'
+import type { ClaimApplyResponse, ClaimPreflightResponse, PlanGateChoice } from '@/shared/claim/types'
+import type { GateAnswerResponse, GateDecision, GatePreflightResponse } from '@/shared/gate/types'
+import type { LabelKey } from '@/shared/labels/vocabulary'
+import type { ItemActionResult, ItemDecisionResult, OperatorAction, OperatorDecision, UnblockRoute } from '@/shared/actions/types'
+import type { DispatchControlResult } from '@/shared/dispatch/types'
+import type { RuntimePreflight, RuntimeProbe } from '@/shared/runtime/types'
+import type { GhStatus } from '@/shared/gh/types'
+import type { BacklogResponse } from '@/shared/backlog/types'
+import type { StageAllowResult, StageResumeResult, StageRestartResult } from '@/shared/stage/types'
 import type {
   HostedSessionSnapshot,
   HostingCapacity,
@@ -40,11 +40,11 @@ import type {
   SessionStartTarget,
   SessionTaskStopResult,
   WorktreeChoice,
-} from './hosting/types'
-import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SetControlsResult } from './hosting/controls'
-import type { ComposerAttachment } from './hosting/attachments'
-import type { FolderEntry, SessionChanges } from './workspace/types'
-import type { AppCommand } from './shell/commands'
+} from '@/shared/hosting/types'
+import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SetControlsResult } from '@/shared/hosting/controls'
+import type { ComposerAttachment } from '@/shared/hosting/attachments'
+import type { FolderEntry, SessionChanges } from '@/shared/workspace/types'
+import type { AppCommand } from '@/shared/shell/commands'
 
 export interface AppInfo {
   app: string

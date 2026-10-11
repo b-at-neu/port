@@ -1,9 +1,9 @@
 // The session header's "…" menu — session limit stepper, the usage notice, and Dismiss once ended.
 import { MoreHorizontal } from 'lucide-react'
 import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Button } from '@/renderer/components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/renderer/components/ui/dropdown-menu'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { useIpcMutation, useIpcQuery } from '../data/query'
 import { capacityLine, usageNotice } from './rail-model'
 import { CAPACITY_SET_FAILED, DISMISS_BUTTON, LIMIT_STEPPER_TITLE, usageNoticeLines } from './rail-copy'

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { labelName, resolveVocabulary } from '../labels/vocabulary'
-import type { RepoId } from '../repos'
-import type { ReconciledItem, StageLabel } from '../state/types'
-import type { LabelAuditEntry } from '../writes/types'
-import { RETRY_TRIGGER, actionsFor, pausedTriggerFrom } from './plan'
+import { labelName, resolveVocabulary } from '@/shared/labels/vocabulary'
+import type { RepoId } from '@/shared/repos'
+import type { ReconciledItem, StageLabel } from '@/shared/state/types'
+import type { LabelAuditEntry } from '@/shared/writes/types'
+import { RETRY_TRIGGER, actionsFor, pausedTriggerFrom } from '@/shared/actions/plan'
 
 const VOCABULARY = resolveVocabulary({})
 

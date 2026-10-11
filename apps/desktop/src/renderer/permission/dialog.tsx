@@ -1,9 +1,9 @@
 // The permission dialog — DESIGN §3, an AlertDialog mounted once in
 // ShellLayout. Esc (or any other dismiss attempt) denies, never just closes.
-import { AlertDialog, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
-import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { AlertDialog, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/renderer/components/ui/alert-dialog'
+import { Button } from '@/renderer/components/ui/button'
+import { Textarea } from '@/renderer/components/ui/textarea'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { usePermissionState, answer, setMessage } from './store'
 import { useSelectedSession } from '../session/selection'
 import { useIpcQuery } from '../data/query'

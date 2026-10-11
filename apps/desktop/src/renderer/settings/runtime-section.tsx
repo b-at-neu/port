@@ -6,9 +6,9 @@
 // `useIpcQuery`/`useIpcMutation` alone.
 import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Button } from '@/renderer/components/ui/button'
+import { Skeleton } from '@/renderer/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { useIpcMutation, useIpcQuery } from '../data/query'
 import { StatusPill } from '../components/status-pill'
 import { ErrorBanner } from '../components/error-banner'

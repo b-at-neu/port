@@ -1,5 +1,5 @@
 // The runtime strip's operator-facing copy table — one entry per `RuntimeDiagnosis`, never a shared "error" catch-all. A new diagnosis is a compile error here, never a silently blank line.
-import type { RuntimeDiagnosis } from './types'
+import type { RuntimeDiagnosis } from '@/shared/runtime/types'
 
 /** What kind of remedy a diagnosis implies — `retry` covers "try again"; `login`/`update` name a concrete external step; `account-owner` names one the app cannot offer as a button. Never an `'api-key'` member. */
 export type RuntimeAction = 'install' | 'login' | 'update' | 'account-owner' | 'retry'

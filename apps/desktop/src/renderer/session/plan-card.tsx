@@ -1,7 +1,7 @@
 // The ExitPlanMode card: the plan as markdown, a feedback textarea, and the operator's three decisions.
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
+import { Button } from '@/renderer/components/ui/button'
+import { Textarea } from '@/renderer/components/ui/textarea'
 import { Markdown } from '../components/markdown'
 import { PLAN_APPROVE_ACCEPT_EDITS, PLAN_APPROVE_ASK, PLAN_EMPTY, PLAN_FEEDBACK_PLACEHOLDER, PLAN_HEADING, PLAN_KEEP_PLANNING, PLAN_SENDING, planAnswerFailed } from './interaction-copy'
 

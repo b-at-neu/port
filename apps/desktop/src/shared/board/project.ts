@@ -1,12 +1,12 @@
 // The pure board projection — everything the screen decides lives here, testable under `environment: 'node'` with no jsdom dependency.
-import { LABEL_DEFAULTS } from '../labels/defaults'
-import { inspectDenials } from '../local/inspect'
-import { actionsFor } from '../actions/plan'
-import { decisionsFor } from '../actions/decide'
-import type { RepoId } from '../repos'
-import type { RepositoryFreshness, RepositoryState, StageLabel } from '../state/types'
-import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from './types'
-import type { BoardGroup, BoardItemRow, BoardProjection, BoardRepositorySummary, BoardSnapshot, DisplayStatus, GroupBy, RepositoryHealth, SourceHealth, SourceKind } from './types'
+import { LABEL_DEFAULTS } from '@/shared/labels/defaults'
+import { inspectDenials } from '@/shared/local/inspect'
+import { actionsFor } from '@/shared/actions/plan'
+import { decisionsFor } from '@/shared/actions/decide'
+import type { RepoId } from '@/shared/repos'
+import type { RepositoryFreshness, RepositoryState, StageLabel } from '@/shared/state/types'
+import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/shared/board/types'
+import type { BoardGroup, BoardItemRow, BoardProjection, BoardRepositorySummary, BoardSnapshot, DisplayStatus, GroupBy, RepositoryHealth, SourceHealth, SourceKind } from '@/shared/board/types'
 
 /** The eventual-consistency suppression; `item.status` is never rewritten. Fails toward under-reporting — renders `in-flight` rather than a possibly-phantom `stalled`. */
 export function displayStatus(item: { readonly status: string }, repoHealth: RepositoryHealth | undefined, freshness: RepositoryFreshness, now: Date): DisplayStatus {

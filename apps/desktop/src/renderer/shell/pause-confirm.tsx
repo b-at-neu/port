@@ -1,5 +1,5 @@
 // The pause-pipeline confirmation — shown only while in-flight is above 0.
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/renderer/components/ui/alert-dialog'
 import { usePauseRequest, setPauseRequest } from './stores'
 import { useRunStateCommand } from './run-state-command'
 

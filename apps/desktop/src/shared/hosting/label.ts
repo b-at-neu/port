@@ -1,5 +1,5 @@
 // The one session display label and started-at clock, shared by the rail and the permission dialog, so both never name a session differently. Pure, renderer-safe.
-import type { SessionOrigin } from './types'
+import type { SessionOrigin } from '@/shared/hosting/types'
 
 /** The first 8 characters of a Claude session id, matching the header's own short id. */
 function short(id: string): string {

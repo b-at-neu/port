@@ -2,7 +2,7 @@
 // an optional action. Renders inside the affected region (never a dialog) —
 // a read failure is a region-local fact, not an app-wide interruption.
 import { CircleAlert } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/renderer/lib/utils'
 import { Button } from './ui/button'
 
 export interface ErrorBannerAction {

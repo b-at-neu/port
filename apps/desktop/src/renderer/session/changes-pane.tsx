@@ -1,8 +1,8 @@
 // Polls session:changes every 5s while mounted, without useEffect.
 import { FileDiff as FileDiffIcon, RefreshCw, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Button } from '@/renderer/components/ui/button'
+import { Skeleton } from '@/renderer/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { DetailPane } from '../components/detail-pane'
 import { DiffView } from '../components/diff-view'
 import { EmptyState } from '../components/empty-state'

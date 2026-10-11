@@ -1,7 +1,7 @@
 // The AskUserQuestion card: radio rows for single-select, checkboxes for multi-select, plus an Other field.
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Button } from '@/renderer/components/ui/button'
+import { Input } from '@/renderer/components/ui/input'
 import type { AskQuestion } from '../../shared/hosting/controls'
 import { initialState, isComplete, setOther, toAnswers, toggleOption } from './question-model'
 import type { QuestionsState } from './question-model'

@@ -1,6 +1,6 @@
 // The deliberate single point of contact with the shipped template: every other file under labels/ reads LABEL_DEFAULTS below, never this import directly.
 import template from '../../../../../plugins/port/data/labels.json'
-import type { LabelKey } from './vocabulary'
+import type { LabelKey } from '@/shared/labels/vocabulary'
 
 /** Modules a label default can be gated behind, plus the `core` sentinel for a label always created regardless of config. */
 export const LABEL_MODULES = ['core', 'approvalGate', 'release', 'scope'] as const

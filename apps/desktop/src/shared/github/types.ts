@@ -1,5 +1,5 @@
 // Renderer-safe result and item shapes for the GitHub adapter. No import here may reach a Node builtin — only `main/github/` spawns `gh`.
-import type { LabelKey, LabelSource, VocabularyReport } from '../labels/vocabulary'
+import type { LabelKey, LabelSource, VocabularyReport } from '@/shared/labels/vocabulary'
 
 export type PipelineItemKind = 'issue' | 'pull-request'
 

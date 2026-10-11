@@ -1,5 +1,5 @@
 // Inline parse and the link-scheme allowlist — pure, no DOM, no `node:` import. Unrecognized text is literal, with literal runs always coalesced.
-import type { InlineNode } from './types'
+import type { InlineNode } from '@/shared/markdown/types'
 
 /** Every other scheme renders as literal text, since a `javascript:` href in an Electron renderer is a code-execution sink. */
 const LINK_SCHEMES = ['http://', 'https://']

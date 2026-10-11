@@ -2,7 +2,7 @@
 // this ticket needs so Light/Dark/System can actually be switched. No
 // `useEffect`: `useThemePreference` reads the store through
 // `useSyncExternalStore`.
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/renderer/components/ui/select'
 import { useThemePreference } from '../theme/store'
 import type { ThemePreference } from '../theme/store'
 

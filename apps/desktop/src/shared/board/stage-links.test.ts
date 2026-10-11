@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { operatorJoinedOf, stageLinksFor } from './stage-links'
-import type { DispatchRecord } from '../dispatch/types'
-import type { SessionKey } from '../hosting/types'
+import { operatorJoinedOf, stageLinksFor } from '@/shared/board/stage-links'
+import type { DispatchRecord } from '@/shared/dispatch/types'
+import type { SessionKey } from '@/shared/hosting/types'
 
 function record(patch: Partial<DispatchRecord>): DispatchRecord {
   return {

@@ -1,5 +1,5 @@
 // The take-over-from-the-terminal confirmation — shown only once the sidebar's Take over… item arms it.
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/renderer/components/ui/alert-dialog'
 import { useTakeOverRequest, setTakeOverRequest } from './stores'
 import { useRunStateCommand } from './run-state-command'
 

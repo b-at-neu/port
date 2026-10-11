@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { CLI_OUTDATED_COPY, RUNTIME_COPY } from './copy'
-import type { RuntimeDiagnosis } from './types'
+import { CLI_OUTDATED_COPY, RUNTIME_COPY } from '@/shared/runtime/copy'
+import type { RuntimeDiagnosis } from '@/shared/runtime/types'
 
 // This list exists only to drive the runtime assertions below — pinned against the real union so the two can never silently drift apart.
 const ALL_DIAGNOSES: readonly RuntimeDiagnosis[] = [

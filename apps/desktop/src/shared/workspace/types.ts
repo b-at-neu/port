@@ -1,6 +1,6 @@
 // Renderer-safe workspace shapes — folders, session worktrees, and the Changes diff. No Node import here; `main/workspace/` derives these from real git state.
-import type { RepoId } from '../repos'
-import type { FileDiff } from '../sessions/transcript'
+import type { RepoId } from '@/shared/repos'
+import type { FileDiff } from '@/shared/sessions/transcript'
 
 declare const folderIdBrand: unique symbol
 

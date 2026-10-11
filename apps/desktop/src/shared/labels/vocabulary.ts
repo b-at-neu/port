@@ -1,4 +1,4 @@
-import { LABEL_DEFAULTS, type LabelModule, type LabelRole } from './defaults'
+import { LABEL_DEFAULTS, type LabelModule, type LabelRole } from '@/shared/labels/defaults'
 
 /** Every label key the shipped template defines; hand-maintained since a JSON import's string values widen to `string` and cannot derive this union. */
 export const LABEL_KEYS = [

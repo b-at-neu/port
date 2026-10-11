@@ -1,6 +1,6 @@
 // The restore banner — offered once at boot when `session:restore:list` returns entries.
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/renderer/components/ui/button'
 import { useIpcMutation, useIpcQuery } from '../data/query'
 import type { RestorableSession } from '../../shared/hosting/types'
 import type { RepositoryEntry } from '../../shared/repos'

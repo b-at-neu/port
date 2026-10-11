@@ -1,7 +1,7 @@
 // The About screen — static notice copy plus the live `app:info` version line.
 import { useNavigate } from '@tanstack/react-router'
-import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Button } from '@/renderer/components/ui/button'
+import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { ScreenHeader } from '../components/screen-header'
 import { useIpcQuery } from '../data/query'
 import { ROUTE_IDS } from '../router/routes'

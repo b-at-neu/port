@@ -1,8 +1,8 @@
 // The repo page's Denials tab — grouped by command shape or by actor, with attribution, bursts, and a detail pane per row.
 import { useState } from 'react'
 import { ShieldAlert } from 'lucide-react'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Skeleton } from '@/renderer/components/ui/skeleton'
+import { Tabs, TabsList, TabsTrigger } from '@/renderer/components/ui/tabs'
 import { DetailPane } from '../components/detail-pane'
 import { EmptyState } from '../components/empty-state'
 import { ErrorBanner } from '../components/error-banner'
