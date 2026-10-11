@@ -1,12 +1,12 @@
 // The Set up port checklist's own `(preflight, probe, gh, repos) → display
 // model` — the launch redirect reuses `complete` directly, so the two can never disagree.
-import type { RuntimePreflight, RuntimeProbe } from '../../shared/runtime/types'
-import { RUNTIME_API_KEY_NOTE, RUNTIME_COPY } from '../../shared/runtime/copy'
-import { PILL_LABEL } from '../settings/runtime-model'
-import type { GhStatus } from '../../shared/gh/types'
-import type { ReposListResponse } from '../../shared/ipc'
-import type { RepositoryEntry } from '../../shared/repos'
-import type { PillStatus } from '../components/status-pill'
+import type { RuntimePreflight, RuntimeProbe } from '@/shared/runtime/types'
+import { RUNTIME_API_KEY_NOTE, RUNTIME_COPY } from '@/shared/runtime/copy'
+import { PILL_LABEL } from '@/renderer/settings/runtime-model'
+import type { GhStatus } from '@/shared/gh/types'
+import type { ReposListResponse } from '@/shared/ipc'
+import type { RepositoryEntry } from '@/shared/repos'
+import type { PillStatus } from '@/renderer/components/status-pill'
 
 /** One query's own loading/error/data split, kept loose for easy testing. */
 export interface QueryState<T> {

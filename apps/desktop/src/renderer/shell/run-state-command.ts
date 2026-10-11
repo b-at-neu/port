@@ -1,13 +1,13 @@
 // Run/Drain/Pause for one repository, as a React mutation with toasts.
 import { toast } from 'sonner'
-import type { RepoId } from '../../shared/repos'
-import type { DispatchControlResult } from '../../shared/dispatch/types'
-import { useIpcMutation, ipcQueryOptions } from '../data/query'
+import type { RepoId } from '@/shared/repos'
+import type { DispatchControlResult } from '@/shared/dispatch/types'
+import { useIpcMutation, ipcQueryOptions } from '@/renderer/data/query'
 import { useQueryClient } from '@tanstack/react-query'
-import type { BoardSnapshot } from '../../shared/board/types'
-import { haltHeadingCopy, haltItemLine } from '../board/halt-copy'
-import { runStateResultNote, pauseReportNote, pauseAbortedCopy } from '../board/run-state'
-import { setPauseRequest, setTakeOverRequest } from './stores'
+import type { BoardSnapshot } from '@/shared/board/types'
+import { haltHeadingCopy, haltItemLine } from '@/renderer/board/halt-copy'
+import { runStateResultNote, pauseReportNote, pauseAbortedCopy } from '@/renderer/board/run-state'
+import { setPauseRequest, setTakeOverRequest } from '@/renderer/shell/stores'
 
 function applyRunState(client: ReturnType<typeof useQueryClient>, repoId: RepoId, result: Extract<DispatchControlResult, { readonly command: 'run' | 'drain' | 'pause' | 'take-over' }>): void {
   if (!result.ok) return

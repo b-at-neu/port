@@ -5,11 +5,11 @@ import { Button } from '@/renderer/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/renderer/components/ui/dialog'
 import { Input } from '@/renderer/components/ui/input'
 import { toast } from 'sonner'
-import type { RepoId } from '../../shared/repos'
-import type { StageDenial, StageAllowResult } from '../../shared/stage/types'
-import { invoke } from '../data/invoke'
+import type { RepoId } from '@/shared/repos'
+import type { StageDenial, StageAllowResult } from '@/shared/stage/types'
+import { invoke } from '@/renderer/data/invoke'
 import { useQueryClient } from '@tanstack/react-query'
-import { ipcQueryOptions } from '../data/query'
+import { ipcQueryOptions } from '@/renderer/data/query'
 
 type AllowDialogState = { readonly open: false } | { readonly open: true; readonly repoId: RepoId; readonly denial: StageDenial; readonly rule: string; readonly submitting: boolean }
 

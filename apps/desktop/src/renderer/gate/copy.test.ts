@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { GateAnswerResponse } from '../../shared/gate/types'
-import type { OwnershipSummary } from '../../shared/writes/types'
-import { autoPlanNoteCopy, gateDisabledReason, primaryApproveLabel, refusedVerdictCopy, resultCopy, sessionRequiredCopy } from './copy'
+import type { GateAnswerResponse } from '@/shared/gate/types'
+import type { OwnershipSummary } from '@/shared/writes/types'
+import { autoPlanNoteCopy, gateDisabledReason, primaryApproveLabel, refusedVerdictCopy, resultCopy, sessionRequiredCopy } from '@/renderer/gate/copy'
 
 describe('gateDisabledReason', () => {
   it('is null while this app owns the repository, or while ownership is absent', () => {

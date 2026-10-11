@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createPermissionStore } from './store'
-import type { PermissionStoreDeps } from './store'
-import type { HostedSessionSnapshot, PermissionDecision, SessionKey } from '../../shared/hosting/types'
-import type { SessionControls, SessionModels } from '../../shared/hosting/controls'
-import type { RepoId } from '../../shared/repos'
+import { createPermissionStore } from '@/renderer/permission/store'
+import type { PermissionStoreDeps } from '@/renderer/permission/store'
+import type { HostedSessionSnapshot, PermissionDecision, SessionKey } from '@/shared/hosting/types'
+import type { SessionControls, SessionModels } from '@/shared/hosting/controls'
+import type { RepoId } from '@/shared/repos'
 
 const KEY = 'hosted-1' as SessionKey
 

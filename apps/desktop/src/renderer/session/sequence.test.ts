@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { accept, drainBuffered } from './sequence'
+import { accept, drainBuffered } from '@/renderer/session/sequence'
 
 describe('accept', () => {
   it('applies exactly the next revision', () => {

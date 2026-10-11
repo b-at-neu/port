@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '../../shared/repos'
-import type { FolderEntry, FolderId } from '../../shared/workspace/types'
-import type { HostedSessionSnapshot } from '../../shared/hosting/types'
-import { effectiveWorktree, initialFolderId, orderFolders, worktreeControl, worktreeHint } from './new-session-model'
+import type { RepoId } from '@/shared/repos'
+import type { FolderEntry, FolderId } from '@/shared/workspace/types'
+import type { HostedSessionSnapshot } from '@/shared/hosting/types'
+import { effectiveWorktree, initialFolderId, orderFolders, worktreeControl, worktreeHint } from '@/renderer/session/new-session-model'
 
 function folder(overrides: Partial<FolderEntry>): FolderEntry {
   return {

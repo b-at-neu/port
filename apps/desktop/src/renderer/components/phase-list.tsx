@@ -1,11 +1,11 @@
 // The Board detail pane's PhaseList — six phases, each an 8px dot in the
 // same states PhaseBar uses; only the current phase carries an extra line.
 import { cn } from '@/renderer/lib/utils'
-import type { LabelKey } from '../../shared/labels/vocabulary'
-import type { PipelineItemKind } from '../../shared/github/types'
-import { PHASE_NAMES } from '../lib/phase'
-import { phaseSegmentsFor } from '../board/phase-model'
-import type { PhaseKey, PhaseSegmentState } from '../board/phase-model'
+import type { LabelKey } from '@/shared/labels/vocabulary'
+import type { PipelineItemKind } from '@/shared/github/types'
+import { PHASE_NAMES } from '@/renderer/lib/phase'
+import { phaseSegmentsFor } from '@/renderer/board/phase-model'
+import type { PhaseKey, PhaseSegmentState } from '@/renderer/board/phase-model'
 
 const DOT_CLASS: Readonly<Record<PhaseSegmentState, string>> = {
   finished: 'bg-working-pill',

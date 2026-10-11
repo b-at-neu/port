@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { binaryLine, changesEmpty, changesErrorCopy, changesHeaderText, changesTooLarge, numstatLine, untrackedLine } from './changes-copy'
+import { binaryLine, changesEmpty, changesErrorCopy, changesHeaderText, changesTooLarge, numstatLine, untrackedLine } from '@/renderer/session/changes-copy'
 
 describe('changesHeaderText', () => {
   it('names the worktree branch for a worktree session', () => {

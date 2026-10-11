@@ -5,7 +5,7 @@ import { ChevronRight } from 'lucide-react'
 import { cn } from '@/renderer/lib/utils'
 import { Button } from '@/renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
-import { exactTime, relativeAge } from '../backlog/group'
+import { exactTime, relativeAge } from '@/renderer/backlog/group'
 
 export interface NeedsYouItemProps {
   readonly leadCopy: string

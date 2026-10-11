@@ -1,13 +1,13 @@
 // DESIGN §3 Session header — 44px, title, phase pill, Stop/Close, the "…" menu.
 import { Button } from '@/renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
-import { ScreenHeader } from '../components/screen-header'
-import { StatusPill } from '../components/status-pill'
-import type { PillStatus } from '../components/status-pill'
-import { CapacityMenu } from './capacity-menu'
-import { END_COPY, PHASE_COPY } from './copy'
-import { sessionDisplayLabel } from '../../shared/hosting/label'
-import type { HostedSessionSnapshot, SessionPhase } from '../../shared/hosting/types'
+import { ScreenHeader } from '@/renderer/components/screen-header'
+import { StatusPill } from '@/renderer/components/status-pill'
+import type { PillStatus } from '@/renderer/components/status-pill'
+import { CapacityMenu } from '@/renderer/session/capacity-menu'
+import { END_COPY, PHASE_COPY } from '@/renderer/session/copy'
+import { sessionDisplayLabel } from '@/shared/hosting/label'
+import type { HostedSessionSnapshot, SessionPhase } from '@/shared/hosting/types'
 
 const PHASE_STATUS: Readonly<Record<SessionPhase, PillStatus>> = {
   starting: 'working',

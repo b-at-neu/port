@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ghStatusModel } from './gh-model'
+import { ghStatusModel } from '@/renderer/settings/gh-model'
 
 describe('ghStatusModel', () => {
   it('signed-in is a success pill', () => {

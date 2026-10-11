@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { PipelineFailureKind } from '../../shared/github/types'
-import { backlogEmptyGroupCopy, backlogFailureCopy, backlogInvokeErrorCopy, backlogNotReadyCopy, backlogTruncatedCopy } from './copy'
+import type { PipelineFailureKind } from '@/shared/github/types'
+import { backlogEmptyGroupCopy, backlogFailureCopy, backlogInvokeErrorCopy, backlogNotReadyCopy, backlogTruncatedCopy } from '@/renderer/backlog/copy'
 
 const EVERY_KIND: readonly PipelineFailureKind[] = [
   'not-found',

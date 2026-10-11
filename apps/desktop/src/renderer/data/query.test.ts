@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('./invoke', () => ({ invoke: vi.fn() }))
+vi.mock('@/renderer/data/invoke', () => ({ invoke: vi.fn() }))
 
-import { createQueryClient, ipcQueryOptions } from './query'
-import { invoke } from './invoke'
+import { createQueryClient, ipcQueryOptions } from '@/renderer/data/query'
+import { invoke } from '@/renderer/data/invoke'
 
 describe('createQueryClient', () => {
   it('defaults to networkMode always, no retry, and no refetch on focus', () => {

@@ -1,11 +1,11 @@
 // DESIGN §4 PhaseBar — six segments, one Tooltip/aria-label for the bar.
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { cn } from '@/renderer/lib/utils'
-import type { LabelKey } from '../../shared/labels/vocabulary'
-import type { PipelineItemKind } from '../../shared/github/types'
-import { PHASE_NAMES } from '../lib/phase'
-import { phaseSegmentsFor } from '../board/phase-model'
-import type { PhaseSegmentState } from '../board/phase-model'
+import type { LabelKey } from '@/shared/labels/vocabulary'
+import type { PipelineItemKind } from '@/shared/github/types'
+import { PHASE_NAMES } from '@/renderer/lib/phase'
+import { phaseSegmentsFor } from '@/renderer/board/phase-model'
+import type { PhaseSegmentState } from '@/renderer/board/phase-model'
 
 // -dot marks the current segment, -pill a decided one (finished/complete).
 const SEGMENT_CLASS: Readonly<Record<PhaseSegmentState, string>> = {

@@ -1,7 +1,7 @@
 // One module-level `keydown` listener, no `useEffect`. `resolveKey` is pure;
 // `installKeyboardMap` wires its result to real effects.
-import type { SessionKey } from '../../shared/hosting/types'
-import type { AppCommand } from '../../shared/shell/commands'
+import type { SessionKey } from '@/shared/hosting/types'
+import type { AppCommand } from '@/shared/shell/commands'
 
 export interface KeyboardContext {
   readonly mod: boolean

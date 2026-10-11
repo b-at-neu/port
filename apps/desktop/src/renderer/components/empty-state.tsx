@@ -2,7 +2,7 @@
 // action.
 import type { ComponentType } from 'react'
 import { cn } from '@/renderer/lib/utils'
-import { Button } from './ui/button'
+import { Button } from '@/renderer/components/ui/button'
 
 export interface EmptyStateAction {
   readonly label: string

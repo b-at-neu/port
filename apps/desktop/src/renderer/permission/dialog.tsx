@@ -4,12 +4,12 @@ import { AlertDialog, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, 
 import { Button } from '@/renderer/components/ui/button'
 import { Textarea } from '@/renderer/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
-import { usePermissionState, answer, setMessage } from './store'
-import { useSelectedSession } from '../session/selection'
-import { useIpcQuery } from '../data/query'
-import { sessionDisplayLabel, startedClock } from '../../shared/hosting/label'
-import { folderLabel } from '../../shared/workspace/label'
-import type { RepositoryEntry } from '../../shared/repos'
+import { usePermissionState, answer, setMessage } from '@/renderer/permission/store'
+import { useSelectedSession } from '@/renderer/session/selection'
+import { useIpcQuery } from '@/renderer/data/query'
+import { sessionDisplayLabel, startedClock } from '@/shared/hosting/label'
+import { folderLabel } from '@/shared/workspace/label'
+import type { RepositoryEntry } from '@/shared/repos'
 import {
   ALLOW_ONCE_LABEL,
   ALLOW_SESSION_LABEL,
@@ -28,7 +28,7 @@ import {
   primaryLine,
   protectedPathLine,
   SENDING_LABEL,
-} from './copy'
+} from '@/renderer/permission/copy'
 
 const WAIT_TOOLTIP = 'Wait a moment before allowing.'
 

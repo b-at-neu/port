@@ -5,10 +5,10 @@ import { Button } from '@/renderer/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/renderer/components/ui/dialog'
 import { Input } from '@/renderer/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/renderer/components/ui/select'
-import type { ClaimVerdict, PlanGateChoice } from '../../shared/claim/types'
-import type { RepoId } from '../../shared/repos'
-import { backToPick, closeClaimDialog, confirmClaim, getState, retryPreflight, setClaimNumber, setClaimRepo, setPlanGate, submitPick, subscribe } from './controller'
-import { PLAN_GATE_OPTIONS, assigneeCopy, blockersCopy, closedCopy, movedCopy, preflightFailedCopy, primaryButtonLabel, refusalCopy, writeOutcomeCopy } from './copy'
+import type { ClaimVerdict, PlanGateChoice } from '@/shared/claim/types'
+import type { RepoId } from '@/shared/repos'
+import { backToPick, closeClaimDialog, confirmClaim, getState, retryPreflight, setClaimNumber, setClaimRepo, setPlanGate, submitPick, subscribe } from '@/renderer/claim/controller'
+import { PLAN_GATE_OPTIONS, assigneeCopy, blockersCopy, closedCopy, movedCopy, preflightFailedCopy, primaryButtonLabel, refusalCopy, writeOutcomeCopy } from '@/renderer/claim/copy'
 
 function Aside({ line, note }: { readonly line: string; readonly note: string }) {
   return (

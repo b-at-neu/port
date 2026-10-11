@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { initialState, isComplete, setOther, toAnswers, toggleOption } from './question-model'
-import type { AskQuestion } from '../../shared/hosting/controls'
+import { initialState, isComplete, setOther, toAnswers, toggleOption } from '@/renderer/session/question-model'
+import type { AskQuestion } from '@/shared/hosting/controls'
 
 const SINGLE: AskQuestion = { question: 'Which approach?', header: 'H', multiSelect: false, options: [{ label: 'A', description: null }, { label: 'B', description: null }] }
 const MULTI: AskQuestion = { question: 'Which tests?', header: 'H', multiSelect: true, options: [{ label: 'Unit', description: null }, { label: 'E2E', description: null }, { label: 'Manual', description: null }] }

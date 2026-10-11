@@ -1,9 +1,9 @@
 // Per-tool bodies for ToolCallRow's expanded content: Bash, TodoWrite, Task, Read/Grep/Glob.
 import { CircleDot, Square, SquareCheck } from 'lucide-react'
-import { CodeBlock } from './code-block'
-import { Markdown } from './markdown'
-import type { GroupedNode, RowView } from './conversation-model'
-import { ConversationEntry } from './conversation-entry'
+import { CodeBlock } from '@/renderer/components/code-block'
+import { Markdown } from '@/renderer/components/markdown'
+import type { GroupedNode, RowView } from '@/renderer/components/conversation-model'
+import { ConversationEntry } from '@/renderer/components/conversation-entry'
 
 export function BashBody({ row }: { readonly row: Extract<RowView, { readonly kind: 'tool-call' }> }) {
   return (

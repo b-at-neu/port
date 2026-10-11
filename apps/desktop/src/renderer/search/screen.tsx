@@ -5,12 +5,12 @@ import { ChevronLeft, Search as SearchIcon } from 'lucide-react'
 import { Button } from '@/renderer/components/ui/button'
 import { Input } from '@/renderer/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/renderer/components/ui/select'
-import { useIpcQuery } from '../data/query'
-import { ROUTE_IDS } from '../router/routes'
-import { relativeTime } from '../lib/relative-time'
-import type { SearchResult, SearchScope } from '../../shared/search/types'
-import { MIN_TERM_CHARS } from '../../shared/search/types'
-import { emptyCopy, errorCopy, footnotes, groupHeader, IDLE_NOTICE, kindChip, SEARCH_HINT, SEARCHING_COPY, summaryLine, TOO_SHORT_COPY } from './copy'
+import { useIpcQuery } from '@/renderer/data/query'
+import { ROUTE_IDS } from '@/renderer/router/routes'
+import { relativeTime } from '@/renderer/lib/relative-time'
+import type { SearchResult, SearchScope } from '@/shared/search/types'
+import { MIN_TERM_CHARS } from '@/shared/search/types'
+import { emptyCopy, errorCopy, footnotes, groupHeader, IDLE_NOTICE, kindChip, SEARCH_HINT, SEARCHING_COPY, summaryLine, TOO_SHORT_COPY } from '@/renderer/search/copy'
 
 export function SearchScreen() {
   const search = useSearch({ from: ROUTE_IDS.search })

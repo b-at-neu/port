@@ -1,10 +1,10 @@
 // Owns the transcript tail's open/poll/close cycle and the follow toggle.
 // `createTailStore` is the injectable, directly-testable factory.
 import { useCallback, useSyncExternalStore } from 'react'
-import { invoke } from '../data/invoke'
-import type { EntryPatch, TranscriptEntry, TranscriptSource, TranscriptTailOpen, TranscriptTailPoll } from '../../shared/sessions/transcript'
-import { openFailureCopy, tailBannerKindFor } from './copy'
-import type { TailBannerKind } from './copy'
+import { invoke } from '@/renderer/data/invoke'
+import type { EntryPatch, TranscriptEntry, TranscriptSource, TranscriptTailOpen, TranscriptTailPoll } from '@/shared/sessions/transcript'
+import { openFailureCopy, tailBannerKindFor } from '@/renderer/transcript/copy'
+import type { TailBannerKind } from '@/renderer/transcript/copy'
 
 export interface TailBanner {
   readonly kind: TailBannerKind

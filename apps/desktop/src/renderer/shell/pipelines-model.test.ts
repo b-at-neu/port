@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId, RepositoryEntry } from '../../shared/repos'
-import type { AttachedAgent, PipelineState, ReconciledItem, RepositoryState } from '../../shared/state/types'
-import type { BoardSnapshot } from '../../shared/board/types'
-import type { HostedSessionSnapshot } from '../../shared/hosting/types'
-import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '../../shared/board/types'
-import type { PipelineRow, ReadyPipelineRow } from './pipelines-model'
-import { pipelinesModel } from './pipelines-model'
+import type { RepoId, RepositoryEntry } from '@/shared/repos'
+import type { AttachedAgent, PipelineState, ReconciledItem, RepositoryState } from '@/shared/state/types'
+import type { BoardSnapshot } from '@/shared/board/types'
+import type { HostedSessionSnapshot } from '@/shared/hosting/types'
+import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/shared/board/types'
+import type { PipelineRow, ReadyPipelineRow } from '@/renderer/shell/pipelines-model'
+import { pipelinesModel } from '@/renderer/shell/pipelines-model'
 
 function assertReady(row: PipelineRow | undefined): ReadyPipelineRow {
   if (row === undefined || !row.ready) throw new Error('expected a ready row')

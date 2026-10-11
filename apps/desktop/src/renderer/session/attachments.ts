@@ -1,6 +1,6 @@
 // Classifies a dropped/pasted/picked `File` into a `ComposerAttachment` or a rejection reason — directly testable, the read itself is the one impure seam.
-import { IMAGE_MEDIA_TYPES, MAX_ATTACHMENTS, MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_TEXT_BYTES, MAX_TOTAL_BYTES } from '../../shared/hosting/attachments'
-import type { ComposerAttachment, ImageMediaType } from '../../shared/hosting/attachments'
+import { IMAGE_MEDIA_TYPES, MAX_ATTACHMENTS, MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_TEXT_BYTES, MAX_TOTAL_BYTES } from '@/shared/hosting/attachments'
+import type { ComposerAttachment, ImageMediaType } from '@/shared/hosting/attachments'
 import {
   oversizedImageNotice,
   oversizedPdfNotice,
@@ -9,7 +9,7 @@ import {
   TOTAL_TOO_LARGE_NOTICE,
   unreadableFileNotice,
   unsupportedFileNotice,
-} from './composer-copy'
+} from '@/renderer/session/composer-copy'
 
 export interface FileLike {
   readonly name: string

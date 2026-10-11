@@ -1,11 +1,11 @@
 // The decision dialog's own steps, the same split gate/dialog-steps.tsx uses.
-import { reviseNoteProblem } from '../../shared/actions/decide'
+import { reviseNoteProblem } from '@/shared/actions/decide'
 import { Button } from '@/renderer/components/ui/button'
 import { DialogFooter, DialogHeader, DialogTitle } from '@/renderer/components/ui/dialog'
 import { Textarea } from '@/renderer/components/ui/textarea'
-import type { DecisionState } from './controller'
-import { closeDecisionDialog, retryLabelOnly, setReviseText, submitRevise, submitUnblock } from './controller'
-import { decisionResultCopy, dialogTitle, reviseConsequence, reviseNoteHint, unblockCapNote, unblockConsequence, unblockReasonLine } from './copy'
+import type { DecisionState } from '@/renderer/decision/controller'
+import { closeDecisionDialog, retryLabelOnly, setReviseText, submitRevise, submitUnblock } from '@/renderer/decision/controller'
+import { decisionResultCopy, dialogTitle, reviseConsequence, reviseNoteHint, unblockCapNote, unblockConsequence, unblockReasonLine } from '@/renderer/decision/copy'
 
 export function ConfirmUnblockStep({ state }: { readonly state: Extract<DecisionState, { readonly step: 'confirm-unblock' }> }) {
   const capNote = unblockCapNote(state.context)

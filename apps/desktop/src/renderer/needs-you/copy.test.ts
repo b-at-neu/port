@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '../../shared/repos'
-import type { NeedsYouItem } from '../../shared/board/needs-you'
-import { needsYouLeadCopy } from './copy'
+import type { RepoId } from '@/shared/repos'
+import type { NeedsYouItem } from '@/shared/board/needs-you'
+import { needsYouLeadCopy } from '@/renderer/needs-you/copy'
 
 function base(overrides: Partial<NeedsYouItem> = {}): Pick<NeedsYouItem, 'repoId' | 'repo' | 'number' | 'title' | 'url' | 'at' | 'matchedRow'> {
   return { repoId: 'repo-a' as RepoId, repo: 'o/a', number: 41, title: 't', url: 'https://github.com/o/a/issues/41', at: null, matchedRow: null, ...overrides }

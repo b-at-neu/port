@@ -1,15 +1,15 @@
 // Pure per-row helpers for the Board's TicketRow and detail pane. Action
 // state is passed in explicitly rather than read from a module global.
-import { OPERATOR_DECISIONS } from '../../shared/actions/types'
-import type { ActionAvailability, OperatorAction, OperatorDecision } from '../../shared/actions/types'
-import { needsYouReasonOf } from '../../shared/board/needs-you'
-import type { BoardItemRow } from '../../shared/board/types'
-import { operatorJoinedOf as operatorJoinedOfRecords } from '../../shared/board/stage-links'
-import type { DispatchRecord } from '../../shared/dispatch/types'
-import type { AttachedAgent, AttachedSession } from '../../shared/state/types'
-import type { PillStatus } from '../components/status-pill'
-import type { ItemActionState } from './actions'
-import { actionRefusalNote, actionResultCopy, decisionButtonLabel, decisionRefusalNote, openPrButtonLabel, reviewPlanButtonLabel } from './copy'
+import { OPERATOR_DECISIONS } from '@/shared/actions/types'
+import type { ActionAvailability, OperatorAction, OperatorDecision } from '@/shared/actions/types'
+import { needsYouReasonOf } from '@/shared/board/needs-you'
+import type { BoardItemRow } from '@/shared/board/types'
+import { operatorJoinedOf as operatorJoinedOfRecords } from '@/shared/board/stage-links'
+import type { DispatchRecord } from '@/shared/dispatch/types'
+import type { AttachedAgent, AttachedSession } from '@/shared/state/types'
+import type { PillStatus } from '@/renderer/components/status-pill'
+import type { ItemActionState } from '@/renderer/board/actions'
+import { actionRefusalNote, actionResultCopy, decisionButtonLabel, decisionRefusalNote, openPrButtonLabel, reviewPlanButtonLabel } from '@/renderer/board/copy'
 
 // Mirrors board/sections.ts's own waiting-on-you predicate, so a row's
 // section and its pill colour can never disagree.

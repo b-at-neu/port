@@ -1,14 +1,14 @@
 // `actionFor` resolves each row's single inline action; `runAction`
 // dispatches it, one switch over `NeedsYouItem.kind`.
-import type { DecisionRefusal } from '../../shared/actions/types'
-import type { NeedsYouItem } from '../../shared/board/needs-you'
-import { openReviewDialog } from '../gate/controller'
-import { openDecision } from '../decision/controller'
-import { openAllowDialog } from './allow-dialog'
-import { openRestartDialog } from './restart-dialog'
-import { router } from '../router/router'
-import { ROUTE_IDS } from '../router/routes'
-import { invoke } from '../data/invoke'
+import type { DecisionRefusal } from '@/shared/actions/types'
+import type { NeedsYouItem } from '@/shared/board/needs-you'
+import { openReviewDialog } from '@/renderer/gate/controller'
+import { openDecision } from '@/renderer/decision/controller'
+import { openAllowDialog } from '@/renderer/needs-you/allow-dialog'
+import { openRestartDialog } from '@/renderer/needs-you/restart-dialog'
+import { router } from '@/renderer/router/router'
+import { ROUTE_IDS } from '@/renderer/router/routes'
+import { invoke } from '@/renderer/data/invoke'
 
 export type NeedsYouActionKind = 'review-plan' | 'open' | 'unblock' | 'retry' | 'refresh' | 'answer' | 'allow' | 'resume' | 'restart'
 

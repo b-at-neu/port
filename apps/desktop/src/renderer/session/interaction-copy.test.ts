@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { controlsChangeFailed, modelLoadFailed, planAnswerFailed, questionAnswerFailed, questionProgress, sidebarDotLabel } from './interaction-copy'
+import { controlsChangeFailed, modelLoadFailed, planAnswerFailed, questionAnswerFailed, questionProgress, sidebarDotLabel } from '@/renderer/session/interaction-copy'
 
 describe('questionProgress', () => {
   it('shows no count for a single question', () => {

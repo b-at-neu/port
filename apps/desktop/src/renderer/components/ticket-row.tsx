@@ -2,14 +2,14 @@
 // one next-action link; every operator action lives in the detail pane.
 import type { KeyboardEvent, MouseEvent } from 'react'
 import { cn } from '@/renderer/lib/utils'
-import type { BoardItemRow } from '../../shared/board/types'
-import { PHASE_NAMES } from '../lib/phase'
-import { autoPlanTagLabel, autoPlanTagTitle, operatorJoinedTagLabel, operatorJoinedTagTitle } from '../board/copy'
-import { nextActionFor, pillStatusFor } from '../board/row-model'
-import { openReviewDialog } from '../gate/controller'
-import { openDecision } from '../decision/controller'
-import { PhaseBar } from './phase-bar'
-import { StatusPill } from './status-pill'
+import type { BoardItemRow } from '@/shared/board/types'
+import { PHASE_NAMES } from '@/renderer/lib/phase'
+import { autoPlanTagLabel, autoPlanTagTitle, operatorJoinedTagLabel, operatorJoinedTagTitle } from '@/renderer/board/copy'
+import { nextActionFor, pillStatusFor } from '@/renderer/board/row-model'
+import { openReviewDialog } from '@/renderer/gate/controller'
+import { openDecision } from '@/renderer/decision/controller'
+import { PhaseBar } from '@/renderer/components/phase-bar'
+import { StatusPill } from '@/renderer/components/status-pill'
 
 export interface TicketRowProps {
   readonly row: BoardItemRow

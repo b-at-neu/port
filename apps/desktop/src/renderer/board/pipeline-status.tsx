@@ -2,10 +2,10 @@
 // repository with its own owner line and budget notes underneath.
 import { Button } from '@/renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
-import type { BoardSnapshot } from '../../shared/board/types'
-import { budgetNoteLines, controlFor, observationClause, observationTitle, ownerLineCopy, runStateSuffix } from './owner'
-import { takeOver } from './dispatch'
-import { clockLineCopy, repositoryDetailLines, repositoryLineCopy, storeLineFor } from './tick'
+import type { BoardSnapshot } from '@/shared/board/types'
+import { budgetNoteLines, controlFor, observationClause, observationTitle, ownerLineCopy, runStateSuffix } from '@/renderer/board/owner'
+import { takeOver } from '@/renderer/board/dispatch'
+import { clockLineCopy, repositoryDetailLines, repositoryLineCopy, storeLineFor } from '@/renderer/board/tick'
 
 export interface PipelineStatusProps {
   readonly snapshot: BoardSnapshot

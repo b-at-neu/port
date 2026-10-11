@@ -1,8 +1,8 @@
 // Small `useSyncExternalStore` stores for shell-wide UI state. No `useEffect`
 // anywhere: every writer calls `set` directly from an event handler.
 import { useSyncExternalStore } from 'react'
-import type { RepoId } from '../../shared/repos'
-import type { NewSessionPreselect } from '../session/new-session-model'
+import type { RepoId } from '@/shared/repos'
+import type { NewSessionPreselect } from '@/renderer/session/new-session-model'
 
 function createStore<T>(initial: T) {
   let value = initial

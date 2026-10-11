@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '../../shared/repos'
-import type { BacklogResponse } from '../../shared/backlog/types'
-import { buildBacklogGroup, exactTime, relativeAge, staleSinceAt } from './group'
-import type { BacklogQueryLike } from './group'
+import type { RepoId } from '@/shared/repos'
+import type { BacklogResponse } from '@/shared/backlog/types'
+import { buildBacklogGroup, exactTime, relativeAge, staleSinceAt } from '@/renderer/backlog/group'
+import type { BacklogQueryLike } from '@/renderer/backlog/group'
 
 const REPO_ID = 'repo-a' as RepoId
 
