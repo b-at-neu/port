@@ -74,12 +74,13 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     comments: null,
     reviewCycleCount: null,
     checkRollup: null,
+    planPresent: null,
     ...overrides,
   }
 }
 
 function tickReport(overrides: Partial<TickReport> = {}): TickReport {
-  return { repoId: REPO_ID, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [], autoApprovals: [{ number: 7 }], ...overrides }
+  return { repoId: REPO_ID, displayName: 'o/a', blind: null, actionable: [], held: [], claims: [], disabledStages: [], nextTickAt: null, observations: [], autoApprovals: [{ number: 7 }], labelRepairs: [], ...overrides }
 }
 
 function snapshotWith(tick: readonly TickReport[], items: readonly ReconciledItem[], readAt = '2026-01-01T00:00:00Z'): BoardSnapshot {

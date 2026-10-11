@@ -24,6 +24,7 @@ function makeReport(overrides: Partial<TickReport> = {}): TickReport {
     nextTickAt: null,
     observations: [],
     autoApprovals: [],
+    labelRepairs: [],
     ...overrides,
   }
 }

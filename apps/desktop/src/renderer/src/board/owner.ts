@@ -130,6 +130,14 @@ const OBSERVATION_COPY: Record<TickObservationKind, ObservationCopy> = {
     failed: (n) => `⚠ couldn't act on #${n} — GitHub refused the write. The next poll decides again.`,
     commentFailed: (n) => `acted on #${n}, but its explanation comment didn't post.`,
   },
+  'plan-missing': {
+    written: (n, at) => `moved #${n} back to ready at ${at} — its plan is missing.`,
+    already: (n) => `#${n} was already moved back to ready.`,
+    moved: (n) => `#${n} moved before this app could act on it — nothing was written.`,
+    refusedTerminal: (n) => `didn't move #${n} back to ready — your terminal cockpit took this repo mid-pass.`,
+    failed: (n) => `⚠ couldn't move #${n} back to ready — GitHub refused the write. The next poll decides again.`,
+    commentFailed: (n) => `moved #${n} back to ready, but its explanation comment didn't post.`,
+  },
 }
 
 function recordClause(record: ObservationRecord): string {

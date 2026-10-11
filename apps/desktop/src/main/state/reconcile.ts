@@ -21,7 +21,7 @@ import type {
   WaitingOn,
 } from '../../shared/state/types'
 import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers } from './attach'
-import { closingReference, sessionRequiredAt } from './link'
+import { closingReference, IMPLEMENTATION_PLAN_HEADING, sessionRequiredAt } from './link'
 import { stageOf } from './stage'
 import { codeReviewCount } from '../../../../../scripts/port-tick/gates'
 import { parseFilesBlock } from '../../../../../scripts/port-tick/contention'
@@ -154,6 +154,9 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     // Precomputed so the renderer never re-derives it from raw review bodies; `null` for an issue.
     const reviewCycleCount = item.kind === 'pull-request' ? codeReviewCount(item.reviews ?? undefined) : null
 
+    // `null` for a pull request — a `## Changes` block is prose, never this heading.
+    const planPresent = item.kind === 'issue' ? item.body.split(/\r?\n/).some((line) => line.trim() === IMPLEMENTATION_PLAN_HEADING) : null
+
     return {
       repoId,
       repo: item.repo,
@@ -187,6 +190,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
       comments: item.comments,
       reviewCycleCount,
       checkRollup: item.checkRollup,
+      planPresent,
     }
   })
 

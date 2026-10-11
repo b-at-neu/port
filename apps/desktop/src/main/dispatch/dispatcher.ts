@@ -25,10 +25,10 @@ import { budgetLiveSets, budgetRoute, escalationBody, sumCostUsd } from './budge
 import type { StageDenial, InterruptedStage } from '../../shared/stage/types'
 import { withDenial, withoutDenialId, withoutDenialRule } from './attention'
 import type { BudgetGate } from './budget-gate'
-import { boundRecords, freeSlots, refreshRecords } from './launch'
+import { boundRecords, endedStagesOf, freeSlots, refreshRecords } from './launch'
 import type { StageLauncher, StageRecord } from './launch'
 import type { StageSessionSummary } from './quit'
-import type { TickActionable, TickReport } from '../../shared/tick/types'
+import type { EndedStage, TickActionable, TickReport } from '../../shared/tick/types'
 import type { StageOutcome } from '../../shared/hosting/stage'
 
 const RECENT_LIMIT = 20
@@ -81,6 +81,8 @@ export interface Dispatcher {
   liveStages(repoId: RepoId): readonly string[]
   /** `null` unless this app owns `repoId` — `main/tick/plan.ts`'s own `stageLiveness` input. */
   stageLiveness(repoId: RepoId): { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null
+  /** This repository's own ended stage-session records — `main/tick/plan.ts`'s own `endedStages` input. */
+  endedStages(repoId: RepoId): readonly EndedStage[]
   /** Every live stage session across every repository, for the quit guard. */
   liveStageSessions(): readonly StageSessionSummary[]
   /** Stops new launches — called before `closeAll()` on quit. */
@@ -453,6 +455,9 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     if (stateFor(repoId).owner !== 'app') return null
     return { live: liveStages(repoId), interrupted: (deps.interrupted?.(repoId) ?? []).map((i) => `${i.agent} #${String(i.number)}`) }
   }
+  function endedStages(repoId: RepoId): readonly EndedStage[] {
+    return endedStagesOf(repoStates.get(repoId)?.records ?? [])
+  }
   function liveStageSessions(): readonly StageSessionSummary[] {
     const summaries: StageSessionSummary[] = []
     for (const [repoId, state] of repoStates.entries()) {
@@ -491,5 +496,5 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     stopped = true
   }
 
-  return { consider, status, stopFor, standDown, liveStages, stageLiveness, liveStageSessions, shutdown, recordOutcome, holdsSessionRequired, recordDenial, dismissDenial, clearDenialsFor }
+  return { consider, status, stopFor, standDown, liveStages, stageLiveness, endedStages, liveStageSessions, shutdown, recordOutcome, holdsSessionRequired, recordDenial, dismissDenial, clearDenialsFor }
 }

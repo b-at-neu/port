@@ -232,6 +232,7 @@ export function observationDetailCopy(observation: TickObservation): string | nu
     case 'refresh':
     case 'refresh-stuck':
     case 'withdraw-approval':
+    case 'plan-missing':
       return null
   }
 }

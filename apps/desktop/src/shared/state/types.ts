@@ -119,6 +119,8 @@ export interface ReconciledItem {
   readonly reviewCycleCount: number | null
   /** Copied straight off `PipelineItem`, pull-request only — `null` for an issue. Feeds `scripts/port-tick/checks.ts`'s `rollupVerdict` for the approval-withdrawal observation. */
   readonly checkRollup: readonly CheckContext[] | null
+  /** Whether this issue's body carries `link.ts`'s own `IMPLEMENTATION_PLAN_HEADING`, trimmed-line exact — `null` for a pull request, never a second copy of the heading. Feeds `main/tick/repair.ts`'s `plan-missing`/`plan-missing-approved` shapes. */
+  readonly planPresent: boolean | null
 }
 
 /** `{ at }` when the source answered, `{ unavailable: <reason> }` when it did not — never a stale-looking timestamp standing in for "did not run". */

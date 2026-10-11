@@ -51,6 +51,7 @@ function row(overrides: {
     comments: null,
     reviewCycleCount: null,
     checkRollup: null,
+    planPresent: null,
   } as unknown as ReconciledItem
   return {
     item,

@@ -74,6 +74,8 @@ export function actionFor(item: NeedsYouItem): NeedsYouAction {
       return { label: 'Allow from now on', kind: 'allow', disabledReason: null }
     case 'stage-interrupted':
       return { label: 'Resume', kind: 'resume', disabledReason: item.interrupted.claudeSessionId === null ? "This session ended before Claude started it, so there's nothing to resume." : null, secondaryLabel: 'Restart' }
+    case 'half-labelled':
+      return { label: 'Open on GitHub', kind: 'open', disabledReason: null }
   }
 }
 

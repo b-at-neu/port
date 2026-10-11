@@ -10,6 +10,7 @@ import type { RepoDispatchStatus, RunStatesSnapshot } from '../../shared/dispatc
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '../tick/ledger'
 import { planTick } from '../tick/plan'
 import type { DispatchLedger, RefreshMemo, UnknownStreaks } from '../tick/ledger'
+import type { EndedStage } from '../../shared/tick/types'
 import { buildDesktopTickEvent, recordTick as defaultRecordTick } from '../trajectory/log'
 import type { DesktopTickEvent } from '../trajectory/types'
 import type { RecordTickDeps } from '../trajectory/log'
@@ -65,6 +66,8 @@ export interface CreatePipelineWatcherParams {
   readonly holdSessionRequired?: (repoId: RepoId) => boolean
   /** `planTick`'s own `stageLiveness` input, read fresh per repository. `undefined` reads as `null` for every repository — byte-identical to today. */
   readonly stageLiveness?: (repoId: RepoId) => { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null
+  /** `planTick`'s own `endedStages` input, read fresh per repository. `undefined` reads as `[]` for every repository — byte-identical to today. */
+  readonly endedStages?: (repoId: RepoId) => readonly EndedStage[]
 }
 
 export interface PipelineWatcher {
@@ -175,6 +178,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
           checkDispositions,
           holdSessionRequired: params.holdSessionRequired?.(repository.repoId) ?? true,
           stageLiveness: params.stageLiveness?.(repository.repoId) ?? null,
+          endedStages: params.endedStages?.(repository.repoId) ?? [],
         })
       })
 

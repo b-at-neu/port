@@ -12,6 +12,7 @@ import { createDispatcher } from './dispatcher'
 import type { CreateDispatcherParams, Dispatcher } from './dispatcher'
 import { createAutoPlanner } from './auto-plan'
 import type { AutoPlanner, AutoPlannerDeps } from './auto-plan'
+import type { EndedStage } from '../../shared/tick/types'
 
 export interface WatcherDeps {
   readonly ledger: DispatchLedger
@@ -21,6 +22,7 @@ export interface WatcherDeps {
   readonly dispatchStatus: () => readonly RepoDispatchStatus[]
   readonly holdSessionRequired: (repoId: RepoId) => boolean
   readonly stageLiveness: (repoId: RepoId) => { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null
+  readonly endedStages: (repoId: RepoId) => readonly EndedStage[]
 }
 
 export interface DispatchRuntime {
@@ -67,6 +69,7 @@ export function createDispatchRuntime(deps: Omit<CreateDispatcherParams, 'ledger
       dispatchStatus: () => dispatcher.status(),
       holdSessionRequired: (repoId) => dispatcher.holdsSessionRequired(repoId),
       stageLiveness: (repoId) => dispatcher.stageLiveness(repoId),
+      endedStages: (repoId) => dispatcher.endedStages(repoId),
     },
     bindWatcher: (republish) => {
       republishFn = republish

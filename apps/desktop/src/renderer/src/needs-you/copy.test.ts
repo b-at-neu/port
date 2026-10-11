@@ -79,4 +79,41 @@ describe('needsYouLeadCopy', () => {
     const item = { ...base({ number: 39 }), kind: 'stalled', claim: {} as never } as NeedsYouItem
     expect(needsYouLeadCopy(item)).toBe('Retry #39: its agent stopped responding')
   })
+
+  it('half-labelled — handback-unlabelled uses the resolved label name and the agent\'s phase name', () => {
+    const item = {
+      ...base({ number: 52 }),
+      kind: 'half-labelled',
+      matchedRow: { item: { stages: [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }] } },
+      repair: { number: 52, kind: 'issue', shape: 'handback-unlabelled', labels: ['inProgress'], agent: 'impl' },
+    } as unknown as NeedsYouItem
+    expect(needsYouLeadCopy(item)).toBe('#52\'s implementing session finished, but its label is still "in progress". Check the ticket and set the right label.')
+  })
+
+  it('half-labelled — contradictory names every conflicting label', () => {
+    const item = {
+      ...base({ number: 52 }),
+      kind: 'half-labelled',
+      matchedRow: {
+        item: {
+          stages: [
+            { key: 'planning', name: 'planning', role: 'in-flight' },
+            { key: 'planReview', name: 'plan review', role: 'gate' },
+          ],
+        },
+      },
+      repair: { number: 52, kind: 'issue', shape: 'contradictory', labels: ['planning', 'planReview'], agent: null },
+    } as unknown as NeedsYouItem
+    expect(needsYouLeadCopy(item)).toBe('#52 has conflicting labels: "planning", "plan review". Remove the one that\'s wrong.')
+  })
+
+  it('half-labelled — plan-missing-approved', () => {
+    const item = { ...base({ number: 52 }), kind: 'half-labelled', repair: { number: 52, kind: 'issue', shape: 'plan-missing-approved', labels: ['planApproved'], agent: null } } as unknown as NeedsYouItem
+    expect(needsYouLeadCopy(item)).toBe('#52 is approved, but its body has no implementation plan. Restore the plan or move it back to "ready".')
+  })
+
+  it('half-labelled — pr-missing', () => {
+    const item = { ...base({ number: 52 }), kind: 'half-labelled', repair: { number: 52, kind: 'issue', shape: 'pr-missing', labels: ['prOpened'], agent: null } } as unknown as NeedsYouItem
+    expect(needsYouLeadCopy(item)).toBe('#52 says a pull request is open, but none is. Reopen it or move the issue back.')
+  })
 })

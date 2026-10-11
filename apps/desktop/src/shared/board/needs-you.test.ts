@@ -44,6 +44,7 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     comments: null,
     reviewCycleCount: null,
     checkRollup: null,
+    planPresent: null,
     ...overrides,
   }
 }
@@ -92,6 +93,7 @@ function tickReport(overrides: Partial<TickReport> = {}): TickReport {
     disabledStages: [],
     nextTickAt: null,
     observations: [],
+    labelRepairs: [],
     ...overrides,
   }
 }
@@ -176,6 +178,13 @@ describe('needsYouItems', () => {
     const items = needsYouItems(snapshotOf([], { tick: [tickReport({ claims })] }), NOW)
     expect(items).toHaveLength(1)
     expect(items[0]).toMatchObject({ kind: 'stalled', number: 3 })
+  })
+
+  it('surfaces every reported labelRepair as a half-labelled item', () => {
+    const labelRepairs = [{ number: 9, kind: 'issue' as const, shape: 'contradictory' as const, labels: ['planning' as const, 'planReview' as const], agent: null }]
+    const items = needsYouItems(snapshotOf([], { tick: [tickReport({ labelRepairs })] }), NOW)
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ kind: 'half-labelled', number: 9 })
   })
 
   it('budget notes keep only escalated and escalation-failed', () => {
