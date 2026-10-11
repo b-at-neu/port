@@ -1,5 +1,5 @@
 {
-  "$comment": "Authoritative decision-case table for scripts/port-tick/checks.ts, asserted by scripts/checks/tick.ts (family 14, #292) and ported against by apps/desktop/src/main/tick/checks.test.ts.",
+  "$comment": "Authoritative decision-case table for scripts/port-tick/checks.ts, asserted by scripts/checks/tick.ts (family 14, #292) and ported against by apps/desktop/tests/unit/main/tick/checks.test.ts.",
   "cases": [
     {
       "function": "reduceRollup",

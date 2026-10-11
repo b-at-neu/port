@@ -1,9 +1,9 @@
 // Runs parseFilesBlock/gateCandidates over the tick engine's own shared case table; this module
 // is the engine's own, apps/desktop imports it directly with no local copy.
 import { describe, expect, it } from 'vitest'
-import { gateCandidates, parseFilesBlock } from '../../../../../scripts/port-tick/contention'
-import type { ClaimedItem, OccupiedEntry } from '../../../../../scripts/port-tick/contention'
-import cases from '../../../../../scripts/port-tick/cases/contention.cases.json'
+import { gateCandidates, parseFilesBlock } from '../../../../../../scripts/port-tick/contention'
+import type { ClaimedItem, OccupiedEntry } from '../../../../../../scripts/port-tick/contention'
+import cases from '../../../../../../scripts/port-tick/cases/contention.cases.json'
 
 interface ParseFilesBlockCase {
   readonly function: 'parseFilesBlock'

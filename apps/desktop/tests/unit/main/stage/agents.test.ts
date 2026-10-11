@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { STAGE_AGENT_NAMES } from '@/main/stage/agents'
 
-const PLUGIN_ROOT = join(__dirname, '../../../../../plugins/port')
+const PLUGIN_ROOT = join(__dirname, '../../../../../../plugins/port')
 
 async function frontmatterName(file: string): Promise<string> {
   const text = await readFile(join(PLUGIN_ROOT, 'agents', file), 'utf8')

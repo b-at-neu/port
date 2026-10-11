@@ -1,10 +1,10 @@
 // Runs zeroDiffGate/cycleCapExceeded/etc over the tick engine's own shared case table; these are
 // the engine's own functions. The table's review shape nests commit.oid, so toReviewNode adapts it.
 import { describe, expect, it } from 'vitest'
-import { approvedReverify, capRefreshes, codeReviewCount, cycleCapExceeded, mergeabilityRoute, refreshDecision, refreshWins, zeroDiffGate } from '../../../../../scripts/port-tick/gates'
-import type { ReviewNode } from '../../../../../scripts/port-tick/gates'
-import { toReviewNode } from '../../../../../scripts/port-tick/wire'
-import cases from '../../../../../scripts/port-tick/cases/gates.cases.json'
+import { approvedReverify, capRefreshes, codeReviewCount, cycleCapExceeded, mergeabilityRoute, refreshDecision, refreshWins, zeroDiffGate } from '../../../../../../scripts/port-tick/gates'
+import type { ReviewNode } from '../../../../../../scripts/port-tick/gates'
+import { toReviewNode } from '../../../../../../scripts/port-tick/wire'
+import cases from '../../../../../../scripts/port-tick/cases/gates.cases.json'
 
 interface RawReview {
   readonly body: string

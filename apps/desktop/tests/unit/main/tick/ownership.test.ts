@@ -1,8 +1,8 @@
 // Runs partitionOwnership over the tick engine's own shared case table; this function is the
 // engine's own. The cases are GraphQL-shaped; this test adapts that wire shape at its edges only.
 import { describe, expect, it } from 'vitest'
-import { partitionOwnership } from '../../../../../scripts/port-tick/classify'
-import cases from '../../../../../scripts/port-tick/cases/ownership.cases.json'
+import { partitionOwnership } from '../../../../../../scripts/port-tick/classify'
+import cases from '../../../../../../scripts/port-tick/cases/ownership.cases.json'
 
 interface GraphQLNode {
   readonly number: number

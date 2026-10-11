@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
-import { classifyUnmatched } from '../../../../../scripts/port-tick/liveness'
+import { classifyUnmatched } from '../../../../../../scripts/port-tick/liveness'
 
 const REPO = 'repo-1' as RepoId
 const OTHER = 'repo-2' as RepoId
