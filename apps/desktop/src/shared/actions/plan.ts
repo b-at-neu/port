@@ -1,10 +1,10 @@
 // Pure action derivation — decides whether an action applies and its label-level plan; `main/actions/apply.ts` turns a plan into a `LabelWriteRequest` and writes.
-import { LABEL_DEFAULTS } from '../labels/defaults'
-import type { LabelRole } from '../labels/defaults'
-import type { LabelKey, LabelVocabulary } from '../labels/vocabulary'
-import type { AssigneeExpectation, LabelAuditEntry, LabelPrecondition } from '../writes/types'
-import type { ReconciledItem } from '../state/types'
-import type { ActionAvailability, ActionPlan, ActionRefusal, OperatorAction } from './types'
+import { LABEL_DEFAULTS } from '@/shared/labels/defaults'
+import type { LabelRole } from '@/shared/labels/defaults'
+import type { LabelKey, LabelVocabulary } from '@/shared/labels/vocabulary'
+import type { AssigneeExpectation, LabelAuditEntry, LabelPrecondition } from '@/shared/writes/types'
+import type { ReconciledItem } from '@/shared/state/types'
+import type { ActionAvailability, ActionPlan, ActionRefusal, OperatorAction } from '@/shared/actions/types'
 import { RETRY_TRIGGER as ENGINE_RETRY_TRIGGER } from '../../../../../scripts/port-tick/liveness'
 
 /** Reused directly from the tick engine's own `RETRY_TRIGGER`, so there is no second copy to drift; retry reads it forward, pause reads it inverted. */

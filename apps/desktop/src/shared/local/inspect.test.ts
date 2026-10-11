@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { SessionRecord, SessionScan } from '../sessions/types'
-import { actorKeyOf, BURST_MIN_COUNT, BURST_WINDOW_MS, inspectDenials, shapeOf } from './inspect'
-import type { DenialActor, DenialDecision, DenialEntry, DenialsRead, DenialSummary } from './types'
+import type { SessionRecord, SessionScan } from '@/shared/sessions/types'
+import { actorKeyOf, BURST_MIN_COUNT, BURST_WINDOW_MS, inspectDenials, shapeOf } from '@/shared/local/inspect'
+import type { DenialActor, DenialDecision, DenialEntry, DenialsRead, DenialSummary } from '@/shared/local/types'
 
 // The real-repository-log case lives in `main/local/inspect.test.ts` — this file must import nothing from `src/main/`, the same purity `inspect.ts` rests on.
 

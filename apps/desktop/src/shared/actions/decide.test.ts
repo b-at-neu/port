@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '../repos'
-import type { PullRequestCommentNode } from '../github/types'
-import type { ReconciledItem, StageLabel } from '../state/types'
-import { decisionPlan, decisionsFor, escalationOf, reviseNoteProblem } from './decide'
+import type { RepoId } from '@/shared/repos'
+import type { PullRequestCommentNode } from '@/shared/github/types'
+import type { ReconciledItem, StageLabel } from '@/shared/state/types'
+import { decisionPlan, decisionsFor, escalationOf, reviseNoteProblem } from '@/shared/actions/decide'
 
 function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
   return {

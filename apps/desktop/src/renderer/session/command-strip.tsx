@@ -1,9 +1,9 @@
 // The Pipeline strip — a status chip, one button per `port:` command, an
 // inline argument row, an Agents disclosure, and the invoke-refused banner.
 import { useState } from 'react'
-import { Textarea } from '@/components/ui/textarea'
-import { Button } from '@/components/ui/button'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Textarea } from '@/renderer/components/ui/textarea'
+import { Button } from '@/renderer/components/ui/button'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/renderer/components/ui/collapsible'
 import { invoke } from '../data/invoke'
 import type { AgentSummary, CommandSummary, HostedSessionSnapshot, SessionKey } from '../../shared/hosting/types'
 import { argumentRequired, bannerCopy, chipCopy, INVOKE_REJECTED, invokeFailureCopy } from './commands-copy'

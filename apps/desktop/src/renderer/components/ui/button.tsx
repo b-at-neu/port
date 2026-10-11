@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes } from 'react'
 import { Slot } from '@radix-ui/react-slot'
 import { cva } from 'class-variance-authority'
 import type { VariantProps } from 'class-variance-authority'
-import { cn } from '@/lib/utils'
+import { cn } from '@/renderer/lib/utils'
 
 // shadcn's `new-york` Button, changed only through variants (DESIGN §4):
 // `destructive` uses the `danger` pill roles the ticket measured, never

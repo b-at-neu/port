@@ -1,8 +1,8 @@
 // An operator's default model and permission mode for a new session.
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/renderer/components/ui/select'
+import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { ErrorBanner } from '../components/error-banner'
 import { ipcQueryOptions, useIpcMutation, useIpcQuery } from '../data/query'
 import { SESSION_MODELS, SESSION_PERMISSION_MODES } from '../../shared/hosting/types'

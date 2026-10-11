@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { proposedRule, validateRule } from './rule'
+import { proposedRule, validateRule } from '@/shared/stage/rule'
 
 describe('proposedRule', () => {
   it('narrows a plain-word second token to two tokens', () => {

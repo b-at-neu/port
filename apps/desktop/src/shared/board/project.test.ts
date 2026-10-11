@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '../labels/vocabulary'
-import type { RepoId } from '../repos'
-import type { PipelineState, ReconciledItem, RepositoryState } from '../state/types'
-import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS, initialHealth } from './types'
-import type { BoardSnapshot, RepositoryHealth } from './types'
-import { boardSignature, displayStatus, projectBoard, stageLabelOf } from './project'
+import { resolveVocabulary } from '@/shared/labels/vocabulary'
+import type { RepoId } from '@/shared/repos'
+import type { PipelineState, ReconciledItem, RepositoryState } from '@/shared/state/types'
+import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS, initialHealth } from '@/shared/board/types'
+import type { BoardSnapshot, RepositoryHealth } from '@/shared/board/types'
+import { boardSignature, displayStatus, projectBoard, stageLabelOf } from '@/shared/board/project'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 

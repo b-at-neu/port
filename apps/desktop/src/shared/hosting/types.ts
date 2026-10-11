@@ -1,11 +1,11 @@
 // Renderer-safe contract for a hosted session. No import here may reach a Node builtin — only `main/hosting/` spawns a `claude` child or holds a `Query`. `message: unknown` on the event envelope is deliberate: narrowing it is the renderer's own job, never a second guess at the SDK's union here.
-import type { RepoId } from '../repos'
-import type { RuntimeDiagnosis } from '../runtime/types'
-import type { EntryPatch, TranscriptEntry } from '../sessions/transcript'
-import type { SessionWorkspace } from '../workspace/types'
-import type { PendingInteraction, SessionControls, SessionModels } from './controls'
-import type { SessionResult, StageTag } from './stage'
-import type { SessionUsage } from './usage'
+import type { RepoId } from '@/shared/repos'
+import type { RuntimeDiagnosis } from '@/shared/runtime/types'
+import type { EntryPatch, TranscriptEntry } from '@/shared/sessions/transcript'
+import type { SessionWorkspace } from '@/shared/workspace/types'
+import type { PendingInteraction, SessionControls, SessionModels } from '@/shared/hosting/controls'
+import type { SessionResult, StageTag } from '@/shared/hosting/stage'
+import type { SessionUsage } from '@/shared/hosting/usage'
 
 declare const sessionKeyBrand: unique symbol
 

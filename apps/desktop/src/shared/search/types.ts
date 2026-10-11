@@ -1,7 +1,7 @@
 // Renderer-safe search shapes. No import here may reach a Node builtin or the Agent SDK — `main/search/` derives these from the same `TranscriptEntry[]` `main/sessions/` already parses.
-import type { RepoId } from '../repos'
-import type { SessionFailureKind } from '../sessions/types'
-import type { TranscriptEntry } from '../sessions/transcript'
+import type { RepoId } from '@/shared/repos'
+import type { SessionFailureKind } from '@/shared/sessions/types'
+import type { TranscriptEntry } from '@/shared/sessions/transcript'
 
 export type SearchScope = { readonly kind: 'repo'; readonly repoId: RepoId } | { readonly kind: 'all' }
 

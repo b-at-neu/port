@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import template from '../../../../../plugins/port/data/labels.json'
-import { LABEL_DEFAULTS } from './defaults'
-import { LABEL_KEYS, labelName, resolveVocabulary, verifyVocabulary, type RepoLabels } from './vocabulary'
+import { LABEL_DEFAULTS } from '@/shared/labels/defaults'
+import { LABEL_KEYS, labelName, resolveVocabulary, verifyVocabulary, type RepoLabels } from '@/shared/labels/vocabulary'
 
 // Anti-drift invariant: LABEL_KEYS and LABEL_DEFAULTS agree with the template, both directions.
 describe('LABEL_KEYS / LABEL_DEFAULTS match the shipped template', () => {

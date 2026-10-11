@@ -2,7 +2,7 @@
 // menu-bearing pill never re-derives this shape.
 import type { ReactNode } from 'react'
 import { ChevronDown, Loader2 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/renderer/lib/utils'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip'
 import type { PillStatus } from './status-pill'

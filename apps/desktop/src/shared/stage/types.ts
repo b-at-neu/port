@@ -1,9 +1,9 @@
 // Renderer-safe types for stage-session "needs you" attention: a denied tool call waiting on an
 // allowlist decision, and a stage session interrupted before it reached a hand-back.
-import type { PipelineItemKind } from '../github/types'
-import type { LabelKey } from '../labels/vocabulary'
-import type { StageAgent } from '../tick/types'
-import type { RepoId } from '../repos'
+import type { PipelineItemKind } from '@/shared/github/types'
+import type { LabelKey } from '@/shared/labels/vocabulary'
+import type { StageAgent } from '@/shared/tick/types'
+import type { RepoId } from '@/shared/repos'
 
 /** A single off-allowlist tool call a stage session's policy denied. Deduped per repository by `rule`, bounded to 20, and dropped on relaunch — a repeated denial simply re-raises the item. */
 export interface StageDenial {

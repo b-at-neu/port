@@ -3,7 +3,10 @@
   "compilerOptions": {
     "composite": true,
     "rootDir": "../..",
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
   },
   "include": [
     "src/main/**/*",

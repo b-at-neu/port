@@ -1,7 +1,7 @@
 // A reusable 290px side panel. A callback ref focuses the pane on mount so
 // onKeyDown alone catches Escape — no global listener, no useEffect.
 import type { KeyboardEvent, ReactNode } from 'react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/renderer/lib/utils'
 
 export interface DetailPaneProps {
   readonly onClose: () => void

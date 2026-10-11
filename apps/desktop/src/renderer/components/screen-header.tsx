@@ -1,6 +1,6 @@
 // DESIGN §3/§4 ScreenHeader — 44px, text-title 600, bottom border.
 import type { ReactNode } from 'react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/renderer/lib/utils'
 
 export interface ScreenHeaderProps {
   readonly children: ReactNode

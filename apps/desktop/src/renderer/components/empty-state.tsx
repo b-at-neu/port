@@ -1,7 +1,7 @@
 // DESIGN §4 EmptyState — an icon, one sentence, and the single useful
 // action.
 import type { ComponentType } from 'react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/renderer/lib/utils'
 import { Button } from './ui/button'
 
 export interface EmptyStateAction {

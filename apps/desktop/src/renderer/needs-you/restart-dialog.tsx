@@ -1,6 +1,6 @@
 // Restart's own confirmation — DESIGN §4: it has consequences (removes the kept worktree).
 import { useSyncExternalStore } from 'react'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/renderer/components/ui/alert-dialog'
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
 import type { InterruptedStage, StageRestartResult } from '../../shared/stage/types'

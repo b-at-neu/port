@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/renderer/components/ui/collapsible'
 import { ConversationEntry } from './conversation-entry'
 import { Markdown } from './markdown'
 import { groupEntries } from './conversation-model'

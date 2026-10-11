@@ -1,7 +1,7 @@
 // The plan gate dialog's own steps, split out to stay under 500 lines.
-import { Button } from '@/components/ui/button'
-import { DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Textarea } from '@/components/ui/textarea'
+import { Button } from '@/renderer/components/ui/button'
+import { DialogFooter, DialogHeader, DialogTitle } from '@/renderer/components/ui/dialog'
+import { Textarea } from '@/renderer/components/ui/textarea'
 import { Markdown } from '../components/markdown'
 import type { GateState } from './controller'
 import { backToReview, closeGateDialog, openFeedback, retryLabelOnly, retryPreflight, setFeedbackText, submitApprove, submitFeedback, tryCommentAgain } from './controller'

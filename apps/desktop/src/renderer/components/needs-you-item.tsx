@@ -2,9 +2,9 @@
 // and one inline action, with a caret to expand more detail in place.
 import type { ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { cn } from '@/renderer/lib/utils'
+import { Button } from '@/renderer/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { exactTime, relativeAge } from '../backlog/group'
 
 export interface NeedsYouItemProps {

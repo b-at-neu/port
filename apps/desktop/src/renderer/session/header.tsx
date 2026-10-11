@@ -1,6 +1,6 @@
 // DESIGN §3 Session header — 44px, title, phase pill, Stop/Close, the "…" menu.
-import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Button } from '@/renderer/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { ScreenHeader } from '../components/screen-header'
 import { StatusPill } from '../components/status-pill'
 import type { PillStatus } from '../components/status-pill'

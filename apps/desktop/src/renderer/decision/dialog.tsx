@@ -1,7 +1,7 @@
 // The decision dialog — a shadcn Dialog over decision/controller.ts's
 // useSyncExternalStore state, the same shape gate/dialog.tsx establishes.
 import { useSyncExternalStore } from 'react'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent } from '@/renderer/components/ui/dialog'
 import { closeDecisionDialog, getState, subscribe } from './controller'
 import { ApplyingStep, ConfirmReviseStep, ConfirmUnblockStep, ResultStep } from './dialog-steps'
 

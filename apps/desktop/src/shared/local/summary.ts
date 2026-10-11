@@ -1,5 +1,5 @@
 // The one place a `DenialSummary` is built from entries, shared by the whole-file total (`main/local/denials.ts`) and the analysed-window total (`inspect.ts`), so the two scopes can never drift apart in how they count.
-import type { DenialEntry, DenialSummary } from './types'
+import type { DenialEntry, DenialSummary } from '@/shared/local/types'
 
 /** A `deny` from a `session` actor is `railDenials` (a rail held, never a missing permission), never folded into `agentDenials`. */
 export function summarizeDenials(entries: readonly DenialEntry[]): DenialSummary {

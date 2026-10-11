@@ -1,6 +1,6 @@
 // The app menu's own command table — one entry per global §3 chord, shared by main/menu.ts
 // and the renderer, which both run the identical action a key press would.
-import type { SessionKey } from '../hosting/types'
+import type { SessionKey } from '@/shared/hosting/types'
 
 export interface AppCommandSpec {
   readonly kind: 'palette' | 'new-session' | 'toggle-sidebar' | 'rename-session' | 'next-session' | `jump-to-session-${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}`

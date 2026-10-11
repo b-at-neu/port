@@ -1,5 +1,5 @@
 // Renderer-safe session and agent shapes for the local session adapter. No import here may reach a Node builtin or the Agent SDK — only `main/sessions/` touches either.
-import type { RepoId } from '../repos'
+import type { RepoId } from '@/shared/repos'
 
 /** The four port pipeline stage agents, pinned against the real basenames under `plugins/port/agents/`, both directions. */
 export type PortStageAgent = 'plan-agent' | 'impl-agent' | 'review-agent' | 'revise-agent'

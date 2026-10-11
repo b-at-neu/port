@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { sessionDisplayLabel, startedClock } from './label'
+import { sessionDisplayLabel, startedClock } from '@/shared/hosting/label'
 
 describe('sessionDisplayLabel', () => {
   it('uses the title when set', () => {

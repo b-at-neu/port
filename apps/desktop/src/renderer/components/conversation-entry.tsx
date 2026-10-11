@@ -2,7 +2,7 @@
 // the live session view and the on-disk transcript view.
 import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/renderer/components/ui/collapsible'
 import { Markdown } from './markdown'
 import { ToolCallRow } from './tool-call-row'
 import { buildRow, PROMPT_CLAMP_LINES } from './conversation-model'

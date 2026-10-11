@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react'
 import { parseMarkdown } from '../../shared/markdown/block'
 import type { BlockNode, InlineNode, ListItem, TableAlign } from '../../shared/markdown/types'
-import { cn } from '@/lib/utils'
+import { cn } from '@/renderer/lib/utils'
 import { CodeBlock } from './code-block'
 
 function renderInline(nodes: readonly InlineNode[]): ReactNode {

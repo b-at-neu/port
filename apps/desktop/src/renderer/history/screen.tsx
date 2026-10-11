@@ -1,9 +1,9 @@
 // The History screen — past sessions and their agents, across every repository, reached from the sidebar.
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { RefreshCw, History as HistoryIcon } from 'lucide-react'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/renderer/components/ui/select'
+import { Button } from '@/renderer/components/ui/button'
+import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { EmptyState } from '../components/empty-state'
 import { ErrorBanner } from '../components/error-banner'
 import { ScreenHeader } from '../components/screen-header'

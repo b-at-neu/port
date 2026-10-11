@@ -138,6 +138,8 @@ Installers: `apps/desktop/README.md` → Building installers.
 
 Packaged smoke test (#336): after `pnpm --filter @port/desktop dist`, run `pnpm --filter @port/desktop smoke:packaged` — it launches the packaged executable `dist/` just produced (never the dev build) with fixtures off, and checks the app launches, mounts, hits no page or console error, and quits cleanly. It reuses the visual harness's xvfb-aware runner (`scripts/screenshots.mjs`) under a separate Playwright config (`playwright.packaged.config.mts`), so it never runs alongside `pnpm screenshots`'s own spec.
 
+A cross-folder import inside `apps/desktop/src` uses the `@/` alias, rooted at `src` (`@/main/…`, `@/preload/…`, `@/renderer/…`, `@/shared/…`) — a `./` sibling import is fine, but a `../` parent import that stays inside `src` is a `port/no-parent-import` warning. `node apps/desktop/scripts/alias-imports.mjs [--check] [--retarget-renderer] <dir>…` (run from `apps/desktop`) rewrites a directory's relative imports to the alias; `--check` reports without writing.
+
 The IPC contract between the main and renderer processes lives in `apps/desktop/src/shared/ipc.ts`: a request/response type map plus a runtime channel list, checked against each other at compile time. Add a channel to both, or `pnpm typecheck` fails.
 
 The app shell (`apps/desktop/src/renderer/shell/`) is the one React root: a sidebar, a command palette (Ctrl/Cmd+K), a keyboard map (`docs/DESIGN.md` §3), and the legacy screens' own frame. Sidebar and launch state persist to `localStorage['port.shell']` (`shell/prefs.ts`) — a malformed value falls back to its default rather than crashing the app. The `desktop-shell` layer 1 check pins the keyboard map and the phase-name table against `docs/DESIGN.md`.

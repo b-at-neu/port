@@ -1,9 +1,9 @@
 // "Allow from now on" — the denial row's own confirmation, an editable rule `Input` that main
 // re-validates. The same `useSyncExternalStore` store shape `decision/controller.ts` establishes.
 import { useState, useSyncExternalStore } from 'react'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
+import { Button } from '@/renderer/components/ui/button'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/renderer/components/ui/dialog'
+import { Input } from '@/renderer/components/ui/input'
 import { toast } from 'sonner'
 import type { RepoId } from '../../shared/repos'
 import type { StageDenial, StageAllowResult } from '../../shared/stage/types'

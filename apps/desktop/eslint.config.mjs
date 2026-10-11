@@ -4,12 +4,17 @@ import eslintConfigPrettier from 'eslint-config-prettier'
 import react from 'eslint-plugin-react'
 import reactHooks from 'eslint-plugin-react-hooks'
 import { rule as noRawColourRule } from './eslint/no-raw-colour.mjs'
+import { rule as noParentImportRule } from './eslint/no-parent-import.mjs'
+
+// Defined once: ESLint rejects the same plugin key bound to two different objects when two blocks' files globs overlap.
+const portPlugin = { rules: { 'no-raw-colour': noRawColourRule, 'no-parent-import': noParentImportRule } }
 
 export default tseslint.config(
   { ignores: ['out/**', 'dist/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {
+    plugins: { port: portPlugin },
     languageOptions: {
       parserOptions: {
         projectService: {
@@ -24,6 +29,13 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-misused-promises': 'error'
+    }
+  },
+  // port/no-parent-import is a warning for now; it becomes an error once the rewrite finishes everywhere.
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    rules: {
+      'port/no-parent-import': 'warn'
     }
   },
   {
@@ -43,8 +55,7 @@ export default tseslint.config(
     files: ['src/renderer/**/*.{ts,tsx}'],
     plugins: {
       react,
-      'react-hooks': reactHooks,
-      port: { rules: { 'no-raw-colour': noRawColourRule } }
+      'react-hooks': reactHooks
     },
     languageOptions: {
       parserOptions: { ecmaFeatures: { jsx: true } }

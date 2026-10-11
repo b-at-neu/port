@@ -1,7 +1,7 @@
 // The plan gate dialog — a shadcn Dialog over gate/controller.ts's
 // useSyncExternalStore state. Esc or the scrim calls closeGateDialog.
 import { useSyncExternalStore } from 'react'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent } from '@/renderer/components/ui/dialog'
 import { closeGateDialog, getState, subscribe } from './controller'
 import { ErrorStep, FeedbackStep, LoadingStep, RefusedStep, ResultStep, ReviewingStep } from './dialog-steps'
 
