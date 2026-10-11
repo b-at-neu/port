@@ -1,8 +1,8 @@
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root } from '../lib/files.ts';
-import { resolveMatchers, subagentPayload, plainPayload, makeCheck, makeDecide, bash } from '../lib/guard-fixtures.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root } from '#lib/files.ts';
+import { resolveMatchers, subagentPayload, plainPayload, makeCheck, makeDecide, bash } from '#lib/guard-fixtures.ts';
+import type { Reporter } from '#lib/report.ts';
 
 export default async function ({ fail, ok, expect }: Reporter) {
   const { decide } = await import(pathToFileURL(join(root, 'plugins/port/hooks/lib/guard-rules.mjs')).href);

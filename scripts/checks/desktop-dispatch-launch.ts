@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, walk, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, walk, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // Split out of desktop-dispatch.ts to stay under the file-size limit: no
 // hosted dispatcher session, the onTick pacing, and the quit guard's ordering.

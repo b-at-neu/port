@@ -1,8 +1,8 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, readJson, walk, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, readJson, walk, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 const FORENSICS_DIR = 'scripts/port-forensics';
 const CLI_REL = 'scripts/port-forensics.ts';

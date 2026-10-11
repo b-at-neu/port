@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, walk, relOf, readJson, pipelineSkillText, pipelineDocsText } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, walk, relOf, readJson, pipelineSkillText, pipelineDocsText } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 export default async function ({ expect, fail, ok }: Reporter) {
   // --- Review evidence gate — verdicts wait for concluded checks, never forming one while a

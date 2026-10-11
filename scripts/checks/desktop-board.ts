@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, walk, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, walk, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // apps/desktop/src/shared/board/ and renderer/board/ are a pure projection plus
 // plain-DOM rendering, reading nothing itself. Reads directories by explicit path, never walk('apps/').

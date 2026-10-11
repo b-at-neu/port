@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, readJson, pipelineSkillText } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, readJson, pipelineSkillText } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 const ENGINE_REL = 'scripts/port-tick/overrides.ts';
 

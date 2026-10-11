@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, readJson, walk, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, readJson, walk, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // The registry's config contract (defaults and validation) is read from
 // schema/port.config.schema.json at runtime, never transcribed into TypeScript.

@@ -3,8 +3,8 @@
 import { resolveClaudeHome, buildProjectIndex, readSession, listSessionIds } from './scan.ts';
 import { classifyTermination, notificationGaps, orphans, shellLoopHits, bashTimeouts, blockedAfterDenial, quotaClass, stageOf, itemNumberOf } from './classify.ts';
 import { fetchInFlightItems } from './gh.ts';
-import { classifyRecord, pairToolResults } from '../lib/transcript.ts';
-import { loadConfig } from '../port-tick/config.ts';
+import { classifyRecord, pairToolResults } from '#lib/transcript.ts';
+import { loadConfig } from '#port-tick/config.ts';
 
 const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

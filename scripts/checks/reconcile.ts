@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 const TICK_DIR = 'scripts/port-tick';
 

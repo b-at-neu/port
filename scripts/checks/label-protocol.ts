@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, readJson, walk, relOf, frontmatter } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, readJson, walk, relOf, frontmatter } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // --- Label transitions are compare-and-swap: `--remove-label X` exits 0 when X is absent, so
 // a stale-view transition silently degrades into a bare add. pin: label-cas block ↔ PIPELINE.md

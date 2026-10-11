@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { root, readJson, walk, relOf, blockScalar, sectionText } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, readJson, walk, relOf, blockScalar, sectionText } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 /** Every key a case.yaml may declare, read live from evals/README.md's own schema table
  *  rather than transcribed here. One row packs two backtick-quoted keys into one cell, so every backtick token is taken, not just the first. */

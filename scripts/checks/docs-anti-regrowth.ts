@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 const NAMES_CHECKS_FILE = /scripts\/checks\/[\w-]+\.ts/;
 const HAS_PIN_ROW = /^\|.*↔.*\|.*\|\s*$/m;

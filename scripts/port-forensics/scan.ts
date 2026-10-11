@@ -3,7 +3,7 @@
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
-import { parseLines } from '../lib/transcript.ts';
+import { parseLines } from '#lib/transcript.ts';
 
 export const DEFAULT_READ_CAP_BYTES = 16 * 1024 * 1024;
 

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, walk, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, walk, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // --- No GraphQL search(, no gh --jq under main/github/: `search` is index-backed with
 // ingestion lag, and `gh` silently skips `--jq` on the partial-error response this adapter must read. ---

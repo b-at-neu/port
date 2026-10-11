@@ -2,8 +2,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { root, readJson, walk, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, readJson, walk, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // The guard hook's classifier tests live in hooks-classifier.ts, hooks-cockpit-rules.ts, and
 // hooks-gate-rule.ts; this module keeps the hook as a declared artifact: its command shape, PreToolUse wiring, and end-to-end stdin/stdout/exit-code spawn.

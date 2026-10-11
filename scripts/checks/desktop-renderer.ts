@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, walk, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, walk, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // --- No HTML-injection sink in the renderer: a tool result or diff line is untrusted text,
 // so apps/desktop/src/renderer/ never builds a node from a string it does not fully control. ---

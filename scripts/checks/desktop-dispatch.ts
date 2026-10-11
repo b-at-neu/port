@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { pipelineDocsText, pipelineSkillText, root, walk, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { pipelineDocsText, pipelineSkillText, root, walk, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // Operator control over dispatch and the app's own dispatch loop, plus the budget gate's own
 // rails — mechanical, dependency-free, regex-based rails.

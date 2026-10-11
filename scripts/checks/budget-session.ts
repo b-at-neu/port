@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // bin/budget.mjs's --session support: one session log per dispatcher, so one dispatcher's
 // sweep never closes rows another's agents are still working through.

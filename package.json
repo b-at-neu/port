@@ -6,6 +6,12 @@
   "engines": {
     "node": ">=22.18.0"
   },
+  "imports": {
+    "#lib/*": "./scripts/lib/*",
+    "#port-tick/*": "./scripts/port-tick/*",
+    "#plugins/*": "./plugins/*",
+    "#desktop/*": "./apps/desktop/*"
+  },
   "scripts": {
     "dev": "pnpm --filter @port/desktop dev",
     "build": "pnpm -r build",

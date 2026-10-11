@@ -1,8 +1,8 @@
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root } from '../lib/files.ts';
-import { resolveMatchers, subagentPayload, makeCheck, makeDecide } from '../lib/guard-fixtures.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root } from '#lib/files.ts';
+import { resolveMatchers, subagentPayload, makeCheck, makeDecide } from '#lib/guard-fixtures.ts';
+import type { Reporter } from '#lib/report.ts';
 
 export default async function ({ fail, ok, expect }: Reporter) {
   // --- Guard hook classifier: unit-tests the pure decision logic, isolated from stdin/stdout/exit-code plumbing. ---

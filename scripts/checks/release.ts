@@ -1,8 +1,8 @@
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, readJson } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, readJson } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 import { extractJobBlock } from './portability.ts';
 
 /** Resolves the checked-out branch name from files alone — no `git` subprocess. `null` for a

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, walk } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, walk } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // --- Runner stays thin, every topic module stays wired: the runner discovers every
 // scripts/checks/*.ts file from disk and imports each dynamically, never hand-listing one. ---

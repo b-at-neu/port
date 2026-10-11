@@ -1,7 +1,7 @@
 // The orphan assertion's one GitHub read: which issues and pull requests carry an in-flight
 // label. Reuses the tick engine's `runGraphql` rather than spawning a second `gh` process.
-import { runGraphql } from '../port-tick/gh.ts';
-import { LABEL_DEFAULTS } from '../port-tick/config.ts';
+import { runGraphql } from '#port-tick/gh.ts';
+import { LABEL_DEFAULTS } from '#port-tick/config.ts';
 
 // The five in-flight labels an orphan can be reported against — gate/trigger/terminal labels never mean "an agent is working right now".
 export const IN_FLIGHT_LABEL_KEYS = ['planning', 'inProgress', 'reviewing', 'revising', 'refreshing'];

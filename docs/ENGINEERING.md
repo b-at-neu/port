@@ -32,6 +32,8 @@ This is **this repository's own** standards document, not a template — `plugin
 
 **Inside `apps/desktop/src`, a cross-folder import uses `@/<top-level>/…`, rooted at `src`** — `@/main/…`, `@/preload/…`, `@/renderer/…`, `@/shared/…` — never a per-folder alias and never `@types/` (it collides with npm's `@types/*` scope). A `./` sibling import is fine; a `../` parent import is a `port/no-parent-import` warning today, an error once the whole tree is rewritten; an import that leaves `src` (`scripts/port-tick/*`, `plugins/port/data/labels.json`) stays relative, since no alias covers it. `apps/desktop/scripts/alias-imports.mjs` rewrites a directory's imports for you (`--check` reports without writing).
 
+**Under the root `scripts/`, a cross-folder import uses the root `package.json`'s `imports` map** — `#lib/…`, `#port-tick/…`, `#plugins/…`, `#desktop/…` — never a `../` relative path; a `./` import within the same folder is fine. `scripts/checks/scripts-imports.ts` enforces it: no `../` left in `scripts/`, every `#` specifier resolves against the `imports` map, `./lib/` stays inside `scripts/lib/` itself, and a `scripts/port-tick/*` module that `apps/desktop/src` imports stays free of `#` aliases.
+
 ### Module boundaries
 
 Sorted by path. Insert a new entry at its alphabetical slot, never at the end.

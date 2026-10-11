@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, readJson, walk, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
-import { globToRegExp as hookGlobToRegExp } from '../../plugins/port/hooks/lib/guard-rules.mjs';
+import { root, readJson, walk, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
+import { globToRegExp as hookGlobToRegExp } from '#plugins/port/hooks/lib/guard-rules.mjs';
 
 // apps/desktop/src/main/hosting/ owns the full lifecycle of a hosted session in the main
 // process. These assertions pin its plan's decisions mechanically.

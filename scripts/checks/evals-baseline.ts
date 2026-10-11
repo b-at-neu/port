@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import { root, walk, relOf, sectionText } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, walk, relOf, sectionText } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 /** Every backtick-quoted case name in a table's first column, in source order. */
 function tableCaseNames(section: string): string[] {

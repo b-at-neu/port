@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, walk, relOf, readJson } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, walk, relOf, readJson } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // Scans shipped/repository docs for a concrete version literal, failing unless it is
 // explicitly exempted below as genuinely load-bearing.

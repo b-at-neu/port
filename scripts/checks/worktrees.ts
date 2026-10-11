@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, readJson } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, readJson } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // The four worktree-reclamation blocks, named to mirror scripts/checks/artifacts.ts, which pins bin/artifacts.mjs the same way this pins bin/worktrees.mjs.
 export default async function ({ expect, fail, ok }: Reporter) {

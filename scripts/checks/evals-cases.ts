@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import { root, walk, relOf } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, walk, relOf } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 import { readCasePrompt, readCaseScaffold } from './evals.ts';
 
 /** The dispatch sentence every agent-stage case's `prompt:` must open with, byte-identical

@@ -3,11 +3,11 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import { extname, join } from 'node:path';
-import { root, readJson } from '../lib/files.ts';
-import { scanComments } from '../lib/comments.ts';
-import type { ScanResult } from '../lib/comments.ts';
-import type { Reporter } from '../lib/report.ts';
-import { message } from '../lib/errors.ts';
+import { root, readJson } from '#lib/files.ts';
+import { scanComments } from '#lib/comments.ts';
+import type { ScanResult } from '#lib/comments.ts';
+import type { Reporter } from '#lib/report.ts';
+import { message } from '#lib/errors.ts';
 
 const CONFIG_REL = 'scripts/checks/comments.config.json';
 const SCANNED_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts', '.mjs', '.cjs', '.js']);

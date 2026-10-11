@@ -5,8 +5,8 @@ import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root } from './lib/files.ts';
-import { message } from './lib/errors.ts';
+import { root } from '#lib/files.ts';
+import { message } from '#lib/errors.ts';
 
 export type CorridorVerdict = 'pass' | 'skip' | 'unresolved' | 'in-flight' | 'violation';
 

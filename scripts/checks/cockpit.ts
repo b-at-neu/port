@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, pipelineSkillText } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, pipelineSkillText } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // Keeps the cockpit rails, liveness reset, cycle cap and zero-diff gate, the TaskList
 // liveness contract, and running-plugin staleness.

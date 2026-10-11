@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, readJson, walk, relOf, pipelineSkillText } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
-import { toCheckContexts, toReviewNode } from '../port-tick/wire.ts';
+import { root, readJson, walk, relOf, pipelineSkillText } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
+import { toCheckContexts, toReviewNode } from '#port-tick/wire.ts';
 
 const TICK_DIR = 'scripts/port-tick';
 

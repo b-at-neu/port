@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { root, readJson, pipelineSkillText, pipelineDocsText } from '../lib/files.ts';
-import type { Reporter } from '../lib/report.ts';
+import { root, readJson, pipelineSkillText, pipelineDocsText } from '#lib/files.ts';
+import type { Reporter } from '#lib/report.ts';
 
 // Per-ticket dispatch cost accounting.
 export default async function ({ expect, fail, ok }: Reporter) {
