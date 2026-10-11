@@ -1,6 +1,4 @@
-// Pure: sorts every half-labelled ticket into a repair (through the observation pass) or a
-// report (Needs you, kind `half-labelled`) — never a guess. `isContradictory` wins over every
-// other shape, since choosing one of two role-bearing labels is never this app's call to make.
+// Pure: sorts a half-labelled ticket into a repair or a `half-labelled` report, never a guess.
 import type { ReconciledItem } from '../../shared/state/types'
 import type { EndedStage, TickLabelRepair, TickObservation } from '../../shared/tick/types'
 import { RETRY_TRIGGER } from '../../../../../scripts/port-tick/liveness'
