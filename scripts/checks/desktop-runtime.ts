@@ -94,10 +94,11 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // pin: `main/runtime/classify.cases.json` ↔ `classifyPreflight`/`classifyProbeFailure` in `main/runtime/classify.ts`
+  // pin: `tests/unit/main/runtime/classify.cases.json` ↔ `classifyPreflight`/`classifyProbeFailure` in `main/runtime/classify.ts`
   {
     const classifyFile = allFiles.find((f) => relOf(f) === `${runtimeDir}/classify.ts`);
-    const casesPath = `${runtimeDir}/classify.cases.json`;
+    const runtimeTestsDir = 'apps/desktop/tests/unit/main/runtime';
+    const casesPath = `${runtimeTestsDir}/classify.cases.json`;
     if (!classifyFile) {
       fail('desktop-runtime', `${runtimeDir}/classify.ts does not exist`);
     } else {

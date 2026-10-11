@@ -59,8 +59,9 @@ export default async function ({ expect, fail, ok }: Reporter) {
 
   // pin: `bin/worktrees.mjs`'s `correlate` ↔ the desktop `correlate` (`apps/desktop/src/main/local/correlate.ts`)
   {
-    const casesPath = join(root, dir, 'correlation.cases.json');
-    const cases = readJson(`${dir}/correlation.cases.json`);
+    const testsDir = 'apps/desktop/tests/unit/main/local';
+    const casesPath = join(root, testsDir, 'correlation.cases.json');
+    const cases = readJson(`${testsDir}/correlation.cases.json`);
 
     const rungs = new Set<string>(cases.map((c: any) => c.expect?.rung).filter(Boolean));
     for (const rung of ['upstream-branch', 'branch-name', 'directory-basename', 'head-subject']) {

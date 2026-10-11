@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { correlate } from '@/main/local/correlate'
 import type { CorrelationInput } from '@/main/local/correlate'
-import cases from '@/main/local/correlation.cases.json'
+import cases from './correlation.cases.json'
 
 interface Case {
   readonly name: string
