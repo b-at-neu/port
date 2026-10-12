@@ -5,7 +5,7 @@
   "description": "Desktop cockpit for the port pipeline. Runs your own installed Claude Code under your own account.",
   "main": "out/main/index.js",
   "scripts": {
-    "dev": "node scripts/ensure-electron.mjs && electron-vite dev",
+    "dev": "node scripts/ensure-electron.mjs && node scripts/ensure-sandbox.mjs && electron-vite dev",
     "build": "electron-vite build",
     "dist": "node scripts/icon.mjs && electron-vite build && electron-builder --config electron-builder.config.mjs --publish never && node scripts/audit-bundle.mjs",
     "screenshots": "electron-vite build && node scripts/screenshots.mjs",

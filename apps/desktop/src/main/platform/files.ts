@@ -95,6 +95,15 @@ export async function statPath(path: string): Promise<FileResult<StatInfo>> {
   }
 }
 
+export async function statOwnerMode(path: string): Promise<{ uid: number; mode: number } | null> {
+  try {
+    const info = await stat(path)
+    return { uid: info.uid, mode: info.mode }
+  } catch {
+    return null
+  }
+}
+
 /** Succeeds silently when `path` already exists — both cases are "make sure it's there". */
 export async function ensureDirectory(path: string): Promise<FileResult<void>> {
   try {

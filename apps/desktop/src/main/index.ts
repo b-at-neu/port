@@ -5,6 +5,7 @@ import { registerFixtureIpc } from '@/main/fixtures'
 import { fixtureMode } from '@/main/fixtures/mode'
 import { e2eMode } from '@/main/e2e/mode'
 import { setE2ERoute } from '@/main/platform/run'
+import { statOwnerMode } from '@/main/platform/files'
 import type { PipelineWatcher } from '@/types/state'
 import type { HostedStore } from '@/types/hosting'
 import { createQuitGuard } from '@/main/dispatch/quit'
@@ -13,6 +14,7 @@ import { confirmQuit } from '@/main/dialogs'
 import { applyNavigationGuards } from '@/main/navigation'
 import { ABOUT_NOTICE, ABOUT_POWERED_BY } from '@/utils/about/copy'
 import { menuTemplate } from '@/main/menu'
+import { chromeSandboxPath, needsNoSandbox } from '@/main/sandbox'
 import type { StageRegistry } from '@/types/stage'
 
 // A hung registry write must never block quitting.
@@ -25,11 +27,18 @@ function withTimeout(promise: Promise<void>, ms: number): Promise<void> {
   return Promise.race([promise, deadline])
 }
 
-// A dev-only `pnpm install` never runs as root, so `chrome-sandbox` ships without the root-owned
-// permissions Chromium requires. Packaged builds are unaffected.
-if (!app.isPackaged) {
-  app.commandLine.appendSwitch('no-sandbox')
+// A misconfigured `chrome-sandbox` helper falls back to `--no-sandbox`; once it's root:4755
+// the real sandbox runs instead, which AppArmor-hardened distros require (see ensure-sandbox.mjs).
+async function configureSandboxSwitch(): Promise<void> {
+  if (app.isPackaged || process.platform !== 'linux') return
+  const stat = await statOwnerMode(chromeSandboxPath(process.execPath))
+  if (needsNoSandbox(process.platform, app.isPackaged, stat)) {
+    app.commandLine.appendSwitch('no-sandbox')
+  }
 }
+
+// Resolved before `app.whenReady()` below — `commandLine.appendSwitch` is a no-op once ready.
+const sandboxConfigured = configureSandboxSwitch()
 
 // An `on` result relocates `userData` before the single-instance lock is ever requested, so a
 // fixture run never contends for the operator's own lock or touches their real profile.
@@ -118,7 +127,7 @@ if (fixture.kind === 'invalid') {
       }
     }
 
-    void app.whenReady().then(() => {
+    void sandboxConfigured.then(() => app.whenReady()).then(() => {
       // Never `app.setName('port')` here — that would move the dev
       // `userData` directory away from the operator's real profile.
       app.setAboutPanelOptions({ applicationName: 'port', applicationVersion: app.getVersion(), credits: [ABOUT_POWERED_BY, ABOUT_NOTICE].join('\n') })
