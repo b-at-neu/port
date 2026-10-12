@@ -56,8 +56,8 @@ export function repoSearchFromRaw(search: Readonly<Record<string, unknown>>): Re
 /** `repo` scopes History to one repository; absent or invalid means every
  *  repository — the screen's own "All repositories" default. */
 export function historySearchFromRaw(search: Readonly<Record<string, unknown>>): HistorySearch {
-  const { repo } = search
-  return { repo: typeof repo === 'string' && repo !== '' ? (repo as RepoId) : null }
+  const { repo, archived } = search
+  return { repo: typeof repo === 'string' && repo !== '' ? (repo as RepoId) : null, archived: archived === true }
 }
 
 export function searchSearchFromRaw(search: Readonly<Record<string, unknown>>): SearchSearch {

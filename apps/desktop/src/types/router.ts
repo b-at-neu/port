@@ -26,6 +26,7 @@ export interface RepoSearch {
 
 export interface HistorySearch {
   readonly repo?: RepoId | null
+  readonly archived?: boolean
 }
 
 export interface SearchSearch {

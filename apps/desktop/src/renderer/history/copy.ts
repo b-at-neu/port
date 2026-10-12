@@ -14,6 +14,20 @@ export function failureCopy(kind: SessionFailureKind, message: string): string {
   }
 }
 
+export function groupHeader(kind: 'pinned' | 'recent' | 'archived'): string {
+  switch (kind) {
+    case 'pinned':
+      return 'Pinned'
+    case 'recent':
+      return 'Recent'
+    case 'archived':
+      return 'Archived'
+  }
+}
+
+export const ALL_ARCHIVED_EMPTY = 'Every session here is archived.'
+export const SHOW_ARCHIVED_ACTION = 'Show archived'
+
 export function footnote(unresolvedCount: number, unreadableCount: number): string | null {
   if (unresolvedCount === 0 && unreadableCount === 0) return null
   const parts: string[] = []

@@ -7,7 +7,7 @@ import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Input } from '@/renderer/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { toast } from 'sonner'
-import type { HostedSessionSnapshot } from '@/types/hosting'
+import type { HostedSessionSnapshot, SessionMarks } from '@/types/hosting'
 import { sessionTitle } from '@/utils/hosting/label'
 import { folderLabel } from '@/renderer/workspace/label'
 import type { RepositoryEntry } from '@/utils/repos'
@@ -16,6 +16,8 @@ import { useSelectedSession } from '@/renderer/session/selection'
 import { sidebarDotLabel } from '@/renderer/session/interaction-copy'
 import { useRenaming, setRenaming, openNewSessionDialog } from '@/renderer/shell/stores'
 import { ROUTE_IDS } from '@/renderer/router/routes'
+import { useSessionMarks } from '@/renderer/session/marks'
+import { SessionMarkMenu, SessionPinGlyph } from '@/renderer/components/session-mark-menu'
 
 function repoTag(repos: readonly RepositoryEntry[] | undefined, session: HostedSessionSnapshot): string {
   if (session.repoId === null) return folderLabel(session.workspace.folder)
@@ -32,13 +34,14 @@ function dotFor(session: HostedSessionSnapshot): { readonly className: string; r
   return { className: 'bg-idle-dot', label: 'Idle' }
 }
 
-function SessionRow({ session, repos, selected }: { readonly session: HostedSessionSnapshot; readonly repos: readonly RepositoryEntry[] | undefined; readonly selected: boolean }) {
+function SessionRow({ session, repos, marks, selected }: { readonly session: HostedSessionSnapshot; readonly repos: readonly RepositoryEntry[] | undefined; readonly marks: SessionMarks | undefined; readonly selected: boolean }) {
   const navigate = useNavigate()
   const renaming = useRenaming()
   const rename = useIpcMutation('session:rename')
   const [draft, setDraft] = useState(() => sessionTitle(session))
   const dot = dotFor(session)
   const isRenaming = renaming === session.sessionKey
+  const pinned = session.claudeSessionId !== null && (marks?.pinned.includes(session.claudeSessionId) ?? false)
 
   async function commitRename(): Promise<void> {
     const title = draft.trim().slice(0, 80)
@@ -72,33 +75,46 @@ function SessionRow({ session, repos, selected }: { readonly session: HostedSess
   }
 
   return (
-    <button
-      type="button"
-      onClick={() => void navigate({ to: ROUTE_IDS.session, search: { key: session.sessionKey } })}
-      className={cn(
-        'flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-small text-foreground-secondary hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        selected && 'bg-selection text-primary-text',
-      )}
-    >
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', dot.className)} />
-        </TooltipTrigger>
-        <TooltipContent>{dot.label}</TooltipContent>
-      </Tooltip>
-      <span className="flex-1 truncate">{sessionTitle(session)}</span>
-      <span className="shrink-0 truncate text-meta text-muted-foreground">{repoTag(repos, session)}</span>
-    </button>
+    <div className={cn('group/row flex h-7 w-full items-center gap-1 rounded-md pr-1 text-small text-foreground-secondary', selected && 'bg-selection text-primary-text')}>
+      <button
+        type="button"
+        onClick={() => void navigate({ to: ROUTE_IDS.session, search: { key: session.sessionKey } })}
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', dot.className)} />
+          </TooltipTrigger>
+          <TooltipContent>{dot.label}</TooltipContent>
+        </Tooltip>
+        {pinned ? <SessionPinGlyph /> : null}
+        <span className="flex-1 truncate">{sessionTitle(session)}</span>
+        <span className="shrink-0 truncate text-meta text-muted-foreground">{repoTag(repos, session)}</span>
+      </button>
+      <div className="shrink-0 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 group-has-[[data-state=open]]/row:opacity-100">
+        <SessionMarkMenu sessionId={session.claudeSessionId} marks={marks} onRename={() => setRenaming(session.sessionKey)} />
+      </div>
+    </div>
   )
+}
+
+function pinnedFirst(sessions: readonly HostedSessionSnapshot[], marks: SessionMarks | undefined): readonly HostedSessionSnapshot[] {
+  if (marks === undefined) return sessions
+  const isPinned = (s: HostedSessionSnapshot) => s.claudeSessionId !== null && marks.pinned.includes(s.claudeSessionId)
+  return [...sessions.filter(isPinned), ...sessions.filter((s) => !isPinned(s))]
 }
 
 export function SidebarSessions() {
   const navigate = useNavigate()
   const sessions = useIpcQuery('session:list')
   const repos = useIpcQuery('repos:list')
+  const marks = useSessionMarks()
   const selectedKey = useSelectedSession()
   // Stage sessions (this app's own pipeline dispatches) live in the Pipelines section, never here.
-  const live = (sessions.data ?? []).filter((s) => s.phase !== 'ended' && s.stage === null)
+  const live = pinnedFirst(
+    (sessions.data ?? []).filter((s) => s.phase !== 'ended' && s.stage === null),
+    marks.data,
+  )
 
   return (
     <div>
@@ -112,7 +128,7 @@ export function SidebarSessions() {
       ) : live.length === 0 ? (
         <p className="px-2 py-1 text-small text-muted-foreground">No sessions open.</p>
       ) : (
-        live.map((session) => <SessionRow key={session.sessionKey} session={session} repos={repos.data?.ok === true ? repos.data.repositories : undefined} selected={session.sessionKey === selectedKey} />)
+        live.map((session) => <SessionRow key={session.sessionKey} session={session} repos={repos.data?.ok === true ? repos.data.repositories : undefined} marks={marks.data} selected={session.sessionKey === selectedKey} />)
       )}
 
       <button
