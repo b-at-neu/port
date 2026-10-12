@@ -1,13 +1,12 @@
 // fetchBacklog: every open issue, dropping anything carrying a vocabulary label.
 import { gh as defaultGh } from '@/main/platform/gh'
-import type { GhResult, GhRunner } from '@/main/platform/gh'
+import type {GhResult, GhRunner} from '@/types/platform'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { BacklogItem, BacklogResponse } from '@/types/backlog'
 import { classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'
-import type { RepoRef } from '@/main/github/adapter'
+import type { GitHubRepoRef } from '@/types/github'
 
-export type { GhRunner }
 
 const PAGE_SIZE = 100
 const ASSIGNEE_PAGE_SIZE = 10
@@ -38,8 +37,8 @@ function buildBacklogQuery(): string {
   ].join('\n')
 }
 
-export interface FetchBacklogParams {
-  readonly repo: RepoRef
+interface FetchBacklogParams {
+  readonly repo: GitHubRepoRef
   readonly vocabulary: LabelVocabulary
   readonly gh?: GhRunner
   readonly now?: () => Date

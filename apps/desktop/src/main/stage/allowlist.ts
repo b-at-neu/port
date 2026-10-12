@@ -3,7 +3,7 @@
 import { join } from 'node:path'
 import type { StageAllowResult } from '@/types/stage'
 import { validateRule } from '@/main/stage/rule'
-import type { FileResult } from '@/main/platform/files'
+import type {FileResult} from '@/types/platform'
 
 interface SettingsShape {
   readonly permissions?: { readonly allow?: readonly unknown[]; readonly [k: string]: unknown }
@@ -15,7 +15,7 @@ interface ConfigShape {
   readonly [k: string]: unknown
 }
 
-export interface AllowRuleParams {
+interface AllowRuleParams {
   readonly root: string
   readonly rule: string
   readonly readJson: <T>(path: string) => Promise<FileResult<T>>

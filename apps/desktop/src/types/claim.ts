@@ -1,6 +1,11 @@
+import type { ApplyLabelsParams } from '@/types/writes'
+
 // Renderer-safe contract for the claim dialog (the "work on #N" flow). No import here may reach a Node builtin — only `main/claim.ts` resolves a repository, spawns `gh`, or writes a label.
-import type { BlockerRead, PipelineItemKind } from '@/types/github'
+import type { BlockerRead, ClaimPreflightFetch, GitHubRepoRef, PipelineItemKind } from '@/types/github'
 import type { WriteOutcome } from '@/types/writes'
+import type { GhRunner } from '@/types/platform'
+import type { RegistryDeps } from '@/types/registry'
+import type { ReposListResponse } from '@/types/ipc'
 
 /** IPC-validated at `main/ipc.ts` against this exact list — a literal union carries no runtime list of its own to check a request against. */
 export const PLAN_GATE_CHOICES = ['review', 'auto'] as const
@@ -45,3 +50,9 @@ export type ClaimApplyResponse =
   | { readonly kind: 'refused'; readonly verdict: Exclude<ClaimVerdict, { kind: 'claimable' }> }
   | { readonly kind: 'preflight-failed'; readonly message: string }
   | { readonly kind: 'write'; readonly outcome: WriteOutcome }
+
+export interface ClaimDeps {
+  readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
+  readonly fetchClaimPreflight: (params: { readonly repo: GitHubRepoRef; readonly number: number; readonly gh?: GhRunner; readonly now?: () => Date }) => Promise<ClaimPreflightFetch>
+  readonly applyClaimLabels: (params: ApplyLabelsParams) => Promise<WriteOutcome>
+}

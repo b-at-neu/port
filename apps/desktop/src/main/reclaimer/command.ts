@@ -2,7 +2,7 @@
 // reject rather than interpret.
 const METACHARACTERS = new Set(['|', '&', ';', '<', '>', '$', '`', '(', ')'])
 
-export type TokenizeResult =
+type TokenizeResult =
   | { readonly ok: true; readonly binary: string; readonly args: readonly string[] }
   | { readonly ok: false; readonly kind: 'unparseable-command' }
   | { readonly ok: false; readonly kind: 'unsupported-runner'; readonly token: string }

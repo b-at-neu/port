@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionKey } from '@/types/hosting'
 import { resolveSessionControlsSet, resolveSessionPlanAnswer, resolveSessionQuestionAnswer } from '@/main/channels/hosting'
-import type { HostingChannelDeps } from '@/main/channels/hosting'
+import type { HostingChannelDeps } from '@/types/channels'
 import { storeStub } from '../../../fixtures/store'
 
 const SESSION_KEY = 'hosted-1' as SessionKey

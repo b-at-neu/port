@@ -1,28 +1,12 @@
 // Resume and Restart compositions for an interrupted stage session — operator-only, never called
 // from the dispatch loop itself. Nothing here restarts anything on its own.
-import type { ItemActionResult } from '@/types/actions'
-import type { InterruptedStage, StageResumeResult, StageRestartResult } from '@/types/stage'
-import type { HostedStore } from '@/main/hosting/store'
-import type { RemoveSessionWorktreeOutcome } from '@/main/workspace/worktree'
-import type { StageRegistry } from '@/main/stage/registry'
+import type { StageResumeResult, StageRestartResult } from '@/types/stage'
+
 import { STAGE_AGENT_NAMES } from '@/main/stage/agents'
+import type { RecoverDeps } from '@/types/stage'
 
 /** Byte-identical restatement sent after a resumed session's `init` — the label swap already ran, so the resumed agent must never repeat its Pre-flight. */
 export const RESUME_PROMPT = 'You were interrupted. Continue your pipeline stage for #<n> from where you stopped; your label swap has already happened.'
-
-export interface ResolvedStageRoot {
-  readonly path: string
-  readonly sessionRequiredPaths: readonly string[]
-}
-
-export interface RecoverDeps {
-  readonly registry: StageRegistry
-  readonly store: Pick<HostedStore, 'start' | 'send' | 'close' | 'list'>
-  readonly removeWorktree: (path: string, force: boolean) => Promise<RemoveSessionWorktreeOutcome>
-  readonly resolveEntry: (repoId: InterruptedStage['repoId']) => ResolvedStageRoot | null
-  readonly applyRetry: (interrupted: InterruptedStage) => Promise<ItemActionResult>
-  readonly capacity: () => Promise<{ readonly limit: number }>
-}
 
 function freeSlotsOf(limit: number, open: number): number {
   return Math.max(0, limit - open)

@@ -1,3 +1,5 @@
+import type { RuntimeProbeFn } from '@/types/runtime'
+
 // The two composition roots `main/ipc.ts` calls, which only ever validates the request shape and delegates. Neither strips `ANTHROPIC_API_KEY`; both only report whether it is present.
 import { ensureDirectory } from '@/main/platform/files'
 import { readCredentialsTell } from '@/main/runtime/credentials'
@@ -5,10 +7,10 @@ import { resolveClaudeExecutable } from '@/main/runtime/locate'
 import { readClaudeVersion } from '@/main/runtime/version'
 import { classifyPreflight } from '@/main/runtime/classify'
 import { createRuntimeProbe } from '@/main/runtime/sdk'
-import type { RuntimeProbeFn } from '@/main/runtime/sdk'
+
 import type { RuntimePreflight, RuntimeProbe } from '@/types/runtime'
 import { listRepositories, requireReadyRepo } from '@/main/registry'
-import type { RegistryDeps } from '@/main/registry'
+import type { RegistryDeps } from '@/types/registry'
 import type { RepoId } from '@/utils/repos'
 
 function apiKeyInEnvironment(env: NodeJS.ProcessEnv): boolean {
@@ -16,7 +18,7 @@ function apiKeyInEnvironment(env: NodeJS.ProcessEnv): boolean {
   return typeof value === 'string' && value !== ''
 }
 
-export interface RuntimePreflightDeps {
+interface RuntimePreflightDeps {
   readonly resolveClaudeExecutable: typeof resolveClaudeExecutable
   readonly readClaudeVersion: typeof readClaudeVersion
   readonly readCredentialsTell: typeof readCredentialsTell
@@ -91,7 +93,7 @@ function resolveReadyEntry(registryDeps: RegistryDeps, repoId: RepoId, list: typ
   return requireReadyRepo(registryDeps, "'runtime:probe'", repoId, list)
 }
 
-export interface RunRuntimeProbeParams {
+interface RunRuntimeProbeParams {
   readonly registryDeps: RegistryDeps
   /** `null` runs the probe repository-free, against `probeDir` instead of a
    *  registered repository — no registry lookup at all. */

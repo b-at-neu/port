@@ -19,7 +19,7 @@ export function indexOfFolded(haystack: string, foldedTerm: string, fromIndex = 
   return foldCase(haystack).indexOf(foldedTerm, fromIndex)
 }
 
-export interface ParsedQuery {
+interface ParsedQuery {
   /** Already folded and filtered to `MIN_TERM_CHARS` or longer. */
   readonly terms: readonly string[]
 }

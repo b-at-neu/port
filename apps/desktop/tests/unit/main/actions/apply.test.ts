@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { ReconciledItem, RepositoryState } from '@/types/state'
 import type { LabelWriteRequest, WriteOutcome } from '@/types/writes'
-import type { ApplyLabelsParams } from '@/main/writes/apply'
-import type { RecoverPausedTriggerResult } from '@/main/actions/resume'
+
+import type {RecoverPausedTriggerResult} from '@/types/actions'
 import { applyItemAction } from '@/main/actions/apply'
-import type { ApplyItemActionDeps, ItemActionRequest } from '@/main/actions/apply'
+import type { ApplyItemActionDeps } from '@/main/actions/apply'
+import type { ItemActionRequest } from '@/types/actions'
+import type { ApplyLabelsParams } from '@/types/writes'
 import { boardSnapshot as snapshotOf, readyEntry as entry, reconciledItem, repositoryState as repoState } from '../../../fixtures/board-state'
 
 const REPO_ID = 'repo-a' as RepoId

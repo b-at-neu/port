@@ -1,3 +1,12 @@
+import type { BoardSnapshot } from '@/types/board'
+import type { RegistryDeps } from '@/types/registry'
+import type { GateDecision } from '@/types/gate'
+import type { ReconciledItem } from '@/types/state'
+import type { WriteObservation } from '@/types/dispatch'
+import type { AuditRead } from '@/types/writes'
+import type { RepositoryEntry, RepoId } from '@/utils/repos'
+import type { LabelVocabulary } from '@/utils/labels/vocabulary'
+
 // Renderer-safe contract for the single-label operator actions: pause, resume, retry, stop, gate. No import here may reach a Node builtin.
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { LabelPrecondition, WriteOutcome } from '@/types/writes'
@@ -13,6 +22,25 @@ export type OperatorDecision = (typeof OPERATOR_DECISIONS)[number]
 /** Unblock's own fork — which trigger the cleared item goes back to. */
 export const UNBLOCK_ROUTES = ['revision', 'review'] as const
 export type UnblockRoute = (typeof UNBLOCK_ROUTES)[number]
+
+export interface ItemActionRequest {
+  readonly repoId: RepoId
+  readonly kind: 'issue' | 'pull-request'
+  readonly number: number
+  readonly action: OperatorAction
+  /** `null` when the row showed no stage (resume). A mismatch against a fresh read refuses. */
+  readonly expectedStage: LabelKey | null
+}
+
+export interface ItemDecisionRequest {
+  readonly repoId: RepoId
+  readonly number: number
+  readonly decision: OperatorDecision
+  readonly expectedStage: LabelKey | null
+  readonly route: UnblockRoute | null
+  readonly note: string | null
+  readonly skipComment: boolean
+}
 
 /** The `LabelWriteRequest` key-level shape; the main side supplies the rest from the registry entry, never from a plan a caller could forge. */
 export interface ActionPlan {
@@ -73,3 +101,86 @@ export type ItemDecisionResult =
 
 /** `reviseNoteProblem` refuses anything longer, before a single byte reaches `gh`. */
 export const MAX_REVISE_NOTE_CHARS = 10_000
+
+export interface ApplyItemActionParams {
+  readonly request: ItemActionRequest
+  readonly snapshot: BoardSnapshot
+  readonly entry: ReadyEntry
+  readonly auditDir: string
+}
+
+export type ReadyEntry = Extract<RepositoryEntry, { readonly status: 'ready' }>
+
+export interface ApplyItemDecisionParams {
+  readonly request: ItemDecisionRequest
+  readonly snapshot: BoardSnapshot
+  readonly entry: ReadyEntry
+  readonly auditDir: string
+  readonly scratchDir: string
+}
+
+export interface EscalateToHumanResult {
+  readonly labels: WriteOutcome
+  /** `null` when the label swap did not reach `applied` — no comment is attempted then. */
+  readonly comment: WriteOutcome | null
+}
+
+export interface EscalateToHumanParams {
+  readonly entry: ReadyEntry
+  readonly kind: 'issue' | 'pull-request'
+  readonly number: number
+  readonly trigger: LabelKey
+  readonly viewer: string
+  readonly body: string
+  readonly action: string
+  readonly auditDir: string
+  readonly scratchDir: string
+}
+
+export interface AutoApprovePlanParams {
+  readonly entry: ReadyEntry
+  readonly item: { readonly number: number; readonly assignees: readonly string[] }
+  readonly auditDir: string
+}
+
+export interface GateAnswerParams {
+  readonly registryDeps: RegistryDeps
+  readonly repoId: RepoId
+  readonly number: number
+  readonly decision: GateDecision
+  readonly feedback: string | null
+  /** A renderer-supplied `skipComment` can only ever suppress the comment write, never widen it. */
+  readonly skipComment: boolean
+  readonly auditDir: string
+  readonly scratchDir: string
+}
+
+export interface GatePreflightParams {
+  readonly registryDeps: RegistryDeps
+  readonly repoId: RepoId
+  readonly number: number
+}
+
+export interface ApplyObservationResult {
+  readonly labels: WriteOutcome
+  /** `null` when the label swap did not reach `applied`, or the plan carried no comment. */
+  readonly comment: WriteOutcome | null
+}
+
+export interface ApplyObservationParams {
+  readonly entry: ReadyEntry
+  readonly item: ReconciledItem
+  readonly observation: WriteObservation
+  readonly auditDir: string
+  readonly scratchDir: string
+}
+
+export interface RecoverPausedTriggerParams {
+  readonly auditDir: string
+  readonly repo: string
+  readonly number: number
+  readonly vocabulary: LabelVocabulary
+  readonly readAuditLog?: (dir: string, params: { readonly repo?: string; readonly number?: number }) => Promise<AuditRead>
+}
+
+export type RecoverPausedTriggerResult = { readonly kind: 'recovered'; readonly trigger: LabelKey } | { readonly kind: 'no-record' } | { readonly kind: 'unresolvable' }

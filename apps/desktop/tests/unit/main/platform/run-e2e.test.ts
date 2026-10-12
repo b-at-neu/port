@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { runCommand, setE2ERoute } from '@/main/platform/run'
-import type { RunCommandOptions, Spawner } from '@/main/platform/run'
+import type { RunCommandOptions, Spawner } from '@/types/platform'
 
 afterEach(() => {
   setE2ERoute(null)

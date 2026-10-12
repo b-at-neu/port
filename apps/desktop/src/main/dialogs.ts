@@ -1,7 +1,7 @@
 // The picker lives here, in main, rather than the renderer sending a path: an arbitrary directory
 // reachable from web content would be a strictly worse boundary for no gain.
 import { dialog, type BrowserWindow } from 'electron'
-import type { QuitWarningCopy } from '@/main/dispatch/quit'
+import type {QuitWarningCopy} from '@/types/dispatch'
 
 /** Opens the native directory picker and returns the chosen path, or `null`
  *  on cancel. */

@@ -1,3 +1,7 @@
+import type { LabelPrecondition } from '@/types/writes'
+import type { PipelineItemKind } from '@/types/github'
+import type { LabelKey } from '@/utils/labels/vocabulary'
+
 // Renderer-safe contract for the plan gate dialog. No import here may reach a Node builtin — only `main/actions/gate.ts` resolves a repository, spawns `gh`, or reads `.agents/cockpit.json`.
 import type { OwnershipSummary, WriteOutcome } from '@/types/writes'
 
@@ -49,3 +53,19 @@ export type GateAnswerResponse =
   | { readonly kind: 'preflight-failed'; readonly message: string }
   | { readonly kind: 'comment-failed'; readonly comment: WriteOutcome }
   | { readonly kind: 'answered'; readonly comment: WriteOutcome | null; readonly labels: WriteOutcome }
+
+export interface GatePlan {
+  readonly add: readonly LabelKey[]
+  readonly remove: readonly LabelKey[]
+  readonly expect: LabelPrecondition
+}
+
+export interface GateClassifyItem {
+  readonly kind: PipelineItemKind
+  readonly number: number
+  readonly labels: readonly string[]
+  readonly assignees: readonly string[]
+  readonly viewer: string
+  /** Computed by `main/actions/gate.ts` from the item's own body — this module never parses one. */
+  readonly noPlanBlock: boolean
+}

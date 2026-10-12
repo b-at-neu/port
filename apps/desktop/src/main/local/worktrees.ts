@@ -2,16 +2,15 @@
 // independent of worktree count.
 import { git as defaultGit, parsePorcelainStanzas } from '@/main/platform/git'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import type { CommandResult } from '@/main/platform/run'
-import type { GitRunner } from '@/main/platform/git'
-import type { PathOps } from '@/main/platform/paths'
+import type {CommandResult} from '@/types/platform'
+import type {GitRunner} from '@/types/platform'
+import type {PathOps} from '@/types/platform'
 import type { AssertEqual } from '@/types/assert-type'
 import type { LocalFailureKind, WorktreeEntry, WorktreeProducer, WorktreesRead } from '@/types/local'
 import { correlate } from '@/main/local/correlate'
 
-export type { GitRunner }
 
-export interface ReadWorktreesParams {
+interface ReadWorktreesParams {
   readonly repoRoot: string
   readonly git?: GitRunner
   readonly now?: () => Date

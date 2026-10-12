@@ -1,9 +1,11 @@
 import { pathOps } from '@/main/platform/paths'
-import type { PathOps } from '@/main/platform/paths'
-import { runCommand } from '@/main/platform/run'
-import type { CommandResult, RunCommandOptions } from '@/main/platform/run'
 
-export interface GitOptions extends Omit<RunCommandOptions, 'whichEnv' | 'platform'> {
+import { runCommand } from '@/main/platform/run'
+
+import type { GitRunner, GitLinesResult } from '@/types/platform'
+import type { RunCommandOptions, CommandResult, PathOps } from '@/types/platform'
+
+interface GitOptions extends Omit<RunCommandOptions, 'whichEnv' | 'platform'> {
   readonly cwd: string
 }
 
@@ -26,8 +28,6 @@ export function git(args: readonly string[], options: GitOptions): Promise<Comma
     env: withGitEnv(options.env),
   })
 }
-
-export type GitLinesResult = { readonly ok: true; readonly lines: readonly string[] } | Exclude<CommandResult, { ok: true }>
 
 export async function gitLines(args: readonly string[], options: GitOptions): Promise<GitLinesResult> {
   const result = await git(args, options)
@@ -58,7 +58,7 @@ export function parsePorcelainStanzas(stdout: string): ReadonlyArray<ReadonlyMap
     })
 }
 
-export type GitRepoRootResult =
+type GitRepoRootResult =
   | { readonly ok: true; readonly root: string }
   | { readonly ok: false; readonly kind: 'not-a-repository' }
   | Exclude<CommandResult, { ok: true }>
@@ -75,8 +75,6 @@ export async function gitRepoRoot(cwd: string, options?: Omit<GitOptions, 'cwd'>
   const root = result.stdout.replace(/\r?\n$/, '')
   return { ok: true, root: pathOps.toNative(root) }
 }
-
-export type GitRunner = (args: readonly string[], cwd: string) => Promise<CommandResult>
 
 export function defaultGitRunner(): GitRunner {
   return (args, cwd) => git(args, { cwd })

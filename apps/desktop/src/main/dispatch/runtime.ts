@@ -1,7 +1,10 @@
+import type { DispatchLedger, UnknownStreaks, RefreshMemo } from '@/types/tick'
+import type { Dispatcher, AutoPlanner, CreateDispatcherParams, AutoPlannerDeps } from '@/types/dispatch'
+
 // Bundles the dispatch loop's own process-lifetime state so main/ipc.ts creates one thing
 // instead of wiring several by hand.
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
-import type { DispatchLedger, RefreshMemo, UnknownStreaks } from '@/main/tick/ledger'
+
 import type { RepoId } from '@/utils/repos'
 import type { RepoDispatchStatus } from '@/types/dispatch'
 import { applyObservation } from '@/main/actions/observe'
@@ -9,12 +12,12 @@ import { autoApprovePlan } from '@/main/actions/gate'
 import { escalateToHuman } from '@/main/actions/escalate'
 import { createBudgetGate } from '@/main/dispatch/budget-gate'
 import { createDispatcher } from '@/main/dispatch/dispatcher'
-import type { CreateDispatcherParams, Dispatcher } from '@/main/dispatch/dispatcher'
+
 import { createAutoPlanner } from '@/main/dispatch/auto-plan'
-import type { AutoPlanner, AutoPlannerDeps } from '@/main/dispatch/auto-plan'
+
 import type { EndedStage } from '@/types/tick'
 
-export interface WatcherDeps {
+interface WatcherDeps {
   readonly ledger: DispatchLedger
   readonly unknownStreaks: UnknownStreaks
   readonly refreshMemo: RefreshMemo
@@ -25,7 +28,7 @@ export interface WatcherDeps {
   readonly endedStages: (repoId: RepoId) => readonly EndedStage[]
 }
 
-export interface DispatchRuntime {
+interface DispatchRuntime {
   readonly ledger: DispatchLedger
   readonly unknownStreaks: UnknownStreaks
   readonly refreshMemo: RefreshMemo

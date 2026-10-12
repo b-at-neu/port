@@ -1,14 +1,10 @@
 // Pin and archive marks: an insertion-ordered, capped set per kind. Idempotent — setting
 // an id to its current state is a no-op rather than moving it to the end.
 import type { SessionMarks } from '@/types/hosting'
+import type { SessionMarksTracker } from '@/types/hosting'
 
 /** Per-kind cap; the oldest id is dropped to make room for a new one. */
 export const MARKS_LIMIT = 500
-
-export interface SessionMarksTracker {
-  current(): SessionMarks
-  set(kind: 'pinned' | 'archived', sessionId: string, on: boolean): SessionMarks
-}
 
 function withMark(ids: readonly string[], sessionId: string, on: boolean): readonly string[] {
   const has = ids.includes(sessionId)

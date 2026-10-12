@@ -1,18 +1,20 @@
+import type { RecentsStore } from '@/types/workspace'
+
 // `folders:list`/`folders:choose`/`session:changes`'s composition: registry read, the recents store, the native picker, and one session-workspace lookup — a channel composition root, never a second copy of `resolve.ts`'s logic.
-import type { GitRunner } from '@/main/platform/git'
+import type {GitRunner} from '@/types/platform'
 import { defaultGitRunner } from '@/main/platform/git'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import type { PathOps } from '@/main/platform/paths'
+import type {PathOps} from '@/types/platform'
 import { statPath } from '@/main/platform/files'
 import type { IpcMap } from '@/types/ipc'
 import type { FolderEntry } from '@/types/workspace'
 import type { SessionChanges, SessionWorkspace } from '@/types/workspace'
 import { isReadyEntry, listRepositories } from '@/main/registry'
-import type { RegistryDeps } from '@/main/registry'
+import type { RegistryDeps } from '@/types/registry'
 import { chooseFolder as defaultChooseFolder } from '@/main/dialogs'
 import { toFolderEntry } from '@/main/workspace/resolve'
 import { computeSessionChanges as defaultComputeSessionChanges } from '@/main/workspace/changes'
-import type { RecentsStore } from '@/main/workspace/recents'
+
 import { createRecentsStore, pruneMissing } from '@/main/workspace/recents'
 
 export interface WorkspaceChannelDeps {

@@ -1,20 +1,12 @@
 // Takes its directory as a parameter so nothing here imports Electron; every test passes a `mkdtemp`.
 import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
 import { pathOps } from '@/main/platform/paths'
+import type { SignatureIndexEntry } from '@/types/search'
 
 const SEARCH_INDEX_FILE = 'search-index.json'
 const CURRENT_VERSION = 1
 
-// Keyed by `sessionId` or `sessionId#agentId`; this module only ever sees the key as an opaque string.
-export interface SignatureIndexEntry {
-  readonly path: string
-  readonly sizeBytes: number
-  readonly modifiedAt: string
-  readonly bits: number
-  readonly signature: string
-}
-
-export type SignatureIndex = ReadonlyMap<string, SignatureIndexEntry>
+type SignatureIndex = ReadonlyMap<string, SignatureIndexEntry>
 
 interface SignatureIndexFileShape {
   readonly version: number
@@ -48,7 +40,7 @@ export async function readSignatureIndex(dir: string): Promise<SignatureIndex> {
   return index
 }
 
-export type WriteSignatureIndexResult = { readonly ok: true } | { readonly ok: false; readonly message: string }
+type WriteSignatureIndexResult = { readonly ok: true } | { readonly ok: false; readonly message: string }
 
 export async function writeSignatureIndex(dir: string, index: SignatureIndex): Promise<WriteSignatureIndexResult> {
   const ensured = await ensureDirectory(dir)

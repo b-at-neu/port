@@ -167,5 +167,23 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  note(`desktop-imports: scanned apps/desktop/src, tests/unit/ and tests/fixtures/ for relative parent imports, renderer-rooted @/ imports, the absence of shared/, and utils/ reach from both sides`);
+  // --- No MULTI-classified type or interface under main/ (non-test) is still exported. Reuses
+  // type-moves.mjs's own classifier, so this check and the migration tool can never drift apart. ---
+  {
+    const typeMoves = await import(pathToFileURL(join(root, 'apps/desktop/scripts/type-moves.mjs')).href);
+    const { declByKey, mainFiles } = typeMoves.classify() as { declByKey: Map<string, { file: string; name: string }>; mainFiles: string[] };
+    if (mainFiles.length === 0) {
+      fail('desktop-imports', 'no non-test files scanned under apps/desktop/src/main — the guard cannot pass vacuously');
+    } else {
+      let violated = false;
+      for (const decl of declByKey.values()) {
+        if (typeMoves.classOf(decl, decl.file) !== 'MULTI') continue;
+        violated = true;
+        fail('desktop-imports', `${relOf(decl.file)} still exports '${decl.name}', used by more than one other file — move it to types/<topic> (apps/desktop/scripts/type-moves.mjs)`);
+      }
+      if (!violated) ok();
+    }
+  }
+
+  note(`desktop-imports: scanned apps/desktop/src, tests/unit/ and tests/fixtures/ for relative parent imports, renderer-rooted @/ imports, the absence of shared/, utils/ reach from both sides, and no main/ exported type imported elsewhere`);
 }

@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import type { CommandResult } from '@/main/platform/run'
-import type { GitRunner } from '@/main/platform/git'
-import type { RegistryDeps } from '@/main/registry'
+import type {CommandResult} from '@/types/platform'
+import type {GitRunner} from '@/types/platform'
+import type { RegistryDeps } from '@/types/registry'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import type { SessionWorkspace } from '@/types/workspace'
 import type { SessionKey } from '@/types/hosting'
-import type { RecentsStore } from '@/main/workspace/recents'
+
 import { resolveFoldersChoose, resolveFoldersList, resolveSessionChanges } from '@/main/channels/workspace'
 import type { WorkspaceChannelDeps } from '@/main/channels/workspace'
+import type { RecentsStore } from '@/types/workspace'
 
 function ok(stdout: string): CommandResult {
   return { ok: true, stdout, stderr: '' }

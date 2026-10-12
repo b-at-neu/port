@@ -2,6 +2,8 @@
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { ReclaimerFailureKind } from '@/types/reclaimer'
+import type { GhRunner, GitRunner, PathOps } from '@/types/platform'
+import type { FetchItemsByNumberParams, ItemsByNumberFetch } from '@/types/github'
 
 export type AssigneeExpectation = { readonly kind: 'any' } | { readonly kind: 'unassigned' } | { readonly kind: 'exactly'; readonly logins: readonly string[] }
 
@@ -142,3 +144,24 @@ export interface ReadAuditLogParams {
 export type AuditRead =
   | { readonly ok: true; readonly entries: readonly AuditEntry[]; readonly malformed: number; readonly previousPath: string | null; readonly readAt: string }
   | { readonly ok: false; readonly kind: AuditReadFailureKind; readonly message: string; readonly readAt: string }
+
+export interface PostCommentParams {
+  readonly request: CommentRequest
+  readonly repoRoot: string
+  readonly auditDir: string
+  readonly gh?: GhRunner
+  readonly git?: GitRunner
+  readonly now?: () => Date
+  readonly pathOps?: PathOps
+}
+
+export interface ApplyLabelsParams {
+  readonly request: LabelWriteRequest
+  readonly repoRoot: string
+  readonly auditDir: string
+  readonly gh?: GhRunner
+  readonly git?: GitRunner
+  readonly fetchItemsByNumber?: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
+  readonly now?: () => Date
+  readonly pathOps?: PathOps
+}

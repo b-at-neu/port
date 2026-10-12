@@ -6,7 +6,7 @@ import { foldCase, indexOfFolded } from '@/main/search/terms'
 // Either side of a match, in the original (unfolded) text.
 const SNIPPET_CONTEXT_CHARS = 60
 
-export interface SearchableField {
+interface SearchableField {
   readonly field: SearchField
   readonly text: string
 }

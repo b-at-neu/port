@@ -1,6 +1,6 @@
 // Pure redispatch-floor filtering, the re-read survivor test, and the budget note's
 // comment-failure clause, moved here to keep dispatcher.ts under the file-size limit.
-import type { StageRecord } from '@/main/dispatch/launch'
+import type {StageRecord} from '@/types/dispatch'
 import type { ResolvedItem } from '@/types/github'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { TickActionable } from '@/types/tick'
@@ -10,7 +10,7 @@ import type { WriteOutcome } from '@/types/writes'
  *  and double-dispatch the same candidate within one tick's worth of time. */
 export const REDISPATCH_FLOOR_MS = 270_000
 
-export interface SelectDispatchesParams {
+interface SelectDispatchesParams {
   readonly dispatchable: readonly TickActionable[]
   /** This repository's own bounded recent list, every state — the floor applies to all three. */
   readonly recent: readonly StageRecord[]

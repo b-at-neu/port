@@ -10,7 +10,7 @@ import { defaultWorkspaceChannelDeps, resolveFoldersChoose, resolveFoldersList, 
 import { createRecentsStore } from '@/main/workspace/recents'
 import { createSessionWorktree, removeSessionWorktreeAt } from '@/main/workspace/worktree'
 import { createStageLauncher } from '@/main/stage/launcher'
-import type { StageLauncherHandle } from '@/main/stage/launcher'
+import type {StageLauncherHandle} from '@/types/stage'
 import { defaultForkListSessions } from '@/main/hosting/fork'
 import { statPath } from '@/main/platform/files'
 import type { SessionKey } from '@/types/hosting'
@@ -25,13 +25,13 @@ import { createDispatchRuntime } from '@/main/dispatch/runtime'
 import { createRunStateStore } from '@/main/dispatch/store'
 import { defaultHaltDispatchDeps, haltDispatch } from '@/main/dispatch/halt'
 import { registeredRepoIds, resolveDispatchControl } from '@/main/dispatch/resolve'
-import type { Dispatcher } from '@/main/dispatch/dispatcher'
+import type {Dispatcher} from '@/types/dispatch'
 import { fetchItemsByNumber } from '@/main/github/adapter'
 import { readOwnership, releaseOwnership, takeOwnership } from '@/main/dispatch/ownership'
 import { resolveGateAnswer, resolveGatePreflight } from '@/main/channels/gate'
-import type { GateChannelDeps } from '@/main/channels/gate'
+import type {GateChannelDeps} from '@/types/channels'
 import { resolveItemAction, resolveItemDecision } from '@/main/channels/items'
-import type { ItemDecisionDeps } from '@/main/channels/items'
+import type {ItemDecisionDeps} from '@/types/channels'
 import { resolveRuntimeProbe } from '@/main/channels/runtime'
 import { resolveSearchQuery, resolveSessionsScan, resolveTranscriptTailClose, resolveTranscriptTailOpen, resolveTranscriptTailPoll } from '@/main/channels/sessions'
 import {
@@ -64,21 +64,23 @@ import {
 } from '@/main/channels/hosting'
 import { defaultGitRunner, git } from '@/main/platform/git'
 import { readWorktreeReport } from '@/main/reclaimer/report'
-import type { ReadWorktreeReportParams } from '@/main/reclaimer/report'
+
 import { addRepository, listRepositories, removeRepository, requireReadyRepo } from '@/main/registry'
-import type { RegistryDeps } from '@/main/registry'
+import type { RegistryDeps } from '@/types/registry'
 import { createPipelineWatcher } from '@/main/state/watcher'
-import type { PipelineWatcher } from '@/main/state/watcher'
+import type {PipelineWatcher} from '@/types/state'
 import { runtimePreflight } from '@/main/runtime/preflight'
 import { createHostedStore, defaultHostedStoreDeps } from '@/main/hosting/store'
 import { createHostingPersistence } from '@/main/hosting/persist'
-import type { HostedStore } from '@/main/hosting/store'
+
 import { createNotifier } from '@/main/hosting/notify'
 import { createStageRegistry } from '@/main/stage/registry'
-import type { StageRegistry } from '@/main/stage/registry'
+import type {StageRegistry} from '@/types/stage'
 import { readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
 import { resolveStageAllow, resolveStageDismissDenial, resolveStageResume, resolveStageRestart } from '@/main/channels/stage'
-import type { StageChannelDeps } from '@/main/channels/stage'
+import type {StageChannelDeps} from '@/types/channels'
+import type { ReadWorktreeReportParams } from '@/types/reclaimer'
+import type { HostedStore } from '@/types/hosting'
 
 type AppInfo = IpcMap['app:info']['response']
 
@@ -172,7 +174,7 @@ export async function resolveBoardRefresh(
   return deps.refresh(request)
 }
 
-export interface RegisteredIpc {
+interface RegisteredIpc {
   readonly watcher: PipelineWatcher
   readonly hostedStore: HostedStore
   readonly dispatcher: Dispatcher

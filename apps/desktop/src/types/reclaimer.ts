@@ -1,3 +1,5 @@
+import type { GitRunner, NodeRunner, PathOps } from '@/types/platform'
+
 // Renderer-safe shapes for the worktree inspector: driving the shipped worktrees script and joining the local read for the one fact its JSON omits (`prunable`). No import here may reach a Node builtin.
 import type { CorrelationRung, WorktreeProducer } from '@/types/local'
 
@@ -97,3 +99,28 @@ export type WorktreesReclaimResult =
       readonly call: readonly string[]
     }
   | ({ readonly ok: false; readonly readAt: string; readonly call: readonly string[] | null } & ReclaimerFailure)
+
+export interface RunReclaimParams {
+  readonly repoRoot: string
+  /** `commands.worktrees` verbatim off the resolved config — `null` means
+   *  the repository has not installed the reclamation script. */
+  readonly worktreesCommand: string | null
+  /** `null` reclaims every reclaimable candidate; a positive integer scopes
+   *  the run to that ticket's own worktree (`--issue N`). */
+  readonly issue: number | null
+  readonly runNode?: NodeRunner
+  readonly now?: () => Date
+  readonly pathOps?: PathOps
+}
+
+export interface ReadWorktreeReportParams {
+  readonly repoRoot: string
+  /** `null` means the repository has not installed the reclamation script. */
+  readonly worktreesCommand: string | null
+  readonly runNode?: NodeRunner
+  /** Omitted means the join is skipped and `porcelainJoin` reports `'unavailable'` — the report
+   *  itself still succeeds. */
+  readonly git?: GitRunner
+  readonly now?: () => Date
+  readonly pathOps?: PathOps
+}

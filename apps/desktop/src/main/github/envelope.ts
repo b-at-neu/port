@@ -1,21 +1,15 @@
 // Pure envelope parse and failure classification — no I/O. gh api graphql exits non-zero whenever
 // the response carries errors, even when data is still usable, so the envelope itself decides.
-import type { GhResult } from '@/main/platform/gh'
-import type { LabelKey } from '@/utils/labels/vocabulary'
-import type { PipelineItemKind, TruncatedSet, UnavailableAlias } from '@/types/github'
+import type {GhResult} from '@/types/platform'
+import type { TruncatedSet, UnavailableAlias } from '@/types/github'
+import type { AliasInfo, EnvelopeFailureKind, GraphQLErrorEntry } from '@/types/github'
 
-export interface GraphQLErrorEntry {
-  readonly type?: string
-  readonly path?: readonly (string | number)[]
-  readonly message?: string
-}
-
-export interface GraphQLEnvelope {
+interface GraphQLEnvelope {
   readonly data?: Readonly<Record<string, unknown>> | null
   readonly errors?: readonly GraphQLErrorEntry[]
 }
 
-export type ParsedEnvelope = { readonly ok: true; readonly value: GraphQLEnvelope } | { readonly ok: false }
+type ParsedEnvelope = { readonly ok: true; readonly value: GraphQLEnvelope } | { readonly ok: false }
 
 /** `JSON.parse`, guarded against a non-object top level (an array or a bare
  *  primitive is not a GraphQL envelope, whatever `JSON.parse` makes of it). */
@@ -29,11 +23,7 @@ export function parseEnvelope(raw: string): ParsedEnvelope {
   }
 }
 
-/** The failure kinds this classifier can add on top of `gh`'s own, independent of
- *  `PipelineFailureKind` so `adapter.ts`'s assertion actually pins one against the other. */
-export type EnvelopeFailureKind = 'unparseable' | 'no-data' | 'repo-not-found' | 'rate-limited'
-
-export type FailureVerdict =
+type FailureVerdict =
   | { readonly kind: 'ok' }
   | { readonly kind: Exclude<GhResult, { ok: true }>['kind'] | EnvelopeFailureKind; readonly message: string }
 
@@ -85,12 +75,6 @@ export function classifyFailure(ghResult: GhResult, envelope: ParsedEnvelope | u
     return { kind: 'repo-not-found', message: 'the repository does not exist, or is not visible to this token' }
   }
   return { kind: 'ok' }
-}
-
-export interface AliasInfo {
-  readonly key: LabelKey
-  readonly name: string
-  readonly surface: PipelineItemKind
 }
 
 /** Maps `errors[].path` to the alias table built alongside the query, so a partial failure

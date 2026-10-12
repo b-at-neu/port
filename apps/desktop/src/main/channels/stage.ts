@@ -1,34 +1,18 @@
+import type { ResolvedStageRoot, RecoverDeps } from '@/types/stage'
+
 // `stage:allow`, `stage:dismiss-denial`, `stage:resume`, `stage:restart` — the renderer's own
 // seam into `main/stage/`'s allow/resume/restart compositions. Nothing else may call these.
 import type { IpcMap } from '@/types/ipc'
 import type { StageAllowResult, StageDenial, StageResumeResult, StageRestartResult } from '@/types/stage'
-import type { RegistryDeps } from '@/main/registry'
-import { listRepositories, requireReadyRepo } from '@/main/registry'
+import type { RegistryDeps } from '@/types/registry'
+import { requireReadyRepo } from '@/main/registry'
 import { allowRule } from '@/main/stage/allowlist'
 import { resumeStage, restartStage } from '@/main/stage/recover'
-import type { RecoverDeps, ResolvedStageRoot } from '@/main/stage/recover'
-import type { StageRegistry } from '@/main/stage/registry'
-import type { Dispatcher } from '@/main/dispatch/dispatcher'
-import type { HostedStore } from '@/main/hosting/store'
-import type { RemoveSessionWorktreeOutcome } from '@/main/workspace/worktree'
-import type { ApplyItemActionParams } from '@/main/actions/apply'
-import type { ItemActionResult } from '@/types/actions'
-import type { BoardSnapshot } from '@/types/board'
-import type { FileResult } from '@/main/platform/files'
-import type { RepoId } from '@/utils/repos'
 
-export interface StageChannelDeps {
-  readonly listRepositories: typeof listRepositories
-  readonly registry: StageRegistry
-  readonly dispatcher: Pick<Dispatcher, 'status' | 'clearDenialsFor' | 'dismissDenial'>
-  readonly store: Pick<HostedStore, 'start' | 'send' | 'close' | 'list' | 'capacity'>
-  readonly removeWorktree: (path: string, force: boolean) => Promise<RemoveSessionWorktreeOutcome>
-  readonly applyItemAction: (params: ApplyItemActionParams) => Promise<ItemActionResult>
-  readonly snapshot: () => BoardSnapshot
-  readonly auditDir: string
-  readonly readJson: <T>(path: string) => Promise<FileResult<T>>
-  readonly writeJsonAtomic: (path: string, value: unknown) => Promise<FileResult<void>>
-}
+
+
+import type { RepoId } from '@/utils/repos'
+import type { StageChannelDeps } from '@/types/channels'
 
 function findDenial(dispatcher: StageChannelDeps['dispatcher'], repoId: RepoId, denialId: string): StageDenial | null {
   const status = dispatcher.status().find((s) => s.repoId === repoId)

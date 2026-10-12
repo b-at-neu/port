@@ -1,15 +1,7 @@
 // The quit warning's own pure copy and guard — no electron import.
 import type { StageAgent } from '@/types/tick'
 import type { LabelKey } from '@/utils/labels/vocabulary'
-
-// One live stage session, as the quit guard needs it — `repoName` is the
-// display name (`owner/name`), printed verbatim by the copy below.
-export interface StageSessionSummary {
-  readonly agent: StageAgent
-  readonly number: number
-  readonly trigger: LabelKey
-  readonly repoName: string
-}
+import type { QuitWarningCopy, StageSessionSummary } from '@/types/dispatch'
 
 // `refreshing` when the trigger is `refreshBranch`, regardless of agent.
 export function stagePhaseName(agent: StageAgent, trigger: LabelKey): string {
@@ -24,13 +16,6 @@ export function stagePhaseName(agent: StageAgent, trigger: LabelKey): string {
     case 'revise':
       return 'revising'
   }
-}
-
-export interface QuitWarningCopy {
-  readonly message: string
-  readonly detail: string
-  readonly confirmLabel: string
-  readonly cancelLabel: string
 }
 
 function sortKey(s: StageSessionSummary): string {
@@ -53,14 +38,14 @@ export function quitWarningCopy(sessions: readonly StageSessionSummary[]): QuitW
   return { message, detail, confirmLabel: plural ? 'Stop sessions and quit' : 'Stop session and quit', cancelLabel: 'Cancel' }
 }
 
-export interface CreateQuitGuardParams {
+interface CreateQuitGuardParams {
   readonly sessions: () => readonly StageSessionSummary[]
   // Resolves true on confirm, false on cancel — a rejection fails open (treated as confirm).
   readonly confirm: (copy: QuitWarningCopy) => Promise<boolean>
   readonly quit: () => void
 }
 
-export interface QuitGuard {
+interface QuitGuard {
   // true when the quit was intercepted; the caller must itself call preventDefault.
   intercept(preventDefault: () => void): boolean
 }

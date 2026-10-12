@@ -3,7 +3,7 @@ import type { AgentRecord, SessionRecord } from '@/types/sessions'
 import type { WorktreeEntry } from '@/types/local'
 import type { AttachedAgent, AttachedSession, AttachedWorktree } from '@/types/state'
 
-export interface AttachTarget {
+interface AttachTarget {
   readonly number: number
   /** This item's linked counterpart (issue ↔ pull request), or `null` — how a `review #<pr>` dispatch attaches to the issue instead. */
   readonly linked: number | null

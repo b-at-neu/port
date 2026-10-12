@@ -1,32 +1,11 @@
 import { homedir } from 'node:os'
 import { posix as posixImpl, win32 as win32Impl } from 'node:path'
+import type { PathOps, PathFlavour, RepoKey } from '@/types/platform'
 
 type PathImpl = typeof posixImpl
 
-export type PathFlavour = 'posix' | 'win32'
-
-declare const repoKeyBrand: unique symbol
-
-/** Branded string: the canonical identity `pathKey` produces. A raw path cannot be passed where
- *  an identity is expected. */
-export type RepoKey = string & { readonly [repoKeyBrand]: true }
-
-export interface PathOpsOptions {
+interface PathOpsOptions {
   readonly home: string
-}
-
-export interface PathOps {
-  readonly flavour: PathFlavour
-  toNative(p: string): string
-  toPosix(p: string): string
-  pathKey(p: string): RepoKey
-  samePath(a: string, b: string): boolean
-  contains(parent: string, child: string): boolean
-  expandHome(p: string): string
-  resolveFrom(base: string, p: string): string
-  join(base: string, ...segments: string[]): string
-  dirname(p: string): string
-  basename(p: string): string
 }
 
 function implFor(flavour: PathFlavour): PathImpl {

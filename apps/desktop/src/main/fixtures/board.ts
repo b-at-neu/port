@@ -14,7 +14,7 @@ import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@
 import { planTick } from '@/main/tick/plan'
 import { FIXTURE_REPOSITORIES, GADGETS_ID, GADGETS_VOCABULARY_REPORT, LEGACY_SITE_ID, WIDGETS_ID, WIDGETS_VOCABULARY_REPORT } from '@/main/fixtures/repos'
 import type { RepoId } from '@/utils/repos'
-import type { FixtureScenario } from '@/main/fixtures/mode'
+import type {FixtureScenario} from '@/types/fixtures'
 
 const VIEWER = 'octo-dev'
 

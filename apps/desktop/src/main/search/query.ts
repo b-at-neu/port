@@ -1,9 +1,12 @@
+import type { ProjectIndex } from '@/types/sessions'
+import type { SignatureIndexEntry } from '@/types/search'
+
 // scope -> index skip -> budgeted scan -> warm-on-read. Indexing is not a separate pass -- it is
 // the side effect of scanning.
 import { statPath } from '@/main/platform/files'
 import { buildProjectIndex, defaultClaudeHome, resolveTranscriptPath } from '@/main/sessions/locate'
 import { openTranscript } from '@/main/sessions/transcript'
-import type { ProjectIndex } from '@/main/sessions/locate'
+
 import type { AgentRecord, SessionRecord, SessionScan } from '@/types/sessions'
 import { agentLabel, sessionLabel } from '@/utils/sessions/label'
 import { MAX_HITS_PER_TRANSCRIPT, MAX_TOTAL_HITS, SCAN_BUDGET_MS } from '@/types/search'
@@ -14,16 +17,8 @@ import { parseQuery } from '@/main/search/terms'
 import { buildSignature, decodeSignature, encodeSignature, mightContain } from '@/main/search/signature'
 import { hitsFor, searchableFields } from '@/main/search/match'
 import { readSignatureIndex, writeSignatureIndex } from '@/main/search/store'
-import type { SignatureIndexEntry } from '@/main/search/store'
 
-export interface RunSearchParams {
-  readonly scan: SessionScan
-  readonly indexDir: string
-  readonly query: string
-  readonly scope: SearchScope
-  readonly claudeHome?: string
-  readonly now?: () => Date
-}
+import type { RunSearchParams } from '@/types/search'
 
 interface Candidate {
   readonly sessionId: string

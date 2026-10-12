@@ -4,8 +4,8 @@ import type { ClaimPreflightFetch } from '@/types/github'
 import type { LabelWriteRequest, WriteOutcome } from '@/types/writes'
 import type { ReposListResponse } from '@/types/ipc'
 import { claimApply, claimPreflight } from '@/main/claim'
-import type { ClaimDeps } from '@/main/claim'
-import type { RegistryDeps } from '@/main/registry'
+import type { ClaimDeps } from '@/types/claim'
+import type { RegistryDeps } from '@/types/registry'
 import { readyEntry } from '../../fixtures/board-state'
 
 const REPO_ID = 'repo-1' as unknown as RepoId

@@ -1,3 +1,8 @@
+import type { StageLauncher } from '@/types/dispatch'
+import type { HostedSessionSnapshot, HostedStore } from '@/types/hosting'
+import type { RemoveSessionWorktreeOutcome } from '@/types/workspace'
+import type { ItemActionResult } from '@/types/actions'
+
 // Renderer-safe types for stage-session "needs you" attention: a denied tool call waiting on an
 // allowlist decision, and a stage session interrupted before it reached a hand-back.
 import type { PipelineItemKind } from '@/types/github'
@@ -61,3 +66,35 @@ export type StageRestartResult =
   | { readonly kind: 'worktree-remove-failed'; readonly message: string }
   | { readonly kind: 'label-refused'; readonly reason: string }
   | { readonly kind: 'unknown-stage' }
+
+export interface StageLauncherHandle extends StageLauncher {
+  /** Wired from `main/ipc.ts`'s own `onStatus` — classifies a hand-back once per new `lastResult`/`end`, serialized per session key. */
+  observe(snapshot: HostedSessionSnapshot): void
+}
+
+export interface RecoverDeps {
+  readonly registry: StageRegistry
+  readonly store: Pick<HostedStore, 'start' | 'send' | 'close' | 'list'>
+  readonly removeWorktree: (path: string, force: boolean) => Promise<RemoveSessionWorktreeOutcome>
+  readonly resolveEntry: (repoId: InterruptedStage['repoId']) => ResolvedStageRoot | null
+  readonly applyRetry: (interrupted: InterruptedStage) => Promise<ItemActionResult>
+  readonly capacity: () => Promise<{ readonly limit: number }>
+}
+
+export interface ResolvedStageRoot {
+  readonly path: string
+  readonly sessionRequiredPaths: readonly string[]
+}
+
+export interface StageRegistry {
+  /** Loads the file, promoting every `running` entry found to `crash` — a `running` record at boot can only mean the process died before it marked itself otherwise. Missing/malformed loads as empty. */
+  load(): Promise<readonly InterruptedStage[]>
+  recordRunning(entry: Omit<InterruptedStage, 'reason' | 'detail' | 'resetsAt' | 'costUsd'>): void
+  setSessionId(id: string, claudeSessionId: string): void
+  markInterrupted(id: string, reason: InterruptedReason, detail: string | null, resetsAt: string | null, costUsd: number | null): void
+  /** Marks every currently-`running` entry `quit` — called on the quit path before `closeAll()`. */
+  /** Awaited at the quit path, with a timeout the caller applies — a hung write must never block quitting. */
+  markAllQuit(): Promise<void>
+  remove(id: string): void
+  list(): readonly InterruptedStage[]
+}

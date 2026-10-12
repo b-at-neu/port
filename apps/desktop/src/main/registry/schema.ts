@@ -6,7 +6,7 @@ import type { SchemaViolation } from '@/utils/repos'
 const ajv = new Ajv2020({ allErrors: true })
 const validate = ajv.compile(schema)
 
-export interface ValidateConfigResult {
+interface ValidateConfigResult {
   readonly violations: readonly SchemaViolation[]
 }
 
@@ -21,7 +21,7 @@ export function validateConfig(value: unknown): ValidateConfigResult {
   return { violations }
 }
 
-export interface ConfigDefaults {
+interface ConfigDefaults {
   readonly branches: { readonly integration: string; readonly production: string }
   readonly models: { readonly plan: string; readonly impl: string; readonly review: string; readonly revise: string }
   readonly modules: {

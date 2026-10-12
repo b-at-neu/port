@@ -43,3 +43,18 @@ export interface RuntimeProbe {
   readonly diagnosis: RuntimeDiagnosis
   readonly detail: string | null
 }
+
+export interface RunProbeParams {
+  readonly executablePath: string
+  readonly cwd: string
+  readonly credentials: CredentialsTell | null
+  readonly now: number
+  readonly timeoutMs?: number
+}
+
+export interface ProbeOutcome {
+  readonly diagnosis: RuntimeDiagnosis
+  readonly detail: string | null
+}
+
+export type RuntimeProbeFn = (params: RunProbeParams) => Promise<ProbeOutcome>

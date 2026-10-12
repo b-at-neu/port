@@ -1,7 +1,7 @@
 import { runCommand } from '@/main/platform/run'
-import type { CommandResult, RunCommandOptions } from '@/main/platform/run'
 
-export type ClaudeOptions = Omit<RunCommandOptions, 'whichEnv' | 'platform'>
+import type { ClaudeOptions } from '@/types/platform'
+import type { CommandResult } from '@/types/platform'
 
 // 10s — a single short-lived process with no network I/O, well under the platform layer's 30s default.
 const DEFAULT_CLAUDE_TIMEOUT_MS = 10_000

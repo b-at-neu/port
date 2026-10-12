@@ -2,6 +2,7 @@
 import { listDirectory } from '@/main/platform/files'
 import { pathOps } from '@/main/platform/paths'
 import type { SessionFailureKind } from '@/types/sessions'
+import type { ProjectIndex } from '@/types/sessions'
 
 /** Shared core so the bare-id validator and the filename matcher never drift apart. */
 const SESSION_ID_CORE = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
@@ -11,9 +12,7 @@ export const SESSION_ID_RE = new RegExp(`^${SESSION_ID_CORE}$`, 'i')
 
 const SESSION_ID_FILENAME = new RegExp(`^(${SESSION_ID_CORE})\\.jsonl$`, 'i')
 
-export type ProjectIndex = ReadonlyMap<string, string>
-
-export type BuildProjectIndexResult =
+type BuildProjectIndexResult =
   | { readonly ok: true; readonly index: ProjectIndex; readonly scannedProjects: number }
   | { readonly ok: false; readonly kind: SessionFailureKind; readonly message: string }
 
@@ -61,7 +60,7 @@ export function defaultClaudeHome(): string {
   return pathOps.expandHome('~/.claude')
 }
 
-export type ResolveTranscriptPathResult =
+type ResolveTranscriptPathResult =
   | { readonly ok: true; readonly path: string }
   | { readonly ok: false; readonly kind: 'session-unresolved' | 'invalid-id' }
 

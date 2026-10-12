@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { forkTitle, titleFork } from '@/main/hosting/fork'
 import type { TitleForkDeps } from '@/main/hosting/fork'
-import type { RawSession } from '@/main/sessions/sdk'
+import type {RawSession} from '@/types/sessions'
 
 function session(overrides: Partial<RawSession>): RawSession {
   return { sessionId: 's', summary: null, lastModified: '2026-01-01T00:00:00.000Z', customTitle: null, firstPrompt: null, gitBranch: null, cwd: null, ...overrides }

@@ -5,16 +5,10 @@ import type { ClaimPreflightFetch } from '@/types/github'
 import type { RepoId } from '@/utils/repos'
 import { fetchClaimPreflight } from '@/main/github/adapter'
 import { listRepositories, requireReadyRepo } from '@/main/registry'
-import type { RegistryDeps } from '@/main/registry'
+import type { RegistryDeps } from '@/types/registry'
 import { applyClaimLabels } from '@/main/actions/claim'
-import type { ApplyLabelsParams } from '@/main/writes/apply'
-import type { WriteOutcome } from '@/types/writes'
 
-export interface ClaimDeps {
-  readonly listRepositories: typeof listRepositories
-  readonly fetchClaimPreflight: typeof fetchClaimPreflight
-  readonly applyClaimLabels: (params: ApplyLabelsParams) => Promise<WriteOutcome>
-}
+import type { ClaimDeps } from '@/types/claim'
 
 export const defaultClaimDeps: ClaimDeps = { listRepositories, fetchClaimPreflight, applyClaimLabels }
 
@@ -34,7 +28,7 @@ function toClaimPreflight(fetch: Extract<ClaimPreflightFetch, { readonly ok: tru
   return { ...fetch.item, viewer: fetch.viewer, readAt: fetch.fetchedAt }
 }
 
-export interface ClaimPreflightParams {
+interface ClaimPreflightParams {
   readonly registryDeps: RegistryDeps
   readonly repoId: RepoId
   readonly number: number
@@ -51,7 +45,7 @@ export async function claimPreflight(params: ClaimPreflightParams, deps: ClaimDe
   return { kind: 'resolved', preflight, verdict }
 }
 
-export interface ClaimApplyParams {
+interface ClaimApplyParams {
   readonly registryDeps: RegistryDeps
   readonly repoId: RepoId
   readonly number: number

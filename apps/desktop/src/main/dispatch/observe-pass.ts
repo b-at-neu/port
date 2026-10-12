@@ -1,17 +1,20 @@
+import type { RefreshMemo } from '@/types/tick'
+import type { WriteObservation } from '@/types/dispatch'
+
 // The observation pass, split out of dispatcher.ts to keep it under the file-size limit. A throw
 // from the write becomes `outcome: 'failed'`, never a pass that stops partway through.
-import type { ReadyEntry } from '@/main/actions/apply'
-import type { ApplyObservationParams, ApplyObservationResult } from '@/main/actions/observe'
+import type {ReadyEntry} from '@/types/actions'
+import type {ApplyObservationParams, ApplyObservationResult} from '@/types/actions'
 import type { ObservationRecord } from '@/types/dispatch'
-import type { RefreshMemo } from '@/main/tick/ledger'
+
 import type { RepositoryState } from '@/types/state'
 import type { TickObservation } from '@/types/tick'
 import type { WriteOutcome } from '@/types/writes'
-import type { WriteObservation } from '@/main/dispatch/observation'
+
 
 const OBSERVED_LIMIT = 20
 
-export interface ObservationPassDeps {
+interface ObservationPassDeps {
   readonly writeObservation: (params: ApplyObservationParams) => Promise<ApplyObservationResult>
   readonly refreshMemo: RefreshMemo
   readonly dirs: { readonly audit: string; readonly scratch: string }
@@ -20,7 +23,7 @@ export interface ObservationPassDeps {
 }
 
 /** The mutable slice of `RepoDispatcherState` this pass reads and writes. */
-export interface ObservationPassState {
+interface ObservationPassState {
   observed: ObservationRecord[]
   observedWriteAt: Map<number, string>
 }

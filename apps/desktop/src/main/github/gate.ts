@@ -1,14 +1,13 @@
 // fetchGatePreflight — the plan gate's own one round trip. A new file to stay clear of the
 // file-size ratchet; reuses envelope.ts's parsing rather than hand-rolling a second reader.
 import { gh as defaultGh } from '@/main/platform/gh'
-import type { GhResult, GhRunner } from '@/main/platform/gh'
+import type {GhResult, GhRunner} from '@/types/platform'
 import type { GatePreflightFetch, GatePreflightItem } from '@/types/github'
 import { classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'
 import { buildGatePreflightQuery } from '@/main/github/query'
-import type { RepoRef } from '@/main/github/adapter'
+import type { GitHubRepoRef } from '@/types/github'
 
-export type { GhRunner }
 
 function stdoutOf(result: GhResult): string | undefined {
   return 'stdout' in result ? result.stdout : undefined
@@ -20,8 +19,8 @@ function kindOfTypename(typename: unknown): 'issue' | 'pull-request' | undefined
   return undefined
 }
 
-export interface FetchGatePreflightParams {
-  readonly repo: RepoRef
+interface FetchGatePreflightParams {
+  readonly repo: GitHubRepoRef
   readonly number: number
   readonly gh?: GhRunner
   readonly now?: () => Date

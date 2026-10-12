@@ -1,18 +1,21 @@
+import type { ExpectedComponents, InitPlugin, PluginRequest } from '@/types/hosting-plugin'
+import type { HostedQuery } from '@/main/hosting/sdk'
+
 // A timeout or rejected read-back must never look like an empty capability list.
-import type { AgentSummary, CommandSummary, PluginRequest, SessionCapabilities, SlashCommandSummary } from '@/types/hosting'
+import type { AgentSummary, CommandSummary, SessionCapabilities, SlashCommandSummary } from '@/types/hosting'
 import { isRecord } from '@/main/guards'
 import { sanitize } from '@/main/sessions/transcript-entries'
 import { checkComponents, checkPluginLoad, isPipelineCommand, PLUGIN_NAME } from '@/main/hosting/verify'
-import type { InitPlugin } from '@/main/hosting/verify'
-import type { ExpectedComponents } from '@/main/hosting/plugin'
-import type { AgentInfo, HostedQuery, SlashCommand } from '@/main/hosting/sdk'
+
+
+import type {AgentInfo, SlashCommand} from '@/main/hosting/sdk'
 
 /** Control requests answered before the first turn, costing no tokens. */
 export const CAPABILITIES_TIMEOUT_MS = 30_000
 
 const QUALIFIER = `${PLUGIN_NAME}:`
 
-export interface CreateCapabilityTrackerParams {
+interface CreateCapabilityTrackerParams {
   readonly request: PluginRequest
   readonly readExpectedComponents: (pluginPath: string) => Promise<ExpectedComponents | null>
   readonly samePath: (a: string, b: string) => boolean
@@ -21,7 +24,7 @@ export interface CreateCapabilityTrackerParams {
   readonly timeoutMs?: number
 }
 
-export interface CapabilityTracker {
+interface CapabilityTracker {
   start(query: HostedQuery): Promise<void>
   observe(message: unknown): void
   current(): SessionCapabilities

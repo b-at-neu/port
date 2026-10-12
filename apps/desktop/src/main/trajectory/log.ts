@@ -3,21 +3,14 @@
 import { appendTextFile, ensureDirectory, renamePath, statPath } from '@/main/platform/files'
 import { defaultGitRunner, resolveGitBaseRoot } from '@/main/platform/git'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import type { GitRunner } from '@/main/platform/git'
-import type { PathOps } from '@/main/platform/paths'
 import type { TickReport } from '@/types/tick'
-import type { DesktopTickEvent } from '@/main/trajectory/types'
+import type { DesktopTickEvent } from '@/types/trajectory'
+import type { RecordTickDeps } from '@/types/trajectory'
 
-export type { GitRunner }
 
 const LOG_FILE = 'desktop-events.jsonl'
 const PREV_LOG_FILE = 'desktop-events.prev.jsonl'
 const ROTATE_AT_BYTES = 8 * 1024 * 1024
-
-export interface RecordTickDeps {
-  readonly git?: GitRunner
-  readonly pathOps?: PathOps
-}
 
 /** `repo` is the `owner/name` slug — `report.repoId` alone is not joinable against the cockpit's
  *  own record. */

@@ -1,4 +1,4 @@
-import type { HostedStore } from '@/main/hosting/store'
+import type { HostedStore } from '@/types/hosting'
 
 function unexpected(name: string): () => never {
   return () => {

@@ -3,14 +3,12 @@
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { ReconciledItem } from '@/types/state'
 import type { TickObservation } from '@/types/tick'
+import type { WriteObservation } from '@/types/dispatch'
 
 // A literal, not an import — this module loads standalone and can't resolve a relative import.
 const CYCLE_CAP_ESCALATION_MARKER = 'review cycles reached the cap of'
 
-/** Every `TickObservation` kind this module writes — excludes the one report-only kind, `refresh-deferred`. */
-export type WriteObservation = Exclude<TickObservation, { readonly kind: 'refresh-deferred' }>
-
-export interface ObservationWritePlan {
+interface ObservationWritePlan {
   readonly add: readonly LabelKey[]
   readonly remove: readonly LabelKey[]
   readonly expect: {

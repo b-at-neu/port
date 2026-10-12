@@ -1,24 +1,6 @@
 // The only file under apps/desktop/src/ that may reference `@anthropic-ai/claude-agent-sdk` — pinned mechanically by the `desktop-sessions` layer 1 check.
 import type { SDKSessionInfo } from '@anthropic-ai/claude-agent-sdk'
-import type { SessionFailureKind } from '@/types/sessions'
-
-/** Mapped from the SDK's `SDKSessionInfo` — optional fields carried as `null`, and `lastModified` normalized to an ISO string here. */
-export interface RawSession {
-  readonly sessionId: string
-  readonly summary: string | null
-  readonly lastModified: string
-  readonly customTitle: string | null
-  readonly firstPrompt: string | null
-  readonly gitBranch: string | null
-  readonly cwd: string | null
-}
-
-export type ListSessionsResult =
-  | { readonly ok: true; readonly sessions: readonly RawSession[] }
-  | { readonly ok: false; readonly kind: SessionFailureKind; readonly message: string }
-
-/** The injectable seam every caller takes instead of importing the SDK directly, so `adapter.test.ts` runs with no SDK present. */
-export type SessionReader = () => Promise<ListSessionsResult>
+import type { SessionReader, RawSession } from '@/types/sessions'
 
 /** Only the one function this adapter calls, never the whole SDK module type, so a fake in `sdk.test.ts` needs no unrelated exports. */
 type SdkListSessions = () => Promise<SDKSessionInfo[]>

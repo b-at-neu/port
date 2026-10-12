@@ -1,13 +1,13 @@
 // Streaming input mode, always, so interrupt()/setPermissionMode() stay available for the handle's whole life.
 // end() closes the iterator, the SDK's own graceful-shutdown trigger — never process.kill or a signal.
 import type { SDKUserMessage } from '@/main/hosting/sdk'
-import type { ContentBlock } from '@/main/hosting/content'
+import type {ContentBlock} from '@/types/hosting'
 
-export interface PushResult {
+interface PushResult {
   readonly uuid: string
 }
 
-export interface HostedInput {
+interface HostedInput {
   /** Iterable exactly once. */
   readonly stream: AsyncIterable<SDKUserMessage>
   /** Always accepted; dropped silently once `end()` has been called — a plain string when there are no attachments. */

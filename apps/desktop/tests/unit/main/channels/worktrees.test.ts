@@ -7,7 +7,7 @@ import type { WorktreesReclaimResult } from '@/types/reclaimer'
 import type { ReclaimAuditEntry } from '@/types/writes'
 import { resolveWorktreesReclaim } from '@/main/channels/worktrees'
 import type { WorktreesReclaimDeps } from '@/main/channels/worktrees'
-import type { RegistryDeps } from '@/main/registry'
+import type { RegistryDeps } from '@/types/registry'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 

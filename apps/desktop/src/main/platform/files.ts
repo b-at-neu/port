@@ -3,11 +3,7 @@ import { createReadStream } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { appendFile, mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-
-/** ENOENT is a value, never an exception — callers must distinguish "no config" from "unreadable". */
-export type FileFailureKind = 'not-found' | 'not-a-file' | 'permission-denied' | 'too-large' | 'unparseable' | 'io'
-
-export type FileResult<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly kind: FileFailureKind; readonly message: string }
+import type { ReadLinesFromResult, DirEntry, DirEntryKind, FileResult, FileFailureKind } from '@/types/platform'
 
 // Keeps a runaway denials log from OOM-ing the main process.
 const MAX_BYTES = 16 * 1024 * 1024
@@ -66,13 +62,6 @@ export async function readJsonFile<T>(path: string): Promise<FileResult<T>> {
   }
 }
 
-export type DirEntryKind = 'file' | 'directory' | 'symlink' | 'other'
-
-export interface DirEntry {
-  readonly name: string
-  readonly kind: DirEntryKind
-}
-
 function classifyDirent(entry: Dirent): DirEntryKind {
   if (entry.isDirectory()) return 'directory'
   if (entry.isSymbolicLink()) return 'symlink'
@@ -89,7 +78,7 @@ export async function listDirectory(path: string): Promise<FileResult<readonly D
   }
 }
 
-export interface StatInfo {
+interface StatInfo {
   readonly kind: 'file' | 'directory' | 'other'
   readonly size: number
   readonly modifiedAt: string
@@ -116,19 +105,9 @@ export async function ensureDirectory(path: string): Promise<FileResult<void>> {
   }
 }
 
-export interface ReadLinesFromOptions {
+interface ReadLinesFromOptions {
   readonly maxBytes: number
 }
-
-export interface ReadLinesFromValue {
-  readonly lines: readonly string[]
-  /** The caller's next `start`. A partial trailing line is never counted here, so a resumed read picks it up whole. */
-  readonly bytesConsumed: number
-  /** The only honest "there may be more past this window" signal; `nextOffset < size` is not one. */
-  readonly filledBudget: boolean
-}
-
-export type ReadLinesFromResult = FileResult<ReadLinesFromValue>
 
 /** Finds the **last** newline in the window and decodes only the bytes before it, so a multi-byte
  *  sequence is never split. A full window with no newline reports `too-large` instead of spinning. */

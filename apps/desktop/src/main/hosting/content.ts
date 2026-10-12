@@ -1,12 +1,6 @@
 // Pure content-block building — a string passes through untouched, so a send with no attachments keeps today's wire shape.
-import type { ComposerAttachment, ImageMediaType } from '@/utils/hosting/attachments'
-
-/** The three Anthropic Messages API content-block shapes this app ever builds, never the SDK's own wider union. */
-export type ContentBlock =
-  | { readonly type: 'image'; readonly source: { readonly type: 'base64'; readonly media_type: ImageMediaType; readonly data: string } }
-  | { readonly type: 'document'; readonly source: { readonly type: 'base64'; readonly media_type: 'application/pdf'; readonly data: string }; readonly title: string }
-  | { readonly type: 'document'; readonly source: { readonly type: 'text'; readonly media_type: 'text/plain'; readonly data: string }; readonly title: string }
-  | { readonly type: 'text'; readonly text: string }
+import type { ComposerAttachment } from '@/utils/hosting/attachments'
+import type { ContentBlock } from '@/types/hosting'
 
 function blockFor(attachment: ComposerAttachment): ContentBlock {
   switch (attachment.kind) {

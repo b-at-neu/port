@@ -3,7 +3,8 @@
 // variant added to either union fails typecheck until its own copy exists
 // here, the same `Record`-exhaustiveness rule `session/copy.ts` already
 // establishes for `SessionPhase`/`SessionEndReason`.
-import type { ComponentCheck, PluginRequest, SessionCapabilities, SessionInvokeResult } from '@/types/hosting'
+import type { SessionCapabilities, SessionInvokeResult } from '@/types/hosting'
+import type { ComponentCheck, PluginRequest } from '@/types/hosting-plugin'
 import { SEND_FAILED_UNKNOWN_SESSION } from '@/renderer/session/copy'
 
 const SOURCE_LABEL: Readonly<Record<PluginRequest['source'], string>> = {

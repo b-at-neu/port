@@ -1,7 +1,7 @@
 // The `@` suggestion list's own file source: git's own listing when `cwd` is a work tree, a bounded walk otherwise.
 import { listDirectory } from '@/main/platform/files'
 import { gitLines } from '@/main/platform/git'
-import type { GitLinesResult } from '@/main/platform/git'
+import type {GitLinesResult} from '@/types/platform'
 
 export const MAX_FILES = 20_000
 
@@ -10,7 +10,7 @@ const SKIP_DIRECTORY_NAMES = new Set(['node_modules'])
 
 const MAX_WALK_DEPTH = 8
 
-export type FileListingResult = { readonly ok: true; readonly files: readonly string[]; readonly truncated: boolean } | { readonly ok: false; readonly message: string }
+type FileListingResult = { readonly ok: true; readonly files: readonly string[]; readonly truncated: boolean } | { readonly ok: false; readonly message: string }
 
 export interface FileListingDeps {
   readonly gitLines: typeof gitLines

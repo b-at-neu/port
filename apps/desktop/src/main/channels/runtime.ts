@@ -1,7 +1,7 @@
 import type { IpcMap } from '@/types/ipc'
 import type { RuntimeProbe } from '@/types/runtime'
 import { runtimeProbe } from '@/main/runtime/preflight'
-import type { RegistryDeps } from '@/main/registry'
+import type { RegistryDeps } from '@/types/registry'
 import type { RepoId } from '@/utils/repos'
 
 /** `repoId` must be a non-empty string or exactly `null` — explicit, so a caller can't drop the key by accident. */

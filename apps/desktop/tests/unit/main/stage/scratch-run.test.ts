@@ -1,3 +1,7 @@
+import type { HostedQuery } from '@/main/hosting/sdk'
+import type { HostedSdk } from '@/main/hosting/sdk'
+import type { StageLauncherHandle } from '@/types/stage'
+
 // A scratch-repo run takes one ticket from `ready` to an opened PR entirely through stage sessions, against a fake SDK; only the outer edges (SDK, git, worktrees, GitHub, ownership, the stage registry, the budget gate) are faked.
 import { describe, expect, it, vi } from 'vitest'
 import { labelName, resolveVocabulary, verifyVocabulary } from '@/utils/labels/vocabulary'
@@ -7,20 +11,20 @@ import type { PipelineFetch, PipelineItem, QueriedLabel, ResolvedItem } from '@/
 import { DEFAULT_POLL_POLICY } from '@/types/board'
 import type { BoardSnapshot } from '@/types/board'
 import type { HostedSessionSnapshot } from '@/types/hosting'
-import type { HostedQuery, HostedSdk, Options } from '@/main/hosting/sdk'
+import type {Options} from '@/main/hosting/sdk'
 import { createHostedStore } from '@/main/hosting/store'
 import { createInMemoryHostingPersistence } from '@/main/hosting/persist'
 import { createStageLauncher } from '@/main/stage/launcher'
-import type { StageLauncherHandle } from '@/main/stage/launcher'
+
 import { createStageRegistry } from '@/main/stage/registry'
 import { createDispatcher } from '@/main/dispatch/dispatcher'
-import type { Dispatcher } from '@/main/dispatch/dispatcher'
+import type {Dispatcher} from '@/types/dispatch'
 import type { StageDenial } from '@/types/stage'
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
 import { planTick } from '@/main/tick/plan'
 import { reconcileRepository } from '@/main/state/reconcile'
-import type { ReadyEntry } from '@/main/actions/apply'
-import type { CreateSessionWorktreeResult, RemoveSessionWorktreeOutcome } from '@/main/workspace/worktree'
+import type {ReadyEntry} from '@/types/actions'
+import type {CreateSessionWorktreeResult, RemoveSessionWorktreeOutcome} from '@/types/workspace'
 
 const REPO_ID = 'repo-scratch' as RepoId
 const VIEWER = 'op'
@@ -158,7 +162,7 @@ function fakeQuery() {
         },
       }
     },
-  } as unknown as HostedQuery
+  }
 
   return {
     query,

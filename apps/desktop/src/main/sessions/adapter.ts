@@ -3,17 +3,10 @@ import { listDirectory, readJsonFile, statPath } from '@/main/platform/files'
 import { pathOps } from '@/main/platform/paths'
 import type { AgentRecord, MetaProblem, SessionRecord, SessionRef, SessionScan } from '@/types/sessions'
 import { activityOf, attributeSession, itemNumberOf, parseAgentMeta, sessionRole, stageOf } from '@/main/sessions/classify'
-import type { RepoRef } from '@/main/sessions/classify'
 import { buildProjectIndex, defaultClaudeHome, resolveSessionDir } from '@/main/sessions/locate'
 import { createSdkSessionReader } from '@/main/sessions/sdk'
-import type { SessionReader } from '@/main/sessions/sdk'
 
-export interface ReadSessionStateParams {
-  readonly repos: readonly RepoRef[]
-  readonly claudeHome?: string
-  readonly reader?: SessionReader
-  readonly now?: () => Date
-}
+import type { ReadSessionStateParams } from '@/types/sessions'
 
 const AGENT_META_SUFFIX = '.meta.json'
 const AGENT_ID_PREFIX = /^agent-/

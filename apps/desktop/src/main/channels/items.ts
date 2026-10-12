@@ -1,3 +1,5 @@
+import type { ApplyItemActionParams } from '@/types/actions'
+
 // The board's item-level writes — `item:action` and `item:decide`. Every
 // stale-renderer mistake throws here, never a value `main/actions/` defends.
 import { OPERATOR_ACTIONS, OPERATOR_DECISIONS, UNBLOCK_ROUTES } from '@/types/actions'
@@ -5,10 +7,11 @@ import type { ItemActionResult, ItemDecisionResult, OperatorDecision, UnblockRou
 import { MAX_REVISE_NOTE_CHARS } from '@/types/actions'
 import type { BoardSnapshot } from '@/types/board'
 import type { IpcMap } from '@/types/ipc'
-import type { RegistryDeps } from '@/main/registry'
+import type { RegistryDeps } from '@/types/registry'
 import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/registry'
-import type { ApplyItemActionParams } from '@/main/actions/apply'
-import type { ApplyItemDecisionParams } from '@/main/actions/decide'
+
+
+import type { ItemDecisionDeps } from '@/types/channels'
 
 export interface ItemActionDeps {
   readonly listRepositories: typeof listRepositories
@@ -54,14 +57,6 @@ export async function resolveItemAction(registryDeps: RegistryDeps, request: Ipc
     }
   }
   return result
-}
-
-/** The seam `'item:decide'` composes through. */
-export interface ItemDecisionDeps {
-  readonly listRepositories: typeof listRepositories
-  readonly applyItemDecision: (params: ApplyItemDecisionParams) => Promise<ItemDecisionResult>
-  readonly snapshot: () => BoardSnapshot
-  readonly refresh: (request: IpcMap['board:refresh']['request']) => Promise<BoardSnapshot>
 }
 
 function isOperatorDecision(value: unknown): value is OperatorDecision {

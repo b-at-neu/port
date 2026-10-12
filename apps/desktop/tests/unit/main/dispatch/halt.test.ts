@@ -4,9 +4,10 @@ import type { RepoId } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
 import type { ReconciledItem, RepositoryState } from '@/types/state'
 import type { ItemActionResult } from '@/types/actions'
-import type { ReadyEntry } from '@/main/actions/apply'
-import type { RunStateStore, SetRunStateResult } from '@/main/dispatch/store'
+
+import type {RunStateStore, SetRunStateResult} from '@/types/dispatch'
 import { haltDispatch } from '@/main/dispatch/halt'
+import type { ReadyEntry } from '@/types/actions'
 
 const VOCABULARY = resolveVocabulary({})
 const REPO_ID = 'repo-a' as RepoId

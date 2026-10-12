@@ -1,7 +1,9 @@
+import type { PersistedOpenEntry } from '@/types/hosting'
+
 // Pure restore-set bookkeeping. No I/O here; persist.ts owns the file, store.ts composes both.
-import type { RepoId } from '@/utils/repos'
 import type { HostedSessionSnapshot } from '@/types/hosting'
-import type { PersistedOpenEntry } from '@/main/hosting/persist'
+
+import type { MintedRestorable } from '@/types/hosting'
 
 /** Not `closing`/`ended`, and carrying a real `claudeSessionId` — a session without one cannot be resumed. `cwd` comes from `workspace.folder`, so a restore reopens the exact folder or worktree. A stage session (`stage !== null`) is never persisted — it belongs to this app's dispatch loop, never the operator restore banner. */
 export function persistedOpen(handles: readonly HostedSessionSnapshot[]): readonly PersistedOpenEntry[] {
@@ -15,16 +17,6 @@ export function persistedOpen(handles: readonly HostedSessionSnapshot[]): readon
   return result
 }
 
-/** An app-local `restoreId`, never persisted itself; the renderer-facing shape omits `claudeSessionId`. */
-export interface MintedRestorable {
-  readonly restoreId: string
-  readonly repoId: RepoId | null
-  readonly claudeSessionId: string
-  readonly title: string | null
-  readonly startedAt: string
-  readonly cwd?: string
-}
-
 /** Assigns `restore-<n>` ids by position — called once, after `persistence.load()`. */
 export function mintRestorable(entries: readonly PersistedOpenEntry[]): readonly MintedRestorable[] {
   return entries.map((entry, index) => ({ restoreId: `restore-${String(index + 1)}`, ...entry }))
@@ -35,7 +27,7 @@ export function dropAdopted(restorable: readonly MintedRestorable[], claudeSessi
   return restorable.filter((entry) => entry.claudeSessionId !== claudeSessionId)
 }
 
-export interface NextPersistedParams {
+interface NextPersistedParams {
   readonly limit: number
   readonly live: readonly PersistedOpenEntry[]
   readonly restorable: readonly MintedRestorable[]

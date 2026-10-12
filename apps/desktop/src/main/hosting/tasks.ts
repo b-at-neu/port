@@ -3,7 +3,7 @@ import { isRecord } from '@/main/guards'
 import type { BackgroundTask } from '@/types/hosting'
 import { TOOL_USE_ID_FIELD } from '@/main/sessions/transcript-entries'
 
-export interface TaskTracker {
+interface TaskTracker {
   /** `true` when the observed message changed the current set. */
   observe(message: unknown): boolean
   current(): readonly BackgroundTask[]

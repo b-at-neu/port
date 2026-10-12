@@ -1,20 +1,11 @@
 // Never guessed: an unrecoverable inverse is reported rather than assumed.
 import { RETRY_TRIGGER, pausedTriggerFrom } from '@/utils/actions/plan'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
-import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
-import type { AuditEntry, AuditRead, LabelAuditEntry } from '@/types/writes'
+import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { AuditEntry, LabelAuditEntry } from '@/types/writes'
 import { isLabelAuditEntry } from '@/types/writes'
 import { readAuditLog } from '@/main/writes/audit'
-
-export type RecoverPausedTriggerResult = { readonly kind: 'recovered'; readonly trigger: LabelKey } | { readonly kind: 'no-record' } | { readonly kind: 'unresolvable' }
-
-export interface RecoverPausedTriggerParams {
-  readonly auditDir: string
-  readonly repo: string
-  readonly number: number
-  readonly vocabulary: LabelVocabulary
-  readonly readAuditLog?: (dir: string, params: { readonly repo?: string; readonly number?: number }) => Promise<AuditRead>
-}
+import type { RecoverPausedTriggerParams, RecoverPausedTriggerResult } from '@/types/actions'
 
 function isAppliedPauseOrStop(entry: AuditEntry): entry is LabelAuditEntry {
   if (!isLabelAuditEntry(entry)) return false

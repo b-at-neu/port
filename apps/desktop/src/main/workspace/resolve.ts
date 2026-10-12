@@ -1,10 +1,10 @@
 // Resolves a folder/cwd to its `SessionWorkspace` and `repoId` — the registry's own path-key
 // identity, never a second normalisation.
 import { createHash } from 'node:crypto'
-import type { GitRunner } from '@/main/platform/git'
+import type {GitRunner} from '@/types/platform'
 import { resolveGitBaseRoot } from '@/main/platform/git'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import type { PathOps } from '@/main/platform/paths'
+import type {PathOps} from '@/types/platform'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import type { FolderEntry, FolderId, SessionWorkspace } from '@/types/workspace'
 import { isReadyEntry } from '@/main/registry'
@@ -52,7 +52,7 @@ async function portBaseOf(git: GitRunner, cwd: string, branch: string | null): P
   return sha === '' ? null : { sha, label: branch }
 }
 
-export interface ResolveWorkspaceDeps {
+interface ResolveWorkspaceDeps {
   readonly git: GitRunner
   /** The ready, registered repositories to match the base root against — a snapshot the caller
    *  already has, never a second registry read inside this pure resolver. */
@@ -88,7 +88,7 @@ export async function resolveWorkspace(folder: string, deps: ResolveWorkspaceDep
   return { workspace: { folder, root, worktree, base }, repoId }
 }
 
-export interface ToFolderEntryDeps {
+interface ToFolderEntryDeps {
   readonly git: GitRunner
   readonly repositories: readonly RepositoryEntry[]
   readonly lastUsedAt: string | null

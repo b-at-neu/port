@@ -15,7 +15,7 @@ interface CredentialsFileShape {
 
 const NOT_PRESENT: CredentialsTell = { present: false, expiresAt: null, hasRefreshToken: false }
 
-export interface ReadCredentialsTellOptions {
+interface ReadCredentialsTellOptions {
   readonly claudeHome?: string
 }
 

@@ -62,7 +62,7 @@ const CHECK_ROLLUP_FRAGMENT = `fragment CheckRollupFields on PullRequest {
   }
 }`
 
-export interface PipelineQuery {
+interface PipelineQuery {
   readonly document: string
   readonly aliases: readonly QueriedLabel[]
 }
@@ -112,12 +112,12 @@ export function buildPipelineQuery(vocabulary: LabelVocabulary): PipelineQuery {
   return { document, aliases }
 }
 
-export interface ItemsByNumberAlias {
+interface ItemsByNumberAlias {
   readonly alias: string
   readonly number: number
 }
 
-export interface ItemsByNumberQuery {
+interface ItemsByNumberQuery {
   readonly document: string
   readonly aliases: readonly ItemsByNumberAlias[]
 }
@@ -143,13 +143,13 @@ export function buildItemsByNumberQuery(numbers: readonly number[]): ItemsByNumb
   return { document, aliases }
 }
 
-export interface ItemStateAlias {
+interface ItemStateAlias {
   readonly alias: string
   readonly kind: PipelineItemKind
   readonly number: number
 }
 
-export interface ItemStatesQuery {
+interface ItemStatesQuery {
   readonly document: string
   readonly aliases: readonly ItemStateAlias[]
 }
@@ -177,13 +177,13 @@ export function buildItemStatesQuery(items: readonly ItemRef[]): ItemStatesQuery
   return { document, aliases }
 }
 
-export interface ClaimPreflightQuery {
+interface ClaimPreflightQuery {
   readonly document: string
 }
 
 /** The claim dialog's one round trip: the number's identity, labels, assignees, and open
  *  `blockedBy` edges, plus the signed-in account's login. A single-number, single-alias query (`c0`). */
-export interface GatePreflightQuery {
+interface GatePreflightQuery {
   readonly document: string
 }
 

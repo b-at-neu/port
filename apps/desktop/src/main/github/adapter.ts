@@ -1,9 +1,11 @@
+import type { EnvelopeFailureKind, GraphQLErrorEntry, AliasInfo } from '@/types/github'
+
 // The public logic behind fetchPipelineItems/fetchItemStates: building the document, calling the
 // injected gh, then composing envelope.ts and map.ts. The caller supplies the LabelVocabulary.
-import type { GhResult, GhRunner } from '@/main/platform/gh'
+import type {GhResult, GhRunner} from '@/types/platform'
 import { gh as defaultGh } from '@/main/platform/gh'
+import type { FetchItemsByNumberParams } from '@/types/github'
 
-export type { GhRunner }
 import { verifyVocabulary } from '@/utils/labels/vocabulary'
 import type { LabelVocabulary, RepoLabels } from '@/utils/labels/vocabulary'
 import type { AssertEqual } from '@/types/assert-type'
@@ -20,10 +22,11 @@ import type {
   PipelineFetch,
   PipelineItemKind,
   RateLimitInfo,
+  GitHubRepoRef,
   ResolvedItem,
 } from '@/types/github'
 import { classifyFailure, collectTruncated, collectUnavailable, parseEnvelope } from '@/main/github/envelope'
-import type { AliasInfo, EnvelopeFailureKind, GraphQLErrorEntry } from '@/main/github/envelope'
+
 import { applyItemStates, fieldListOf, mapPipelineItems } from '@/main/github/map'
 import { buildClaimPreflightQuery, buildItemStatesQuery, buildItemsByNumberQuery, buildPipelineQuery } from '@/main/github/query'
 
@@ -91,13 +94,8 @@ function unavailableAliasNames(errors: readonly GraphQLErrorEntry[] | undefined)
   return names
 }
 
-export interface RepoRef {
-  readonly owner: string
-  readonly name: string
-}
-
-export interface FetchPipelineItemsParams {
-  readonly repo: RepoRef
+interface FetchPipelineItemsParams {
+  readonly repo: GitHubRepoRef
   readonly vocabulary: LabelVocabulary
   readonly gh?: GhRunner
   readonly now?: () => Date
@@ -158,8 +156,8 @@ export async function fetchPipelineItems(params: FetchPipelineItemsParams): Prom
   }
 }
 
-export interface FetchItemStatesParams {
-  readonly repo: RepoRef
+interface FetchItemStatesParams {
+  readonly repo: GitHubRepoRef
   readonly items: readonly ItemRef[]
   readonly gh?: GhRunner
   readonly now?: () => Date
@@ -220,13 +218,6 @@ export async function fetchItemStates(params: FetchItemStatesParams): Promise<It
   }
 
   return { ok: true, states, unavailable, fetchedAt }
-}
-
-export interface FetchItemsByNumberParams {
-  readonly repo: RepoRef
-  readonly numbers: readonly number[]
-  readonly gh?: GhRunner
-  readonly now?: () => Date
 }
 
 function kindOfTypename(typename: unknown): PipelineItemKind | undefined {
@@ -296,8 +287,8 @@ export async function fetchItemsByNumber(params: FetchItemsByNumberParams): Prom
   return { ok: true, resolved, unavailable, fetchedAt }
 }
 
-export interface FetchClaimPreflightParams {
-  readonly repo: RepoRef
+interface FetchClaimPreflightParams {
+  readonly repo: GitHubRepoRef
   readonly number: number
   readonly gh?: GhRunner
   readonly now?: () => Date

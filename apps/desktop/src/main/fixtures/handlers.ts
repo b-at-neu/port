@@ -11,12 +11,12 @@ import { fixtureFolders, fixtureSessionChanges } from '@/main/fixtures/folders'
 import { FIXTURE_REPOSITORIES } from '@/main/fixtures/repos'
 import { fixtureAttachEntries } from '@/main/fixtures/entries'
 import { fixturePermissionSnapshots, fixtureSearchResult, fixtureSessionAttach, fixtureSessionsScan, fixtureSessionSnapshots, STREAMING_KEY } from '@/main/fixtures/sessions'
-import type { FixtureScenario } from '@/main/fixtures/mode'
+import type {FixtureScenario} from '@/types/fixtures'
 import { fixtureWorktreesReclaim, fixtureWorktreesReport } from '@/main/fixtures/worktrees'
 
 /** Exhaustive by construction: a new `IpcChannel` fails `pnpm typecheck` in
  *  `fixtureHandlers`'s own return literal until a fixture exists for it. */
-export type FixtureHandlers = { readonly [C in IpcChannel]: (request: IpcMap[C]['request']) => IpcMap[C]['response'] }
+type FixtureHandlers = { readonly [C in IpcChannel]: (request: IpcMap[C]['request']) => IpcMap[C]['response'] }
 
 // One pinned fixture session, per the Implementation checklist.
 const FIXTURE_MARKS = { pinned: ['fixture-claude-1'], archived: [] }

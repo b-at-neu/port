@@ -5,12 +5,12 @@ import type { BoardSnapshot } from '@/types/board'
 import type { WriteOutcome } from '@/types/writes'
 import type { ReconciledItem } from '@/types/state'
 import type { TickReport } from '@/types/tick'
-import type { ReadyEntry } from '@/main/actions/apply'
-import type { AutoApprovePlanParams } from '@/main/actions/gate'
+import type {ReadyEntry} from '@/types/actions'
+import type {AutoApprovePlanParams} from '@/types/actions'
 import type { ReposListResponse } from '@/types/ipc'
 import { createAutoPlanner } from '@/main/dispatch/auto-plan'
-import type { AutoPlannerDeps } from '@/main/dispatch/auto-plan'
-import type { OwnershipRead } from '@/main/dispatch/ownership'
+import type {AutoPlannerDeps} from '@/types/dispatch'
+import type {OwnershipRead} from '@/types/dispatch'
 
 const REPO_ID = 'repo-a' as RepoId
 const VOCABULARY = resolveVocabulary({})

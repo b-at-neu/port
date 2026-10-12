@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createPathOps } from '@/main/platform/paths'
-import type { PathFlavour, PathOps } from '@/main/platform/paths'
+import type { PathFlavour, PathOps } from '@/types/platform'
 
 interface Case {
   readonly name: string

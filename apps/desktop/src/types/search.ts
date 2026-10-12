@@ -1,3 +1,5 @@
+import type { SessionScan } from '@/types/sessions'
+
 // Renderer-safe search shapes. No import here may reach a Node builtin or the Agent SDK — `main/search/` derives these from the same `TranscriptEntry[]` `main/sessions/` already parses.
 import type { RepoId } from '@/utils/repos'
 import type { SessionFailureKind } from '@/types/sessions'
@@ -65,3 +67,21 @@ export type SearchResult =
     }
   | { readonly ok: false; readonly kind: 'invalid-query' }
   | { readonly ok: false; readonly kind: 'sessions-unavailable'; readonly sessionsKind: SessionFailureKind; readonly message: string }
+
+export interface RunSearchParams {
+  readonly scan: SessionScan
+  readonly indexDir: string
+  readonly query: string
+  readonly scope: SearchScope
+  readonly claudeHome?: string
+  readonly now?: () => Date
+}
+
+// Keyed by `sessionId` or `sessionId#agentId`; this module only ever sees the key as an opaque string.
+export interface SignatureIndexEntry {
+  readonly path: string
+  readonly sizeBytes: number
+  readonly modifiedAt: string
+  readonly bits: number
+  readonly signature: string
+}

@@ -1,16 +1,16 @@
 // The app-level registry file: read, dedupe, version gate, atomic write. Takes its directory as a parameter, so nothing in this module imports Electron.
 import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
 import { pathOps } from '@/main/platform/paths'
-import type { PathOps } from '@/main/platform/paths'
+import type {PathOps} from '@/types/platform'
 
 const REGISTRY_FILE = 'registry.json'
 const CURRENT_VERSION = 1
 
-export interface RegistryEntry {
+interface RegistryEntry {
   readonly path: string
 }
 
-export type ReadRegistryResult =
+type ReadRegistryResult =
   | { readonly ok: true; readonly repositories: readonly string[] }
   | { readonly ok: false; readonly kind: 'registry-malformed' | 'registry-unsupported-version' | 'registry-unreadable'; readonly message: string }
 
@@ -60,7 +60,7 @@ export async function readRegistry(dir: string): Promise<ReadRegistryResult> {
   return { ok: true, repositories: dedupePaths(paths) }
 }
 
-export type WriteRegistryResult = { readonly ok: true } | { readonly ok: false; readonly kind: 'registry-unwritable'; readonly message: string }
+type WriteRegistryResult = { readonly ok: true } | { readonly ok: false; readonly kind: 'registry-unwritable'; readonly message: string }
 
 /** Writes the deduplicated path list atomically. Callers must never write when the corresponding read failed, which is why this does not itself read first. */
 export async function writeRegistry(dir: string, paths: readonly string[]): Promise<WriteRegistryResult> {

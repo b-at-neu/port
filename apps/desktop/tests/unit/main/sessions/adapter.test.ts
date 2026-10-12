@@ -3,9 +3,9 @@ import { homedir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { pathOps } from '@/main/platform/paths'
-import type { RepoRef } from '@/main/sessions/classify'
+import type { LocalRepoRef as RepoRef } from '@/types/github'
 import { readSessionState } from '@/main/sessions/adapter'
-import type { RawSession } from '@/main/sessions/sdk'
+import type { RawSession } from '@/types/sessions'
 import { makeTempDir } from '../../../fixtures/fs'
 
 async function pathExists(path: string): Promise<boolean> {

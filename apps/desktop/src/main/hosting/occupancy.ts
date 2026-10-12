@@ -1,6 +1,8 @@
+import type { HostedHandle } from '@/types/hosting'
+
 // Pure occupancy checks over live handles — moved out of store.ts so folder-busy's own search sits
 // beside the already-open one it composes with, never duplicated inline.
-import type { HostedHandle } from '@/main/hosting/handle'
+
 import type { SessionKey } from '@/types/hosting'
 
 /** Compares a live handle's `claudeSessionId ?? resumeTarget` against the requested `sessionId`.

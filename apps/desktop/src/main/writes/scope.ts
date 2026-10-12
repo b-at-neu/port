@@ -1,7 +1,7 @@
 // Pure precondition evaluation — no `gh`, no filesystem, no `git`.
 import type { AssigneeExpectation, ObservedItem } from '@/types/writes'
 
-export type PreconditionVerdict = { readonly satisfied: true } | { readonly satisfied: false; readonly expected: readonly string[]; readonly observed: readonly string[] }
+type PreconditionVerdict = { readonly satisfied: true } | { readonly satisfied: false; readonly expected: readonly string[]; readonly observed: readonly string[] }
 
 function assigneesSatisfied(expectation: AssigneeExpectation, observedAssignees: readonly string[]): boolean {
   switch (expectation.kind) {

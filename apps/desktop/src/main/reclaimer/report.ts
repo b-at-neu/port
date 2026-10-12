@@ -2,17 +2,15 @@
 // calls no `git` itself; the join is the only reader.
 import { node as defaultNode } from '@/main/platform/node'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import type { CommandResult } from '@/main/platform/run'
-import type { NodeRunner } from '@/main/platform/node'
-import type { PathOps } from '@/main/platform/paths'
+import type {CommandResult, NodeRunner} from '@/types/platform'
 import { readWorktrees } from '@/main/local/worktrees'
-import type { GitRunner as WorktreesGitRunner } from '@/main/local/worktrees'
 import type { AssertEqual } from '@/types/assert-type'
 import type { GithubResolutionState, InspectedWorktree, PorcelainJoinState, ReclaimerFailureKind, WorktreesReport } from '@/types/reclaimer'
 import { isReclaimableState } from '@/types/reclaimer'
 import { parseNodeCommand } from '@/main/reclaimer/command'
 import { describeCommandFailure } from '@/main/reclaimer/command-failure'
 import { parseReportPayload } from '@/main/reclaimer/parse'
+import type { ReadWorktreeReportParams } from '@/types/reclaimer'
 
 // Fails to compile if a new `CommandResult` failure kind is added without `ReclaimerFailureKind` growing to match.
 type CommandResultFailureKind = Exclude<CommandResult, { ok: true }>['kind']
@@ -24,18 +22,6 @@ export const SCRIPT_FAIL_PREFIX = 'FAIL  '
 export const GH_RESOLUTION_FAILED_SENTINEL = 'gh issueOrPullRequest resolution failed'
 
 export type { NodeRunner }
-
-export interface ReadWorktreeReportParams {
-  readonly repoRoot: string
-  /** `null` means the repository has not installed the reclamation script. */
-  readonly worktreesCommand: string | null
-  readonly runNode?: NodeRunner
-  /** Omitted means the join is skipped and `porcelainJoin` reports `'unavailable'` — the report
-   *  itself still succeeds. */
-  readonly git?: WorktreesGitRunner
-  readonly now?: () => Date
-  readonly pathOps?: PathOps
-}
 
 function firstFailLine(stderr: string): string {
   const line = stderr.split(/\r?\n/).find((l) => l.startsWith(SCRIPT_FAIL_PREFIX))

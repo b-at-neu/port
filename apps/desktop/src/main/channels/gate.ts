@@ -2,17 +2,10 @@
 // logged so it can never mask the write's own success.
 import { GATE_DECISIONS } from '@/types/gate'
 import type { GateAnswerResponse, GateDecision, GatePreflightResponse } from '@/types/gate'
-import type { BoardSnapshot } from '@/types/board'
 import type { IpcMap } from '@/types/ipc'
-import type { RegistryDeps } from '@/main/registry'
+import type { RegistryDeps } from '@/types/registry'
 import { requireRepoId } from '@/main/registry'
-import type { GateAnswerParams, GatePreflightParams } from '@/main/actions/gate'
-
-export interface GateChannelDeps {
-  readonly gatePreflight: (params: GatePreflightParams) => Promise<GatePreflightResponse>
-  readonly gateAnswer: (params: GateAnswerParams) => Promise<GateAnswerResponse>
-  readonly refresh: (request: IpcMap['board:refresh']['request']) => Promise<BoardSnapshot>
-}
+import type { GateChannelDeps } from '@/types/channels'
 
 export async function resolveGatePreflight(registryDeps: RegistryDeps, request: IpcMap['gate:preflight']['request'], deps: GateChannelDeps): Promise<GatePreflightResponse> {
   const repoId = requireRepoId(request?.repoId, "'gate:preflight'")

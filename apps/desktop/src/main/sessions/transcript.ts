@@ -1,19 +1,14 @@
+import type { ProjectIndex } from '@/types/sessions'
+
 // advanceTranscript reads one more bounded chunk from the cursor's offset and pushes it through the same Deriver, so a tool_use at the end of one chunk still pairs with its tool_result at the start of the next.
 import { readLinesFrom, statPath } from '@/main/platform/files'
-import type { ReadLinesFromResult } from '@/main/platform/files'
+import type {ReadLinesFromResult} from '@/types/platform'
 import type { EntryPatch, TranscriptEntry, TranscriptRead, TranscriptSource } from '@/utils/sessions/transcript'
 import { buildProjectIndex, defaultClaudeHome, resolveTranscriptPath, SESSION_ID_RE } from '@/main/sessions/locate'
-import type { ProjectIndex } from '@/main/sessions/locate'
-import { createDeriver } from '@/main/sessions/transcript-entries'
-import type { Deriver } from '@/main/sessions/transcript-entries'
 
-export interface OpenTranscriptParams {
-  readonly sessionId: string
-  readonly agentId: string | null
-  readonly claudeHome?: string
-  /** Skips this call's own `buildProjectIndex` when the caller already built one, rather than re-listing `<claudeHome>/projects/` once per transcript. */
-  readonly index?: ProjectIndex
-}
+import { createDeriver } from '@/main/sessions/transcript-entries'
+
+import type { TranscriptCursor, OpenTranscriptParams } from '@/types/sessions'
 
 /** Validated before any filesystem call, the same "gate first" contract `SESSION_ID_RE` holds for the session id. */
 const AGENT_ID_RE = /^[0-9a-f]{6,64}$/i
@@ -60,19 +55,7 @@ function parseLines(lines: readonly string[]): { readonly records: unknown[]; re
   return { records, malformed }
 }
 
-/** Main-process-only -- never crosses IPC. Holds the `Deriver` and everything `advanceTranscript` needs to resume. */
-export interface TranscriptCursor {
-  readonly path: string
-  readonly sessionId: string
-  readonly agentId: string | null
-  readonly offset: number
-  readonly nextIndex: number
-  readonly recordCount: number
-  readonly malformedLines: number
-  readonly deriver: Deriver
-}
-
-export interface OpenTranscriptResult {
+interface OpenTranscriptResult {
   readonly read: TranscriptRead
   readonly cursor: TranscriptCursor | null
 }
@@ -156,7 +139,7 @@ export async function openTranscript(params: OpenTranscriptParams): Promise<Open
   }
 }
 
-export type AdvanceTranscriptResult =
+type AdvanceTranscriptResult =
   | {
       readonly ok: true
       readonly appended: readonly TranscriptEntry[]

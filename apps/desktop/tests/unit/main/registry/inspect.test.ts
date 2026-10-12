@@ -4,9 +4,9 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { labelName } from '@/utils/labels/vocabulary'
 import type { LabelKey } from '@/utils/labels/vocabulary'
-import type { CommandResult } from '@/main/platform/run'
+import type {CommandResult} from '@/types/platform'
 import { inspectRepository } from '@/main/registry/inspect'
-import type { GitRunner } from '@/main/registry/harness'
+import type { GitRunner } from '@/types/platform'
 
 async function makeRepoDir(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'port-registry-inspect-'))

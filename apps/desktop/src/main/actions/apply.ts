@@ -1,34 +1,21 @@
+import type { ApplyLabelsParams } from '@/types/writes'
+import type { RecoverPausedTriggerParams, RecoverPausedTriggerResult } from '@/types/actions'
+
 // A renderer-supplied `expectedStage` is only ever grounds to refuse, never to widen a plan.
 import { actionsFor, stageKeyOf } from '@/utils/actions/plan'
-import type { ActionPlan, ItemActionResult, OperatorAction } from '@/types/actions'
+import type { ActionPlan, ItemActionResult } from '@/types/actions'
 import { labelName } from '@/utils/labels/vocabulary'
 import type { LabelKey } from '@/utils/labels/vocabulary'
-import type { RepoId, RepositoryEntry } from '@/utils/repos'
+import type { RepoId } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
 import type { ReconciledItem, RepositoryState } from '@/types/state'
 import type { LabelWriteRequest, WriteOutcome } from '@/types/writes'
 import { applyLabels } from '@/main/writes/apply'
-import type { ApplyLabelsParams } from '@/main/writes/apply'
+
 import { recoverPausedTrigger } from '@/main/actions/resume'
-import type { RecoverPausedTriggerParams, RecoverPausedTriggerResult } from '@/main/actions/resume'
 
-export type ReadyEntry = Extract<RepositoryEntry, { readonly status: 'ready' }>
+import type { ApplyItemActionParams, ItemActionRequest, ReadyEntry } from '@/types/actions'
 
-export interface ItemActionRequest {
-  readonly repoId: RepoId
-  readonly kind: 'issue' | 'pull-request'
-  readonly number: number
-  readonly action: OperatorAction
-  /** `null` when the row showed no stage (resume). A mismatch against a fresh read refuses. */
-  readonly expectedStage: LabelKey | null
-}
-
-export interface ApplyItemActionParams {
-  readonly request: ItemActionRequest
-  readonly snapshot: BoardSnapshot
-  readonly entry: ReadyEntry
-  readonly auditDir: string
-}
 
 export interface ApplyItemActionDeps {
   readonly applyLabels: (params: ApplyLabelsParams) => Promise<WriteOutcome>

@@ -1,12 +1,14 @@
+import type { RunReclaimParams } from '@/types/reclaimer'
+
 // `'worktrees:reclaim'`'s composition: registry lookup, `runReclaim`, then
 // exactly one `appendAudit` call — aborts included.
 import type { IpcMap } from '@/types/ipc'
 import type { ReclaimAuditEntry } from '@/types/writes'
 import type { ReclaimedWorktree, WorktreesReclaimResult } from '@/types/reclaimer'
 import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/registry'
-import type { RegistryDeps } from '@/main/registry'
+import type { RegistryDeps } from '@/types/registry'
 import { runReclaim } from '@/main/reclaimer/reclaim'
-import type { RunReclaimParams } from '@/main/reclaimer/reclaim'
+
 import { appendAudit } from '@/main/writes/audit'
 
 export interface WorktreesReclaimDeps {

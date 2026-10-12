@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { runCommand, runExecutable } from '@/main/platform/run'
-import type { Spawner } from '@/main/platform/run'
+import type { Spawner } from '@/types/platform'
 
 function rejecting(failure: Record<string, unknown>): Spawner {
   return () => Promise.reject(Object.assign(new Error('spawn failed'), failure))

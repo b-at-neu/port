@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createCapabilityTracker } from '@/main/hosting/capabilities'
-import type { PluginRequest } from '@/types/hosting'
+import type { PluginRequest } from '@/types/hosting-plugin'
 import type { HostedQuery } from '@/main/hosting/sdk'
+
 
 const INSTALLED: PluginRequest = { source: 'installed' }
 const REPOSITORY: PluginRequest = { source: 'repository', path: '/repo/plugins/port' }

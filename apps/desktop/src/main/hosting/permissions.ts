@@ -1,3 +1,5 @@
+import type { StagePolicyDecision } from '@/types/hosting'
+
 // The per-session permission broker: every call becomes a pending request, settled by
 // an operator answer or by the SDK's own AbortSignal, never by a timer of its own.
 import type { QuestionAnswerResult, PlanAnswerResult, PlanDecision } from '@/utils/hosting/controls'
@@ -5,11 +7,11 @@ import type { PendingPermission, PermissionDecision, SessionPermissionAnswerResu
 import { narrowSessionGrant } from '@/main/hosting/grant'
 import { answersMatch, narrowInteraction, planApproveResult, planKeepResult, questionResult } from '@/main/hosting/interactions'
 import type { CanUseTool, PermissionResult, PermissionUpdate } from '@/main/hosting/sdk'
-import type { StagePolicyDecision } from '@/main/hosting/stage-policy'
+
 
 export const DEFAULT_DENY_MESSAGE = 'The operator denied this tool call.'
 
-export interface CreatePermissionBrokerParams {
+interface CreatePermissionBrokerParams {
   readonly now: () => number
   readonly onChange: () => void
   // Fired after a plan is approved into a mode, so the controls snapshot reflects it without a second SDK call.
@@ -20,7 +22,7 @@ export interface CreatePermissionBrokerParams {
   readonly onDeny?: (toolName: string, input: Readonly<Record<string, unknown>>) => void
 }
 
-export interface PermissionBroker {
+interface PermissionBroker {
   /** Typed `Promise<PermissionResult>`, never `| null` — the SDK treats `null` as "already answered" and hangs. */
   readonly canUseTool: CanUseTool
   pending(): readonly PendingPermission[]

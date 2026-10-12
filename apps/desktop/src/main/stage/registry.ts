@@ -1,7 +1,8 @@
 // stage-sessions.json's only writer: interrupted stage sessions survive a relaunch here. A
 // missing or malformed file loads as empty, the same recoverable-state shape as hosting/persist.ts.
 import type { InterruptedReason, InterruptedStage } from '@/types/stage'
-import type { FileResult } from '@/main/platform/files'
+import type {FileResult} from '@/types/platform'
+import type { StageRegistry } from '@/types/stage'
 
 const CURRENT_VERSION = 1
 
@@ -37,24 +38,11 @@ function isStoredEntry(value: unknown): value is StoredEntry {
   )
 }
 
-export interface CreateStageRegistryParams {
+interface CreateStageRegistryParams {
   readonly path: string
   readonly readJson: <T>(path: string) => Promise<FileResult<T>>
   readonly writeJsonAtomic: (path: string, value: unknown) => Promise<FileResult<void>>
   readonly now: () => Date
-}
-
-export interface StageRegistry {
-  /** Loads the file, promoting every `running` entry found to `crash` — a `running` record at boot can only mean the process died before it marked itself otherwise. Missing/malformed loads as empty. */
-  load(): Promise<readonly InterruptedStage[]>
-  recordRunning(entry: Omit<InterruptedStage, 'reason' | 'detail' | 'resetsAt' | 'costUsd'>): void
-  setSessionId(id: string, claudeSessionId: string): void
-  markInterrupted(id: string, reason: InterruptedReason, detail: string | null, resetsAt: string | null, costUsd: number | null): void
-  /** Marks every currently-`running` entry `quit` — called on the quit path before `closeAll()`. */
-  /** Awaited at the quit path, with a timeout the caller applies — a hung write must never block quitting. */
-  markAllQuit(): Promise<void>
-  remove(id: string): void
-  list(): readonly InterruptedStage[]
 }
 
 function toInterrupted(entries: readonly StoredEntry[]): readonly InterruptedStage[] {

@@ -1,17 +1,21 @@
+import type { HostedStore } from '@/types/hosting'
+import type { StageRegistry } from '@/types/stage'
+
 // The real StageLauncher: a worktree, a hosted session, a send, and the hand-back watcher that closes and removes it.
-import type { GitRunner } from '@/main/platform/git'
-import type { CreateSessionWorktreeParams, CreateSessionWorktreeResult, RemoveSessionWorktreeOutcome } from '@/main/workspace/worktree'
-import type { StageLaunchRequest, StageLaunchResult, StageLauncher } from '@/main/dispatch/launch'
+import type {GitRunner} from '@/types/platform'
+import type {CreateSessionWorktreeParams, CreateSessionWorktreeResult, RemoveSessionWorktreeOutcome} from '@/types/workspace'
+import type {StageLaunchRequest, StageLaunchResult} from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '@/types/hosting'
-import type { HostedStore } from '@/main/hosting/store'
+
 import type { StageOutcome } from '@/types/stage-session'
 import type { RepoId } from '@/utils/repos'
 import type { StageDenial } from '@/types/stage'
 import { proposedRule } from '@/main/stage/rule'
 import { STAGE_AGENT_NAMES } from '@/main/stage/agents'
 import { classifyHandback } from '@/main/stage/handback'
-import type { StageRegistry } from '@/main/stage/registry'
+
 import { inFlightKeyFor } from '@/main/tick/routing'
+import type { StageLauncherHandle } from '@/types/stage'
 
 const DENIAL_INPUT_SUMMARY_CAP = 200
 
@@ -20,7 +24,7 @@ function inputSummaryOf(input: Readonly<Record<string, unknown>>): string {
   return text.length > DENIAL_INPUT_SUMMARY_CAP ? `${text.slice(0, DENIAL_INPUT_SUMMARY_CAP)}…` : text
 }
 
-export interface CreateStageLauncherParams {
+interface CreateStageLauncherParams {
   readonly store: HostedStore
   readonly git: GitRunner
   readonly createWorktree: (params: CreateSessionWorktreeParams) => Promise<CreateSessionWorktreeResult>
@@ -32,11 +36,6 @@ export interface CreateStageLauncherParams {
   /** The policy's `deny` arm, turned into a `StageDenial` — deduped and bounded on the dispatcher's own side. */
   readonly onDenial: (repoId: RepoId, denial: StageDenial) => void
   readonly newId: () => string
-}
-
-export interface StageLauncherHandle extends StageLauncher {
-  /** Wired from `main/ipc.ts`'s own `onStatus` — classifies a hand-back once per new `lastResult`/`end`, serialized per session key. */
-  observe(snapshot: HostedSessionSnapshot): void
 }
 
 /** The one place a failed `SessionStartResult` becomes a message for a dispatch record — never re-derived at a second call site. */

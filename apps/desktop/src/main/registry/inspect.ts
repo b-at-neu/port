@@ -5,12 +5,12 @@ import { readJsonFile, statPath } from '@/main/platform/files'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoDiagnostic, RepoId, RepoProblem, RepositoryEntry, ResolvedRepoConfig, SchemaViolation } from '@/utils/repos'
 import { currentBranch, permissionsState, refsCarryingConfig } from '@/main/registry/harness'
-import type { GitRunner } from '@/main/registry/harness'
+import type { GitRunner } from '@/types/platform'
 import { resolveEffectiveConfig } from '@/main/registry/effective'
-import type { PortResolved } from '@/main/registry/effective'
+import type {PortResolved} from '@/types/registry'
 import { CONFIG_DEFAULTS, validateConfig } from '@/main/registry/schema'
 
-export interface InspectDeps {
+interface InspectDeps {
   readonly git: GitRunner
 }
 

@@ -2,26 +2,12 @@
 // report.ts's read. Never passes --unlock/--force-dirty/--offline, no retry.
 import { node as defaultNode } from '@/main/platform/node'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import type { NodeRunner } from '@/main/platform/node'
-import type { PathOps } from '@/main/platform/paths'
 import type { WorktreesReclaimResult } from '@/types/reclaimer'
 import { parseNodeCommand } from '@/main/reclaimer/command'
 import { describeCommandFailure } from '@/main/reclaimer/command-failure'
 import { SCRIPT_FAIL_PREFIX } from '@/main/reclaimer/report'
 import { parseReclaimPayload } from '@/main/reclaimer/parse'
-
-export interface RunReclaimParams {
-  readonly repoRoot: string
-  /** `commands.worktrees` verbatim off the resolved config — `null` means
-   *  the repository has not installed the reclamation script. */
-  readonly worktreesCommand: string | null
-  /** `null` reclaims every reclaimable candidate; a positive integer scopes
-   *  the run to that ticket's own worktree (`--issue N`). */
-  readonly issue: number | null
-  readonly runNode?: NodeRunner
-  readonly now?: () => Date
-  readonly pathOps?: PathOps
-}
+import type { RunReclaimParams } from '@/types/reclaimer'
 
 function firstFailLine(stderr: string): string {
   const line = stderr.split(/\r?\n/).find((l) => l.startsWith(SCRIPT_FAIL_PREFIX))

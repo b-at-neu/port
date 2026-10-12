@@ -2,23 +2,11 @@
 import { execFile } from 'node:child_process'
 import { stat } from 'node:fs/promises'
 import { which as defaultWhich } from '@/main/platform/which'
-import type { WhichEnv, WhichResult } from '@/main/platform/which'
+
+import type { RunCommandOptions, CommandResult, KnownCommand, Spawner, RunExecutableOptions } from '@/types/platform'
 
 /** A literal union, so an adapter reaching for a POSIX-only utility is a compile-time error. */
-export const KNOWN_COMMANDS = ['git', 'gh', 'node', 'claude'] as const
-
-export type KnownCommand = (typeof KNOWN_COMMANDS)[number]
-
-// One error rule, everywhere: a condition a human could cause is a value; a programmer mistake is a throw.
-export type CommandResult =
-  | { readonly ok: true; readonly stdout: string; readonly stderr: string }
-  | { readonly ok: false; readonly kind: 'not-found'; readonly command: string; readonly searched: readonly string[] }
-  | { readonly ok: false; readonly kind: 'cwd-missing'; readonly cwd: string }
-  | { readonly ok: false; readonly kind: 'nonzero'; readonly code: number; readonly stdout: string; readonly stderr: string }
-  | { readonly ok: false; readonly kind: 'signalled'; readonly signal: string; readonly stderr: string }
-  | { readonly ok: false; readonly kind: 'timeout'; readonly timeoutMs: number; readonly stderr: string }
-  | { readonly ok: false; readonly kind: 'output-too-large'; readonly maxBytes: number }
-  | { readonly ok: false; readonly kind: 'spawn-failed'; readonly message: string }
+export const KNOWN_COMMANDS = ['git', 'gh', 'node', 'claude'] as const satisfies readonly KnownCommand[]
 
 const DEFAULT_TIMEOUT_MS = 30_000
 const DEFAULT_MAX_BYTES = 32 * 1024 * 1024
@@ -36,22 +24,6 @@ let e2eRoute: E2ERoute | null = null
 export function setE2ERoute(route: E2ERoute | null): void {
   e2eRoute = route
 }
-
-export interface SpawnOutcome {
-  readonly stdout: string
-  readonly stderr: string
-}
-
-export interface SpawnParams {
-  readonly cwd: string | undefined
-  readonly timeout: number
-  readonly maxBuffer: number
-  readonly env: NodeJS.ProcessEnv
-}
-
-/** Rejects with a plain, duck-typed failure, so a fake spawner in a test needs no real
- *  `child_process` error shape. */
-export type Spawner = (absPath: string, args: readonly string[], params: SpawnParams) => Promise<SpawnOutcome>
 
 interface SpawnFailureLike {
   readonly code?: unknown
@@ -118,14 +90,6 @@ function classifySpawnError(error: unknown, absPath: string, ctx: { timeoutMs: n
   return { ok: false, kind: 'spawn-failed', message }
 }
 
-export interface RunExecutableOptions {
-  readonly cwd?: string
-  readonly timeoutMs?: number
-  readonly maxBytes?: number
-  readonly env?: NodeJS.ProcessEnv
-  readonly spawner?: Spawner
-}
-
 /** Spawns an already-resolved absolute path; exported so tests can skip `which`. */
 export async function runExecutable(
   absPath: string,
@@ -147,12 +111,6 @@ export async function runExecutable(
   } catch (error) {
     return classifySpawnError(error, absPath, { timeoutMs, maxBytes })
   }
-}
-
-export interface RunCommandOptions extends RunExecutableOptions {
-  readonly whichEnv?: WhichEnv
-  readonly platform?: NodeJS.Platform
-  readonly resolve?: (options: { command: KnownCommand; env: WhichEnv; platform: NodeJS.Platform }) => Promise<WhichResult>
 }
 
 async function cwdExists(cwd: string): Promise<boolean> {

@@ -1,19 +1,8 @@
 // Pure plan-review-gate classification and label-level plan building — no `gh`, no filesystem. The caller supplies the already-fetched `GateClassifyItem`; this module never touches a body string.
 import { labelName } from '@/utils/labels/vocabulary'
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
-import type { LabelPrecondition } from '@/types/writes'
-import type { PipelineItemKind } from '@/types/github'
 import type { GateDecision, GateVerdict } from '@/types/gate'
-
-export interface GateClassifyItem {
-  readonly kind: PipelineItemKind
-  readonly number: number
-  readonly labels: readonly string[]
-  readonly assignees: readonly string[]
-  readonly viewer: string
-  /** Computed by `main/actions/gate.ts` from the item's own body — this module never parses one. */
-  readonly noPlanBlock: boolean
-}
+import type { GatePlan, GateClassifyItem } from '@/types/gate'
 
 /** `item: null` passes through as `not-found`, never a thrown error. Resolves `planReview` through the vocabulary, never a literal name. `assignedElsewhere` is advisory only, never a refusal. */
 export function classifyGate(params: { readonly item: GateClassifyItem | null; readonly vocabulary: LabelVocabulary }): GateVerdict {
@@ -28,12 +17,6 @@ export function classifyGate(params: { readonly item: GateClassifyItem | null; r
 
   const assignedElsewhere = item.assignees.filter((login) => login !== item.viewer)
   return { kind: 'answerable', noPlanBlock: item.noPlanBlock, assignedElsewhere }
-}
-
-export interface GatePlan {
-  readonly add: readonly LabelKey[]
-  readonly remove: readonly LabelKey[]
-  readonly expect: LabelPrecondition
 }
 
 /** Key-level plans only; the caller supplies `repoId`/`repo`/`kind`/`number`/`vocabulary`. `expect.assignees: { kind: 'any' }` is deliberate: an item assigned to someone else is still answerable. */
