@@ -5,9 +5,7 @@ interface SessionEntry {
   readonly repoId: RepoId | null
   /** This session's folder, for a null-`repoId` session's own display label. */
   readonly folder: string
-  /** #103: carried alongside the pending list so the dialog's context line
-   *  can name the session with the same `sessionDisplayLabel` the rail
-   *  shows — never the raw `sessionKey`. */
+  /** Carried alongside the pending list so the dialog names the session the same way the rail does. */
   readonly title: string | null
   readonly origin: SessionOrigin
   readonly startedAt: string

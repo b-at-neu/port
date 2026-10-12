@@ -14,9 +14,7 @@ export interface StartFailureCopy {
   readonly detail: string | null
 }
 
-/** `already-open` is deliberately excluded from this type — the controller
- *  switches to the existing session for that result, with no banner at all,
- *  rather than rendering a failure screen for it. */
+// `already-open` is deliberately excluded — that result switches sessions instead of showing a banner.
 export type RenderableStartFailure = Extract<SessionStartResult, { readonly ok: false; readonly kind: 'at-capacity' | 'runtime' | 'folder-missing' | 'folder-busy' | 'not-git' | 'worktree-failed' }>
 
 export type NewSessionPreselect = { readonly kind: 'repo'; readonly repoId: RepoId } | { readonly kind: 'path'; readonly path: string } | null
