@@ -1,4 +1,4 @@
-# Runs `pnpm e2e` on every pull request that touches apps/desktop (#442) —
+# Runs `pnpm e2e` on every pull request that touches apps/desktop —
 # the three E2E flows against the real app, every `gh`/`git` call routed to
 # the fake CLI under tests/e2e/fake. CI-only: never named in
 # `commands.checks` (see docs/TESTING.md → "Desktop E2E flows").
