@@ -1,9 +1,12 @@
 // Pure types and constants for the board projection. No import here may reach a Node builtin or `src/main/`, so this file compiles under `typecheck:web`.
 import type { RepoId } from '@/utils/repos'
 import type { ItemStatus, PipelineState, ReconciledItem, RepositoryState, StageLabel } from '@/types/state'
-import type { ActionAvailability, DecisionAvailability, OperatorAction, OperatorDecision } from '@/types/actions'
-import type { TickReport } from '@/types/tick'
-import type { RepoDispatchStatus, RunStatesSnapshot } from '@/types/dispatch'
+import type { ActionAvailability, DecisionAvailability, ItemActionResult, OperatorAction, OperatorDecision } from '@/types/actions'
+import type { StageAgent, TickClaim, TickHeld, TickLabelRepair, TickReport } from '@/types/tick'
+import type { BudgetNote, RepoDispatchStatus, RunStatesSnapshot } from '@/types/dispatch'
+import type { SessionKey } from '@/types/hosting'
+import type { AskQuestion } from '@/utils/hosting/controls'
+import type { StageDenial, InterruptedStage } from '@/types/stage'
 
 /** The four sources the watcher polls independently; `itemStates` is a dependent re-check fired internally, never independently schedulable. */
 export const SOURCE_KINDS = ['github', 'sessions', 'worktrees', 'denials'] as const
@@ -140,3 +143,44 @@ export interface BoardProjection {
   /** A compact string over every rendered field, deliberately excluding `emittedAt`, so a poll that changed nothing never triggers a rebuild. */
   readonly signature: string
 }
+
+export type ItemActionState = { readonly kind: 'pending'; readonly action: OperatorAction } | { readonly kind: 'result'; readonly action: OperatorAction; readonly result: ItemActionResult }
+
+interface NeedsYouItemBase {
+  readonly repoId: RepoId | null
+  readonly repo: string | null
+  readonly number: number | null
+  readonly title: string | null
+  readonly url: string | null
+  /** `null` for every current kind — no kind left carries a real timestamp. */
+  readonly at: string | null
+  /** The board row at this (repoId, number), when one exists — lets `held`/`stalled` reuse its `decisions.unblock` too. */
+  readonly matchedRow: BoardItemRow | null
+}
+
+/** One row per (repo, number, kind) — an item with two reasons appears twice, each with its own action. */
+export type NeedsYouItem =
+  | (NeedsYouItemBase & { readonly kind: 'plan-review'; readonly row: BoardItemRow })
+  | (NeedsYouItemBase & { readonly kind: 'ready-to-merge'; readonly row: BoardItemRow })
+  | (NeedsYouItemBase & { readonly kind: 'needs-human'; readonly row: BoardItemRow })
+  | (NeedsYouItemBase & { readonly kind: 'blocked'; readonly row: BoardItemRow })
+  | (NeedsYouItemBase & { readonly kind: 'budget'; readonly note: BudgetNote })
+  | (NeedsYouItemBase & { readonly kind: 'held'; readonly held: TickHeld })
+  | (NeedsYouItemBase & { readonly kind: 'stalled'; readonly claim: TickClaim })
+  | (NeedsYouItemBase & { readonly kind: 'stage-question'; readonly sessionKey: SessionKey; readonly permissionId: string; readonly questions: readonly AskQuestion[] })
+  | (NeedsYouItemBase & { readonly kind: 'stage-questions' | 'stage-blocked'; readonly sessionKey: SessionKey; readonly text: string | null })
+  | (NeedsYouItemBase & { readonly kind: 'stage-denial'; readonly denial: StageDenial })
+  | (NeedsYouItemBase & { readonly kind: 'stage-interrupted'; readonly interrupted: InterruptedStage })
+  | (NeedsYouItemBase & { readonly kind: 'half-labelled'; readonly repair: TickLabelRepair })
+
+export const PHASE_KEYS = ['plan', 'planReview', 'implement', 'review', 'revision', 'merge'] as const
+
+export type PhaseKey = (typeof PHASE_KEYS)[number]
+
+export type PhaseSegmentState = 'finished' | 'current-working' | 'current-attention' | 'complete' | 'pending'
+
+export type BoardGroupBy = 'phase' | 'repo'
+
+export type StageLink =
+  | { readonly kind: 'live'; readonly agent: StageAgent; readonly sessionKey: SessionKey; readonly at: string; readonly operatorJoined: boolean }
+  | { readonly kind: 'transcript'; readonly agent: StageAgent; readonly sessionId: string; readonly at: string; readonly operatorJoined: boolean }

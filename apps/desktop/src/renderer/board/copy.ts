@@ -9,7 +9,7 @@ import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import { RETRY_TRIGGER } from '@/utils/actions/plan'
 import type { ActionPlan, ActionRefusal, ItemActionResult, OperatorAction, OperatorDecision } from '@/types/actions'
 import type { Conflict } from '@/types/writes'
-import type { StageLink } from '@/renderer/board/stage-links'
+import type { StageLink } from '@/types/board'
 
 const STAGE_NAME: Readonly<Record<StageLink['agent'], string>> = { plan: 'Planning', impl: 'Implementing', review: 'Reviewing', revise: 'Revising' }
 

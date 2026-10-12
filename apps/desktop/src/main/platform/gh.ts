@@ -3,9 +3,9 @@ import { runCommand } from '@/main/platform/run'
 import type { GhAuthStatusResult, GhResult } from '@/types/platform'
 import type { RunCommandOptions } from '@/types/platform'
 
-export type GhOptions = Omit<RunCommandOptions, 'whichEnv' | 'platform'>
+type GhOptions = Omit<RunCommandOptions, 'whichEnv' | 'platform'>
 
-export type GhClassification = 'unauthenticated' | 'rate-limited' | 'forbidden' | 'http-not-found' | 'network' | 'unknown'
+type GhClassification = 'unauthenticated' | 'rate-limited' | 'forbidden' | 'http-not-found' | 'network' | 'unknown'
 
 interface GhExitOutcome {
   readonly code: number

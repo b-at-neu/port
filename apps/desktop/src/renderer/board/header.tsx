@@ -21,14 +21,14 @@ import type { RepoId } from '@/utils/repos'
 import type { BoardSnapshot, SourceKind } from '@/types/board'
 import type { RepositoryState } from '@/types/state'
 import { worstHealth } from '@/renderer/board/project'
-import type { BoardGroupBy } from '@/renderer/board/sections'
+import type { BoardGroupBy } from '@/types/board'
 import { haltButtonLabel, haltPending, runHalt, subscribeDispatch } from '@/renderer/board/dispatch'
 import { rateLimitCopy, sourceHealthCopy } from '@/renderer/board/copy'
 import { openClaimDialog } from '@/renderer/claim/controller'
 
 const SOURCE_KINDS: readonly SourceKind[] = ['github', 'sessions', 'worktrees', 'denials']
 
-export interface BoardHeaderProps {
+interface BoardHeaderProps {
   readonly snapshot: BoardSnapshot | null
   readonly now: Date
   readonly refreshing: boolean

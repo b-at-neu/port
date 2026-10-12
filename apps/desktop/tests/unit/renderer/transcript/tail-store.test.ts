@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createTailStore } from '@/renderer/transcript/tail-store'
-import type { TailStoreDeps } from '@/renderer/transcript/tail-store'
+import type { TailStoreDeps } from '@/types/transcript'
 import type { TranscriptTailOpen, TranscriptTailPoll } from '@/utils/sessions/transcript'
 
 const SOURCE = { sessionId: 's', agentId: null, path: '', sizeBytes: 0, modifiedAt: 't', recordCount: 0, malformedLines: 0 }

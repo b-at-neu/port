@@ -76,7 +76,7 @@ function componentSuffix(components: ComponentCheck, sourceLabel: string): strin
   }
 }
 
-export interface CapabilitiesBanner {
+interface CapabilitiesBanner {
   readonly text: string
   /** SDK message text, shown verbatim in a `<pre>` — `unavailable` only. */
   readonly detail: string | null

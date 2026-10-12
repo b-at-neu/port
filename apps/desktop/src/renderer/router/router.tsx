@@ -2,7 +2,7 @@
 // `file://`, where path history cannot resolve).
 import { createHashHistory, createRootRoute, createRoute, createRouter, redirect } from '@tanstack/react-router'
 import { ROUTE_IDS, boardSearchFromRaw, historySearchFromRaw, repoSearchFromRaw, searchSearchFromRaw, sessionSearchFromRaw, transcriptSearchFromRaw } from '@/renderer/router/routes'
-import type { BoardSearch, HistorySearch, RepoSearch, SearchSearch, SessionSearch, TranscriptSearch } from '@/renderer/router/routes'
+import type { BoardSearch, HistorySearch, RepoSearch, SearchSearch, SessionSearch, TranscriptSearch } from '@/types/router'
 import { SettingsScreen } from '@/renderer/settings/screen'
 import { BacklogScreen } from '@/renderer/backlog/screen'
 import { NeedsYouScreen } from '@/renderer/needs-you/screen'

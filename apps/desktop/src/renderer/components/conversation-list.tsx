@@ -81,7 +81,7 @@ function HistorySection({ history, dividerLabel }: { readonly history: SessionHi
   )
 }
 
-export interface ConversationListProps {
+interface ConversationListProps {
   readonly entries: readonly TranscriptEntry[]
   /** The absolute index `entries[0]` carries — `0` for a transcript read from
    *  the start, `firstIndex` for a session attached mid-window. */

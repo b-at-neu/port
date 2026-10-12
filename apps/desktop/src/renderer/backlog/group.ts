@@ -1,31 +1,7 @@
 // Pure projection from one repository's `backlog:list` query state into what `screen.tsx` renders — no DOM, no IPC call.
-import type { BacklogResponse } from '@/types/backlog'
+import type { BacklogGroupView, BacklogQueryLike } from '@/types/backlog'
 import type { RepoId } from '@/utils/repos'
 import { backlogFailureCopy, backlogInvokeErrorCopy, backlogTruncatedCopy } from '@/renderer/backlog/copy'
-
-export interface BacklogRowView {
-  readonly repoId: RepoId
-  readonly repo: string
-  readonly number: number
-  readonly title: string
-  readonly url: string
-  readonly assignee: string | null
-  readonly updatedAt: string
-}
-
-export type BacklogGroupView =
-  | { readonly kind: 'loading'; readonly repoId: RepoId; readonly repo: string }
-  | { readonly kind: 'invoke-error'; readonly repoId: RepoId; readonly repo: string; readonly message: string }
-  | { readonly kind: 'read-error'; readonly repoId: RepoId; readonly repo: string; readonly message: string }
-  | { readonly kind: 'loaded'; readonly repoId: RepoId; readonly repo: string; readonly items: readonly BacklogRowView[]; readonly truncatedNote: string | null }
-
-// `status` stays `'success'` on a refetch over previously-good data, so `isError`/`dataUpdatedAt` carry that fact separately.
-export interface BacklogQueryLike {
-  readonly status: 'pending' | 'error' | 'success'
-  readonly data: BacklogResponse | undefined
-  readonly isError: boolean
-  readonly dataUpdatedAt: number
-}
 
 function assigneeLine(assignees: readonly string[], viewer: string | null): string | null {
   const others = assignees.filter((login) => login !== viewer)

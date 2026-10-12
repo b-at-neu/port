@@ -1,7 +1,7 @@
 // `actionFor` resolves each row's single inline action; `runAction`
 // dispatches it, one switch over `NeedsYouItem.kind`.
 import type { DecisionRefusal } from '@/types/actions'
-import type { NeedsYouItem } from '@/renderer/board/needs-you'
+import type { NeedsYouItem } from '@/types/board'
 import { openReviewDialog } from '@/renderer/gate/controller'
 import { openDecision } from '@/renderer/decision/controller'
 import { openAllowDialog } from '@/renderer/needs-you/allow-dialog'
@@ -10,9 +10,9 @@ import { router } from '@/renderer/router/router'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { invoke } from '@/renderer/data/invoke'
 
-export type NeedsYouActionKind = 'review-plan' | 'open' | 'unblock' | 'retry' | 'refresh' | 'answer' | 'allow' | 'resume' | 'restart'
+type NeedsYouActionKind = 'review-plan' | 'open' | 'unblock' | 'retry' | 'refresh' | 'answer' | 'allow' | 'resume' | 'restart'
 
-export interface NeedsYouAction {
+interface NeedsYouAction {
   readonly label: string
   readonly kind: NeedsYouActionKind
   readonly disabledReason: string | null
@@ -79,7 +79,7 @@ export function actionFor(item: NeedsYouItem): NeedsYouAction {
   }
 }
 
-export interface RunActionDeps {
+interface RunActionDeps {
   readonly onToast: (message: string) => void
 }
 

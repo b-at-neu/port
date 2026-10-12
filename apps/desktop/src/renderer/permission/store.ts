@@ -1,16 +1,16 @@
 // The permission dialog's queue, arming, drafts and sending state.
 // `createPermissionStore` is the injectable, directly-testable factory.
 import { useSyncExternalStore } from 'react'
-import type { HostedSessionSnapshot, PermissionDecision, SessionPermissionAnswerResult } from '@/types/hosting'
+import type { PermissionDecision } from '@/types/hosting'
 import { applySnapshot, EMPTY_QUEUE, interactionCount, ordered, seed } from '@/renderer/permission/queue'
-import type { PermissionQueue, QueuedPermission } from '@/renderer/permission/queue'
+import type { PermissionQueue, PermissionStoreDeps, QueuedPermission } from '@/types/permission'
 import { IPC_FAILURE_MESSAGE } from '@/renderer/permission/copy'
 import { invoke } from '@/renderer/data/invoke'
 import { sharedSubscriptions } from '@/renderer/data/subscriptions'
 
 const ARM_DELAY_MS = 600
 
-export interface PermissionViewState {
+interface PermissionViewState {
   readonly current: QueuedPermission | null
   readonly total: number
   readonly message: string
@@ -26,15 +26,7 @@ function documentTitleFor(count: number): string {
   return `port — ${String(count)} permission request${count === 1 ? '' : 's'} waiting`
 }
 
-export interface PermissionStoreDeps {
-  readonly answerPermission: (params: { readonly sessionKey: QueuedPermission['sessionKey']; readonly permissionId: string; readonly decision: PermissionDecision; readonly message: string | null }) => Promise<SessionPermissionAnswerResult>
-  readonly sessionList: () => Promise<readonly HostedSessionSnapshot[]>
-  readonly subscribeSessionStatus: (listener: (snapshot: HostedSessionSnapshot) => void) => () => void
-  readonly now: () => number
-  readonly setDocumentTitle: (title: string) => void
-}
-
-export interface PermissionStore {
+interface PermissionStore {
   subscribe(this: void, listener: () => void): () => void
   getSnapshot(this: void): PermissionViewState
   setMessage(permissionId: string, value: string): void

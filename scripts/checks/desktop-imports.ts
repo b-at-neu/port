@@ -167,13 +167,42 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- No MULTI-classified type or interface under main/ (non-test) is still exported. Reuses
-  // type-moves.mjs's own classifier, so this check and the migration tool can never drift apart. ---
+  // --- Fixture first — findLeakedTypes can't pass vacuously on a good fixture or three bad ones. ---
+  const typeMoves = await import(pathToFileURL(join(root, 'apps/desktop/scripts/type-moves.mjs')).href);
   {
-    const typeMoves = await import(pathToFileURL(join(root, 'apps/desktop/scripts/type-moves.mjs')).href);
+    const good = typeMoves.findLeakedTypes([
+      { path: 'renderer/a.ts', text: "export interface Solo {\n  readonly x: number\n}\n" },
+    ]);
+    if (good.length !== 0) fail('desktop-imports', `fixture 'good' expected no leaked types, got ${String(good.length)}`);
+    else ok();
+
+    const badSibling = typeMoves.findLeakedTypes([
+      { path: 'renderer/a.ts', text: "export interface Leaked {\n  readonly x: number\n}\n" },
+      { path: 'renderer/b.ts', text: "import type { Leaked } from './a'\n" },
+    ]);
+    if (badSibling.length !== 1) fail('desktop-imports', `fixture 'renderer sibling' expected 1 leaked type, got ${String(badSibling.length)}`);
+    else ok();
+
+    const badTestImporter = typeMoves.findLeakedTypes([
+      { path: 'main/a.ts', text: "export interface Leaked {\n  readonly x: number\n}\n" },
+      { path: 'a.test.ts', text: "import type { Leaked } from '@/main/a'\n" },
+    ]);
+    if (badTestImporter.length !== 1) fail('desktop-imports', `fixture 'main test importer' expected 1 leaked type, got ${String(badTestImporter.length)}`);
+    else ok();
+
+    const badTsxImporter = typeMoves.findLeakedTypes([
+      { path: 'renderer/a.ts', text: "export interface Leaked {\n  readonly x: number\n}\n" },
+      { path: 'renderer/b.tsx', text: "import { type Leaked } from './a'\n" },
+    ]);
+    if (badTsxImporter.length !== 1) fail('desktop-imports', `fixture '.tsx importer' expected 1 leaked type, got ${String(badTsxImporter.length)}`);
+    else ok();
+  }
+
+  // --- No MULTI-classified type under main/ or renderer/ (non-test) is still exported. ---
+  {
     const { declByKey, mainFiles } = typeMoves.classify() as { declByKey: Map<string, { file: string; name: string }>; mainFiles: string[] };
     if (mainFiles.length === 0) {
-      fail('desktop-imports', 'no non-test files scanned under apps/desktop/src/main — the guard cannot pass vacuously');
+      fail('desktop-imports', 'no non-test files scanned under apps/desktop/src/main or src/renderer — the guard cannot pass vacuously');
     } else {
       let violated = false;
       for (const decl of declByKey.values()) {
@@ -185,5 +214,5 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  note(`desktop-imports: scanned apps/desktop/src, tests/unit/ and tests/fixtures/ for relative parent imports, renderer-rooted @/ imports, the absence of shared/, utils/ reach from both sides, and no main/ exported type imported elsewhere`);
+  note(`desktop-imports: scanned apps/desktop/src, tests/unit/ and tests/fixtures/ for relative parent imports, renderer-rooted @/ imports, the absence of shared/, utils/ reach from both sides, and no main/ or renderer/ exported type imported elsewhere`);
 }

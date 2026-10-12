@@ -6,7 +6,7 @@ import type { BoardItemRow, BoardProjection } from '@/types/board'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import { notReadyCopy } from '@/renderer/board/copy'
 
-export interface BoardBannersProps {
+interface BoardBannersProps {
   readonly projection: BoardProjection
   readonly onSelectRow: (row: BoardItemRow) => void
 }

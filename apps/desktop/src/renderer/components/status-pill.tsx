@@ -2,10 +2,9 @@
 // is never colour-only (ENGINEERING §5). No menu: the repo run-state pill
 // with Run/Pause/Drain belongs to #314/#318, not this ticket.
 import { cn } from '@/renderer/lib/utils'
+import type { PillStatus } from '@/types/components'
 
-export type PillStatus = 'working' | 'attention' | 'success' | 'danger' | 'idle'
-
-export interface StatusPillProps {
+interface StatusPillProps {
   readonly status: PillStatus
   readonly label: string
   readonly className?: string

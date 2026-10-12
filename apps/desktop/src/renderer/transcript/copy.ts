@@ -1,5 +1,6 @@
 // Every string the transcript screen renders — pure, no DOM.
 import type { TranscriptFailureKind, TranscriptSource, TranscriptTailFailureKind } from '@/utils/sessions/transcript'
+import type { TailBannerKind } from '@/types/transcript'
 
 export function openFailureCopy(kind: TranscriptFailureKind, message: string, path: string | null): string {
   const p = path ?? ''
@@ -16,8 +17,6 @@ export function openFailureCopy(kind: TranscriptFailureKind, message: string, pa
       return "That session or agent id isn't a valid identifier."
   }
 }
-
-export type TailBannerKind = 'not-found' | 'unreadable' | 'too-large' | 'unreachable'
 
 export function tailBannerKindFor(kind: TranscriptTailFailureKind): TailBannerKind {
   if (kind === 'not-found' || kind === 'unreadable' || kind === 'too-large') return kind

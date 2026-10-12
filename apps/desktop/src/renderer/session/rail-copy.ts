@@ -3,7 +3,7 @@
 // label.ts`), the same "14:02 today, else Mon 14:02" rule the rail's own row
 // meta line and the restore banner's "opened" line both need too.
 import type { SessionRateLimit } from '@/types/hosting'
-import type { UsageNotice } from '@/renderer/session/rail-model'
+import type { UsageNotice } from '@/types/session'
 import { startedClock } from '@/utils/hosting/label'
 
 export const LIMIT_STEPPER_TITLE = "Each session is its own Claude Code process. They all share your subscription's usage limit."
@@ -32,7 +32,7 @@ function resetsSuffix(resetsAt: string | null, now: Date): string {
   return resetsAt === null ? '' : ` · resets ${startedClock(resetsAt, now)}`
 }
 
-export interface UsageNoticeLines {
+interface UsageNoticeLines {
   readonly main: string
   readonly sub: string
 }

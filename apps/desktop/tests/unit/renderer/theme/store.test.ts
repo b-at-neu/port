@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createThemeStore } from '@/renderer/theme/store'
-import type { ThemeStoreDeps } from '@/renderer/theme/store'
+import type { ThemeStoreDeps } from '@/types/theme'
 
 function fakeStorage(initial: Record<string, string> = {}): Pick<Storage, 'getItem' | 'setItem'> {
   const values = new Map(Object.entries(initial))

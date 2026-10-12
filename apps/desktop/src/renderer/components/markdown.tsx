@@ -116,7 +116,7 @@ function MarkdownBlocks({ nodes }: { readonly nodes: readonly BlockNode[] }) {
   )
 }
 
-export interface MarkdownProps {
+interface MarkdownProps {
   readonly source: string
   readonly className?: string
 }

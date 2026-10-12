@@ -1,4 +1,6 @@
 // Renderer-safe shapes for the two local sources the pipeline writes: `git worktree list --porcelain` and `.agents/denials.log`. No import here may reach a Node builtin. `LocalFailureKind` and `DenialsFailureKind` are hand-maintained, pinned against the real platform-layer types with `AssertEqual` so a new failure kind there breaks `pnpm typecheck` here rather than silently landing in `unknown`.
+import type { RepoId } from '@/utils/repos'
+import type { SessionRole } from '@/types/sessions'
 
 export type CorrelationRung = 'upstream-branch' | 'branch-name' | 'directory-basename' | 'head-subject'
 
@@ -127,3 +129,58 @@ export type DenialsRead =
       readonly path: string
       readonly readAt: string
     }
+
+/** Set only for a `session` actor. A session id the scan cannot resolve is `unknown-session`; a scan that never ran or failed is the distinct `attribution-unavailable`. */
+export type SessionAttribution =
+  | { readonly kind: 'attributed'; readonly role: SessionRole; readonly repoId: RepoId | null; readonly label: string | null; readonly lastActivityAt: string }
+  | { readonly kind: 'unknown-session' }
+  | { readonly kind: 'attribution-unavailable'; readonly reason: 'not-scanned' | 'scan-failed' }
+
+/** Every analysed entry lands in exactly one bucket, summing to `analysed`. `unattributable` covers a legacy line's bare uuid and a malformed line. */
+export interface AttributionTally {
+  readonly agentAttributed: number
+  readonly sessionAttributed: number
+  readonly sessionUnresolved: number
+  readonly attributionUnavailable: number
+  readonly unattributable: number
+}
+
+/** `undecided` is a legacy or malformed line, so it is neither a denial nor a miss. */
+interface DecisionCounts {
+  readonly deny: number
+  readonly miss: number
+  readonly gateClear: number
+  readonly hookError: number
+  readonly undecided: number
+  readonly total: number
+}
+
+/** One actor's qualifying run of `deny` entries on one shape, inside `burstWindowMs`, reaching at least `burstMinCount`. At most one per shape group; the largest window wins. */
+export interface Burst {
+  readonly actorKey: string
+  readonly count: number
+  readonly startedAt: string
+  readonly endedAt: string
+}
+
+/** `key` is stable and collision-free — see `actorKeyOf`. `actor` is `null` only for malformed lines. `attribution` is set only when `actor.kind === 'session'`. */
+export interface ActorGroup {
+  readonly key: string
+  readonly actor: DenialActor | null
+  readonly attribution: SessionAttribution | null
+  readonly counts: DecisionCounts
+  readonly firstSeen: string | null
+  readonly lastSeen: string | null
+  readonly shapeCount: number
+}
+
+/** `sample` is the newest entry's subject verbatim, capped at 200 characters. Malformed lines carry no subject and never form a shape. */
+export interface ShapeGroup {
+  readonly shape: string
+  readonly counts: DecisionCounts
+  readonly actorCount: number
+  readonly firstSeen: string | null
+  readonly lastSeen: string | null
+  readonly sample: string
+  readonly burst: Burst | null
+}

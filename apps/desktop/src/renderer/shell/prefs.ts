@@ -2,7 +2,7 @@
 // hand-edited or stale value must never crash the app on launch.
 import { RESTORABLE_ROUTES } from '@/renderer/router/routes'
 
-export interface ShellPrefs {
+interface ShellPrefs {
   readonly v: 1
   readonly sidebarCollapsed: boolean
   readonly collapsedRepos: readonly string[]

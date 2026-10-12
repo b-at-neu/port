@@ -11,7 +11,7 @@ import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionContr
 import type { ComposerAttachment } from '@/utils/hosting/attachments'
 import type { FolderId } from '@/types/workspace'
 import { folderMissingToast, startFailureCopy, START_UNREACHABLE } from '@/renderer/session/copy'
-import type { RenderableStartFailure, StartFailureCopy } from '@/renderer/session/copy'
+import type { RenderableStartFailure, StartFailureCopy } from '@/types/session'
 import { clearDraft, clearDraftAttachments } from '@/renderer/session/drafts'
 import { forgetSessionEntries } from '@/renderer/session/entries-store'
 
@@ -64,7 +64,7 @@ function handleStartResult(result: SessionStartResult): void {
   if (result.kind === 'already-open') void router.navigate({ to: ROUTE_IDS.session, search: { key: result.sessionKey } })
 }
 
-export type StartInFolderOutcome = { readonly kind: 'started' } | { readonly kind: 'failed'; readonly copy: StartFailureCopy; readonly result: RenderableStartFailure | null }
+type StartInFolderOutcome = { readonly kind: 'started' } | { readonly kind: 'failed'; readonly copy: StartFailureCopy; readonly result: RenderableStartFailure | null }
 
 /** The New session dialog's own start — stays open on failure so the dialog can show the inline banner. */
 export async function startInFolder(folderId: FolderId, worktree: boolean): Promise<StartInFolderOutcome> {
@@ -86,7 +86,7 @@ export function selectSession(key: SessionKey): void {
   void router.navigate({ to: ROUTE_IDS.session, search: { key } })
 }
 
-export interface SendOutcome {
+interface SendOutcome {
   readonly ok: boolean
   readonly error: string | null
   /** The blocked command's own name, set only when `error` is `'blocked-command'`. */

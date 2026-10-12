@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
-import type { NeedsYouItem } from '@/renderer/board/needs-you'
+import type { NeedsYouItem } from '@/types/board'
 import { needsYouLeadCopy } from '@/renderer/needs-you/copy'
 
 function base(overrides: Partial<NeedsYouItem> = {}): Pick<NeedsYouItem, 'repoId' | 'repo' | 'number' | 'title' | 'url' | 'at' | 'matchedRow'> {

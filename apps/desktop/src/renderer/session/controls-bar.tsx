@@ -9,7 +9,7 @@ import { DEFAULT_SELECT_VALUE, MODE_OPTIONS, controlsBarState, effortLabel } fro
 import { controlsChangeFailed, MODELS_LOADING } from '@/renderer/session/interaction-copy'
 import { setControls } from '@/renderer/session/actions'
 
-export interface ControlsBarProps {
+interface ControlsBarProps {
   readonly sessionKey: SessionKey
   readonly controls: SessionControls
   readonly models: SessionModels

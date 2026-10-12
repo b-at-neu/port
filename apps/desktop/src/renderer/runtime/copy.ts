@@ -2,9 +2,9 @@
 import type { RuntimeDiagnosis } from '@/types/runtime'
 
 /** What kind of remedy a diagnosis implies — `retry` covers "try again"; `login`/`update` name a concrete external step; `account-owner` names one the app cannot offer as a button. Never an `'api-key'` member. */
-export type RuntimeAction = 'install' | 'login' | 'update' | 'account-owner' | 'retry'
+type RuntimeAction = 'install' | 'login' | 'update' | 'account-owner' | 'retry'
 
-export interface RuntimeCopy {
+interface RuntimeCopy {
   readonly title: string
   readonly body: string
   readonly action: RuntimeAction | null

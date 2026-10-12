@@ -18,7 +18,8 @@ import type { SessionScan } from '@/types/sessions'
 import type { RunSearchParams, SearchResult } from '@/types/search'
 import type { StageRegistry } from '@/types/stage'
 import type { Dispatcher } from '@/types/dispatch'
-import type { ReposListResponse } from '@/types/ipc'
+import type { IpcChannel, ReposListResponse } from '@/types/ipc'
+import type { AssertEqual } from '@/types/assert-type'
 
 export interface GateChannelDeps {
   readonly gatePreflight: (params: GatePreflightParams) => Promise<GatePreflightResponse>
@@ -63,3 +64,76 @@ export interface StageChannelDeps {
   readonly readJson: <T>(path: string) => Promise<FileResult<T>>
   readonly writeJsonAtomic: (path: string, value: unknown) => Promise<FileResult<void>>
 }
+
+// The read/write partition over IpcChannel — hand-maintained, never derived from IPC_CHANNELS.
+export const QUERY_CHANNELS = [
+  'app:info',
+  'repos:list',
+  'worktrees:report',
+  'sessions:scan',
+  'search:query',
+  'board:snapshot',
+  'claim:preflight',
+  'runtime:preflight',
+  'gate:preflight',
+  'session:list',
+  'session:capacity',
+  'session:restore:list',
+  'gh:status',
+  'session:defaults',
+  'backlog:list',
+  'session:files',
+  'folders:list',
+  'session:changes',
+  'session:marks',
+] as const
+
+export type QueryChannel = (typeof QUERY_CHANNELS)[number]
+
+// Every other channel, including the ones that move state in the main process.
+export const MUTATION_CHANNELS = [
+  'repos:add',
+  'repos:remove',
+  'transcript:tail:open',
+  'transcript:tail:poll',
+  'transcript:tail:close',
+  'board:refresh',
+  'worktrees:reclaim',
+  'claim:apply',
+  'item:action',
+  'item:decide',
+  'dispatch:control',
+  'runtime:probe',
+  'gate:answer',
+  'session:start',
+  'session:send',
+  'session:interrupt',
+  'session:close',
+  'session:attach',
+  'session:permission:answer',
+  'session:invoke',
+  'session:dismiss',
+  'session:capacity:set',
+  'session:restore',
+  'session:restore:discard',
+  'session:defaults:set',
+  'session:rename',
+  'session:controls:set',
+  'session:question:answer',
+  'session:plan:answer',
+  'session:task:stop',
+  'folders:choose',
+  'session:pin:set',
+  'session:archive:set',
+  'stage:allow',
+  'stage:dismiss-denial',
+  'stage:resume',
+  'stage:restart',
+] as const
+
+export type MutationChannel = (typeof MUTATION_CHANNELS)[number]
+
+// Fails to compile when a channel is unclassified, misclassified into both
+// lists, or either list drifts from IpcMap's own keys.
+export const _queryAndMutationCoverIpcChannel: AssertEqual<QueryChannel | MutationChannel, IpcChannel> = true
+export const _queryAndMutationNeverOverlap: AssertEqual<QueryChannel & MutationChannel, never> = true

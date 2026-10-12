@@ -5,7 +5,7 @@ import { QueryClient, QueryObserver, useMutation, useQuery, queryOptions } from 
 import type { QueryObserverResult } from '@tanstack/react-query'
 import type { IpcMap } from '@/types/ipc'
 import { invoke } from '@/renderer/data/invoke'
-import type { MutationChannel, QueryChannel } from '@/renderer/data/channels'
+import type { MutationChannel, QueryChannel } from '@/types/channels'
 
 /** `networkMode: 'always'` because IPC never touches the network — the
  *  default `'online'` mode would pause every query on an offline machine,

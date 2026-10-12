@@ -75,7 +75,7 @@ function compareRows(a: BoardItemRow, b: BoardItemRow, displayNameOf: ReadonlyMa
   return a.item.number - b.item.number
 }
 
-export interface ProjectBoardParams {
+interface ProjectBoardParams {
   readonly snapshot: BoardSnapshot
   readonly groupBy: GroupBy
   readonly now: Date

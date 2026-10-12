@@ -7,13 +7,14 @@
 // awaiting-permission phase later fails typecheck until its own copy exists
 // here. End diagnoses reuse `RUNTIME_COPY` from `renderer/runtime/copy.ts`,
 // never new wording of their own.
-import type { HostedSessionSnapshot, SessionEnd, SessionEndReason, SessionPhase, SessionStartResult } from '@/types/hosting'
+import type { HostedSessionSnapshot, SessionEnd, SessionEndReason, SessionPhase } from '@/types/hosting'
 import { RUNTIME_COPY } from '@/renderer/runtime/copy'
+import type { RenderableStartFailure, StartFailureCopy } from '@/types/session'
 
-export type StopState = 'enabled' | 'disabled' | 'stopping' | 'hidden'
-export type CloseState = 'enabled' | 'confirm' | 'closing' | 'hidden'
+type StopState = 'enabled' | 'disabled' | 'stopping' | 'hidden'
+type CloseState = 'enabled' | 'confirm' | 'closing' | 'hidden'
 
-export interface PhaseCopy {
+interface PhaseCopy {
   readonly pill: string
   readonly stop: StopState
   readonly close: CloseState
@@ -38,7 +39,7 @@ export const PHASE_COPY: Readonly<Record<SessionPhase, PhaseCopy>> = {
   ended: { pill: '', stop: 'hidden', close: 'hidden', composerDisabled: true, composerPlaceholder: 'This session has ended.', sendLabel: null },
 }
 
-export interface EndCopy {
+interface EndCopy {
   readonly title: string
   readonly body: string
 }
@@ -64,7 +65,7 @@ export function endBody(end: SessionEnd): string {
   return template.replace('{exitCode}', String(end.exitCode)).replace('{signal}', String(end.signal))
 }
 
-export interface ComposerCopy {
+interface ComposerCopy {
   readonly disabled: boolean
   readonly placeholder: string
   readonly sendLabel: string | null
@@ -79,17 +80,6 @@ export function composerCopy(phase: SessionPhase, sessionGone = false): Composer
   const copy = PHASE_COPY[phase]
   return { disabled: copy.composerDisabled || sessionGone, placeholder: copy.composerPlaceholder, sendLabel: copy.sendLabel }
 }
-
-export interface StartFailureCopy {
-  readonly title: string
-  readonly body: string
-  readonly detail: string | null
-}
-
-/** `already-open` is deliberately excluded from this type — the controller
- *  switches to the existing session for that result, with no banner at all,
- *  rather than rendering a failure screen for it. */
-export type RenderableStartFailure = Extract<SessionStartResult, { readonly ok: false; readonly kind: 'at-capacity' | 'runtime' | 'folder-missing' | 'folder-busy' | 'not-git' | 'worktree-failed' }>
 
 /** `at-capacity` names the limit and points at the rail rather than a bare
  *  refusal; `runtime` reuses #97's own `RUNTIME_COPY`, never a second error

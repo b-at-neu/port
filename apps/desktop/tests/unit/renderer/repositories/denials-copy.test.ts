@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { actorAttributionPill, attributionLineCopy, burstPillCopy, cappedLineCopy, emptyLogCopy, metaStripCopy, noEntriesCopy, readFailedCopy } from '@/renderer/repositories/denials-copy'
-import type { AttributionTally, SessionAttribution } from '@/renderer/local/inspect'
+import type { AttributionTally, SessionAttribution } from '@/types/local'
 import type { DenialActor, DenialSummary } from '@/types/local'
 
 function summary(overrides: Partial<DenialSummary> = {}): DenialSummary {

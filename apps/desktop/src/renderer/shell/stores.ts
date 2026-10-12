@@ -2,7 +2,7 @@
 // anywhere: every writer calls `set` directly from an event handler.
 import { useSyncExternalStore } from 'react'
 import type { RepoId } from '@/utils/repos'
-import type { NewSessionPreselect } from '@/renderer/session/new-session-model'
+import type { NewSessionPreselect } from '@/types/session'
 
 function createStore<T>(initial: T) {
   let value = initial
@@ -25,9 +25,9 @@ function createStore<T>(initial: T) {
   }
 }
 
-export type PalettePage = 'root'
+type PalettePage = 'root'
 
-export interface PaletteState {
+interface PaletteState {
   readonly open: boolean
   readonly page: PalettePage
 }
@@ -54,7 +54,7 @@ export function usePaletteState(): PaletteState {
   return useSyncExternalStore(paletteStore.subscribe, paletteStore.get)
 }
 
-export interface NewSessionDialogState {
+interface NewSessionDialogState {
   readonly open: boolean
   readonly preselect: NewSessionPreselect
 }
@@ -73,7 +73,7 @@ export function useNewSessionDialog(): NewSessionDialogState {
   return useSyncExternalStore(newSessionDialogStore.subscribe, newSessionDialogStore.get)
 }
 
-export interface PauseRequest {
+interface PauseRequest {
   readonly repoId: RepoId
   readonly name: string
   readonly inFlight: number
@@ -90,7 +90,7 @@ export function usePauseRequest(): PauseRequest | null {
 }
 
 /** The sidebar's own Take over confirmation, armed the same way `PauseRequest` arms its own. */
-export interface TakeOverRequest {
+interface TakeOverRequest {
   readonly repoId: RepoId
   readonly name: string
 }
@@ -133,13 +133,13 @@ export function useSidebarCollapsed(): boolean {
   return useSyncExternalStore(sidebarCollapsedStore.subscribe, sidebarCollapsedStore.get)
 }
 
-export interface ListNavigator {
+interface ListNavigator {
   next(): void
   prev(): void
   open(): void
 }
 
-export type ScreenKey = 'board' | 'backlog' | 'needsYou'
+type ScreenKey = 'board' | 'backlog' | 'needsYou'
 
 const navigators = new Map<ScreenKey, ListNavigator>()
 

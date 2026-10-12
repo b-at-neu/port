@@ -4,7 +4,7 @@ import type { AttachedAgent, PipelineState, ReconciledItem, RepositoryState } fr
 import type { BoardSnapshot } from '@/types/board'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/types/board'
-import type { PipelineRow, ReadyPipelineRow } from '@/renderer/shell/pipelines-model'
+import type { PipelineRow, ReadyPipelineRow } from '@/types/shell'
 import { pipelinesModel } from '@/renderer/shell/pipelines-model'
 
 function assertReady(row: PipelineRow | undefined): ReadyPipelineRow {

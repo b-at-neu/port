@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { checkBatchLimits, classifyFileKind, readAttachment, sizeNotice } from '@/renderer/session/attachments'
-import type { FileLike } from '@/renderer/session/attachments'
+import type { FileLike } from '@/types/session'
 import { MAX_ATTACHMENTS, MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_TEXT_BYTES, MAX_TOTAL_BYTES } from '@/utils/hosting/attachments'
 
 function file(name: string, size: number, type: string): FileLike {

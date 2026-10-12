@@ -1,13 +1,9 @@
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { PipelineItemKind } from '@/types/github'
+import type { PhaseKey, PhaseSegmentState } from '@/types/board'
+import { PHASE_KEYS } from '@/types/board'
 
-export const PHASE_KEYS = ['plan', 'planReview', 'implement', 'review', 'revision', 'merge'] as const
-
-export type PhaseKey = (typeof PHASE_KEYS)[number]
-
-export type PhaseSegmentState = 'finished' | 'current-working' | 'current-attention' | 'complete' | 'pending'
-
-export interface PhaseSegment {
+interface PhaseSegment {
   readonly phase: PhaseKey
   readonly state: PhaseSegmentState
 }
@@ -34,7 +30,7 @@ function phaseIndex(phase: PhaseKey): number {
   return PHASE_KEYS.indexOf(phase)
 }
 
-export interface PhaseModelParams {
+interface PhaseModelParams {
   readonly stageKey: LabelKey | null
   readonly kind: PipelineItemKind
   readonly merged: boolean

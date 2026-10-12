@@ -5,7 +5,7 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { PipelineItemKind } from '@/types/github'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
 import { phaseSegmentsFor } from '@/renderer/board/phase-model'
-import type { PhaseSegmentState } from '@/renderer/board/phase-model'
+import type { PhaseSegmentState } from '@/types/board'
 
 // -dot marks the current segment, -pill a decided one (finished/complete).
 const SEGMENT_CLASS: Readonly<Record<PhaseSegmentState, string>> = {
@@ -16,7 +16,7 @@ const SEGMENT_CLASS: Readonly<Record<PhaseSegmentState, string>> = {
   pending: 'bg-accent',
 }
 
-export interface PhaseBarProps {
+interface PhaseBarProps {
   readonly stageKey: LabelKey | null
   readonly kind: PipelineItemKind
   readonly merged: boolean

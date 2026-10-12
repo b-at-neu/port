@@ -1,7 +1,7 @@
 // Every pure string the Repositories screens render. No DOM here.
 import type { AppliedOverride, RepoDiagnostic, RepoProblem, ResolvedRepoConfig } from '@/utils/repos'
 import type { LabelSource, VocabularyProblem, VocabularyVerdict } from '@/utils/labels/vocabulary'
-import type { OverviewModuleFlag } from '@/renderer/repositories/health-model'
+import type { OverviewModuleFlag } from '@/types/repositories'
 
 const MODULE_LABELS: { readonly [K in keyof ResolvedRepoConfig['modules']]: string } = {
   approvalGate: 'approval gate',
@@ -103,9 +103,9 @@ export function summaryParts(config: ResolvedRepoConfig): readonly string[] {
   return [branchSummary, `${labelCount} pipeline labels`, moduleSummary(config.modules)].filter((part) => part !== '')
 }
 
-export type RegistryErrorReason = 'unreadable' | 'malformed' | 'unsupported-version'
+type RegistryErrorReason = 'unreadable' | 'malformed' | 'unsupported-version'
 
-export interface RegistryBanner {
+interface RegistryBanner {
   readonly path: string
   readonly reason: RegistryErrorReason
 }

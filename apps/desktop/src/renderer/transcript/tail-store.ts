@@ -2,17 +2,17 @@
 // `createTailStore` is the injectable, directly-testable factory.
 import { useCallback, useSyncExternalStore } from 'react'
 import { invoke } from '@/renderer/data/invoke'
-import type { EntryPatch, TranscriptEntry, TranscriptSource, TranscriptTailOpen, TranscriptTailPoll } from '@/utils/sessions/transcript'
+import type { EntryPatch, TranscriptEntry, TranscriptSource } from '@/utils/sessions/transcript'
 import { openFailureCopy, tailBannerKindFor } from '@/renderer/transcript/copy'
-import type { TailBannerKind } from '@/renderer/transcript/copy'
+import type { TailBannerKind, TailStoreDeps } from '@/types/transcript'
 
-export interface TailBanner {
+interface TailBanner {
   readonly kind: TailBannerKind
   readonly message: string
   readonly path: string | null
 }
 
-export type TailSnapshot =
+type TailSnapshot =
   | { readonly status: 'loading' }
   | { readonly status: 'error'; readonly message: string }
   | { readonly status: 'unreachable' }
@@ -35,15 +35,8 @@ function patchEntries(entries: readonly TranscriptEntry[], patches: readonly Ent
   return next
 }
 
-export interface TailStoreDeps {
-  readonly tailOpen: (sessionId: string, agentId: string | null) => Promise<TranscriptTailOpen>
-  readonly tailPoll: (tailId: string) => Promise<TranscriptTailPoll>
-  readonly tailClose: (tailId: string) => Promise<unknown>
-  readonly isHidden: () => boolean
-  readonly onVisibilityChange: (listener: () => void) => () => void
-}
 
-export interface TailStore {
+interface TailStore {
   subscribe(sessionId: string, agentId: string | null, listener: () => void): () => void
   getSnapshot(): TailSnapshot
   toggleFollow(): void

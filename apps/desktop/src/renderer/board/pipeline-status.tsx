@@ -7,7 +7,7 @@ import { budgetNoteLines, controlFor, observationClause, observationTitle, owner
 import { takeOver } from '@/renderer/board/dispatch'
 import { clockLineCopy, repositoryDetailLines, repositoryLineCopy, storeLineFor } from '@/renderer/board/tick'
 
-export interface PipelineStatusProps {
+interface PipelineStatusProps {
   readonly snapshot: BoardSnapshot
   readonly now: Date
 }

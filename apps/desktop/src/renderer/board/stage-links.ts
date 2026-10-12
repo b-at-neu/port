@@ -1,12 +1,7 @@
 // Pure link resolution from dispatch records to a board item's stage sessions — renderer-safe, no I/O.
 import type { DispatchRecord } from '@/types/dispatch'
 import type { PipelineItemKind } from '@/types/github'
-import type { SessionKey } from '@/types/hosting'
-import type { StageAgent } from '@/types/tick'
-
-export type StageLink =
-  | { readonly kind: 'live'; readonly agent: StageAgent; readonly sessionKey: SessionKey; readonly at: string; readonly operatorJoined: boolean }
-  | { readonly kind: 'transcript'; readonly agent: StageAgent; readonly sessionId: string; readonly at: string; readonly operatorJoined: boolean }
+import type { StageLink } from '@/types/board'
 
 function matches(record: DispatchRecord, number: number, kind: PipelineItemKind): boolean {
   return record.number === number && record.kind === kind

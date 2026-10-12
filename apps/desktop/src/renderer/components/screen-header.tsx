@@ -2,7 +2,7 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/renderer/lib/utils'
 
-export interface ScreenHeaderProps {
+interface ScreenHeaderProps {
   readonly children: ReactNode
   readonly className?: string
 }

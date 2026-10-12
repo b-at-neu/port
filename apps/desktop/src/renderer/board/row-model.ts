@@ -7,8 +7,8 @@ import type { BoardItemRow } from '@/types/board'
 import { operatorJoinedOf as operatorJoinedOfRecords } from '@/renderer/board/stage-links'
 import type { DispatchRecord } from '@/types/dispatch'
 import type { AttachedAgent, AttachedSession } from '@/types/state'
-import type { PillStatus } from '@/renderer/components/status-pill'
-import type { ItemActionState } from '@/renderer/board/actions'
+import type { PillStatus } from '@/types/components'
+import type { ItemActionState } from '@/types/board'
 import { actionRefusalNote, actionResultCopy, decisionButtonLabel, decisionRefusalNote, openPrButtonLabel, reviewPlanButtonLabel } from '@/renderer/board/copy'
 
 // Mirrors board/sections.ts's own waiting-on-you predicate, so a row's
@@ -89,7 +89,7 @@ export function actionNoteFor(row: BoardItemRow, state: ItemActionState | undefi
   return ownershipNoteFor(row.actions, row.item)
 }
 
-export type NextAction =
+type NextAction =
   | { readonly kind: 'review-plan'; readonly label: string }
   | { readonly kind: 'open-pr'; readonly label: string; readonly url: string }
   | { readonly kind: 'decision'; readonly label: string; readonly decision: OperatorDecision }

@@ -14,7 +14,7 @@ import type { FolderEntry, FolderId } from '@/types/workspace'
 import { closeNewSessionDialog, useNewSessionDialog } from '@/renderer/shell/stores'
 import { effectiveWorktree, initialFolderId, orderFolders, worktreeControl, worktreeHint } from '@/renderer/session/new-session-model'
 import { startInFolder } from '@/renderer/session/actions'
-import type { RenderableStartFailure } from '@/renderer/session/copy'
+import type { RenderableStartFailure } from '@/types/session'
 import { NEW_SESSION_CANCEL, NEW_SESSION_CHOOSE_FOLDER, NEW_SESSION_DIALOG_TITLE, NEW_SESSION_EMPTY_LINE, NEW_SESSION_FOLDERS_FAILED, NEW_SESSION_START, NEW_SESSION_STARTING, NEW_SESSION_WORKTREE_LABEL } from '@/renderer/session/copy'
 
 export function NewSessionDialog() {

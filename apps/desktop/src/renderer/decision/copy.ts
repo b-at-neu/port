@@ -34,7 +34,7 @@ export function reviseNoteHint(problem: 'empty' | 'too-long' | 'only-sha' | null
   return null
 }
 
-export interface DecisionResultCopy {
+interface DecisionResultCopy {
   readonly line: string
   readonly note: string | null
   readonly offerLabelOnly: boolean

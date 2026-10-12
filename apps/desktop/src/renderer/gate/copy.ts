@@ -34,7 +34,7 @@ export function noPlanNoteCopy(): string {
   return "No plan section in this issue's body — showing the whole body."
 }
 
-export interface SessionRequiredCopy {
+interface SessionRequiredCopy {
   readonly banner: string
   readonly note: string
   readonly launchLine: string
@@ -59,7 +59,7 @@ export function feedbackHint(number: number): string {
   return `Posted as a comment on #${String(number)}, then the issue moves to \`plan changes requested\`. plan-agent reads your comment as the change request.`
 }
 
-export interface ResultCopy {
+interface ResultCopy {
   readonly line: string
   readonly note: string | null
   readonly actions: readonly ('retry-label' | 'show-state' | 'try-again' | 'dismiss')[]

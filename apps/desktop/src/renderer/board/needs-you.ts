@@ -1,46 +1,15 @@
 // Pure "needs you" derivation, built on `projectBoard`'s own rows so
 // `actions`/`decisions` availability is reused, never re-derived.
 import type { BudgetNote } from '@/types/dispatch'
-import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
-import type { AskQuestion } from '@/utils/hosting/controls'
-import type { StageDenial, InterruptedStage } from '@/types/stage'
+import type { HostedSessionSnapshot } from '@/types/hosting'
 import type { RepoId } from '@/utils/repos'
 import type { RepositoryState } from '@/types/state'
-import type { TickClaim, TickHeld, TickLabelRepair } from '@/types/tick'
+import type { TickHeld } from '@/types/tick'
 import { projectBoard } from '@/renderer/board/project'
-import type { BoardItemRow, BoardSnapshot } from '@/types/board'
+import type { BoardItemRow, BoardSnapshot, NeedsYouItem } from '@/types/board'
 
 /** The four label-keyed kinds, each carrying the row they came from. */
-export type RowNeedsYouKind = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'blocked'
-
-export type NeedsYouKind = RowNeedsYouKind | 'budget' | 'held' | 'stalled' | 'stage-question' | 'stage-questions' | 'stage-blocked' | 'stage-denial' | 'stage-interrupted' | 'half-labelled'
-
-interface NeedsYouItemBase {
-  readonly repoId: RepoId | null
-  readonly repo: string | null
-  readonly number: number | null
-  readonly title: string | null
-  readonly url: string | null
-  /** `null` for every current kind — no kind left carries a real timestamp. */
-  readonly at: string | null
-  /** The board row at this (repoId, number), when one exists — lets `held`/`stalled` reuse its `decisions.unblock` too. */
-  readonly matchedRow: BoardItemRow | null
-}
-
-/** One row per (repo, number, kind) — an item with two reasons appears twice, each with its own action. */
-export type NeedsYouItem =
-  | (NeedsYouItemBase & { readonly kind: 'plan-review'; readonly row: BoardItemRow })
-  | (NeedsYouItemBase & { readonly kind: 'ready-to-merge'; readonly row: BoardItemRow })
-  | (NeedsYouItemBase & { readonly kind: 'needs-human'; readonly row: BoardItemRow })
-  | (NeedsYouItemBase & { readonly kind: 'blocked'; readonly row: BoardItemRow })
-  | (NeedsYouItemBase & { readonly kind: 'budget'; readonly note: BudgetNote })
-  | (NeedsYouItemBase & { readonly kind: 'held'; readonly held: TickHeld })
-  | (NeedsYouItemBase & { readonly kind: 'stalled'; readonly claim: TickClaim })
-  | (NeedsYouItemBase & { readonly kind: 'stage-question'; readonly sessionKey: SessionKey; readonly permissionId: string; readonly questions: readonly AskQuestion[] })
-  | (NeedsYouItemBase & { readonly kind: 'stage-questions' | 'stage-blocked'; readonly sessionKey: SessionKey; readonly text: string | null })
-  | (NeedsYouItemBase & { readonly kind: 'stage-denial'; readonly denial: StageDenial })
-  | (NeedsYouItemBase & { readonly kind: 'stage-interrupted'; readonly interrupted: InterruptedStage })
-  | (NeedsYouItemBase & { readonly kind: 'half-labelled'; readonly repair: TickLabelRepair })
+type RowNeedsYouKind = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'blocked'
 
 // Every other stage key carries no "needs you" kind at all.
 const ROW_KIND: Readonly<Partial<Record<string, RowNeedsYouKind>>> = {

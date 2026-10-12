@@ -12,7 +12,7 @@ const ROLE_CLASS = {
   'diff-del': 'text-syntax-keyword',
 } as const
 
-export interface CodeBlockProps {
+interface CodeBlockProps {
   readonly code: string
   readonly language: string | null
   readonly className?: string

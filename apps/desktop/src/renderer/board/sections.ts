@@ -1,29 +1,27 @@
 // The Board's three-section split — Waiting on you, In progress, Queued —
 // each optionally broken into phase or repo sub-groups.
 import { needsYouReasonOf } from '@/renderer/board/needs-you'
-import type { BoardItemRow } from '@/types/board'
+import type { BoardGroupBy, BoardItemRow } from '@/types/board'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import type { RepoId } from '@/utils/repos'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
 
-export type BoardGroupBy = 'phase' | 'repo'
-
-export interface BoardSubGroup {
+interface BoardSubGroup {
   readonly key: string
   readonly name: string
   readonly rows: readonly BoardItemRow[]
 }
 
-export type BoardSectionKey = 'waiting-on-you' | 'in-progress' | 'queued'
+type BoardSectionKey = 'waiting-on-you' | 'in-progress' | 'queued'
 
-export interface BoardSection {
+interface BoardSection {
   readonly key: BoardSectionKey
   readonly name: string
   readonly count: number
   readonly subGroups: readonly BoardSubGroup[]
 }
 
-export interface BoardSectionsParams {
+interface BoardSectionsParams {
   readonly group: BoardGroupBy
   // null means every repository.
   readonly repo: RepoId | null

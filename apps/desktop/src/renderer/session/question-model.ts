@@ -1,12 +1,6 @@
 // Pure selection state for the question card, folded into the answers record the SDK itself expects.
 import type { AskQuestion } from '@/utils/hosting/controls'
-
-export interface QuestionState {
-  readonly selected: ReadonlySet<string>
-  readonly other: string
-}
-
-export type QuestionsState = readonly QuestionState[]
+import type { QuestionsState, QuestionState } from '@/types/session'
 
 export function initialState(questions: readonly AskQuestion[]): QuestionsState {
   return questions.map(() => ({ selected: new Set<string>(), other: '' }))

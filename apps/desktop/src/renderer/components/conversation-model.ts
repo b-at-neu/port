@@ -1,42 +1,12 @@
 // Pure `TranscriptEntry` → view-model mapping, shared by the live session
 // view and the on-disk transcript view. `buildRow`'s exact signature is pinned by `scripts/checks/desktop-renderer.ts`.
-import type { DiffHunk, FileDiff, Payload, ToolDetail, TranscriptEntry } from '@/utils/sessions/transcript'
+import type { DiffHunk, FileDiff, Payload, TranscriptEntry } from '@/utils/sessions/transcript'
+import type { GroupedNode, PayloadView, RowView, ToolResultView } from '@/types/components'
 
 export const PROMPT_CLAMP_LINES = 12
 
-export interface PayloadView {
-  readonly text: string
-  readonly omittedChars: number
-}
-
 function payloadView(payload: Payload): PayloadView {
   return { text: payload.text, omittedChars: payload.omittedChars }
-}
-
-export type ToolResultView = { readonly kind: 'none' } | { readonly kind: 'ok'; readonly payload: PayloadView } | { readonly kind: 'error'; readonly payload: PayloadView }
-
-export type RowView =
-  | { readonly kind: 'user-text'; readonly uuid: string; readonly text: PayloadView }
-  | { readonly kind: 'assistant-text'; readonly uuid: string; readonly text: PayloadView }
-  | { readonly kind: 'thinking'; readonly uuid: string; readonly wordCount: number; readonly text: PayloadView }
-  | {
-      readonly kind: 'tool-call'
-      readonly uuid: string
-      readonly name: string
-      readonly headline: string
-      readonly input: PayloadView
-      readonly result: ToolResultView
-      readonly diff: FileDiff | null
-      readonly detail: ToolDetail | null
-    }
-  | { readonly kind: 'meta'; readonly uuid: string; readonly label: string }
-
-/** One grouped row — a tool call's own children, nested recursively, by `parentToolUseId` matching an earlier row's `toolUseId`. */
-export interface GroupedNode {
-  readonly entry: TranscriptEntry
-  readonly children: readonly GroupedNode[]
-  /** `true` when this node's own `parentToolUseId` named a row no longer in the window — its own children still render, just without their parent's row. */
-  readonly orphanSubagent: boolean
 }
 
 function wordCount(text: string): number {

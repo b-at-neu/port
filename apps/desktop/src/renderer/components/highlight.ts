@@ -32,9 +32,9 @@ interface HastRoot {
 
 export const MAX_HIGHLIGHT_CHARS = 20_000
 
-export type SyntaxRole = 'keyword' | 'string' | 'comment' | 'constant' | 'function' | 'diff-add' | 'diff-del'
+type SyntaxRole = 'keyword' | 'string' | 'comment' | 'constant' | 'function' | 'diff-add' | 'diff-del'
 
-export interface HighlightRun {
+interface HighlightRun {
   readonly text: string
   readonly role: SyntaxRole | null
 }

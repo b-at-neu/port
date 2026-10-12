@@ -7,7 +7,7 @@ import { Button } from '@/renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { exactTime, relativeAge } from '@/renderer/backlog/group'
 
-export interface NeedsYouItemProps {
+interface NeedsYouItemProps {
   readonly leadCopy: string
   readonly repo: string | null
   readonly at: string | null

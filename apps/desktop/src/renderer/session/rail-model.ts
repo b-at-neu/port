@@ -3,8 +3,9 @@
 // No DOM here; `rail.ts` renders from these.
 import type { HostedSessionSnapshot, SessionKey, SessionRateLimit } from '@/types/hosting'
 import { END_COPY } from '@/renderer/session/copy'
+import type { UsageNotice } from '@/types/session'
 
-export interface RailRowStatus {
+interface RailRowStatus {
   readonly glyph: string
   readonly word: string
 }
@@ -53,12 +54,6 @@ export function capacityLine(open: number, limit: number): string {
   if (open < limit) return `${String(open)} of ${String(limit)} open`
   if (open === limit) return `${String(open)} of ${String(limit)} open — close one to start another`
   return `${String(open)} of ${String(limit)} open — close ${String(open - limit)} to start another`
-}
-
-export interface UsageNotice {
-  readonly status: Extract<SessionRateLimit['status'], 'warning' | 'rejected'>
-  readonly window: SessionRateLimit['window']
-  readonly resetsAt: string | null
 }
 
 /** The newest reading by `observedAt` across every session — every open

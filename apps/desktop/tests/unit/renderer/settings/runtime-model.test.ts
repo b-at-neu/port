@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { runtimeDiagnosisModel } from '@/renderer/settings/runtime-model'
 import type { RuntimePreflight, RuntimeProbe } from '@/types/runtime'
+import type { RepoId } from '@/utils/repos'
 
 function preflight(overrides: Partial<RuntimePreflight> = {}): RuntimePreflight {
   return {
@@ -27,7 +28,7 @@ function probe(overrides: Partial<RuntimeProbe> = {}): RuntimeProbe {
   }
 }
 
-const READY_REPO = { id: 'repo-1', repo: 'o/n' }
+const READY_REPO = { id: 'repo-1' as RepoId, repo: 'o/n' }
 
 describe('runtimeDiagnosisModel', () => {
   it('unverified is idle with no action disabled when a repo is ready', () => {

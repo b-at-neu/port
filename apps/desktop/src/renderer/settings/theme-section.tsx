@@ -4,7 +4,7 @@
 // `useSyncExternalStore`.
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/renderer/components/ui/select'
 import { useThemePreference } from '@/renderer/theme/store'
-import type { ThemePreference } from '@/renderer/theme/store'
+import type { ThemePreference } from '@/types/theme'
 
 const LABEL: Readonly<Record<ThemePreference, string>> = {
   system: 'System',

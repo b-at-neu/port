@@ -2,16 +2,17 @@
 // board's own `BoardSnapshot` into the Sources, Labels, Config sections.
 import type { BoardSnapshot, RepositoryHealth, SourceKind } from '@/types/board'
 import { SOURCE_KINDS } from '@/types/board'
+import type { ModuleFlagName, OverviewModuleFlag } from '@/types/repositories'
 import type { LabelKey, LabelSource, VocabularyProblem, VocabularyVerdict } from '@/utils/labels/vocabulary'
 import type { AppliedOverride, RepoId, ResolvedRepoConfig } from '@/utils/repos'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
 
-export interface OverviewSourceSection {
+interface OverviewSourceSection {
   readonly kind: SourceKind
   readonly health: RepositoryHealth[SourceKind]
 }
 
-export interface OverviewLabelRow {
+interface OverviewLabelRow {
   readonly name: string
   readonly key: LabelKey
   readonly roleDisplay: string
@@ -19,21 +20,14 @@ export interface OverviewLabelRow {
   readonly present: boolean | null
 }
 
-export interface OverviewLabels {
+interface OverviewLabels {
   readonly verdict: VocabularyVerdict
   readonly unverifiedReason: string | undefined
   readonly problems: readonly VocabularyProblem[]
   readonly rows: readonly OverviewLabelRow[]
 }
 
-export type ModuleFlagName = keyof ResolvedRepoConfig['modules']
-
-export interface OverviewModuleFlag {
-  readonly name: ModuleFlagName
-  readonly on: boolean
-}
-
-export interface OverviewHealth {
+interface OverviewHealth {
   readonly sources: readonly OverviewSourceSection[] | null
   readonly rateLimit: { readonly remaining: number; readonly resetAt: string } | null
   readonly labels: OverviewLabels | null

@@ -1,12 +1,10 @@
 // Pure decision logic for the New session dialog — folder ordering, preselection, and the
 // worktree checkbox's forced/disabled/free state. No React, no IPC.
-import type { RepoId } from '@/utils/repos'
 import type { FolderEntry, FolderId } from '@/types/workspace'
 import type { HostedSessionSnapshot } from '@/types/hosting'
+import type { NewSessionPreselect } from '@/types/session'
 
-export type NewSessionPreselect = { readonly kind: 'repo'; readonly repoId: RepoId } | { readonly kind: 'path'; readonly path: string } | null
-
-export interface OrderedFolders {
+interface OrderedFolders {
   readonly repos: readonly FolderEntry[]
   readonly recents: readonly FolderEntry[]
 }
@@ -53,7 +51,7 @@ export function initialFolderId(folders: readonly FolderEntry[], preselect: NewS
   return (latest ?? folders[0] ?? null)?.id ?? null
 }
 
-export type WorktreeControl = { readonly kind: 'free' } | { readonly kind: 'forced-on'; readonly reason: string } | { readonly kind: 'disabled-off'; readonly reason: string }
+type WorktreeControl = { readonly kind: 'free' } | { readonly kind: 'forced-on'; readonly reason: string } | { readonly kind: 'disabled-off'; readonly reason: string }
 
 const NOT_GIT_REASON = "This folder isn't a git repository."
 const BUSY_REASON = 'Another session is already working in this folder.'

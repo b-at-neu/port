@@ -5,9 +5,9 @@ import type { LiveBlock, SessionAttachResult, SessionEntriesDelta, SessionHistor
 import type { EntryPatch, TranscriptEntry } from '@/utils/sessions/transcript'
 import { accept, drainBuffered } from '@/renderer/session/sequence'
 import { sharedSubscriptions } from '@/renderer/data/subscriptions'
-import type { Subscriptions } from '@/renderer/data/subscriptions'
+import type { Subscriptions } from '@/types/data'
 
-export interface SessionEntriesSnapshot {
+interface SessionEntriesSnapshot {
   readonly entries: readonly TranscriptEntry[]
   readonly firstIndex: number
   readonly live: LiveBlock | null
@@ -62,11 +62,11 @@ function ingestDelta(state: EntriesState, delta: SessionEntriesDelta): void {
   applyPartial(state, delta)
 }
 
-export interface EntriesRegistryDeps {
+interface EntriesRegistryDeps {
   readonly sessionAttach: (sessionKey: SessionKey) => Promise<SessionAttachResult>
 }
 
-export interface EntriesRegistry {
+interface EntriesRegistry {
   getSnapshot(key: SessionKey): SessionEntriesSnapshot
   subscribe(key: SessionKey, listener: () => void): () => void
   handlePush(delta: SessionEntriesDelta): void

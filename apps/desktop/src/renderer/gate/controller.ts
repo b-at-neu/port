@@ -7,28 +7,7 @@
 // gone along with the claim itself.
 import { invoke } from '@/renderer/data/invoke'
 import type { RepoId } from '@/utils/repos'
-import type { GateAnswerResponse, GateDecision, GatePreflight, GateVerdict } from '@/types/gate'
-import type { OwnershipSummary } from '@/types/writes'
-
-type AnswerableVerdict = Extract<GateVerdict, { readonly kind: 'answerable' }>
-type RefusalVerdict = Exclude<GateVerdict, { readonly kind: 'answerable' }>
-
-export type GateState =
-  | { readonly step: 'closed' }
-  | { readonly step: 'loading'; readonly repoId: RepoId; readonly number: number }
-  | { readonly step: 'reviewing'; readonly repoId: RepoId; readonly preflight: GatePreflight; readonly verdict: AnswerableVerdict; readonly ownership: OwnershipSummary }
-  | { readonly step: 'feedback'; readonly repoId: RepoId; readonly preflight: GatePreflight; readonly verdict: AnswerableVerdict; readonly ownership: OwnershipSummary; readonly text: string }
-  | { readonly step: 'answering'; readonly repoId: RepoId; readonly number: number }
-  | { readonly step: 'refused'; readonly repoId: RepoId; readonly number: number; readonly verdict: RefusalVerdict }
-  | { readonly step: 'preflight-failed'; readonly repoId: RepoId; readonly number: number; readonly message: string }
-  | {
-      readonly step: 'result'
-      readonly repoId: RepoId
-      readonly preflight: GatePreflight
-      readonly decision: GateDecision
-      readonly feedback: string | null
-      readonly response: GateAnswerResponse
-    }
+import type { GateDecision, GatePreflight, GateState } from '@/types/gate'
 
 let state: GateState = { step: 'closed' }
 const listeners = new Set<() => void>()

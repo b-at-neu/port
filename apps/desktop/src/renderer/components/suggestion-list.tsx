@@ -1,14 +1,7 @@
 // The shared listbox the `/` and `@` lists both render from — presentation only; the textarea owns keyboard handling.
-import type { ReactNode } from 'react'
+import type { SuggestionRow } from '@/types/components'
 
-export interface SuggestionRow {
-  readonly key: string
-  /** A row that cannot be selected still renders, but is skipped by selection — see `selectableKeys`. */
-  readonly content: ReactNode
-  readonly title?: string
-}
-
-export interface SuggestionListProps {
+interface SuggestionListProps {
   readonly id: string
   readonly rows: readonly SuggestionRow[]
   readonly selectedIndex: number | null

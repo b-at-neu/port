@@ -13,9 +13,8 @@ import { useIpcMutation, useIpcQuery } from '@/renderer/data/query'
 import { StatusPill } from '@/renderer/components/status-pill'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { runtimeDiagnosisModel } from '@/renderer/settings/runtime-model'
-import type { ReadyRepo } from '@/renderer/settings/runtime-model'
+import type { ReadyRepo } from '@/types/repositories'
 import type { ReposListResponse } from '@/types/ipc'
-import type { RepoId } from '@/utils/repos'
 import type { RuntimeProbe } from '@/types/runtime'
 
 function firstReadyRepo(result: ReposListResponse | undefined): ReadyRepo | null {
@@ -63,7 +62,7 @@ export function RuntimeSection() {
     setProbeError(false)
     if (readyRepo !== null) {
       try {
-        const result = await probeMutation.mutateAsync({ repoId: readyRepo.id as RepoId })
+        const result = await probeMutation.mutateAsync({ repoId: readyRepo.id })
         setProbe(result)
       } catch {
         setProbeError(true)

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { setupModel } from '@/renderer/setup/model'
-import type { QueryState } from '@/renderer/setup/model'
+import type { QueryState } from '@/types/setup'
 import type { RuntimePreflight, RuntimeProbe } from '@/types/runtime'
 import type { GhStatus } from '@/types/gh'
 import type { ReposListResponse } from '@/types/ipc'
