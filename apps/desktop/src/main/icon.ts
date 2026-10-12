@@ -1,6 +1,5 @@
 // Pure path resolution for the app's window/dock icon — no `electron` import, so it is testable
-// without a running app. `scripts/icon.mjs` is the one place that renders the PNG files this
-// points at; this module only decides which path (if any) applies for a given platform/package state.
+// without a running app. `scripts/icon.mjs` renders the PNG files this points at.
 import { join } from 'node:path'
 
 export interface IconPathInput {
