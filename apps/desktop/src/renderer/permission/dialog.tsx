@@ -8,7 +8,7 @@ import { usePermissionState, answer, setMessage } from '@/renderer/permission/st
 import { useSelectedSession } from '@/renderer/session/selection'
 import { useIpcQuery } from '@/renderer/data/query'
 import { sessionDisplayLabel, startedClock } from '@/utils/hosting/label'
-import { folderLabel } from '@/renderer/workspace/label'
+import { folderLabel } from '@/utils/workspace/label'
 import type { RepositoryEntry } from '@/utils/repos'
 import {
   ALLOW_ONCE_LABEL,

@@ -79,21 +79,27 @@ describe('notificationFor', () => {
 })
 
 describe('createNotifier', () => {
-  it('fires only when the app is unfocused', () => {
-    const show = vi.fn()
-    const notifier = createNotifier({ isAppFocused: () => true, show, repoLabel: () => 'widgets' })
+  function resolvedLabel(label: string): () => Promise<string> {
+    return () => Promise.resolve(label)
+  }
+
+  it('fires only when the app is unfocused', async () => {
+    const show = vi.fn<(notification: { title: string }, snapshot: HostedSessionSnapshot) => void>()
+    const repoLabel = vi.fn(resolvedLabel('widgets'))
+    const notifier = createNotifier({ isAppFocused: () => true, show, repoLabel })
     notifier.observe(snapshot({ phase: 'streaming' }))
     notifier.observe(snapshot({ phase: 'ready' }))
+    await vi.waitFor(() => expect(repoLabel).not.toHaveBeenCalled())
     expect(show).not.toHaveBeenCalled()
   })
 
-  it('fires once when unfocused, and never replays after refocus', () => {
+  it('fires once when unfocused, and never replays after refocus', async () => {
     let focused = false
-    const show = vi.fn()
-    const notifier = createNotifier({ isAppFocused: () => focused, show, repoLabel: () => 'widgets' })
+    const show = vi.fn<(notification: { title: string }, snapshot: HostedSessionSnapshot) => void>()
+    const notifier = createNotifier({ isAppFocused: () => focused, show, repoLabel: resolvedLabel('widgets') })
     notifier.observe(snapshot({ phase: 'streaming' }))
     notifier.observe(snapshot({ phase: 'ready' }))
-    expect(show).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(show).toHaveBeenCalledTimes(1))
 
     focused = true
     notifier.observe(snapshot({ phase: 'ready' }))
@@ -102,11 +108,39 @@ describe('createNotifier', () => {
     expect(show).toHaveBeenCalledTimes(1)
   })
 
-  it('drops an ended session from its baseline, so a stale previous never lingers', () => {
-    const show = vi.fn()
-    const notifier = createNotifier({ isAppFocused: () => false, show, repoLabel: () => 'widgets' })
+  it('drops an ended session from its baseline, so a stale previous never lingers', async () => {
+    const show = vi.fn<(notification: { title: string }, snapshot: HostedSessionSnapshot) => void>()
+    const notifier = createNotifier({ isAppFocused: () => false, show, repoLabel: resolvedLabel('widgets') })
     notifier.observe(snapshot({ phase: 'streaming' }))
     notifier.observe(snapshot({ phase: 'ended', end: { reason: 'completed', exitCode: 0, signal: null, message: null, diagnosis: null } }))
-    expect(show).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(show).toHaveBeenCalledTimes(1))
+  })
+
+  it('never calls the label lookup when nothing fires', () => {
+    const repoLabel = vi.fn(resolvedLabel('widgets'))
+    const notifier = createNotifier({ isAppFocused: () => false, show: vi.fn(), repoLabel })
+    const only = snapshot({ phase: 'streaming' })
+    notifier.observe(only)
+    notifier.observe(only)
+    expect(repoLabel).not.toHaveBeenCalled()
+  })
+
+  it('uses the resolved label in the shown title', async () => {
+    const show = vi.fn<(notification: { title: string }, snapshot: HostedSessionSnapshot) => void>()
+    const notifier = createNotifier({ isAppFocused: () => false, show, repoLabel: resolvedLabel('widgets') })
+    notifier.observe(snapshot({ phase: 'streaming' }))
+    notifier.observe(snapshot({ phase: 'ready' }))
+    await vi.waitFor(() => expect(show).toHaveBeenCalledTimes(1))
+    expect(show.mock.calls[0]?.[0].title).toContain('widgets')
+  })
+
+  it('falls back to the folder basename, never null, when the lookup rejects', async () => {
+    const show = vi.fn<(notification: { title: string }, snapshot: HostedSessionSnapshot) => void>()
+    const notifier = createNotifier({ isAppFocused: () => false, show, repoLabel: () => Promise.reject(new Error('lookup failed')) })
+    notifier.observe(snapshot({ phase: 'streaming' }))
+    notifier.observe(snapshot({ phase: 'ready' }))
+    await vi.waitFor(() => expect(show).toHaveBeenCalledTimes(1))
+    expect(show.mock.calls[0]?.[0].title).toContain('repo')
+    expect(show.mock.calls[0]?.[0].title).not.toContain('null')
   })
 })
