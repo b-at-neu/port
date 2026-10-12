@@ -1,11 +1,11 @@
 import { app, BrowserWindow, Menu } from 'electron'
-import { statSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import { registerIpc, broadcastAppCommand } from '@/main/ipc'
 import { registerFixtureIpc } from '@/main/fixtures'
 import { fixtureMode } from '@/main/fixtures/mode'
 import { e2eMode } from '@/main/e2e/mode'
 import { setE2ERoute } from '@/main/platform/run'
+import { statOwnerMode } from '@/main/platform/files'
 import type { PipelineWatcher } from '@/types/state'
 import type { HostedStore } from '@/types/hosting'
 import { createQuitGuard } from '@/main/dispatch/quit'
@@ -27,20 +27,18 @@ function withTimeout(promise: Promise<void>, ms: number): Promise<void> {
   return Promise.race([promise, deadline])
 }
 
-// A misconfigured `chrome-sandbox` helper (see `ensure-sandbox.mjs`) falls back to `--no-sandbox`;
-// once it's root:4755, the real sandbox runs instead, which AppArmor-hardened distros require.
-if (!app.isPackaged && process.platform === 'linux') {
-  let stat: { uid: number; mode: number } | null = null
-  try {
-    const result = statSync(chromeSandboxPath(process.execPath), { throwIfNoEntry: false })
-    stat = result ? { uid: result.uid, mode: result.mode } : null
-  } catch {
-    stat = null
-  }
+// A misconfigured `chrome-sandbox` helper falls back to `--no-sandbox`; once it's root:4755
+// the real sandbox runs instead, which AppArmor-hardened distros require (see ensure-sandbox.mjs).
+async function configureSandboxSwitch(): Promise<void> {
+  if (app.isPackaged || process.platform !== 'linux') return
+  const stat = await statOwnerMode(chromeSandboxPath(process.execPath))
   if (needsNoSandbox(process.platform, app.isPackaged, stat)) {
     app.commandLine.appendSwitch('no-sandbox')
   }
 }
+
+// Resolved before `app.whenReady()` below — `commandLine.appendSwitch` is a no-op once ready.
+const sandboxConfigured = configureSandboxSwitch()
 
 // An `on` result relocates `userData` before the single-instance lock is ever requested, so a
 // fixture run never contends for the operator's own lock or touches their real profile.
@@ -129,7 +127,7 @@ if (fixture.kind === 'invalid') {
       }
     }
 
-    void app.whenReady().then(() => {
+    void sandboxConfigured.then(() => app.whenReady()).then(() => {
       // Never `app.setName('port')` here — that would move the dev
       // `userData` directory away from the operator's real profile.
       app.setAboutPanelOptions({ applicationName: 'port', applicationVersion: app.getVersion(), credits: [ABOUT_POWERED_BY, ABOUT_NOTICE].join('\n') })

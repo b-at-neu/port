@@ -1,9 +1,5 @@
-// On Linux, Electron's `chrome-sandbox` ships owner:owner 0755 after every `pnpm install`,
-// since setting its setuid bit needs root — `pnpm install` never runs as root. Chromium's zygote
-// needs that bit on AppArmor-hardened distros (Ubuntu 23.10+) even with `--no-sandbox`, so this
-// fixes it once per resolved `electron` path via a single interactive `sudo` prompt. The check
-// below is duplicated from `src/main/sandbox.ts` by design — scripts run untranspiled, so that
-// file stays the tested definition; this is the thin, I/O-only mirror.
+// Fixes chrome-sandbox's setuid bit via one sudo prompt (AppArmor-hardened distros need it even
+// with --no-sandbox). The permission check mirrors `src/main/sandbox.ts`, untranspiled here.
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { statSync } from 'node:fs'
