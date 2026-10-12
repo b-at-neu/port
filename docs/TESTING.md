@@ -30,6 +30,19 @@ The script reports full schema validation as **skipped**, because a draft 2020-1
 - Shared data, fakes and helpers used by more than one test live in `apps/desktop/tests/fixtures/`. A helper used by one test stays in that test.
 - Tests import source with `@/…`, never `../`. vitest reads tests only from `tests/unit/`.
 
+## Desktop E2E flows
+
+`apps/desktop/tests/e2e/` (#442) runs the **real, built** desktop app — fixtures off, real `registerIpc()` — with every `gh`/`git`/`node`/`claude` call routed to one fake CLI (`tests/e2e/fake/cli.mjs`) instead of the host's own binaries. It drives the app with Playwright's Electron support, asserting both the recorded calls and the resulting screen: clicks, dialogs, and IPC round-trips that no unit test or the visual harness's screenshot-only capture ever exercises.
+
+This is CI-only (`.github/workflows/e2e.yml`, a three-OS matrix) and never named in `commands.checks` — it builds and launches Electron, which an agent's own check run must never do. Run it locally with `pnpm e2e` (`pnpm --filter @port/desktop e2e`, which builds first).
+
+To add a flow:
+
+1. Build its scripted state with `sandboxState` (`tests/e2e/fake/state.mts`) — the only way a flow writes `fake-state.json`.
+2. Drive the UI by role or label (`page.getByRole(...)`), the same as the rest of the suite, never a CSS class a later refactor would break.
+3. Assert both `calls()` (every `gh`/`git` invocation the fake recorded, in order) and `state()` (the fake's own mutated copy of the scripted issues/pulls) through the `E2EApp` the harness (`tests/e2e/harness/app.mts`) returns, plus the resulting screen.
+4. Script every new call shape the flow needs in `cli.mjs` — an unscripted `gh`/`git` call exits 1 with `fake: unscripted <command> <args>` on stderr, and the flow's own assertion against an incomplete `state()` is what surfaces it as a failure.
+
 ## Layer 2 — artifact assertions on real runs
 
 The output formats live in `FORMATS.md` prose and, until now, were asserted nowhere. The one that matters most is the review heading — the cockpit **counts** occurrences of the literal `## Code Review` to derive the cycle number, so renaming it silently breaks the cycle cap and the escalating bar, with no error anywhere. That is why the literal prefix is asserted separately from the rest of the heading.

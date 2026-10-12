@@ -3,6 +3,8 @@ import { isAbsolute, join } from 'node:path'
 import { registerIpc, broadcastAppCommand } from '@/main/ipc'
 import { registerFixtureIpc } from '@/main/fixtures'
 import { fixtureMode } from '@/main/fixtures/mode'
+import { e2eMode } from '@/main/e2e/mode'
+import { setE2ERoute } from '@/main/platform/run'
 import type { PipelineWatcher } from '@/main/state/watcher'
 import type { HostedStore } from '@/main/hosting/store'
 import { createQuitGuard } from '@/main/dispatch/quit'
@@ -32,9 +34,13 @@ if (!app.isPackaged) {
 // An `on` result relocates `userData` before the single-instance lock is ever requested, so a
 // fixture run never contends for the operator's own lock or touches their real profile.
 const fixture = fixtureMode(process.env, app.isPackaged, isAbsolute)
+const e2e = e2eMode(process.env, app.isPackaged, isAbsolute)
 
 if (fixture.kind === 'invalid') {
   console.error(`[fixtures] ${fixture.reason}`)
+  app.exit(1)
+} else if (e2e.kind === 'invalid') {
+  console.error(`[e2e] ${e2e.reason}`)
   app.exit(1)
 } else {
   if (fixture.kind === 'ignored') {
@@ -42,6 +48,13 @@ if (fixture.kind === 'invalid') {
   }
   if (fixture.kind === 'on') {
     app.setPath('userData', fixture.userData)
+  }
+  if (e2e.kind === 'ignored') {
+    console.warn('[e2e] PORT_E2E is set but ignored in a packaged build')
+  }
+  if (e2e.kind === 'on') {
+    app.setPath('userData', e2e.userData)
+    setE2ERoute({ fake: e2e.fake })
   }
 
   const gotLock = app.requestSingleInstanceLock()

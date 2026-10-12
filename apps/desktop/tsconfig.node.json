@@ -24,6 +24,7 @@
     "tests/fixtures/**/*",
     "tests/visual/**/*",
     "tests/smoke/**/*",
+    "tests/e2e/**/*",
     "../../scripts/port-tick/gates.ts",
     "../../scripts/port-tick/contention.ts",
     "../../scripts/port-tick/checks.ts",

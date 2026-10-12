@@ -17,6 +17,7 @@
     "build": "pnpm -r build",
     "dist": "pnpm --filter @port/desktop dist",
     "screenshots": "pnpm --filter @port/desktop screenshots",
+    "e2e": "pnpm --filter @port/desktop e2e",
     "typecheck": "pnpm -r typecheck",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "lint": "pnpm -r lint",

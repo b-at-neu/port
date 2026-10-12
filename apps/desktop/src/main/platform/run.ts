@@ -23,6 +23,20 @@ export type CommandResult =
 const DEFAULT_TIMEOUT_MS = 30_000
 const DEFAULT_MAX_BYTES = 32 * 1024 * 1024
 
+export interface E2ERoute {
+  readonly fake: string
+}
+
+// Module-level, set once from `index.ts` before `registerIpc()` — never re-read from
+// `process.env` per call. `null` means E2E mode is off.
+let e2eRoute: E2ERoute | null = null
+
+/** Called once, from `index.ts`, before `registerIpc()`. Every `runCommand` call after this
+ *  routes to the fake instead of resolving the real executable with `which`. */
+export function setE2ERoute(route: E2ERoute | null): void {
+  e2eRoute = route
+}
+
 export interface SpawnOutcome {
   readonly stdout: string
   readonly stderr: string
@@ -154,6 +168,13 @@ async function cwdExists(cwd: string): Promise<boolean> {
 export async function runCommand(command: KnownCommand, args: readonly string[], options: RunCommandOptions = {}): Promise<CommandResult> {
   if (options.cwd !== undefined && !(await cwdExists(options.cwd))) {
     return { ok: false, kind: 'cwd-missing', cwd: options.cwd }
+  }
+
+  // E2E mode: every known command routes to the fake through Electron's own binary run as Node,
+  // so `which` is never consulted and a host `gh`/`git` can never be reached by accident.
+  if (e2eRoute !== null) {
+    const env = { ...(options.env ?? process.env), ELECTRON_RUN_AS_NODE: '1' }
+    return runExecutable(process.execPath, [e2eRoute.fake, command, ...args], { ...options, env })
   }
 
   const envForResolution = options.whichEnv ?? options.env ?? process.env

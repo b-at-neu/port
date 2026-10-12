@@ -21,7 +21,7 @@ export default tseslint.config(
           // eslint/*.mjs has no imports (ENGINEERING §1) and needs no type
           // information of its own — same default-project carve-out as the
           // config files above it.
-          allowDefaultProject: ['*.config.mts', '*.config.mjs', 'scripts/*.mjs', 'eslint/*.mjs']
+          allowDefaultProject: ['*.config.mts', '*.config.mjs', 'scripts/*.mjs', 'eslint/*.mjs', 'tests/e2e/fake/*.mjs']
         },
         tsconfigRootDir: import.meta.dirname
       }
@@ -38,7 +38,7 @@ export default tseslint.config(
     }
   },
   {
-    files: ['*.config.mts', '*.config.mjs', 'scripts/*.mjs', 'eslint/*.mjs'],
+    files: ['*.config.mts', '*.config.mjs', 'scripts/*.mjs', 'eslint/*.mjs', 'tests/e2e/fake/*.mjs'],
     ...tseslint.configs.disableTypeChecked,
     languageOptions: {
       ...tseslint.configs.disableTypeChecked.languageOptions,
@@ -113,7 +113,7 @@ export default tseslint.config(
   // parameter (`test.afterEach(async ({}, testInfo) => …)`); that shape is
   // the framework's own contract, never a lint complaint about real code.
   {
-    files: ['tests/visual/**/*.mts'],
+    files: ['tests/visual/**/*.mts', 'tests/e2e/**/*.mts'],
     rules: {
       'no-empty-pattern': 'off'
     }
