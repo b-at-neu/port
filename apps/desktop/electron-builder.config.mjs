@@ -84,6 +84,9 @@ export default {
     category: 'Development',
     icon: 'build/icon.png',
     maintainer: `${author.name} <${author.email}>`,
+    // Matches the installed `.desktop` filename to `desktopName` (package.json), which doubles
+    // as Electron's runtime app_id/WM_CLASS — otherwise desktop environments can't find the icon.
+    syncDesktopName: true,
   },
   mac: {
     target: 'dmg',

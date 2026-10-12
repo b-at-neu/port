@@ -134,11 +134,7 @@ if (fixture.kind === 'invalid') {
       }
     }
 
-<<<<<<< HEAD
-    void sandboxConfigured.then(() => app.whenReady()).then(() => {
-=======
-    void app.whenReady().then(async () => {
->>>>>>> 8f51b664 (#449 generate the window/dock icon and favicon before dev and build)
+    void sandboxConfigured.then(() => app.whenReady()).then(async () => {
       // Never `app.setName('port')` here — that would move the dev
       // `userData` directory away from the operator's real profile.
       app.setAboutPanelOptions({ applicationName: 'port', applicationVersion: app.getVersion(), credits: [ABOUT_POWERED_BY, ABOUT_NOTICE].join('\n') })
