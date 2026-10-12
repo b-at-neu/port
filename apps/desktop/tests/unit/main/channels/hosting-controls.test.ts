@@ -1,94 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionKey } from '@/types/hosting'
-import type { HostedStore } from '@/main/hosting/store'
 import { resolveSessionControlsSet, resolveSessionPlanAnswer, resolveSessionQuestionAnswer } from '@/main/channels/hosting'
 import type { HostingChannelDeps } from '@/main/channels/hosting'
+import { storeStub } from '../../../fixtures/store'
 
 const SESSION_KEY = 'hosted-1' as SessionKey
-
-function storeStub(overrides: Partial<HostedStore> = {}): HostedStore {
-  return {
-    start: () => {
-      throw new Error('unused in this test')
-    },
-    send: () => {
-      throw new Error('unused in this test')
-    },
-    interrupt: () => {
-      throw new Error('unused in this test')
-    },
-    close: () => {
-      throw new Error('unused in this test')
-    },
-    attach: () => {
-      throw new Error('unused in this test')
-    },
-    list: () => {
-      throw new Error('unused in this test')
-    },
-    closeAll: () => {
-      throw new Error('unused in this test')
-    },
-    answerPermission: () => {
-      throw new Error('unused in this test')
-    },
-    invoke: () => {
-      throw new Error('unused in this test')
-    },
-    dismiss: () => {
-      throw new Error('unused in this test')
-    },
-    snapshotOf: () => {
-      throw new Error('unused in this test')
-    },
-    cwdOf: () => {
-      throw new Error('cwdOf should not be invoked in this case')
-    },
-    capacity: () => {
-      throw new Error('unused in this test')
-    },
-    setLimit: () => {
-      throw new Error('unused in this test')
-    },
-    defaults: () => {
-      throw new Error('unused in this test')
-    },
-    setDefaults: () => {
-      throw new Error('unused in this test')
-    },
-    rename: () => {
-      throw new Error('unused in this test')
-    },
-    restorable: () => {
-      throw new Error('unused in this test')
-    },
-    restore: () => {
-      throw new Error('unused in this test')
-    },
-    discardRestorable: () => {
-      throw new Error('unused in this test')
-    },
-    marks: () => {
-      throw new Error('unused in this test')
-    },
-    setMark: () => {
-      throw new Error('unused in this test')
-    },
-    setControls: () => {
-      throw new Error('setControls should not be invoked in this case')
-    },
-    answerQuestion: () => {
-      throw new Error('answerQuestion should not be invoked in this case')
-    },
-    answerPlan: () => {
-      throw new Error('answerPlan should not be invoked in this case')
-    },
-    stopTask: () => {
-      throw new Error('unused in this test')
-    },
-    ...overrides,
-  }
-}
 
 function depsWith(overrides: Partial<HostingChannelDeps> = {}): HostingChannelDeps {
   return {

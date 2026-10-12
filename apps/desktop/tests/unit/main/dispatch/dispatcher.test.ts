@@ -11,6 +11,7 @@ import type { StageLaunchRequest, StageLaunchResult, StageLauncher } from '@/mai
 import { createDispatcher, DISPATCH_PROMPT, promptFor, REFRESH_PROMPT } from '@/main/dispatch/dispatcher'
 import type { CreateDispatcherParams } from '@/main/dispatch/dispatcher'
 import type { OwnershipRead } from '@/main/dispatch/ownership'
+import { DISPATCH_STORE_DEFAULTS, storeStub } from '../../../fixtures/store'
 
 const REPO_ID = 'repo-a' as RepoId
 const VOCABULARY = resolveVocabulary({})
@@ -97,63 +98,7 @@ function sessionSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): Hosted
 }
 
 function fakeStore(overrides: Partial<HostedStore> = {}): HostedStore {
-  return {
-    start: () => {
-      throw new Error('start should not be invoked in this case')
-    },
-    send: () => ({ ok: true as const, uuid: 'u1', queued: true }),
-    interrupt: () => {
-      throw new Error('interrupt should not be invoked in this case')
-    },
-    close: () => Promise.resolve({ ok: true }),
-    attach: () => {
-      throw new Error('attach should not be invoked in this case')
-    },
-    list: () => [],
-    closeAll: () => Promise.resolve(),
-    answerPermission: () => {
-      throw new Error('answerPermission should not be invoked in this case')
-    },
-    invoke: () => {
-      throw new Error('invoke should not be invoked in this case')
-    },
-    dismiss: () => {
-      throw new Error('dismiss should not be invoked in this case')
-    },
-    snapshotOf: () => null,
-    cwdOf: () => null,
-    capacity: () => Promise.resolve({ limit: 4, ceiling: 8 }),
-    setLimit: () => {
-      throw new Error('setLimit should not be invoked in this case')
-    },
-    restorable: () => Promise.resolve([]),
-    restore: () => {
-      throw new Error('restore should not be invoked in this case')
-    },
-    discardRestorable: () => Promise.resolve({ ok: true }),
-    setControls: () => Promise.resolve({ ok: false, kind: 'unknown-session' }),
-    answerQuestion: () => ({ ok: false, kind: 'unknown-session' }),
-    answerPlan: () => ({ ok: false, kind: 'unknown-session' }),
-    defaults: () => {
-      throw new Error('defaults should not be invoked in this case')
-    },
-    setDefaults: () => {
-      throw new Error('setDefaults should not be invoked in this case')
-    },
-    rename: () => {
-      throw new Error('rename should not be invoked in this case')
-    },
-    marks: () => {
-      throw new Error('marks should not be invoked in this case')
-    },
-    setMark: () => {
-      throw new Error('setMark should not be invoked in this case')
-    },
-    stopTask: () => {
-      throw new Error('stopTask should not be invoked in this case')
-    },
-    ...overrides,
-  }
+  return storeStub({ ...DISPATCH_STORE_DEFAULTS, ...overrides })
 }
 
 function fakeLauncher(launch: (request: StageLaunchRequest) => Promise<StageLaunchResult>): StageLauncher {
