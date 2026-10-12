@@ -1,94 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionKey } from '@/types/hosting'
-import type { HostedStore } from '@/main/hosting/store'
 import { resolveSessionFiles, resolveSessionSend } from '@/main/channels/hosting'
 import type { HostingChannelDeps } from '@/main/channels/hosting'
+import { storeStub } from '../../../fixtures/store'
 
 const SESSION_KEY = 'hosted-1' as SessionKey
-
-function storeStub(overrides: Partial<HostedStore> = {}): HostedStore {
-  return {
-    start: () => {
-      throw new Error('start should not be invoked in this case')
-    },
-    send: () => {
-      throw new Error('send should not be invoked in this case')
-    },
-    interrupt: () => {
-      throw new Error('interrupt should not be invoked in this case')
-    },
-    close: () => {
-      throw new Error('close should not be invoked in this case')
-    },
-    attach: () => {
-      throw new Error('attach should not be invoked in this case')
-    },
-    list: () => {
-      throw new Error('list should not be invoked in this case')
-    },
-    closeAll: () => {
-      throw new Error('closeAll should not be invoked in this case')
-    },
-    answerPermission: () => {
-      throw new Error('answerPermission should not be invoked in this case')
-    },
-    invoke: () => {
-      throw new Error('invoke should not be invoked in this case')
-    },
-    dismiss: () => {
-      throw new Error('dismiss should not be invoked in this case')
-    },
-    snapshotOf: () => {
-      throw new Error('snapshotOf should not be invoked in this case')
-    },
-    cwdOf: () => {
-      throw new Error('cwdOf should not be invoked in this case')
-    },
-    capacity: () => {
-      throw new Error('capacity should not be invoked in this case')
-    },
-    setLimit: () => {
-      throw new Error('setLimit should not be invoked in this case')
-    },
-    defaults: () => {
-      throw new Error('defaults should not be invoked in this case')
-    },
-    setDefaults: () => {
-      throw new Error('setDefaults should not be invoked in this case')
-    },
-    rename: () => {
-      throw new Error('rename should not be invoked in this case')
-    },
-    restorable: () => {
-      throw new Error('restorable should not be invoked in this case')
-    },
-    restore: () => {
-      throw new Error('restore should not be invoked in this case')
-    },
-    discardRestorable: () => {
-      throw new Error('discardRestorable should not be invoked in this case')
-    },
-    marks: () => {
-      throw new Error('marks should not be invoked in this case')
-    },
-    setMark: () => {
-      throw new Error('setMark should not be invoked in this case')
-    },
-    setControls: () => {
-      throw new Error('setControls should not be invoked in this case')
-    },
-    answerQuestion: () => {
-      throw new Error('answerQuestion should not be invoked in this case')
-    },
-    answerPlan: () => {
-      throw new Error('answerPlan should not be invoked in this case')
-    },
-    stopTask: () => {
-      throw new Error('stopTask should not be invoked in this case')
-    },
-    ...overrides,
-  }
-}
 
 function depsWith(overrides: Partial<HostingChannelDeps> = {}): HostingChannelDeps {
   return {

@@ -2,50 +2,10 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { HostedStore } from '@/main/hosting/store'
 import { createDispatchRuntime } from '@/main/dispatch/runtime'
+import { DISPATCH_STORE_DEFAULTS, storeStub } from '../../../fixtures/store'
 
-function fakeStore(): HostedStore {
-  return {
-    start: () => {
-      throw new Error('unused in this test')
-    },
-    send: () => ({ ok: true, uuid: 'u', queued: true }),
-    interrupt: () => Promise.reject(new Error('unused')),
-    close: () => Promise.reject(new Error('unused')),
-    attach: () => {
-      throw new Error('unused')
-    },
-    list: () => [],
-    closeAll: () => Promise.resolve(),
-    answerPermission: () => {
-      throw new Error('unused')
-    },
-    invoke: () => {
-      throw new Error('unused')
-    },
-    dismiss: () => {
-      throw new Error('unused')
-    },
-    setControls: () => Promise.reject(new Error('unused')),
-    answerQuestion: () => {
-      throw new Error('unused')
-    },
-    answerPlan: () => {
-      throw new Error('unused')
-    },
-    snapshotOf: () => null,
-    cwdOf: () => null,
-    capacity: () => Promise.resolve({ limit: 4, ceiling: 8 }),
-    setLimit: () => Promise.reject(new Error('unused')),
-    restorable: () => Promise.resolve([]),
-    restore: () => Promise.reject(new Error('unused')),
-    discardRestorable: () => Promise.resolve({ ok: true }),
-    defaults: () => Promise.reject(new Error('unused')),
-    setDefaults: () => Promise.reject(new Error('unused')),
-    rename: () => Promise.reject(new Error('unused')),
-    marks: () => Promise.reject(new Error('unused')),
-    setMark: () => Promise.reject(new Error('unused')),
-    stopTask: () => Promise.reject(new Error('unused')),
-  }
+function fakeStore(overrides: Partial<HostedStore> = {}): HostedStore {
+  return storeStub({ ...DISPATCH_STORE_DEFAULTS, ...overrides })
 }
 
 describe('createDispatchRuntime', () => {
