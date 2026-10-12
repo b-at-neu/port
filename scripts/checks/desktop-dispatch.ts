@@ -94,7 +94,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
     const text = readFileSync(join(root, resolveFile), 'utf8');
     if (!/DISPATCH_COMMANDS/.test(text)) {
       fail('desktop-dispatch', `${resolveFile} never references DISPATCH_COMMANDS — command validation must resolve it by name, never a retyped list`);
-    } else expect(!/\[\s*'run'\s*,\s*'drain'\s*,\s*'pause'\s*,\s*'halt'\s*\]/.test(text), 'desktop-dispatch', `${resolveFile} retypes the command list as a literal array instead of validating against DISPATCH_COMMANDS`);
+    } else expect(!/\[\s*'run'\s*,\s*'drain'\s*,\s*'pause'\s*,\s*'take-over'\s*\]/.test(text), 'desktop-dispatch', `${resolveFile} retypes the command list as a literal array instead of validating against DISPATCH_COMMANDS`);
   }
 
   // --- In halt.ts, runStates.set( precedes stopFor(, which precedes applyItemAction(,

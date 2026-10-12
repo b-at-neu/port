@@ -42,8 +42,8 @@ export const RUN_TARGET: Readonly<Record<RunCommand, RunState>> = {
   pause: 'paused',
 }
 
-/** `halt` carries no `repoId` at all — it pauses every registered repository. `take-over` overwrites a `terminal` ownership record, reached only from the confirmed Take over dialog. */
-export const DISPATCH_COMMANDS = [...RUN_COMMANDS, 'halt', 'take-over'] as const
+/** `take-over` overwrites a `terminal` ownership record, reached only from the confirmed Take over dialog. There is no `halt` command any more — `HaltReport`/`haltDispatch` still exist, scoped to one repository by `pause`. */
+export const DISPATCH_COMMANDS = [...RUN_COMMANDS, 'take-over'] as const
 export type DispatchCommand = (typeof DISPATCH_COMMANDS)[number]
 
 /** The run-state store's own read status — `unread` before the file has ever been read, so a not-yet-loaded store answers every repository as paused, never silently as open. */
@@ -88,14 +88,13 @@ export type HaltReport =
   | { readonly kind: 'aborted'; readonly reason: 'run-state-unwritable'; readonly message: string; readonly path: string }
   | { readonly kind: 'completed'; readonly items: readonly HaltItemOutcome[] }
 
-/** `'dispatch:control'`'s response. `run`/`drain`/`take-over` take ownership first; `drain`'s own write failure surfaces as `persisted: false`. `pause`/`halt` are never refused outright — a failed write surfaces inside `report` instead. */
+/** `'dispatch:control'`'s response. `run`/`drain`/`take-over` take ownership first; `drain`'s own write failure surfaces as `persisted: false`. `pause` is never refused outright — a failed write surfaces inside `report` instead. */
 export type DispatchControlResult =
   | { readonly ok: true; readonly command: 'run'; readonly repoId: RepoId; readonly runState: RepoRunState }
   | { readonly ok: false; readonly command: 'run'; readonly repoId: RepoId; readonly reason: 'terminal-owned' | 'ownership-unreadable' | 'unwritable' | 'unreadable'; readonly message?: string; readonly since?: string; readonly path?: string }
   | { readonly ok: true; readonly command: 'drain'; readonly repoId: RepoId; readonly runState: RepoRunState; readonly persisted: boolean }
   | { readonly ok: false; readonly command: 'drain'; readonly repoId: RepoId; readonly reason: 'terminal-owned' | 'ownership-unreadable' | 'unwritable' | 'unreadable'; readonly message?: string; readonly since?: string; readonly path?: string }
   | { readonly ok: true; readonly command: 'pause'; readonly repoId: RepoId; readonly runState: RepoRunState; readonly report: HaltReport; readonly released: boolean }
-  | { readonly ok: true; readonly command: 'halt'; readonly report: HaltReport; readonly released: boolean }
   | { readonly ok: true; readonly command: 'take-over'; readonly repoId: RepoId; readonly runState: RepoRunState }
   | { readonly ok: false; readonly command: 'take-over'; readonly repoId: RepoId; readonly reason: 'unwritable'; readonly message: string; readonly path: string }
 

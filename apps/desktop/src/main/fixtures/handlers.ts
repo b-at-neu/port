@@ -76,7 +76,6 @@ export function fixtureHandlers(now: Date, scenario: FixtureScenario = 'populate
     'item:decide': () => ({ ok: true, comment: null, labels: { kind: 'no-op' } }),
 
     'dispatch:control': (request) => {
-      if (request.command === 'halt') return { ok: true, command: 'halt', report: { kind: 'completed', items: [] }, released: true }
       if (request.command === 'take-over') return { ok: true, command: 'take-over', repoId: request.repoId, runState: { repoId: request.repoId, state: RUN_TARGET.run, since: now.toISOString() } }
       const runState: RepoRunState = { repoId: request.repoId, state: RUN_TARGET[request.command], since: now.toISOString() }
       if (request.command === 'run') return { ok: true, command: 'run', repoId: request.repoId, runState }

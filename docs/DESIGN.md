@@ -140,7 +140,7 @@ The dark `brand` tile's `#4b5f8f` border measures 3.0 against `sidebar`, enough 
 | Screen | Content |
 | --- | --- |
 | Needs you | Everything waiting on the operator, newest first, each with its action inline: plan reviews, PRs ready to merge, questions from stage sessions, needs-human escalations, blocked items |
-| Board | Grouped list: **Waiting on you**, **In progress**, **Queued**. Toggle grouping by phase or by repo, plus a repo filter. **Work on ticket** in the header |
+| Board | Grouped list: **Waiting on you**, **In progress**, **Queued**. Toggle grouping by phase or by repo, plus a repo filter |
 | Backlog | Open tickets not yet in a pipeline, with **Work on**: interactive plan review or auto-plan |
 | Repositories | One page per repo, with tabs: Overview (health, label resolution, overrides in effect), Worktrees, Denials |
 | Session | Conversation and composer. **Changes** opens the session's diff in the detail pane |
@@ -231,7 +231,7 @@ Scoping epics, releases and analytics are out of scope for the first release.
 - Plain, short and factual: say what happened and what to do next.
 - Sentence case everywhere.
 - No exclamation marks, no "Oops", no exaggeration.
-- Buttons are verbs naming their result: "Approve plan", "Stop session", "Open PR", "Work on ticket".
+- Buttons are verbs naming their result: "Approve plan", "Stop session", "Open PR", "Work on".
 
 **Names:**
 - The app is **port**, always lowercase.

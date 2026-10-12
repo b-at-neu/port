@@ -73,8 +73,6 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
     variants: [
       { name: 'detail', hash: '#/board?item=fixture-acme-widgets:38', ready: '[role="complementary"]' },
       { name: 'gate-review', click: 'text=Review plan', ready: '[data-slot="dialog-content"]' },
-      { name: 'claim', click: 'text=Work on ticket', ready: '[data-slot="dialog-content"]' },
-      { name: 'halt', click: 'text=Halt everything', ready: '[data-slot="alert-dialog-content"]' },
     ],
   },
   repos: { hash: '#/repositories', container: '#app', ready: '[data-slot="repo-row"]' },

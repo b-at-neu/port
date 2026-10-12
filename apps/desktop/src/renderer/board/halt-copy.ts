@@ -1,8 +1,6 @@
 // Shared stop-report copy (#110, #314) — one `HaltItemOutcome`/`HaltReport`
-// rendering, used by `board/dispatch.ts`'s `Halt everything` (every
-// repository) and `board/run-state.ts`'s per-repository `Pause`. Split out
-// of `dispatch.ts` so the two modules never form a circular import between
-// them.
+// rendering. Halt everything is gone; `board/run-state.ts`'s per-repository
+// `Pause` is this module's only caller now.
 import type { HaltItemOutcome, HaltReport } from '@/types/dispatch'
 import { actionResultCopy } from '@/renderer/board/copy'
 
@@ -55,9 +53,10 @@ export function haltItemLine(outcome: HaltItemOutcome, now: Date): string {
 /** The heading line for a `completed` report — `N stopped, M skipped`, plus
  *  a `, K not stopped` clause only when a refusal actually happened, so the
  *  ordinary case stays exactly the two-count example the plan itself gives.
- *  `leadingWord` defaults to `Halted` (`Halt everything`'s own report);
- *  `run-state.ts`'s per-repository Pause passes `'Paused'`, since the plan's
- *  own **UX states** table gives Pause a distinct heading word. */
+ *  `leadingWord` defaults to `Halted`; `run-state.ts`'s per-repository Pause
+ *  passes `'Paused'`, since the plan's own **UX states** table gives Pause a
+ *  distinct heading word — the only caller left now that Halt everything is
+ *  gone. */
 export function haltHeadingCopy(report: Extract<HaltReport, { readonly kind: 'completed' }>, leadingWord = 'Halted'): string {
   const stopped = report.items.filter((item) => item.kind === 'stopped').length
   const skipped = report.items.filter((item) => item.kind === 'skipped').length

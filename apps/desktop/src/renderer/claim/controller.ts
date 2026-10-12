@@ -1,17 +1,15 @@
 // The claim dialog's state machine (#93, #319) — a `useSyncExternalStore`
-// store now, with `claim/dialog.tsx` (a shadcn `Dialog`) as its one renderer
-// in place of the deleted `view.ts`'s native `<dialog>`. Every write goes
-// through `data/invoke.ts`'s `invoke`, never `window.port` directly.
+// store, with `claim/dialog.tsx` (a shadcn `Dialog`) as its one renderer.
+// Every entry comes from `openClaimDialogFor` (Backlog's own Work on) —
+// there is no repo/number picker any more. Every write goes through
+// `data/invoke.ts`'s `invoke`, never `window.port` directly.
 import { invoke } from '@/renderer/data/invoke'
-import { isReadyRepo } from '@/utils/repos'
 import type { RepoId } from '@/utils/repos'
 import type { ClaimPreflight, ClaimVerdict, PlanGateChoice } from '@/types/claim'
-import type { ReadyRepo } from '@/types/repositories'
 import type { WriteOutcome } from '@/types/writes'
 
 type ClaimState =
   | { readonly step: 'closed' }
-  | { readonly step: 'picking'; readonly repos: readonly ReadyRepo[]; readonly repoId: RepoId | null; readonly number: string; readonly error: string | null }
   | { readonly step: 'loading'; readonly repoId: RepoId; readonly repo: string; readonly number: number }
   | {
       readonly step: 'reviewing'
@@ -59,35 +57,12 @@ export function getState(): ClaimState {
   return state
 }
 
-async function loadRepos(): Promise<readonly ReadyRepo[]> {
-  const result = await invoke('repos:list')
-  if (!result.ok) return []
-  return result.repositories.filter(isReadyRepo).map((entry) => ({ id: entry.id, repo: entry.config.repo }))
-}
-
-export function openClaimDialog(): void {
-  onClaimed = null
-  setState({ step: 'picking', repos: [], repoId: null, number: '', error: null })
-  void loadRepos().then((repos) => {
-    if (state.step !== 'picking') return
-    const onlyRepo = repos.length === 1 ? repos[0] : undefined
-    setState({ ...state, repos, repoId: state.repoId ?? onlyRepo?.id ?? null })
-  })
-}
-
 export function closeClaimDialog(): void {
   onClaimed = null
   setState({ step: 'closed' })
 }
 
-function parseNumber(raw: string): number | null {
-  const trimmed = raw.trim().replace(/^#/, '')
-  if (!/^\d+$/.test(trimmed)) return null
-  const value = Number(trimmed)
-  return Number.isInteger(value) && value > 0 ? value : null
-}
-
-// The preflight fetch and its classification, shared by the picker (`submitPick`) and a preset entry (`openClaimDialogFor`).
+// The preflight fetch and its classification — `openClaimDialogFor`'s own read, and `retryPreflight`'s re-read of the same request.
 async function runPreflight(repoId: RepoId, repo: string, number: number, planGate: PlanGateChoice): Promise<void> {
   setState({ step: 'loading', repoId, repo, number })
   try {
@@ -112,35 +87,9 @@ async function runPreflight(repoId: RepoId, repo: string, number: number, planGa
   }
 }
 
-export function setClaimRepo(repoId: RepoId): void {
-  if (state.step !== 'picking') return
-  setState({ ...state, repoId, error: null })
-}
-
-export function setClaimNumber(number: string): void {
-  if (state.step !== 'picking') return
-  setState({ ...state, number, error: null })
-}
-
 export function setPlanGate(planGate: PlanGateChoice): void {
   if (state.step !== 'reviewing') return
   setState({ ...state, planGate })
-}
-
-export function submitPick(): void {
-  if (state.step !== 'picking') return
-  const { repoId, number } = state
-  const parsed = parseNumber(number)
-  if (repoId === null) {
-    setState({ ...state, error: 'Pick a repository.' })
-    return
-  }
-  if (parsed === null) {
-    setState({ ...state, error: 'Enter a positive issue number.' })
-    return
-  }
-  const repo = state.repos.find((r) => r.id === repoId)?.repo ?? repoId
-  void runPreflight(repoId, repo, parsed, 'review')
 }
 
 interface OpenClaimDialogForParams {
@@ -156,15 +105,6 @@ interface OpenClaimDialogForParams {
 export function openClaimDialogFor(params: OpenClaimDialogForParams): void {
   onClaimed = params.onClaimed
   void runPreflight(params.repoId, params.repo, params.number, params.planGate)
-}
-
-export function backToPick(): void {
-  if (state.step !== 'reviewing') return
-  setState({ step: 'picking', repos: [], repoId: state.repoId, number: String(state.preflight.number), error: null })
-  void loadRepos().then((repos) => {
-    if (state.step !== 'picking') return
-    setState({ ...state, repos })
-  })
 }
 
 export function confirmClaim(): void {
@@ -201,17 +141,16 @@ export function confirmClaim(): void {
 
 /** Re-runs the preflight in place, for both result shapes the plan groups
  *  under the same retry affordance: `moved` (the IPC-level race) and a
- *  `write-result` carrying `precondition-failed` (the write-level race). */
+ *  `write-result` carrying `precondition-failed` (the write-level race).
+ *  `'review'` matches what retry did today through the old picker. */
 export function retryPreflight(): void {
   if (state.step === 'moved') {
-    const { repoId, number } = state
-    setState({ step: 'picking', repos: [], repoId, number: String(number), error: null })
-    submitPick()
+    const { repoId, repo, number } = state
+    void runPreflight(repoId, repo, number, 'review')
     return
   }
   if (state.step === 'write-result' && state.outcome.kind === 'precondition-failed') {
-    const { repoId, number } = state
-    setState({ step: 'picking', repos: [], repoId, number: String(number), error: null })
-    submitPick()
+    const { repoId, repo, number } = state
+    void runPreflight(repoId, repo, number, 'review')
   }
 }

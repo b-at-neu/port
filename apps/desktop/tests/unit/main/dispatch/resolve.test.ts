@@ -109,12 +109,14 @@ describe('registeredRepoIds', () => {
 describe('resolveDispatchControl — validation', () => {
   it('rejects a command outside DISPATCH_COMMANDS', async () => {
     await expect(resolveDispatchControl(registryDeps, { command: 'bogus' as never }, depsWith())).rejects.toThrow(
-      "'dispatch:control' requires 'command' to be one of run, drain, pause, halt, take-over",
+      "'dispatch:control' requires 'command' to be one of run, drain, pause, take-over",
     )
   })
 
-  it('rejects halt carrying a repoId', async () => {
-    await expect(resolveDispatchControl(registryDeps, { command: 'halt', repoId: REPO_ID }, depsWith())).rejects.toThrow("must not carry a 'repoId'")
+  it('rejects halt — there is no halt command any more', async () => {
+    await expect(resolveDispatchControl(registryDeps, { command: 'halt' } as never, depsWith())).rejects.toThrow(
+      "'dispatch:control' requires 'command' to be one of run, drain, pause, take-over",
+    )
   })
 
   it('rejects run/drain/pause with no repoId', async () => {
@@ -300,47 +302,5 @@ describe('resolveDispatchControl — pause', () => {
       depsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [entry] }), releaseOwnership: () => Promise.resolve({ ok: false, kind: 'permission-denied', message: 'nope', path: 'p' }) }),
     )
     expect(result).toMatchObject({ ok: true, command: 'pause', released: false })
-  })
-})
-
-describe('resolveDispatchControl — halt', () => {
-  it('lists ready repositories, calls haltDispatch across all of them, releases ownership for each, and refreshes once', async () => {
-    let refreshCalls = 0
-    let haltCalled = false
-    let releaseCalls = 0
-    const entry = await readyEntry()
-    const result = await resolveDispatchControl(
-      registryDeps,
-      { command: 'halt' },
-      depsWith({
-        listRepositories: () => Promise.resolve({ ok: true, repositories: [entry] }),
-        haltDispatch: (params) => {
-          haltCalled = true
-          expect(params.repoIds).toEqual([REPO_ID])
-          return Promise.resolve({ kind: 'completed', items: [] })
-        },
-        releaseOwnership: () => { releaseCalls += 1; return Promise.resolve({ ok: true, path: 'p' }) },
-        refresh: () => {
-          refreshCalls += 1
-          return Promise.resolve(SNAPSHOT)
-        },
-      }),
-    )
-    expect(haltCalled).toBe(true)
-    expect(releaseCalls).toBe(1)
-    expect(refreshCalls).toBe(1)
-    expect(result).toEqual({ ok: true, command: 'halt', report: { kind: 'completed', items: [] }, released: true })
-  })
-
-  it('still refreshes once even when the halt itself aborted', async () => {
-    let refreshCalls = 0
-    const aborted: HaltReport = { kind: 'aborted', reason: 'run-state-unwritable', message: 'disk full', path: '/userData/dispatch.json' }
-    const result = await resolveDispatchControl(
-      registryDeps,
-      { command: 'halt' },
-      depsWith({ haltDispatch: () => Promise.resolve(aborted), refresh: () => { refreshCalls += 1; return Promise.resolve(SNAPSHOT) } }),
-    )
-    expect(refreshCalls).toBe(1)
-    expect(result).toEqual({ ok: true, command: 'halt', report: aborted, released: true })
   })
 })
