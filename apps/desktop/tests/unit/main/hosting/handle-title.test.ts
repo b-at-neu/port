@@ -1,75 +1,7 @@
 // title/rateLimit/resumeTarget, split out of handle.test.ts to stay under the file-size limit.
 import { describe, expect, it, vi } from 'vitest'
 import { createHostedHandle } from '@/main/hosting/handle'
-import type { HostedQuery } from '@/main/hosting/handle'
-import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
-import type { PluginRequest, SessionKey } from '@/types/hosting'
-import type { RepoId } from '@/utils/repos'
-
-const SESSION_KEY = 'hosted-1' as SessionKey
-const REPO_ID = 'repo-1' as RepoId
-const INSTALLED_PLUGIN: PluginRequest = { source: 'installed' }
-
-function fakeQuery() {
-  let pendingResolve: ((result: IteratorResult<unknown>) => void) | null = null
-  const queue: unknown[] = []
-
-  const query: HostedQuery = {
-    interrupt: vi.fn(() => Promise.resolve({ still_queued: [] })),
-    close: vi.fn(),
-    [Symbol.asyncIterator]() {
-      return {
-        next(): Promise<IteratorResult<unknown>> {
-          if (queue.length > 0) return Promise.resolve({ done: false, value: queue.shift() })
-          return new Promise((resolve) => {
-            pendingResolve = resolve
-          })
-        },
-      }
-    },
-  } as unknown as HostedQuery
-
-  return {
-    query,
-    push(message: unknown) {
-      if (pendingResolve) {
-        const resolve = pendingResolve
-        pendingResolve = null
-        resolve({ done: false, value: message })
-      } else {
-        queue.push(message)
-      }
-    },
-  }
-}
-
-function baseParams(overrides: Partial<Parameters<typeof createHostedHandle>[0]> = {}) {
-  return {
-    sessionKey: SESSION_KEY,
-    repoId: REPO_ID,
-    workspace: { folder: '/repo', root: '/repo', worktree: null, base: null },
-    mode: { kind: 'fresh' as const },
-    cwd: '/repo',
-    executablePath: '/usr/local/bin/claude',
-    credentials: null,
-    now: () => 1_000,
-    onEvent: vi.fn(),
-    onStatus: vi.fn(),
-    plugin: INSTALLED_PLUGIN,
-    readExpectedComponents: () => Promise.resolve(null),
-    samePath: (a: string, b: string) => a === b,
-    initialTitle: null,
-    defaults: DEFAULT_SESSION_DEFAULTS,
-    history: { kind: 'none' as const },
-    stage: null,
-    ...overrides,
-  }
-}
-
-async function flush(): Promise<void> {
-  await Promise.resolve()
-  await Promise.resolve()
-}
+import { baseParams, fakeQuery, flush } from '../../../fixtures/hosting/handle'
 
 describe('title (#103)', () => {
   it('starts with initialTitle, and the first send() never overwrites it', () => {

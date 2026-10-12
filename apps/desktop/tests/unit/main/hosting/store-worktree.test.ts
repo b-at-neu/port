@@ -1,63 +1,11 @@
 // folder-busy and the worktree dismiss outcomes — split out of store.test.ts to stay under the file size limit.
 import { describe, expect, it, vi } from 'vitest'
 import { createHostedStore } from '@/main/hosting/store'
-import type { HostedStoreDeps } from '@/main/hosting/store'
-import { createInMemoryHostingPersistence } from '@/main/hosting/persist'
-import type { HostedQuery } from '@/main/hosting/handle'
-import type { RepoId } from '@/utils/repos'
 import type { SessionWorkspace } from '@/types/workspace'
+import { REPO_ID, baseDeps, endedQuery, flush } from '../../../fixtures/hosting/store'
 
-const REPO_ID = 'repo-1' as RepoId
 const PLAIN_WORKSPACE: SessionWorkspace = { folder: '/repo', root: '/repo', worktree: null, base: null }
 const WORKTREE_WORKSPACE: SessionWorkspace = { folder: '/repo/.claude/worktrees/session-a', root: '/repo', worktree: { path: '/repo/.claude/worktrees/session-a', branch: 'session/a' }, base: null }
-
-function idleQuery(): HostedQuery {
-  return {
-    interrupt: vi.fn(() => Promise.resolve({ still_queued: [] })),
-    close: vi.fn(),
-    [Symbol.asyncIterator]() {
-      return { next: () => new Promise<IteratorResult<unknown>>(() => undefined) }
-    },
-  } as unknown as HostedQuery
-}
-
-function endedQuery(): HostedQuery {
-  return {
-    interrupt: vi.fn(),
-    close: vi.fn(),
-    [Symbol.asyncIterator]() {
-      return { next: () => Promise.resolve({ done: true, value: undefined }) }
-    },
-  } as unknown as HostedQuery
-}
-
-function baseDeps(overrides: Partial<HostedStoreDeps> = {}): HostedStoreDeps {
-  return {
-    getSdk: () => Promise.resolve({ query: () => idleQuery(), renameSession: vi.fn(() => Promise.resolve(undefined)) }),
-    resolveClaudeExecutable: () => Promise.resolve({ ok: true, path: '/usr/local/bin/claude' }),
-    readCredentialsTell: () => Promise.resolve({ present: false, expiresAt: null, hasRefreshToken: false }),
-    listSessionsForFork: () => Promise.resolve({ ok: true, sessions: [] }),
-    env: {},
-    platform: 'linux',
-    now: () => 1_000,
-    onEvent: vi.fn(),
-    onStatus: vi.fn(),
-    onEntries: vi.fn(),
-    resolvePluginRequest: () => Promise.resolve({ source: 'installed' }),
-    readExpectedComponents: () => Promise.resolve(null),
-    samePath: (a: string, b: string) => a === b,
-    persistence: createInMemoryHostingPersistence(),
-    removeWorktree: () => Promise.resolve({ outcome: 'removed' }),
-    readHistory: () => Promise.resolve({ kind: 'none' }),
-    ...overrides,
-  }
-}
-
-async function flush(): Promise<void> {
-  await Promise.resolve()
-  await Promise.resolve()
-  await Promise.resolve()
-}
 
 describe('createHostedStore — folder-busy', () => {
   it('refuses a second non-worktree start in the same folder', async () => {
