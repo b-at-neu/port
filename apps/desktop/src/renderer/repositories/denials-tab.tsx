@@ -9,9 +9,9 @@ import { ErrorBanner } from '@/renderer/components/error-banner'
 import { StatusPill } from '@/renderer/components/status-pill'
 import { useIpcQuery } from '@/renderer/data/query'
 import { inspectDenials } from '@/renderer/local/inspect'
-import type { ActorGroup, ShapeGroup } from '@/renderer/local/inspect'
+import type { ActorGroup, ShapeGroup } from '@/types/local'
 import type { RepoId } from '@/utils/repos'
-import type { DenialsGroup } from '@/renderer/router/routes'
+import type { DenialsGroup } from '@/types/router'
 import { actorAttributionPill, attributionLineCopy, burstPillCopy, cappedLineCopy, emptyLogCopy, metaStripCopy, noEntriesCopy, readFailedCopy } from '@/renderer/repositories/denials-copy'
 
 function relativeOrDash(iso: string | null, now: Date): string {

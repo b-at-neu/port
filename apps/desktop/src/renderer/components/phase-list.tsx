@@ -5,7 +5,7 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { PipelineItemKind } from '@/types/github'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
 import { phaseSegmentsFor } from '@/renderer/board/phase-model'
-import type { PhaseKey, PhaseSegmentState } from '@/renderer/board/phase-model'
+import type { PhaseKey, PhaseSegmentState } from '@/types/board'
 
 const DOT_CLASS: Readonly<Record<PhaseSegmentState, string>> = {
   finished: 'bg-working-pill',
@@ -32,7 +32,7 @@ function labelFor(phase: PhaseKey, isCurrent: boolean, stageKey: LabelKey | null
   return PHASE_NAMES[key] ?? key
 }
 
-export interface PhaseListProps {
+interface PhaseListProps {
   readonly stageKey: LabelKey | null
   readonly kind: PipelineItemKind
   readonly merged: boolean

@@ -7,12 +7,12 @@ import type { LabelKey, LabelSource, VocabularyProblem, VocabularyVerdict } from
 import type { AppliedOverride, RepoId, ResolvedRepoConfig } from '@/utils/repos'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
 
-export interface OverviewSourceSection {
+interface OverviewSourceSection {
   readonly kind: SourceKind
   readonly health: RepositoryHealth[SourceKind]
 }
 
-export interface OverviewLabelRow {
+interface OverviewLabelRow {
   readonly name: string
   readonly key: LabelKey
   readonly roleDisplay: string
@@ -20,14 +20,14 @@ export interface OverviewLabelRow {
   readonly present: boolean | null
 }
 
-export interface OverviewLabels {
+interface OverviewLabels {
   readonly verdict: VocabularyVerdict
   readonly unverifiedReason: string | undefined
   readonly problems: readonly VocabularyProblem[]
   readonly rows: readonly OverviewLabelRow[]
 }
 
-export interface OverviewHealth {
+interface OverviewHealth {
   readonly sources: readonly OverviewSourceSection[] | null
   readonly rateLimit: { readonly remaining: number; readonly resetAt: string } | null
   readonly labels: OverviewLabels | null

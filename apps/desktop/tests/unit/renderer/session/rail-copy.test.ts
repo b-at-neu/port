@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { restoreBannerLine, restoreOpenedLine, restorePartialLine, restoreUnavailableLine, usageNoticeLines } from '@/renderer/session/rail-copy'
-import type { UsageNotice } from '@/renderer/session/rail-model'
+import type { UsageNotice } from '@/types/session'
 
 const NOW = new Date(2026, 0, 5, 12, 0)
 

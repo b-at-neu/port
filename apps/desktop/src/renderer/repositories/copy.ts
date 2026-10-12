@@ -103,9 +103,9 @@ export function summaryParts(config: ResolvedRepoConfig): readonly string[] {
   return [branchSummary, `${labelCount} pipeline labels`, moduleSummary(config.modules)].filter((part) => part !== '')
 }
 
-export type RegistryErrorReason = 'unreadable' | 'malformed' | 'unsupported-version'
+type RegistryErrorReason = 'unreadable' | 'malformed' | 'unsupported-version'
 
-export interface RegistryBanner {
+interface RegistryBanner {
   readonly path: string
   readonly reason: RegistryErrorReason
 }

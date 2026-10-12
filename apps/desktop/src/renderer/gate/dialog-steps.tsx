@@ -3,7 +3,7 @@ import { Button } from '@/renderer/components/ui/button'
 import { DialogFooter, DialogHeader, DialogTitle } from '@/renderer/components/ui/dialog'
 import { Textarea } from '@/renderer/components/ui/textarea'
 import { Markdown } from '@/renderer/components/markdown'
-import type { GateState } from '@/renderer/gate/controller'
+import type { GateState } from '@/types/gate'
 import { backToReview, closeGateDialog, openFeedback, retryLabelOnly, retryPreflight, setFeedbackText, submitApprove, submitFeedback, tryCommentAgain } from '@/renderer/gate/controller'
 import { assigneeNoteCopy, autoPlanNoteCopy, feedbackHint, gateDisabledReason, noPlanNoteCopy, primaryApproveLabel, refusedVerdictCopy, resultCopy, sessionRequiredCopy } from '@/renderer/gate/copy'
 

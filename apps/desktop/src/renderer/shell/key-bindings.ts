@@ -1,5 +1,5 @@
 // `keys` is copied verbatim so a pin can check this against the design doc.
-export interface KeyBinding {
+interface KeyBinding {
   readonly keys: string
   readonly action: string
   readonly scope: 'global' | 'composer' | 'list'

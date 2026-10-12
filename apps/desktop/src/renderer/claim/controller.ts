@@ -9,7 +9,7 @@ import type { ClaimPreflight, ClaimVerdict, PlanGateChoice } from '@/types/claim
 import type { ReadyRepo } from '@/types/repositories'
 import type { WriteOutcome } from '@/types/writes'
 
-export type ClaimState =
+type ClaimState =
   | { readonly step: 'closed' }
   | { readonly step: 'picking'; readonly repos: readonly ReadyRepo[]; readonly repoId: RepoId | null; readonly number: string; readonly error: string | null }
   | { readonly step: 'loading'; readonly repoId: RepoId; readonly repo: string; readonly number: number }
@@ -143,7 +143,7 @@ export function submitPick(): void {
   void runPreflight(repoId, repo, parsed, 'review')
 }
 
-export interface OpenClaimDialogForParams {
+interface OpenClaimDialogForParams {
   readonly repoId: RepoId
   readonly repo: string
   readonly number: number

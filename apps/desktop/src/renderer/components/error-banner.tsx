@@ -5,12 +5,12 @@ import { CircleAlert } from 'lucide-react'
 import { cn } from '@/renderer/lib/utils'
 import { Button } from '@/renderer/components/ui/button'
 
-export interface ErrorBannerAction {
+interface ErrorBannerAction {
   readonly label: string
   readonly onClick: () => void
 }
 
-export interface ErrorBannerProps {
+interface ErrorBannerProps {
   readonly message: string
   readonly action?: ErrorBannerAction
   readonly className?: string

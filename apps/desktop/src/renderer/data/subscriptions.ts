@@ -3,25 +3,10 @@
 // all subscribe through this module instead of the bridge directly, so a
 // pushed event is attached once no matter how many screens care about it.
 import type { QueryClient } from '@tanstack/react-query'
-import type { BridgeListener, IpcEvent, IpcEventMap } from '@/types/ipc'
+import type { IpcEventMap } from '@/types/ipc'
 import type { HostedSessionSnapshot } from '@/types/hosting'
+import type { EventListener, SubscribableEvent, SubscriptionBridge, Subscriptions } from '@/types/data'
 import { ipcQueryOptions } from '@/renderer/data/query'
-
-export type SubscribableEvent = IpcEvent
-
-type EventListener<E extends SubscribableEvent> = (payload: IpcEventMap[E]) => void
-
-/** The narrow slice of `PortBridge` this module needs — a fake satisfying
- *  just these three listener methods is enough for a test, with no need to
- *  stub the rest of the bridge's dozens of invokers. The real `window.port`
- *  satisfies this structurally, carrying everything else besides. */
-export type SubscriptionBridge = {
-  [E in SubscribableEvent as BridgeListener<E>]: (listener: EventListener<E>) => () => void
-}
-
-export interface Subscriptions {
-  subscribe<E extends SubscribableEvent>(event: E, listener: EventListener<E>): () => void
-}
 
 /** The one place `window.port.onBoardUpdate`/`onSessionStatus`/
  *  `onSessionEntries` are named (`scripts/checks/desktop-react.ts` pins

@@ -3,7 +3,7 @@ import { reviseNoteProblem } from '@/utils/actions/decide'
 import { Button } from '@/renderer/components/ui/button'
 import { DialogFooter, DialogHeader, DialogTitle } from '@/renderer/components/ui/dialog'
 import { Textarea } from '@/renderer/components/ui/textarea'
-import type { DecisionState } from '@/renderer/decision/controller'
+import type { DecisionState } from '@/types/decision'
 import { closeDecisionDialog, retryLabelOnly, setReviseText, submitRevise, submitUnblock } from '@/renderer/decision/controller'
 import { decisionResultCopy, dialogTitle, reviseConsequence, reviseNoteHint, unblockCapNote, unblockConsequence, unblockReasonLine } from '@/renderer/decision/copy'
 

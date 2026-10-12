@@ -5,7 +5,7 @@ import { Textarea } from '@/renderer/components/ui/textarea'
 import { Markdown } from '@/renderer/components/markdown'
 import { PLAN_APPROVE_ACCEPT_EDITS, PLAN_APPROVE_ASK, PLAN_EMPTY, PLAN_FEEDBACK_PLACEHOLDER, PLAN_HEADING, PLAN_KEEP_PLANNING, PLAN_SENDING, planAnswerFailed } from '@/renderer/session/interaction-copy'
 
-export interface PlanCardProps {
+interface PlanCardProps {
   readonly plan: string | null
   readonly sending: boolean
   readonly error: string | null

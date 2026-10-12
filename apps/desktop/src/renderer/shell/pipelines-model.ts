@@ -4,40 +4,11 @@ import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
 import type { DispatchOwner } from '@/types/dispatch'
 import type { ReconciledItem } from '@/types/state'
-import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
+import type { HostedSessionSnapshot } from '@/types/hosting'
 import { needsYouItems, repoNeedsYou } from '@/renderer/board/needs-you'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
-import type { PillStatus } from '@/renderer/components/status-pill'
-
-export interface PipelineSessionRow {
-  readonly key: string
-  readonly number: number
-  readonly label: string
-  readonly dot: 'attention' | 'working' | 'idle'
-  /** Non-`null` for a row backed by one of this app's own stage sessions — the row then links to that session, not the board. */
-  readonly sessionKey: SessionKey | null
-}
-
-export interface ReadyPipelineRow {
-  readonly ready: true
-  readonly repoId: RepoId
-  readonly name: string
-  readonly pill: { readonly status: PillStatus; readonly label: string }
-  /** This repository's own cockpit ownership — `'none'` before the first read. */
-  readonly owner: DispatchOwner
-  readonly unreadableMessage: string | null
-  readonly inFlight: number
-  readonly needsYou: boolean
-  readonly sessions: readonly PipelineSessionRow[]
-}
-
-export interface NotReadyPipelineRow {
-  readonly ready: false
-  readonly repoId: RepoId
-  readonly name: string
-}
-
-export type PipelineRow = ReadyPipelineRow | NotReadyPipelineRow
+import type { PillStatus } from '@/types/components'
+import type { PipelineRow, PipelineSessionRow } from '@/types/shell'
 
 function sessionsFor(repoId: RepoId, items: readonly ReconciledItem[], needsYouNumbers: ReadonlySet<number>): PipelineSessionRow[] {
   const rows: PipelineSessionRow[] = []

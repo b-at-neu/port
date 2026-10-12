@@ -1,9 +1,9 @@
 // Pure composer logic: trigger detection, suggestion acceptance, and ranking — no DOM, no React.
 import type { SlashCommandSummary } from '@/types/hosting'
 
-export type TriggerKind = 'command' | 'file'
+type TriggerKind = 'command' | 'file'
 
-export interface ActiveTrigger {
+interface ActiveTrigger {
   readonly kind: TriggerKind
   /** The trigger character's own index in `value` (`/` or `@`). */
   readonly start: number
@@ -35,7 +35,7 @@ export function activeTrigger(value: string, caret: number): ActiveTrigger | nul
   return null
 }
 
-export interface AppliedSuggestion {
+interface AppliedSuggestion {
   readonly value: string
   readonly caret: number
 }

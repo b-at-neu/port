@@ -5,7 +5,7 @@ export function shortSha(sha: string): string {
   return sha.slice(0, 7)
 }
 
-export interface ChangesHeader {
+interface ChangesHeader {
   readonly prefix: string
   readonly branch: string | null
   readonly sha: string
@@ -38,7 +38,7 @@ export function binaryLine(path: string): string {
   return `${path} · binary`
 }
 
-export interface NumstatLine {
+interface NumstatLine {
   readonly added: string
   readonly removed: string
 }

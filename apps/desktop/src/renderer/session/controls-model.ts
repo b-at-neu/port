@@ -10,7 +10,7 @@ export function nextMode(current: SessionPermissionMode): SessionPermissionMode 
   return MODE_CYCLE[(index + 1) % MODE_CYCLE.length] as SessionPermissionMode
 }
 
-export interface ModeOption {
+interface ModeOption {
   readonly value: SessionPermissionMode
   readonly label: string
 }
@@ -21,7 +21,7 @@ export const MODE_OPTIONS: readonly ModeOption[] = [
   { value: 'plan', label: 'Plan mode' },
 ]
 
-export interface ModelSelectOption {
+interface ModelSelectOption {
   readonly value: string
   readonly label: string
 }
@@ -56,7 +56,7 @@ export function effortLabel(effort: SessionEffort | null): string {
   return effort === null ? 'Default' : effort.charAt(0).toUpperCase() + effort.slice(1)
 }
 
-export interface ControlsBarState {
+interface ControlsBarState {
   readonly mode: ModeOption
   readonly modelLabel: string
   readonly modelOptions: readonly ModelSelectOption[]

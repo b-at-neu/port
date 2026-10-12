@@ -11,7 +11,7 @@ export const KNOWN_COMMANDS = ['git', 'gh', 'node', 'claude'] as const satisfies
 const DEFAULT_TIMEOUT_MS = 30_000
 const DEFAULT_MAX_BYTES = 32 * 1024 * 1024
 
-export interface E2ERoute {
+interface E2ERoute {
   readonly fake: string
 }
 

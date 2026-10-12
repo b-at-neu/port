@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionEnd } from '@/types/hosting'
 import { composerCopy, endBody, interruptNote, startFailureCopy } from '@/renderer/session/copy'
-import type { RenderableStartFailure } from '@/renderer/session/copy'
+import type { RenderableStartFailure } from '@/types/session'
 
 describe('composerCopy', () => {
   it('ready and starting offer Send, never disabled', () => {

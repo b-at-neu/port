@@ -1,15 +1,15 @@
 // One module-level `keydown` listener, no `useEffect`. `resolveKey` is pure;
 // `installKeyboardMap` wires its result to real effects.
-import type { SessionKey } from '@/types/hosting'
 import type { AppCommand } from '@/utils/shell/commands'
+import type { KeyboardDeps } from '@/types/shell'
 
-export interface KeyboardContext {
+interface KeyboardContext {
   readonly mod: boolean
   readonly editableFocused: boolean
   readonly dialogOpen: boolean
 }
 
-export type KeyboardAction =
+type KeyboardAction =
   | { readonly kind: 'palette' }
   | { readonly kind: 'new-session' }
   | { readonly kind: 'jump-to-session'; readonly index: number }
@@ -46,17 +46,6 @@ function isEditable(target: EventTarget | null): boolean {
 
 function isDialogOpen(): boolean {
   return document.querySelector('[role="dialog"][data-state="open"], [data-radix-popper-content-wrapper]') !== null
-}
-
-export interface KeyboardDeps {
-  readonly openPalette: (page: 'root') => void
-  readonly openNewSessionDialog: () => void
-  readonly liveSessionKeys: () => readonly SessionKey[]
-  readonly currentSessionKey: () => SessionKey | null
-  readonly selectSession: (key: SessionKey) => void
-  readonly toggleSidebar: () => void
-  readonly startRename: () => void
-  readonly currentListNavigator: () => { next(): void; prev(): void; open(): void } | undefined
 }
 
 /** The keymap's own effects, shared with the app menu's `app:command` push — extracted so

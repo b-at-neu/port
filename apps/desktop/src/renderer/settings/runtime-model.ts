@@ -7,15 +7,15 @@
 import type { RuntimeDiagnosis, RuntimePreflight, RuntimeProbe } from '@/types/runtime'
 import type { ReadyRepo } from '@/types/repositories'
 import { CLI_OUTDATED_COPY, RUNTIME_API_KEY_NOTE, RUNTIME_COPY, RUNTIME_NO_READY_REPO_NOTE, RUNTIME_PROBE_ERROR, runtimeActionLabel } from '@/renderer/runtime/copy'
-import type { PillStatus } from '@/renderer/components/status-pill'
+import type { PillStatus } from '@/types/components'
 
-export interface RuntimeActionView {
+interface RuntimeActionView {
   readonly label: string
   readonly kind: 'test' | 'retry'
   readonly disabledReason: string | null
 }
 
-export interface RuntimeDiagnosisModel {
+interface RuntimeDiagnosisModel {
   readonly pillStatus: PillStatus
   readonly pillLabel: string
   /** `"Claude Code 2.1.3 · /path/to/claude"` — omitted when nothing resolved. */

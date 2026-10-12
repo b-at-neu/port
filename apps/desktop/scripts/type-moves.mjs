@@ -204,9 +204,7 @@ function allSourceFiles() {
 
 export const SCAN_ROOTS = ['main', 'renderer']
 
-/** Builds the classification: a Map<file, Map<name, decl>> for the scanned roots' non-test files
- *  (src/main/ and src/renderer/ by default), plus per-declaration importer file lists (resolved
- *  through one level of re-export shim). */
+/** Classification over the scanned roots' non-test files, plus each declaration's importer set. */
 export function classify(roots = SCAN_ROOTS) {
   const scanFiles = roots.flatMap((r) => walkSourceFiles(join(SRC_ROOT, r))).filter((f) => !f.endsWith('.test.ts') && !f.endsWith('.test.tsx'))
 
@@ -252,9 +250,7 @@ export function classify(roots = SCAN_ROOTS) {
   return { declByKey, declsByFile, mainFiles: scanFiles }
 }
 
-/** Pure check-facing wrapper: every MULTI-classified declaration under the scanned roots, as
- *  [{ type, file, importer }] rows — one row per declaration, naming its first importer. Used by
- *  scripts/checks/desktop-imports.ts so the check and this tool's classifier can never drift apart. */
+/** Every MULTI-classified declaration under the scanned roots, as [{ type, file, importer }] rows. */
 export function findLeakedTypes(files, roots = SCAN_ROOTS) {
   if (files) {
     // in-memory fixture mode: files is [{path, text}], path relative to SRC_ROOT
@@ -265,7 +261,7 @@ export function findLeakedTypes(files, roots = SCAN_ROOTS) {
       const decls = findDeclarations(byPath.get(file))
       for (const d of decls) declByKey.set(`${file}#${d.name}`, { file, ...d, importers: new Set() })
     }
-    for (const file of scanFiles) {
+    for (const file of byPath.keys()) {
       for (const imp of findNamedImports(byPath.get(file))) {
         let target = null
         if (imp.specifier.startsWith('./')) {

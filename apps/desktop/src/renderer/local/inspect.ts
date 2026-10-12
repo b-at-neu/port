@@ -1,9 +1,8 @@
 // Turns the denial log into something an operator can act on. Pure, so it compiles under `typecheck:web` and runs from both renderer and main. Lives in `renderer/` because it joins two adapters' outputs. A shape is a grouping key, never a parse; bursts count only `deny` entries; attribution fails toward "unknown", never a guessed role.
-import type { RepoId } from '@/utils/repos'
-import type { SessionRecord, SessionRole, SessionScan } from '@/types/sessions'
+import type { SessionRecord, SessionScan } from '@/types/sessions'
 import { shapeOf } from '@/renderer/local/shape'
 import { summarizeDenials } from '@/utils/local/summary'
-import type { DenialActor, DenialDecision, DenialsFailureKind, DenialSummary, DenialsRead } from '@/types/local'
+import type { ActorGroup, AttributionTally, Burst, DenialActor, DenialDecision, DenialsFailureKind, DenialSummary, DenialsRead, SessionAttribution, ShapeGroup } from '@/types/local'
 
 export { shapeOf } from '@/renderer/local/shape'
 
@@ -11,63 +10,8 @@ export { shapeOf } from '@/renderer/local/shape'
 export const BURST_MIN_COUNT = 3
 export const BURST_WINDOW_MS = 10 * 60 * 1000
 
-/** Set only for a `session` actor. A session id the scan cannot resolve is `unknown-session`; a scan that never ran or failed is the distinct `attribution-unavailable`. */
-export type SessionAttribution =
-  | { readonly kind: 'attributed'; readonly role: SessionRole; readonly repoId: RepoId | null; readonly label: string | null; readonly lastActivityAt: string }
-  | { readonly kind: 'unknown-session' }
-  | { readonly kind: 'attribution-unavailable'; readonly reason: 'not-scanned' | 'scan-failed' }
-
-/** Every analysed entry lands in exactly one bucket, summing to `analysed`. `unattributable` covers a legacy line's bare uuid and a malformed line. */
-export interface AttributionTally {
-  readonly agentAttributed: number
-  readonly sessionAttributed: number
-  readonly sessionUnresolved: number
-  readonly attributionUnavailable: number
-  readonly unattributable: number
-}
-
-/** `undecided` is a legacy or malformed line, so it is neither a denial nor a miss. */
-export interface DecisionCounts {
-  readonly deny: number
-  readonly miss: number
-  readonly gateClear: number
-  readonly hookError: number
-  readonly undecided: number
-  readonly total: number
-}
-
-/** One actor's qualifying run of `deny` entries on one shape, inside `burstWindowMs`, reaching at least `burstMinCount`. At most one per shape group; the largest window wins. */
-export interface Burst {
-  readonly actorKey: string
-  readonly count: number
-  readonly startedAt: string
-  readonly endedAt: string
-}
-
-/** `key` is stable and collision-free — see `actorKeyOf`. `actor` is `null` only for malformed lines. `attribution` is set only when `actor.kind === 'session'`. */
-export interface ActorGroup {
-  readonly key: string
-  readonly actor: DenialActor | null
-  readonly attribution: SessionAttribution | null
-  readonly counts: DecisionCounts
-  readonly firstSeen: string | null
-  readonly lastSeen: string | null
-  readonly shapeCount: number
-}
-
-/** `sample` is the newest entry's subject verbatim, capped at 200 characters. Malformed lines carry no subject and never form a shape. */
-export interface ShapeGroup {
-  readonly shape: string
-  readonly counts: DecisionCounts
-  readonly actorCount: number
-  readonly firstSeen: string | null
-  readonly lastSeen: string | null
-  readonly sample: string
-  readonly burst: Burst | null
-}
-
 /** Mirrors `DenialsRead`'s three-arm union, so an absent log stays a distinct healthy state and never renders as "no denials". */
-export type DenialInspection =
+type DenialInspection =
   | { readonly ok: true; readonly present: false; readonly path: string; readonly readAt: string }
   | {
       readonly ok: true
@@ -86,7 +30,7 @@ export type DenialInspection =
     }
   | { readonly ok: false; readonly kind: DenialsFailureKind; readonly message: string; readonly path: string; readonly readAt: string }
 
-export interface InspectDenialsInput {
+interface InspectDenialsInput {
   readonly read: DenialsRead
   /** `null` = no session scan ran at all, distinct from a scan that ran and failed; both degrade to `attribution-unavailable` with a different `reason`. */
   readonly sessions: SessionScan | null

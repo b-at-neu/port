@@ -8,10 +8,8 @@
 // signals directly.
 import type { RepoId } from '@/utils/repos'
 import type { LabelKey } from '@/utils/labels/vocabulary'
-import type { ItemActionResult, OperatorAction } from '@/types/actions'
-import type { BoardSnapshot } from '@/types/board'
-
-export type ItemActionState = { readonly kind: 'pending'; readonly action: OperatorAction } | { readonly kind: 'result'; readonly action: OperatorAction; readonly result: ItemActionResult }
+import type { OperatorAction } from '@/types/actions'
+import type { BoardSnapshot, ItemActionState } from '@/types/board'
 
 const states = new Map<string, ItemActionState>()
 const listeners = new Set<() => void>()
@@ -61,7 +59,7 @@ export function pruneItemActionStates(snapshot: BoardSnapshot): void {
   if (changed) notify()
 }
 
-export interface RunItemActionParams {
+interface RunItemActionParams {
   readonly repoId: RepoId
   readonly kind: 'issue' | 'pull-request'
   readonly number: number

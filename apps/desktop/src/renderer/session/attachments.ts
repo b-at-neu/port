@@ -10,14 +10,9 @@ import {
   unreadableFileNotice,
   unsupportedFileNotice,
 } from '@/renderer/session/composer-copy'
+import type { FileLike } from '@/types/session'
 
-export interface FileLike {
-  readonly name: string
-  readonly size: number
-  readonly type: string
-}
-
-export type FileKind = 'image' | 'pdf' | 'text' | 'unsupported'
+type FileKind = 'image' | 'pdf' | 'text' | 'unsupported'
 
 function isImageMediaType(type: string): type is ImageMediaType {
   return (IMAGE_MEDIA_TYPES as readonly string[]).includes(type)
@@ -56,7 +51,7 @@ export function sizeNotice(file: FileLike): string | null {
   return oversizedTextNotice(file.name)
 }
 
-export interface AttachmentBatchCheck {
+interface AttachmentBatchCheck {
   readonly accepted: readonly FileLike[]
   readonly rejected: readonly { readonly file: FileLike; readonly notice: string }[]
 }
@@ -85,7 +80,7 @@ export function checkBatchLimits(existingCount: number, existingTotalBytes: numb
   return { accepted, rejected }
 }
 
-export interface AttachmentReaderDeps {
+interface AttachmentReaderDeps {
   readonly readAsDataUrl: (file: File) => Promise<string>
   readonly readAsText: (file: File) => Promise<string>
 }
@@ -97,7 +92,7 @@ function base64Of(dataUrl: string): string {
   return index === -1 ? '' : dataUrl.slice(index + 1)
 }
 
-export type ClassifyResult = { readonly ok: true; readonly attachment: ComposerAttachment } | { readonly ok: false; readonly notice: string }
+type ClassifyResult = { readonly ok: true; readonly attachment: ComposerAttachment } | { readonly ok: false; readonly notice: string }
 
 /** Image/pdf as base64, text decoded strictly so a non-UTF-8 file reports unreadable rather than mojibake. */
 export async function readAttachment(file: File, deps: AttachmentReaderDeps): Promise<ClassifyResult> {

@@ -11,7 +11,7 @@ import { openDecision } from '@/renderer/decision/controller'
 import { PhaseBar } from '@/renderer/components/phase-bar'
 import { StatusPill } from '@/renderer/components/status-pill'
 
-export interface TicketRowProps {
+interface TicketRowProps {
   readonly row: BoardItemRow
   readonly selected: boolean
   readonly onSelect: () => void

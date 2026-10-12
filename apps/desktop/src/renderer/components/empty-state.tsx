@@ -4,12 +4,12 @@ import type { ComponentType } from 'react'
 import { cn } from '@/renderer/lib/utils'
 import { Button } from '@/renderer/components/ui/button'
 
-export interface EmptyStateAction {
+interface EmptyStateAction {
   readonly label: string
   readonly onClick: () => void
 }
 
-export interface EmptyStateProps {
+interface EmptyStateProps {
   readonly icon: ComponentType<{ className?: string }>
   readonly message: string
   readonly action?: EmptyStateAction

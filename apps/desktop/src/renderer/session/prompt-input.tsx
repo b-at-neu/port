@@ -2,18 +2,18 @@
 import { useMemo, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { Composer } from '@/renderer/components/composer'
-import type { ComposerAttachmentChip } from '@/renderer/components/composer'
+import type { ComposerAttachmentChip } from '@/types/components'
 import { SuggestionList } from '@/renderer/components/suggestion-list'
-import type { SuggestionRow } from '@/renderer/components/suggestion-list'
+import type { SuggestionRow } from '@/types/components'
 import { useIpcQuery } from '@/renderer/data/query'
 import type { RepoId } from '@/utils/repos'
 import type { ComposerAttachment } from '@/utils/hosting/attachments'
 import type { HostedSessionSnapshot, SessionKey, SlashCommandSummary } from '@/types/hosting'
 import { activeTrigger, applySuggestion, fuzzyRankFiles, rankCommands } from '@/renderer/session/composer-model'
 import { checkBatchLimits, readAttachment, sizeNotice } from '@/renderer/session/attachments'
-import type { FileLike } from '@/renderer/session/attachments'
+import type { FileLike } from '@/types/session'
 import { historyFor, NOT_RECALLING, recallNewer, recallOlder, recallText, recordSent } from '@/renderer/session/prompt-history'
-import type { RecallState } from '@/renderer/session/prompt-history'
+import type { RecallState } from '@/types/session'
 import {
   COMMANDS_UNAVAILABLE,
   filesTruncatedNote,
@@ -60,7 +60,7 @@ function readerDeps() {
   }
 }
 
-export interface PromptInputProps {
+interface PromptInputProps {
   readonly sessionKey: SessionKey
   readonly repoId: RepoId | null
   readonly snapshot: HostedSessionSnapshot

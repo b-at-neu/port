@@ -4,10 +4,10 @@ import { Button } from '@/renderer/components/ui/button'
 import { Input } from '@/renderer/components/ui/input'
 import type { AskQuestion } from '@/utils/hosting/controls'
 import { initialState, isComplete, setOther, toAnswers, toggleOption } from '@/renderer/session/question-model'
-import type { QuestionsState } from '@/renderer/session/question-model'
+import type { QuestionsState } from '@/types/session'
 import { QUESTION_OTHER_LABEL, QUESTION_SEND, QUESTION_SKIP, questionAnswerFailed, questionProgress } from '@/renderer/session/interaction-copy'
 
-export interface QuestionCardProps {
+interface QuestionCardProps {
   readonly questions: readonly AskQuestion[]
   readonly sending: boolean
   readonly error: string | null

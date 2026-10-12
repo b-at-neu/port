@@ -3,7 +3,7 @@
 // `window.port` directly, so a future transport change touches one file.
 import { bridgeMethodName } from '@/types/ipc'
 import type { IpcMap } from '@/types/ipc'
-import type { MutationChannel, QueryChannel } from '@/renderer/data/channels'
+import type { MutationChannel, QueryChannel } from '@/types/channels'
 
 type DataChannel = QueryChannel | MutationChannel
 

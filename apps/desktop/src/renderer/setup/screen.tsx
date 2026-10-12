@@ -13,7 +13,7 @@ import { ErrorBanner } from '@/renderer/components/error-banner'
 import { ipcQueryOptions, useIpcMutation, useIpcQuery } from '@/renderer/data/query'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { setupModel } from '@/renderer/setup/model'
-import type { SetupAction, SetupStep } from '@/renderer/setup/model'
+import type { SetupAction, SetupStep } from '@/types/setup'
 import type { RuntimeProbe } from '@/types/runtime'
 import type { ReposListResponse } from '@/types/ipc'
 

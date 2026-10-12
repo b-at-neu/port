@@ -2,7 +2,7 @@
 // #84's tail poll already follows (never apply a delta out of order), lifted
 // to a push-based stream instead of a poll response. No DOM, no IPC here.
 
-export type SequenceOutcome = 'apply' | 'stale' | 'gap'
+type SequenceOutcome = 'apply' | 'stale' | 'gap'
 
 interface Revisioned {
   readonly revision: number
@@ -20,7 +20,7 @@ export function accept(lastRevision: number, delta: Revisioned): SequenceOutcome
   return 'gap'
 }
 
-export type DrainResult<T> = { readonly kind: 'apply'; readonly deltas: readonly T[] } | { readonly kind: 'gap' }
+type DrainResult<T> = { readonly kind: 'apply'; readonly deltas: readonly T[] } | { readonly kind: 'gap' }
 
 /** After `session:attach` resolves with `attachRevision`, folds in whatever
  *  `session:entries` pushes arrived (and were buffered) while that round

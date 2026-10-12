@@ -5,7 +5,7 @@ import { ChevronDown, Loader2 } from 'lucide-react'
 import { cn } from '@/renderer/lib/utils'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/renderer/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
-import type { PillStatus } from '@/renderer/components/status-pill'
+import type { PillStatus } from '@/types/components'
 
 const DOT_CLASS: Readonly<Record<PillStatus, string>> = {
   working: 'bg-working-dot',
@@ -23,7 +23,7 @@ const PILL_CLASS: Readonly<Record<PillStatus, string>> = {
   idle: 'bg-idle-pill text-idle-pill-foreground',
 }
 
-export interface StatusPillMenuItem {
+interface StatusPillMenuItem {
   readonly key: string
   readonly label: string
   readonly hint: string
@@ -32,7 +32,7 @@ export interface StatusPillMenuItem {
   readonly onSelect: () => void
 }
 
-export interface StatusPillMenuProps {
+interface StatusPillMenuProps {
   readonly status: PillStatus
   readonly label: string
   readonly pending: boolean

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { QueryClient } from '@tanstack/react-query'
 import { connectQueryCache, createSubscriptions } from '@/renderer/data/subscriptions'
-import type { SubscribableEvent, SubscriptionBridge } from '@/renderer/data/subscriptions'
+import type { SubscribableEvent, SubscriptionBridge } from '@/types/data'
 import { ipcQueryOptions } from '@/renderer/data/query'
 import type { BoardSnapshot } from '@/types/board'
 import type { HostedSessionSnapshot, SessionEntriesDelta } from '@/types/hosting'

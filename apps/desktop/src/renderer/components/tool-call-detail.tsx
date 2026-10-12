@@ -2,7 +2,7 @@
 import { CircleDot, Square, SquareCheck } from 'lucide-react'
 import { CodeBlock } from '@/renderer/components/code-block'
 import { Markdown } from '@/renderer/components/markdown'
-import type { GroupedNode, RowView } from '@/renderer/components/conversation-model'
+import type { GroupedNode, RowView } from '@/types/components'
 import { ConversationEntry } from '@/renderer/components/conversation-entry'
 
 export function BashBody({ row }: { readonly row: Extract<RowView, { readonly kind: 'tool-call' }> }) {

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { LabelKey } from '@/utils/labels/vocabulary'
-import { PHASE_KEYS, phaseSegmentsFor } from '@/renderer/board/phase-model'
-import type { PhaseKey } from '@/renderer/board/phase-model'
+import { phaseSegmentsFor } from '@/renderer/board/phase-model'
+import { PHASE_KEYS } from '@/types/board'
+import type { PhaseKey } from '@/types/board'
 
 function statesOf(stageKey: LabelKey | null, kind: 'issue' | 'pull-request' = 'issue', merged = false) {
   return phaseSegmentsFor({ stageKey, kind, merged }).map((s) => s.state)

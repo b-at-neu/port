@@ -13,7 +13,7 @@ import { OPERATOR_ACTIONS, OPERATOR_DECISIONS } from '@/types/actions'
 import type { OperatorAction } from '@/types/actions'
 import type { BoardItemRow } from '@/types/board'
 import { stageLinksFor } from '@/renderer/board/stage-links'
-import type { StageLink } from '@/renderer/board/stage-links'
+import type { StageLink } from '@/types/board'
 import type { DispatchOwner, DispatchRecord } from '@/types/dispatch'
 import type { TickReport } from '@/types/tick'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
@@ -25,7 +25,7 @@ import { actionButtonLabel, actionPendingLabel, actionResultCopy, decisionButton
 import { actionNoteFor, agentSummaryOf, decisionNoteFor, pillStatusFor } from '@/renderer/board/row-model'
 import { itemDetailLines } from '@/renderer/board/tick'
 
-export interface ItemPaneProps {
+interface ItemPaneProps {
   readonly row: BoardItemRow
   readonly report: TickReport | undefined
   readonly owner: DispatchOwner

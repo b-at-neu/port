@@ -4,35 +4,10 @@
 // entries wholesale (an `ended` snapshot, or one with no pending requests,
 // clears them), so a request withdrawn by an interrupt, a session end, or
 // an SDK-side cancel disappears on the very next `session:status` push.
-import type { HostedSessionSnapshot, PendingPermission, SessionKey, SessionOrigin } from '@/types/hosting'
-import type { RepoId } from '@/utils/repos'
-
-interface SessionEntry {
-  readonly repoId: RepoId | null
-  /** This session's folder, for a null-`repoId` session's own display label. */
-  readonly folder: string
-  /** #103: carried alongside the pending list so the dialog's context line
-   *  can name the session with the same `sessionDisplayLabel` the rail
-   *  shows — never the raw `sessionKey`. */
-  readonly title: string | null
-  readonly origin: SessionOrigin
-  readonly startedAt: string
-  readonly permissions: readonly PendingPermission[]
-}
-
-export type PermissionQueue = ReadonlyMap<SessionKey, SessionEntry>
+import type { HostedSessionSnapshot } from '@/types/hosting'
+import type { PermissionQueue, QueuedPermission } from '@/types/permission'
 
 export const EMPTY_QUEUE: PermissionQueue = new Map()
-
-export interface QueuedPermission {
-  readonly sessionKey: SessionKey
-  readonly repoId: RepoId | null
-  readonly folder: string
-  readonly title: string | null
-  readonly origin: SessionOrigin
-  readonly startedAt: string
-  readonly permission: PendingPermission
-}
 
 /** Folds one snapshot into the queue — the whole update unit `session:status`
  *  and `session:list` both use, so seeding from a boot-time list and

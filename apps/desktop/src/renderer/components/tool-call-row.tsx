@@ -5,7 +5,7 @@ import { cn } from '@/renderer/lib/utils'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/renderer/components/ui/collapsible'
 import { DiffView } from '@/renderer/components/diff-view'
 import { defaultOpen, toolSummary } from '@/renderer/components/conversation-model'
-import type { GroupedNode, RowView } from '@/renderer/components/conversation-model'
+import type { GroupedNode, RowView } from '@/types/components'
 import { BashBody, LookupBody, TaskBody, TodoBody } from '@/renderer/components/tool-call-detail'
 
 function ToolIcon({ name, className }: { readonly name: string; readonly className: string }) {

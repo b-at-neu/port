@@ -72,7 +72,7 @@ export function primaryLine(toolName: string, input: Readonly<Record<string, unk
   return null
 }
 
-export type FormatInputResult = { readonly ok: true; readonly text: string } | { readonly ok: false }
+type FormatInputResult = { readonly ok: true; readonly text: string } | { readonly ok: false }
 
 /** The full input is never truncated — it scrolls instead, because the
  *  operator is approving exactly those bytes. `ok: false` only when

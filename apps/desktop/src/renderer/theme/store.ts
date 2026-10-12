@@ -4,27 +4,11 @@
 // `permission/controller.ts` already establish. No `useEffect`: React reads
 // the live value through `useSyncExternalStore`, never a mount-time sync.
 import { useSyncExternalStore } from 'react'
-
-export type ThemePreference = 'system' | 'light' | 'dark'
-export type ResolvedTheme = 'light' | 'dark'
+import type { ResolvedTheme, ThemePreference, ThemeStoreDeps } from '@/types/theme'
 
 const STORAGE_KEY = 'port.theme'
 
-export interface ThemeStoreDeps {
-  readonly storage: Pick<Storage, 'getItem' | 'setItem'>
-  /** A simple shape, not `Pick<MediaQueryList, …>` — the DOM lib's own
-   *  overloaded `addEventListener` makes a plain fake awkward to type, and
-   *  the real `MediaQueryList` already satisfies this narrower one
-   *  structurally. */
-  readonly media: {
-    readonly matches: boolean
-    addEventListener(type: 'change', listener: () => void): void
-    removeEventListener(type: 'change', listener: () => void): void
-  }
-  readonly root: Pick<HTMLElement, 'dataset'>
-}
-
-export interface ThemeStore {
+interface ThemeStore {
   // `this: void` on every method `useThemePreference` passes around unbound
   // (`store.subscribe`, `store.getPreference`, `store.setPreference`) — none
   // of them reads `this`, and the annotation is what lets eslint's

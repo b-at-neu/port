@@ -1,5 +1,6 @@
 // Per-repository prompt history — sent text only, newest first, capped and duplicate-collapsed, persisted in localStorage.
 import type { RepoId } from '@/utils/repos'
+import type { PromptHistoryStorage, RecallState } from '@/types/session'
 
 export const MAX_ENTRIES = 100
 
@@ -9,12 +10,6 @@ type HistoryByRepo = Readonly<Record<string, readonly string[]>>
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string')
-}
-
-/** Injectable so tests exercise this against a plain fake, never a jsdom `window`. */
-export interface PromptHistoryStorage {
-  getItem(key: string): string | null
-  setItem(key: string, value: string): void
 }
 
 function defaultStorage(): PromptHistoryStorage {
@@ -58,11 +53,6 @@ export function recordSent(repoId: RepoId, text: string, storage: PromptHistoryS
   if (existing[0] === text) return
   const next = [text, ...existing].slice(0, MAX_ENTRIES)
   writeAll(storage, { ...all, [repoId]: next })
-}
-
-export interface RecallState {
-  /** `null` means not currently recalling — the draft is the operator's own typed text. */
-  readonly index: number | null
 }
 
 export const NOT_RECALLING: RecallState = { index: null }

@@ -1,5 +1,5 @@
 // Every pure string the Repositories screen's Denials tab renders. Every count comes from `window`, never the whole-file `summary`.
-import type { AttributionTally, SessionAttribution } from '@/renderer/local/inspect'
+import type { AttributionTally, SessionAttribution } from '@/types/local'
 import type { DenialActor, DenialSummary } from '@/types/local'
 
 export function metaStripCopy(window: DenialSummary): string {
@@ -26,9 +26,9 @@ export function burstPillCopy(count: number, startedAt: string, endedAt: string)
   return `Burst: ${String(count)} in ${String(minutes)}m`
 }
 
-export type AttributionPillTone = 'attention' | 'idle'
+type AttributionPillTone = 'attention' | 'idle'
 
-export interface AttributionPill {
+interface AttributionPill {
   readonly label: string
   readonly tone: AttributionPillTone
 }

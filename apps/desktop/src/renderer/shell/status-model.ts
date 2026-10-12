@@ -4,9 +4,9 @@ import type { QueryObserverResult } from '@tanstack/react-query'
 import type { RuntimePreflight } from '@/types/runtime'
 import type { GhStatus } from '@/types/gh'
 
-export type FooterStatusKind = 'success' | 'danger' | 'idle'
+type FooterStatusKind = 'success' | 'danger' | 'idle'
 
-export interface FooterStatus {
+interface FooterStatus {
   readonly status: FooterStatusKind
   readonly tooltip: string
 }

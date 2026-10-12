@@ -1,7 +1,7 @@
 // Pure, the same shape as fixtures/mode.ts.
 export const E2E_ENV = { flag: 'PORT_E2E', userData: 'PORT_E2E_USER_DATA', fake: 'PORT_E2E_FAKE' } as const
 
-export type E2EModeResult =
+type E2EModeResult =
   | { readonly kind: 'off' }
   | { readonly kind: 'ignored' }
   | { readonly kind: 'invalid'; readonly reason: string }

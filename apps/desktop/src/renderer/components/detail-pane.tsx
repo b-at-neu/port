@@ -3,7 +3,7 @@
 import type { KeyboardEvent, ReactNode } from 'react'
 import { cn } from '@/renderer/lib/utils'
 
-export interface DetailPaneProps {
+interface DetailPaneProps {
   readonly onClose: () => void
   readonly children: ReactNode
   readonly className?: string

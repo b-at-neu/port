@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createPermissionStore } from '@/renderer/permission/store'
-import type { PermissionStoreDeps } from '@/renderer/permission/store'
+import type { PermissionStoreDeps } from '@/types/permission'
 import type { HostedSessionSnapshot, PermissionDecision, SessionKey } from '@/types/hosting'
 import type { SessionControls, SessionModels } from '@/utils/hosting/controls'
 import type { RepoId } from '@/utils/repos'

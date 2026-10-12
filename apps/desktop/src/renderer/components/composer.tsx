@@ -6,21 +6,15 @@ import { FileText, Image as ImageIcon, Paperclip, Send, X } from 'lucide-react'
 import { Textarea } from '@/renderer/components/ui/textarea'
 import { Button } from '@/renderer/components/ui/button'
 import { ATTACH_FILES_TOOLTIP, DROP_TO_ATTACH_HINT, removeAttachmentLabel } from '@/renderer/session/composer-copy'
+import type { ComposerAttachmentChip } from '@/types/components'
 
-export interface ComposerAttachmentChip {
-  readonly key: string
-  readonly name: string
-  readonly kind: 'image' | 'pdf' | 'text'
-  readonly sizeLabel: string
-}
-
-export interface ComposerComboboxProps {
+interface ComposerComboboxProps {
   readonly listId: string
   readonly expanded: boolean
   readonly activeDescendantId: string | null
 }
 
-export interface ComposerProps {
+interface ComposerProps {
   readonly value: string
   readonly onChange: (value: string) => void
   readonly onSend: () => void
