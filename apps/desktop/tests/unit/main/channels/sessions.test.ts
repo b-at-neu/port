@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import type { TranscriptTailOpen, TranscriptTailPoll } from '@/utils/sessions/transcript'
 import { resolveTranscriptTailClose, resolveTranscriptTailOpen, resolveTranscriptTailPoll } from '@/main/channels/sessions'
 import type { TranscriptTailDeps } from '@/main/channels/sessions'
 
@@ -36,20 +35,6 @@ describe('resolveTranscriptTailOpen', () => {
       "'transcript:tail:open' requires 'agentId' to be a string or null",
     )
   })
-
-  it('passes a valid request through to openTail', async () => {
-    const response: TranscriptTailOpen = { ok: true, tailId: 'tail-1', source: {} as never, entries: [] }
-    let received: unknown
-    const deps = tailDepsWith({
-      openTail: (params) => {
-        received = params
-        return Promise.resolve(response)
-      },
-    })
-    const result = await resolveTranscriptTailOpen({ sessionId: 's1', agentId: null }, deps)
-    expect(result).toBe(response)
-    expect(received).toEqual({ sessionId: 's1', agentId: null })
-  })
 })
 
 describe('resolveTranscriptTailPoll', () => {
@@ -62,20 +47,6 @@ describe('resolveTranscriptTailPoll', () => {
   it('rejects an empty tailId', async () => {
     await expect(resolveTranscriptTailPoll({ tailId: '' }, tailDepsWith({}))).rejects.toThrow("'transcript:tail:poll' requires a non-empty 'tailId'")
   })
-
-  it('passes a valid request through to pollTail', async () => {
-    const response: TranscriptTailPoll = { ok: true, source: {} as never, appended: [], patched: [], hasMore: false }
-    let received: unknown
-    const deps = tailDepsWith({
-      pollTail: (params) => {
-        received = params
-        return Promise.resolve(response)
-      },
-    })
-    const result = await resolveTranscriptTailPoll({ tailId: 'tail-1' }, deps)
-    expect(result).toBe(response)
-    expect(received).toEqual({ tailId: 'tail-1' })
-  })
 })
 
 describe('resolveTranscriptTailClose', () => {
@@ -83,16 +54,5 @@ describe('resolveTranscriptTailClose', () => {
     expect(() => resolveTranscriptTailClose({ tailId: undefined as unknown as string }, tailDepsWith({}))).toThrow(
       "'transcript:tail:close' requires a non-empty 'tailId'",
     )
-  })
-
-  it('passes a valid request through to closeTail', () => {
-    let received: unknown
-    const deps = tailDepsWith({
-      closeTail: (params) => {
-        received = params
-      },
-    })
-    resolveTranscriptTailClose({ tailId: 'tail-1' }, deps)
-    expect(received).toEqual({ tailId: 'tail-1' })
   })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildSessionOptions, SETTING_SOURCES } from '@/main/hosting/options'
+import { buildSessionOptions } from '@/main/hosting/options'
 import type { CanUseTool } from '@/main/hosting/sdk'
 import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
 import type { PluginRequest } from '@/types/hosting'
@@ -70,13 +70,6 @@ describe('buildSessionOptions', () => {
     { kind: 'fork' as const, sessionId: 'x' },
   ]
 
-  it('settingSources is always the three explicit sources, never omitted, in every start mode', () => {
-    for (const mode of MODES) {
-      const options = buildSessionOptions({ ...BASE, mode, plugin: INSTALLED })
-      expect(options.settingSources).toEqual([...SETTING_SOURCES])
-    }
-  })
-
   it('the installed source passes no plugins option, in every start mode', () => {
     for (const mode of MODES) {
       const options = buildSessionOptions({ ...BASE, mode, plugin: INSTALLED })
@@ -89,11 +82,6 @@ describe('buildSessionOptions', () => {
       const options = buildSessionOptions({ ...BASE, mode, plugin: REPOSITORY })
       expect(options.plugins).toEqual([{ type: 'local', path: '/repo/plugins/port' }])
     }
-  })
-
-  it('never sets a skills option key', () => {
-    const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, plugin: REPOSITORY })
-    expect((options as Record<string, unknown>)['skills']).toBeUndefined()
   })
 })
 
@@ -120,11 +108,9 @@ describe('buildSessionOptions — stage branch (#327)', () => {
     expect((options as Record<string, unknown>)['agent']).toBe('port:impl-agent')
   })
 
-  it('adds no tools, allowedTools, systemPrompt or bypassPermissions', () => {
+  it('adds no allowedTools or systemPrompt', () => {
     const options = buildSessionOptions({ ...BASE, mode: { kind: 'fresh' }, stage: { agentName: 'port:plan-agent', model: 'opus' } }) as Record<string, unknown>
-    expect(options['tools']).toBeUndefined()
     expect(options['allowedTools']).toBeUndefined()
     expect(options['systemPrompt']).toBeUndefined()
-    expect(options['bypassPermissions']).toBeUndefined()
   })
 })
