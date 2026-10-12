@@ -9,7 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/u
 import { toast } from 'sonner'
 import type { HostedSessionSnapshot, SessionMarks } from '@/types/hosting'
 import { sessionTitle } from '@/utils/hosting/label'
-import { folderLabel } from '@/renderer/workspace/label'
+import { folderLabel } from '@/utils/workspace/label'
 import type { RepositoryEntry } from '@/utils/repos'
 import { useIpcMutation, useIpcQuery } from '@/renderer/data/query'
 import { useSelectedSession } from '@/renderer/session/selection'
