@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu } from 'electron'
+import { statSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import { registerIpc, broadcastAppCommand } from '@/main/ipc'
 import { registerFixtureIpc } from '@/main/fixtures'
@@ -13,6 +14,7 @@ import { confirmQuit } from '@/main/dialogs'
 import { applyNavigationGuards } from '@/main/navigation'
 import { ABOUT_NOTICE, ABOUT_POWERED_BY } from '@/utils/about/copy'
 import { menuTemplate } from '@/main/menu'
+import { chromeSandboxPath, needsNoSandbox } from '@/main/sandbox'
 import type { StageRegistry } from '@/types/stage'
 
 // A hung registry write must never block quitting.
@@ -25,10 +27,19 @@ function withTimeout(promise: Promise<void>, ms: number): Promise<void> {
   return Promise.race([promise, deadline])
 }
 
-// A dev-only `pnpm install` never runs as root, so `chrome-sandbox` ships without the root-owned
-// permissions Chromium requires. Packaged builds are unaffected.
-if (!app.isPackaged) {
-  app.commandLine.appendSwitch('no-sandbox')
+// A misconfigured `chrome-sandbox` helper (see `ensure-sandbox.mjs`) falls back to `--no-sandbox`;
+// once it's root:4755, the real sandbox runs instead, which AppArmor-hardened distros require.
+if (!app.isPackaged && process.platform === 'linux') {
+  let stat: { uid: number; mode: number } | null = null
+  try {
+    const result = statSync(chromeSandboxPath(process.execPath), { throwIfNoEntry: false })
+    stat = result ? { uid: result.uid, mode: result.mode } : null
+  } catch {
+    stat = null
+  }
+  if (needsNoSandbox(process.platform, app.isPackaged, stat)) {
+    app.commandLine.appendSwitch('no-sandbox')
+  }
 }
 
 // An `on` result relocates `userData` before the single-instance lock is ever requested, so a
