@@ -1,13 +1,10 @@
-// The claim dialog — a shadcn Dialog over claim/controller.ts's
-// useSyncExternalStore state. Esc or the scrim calls closeClaimDialog.
+// The claim dialog — a shadcn Dialog over claim/controller.ts's useSyncExternalStore state. Esc or the scrim calls closeClaimDialog; every entry comes from Backlog's own Work on.
 import { useSyncExternalStore } from 'react'
 import { Button } from '@/renderer/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/renderer/components/ui/dialog'
-import { Input } from '@/renderer/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/renderer/components/ui/select'
 import type { ClaimVerdict, PlanGateChoice } from '@/types/claim'
-import type { RepoId } from '@/utils/repos'
-import { backToPick, closeClaimDialog, confirmClaim, getState, retryPreflight, setClaimNumber, setClaimRepo, setPlanGate, submitPick, subscribe } from '@/renderer/claim/controller'
+import { closeClaimDialog, confirmClaim, getState, retryPreflight, setPlanGate, subscribe } from '@/renderer/claim/controller'
 import { PLAN_GATE_OPTIONS, assigneeCopy, blockersCopy, closedCopy, movedCopy, preflightFailedCopy, primaryButtonLabel, refusalCopy, writeOutcomeCopy } from '@/renderer/claim/copy'
 
 function Aside({ line, note }: { readonly line: string; readonly note: string }) {
@@ -16,66 +13,6 @@ function Aside({ line, note }: { readonly line: string; readonly note: string })
       <span>{line}</span>
       {note !== '' ? <span className="text-meta text-muted-foreground">{note}</span> : null}
     </div>
-  )
-}
-
-function PickStep() {
-  const state = useSyncExternalStore(subscribe, getState)
-  if (state.step !== 'picking') return null
-
-  if (state.repos.length === 0) {
-    return (
-      <>
-        <DialogHeader>
-          <DialogTitle>Work on…</DialogTitle>
-        </DialogHeader>
-        <p className="text-small text-muted-foreground">No port-managed repositories yet. Add one on the Repositories tab.</p>
-        <DialogFooter>
-          <Button variant="outline" onClick={closeClaimDialog}>
-            Cancel
-          </Button>
-        </DialogFooter>
-      </>
-    )
-  }
-
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle>Work on…</DialogTitle>
-      </DialogHeader>
-      <div className="flex flex-col gap-3">
-        <label className="flex flex-col gap-1">
-          <span className="text-small text-muted-foreground">Repository</span>
-          <Select value={state.repoId ?? undefined} onValueChange={(value) => setClaimRepo(value as RepoId)}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Pick a repository" />
-            </SelectTrigger>
-            <SelectContent>
-              {state.repos.map((repo) => (
-                <SelectItem key={repo.id} value={repo.id}>
-                  {repo.repo}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-small text-muted-foreground">Issue number</span>
-          <Input inputMode="numeric" value={state.number} onChange={(event) => setClaimNumber(event.target.value)} />
-        </label>
-        <p className="text-meta text-muted-foreground">Opt-in labels the issue and assigns it to you. It does not dispatch — a cockpit assigned to you picks it up on its next tick.</p>
-        {state.error !== null ? <p className="text-small text-danger-dot">{state.error}</p> : null}
-      </div>
-      <DialogFooter>
-        <Button variant="outline" onClick={closeClaimDialog}>
-          Cancel
-        </Button>
-        <Button onClick={submitPick} disabled={state.number.trim() === ''}>
-          Continue
-        </Button>
-      </DialogFooter>
-    </>
   )
 }
 
@@ -132,9 +69,6 @@ function ReviewStep() {
         <Button variant="outline" onClick={closeClaimDialog}>
           Cancel
         </Button>
-        <Button variant="outline" onClick={backToPick}>
-          Back
-        </Button>
         <Button onClick={confirmClaim}>{primaryButtonLabel(claimable)}</Button>
       </DialogFooter>
     </>
@@ -172,8 +106,6 @@ function DialogBody() {
   switch (state.step) {
     case 'closed':
       return null
-    case 'picking':
-      return <PickStep />
     case 'loading':
       return <LoadingStep repo={state.repo} number={state.number} />
     case 'reviewing':

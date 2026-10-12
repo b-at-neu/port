@@ -396,7 +396,7 @@ export function registerIpc(): RegisteredIpc {
     } satisfies ItemDecisionDeps),
   )
 
-  // run/drain/pause/take-over one repository, or halt everything — all branching in `resolveDispatchControl`.
+  // run/drain/pause/take-over, scoped to one repository — all branching in `resolveDispatchControl`.
   handle('dispatch:control', (_event, request) =>
     resolveDispatchControl(registryDeps, request, {
       listRepositories,

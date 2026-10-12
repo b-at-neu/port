@@ -3,13 +3,15 @@
 // the same rule `worktrees.ts`'s own header states. Pure string functions;
 // no DOM here.
 import type { ItemStatus, LinkReason, RepositoryFreshness, RepositoryState, StatusEvidence, WaitingOn } from '@/types/state'
-import type { DisplayStatus, SourceHealth, SourceKind } from '@/types/board'
+import type { BoardSnapshot, DisplayStatus, SourceHealth, SourceKind } from '@/types/board'
+import { SOURCE_KINDS } from '@/types/board'
 import type { RepoProblem } from '@/utils/repos'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import { RETRY_TRIGGER } from '@/utils/actions/plan'
 import type { ActionPlan, ActionRefusal, ItemActionResult, OperatorAction, OperatorDecision } from '@/types/actions'
 import type { Conflict } from '@/types/writes'
 import type { StageLink } from '@/types/board'
+import { worstHealth } from '@/renderer/board/project'
 
 const STAGE_NAME: Readonly<Record<StageLink['agent'], string>> = { plan: 'Planning', impl: 'Implementing', review: 'Reviewing', revise: 'Revising' }
 
@@ -149,6 +151,53 @@ export function rateLimitCopy(freshness: RepositoryFreshness | null, remaining: 
   const resetTime = new Date(resetAt)
   const label = Number.isNaN(resetTime.getTime()) ? resetAt : resetTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   return `${remaining.toLocaleString()} API points left, resets ${label}`
+}
+
+function freshnessAgeCopy(at: string, now: Date): string {
+  const seconds = Math.round((now.getTime() - Date.parse(at)) / 1000)
+  const minutes = Math.round(seconds / 60)
+  return minutes >= 1 ? `${String(minutes)}m ago` : `${String(seconds)}s ago`
+}
+
+/** A source counts against the header indicator when it has failed at least
+ *  once, or — GitHub only — its last success is older than twice its own
+ *  poll interval. */
+function isUnhealthySource(kind: SourceKind, health: SourceHealth, now: Date): boolean {
+  if (health.consecutiveFailures > 0) return true
+  if (kind !== 'github' || health.lastSuccessAt === null) return false
+  return now.getTime() - Date.parse(health.lastSuccessAt) > health.intervalMs * 2
+}
+
+/** The Board header's single freshness indicator (replacing the old
+ *  `FreshnessStrip` plus stale label) — `null` whenever every source reads
+ *  healthy, or there is no health to read at all. */
+export function freshnessIndicator(snapshot: BoardSnapshot, now: Date): { readonly label: string; readonly lines: readonly string[] } | null {
+  if (snapshot.health.length === 0) return null
+
+  const unhealthy = SOURCE_KINDS.filter((kind) => {
+    const worst = worstHealth(snapshot.health, kind)
+    return worst !== null && isUnhealthySource(kind, worst, now)
+  })
+  if (unhealthy.length === 0) return null
+
+  const unhealthyHealths = unhealthy.map((kind) => worstHealth(snapshot.health, kind)).filter((h): h is SourceHealth => h !== null)
+  const neverRead = unhealthyHealths.some((h) => h.lastSuccessAt === null)
+  let label: string
+  if (neverRead) {
+    label = 'Not updated yet'
+  } else {
+    const oldest = unhealthyHealths.reduce((a, b) => (Date.parse(a.lastSuccessAt ?? '') <= Date.parse(b.lastSuccessAt ?? '') ? a : b))
+    label = `Updated ${freshnessAgeCopy(oldest.lastSuccessAt as string, now)}`
+  }
+
+  const sourceLines = SOURCE_KINDS.map((kind) => {
+    const worst = worstHealth(snapshot.health, kind)
+    return worst !== null ? sourceHealthCopy(kind, worst, now) : null
+  }).filter((line): line is string => line !== null)
+  const rateLimit = snapshot.state.repositories.find((r): r is Extract<RepositoryState, { readonly ok: true }> => r.ok)?.rateLimit ?? null
+  const rateLimitText = rateLimit !== null ? rateLimitCopy(null, rateLimit.remaining, rateLimit.resetAt) : null
+
+  return { label, lines: rateLimitText !== null ? [...sourceLines, rateLimitText] : sourceLines }
 }
 
 // --- The plan gate (#92) ----------------------------------------------------

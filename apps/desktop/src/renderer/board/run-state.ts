@@ -60,8 +60,9 @@ export function runStateResultNote(result: DispatchControlResult): string | null
 }
 
 /** `pause`'s own stop report, reusing `halt-copy.ts`'s halt copy — the same
- *  shape as `Halt everything`'s report, scoped to one repository, with the
- *  run-state-specific note the plan's **UX states** table names. */
+ *  report shape `main/dispatch/halt.ts`'s `haltDispatch` always returns,
+ *  scoped here to one repository, with the run-state-specific note the
+ *  plan's **UX states** table names. */
 export function pauseReportNote(report: Extract<HaltReport, { readonly kind: 'completed' }>, repoName: string): string {
   return `Nothing in ${repoName} will be picked up until you run it. Stopped tickets have no stage; Resume on a row restores it.`
 }

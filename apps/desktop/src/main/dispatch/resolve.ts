@@ -49,8 +49,8 @@ function ownershipWriteFailureReason(result: Extract<Awaited<ReturnType<typeof t
   return { reason: 'unwritable', message: result.message, path: result.path }
 }
 
-/** `halt` sweeps every ready repository with no `repoId`; the rest require one, naming a registered
- *  repository, and take or release ownership before writing the run state and refreshing. */
+/** Every command requires a registered `repoId`; `run`/`drain`/`take-over` take or release
+ *  ownership before writing the run state and refreshing. */
 export async function resolveDispatchControl(
   registryDeps: RegistryDeps,
   request: { readonly command: DispatchCommand; readonly repoId?: RepoId },
@@ -58,16 +58,6 @@ export async function resolveDispatchControl(
 ): Promise<DispatchControlResult> {
   if (typeof request?.command !== 'string' || !(DISPATCH_COMMANDS as readonly string[]).includes(request.command)) {
     throw new Error(`'dispatch:control' requires 'command' to be one of ${DISPATCH_COMMANDS.join(', ')}`)
-  }
-
-  if (request.command === 'halt') {
-    if (request.repoId !== undefined) throw new Error("'dispatch:control' halt must not carry a 'repoId'")
-    const list = await deps.listRepositories(registryDeps)
-    const entries = list.ok ? list.repositories.filter(isReadyEntry) : []
-    const report = await deps.haltDispatch({ snapshot: deps.snapshot(), entries, runStates: deps.runStates, repoIds: entries.map((e) => e.id), auditDir: deps.auditDir, now: deps.now })
-    const releases = await Promise.all(entries.map((entry) => deps.releaseOwnership({ repoRoot: entry.path, repo: entry.config.repo })))
-    await deps.refresh({})
-    return { ok: true, command: 'halt', report, released: releases.every((r) => r.ok) }
   }
 
   if (typeof request.repoId !== 'string' || request.repoId === '') {

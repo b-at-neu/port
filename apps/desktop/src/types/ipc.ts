@@ -148,9 +148,9 @@ export interface IpcMap {
     request: { repoId: RepoId; number: number; decision: OperatorDecision; expectedStage: LabelKey | null; route: UnblockRoute | null; note: string | null; skipComment: boolean }
     response: ItemDecisionResult
   }
-  /** Operator control over dispatch. `repoId` is required for `run`/`drain`/`pause`/`take-over` and must be omitted for `halt`, which sweeps every ready repository. `take-over` overwrites a `terminal` ownership record and then runs. */
+  /** Operator control over dispatch. `repoId` is required for every command. `take-over` overwrites a `terminal` ownership record and then runs. */
   'dispatch:control': {
-    request: { command: 'halt' } | { command: 'run' | 'drain' | 'pause' | 'take-over'; repoId: RepoId }
+    request: { command: 'run' | 'drain' | 'pause' | 'take-over'; repoId: RepoId }
     response: DispatchControlResult
   }
   /** The runtime strip's cheap check — no repository context, no subprocess beyond `claude --version`, no network. There is no failure branch; every failure *is* a diagnosis. */

@@ -1,4 +1,4 @@
-// The command palette (Ctrl/Cmd+K) — Go to, Sessions, Pipelines, Tickets, View.
+// The command palette (Ctrl/Cmd+K) — Go to, Sessions, Pipelines, View.
 import { useNavigate } from '@tanstack/react-router'
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut } from '@/renderer/components/ui/command'
 import { needsYouItems } from '@/renderer/board/needs-you'
@@ -6,7 +6,6 @@ import { sessionTitle } from '@/utils/hosting/label'
 import type { RepositoryEntry } from '@/utils/repos'
 import { useIpcQuery } from '@/renderer/data/query'
 import { selectSession } from '@/renderer/session/actions'
-import { openClaimDialog } from '@/renderer/claim/controller'
 import { useThemePreference } from '@/renderer/theme/store'
 import { usePaletteState, closePalette, openNewSessionDialog, setPaletteOpen, toggleSidebarCollapsed } from '@/renderer/shell/stores'
 import { useRunStateCommand } from '@/renderer/shell/run-state-command'
@@ -113,17 +112,6 @@ export function CommandPalette() {
               </div>
             )
           })}
-        </CommandGroup>
-        <CommandSeparator />
-        <CommandGroup heading="Tickets">
-          <CommandItem
-            onSelect={() => {
-              closePalette()
-              openClaimDialog()
-            }}
-          >
-            Work on ticket…
-          </CommandItem>
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="View">
