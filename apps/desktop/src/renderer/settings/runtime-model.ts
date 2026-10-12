@@ -5,15 +5,11 @@
 // component. Shares `renderer/runtime/copy.ts`'s copy table rather than
 // redeclaring any of it.
 import type { RuntimeDiagnosis, RuntimePreflight, RuntimeProbe } from '@/types/runtime'
+import type { ReadyRepo } from '@/types/repositories'
 import { CLI_OUTDATED_COPY, RUNTIME_API_KEY_NOTE, RUNTIME_COPY, RUNTIME_NO_READY_REPO_NOTE, RUNTIME_PROBE_ERROR, runtimeActionLabel } from '@/renderer/runtime/copy'
 import type { PillStatus } from '@/renderer/components/status-pill'
 
-export interface ReadyRepo {
-  readonly id: string
-  readonly repo: string
-}
-
-export interface RuntimeAction {
+export interface RuntimeActionView {
   readonly label: string
   readonly kind: 'test' | 'retry'
   readonly disabledReason: string | null
@@ -28,7 +24,7 @@ export interface RuntimeDiagnosisModel {
   readonly body: string
   readonly detail: string | null
   readonly notes: readonly string[]
-  readonly action: RuntimeAction | null
+  readonly action: RuntimeActionView | null
   /** The probe's own invoke-rejected case — a distinct field, not folded
    *  into `notes`, since the UX spec renders it as its own `ErrorBanner`
    *  rather than a muted note line. */
@@ -101,7 +97,7 @@ export function runtimeDiagnosisModel(
   // still-pending repos query is not evidence of "no ready repo", so
   // withhold the action entirely rather than flashing the disabled-with-
   // reason state for a repo that is actually registered.
-  const action: RuntimeAction | null =
+  const action: RuntimeActionView | null =
     label === null || (diagnosis === 'unverified' && readyRepo === null && reposPending)
       ? null
       : {

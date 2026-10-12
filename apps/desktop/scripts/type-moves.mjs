@@ -202,15 +202,17 @@ function allSourceFiles() {
   return files
 }
 
-/** Builds the classification: a Map<file, Map<name, decl>> for src/main/ non-test files, plus
- *  per-declaration importer file lists (resolved through one level of re-export shim). */
-export function classify() {
-  const mainRoot = join(SRC_ROOT, 'main')
-  const mainFiles = walkSourceFiles(mainRoot).filter((f) => !f.endsWith('.test.ts'))
+export const SCAN_ROOTS = ['main', 'renderer']
+
+/** Builds the classification: a Map<file, Map<name, decl>> for the scanned roots' non-test files
+ *  (src/main/ and src/renderer/ by default), plus per-declaration importer file lists (resolved
+ *  through one level of re-export shim). */
+export function classify(roots = SCAN_ROOTS) {
+  const scanFiles = roots.flatMap((r) => walkSourceFiles(join(SRC_ROOT, r))).filter((f) => !f.endsWith('.test.ts') && !f.endsWith('.test.tsx'))
 
   const declsByFile = new Map()
   const declByKey = new Map() // `${file}#${name}` -> decl
-  for (const file of mainFiles) {
+  for (const file of scanFiles) {
     const content = readFileSync(file, 'utf8')
     const decls = findDeclarations(content)
     if (decls.length) declsByFile.set(file, decls)
@@ -220,7 +222,7 @@ export function classify() {
   // shim resolution: specifier+name -> defining file (for re-export passthroughs)
   const allFiles = allSourceFiles()
   const shimTargets = new Map() // `${shimFile}#${name}` -> definingFile
-  for (const file of mainFiles) {
+  for (const file of scanFiles) {
     const content = readFileSync(file, 'utf8')
     for (const shim of findReexportShims(content)) {
       const target = resolveSpecifier(file, shim.specifier)
@@ -233,9 +235,6 @@ export function classify() {
   }
 
   for (const file of allFiles) {
-    if (declsByFile.has(file) && mainFiles.includes(file)) {
-      // a file can still import another main/ file's type; fall through
-    }
     const content = readFileSync(file, 'utf8')
     for (const imp of findNamedImports(content)) {
       let target = resolveSpecifier(file, imp.specifier)
@@ -250,7 +249,52 @@ export function classify() {
     }
   }
 
-  return { declByKey, declsByFile, mainFiles }
+  return { declByKey, declsByFile, mainFiles: scanFiles }
+}
+
+/** Pure check-facing wrapper: every MULTI-classified declaration under the scanned roots, as
+ *  [{ type, file, importer }] rows — one row per declaration, naming its first importer. Used by
+ *  scripts/checks/desktop-imports.ts so the check and this tool's classifier can never drift apart. */
+export function findLeakedTypes(files, roots = SCAN_ROOTS) {
+  if (files) {
+    // in-memory fixture mode: files is [{path, text}], path relative to SRC_ROOT
+    const byPath = new Map(files.map((f) => [join(SRC_ROOT, f.path), f.text]))
+    const scanFiles = [...byPath.keys()].filter((f) => !f.endsWith('.test.ts') && !f.endsWith('.test.tsx'))
+    const declByKey = new Map()
+    for (const file of scanFiles) {
+      const decls = findDeclarations(byPath.get(file))
+      for (const d of decls) declByKey.set(`${file}#${d.name}`, { file, ...d, importers: new Set() })
+    }
+    for (const file of scanFiles) {
+      for (const imp of findNamedImports(byPath.get(file))) {
+        let target = null
+        if (imp.specifier.startsWith('./')) {
+          const base = resolve(dirname(file), imp.specifier)
+          target = [base, `${base}.ts`, `${base}.tsx`].find((c) => byPath.has(c)) ?? null
+        } else if (imp.specifier.startsWith('@/')) {
+          const base = join(SRC_ROOT, imp.specifier.slice(2))
+          target = [base, `${base}.ts`, `${base}.tsx`].find((c) => byPath.has(c)) ?? null
+        }
+        if (!target) continue
+        const decl = declByKey.get(`${target}#${imp.name}`)
+        if (decl && file !== target) decl.importers.add(file)
+      }
+    }
+    const rows = []
+    for (const d of declByKey.values()) {
+      if (classOf(d, d.file) !== 'MULTI') continue
+      rows.push({ type: d.name, file: toPosix(relative(SRC_ROOT, d.file)), importer: toPosix(relative(SRC_ROOT, [...d.importers][0])) })
+    }
+    return rows
+  }
+
+  const { declByKey } = classify(roots)
+  const rows = []
+  for (const d of declByKey.values()) {
+    if (classOf(d, d.file) !== 'MULTI') continue
+    rows.push({ type: d.name, file: toPosix(relative(SRC_ROOT, d.file)), importer: toPosix(relative(SRC_ROOT, [...d.importers][0])) })
+  }
+  return rows
 }
 
 // SDK-shaped declarations can't move to types/<topic>.ts: the literal is banned there, and
@@ -264,8 +308,10 @@ export function classOf(decl, selfFile) {
   const importers = [...decl.importers]
   // A declaration's "own test" is either co-located (old layout: foo.ts / foo.test.ts) or mirrored
   // under tests/unit/ (current layout: src/main/x/foo.ts / tests/unit/main/x/foo.test.ts).
-  const coLocatedTest = `${selfFile.slice(0, -3)}.test.ts`
-  const mirroredTest = selfFile.startsWith(SRC_ROOT) ? join(DESKTOP_ROOT, 'tests', 'unit', `${relative(SRC_ROOT, selfFile).slice(0, -3)}.test.ts`) : null
+  const ext = selfFile.endsWith('.tsx') ? '.tsx' : '.ts'
+  const base = selfFile.slice(0, -ext.length)
+  const coLocatedTest = `${base}.test${ext}`
+  const mirroredTest = selfFile.startsWith(SRC_ROOT) ? join(DESKTOP_ROOT, 'tests', 'unit', `${relative(SRC_ROOT, base)}.test${ext}`) : null
   const ownTests = new Set([coLocatedTest, mirroredTest].filter((p) => p !== null))
   const nonSelfTestImporters = importers.filter((f) => !ownTests.has(f))
   if (nonSelfTestImporters.length === 0 && importers.length === 0) return 'NONE'

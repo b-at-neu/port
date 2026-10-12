@@ -6,12 +6,8 @@ import { invoke } from '@/renderer/data/invoke'
 import { isReadyRepo } from '@/utils/repos'
 import type { RepoId } from '@/utils/repos'
 import type { ClaimPreflight, ClaimVerdict, PlanGateChoice } from '@/types/claim'
+import type { ReadyRepo } from '@/types/repositories'
 import type { WriteOutcome } from '@/types/writes'
-
-export interface ReadyRepo {
-  readonly id: RepoId
-  readonly repo: string
-}
 
 export type ClaimState =
   | { readonly step: 'closed' }
