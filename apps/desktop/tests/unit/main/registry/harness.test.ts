@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { CommandResult } from '@/main/platform/run'
 import { currentBranch, permissionsState, refsCarryingConfig } from '@/main/registry/harness'
 import type { GitRunner } from '@/main/registry/harness'
-import { makeTempDir } from '@/testing/fixtures'
+import { makeTempDir } from '../../../fixtures/fs'
 
 function ok(stdout: string): CommandResult {
   return { ok: true, stdout, stderr: '' }

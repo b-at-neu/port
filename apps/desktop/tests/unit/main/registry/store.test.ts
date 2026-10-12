@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { createPathOps } from '@/main/platform/paths'
 import { dedupePaths, readRegistry, writeRegistry } from '@/main/registry/store'
-import { makeTempDir } from '@/testing/fixtures'
+import { makeTempDir } from '../../../fixtures/fs'
 
 describe('readRegistry', () => {
   it('returns empty when the file is absent', async () => {

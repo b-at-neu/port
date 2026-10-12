@@ -8,7 +8,7 @@ import type { GhResult } from '@/main/platform/gh'
 import type { RepositoryEntry } from '@/utils/repos'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import { readPipelineState } from '@/main/state/read'
-import { makeTempDir } from '@/testing/fixtures'
+import { makeTempDir } from '../../../fixtures/fs'
 
 async function pathExists(path: string): Promise<boolean> {
   try {

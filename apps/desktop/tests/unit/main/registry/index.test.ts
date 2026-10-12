@@ -6,7 +6,7 @@ import { pathOps } from '@/main/platform/paths'
 import type { GitRunner } from '@/main/registry/harness'
 import { addRepository, listRepositories, removeRepository } from '@/main/registry/index'
 import { readRegistry } from '@/main/registry/store'
-import { makeTempDir } from '@/testing/fixtures'
+import { makeTempDir } from '../../../fixtures/fs'
 
 async function makeRepo(root: string, repo = 'acme/widgets'): Promise<void> {
   await mkdir(join(root, '.claude'), { recursive: true })

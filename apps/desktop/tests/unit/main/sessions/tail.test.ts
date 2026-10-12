@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { createTailStore } from '@/main/sessions/tail'
 import { advanceTranscript, openTranscript } from '@/main/sessions/transcript'
-import { makeClaudeHome } from '@/testing/fixtures'
+import { makeClaudeHome } from '../../../fixtures/fs'
 
 function jsonl(records: readonly unknown[]): string {
   return records.map((record) => JSON.stringify(record)).join('\n') + '\n'

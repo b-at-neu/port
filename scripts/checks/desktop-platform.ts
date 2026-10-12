@@ -7,7 +7,6 @@ import type { Reporter } from '#lib/report.ts';
 // a child process, the filesystem, or a path string — a compile-time and layer 1 fact.
 export default async function ({ expect, fail, ok }: Reporter) {
   const platformDir = 'apps/desktop/src/main/platform';
-  const testingDir = 'apps/desktop/src/testing';
   const runRel = `${platformDir}/run.ts`;
   const srcDir = join(root, 'apps/desktop/src');
   const files = walk(srcDir).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
@@ -99,14 +98,13 @@ export default async function ({ expect, fail, ok }: Reporter) {
       }
 
       // A *.test.ts file is exempt — it verifies an adapter's behaviour rather than being
-      // one, and needs the real async fs API for a realistic fixture. apps/desktop/src/testing/ is the same exemption; it ships no production code.
+      // one, and needs the real async fs API for a realistic fixture.
       if (
         /from\s*'node:fs(?:\/promises)?'/.test(text) &&
         !rel.startsWith(`${platformDir}/`) &&
-        !rel.startsWith(`${testingDir}/`) &&
         !rel.endsWith('.test.ts')
       ) {
-        fail('desktop-platform-layer', `${rel} imports 'node:fs' directly — only files under ${platformDir}/, ${testingDir}/, or a *.test.ts fixture may`);
+        fail('desktop-platform-layer', `${rel} imports 'node:fs' directly — only files under ${platformDir}/ or a *.test.ts fixture may`);
       }
     }
     ok();
