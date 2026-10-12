@@ -49,7 +49,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
   }
 
   // --- No ../ import left inside tests/unit/ or tests/fixtures/ that climbs into src/ — a moved
-  // unit test must import its source with @/. An empty tree is not a failure: it is empty by design. ---
+  // unit test must import its source with @/. ---
   {
     const dirs = ['apps/desktop/tests/unit', 'apps/desktop/tests/fixtures'];
     const files = dirs.flatMap((dir) => walk(join(root, dir))).filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
@@ -74,7 +74,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
         }
       }
     }
-    if (files.length === 0) note('desktop-imports: apps/desktop/tests/unit/ and tests/fixtures/ scanned 0 files — empty by design until the move tickets land');
+    if (files.length === 0) fail('desktop-imports', 'no files scanned under apps/desktop/tests/unit/ or tests/fixtures/ — the guard cannot pass vacuously');
     else if (!violated) ok();
   }
 

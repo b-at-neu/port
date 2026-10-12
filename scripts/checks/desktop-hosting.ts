@@ -160,7 +160,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
   {
     const rel = unitTestPath('main/hosting/live.test.ts');
     if (!rel) {
-      fail('desktop-hosting', 'main/hosting/live.test.ts exists under neither apps/desktop/src/ nor apps/desktop/tests/unit/');
+      fail('desktop-hosting', 'main/hosting/live.test.ts does not exist under apps/desktop/tests/unit/');
     } else {
       const text = readFileSync(join(root, rel), 'utf8');
       if (!text.includes('PORT_LIVE_SDK')) {

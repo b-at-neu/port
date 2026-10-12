@@ -21,7 +21,7 @@ export default async function ({ fail, ok, expect, note }: Reporter) {
   {
     const testFile = unitTestPath('main/dispatch/ownership.test.ts');
     if (!testFile) {
-      fail('cockpit-ownership-parity', 'main/dispatch/ownership.test.ts exists under neither apps/desktop/src/ nor apps/desktop/tests/unit/');
+      fail('cockpit-ownership-parity', 'main/dispatch/ownership.test.ts does not exist under apps/desktop/tests/unit/');
     } else {
       const text = readFileSync(join(root, testFile), 'utf8');
       if (!text.includes('ownership-rules.mjs')) {
