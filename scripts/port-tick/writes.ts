@@ -25,8 +25,8 @@ function labelEdit({
   return `gh ${target} edit ${subject} --repo ${repo}${removePart} --add-label "${labels[addKey]}"`;
 }
 
-/** The refresh sweep's asymmetry, in one place. `action: 'refresh'` adds `labels.refreshBranch`
- *  and removes nothing; `action: 'escalate'` removes `labels[candidate.sourceLabelKey]` and adds `labels.needsHuman`. */
+/** `action: 'refresh'` adds `labels.refreshBranch`, also removing `labels.readyForReview` when
+ *  that was the source; `action: 'escalate'` removes `labels[candidate.sourceLabelKey]` instead. */
 export function refreshSweepWrite({ repo, labels, candidate, decision }: { repo: string; labels: Record<string, string>; candidate: any; decision: any }): any {
   if (decision.action === 'escalate') {
     return {
@@ -34,9 +34,31 @@ export function refreshSweepWrite({ repo, labels, candidate, decision }: { repo:
       why: `refresh sweep: ${decision.reason}`,
     };
   }
+  const removeKey = candidate.sourceLabelKey === 'readyForReview' ? 'readyForReview' : null;
   return {
-    command: labelEdit({ removeKey: null, addKey: 'refreshBranch', number: candidate.number, repo, labels }),
+    command: labelEdit({ removeKey, addKey: 'refreshBranch', number: candidate.number, repo, labels }),
     why: 'refresh sweep: rebase + force-push, no code changes',
+  };
+}
+
+/** A stranded pull request has no source label to remove; `unknown: true` means the timeline
+ *  gave no recoverable answer, otherwise `toKey` is the trigger `lastKnownTrigger` resolved. */
+export function strandedRestoreWrite({
+  repo,
+  labels,
+  number,
+  toKey,
+  unknown,
+}: {
+  repo: string;
+  labels: Record<string, string>;
+  number: number;
+  toKey: string;
+  unknown?: boolean;
+}): any {
+  return {
+    command: labelEdit({ removeKey: null, addKey: toKey, number, repo, labels }),
+    why: unknown ? 'stranded: last state unknown → needs human' : `stranded: restored ${labels[toKey]}`,
   };
 }
 

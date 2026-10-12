@@ -61,7 +61,8 @@ export function observationWrite(observation: WriteObservation, item: Reconciled
     }
     case 'refresh': {
       const add: readonly LabelKey[] = ['refreshBranch']
-      return { add, remove: [], expect: precondition(item, vocabulary, add), action: 'observe-refresh', comment: rebaseRequiredComment(observation.headRefOid, integration) }
+      const remove: readonly LabelKey[] = observation.sourceLabel === 'readyForReview' ? ['readyForReview'] : []
+      return { add, remove, expect: precondition(item, vocabulary, add), action: 'observe-refresh', comment: rebaseRequiredComment(observation.headRefOid, integration) }
     }
     case 'refresh-stuck': {
       const add: readonly LabelKey[] = ['needsHuman']

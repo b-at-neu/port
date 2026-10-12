@@ -247,6 +247,105 @@
         },
         "persist": { "contradictions": ["203:planApproved+prOpened"], "duplicates": [] }
       }
+    },
+    {
+      "function": "strandedPullRequests",
+      "name": "marker-only, mine — stranded (#494)",
+      "input": {
+        "prs": [{ "number": 70, "assignees": { "nodes": [{ "login": "op" }] }, "labels": { "nodes": [{ "name": "claude" }] } }],
+        "viewer": "op",
+        "labels": { "readyForReview": "ready for review", "reviewing": "reviewing", "needsRevision": "needs revision", "revising": "revising", "approved": "approved", "needsHuman": "needs human", "refreshBranch": "refresh branch", "refreshing": "refreshing", "marker": "claude" }
+      },
+      "expected": [70]
+    },
+    {
+      "function": "strandedPullRequests",
+      "name": "marker + approved — not stranded",
+      "input": {
+        "prs": [{ "number": 71, "assignees": { "nodes": [{ "login": "op" }] }, "labels": { "nodes": [{ "name": "claude" }, { "name": "approved" }] } }],
+        "viewer": "op",
+        "labels": { "readyForReview": "ready for review", "reviewing": "reviewing", "needsRevision": "needs revision", "revising": "revising", "approved": "approved", "needsHuman": "needs human", "refreshBranch": "refresh branch", "refreshing": "refreshing", "marker": "claude" }
+      },
+      "expected": []
+    },
+    {
+      "function": "strandedPullRequests",
+      "name": "unowned — not stranded",
+      "input": {
+        "prs": [{ "number": 72, "assignees": { "nodes": [] }, "labels": { "nodes": [{ "name": "claude" }] } }],
+        "viewer": "op",
+        "labels": { "readyForReview": "ready for review", "reviewing": "reviewing", "needsRevision": "needs revision", "revising": "revising", "approved": "approved", "needsHuman": "needs human", "refreshBranch": "refresh branch", "refreshing": "refreshing", "marker": "claude" }
+      },
+      "expected": []
+    },
+    {
+      "function": "strandedPullRequests",
+      "name": "another operator's — not stranded",
+      "input": {
+        "prs": [{ "number": 73, "assignees": { "nodes": [{ "login": "other" }] }, "labels": { "nodes": [{ "name": "claude" }] } }],
+        "viewer": "op",
+        "labels": { "readyForReview": "ready for review", "reviewing": "reviewing", "needsRevision": "needs revision", "revising": "revising", "approved": "approved", "needsHuman": "needs human", "refreshBranch": "refresh branch", "refreshing": "refreshing", "marker": "claude" }
+      },
+      "expected": []
+    },
+    {
+      "function": "strandedPullRequests",
+      "name": "no marker at all — not stranded",
+      "input": {
+        "prs": [{ "number": 74, "assignees": { "nodes": [{ "login": "op" }] }, "labels": { "nodes": [] } }],
+        "viewer": "op",
+        "labels": { "readyForReview": "ready for review", "reviewing": "reviewing", "needsRevision": "needs revision", "revising": "revising", "approved": "approved", "needsHuman": "needs human", "refreshBranch": "refresh branch", "refreshing": "refreshing", "marker": "claude" }
+      },
+      "expected": []
+    },
+    {
+      "function": "lastKnownTrigger",
+      "name": "last unlabeled refreshing → refreshBranch",
+      "input": {
+        "timeline": [
+          { "__typename": "LabeledEvent", "label": { "name": "refreshing" } },
+          { "__typename": "UnlabeledEvent", "label": { "name": "refreshing" } }
+        ],
+        "labels": { "refreshBranch": "refresh branch", "refreshing": "refreshing" }
+      },
+      "expected": "refreshBranch"
+    },
+    {
+      "function": "lastKnownTrigger",
+      "name": "last unlabeled ready for review → readyForReview",
+      "input": {
+        "timeline": [
+          { "__typename": "LabeledEvent", "label": { "name": "ready for review" } },
+          { "__typename": "UnlabeledEvent", "label": { "name": "ready for review" } }
+        ],
+        "labels": { "readyForReview": "ready for review" }
+      },
+      "expected": "readyForReview"
+    },
+    {
+      "function": "lastKnownTrigger",
+      "name": "only marker events — null",
+      "input": {
+        "timeline": [
+          { "__typename": "LabeledEvent", "label": { "name": "claude" } },
+          { "__typename": "UnlabeledEvent", "label": { "name": "claude" } }
+        ],
+        "labels": { "marker": "claude" }
+      },
+      "expected": null
+    },
+    {
+      "function": "lastKnownTrigger",
+      "name": "a later re-label of the same name is ignored — newest event wins",
+      "input": {
+        "timeline": [
+          { "__typename": "UnlabeledEvent", "label": { "name": "ready for review" } },
+          { "__typename": "LabeledEvent", "label": { "name": "ready for review" } },
+          { "__typename": "UnlabeledEvent", "label": { "name": "needs revision" } }
+        ],
+        "labels": { "readyForReview": "ready for review", "needsRevision": "needs revision" }
+      },
+      "expected": "needsRevision"
     }
   ]
 }
