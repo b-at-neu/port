@@ -108,7 +108,7 @@ function GroupHeader({ repo, count }: { readonly repo: string; readonly count: n
   )
 }
 
-function GroupBody({ group, now, selection, menuOpenKey, setMenuOpenKey, flatStart }: { readonly group: BacklogGroupView; readonly now: Date; readonly selection: number; readonly menuOpenKey: string | null; readonly setMenuOpenKey: (key: string | null) => void; readonly flatStart: number }) {
+function GroupBody({ group, now, selection, menuOpenKey, setMenuOpenKey, flatStart }: { readonly group: BacklogGroupView; readonly now: Date; readonly selection: number | null; readonly menuOpenKey: string | null; readonly setMenuOpenKey: (key: string | null) => void; readonly flatStart: number }) {
   if (group.kind === 'loading') {
     return (
       <div className="flex flex-col gap-1 px-4 py-2">
@@ -151,7 +151,9 @@ function GroupBody({ group, now, selection, menuOpenKey, setMenuOpenKey, flatSta
 export function BacklogScreen() {
   const reposQuery = useIpcQuery('repos:list')
   const navigate = useNavigate()
-  const [selection, setSelection] = useState(0)
+  // `null` until the operator actually navigates the list — a default of 0 would ring-highlight
+  // the first row before any keyboard input, which reads as already selected.
+  const [selection, setSelection] = useState<number | null>(null)
   const [menuOpenKey, setMenuOpenKey] = useState<string | null>(null)
   const now = new Date()
 
@@ -166,13 +168,13 @@ export function BacklogScreen() {
   })
 
   const flatRows: BacklogRowView[] = groups.flatMap((g) => (g.kind === 'loaded' ? g.items : []))
-  const clampedSelection = flatRows.length === 0 ? 0 : Math.min(selection, flatRows.length - 1)
+  const clampedSelection = selection === null || flatRows.length === 0 ? null : Math.min(selection, flatRows.length - 1)
 
   registerListNavigator('backlog', {
-    next: () => setSelection((s) => Math.min(s + 1, Math.max(flatRows.length - 1, 0))),
-    prev: () => setSelection((s) => Math.max(s - 1, 0)),
+    next: () => setSelection((s) => Math.min((s ?? -1) + 1, Math.max(flatRows.length - 1, 0))),
+    prev: () => setSelection((s) => Math.max((s ?? 0) - 1, 0)),
     open: () => {
-      const row = flatRows[clampedSelection]
+      const row = clampedSelection === null ? undefined : flatRows[clampedSelection]
       if (row !== undefined) setMenuOpenKey(rowKey(row.repoId, row.number))
     },
   })

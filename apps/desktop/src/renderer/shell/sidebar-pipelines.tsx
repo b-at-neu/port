@@ -44,7 +44,12 @@ function RunStateMenu({ row }: { readonly row: Extract<PipelineRow, { readonly r
           label: 'Drain',
           hint: 'finish in-flight',
           current: row.pill.label === 'Draining',
-          disabledReason: row.pill.label === 'Draining' ? 'Already draining' : ownershipReason,
+          disabledReason:
+            row.pill.label === 'Draining'
+              ? 'Already draining'
+              : row.pill.label === 'Paused' && row.inFlight === 0
+                ? 'Nothing is in flight to finish'
+                : ownershipReason,
           onSelect: () => runState.drain(row.repoId, row.name),
         },
         { key: 'pause', label: 'Pause', hint: 'stop now', current: row.pill.label === 'Paused', disabledReason: row.pill.label === 'Paused' ? 'Already paused' : null, onSelect: () => runState.requestPause(row.repoId, row.name, row.inFlight) },
