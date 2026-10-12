@@ -2,47 +2,26 @@ import { describe, expect, it } from 'vitest'
 import type { ReconciledItem } from '@/types/state'
 import type { EndedStage } from '@/types/tick'
 import { repairsOf } from '@/main/tick/repair'
+import { reconciledItem } from '../../../fixtures/board-state'
 
 const VIEWER = 'op'
 const READ_AT = '2026-01-01T01:00:00.000Z'
 
 function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
-  return {
-    repoId: 'repo-a' as ReconciledItem['repoId'],
+  return reconciledItem({
     repo: 'o/r',
-    kind: 'issue',
     number: 52,
     title: 'a ticket',
     url: 'https://github.com/o/r/issues/52',
     assignees: [VIEWER],
     stage: 'in-flight',
     stages: [{ key: 'inProgress', name: 'inProgress', role: 'in-flight' }],
-    stageAmbiguous: false,
-    marked: true,
-    autoPlan: false,
     status: 'in-flight',
     statusEvidence: null,
     waitingOn: null,
-    sessionRequired: false,
-    linked: null,
-    linkReason: null,
-    agents: [],
-    sessions: [],
-    worktrees: [],
-    state: 'OPEN',
-    mergedAt: null,
     matchedKeys: ['inProgress'],
-    sources: ['github'],
-    claimedFiles: null,
-    headRefOid: null,
-    mergeable: null,
-    reviews: null,
-    comments: null,
-    reviewCycleCount: null,
-    checkRollup: null,
-    planPresent: null,
     ...overrides,
-  }
+  })
 }
 
 function ended(overrides: Partial<EndedStage> = {}): EndedStage {

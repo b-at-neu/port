@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { ReposListResponse } from '@/types/ipc'
 import type { WorktreesReport } from '@/types/reclaimer'
-import type { BoardSnapshot } from '@/types/board'
 import { resolveBoardRefresh, resolveWorktreesReport } from '@/main/ipc'
 import type { BoardRefreshDeps, WorktreesReportDeps } from '@/main/ipc'
 import type { RegistryDeps } from '@/main/registry'
+import { boardSnapshot, readyEntry } from '../../fixtures/board-state'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 
@@ -17,28 +17,10 @@ const registryDeps: RegistryDeps = {
   chooseDirectory: () => Promise.resolve(null),
 }
 
-const READY_ENTRY = {
-  id: REPO_ID,
-  path: '/repo',
-  displayName: 'widgets',
-  status: 'ready' as const,
-  config: {
-    repo: 'acme/widgets',
-    owner: 'acme',
-    name: 'widgets',
-    branches: { integration: 'dev', production: 'main' },
-    models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
-    modules: { approvalGate: true, release: true, scope: true },
-    reviewCycleCap: 3,
-    vocabulary: {} as never,
-    commands: { worktrees: 'node scripts/worktrees.mjs', budget: null },
-    concurrency: { sharedFiles: [], overlapThreshold: 2 },
-      sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
-    checkDispositions: {},
-    overrides: [],
-  },
-  diagnostics: [],
-}
+const READY_ENTRY = readyEntry(
+  { id: REPO_ID, displayName: 'widgets' },
+  { repo: 'acme/widgets', owner: 'acme', name: 'widgets', reviewCycleCap: 3, vocabulary: {} as never, commands: { worktrees: 'node scripts/worktrees.mjs', budget: null } },
+)
 
 const NOT_READY_ENTRY = {
   id: REPO_ID,
@@ -114,7 +96,7 @@ describe('resolveWorktreesReport', () => {
   })
 })
 
-const FAKE_SNAPSHOT = { state: { repositories: [], sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: '2026-01-01T00:00:00.000Z' }, readAt: '2026-01-01T00:00:00.000Z' }, health: [], policy: { baseIntervalMs: { github: 60_000, sessions: 15_000, worktrees: 15_000, denials: 15_000 }, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: 30_000 }, tick: [], runStates: { store: { kind: 'loaded' }, repositories: [] }, nextWakeupAt: null, emittedAt: '2026-01-01T00:00:00.000Z', dispatch: [] } satisfies BoardSnapshot
+const FAKE_SNAPSHOT = boardSnapshot([], '2026-01-01T00:00:00.000Z')
 
 function boardDepsWith(overrides: Partial<BoardRefreshDeps>): BoardRefreshDeps {
   return {
