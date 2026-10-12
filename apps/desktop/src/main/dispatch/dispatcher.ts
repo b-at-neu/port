@@ -9,7 +9,7 @@ import type { RunState } from '@/types/dispatch'
 import type { RepoId } from '@/utils/repos'
 
 import type { SessionKey } from '@/types/hosting'
-import type {ReadyEntry} from '@/types/actions'
+import type { ReadyEntry } from '@/types/actions'
 
 import { dispatchableFrom, observableFrom } from '@/main/tick/dispatchable'
 

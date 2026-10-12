@@ -7,7 +7,7 @@ import type { RepoDiagnostic, RepoId, RepoProblem, RepositoryEntry, ResolvedRepo
 import { currentBranch, permissionsState, refsCarryingConfig } from '@/main/registry/harness'
 import type { GitRunner } from '@/types/platform'
 import { resolveEffectiveConfig } from '@/main/registry/effective'
-import type {PortResolved} from '@/types/registry'
+import type { PortResolved } from '@/types/registry'
 import { CONFIG_DEFAULTS, validateConfig } from '@/main/registry/schema'
 
 interface InspectDeps {

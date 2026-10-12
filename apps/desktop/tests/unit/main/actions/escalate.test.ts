@@ -4,9 +4,9 @@ import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { WriteOutcome } from '@/types/writes'
 import { escalateToHuman } from '@/main/actions/escalate'
-import type {EscalateToHumanDeps} from '@/main/actions/escalate'
-import type {EscalateToHumanParams} from '@/types/actions'
-import type {ReadyEntry} from '@/types/actions'
+import type { EscalateToHumanDeps } from '@/main/actions/escalate'
+import type { EscalateToHumanParams } from '@/types/actions'
+import type { ReadyEntry } from '@/types/actions'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 const VOCABULARY: LabelVocabulary = resolveVocabulary({})

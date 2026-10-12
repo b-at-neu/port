@@ -5,7 +5,7 @@ import type { RunStateStore, HaltDispatchParams, HaltDispatchDeps } from '@/type
 import { DISPATCH_COMMANDS, RUN_TARGET } from '@/types/dispatch'
 import type { DispatchCommand, DispatchControlResult, HaltReport } from '@/types/dispatch'
 import type { BoardSnapshot } from '@/types/board'
-import type {RefreshRequest} from '@/types/state'
+import type { RefreshRequest } from '@/types/state'
 import type { RepoId } from '@/utils/repos'
 import { isReadyEntry, listRepositories } from '@/main/registry'
 import type { RegistryDeps } from '@/types/registry'

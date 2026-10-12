@@ -2,9 +2,9 @@ import type { HostedStore } from '@/types/hosting'
 import type { StageRegistry } from '@/types/stage'
 
 // The real StageLauncher: a worktree, a hosted session, a send, and the hand-back watcher that closes and removes it.
-import type {GitRunner} from '@/types/platform'
-import type {CreateSessionWorktreeParams, CreateSessionWorktreeResult, RemoveSessionWorktreeOutcome} from '@/types/workspace'
-import type {StageLaunchRequest, StageLaunchResult} from '@/types/dispatch'
+import type { GitRunner } from '@/types/platform'
+import type { CreateSessionWorktreeParams, CreateSessionWorktreeResult, RemoveSessionWorktreeOutcome } from '@/types/workspace'
+import type { StageLaunchRequest, StageLaunchResult } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '@/types/hosting'
 
 import type { StageOutcome } from '@/types/stage-session'

@@ -11,7 +11,7 @@ import { fixtureFolders, fixtureSessionChanges } from '@/main/fixtures/folders'
 import { FIXTURE_REPOSITORIES } from '@/main/fixtures/repos'
 import { fixtureAttachEntries } from '@/main/fixtures/entries'
 import { fixturePermissionSnapshots, fixtureSearchResult, fixtureSessionAttach, fixtureSessionsScan, fixtureSessionSnapshots, STREAMING_KEY } from '@/main/fixtures/sessions'
-import type {FixtureScenario} from '@/types/fixtures'
+import type { FixtureScenario } from '@/types/fixtures'
 import { fixtureWorktreesReclaim, fixtureWorktreesReport } from '@/main/fixtures/worktrees'
 
 /** Exhaustive by construction: a new `IpcChannel` fails `pnpm typecheck` in

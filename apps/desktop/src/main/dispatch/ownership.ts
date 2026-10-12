@@ -3,7 +3,7 @@
 import { defaultGitRunner, resolveGitBaseRoot } from '@/main/platform/git'
 import { ensureDirectory, readTextFile, removeFile, writeJsonFileAtomic } from '@/main/platform/files'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import type {FileFailureKind} from '@/types/platform'
+import type { FileFailureKind } from '@/types/platform'
 import type { OwnershipSummary } from '@/types/writes'
 import type { TakeOwnershipResult, TakeOwnershipParams, OwnershipWriteResult, ReadOwnershipParams, OwnershipRead, OwnershipDeps, OwnershipWriteFailureKind } from '@/types/dispatch'
 

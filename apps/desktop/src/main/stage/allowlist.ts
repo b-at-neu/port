@@ -3,7 +3,7 @@
 import { join } from 'node:path'
 import type { StageAllowResult } from '@/types/stage'
 import { validateRule } from '@/main/stage/rule'
-import type {FileResult} from '@/types/platform'
+import type { FileResult } from '@/types/platform'
 
 interface SettingsShape {
   readonly permissions?: { readonly allow?: readonly unknown[]; readonly [k: string]: unknown }

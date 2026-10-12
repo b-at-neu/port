@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type {GhResult} from '@/types/platform'
+import type { GhResult } from '@/types/platform'
 import { fetchGatePreflight } from '@/main/github/gate'
 import type { GhRunner } from '@/types/platform'
 

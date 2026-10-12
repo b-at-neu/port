@@ -1,10 +1,10 @@
 // Resolves a folder/cwd to its `SessionWorkspace` and `repoId` — the registry's own path-key
 // identity, never a second normalisation.
 import { createHash } from 'node:crypto'
-import type {GitRunner} from '@/types/platform'
+import type { GitRunner } from '@/types/platform'
 import { resolveGitBaseRoot } from '@/main/platform/git'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import type {PathOps} from '@/types/platform'
+import type { PathOps } from '@/types/platform'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import type { FolderEntry, FolderId, SessionWorkspace } from '@/types/workspace'
 import { isReadyEntry } from '@/main/registry'

@@ -28,7 +28,7 @@ export function walkSourceFiles(dir) {
 
 /** Strips comments and string/template contents to spaces (preserving length) so bracket-depth
  *  scanning never trips on a `;` or brace inside a comment or a string literal. */
-function maskNonCode(src) {
+export function maskNonCode(src) {
   let out = ''
   let i = 0
   const n = src.length
@@ -65,7 +65,7 @@ function maskNonCode(src) {
 }
 
 /** Every top-level `export interface X` / `export type X` declaration, as [{ name, start, end, text }]. */
-function findDeclarations(content) {
+export function findDeclarations(content) {
   const masked = maskNonCode(content)
   const decls = []
   const re = /^export (interface|type) ([A-Za-z_$][\w$]*)/gm
@@ -170,7 +170,7 @@ function resolveSpecifier(fromFile, spec) {
 }
 
 /** Named imports/re-exports and `import('spec').Name` usages: [{ name, specifier }]. */
-function findNamedImports(content) {
+export function findNamedImports(content) {
   const out = []
   const blockRe = /\bimport\s+type\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]|\bimport\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]|\bexport\s+type\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]|\bexport\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g
   let m
@@ -382,9 +382,9 @@ function remap(tablePath, dirs, { check }) {
         // A fresh import line, even if the file already imports from the new specifier elsewhere —
         // a duplicate import is valid TS, and merging in place risks dropping the move.
         const lines = []
-        if (keep.length) lines.push(`${head}${keep.join(', ')}${mid}${quote}${spec}${quote}${semi}`)
+        if (keep.length) lines.push(`${head} ${keep.join(', ')} ${mid}${quote}${spec}${quote}${semi}`)
         for (const [ns, nparts] of moved) {
-          lines.push(`${head}${nparts.join(', ')}${mid}${quote}${ns}${quote}${semi}`)
+          lines.push(`${head} ${nparts.join(', ')} ${mid}${quote}${ns}${quote}${semi}`)
         }
         return lines.join('\n')
       })

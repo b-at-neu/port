@@ -2,8 +2,8 @@
 // exist" rather than presenting a rotated file's remainder as the whole history.
 import { appendTextFile, readLinesFrom, renamePath, statPath } from '@/main/platform/files'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import type {FileFailureKind} from '@/types/platform'
-import type {PathOps} from '@/types/platform'
+import type { FileFailureKind } from '@/types/platform'
+import type { PathOps } from '@/types/platform'
 import type { AuditEntry, AuditRead, AuditReadFailureKind, ReadAuditLogParams } from '@/types/writes'
 import { isLabelAuditEntry } from '@/types/writes'
 

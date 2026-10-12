@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createPathOps } from '@/main/platform/paths'
-import type {CommandResult} from '@/types/platform'
-import type {NodeRunner} from '@/types/platform'
+import type { CommandResult } from '@/types/platform'
+import type { NodeRunner } from '@/types/platform'
 import { SCRIPT_FAIL_PREFIX } from '@/main/reclaimer/report'
 import { runReclaim } from '@/main/reclaimer/reclaim'
 

@@ -42,7 +42,7 @@ import { buildUserContent } from '@/main/hosting/content'
 
 import { composeInvocation, isPipelineCommand, validateCommandName } from '@/main/hosting/verify'
 
-import type {SDKMessage} from '@/main/hosting/sdk'
+import type { SDKMessage } from '@/main/hosting/sdk'
 import { pathOps } from '@/main/platform/paths'
 
 export type { HostedQuery } from '@/main/hosting/sdk'

@@ -2,9 +2,9 @@
 // independent of worktree count.
 import { git as defaultGit, parsePorcelainStanzas } from '@/main/platform/git'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import type {CommandResult} from '@/types/platform'
-import type {GitRunner} from '@/types/platform'
-import type {PathOps} from '@/types/platform'
+import type { CommandResult } from '@/types/platform'
+import type { GitRunner } from '@/types/platform'
+import type { PathOps } from '@/types/platform'
 import type { AssertEqual } from '@/types/assert-type'
 import type { LocalFailureKind, WorktreeEntry, WorktreeProducer, WorktreesRead } from '@/types/local'
 import { correlate } from '@/main/local/correlate'

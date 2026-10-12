@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { classifyFailure, collectTruncated, collectUnavailable, parseEnvelope } from '@/main/github/envelope'
-import type {AliasInfo} from '@/types/github'
-import type {GhResult} from '@/types/platform'
+import type { AliasInfo } from '@/types/github'
+import type { GhResult } from '@/types/platform'
 
 // Captured live: a nonexistent aliased issue(number: 999999) beside three intact aliases, gh api
 // graphql exiting 1 while data stays fully usable.

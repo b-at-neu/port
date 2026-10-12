@@ -2,7 +2,7 @@ import type { EnvelopeFailureKind, GraphQLErrorEntry, AliasInfo } from '@/types/
 
 // The public logic behind fetchPipelineItems/fetchItemStates: building the document, calling the
 // injected gh, then composing envelope.ts and map.ts. The caller supplies the LabelVocabulary.
-import type {GhResult, GhRunner} from '@/types/platform'
+import type { GhResult, GhRunner } from '@/types/platform'
 import { gh as defaultGh } from '@/main/platform/gh'
 import type { FetchItemsByNumberParams } from '@/types/github'
 

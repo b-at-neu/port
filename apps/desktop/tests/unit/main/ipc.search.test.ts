@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import type { SearchResult } from '@/types/search'
 import { resolveSearchQuery } from '@/main/channels/sessions'
-import type {SearchQueryDeps} from '@/types/channels'
+import type { SearchQueryDeps } from '@/types/channels'
 import type { RegistryDeps } from '@/types/registry'
 
 const registryDeps: RegistryDeps = {

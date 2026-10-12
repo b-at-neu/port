@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { chmod, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type {CommandResult} from '@/types/platform'
+import type { CommandResult } from '@/types/platform'
 import { readDenials } from '@/main/local/denials'
 import type { GitRunner } from '@/types/platform'
 

@@ -21,7 +21,7 @@ import {
   resolveSessionSend,
   resolveSessionStart,
 } from '@/main/channels/hosting'
-import type {HostingChannelDeps} from '@/types/channels'
+import type { HostingChannelDeps } from '@/types/channels'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 const SESSION_KEY = 'hosted-1' as SessionKey

@@ -2,7 +2,7 @@
 import { pathOps } from '@/main/platform/paths'
 import type { ReposAddResponse, ReposListResponse, ReposRemoveResponse } from '@/types/ipc'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
-import type {ReadyEntry} from '@/types/actions'
+import type { ReadyEntry } from '@/types/actions'
 import type { GitRunner } from '@/types/platform'
 import { inspectRepository, resolveGitRoot } from '@/main/registry/inspect'
 import { readRegistry, writeRegistry } from '@/main/registry/store'

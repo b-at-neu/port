@@ -2,7 +2,7 @@ import type { ProjectIndex } from '@/types/sessions'
 
 // advanceTranscript reads one more bounded chunk from the cursor's offset and pushes it through the same Deriver, so a tool_use at the end of one chunk still pairs with its tool_result at the start of the next.
 import { readLinesFrom, statPath } from '@/main/platform/files'
-import type {ReadLinesFromResult} from '@/types/platform'
+import type { ReadLinesFromResult } from '@/types/platform'
 import type { EntryPatch, TranscriptEntry, TranscriptRead, TranscriptSource } from '@/utils/sessions/transcript'
 import { buildProjectIndex, defaultClaudeHome, resolveTranscriptPath, SESSION_ID_RE } from '@/main/sessions/locate'
 

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type {CommandResult} from '@/types/platform'
+import type { CommandResult } from '@/types/platform'
 import { classifyOwnership, readOwnership, releaseOwnership, takeOwnership } from '@/main/dispatch/ownership'
 import type { GitRunner } from '@/types/platform'
 

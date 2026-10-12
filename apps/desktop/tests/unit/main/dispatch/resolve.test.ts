@@ -8,7 +8,7 @@ import type { ReposListResponse } from '@/types/ipc'
 import type { BoardSnapshot } from '@/types/board'
 import type { HaltReport } from '@/types/dispatch'
 import type { RegistryDeps } from '@/types/registry'
-import type {ReadyEntry} from '@/types/actions'
+import type { ReadyEntry } from '@/types/actions'
 
 import { registeredRepoIds, resolveDispatchControl } from '@/main/dispatch/resolve'
 import type { ResolveDispatchControlDeps } from '@/main/dispatch/resolve'

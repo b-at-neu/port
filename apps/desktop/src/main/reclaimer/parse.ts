@@ -1,6 +1,6 @@
 // A missing field, a non-array `candidates`, or an unknown `state` fails the whole payload,
 // naming the field — never a partial list.
-import type {PathOps} from '@/types/platform'
+import type { PathOps } from '@/types/platform'
 import type { CorrelationRung } from '@/types/local'
 import type { ReclaimedWorktree, WorktreeState } from '@/types/reclaimer'
 import { WORKTREE_STATES } from '@/types/reclaimer'

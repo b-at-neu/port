@@ -1,10 +1,10 @@
 import type { RecentsStore } from '@/types/workspace'
 
 // `folders:list`/`folders:choose`/`session:changes`'s composition: registry read, the recents store, the native picker, and one session-workspace lookup — a channel composition root, never a second copy of `resolve.ts`'s logic.
-import type {GitRunner} from '@/types/platform'
+import type { GitRunner } from '@/types/platform'
 import { defaultGitRunner } from '@/main/platform/git'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import type {PathOps} from '@/types/platform'
+import type { PathOps } from '@/types/platform'
 import { statPath } from '@/main/platform/files'
 import type { IpcMap } from '@/types/ipc'
 import type { FolderEntry } from '@/types/workspace'

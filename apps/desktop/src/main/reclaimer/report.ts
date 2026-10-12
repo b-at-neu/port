@@ -2,7 +2,7 @@
 // calls no `git` itself; the join is the only reader.
 import { node as defaultNode } from '@/main/platform/node'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import type {CommandResult, NodeRunner} from '@/types/platform'
+import type { CommandResult, NodeRunner } from '@/types/platform'
 import { readWorktrees } from '@/main/local/worktrees'
 import type { AssertEqual } from '@/types/assert-type'
 import type { GithubResolutionState, InspectedWorktree, PorcelainJoinState, ReclaimerFailureKind, WorktreesReport } from '@/types/reclaimer'

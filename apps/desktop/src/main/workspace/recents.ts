@@ -1,7 +1,7 @@
 // `folders.json`'s only writer — a recoverable recents store, cap 10, deduped by `samePath`.
 import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import type {PathOps} from '@/types/platform'
+import type { PathOps } from '@/types/platform'
 import type { RecentFolder, RecentsStore } from '@/types/workspace'
 
 const FOLDERS_FILE = 'folders.json'

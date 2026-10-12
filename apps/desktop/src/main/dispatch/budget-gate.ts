@@ -1,11 +1,11 @@
 // Runs the shipped bin/budget.mjs through commands.budget and classifies its outcome into values
 // the dispatcher can report — never a throw, and an absent signal is never read as a passing one.
 import { node as defaultNode } from '@/main/platform/node'
-import type {CommandResult} from '@/types/platform'
-import type {NodeRunner} from '@/types/platform'
+import type { CommandResult } from '@/types/platform'
+import type { NodeRunner } from '@/types/platform'
 import { parseNodeCommand } from '@/main/reclaimer/command'
 import { SCRIPT_FAIL_PREFIX } from '@/main/reclaimer/report'
-import type {ReadyEntry} from '@/types/actions'
+import type { ReadyEntry } from '@/types/actions'
 import { dispatchArgs, OUTDATED_SCRIPT_SENTINEL, parseSweepLine, parseVerdict, resetArgs, sweepArgs } from '@/main/dispatch/budget'
 
 import type { BudgetGate } from '@/types/dispatch'

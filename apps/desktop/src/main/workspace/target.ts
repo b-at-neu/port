@@ -1,7 +1,7 @@
 // Resolves a `session:start` target to a cwd/workspace/repoId, creating a session worktree only on
 // an explicit `worktree: true` — the only place a start target becomes a cwd.
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import type {PathOps} from '@/types/platform'
+import type { PathOps } from '@/types/platform'
 import type { SessionStartMode, SessionStartTarget } from '@/types/hosting'
 import { isReadyEntry } from '@/main/registry'
 

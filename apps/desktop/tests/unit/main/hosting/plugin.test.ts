@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { readExpectedComponents, resolvePluginRequest } from '@/main/hosting/plugin'
 import type { ReadExpectedComponentsDeps, ResolvePluginRequestDeps } from '@/main/hosting/plugin'
 import { pathOps } from '@/main/platform/paths'
-import type {DirEntry, FileResult} from '@/types/platform'
+import type { DirEntry, FileResult } from '@/types/platform'
 
 function jsonDeps(result: FileResult<unknown>): ResolvePluginRequestDeps {
   return { readJsonFile: () => Promise.resolve(result as never) }

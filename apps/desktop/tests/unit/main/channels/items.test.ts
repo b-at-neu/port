@@ -3,8 +3,8 @@ import type { RepoId } from '@/utils/repos'
 import type { ReposListResponse } from '@/types/ipc'
 import type { BoardSnapshot } from '@/types/board'
 import { resolveItemAction, resolveItemDecision } from '@/main/channels/items'
-import type {ItemActionDeps} from '@/main/channels/items'
-import type {ItemDecisionDeps} from '@/types/channels'
+import type { ItemActionDeps } from '@/main/channels/items'
+import type { ItemDecisionDeps } from '@/types/channels'
 import type { RegistryDeps } from '@/types/registry'
 
 const REPO_ID = 'repo-1' as unknown as RepoId

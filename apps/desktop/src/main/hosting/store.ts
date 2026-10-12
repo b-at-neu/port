@@ -55,7 +55,7 @@ import { createInMemoryHostingPersistence, DEFAULT_SESSION_LIMIT, SESSION_LIMIT_
 import { dropAdopted, mintRestorable, nextPersisted, persistedOpen } from '@/main/hosting/restore'
 
 import { findAlreadyOpen, findFolderBusy } from '@/main/hosting/occupancy'
-import type {SessionReader} from '@/types/sessions'
+import type { SessionReader } from '@/types/sessions'
 import { readCredentialsTell } from '@/main/runtime/credentials'
 import { resolveClaudeExecutable } from '@/main/runtime/locate'
 import { pathOps } from '@/main/platform/paths'

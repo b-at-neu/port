@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createPathOps } from '@/main/platform/paths'
-import type {CommandResult} from '@/types/platform'
+import type { CommandResult } from '@/types/platform'
 import type { GitRunner as WorktreesGitRunner } from '@/types/platform'
 import { GH_RESOLUTION_FAILED_SENTINEL, readWorktreeReport, SCRIPT_FAIL_PREFIX } from '@/main/reclaimer/report'
 import type { NodeRunner } from '@/main/reclaimer/report'

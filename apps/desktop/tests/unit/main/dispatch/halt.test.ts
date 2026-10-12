@@ -5,7 +5,7 @@ import type { BoardSnapshot } from '@/types/board'
 import type { ReconciledItem, RepositoryState } from '@/types/state'
 import type { ItemActionResult } from '@/types/actions'
 
-import type {RunStateStore, SetRunStateResult} from '@/types/dispatch'
+import type { RunStateStore, SetRunStateResult } from '@/types/dispatch'
 import { haltDispatch } from '@/main/dispatch/halt'
 import type { ReadyEntry } from '@/types/actions'
 

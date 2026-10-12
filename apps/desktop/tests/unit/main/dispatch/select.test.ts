@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { REDISPATCH_FLOOR_MS, selectDispatches } from '@/main/dispatch/select'
-import type {StageRecord} from '@/types/dispatch'
+import type { StageRecord } from '@/types/dispatch'
 import type { SessionKey } from '@/types/hosting'
 import type { TickActionable } from '@/types/tick'
 

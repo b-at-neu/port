@@ -3,7 +3,7 @@ import type { RepoId } from '@/utils/repos'
 import type { ReconciledItem, RepositoryState } from '@/types/state'
 import type { LabelWriteRequest, WriteOutcome } from '@/types/writes'
 
-import type {RecoverPausedTriggerResult} from '@/types/actions'
+import type { RecoverPausedTriggerResult } from '@/types/actions'
 import { applyItemAction } from '@/main/actions/apply'
 import type { ApplyItemActionDeps } from '@/main/actions/apply'
 import type { ItemActionRequest } from '@/types/actions'

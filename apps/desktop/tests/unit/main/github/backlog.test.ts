@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type {GhResult} from '@/types/platform'
+import type { GhResult } from '@/types/platform'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import { fetchBacklog } from '@/main/github/backlog'
 import type { GhRunner } from '@/types/platform'

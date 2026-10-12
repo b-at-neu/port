@@ -3,8 +3,8 @@ import type { WriteObservation } from '@/types/dispatch'
 
 // The observation pass, split out of dispatcher.ts to keep it under the file-size limit. A throw
 // from the write becomes `outcome: 'failed'`, never a pass that stops partway through.
-import type {ReadyEntry} from '@/types/actions'
-import type {ApplyObservationParams, ApplyObservationResult} from '@/types/actions'
+import type { ReadyEntry } from '@/types/actions'
+import type { ApplyObservationParams, ApplyObservationResult } from '@/types/actions'
 import type { ObservationRecord } from '@/types/dispatch'
 
 import type { RepositoryState } from '@/types/state'

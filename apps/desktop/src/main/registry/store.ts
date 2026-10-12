@@ -1,7 +1,7 @@
 // The app-level registry file: read, dedupe, version gate, atomic write. Takes its directory as a parameter, so nothing in this module imports Electron.
 import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
 import { pathOps } from '@/main/platform/paths'
-import type {PathOps} from '@/types/platform'
+import type { PathOps } from '@/types/platform'
 
 const REGISTRY_FILE = 'registry.json'
 const CURRENT_VERSION = 1

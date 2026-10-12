@@ -1,7 +1,7 @@
 // Honours the cockpit's unprompted `autoPlan` swap while this app owns the repository.
 import type { BoardSnapshot } from '@/types/board'
 import type { RepoId } from '@/utils/repos'
-import type {ReadyEntry} from '@/types/actions'
+import type { ReadyEntry } from '@/types/actions'
 import { autoApprovableFrom } from '@/main/tick/dispatchable'
 
 

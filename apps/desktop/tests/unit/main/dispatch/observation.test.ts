@@ -3,7 +3,7 @@ import type { LabelKey, LabelVocabulary, ResolvedLabel } from '@/utils/labels/vo
 import type { ReconciledItem } from '@/types/state'
 import type { TickObservation } from '@/types/tick'
 import { observationWrite } from '@/main/dispatch/observation'
-import type {WriteObservation} from '@/types/dispatch'
+import type { WriteObservation } from '@/types/dispatch'
 
 const REPO_ID = 'repo-a' as ReconciledItem['repoId']
 

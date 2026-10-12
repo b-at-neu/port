@@ -1,6 +1,6 @@
 // Pure redispatch-floor filtering, the re-read survivor test, and the budget note's
 // comment-failure clause, moved here to keep dispatcher.ts under the file-size limit.
-import type {StageRecord} from '@/types/dispatch'
+import type { StageRecord } from '@/types/dispatch'
 import type { ResolvedItem } from '@/types/github'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { TickActionable } from '@/types/tick'

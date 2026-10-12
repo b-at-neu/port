@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { resumeStage, restartStage, RESUME_PROMPT } from '@/main/stage/recover'
 import { createStageRegistry } from '@/main/stage/registry'
-import type {FileResult} from '@/types/platform'
+import type { FileResult } from '@/types/platform'
 import type { HostedSessionSnapshot, SessionKey, SessionStartResult } from '@/types/hosting'
-import type {RemoveSessionWorktreeOutcome} from '@/types/workspace'
+import type { RemoveSessionWorktreeOutcome } from '@/types/workspace'
 
 import type { InterruptedStage } from '@/types/stage'
 import type { RepoId } from '@/utils/repos'

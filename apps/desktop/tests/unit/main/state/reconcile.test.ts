@@ -4,8 +4,8 @@ import type { PipelineFetch, PipelineItem } from '@/types/github'
 import type { RepositoryEntry } from '@/utils/repos'
 import type { WorktreeEntry, WorktreesRead } from '@/types/local'
 import type { AgentRecord, SessionRecord } from '@/types/sessions'
-import {reconcileRepository} from '@/main/state/reconcile'
-import {type RepoSessionSlice} from '@/types/state'
+import { reconcileRepository } from '@/main/state/reconcile'
+import { type RepoSessionSlice } from '@/types/state'
 
 const VOCABULARY = resolveVocabulary({})
 

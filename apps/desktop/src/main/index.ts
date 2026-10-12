@@ -8,12 +8,12 @@ import { setE2ERoute } from '@/main/platform/run'
 import type { PipelineWatcher } from '@/types/state'
 import type { HostedStore } from '@/types/hosting'
 import { createQuitGuard } from '@/main/dispatch/quit'
-import type {Dispatcher} from '@/types/dispatch'
+import type { Dispatcher } from '@/types/dispatch'
 import { confirmQuit } from '@/main/dialogs'
 import { applyNavigationGuards } from '@/main/navigation'
 import { ABOUT_NOTICE, ABOUT_POWERED_BY } from '@/utils/about/copy'
 import { menuTemplate } from '@/main/menu'
-import type {StageRegistry} from '@/types/stage'
+import type { StageRegistry } from '@/types/stage'
 
 // A hung registry write must never block quitting.
 const MARK_ALL_QUIT_TIMEOUT_MS = 2_000

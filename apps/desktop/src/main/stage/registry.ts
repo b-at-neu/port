@@ -1,7 +1,7 @@
 // stage-sessions.json's only writer: interrupted stage sessions survive a relaunch here. A
 // missing or malformed file loads as empty, the same recoverable-state shape as hosting/persist.ts.
 import type { InterruptedReason, InterruptedStage } from '@/types/stage'
-import type {FileResult} from '@/types/platform'
+import type { FileResult } from '@/types/platform'
 import type { StageRegistry } from '@/types/stage'
 
 const CURRENT_VERSION = 1

@@ -8,7 +8,7 @@ import { sanitize } from '@/main/sessions/transcript-entries'
 import { checkComponents, checkPluginLoad, isPipelineCommand, PLUGIN_NAME } from '@/main/hosting/verify'
 
 
-import type {AgentInfo, SlashCommand} from '@/main/hosting/sdk'
+import type { AgentInfo, SlashCommand } from '@/main/hosting/sdk'
 
 /** Control requests answered before the first turn, costing no tokens. */
 export const CAPABILITIES_TIMEOUT_MS = 30_000

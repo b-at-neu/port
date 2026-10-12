@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type {CommandResult} from '@/types/platform'
-import type {GitRunner} from '@/types/platform'
+import type { CommandResult } from '@/types/platform'
+import type { GitRunner } from '@/types/platform'
 import { createPathOps } from '@/main/platform/paths'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import { resolveWorkspace, toFolderEntry } from '@/main/workspace/resolve'

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type {CommandResult} from '@/types/platform'
-import type {GitRunner} from '@/types/platform'
+import type { CommandResult } from '@/types/platform'
+import type { GitRunner } from '@/types/platform'
 import type { SessionWorkspace } from '@/types/workspace'
 import { computeSessionChanges } from '@/main/workspace/changes'
 

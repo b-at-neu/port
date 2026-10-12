@@ -1,6 +1,6 @@
 // Maps a platform-layer failure straight through, never re-classifying.
 // Shared by report.ts and reclaim.ts, so their failure copy never drifts.
-import type {CommandResult} from '@/types/platform'
+import type { CommandResult } from '@/types/platform'
 
 export function describeCommandFailure(result: Exclude<CommandResult, { ok: true }>): { kind: Exclude<CommandResult, { ok: true }>['kind']; message: string } {
   switch (result.kind) {

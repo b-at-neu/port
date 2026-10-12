@@ -1,7 +1,7 @@
 // fetchGatePreflight — the plan gate's own one round trip. A new file to stay clear of the
 // file-size ratchet; reuses envelope.ts's parsing rather than hand-rolling a second reader.
 import { gh as defaultGh } from '@/main/platform/gh'
-import type {GhResult, GhRunner} from '@/types/platform'
+import type { GhResult, GhRunner } from '@/types/platform'
 import type { GatePreflightFetch, GatePreflightItem } from '@/types/github'
 import { classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'

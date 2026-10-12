@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { budgetLiveSets, budgetRoute, dispatchArgs, escalationBody, parseSweepLine, parseVerdict, resetArgs, sumCostUsd, sweepArgs } from '@/main/dispatch/budget'
-import type {StageRecord} from '@/types/dispatch'
+import type { StageRecord } from '@/types/dispatch'
 import type { SessionKey } from '@/types/hosting'
 import type { TickActionable } from '@/types/tick'
 

@@ -9,6 +9,7 @@
     }
   },
   "include": [
+    "scripts/type-moves.d.mts",
     "src/main/**/*",
     "src/preload/**/*",
     "src/renderer/local/inspect.ts",
@@ -20,6 +21,7 @@
     "src/utils/**/*",
     "tests/unit/main/**/*",
     "tests/unit/preload/**/*",
+    "tests/unit/scripts/**/*",
     "tests/unit/utils/**/*",
     "tests/fixtures/**/*",
     "tests/visual/**/*",
