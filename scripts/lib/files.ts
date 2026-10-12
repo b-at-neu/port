@@ -54,14 +54,11 @@ export function frontmatter(file: string): Record<string, string> | null {
   return parseFrontmatter(readFileSync(file, 'utf8'));
 }
 
-/** The repo-relative path of a desktop unit test, given its path under `apps/desktop/src/`
- *  (e.g. `main/hosting/live.test.ts`), wherever it lives today; null when neither exists. */
-export const unitTestPath = (srcRel: string): string | null => {
-  const underTests = `apps/desktop/tests/unit/${srcRel}`;
-  if (existsSync(join(root, underTests))) return underTests;
-  const underSrc = `apps/desktop/src/${srcRel}`;
-  if (existsSync(join(root, underSrc))) return underSrc;
-  return null;
+/** The repo-relative path of a desktop unit test, given its path relative to
+ *  `apps/desktop/tests/unit/` (e.g. `main/hosting/live.test.ts`); null when it does not exist. */
+export const unitTestPath = (rel: string): string | null => {
+  const underTests = `apps/desktop/tests/unit/${rel}`;
+  return existsSync(join(root, underTests)) ? underTests : null;
 };
 
 /** The named `##`-level markdown section's body, up to the next `##` heading or end of file.

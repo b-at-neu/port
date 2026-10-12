@@ -28,7 +28,7 @@ The script reports full schema validation as **skipped**, because a draft 2020-1
 
 - Unit tests mirror `src/` under `apps/desktop/tests/unit/`: `src/main/hosting/store.ts` → `tests/unit/main/hosting/store.test.ts`.
 - Shared data, fakes and helpers used by more than one test live in `apps/desktop/tests/fixtures/`. A helper used by one test stays in that test.
-- Tests import source with `@/…`, never `../`. During the move, vitest reads both `src/` and `tests/unit/`; a new test goes in `tests/unit/`.
+- Tests import source with `@/…`, never `../`. vitest reads tests only from `tests/unit/`.
 
 ## Layer 2 — artifact assertions on real runs
 
