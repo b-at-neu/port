@@ -5,10 +5,22 @@ import { Button } from '@/renderer/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/renderer/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { useIpcMutation, useIpcQuery } from '@/renderer/data/query'
-import { capacityLine, usageNotice } from '@/renderer/session/rail-model'
-import { CAPACITY_SET_FAILED, DISMISS_BUTTON, LIMIT_STEPPER_TITLE, usageNoticeLines } from '@/renderer/session/rail-copy'
+import { capacityLine, usageNotice, usageSummary } from '@/renderer/session/rail-model'
+import {
+  CAPACITY_SET_FAILED,
+  DISMISS_BUTTON,
+  LIMIT_STEPPER_TITLE,
+  USAGE_ALL_SESSIONS,
+  USAGE_HEADING,
+  USAGE_NONE,
+  USAGE_THIS_SESSION,
+  usageNoticeLines,
+  usageSessionsLine,
+  usageValue,
+} from '@/renderer/session/rail-copy'
+import type { SessionUsage } from '@/utils/hosting/usage'
 
-export function CapacityMenu({ onDismiss, showDismiss }: { readonly onDismiss: () => void; readonly showDismiss: boolean }) {
+export function CapacityMenu({ usage, onDismiss, showDismiss }: { readonly usage: SessionUsage | null; readonly onDismiss: () => void; readonly showDismiss: boolean }) {
   const sessions = useIpcQuery('session:list')
   const capacity = useIpcQuery('session:capacity')
   const setCapacity = useIpcMutation('session:capacity:set')
@@ -17,6 +29,7 @@ export function CapacityMenu({ onDismiss, showDismiss }: { readonly onDismiss: (
   const limit = capacity.data?.limit ?? 4
   const ceiling = capacity.data?.ceiling ?? 8
   const notice = sessions.data !== undefined ? usageNotice(sessions.data, new Date()) : null
+  const summary = sessions.data !== undefined ? usageSummary(usage, sessions.data) : null
 
   async function setLimit(next: number): Promise<void> {
     try {
@@ -64,6 +77,25 @@ export function CapacityMenu({ onDismiss, showDismiss }: { readonly onDismiss: (
                 )
               })()
             : null}
+        </div>
+        <DropdownMenuSeparator />
+        <div data-slot="usage-totals" className="flex flex-col gap-1 px-2 py-1.5">
+          <span className="text-meta font-medium text-muted-foreground">{USAGE_HEADING}</span>
+          {summary === null || (summary.session.sessions === 0 && summary.all.sessions === 0) ? (
+            <span className="text-meta text-muted-foreground">{USAGE_NONE}</span>
+          ) : (
+            <>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-small">{USAGE_THIS_SESSION}</span>
+                <span className="text-small tabular-nums">{usageValue(summary.session)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-small">{USAGE_ALL_SESSIONS}</span>
+                <span className="text-small tabular-nums">{usageValue(summary.all)}</span>
+              </div>
+              <span className="text-meta text-muted-foreground">{usageSessionsLine(summary.all.sessions)}</span>
+            </>
+          )}
         </div>
         {showDismiss ? (
           <>

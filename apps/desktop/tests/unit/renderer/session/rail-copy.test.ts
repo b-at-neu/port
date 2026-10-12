@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { restoreBannerLine, restoreOpenedLine, restorePartialLine, restoreUnavailableLine, usageNoticeLines } from '@/renderer/session/rail-copy'
+import { contextMeterLabel, restoreBannerLine, restoreOpenedLine, restorePartialLine, restoreUnavailableLine, usageNoticeLines, usageSessionsLine, usageValue } from '@/renderer/session/rail-copy'
 import type { UsageNotice } from '@/types/session'
+import type { SessionUsage } from '@/utils/hosting/usage'
 
 const NOW = new Date(2026, 0, 5, 12, 0)
 
@@ -53,5 +54,38 @@ describe('restoreOpenedLine', () => {
 describe('restorePartialLine', () => {
   it('names how many resumed against the limit', () => {
     expect(restorePartialLine(3, 5, 3)).toBe('Resumed 3 of 5 — the limit is 3. Raise it or close a session to resume the rest.')
+  })
+})
+
+describe('usageValue', () => {
+  it('renders cost and tokens', () => {
+    expect(usageValue({ costUsd: 0.42, totalTokens: 210_000, sessions: 1 })).toBe('$0.42 · 210k tokens')
+  })
+
+  it('renders dashes for nulls', () => {
+    expect(usageValue({ costUsd: null, totalTokens: null, sessions: 0 })).toBe('— · — tokens')
+  })
+})
+
+describe('usageSessionsLine', () => {
+  it('pluralizes', () => {
+    expect(usageSessionsLine(1)).toBe('1 session with a reading')
+    expect(usageSessionsLine(2)).toBe('2 sessions with a reading')
+  })
+})
+
+describe('contextMeterLabel', () => {
+  const usage: SessionUsage = { costUsd: 0.42, inputTokens: 1, outputTokens: 1, cacheReadTokens: 1, cacheWriteTokens: 1, contextTokens: 84_000, contextWindow: 200_000, observedAt: 't0' }
+
+  it('renders known usage', () => {
+    expect(contextMeterLabel(usage)).toBe('84k of 200k tokens in context')
+  })
+
+  it('renders the unknown label for null usage', () => {
+    expect(contextMeterLabel(null)).toBe('No context reading yet.')
+  })
+
+  it('renders the unknown label when the context window is not positive', () => {
+    expect(contextMeterLabel({ ...usage, contextWindow: 0 })).toBe('No context reading yet.')
   })
 })

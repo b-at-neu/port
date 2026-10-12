@@ -77,7 +77,7 @@ export function SessionHeader({
             {phaseCopy.close === 'closing' ? 'Closing…' : 'Close session'}
           </Button>
         ) : null}
-        <CapacityMenu onDismiss={onDismiss} showDismiss={phase === 'ended'} />
+        <CapacityMenu usage={snapshot.usage} onDismiss={onDismiss} showDismiss={phase === 'ended'} />
       </div>
     </ScreenHeader>
   )
