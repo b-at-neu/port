@@ -3,8 +3,10 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/renderer/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
+import { ContextMeter } from '@/renderer/components/context-meter'
 import type { SessionControls, SessionEffort, SessionModels } from '@/utils/hosting/controls'
 import type { SessionKey } from '@/types/hosting'
+import type { SessionUsage } from '@/utils/hosting/usage'
 import { DEFAULT_SELECT_VALUE, MODE_OPTIONS, controlsBarState, effortLabel } from '@/renderer/session/controls-model'
 import { controlsChangeFailed, MODELS_LOADING } from '@/renderer/session/interaction-copy'
 import { setControls } from '@/renderer/session/actions'
@@ -13,11 +15,12 @@ interface ControlsBarProps {
   readonly sessionKey: SessionKey
   readonly controls: SessionControls
   readonly models: SessionModels
+  readonly usage: SessionUsage | null
   readonly disabled: boolean
   readonly disabledReason: string | null
 }
 
-export function ControlsBar({ sessionKey, controls, models, disabled, disabledReason }: ControlsBarProps) {
+export function ControlsBar({ sessionKey, controls, models, usage, disabled, disabledReason }: ControlsBarProps) {
   const [pending, setPending] = useState<'permissionMode' | 'model' | 'effort' | null>(null)
   const state = controlsBarState(controls, models)
 
@@ -85,12 +88,22 @@ export function ControlsBar({ sessionKey, controls, models, disabled, disabledRe
     </div>
   )
 
-  if (!disabled || disabledReason === null) return row
+  const selects =
+    !disabled || disabledReason === null ? (
+      row
+    ) : (
+      <Tooltip>
+        <TooltipTrigger asChild>{row}</TooltipTrigger>
+        <TooltipContent>{disabledReason}</TooltipContent>
+      </Tooltip>
+    )
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>{row}</TooltipTrigger>
-      <TooltipContent>{disabledReason}</TooltipContent>
-    </Tooltip>
+    <div className="flex items-center">
+      {selects}
+      <div className="ml-auto">
+        <ContextMeter usage={usage} />
+      </div>
+    </div>
   )
 }

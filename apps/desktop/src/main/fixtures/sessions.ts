@@ -145,7 +145,7 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       rateLimit: null,
       controls: FIXTURE_CONTROLS,
       models: FIXTURE_MODELS,
-      usage: null,
+      usage: { costUsd: 1.18, inputTokens: 420_000, outputTokens: 28_000, cacheReadTokens: 35_000, cacheWriteTokens: 8_000, contextTokens: 190_000, contextWindow: 200_000, observedAt: t(29) },
       backgroundTasks: [],
       stage: null,
       lastResult: null,

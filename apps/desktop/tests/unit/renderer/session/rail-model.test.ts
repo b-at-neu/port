@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { capacityLine, fallbackSelection, openCount, rowsFor, rowStatus, usageNotice } from '@/renderer/session/rail-model'
+import { capacityLine, fallbackSelection, openCount, rowsFor, rowStatus, usageNotice, usageSummary } from '@/renderer/session/rail-model'
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import type { SessionControls, SessionModels } from '@/utils/hosting/controls'
 import type { RepoId } from '@/utils/repos'
+import type { SessionUsage } from '@/utils/hosting/usage'
 
 const REPO_ID = 'repo-1' as RepoId
 
@@ -125,5 +126,21 @@ describe('fallbackSelection', () => {
 
   it('returns null when nothing open remains', () => {
     expect(fallbackSelection([snapshot({ phase: 'ended' })], null)).toBeNull()
+  })
+})
+
+const USAGE: SessionUsage = { costUsd: 0.42, inputTokens: 180_000, outputTokens: 12_000, cacheReadTokens: 15_000, cacheWriteTokens: 3_000, contextTokens: 84_000, contextWindow: 200_000, observedAt: 't0' }
+
+describe('usageSummary', () => {
+  it('returns null totals for both when current is null and no snapshot carries usage', () => {
+    const result = usageSummary(null, [snapshot({ usage: null })])
+    expect(result.session).toEqual({ costUsd: null, totalTokens: null, sessions: 0 })
+    expect(result.all).toEqual({ costUsd: null, totalTokens: null, sessions: 0 })
+  })
+
+  it('sums only the snapshots carrying a reading, current included separately', () => {
+    const result = usageSummary(USAGE, [snapshot({ usage: USAGE }), snapshot({ sessionKey: 'b' as SessionKey, usage: null })])
+    expect(result.session).toEqual({ costUsd: 0.42, totalTokens: 210_000, sessions: 1 })
+    expect(result.all).toEqual({ costUsd: 0.42, totalTokens: 210_000, sessions: 1 })
   })
 })

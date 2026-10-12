@@ -5,6 +5,7 @@
 import type { SessionRateLimit } from '@/types/hosting'
 import type { UsageNotice } from '@/types/session'
 import { startedClock } from '@/utils/hosting/label'
+import { contextPercent, formatCost, formatTokens, type SessionUsage, type UsageTotals } from '@/utils/hosting/usage'
 
 export const LIMIT_STEPPER_TITLE = "Each session is its own Claude Code process. They all share your subscription's usage limit."
 export const CAPACITY_SET_FAILED = "Couldn't reach the main process. The limit wasn't changed."
@@ -70,4 +71,25 @@ export function restoreOpenedLine(startedAt: string, now: Date): string {
 
 export function restorePartialLine(resumed: number, total: number, limit: number): string {
   return `Resumed ${String(resumed)} of ${String(total)} — the limit is ${String(limit)}. Raise it or close a session to resume the rest.`
+}
+
+export const USAGE_HEADING = 'Usage'
+export const USAGE_THIS_SESSION = 'This session'
+export const USAGE_ALL_SESSIONS = 'All sessions'
+export const USAGE_NONE = 'No usage reported yet.'
+export const CONTEXT_UNKNOWN = 'No context reading yet.'
+
+export function usageValue(totals: UsageTotals): string {
+  return `${formatCost(totals.costUsd)} · ${formatTokens(totals.totalTokens)} tokens`
+}
+
+export function usageSessionsLine(count: number): string {
+  return `${String(count)} session${count === 1 ? '' : 's'} with a reading`
+}
+
+/** `84k of 200k tokens in context`, or `CONTEXT_UNKNOWN` when `contextPercent`
+ *  is null (no reading, or a non-positive context window). */
+export function contextMeterLabel(usage: SessionUsage | null): string {
+  if (usage === null || contextPercent(usage) === null) return CONTEXT_UNKNOWN
+  return `${formatTokens(usage.contextTokens)} of ${formatTokens(usage.contextWindow)} tokens in context`
 }

@@ -4,6 +4,7 @@
 import type { HostedSessionSnapshot, SessionKey, SessionRateLimit } from '@/types/hosting'
 import { END_COPY } from '@/renderer/session/copy'
 import type { UsageNotice } from '@/types/session'
+import { aggregateUsage, type SessionUsage, type UsageTotals } from '@/utils/hosting/usage'
 
 interface RailRowStatus {
   readonly glyph: string
@@ -79,4 +80,15 @@ export function fallbackSelection(snapshots: readonly HostedSessionSnapshot[], r
   const candidates = snapshots.filter((snapshot) => snapshot.phase !== 'ended' && snapshot.sessionKey !== removedKey)
   if (candidates.length === 0) return null
   return candidates.reduce((newest, candidate) => (candidate.startedAt > newest.startedAt ? candidate : newest)).sessionKey
+}
+
+export interface UsageSummary {
+  readonly session: UsageTotals
+  readonly all: UsageTotals
+}
+
+/** `session` is this session's own reading; `all` sums every snapshot in
+ *  `session:list`, ended included, since their cost was already spent. */
+export function usageSummary(current: SessionUsage | null, snapshots: readonly HostedSessionSnapshot[]): UsageSummary {
+  return { session: aggregateUsage([current]), all: aggregateUsage(snapshots.map((snapshot) => snapshot.usage)) }
 }

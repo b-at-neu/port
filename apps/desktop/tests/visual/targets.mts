@@ -116,6 +116,7 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'plan', hash: '#/session?key=fixture-session-plan', ready: '[data-slot="plan-card"]' },
       { name: 'new-session', click: '[data-slot="session-empty"] button', ready: '[data-slot="new-session-dialog"]' },
       { name: 'changes', hash: `#/session?key=${FIXTURE_SESSION_ID}&pane=changes`, ready: 'text=Changes since' },
+      { name: 'menu', hash: `#/session?key=${FIXTURE_SESSION_ID}`, click: '[aria-label="Session menu"]', ready: '[data-slot="usage-totals"]' },
     ],
   },
   settings: { hash: '#/settings', container: '#app', ready: '#app h2' },

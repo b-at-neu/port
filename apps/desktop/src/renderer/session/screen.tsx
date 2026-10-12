@@ -275,6 +275,7 @@ function SessionLive({ snapshot, repoLabel, paneOpen }: { readonly snapshot: Hos
           sessionKey={key}
           controls={snapshot.controls}
           models={snapshot.models}
+          usage={snapshot.usage}
           disabled={snapshot.phase === 'starting' || snapshot.phase === 'closing' || snapshot.phase === 'ended'}
           disabledReason={snapshot.phase === 'starting' ? 'Waiting for the session to start.' : snapshot.phase === 'closing' ? 'This session is closing.' : snapshot.phase === 'ended' ? 'This session has ended.' : null}
         />
