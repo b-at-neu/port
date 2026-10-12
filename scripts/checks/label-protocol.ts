@@ -104,11 +104,22 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     expect(text.includes('git ls-remote --heads origin'), 'label-protocol', `${rel} does not name the same 'git ls-remote --heads origin' resume-branch lookup impl-agent.md's Pre-flight uses — the dispatched and operator routes have drifted apart`);
   }
 
-  // --- Refresh escalation removes the surviving trigger too — an escalation must never leave
-  // needs human beside a live trigger, three role-bearing labels at once. ---
+  // --- The surviving trigger is now stripped at refresh entry, not at escalation. ---
   {
     const rel = 'plugins/port/agents/revise-agent.md';
     const text = readFileSync(join(root, rel), 'utf8');
-    expect(text.includes('plus `<labels.readyForReview>` when it is present too'), 'label-protocol', `${rel}'s Refresh mode escalation does not name removing the surviving trigger label (<labels.readyForReview>) alongside <labels.refreshing>/<labels.approved> (#225)`);
+    expect(text.includes('a pre-#494 leftover'), 'label-protocol', `${rel}'s Refresh mode swap does not strip a leftover <labels.readyForReview>/<labels.needsRevision> at entry (#225, #494)`);
+  }
+
+  // --- Refresh mode must always exit with exactly one trigger label, never none. ---
+  {
+    const rel = 'plugins/port/agents/revise-agent.md';
+    const text = readFileSync(join(root, rel), 'utf8');
+    expect(text.includes('Refresh mode never exits leaving the pull request without a trigger label (#494).'), 'label-protocol', `${rel} is missing the literal regression sentence for #494`);
+  }
+  {
+    const rel = 'plugins/port/agents/review-agent.md';
+    const text = readFileSync(join(root, rel), 'utf8');
+    expect(!text.includes('<labels.readyForReview>,<labels.refreshBranch>'), 'label-protocol', `${rel}'s mergeability exit still pairs <labels.readyForReview> with <labels.refreshBranch> — #494 narrows the add to <labels.refreshBranch> alone`);
   }
 }

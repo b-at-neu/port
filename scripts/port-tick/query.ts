@@ -61,9 +61,9 @@ export function buildQuery({
   // --- Occupied set for the file contention gate ---------------------------
   parts.push(issueSet('prOpened', labels.prOpened));
 
-  // --- Unconditional: the duplicate-pull-request sweep and the (module-gated) ungated report share this alias.
+  // --- Unconditional: the duplicate, ungated, and stranded sweeps share this alias; the timeline is 30 events.
   parts.push(
-    'allOpenPRs: pullRequests(states: OPEN, first: 100) { totalCount nodes { number title headRefName baseRefName body labels(first: 20) { nodes { name } } assignees(first: 5) { nodes { login } } } }',
+    'allOpenPRs: pullRequests(states: OPEN, first: 100) { totalCount nodes { number title headRefName baseRefName body labels(first: 20) { nodes { name } } assignees(first: 5) { nodes { login } } timelineItems(last: 30, itemTypes: [LABELED_EVENT, UNLABELED_EVENT]) { nodes { __typename ... on LabeledEvent { label { name } } ... on UnlabeledEvent { label { name } } } } } }',
   );
 
   // --- Approved re-verify / merged-PR reconciliation -----------------------

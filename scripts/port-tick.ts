@@ -13,7 +13,7 @@ import { classifyEnvelope, truncatedAliases } from './port-tick/envelope.ts';
 import { labelsByItem, contradictions, actionablePartitions, reconcileTick, ungatedPullRequests, reportOrphans, ticketsByPullRequest } from './port-tick/reconcile.ts';
 import { classifyUnmatched, descriptionOf, RETRY_TRIGGER, isUsageLimitMessage, buildLivenessExpected } from './port-tick/liveness.ts';
 import { nextDelay } from './port-tick/pacing.ts';
-import { freshAccumulator, partitionAliases, planTriggers, planReadyForReview, planNeedsRevision, planApproved, planRefreshSweep, planHumanGates } from './port-tick/plan.ts';
+import { freshAccumulator, partitionAliases, planTriggers, planReadyForReview, planNeedsRevision, planApproved, planRefreshSweep, planStrandedSweep, planHumanGates } from './port-tick/plan.ts';
 import { readState, writeState, freshTickState, freshDispatchLog, newRunId, TICK_STATE_PATH, DISPATCH_LOG_PATH } from './port-tick/state.ts';
 import { livenessResetWrite, gateResolveWrite } from './port-tick/writes.ts';
 import { formatEvent, appendEvent, rotateIfNeeded, envelopeFor, runStartPayload, tickEventPayload } from './port-tick/events.ts';
@@ -109,13 +109,19 @@ function cmdPlan(root: string, cfg: any): void {
   planNeedsRevision(cfg, actionable, refreshBranchNumbers, refreshingNumbers, acc);
   planApproved(cfg, actionable, refreshBranchNumbers, refreshingNumbers, acc);
   planRefreshSweep(cfg, refreshedState, acc);
-  planHumanGates(actionable, acc);
-
-  const { dispatch, gates, held, announce, writes, refreshedUpdates, unknownStreakUpdates } = acc;
 
   // Ungated sweep: `allOpenPRs` is unconditional — only the filter and the report stay module-gated.
   const openPRs = repository.allOpenPRs?.nodes ?? [];
   const ungated: number[] = cfg.modules.approvalGate ? ungatedPullRequests(openPRs, cfg.labels) : [];
+
+  // Stranded-pull-request sweep: skipped when allOpenPRs is unavailable or truncated.
+  const allOpenPRsAvailable = !envelope.unavailable.includes('allOpenPRs') && !truncated.includes('allOpenPRs');
+  const strandedState: Record<string, any> = tickState.strandedSeen ?? {};
+  planStrandedSweep(cfg, openPRs, viewer, strandedState, allOpenPRsAvailable, acc);
+
+  planHumanGates(actionable, acc);
+
+  const { dispatch, gates, held, announce, writes, refreshedUpdates, unknownStreakUpdates, strandedUpdates } = acc;
 
   // Duplicate-pull-request sweep + reconcile reporting, change-only against `.temp/tick-state.json`'s remembered sets.
   const { reconcile, persist: reconcilePersist } = reconcileTick({
@@ -158,6 +164,7 @@ function cmdPlan(root: string, cfg: any): void {
     livenessExpected: buildLivenessExpected(actionable, cfg.labels),
     refreshedUpdates,
     unknownStreakUpdates,
+    strandedUpdates,
     wakeup,
     rateLimit: res.body.data.rateLimit ?? null,
     denials: denialsDelta,
@@ -238,6 +245,11 @@ function cmdCommit(root: string, cfg: any, args: any): void {
   for (const u of cache.unknownStreakUpdates ?? []) {
     if (u.remove) delete tickState.unknownStreak[u.item];
     else tickState.unknownStreak[u.item] = u.streak;
+  }
+  tickState.strandedSeen = tickState.strandedSeen ?? {};
+  for (const u of cache.strandedUpdates ?? []) {
+    if (u.remove) delete tickState.strandedSeen[u.item];
+    else tickState.strandedSeen[u.item] = true;
   }
 
   const willMoveWithoutHuman = (cache.dispatch ?? []).length > 0 || liveDescriptions.length > 0;

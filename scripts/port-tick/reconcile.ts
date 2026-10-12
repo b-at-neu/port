@@ -1,6 +1,7 @@
 // Pure: label-state reconciliation. Excluding markers and the sanctioned refresh pair, an
 // item holds at most one role-bearing label; a contradictory item is only ever reported, never repaired or escalated.
 import { LABEL_ROLES, LABEL_SURFACE } from './config.ts';
+import { RETRY_TRIGGER } from './liveness.ts';
 
 /** The one pair sanctioned to sit beside each other. Pinned against `artifacts.mjs`'s
  *  `PR_REFRESH_KEYS`, both directions, by `scripts/checks/tick.ts`. */
@@ -152,6 +153,56 @@ export function ungatedPullRequests(prs: Array<{ number: number; labels?: { node
       return names.some((n) => stageLabelNames.has(n)) && !names.includes(labels.marker);
     })
     .map((pr) => pr.number);
+}
+
+/** Every open pull request that is `viewer`'s, carries `labels.marker`, and holds no other
+ *  PR-surface role-bearing label at all (trigger, in-flight, gate, or `approved`). Sorted by number. */
+export function strandedPullRequests(
+  prs: Array<{ number: number; assignees?: { nodes?: Array<{ login: string }> }; labels?: { nodes?: Array<{ name: string }> } }>,
+  viewer: string | null,
+  labels: Record<string, string>,
+): number[] {
+  const roleBearingPrNames = new Set(
+    Object.keys(LABEL_ROLES)
+      .filter((k) => (LABEL_ROLES as Record<string, string>)[k] !== 'marker' && (LABEL_SURFACE as Record<string, string>)[k] !== 'issue')
+      .map((k) => labels[k]),
+  );
+  return prs
+    .filter((pr) => {
+      const assignees = (pr.assignees?.nodes ?? []).map((a) => a.login);
+      if (!assignees.includes(viewer ?? '')) return false;
+      const names = (pr.labels?.nodes ?? []).map((l) => l.name);
+      if (!names.includes(labels.marker)) return false;
+      return !names.some((n) => roleBearingPrNames.has(n));
+    })
+    .map((pr) => pr.number)
+    .sort((a, b) => a - b);
+}
+
+/** Newest-to-oldest walk of a label timeline for the most recently lost role-bearing label's
+ *  config key: a trigger/`approved` restores as itself, an in-flight label as its `RETRY_TRIGGER`. */
+export function lastKnownTrigger(
+  timeline: Array<{ __typename: string; label?: { name: string } }>,
+  labels: Record<string, string>,
+): string | null {
+  const nameToKey: Record<string, string> = {};
+  for (const [key, name] of Object.entries(labels)) {
+    if ((LABEL_SURFACE as Record<string, string>)[key] === 'issue') continue;
+    nameToKey[name] = key;
+  }
+  for (let i = timeline.length - 1; i >= 0; i--) {
+    const event = timeline[i];
+    if (event.__typename !== 'UnlabeledEvent') continue;
+    const name = event.label?.name;
+    if (!name) continue;
+    const key = nameToKey[name];
+    if (!key) continue;
+    const role = (LABEL_ROLES as Record<string, string>)[key];
+    if (role === 'trigger' || key === 'approved') return key;
+    if (role === 'in-flight') return RETRY_TRIGGER[key] ?? null;
+    if (key === 'needsHuman') return 'needsHuman';
+  }
+  return null;
 }
 
 /** Builds the co-presence map, flags contradictions and duplicate pull requests, and reduces

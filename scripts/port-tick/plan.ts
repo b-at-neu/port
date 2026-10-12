@@ -5,7 +5,8 @@ import { parseFilesBlock, gateCandidates } from './contention.ts';
 import { rollupVerdict } from './checks.ts';
 import { mergeabilityRoute, refreshDecision, capRefreshes, zeroDiffGate, cycleCapExceeded, cycleGrantCount, approvedReverify, refreshWins } from './gates.ts';
 import { toReviewNode, toCheckContexts, assigneeLoginsOf } from './wire.ts';
-import { refreshSweepWrite, zeroDiffWrite, cycleCapWrite, approvalWithdrawnWrite } from './writes.ts';
+import { refreshSweepWrite, zeroDiffWrite, cycleCapWrite, approvalWithdrawnWrite, strandedRestoreWrite } from './writes.ts';
+import { strandedPullRequests, lastKnownTrigger } from './reconcile.ts';
 
 // port-tick.ts passes the same accumulator through the whole step sequence.
 export interface PlanAccumulator {
@@ -17,10 +18,11 @@ export interface PlanAccumulator {
   readonly refreshCandidates: any[];
   readonly refreshedUpdates: any[];
   readonly unknownStreakUpdates: any[];
+  readonly strandedUpdates: any[];
 }
 
 export function freshAccumulator(): PlanAccumulator {
-  return { dispatch: [], gates: [], held: [], announce: [], writes: [], refreshCandidates: [], refreshedUpdates: [], unknownStreakUpdates: [] };
+  return { dispatch: [], gates: [], held: [], announce: [], writes: [], refreshCandidates: [], refreshedUpdates: [], unknownStreakUpdates: [], strandedUpdates: [] };
 }
 
 // Ownership partition, every trigger/gate/in-flight alias.
@@ -173,6 +175,34 @@ export function planRefreshSweep(cfg: any, refreshedState: Record<string, any>, 
     acc.dispatch.push({ stage: 'revise-agent', item: c.number, kind: 'refresh', model: cfg.models.revise, reason: 'refresh sweep' });
     acc.announce.push({ kind: 'rebase-required', item: c.number, facts: { headRefOid: c.headRefOid, base: cfg.integration, approvalStands: c.sourceLabelKey === 'approved' } });
     acc.refreshedUpdates.push({ item: c.number, sha: c.headRefOid, count: decision.count });
+  }
+}
+
+// Mine, marked, open, no role-bearing label — debounced one tick against `strandedState`.
+// First sighting only announces; still stranded next tick restores the last trigger, or escalates.
+export function planStrandedSweep(cfg: any, openPRs: any[], viewer: string | null, strandedState: Record<string, any>, available: boolean, acc: PlanAccumulator): void {
+  if (!available) return;
+  const current = strandedPullRequests(openPRs, viewer, cfg.labels);
+  for (const n of current) {
+    if (strandedState[n] === undefined) {
+      acc.announce.push({ kind: 'stranded-suspect', item: n, facts: {} });
+      acc.strandedUpdates.push({ item: n, seen: true });
+      continue;
+    }
+    const pr = openPRs.find((p: any) => p.number === n);
+    const timeline = pr?.timelineItems?.nodes ?? [];
+    const toKey = lastKnownTrigger(timeline, cfg.labels);
+    if (toKey) {
+      acc.writes.push(strandedRestoreWrite({ repo: cfg.repo, labels: cfg.labels, number: n, toKey }));
+      acc.announce.push({ kind: 'stranded-restored', item: n, facts: { label: cfg.labels[toKey], source: 'timeline' } });
+    } else {
+      acc.writes.push(strandedRestoreWrite({ repo: cfg.repo, labels: cfg.labels, number: n, toKey: 'needsHuman', unknown: true }));
+      acc.announce.push({ kind: 'stranded-restored', item: n, facts: { label: cfg.labels.needsHuman, source: 'unknown' } });
+    }
+    acc.strandedUpdates.push({ item: n, remove: true });
+  }
+  for (const key of Object.keys(strandedState)) {
+    if (!current.includes(Number(key))) acc.strandedUpdates.push({ item: Number(key), remove: true });
   }
 }
 

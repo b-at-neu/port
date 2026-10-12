@@ -64,6 +64,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       approvalWithdrawnWrite: modules['writes.ts'].approvalWithdrawnWrite,
       livenessResetWrite: modules['writes.ts'].livenessResetWrite,
       gateResolveWrite: modules['writes.ts'].gateResolveWrite,
+      strandedRestoreWrite: modules['writes.ts'].strandedRestoreWrite,
       formatEvent: modules['events.ts'].formatEvent,
       rotationDecision: modules['events.ts'].rotationDecision,
       parseDenialLine: modules['denials.ts'].parseDenialLine,
@@ -84,6 +85,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       reportDelta: modules['reconcile.ts'].reportDelta,
       reportOrphans: modules['reconcile.ts'].reportOrphans,
       reconcileTick: modules['reconcile.ts'].reconcileTick,
+      strandedPullRequests: modules['reconcile.ts'].strandedPullRequests,
+      lastKnownTrigger: modules['reconcile.ts'].lastKnownTrigger,
       reduceRollup: modules['checks.ts'].reduceRollup,
       isConcluded: modules['checks.ts'].isConcluded,
       conclusionOf: modules['checks.ts'].conclusionOf,
@@ -316,6 +319,7 @@ function runCase(fn: string, impl: any, input: any): any {
     case 'approvalWithdrawnWrite':
     case 'livenessResetWrite':
     case 'gateResolveWrite':
+    case 'strandedRestoreWrite':
     case 'parseDenialLine':
     case 'summarizeDelta':
       return impl(input);
@@ -355,6 +359,10 @@ function runCase(fn: string, impl: any, input: any): any {
       return impl(input.liveness, input.orphansReported);
     case 'reconcileTick':
       return impl(input);
+    case 'strandedPullRequests':
+      return impl(input.prs, input.viewer, input.labels);
+    case 'lastKnownTrigger':
+      return impl(input.timeline, input.labels);
     case 'reduceRollup':
     case 'isConcluded':
     case 'conclusionOf':
