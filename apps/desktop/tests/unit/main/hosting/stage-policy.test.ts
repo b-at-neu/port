@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createPathOps } from '@/main/platform/paths'
-import { globToRegExp, stagePolicy } from '@/main/hosting/stage-policy'
+import { stagePolicy } from '@/main/hosting/stage-policy'
 import type { StagePolicyParams } from '@/main/hosting/stage-policy'
 
 const posixOps = createPathOps('posix', { home: '/home/op' })
@@ -46,24 +46,5 @@ describe('stagePolicy', () => {
     const winOps = createPathOps('win32', { home: 'C:\\Users\\op' })
     const winPolicy = stagePolicy({ cwd: 'C:\\repo', sessionRequiredPaths: ['.claude/**'], pathOps: winOps })
     expect(winPolicy('Write', { file_path: 'C:\\repo\\.claude\\settings.json' })).toEqual({ kind: 'ask', protectedPath: '.claude/settings.json' })
-  })
-})
-
-// Glob parity with plugins/port/hooks/lib/guard-rules.mjs's own globToRegExp is pinned in
-// scripts/checks/desktop-hosting.ts, which can import a .mjs directly; this file sticks to its own cases.
-describe('globToRegExp', () => {
-  const CASES: readonly { readonly glob: string; readonly path: string; readonly matches: boolean }[] = [
-    { glob: 'CLAUDE.md', path: 'CLAUDE.md', matches: true },
-    { glob: 'CLAUDE.md', path: 'src/CLAUDE.md', matches: false },
-    { glob: '.claude/**', path: '.claude/settings.json', matches: true },
-    { glob: '.claude/**', path: '.claude/sub/dir/file.json', matches: true },
-    { glob: '.claude/**', path: '.claudexyz', matches: false },
-    { glob: 'src/*.ts', path: 'src/index.ts', matches: true },
-    { glob: 'src/*.ts', path: 'src/sub/index.ts', matches: false },
-    { glob: 'infra/**', path: 'infra', matches: false },
-  ]
-
-  it.each(CASES)('$glob against $path -> $matches', ({ glob, path, matches }) => {
-    expect(globToRegExp(glob).test(path)).toBe(matches)
   })
 })

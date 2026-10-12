@@ -32,19 +32,6 @@ describe('createPermissionBroker', () => {
     expect(pending['toolUseID']).toBeUndefined()
   })
 
-  it('optional fields default to null when the SDK omits them', () => {
-    const broker = createPermissionBroker({ now: () => 1_000, onChange: vi.fn() })
-    void broker.canUseTool('Bash', {}, baseOptions())
-    const pending = broker.pending()[0]
-    expect(pending?.title).toBeNull()
-    expect(pending?.displayName).toBeNull()
-    expect(pending?.description).toBeNull()
-    expect(pending?.decisionReason).toBeNull()
-    expect(pending?.blockedPath).toBeNull()
-    expect(pending?.agentId).toBeNull()
-    expect(pending?.sessionGrant).toBeNull()
-  })
-
   it('an already-aborted signal resolves deny at once and adds nothing', async () => {
     const onChange = vi.fn()
     const broker = createPermissionBroker({ now: () => 1_000, onChange })

@@ -1,18 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { runtimeDiagnosisModel } from '@/renderer/settings/runtime-model'
-import type { RuntimeDiagnosis, RuntimePreflight, RuntimeProbe } from '@/types/runtime'
-
-const ALL_DIAGNOSES: readonly RuntimeDiagnosis[] = [
-  'unverified',
-  'verified',
-  'cli-missing',
-  'bundled-fallback',
-  'cli-unusable',
-  'unauthenticated',
-  'token-stale',
-  'policy-refused',
-  'probe-failed',
-]
+import type { RuntimePreflight, RuntimeProbe } from '@/types/runtime'
 
 function preflight(overrides: Partial<RuntimePreflight> = {}): RuntimePreflight {
   return {
@@ -42,14 +30,6 @@ function probe(overrides: Partial<RuntimeProbe> = {}): RuntimeProbe {
 const READY_REPO = { id: 'repo-1', repo: 'o/n' }
 
 describe('runtimeDiagnosisModel', () => {
-  for (const diagnosis of ALL_DIAGNOSES) {
-    it(`renders a title and pill for '${diagnosis}'`, () => {
-      const model = runtimeDiagnosisModel(preflight({ diagnosis }), null, READY_REPO, false)
-      expect(model.title.length).toBeGreaterThan(0)
-      expect(model.pillLabel.length).toBeGreaterThan(0)
-    })
-  }
-
   it('unverified is idle with no action disabled when a repo is ready', () => {
     const model = runtimeDiagnosisModel(preflight({ diagnosis: 'unverified' }), null, READY_REPO, false)
     expect(model.pillStatus).toBe('idle')

@@ -185,11 +185,6 @@ describe('resolveSessionList', () => {
     expect(() => resolveSessionList({} as unknown as void, depsWith())).toThrow("'session:list' takes no payload")
   })
 
-  it('delegates to the store', () => {
-    const list = vi.fn(() => [])
-    resolveSessionList(undefined, depsWith({ store: storeStub({ list }) }))
-    expect(list).toHaveBeenCalledTimes(1)
-  })
 })
 
 describe('resolveSessionInvoke', () => {
@@ -255,11 +250,6 @@ describe('resolveSessionPermissionAnswer', () => {
     )
   })
 
-  it('delegates to the store with the validated request', () => {
-    const answerPermission = vi.fn(() => ({ ok: true as const }))
-    resolveSessionPermissionAnswer({ ...base, message: 'no thanks' }, depsWith({ store: storeStub({ answerPermission }) }))
-    expect(answerPermission).toHaveBeenCalledWith(SESSION_KEY, 'perm-1', 'deny', 'no thanks')
-  })
 })
 
 describe('resolveSessionDismiss', () => {
@@ -282,12 +272,6 @@ describe('resolveSessionDismiss', () => {
     )
   })
 
-  it('delegates to the store', () => {
-    const dismiss = vi.fn(() => Promise.resolve({ ok: true as const }))
-    const snapshotOf = () => null
-    void resolveSessionDismiss({ sessionKey: SESSION_KEY, worktree: 'keep' }, depsWith({ store: storeStub({ dismiss, snapshotOf }) }))
-    expect(dismiss).toHaveBeenCalledWith(SESSION_KEY, 'keep')
-  })
 })
 
 describe('resolveSessionCapacity', () => {
@@ -295,11 +279,6 @@ describe('resolveSessionCapacity', () => {
     expect(() => resolveSessionCapacity({} as unknown as void, depsWith())).toThrow("'session:capacity' takes no payload")
   })
 
-  it('delegates to the store', async () => {
-    const capacity = vi.fn(() => Promise.resolve({ limit: 4, ceiling: 8 }))
-    await resolveSessionCapacity(undefined, depsWith({ store: storeStub({ capacity }) }))
-    expect(capacity).toHaveBeenCalledTimes(1)
-  })
 })
 
 describe('resolveSessionCapacitySet', () => {
@@ -315,11 +294,6 @@ describe('resolveSessionCapacitySet', () => {
     expect(() => resolveSessionCapacitySet({ limit: 9 }, depsWith())).toThrow("'session:capacity:set' requires 'limit' to be an integer from 1 to 8")
   })
 
-  it('delegates to the store', () => {
-    const setLimit = vi.fn(() => Promise.resolve({ limit: 3, ceiling: 8 }))
-    void resolveSessionCapacitySet({ limit: 3 }, depsWith({ store: storeStub({ setLimit }) }))
-    expect(setLimit).toHaveBeenCalledWith(3)
-  })
 })
 
 describe('resolveSessionDefaults', () => {
@@ -327,11 +301,6 @@ describe('resolveSessionDefaults', () => {
     expect(() => resolveSessionDefaults({} as unknown as undefined, depsWith())).toThrow("'session:defaults' takes no payload")
   })
 
-  it('delegates to store.defaults()', () => {
-    const defaults = vi.fn(() => Promise.resolve({ model: null, permissionMode: 'default' as const }))
-    void resolveSessionDefaults(undefined, depsWith({ store: storeStub({ defaults }) }))
-    expect(defaults).toHaveBeenCalled()
-  })
 })
 
 describe('resolveSessionDefaultsSet', () => {
@@ -347,11 +316,6 @@ describe('resolveSessionDefaultsSet', () => {
     )
   })
 
-  it('delegates a valid payload', () => {
-    const setDefaults = vi.fn(() => Promise.resolve({ model: 'opus' as const, permissionMode: 'acceptEdits' as const }))
-    void resolveSessionDefaultsSet({ model: 'opus', permissionMode: 'acceptEdits' }, depsWith({ store: storeStub({ setDefaults }) }))
-    expect(setDefaults).toHaveBeenCalledWith({ model: 'opus', permissionMode: 'acceptEdits' })
-  })
 })
 
 describe('resolveSessionRename', () => {

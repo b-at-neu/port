@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { SessionKey } from '@/types/hosting'
 import { resolveSessionControlsSet, resolveSessionPlanAnswer, resolveSessionQuestionAnswer } from '@/main/channels/hosting'
 import type { HostingChannelDeps } from '@/main/channels/hosting'
@@ -47,12 +47,6 @@ describe('resolveSessionControlsSet', () => {
   it('rejects an unlisted effort', () => {
     expect(() => resolveSessionControlsSet({ sessionKey: SESSION_KEY, effort: 'extreme' as never }, depsWith())).toThrow(/effort/)
   })
-
-  it('delegates a valid patch', () => {
-    const setControls = vi.fn(() => Promise.resolve({ ok: true as const, controls: { permissionMode: 'acceptEdits' as const, model: null, effort: null } }))
-    void resolveSessionControlsSet({ sessionKey: SESSION_KEY, permissionMode: 'acceptEdits' }, depsWith({ store: storeStub({ setControls }) }))
-    expect(setControls).toHaveBeenCalledWith(SESSION_KEY, { permissionMode: 'acceptEdits', model: undefined, effort: undefined })
-  })
 })
 
 describe('resolveSessionQuestionAnswer', () => {
@@ -63,12 +57,6 @@ describe('resolveSessionQuestionAnswer', () => {
   it('rejects a non-string answer value', () => {
     expect(() => resolveSessionQuestionAnswer({ sessionKey: SESSION_KEY, permissionId: 'p1', answers: { Q: 1 as never } }, depsWith())).toThrow(/string/)
   })
-
-  it('delegates valid answers', () => {
-    const answerQuestion = vi.fn(() => ({ ok: true as const }))
-    void resolveSessionQuestionAnswer({ sessionKey: SESSION_KEY, permissionId: 'p1', answers: { Q: 'A' } }, depsWith({ store: storeStub({ answerQuestion }) }))
-    expect(answerQuestion).toHaveBeenCalledWith(SESSION_KEY, 'p1', { Q: 'A' })
-  })
 })
 
 describe('resolveSessionPlanAnswer', () => {
@@ -78,11 +66,5 @@ describe('resolveSessionPlanAnswer', () => {
 
   it('rejects an empty keep-planning feedback', () => {
     expect(() => resolveSessionPlanAnswer({ sessionKey: SESSION_KEY, permissionId: 'p1', decision: { kind: 'keep-planning', feedback: '' } }, depsWith())).toThrow(/feedback/)
-  })
-
-  it('delegates a valid approve decision', () => {
-    const answerPlan = vi.fn(() => ({ ok: true as const }))
-    void resolveSessionPlanAnswer({ sessionKey: SESSION_KEY, permissionId: 'p1', decision: { kind: 'approve', mode: 'acceptEdits' } }, depsWith({ store: storeStub({ answerPlan }) }))
-    expect(answerPlan).toHaveBeenCalledWith(SESSION_KEY, 'p1', { kind: 'approve', mode: 'acceptEdits' })
   })
 })

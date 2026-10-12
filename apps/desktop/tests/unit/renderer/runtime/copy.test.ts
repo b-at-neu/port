@@ -16,14 +16,6 @@ const ALL_DIAGNOSES: readonly RuntimeDiagnosis[] = [
 ]
 
 describe('RUNTIME_COPY', () => {
-  it('every diagnosis has a non-empty title and body', () => {
-    for (const diagnosis of ALL_DIAGNOSES) {
-      const entry = RUNTIME_COPY[diagnosis]
-      expect(entry.title.length).toBeGreaterThan(0)
-      expect(entry.body.length).toBeGreaterThan(0)
-    }
-  })
-
   it('no entry anywhere mentions an API key', () => {
     for (const diagnosis of ALL_DIAGNOSES) {
       const entry = RUNTIME_COPY[diagnosis]

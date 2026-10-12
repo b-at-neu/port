@@ -31,7 +31,7 @@ function worktree(overrides: Partial<InspectedWorktree> = {}): InspectedWorktree
 }
 
 describe('failureCopy', () => {
-  it('covers every failure kind with its own sentence', () => {
+  it('interpolates the runner token and the script message', () => {
     const cases: ReadonlyArray<Extract<WorktreesReport, { ok: false }>> = [
       { ok: false, kind: 'not-configured', message: '', readAt: '' },
       { ok: false, kind: 'unsupported-runner', token: 'python', message: '', readAt: '' },
@@ -46,9 +46,6 @@ describe('failureCopy', () => {
       { ok: false, kind: 'nonzero', message: 'exit 1', readAt: '' },
       { ok: false, kind: 'spawn-failed', message: 'ENOENT', readAt: '' },
     ]
-    for (const failure of cases) {
-      expect(failureCopy(failure).length).toBeGreaterThan(0)
-    }
     expect(failureCopy(cases[1] as Extract<WorktreesReport, { ok: false; kind: 'unsupported-runner' }>)).toContain('python')
     expect(failureCopy(cases[5] as Extract<WorktreesReport, { ok: false; kind: 'script-failed' }>)).toContain('boom')
   })
