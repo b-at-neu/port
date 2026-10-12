@@ -1,47 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import type { RepoId } from '@/utils/repos'
 import type { ReconciledItem } from '@/types/state'
 import { autoApprovalsOf } from '@/main/tick/auto-plan'
-
-const REPO = 'repo-a' as RepoId
+import { reconciledItem } from '../../../fixtures/board-state'
 
 function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
-  return {
-    repoId: REPO,
-    repo: 'o/a',
-    kind: 'issue',
-    number: 1,
-    title: 'a ticket',
-    url: 'https://github.com/o/a/issues/1',
-    assignees: ['op'],
+  return reconciledItem({
     stage: 'trigger',
     stages: [{ key: 'planReview', name: 'plan review', role: 'gate' }],
-    stageAmbiguous: false,
-    marked: true,
     autoPlan: true,
-    status: 'waiting',
-    statusEvidence: null,
-    waitingOn: 'cockpit',
-    sessionRequired: false,
-    linked: null,
-    linkReason: null,
-    agents: [],
-    sessions: [],
-    worktrees: [],
-    state: 'OPEN',
-    mergedAt: null,
     matchedKeys: ['planReview'],
-    sources: ['github'],
-    claimedFiles: null,
-    headRefOid: null,
-    mergeable: null,
-    reviews: null,
-    comments: null,
-    reviewCycleCount: null,
-    checkRollup: null,
-    planPresent: null,
     ...overrides,
-  }
+  })
 }
 
 describe('autoApprovalsOf', () => {

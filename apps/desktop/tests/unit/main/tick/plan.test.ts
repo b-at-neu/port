@@ -3,81 +3,15 @@ import type { RepoId } from '@/utils/repos'
 import type { ReconciledItem, RepositoryState } from '@/types/state'
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
 import { planTick } from '@/main/tick/plan'
+import { reconciledItem as item, repositoryState } from '../../../fixtures/board-state'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 const NEXT_DECISION_AT = new Date('2026-01-01T01:01:00.000Z')
 const REPO = 'repo-a' as RepoId
 const NO_CHECK_DISPOSITIONS = {}
 
-function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
-  return {
-    repoId: REPO,
-    repo: 'o/a',
-    kind: 'issue',
-    number: 1,
-    title: 'a ticket',
-    url: 'https://github.com/o/a/issues/1',
-    assignees: ['op'],
-    stage: 'trigger',
-    stages: [{ key: 'ready', name: 'ready', role: 'trigger' }],
-    stageAmbiguous: false,
-    marked: true,
-    autoPlan: false,
-    status: 'waiting',
-    statusEvidence: null,
-    waitingOn: 'cockpit',
-    sessionRequired: false,
-    linked: null,
-    linkReason: null,
-    agents: [],
-    sessions: [],
-    worktrees: [],
-    state: 'OPEN',
-    mergedAt: null,
-    matchedKeys: ['ready'],
-    sources: ['github'],
-    claimedFiles: null,
-    headRefOid: null,
-    mergeable: null,
-    reviews: null,
-    comments: null,
-    reviewCycleCount: null,
-    checkRollup: null,
-    planPresent: null,
-    ...overrides,
-  }
-}
-
 function readyRepo(items: readonly ReconciledItem[], overrides: Partial<Extract<RepositoryState, { ok: true }>> = {}): Extract<RepositoryState, { ok: true }> {
-  return {
-    ok: true,
-    repoId: REPO,
-    repo: 'o/a',
-    displayName: 'o/a',
-    items,
-    orphans: [],
-    uncorrelatedWorktrees: [],
-    denials: { ok: true, present: false, path: '/repo/.agents/denials.log', readAt: NOW.toISOString() },
-    diagnostics: [],
-    vocabulary: { verdict: 'verified', present: [], missing: [], problems: [], repoLabels: { ok: true, names: [] } },
-    unavailable: [],
-    truncated: [],
-    rateLimit: { cost: 1, remaining: 4999, resetAt: '2026-01-01T02:00:00Z' },
-    freshness: {
-      github: { at: NOW.toISOString() },
-      itemStates: { unavailable: 'no re-check needed' },
-      sessions: { at: NOW.toISOString() },
-      worktrees: { at: NOW.toISOString() },
-      denials: { at: NOW.toISOString() },
-    },
-    worktreeTotals: { registered: 0, attached: 0, uncorrelated: 0 },
-    viewer: 'op',
-    approvalGate: true,
-    disabled: [],
-    concurrency: { sharedFiles: [], overlapThreshold: 2 },
-    reviewCycleCap: 5,
-    ...overrides,
-  }
+  return repositoryState(items, overrides, NOW.toISOString())
 }
 
 describe('planTick — blind first', () => {

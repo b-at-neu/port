@@ -9,6 +9,7 @@ import type { ReposListResponse } from '@/types/ipc'
 import { autoApprovePlan, gateAnswer, gatePreflight } from '@/main/actions/gate'
 import type { GateDeps } from '@/main/actions/gate'
 import type { RegistryDeps } from '@/main/registry'
+import { readyEntry } from '../../../fixtures/board-state'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 const VOCABULARY: LabelVocabulary = resolveVocabulary({})
@@ -22,28 +23,7 @@ const registryDeps: RegistryDeps = {
   chooseDirectory: () => Promise.resolve(null),
 }
 
-const READY_ENTRY = {
-  id: REPO_ID,
-  path: '/repo',
-  displayName: 'widgets',
-  status: 'ready' as const,
-  config: {
-    repo: 'acme/widgets',
-    owner: 'acme',
-    name: 'widgets',
-    branches: { integration: 'dev', production: 'main' },
-    models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
-    modules: { approvalGate: true, release: true, scope: true },
-    reviewCycleCap: 3,
-    vocabulary: VOCABULARY,
-    commands: { worktrees: null, budget: null },
-    concurrency: { sharedFiles: [], overlapThreshold: 2 },
-    sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
-    checkDispositions: {},
-    overrides: [],
-  },
-  diagnostics: [],
-}
+const READY_ENTRY = readyEntry({ id: REPO_ID, displayName: 'widgets' }, { repo: 'acme/widgets', owner: 'acme', name: 'widgets', reviewCycleCap: 3 })
 
 const ABSENT_OWNERSHIP: OwnershipRead = { kind: 'absent', path: '/repo/.agents/cockpit.json', readAt: '2026-01-01T00:00:00.000Z' }
 const ABSENT_OWNERSHIP_SUMMARY: OwnershipSummary = { kind: 'absent' }

@@ -2,10 +2,7 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { resolveVocabulary } from '@/utils/labels/vocabulary'
-import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
-import type { BoardSnapshot } from '@/types/board'
 import type { ReconciledItem, RepositoryState, StageLabel } from '@/types/state'
 import type { ItemsByNumberFetch, ResolvedItem } from '@/types/github'
 import type { AuditEntry, LabelAuditEntry, WriteOutcome } from '@/types/writes'
@@ -15,10 +12,9 @@ import type { GhRunner } from '@/main/writes/apply'
 import type { GitRunner } from '@/main/dispatch/ownership'
 import { applyItemDecision, defaultApplyItemDecisionDeps } from '@/main/actions/decide'
 import type { ApplyItemDecisionDeps } from '@/main/actions/decide'
-import type { ReadyEntry } from '@/main/actions/apply'
+import { boardSnapshot as snapshotOf, readyEntry, reconciledItem, repositoryState } from '../../../fixtures/board-state'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
-const VOCABULARY: LabelVocabulary = resolveVocabulary({})
 const NOW = () => new Date('2026-01-01T00:00:00.000Z')
 
 function stageLabel(key: StageLabel['key'], role: StageLabel['role']): StageLabel {
@@ -26,113 +22,30 @@ function stageLabel(key: StageLabel['key'], role: StageLabel['role']): StageLabe
 }
 
 function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
-  return {
+  return reconciledItem({
     repoId: REPO_ID,
-    repo: 'o/a',
     kind: 'pull-request',
     number: 300,
     title: 'a pull request',
     url: 'https://github.com/o/a/pull/300',
-    assignees: ['op'],
     stage: 'gate',
     stages: [stageLabel('needsHuman', 'gate')],
-    stageAmbiguous: false,
-    marked: true,
-    autoPlan: false,
     status: 'gated',
-    statusEvidence: null,
     waitingOn: null,
-    sessionRequired: false,
-    linked: null,
-    linkReason: null,
-    agents: [],
-    sessions: [],
-    worktrees: [],
-    state: 'OPEN',
-    mergedAt: null,
     matchedKeys: ['needsHuman'],
-    sources: ['github'],
-    claimedFiles: null,
     headRefOid: 'a'.repeat(40),
     mergeable: 'MERGEABLE',
-    reviews: null,
-    comments: null,
     reviewCycleCount: 0,
-    checkRollup: null,
-    planPresent: null,
     ...overrides,
-  }
+  })
 }
 
 function repoState(items: readonly ReconciledItem[], overrides: Partial<Extract<RepositoryState, { readonly ok: true }>> = {}): Extract<RepositoryState, { readonly ok: true }> {
-  return {
-    ok: true,
-    repoId: REPO_ID,
-    repo: 'o/a',
-    displayName: 'o/a',
-    items,
-    orphans: [],
-    uncorrelatedWorktrees: [],
-    denials: { ok: true, present: false, path: '/repo/.agents/denials.log', readAt: '2026-01-01T00:00:00Z' },
-    diagnostics: [],
-    vocabulary: { verdict: 'verified', present: [], missing: [], problems: [], repoLabels: { ok: true, names: [] } },
-    unavailable: [],
-    truncated: [],
-    rateLimit: { cost: 1, remaining: 4999, resetAt: '2026-01-01T02:00:00Z' },
-    freshness: {
-      github: { at: '2026-01-01T00:00:00Z' },
-      itemStates: { unavailable: 'no re-check needed' },
-      sessions: { at: '2026-01-01T00:00:00Z' },
-      worktrees: { at: '2026-01-01T00:00:00Z' },
-      denials: { at: '2026-01-01T00:00:00Z' },
-    },
-    worktreeTotals: { registered: 0, attached: 0, uncorrelated: 0 },
-    viewer: 'op',
-    approvalGate: true,
-    disabled: [],
-    concurrency: { sharedFiles: [], overlapThreshold: 2 },
-    reviewCycleCap: 5,
-    ...overrides,
-  }
+  return repositoryState(items, { repoId: REPO_ID, ...overrides })
 }
 
-function snapshotOf(repositories: readonly RepositoryState[]): BoardSnapshot {
-  return {
-    state: { repositories, sessions: { ok: true, sessions: [], agents: [], unattributed: 0, unresolved: [], unreadable: [], scannedProjects: 0, scanMs: 0, scannedAt: '2026-01-01T00:00:00Z' }, readAt: '2026-01-01T00:00:00Z' },
-    health: [],
-    policy: { baseIntervalMs: { github: 60_000, sessions: 15_000, worktrees: 15_000, denials: 15_000 }, backoffCeilingMs: 900_000, rateLimitFloor: 200, staleGraceMs: 30_000 },
-    tick: [],
-    runStates: { store: { kind: 'loaded' }, repositories: [] },
-    nextWakeupAt: null,
-    emittedAt: '2026-01-01T00:00:00Z',
-    dispatch: [],
-  }
-}
-
-function entry(overrides: Partial<ReadyEntry> = {}): ReadyEntry {
-  return {
-    id: REPO_ID,
-    path: '/repo',
-    displayName: 'o/a',
-    status: 'ready',
-    config: {
-      repo: 'o/a',
-      owner: 'o',
-      name: 'a',
-      branches: { integration: 'dev', production: 'main' },
-      commands: { worktrees: null, budget: null },
-      concurrency: { sharedFiles: [], overlapThreshold: 2 },
-      sessionRequiredPaths: ['CLAUDE.md', '.claude/**'],
-      checkDispositions: {},
-      overrides: [],
-      models: { plan: 'opus', impl: 'sonnet', review: 'sonnet', revise: 'sonnet' },
-      modules: { approvalGate: true, release: true, scope: true },
-      reviewCycleCap: 5,
-      vocabulary: VOCABULARY,
-    },
-    diagnostics: [],
-    ...overrides,
-  }
+function entry(overrides: Partial<Parameters<typeof readyEntry>[0]> = {}): ReturnType<typeof readyEntry> {
+  return readyEntry({ id: REPO_ID, ...overrides })
 }
 
 function resolvedItem(overrides: Partial<ResolvedItem> = {}): ResolvedItem {
