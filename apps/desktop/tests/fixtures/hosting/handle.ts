@@ -11,8 +11,24 @@ export const REPO_ID = 'repo-1' as RepoId
 export const WORKSPACE: SessionWorkspace = { folder: '/repo', root: '/repo', worktree: null, base: null }
 export const INSTALLED_PLUGIN: PluginRequest = { source: 'installed' }
 
+interface FakeQuery {
+  readonly query: HostedQuery
+  readonly interrupt: ReturnType<typeof vi.fn>
+  readonly close: ReturnType<typeof vi.fn>
+  readonly supportedCommands: ReturnType<typeof vi.fn>
+  readonly supportedAgents: ReturnType<typeof vi.fn>
+  readonly setPermissionMode: ReturnType<typeof vi.fn>
+  readonly setModel: ReturnType<typeof vi.fn>
+  readonly applyFlagSettings: ReturnType<typeof vi.fn>
+  readonly supportedModels: ReturnType<typeof vi.fn>
+  readonly stopTask: ReturnType<typeof vi.fn>
+  push(message: unknown): void
+  finish(): void
+  fail(error: Error): void
+}
+
 /** `push` delivers the next message to whichever `next()` is currently waiting. */
-export function fakeQuery(options: { readonly commands?: readonly { name: string; description: string; argumentHint: string }[]; readonly agents?: readonly { name: string; description: string; model?: string }[] } = {}) {
+export function fakeQuery(options: { readonly commands?: readonly { name: string; description: string; argumentHint: string }[]; readonly agents?: readonly { name: string; description: string; model?: string }[] } = {}): FakeQuery {
   let pendingResolve: ((result: IteratorResult<unknown>) => void) | null = null
   let pendingReject: ((error: Error) => void) | null = null
   const queue: unknown[] = []
@@ -96,7 +112,9 @@ export function fakeQuery(options: { readonly commands?: readonly { name: string
   }
 }
 
-export function baseParams(overrides: Partial<Parameters<typeof createHostedHandle>[0]> = {}) {
+export function baseParams(
+  overrides: Partial<Parameters<typeof createHostedHandle>[0]> = {},
+): Parameters<typeof createHostedHandle>[0] {
   return {
     sessionKey: SESSION_KEY,
     repoId: REPO_ID,
