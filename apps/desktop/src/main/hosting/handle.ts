@@ -1,50 +1,48 @@
+import type { ProjectedDelta, ContentBlock } from '@/types/hosting'
+import type { ExpectedComponents, UsageReading, PluginRequest } from '@/types/hosting-plugin'
+
 // One hosted session: builds options, opens the query, runs the pump loop. The ring
 // exists only so a renderer attaching mid-stream is not blank; the on-disk transcript is the history.
 import type { CredentialsTell } from '@/types/runtime'
-import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls } from '@/utils/hosting/controls'
+import type { HostedHandle } from '@/types/hosting'
+import type { HostedQueryFn } from '@/main/hosting/sdk'
 import type {
   HostedSessionSnapshot,
-  PermissionDecision,
-  PluginRequest,
   SessionDefaults,
   SessionEnd,
   SessionEntriesDelta,
   SessionEventEnvelope,
   SessionHistory,
-  SessionInvokeResult,
   SessionKey,
   SessionOrigin,
-  SessionPermissionAnswerResult,
   SessionPhase,
   SessionRateLimit,
   SessionStartMode,
-  SessionTaskStopResult,
 } from '@/types/hosting'
 import type { RepoId } from '@/utils/repos'
 import type { SessionWorkspace } from '@/types/workspace'
-import type { ComposerAttachment } from '@/utils/hosting/attachments'
 import type { SessionResult, StageTag } from '@/types/stage-session'
 import { createHostedInput } from '@/main/hosting/input'
 import { buildSessionOptions } from '@/main/hosting/options'
 import { classifyEnd } from '@/main/hosting/classify'
 import { createControlsTracker } from '@/main/hosting/controls'
-import type { ControlsTracker } from '@/main/hosting/controls'
+
 import { createPermissionBroker } from '@/main/hosting/permissions'
 import { stagePolicy } from '@/main/hosting/stage-policy'
 import { createSessionProjector } from '@/main/hosting/project'
-import type { ProjectedDelta, SessionProjectorWindow } from '@/main/hosting/project'
+
 import { createCapabilityTracker } from '@/main/hosting/capabilities'
 import { createTaskTracker } from '@/main/hosting/tasks'
 import { readRateLimit } from '@/main/hosting/rate-limit'
 import { readResult } from '@/main/hosting/result'
 import { readUsage } from '@/main/hosting/usage'
-import type { UsageReading } from '@/main/hosting/usage'
+
 import { promptTitle } from '@/main/hosting/title'
 import { buildUserContent } from '@/main/hosting/content'
-import type { ContentBlock } from '@/main/hosting/content'
+
 import { composeInvocation, isPipelineCommand, validateCommandName } from '@/main/hosting/verify'
-import type { ExpectedComponents } from '@/main/hosting/plugin'
-import type { HostedQuery, Options, SDKMessage, SDKUserMessage } from '@/main/hosting/sdk'
+
+import type { SDKMessage } from '@/main/hosting/sdk'
 import { pathOps } from '@/main/platform/paths'
 
 export type { HostedQuery } from '@/main/hosting/sdk'
@@ -56,9 +54,7 @@ export const REPLAY_LIMIT = 500
  *  the input iterator ends, before forcing `query.close()`. */
 export const CLOSE_GRACE_MS = 5_000
 
-export type HostedQueryFn = (params: { prompt: AsyncIterable<SDKUserMessage>; options?: Options }) => HostedQuery
-
-export interface CreateHostedHandleParams {
+interface CreateHostedHandleParams {
   readonly sessionKey: SessionKey
   readonly repoId: RepoId | null
   readonly workspace: SessionWorkspace
@@ -86,48 +82,9 @@ export interface CreateHostedHandleParams {
   readonly stage: { readonly tag: StageTag; readonly agentName: string; readonly model: string; readonly sessionRequiredPaths: readonly string[]; readonly onDeny?: (toolName: string, input: Readonly<Record<string, unknown>>) => void } | null
 }
 
-export interface HostedHandleReplay {
-  readonly events: readonly SessionEventEnvelope[]
-  readonly droppedBefore: number
-}
-
-export interface HostedSendResult {
+interface HostedSendResult {
   readonly uuid: string
   readonly queued: boolean
-}
-
-/** `blocked-command` is an operator action, not a bug — a typed value, never a thrown refusal. */
-export type HostedSendOutcome = ({ readonly ok: true } & HostedSendResult) | { readonly ok: false; readonly kind: 'blocked-command'; readonly name: string }
-
-export interface HostedHandle {
-  readonly sessionKey: SessionKey
-  /** `mode.sessionId` for `resume`/`resume-at`, `null` otherwise. */
-  readonly resumeTarget: string | null
-  readonly cwd: string
-  snapshot(): HostedSessionSnapshot
-  replay(): HostedHandleReplay
-  /** Refuses `/port:pipeline` (or an unreported bare `/pipeline`) as `blocked-command`, pushing nothing. `source` defaults to `'app'` — only a `'operator'` send into a stage session can ever stamp `operatorJoinedAt`. */
-  send(text: string, attachments?: readonly ComposerAttachment[], source?: 'operator' | 'app'): HostedSendOutcome
-  /** The interrupt receipt's `still_queued` count, or `null` when the CLI returned no receipt. */
-  interrupt(): Promise<number | null>
-  /** Ends the input iterator, waits up to `CLOSE_GRACE_MS`, then forces `query.close()`. */
-  close(): Promise<void>
-  setTitled(titled: boolean): void
-  /** Fills `title` only while it is still `null`. */
-  setTitle(title: string): void
-  /** Unlike `setTitle`, sets `title` unconditionally. */
-  rename(title: string): void
-  answerPermission(permissionId: string, decision: PermissionDecision, message: string | null): SessionPermissionAnswerResult
-  entriesWindow(): SessionProjectorWindow
-  /** `invalid-command` on a malformed name, `unknown-command` outside this session's `port:` list. */
-  invoke(name: string, args: string): SessionInvokeResult
-  // unknown-session once closing/ended, not-ready before init.
-  setControls(patch: { readonly permissionMode?: SessionControls['permissionMode']; readonly model?: string; readonly effort?: SessionControls['effort'] }): Promise<Awaited<ReturnType<ControlsTracker['set']>> | { readonly ok: false; readonly kind: 'unknown-session' | 'not-ready' }>
-  answerQuestion(permissionId: string, answers: Readonly<Record<string, string>>): QuestionAnswerResult
-  answerPlan(permissionId: string, decision: PlanDecision): PlanAnswerResult
-  history(): SessionHistory
-  /** `unknown-task` for an id not in this handle's own `backgroundTasks` — never forwards an arbitrary id. */
-  stopTask(taskId: string): Promise<SessionTaskStopResult>
 }
 
 function resumeTargetFor(mode: SessionStartMode): string | null {
@@ -292,7 +249,8 @@ export function createHostedHandle(params: CreateHostedHandleParams, query: Host
 
   async function pump(): Promise<void> {
     try {
-      for await (const message of stream) {
+      for await (const rawMessage of stream) {
+        const message = rawMessage as SDKMessage
         const receivedAt = new Date(params.now()).toISOString()
         pushEnvelope(message, receivedAt)
         applyMessage(message)

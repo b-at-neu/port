@@ -2,9 +2,9 @@
 // wins over the installed cache when this checkout's manifest names `port`.
 import { listDirectory, readJsonFile } from '@/main/platform/files'
 import { pathOps } from '@/main/platform/paths'
-import type { PluginRequest } from '@/types/hosting'
+import type { PluginRequest, ExpectedComponents } from '@/types/hosting-plugin'
 
-export interface PluginManifest {
+interface PluginManifest {
   readonly name?: string
 }
 
@@ -26,11 +26,6 @@ export async function resolvePluginRequest(repoRoot: string, deps: ResolvePlugin
   }
   if (result.value.name !== 'port') return { source: 'installed' }
   return { source: 'repository', path: pluginPath }
-}
-
-export interface ExpectedComponents {
-  readonly skills: readonly string[]
-  readonly agents: readonly string[]
 }
 
 export interface ReadExpectedComponentsDeps {

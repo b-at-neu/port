@@ -1,7 +1,7 @@
 // No semver dependency — a three-number component-wise compare is all a `\d+\.\d+\.\d+` prefix needs. Below the minimum never blocks: the policy is "try it and see", so this only sets `belowMinimum`.
 import { claude } from '@/main/platform/claude'
-import type { ClaudeOptions } from '@/main/platform/claude'
-import type { CommandResult } from '@/main/platform/run'
+import type { ClaudeOptions } from '@/types/platform'
+import type { CommandResult } from '@/types/platform'
 import { MINIMUM_CLAUDE_CODE_VERSION } from '@/types/runtime'
 
 const VERSION_RE = /(\d+)\.(\d+)\.(\d+)/
@@ -24,9 +24,9 @@ function compareVersions(a: VersionTuple, b: VersionTuple): number {
   return 0
 }
 
-export type ReadVersionResult = { readonly ok: true; readonly raw: string; readonly belowMinimum: boolean } | { readonly ok: false }
+type ReadVersionResult = { readonly ok: true; readonly raw: string; readonly belowMinimum: boolean } | { readonly ok: false }
 
-export interface ReadClaudeVersionOptions {
+interface ReadClaudeVersionOptions {
   readonly runClaude?: (args: readonly string[], options?: ClaudeOptions) => Promise<CommandResult>
   readonly minimum?: string
 }

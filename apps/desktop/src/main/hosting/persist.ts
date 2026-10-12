@@ -1,10 +1,10 @@
 // hosting.json's only writer: recoverable app state, so a missing or malformed file resolves to
 // an empty state rather than refusing to load. Pinned as the sole writer by desktop-hosting.ts.
-import type { RepoId } from '@/utils/repos'
 import { DEFAULT_SESSION_DEFAULTS, SESSION_MODELS, SESSION_PERMISSION_MODES } from '@/types/hosting'
 import type { SessionDefaults, SessionMarks, SessionModel, SessionPermissionMode } from '@/types/hosting'
 import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
 import { pathOps } from '@/main/platform/paths'
+import type { HostingPersistedState, HostingPersistence, PersistedOpenEntry } from '@/types/hosting'
 
 const HOSTING_FILE = 'hosting.json'
 const CURRENT_VERSION = 1
@@ -12,22 +12,6 @@ const CURRENT_VERSION = 1
 /** Default `limit` for a fresh or unrecoverable state, and the operator's own ceiling when raising it. */
 export const DEFAULT_SESSION_LIMIT = 4
 export const SESSION_LIMIT_CEILING = 8
-
-export interface PersistedOpenEntry {
-  readonly repoId: RepoId | null
-  readonly claudeSessionId: string
-  readonly title: string | null
-  readonly startedAt: string
-  /** Additive, no version bump — a v1 file without it still restores through the registry path. */
-  readonly cwd?: string
-}
-
-export interface HostingPersistedState {
-  readonly limit: number
-  readonly open: readonly PersistedOpenEntry[]
-  readonly defaults: SessionDefaults
-  readonly marks: SessionMarks
-}
 
 interface HostingFileShape {
   readonly version: number
@@ -104,16 +88,8 @@ function emptyState(): HostingPersistedState {
   return { limit: DEFAULT_SESSION_LIMIT, open: [], defaults: DEFAULT_SESSION_DEFAULTS, marks: EMPTY_MARKS }
 }
 
-export interface CreateHostingPersistenceParams {
+interface CreateHostingPersistenceParams {
   readonly dir: string
-}
-
-export interface HostingPersistence {
-  load(): Promise<HostingPersistedState>
-  /** Fire-and-forget, deduplicated by last-written JSON; only the newest pending state survives. */
-  save(state: HostingPersistedState): void
-  /** Drops every later `save` — called before quitting overwrites the persisted set. */
-  freeze(): void
 }
 
 /** Missing, unparseable, wrong-shaped, or newer-versioned all resolve to `emptyState()`, logged once. */

@@ -2,7 +2,7 @@
 import type { SessionGrantItem } from '@/types/hosting'
 import type { PermissionUpdate } from '@/main/hosting/sdk'
 
-export interface SessionGrant {
+interface SessionGrant {
   readonly updates: readonly PermissionUpdate[]
   readonly summary: readonly SessionGrantItem[]
 }

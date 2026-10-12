@@ -95,7 +95,7 @@ function countSign(hunks: readonly DiffHunk[], sign: DiffSign): number {
   return hunks.reduce((sum, hunk) => sum + hunk.lines.filter((line) => line.sign === sign).length, 0)
 }
 
-export interface ParsedDiff {
+interface ParsedDiff {
   readonly files: readonly FileDiff[]
   /** Paths `git diff` reported as `Binary files … differ` — never present in `files`. */
   readonly binary: readonly string[]

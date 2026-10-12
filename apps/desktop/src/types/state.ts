@@ -1,3 +1,8 @@
+import type { AgentRecord, SessionRecord } from '@/types/sessions'
+import type { PipelineFetch, ItemsByNumberFetch } from '@/types/github'
+import type { WorktreesRead } from '@/types/local'
+import type { BoardSnapshot, SourceKind } from '@/types/board'
+
 // Renderer-safe reconciled shapes for the unified state model. No import here may reach a Node builtin — only `main/state/` joins the four adapters. A condition a human or the environment could cause is a value, never a throw.
 import type { LabelKey, VocabularyReport } from '@/utils/labels/vocabulary'
 import type { LabelRole } from '@/utils/labels/defaults'
@@ -193,4 +198,46 @@ export interface PipelineState {
   readonly repositories: readonly RepositoryState[]
   readonly sessions: SessionScan
   readonly readAt: string
+}
+
+/** The repository-scoped slice of the whole-machine `SessionScan`, never a second scan. `available` is `false` only when the scan itself failed. */
+export interface RepoSessionSlice {
+  readonly agents: readonly AgentRecord[]
+  readonly sessions: readonly SessionRecord[]
+  readonly available: boolean
+  readonly freshness: FreshnessEntry
+}
+
+/** What every refresh primitive reports back for health bookkeeping — `schedule.ts` reads this, never the cache directly. */
+export interface RefreshOutcome {
+  readonly ok: boolean
+  readonly at: string
+  readonly error?: string
+  /** GitHub-only — the window this attempt read, so `schedule.ts`'s `deferredUntil` can defer even a successful-but-low-headroom read. */
+  readonly rateLimit?: RateLimitInfo | null
+  /** GitHub-only — so a `rate-limited` failure can defer to `resetAt` rather than double the interval like any other failure. */
+  readonly failureKind?: PipelineFailureKind | null
+}
+
+export interface SourceCache {
+  readonly github: Map<RepoId, PipelineFetch>
+  /** Keyed with the fetch it belongs to, never independently schedulable — `SOURCE_KINDS` deliberately excludes `itemStates`. */
+  readonly itemStates: Map<RepoId, ItemsByNumberFetch | null>
+  readonly worktrees: Map<RepoId, WorktreesRead>
+  readonly denials: Map<RepoId, DenialsRead>
+  /** One machine-wide scan, never per repository. */
+  sessions: SessionScan | null
+}
+
+export interface PipelineWatcher {
+  readonly refresh: (request?: RefreshRequest) => Promise<BoardSnapshot>
+  readonly snapshot: () => BoardSnapshot
+  readonly stop: () => void
+  /** Re-reads `dispatchStatus()` onto the existing snapshot — never a second `buildSnapshot()` call, so it never produces a duplicate trajectory-record line or re-runs a poll. */
+  readonly republish: () => void
+}
+
+export interface RefreshRequest {
+  readonly repoId?: RepoId
+  readonly source?: SourceKind
 }

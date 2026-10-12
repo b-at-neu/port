@@ -4,16 +4,7 @@ import { isRecord } from '@/main/guards'
 import type { SessionControls, SessionEffort, SessionModelOption, SessionModels } from '@/utils/hosting/controls'
 import { SESSION_EFFORTS } from '@/utils/hosting/controls'
 import type { SessionDefaults } from '@/types/hosting'
-import type { HostedQuery, ModelInfo } from '@/main/hosting/sdk'
-
-// A stalled supportedModels() call must never park the model select forever.
-export const MODELS_TIMEOUT_MS = 30_000
-
-export interface CreateControlsTrackerParams {
-  readonly defaults: SessionDefaults
-  readonly onChange: () => void
-  readonly timeoutMs?: number
-}
+import type { ModelInfo, HostedQuery } from '@/main/hosting/sdk'
 
 export interface ControlsTracker {
   start(query: HostedQuery): Promise<void>
@@ -25,6 +16,15 @@ export interface ControlsTracker {
     { readonly ok: true; readonly controls: SessionControls } | { readonly ok: false; readonly kind: 'unknown-model' | 'unsupported-effort' } | { readonly ok: false; readonly kind: 'rejected'; readonly message: string }
   >
   adoptApprovedMode(mode: SessionControls['permissionMode']): void
+}
+
+// A stalled supportedModels() call must never park the model select forever.
+export const MODELS_TIMEOUT_MS = 30_000
+
+interface CreateControlsTrackerParams {
+  readonly defaults: SessionDefaults
+  readonly onChange: () => void
+  readonly timeoutMs?: number
 }
 
 function timeoutRejection(ms: number): Promise<never> {

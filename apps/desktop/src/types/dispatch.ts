@@ -1,3 +1,23 @@
+import type { BoardSnapshot } from '@/types/board'
+import type { RegistryDeps } from '@/types/registry'
+import type { AutoApprovePlanParams, ReadyEntry, EscalateToHumanParams, EscalateToHumanResult, ApplyObservationParams, ApplyObservationResult, ApplyItemActionParams } from '@/types/actions'
+import type { TickActionable, EndedStage, DispatchLedger, RefreshMemo, TickObservation } from '@/types/tick'
+import type { HostedStore } from '@/types/hosting'
+import type { FetchItemsByNumberParams, ItemsByNumberFetch } from '@/types/github'
+import type { ReposListResponse } from '@/types/ipc'
+import type { GitRunner, PathOps, FileFailureKind } from '@/types/platform'
+import type { LabelKey } from '@/utils/labels/vocabulary'
+
+export type BudgetGateFailure = { readonly ok: false; readonly kind: 'unavailable' | 'failed'; readonly message: string }
+
+export interface OwnershipDeps {
+  readonly repoRoot: string
+  readonly git?: GitRunner
+  readonly pathOps?: PathOps
+}
+
+export type OwnershipWriteFailureKind = Exclude<FileFailureKind, 'unparseable'>
+
 // Renderer-safe contract for operator control over dispatch: per-repository run state (run/drain/pause) and halt everything. No import here may reach a Node builtin.
 import type { PipelineItemKind } from '@/types/github'
 import type { ItemActionResult } from '@/types/actions'
@@ -154,3 +174,202 @@ export interface RepoDispatchStatus {
   /** Stage sessions that ended without reaching a hand-back — survive a relaunch through `stage-sessions.json`, cleared once the item no longer carries the in-flight label. */
   readonly interrupted: readonly InterruptedStage[]
 }
+
+export interface AutoPlanner {
+  consider(snapshot: BoardSnapshot): Promise<void>
+}
+
+export interface AutoPlannerDeps {
+  readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
+  readonly registryDeps: RegistryDeps
+  readonly readOwnership: (params: ReadOwnershipParams) => Promise<OwnershipRead>
+  /** The same per-repository run state `main/dispatch/dispatcher.ts` reads, never a second store. */
+  readonly runState: (repoId: RepoId) => RunState
+  readonly autoApprove: (params: AutoApprovePlanParams) => Promise<WriteOutcome>
+  readonly auditDir: string
+  readonly now: () => Date
+}
+
+export interface BudgetGate {
+  readonly reset: (entry: ReadyEntry) => Promise<BudgetResetResult>
+  readonly sweep: (entry: ReadyEntry, sets: { readonly live: readonly string[]; readonly completed: readonly string[] }) => Promise<BudgetSweepResult>
+  readonly check: (entry: ReadyEntry, candidate: Pick<TickActionable, 'kind' | 'number' | 'agent'>, model: string) => Promise<BudgetCheckResult>
+}
+
+/** Never a `BudgetGateFailure` — a sweep failure must never block dispatch, only report it. */
+export interface BudgetSweepResult {
+  readonly line: string | null
+  readonly problem: string | null
+}
+
+export type BudgetCheckResult = { readonly ok: true; readonly verdict: BudgetVerdict; readonly line: string } | BudgetGateFailure
+
+export type BudgetResetResult = { readonly ok: true } | BudgetGateFailure
+
+export type BudgetVerdict = 'allow' | 'exceeded' | 'hold'
+
+export interface Dispatcher {
+  /** Considers every ready repository, at most one pass each at a time. Never throws: a failure
+   *  in one repository's pass is reported on its own status, never allowed to stop the others. */
+  consider(snapshot: BoardSnapshot): Promise<void>
+  status(): readonly RepoDispatchStatus[]
+  /** `true` only when this loop found a `started` record for `(repoId, number)` and closing it did not throw. */
+  stopFor(repoId: RepoId, number: number): Promise<boolean>
+  /** Closes every remaining live stage session in a repository. */
+  standDown(repoId: RepoId): Promise<boolean>
+  liveStages(repoId: RepoId): readonly string[]
+  /** `null` unless this app owns `repoId` — `main/tick/plan.ts`'s own `stageLiveness` input. */
+  stageLiveness(repoId: RepoId): { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null
+  /** This repository's own ended stage-session records — `main/tick/plan.ts`'s own `endedStages` input. */
+  endedStages(repoId: RepoId): readonly EndedStage[]
+  /** Every live stage session across every repository, for the quit guard. */
+  liveStageSessions(): readonly StageSessionSummary[]
+  /** Stops new launches — called before `closeAll()` on quit. */
+  shutdown(): void
+  /** Records a stage launcher's hand-back classification against its matching record, by session key. A no-op if the key is not tracked. */
+  recordOutcome(repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome): void
+  /** `true` unless this app currently owns `repoId` — an unread repository (`'none'`) holds, the fail direction for `SESSION REQUIRED`. */
+  holdsSessionRequired(repoId: RepoId): boolean
+  /** Stage-denial bookkeeping: record (deduped by rule, bounded to 20), dismiss by id (operator's own Dismiss), or clear every denial proposing a given rule (once Allow succeeds or reports `already-allowed`). */
+  recordDenial(repoId: RepoId, denial: StageDenial): void
+  dismissDenial(repoId: RepoId, id: string): void
+  clearDenialsFor(repoId: RepoId, rule: string): void
+}
+
+export interface CreateDispatcherParams {
+  readonly store: HostedStore
+  readonly ledger: DispatchLedger
+  /** `null` is the honest state until a real launcher exists; a candidate sits visibly at `no-launcher`. */
+  readonly launch: StageLauncher | null
+  /** Read fresh every pass, never cached. */
+  readonly runState: (repoId: RepoId) => RunState
+  readonly readOwnership: (params: ReadOwnershipParams) => Promise<OwnershipRead>
+  /** The re-take-on-relaunch rule: a persisted `run`/`draining` state with an `absent` ownership
+   *  record takes ownership itself. */
+  readonly takeOwnership: (params: TakeOwnershipParams) => Promise<TakeOwnershipResult>
+  readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
+  readonly listRepositories: (registryDeps: RegistryDeps) => Promise<ReposListResponse>
+  readonly registryDeps: RegistryDeps
+  readonly budget: BudgetGate
+  readonly escalate: (params: EscalateToHumanParams) => Promise<EscalateToHumanResult>
+  readonly writeObservation: (params: ApplyObservationParams) => Promise<ApplyObservationResult>
+  readonly refreshMemo: RefreshMemo
+  readonly dirs: { readonly audit: string; readonly scratch: string }
+  readonly onChange: () => void
+  readonly now: () => Date
+  /** Interrupted stage sessions for a repository, read from `main/stage/registry.ts` — `[]` when none is wired (tests, or before the registry loads). */
+  readonly interrupted?: (repoId: RepoId) => readonly InterruptedStage[]
+}
+
+export interface HaltDispatchDeps {
+  readonly applyItemAction: (params: ApplyItemActionParams) => Promise<ItemActionResult>
+  /** This app's own per-item stop, called before every `applyItemAction` so the session is asked
+   *  to stop before its label is touched. A no-op default for a caller with no dispatch loop. */
+  readonly stopFor?: (repoId: RepoId, number: number) => Promise<boolean>
+  /** This app's own whole-repository stand-down, once per in-scope ready entry after the per-item loop. */
+  readonly standDown?: (repoId: RepoId) => Promise<boolean>
+}
+
+export interface HaltDispatchParams {
+  readonly snapshot: BoardSnapshot
+  /** One repository for `pause`, every ready repository for `halt`. An entry missing for a
+   *  repository means every item there is skipped, never stopped. */
+  readonly entries: readonly ReadyEntry[]
+  readonly runStates: RunStateStore
+  /** Written to `runStates` first, regardless of whether `entries` carries a ready entry for each. */
+  readonly repoIds: readonly RepoId[]
+  readonly auditDir: string
+  readonly now: () => Date
+}
+
+// This app's own per-item launch record, kept internally by the loop.
+export interface StageRecord {
+  // `null` for a `failed` record — no session was ever created to key.
+  readonly sessionKey: SessionKey | null
+  readonly agent: StageAgent
+  readonly number: number
+  readonly kind: PipelineItemKind
+  readonly trigger: LabelKey
+  readonly state: 'started' | 'ended' | 'failed'
+  readonly at: string
+  readonly detail: string | null
+  /** `null` until the launcher classifies a hand-back for this record's session; never set for a `failed` record. */
+  readonly outcome: StageOutcome | null
+  readonly claudeSessionId: string | null
+  readonly operatorJoinedAt: string | null
+}
+
+export interface StageLauncher {
+  launch(request: StageLaunchRequest): Promise<StageLaunchResult>
+}
+
+// `ok: true` promises the store holds a non-`ended` handle for `sessionKey`.
+export type StageLaunchResult = { readonly ok: true; readonly sessionKey: SessionKey } | { readonly ok: false; readonly kind: 'at-capacity'; readonly limit: number } | { readonly ok: false; readonly kind: 'failed'; readonly message: string }
+
+export interface StageLaunchRequest {
+  readonly entry: ReadyEntry
+  readonly agent: StageAgent
+  readonly number: number
+  readonly kind: PipelineItemKind
+  readonly trigger: LabelKey
+  readonly model: string
+  readonly prompt: string
+}
+
+/** Every `TickObservation` kind this module writes — excludes the one report-only kind, `refresh-deferred`. */
+export type WriteObservation = Exclude<TickObservation, { readonly kind: 'refresh-deferred' }>
+
+export type TakeOwnershipResult = OwnershipWriteResult | { readonly ok: false; readonly kind: 'refused'; readonly verdict: Extract<OwnershipRead, { kind: 'terminal' | 'unreadable' }>; readonly path: string }
+
+export interface TakeOwnershipParams extends OwnershipDeps {
+  readonly repo: string
+  /** Overwrites a `terminal` record — reached only from the confirmed Take over dialog. */
+  readonly force?: boolean
+  readonly now?: () => Date
+}
+
+export type OwnershipWriteResult = { readonly ok: true; readonly path: string } | { readonly ok: false; readonly kind: OwnershipWriteFailureKind; readonly message: string; readonly path: string }
+
+export interface ReadOwnershipParams extends OwnershipDeps {
+  readonly repo: string
+  readonly now?: () => Date
+}
+
+export type OwnershipRead =
+  | { readonly kind: 'absent'; readonly path: string; readonly readAt: string }
+  | { readonly kind: 'app'; readonly since: string; readonly path: string; readonly readAt: string }
+  | { readonly kind: 'terminal'; readonly since: string; readonly path: string; readonly readAt: string }
+  | { readonly kind: 'unreadable'; readonly message: string; readonly path: string; readonly readAt: string }
+
+export interface QuitWarningCopy {
+  readonly message: string
+  readonly detail: string
+  readonly confirmLabel: string
+  readonly cancelLabel: string
+}
+
+// One live stage session, as the quit guard needs it — `repoName` is the
+// display name (`owner/name`), printed verbatim by the copy below.
+export interface StageSessionSummary {
+  readonly agent: StageAgent
+  readonly number: number
+  readonly trigger: LabelKey
+  readonly repoName: string
+}
+
+export interface RunStateStore {
+  /** Synchronous, always answerable — a repository with no entry reads paused with `since: null`. */
+  readonly current: (repoId: RepoId) => RepoRunState
+  readonly status: () => RunStateStoreStatus
+  readonly snapshot: (repoIds: readonly RepoId[]) => RunStatesSnapshot
+  /** Resolves the on-disk state once, at startup. `registered` is called only for a v1 file, to
+   *  migrate every currently-registered repository onto its own entry. */
+  readonly load: (registered: () => Promise<readonly RepoId[] | null>) => Promise<void>
+  /** A failed `set(..., 'paused' | 'draining', ...)` still applies in memory; a failed
+   *  `set(..., RUN_TARGET.run, ...)` changes nothing at all. */
+  readonly set: (repoIds: readonly RepoId[], state: RunState, at: string) => Promise<SetRunStateResult>
+  readonly forget: (repoId: RepoId) => Promise<SetRunStateResult>
+  readonly path: string
+}
+
+export type SetRunStateResult = { readonly ok: true } | { readonly ok: false; readonly reason: 'unwritable' | 'unreadable'; readonly message: string }

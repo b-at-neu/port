@@ -4,9 +4,11 @@ import type { AgentInfo, CanUseTool, EffortLevel, ModelInfo, Options, Permission
 
 export type { AgentInfo, CanUseTool, EffortLevel, ModelInfo, Options, PermissionMode, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage, SlashCommand }
 
+export type HostedQueryFn = (params: { prompt: string | AsyncIterable<SDKUserMessage>; options?: Options }) => HostedQuery
+
 /** The narrow structural slice of the real `Query` this app needs, so a test fake
  *  needs no unrelated method off the real interface. */
-export interface HostedQuery extends AsyncIterable<SDKMessage> {
+export interface HostedQuery extends AsyncIterable<unknown> {
   interrupt(): Promise<{ readonly still_queued: readonly string[] } | undefined>
   close(): void
   supportedCommands(): Promise<SlashCommand[]>
@@ -18,7 +20,6 @@ export interface HostedQuery extends AsyncIterable<SDKMessage> {
   stopTask(taskId: string): Promise<void>
 }
 
-/** Typed narrowly rather than re-exporting the SDK's own module type. */
 export interface HostedSdk {
   readonly query: (params: { prompt: string | AsyncIterable<SDKUserMessage>; options?: Options }) => HostedQuery
   readonly renameSession: (sessionId: string, title: string, options?: { readonly dir?: string }) => Promise<void>

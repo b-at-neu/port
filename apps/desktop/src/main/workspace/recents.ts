@@ -1,16 +1,12 @@
 // `folders.json`'s only writer — a recoverable recents store, cap 10, deduped by `samePath`.
 import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import type { PathOps } from '@/main/platform/paths'
+import type { PathOps } from '@/types/platform'
+import type { RecentFolder, RecentsStore } from '@/types/workspace'
 
 const FOLDERS_FILE = 'folders.json'
 const CURRENT_VERSION = 1
 export const RECENTS_CAP = 10
-
-export interface RecentFolder {
-  readonly path: string
-  readonly lastUsedAt: string
-}
 
 interface FoldersFileShape {
   readonly version: number
@@ -23,14 +19,7 @@ function isValidRecent(value: unknown): value is RecentFolder {
   return typeof entry.path === 'string' && entry.path !== '' && typeof entry.lastUsedAt === 'string' && entry.lastUsedAt !== ''
 }
 
-export interface RecentsStore {
-  /** Missing, unparseable, wrong-shaped, or newer-versioned all resolve to an empty list. */
-  load(): Promise<readonly RecentFolder[]>
-  /** Upserts by `samePath` (moving the match to most-recent), then caps at `RECENTS_CAP`. */
-  record(path: string, now: Date): Promise<void>
-}
-
-export interface CreateRecentsStoreParams {
+interface CreateRecentsStoreParams {
   readonly dir: string
   readonly pathOps?: PathOps
 }

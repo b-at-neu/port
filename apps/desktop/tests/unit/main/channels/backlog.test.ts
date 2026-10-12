@@ -4,7 +4,7 @@ import type { ReposListResponse } from '@/types/ipc'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import { resolveBacklogList } from '@/main/channels/backlog'
 import type { BacklogListDeps } from '@/main/channels/backlog'
-import type { RegistryDeps } from '@/main/registry'
+import type { RegistryDeps } from '@/types/registry'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 

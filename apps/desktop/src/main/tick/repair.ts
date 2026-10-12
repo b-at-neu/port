@@ -6,7 +6,7 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 import { isContradictory } from '@/main/tick/observe'
 import { AGENT_FOR_IN_FLIGHT } from '@/main/tick/routing'
 
-export interface RepairsOfParams {
+interface RepairsOfParams {
   readonly items: readonly ReconciledItem[]
   readonly endedStages: readonly EndedStage[]
   /** Numbers this app currently has a live stage session for — a repair shape never fires against one. */
@@ -16,7 +16,7 @@ export interface RepairsOfParams {
   readonly readAt: string | null
 }
 
-export interface RepairsOfResult {
+interface RepairsOfResult {
   readonly observations: readonly TickObservation[]
   readonly reports: readonly TickLabelRepair[]
 }

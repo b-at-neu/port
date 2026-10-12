@@ -1,3 +1,5 @@
+import type { RefreshMemo } from '@/types/tick'
+
 // Pure: turns the report pieces planTick already computed into the four machine-observation write
 // families. Every observation needs the viewer among the item's assignees and a non-contradictory label set.
 import type { LabelKey } from '@/utils/labels/vocabulary'
@@ -5,12 +7,12 @@ import type { RepoId } from '@/utils/repos'
 import type { ReconciledItem } from '@/types/state'
 import type { TickClaim, TickHeld, TickObservation } from '@/types/tick'
 import { approvedReverify, capRefreshes, refreshDecision } from '../../../../../scripts/port-tick/gates'
-import type { RefreshMemo } from '@/main/tick/ledger'
+
 import { rollupVerdict } from '../../../../../scripts/port-tick/checks'
 import type { Disposition } from '../../../../../scripts/port-tick/checks'
 import { REFRESH_PAIR } from '@/main/tick/routing'
 
-export interface ObservationsOfParams {
+interface ObservationsOfParams {
   readonly repoId: RepoId
   readonly items: readonly ReconciledItem[]
   readonly claims: readonly TickClaim[]

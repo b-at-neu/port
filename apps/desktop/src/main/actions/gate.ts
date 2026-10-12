@@ -1,7 +1,11 @@
+import type { ApplyLabelsParams, PostCommentParams } from '@/types/writes'
+import type { GateClassifyItem, GatePlan } from '@/types/gate'
+import type { ReadyEntry } from '@/types/actions'
+
 // No `gh` import here — the read comes from `../github`, the write from `../writes`.
 import { buildAutoApprovePlan, buildGatePlan, classifyGate } from '@/main/gate/classify'
-import type { GateClassifyItem, GatePlan } from '@/main/gate/classify'
-import type { GateAction, GateAnswerResponse, GateDecision, GatePreflight, GatePreflightResponse } from '@/types/gate'
+
+import type { GateAction, GateAnswerResponse, GatePreflight, GatePreflightResponse } from '@/types/gate'
 import type { GatePreflightFetch } from '@/types/github'
 import { labelName } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
@@ -9,11 +13,12 @@ import type { LabelWriteRequest, OwnershipSummary, WriteOutcome } from '@/types/
 import { fetchGatePreflight } from '@/main/github/gate'
 import { IMPLEMENTATION_PLAN_HEADING, sessionRequiredMarkerAt } from '@/main/state/link'
 import { listRepositories, requireReadyRepo } from '@/main/registry'
-import type { RegistryDeps } from '@/main/registry'
-import type { ReadyEntry } from '@/main/actions/apply'
+import type { RegistryDeps } from '@/types/registry'
+
 import { applyLabels, postComment } from '@/main/writes/apply'
 import { readOwnership, toOwnershipSummary } from '@/main/dispatch/ownership'
-import type { ApplyLabelsParams, PostCommentParams } from '@/main/writes/apply'
+
+import type { AutoApprovePlanParams, GateAnswerParams, GatePreflightParams } from '@/types/actions'
 
 export interface GateDeps {
   readonly listRepositories: typeof listRepositories
@@ -77,12 +82,6 @@ function toClassifyItem(item: Extract<GatePreflightFetch, { readonly ok: true }>
   return { kind: item.kind, number: item.number, labels: item.labels, assignees: item.assignees, viewer, noPlanBlock: !item.body.includes(IMPLEMENTATION_PLAN_HEADING) }
 }
 
-export interface GatePreflightParams {
-  readonly registryDeps: RegistryDeps
-  readonly repoId: RepoId
-  readonly number: number
-}
-
 // Ownership rides along on every response arm; the dialog disables controls under terminal/unreadable regardless.
 export async function gatePreflight(params: GatePreflightParams, deps: GateDeps = defaultGateDeps): Promise<GatePreflightResponse> {
   const entry = await resolveReadyEntry(params.registryDeps, params.repoId, deps)
@@ -112,18 +111,6 @@ function buildWriteRequest(entry: ReadyEntry, number: number, plan: GatePlan, ac
     expect: plan.expect,
     action,
   }
-}
-
-export interface GateAnswerParams {
-  readonly registryDeps: RegistryDeps
-  readonly repoId: RepoId
-  readonly number: number
-  readonly decision: GateDecision
-  readonly feedback: string | null
-  /** A renderer-supplied `skipComment` can only ever suppress the comment write, never widen it. */
-  readonly skipComment: boolean
-  readonly auditDir: string
-  readonly scratchDir: string
 }
 
 // A non-`applied` comment outcome aborts as `comment-failed`, with no label ever touched.
@@ -157,12 +144,6 @@ export async function gateAnswer(params: GateAnswerParams, deps: GateDeps = defa
   const action: GateAction = params.decision === 'approve' ? 'approve-plan' : 'request-plan-changes'
   const labels = await deps.applyLabels({ request: buildWriteRequest(entry, params.number, plan, action), repoRoot: entry.path, auditDir: params.auditDir })
   return { kind: 'answered', comment, labels }
-}
-
-export interface AutoApprovePlanParams {
-  readonly entry: ReadyEntry
-  readonly item: { readonly number: number; readonly assignees: readonly string[] }
-  readonly auditDir: string
 }
 
 // No ownership read here — the caller already confirmed it, and `applyLabels` re-checks at write time.

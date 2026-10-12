@@ -1,7 +1,8 @@
+import type { TranscriptCursor, OpenTranscriptParams, OpenTailParams, PollTailParams, CloseTailParams, TranscriptTailStore } from '@/types/sessions'
+
 // Gives the renderer a follow primitive without ever exposing a TranscriptCursor across IPC. tailId is a module-local counter, not randomUUID, since its whole scope is one main process.
 import type { TranscriptTailOpen, TranscriptTailPoll } from '@/utils/sessions/transcript'
 import { advanceTranscript, openTranscript } from '@/main/sessions/transcript'
-import type { OpenTranscriptParams, TranscriptCursor } from '@/main/sessions/transcript'
 
 /** Swept lazily at the head of every `open`/`poll` -- no periodic timer or `webContents` bookkeeping. */
 const TAIL_IDLE_MS = 5 * 60_000
@@ -15,38 +16,16 @@ interface TailState {
   readonly touchedAt: number
 }
 
-export interface TailStoreDeps {
+interface TranscriptTailStoreDeps {
   readonly openTranscript: typeof openTranscript
   readonly advanceTranscript: typeof advanceTranscript
   readonly now: () => number
 }
 
-const defaultDeps: TailStoreDeps = {
+const defaultDeps: TranscriptTailStoreDeps = {
   openTranscript,
   advanceTranscript,
   now: () => Date.now(),
-}
-
-export interface OpenTailParams {
-  readonly sessionId: string
-  readonly agentId: string | null
-  readonly claudeHome?: string
-}
-
-export interface PollTailParams {
-  readonly tailId: string
-}
-
-export interface CloseTailParams {
-  readonly tailId: string
-}
-
-export interface TailStore {
-  openTail(params: OpenTailParams): Promise<TranscriptTailOpen>
-  pollTail(params: PollTailParams): Promise<TranscriptTailPoll>
-  closeTail(params: CloseTailParams): void
-  /** Test-only introspection -- how many tails are currently held open. */
-  readonly size: number
 }
 
 function paramsToOpen(params: OpenTailParams): OpenTranscriptParams {
@@ -54,7 +33,7 @@ function paramsToOpen(params: OpenTailParams): OpenTranscriptParams {
 }
 
 /** A factory, never a shared module-level singleton, so a test gets its own `Map` and injected clock. */
-export function createTailStore(deps: TailStoreDeps = defaultDeps): TailStore {
+export function createTailStore(deps: TranscriptTailStoreDeps = defaultDeps): TranscriptTailStore {
   const tails = new Map<string, TailState>()
   let nextId = 0
 
@@ -127,4 +106,4 @@ export function createTailStore(deps: TailStoreDeps = defaultDeps): TailStore {
 }
 
 /** The one instance `main/ipc.ts`'s three tail channels bind to. */
-export const tailStore: TailStore = createTailStore()
+export const tailStore: TranscriptTailStore = createTailStore()

@@ -1,14 +1,16 @@
+import type { StageRecord } from '@/types/dispatch'
+
 // Pure composition over the shipped bin/budget.mjs: argument builders, output parsing, and the
 // two-strike hold rule. No I/O — budget-gate.ts is what actually runs the script.
-import type { StageRecord } from '@/main/dispatch/launch'
+
 import type { TickActionable } from '@/types/tick'
+import type { BudgetVerdict } from '@/types/dispatch'
 
 /** One session log per dispatcher — sharing one log with the cockpit would close rows this
  *  app's own agents are still working through. */
 export const BUDGET_SESSION = 'desktop'
 
 export const BUDGET_VERDICTS = ['allow', 'exceeded', 'hold'] as const
-export type BudgetVerdict = (typeof BUDGET_VERDICTS)[number]
 
 /** The substring an older copy predating `--session` produces; tells "script can't run" apart
  *  from "script is simply out of date". */

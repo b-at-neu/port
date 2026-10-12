@@ -2,7 +2,7 @@
 import { ipcMain } from 'electron'
 import { IPC_CHANNELS } from '@/types/ipc'
 import type { IpcChannel } from '@/types/ipc'
-import type { FixtureScenario } from '@/main/fixtures/mode'
+import type { FixtureScenario } from '@/types/fixtures'
 import { fixtureHandlers } from '@/main/fixtures/handlers'
 
 export function registerFixtureIpc(scenario: FixtureScenario): void {

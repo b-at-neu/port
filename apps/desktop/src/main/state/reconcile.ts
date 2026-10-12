@@ -1,10 +1,10 @@
 // No I/O, no `gh`, no `git`, no filesystem — main/state/read.ts is the thin orchestrator that does the fetching this function composes.
 import type { LabelRole } from '@/utils/labels/defaults'
+import type { RepoSessionSlice } from '@/types/state'
 import type {
   ItemsByNumberFetch,
   PipelineFetch,
 } from '@/types/github'
-import type { AgentRecord, SessionRecord } from '@/types/sessions'
 import type { DenialsRead, UnresolvedReason, WorktreeEntry, WorktreesRead } from '@/types/local'
 import type { RepositoryEntry } from '@/utils/repos'
 import type {
@@ -26,15 +26,7 @@ import { stageOf } from '@/main/state/stage'
 import { codeReviewCount } from '../../../../../scripts/port-tick/gates'
 import { parseFilesBlock } from '../../../../../scripts/port-tick/contention'
 
-/** The repository-scoped slice of the whole-machine `SessionScan`, never a second scan. `available` is `false` only when the scan itself failed. */
-export interface RepoSessionSlice {
-  readonly agents: readonly AgentRecord[]
-  readonly sessions: readonly SessionRecord[]
-  readonly available: boolean
-  readonly freshness: FreshnessEntry
-}
-
-export interface ReconcileRepositoryInput {
+interface ReconcileRepositoryInput {
   readonly entry: Extract<RepositoryEntry, { status: 'ready' }>
   readonly pipelineFetch: PipelineFetch
   readonly itemsByNumberFetch: ItemsByNumberFetch | null

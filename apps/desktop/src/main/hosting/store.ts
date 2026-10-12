@@ -1,9 +1,20 @@
+import type { HostedHandle, MintedRestorable, SessionMarksTracker } from '@/types/hosting'
+import type { HostedQueryFn, HostedSdk } from '@/main/hosting/sdk'
+import type { WhichEnv, WhichOptions, WhichResult, FileResult, DirEntry } from '@/types/platform'
+import type { CredentialsTell } from '@/types/runtime'
+import type { HostingPersistence, SessionHistory } from '@/types/hosting'
+import type { ExpectedComponents, PluginRequest } from '@/types/hosting-plugin'
+import type { RemoveSessionWorktreeOutcome } from '@/types/workspace'
+import type { OpenTranscriptParams, TranscriptCursor } from '@/types/sessions'
+import type { TranscriptRead } from '@/utils/sessions/transcript'
+
 // Map<sessionKey, Handle>, the process-lifetime instance main/ipc.ts binds, plus closeAll().
 // A start past the current limit returns at-capacity, counted against live handles only.
 import type { RepoId } from '@/utils/repos'
 import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SetControlsResult } from '@/utils/hosting/controls'
 import type { ComposerAttachment } from '@/utils/hosting/attachments'
 import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
+import type { HostedStore, StartSessionParams } from '@/types/hosting'
 import type {
   HostedSessionSnapshot,
   HostingCapacity,
@@ -31,28 +42,27 @@ import type {
 } from '@/types/hosting'
 import { createHostedHandle } from '@/main/hosting/handle'
 import { createSessionMarks } from '@/main/hosting/marks'
-import type { SessionMarksTracker } from '@/main/hosting/marks'
-import type { HostedHandle, HostedQueryFn } from '@/main/hosting/handle'
+
+
 import { createHostedSdk } from '@/main/hosting/sdk'
-import type { HostedSdk } from '@/main/hosting/sdk'
+
 import { readHistory } from '@/main/hosting/history'
 import { defaultForkListSessions, titleFork } from '@/main/hosting/fork'
 import { defaultReadExpectedComponentsDeps, readExpectedComponents, resolvePluginRequest } from '@/main/hosting/plugin'
 import { resolveStartTitle } from '@/main/hosting/title'
 import { createInMemoryHostingPersistence, DEFAULT_SESSION_LIMIT, SESSION_LIMIT_CEILING } from '@/main/hosting/persist'
-import type { HostingPersistence } from '@/main/hosting/persist'
+
 import { dropAdopted, mintRestorable, nextPersisted, persistedOpen } from '@/main/hosting/restore'
-import type { MintedRestorable } from '@/main/hosting/restore'
+
 import { findAlreadyOpen, findFolderBusy } from '@/main/hosting/occupancy'
-import type { SessionReader } from '@/main/sessions/sdk'
+import type { SessionReader } from '@/types/sessions'
 import { readCredentialsTell } from '@/main/runtime/credentials'
 import { resolveClaudeExecutable } from '@/main/runtime/locate'
 import { pathOps } from '@/main/platform/paths'
 import { defaultGitRunner } from '@/main/platform/git'
 import { removeSessionWorktreeAt } from '@/main/workspace/worktree'
-import type { RemoveSessionWorktreeOutcome } from '@/main/workspace/worktree'
+
 import type { SessionWorkspace } from '@/types/workspace'
-import type { StageTag } from '@/types/stage-session'
 
 export { DEFAULT_SESSION_LIMIT, SESSION_LIMIT_CEILING } from '@/main/hosting/persist'
 
@@ -61,8 +71,10 @@ export const ENDED_RETAIN_LIMIT = 20
 
 export interface HostedStoreDeps {
   readonly getSdk: () => Promise<HostedSdk>
-  readonly resolveClaudeExecutable: typeof resolveClaudeExecutable
-  readonly readCredentialsTell: typeof readCredentialsTell
+  readonly resolveClaudeExecutable: (options: { readonly env: WhichEnv; readonly platform: NodeJS.Platform; readonly which?: (options: WhichOptions) => Promise<WhichResult> }) => Promise<
+    { readonly ok: true; readonly path: string } | { readonly ok: false; readonly kind: 'not-found'; readonly searched: readonly string[] } | { readonly ok: false; readonly kind: 'bundled-fallback'; readonly path: string }
+  >
+  readonly readCredentialsTell: (options?: { readonly claudeHome?: string }) => Promise<CredentialsTell>
   readonly listSessionsForFork: SessionReader
   readonly env: NodeJS.ProcessEnv
   readonly platform: NodeJS.Platform
@@ -72,14 +84,14 @@ export interface HostedStoreDeps {
   /** Forwarded verbatim to every handle's own `onEntries`. */
   readonly onEntries: (delta: SessionEntriesDelta) => void
   /** Resolved once per `start()`, after the executable and before a key is minted. */
-  readonly resolvePluginRequest: typeof resolvePluginRequest
-  readonly readExpectedComponents: (pluginPath: string) => ReturnType<typeof readExpectedComponents>
+  readonly resolvePluginRequest: (repoRoot: string, deps?: { readonly readJsonFile: <T>(path: string) => Promise<FileResult<T>> }) => Promise<PluginRequest>
+  readonly readExpectedComponents: (pluginPath: string, deps?: { readonly listDirectory: (path: string) => Promise<FileResult<readonly DirEntry[]>> }) => Promise<ExpectedComponents | null>
   readonly samePath: (a: string, b: string) => boolean
   /** `main/ipc.ts` supplies the real file-backed one; the default here is disk-free, for tests. */
   readonly persistence: HostingPersistence
   /** Removes a worktree on an explicit `dismiss` choice — the default wraps `removeSessionWorktreeAt` with a real `GitRunner`. */
   readonly removeWorktree: (path: string, force: boolean) => Promise<RemoveSessionWorktreeOutcome>
-  readonly readHistory: typeof readHistory
+  readonly readHistory: (mode: SessionStartMode, deps?: { readonly openTranscript: (params: OpenTranscriptParams) => Promise<{ readonly read: TranscriptRead; readonly cursor: TranscriptCursor | null }> }) => Promise<SessionHistory>
 }
 
 export const defaultHostedStoreDeps: HostedStoreDeps = {
@@ -99,53 +111,6 @@ export const defaultHostedStoreDeps: HostedStoreDeps = {
   persistence: createInMemoryHostingPersistence(),
   removeWorktree: (path, force) => removeSessionWorktreeAt({ path, force, git: defaultGitRunner() }),
   readHistory,
-}
-
-export interface StartSessionParams {
-  readonly repoId: RepoId | null
-  readonly mode: SessionStartMode
-  /** Resolved by the caller, never re-derived here — `workspace.folder` is this session's `cwd`. */
-  readonly workspace: SessionWorkspace
-  /** The restore path's own resolved title — omitted for every other start path. */
-  readonly initialTitle?: string | null
-  /** Non-null only for a stage launch — passed straight through to the handle; `main/stage/` is the only caller that sets it. `onDeny` fires once per denied tool call, never for a protected-path or interaction `ask`. */
-  readonly stage?: { readonly tag: StageTag; readonly agentName: string; readonly model: string; readonly sessionRequiredPaths: readonly string[]; readonly onDeny?: (toolName: string, input: Readonly<Record<string, unknown>>) => void } | null
-}
-
-export interface HostedStore {
-  start(params: StartSessionParams): Promise<SessionStartResult>
-  /** `options.source` defaults to `'app'` so an unmarked caller never fakes an operator join — `main/channels/hosting.ts`'s `resolveSessionSend` is the only `'operator'` caller. */
-  send(sessionKey: SessionKey, text: string, attachments?: readonly ComposerAttachment[], options?: { readonly source: 'operator' | 'app' }): SessionSendResult
-  interrupt(sessionKey: SessionKey): Promise<SessionInterruptResult>
-  close(sessionKey: SessionKey): Promise<SessionCloseResult>
-  attach(sessionKey: SessionKey): SessionAttachResult
-  list(): readonly HostedSessionSnapshot[]
-  closeAll(): Promise<void>
-  answerPermission(sessionKey: SessionKey, permissionId: string, decision: PermissionDecision, message: string | null): SessionPermissionAnswerResult
-  invoke(sessionKey: SessionKey, name: string, args: string): SessionInvokeResult
-  setControls(sessionKey: SessionKey, patch: { readonly permissionMode?: SessionControls['permissionMode']; readonly model?: string; readonly effort?: SessionControls['effort'] }): Promise<SetControlsResult>
-  answerQuestion(sessionKey: SessionKey, permissionId: string, answers: Readonly<Record<string, string>>): QuestionAnswerResult
-  answerPlan(sessionKey: SessionKey, permissionId: string, decision: PlanDecision): PlanAnswerResult
-  /** Removes an ended handle — `still-open` for any other phase. A worktree session's `'remove'`/`'force'` choice removes the worktree first; `'dirty'`/`'failed'` outcomes leave the handle in place. */
-  dismiss(sessionKey: SessionKey, worktree: WorktreeChoice): Promise<SessionDismissResult>
-  snapshotOf(sessionKey: SessionKey): HostedSessionSnapshot | null
-  /** This handle's own `cwd` — `null` for a key naming no live handle. */
-  cwdOf(sessionKey: SessionKey): string | null
-  capacity(): Promise<HostingCapacity>
-  /** Persists the new limit and never closes a session, even below the current open count. */
-  setLimit(limit: number): Promise<HostingCapacity>
-  defaults(): Promise<SessionDefaults>
-  setDefaults(next: SessionDefaults): Promise<SessionDefaults>
-  /** Renames on disk first and only then applies it to the handle — a rejection leaves the title unchanged. */
-  rename(sessionKey: SessionKey, title: string): Promise<SessionRenameResult>
-  restorable(): Promise<readonly MintedRestorable[]>
-  /** Starts through the normal `start` path, so capacity and `already-open` still apply. */
-  restore(restoreId: string, resolved: { readonly repoId: RepoId | null; readonly workspace: SessionWorkspace }): Promise<SessionRestoreResult>
-  discardRestorable(restoreId: string | null): Promise<SessionRestoreDiscardResult>
-  marks(): Promise<SessionMarks>
-  /** An empty or over-200-char id returns `invalid-session-id`, never thrown. */
-  setMark(kind: 'pinned' | 'archived', sessionId: string, on: boolean): Promise<SessionMarkResult>
-  stopTask(sessionKey: SessionKey, taskId: string): Promise<SessionTaskStopResult>
 }
 
 function toSessionKey(n: number): SessionKey {

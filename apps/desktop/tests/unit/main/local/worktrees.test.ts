@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { createPathOps, pathOps as hostPathOps } from '@/main/platform/paths'
-import type { CommandResult } from '@/main/platform/run'
+import type { CommandResult } from '@/types/platform'
 import { readWorktrees } from '@/main/local/worktrees'
-import type { GitRunner } from '@/main/local/worktrees'
+import type { GitRunner } from '@/types/platform'
 
 function ok(stdout: string): CommandResult {
   return { ok: true, stdout, stderr: '' }

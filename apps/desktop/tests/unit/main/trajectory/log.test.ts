@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { TickReport } from '@/types/tick'
 import { buildDesktopTickEvent, recordTick } from '@/main/trajectory/log'
-import type { GitRunner } from '@/main/trajectory/log'
+import type { GitRunner } from '@/types/platform'
 import { makeTempDir } from '../../../fixtures/fs'
 
 const REPO_ID = 'repo-1' as unknown as RepoId

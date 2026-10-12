@@ -1,5 +1,6 @@
 import { runCommand } from '@/main/platform/run'
-import type { CommandResult, RunCommandOptions } from '@/main/platform/run'
+
+import type { RunCommandOptions, CommandResult } from '@/types/platform'
 
 export type NodeOptions = Omit<RunCommandOptions, 'whichEnv' | 'platform'>
 
@@ -10,4 +11,3 @@ export function node(args: readonly string[], options: NodeOptions = {}): Promis
   return runCommand('node', args, { timeoutMs: DEFAULT_NODE_TIMEOUT_MS, ...options })
 }
 
-export type NodeRunner = (args: readonly string[], options: NodeOptions) => Promise<CommandResult>

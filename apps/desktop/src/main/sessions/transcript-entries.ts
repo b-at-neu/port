@@ -3,6 +3,7 @@ import type { DiffHunk, DiffLine, DiffSign, EntryPatch, FileDiff, MetaEntry, Pay
 import { MAX_PAYLOAD_CHARS } from '@/utils/sessions/transcript'
 import { isRecord } from '@/main/guards'
 import { toolDetailFor } from '@/main/sessions/tool-detail'
+import type { Deriver, DerivedChunk } from '@/types/sessions'
 
 /** The raw SDK field name for a tool call's id — exported so `hosting/tasks.ts`'s unrelated `task_started` read shares one literal rather than a second occurrence of the word. */
 export const TOOL_USE_ID_FIELD = 'tool_use_id'
@@ -241,16 +242,6 @@ function attachmentLabel(attachment: unknown): string {
   }
   if (typeof kind === 'string' && kind !== '') return kind.replace(/_/g, ' ')
   return 'attachment'
-}
-
-export interface DerivedChunk {
-  readonly appended: readonly TranscriptEntry[]
-  readonly patched: readonly EntryPatch[]
-}
-
-export interface Deriver {
-  /** Returns only this batch's delta, never the whole transcript, so a caller can apply it directly onto a list it already holds. */
-  push(records: readonly unknown[]): DerivedChunk
 }
 
 /** Pairs a `tool_use` with its `tool_result` by id, never position, even across separate `push` calls. A record this module cannot recognize is skipped rather than thrown on. A tool call pairs once: its pending entry and raw input are pruned the moment a result claims it, so a duplicate result cannot overwrite a real diff and inputs never accumulate unboundedly. */

@@ -1,3 +1,5 @@
+import type { StageRecord, OwnershipRead, StageSessionSummary } from '@/types/dispatch'
+
 // The app's own dispatch loop: turns a BoardSnapshot into real stage-session launches through a
 // StageLauncher seam. `consider` is the one entry point main/ipc.ts wires to `onTick`.
 import type { BoardSnapshot } from '@/types/board'
@@ -5,31 +7,27 @@ import type { BudgetNote, BudgetStatus, DispatchOwner, DispatcherState, Observat
 import { RUN_TARGET } from '@/types/dispatch'
 import type { RunState } from '@/types/dispatch'
 import type { RepoId } from '@/utils/repos'
-import type { HostedStore } from '@/main/hosting/store'
+
 import type { SessionKey } from '@/types/hosting'
-import type { ReadyEntry } from '@/main/actions/apply'
-import type { ApplyObservationParams, ApplyObservationResult } from '@/main/actions/observe'
-import type { EscalateToHumanParams, EscalateToHumanResult } from '@/main/actions/escalate'
-import type { RegistryDeps } from '@/main/registry'
-import type { ReposListResponse } from '@/types/ipc'
-import type { DispatchLedger, RefreshMemo } from '@/main/tick/ledger'
+import type { ReadyEntry } from '@/types/actions'
+
 import { dispatchableFrom, observableFrom } from '@/main/tick/dispatchable'
-import type { ReadOwnershipParams, TakeOwnershipParams, TakeOwnershipResult } from '@/main/dispatch/ownership'
-import type { OwnershipRead } from '@/main/dispatch/ownership'
-import type { FetchItemsByNumberParams } from '@/main/github/adapter'
-import type { ItemsByNumberFetch } from '@/types/github'
+
+
+
 import { labelName } from '@/utils/labels/vocabulary'
 import { runObservationPass } from '@/main/dispatch/observe-pass'
 import { commentFailureMessage, selectDispatches, survived } from '@/main/dispatch/select'
 import { budgetLiveSets, budgetRoute, escalationBody, sumCostUsd } from '@/main/dispatch/budget'
-import type { StageDenial, InterruptedStage } from '@/types/stage'
+import type { StageDenial } from '@/types/stage'
 import { withDenial, withoutDenialId, withoutDenialRule } from '@/main/dispatch/attention'
-import type { BudgetGate } from '@/main/dispatch/budget-gate'
+
 import { boundRecords, endedStagesOf, freeSlots, refreshRecords } from '@/main/dispatch/launch'
-import type { StageLauncher, StageRecord } from '@/main/dispatch/launch'
-import type { StageSessionSummary } from '@/main/dispatch/quit'
+
+
 import type { EndedStage, TickActionable, TickReport } from '@/types/tick'
 import type { StageOutcome } from '@/types/stage-session'
+import type { Dispatcher, CreateDispatcherParams } from '@/types/dispatch'
 
 const RECENT_LIMIT = 20
 const NOTE_LIMIT = 20
@@ -42,59 +40,6 @@ export const REFRESH_PROMPT = 'Run your pipeline stage for pull request #<n> in 
 export function promptFor(actionable: Pick<TickActionable, 'trigger' | 'number'>): string {
   const n = String(actionable.number)
   return actionable.trigger === 'refreshBranch' ? REFRESH_PROMPT.replace('<n>', n) : DISPATCH_PROMPT.replace('<n>', n)
-}
-
-export interface CreateDispatcherParams {
-  readonly store: HostedStore
-  readonly ledger: DispatchLedger
-  /** `null` is the honest state until a real launcher exists; a candidate sits visibly at `no-launcher`. */
-  readonly launch: StageLauncher | null
-  /** Read fresh every pass, never cached. */
-  readonly runState: (repoId: RepoId) => RunState
-  readonly readOwnership: (params: ReadOwnershipParams) => Promise<OwnershipRead>
-  /** The re-take-on-relaunch rule: a persisted `run`/`draining` state with an `absent` ownership
-   *  record takes ownership itself. */
-  readonly takeOwnership: (params: TakeOwnershipParams) => Promise<TakeOwnershipResult>
-  readonly fetchItemsByNumber: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
-  readonly listRepositories: (registryDeps: RegistryDeps) => Promise<ReposListResponse>
-  readonly registryDeps: RegistryDeps
-  readonly budget: BudgetGate
-  readonly escalate: (params: EscalateToHumanParams) => Promise<EscalateToHumanResult>
-  readonly writeObservation: (params: ApplyObservationParams) => Promise<ApplyObservationResult>
-  readonly refreshMemo: RefreshMemo
-  readonly dirs: { readonly audit: string; readonly scratch: string }
-  readonly onChange: () => void
-  readonly now: () => Date
-  /** Interrupted stage sessions for a repository, read from `main/stage/registry.ts` — `[]` when none is wired (tests, or before the registry loads). */
-  readonly interrupted?: (repoId: RepoId) => readonly InterruptedStage[]
-}
-
-export interface Dispatcher {
-  /** Considers every ready repository, at most one pass each at a time. Never throws: a failure
-   *  in one repository's pass is reported on its own status, never allowed to stop the others. */
-  consider(snapshot: BoardSnapshot): Promise<void>
-  status(): readonly RepoDispatchStatus[]
-  /** `true` only when this loop found a `started` record for `(repoId, number)` and closing it did not throw. */
-  stopFor(repoId: RepoId, number: number): Promise<boolean>
-  /** Closes every remaining live stage session in a repository. */
-  standDown(repoId: RepoId): Promise<boolean>
-  liveStages(repoId: RepoId): readonly string[]
-  /** `null` unless this app owns `repoId` — `main/tick/plan.ts`'s own `stageLiveness` input. */
-  stageLiveness(repoId: RepoId): { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null
-  /** This repository's own ended stage-session records — `main/tick/plan.ts`'s own `endedStages` input. */
-  endedStages(repoId: RepoId): readonly EndedStage[]
-  /** Every live stage session across every repository, for the quit guard. */
-  liveStageSessions(): readonly StageSessionSummary[]
-  /** Stops new launches — called before `closeAll()` on quit. */
-  shutdown(): void
-  /** Records a stage launcher's hand-back classification against its matching record, by session key. A no-op if the key is not tracked. */
-  recordOutcome(repoId: RepoId, sessionKey: SessionKey, outcome: StageOutcome): void
-  /** `true` unless this app currently owns `repoId` — an unread repository (`'none'`) holds, the fail direction for `SESSION REQUIRED`. */
-  holdsSessionRequired(repoId: RepoId): boolean
-  /** Stage-denial bookkeeping: record (deduped by rule, bounded to 20), dismiss by id (operator's own Dismiss), or clear every denial proposing a given rule (once Allow succeeds or reports `already-allowed`). */
-  recordDenial(repoId: RepoId, denial: StageDenial): void
-  dismissDenial(repoId: RepoId, id: string): void
-  clearDenialsFor(repoId: RepoId, rule: string): void
 }
 
 interface RepoDispatcherState {

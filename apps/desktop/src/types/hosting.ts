@@ -1,3 +1,6 @@
+import type { ImageMediaType, ComposerAttachment } from '@/utils/hosting/attachments'
+import type { QuestionAnswerResult, PlanDecision, PlanAnswerResult, SetControlsResult } from '@/utils/hosting/controls'
+
 // Renderer-safe contract for a hosted session. No import here may reach a Node builtin — only `main/hosting/` spawns a `claude` child or holds a `Query`. `message: unknown` on the event envelope is deliberate: narrowing it is the renderer's own job, never a second guess at the SDK's union here.
 import type { RepoId } from '@/utils/repos'
 import type { RuntimeDiagnosis } from '@/types/runtime'
@@ -6,6 +9,7 @@ import type { SessionWorkspace } from '@/types/workspace'
 import type { PendingInteraction, SessionControls, SessionModels } from '@/utils/hosting/controls'
 import type { SessionResult, StageTag } from '@/types/stage-session'
 import type { SessionUsage } from '@/utils/hosting/usage'
+import type { PluginRequest, PluginLoad, ComponentCheck } from '@/types/hosting-plugin'
 
 declare const sessionKeyBrand: unique symbol
 
@@ -92,6 +96,19 @@ export interface SessionEventEnvelope {
   readonly receivedAt: string
   readonly message: unknown
 }
+
+export interface HostedHandleReplay {
+  readonly events: readonly SessionEventEnvelope[]
+  readonly droppedBefore: number
+}
+
+interface HostedSendResult {
+  readonly uuid: string
+  readonly queued: boolean
+}
+
+/** `blocked-command` is an operator action, not a bug — a typed value, never a thrown refusal. */
+export type HostedSendOutcome = ({ readonly ok: true } & HostedSendResult) | { readonly ok: false; readonly kind: 'blocked-command'; readonly name: string }
 
 /** A `session:start` target — a registered/recent folder by its `FolderId`, or the cwd of a named transcript. `worktree: true` on a folder target creates a session worktree before starting. */
 export type SessionStartTarget = { readonly kind: 'folder'; readonly folderId: string; readonly worktree: boolean } | { readonly kind: 'transcript' }
@@ -199,23 +216,6 @@ export interface PendingPermission {
 
 /** `'session:permission:answer'`'s response: ordinary races and `no-session-grant`/`interaction-prompt` refusals are reported as values, never thrown. */
 export type SessionPermissionAnswerResult = { readonly ok: true } | { readonly ok: false; readonly kind: 'unknown-session' | 'unknown-permission' | 'no-session-grant' | 'interaction-prompt' }
-
-/** Which plugin path a session asked for — the repository's own copy (self-hosting) or the operator's installed one. Resolved once before spawn, carried on the snapshot so the operator sees it even before `init` confirms what loaded. */
-export type PluginRequest = { readonly source: 'repository'; readonly path: string } | { readonly source: 'installed' }
-
-/** What actually loaded, read back from the SDK rather than assumed. `unconfirmed` is the state before any `init` has arrived. */
-export type PluginLoad =
-  | { readonly kind: 'unconfirmed' }
-  | { readonly kind: 'loaded'; readonly path: string; readonly version: string | null }
-  | { readonly kind: 'missing' }
-  | { readonly kind: 'shadowed'; readonly path: string; readonly version: string | null }
-  | { readonly kind: 'duplicate'; readonly paths: readonly string[] }
-
-/** Whether the loaded plugin's skills/agents match what the plugin directory declares — `unchecked` when the directory could not be read, never reported as `complete`. */
-export type ComponentCheck =
-  | { readonly kind: 'unchecked'; readonly reason: 'no-plugin-path' | 'unreadable' }
-  | { readonly kind: 'complete' }
-  | { readonly kind: 'incomplete'; readonly missingSkills: readonly string[]; readonly missingAgents: readonly string[] }
 
 /** One `port:` slash command, renderer-safe — `description` goes through `sanitize` before it reaches this shape. */
 export interface CommandSummary {
@@ -348,3 +348,141 @@ export type SessionHistory =
 
 /** `'session:task:stop'`'s response — `unknown-task` for an id not in this handle's own `backgroundTasks`, so a task from another session can never be stopped. */
 export type SessionTaskStopResult = { readonly ok: true } | { readonly ok: false; readonly kind: 'unknown-session' | 'unknown-task' } | { readonly ok: false; readonly kind: 'stop-failed'; readonly message: string }
+
+/** The three Anthropic Messages API content-block shapes this app ever builds, never the SDK's own wider union. */
+export type ContentBlock =
+  | { readonly type: 'image'; readonly source: { readonly type: 'base64'; readonly media_type: ImageMediaType; readonly data: string } }
+  | { readonly type: 'document'; readonly source: { readonly type: 'base64'; readonly media_type: 'application/pdf'; readonly data: string }; readonly title: string }
+  | { readonly type: 'document'; readonly source: { readonly type: 'text'; readonly media_type: 'text/plain'; readonly data: string }; readonly title: string }
+  | { readonly type: 'text'; readonly text: string }
+
+export interface HostedHandle {
+  readonly sessionKey: SessionKey
+  /** `mode.sessionId` for `resume`/`resume-at`, `null` otherwise. */
+  readonly resumeTarget: string | null
+  readonly cwd: string
+  snapshot(): HostedSessionSnapshot
+  replay(): HostedHandleReplay
+  /** Refuses `/port:pipeline` (or an unreported bare `/pipeline`) as `blocked-command`, pushing nothing. `source` defaults to `'app'` — only a `'operator'` send into a stage session can ever stamp `operatorJoinedAt`. */
+  send(text: string, attachments?: readonly ComposerAttachment[], source?: 'operator' | 'app'): HostedSendOutcome
+  /** The interrupt receipt's `still_queued` count, or `null` when the CLI returned no receipt. */
+  interrupt(): Promise<number | null>
+  /** Ends the input iterator, waits up to `CLOSE_GRACE_MS`, then forces `query.close()`. */
+  close(): Promise<void>
+  setTitled(titled: boolean): void
+  /** Fills `title` only while it is still `null`. */
+  setTitle(title: string): void
+  /** Unlike `setTitle`, sets `title` unconditionally. */
+  rename(title: string): void
+  answerPermission(permissionId: string, decision: PermissionDecision, message: string | null): SessionPermissionAnswerResult
+  entriesWindow(): SessionProjectorWindow
+  /** `invalid-command` on a malformed name, `unknown-command` outside this session's `port:` list. */
+  invoke(name: string, args: string): SessionInvokeResult
+  // unknown-session once closing/ended, not-ready before init.
+  setControls(patch: { readonly permissionMode?: SessionControls['permissionMode']; readonly model?: string; readonly effort?: SessionControls['effort'] }): Promise<SetControlsResult>
+  answerQuestion(permissionId: string, answers: Readonly<Record<string, string>>): QuestionAnswerResult
+  answerPlan(permissionId: string, decision: PlanDecision): PlanAnswerResult
+  history(): SessionHistory
+  /** `unknown-task` for an id not in this handle's own `backgroundTasks` — never forwards an arbitrary id. */
+  stopTask(taskId: string): Promise<SessionTaskStopResult>
+}
+
+export interface SessionMarksTracker {
+  current(): SessionMarks
+  set(kind: 'pinned' | 'archived', sessionId: string, on: boolean): SessionMarks
+}
+
+export interface HostingPersistence {
+  load(): Promise<HostingPersistedState>
+  /** Fire-and-forget, deduplicated by last-written JSON; only the newest pending state survives. */
+  save(state: HostingPersistedState): void
+  /** Drops every later `save` — called before quitting overwrites the persisted set. */
+  freeze(): void
+}
+
+export interface HostingPersistedState {
+  readonly limit: number
+  readonly open: readonly PersistedOpenEntry[]
+  readonly defaults: SessionDefaults
+  readonly marks: SessionMarks
+}
+
+export interface PersistedOpenEntry {
+  readonly repoId: RepoId | null
+  readonly claudeSessionId: string
+  readonly title: string | null
+  readonly startedAt: string
+  /** Additive, no version bump — a v1 file without it still restores through the registry path. */
+  readonly cwd?: string
+}
+
+export interface SessionProjectorWindow {
+  readonly entries: readonly TranscriptEntry[]
+  /** The absolute index of `entries[0]`; `0` until the ring has dropped its oldest rows. */
+  readonly firstIndex: number
+  readonly partial: LiveBlock | null
+  readonly pendingSends: readonly string[]
+  readonly revision: number
+}
+
+/** Everything `SessionEntriesDelta` carries except `sessionKey`, which only `handle.ts` adds. */
+export type ProjectedDelta = Omit<SessionEntriesDelta, 'sessionKey'>
+
+/** An app-local `restoreId`, never persisted itself; the renderer-facing shape omits `claudeSessionId`. */
+export interface MintedRestorable {
+  readonly restoreId: string
+  readonly repoId: RepoId | null
+  readonly claudeSessionId: string
+  readonly title: string | null
+  readonly startedAt: string
+  readonly cwd?: string
+}
+
+export type StagePolicyDecision = { readonly kind: 'ask'; readonly protectedPath: string | null } | { readonly kind: 'deny'; readonly message: string }
+
+export interface HostedStore {
+  start(params: StartSessionParams): Promise<SessionStartResult>
+  /** `options.source` defaults to `'app'` so an unmarked caller never fakes an operator join — `main/channels/hosting.ts`'s `resolveSessionSend` is the only `'operator'` caller. */
+  send(sessionKey: SessionKey, text: string, attachments?: readonly ComposerAttachment[], options?: { readonly source: 'operator' | 'app' }): SessionSendResult
+  interrupt(sessionKey: SessionKey): Promise<SessionInterruptResult>
+  close(sessionKey: SessionKey): Promise<SessionCloseResult>
+  attach(sessionKey: SessionKey): SessionAttachResult
+  list(): readonly HostedSessionSnapshot[]
+  closeAll(): Promise<void>
+  answerPermission(sessionKey: SessionKey, permissionId: string, decision: PermissionDecision, message: string | null): SessionPermissionAnswerResult
+  invoke(sessionKey: SessionKey, name: string, args: string): SessionInvokeResult
+  setControls(sessionKey: SessionKey, patch: { readonly permissionMode?: SessionControls['permissionMode']; readonly model?: string; readonly effort?: SessionControls['effort'] }): Promise<SetControlsResult>
+  answerQuestion(sessionKey: SessionKey, permissionId: string, answers: Readonly<Record<string, string>>): QuestionAnswerResult
+  answerPlan(sessionKey: SessionKey, permissionId: string, decision: PlanDecision): PlanAnswerResult
+  /** Removes an ended handle — `still-open` for any other phase. A worktree session's `'remove'`/`'force'` choice removes the worktree first; `'dirty'`/`'failed'` outcomes leave the handle in place. */
+  dismiss(sessionKey: SessionKey, worktree: WorktreeChoice): Promise<SessionDismissResult>
+  snapshotOf(sessionKey: SessionKey): HostedSessionSnapshot | null
+  /** This handle's own `cwd` — `null` for a key naming no live handle. */
+  cwdOf(sessionKey: SessionKey): string | null
+  capacity(): Promise<HostingCapacity>
+  /** Persists the new limit and never closes a session, even below the current open count. */
+  setLimit(limit: number): Promise<HostingCapacity>
+  defaults(): Promise<SessionDefaults>
+  setDefaults(next: SessionDefaults): Promise<SessionDefaults>
+  /** Renames on disk first and only then applies it to the handle — a rejection leaves the title unchanged. */
+  rename(sessionKey: SessionKey, title: string): Promise<SessionRenameResult>
+  restorable(): Promise<readonly MintedRestorable[]>
+  /** Starts through the normal `start` path, so capacity and `already-open` still apply. */
+  restore(restoreId: string, resolved: { readonly repoId: RepoId | null; readonly workspace: SessionWorkspace }): Promise<SessionRestoreResult>
+  discardRestorable(restoreId: string | null): Promise<SessionRestoreDiscardResult>
+  marks(): Promise<SessionMarks>
+  /** An empty or over-200-char id returns `invalid-session-id`, never thrown. */
+  setMark(kind: 'pinned' | 'archived', sessionId: string, on: boolean): Promise<SessionMarkResult>
+  stopTask(sessionKey: SessionKey, taskId: string): Promise<SessionTaskStopResult>
+}
+
+export interface StartSessionParams {
+  readonly repoId: RepoId | null
+  readonly mode: SessionStartMode
+  /** Resolved by the caller, never re-derived here — `workspace.folder` is this session's `cwd`. */
+  readonly workspace: SessionWorkspace
+  /** The restore path's own resolved title — omitted for every other start path. */
+  readonly initialTitle?: string | null
+  /** Non-null only for a stage launch — passed straight through to the handle; `main/stage/` is the only caller that sets it. `onDeny` fires once per denied tool call, never for a protected-path or interaction `ask`. */
+  readonly stage?: { readonly tag: StageTag; readonly agentName: string; readonly model: string; readonly sessionRequiredPaths: readonly string[]; readonly onDeny?: (toolName: string, input: Readonly<Record<string, unknown>>) => void } | null
+}

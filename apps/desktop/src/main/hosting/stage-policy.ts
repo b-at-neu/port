@@ -1,5 +1,6 @@
 // Pure routing for a stage session's `canUseTool`: `AskUserQuestion`/`ExitPlanMode` always pause, an edit under `sessionRequiredPaths` pauses as protected, and everything else the repository's own allowlist did not already auto-approve is denied at once.
-import type { PathOps } from '@/main/platform/paths'
+import type { PathOps } from '@/types/platform'
+import type { StagePolicyDecision } from '@/types/hosting'
 
 /** Mirrors `plugins/port/hooks/lib/guard-rules.mjs`'s own `globToRegExp` byte-for-byte — a test asserts both sides agree over a shared case list. `**` → any depth, `*` → one path segment, else escaped. */
 export function globToRegExp(glob: string): RegExp {
@@ -19,8 +20,6 @@ export function globToRegExp(glob: string): RegExp {
 }
 
 export const STAGE_DENY_MESSAGE = "This tool call isn't on this repository's allowlist, so port denied it. Carry on without it, or end with BLOCKED: naming the exact call."
-
-export type StagePolicyDecision = { readonly kind: 'ask'; readonly protectedPath: string | null } | { readonly kind: 'deny'; readonly message: string }
 
 export interface StagePolicyParams {
   readonly cwd: string

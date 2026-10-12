@@ -1,15 +1,15 @@
 // Resolves the `claude` executable the SDK should point at, and refuses the Agent SDK's own bundled per-platform binary (~327MB) — a silent fallback to that path is a bug to surface.
 import { createPathOps } from '@/main/platform/paths'
 import { which as defaultWhich } from '@/main/platform/which'
-import type { PathOps } from '@/main/platform/paths'
-import type { WhichEnv, WhichOptions, WhichResult } from '@/main/platform/which'
+import type { PathOps } from '@/types/platform'
+import type { WhichEnv, WhichOptions, WhichResult } from '@/types/platform'
 
-export type LocateResult =
+type LocateResult =
   | { readonly ok: true; readonly path: string }
   | { readonly ok: false; readonly kind: 'not-found'; readonly searched: readonly string[] }
   | { readonly ok: false; readonly kind: 'bundled-fallback'; readonly path: string }
 
-export interface ResolveClaudeExecutableOptions {
+interface ResolveClaudeExecutableOptions {
   readonly env: WhichEnv
   readonly platform: NodeJS.Platform
   readonly which?: (options: WhichOptions) => Promise<WhichResult>

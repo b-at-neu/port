@@ -1,5 +1,21 @@
+import type { GhRunner } from '@/types/platform'
+
 // Renderer-safe result and item shapes for the GitHub adapter. No import here may reach a Node builtin — only `main/github/` spawns `gh`.
 import type { LabelKey, LabelSource, VocabularyReport } from '@/utils/labels/vocabulary'
+import type { RepoId } from '@/utils/repos'
+
+/** A remote GitHub locator — `github/adapter.ts`'s original `RepoRef` shape. */
+export interface GitHubRepoRef {
+  readonly owner: string
+  readonly name: string
+}
+
+/** A local, already-registered repository — `sessions/classify.ts`'s original `RepoRef` shape. */
+export interface LocalRepoRef {
+  readonly id: RepoId
+  readonly root: string
+}
+
 
 export type PipelineItemKind = 'issue' | 'pull-request'
 
@@ -230,3 +246,26 @@ export interface GatePreflightItem {
 export type GatePreflightFetch =
   | { readonly ok: true; readonly item: GatePreflightItem | null; readonly viewer: string; readonly fetchedAt: string }
   | { readonly ok: false; readonly kind: PipelineFailureKind; readonly message: string; readonly fetchedAt: string }
+
+export interface FetchItemsByNumberParams {
+  readonly repo: GitHubRepoRef
+  readonly numbers: readonly number[]
+  readonly gh?: GhRunner
+  readonly now?: () => Date
+}
+
+export interface AliasInfo {
+  readonly key: LabelKey
+  readonly name: string
+  readonly surface: PipelineItemKind
+}
+
+/** The failure kinds this classifier can add on top of `gh`'s own, independent of
+ *  `PipelineFailureKind` so `adapter.ts`'s assertion actually pins one against the other. */
+export type EnvelopeFailureKind = 'unparseable' | 'no-data' | 'repo-not-found' | 'rate-limited'
+
+export interface GraphQLErrorEntry {
+  readonly type?: string
+  readonly path?: readonly (string | number)[]
+  readonly message?: string
+}

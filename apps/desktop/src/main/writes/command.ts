@@ -3,14 +3,14 @@ import { labelName } from '@/utils/labels/vocabulary'
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { LabelWriteRequest } from '@/types/writes'
 
-export interface ResolvedNames {
+interface ResolvedNames {
   readonly addNames: readonly string[]
   readonly removeNames: readonly string[]
 }
 
-export type BuildCommandResult = ({ readonly ok: true; readonly argv: readonly string[] } & ResolvedNames) | { readonly ok: false; readonly unresolved: readonly LabelKey[] }
+type BuildCommandResult = ({ readonly ok: true; readonly argv: readonly string[] } & ResolvedNames) | { readonly ok: false; readonly unresolved: readonly LabelKey[] }
 
-export interface KeyResolution {
+interface KeyResolution {
   readonly names: string[]
   readonly unresolved: LabelKey[]
 }

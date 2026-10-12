@@ -4,7 +4,8 @@ import { ensureDirectory, readJsonFile, writeJsonFileAtomic } from '@/main/platf
 import { pathOps } from '@/main/platform/paths'
 import type { RepoId } from '@/utils/repos'
 import { RUN_STATES, RUN_TARGET } from '@/types/dispatch'
-import type { RepoRunState, RunState, RunStatesSnapshot, RunStateStoreStatus } from '@/types/dispatch'
+import type { RepoRunState, RunState, RunStateStoreStatus } from '@/types/dispatch'
+import type { RunStateStore, SetRunStateResult } from '@/types/dispatch'
 
 const DISPATCH_FILE = 'dispatch.json'
 const CURRENT_VERSION = 2
@@ -24,23 +25,6 @@ interface V2EntryShape {
 interface V2FileShape {
   readonly version: 2
   readonly repositories: readonly V2EntryShape[]
-}
-
-export type SetRunStateResult = { readonly ok: true } | { readonly ok: false; readonly reason: 'unwritable' | 'unreadable'; readonly message: string }
-
-export interface RunStateStore {
-  /** Synchronous, always answerable — a repository with no entry reads paused with `since: null`. */
-  readonly current: (repoId: RepoId) => RepoRunState
-  readonly status: () => RunStateStoreStatus
-  readonly snapshot: (repoIds: readonly RepoId[]) => RunStatesSnapshot
-  /** Resolves the on-disk state once, at startup. `registered` is called only for a v1 file, to
-   *  migrate every currently-registered repository onto its own entry. */
-  readonly load: (registered: () => Promise<readonly RepoId[] | null>) => Promise<void>
-  /** A failed `set(..., 'paused' | 'draining', ...)` still applies in memory; a failed
-   *  `set(..., RUN_TARGET.run, ...)` changes nothing at all. */
-  readonly set: (repoIds: readonly RepoId[], state: RunState, at: string) => Promise<SetRunStateResult>
-  readonly forget: (repoId: RepoId) => Promise<SetRunStateResult>
-  readonly path: string
 }
 
 function dispatchPath(dir: string): string {

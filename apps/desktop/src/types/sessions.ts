@@ -1,5 +1,8 @@
+import type { TranscriptTailOpen, TranscriptTailPoll, EntryPatch, TranscriptEntry } from '@/utils/sessions/transcript'
+
 // Renderer-safe session and agent shapes for the local session adapter. No import here may reach a Node builtin or the Agent SDK — only `main/sessions/` touches either.
 import type { RepoId } from '@/utils/repos'
+import type { LocalRepoRef } from '@/types/github'
 
 /** The four port pipeline stage agents, pinned against the real basenames under `plugins/port/agents/`, both directions. */
 export type PortStageAgent = 'plan-agent' | 'impl-agent' | 'review-agent' | 'revise-agent'
@@ -94,3 +97,82 @@ export type SessionScan =
       readonly message: string
       readonly scannedAt: string
     }
+
+export interface ReadSessionStateParams {
+  readonly repos: readonly LocalRepoRef[]
+  readonly claudeHome?: string
+  readonly reader?: SessionReader
+  readonly now?: () => Date
+}
+
+export type ProjectIndex = ReadonlyMap<string, string>
+
+/** The injectable seam every caller takes instead of importing the SDK directly, so `adapter.test.ts` runs with no SDK present. */
+export type SessionReader = () => Promise<ListSessionsResult>
+
+export type ListSessionsResult =
+  | { readonly ok: true; readonly sessions: readonly RawSession[] }
+  | { readonly ok: false; readonly kind: SessionFailureKind; readonly message: string }
+
+/** Mapped from the SDK's `SDKSessionInfo` — optional fields carried as `null`, and `lastModified` normalized to an ISO string here. */
+export interface RawSession {
+  readonly sessionId: string
+  readonly summary: string | null
+  readonly lastModified: string
+  readonly customTitle: string | null
+  readonly firstPrompt: string | null
+  readonly gitBranch: string | null
+  readonly cwd: string | null
+}
+
+export interface OpenTailParams {
+  readonly sessionId: string
+  readonly agentId: string | null
+  readonly claudeHome?: string
+}
+
+export interface PollTailParams {
+  readonly tailId: string
+}
+
+export interface CloseTailParams {
+  readonly tailId: string
+}
+
+export interface TranscriptTailStore {
+  openTail(params: OpenTailParams): Promise<TranscriptTailOpen>
+  pollTail(params: PollTailParams): Promise<TranscriptTailPoll>
+  closeTail(params: CloseTailParams): void
+  /** Test-only introspection -- how many tails are currently held open. */
+  readonly size: number
+}
+
+export interface DerivedChunk {
+  readonly appended: readonly TranscriptEntry[]
+  readonly patched: readonly EntryPatch[]
+}
+
+export interface Deriver {
+  /** Returns only this batch's delta, never the whole transcript, so a caller can apply it directly onto a list it already holds. */
+  push(records: readonly unknown[]): DerivedChunk
+}
+
+/** Main-process-only -- never crosses IPC. Holds the `Deriver` and everything `advanceTranscript` needs to resume. */
+export interface TranscriptCursor {
+  readonly path: string
+  readonly sessionId: string
+  readonly agentId: string | null
+  readonly offset: number
+  readonly nextIndex: number
+  readonly recordCount: number
+  readonly malformedLines: number
+  readonly deriver: Deriver
+}
+
+export interface OpenTranscriptParams {
+  readonly sessionId: string
+  readonly agentId: string | null
+  readonly claudeHome?: string
+  /** Skips this call's own `buildProjectIndex` when the caller already built one, rather than re-listing `<claudeHome>/projects/` once per transcript. */
+  readonly index?: ProjectIndex
+}

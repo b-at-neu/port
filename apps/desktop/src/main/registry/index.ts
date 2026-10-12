@@ -2,16 +2,11 @@
 import { pathOps } from '@/main/platform/paths'
 import type { ReposAddResponse, ReposListResponse, ReposRemoveResponse } from '@/types/ipc'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
-import type { ReadyEntry } from '@/main/actions/apply'
-import type { GitRunner } from '@/main/registry/harness'
+import type { ReadyEntry } from '@/types/actions'
+import type { GitRunner } from '@/types/platform'
 import { inspectRepository, resolveGitRoot } from '@/main/registry/inspect'
 import { readRegistry, writeRegistry } from '@/main/registry/store'
-
-export interface RegistryDeps {
-  readonly registryDir: string
-  readonly git: GitRunner
-  readonly chooseDirectory: () => Promise<string | null>
-}
+import type { RegistryDeps } from '@/types/registry'
 
 async function inspectAll(paths: readonly string[], git: GitRunner) {
   return Promise.all(paths.map((path) => inspectRepository(path, { git })))

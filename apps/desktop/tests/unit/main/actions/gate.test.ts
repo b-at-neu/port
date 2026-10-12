@@ -4,11 +4,11 @@ import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { GatePreflightFetch } from '@/types/github'
 import type { LabelWriteRequest, OwnershipSummary, WriteOutcome } from '@/types/writes'
-import type { OwnershipRead } from '@/main/dispatch/ownership'
+import type { OwnershipRead } from '@/types/dispatch'
 import type { ReposListResponse } from '@/types/ipc'
 import { autoApprovePlan, gateAnswer, gatePreflight } from '@/main/actions/gate'
 import type { GateDeps } from '@/main/actions/gate'
-import type { RegistryDeps } from '@/main/registry'
+import type { RegistryDeps } from '@/types/registry'
 import { readyEntry } from '../../../fixtures/board-state'
 
 const REPO_ID = 'repo-1' as unknown as RepoId

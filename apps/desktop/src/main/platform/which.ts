@@ -1,26 +1,8 @@
 import { access as fsAccess, constants } from 'node:fs/promises'
 import { posix as posixImpl, win32 as win32Impl } from 'node:path'
+import type { WhichResult, WhichOptions, WhichEnv } from '@/types/platform'
 
-export interface WhichEnv {
-  readonly PATH?: string
-  readonly PATHEXT?: string
-  readonly [key: string]: string | undefined
-}
-
-export type WhichPlatform = 'darwin' | 'linux' | 'win32'
-
-export interface WhichOptions {
-  readonly command: string
-  readonly env: WhichEnv
-  readonly platform: NodeJS.Platform
-  /** Injectable existence/executable probe — real filesystem access by
-   *  default, a stub in tests so no binary needs to actually be installed. */
-  readonly probe?: (candidate: string) => Promise<boolean>
-}
-
-export type WhichResult =
-  | { readonly ok: true; readonly path: string }
-  | { readonly ok: false; readonly kind: 'not-found'; readonly command: string; readonly searched: readonly string[] }
+type WhichPlatform = 'darwin' | 'linux' | 'win32'
 
 // A GUI-launched process inherits no login-shell `PATH`; a login shell is never spawned to harvest
 // one — that is exactly the POSIX-only shell-out this layer forbids.

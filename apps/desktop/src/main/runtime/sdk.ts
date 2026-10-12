@@ -1,6 +1,6 @@
 // One `query()` turn, fixed short prompt, `maxTurns: 1`, always with `pathToClaudeCodeExecutable` set so the probe never falls back to the SDK's bundled binary. `ANTHROPIC_API_KEY` is never stripped, only reported.
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
-import type { CredentialsTell, RuntimeDiagnosis } from '@/types/runtime'
+import type { RuntimeProbeFn } from '@/types/runtime'
 import { classifyProbeFailure } from '@/main/runtime/classify'
 
 /** Only the fields this probe reads off a result message, so `sdk.test.ts` builds plain fixtures rather than every field of the real `SDKResultMessage` union. */
@@ -23,21 +23,6 @@ const DEFAULT_PROBE_TIMEOUT_MS = 60_000
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
-
-export interface RunProbeParams {
-  readonly executablePath: string
-  readonly cwd: string
-  readonly credentials: CredentialsTell | null
-  readonly now: number
-  readonly timeoutMs?: number
-}
-
-export interface ProbeOutcome {
-  readonly diagnosis: RuntimeDiagnosis
-  readonly detail: string | null
-}
-
-export type RuntimeProbeFn = (params: RunProbeParams) => Promise<ProbeOutcome>
 
 function resultText(message: ProbeMessage): string {
   if (message.subtype === 'success' && typeof message.result === 'string') return message.result

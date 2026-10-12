@@ -3,24 +3,30 @@
 import type { RepoId } from '@/utils/repos'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { StageAgent, TickBlind, TickClaimClass, TickContention, TickHeldReason } from '@/types/tick'
+import type { GitRunner, PathOps } from '@/types/platform'
+
+export interface RecordTickDeps {
+  readonly git?: GitRunner
+  readonly pathOps?: PathOps
+}
 
 /** `stage` is `` `${agent}-agent` ``, the same string the cockpit's own `planned.dispatch`
  *  entries carry. */
-export interface DesktopDispatchEvent {
+interface DesktopDispatchEvent {
   readonly item: number
   readonly stage: string
   readonly agent: StageAgent
 }
 
 /** `trigger` is load-bearing: the parity diff buckets `unowned`/`other-operator` counts off it. */
-export interface DesktopHeldEvent {
+interface DesktopHeldEvent {
   readonly item: number
   readonly reason: TickHeldReason
   readonly contention: TickContention | null
   readonly trigger: LabelKey
 }
 
-export interface DesktopClaimEvent {
+interface DesktopClaimEvent {
   readonly item: number
   readonly class: TickClaimClass
 }

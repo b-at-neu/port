@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { promptTitle, recordTitle, resolveStartTitle } from '@/main/hosting/title'
-import type { SessionReader } from '@/main/sessions/sdk'
+import type { SessionReader } from '@/types/sessions'
 
 function session(overrides: Partial<{ sessionId: string; customTitle: string | null; summary: string | null; firstPrompt: string | null }> = {}) {
   return {

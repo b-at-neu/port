@@ -1,33 +1,20 @@
+import type { ApplyLabelsParams, PostCommentParams } from '@/types/writes'
+
 // Label-first, then (only on `applied`, and only when the plan carries one) the comment —
 // a failed comment must still leave the label write standing.
-import type { ReconciledItem } from '@/types/state'
 import type { LabelWriteRequest, WriteOutcome } from '@/types/writes'
 import { applyLabels, postComment } from '@/main/writes/apply'
-import type { ApplyLabelsParams, PostCommentParams } from '@/main/writes/apply'
+
 import { observationWrite } from '@/main/dispatch/observation'
-import type { WriteObservation } from '@/main/dispatch/observation'
-import type { ReadyEntry } from '@/main/actions/apply'
 
-export interface ApplyObservationParams {
-  readonly entry: ReadyEntry
-  readonly item: ReconciledItem
-  readonly observation: WriteObservation
-  readonly auditDir: string
-  readonly scratchDir: string
-}
+import type { ApplyObservationResult, ApplyObservationParams } from '@/types/actions'
 
-export interface ApplyObservationDeps {
+interface ApplyObservationDeps {
   readonly applyLabels: (params: ApplyLabelsParams) => Promise<WriteOutcome>
   readonly postComment: (params: PostCommentParams) => Promise<WriteOutcome>
 }
 
 export const defaultApplyObservationDeps: ApplyObservationDeps = { applyLabels, postComment }
-
-export interface ApplyObservationResult {
-  readonly labels: WriteOutcome
-  /** `null` when the label swap did not reach `applied`, or the plan carried no comment. */
-  readonly comment: WriteOutcome | null
-}
 
 export async function applyObservation(params: ApplyObservationParams, deps: ApplyObservationDeps = defaultApplyObservationDeps): Promise<ApplyObservationResult> {
   const plan = observationWrite(params.observation, params.item, params.entry.config.vocabulary, params.entry.config.branches.integration)

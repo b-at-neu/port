@@ -3,9 +3,9 @@
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import { sessionDisplayLabel } from '@/utils/hosting/label'
 
-export type NotificationKind = 'needs-you' | 'finished' | 'ended'
+type NotificationKind = 'needs-you' | 'finished' | 'ended'
 
-export interface SessionNotification {
+interface SessionNotification {
   readonly kind: NotificationKind
   readonly title: string
   readonly body: string
@@ -37,13 +37,13 @@ export function notificationFor(previous: HostedSessionSnapshot | null, next: Ho
   return null
 }
 
-export interface CreateNotifierParams {
+interface CreateNotifierParams {
   readonly isAppFocused: () => boolean
   readonly show: (notification: SessionNotification, snapshot: HostedSessionSnapshot) => void
   readonly repoLabel: (snapshot: HostedSessionSnapshot) => string
 }
 
-export interface SessionNotifier {
+interface SessionNotifier {
   /** Calls `show` only when unfocused; a focused transition still updates the baseline, so focusing then blurring never replays it. */
   observe(snapshot: HostedSessionSnapshot): void
 }

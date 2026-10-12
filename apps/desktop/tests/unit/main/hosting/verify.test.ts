@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { checkComponents, checkPluginLoad, composeInvocation, isPipelineCommand, validateCommandName } from '@/main/hosting/verify'
-import type { InitPlugin } from '@/main/hosting/verify'
-import type { PluginRequest } from '@/types/hosting'
+
+import type { PluginRequest, InitPlugin } from '@/types/hosting-plugin'
 
 const REPOSITORY: PluginRequest = { source: 'repository', path: '/repo/plugins/port' }
 const INSTALLED: PluginRequest = { source: 'installed' }

@@ -1,7 +1,7 @@
 import { vi } from 'vitest'
 import type { HostedQuery, createHostedHandle } from '@/main/hosting/handle'
 import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
-import type { PluginRequest } from '@/types/hosting'
+import type { PluginRequest } from '@/types/hosting-plugin'
 import type { RepoId } from '@/utils/repos'
 import type { SessionWorkspace } from '@/types/workspace'
 import type { SessionKey } from '@/types/hosting'

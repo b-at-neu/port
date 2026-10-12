@@ -3,16 +3,14 @@
 import { defaultGitRunner, resolveGitBaseRoot } from '@/main/platform/git'
 import { ensureDirectory, readTextFile, removeFile, writeJsonFileAtomic } from '@/main/platform/files'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import type { FileFailureKind } from '@/main/platform/files'
-import type { GitRunner } from '@/main/platform/git'
-import type { PathOps } from '@/main/platform/paths'
+import type { FileFailureKind } from '@/types/platform'
 import type { OwnershipSummary } from '@/types/writes'
+import type { TakeOwnershipResult, TakeOwnershipParams, OwnershipWriteResult, ReadOwnershipParams, OwnershipRead, OwnershipDeps, OwnershipWriteFailureKind } from '@/types/dispatch'
 
-export type { GitRunner }
 
-export type OwnershipOwner = 'app' | 'terminal'
+type OwnershipOwner = 'app' | 'terminal'
 
-export interface OwnershipRecord {
+interface OwnershipRecord {
   readonly repo: string
   readonly owner: OwnershipOwner
   readonly since: string
@@ -45,34 +43,18 @@ export function classifyOwnership(exists: boolean, text: string | null, repo: st
   return { kind: 'unreadable', message: "cockpit.json has an unknown 'owner'" }
 }
 
-export type OwnershipVerdict =
+type OwnershipVerdict =
   | { readonly kind: 'absent' }
   | { readonly kind: 'app'; readonly since: string }
   | { readonly kind: 'terminal'; readonly since: string }
   | { readonly kind: 'unreadable'; readonly message: string }
 
-interface OwnershipDeps {
-  readonly repoRoot: string
-  readonly git?: GitRunner
-  readonly pathOps?: PathOps
-}
-
+export 
 async function resolveOwnershipPath(deps: OwnershipDeps): Promise<string> {
   const pathOps = deps.pathOps ?? defaultPathOps
   const git = deps.git ?? defaultGitRunner()
   const baseRoot = await resolveGitBaseRoot(git, deps.repoRoot, pathOps)
   return pathOps.join(baseRoot, '.agents', 'cockpit.json')
-}
-
-export type OwnershipRead =
-  | { readonly kind: 'absent'; readonly path: string; readonly readAt: string }
-  | { readonly kind: 'app'; readonly since: string; readonly path: string; readonly readAt: string }
-  | { readonly kind: 'terminal'; readonly since: string; readonly path: string; readonly readAt: string }
-  | { readonly kind: 'unreadable'; readonly message: string; readonly path: string; readonly readAt: string }
-
-export interface ReadOwnershipParams extends OwnershipDeps {
-  readonly repo: string
-  readonly now?: () => Date
 }
 
 export async function readOwnership(params: ReadOwnershipParams): Promise<OwnershipRead> {
@@ -113,22 +95,9 @@ export function toOwnershipSummary(read: OwnershipRead): OwnershipSummary {
   }
 }
 
-type OwnershipWriteFailureKind = Exclude<FileFailureKind, 'unparseable'>
-
-function toOwnershipWriteFailureKind(kind: FileFailureKind): OwnershipWriteFailureKind {
+export function toOwnershipWriteFailureKind(kind: FileFailureKind): OwnershipWriteFailureKind {
   return kind === 'unparseable' ? 'io' : kind
 }
-
-export type OwnershipWriteResult = { readonly ok: true; readonly path: string } | { readonly ok: false; readonly kind: OwnershipWriteFailureKind; readonly message: string; readonly path: string }
-
-export interface TakeOwnershipParams extends OwnershipDeps {
-  readonly repo: string
-  /** Overwrites a `terminal` record — reached only from the confirmed Take over dialog. */
-  readonly force?: boolean
-  readonly now?: () => Date
-}
-
-export type TakeOwnershipResult = OwnershipWriteResult | { readonly ok: false; readonly kind: 'refused'; readonly verdict: Extract<OwnershipRead, { kind: 'terminal' | 'unreadable' }>; readonly path: string }
 
 /** Always writes `owner: "app"`, the only owner this process ever claims for itself — no
  *  read-modify-write, since a record carries exactly one owner and `since` always starts fresh. */
@@ -151,7 +120,7 @@ export async function takeOwnership(params: TakeOwnershipParams): Promise<TakeOw
   return { ok: true, path }
 }
 
-export interface ReleaseOwnershipParams extends OwnershipDeps {
+interface ReleaseOwnershipParams extends OwnershipDeps {
   readonly repo: string
 }
 

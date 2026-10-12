@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { resolveStartTarget } from '@/main/workspace/target'
-import type { ResolveStartTargetDeps } from '@/main/workspace/target'
+import type { ResolveStartTargetDeps } from '@/types/workspace'
 import { toFolderId } from '@/main/workspace/resolve'
 import { pathOps } from '@/main/platform/paths'
 import type { RepositoryEntry } from '@/utils/repos'

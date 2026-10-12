@@ -7,19 +7,9 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { AppliedOverride, CheckDisposition, RepoConfigReadFailureKind, RepoProblem } from '@/utils/repos'
 import { applyOverrides, parseOverrides } from '../../../../../scripts/port-tick/overrides'
 import type { EffectiveConfigShape } from '../../../../../scripts/port-tick/overrides'
+import type { PortResolved } from '@/types/registry'
 
-/** Values `inspect.ts` has already defaulted off the schema, before any `CLAUDE.md` override applies. */
-export interface PortResolved {
-  readonly branches: { readonly integration: string; readonly production: string | null }
-  readonly models: { readonly plan: string; readonly impl: string; readonly review: string; readonly revise: string }
-  readonly modules: { readonly approvalGate: boolean; readonly release: boolean; readonly scope: boolean }
-  readonly reviewCycleCap: number
-  readonly concurrency: { readonly sharedFiles: readonly string[]; readonly overlapThreshold: number }
-  /** Seeds `sessionRequiredPaths +=` — nothing else in the app consumes the resolved list. */
-  readonly sessionRequiredPaths: readonly string[]
-}
-
-export type EffectiveConfigResult =
+type EffectiveConfigResult =
   | {
       readonly ok: true
       readonly branches: { readonly integration: string; readonly production: string | null }

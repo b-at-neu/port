@@ -2,29 +2,26 @@
 // attempt, aborts included.
 import { randomUUID } from 'node:crypto'
 import { gh as defaultGh } from '@/main/platform/gh'
-import type { GhResult, GhRunner } from '@/main/platform/gh'
+import type { GhResult } from '@/types/platform'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
 import { removeFile, writeTextFile } from '@/main/platform/files'
-import type { PathOps } from '@/main/platform/paths'
 import { fetchItemsByNumber } from '@/main/github/adapter'
-import type { FetchItemsByNumberParams, RepoRef } from '@/main/github/adapter'
-import type { ItemsByNumberFetch } from '@/types/github'
+
+import type { GitHubRepoRef } from '@/types/github'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { AssertEqual } from '@/types/assert-type'
-import type { CommentRequest, GhWriteFailureKind, LabelAuditEntry, LabelWriteRequest, ObservedItem, OwnershipKind, WriteOutcome } from '@/types/writes'
+import type { GhWriteFailureKind, LabelAuditEntry, LabelWriteRequest, ObservedItem, OwnershipKind, WriteOutcome } from '@/types/writes'
 import { appendAudit } from '@/main/writes/audit'
 import { buildCommand, resolveKeys } from '@/main/writes/command'
-import type { GitRunner as OwnershipGitRunner } from '@/main/dispatch/ownership'
 import { readOwnership } from '@/main/dispatch/ownership'
 import { evaluate, wouldChangeNothing } from '@/main/writes/scope'
-
-export type { GhRunner }
+import type { PostCommentParams, ApplyLabelsParams } from '@/types/writes'
 
 // Fails to compile if `GhResult` grows a failure kind without `GhWriteFailureKind` growing to match.
 type GhResultFailureKind = Exclude<GhResult, { ok: true }>['kind']
 export const _kindsCoverGhResult: AssertEqual<GhWriteFailureKind, GhResultFailureKind> = true
 
-function splitRepo(repo: string): RepoRef {
+function splitRepo(repo: string): GitHubRepoRef {
   const slash = repo.indexOf('/')
   if (slash === -1) return { owner: repo, name: '' }
   return { owner: repo.slice(0, slash), name: repo.slice(slash + 1) }
@@ -48,17 +45,6 @@ function describeGhFailure(result: Exclude<GhResult, { ok: true }>): string {
     default:
       return result.stderr
   }
-}
-
-export interface ApplyLabelsParams {
-  readonly request: LabelWriteRequest
-  readonly repoRoot: string
-  readonly auditDir: string
-  readonly gh?: GhRunner
-  readonly git?: OwnershipGitRunner
-  readonly fetchItemsByNumber?: (params: FetchItemsByNumberParams) => Promise<ItemsByNumberFetch>
-  readonly now?: () => Date
-  readonly pathOps?: PathOps
 }
 
 interface AuditContext {
@@ -178,16 +164,6 @@ export async function applyLabels(params: ApplyLabelsParams): Promise<WriteOutco
   const outcome: WriteOutcome = { kind: 'applied', argv: command.argv }
   await recordLabelAudit(auditDir, ctxWithCall, outcome, now)
   return outcome
-}
-
-export interface PostCommentParams {
-  readonly request: CommentRequest
-  readonly repoRoot: string
-  readonly auditDir: string
-  readonly gh?: GhRunner
-  readonly git?: OwnershipGitRunner
-  readonly now?: () => Date
-  readonly pathOps?: PathOps
 }
 
 /** Passes `--body-file` from a scratch file, deleted in a `finally` — argv-length limits on Windows

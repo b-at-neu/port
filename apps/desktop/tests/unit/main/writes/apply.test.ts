@@ -7,14 +7,13 @@ import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { AuditEntry, CommentRequest, LabelAuditEntry, LabelWriteRequest, WriteOutcome } from '@/types/writes'
 import { isLabelAuditEntry } from '@/types/writes'
-import type { CommandResult } from '@/main/platform/run'
-import type { GhResult } from '@/main/platform/gh'
+import type { CommandResult } from '@/types/platform'
+import type { GhResult } from '@/types/platform'
 import type { ItemsByNumberFetch, ResolvedItem } from '@/types/github'
 import { applyLabels, postComment } from '@/main/writes/apply'
-import type { GhRunner } from '@/main/writes/apply'
+import type { GhRunner, GitRunner } from '@/types/platform'
 import { readAuditLog } from '@/main/writes/audit'
 import { takeOwnership } from '@/main/dispatch/ownership'
-import type { GitRunner } from '@/main/dispatch/ownership'
 
 const VOCABULARY: LabelVocabulary = resolveVocabulary({})
 const REPO_ID = 'repo-1' as unknown as RepoId

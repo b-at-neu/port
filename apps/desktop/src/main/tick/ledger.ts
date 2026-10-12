@@ -4,18 +4,7 @@ import type { RepoId } from '@/utils/repos'
 import type { LedgerRow, LedgerState, UnmatchedResult } from '../../../../../scripts/port-tick/liveness'
 import { classifyUnmatched } from '../../../../../scripts/port-tick/liveness'
 import type { RefreshMemoEntry } from '../../../../../scripts/port-tick/gates'
-
-export interface DispatchLedger {
-  /** Records the claim at `state: 'dispatched'`, carrying over any `resets` a prior row already had. */
-  readonly record: (repoId: RepoId, number: number) => void
-  /** Writes the row forward only when `classifyUnmatched` returned a `nextState`; `no-record` and
-   *  `capped` leave the ledger untouched. */
-  readonly advance: (repoId: RepoId, number: number, result: UnmatchedResult) => void
-  readonly rowFor: (repoId: RepoId, number: number) => LedgerRow | undefined
-  /** Classifies and advances the row at most once per distinct `readAt`, so repeated polls over
-   *  the same GitHub read don't independently advance the state past the intended debounce. */
-  readonly observeUnmatched: (repoId: RepoId, number: number, readAt: string | null) => UnmatchedResult
-}
+import type { RefreshMemo, UnknownStreaks, DispatchLedger } from '@/types/tick'
 
 export function createDispatchLedger(): DispatchLedger {
   const rows = new Map<RepoId, Map<number, LedgerRow>>()
@@ -64,12 +53,6 @@ export function createDispatchLedger(): DispatchLedger {
   }
 }
 
-export interface UnknownStreaks {
-  readonly get: (repoId: RepoId, number: number) => number
-  readonly set: (repoId: RepoId, number: number, streak: number) => void
-  readonly clear: (repoId: RepoId, number: number) => void
-}
-
 /** The app's own equivalent of the cockpit's `tickState.unknownStreak` — a process-scoped map
  *  counting consecutive UNKNOWN mergeability ticks. `get` defaults to 0 for an item never recorded. */
 export function createUnknownStreaks(): UnknownStreaks {
@@ -94,12 +77,6 @@ export function createUnknownStreaks(): UnknownStreaks {
       bucket(repoId).delete(number)
     },
   }
-}
-
-export interface RefreshMemo {
-  readonly get: (repoId: RepoId, number: number) => RefreshMemoEntry | undefined
-  readonly set: (repoId: RepoId, number: number, entry: RefreshMemoEntry) => void
-  readonly clear: (repoId: RepoId, number: number) => void
 }
 
 /** The app's own equivalent of the cockpit's `Refreshed:` record — a process-scoped map, same

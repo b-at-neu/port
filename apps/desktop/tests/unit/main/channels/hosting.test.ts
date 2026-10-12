@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { SessionKey } from '@/types/hosting'
-import type { RegistryDeps } from '@/main/registry'
-import type { ResolveStartTargetDeps, ResolvedStartTarget } from '@/main/workspace/target'
+import type { RegistryDeps } from '@/types/registry'
+import type { ResolveStartTargetDeps, ResolvedStartTarget } from '@/types/workspace'
 import { storeStub } from '../../../fixtures/store'
 import {
   MAX_INVOKE_ARGS_CHARS,
@@ -21,7 +21,7 @@ import {
   resolveSessionSend,
   resolveSessionStart,
 } from '@/main/channels/hosting'
-import type { HostingChannelDeps } from '@/main/channels/hosting'
+import type { HostingChannelDeps } from '@/types/channels'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 const SESSION_KEY = 'hosted-1' as SessionKey

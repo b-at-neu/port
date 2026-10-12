@@ -13,7 +13,7 @@ if (SEEDS.length !== SIGNATURE_HASHES) {
   throw new Error(`signature.ts's SEEDS has ${String(SEEDS.length)} entries, but SIGNATURE_HASHES is ${String(SIGNATURE_HASHES)}`)
 }
 
-export interface Signature {
+interface Signature {
   readonly bits: number
   readonly data: Uint8Array
 }

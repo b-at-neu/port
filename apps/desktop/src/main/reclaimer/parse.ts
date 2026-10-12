@@ -1,6 +1,6 @@
 // A missing field, a non-array `candidates`, or an unknown `state` fails the whole payload,
 // naming the field — never a partial list.
-import type { PathOps } from '@/main/platform/paths'
+import type { PathOps } from '@/types/platform'
 import type { CorrelationRung } from '@/types/local'
 import type { ReclaimedWorktree, WorktreeState } from '@/types/reclaimer'
 import { WORKTREE_STATES } from '@/types/reclaimer'
@@ -9,7 +9,7 @@ import { isRecord } from '@/main/guards'
 const RUNGS: ReadonlySet<string> = new Set<CorrelationRung>(['upstream-branch', 'branch-name', 'directory-basename', 'head-subject'])
 const STATES: ReadonlySet<string> = new Set<string>(WORKTREE_STATES)
 
-export interface ParsedWorktree {
+interface ParsedWorktree {
   readonly path: string
   readonly branch: string | null
   readonly head: string | null
@@ -22,7 +22,7 @@ export interface ParsedWorktree {
   readonly dirtyFiles: number
 }
 
-export type ParsedReport =
+type ParsedReport =
   | {
       readonly ok: true
       readonly mainRoot: string
@@ -142,7 +142,7 @@ export function parseReportPayload(stdout: string, pathOps: PathOps): ParsedRepo
   return { ok: true, mainRoot: pathOps.toNative(mainRoot), integrationRef, worktrees, orphanDirs, registered, byState }
 }
 
-export type ParsedReclaim =
+type ParsedReclaim =
   | { readonly ok: true; readonly removed: number; readonly results: readonly ReclaimedWorktree[] }
   | { readonly ok: false; readonly message: string }
 

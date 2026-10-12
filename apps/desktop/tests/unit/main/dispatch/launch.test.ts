@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { boundRecords, freeSlots, liveCount, refreshRecords } from '@/main/dispatch/launch'
-import type { StageRecord } from '@/main/dispatch/launch'
+import type { StageRecord } from '@/types/dispatch'
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import type { SessionControls, SessionModels } from '@/utils/hosting/controls'
 import type { RepoId } from '@/utils/repos'

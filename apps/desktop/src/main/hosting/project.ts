@@ -1,13 +1,16 @@
+import type { ContentBlock } from '@/types/hosting'
+
 // A pure projector turning the live SDK message stream into the same TranscriptEntry shape
 // already derived from a session's on-disk .jsonl. Never throws: an unrecognized message is skipped.
 import type { EntryPatch, MetaEntry, TranscriptEntry } from '@/utils/sessions/transcript'
 import { MAX_PAYLOAD_CHARS } from '@/utils/sessions/transcript'
 import { isRecord } from '@/main/guards'
 import { createDeriver, sanitize } from '@/main/sessions/transcript-entries'
-import type { LiveBlock, LiveBlockKind, PartialUpdate, SessionEntriesDelta } from '@/types/hosting'
-import type { ContentBlock } from '@/main/hosting/content'
+import type { LiveBlock, LiveBlockKind, PartialUpdate } from '@/types/hosting'
 
-export interface CreateSessionProjectorParams {
+import type { SessionProjectorWindow, ProjectedDelta } from '@/types/hosting'
+
+interface CreateSessionProjectorParams {
   /** Used only to shorten a headline path, never to resolve or open anything. */
   readonly cwd: string
 }
@@ -21,19 +24,7 @@ interface MirrorState {
   readonly openToolCalls: Map<number, number>
 }
 
-/** Everything `SessionEntriesDelta` carries except `sessionKey`, which only `handle.ts` adds. */
-export type ProjectedDelta = Omit<SessionEntriesDelta, 'sessionKey'>
-
-export interface SessionProjectorWindow {
-  readonly entries: readonly TranscriptEntry[]
-  /** The absolute index of `entries[0]`; `0` until the ring has dropped its oldest rows. */
-  readonly firstIndex: number
-  readonly partial: LiveBlock | null
-  readonly pendingSends: readonly string[]
-  readonly revision: number
-}
-
-export interface SessionProjector {
+interface SessionProjector {
   /** `null` when the message produced no visible change. Never throws: an unrecognized message is skipped. */
   push(message: unknown, receivedAt: string): ProjectedDelta | null
   /** Marks the uuid pending until an ack frame or a `result` arrives; `content` is a plain string with no attachments. */

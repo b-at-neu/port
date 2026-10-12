@@ -1,30 +1,11 @@
 // Honours the cockpit's unprompted `autoPlan` swap while this app owns the repository.
 import type { BoardSnapshot } from '@/types/board'
-import type { RunState } from '@/types/dispatch'
 import type { RepoId } from '@/utils/repos'
-import type { ReadyEntry } from '@/main/actions/apply'
-import type { AutoApprovePlanParams } from '@/main/actions/gate'
+import type { ReadyEntry } from '@/types/actions'
 import { autoApprovableFrom } from '@/main/tick/dispatchable'
-import type { RegistryDeps } from '@/main/registry'
-import { listRepositories as defaultListRepositories } from '@/main/registry'
-import type { ReadOwnershipParams } from '@/main/dispatch/ownership'
-import type { OwnershipRead } from '@/main/dispatch/ownership'
-import type { WriteOutcome } from '@/types/writes'
 
-export interface AutoPlannerDeps {
-  readonly listRepositories: typeof defaultListRepositories
-  readonly registryDeps: RegistryDeps
-  readonly readOwnership: (params: ReadOwnershipParams) => Promise<OwnershipRead>
-  /** The same per-repository run state `main/dispatch/dispatcher.ts` reads, never a second store. */
-  readonly runState: (repoId: RepoId) => RunState
-  readonly autoApprove: (params: AutoApprovePlanParams) => Promise<WriteOutcome>
-  readonly auditDir: string
-  readonly now: () => Date
-}
 
-export interface AutoPlanner {
-  consider(snapshot: BoardSnapshot): Promise<void>
-}
+import type { AutoPlanner, AutoPlannerDeps } from '@/types/dispatch'
 
 export function createAutoPlanner(deps: AutoPlannerDeps): AutoPlanner {
   const inFlight = new Set<RepoId>()

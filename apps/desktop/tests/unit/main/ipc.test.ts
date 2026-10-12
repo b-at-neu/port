@@ -4,7 +4,7 @@ import type { ReposListResponse } from '@/types/ipc'
 import type { WorktreesReport } from '@/types/reclaimer'
 import { resolveBoardRefresh, resolveWorktreesReport } from '@/main/ipc'
 import type { BoardRefreshDeps, WorktreesReportDeps } from '@/main/ipc'
-import type { RegistryDeps } from '@/main/registry'
+import type { RegistryDeps } from '@/types/registry'
 import { boardSnapshot, readyEntry } from '../../fixtures/board-state'
 
 const REPO_ID = 'repo-1' as unknown as RepoId

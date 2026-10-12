@@ -1,7 +1,7 @@
 // Reads and slices the earlier conversation for resume/resume-at/fork — read before spawn, kept frozen on the handle.
 import type { SessionHistory, SessionStartMode } from '@/types/hosting'
 import { openTranscript } from '@/main/sessions/transcript'
-import type { OpenTranscriptParams } from '@/main/sessions/transcript'
+import type { OpenTranscriptParams } from '@/types/sessions'
 
 /** The last `HISTORY_LIMIT` entries are kept; the rest are counted as `omittedBefore`, never silently dropped. */
 export const HISTORY_LIMIT = 500

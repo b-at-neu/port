@@ -1,45 +1,8 @@
 // The seam between the main-process dispatch loop and whatever actually
 // starts a stage session — no I/O, no SDK import.
-import type { ReadyEntry } from '@/main/actions/apply'
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
-import type { PipelineItemKind } from '@/types/github'
-import type { LabelKey } from '@/utils/labels/vocabulary'
-import type { EndedStage, StageAgent } from '@/types/tick'
-import type { StageOutcome } from '@/types/stage-session'
-
-export interface StageLaunchRequest {
-  readonly entry: ReadyEntry
-  readonly agent: StageAgent
-  readonly number: number
-  readonly kind: PipelineItemKind
-  readonly trigger: LabelKey
-  readonly model: string
-  readonly prompt: string
-}
-
-// `ok: true` promises the store holds a non-`ended` handle for `sessionKey`.
-export type StageLaunchResult = { readonly ok: true; readonly sessionKey: SessionKey } | { readonly ok: false; readonly kind: 'at-capacity'; readonly limit: number } | { readonly ok: false; readonly kind: 'failed'; readonly message: string }
-
-export interface StageLauncher {
-  launch(request: StageLaunchRequest): Promise<StageLaunchResult>
-}
-
-// This app's own per-item launch record, kept internally by the loop.
-export interface StageRecord {
-  // `null` for a `failed` record — no session was ever created to key.
-  readonly sessionKey: SessionKey | null
-  readonly agent: StageAgent
-  readonly number: number
-  readonly kind: PipelineItemKind
-  readonly trigger: LabelKey
-  readonly state: 'started' | 'ended' | 'failed'
-  readonly at: string
-  readonly detail: string | null
-  /** `null` until the launcher classifies a hand-back for this record's session; never set for a `failed` record. */
-  readonly outcome: StageOutcome | null
-  readonly claudeSessionId: string | null
-  readonly operatorJoinedAt: string | null
-}
+import type { EndedStage } from '@/types/tick'
+import type { StageRecord } from '@/types/dispatch'
 
 // Hosted snapshots whose `phase !== 'ended'` — operator and stage sessions
 // alike; stage sessions share the hosted cap.

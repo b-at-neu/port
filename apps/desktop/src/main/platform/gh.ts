@@ -1,11 +1,13 @@
 import { runCommand } from '@/main/platform/run'
-import type { CommandResult, RunCommandOptions } from '@/main/platform/run'
+
+import type { GhAuthStatusResult, GhResult } from '@/types/platform'
+import type { RunCommandOptions } from '@/types/platform'
 
 export type GhOptions = Omit<RunCommandOptions, 'whichEnv' | 'platform'>
 
 export type GhClassification = 'unauthenticated' | 'rate-limited' | 'forbidden' | 'http-not-found' | 'network' | 'unknown'
 
-export interface GhExitOutcome {
+interface GhExitOutcome {
   readonly code: number
   readonly stdout: string
   readonly stderr: string
@@ -34,11 +36,6 @@ export function classifyGhExit(outcome: GhExitOutcome): GhClassification {
   return 'unknown'
 }
 
-export type GhResult =
-  | { readonly ok: true; readonly stdout: string; readonly stderr: string }
-  | Exclude<CommandResult, { ok: true } | { ok: false; kind: 'nonzero' }>
-  | { readonly ok: false; readonly kind: GhClassification; readonly stdout: string; readonly stderr: string }
-
 // `stdout` is preserved on the classified-failure branch: `gh api graphql` exits non-zero whenever
 // the response carries `errors`, even when `data` is still usable.
 export async function gh(args: readonly string[], options: GhOptions = {}): Promise<GhResult> {
@@ -49,7 +46,7 @@ export async function gh(args: readonly string[], options: GhOptions = {}): Prom
   return { ok: false, kind, stdout: result.stdout, stderr: result.stderr }
 }
 
-export type GhJsonResult<T> = { readonly ok: true; readonly data: T } | Exclude<GhResult, { ok: true }> | { readonly ok: false; readonly kind: 'unparseable'; readonly stdout: string }
+type GhJsonResult<T> = { readonly ok: true; readonly data: T } | Exclude<GhResult, { ok: true }> | { readonly ok: false; readonly kind: 'unparseable'; readonly stdout: string }
 
 /** Parses stdout and returns `unparseable` with the raw stdout on failure —
  *  never `null`, which a caller could otherwise mistake for a real value. */
@@ -63,8 +60,6 @@ export async function ghJson<T>(args: readonly string[], options?: GhOptions): P
   }
 }
 
-export type GhAuthStatusResult = { readonly ok: true; readonly authenticated: boolean } | Exclude<GhResult, { ok: true } | { ok: false; kind: 'unauthenticated' }>
-
 /** Reads the exit code directly rather than routing through `classifyGhExit`, which is tuned
  *  for HTTP-bearing API failures this command never produces. */
 export async function ghAuthStatus(options?: GhOptions): Promise<GhAuthStatusResult> {
@@ -74,5 +69,3 @@ export async function ghAuthStatus(options?: GhOptions): Promise<GhAuthStatusRes
   return result
 }
 
-/** An injectable `gh` invocation, so a test runs against a fake runner and needs no real `gh` binary. */
-export type GhRunner = (args: readonly string[], options?: GhOptions) => Promise<GhResult>

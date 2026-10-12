@@ -2,7 +2,7 @@ import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { RepoId } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
 import type { ReconciledItem, RepositoryState } from '@/types/state'
-import type { ReadyEntry } from '@/main/actions/apply'
+import type { ReadyEntry } from '@/types/actions'
 
 export function reconciledItem(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
   return {

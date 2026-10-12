@@ -1,41 +1,25 @@
+import type { ApplyLabelsParams, PostCommentParams } from '@/types/writes'
+import type { FetchItemsByNumberParams } from '@/types/github'
+import type { ReadyEntry } from '@/types/actions'
+
 // applyItemDecision — unblock and revise, the comment-then-swap write
 // `main/actions/gate.ts`'s own `gateAnswer` already establishes.
 import { decisionPlan, decisionsFor, isCycleCapEscalation, reviseNoteProblem } from '@/utils/actions/decide'
 import { changesRequestedBody, gateClearedBody } from '@/utils/actions/bodies'
-import type { ItemDecisionResult, OperatorDecision, UnblockRoute } from '@/types/actions'
+import type { ItemDecisionResult } from '@/types/actions'
 import { stageKeyOf } from '@/utils/actions/plan'
 import { labelName } from '@/utils/labels/vocabulary'
-import type { LabelKey } from '@/utils/labels/vocabulary'
-import type { RepoId } from '@/utils/repos'
-import type { BoardSnapshot } from '@/types/board'
 import type { ReconciledItem } from '@/types/state'
 import type { LabelWriteRequest, ObservedItem, WriteOutcome } from '@/types/writes'
 import { evaluate } from '@/main/writes/scope'
 import { applyLabels, postComment } from '@/main/writes/apply'
-import type { ApplyLabelsParams, PostCommentParams } from '@/main/writes/apply'
+
 import { fetchItemsByNumber } from '@/main/github/adapter'
-import type { FetchItemsByNumberParams } from '@/main/github/adapter'
+
 import type { ItemsByNumberFetch } from '@/types/github'
 import { findRepoState, movedResult } from '@/main/actions/apply'
-import type { ReadyEntry } from '@/main/actions/apply'
 
-export interface ItemDecisionRequest {
-  readonly repoId: RepoId
-  readonly number: number
-  readonly decision: OperatorDecision
-  readonly expectedStage: LabelKey | null
-  readonly route: UnblockRoute | null
-  readonly note: string | null
-  readonly skipComment: boolean
-}
-
-export interface ApplyItemDecisionParams {
-  readonly request: ItemDecisionRequest
-  readonly snapshot: BoardSnapshot
-  readonly entry: ReadyEntry
-  readonly auditDir: string
-  readonly scratchDir: string
-}
+import type { ApplyItemDecisionParams } from '@/types/actions'
 
 export interface ApplyItemDecisionDeps {
   readonly applyLabels: (params: ApplyLabelsParams) => Promise<WriteOutcome>

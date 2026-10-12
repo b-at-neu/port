@@ -1,34 +1,18 @@
 // Runs the shipped bin/budget.mjs through commands.budget and classifies its outcome into values
 // the dispatcher can report — never a throw, and an absent signal is never read as a passing one.
 import { node as defaultNode } from '@/main/platform/node'
-import type { CommandResult } from '@/main/platform/run'
-import type { NodeRunner } from '@/main/platform/node'
+import type { CommandResult } from '@/types/platform'
+import type { NodeRunner } from '@/types/platform'
 import { parseNodeCommand } from '@/main/reclaimer/command'
 import { SCRIPT_FAIL_PREFIX } from '@/main/reclaimer/report'
-import type { ReadyEntry } from '@/main/actions/apply'
-import type { TickActionable } from '@/types/tick'
+import type { ReadyEntry } from '@/types/actions'
 import { dispatchArgs, OUTDATED_SCRIPT_SENTINEL, parseSweepLine, parseVerdict, resetArgs, sweepArgs } from '@/main/dispatch/budget'
-import type { BudgetVerdict } from '@/main/dispatch/budget'
+
+import type { BudgetGate } from '@/types/dispatch'
 
 export type { NodeRunner }
 
 /** `unavailable`: the script can't be run at all, or is too old. `failed`: the script ran but exited non-zero. */
-export type BudgetGateFailure = { readonly ok: false; readonly kind: 'unavailable' | 'failed'; readonly message: string }
-
-export type BudgetResetResult = { readonly ok: true } | BudgetGateFailure
-export type BudgetCheckResult = { readonly ok: true; readonly verdict: BudgetVerdict; readonly line: string } | BudgetGateFailure
-
-/** Never a `BudgetGateFailure` — a sweep failure must never block dispatch, only report it. */
-export interface BudgetSweepResult {
-  readonly line: string | null
-  readonly problem: string | null
-}
-
-export interface BudgetGate {
-  readonly reset: (entry: ReadyEntry) => Promise<BudgetResetResult>
-  readonly sweep: (entry: ReadyEntry, sets: { readonly live: readonly string[]; readonly completed: readonly string[] }) => Promise<BudgetSweepResult>
-  readonly check: (entry: ReadyEntry, candidate: Pick<TickActionable, 'kind' | 'number' | 'agent'>, model: string) => Promise<BudgetCheckResult>
-}
 
 function firstFailLine(stderr: string): string | null {
   const line = stderr.split(/\r?\n/).find((l) => l.startsWith(SCRIPT_FAIL_PREFIX))

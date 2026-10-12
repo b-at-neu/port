@@ -1,22 +1,12 @@
+import type { ApplyLabelsParams, PostCommentParams } from '@/types/writes'
+
 // Swaps the trigger label for `needsHuman`, then comments — a failed swap never posts a
 // comment that would repeat on every poll.
-import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { LabelWriteRequest, WriteOutcome } from '@/types/writes'
 import { applyLabels, postComment } from '@/main/writes/apply'
-import type { ApplyLabelsParams, PostCommentParams } from '@/main/writes/apply'
-import type { ReadyEntry } from '@/main/actions/apply'
 
-export interface EscalateToHumanParams {
-  readonly entry: ReadyEntry
-  readonly kind: 'issue' | 'pull-request'
-  readonly number: number
-  readonly trigger: LabelKey
-  readonly viewer: string
-  readonly body: string
-  readonly action: string
-  readonly auditDir: string
-  readonly scratchDir: string
-}
+
+import type { EscalateToHumanResult, EscalateToHumanParams } from '@/types/actions'
 
 export interface EscalateToHumanDeps {
   readonly applyLabels: (params: ApplyLabelsParams) => Promise<WriteOutcome>
@@ -24,12 +14,6 @@ export interface EscalateToHumanDeps {
 }
 
 export const defaultEscalateDeps: EscalateToHumanDeps = { applyLabels, postComment }
-
-export interface EscalateToHumanResult {
-  readonly labels: WriteOutcome
-  /** `null` when the label swap did not reach `applied` — no comment is attempted then. */
-  readonly comment: WriteOutcome | null
-}
 
 function buildWriteRequest(params: EscalateToHumanParams): LabelWriteRequest {
   return {

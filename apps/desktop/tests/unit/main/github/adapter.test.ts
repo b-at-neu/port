@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import { ghAuthStatus, ghJson } from '@/main/platform/gh'
-import type { GhResult } from '@/main/platform/gh'
+import type { GhResult } from '@/types/platform'
 import { fetchClaimPreflight, fetchItemsByNumber, fetchItemStates, fetchPipelineItems } from '@/main/github/adapter'
-import type { GhRunner } from '@/main/github/adapter'
+import type { GhRunner } from '@/types/platform'
 
 const VOCABULARY: LabelVocabulary = {
   labels: [

@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { GateAnswerResponse, GatePreflightResponse } from '@/types/gate'
 import type { BoardSnapshot } from '@/types/board'
-import type { RegistryDeps } from '@/main/registry'
+import type { RegistryDeps } from '@/types/registry'
 import { resolveGateAnswer, resolveGatePreflight } from '@/main/channels/gate'
-import type { GateChannelDeps } from '@/main/channels/gate'
+import type { GateChannelDeps } from '@/types/channels'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 const registryDeps: RegistryDeps = {

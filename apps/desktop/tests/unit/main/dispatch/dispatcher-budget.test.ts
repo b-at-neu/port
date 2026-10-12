@@ -1,3 +1,5 @@
+import type { HostedStore } from '@/types/hosting'
+
 // Dispatcher-level budget-gate cases: reset-once/sweep-every-pass bookkeeping, the fail-closed
 // budget-unavailable refusal, and per-candidate routing. Additive to dispatcher.test.ts, not a duplicate.
 import { describe, expect, it, vi } from 'vitest'
@@ -6,15 +8,15 @@ import type { RepoId } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
 import type { HostedSessionSnapshot, SessionKey } from '@/types/hosting'
 import type { SessionControls, SessionModels } from '@/utils/hosting/controls'
-import type { HostedStore } from '@/main/hosting/store'
+
 import type { TickReport } from '@/types/tick'
-import type { EscalateToHumanParams } from '@/main/actions/escalate'
-import type { ReadyEntry } from '@/main/actions/apply'
-import type { StageLaunchResult, StageLauncher } from '@/main/dispatch/launch'
+import type { EscalateToHumanParams } from '@/types/actions'
+import type { ReadyEntry } from '@/types/actions'
+import type { StageLaunchResult, StageLauncher } from '@/types/dispatch'
 import { createDispatcher } from '@/main/dispatch/dispatcher'
-import type { CreateDispatcherParams } from '@/main/dispatch/dispatcher'
-import type { BudgetCheckResult, BudgetGate, BudgetResetResult, BudgetSweepResult } from '@/main/dispatch/budget-gate'
-import type { OwnershipRead } from '@/main/dispatch/ownership'
+import type { CreateDispatcherParams } from '@/types/dispatch'
+import type { BudgetCheckResult, BudgetGate, BudgetResetResult, BudgetSweepResult } from '@/types/dispatch'
+import type { OwnershipRead } from '@/types/dispatch'
 import { DISPATCH_STORE_DEFAULTS, storeStub } from '../../../fixtures/store'
 
 const REPO_ID = 'repo-a' as RepoId

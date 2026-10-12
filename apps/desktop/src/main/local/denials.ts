@@ -2,16 +2,15 @@
 import { defaultGitRunner, resolveGitBaseRoot } from '@/main/platform/git'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
 import { readTextFile } from '@/main/platform/files'
-import type { FileFailureKind } from '@/main/platform/files'
-import type { GitRunner } from '@/main/platform/git'
-import type { PathOps } from '@/main/platform/paths'
+import type { FileFailureKind } from '@/types/platform'
+import type { GitRunner } from '@/types/platform'
+import type { PathOps } from '@/types/platform'
 import type { AssertEqual } from '@/types/assert-type'
 import { summarizeDenials } from '@/utils/local/summary'
 import type { DenialActor, DenialDecision, DenialEntry, DenialsFailureKind, DenialsRead } from '@/types/local'
 
-export type { GitRunner }
 
-export interface ReadDenialsParams {
+interface ReadDenialsParams {
   readonly repoRoot: string
   readonly git?: GitRunner
   /** The newest N lines kept in `entries`; `summary` always counts the whole file. Defaults to 500. */

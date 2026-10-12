@@ -1,17 +1,10 @@
 // Pure verification logic over a hosted session's plugin load and command/agent inventory, read
 // back rather than assumed. Split from capabilities.ts's I/O and timing shell.
-import type { ComponentCheck, PluginLoad, PluginRequest } from '@/types/hosting'
+import type { ComponentCheck, PluginLoad, PluginRequest, InitPlugin } from '@/types/hosting-plugin'
 
 export const PLUGIN_NAME = 'port'
 
-/** The shape `system`/`init`'s own `plugins` field carries, narrowed to what this module reads. */
-export interface InitPlugin {
-  readonly name: string
-  readonly path: string
-  readonly version?: string
-}
-
-export interface CheckPluginLoadParams {
+interface CheckPluginLoadParams {
   readonly request: PluginRequest
   /** `null` before any `init` has arrived. */
   readonly initPlugins: readonly InitPlugin[] | null
@@ -43,7 +36,7 @@ export function checkPluginLoad(params: CheckPluginLoadParams): PluginLoad {
   return { kind: 'loaded', path: only.path, version: only.version ?? null }
 }
 
-export interface CheckComponentsParams {
+interface CheckComponentsParams {
   /** `null` when there is nothing to compare against yet — never treated as `complete`. */
   readonly expected: { readonly skills: readonly string[]; readonly agents: readonly string[] } | null
   /** `false` means there was no plugin path yet to read from, so `expected` being `null` reflects
@@ -63,7 +56,7 @@ export function checkComponents(params: CheckComponentsParams): ComponentCheck {
   return { kind: 'incomplete', missingSkills, missingAgents }
 }
 
-export type CommandNameResult = { readonly ok: true } | { readonly ok: false; readonly reason: string }
+type CommandNameResult = { readonly ok: true } | { readonly ok: false; readonly reason: string }
 
 /** No control-character regex literal (`no-control-regex`) — checked by code point instead. */
 function hasControlCharacter(name: string): boolean {

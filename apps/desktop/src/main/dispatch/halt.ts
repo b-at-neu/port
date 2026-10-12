@@ -1,36 +1,13 @@
 // Pause-then-stop-every-claim. Every write goes through applyItemAction, the same chokepoint
 // the board's own row buttons use.
 import { actionsFor, stageKeyOf } from '@/utils/actions/plan'
-import type { ItemActionResult } from '@/types/actions'
 import { labelName } from '@/utils/labels/vocabulary'
-import type { BoardSnapshot } from '@/types/board'
 import type { HaltItemOutcome, HaltReport } from '@/types/dispatch'
 import type { ReconciledItem } from '@/types/state'
-import type { RepoId } from '@/utils/repos'
 import { applyItemAction as defaultApplyItemAction } from '@/main/actions/apply'
-import type { ApplyItemActionParams, ReadyEntry } from '@/main/actions/apply'
-import type { RunStateStore } from '@/main/dispatch/store'
 
-export interface HaltDispatchParams {
-  readonly snapshot: BoardSnapshot
-  /** One repository for `pause`, every ready repository for `halt`. An entry missing for a
-   *  repository means every item there is skipped, never stopped. */
-  readonly entries: readonly ReadyEntry[]
-  readonly runStates: RunStateStore
-  /** Written to `runStates` first, regardless of whether `entries` carries a ready entry for each. */
-  readonly repoIds: readonly RepoId[]
-  readonly auditDir: string
-  readonly now: () => Date
-}
 
-export interface HaltDispatchDeps {
-  readonly applyItemAction: (params: ApplyItemActionParams) => Promise<ItemActionResult>
-  /** This app's own per-item stop, called before every `applyItemAction` so the session is asked
-   *  to stop before its label is touched. A no-op default for a caller with no dispatch loop. */
-  readonly stopFor?: (repoId: RepoId, number: number) => Promise<boolean>
-  /** This app's own whole-repository stand-down, once per in-scope ready entry after the per-item loop. */
-  readonly standDown?: (repoId: RepoId) => Promise<boolean>
-}
+import type { HaltDispatchDeps, HaltDispatchParams } from '@/types/dispatch'
 
 export const defaultHaltDispatchDeps: HaltDispatchDeps = { applyItemAction: defaultApplyItemAction }
 

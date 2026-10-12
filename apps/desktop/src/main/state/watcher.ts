@@ -1,6 +1,9 @@
+import type { DispatchLedger, UnknownStreaks, RefreshMemo } from '@/types/tick'
+import type { SourceCache, RefreshOutcome } from '@/types/state'
+
 // The only clock in main — one timer, rescheduled to the earliest `nextDueAt`. `schedule.ts` decides *when*; this file is the only place under `src/main/` allowed to name `setTimeout`.
-import type { GhRunner } from '@/main/github/adapter'
-import type { GitRunner } from '@/main/local/worktrees'
+import type { GhRunner } from '@/types/platform'
+import type { GitRunner } from '@/types/platform'
 import { readSessionState } from '@/main/sessions/adapter'
 import type { RepoId } from '@/utils/repos'
 import type { RepositoryEntry } from '@/utils/repos'
@@ -9,20 +12,16 @@ import type { BoardSnapshot, RepositoryHealth, SourceHealth, SourceKind } from '
 import type { RepoDispatchStatus, RunStatesSnapshot } from '@/types/dispatch'
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
 import { planTick } from '@/main/tick/plan'
-import type { DispatchLedger, RefreshMemo, UnknownStreaks } from '@/main/tick/ledger'
+
 import type { EndedStage } from '@/types/tick'
 import { buildDesktopTickEvent, recordTick as defaultRecordTick } from '@/main/trajectory/log'
-import type { DesktopTickEvent } from '@/main/trajectory/types'
-import type { RecordTickDeps } from '@/main/trajectory/log'
+import type { DesktopTickEvent } from '@/types/trajectory'
+import type { RecordTickDeps } from '@/types/trajectory'
 import { isReady, projectFromCache } from '@/main/state/read'
 import { afterFailure, afterSuccess, deferredUntil, dueSources, nextDueAt } from '@/main/state/schedule'
 import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/state/sources'
-import type { RefreshOutcome, SourceCache } from '@/main/state/sources'
 
-export interface RefreshRequest {
-  readonly repoId?: RepoId
-  readonly source?: SourceKind
-}
+import type { PipelineWatcher, RefreshRequest } from '@/types/state'
 
 export interface TimerHandle {
   readonly clear: () => void
@@ -36,9 +35,9 @@ const defaultSetTimer: TimerFactory = (callback, ms) => {
 }
 
 /** Injected so `watcher.test.ts` never touches a real filesystem for the trajectory record. */
-export type RecordTickFn = (repoRoot: string, event: DesktopTickEvent, deps?: RecordTickDeps) => Promise<void>
+type RecordTickFn = (repoRoot: string, event: DesktopTickEvent, deps?: RecordTickDeps) => Promise<void>
 
-export interface CreatePipelineWatcherParams {
+interface CreatePipelineWatcherParams {
   /** A static list, or a provider re-invoked on the GitHub cadence, so a repository added or removed appears on the board without a restart. */
   readonly repositories: readonly RepositoryEntry[] | (() => Promise<readonly RepositoryEntry[]>)
   readonly onSnapshot: (snapshot: BoardSnapshot) => void
@@ -68,14 +67,6 @@ export interface CreatePipelineWatcherParams {
   readonly stageLiveness?: (repoId: RepoId) => { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null
   /** `planTick`'s own `endedStages` input, read fresh per repository. `undefined` reads as `[]` for every repository — byte-identical to today. */
   readonly endedStages?: (repoId: RepoId) => readonly EndedStage[]
-}
-
-export interface PipelineWatcher {
-  readonly refresh: (request?: RefreshRequest) => Promise<BoardSnapshot>
-  readonly snapshot: () => BoardSnapshot
-  readonly stop: () => void
-  /** Re-reads `dispatchStatus()` onto the existing snapshot — never a second `buildSnapshot()` call, so it never produces a duplicate trajectory-record line or re-runs a poll. */
-  readonly republish: () => void
 }
 
 function repoRefOf(entry: Extract<RepositoryEntry, { status: 'ready' }>): { readonly owner: string; readonly name: string } {

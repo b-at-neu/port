@@ -3,24 +3,19 @@ import { pathOps } from '@/main/platform/paths'
 import type { RepoId } from '@/utils/repos'
 import { ACTIVE_WITHIN_MS, IDLE_WITHIN_MS } from '@/types/sessions'
 import type { Activity, PortStageAgent, RoleEvidence, SessionRole } from '@/types/sessions'
+import type { LocalRepoRef } from '@/types/github'
 
 /** The one place this union is declared; pinned against `plugins/port/agents/`'s real basenames. */
 export const PORT_STAGE_AGENTS: readonly PortStageAgent[] = ['plan-agent', 'impl-agent', 'review-agent', 'revise-agent']
 
-/** This adapter reads no config and enumerates no worktrees; `root` is supplied by the caller, never derived here. */
-export interface RepoRef {
-  readonly id: RepoId
-  readonly root: string
-}
-
-export interface Attribution {
+interface Attribution {
   readonly repoId: RepoId | null
   readonly worktreePath: string | null
 }
 
 /** `pathOps.contains`/`samePath` only — never `startsWith`, which would
  *  match a sibling directory sharing a name prefix (`port` vs `portfolio`). */
-export function attributeSession(repos: readonly RepoRef[], cwd: string | null): Attribution {
+export function attributeSession(repos: readonly LocalRepoRef[], cwd: string | null): Attribution {
   if (cwd === null) return { repoId: null, worktreePath: null }
   for (const repo of repos) {
     if (!pathOps.samePath(repo.root, cwd) && !pathOps.contains(repo.root, cwd)) continue
@@ -46,12 +41,12 @@ function isUnderClaudeWorktrees(path: string): boolean {
 const IMPL_WORKTREE_DIRNAME = /^impl-(\d+)$/
 const FIRST_PROMPT_COMMAND = /^\/[A-Za-z0-9_-]+:(pipeline|implement)(?![\w-])/
 
-export interface RoleInput {
+interface RoleInput {
   readonly cwd: string | null
   readonly firstPrompt: string | null
 }
 
-export interface RoleVerdict {
+interface RoleVerdict {
   readonly role: SessionRole
   readonly evidence: RoleEvidence | null
   readonly itemNumber: number | null
@@ -97,7 +92,7 @@ export function itemNumberOf(description: string | null): number | null {
   return parsed === 0 ? null : parsed
 }
 
-export interface ActivityResult {
+interface ActivityResult {
   readonly idleMs: number
   readonly activity: Activity
 }
@@ -109,7 +104,7 @@ export function activityOf(modifiedAt: string, now: Date): ActivityResult {
   return { idleMs, activity }
 }
 
-export interface ParsedAgentMeta {
+interface ParsedAgentMeta {
   readonly agentType: string
   readonly description: string | null
   readonly model: string | null
@@ -118,7 +113,7 @@ export interface ParsedAgentMeta {
   readonly spawnDepth: number | null
 }
 
-export type ParseAgentMetaResult = { readonly ok: true; readonly value: ParsedAgentMeta } | { readonly ok: false; readonly message: string }
+type ParseAgentMetaResult = { readonly ok: true; readonly value: ParsedAgentMeta } | { readonly ok: false; readonly message: string }
 
 /** Never throws on a shape it did not expect; the caller matches a failure into a `MetaProblem` with context this pure function does not have. */
 export function parseAgentMeta(raw: unknown): ParseAgentMetaResult {

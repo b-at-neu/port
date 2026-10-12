@@ -3,7 +3,7 @@
 import type { GhStatus } from '@/types/gh'
 import type { IpcMap } from '@/types/ipc'
 import { ghAuthStatus } from '@/main/platform/gh'
-import type { GhAuthStatusResult } from '@/main/platform/gh'
+import type { GhAuthStatusResult } from '@/types/platform'
 
 export interface GhStatusDeps {
   readonly ghAuthStatus: typeof ghAuthStatus

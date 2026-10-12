@@ -1,11 +1,10 @@
 // What a registered repository's checkout looks like to the harness that would actually dispatch agents in it. Every step degrades to a diagnostic rather than a failure.
 import { pathOps } from '@/main/platform/paths'
 import { readJsonFile } from '@/main/platform/files'
-import type { GitRunner } from '@/main/platform/git'
+import type { GitRunner } from '@/types/platform'
 
-export type { GitRunner }
 
-export type CurrentBranch =
+type CurrentBranch =
   | { readonly kind: 'branch'; readonly name: string }
   | { readonly kind: 'detached'; readonly sha: string }
   | { readonly kind: 'unavailable' }
@@ -23,7 +22,7 @@ export async function currentBranch(git: GitRunner, cwd: string): Promise<Curren
   return { kind: 'detached', sha: sha.stdout.trim() }
 }
 
-export type RefsCarryingConfig = { readonly ok: true; readonly refs: readonly string[] } | { readonly ok: false }
+type RefsCarryingConfig = { readonly ok: true; readonly refs: readonly string[] } | { readonly ok: false }
 
 /** Capped at 20 candidates, each confirmed with `ls-tree` so a branch that later deleted the config is excluded. Git pathspecs use a literal `/`, never `pathOps.join`. */
 const MAX_CANDIDATES = 20
@@ -51,7 +50,7 @@ export async function refsCarryingConfig(git: GitRunner, cwd: string): Promise<R
   return { ok: true, refs: confirmed }
 }
 
-export type PermissionsState = 'missing' | 'empty' | 'populated'
+type PermissionsState = 'missing' | 'empty' | 'populated'
 
 interface SettingsShape {
   readonly permissions?: { readonly allow?: unknown }

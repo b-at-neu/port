@@ -1,47 +1,26 @@
 // One refresh primitive per source, each keeping the previous good value in place on a failed attempt. `watcher.ts` decides *when* to call these; no file here names a timer.
 import { fetchItemsByNumber, fetchPipelineItems } from '@/main/github/adapter'
-import type { GhRunner } from '@/main/github/adapter'
+import type { GhRunner } from '@/types/platform'
 import { collectOrphanNumbers } from '@/main/state/attach'
 import { readDenials } from '@/main/local/denials'
 import { readWorktrees } from '@/main/local/worktrees'
-import type { GitRunner } from '@/main/local/worktrees'
+import type { GitRunner } from '@/types/platform'
 import { readSessionState } from '@/main/sessions/adapter'
 import type { RepoId } from '@/utils/repos'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
-import type { DenialsRead, WorktreeEntry, WorktreesRead } from '@/types/local'
-import type { AgentRecord, SessionScan } from '@/types/sessions'
-import type { ItemsByNumberFetch, PipelineFailureKind, PipelineFetch, RateLimitInfo } from '@/types/github'
-
-export interface SourceCache {
-  readonly github: Map<RepoId, PipelineFetch>
-  /** Keyed with the fetch it belongs to, never independently schedulable — `SOURCE_KINDS` deliberately excludes `itemStates`. */
-  readonly itemStates: Map<RepoId, ItemsByNumberFetch | null>
-  readonly worktrees: Map<RepoId, WorktreesRead>
-  readonly denials: Map<RepoId, DenialsRead>
-  /** One machine-wide scan, never per repository. */
-  sessions: SessionScan | null
-}
+import type { WorktreeEntry } from '@/types/local'
+import type { AgentRecord } from '@/types/sessions'
+import type { RefreshOutcome, SourceCache } from '@/types/state'
 
 export function createSourceCache(): SourceCache {
   return { github: new Map(), itemStates: new Map(), worktrees: new Map(), denials: new Map(), sessions: null }
-}
-
-/** What every refresh primitive reports back for health bookkeeping — `schedule.ts` reads this, never the cache directly. */
-export interface RefreshOutcome {
-  readonly ok: boolean
-  readonly at: string
-  readonly error?: string
-  /** GitHub-only — the window this attempt read, so `schedule.ts`'s `deferredUntil` can defer even a successful-but-low-headroom read. */
-  readonly rateLimit?: RateLimitInfo | null
-  /** GitHub-only — so a `rate-limited` failure can defer to `resetAt` rather than double the interval like any other failure. */
-  readonly failureKind?: PipelineFailureKind | null
 }
 
 function projectOk<T extends { readonly ok: boolean }>(previous: T | null, attempt: T): T {
   return attempt.ok ? attempt : (previous ?? attempt)
 }
 
-export interface RefreshGithubParams {
+interface RefreshGithubParams {
   readonly repoId: RepoId
   readonly repo: { readonly owner: string; readonly name: string }
   readonly vocabulary: LabelVocabulary
@@ -69,7 +48,7 @@ export async function refreshGithub(cache: SourceCache, params: RefreshGithubPar
     : { ok: false, at: fetch.fetchedAt, error: fetch.message, failureKind: fetch.kind }
 }
 
-export interface RefreshWorktreesParams {
+interface RefreshWorktreesParams {
   readonly repoId: RepoId
   readonly repoRoot: string
   readonly git?: GitRunner
@@ -83,7 +62,7 @@ export async function refreshWorktrees(cache: SourceCache, params: RefreshWorktr
   return read.ok ? { ok: true, at: read.readAt } : { ok: false, at: read.readAt, error: read.message }
 }
 
-export interface RefreshDenialsParams {
+interface RefreshDenialsParams {
   readonly repoId: RepoId
   readonly repoRoot: string
   readonly git?: GitRunner
@@ -97,7 +76,7 @@ export async function refreshDenials(cache: SourceCache, params: RefreshDenialsP
   return read.ok ? { ok: true, at: read.readAt } : { ok: false, at: read.readAt, error: read.message }
 }
 
-export interface RefreshSessionsParams {
+interface RefreshSessionsParams {
   readonly repos: Parameters<typeof readSessionState>[0]['repos']
   readonly reader?: Parameters<typeof readSessionState>[0]['reader']
   readonly claudeHome?: string

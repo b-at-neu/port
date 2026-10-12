@@ -7,12 +7,13 @@ import type { RepoId } from '@/utils/repos'
 import type { ReposListResponse } from '@/types/ipc'
 import type { BoardSnapshot } from '@/types/board'
 import type { HaltReport } from '@/types/dispatch'
-import type { RegistryDeps } from '@/main/registry'
-import type { ReadyEntry } from '@/main/actions/apply'
-import type { RunStateStore, SetRunStateResult } from '@/main/dispatch/store'
+import type { RegistryDeps } from '@/types/registry'
+import type { ReadyEntry } from '@/types/actions'
+
 import { registeredRepoIds, resolveDispatchControl } from '@/main/dispatch/resolve'
 import type { ResolveDispatchControlDeps } from '@/main/dispatch/resolve'
-import type { OwnershipWriteResult, TakeOwnershipResult } from '@/main/dispatch/ownership'
+import type { RunStateStore, SetRunStateResult, TakeOwnershipResult, OwnershipWriteResult } from '@/types/dispatch'
+
 
 const registryDeps: RegistryDeps = {
   registryDir: '/registry',

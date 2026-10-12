@@ -1,3 +1,5 @@
+import type { HostedStore } from '@/types/hosting'
+
 // Everything a stale renderer could get wrong throws here, never a value `main/hosting/store.ts`
 // has to defend against.
 import type { IpcMap, ReposListResponse } from '@/types/ipc'
@@ -9,27 +11,16 @@ import type { PlanDecision } from '@/utils/hosting/controls'
 import { isRecord } from '@/main/guards'
 import { IMAGE_MEDIA_TYPES, MAX_ATTACHMENT_NAME_LENGTH, MAX_ATTACHMENTS, MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_TEXT_BYTES, MAX_TOTAL_BYTES } from '@/utils/hosting/attachments'
 import type { ComposerAttachment } from '@/utils/hosting/attachments'
-import type { HostedStore } from '@/main/hosting/store'
+
 import { SESSION_LIMIT_CEILING } from '@/main/hosting/store'
 import { listSessionFiles } from '@/main/hosting/files'
 import { isReadyEntry, listRepositories } from '@/main/registry'
-import type { RegistryDeps } from '@/main/registry'
+import type { RegistryDeps } from '@/types/registry'
 import { resolveStartTarget } from '@/main/workspace/target'
-import type { ResolveStartTargetDeps } from '@/main/workspace/target'
+import type { ResolveStartTargetDeps } from '@/types/workspace'
 import { removeSessionWorktreeAt } from '@/main/workspace/worktree'
 import { resolveWorkspace } from '@/main/workspace/resolve'
-
-export interface HostingChannelDeps {
-  readonly listRepositories: typeof listRepositories
-  readonly store: HostedStore
-  /** Injectable so a test never touches a real `git` subprocess or filesystem. */
-  readonly listSessionFiles: typeof listSessionFiles
-  readonly resolveStartTarget: (target: SessionStartTarget, mode: SessionStartMode, deps: ResolveStartTargetDeps) => ReturnType<typeof resolveStartTarget>
-  readonly targetDeps: Omit<ResolveStartTargetDeps, 'repositories'>
-  readonly now: () => Date
-  /** Best-effort cleanup for a worktree created ahead of a start that then failed — logged, never surfaced over the start result. */
-  readonly removeCreatedWorktree: (path: string) => Promise<void>
-}
+import type { HostingChannelDeps } from '@/types/channels'
 
 export function defaultHostingChannelDeps(store: HostedStore, targetDeps: Omit<ResolveStartTargetDeps, 'repositories'>): HostingChannelDeps {
   return {

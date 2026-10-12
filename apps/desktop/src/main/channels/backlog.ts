@@ -3,7 +3,7 @@ import type { BacklogResponse } from '@/types/backlog'
 import type { IpcMap } from '@/types/ipc'
 import { fetchBacklog } from '@/main/github/backlog'
 import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/registry'
-import type { RegistryDeps } from '@/main/registry'
+import type { RegistryDeps } from '@/types/registry'
 
 export interface BacklogListDeps {
   readonly listRepositories: typeof listRepositories

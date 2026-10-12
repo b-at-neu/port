@@ -1,6 +1,6 @@
 // A fork is renamed away from its parent's title so the two never show as identical rows in the resumable list.
 import { createSdkSessionReader } from '@/main/sessions/sdk'
-import type { SessionReader } from '@/main/sessions/sdk'
+import type { SessionReader } from '@/types/sessions'
 
 /** Bounded to 80 characters so a very long parent title never produces an unreadable row. */
 const MAX_TITLE_LENGTH = 80
@@ -13,7 +13,7 @@ export function forkTitle(parentTitle: string): string {
   return `${base}${FORK_SUFFIX}`
 }
 
-export interface TitleForkParams {
+interface TitleForkParams {
   readonly parentSessionId: string
   readonly forkedSessionId: string
   /** Scopes `renameSession`'s search to this project, not every project on disk. */

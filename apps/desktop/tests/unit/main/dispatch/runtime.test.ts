@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
-import type { HostedStore } from '@/main/hosting/store'
+import type { HostedStore } from '@/types/hosting'
 import { createDispatchRuntime } from '@/main/dispatch/runtime'
 import { DISPATCH_STORE_DEFAULTS, storeStub } from '../../../fixtures/store'
 

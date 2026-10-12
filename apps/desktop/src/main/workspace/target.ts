@@ -1,39 +1,13 @@
 // Resolves a `session:start` target to a cwd/workspace/repoId, creating a session worktree only on
 // an explicit `worktree: true` — the only place a start target becomes a cwd.
-import type { GitRunner } from '@/main/platform/git'
 import { pathOps as defaultPathOps } from '@/main/platform/paths'
-import type { PathOps } from '@/main/platform/paths'
-import type { RepoId, RepositoryEntry } from '@/utils/repos'
-import type { SessionStartMode, SessionStartResult, SessionStartTarget } from '@/types/hosting'
-import type { SessionWorkspace } from '@/types/workspace'
+import type { PathOps } from '@/types/platform'
+import type { SessionStartMode, SessionStartTarget } from '@/types/hosting'
 import { isReadyEntry } from '@/main/registry'
-import type { RecentsStore } from '@/main/workspace/recents'
-import type { CreateSessionWorktreeParams, CreateSessionWorktreeResult } from '@/main/workspace/worktree'
+
+
 import { resolveWorkspace, toFolderId } from '@/main/workspace/resolve'
-import type { SessionReader } from '@/main/sessions/sdk'
-
-export type ResolvedStartTarget =
-  | {
-      readonly ok: true
-      readonly cwd: string
-      readonly workspace: SessionWorkspace
-      readonly repoId: RepoId | null
-      /** The worktree this resolution created, so a failed `store.start` can remove it again. */
-      readonly createdWorktree: { readonly path: string } | null
-      /** The folder path to record in recents on a successful start — `null` for a transcript target. */
-      readonly recordPath: string | null
-    }
-  | Exclude<SessionStartResult, { readonly ok: true } | { readonly ok: false; readonly kind: 'at-capacity' | 'runtime' | 'already-open' | 'folder-busy' }>
-
-export interface ResolveStartTargetDeps {
-  readonly git: GitRunner
-  readonly repositories: readonly RepositoryEntry[]
-  readonly recents: RecentsStore
-  readonly exists: (path: string) => Promise<boolean>
-  readonly readSessions: SessionReader
-  readonly createWorktree: (params: CreateSessionWorktreeParams) => Promise<CreateSessionWorktreeResult>
-  readonly pathOps?: PathOps
-}
+import type { ResolveStartTargetDeps, ResolvedStartTarget } from '@/types/workspace'
 
 function sessionIdOf(mode: SessionStartMode): string | null {
   return mode.kind === 'resume' || mode.kind === 'resume-at' || mode.kind === 'fork' ? mode.sessionId : null

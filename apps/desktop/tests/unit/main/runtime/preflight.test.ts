@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { runtimePreflight, runtimeProbe } from '@/main/runtime/preflight'
 import type { RuntimeProbeDeps } from '@/main/runtime/preflight'
-import type { RegistryDeps } from '@/main/registry'
+import type { RegistryDeps } from '@/types/registry'
 import type { RepoId } from '@/utils/repos'
 
 const NOW = 1_700_000_000_000

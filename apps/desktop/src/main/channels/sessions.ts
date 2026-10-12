@@ -1,3 +1,5 @@
+import type { ReadSessionStateParams, TranscriptTailStore } from '@/types/sessions'
+
 // `main/ipc.ts` stays the registrar; a channel's validation and composition move here as each is next touched.
 import type { RepositoryEntry } from '@/utils/repos'
 import type { SessionScan } from '@/types/sessions'
@@ -5,16 +7,17 @@ import type { TranscriptTailOpen, TranscriptTailPoll } from '@/utils/sessions/tr
 import type { SearchResult, SearchScope } from '@/types/search'
 import type { IpcMap } from '@/types/ipc'
 import { listRepositories } from '@/main/registry'
-import type { RegistryDeps } from '@/main/registry'
+import type { RegistryDeps } from '@/types/registry'
 import { readSessionState } from '@/main/sessions/adapter'
 import { tailStore } from '@/main/sessions/tail'
-import type { ReadSessionStateParams } from '@/main/sessions/adapter'
-import type { RepoRef } from '@/main/sessions/classify'
-import type { TailStore } from '@/main/sessions/tail'
-import { runSearch } from '@/main/search/query'
-import type { RunSearchParams } from '@/main/search/query'
 
-export interface SessionsScanDeps {
+import type { LocalRepoRef } from '@/types/github'
+
+import { runSearch } from '@/main/search/query'
+
+import type { SearchQueryDeps } from '@/types/channels'
+
+interface SessionsScanDeps {
   readonly listRepositories: typeof listRepositories
   readonly readSessionState: (params: ReadSessionStateParams) => Promise<SessionScan>
 }
@@ -28,14 +31,14 @@ function isReady(entry: RepositoryEntry): entry is Extract<RepositoryEntry, { st
 export async function resolveSessionsScan(registryDeps: RegistryDeps, deps: SessionsScanDeps = defaultSessionsScanDeps): Promise<SessionScan> {
   const list = await deps.listRepositories(registryDeps)
   if (!list.ok) throw new Error(`'sessions:scan' could not list repositories: ${list.message}`)
-  const repos: readonly RepoRef[] = list.repositories.filter(isReady).map((entry) => ({ id: entry.id, root: entry.path }))
+  const repos: readonly LocalRepoRef[] = list.repositories.filter(isReady).map((entry) => ({ id: entry.id, root: entry.path }))
   return deps.readSessionState({ repos })
 }
 
 export interface TranscriptTailDeps {
-  readonly openTail: TailStore['openTail']
-  readonly pollTail: TailStore['pollTail']
-  readonly closeTail: TailStore['closeTail']
+  readonly openTail: TranscriptTailStore['openTail']
+  readonly pollTail: TranscriptTailStore['pollTail']
+  readonly closeTail: TranscriptTailStore['closeTail']
 }
 
 const defaultTranscriptTailDeps: TranscriptTailDeps = {
@@ -75,11 +78,6 @@ export function resolveTranscriptTailClose(
     throw new Error("'transcript:tail:close' requires a non-empty 'tailId'")
   }
   deps.closeTail({ tailId: request.tailId })
-}
-
-export interface SearchQueryDeps {
-  readonly resolveSessionsScan: (registryDeps: RegistryDeps) => Promise<SessionScan>
-  readonly runSearch: (params: RunSearchParams) => Promise<SearchResult>
 }
 
 const defaultSearchQueryDeps: SearchQueryDeps = { resolveSessionsScan, runSearch }
