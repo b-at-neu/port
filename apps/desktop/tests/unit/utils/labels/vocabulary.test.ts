@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import template from '../../../../../plugins/port/data/labels.json'
+import template from '../../../../../../plugins/port/data/labels.json'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import { LABEL_KEYS, labelName, resolveVocabulary, verifyVocabulary, type RepoLabels } from '@/utils/labels/vocabulary'
 

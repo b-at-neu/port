@@ -5,7 +5,7 @@ import type { RepoId } from '@/utils/repos'
 import type { TickReport } from '@/types/tick'
 import { buildDesktopTickEvent, recordTick } from '@/main/trajectory/log'
 import type { GitRunner } from '@/main/trajectory/log'
-import { makeTempDir } from '@/testing/fixtures'
+import { makeTempDir } from '../../../fixtures/fs'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 const now = () => new Date('2026-01-01T00:00:00.000Z')

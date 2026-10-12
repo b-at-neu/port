@@ -5,7 +5,7 @@ import { createHostingPersistence, DEFAULT_SESSION_LIMIT } from '@/main/hosting/
 import type { HostingPersistedState, HostingPersistence } from '@/main/hosting/persist'
 import type { RepoId } from '@/utils/repos'
 import { DEFAULT_SESSION_DEFAULTS } from '@/types/hosting'
-import { makeTempDir } from '@/testing/fixtures'
+import { makeTempDir } from '../../../fixtures/fs'
 
 const ENTRY = { repoId: 'repo-1' as RepoId, claudeSessionId: 'session-1', title: 'Title', startedAt: '2026-01-01T00:00:00.000Z' }
 const EMPTY_MARKS = { pinned: [], archived: [] }

@@ -15,7 +15,7 @@ import {
   writeJsonFileAtomic,
   writeTextFile,
 } from '@/main/platform/files'
-import { makeTempDir } from '@/testing/fixtures'
+import { makeTempDir } from '../../../fixtures/fs'
 
 describe('readTextFile', () => {
   it('reads an existing file', async () => {

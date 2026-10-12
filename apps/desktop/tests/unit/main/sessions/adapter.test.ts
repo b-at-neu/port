@@ -6,7 +6,7 @@ import { pathOps } from '@/main/platform/paths'
 import type { RepoRef } from '@/main/sessions/classify'
 import { readSessionState } from '@/main/sessions/adapter'
 import type { RawSession } from '@/main/sessions/sdk'
-import { makeTempDir } from '@/testing/fixtures'
+import { makeTempDir } from '../../../fixtures/fs'
 
 async function pathExists(path: string): Promise<boolean> {
   try {

@@ -7,7 +7,7 @@ import type { SessionRecord, SessionScan } from '@/types/sessions'
 import { MAX_HITS_PER_TRANSCRIPT, MAX_TOTAL_HITS, SCAN_BUDGET_MS } from '@/types/search'
 import type { SearchScope } from '@/types/search'
 import { runSearch } from '@/main/search/query'
-import { makeClaudeHome } from '@/testing/fixtures'
+import { makeClaudeHome } from '../../../fixtures/fs'
 
 const REPO_A = 'repo-a' as RepoId
 const REPO_B = 'repo-b' as RepoId

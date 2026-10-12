@@ -2,7 +2,7 @@ import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
-import { makeTempDir } from '@/testing/fixtures'
+import { makeTempDir } from '../../../fixtures/fs'
 import { createRunStateStore } from '@/main/dispatch/store'
 
 const REPO_A = 'repo-a' as RepoId
