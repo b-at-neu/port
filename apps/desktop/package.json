@@ -8,6 +8,7 @@
     "dev": "node scripts/ensure-electron.mjs && node scripts/ensure-sandbox.mjs && electron-vite dev",
     "build": "electron-vite build",
     "dist": "node scripts/icon.mjs && electron-vite build && electron-builder --config electron-builder.config.mjs --publish never && node scripts/audit-bundle.mjs",
+    "dist:smoke": "node scripts/icon.mjs && electron-vite build --mode smoke && electron-builder --config electron-builder.config.mjs --dir --publish never -c.directories.output=dist/smoke",
     "screenshots": "electron-vite build && node scripts/screenshots.mjs",
     "smoke:packaged": "node scripts/screenshots.mjs --config playwright.packaged.config.mts",
     "e2e": "electron-vite build && node scripts/screenshots.mjs --config playwright.e2e.config.mts",

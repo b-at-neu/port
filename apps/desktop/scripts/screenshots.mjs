@@ -55,7 +55,7 @@ async function main() {
     process.exit(code)
   }
 
-  // `smoke:packaged` forwards its own `--config` and produces no screenshot directory — nothing to list.
+  // `smoke:packaged` forwards its own `--config` and writes to `out/screenshots-packaged` — listing that here would duplicate the CI upload step's own report.
   if (forwardedArgs.includes('--config')) return
 
   const outDir = join(appRoot, 'out', 'screenshots')

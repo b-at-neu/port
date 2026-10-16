@@ -104,9 +104,9 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     const designText = readFileSync(join(root, 'docs/DESIGN.md'), 'utf8');
 
     let violated = false;
-    if (!targetsText.includes("SCREENSHOT_DIR = 'out/screenshots'")) {
+    if (!targetsText.includes('SCREENSHOT_DIR') || !targetsText.includes("'out/screenshots'")) {
       violated = true;
-      fail('desktop-visual', "tests/visual/targets.mts no longer pins SCREENSHOT_DIR = 'out/screenshots'");
+      fail('desktop-visual', "tests/visual/targets.mts no longer pins SCREENSHOT_DIR to 'out/screenshots'");
     }
     if (!workflowText.includes('pnpm screenshots') || !workflowText.includes('apps/desktop/out/screenshots') || !workflowText.includes('name: screenshots')) {
       violated = true;
@@ -119,6 +119,33 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     if (!designText.includes('pnpm screenshots') || !designText.includes('apps/desktop/out/screenshots') || !designText.includes('tests/visual/targets.mts')) {
       violated = true;
       fail('desktop-visual', "docs/DESIGN.md §7 no longer names 'pnpm screenshots' / 'apps/desktop/out/screenshots' / 'tests/visual/targets.mts'");
+    }
+    if (!violated) ok();
+  }
+
+  // pin: packaged `SCREENSHOT_DIR` ↔ desktop-package.yml's artifact name/path, CONTRIBUTING.md, docs/TESTING.md
+  {
+    const targetsText = readFileSync(join(root, 'apps/desktop/tests/visual/targets.mts'), 'utf8');
+    const workflowText = readFileSync(join(root, '.github/workflows/desktop-package.yml'), 'utf8');
+    const contributingText = readFileSync(join(root, 'CONTRIBUTING.md'), 'utf8');
+    const testingText = readFileSync(join(root, 'docs/TESTING.md'), 'utf8');
+
+    let violated = false;
+    if (!targetsText.includes("'out/screenshots-packaged'")) {
+      violated = true;
+      fail('desktop-visual', "tests/visual/targets.mts no longer pins its packaged SCREENSHOT_DIR branch to 'out/screenshots-packaged'");
+    }
+    if (!workflowText.includes('packaged-screenshots-${{ runner.os }}') || !workflowText.includes('apps/desktop/out/screenshots-packaged/')) {
+      violated = true;
+      fail('desktop-visual', ".github/workflows/desktop-package.yml no longer pins 'packaged-screenshots-${{ runner.os }}' / 'apps/desktop/out/screenshots-packaged/' together");
+    }
+    if (!contributingText.includes('out/screenshots-packaged/')) {
+      violated = true;
+      fail('desktop-visual', "CONTRIBUTING.md no longer names 'out/screenshots-packaged/'");
+    }
+    if (!testingText.includes('packaged-screenshots-<os>')) {
+      violated = true;
+      fail('desktop-visual', "docs/TESTING.md no longer names the 'packaged-screenshots-<os>' artifact");
     }
     if (!violated) ok();
   }
