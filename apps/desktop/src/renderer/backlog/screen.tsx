@@ -8,6 +8,7 @@ import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/renderer/components/ui/dropdown-menu'
 import { ScreenHeader } from '@/renderer/components/screen-header'
+import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { EmptyState } from '@/renderer/components/empty-state'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { ipcQueryOptions, useIpcQuery } from '@/renderer/data/query'
@@ -81,7 +82,7 @@ function BacklogRow({
   return (
     <div
       data-slot="backlog-row"
-      className={`flex h-9 items-center gap-2 px-4 text-small ${selected ? 'ring-2 ring-ring ring-inset' : ''}`}
+      className={`flex h-9 items-center gap-2 px-4 text-body ${selected ? 'ring-2 ring-ring ring-inset' : ''}`}
     >
       <span className="w-12 shrink-0 font-mono tabular-nums text-muted-foreground">#{row.number}</span>
       <a href={row.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-foreground hover:underline">
@@ -194,18 +195,21 @@ export function BacklogScreen() {
   })
 
   return (
-    <div className="flex h-full flex-col">
-      <ScreenHeader className="justify-between">
-        <span>Backlog</span>
-        <div className="flex items-center gap-2">
-          {stale !== null ? <span className="text-meta font-normal text-attention-dot">Updated {relativeAge(new Date(stale).toISOString(), now)}</span> : null}
-          <Button variant="ghost" size="small" onClick={refreshAll} disabled={isFetching}>
-            <RefreshCw aria-hidden="true" className={isFetching ? 'size-3.5 animate-spin' : 'size-3.5'} />
-            Refresh
-          </Button>
-        </div>
-      </ScreenHeader>
-      <div className="flex-1 overflow-y-auto">
+    <Screen
+      header={
+        <ScreenHeader className="justify-between">
+          <span>Backlog</span>
+          <div className="flex items-center gap-2">
+            {stale !== null ? <span className="text-meta font-normal text-attention-dot">Updated {relativeAge(new Date(stale).toISOString(), now)}</span> : null}
+            <Button variant="ghost" size="small" onClick={refreshAll} disabled={isFetching}>
+              <RefreshCw aria-hidden="true" className={isFetching ? 'size-3.5 animate-spin' : 'size-3.5'} />
+              Refresh
+            </Button>
+          </div>
+        </ScreenHeader>
+      }
+    >
+      <ScreenBody variant="list">
         {reposQuery.status === 'pending' ? (
           <div className="flex flex-col gap-1 px-4 py-2">
             <Skeleton className="h-5 w-full" />
@@ -226,7 +230,7 @@ export function BacklogScreen() {
             {backlogNotReadyCopy(entry.displayName)}
           </p>
         ))}
-      </div>
-    </div>
+      </ScreenBody>
+    </Screen>
   )
 }

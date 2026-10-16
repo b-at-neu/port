@@ -50,7 +50,7 @@ function WorktreeRow({ worktree, repo, selected, onSelect }: { readonly worktree
       tabIndex={0}
       onClick={onSelect}
       onKeyDown={(event) => event.key === 'Enter' && onSelect()}
-      className={`flex h-9 cursor-pointer items-center gap-3 px-4 text-small outline-none ${selected ? 'bg-selection ring-2 ring-ring ring-inset' : ''}`}
+      className={`flex h-9 cursor-pointer items-center gap-3 px-4 text-body outline-none ${selected ? 'bg-selection ring-2 ring-ring ring-inset' : ''}`}
     >
       <span className="w-40 shrink-0 truncate font-mono text-foreground">{worktree.pathBasename}</span>
       <StatusPill status={PILL_STATUS[worktree.state]} label={worktree.state} />

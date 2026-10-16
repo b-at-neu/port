@@ -20,6 +20,7 @@ import { pruneItemActionStates } from '@/renderer/board/actions'
 import { BoardBanners } from '@/renderer/board/banners'
 import { BoardHeader } from '@/renderer/board/header'
 import { ItemPane } from '@/renderer/board/item-pane'
+import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { PipelineStatus } from '@/renderer/board/pipeline-status'
 import { boardSections } from '@/renderer/board/sections'
 import type { BoardGroupBy } from '@/types/board'
@@ -109,20 +110,23 @@ export function BoardScreen() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <BoardHeader
-        snapshot={snapshot}
-        now={now}
-        refreshing={refreshing}
-        onRefresh={() => void handleRefresh()}
-        group={group}
-        onGroupChange={(nextGroup: BoardGroupBy) => setSearch({ group: nextGroup })}
-        repo={repo}
-        onRepoChange={(nextRepo: RepoId | null) => setSearch({ repo: nextRepo })}
-      />
+    <Screen
+      header={
+        <BoardHeader
+          snapshot={snapshot}
+          now={now}
+          refreshing={refreshing}
+          onRefresh={() => void handleRefresh()}
+          group={group}
+          onGroupChange={(nextGroup: BoardGroupBy) => setSearch({ group: nextGroup })}
+          repo={repo}
+          onRepoChange={(nextRepo: RepoId | null) => setSearch({ repo: nextRepo })}
+        />
+      }
+    >
       {snapshot !== null ? <PipelineStatus snapshot={snapshot} now={now} /> : null}
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex-1 overflow-y-auto">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <ScreenBody variant="list" className="flex-1">
           {snapshot === null ? (
             <div className="flex flex-col gap-1 px-4 py-2">
               <Skeleton className="h-9 w-full" />
@@ -166,9 +170,9 @@ export function BoardScreen() {
               )}
             </>
           ) : null}
-        </div>
+        </ScreenBody>
         {selectedRow !== null ? <ItemPane row={selectedRow} report={report} owner={owner} records={recordsFor(selectedRow.item.repoId)} onClose={() => selectRow(null)} /> : null}
       </div>
-    </div>
+    </Screen>
   )
 }

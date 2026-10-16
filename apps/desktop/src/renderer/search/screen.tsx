@@ -6,6 +6,8 @@ import { Button } from '@/renderer/components/ui/button'
 import { Input } from '@/renderer/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/renderer/components/ui/select'
 import { useIpcQuery } from '@/renderer/data/query'
+import { Screen, ScreenBody } from '@/renderer/components/screen'
+import { ScreenHeader } from '@/renderer/components/screen-header'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { relativeTime } from '@/renderer/lib/relative-time'
 import type { SearchResult, SearchScope } from '@/types/search'
@@ -31,41 +33,43 @@ export function SearchScreen() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-3">
-      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-4 text-title font-semibold">
-        <Button variant="ghost" size="small" onClick={() => void navigate({ to: ROUTE_IDS.history, search: {} })} aria-label="Back">
-          <ChevronLeft aria-hidden="true" className="size-4" />
-        </Button>
-        <span>Search transcripts</span>
-        <Select value={scope.kind} onValueChange={(value) => setScope(value === 'repo' && search.repo ? { kind: 'repo', repoId: search.repo } : { kind: 'all' })}>
-          <SelectTrigger className="w-44">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="repo" disabled={!search.repo}>
-              This repository
-            </SelectItem>
-            <SelectItem value="all">All repositories</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+    <Screen
+      header={
+        <ScreenHeader className="gap-2">
+          <Button variant="ghost" size="small" onClick={() => void navigate({ to: ROUTE_IDS.history, search: {} })} aria-label="Back">
+            <ChevronLeft aria-hidden="true" className="size-4" />
+          </Button>
+          <span>Search transcripts</span>
+          <Select value={scope.kind} onValueChange={(value) => setScope(value === 'repo' && search.repo ? { kind: 'repo', repoId: search.repo } : { kind: 'all' })}>
+            <SelectTrigger className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="repo" disabled={!search.repo}>
+                This repository
+              </SelectItem>
+              <SelectItem value="all">All repositories</SelectItem>
+            </SelectContent>
+          </Select>
+        </ScreenHeader>
+      }
+    >
+      <ScreenBody variant="page">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            submit()
+          }}
+          className="flex gap-2"
+        >
+          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="An error, a file path, a decision" className="flex-1" />
+          <Button type="submit">
+            <SearchIcon aria-hidden="true" className="size-3.5" />
+            Search
+          </Button>
+        </form>
+        <p className="text-meta text-muted-foreground">{SEARCH_HINT}</p>
 
-      <form
-        onSubmit={(event) => {
-          event.preventDefault()
-          submit()
-        }}
-        className="flex gap-2 px-4"
-      >
-        <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="An error, a file path, a decision" className="flex-1" />
-        <Button type="submit">
-          <SearchIcon aria-hidden="true" className="size-3.5" />
-          Search
-        </Button>
-      </form>
-      <p className="px-4 text-meta text-muted-foreground">{SEARCH_HINT}</p>
-
-      <div className="min-h-0 flex-1 overflow-y-auto px-4">
         {submitted === null ? (
           query.trim().length > 0 && query.trim().length < MIN_TERM_CHARS ? (
             <p className="text-small text-danger-pill-foreground">{TOO_SHORT_COPY}</p>
@@ -84,8 +88,8 @@ export function SearchScreen() {
         ) : (
           <SearchResults data={result.data} />
         )}
-      </div>
-    </div>
+      </ScreenBody>
+    </Screen>
   )
 }
 

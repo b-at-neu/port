@@ -9,6 +9,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Button } from '@/renderer/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/renderer/components/ui/tabs'
 import { EmptyState } from '@/renderer/components/empty-state'
+import { Screen, ScreenBody } from '@/renderer/components/screen'
+import { ScreenHeader } from '@/renderer/components/screen-header'
 import { ipcQueryOptions, useIpcMutation, useIpcQuery } from '@/renderer/data/query'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import type { DenialsGroup } from '@/types/router'
@@ -37,7 +39,11 @@ export function RepoScreen() {
   if (entry === undefined) {
     if (reposQuery.isLoading) return null
     return (
-      <EmptyState icon={FolderGit2} message="That repository isn't registered." action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.repos }) }} className="p-6" />
+      <Screen header={<ScreenHeader>Repositories</ScreenHeader>}>
+        <ScreenBody variant="list">
+          <EmptyState icon={FolderGit2} message="That repository isn't registered." action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.repos }) }} className="p-6" />
+        </ScreenBody>
+      </Screen>
     )
   }
 
@@ -68,16 +74,17 @@ export function RepoScreen() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex h-11 shrink-0 items-center justify-between border-b border-border px-4">
-        <div className="flex items-center gap-1 text-title font-semibold text-foreground">
-          <button type="button" onClick={() => void navigate({ to: ROUTE_IDS.repos })} className="text-muted-foreground hover:underline">
-            Repositories
-          </button>
-          <span className="text-muted-foreground">›</span>
-          <span>{name}</span>
-        </div>
-        <div className="flex items-center gap-2">
+    <Screen
+      header={
+        <ScreenHeader className="justify-between">
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={() => void navigate({ to: ROUTE_IDS.repos })} className="text-muted-foreground hover:underline">
+              Repositories
+            </button>
+            <span className="text-muted-foreground">›</span>
+            <span>{name}</span>
+          </div>
+          <div className="flex items-center gap-2">
           {ready ? (
             <Button variant="outline" size="small" onClick={() => openNewSessionDialog({ kind: 'repo', repoId: repoId as RepoId })}>
               New session
@@ -110,26 +117,28 @@ export function RepoScreen() {
               </AlertDialogContent>
             ) : null}
           </AlertDialog>
-        </div>
-      </div>
+          </div>
+        </ScreenHeader>
+      }
+    >
       {ready ? (
-        <Tabs value={tab} onValueChange={(value) => setTab(value as 'overview' | 'worktrees' | 'denials')} className="flex flex-1 flex-col overflow-hidden">
+        <Tabs value={tab} onValueChange={(value) => setTab(value as 'overview' | 'worktrees' | 'denials')} className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <TabsList className="mx-4 mt-2 self-start">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="worktrees">Worktrees</TabsTrigger>
             <TabsTrigger value="denials">Denials</TabsTrigger>
           </TabsList>
-          <div className="flex-1 overflow-y-auto">
+          <ScreenBody variant="list">
             {tab === 'overview' ? <OverviewTab entry={entry} repoId={repoId as RepoId} /> : null}
             {tab === 'worktrees' ? <WorktreesTab repoId={repoId as RepoId} entry={entry} /> : null}
             {tab === 'denials' ? <DenialsTab repoId={repoId as RepoId} group={denialsGroup} onGroupChange={setDenialsGroup} /> : null}
-          </div>
+          </ScreenBody>
         </Tabs>
       ) : (
-        <div className="flex-1 overflow-y-auto">
+        <ScreenBody variant="list">
           <OverviewTab entry={entry} repoId={repoId as RepoId} />
-        </div>
+        </ScreenBody>
       )}
-    </div>
+    </Screen>
   )
 }

@@ -68,14 +68,14 @@ function SessionRow({ session, repos, marks, selected }: { readonly session: Hos
             if (event.key === 'Enter') void commitRename()
             else if (event.key === 'Escape') setRenaming(null)
           }}
-          className="h-6 text-small"
+          className="h-6 text-body"
         />
       </div>
     )
   }
 
   return (
-    <div className={cn('group/row flex h-7 w-full items-center gap-1 rounded-md pr-1 text-small text-foreground-secondary', selected && 'bg-selection text-primary-text')}>
+    <div className={cn('group/row flex h-7 w-full items-center gap-1 rounded-md pr-1 text-body text-foreground-secondary', selected && 'bg-selection text-primary-text')}>
       <button
         type="button"
         onClick={() => void navigate({ to: ROUTE_IDS.session, search: { key: session.sessionKey } })}
@@ -134,7 +134,7 @@ export function SidebarSessions() {
       <button
         type="button"
         onClick={() => openNewSessionDialog()}
-        className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-small text-foreground-secondary hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-body text-foreground-secondary hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <Plus className="size-4 shrink-0" />
         New session
@@ -143,7 +143,7 @@ export function SidebarSessions() {
       <button
         type="button"
         onClick={() => void navigate({ to: ROUTE_IDS.history, search: {} })}
-        className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-small text-foreground-secondary hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-body text-foreground-secondary hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <History className="size-4 shrink-0" />
         History…

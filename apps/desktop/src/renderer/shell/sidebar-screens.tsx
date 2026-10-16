@@ -7,14 +7,14 @@ import { useIpcQuery } from '@/renderer/data/query'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 
 const ROW_CLASS =
-  'flex h-7 items-center gap-2 rounded-md px-2 text-small text-foreground-secondary hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring [&.active]:bg-accent [&.active]:text-foreground'
+  'flex h-7 items-center gap-2 rounded-md px-2 text-body text-foreground-secondary hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring [&.active]:bg-accent [&.active]:text-foreground'
 
 export function SidebarScreens() {
   const snapshot = useIpcQuery('board:snapshot')
   const count = snapshot.data !== undefined ? needsYouItems(snapshot.data, new Date()).length : 0
 
   return (
-    <div className="flex flex-col gap-0.5 px-2 py-1">
+    <div className="flex flex-col gap-0.5 py-1">
       <Link to={ROUTE_IDS.needsYou} className={ROW_CLASS} activeProps={{ className: 'active' }}>
         <Inbox className="size-4 shrink-0" />
         <span className="flex-1 truncate">Needs you</span>

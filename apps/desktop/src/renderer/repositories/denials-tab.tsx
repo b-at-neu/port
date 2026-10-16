@@ -45,7 +45,7 @@ function ShapeRow({ group, now, selected, onSelect }: { readonly group: ShapeGro
           onSelect()
         }
       }}
-      className={`flex h-9 cursor-pointer items-center gap-3 px-4 text-small outline-none ${selected ? 'bg-selection ring-2 ring-ring ring-inset' : ''}`}
+      className={`flex h-9 cursor-pointer items-center gap-3 px-4 text-body outline-none ${selected ? 'bg-selection ring-2 ring-ring ring-inset' : ''}`}
     >
       <span className="w-56 shrink-0 truncate font-mono text-foreground">{group.shape}</span>
       <span className="shrink-0 text-meta text-muted-foreground">
@@ -72,7 +72,7 @@ function ActorRow({ group, now, selected, onSelect }: { readonly group: ActorGro
           onSelect()
         }
       }}
-      className={`flex h-9 cursor-pointer items-center gap-3 px-4 text-small outline-none ${selected ? 'bg-selection ring-2 ring-ring ring-inset' : ''}`}
+      className={`flex h-9 cursor-pointer items-center gap-3 px-4 text-body outline-none ${selected ? 'bg-selection ring-2 ring-ring ring-inset' : ''}`}
     >
       <span className="w-48 shrink-0 truncate font-mono text-foreground">{group.key}</span>
       {pill !== null ? <StatusPill status={pill.tone} label={pill.label} /> : null}

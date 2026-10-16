@@ -1,10 +1,11 @@
-// The Board's own header — title, freshness indicator, the Phase/Repo
-// toggle, the repo filter, and Refresh.
+// The Board's own header — title, the freshness indicator, the Phase/Repo
+// toggle, the repo filter, and Refresh — all on one line.
 import { RefreshCw } from 'lucide-react'
 import { Button } from '@/renderer/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/renderer/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/renderer/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
+import { ScreenHeader } from '@/renderer/components/screen-header'
 import type { RepoId } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
 import type { RepositoryState } from '@/types/state'
@@ -27,13 +28,13 @@ export function BoardHeader({ snapshot, now, refreshing, onRefresh, group, onGro
   const indicator = snapshot !== null ? freshnessIndicator(snapshot, now) : null
 
   return (
-    <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-      <h1 className="text-title font-semibold text-foreground">Board</h1>
-      <div className="flex items-center gap-2">
+    <ScreenHeader className="justify-between gap-2">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="shrink-0">Board</span>
         {indicator !== null ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span tabIndex={0} className="text-meta text-attention-dot">
+              <span tabIndex={0} className="truncate text-meta font-normal text-attention-dot">
                 {indicator.label}
               </span>
             </TooltipTrigger>
@@ -44,6 +45,8 @@ export function BoardHeader({ snapshot, now, refreshing, onRefresh, group, onGro
             </TooltipContent>
           </Tooltip>
         ) : null}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
         <Tabs value={group} onValueChange={(value) => onGroupChange(value as BoardGroupBy)}>
           <TabsList>
             <TabsTrigger value="phase">Phase</TabsTrigger>
@@ -68,6 +71,6 @@ export function BoardHeader({ snapshot, now, refreshing, onRefresh, group, onGro
           Refresh
         </Button>
       </div>
-    </div>
+    </ScreenHeader>
   )
 }

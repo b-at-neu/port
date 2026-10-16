@@ -8,6 +8,7 @@ import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { EmptyState } from '@/renderer/components/empty-state'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { ScreenHeader } from '@/renderer/components/screen-header'
+import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { ConversationList } from '@/renderer/components/conversation-list'
 import { useIpcQuery } from '@/renderer/data/query'
 import { invoke } from '@/renderer/data/invoke'
@@ -56,35 +57,41 @@ export function SessionScreen() {
 
   const snapshot = key !== null ? (sessions.data ?? []).find((candidate) => candidate.sessionKey === key) ?? null : null
 
-  return (
-    <div className="flex h-full flex-col gap-3">
-      <RestoreBanner />
-      {snapshot !== null ? (
-        <SessionLive
-          key={snapshot.sessionKey}
-          snapshot={snapshot}
-          repoLabel={repoLabelFor(repos.data?.ok === true ? repos.data.repositories : undefined, snapshot)}
-          paneOpen={search.pane === 'changes'}
-        />
-      ) : key !== null && sessions.status === 'pending' ? (
-        <div className="flex flex-1 flex-col gap-2">
-          <ScreenHeader>{RECONNECTING}</ScreenHeader>
+  if (snapshot !== null) {
+    return (
+      <SessionLive
+        key={snapshot.sessionKey}
+        snapshot={snapshot}
+        repoLabel={repoLabelFor(repos.data?.ok === true ? repos.data.repositories : undefined, snapshot)}
+        paneOpen={search.pane === 'changes'}
+      />
+    )
+  }
+
+  if (key !== null && sessions.status === 'pending') {
+    return (
+      <Screen header={<ScreenHeader>{RECONNECTING}</ScreenHeader>}>
+        <ScreenBody variant="list">
           <div className="flex flex-col gap-2 p-4">
+            <RestoreBanner />
             <Skeleton className="h-16 w-full" />
             <Skeleton className="h-16 w-full" />
           </div>
-        </div>
-      ) : (
-        <EmptyPanel />
-      )}
-    </div>
-  )
+        </ScreenBody>
+      </Screen>
+    )
+  }
+
+  return <EmptyPanel />
 }
 
 function EmptyPanel() {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3">
-      <EmptyState icon={MessageSquare} message={EMPTY_TITLE} className="py-0" data-slot="session-empty" action={{ label: 'New session', onClick: () => openNewSessionDialog() }} />
+    <div className="flex h-full flex-col gap-3 p-4">
+      <RestoreBanner />
+      <div className="flex flex-1 flex-col items-center justify-center gap-3">
+        <EmptyState icon={MessageSquare} message={EMPTY_TITLE} className="py-0" data-slot="session-empty" action={{ label: 'New session', onClick: () => openNewSessionDialog() }} />
+      </div>
     </div>
   )
 }
@@ -199,16 +206,19 @@ function SessionLive({ snapshot, repoLabel, paneOpen }: { readonly snapshot: Hos
   const composerPlaceholder = interaction === null ? copy.placeholder : interaction.kind === 'question' ? COMPOSER_QUESTION_PLACEHOLDER : COMPOSER_PLAN_PLACEHOLDER
 
   return (
-    <>
-      <SessionHeader
-        snapshot={snapshot}
-        repoLabel={repoLabel}
-        changesOpen={paneOpen}
-        onToggleChanges={toggleChanges}
-        onStop={() => void handleStop()}
-        onClose={handleCloseClick}
-        onDismiss={handleDismiss}
-      />
+    <Screen
+      header={
+        <SessionHeader
+          snapshot={snapshot}
+          repoLabel={repoLabel}
+          changesOpen={paneOpen}
+          onToggleChanges={toggleChanges}
+          onStop={() => void handleStop()}
+          onClose={handleCloseClick}
+          onDismiss={handleDismiss}
+        />
+      }
+    >
       <ArchiveDialog snapshot={snapshot} open={archiving} onOpenChange={setArchiving} />
       <AlertDialog open={closeConfirming} onOpenChange={(open) => !open && setCloseConfirming(false)}>
         <AlertDialogContent>
@@ -231,9 +241,10 @@ function SessionLive({ snapshot, repoLabel, paneOpen }: { readonly snapshot: Hos
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      {sendError !== null ? <ErrorBanner message={sendError} className="mx-auto w-full max-w-[680px]" /> : null}
       <div className="flex min-h-0 flex-1 overflow-hidden">
-      <div className="mx-auto flex w-full max-w-[680px] min-h-0 flex-1 flex-col gap-3">
+      <ScreenBody variant="conversation" className="flex-1">
+        <RestoreBanner />
+        {sendError !== null ? <ErrorBanner message={sendError} /> : null}
         {windowNoteVisible ? <p className="text-meta text-muted-foreground">{windowNote()}</p> : null}
         <ConversationList
           entries={entries.entries}
@@ -281,9 +292,9 @@ function SessionLive({ snapshot, repoLabel, paneOpen }: { readonly snapshot: Hos
         />
         {interruptNoteText !== null ? <p className="text-meta text-muted-foreground">{interruptNoteText}</p> : null}
         <p className="text-meta text-muted-foreground">{COMPOSER_HINT}</p>
-      </div>
+      </ScreenBody>
       {paneOpen && snapshot.workspace.root !== null ? <ChangesPane snapshot={snapshot} onClose={closeChanges} /> : null}
       </div>
-    </>
+    </Screen>
   )
 }

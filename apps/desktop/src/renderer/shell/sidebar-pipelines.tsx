@@ -64,7 +64,7 @@ function RunStateMenu({ row }: { readonly row: Extract<PipelineRow, { readonly r
 function RepoRow({ row, collapsed, onToggle }: { readonly row: PipelineRow; readonly collapsed: boolean; readonly onToggle: () => void }) {
   if (!row.ready) {
     return (
-      <Link to={ROUTE_IDS.repos} className="flex h-7 items-center gap-1.5 rounded-md px-2 text-small text-foreground-secondary hover:bg-accent">
+      <Link to={ROUTE_IDS.repos} className="flex h-7 items-center gap-1.5 rounded-md px-2 text-body text-foreground-secondary hover:bg-accent">
         <span className="w-3.5 shrink-0" />
         <span className="flex-1 truncate" title={row.name}>
           {row.name}
@@ -76,7 +76,7 @@ function RepoRow({ row, collapsed, onToggle }: { readonly row: PipelineRow; read
 
   return (
     <div>
-      <div className="flex h-7 items-center gap-1.5 rounded-md px-2 text-small text-foreground-secondary hover:bg-accent">
+      <div className="flex h-7 items-center gap-1.5 rounded-md px-2 text-body text-foreground-secondary hover:bg-accent">
         <button type="button" onClick={onToggle} className="shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={collapsed ? `Expand ${row.name}` : `Collapse ${row.name}`}>
           {collapsed ? <ChevronRight className="size-3.5" /> : <ChevronDown className="size-3.5" />}
         </button>

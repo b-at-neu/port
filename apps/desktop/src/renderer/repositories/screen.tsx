@@ -9,6 +9,7 @@ import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { EmptyState } from '@/renderer/components/empty-state'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { ScreenHeader } from '@/renderer/components/screen-header'
+import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { StatusPill } from '@/renderer/components/status-pill'
 import { useIpcMutation, useIpcQuery } from '@/renderer/data/query'
 import { ROUTE_IDS } from '@/renderer/router/routes'
@@ -28,7 +29,7 @@ function RepoRow({ entry, highlighted, onOpen }: { readonly entry: RepositoryEnt
       tabIndex={0}
       onClick={onOpen}
       onKeyDown={(event) => event.key === 'Enter' && onOpen()}
-      className={`flex h-9 cursor-pointer items-center gap-3 px-4 text-small outline-none ${highlighted ? 'bg-selection ring-2 ring-ring ring-inset' : ''}`}
+      className={`flex h-9 cursor-pointer items-center gap-3 px-4 text-body outline-none ${highlighted ? 'bg-selection ring-2 ring-ring ring-inset' : ''}`}
     >
       <span className="min-w-0 flex-1 truncate text-foreground">{repoName(entry)}</span>
       <span className="truncate font-mono text-meta text-muted-foreground">{entry.path}</span>
@@ -78,19 +79,22 @@ export function RepositoriesScreen() {
   const repositories = reposQuery.data?.ok === true ? reposQuery.data.repositories : []
 
   return (
-    <div className="flex h-full flex-col">
-      <ScreenHeader className="justify-between">
-        <span>Repositories</span>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="small" onClick={() => void reposQuery.refetch()} disabled={reposQuery.isFetching}>
-            Rescan
-          </Button>
-          <Button size="small" onClick={() => void handleAdd()} disabled={addMutation.isPending}>
-            Add repository…
-          </Button>
-        </div>
-      </ScreenHeader>
-      <div className="flex-1 overflow-y-auto">
+    <Screen
+      header={
+        <ScreenHeader className="justify-between">
+          <span>Repositories</span>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="small" onClick={() => void reposQuery.refetch()} disabled={reposQuery.isFetching}>
+              Rescan
+            </Button>
+            <Button size="small" onClick={() => void handleAdd()} disabled={addMutation.isPending}>
+              Add repository…
+            </Button>
+          </div>
+        </ScreenHeader>
+      }
+    >
+      <ScreenBody variant="list">
         {reposQuery.status === 'pending' ? (
           <div className="flex flex-col gap-1 px-4 py-2">
             <Skeleton className="h-9 w-full" />
@@ -105,7 +109,7 @@ export function RepositoriesScreen() {
         ) : (
           repositories.map((entry) => <RepoRow key={entry.id} entry={entry} highlighted={entry.id === highlighted} onOpen={() => openRepo(entry.id)} />)
         )}
-      </div>
+      </ScreenBody>
       {infoQuery.data !== undefined ? (
         <div className="flex flex-col gap-0.5 border-t border-border px-4 py-2 text-meta text-muted-foreground">
           <span>
@@ -114,6 +118,6 @@ export function RepositoriesScreen() {
           <span>port {infoQuery.data.app}</span>
         </div>
       ) : null}
-    </div>
+    </Screen>
   )
 }

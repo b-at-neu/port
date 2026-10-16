@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { RefreshCw, Inbox } from 'lucide-react'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { ScreenHeader } from '@/renderer/components/screen-header'
+import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { EmptyState } from '@/renderer/components/empty-state'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { NeedsYouItem } from '@/renderer/components/needs-you-item'
@@ -140,18 +141,21 @@ export function NeedsYouScreen() {
   const isStale = snapshotQuery.data !== undefined && snapshotQuery.dataUpdatedAt > 0 && now.getTime() - snapshotQuery.dataUpdatedAt > 5 * 60_000
 
   return (
-    <div className="flex h-full flex-col">
-      <ScreenHeader className="justify-between">
-        <span>Needs you</span>
-        <div className="flex items-center gap-2">
-          {isStale ? <span className="text-meta font-normal text-attention-dot">Updated {Math.round((now.getTime() - snapshotQuery.dataUpdatedAt) / 60_000)}m ago</span> : null}
-          <button type="button" onClick={() => void refresh()} className="flex h-7 items-center gap-1.5 rounded-md px-2 text-small text-foreground-secondary hover:bg-accent">
-            <RefreshCw aria-hidden="true" className="size-3.5" />
-            Refresh
-          </button>
-        </div>
-      </ScreenHeader>
-      <div className="flex-1 overflow-y-auto">
+    <Screen
+      header={
+        <ScreenHeader className="justify-between">
+          <span>Needs you</span>
+          <div className="flex items-center gap-2">
+            {isStale ? <span className="text-meta font-normal text-attention-dot">Updated {Math.round((now.getTime() - snapshotQuery.dataUpdatedAt) / 60_000)}m ago</span> : null}
+            <button type="button" onClick={() => void refresh()} className="flex h-7 items-center gap-1.5 rounded-md px-2 text-small text-foreground-secondary hover:bg-accent">
+              <RefreshCw aria-hidden="true" className="size-3.5" />
+              Refresh
+            </button>
+          </div>
+        </ScreenHeader>
+      }
+    >
+      <ScreenBody variant="list">
         {snapshotQuery.status === 'pending' ? (
           <div className="flex flex-col gap-1 px-4 py-2">
             <Skeleton className="h-5 w-full" />
@@ -185,8 +189,8 @@ export function NeedsYouScreen() {
             )}
           </>
         )}
-      </div>
-    </div>
+      </ScreenBody>
+    </Screen>
   )
 }
 
