@@ -18,6 +18,7 @@ import { useRenaming, setRenaming, openNewSessionDialog } from '@/renderer/shell
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { useSessionMarks } from '@/renderer/session/marks'
 import { SessionMarkMenu, SessionPinGlyph } from '@/renderer/components/session-mark-menu'
+import { orderSessions } from '@/utils/shell/session-order'
 
 function repoTag(repos: readonly RepositoryEntry[] | undefined, session: HostedSessionSnapshot): string {
   if (session.repoId === null) return folderLabel(session.workspace.folder)
@@ -98,23 +99,13 @@ function SessionRow({ session, repos, marks, selected }: { readonly session: Hos
   )
 }
 
-function pinnedFirst(sessions: readonly HostedSessionSnapshot[], marks: SessionMarks | undefined): readonly HostedSessionSnapshot[] {
-  if (marks === undefined) return sessions
-  const isPinned = (s: HostedSessionSnapshot) => s.claudeSessionId !== null && marks.pinned.includes(s.claudeSessionId)
-  return [...sessions.filter(isPinned), ...sessions.filter((s) => !isPinned(s))]
-}
-
 export function SidebarSessions() {
   const navigate = useNavigate()
   const sessions = useIpcQuery('session:list')
   const repos = useIpcQuery('repos:list')
   const marks = useSessionMarks()
   const selectedKey = useSelectedSession()
-  // Stage sessions (this app's own pipeline dispatches) live in the Pipelines section, never here.
-  const live = pinnedFirst(
-    (sessions.data ?? []).filter((s) => s.phase !== 'ended' && s.stage === null),
-    marks.data,
-  )
+  const live = orderSessions(sessions.data ?? [], marks.data)
 
   return (
     <div>

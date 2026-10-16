@@ -1,10 +1,8 @@
-import { app, BrowserWindow, ipcMain, Notification } from 'electron'
-import type { IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, ipcMain, Notification, type IpcMainInvokeEvent } from 'electron'
 import { join } from 'node:path'
 import { IPC_CHANNELS, type IpcChannel, type IpcEvent, type IpcEventMap, type IpcMap } from '@/types/ipc'
 import type { WorktreesReport } from '@/types/reclaimer'
-import { SOURCE_KINDS } from '@/types/board'
-import type { BoardSnapshot } from '@/types/board'
+import { SOURCE_KINDS, type BoardSnapshot } from '@/types/board'
 import { chooseDirectory } from '@/main/dialogs'
 import { defaultWorkspaceChannelDeps, resolveFoldersChoose, resolveFoldersList, resolveSessionChanges } from '@/main/channels/workspace'
 import { createRecentsStore } from '@/main/workspace/recents'
@@ -13,7 +11,7 @@ import { createStageLauncher } from '@/main/stage/launcher'
 import type { StageLauncherHandle } from '@/types/stage'
 import { defaultForkListSessions } from '@/main/hosting/fork'
 import { statPath } from '@/main/platform/files'
-import type { SessionKey } from '@/types/hosting'
+import type { HostedStore, SessionKey } from '@/types/hosting'
 import { applyItemAction } from '@/main/actions/apply'
 import { applyItemDecision } from '@/main/actions/decide'
 import { gateAnswer, gatePreflight } from '@/main/actions/gate'
@@ -79,7 +77,7 @@ import { resolveStageAllow, resolveStageDismissDenial, resolveStageResume, resol
 import type { StageChannelDeps } from '@/types/channels'
 import { resolveForceDispatch } from '@/main/channels/held'
 import type { ReadWorktreeReportParams } from '@/types/reclaimer'
-import type { HostedStore } from '@/types/hosting'
+import { createSessionMenuRefresher } from '@/main/session-menu'
 
 type AppInfo = IpcMap['app:info']['response']
 
@@ -286,10 +284,12 @@ export function registerIpc(): RegisteredIpc {
       broadcast('session:status', snapshot)
       notifier.observe(snapshot)
       stageLauncher.observe(snapshot)
+      sessionMenu.refresh()
     },
     onEntries: (delta) => broadcast('session:entries', delta),
     persistence: createHostingPersistence({ dir: app.getPath('userData') }),
   })
+  const sessionMenu = createSessionMenuRefresher({ store: hostedStore, platform: process.platform, isPackaged: app.isPackaged, send: broadcastAppCommand })
 
   const stageLauncher: StageLauncherHandle = createStageLauncher({
     store: hostedStore,
@@ -378,9 +378,9 @@ export function registerIpc(): RegisteredIpc {
 
   handle('session:marks', (_event, request) => resolveSessionMarks(request, hostingChannelDeps))
 
-  handle('session:pin:set', (_event, request) => resolveSessionPinSet(request, hostingChannelDeps))
+  handle('session:pin:set', (_event, request) => sessionMenu.withRefresh(resolveSessionPinSet(request, hostingChannelDeps)))
 
-  handle('session:archive:set', (_event, request) => resolveSessionArchiveSet(request, hostingChannelDeps))
+  handle('session:archive:set', (_event, request) => sessionMenu.withRefresh(resolveSessionArchiveSet(request, hostingChannelDeps)))
 
   handle('item:action', (_event, request) =>
     resolveItemAction(registryDeps, request, app.getPath('userData'), { listRepositories, applyItemAction, snapshot: watcher.snapshot, refresh: watcher.refresh }),
@@ -441,7 +441,7 @@ export function registerIpc(): RegisteredIpc {
 
   handle('session:invoke', (_event, request) => resolveSessionInvoke(request, hostingChannelDeps))
 
-  handle('session:dismiss', (_event, request) => resolveSessionDismiss(request, hostingChannelDeps))
+  handle('session:dismiss', (_event, request) => sessionMenu.withRefresh(resolveSessionDismiss(request, hostingChannelDeps)))
 
   handle('session:task:stop', (_event, request) => resolveSessionTaskStop(request, hostingChannelDeps))
 

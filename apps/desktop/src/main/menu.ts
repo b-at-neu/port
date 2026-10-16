@@ -3,6 +3,13 @@
 import type { MenuItemConstructorOptions } from 'electron'
 import { APP_COMMANDS } from '@/utils/shell/commands'
 import type { AppCommand, AppCommandSpec } from '@/utils/shell/commands'
+import type { SessionKey } from '@/types/hosting'
+import { MAX_JUMP_SESSIONS } from '@/utils/shell/session-order'
+
+export interface MenuSessionEntry {
+  readonly label: string
+  readonly sessionKey: SessionKey
+}
 
 function commandItem(spec: AppCommandSpec, send: (command: AppCommand) => void): MenuItemConstructorOptions {
   // registerAccelerator: false shows the chord but never lets the native menu swallow the
@@ -14,13 +21,19 @@ function groupItems(group: AppCommandSpec['group'], send: (command: AppCommand) 
   return APP_COMMANDS.filter((spec) => spec.group === group).map((spec) => commandItem(spec, send))
 }
 
-/** Pure — `platform`/`isPackaged` are passed in rather than read from `process`/`app`, so this is testable without Electron running. */
-export function menuTemplate(platform: NodeJS.Platform, isPackaged: boolean, send: (command: AppCommand) => void): MenuItemConstructorOptions[] {
-  const jumpSubmenu: MenuItemConstructorOptions[] = ([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).map((n) => {
-    const spec = APP_COMMANDS.find((candidate) => candidate.kind === `jump-to-session-${n}`)
-    if (spec === undefined) throw new Error(`menuTemplate: missing jump-to-session-${String(n)} command`)
-    return commandItem(spec, send)
-  })
+// A click sends `open-session` with the exact key shown, rather than `jump-to-session-n`, so it
+// still lands on the right row even if the order changed while the menu was open.
+function jumpItem(entry: MenuSessionEntry, index: number, send: (command: AppCommand) => void): MenuItemConstructorOptions {
+  const spec = APP_COMMANDS.find((candidate) => candidate.kind === `jump-to-session-${index + 1}`)
+  if (spec === undefined) throw new Error(`menuTemplate: missing jump-to-session-${String(index + 1)} command`)
+  return { label: entry.label, accelerator: spec.accelerator, registerAccelerator: false, click: () => send({ kind: 'open-session', sessionKey: entry.sessionKey }) }
+}
+
+/** Pure — `platform`/`isPackaged`/`sessions` are passed in rather than read from `process`/`app`/the
+ *  store. `sessions` is already ordered (pinned first) by the caller. */
+export function menuTemplate(platform: NodeJS.Platform, isPackaged: boolean, sessions: readonly MenuSessionEntry[], send: (command: AppCommand) => void): MenuItemConstructorOptions[] {
+  const jumpSubmenu: MenuItemConstructorOptions[] =
+    sessions.length === 0 ? [{ label: 'No sessions open', enabled: false }] : sessions.slice(0, MAX_JUMP_SESSIONS).map((entry, index) => jumpItem(entry, index, send))
 
   const fileItems = groupItems('File', send)
   // 'Session'-group commands are rename-session and next-session; the nine jump commands feed

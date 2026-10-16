@@ -126,6 +126,16 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     if (!violated) ok();
   }
 
+  // --- guard: main/menu.ts's jump items source their accelerator from APP_COMMANDS' jump-to-session kinds (see PR Notes)
+  // Can't import menu.ts here (its '@/' imports don't resolve under plain Node) — asserted against source text.
+  {
+    const file = join(root, 'apps/desktop/src/main/menu.ts');
+    const text = readFileSync(file, 'utf8');
+    const looksUpSpec = /APP_COMMANDS\.find\(\(candidate\) => candidate\.kind === `jump-to-session-\$\{[^}]+\}`\)/.test(text);
+    const usesSpecAccelerator = /accelerator:\s*spec\.accelerator/.test(text);
+    expect(looksUpSpec && usesSpecAccelerator, 'desktop-shell', "main/menu.ts's jump items must look up their accelerator from APP_COMMANDS' jump-to-session-N kinds, never a literal chord");
+  }
+
   // --- guard: renderer/board/needs-you.ts imports nothing from main/ or node: ---
   {
     const file = join(root, 'apps/desktop/src/renderer/board/needs-you.ts');
