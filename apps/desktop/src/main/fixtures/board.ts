@@ -271,7 +271,7 @@ export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'pop
   const nextDecisionAt = new Date(now.getTime() + SOURCE_BASE_INTERVAL_MS.github)
 
   // Stands in for the earlier tick a fresh ledger never saw, so the stalled seed's first observation here classifies as a reset rather than a first sighting.
-  if (scenario !== 'empty') ledger.advance(WIDGETS_ID, 54, { nextState: 'suspect', nextResets: 0 })
+  if (scenario !== 'empty') ledger.advance(WIDGETS_ID, 54, { class: 'suspect', nextState: 'suspect', nextResets: 0 })
 
   const tickParams = { ledger, unknownStreaks, nextDecisionAt, now: () => now, reviewCycleCap: readyEntry.config.reviewCycleCap, startedTasks: [], refreshMemo, checkDispositions: readyEntry.config.checkDispositions, holdSessionRequired: true }
   const gadgetsTickParams = { ...tickParams, reviewCycleCap: gadgetsEntryConfig.config.reviewCycleCap, checkDispositions: gadgetsEntryConfig.config.checkDispositions }
