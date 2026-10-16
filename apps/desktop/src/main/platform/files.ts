@@ -41,6 +41,15 @@ async function checkSize(path: string): Promise<{ ok: true } | { ok: false; kind
   }
 }
 
+export async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function readTextFile(path: string): Promise<FileResult<string>> {
   const sizeCheck = await checkSize(path)
   if (!sizeCheck.ok) return sizeCheck
