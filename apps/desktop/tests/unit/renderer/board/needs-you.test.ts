@@ -256,6 +256,34 @@ describe('needsYouItems', () => {
     expect(items[0]).toMatchObject({ kind: 'stage-blocked', number: 302 })
   })
 
+  it('an error-result hand-back does not produce a stage-blocked item', () => {
+    const session = {
+      sessionKey: 'hosted-4' as SessionKey,
+      claudeSessionId: 's4',
+      repoId: 'repo-a' as RepoId,
+      workspace: { folder: '/wt', root: '/repo', worktree: null, base: null },
+      phase: 'streaming' as const,
+      origin: { kind: 'fresh' as const },
+      startedAt: NOW.toISOString(),
+      queuedAfterInterrupt: null,
+      end: null,
+      titled: null,
+      pendingPermissions: [],
+      capabilities: { kind: 'pending' as const, request: { source: 'installed' as const } },
+      title: null,
+      rateLimit: null,
+      controls: { permissionMode: 'default' as const, model: null, effort: null },
+      models: { kind: 'pending' as const },
+      usage: null,
+      backgroundTasks: [],
+      stage: { agent: 'impl' as const, number: 304, kind: 'issue' as const, trigger: 'planApproved' as const },
+      lastResult: { subtype: 'error_during_execution', isError: true, text: 'BLOCKED: denied gh api', at: NOW.toISOString() },
+      operatorJoinedAt: null,
+    }
+    const items = needsYouItems(snapshotOf([]), NOW, [session])
+    expect(items).toEqual([])
+  })
+
   it('a mid-message mention of the questions prefix does not produce a stage-questions item', () => {
     const session = {
       sessionKey: 'hosted-3' as SessionKey,
