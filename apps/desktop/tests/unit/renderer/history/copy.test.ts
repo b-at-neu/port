@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { failureCopy, footnote } from '@/renderer/history/copy'
+import { failureCopy, footnote, groupHeader } from '@/renderer/history/copy'
 
 describe('failureCopy', () => {
   it('names the message for sdk-failed and projects-unreadable', () => {
@@ -10,6 +10,14 @@ describe('failureCopy', () => {
   it('has fixed copy for the other kinds', () => {
     expect(failureCopy('sdk-unavailable', '')).toContain('Agent SDK')
     expect(failureCopy('claude-home-missing', '')).toContain('No projects directory')
+  })
+})
+
+describe('groupHeader', () => {
+  it('names each group', () => {
+    expect(groupHeader('pinned')).toBe('Pinned')
+    expect(groupHeader('recent')).toBe('Recent')
+    expect(groupHeader('archived')).toBe('Archived')
   })
 })
 

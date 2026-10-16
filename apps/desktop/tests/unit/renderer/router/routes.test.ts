@@ -67,6 +67,13 @@ describe('historySearchFromRaw', () => {
     expect(historySearchFromRaw({}).repo).toBeNull()
     expect(historySearchFromRaw({ repo: '' }).repo).toBeNull()
   })
+
+  it('reads archived=true only, anything else as false', () => {
+    expect(historySearchFromRaw({ archived: true }).archived).toBe(true)
+    expect(historySearchFromRaw({}).archived).toBe(false)
+    expect(historySearchFromRaw({ archived: 'true' }).archived).toBe(false)
+    expect(historySearchFromRaw({ archived: false }).archived).toBe(false)
+  })
 })
 
 describe('searchSearchFromRaw', () => {

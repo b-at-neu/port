@@ -90,7 +90,12 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'mis-resolved', hash: '#/repositories/fixture-acme-gadgets', ready: '[data-slot="label-verdict"]' },
     ],
   },
-  history: { hash: '#/history', container: '#app', ready: '[data-slot="session-row"]' },
+  history: {
+    hash: '#/history',
+    container: '#app',
+    ready: '[data-slot="history-group-pinned"]',
+    variants: [{ name: 'archived', hash: '#/history?archived=true', ready: '[data-slot="history-group-archived"]' }],
+  },
   search: {
     hash: '#/search',
     container: '#app',
@@ -115,6 +120,7 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
       { name: 'new-session', click: '[data-slot="session-empty"] button', ready: '[data-slot="new-session-dialog"]' },
       { name: 'changes', hash: `#/session?key=${FIXTURE_SESSION_ID}&pane=changes`, ready: 'text=Changes since' },
       { name: 'menu', hash: `#/session?key=${FIXTURE_SESSION_ID}`, click: '[aria-label="Session menu"]', ready: '[data-slot="usage-totals"]' },
+      { name: 'sidebar-menu', click: 'aside [data-slot="session-row-menu"]', ready: '[role="menu"]' },
     ],
   },
   settings: { hash: '#/settings', container: '#app', ready: '#app h2' },

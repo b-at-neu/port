@@ -18,8 +18,8 @@ import { fixtureWorktreesReclaim, fixtureWorktreesReport } from '@/main/fixtures
  *  `fixtureHandlers`'s own return literal until a fixture exists for it. */
 type FixtureHandlers = { readonly [C in IpcChannel]: (request: IpcMap[C]['request']) => IpcMap[C]['response'] }
 
-// One pinned fixture session, per the Implementation checklist.
-const FIXTURE_MARKS = { pinned: ['fixture-claude-1'], archived: [] }
+// Pins the live sidebar session and a History row; archives a second History row, per the Implementation checklist.
+const FIXTURE_MARKS = { pinned: ['fixture-claude-1', 'fixture-history-2'], archived: ['fixture-history-3'] }
 
 function transcriptSourceFor(sessionId: string, agentId: string | null, now: Date): TranscriptSource {
   return { sessionId, agentId, path: '', sizeBytes: 0, modifiedAt: now.toISOString(), recordCount: 0, malformedLines: 0 }
