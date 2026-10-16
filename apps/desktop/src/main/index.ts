@@ -41,6 +41,13 @@ async function configureSandboxSwitch(): Promise<void> {
 // Resolved before `app.whenReady()` below — `commandLine.appendSwitch` is a no-op once ready.
 const sandboxConfigured = configureSandboxSwitch()
 
+// `app.setName()` changes Electron's own Linux app_id/WM_CLASS at runtime — `syncDesktopName`
+// only renames the *installed* `.desktop` file, which `pnpm dev` never touches.
+const defaultUserDataPath = app.getPath('userData')
+app.setName('port')
+// Renaming moves the default `userData` path too, so the pre-rename path is pinned back right away.
+app.setPath('userData', defaultUserDataPath)
+
 // An `on` result relocates `userData` before the single-instance lock is ever requested, so a
 // fixture run never contends for the operator's own lock or touches their real profile.
 const fixture = fixtureMode(process.env, app.isPackaged, isAbsolute)
@@ -135,8 +142,6 @@ if (fixture.kind === 'invalid') {
     }
 
     void sandboxConfigured.then(() => app.whenReady()).then(async () => {
-      // Never `app.setName('port')` here — that would move the dev
-      // `userData` directory away from the operator's real profile.
       app.setAboutPanelOptions({ applicationName: 'port', applicationVersion: app.getVersion(), credits: [ABOUT_POWERED_BY, ABOUT_NOTICE].join('\n') })
 
       const dockIconPath = devDockIconPath({ platform: process.platform, isPackaged: app.isPackaged, mainDir: __dirname, resourcesPath: process.resourcesPath })
