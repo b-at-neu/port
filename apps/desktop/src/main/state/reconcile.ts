@@ -70,8 +70,7 @@ function statusOf(
 }
 
 /** Resolves raw label names to keys against this repository's vocabulary, oldest first — an unrecognised name is dropped, and so are `marker`/`autoPlan`. */
-function stageHistoryOf(labelEvents: readonly LabelEventNode[], vocabulary: LabelVocabulary): readonly StageEntry[] {
-  const byName = new Map(vocabulary.labels.map((label) => [label.name, label.key]))
+function stageHistoryOf(labelEvents: readonly LabelEventNode[], byName: ReadonlyMap<string, LabelVocabulary['labels'][number]['key']>): readonly StageEntry[] {
   const out: StageEntry[] = []
   for (const event of labelEvents) {
     const key = byName.get(event.label)
@@ -119,6 +118,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
   }
 
   const vocabulary = entry.config.vocabulary
+  const labelsByName = new Map(vocabulary.labels.map((label) => [label.name, label.key]))
   const worktreeEntries = worktrees.ok ? worktrees.entries : []
   const orphanNumbers = collectOrphanNumbers(pipelineFetch.items, worktreeEntries, repoSessions.agents)
 
@@ -164,7 +164,7 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     // `null` for a pull request — a `## Changes` block is prose, never this heading.
     const planPresent = item.kind === 'issue' ? item.body.split(/\r?\n/).some((line) => line.trim() === IMPLEMENTATION_PLAN_HEADING) : null
 
-    const stageHistory = stageHistoryOf(item.labelEvents, vocabulary)
+    const stageHistory = stageHistoryOf(item.labelEvents, labelsByName)
 
     return {
       repoId,

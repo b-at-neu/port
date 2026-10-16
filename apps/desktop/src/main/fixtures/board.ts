@@ -111,8 +111,7 @@ function pipelineItemsFor(now: Date, vocabulary: LabelVocabulary, seeds: readonl
     const isPr = seed.kind === 'pull-request'
     const history = seed.history ?? [{ key: seed.stageKey, actor: VIEWER, offsetMinutes: -10 }]
     const labelEvents: readonly LabelEventNode[] = history
-      .map((move) => ({ key: move.key, actor: move.actor, offsetMinutes: move.offsetMinutes }))
-      .map((move) => {
+      .map((move): { label: string; actor: string | null; at: string } | undefined => {
         const name = labelName(vocabulary, move.key)
         return name === undefined ? undefined : { label: name, actor: move.actor, at: offsetMinutes(now, move.offsetMinutes) }
       })
