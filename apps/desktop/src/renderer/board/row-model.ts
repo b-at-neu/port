@@ -6,10 +6,17 @@ import { needsYouReasonOf } from '@/renderer/board/needs-you'
 import type { BoardItemRow } from '@/types/board'
 import { operatorJoinedOf as operatorJoinedOfRecords } from '@/renderer/board/stage-links'
 import type { DispatchRecord } from '@/types/dispatch'
-import type { AttachedAgent, AttachedSession } from '@/types/state'
+import type { AttachedAgent, AttachedSession, StageLabel } from '@/types/state'
+import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { LabelRole } from '@/utils/labels/defaults'
 import type { PillStatus } from '@/types/components'
 import type { ItemActionState } from '@/types/board'
 import { actionRefusalNote, actionResultCopy, decisionButtonLabel, decisionRefusalNote, openPrButtonLabel, reviewPlanButtonLabel } from '@/renderer/board/copy'
+
+/** The current winning stage's own `LabelKey`, or `null` when `stage` resolves to nothing — the one place an item's `stages`/`stage` pair becomes a single phase key. */
+export function stageKeyOf(stages: readonly StageLabel[], stage: LabelRole | null): LabelKey | null {
+  return stages.find((label) => label.role === stage)?.key ?? null
+}
 
 // Mirrors board/sections.ts's own waiting-on-you predicate, so a row's
 // section and its pill colour can never disagree.

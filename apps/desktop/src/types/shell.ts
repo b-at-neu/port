@@ -16,11 +16,14 @@ export interface KeyboardDeps {
 
 export interface PipelineSessionRow {
   readonly key: string
+  readonly repoId: RepoId
   readonly number: number
   readonly label: string
   readonly dot: 'attention' | 'working' | 'idle'
   /** Non-`null` for a row backed by one of this app's own stage sessions — the row then links to that session, not the board. */
   readonly sessionKey: SessionKey | null
+  /** Non-`null` for a detected row (no app-hosted session) — the row then links to that session's live Transcript. Exactly one of `sessionKey`/`transcript` is non-null. */
+  readonly transcript: { readonly sessionId: string; readonly agentId: string | null } | null
 }
 
 export interface ReadyPipelineRow {

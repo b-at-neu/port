@@ -59,6 +59,8 @@ export interface AttachedAgent {
   readonly idleMs: number
   readonly lastActivityAt: string
   readonly match: AgentAttachMatch
+  /** The parent session whose transcript holds this subagent. */
+  readonly sessionId: string
 }
 
 /** A `SessionRecord` matched to this item — carries `role`/`roleEvidence` so an operator-session claim is visibly a session, never indistinguishable from a dispatched subagent. */

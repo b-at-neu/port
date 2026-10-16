@@ -25,6 +25,7 @@ export function attachAgents(item: AttachTarget, agents: readonly AgentRecord[])
       idleMs: agent.idleMs,
       lastActivityAt: agent.lastActivityAt,
       match,
+      sessionId: agent.sessionId,
     })
   }
   return attached
