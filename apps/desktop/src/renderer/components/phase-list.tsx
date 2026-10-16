@@ -5,7 +5,8 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { PipelineItemKind } from '@/types/github'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
 import { phaseSegmentsFor } from '@/renderer/board/phase-model'
-import type { PhaseKey, PhaseSegmentState } from '@/types/board'
+import type { PhaseDetail, PhaseKey, PhaseSegmentState } from '@/types/board'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 
 const DOT_CLASS: Readonly<Record<PhaseSegmentState, string>> = {
   finished: 'bg-working-pill',
@@ -36,24 +37,39 @@ interface PhaseListProps {
   readonly stageKey: LabelKey | null
   readonly kind: PipelineItemKind
   readonly merged: boolean
-  // The current phase's own extra line, already computed by the caller.
-  readonly currentDetail: string | null
+  /** One "who and when" line per phase that has history — `phaseDetailsFor`'s own result, rendered verbatim. */
+  readonly details: Partial<Record<PhaseKey, PhaseDetail>>
+  /** The current phase's own extra line (the agent summary), kept as a second meta line under its detail. */
+  readonly extraCurrentLine: string | null
   readonly className?: string
 }
 
-export function PhaseList({ stageKey, kind, merged, currentDetail, className }: PhaseListProps) {
+export function PhaseList({ stageKey, kind, merged, details, extraCurrentLine, className }: PhaseListProps) {
   const segments = phaseSegmentsFor({ stageKey, kind, merged })
 
   return (
     <div className={cn('flex flex-col gap-1.5', className)}>
       {segments.map((segment) => {
         const isCurrent = segment.state === 'current-working' || segment.state === 'current-attention'
+        const detail = details[segment.phase] ?? null
         return (
           <div key={segment.phase} className="flex items-start gap-2">
             <span aria-hidden="true" className={cn('mt-1 size-2 shrink-0 rounded-full', DOT_CLASS[segment.state])} />
             <div className="flex flex-col">
               <span className={cn('text-small', isCurrent ? 'font-medium text-foreground' : 'text-muted-foreground')}>{labelFor(segment.phase, isCurrent, stageKey)}</span>
-              {isCurrent && currentDetail !== null ? <span className="text-meta text-muted-foreground">{currentDetail}</span> : null}
+              {detail !== null ? (
+                detail.at !== null ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-meta text-muted-foreground tabular-nums">{detail.line}</span>
+                    </TooltipTrigger>
+                    <TooltipContent>{new Date(detail.at).toLocaleString()}</TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <span className="text-meta text-muted-foreground tabular-nums">{detail.line}</span>
+                )
+              ) : null}
+              {isCurrent && extraCurrentLine !== null ? <span className="text-meta text-muted-foreground">{extraCurrentLine}</span> : null}
             </div>
           </div>
         )

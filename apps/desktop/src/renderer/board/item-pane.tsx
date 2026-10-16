@@ -24,6 +24,8 @@ import { itemActionState, runItemAction, subscribeItemActions } from '@/renderer
 import { actionButtonLabel, actionPendingLabel, actionResultCopy, decisionButtonLabel, reviewPlanButtonLabel, stageLinkLabel, stageSessionsSectionLabel } from '@/renderer/board/copy'
 import { actionNoteFor, agentSummaryOf, decisionNoteFor, pillStatusFor } from '@/renderer/board/row-model'
 import { itemDetailLines } from '@/renderer/board/tick'
+import { phaseDetailsFor } from '@/renderer/board/phase-history'
+import { useIpcQuery } from '@/renderer/data/query'
 
 interface ItemPaneProps {
   readonly row: BoardItemRow
@@ -49,6 +51,21 @@ export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps
   const availableDecisions = OPERATOR_DECISIONS.filter((decision) => row.decisions[decision].available)
   const agentSummary = agentSummaryOf(item.agents, item.sessions)
   const stageLinks = stageLinksFor(records, item.number, item.kind)
+
+  const sessions = useIpcQuery('session:list')
+  const liveLink = stageLinks.find((link): link is Extract<StageLink, { readonly kind: 'live' }> => link.kind === 'live')
+  const liveSnapshot = liveLink !== undefined ? ((sessions.data ?? []).find((snapshot) => snapshot.sessionKey === liveLink.sessionKey) ?? null) : null
+  const currentCostUsd = liveSnapshot?.usage?.costUsd ?? null
+  const now = new Date()
+  const phaseDetails = phaseDetailsFor({
+    history: item.stageHistory,
+    kind: item.kind,
+    stageKey: row.stageLabel?.key ?? null,
+    merged: item.mergedAt !== null,
+    viewer: row.viewer,
+    now,
+    currentCostUsd,
+  })
 
   function openStageLink(link: StageLink): void {
     if (link.kind === 'live') {
@@ -96,7 +113,7 @@ export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps
         </a>
       </div>
       <StatusPill status={pillStatusFor(row)} label={phaseLabel(row)} />
-      <PhaseList stageKey={row.stageLabel?.key ?? null} kind={item.kind} merged={item.mergedAt !== null} currentDetail={agentSummary} />
+      <PhaseList stageKey={row.stageLabel?.key ?? null} kind={item.kind} merged={item.mergedAt !== null} details={phaseDetails} extraCurrentLine={agentSummary} />
       {stageLinks.length > 0 ? (
         <div className="flex flex-col gap-1">
           <span className="text-meta text-muted-foreground">{stageSessionsSectionLabel()}</span>
