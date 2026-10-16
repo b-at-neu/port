@@ -319,6 +319,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
             }
             pushRecord(entry.id, newStageRecord(candidate, 'started', at, result.sessionKey, null))
             deps.ledger.record(entry.id, candidate.number)
+            deps.forceDispatch.clear(entry.id, candidate.number)
           } else if (result.kind === 'at-capacity') {
             waiting += 1
           } else {

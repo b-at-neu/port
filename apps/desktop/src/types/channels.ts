@@ -17,7 +17,8 @@ import type { RegistryDeps } from '@/types/registry'
 import type { SessionScan } from '@/types/sessions'
 import type { RunSearchParams, SearchResult } from '@/types/search'
 import type { StageRegistry } from '@/types/stage'
-import type { Dispatcher } from '@/types/dispatch'
+import type { Dispatcher, RepoDispatchStatus } from '@/types/dispatch'
+import type { ForceDispatch } from '@/types/tick'
 import type { IpcChannel, ReposListResponse } from '@/types/ipc'
 import type { AssertEqual } from '@/types/assert-type'
 
@@ -63,6 +64,15 @@ export interface StageChannelDeps {
   readonly auditDir: string
   readonly readJson: <T>(path: string) => Promise<FileResult<T>>
   readonly writeJsonAtomic: (path: string, value: unknown) => Promise<FileResult<void>>
+}
+
+/** The seam `'held:force-dispatch'` composes through. `dispatcherStatus` reads the same `RepoDispatchStatus.owner` the board already renders, never a second ownership read. */
+export interface HeldChannelDeps {
+  readonly snapshot: () => BoardSnapshot
+  readonly dispatcherStatus: () => readonly RepoDispatchStatus[]
+  readonly forceDispatch: ForceDispatch
+  /** The watcher's own republish — picks up the override immediately, never waiting for the next poll. */
+  readonly republish: () => void
 }
 
 // The read/write partition over IpcChannel — hand-maintained, never derived from IPC_CHANNELS.
@@ -129,6 +139,7 @@ export const MUTATION_CHANNELS = [
   'stage:dismiss-denial',
   'stage:resume',
   'stage:restart',
+  'held:force-dispatch',
 ] as const
 
 export type MutationChannel = (typeof MUTATION_CHANNELS)[number]

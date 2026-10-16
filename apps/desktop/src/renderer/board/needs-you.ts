@@ -66,6 +66,7 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
   const rowByKey = new Map<string, BoardItemRow>(rows.map((row) => [rowKey(row.item.repoId, row.item.number), row]))
   const viewerByRepo = new Map<RepoId, string | null>(readyRepos(snapshot).map((repo) => [repo.repoId, repo.viewer]))
   const displayNameOf = new Map<RepoId, string>(readyRepos(snapshot).map((repo) => [repo.repoId, repo.displayName]))
+  const ownerByRepo = new Map(snapshot.dispatch.map((d) => [d.repoId, d.owner] as const))
 
   const items: NeedsYouItem[] = []
 
@@ -147,7 +148,18 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
     for (const held of report.held) {
       if (!HELD_KINDS.has(held.reason)) continue
       const matched = rowByKey.get(rowKey(report.repoId, held.number)) ?? null
-      items.push({ kind: 'held', repoId: report.repoId, repo: matched?.item.repo ?? report.displayName, number: held.number, title: matched?.item.title ?? null, url: matched?.item.url ?? null, at: null, matchedRow: matched, held })
+      items.push({
+        kind: 'held',
+        repoId: report.repoId,
+        repo: matched?.item.repo ?? report.displayName,
+        number: held.number,
+        title: matched?.item.title ?? null,
+        url: matched?.item.url ?? null,
+        at: null,
+        matchedRow: matched,
+        held,
+        owner: ownerByRepo.get(report.repoId) ?? null,
+      })
     }
     for (const claim of report.claims) {
       if (claim.class !== 'stalled-confirmed') continue

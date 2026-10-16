@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { ReconciledItem, RepositoryState } from '@/types/state'
-import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
+import { createDispatchLedger, createForceDispatch, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
 import { planTick } from '@/main/tick/plan'
 import { reconciledItem as item, repositoryState } from '../../../fixtures/board-state'
 
@@ -207,6 +207,60 @@ describe('planTick — file-contention gate (#106)', () => {
     const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
     expect(report.actionable.map((a) => a.number)).toEqual([10])
     expect(report.held.map((h) => h.number)).toEqual([11])
+  })
+})
+
+describe('planTick — forceDispatch override (#465)', () => {
+  function inProgressItem(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
+    return item({
+      number: 67,
+      stage: 'in-flight',
+      stages: [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }],
+      status: 'in-flight',
+      statusEvidence: 'agent-active',
+      claimedFiles: ['src/lib/auth.ts', 'src/lib/session.ts'],
+      ...overrides,
+    })
+  }
+  function candidateItem(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
+    return item({ number: 52, stages: [{ key: 'planApproved', name: 'plan approved', role: 'trigger' }], claimedFiles: ['src/lib/auth.ts', 'src/lib/session.ts'], ...overrides })
+  }
+
+  it('a contended item held without the memo becomes actionable once forced', () => {
+    const repo = readyRepo([inProgressItem(), candidateItem()])
+    const held = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true })
+    expect(held.held.map((h) => h.number)).toEqual([52])
+
+    const forceDispatch = createForceDispatch()
+    forceDispatch.set(REPO, 52)
+    const forced = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true, forceDispatch })
+    expect(forced.actionable).toEqual([{ number: 52, kind: 'issue', trigger: 'planApproved', agent: 'impl', unchecked: false, cycle: null }])
+    expect(forced.held).toEqual([])
+  })
+
+  it('forcing one contended candidate still holds another against the same occupant', () => {
+    const repo = readyRepo([inProgressItem(), candidateItem({ number: 52 }), candidateItem({ number: 53, claimedFiles: ['src/lib/auth.ts', 'src/lib/session.ts'] })])
+    const forceDispatch = createForceDispatch()
+    forceDispatch.set(REPO, 52)
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true, forceDispatch })
+    expect(report.actionable.map((a) => a.number)).toEqual([52])
+    expect(report.held.map((h) => h.number)).toEqual([53])
+  })
+
+  it('a non-contended hold reason is unaffected by the memo', () => {
+    const repo = readyRepo([item({ assignees: [] })])
+    const forceDispatch = createForceDispatch()
+    forceDispatch.set(REPO, 1)
+    const report = planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true, forceDispatch })
+    expect(report.held).toEqual([{ number: 1, kind: 'issue', trigger: 'ready', reason: 'unowned', contention: null, escalation: null }])
+  })
+
+  it('prunes a stale entry once the number is no longer a structured candidate', () => {
+    const repo = readyRepo([candidateItem({ claimedFiles: null })])
+    const forceDispatch = createForceDispatch()
+    forceDispatch.set(REPO, 52)
+    planTick({ repository: repo, ledger: createDispatchLedger(), unknownStreaks: createUnknownStreaks(), nextDecisionAt: NEXT_DECISION_AT, now: () => NOW, reviewCycleCap: 5, startedTasks: [], refreshMemo: createRefreshMemo(), checkDispositions: NO_CHECK_DISPOSITIONS, holdSessionRequired: true, forceDispatch })
+    expect(forceDispatch.has(REPO, 52)).toBe(false)
   })
 })
 

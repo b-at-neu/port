@@ -64,7 +64,6 @@ import {
 } from '@/main/channels/hosting'
 import { defaultGitRunner, git } from '@/main/platform/git'
 import { readWorktreeReport } from '@/main/reclaimer/report'
-
 import { addRepository, listRepositories, removeRepository, requireReadyRepo } from '@/main/registry'
 import type { RegistryDeps } from '@/types/registry'
 import { createPipelineWatcher } from '@/main/state/watcher'
@@ -72,13 +71,13 @@ import type { PipelineWatcher } from '@/types/state'
 import { runtimePreflight } from '@/main/runtime/preflight'
 import { createHostedStore, defaultHostedStoreDeps } from '@/main/hosting/store'
 import { createHostingPersistence } from '@/main/hosting/persist'
-
 import { createNotifier } from '@/main/hosting/notify'
 import { createStageRegistry } from '@/main/stage/registry'
 import type { StageRegistry } from '@/types/stage'
 import { readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
 import { resolveStageAllow, resolveStageDismissDenial, resolveStageResume, resolveStageRestart } from '@/main/channels/stage'
 import type { StageChannelDeps } from '@/types/channels'
+import { resolveForceDispatch } from '@/main/channels/held'
 import type { ReadWorktreeReportParams } from '@/types/reclaimer'
 import type { HostedStore } from '@/types/hosting'
 
@@ -311,7 +310,7 @@ export function registerIpc(): RegisteredIpc {
     createWorktree: createSessionWorktree,
   })
 
-  const { watcherDeps, dispatcher, autoPlanner, bindWatcher, shutdown } = createDispatchRuntime({
+  const { watcherDeps, dispatcher, forceDispatch, autoPlanner, bindWatcher, shutdown } = createDispatchRuntime({
     store: hostedStore,
     launch: stageLauncher,
     runState: (repoId) => runStates.current(repoId).state,
@@ -488,6 +487,8 @@ export function registerIpc(): RegisteredIpc {
   handle('stage:resume', (_event, request) => resolveStageResume(registryDeps, request, stageChannelDeps))
 
   handle('stage:restart', (_event, request) => resolveStageRestart(registryDeps, request, stageChannelDeps))
+
+  handle('held:force-dispatch', (_event, request) => resolveForceDispatch(request, { snapshot: watcher.snapshot, dispatcherStatus: () => dispatcher.status(), forceDispatch, republish: () => watcher.republish() }))
 
   for (const channel of IPC_CHANNELS) {
     if (!registered.has(channel)) {

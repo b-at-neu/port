@@ -1,4 +1,4 @@
-import type { DispatchLedger, UnknownStreaks, RefreshMemo } from '@/types/tick'
+import type { DispatchLedger, UnknownStreaks, RefreshMemo, ForceDispatch } from '@/types/tick'
 import type { SourceCache, RefreshOutcome } from '@/types/state'
 
 // The only clock in main — one timer, rescheduled to the earliest `nextDueAt`. `schedule.ts` decides *when*; this file is the only place under `src/main/` allowed to name `setTimeout`.
@@ -57,6 +57,8 @@ interface CreatePipelineWatcherParams {
   readonly unknownStreaks?: UnknownStreaks
   /** Shared with the dispatcher's own observation pass, never a second instance that would disagree with what the dispatcher just wrote. */
   readonly refreshMemo?: RefreshMemo
+  /** The Needs-you "Dispatch anyway" override — shared with the dispatcher's own consumption pass, never a second instance that would disagree on which entries are still live. */
+  readonly forceDispatch?: ForceDispatch
   /** This repository's own dispatcher session's `started` tasks, as descriptions. `undefined` reads as `[]`. */
   readonly startedTasks?: (repoId: RepoId) => readonly string[]
   /** Read fresh inside `buildSnapshot()`, never cached. `undefined` reads as `[]`. */
@@ -170,6 +172,7 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
           holdSessionRequired: params.holdSessionRequired?.(repository.repoId) ?? true,
           stageLiveness: params.stageLiveness?.(repository.repoId) ?? null,
           endedStages: params.endedStages?.(repository.repoId) ?? [],
+          forceDispatch: params.forceDispatch,
         })
       })
 

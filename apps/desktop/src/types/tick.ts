@@ -163,6 +163,14 @@ export interface UnknownStreaks {
   readonly clear: (repoId: RepoId, number: number) => void
 }
 
+/** The Needs-you "Dispatch anyway" override — same per-process, restart-forgets lifetime as `UnknownStreaks`/`RefreshMemo`; `prune` drops an entry no longer among this tick's structured candidates. */
+export interface ForceDispatch {
+  readonly has: (repoId: RepoId, number: number) => boolean
+  readonly set: (repoId: RepoId, number: number) => void
+  readonly clear: (repoId: RepoId, number: number) => void
+  readonly prune: (repoId: RepoId, keep: ReadonlySet<number>) => void
+}
+
 export interface DispatchLedger {
   /** Records the claim at `state: 'dispatched'`, carrying over any `resets` a prior row already had. */
   readonly record: (repoId: RepoId, number: number) => void

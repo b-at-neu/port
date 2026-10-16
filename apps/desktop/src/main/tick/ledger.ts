@@ -4,7 +4,7 @@ import type { RepoId } from '@/utils/repos'
 import type { LedgerRow, LedgerState, UnmatchedResult } from '../../../../../scripts/port-tick/liveness'
 import { classifyUnmatched } from '../../../../../scripts/port-tick/liveness'
 import type { RefreshMemoEntry } from '../../../../../scripts/port-tick/gates'
-import type { RefreshMemo, UnknownStreaks, DispatchLedger } from '@/types/tick'
+import type { RefreshMemo, UnknownStreaks, DispatchLedger, ForceDispatch } from '@/types/tick'
 
 export function createDispatchLedger(): DispatchLedger {
   const rows = new Map<RepoId, Map<number, LedgerRow>>()
@@ -101,6 +101,39 @@ export function createRefreshMemo(): RefreshMemo {
     },
     clear(repoId, number) {
       bucket(repoId).delete(number)
+    },
+  }
+}
+
+/** The Needs-you "Dispatch anyway" override's own storage — same per-repository `Set<number>`
+ *  shape and restart behaviour as `createUnknownStreaks`. */
+export function createForceDispatch(): ForceDispatch {
+  const rows = new Map<RepoId, Set<number>>()
+
+  function bucket(repoId: RepoId): Set<number> {
+    const existing = rows.get(repoId)
+    if (existing) return existing
+    const created = new Set<number>()
+    rows.set(repoId, created)
+    return created
+  }
+
+  return {
+    has(repoId, number) {
+      return bucket(repoId).has(number)
+    },
+    set(repoId, number) {
+      bucket(repoId).add(number)
+    },
+    clear(repoId, number) {
+      bucket(repoId).delete(number)
+    },
+    prune(repoId, keep) {
+      const set = rows.get(repoId)
+      if (set === undefined) return
+      for (const number of set) {
+        if (!keep.has(number)) set.delete(number)
+      }
     },
   }
 }

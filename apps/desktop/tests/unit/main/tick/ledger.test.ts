@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
-import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
+import { createDispatchLedger, createForceDispatch, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
 import { classifyUnmatched } from '../../../../../../scripts/port-tick/liveness'
 
 const REPO = 'repo-1' as RepoId
@@ -118,5 +118,37 @@ describe('createUnknownStreaks', () => {
     streaks.set(REPO, 42, 1)
     streaks.clear(REPO, 42)
     expect(streaks.get(REPO, 42)).toBe(0)
+  })
+})
+
+describe('createForceDispatch', () => {
+  it('a never-set item reads false', () => {
+    const forceDispatch = createForceDispatch()
+    expect(forceDispatch.has(REPO, 1)).toBe(false)
+  })
+
+  it('set then has round-trips, scoped per repo', () => {
+    const forceDispatch = createForceDispatch()
+    forceDispatch.set(REPO, 42)
+    expect(forceDispatch.has(REPO, 42)).toBe(true)
+    expect(forceDispatch.has(OTHER, 42)).toBe(false)
+  })
+
+  it('clear removes the entry', () => {
+    const forceDispatch = createForceDispatch()
+    forceDispatch.set(REPO, 42)
+    forceDispatch.clear(REPO, 42)
+    expect(forceDispatch.has(REPO, 42)).toBe(false)
+  })
+
+  it('prune drops entries not in keep, scoped per repo', () => {
+    const forceDispatch = createForceDispatch()
+    forceDispatch.set(REPO, 42)
+    forceDispatch.set(REPO, 43)
+    forceDispatch.set(OTHER, 42)
+    forceDispatch.prune(REPO, new Set([43]))
+    expect(forceDispatch.has(REPO, 42)).toBe(false)
+    expect(forceDispatch.has(REPO, 43)).toBe(true)
+    expect(forceDispatch.has(OTHER, 42)).toBe(true)
   })
 })

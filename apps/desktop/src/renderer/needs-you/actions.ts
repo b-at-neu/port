@@ -6,11 +6,12 @@ import { openReviewDialog } from '@/renderer/gate/controller'
 import { openDecision } from '@/renderer/decision/controller'
 import { openAllowDialog } from '@/renderer/needs-you/allow-dialog'
 import { openRestartDialog } from '@/renderer/needs-you/restart-dialog'
+import { openForceDispatchDialog } from '@/renderer/needs-you/force-dispatch-dialog'
 import { router } from '@/renderer/router/router'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { invoke } from '@/renderer/data/invoke'
 
-type NeedsYouActionKind = 'review-plan' | 'open' | 'unblock' | 'retry' | 'refresh' | 'answer' | 'allow' | 'resume' | 'restart'
+type NeedsYouActionKind = 'review-plan' | 'open' | 'unblock' | 'retry' | 'refresh' | 'answer' | 'allow' | 'resume' | 'restart' | 'force'
 
 interface NeedsYouAction {
   readonly label: string
@@ -46,6 +47,10 @@ function heldAction(item: Extract<NeedsYouItem, { readonly kind: 'held' }>): Nee
     const decision = item.matchedRow?.decisions.unblock
     if (decision?.available === true) return { label: 'Unblock', kind: 'unblock', disabledReason: null }
     return { label: 'Open PR', kind: 'open', disabledReason: null }
+  }
+  if (item.held.reason === 'contended') {
+    const disabledReason = item.owner === 'app' ? null : 'The terminal cockpit runs this repository. Use `dispatch #N anyway` there.'
+    return { label: 'Dispatch anyway', kind: 'force', disabledReason }
   }
   return { label: 'Open ticket', kind: 'open', disabledReason: null }
 }
@@ -118,6 +123,9 @@ export function runAction(item: NeedsYouItem, deps: RunActionDeps): void {
       return
     case 'restart':
       if (item.kind === 'stage-interrupted') openRestartDialog(item.interrupted)
+      return
+    case 'force':
+      if (item.kind === 'held' && item.repoId !== null && item.number !== null) openForceDispatchDialog({ repoId: item.repoId, number: item.number, held: item.held })
       return
     case 'retry':
     case 'refresh':
