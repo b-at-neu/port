@@ -18,7 +18,7 @@ import type { RepoId } from '@/utils/repos'
 import { registerListNavigator } from '@/renderer/shell/stores'
 import { pruneItemActionStates } from '@/renderer/board/actions'
 import { BoardBanners } from '@/renderer/board/banners'
-import { BoardHeader, FreshnessStrip } from '@/renderer/board/header'
+import { BoardHeader } from '@/renderer/board/header'
 import { ItemPane } from '@/renderer/board/item-pane'
 import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { PipelineStatus } from '@/renderer/board/pipeline-status'
@@ -112,18 +112,16 @@ export function BoardScreen() {
   return (
     <Screen
       header={
-        <>
-          <BoardHeader
-            snapshot={snapshot}
-            refreshing={refreshing}
-            onRefresh={() => void handleRefresh()}
-            group={group}
-            onGroupChange={(nextGroup: BoardGroupBy) => setSearch({ group: nextGroup })}
-            repo={repo}
-            onRepoChange={(nextRepo: RepoId | null) => setSearch({ repo: nextRepo })}
-          />
-          {snapshot !== null ? <FreshnessStrip snapshot={snapshot} now={now} /> : null}
-        </>
+        <BoardHeader
+          snapshot={snapshot}
+          now={now}
+          refreshing={refreshing}
+          onRefresh={() => void handleRefresh()}
+          group={group}
+          onGroupChange={(nextGroup: BoardGroupBy) => setSearch({ group: nextGroup })}
+          repo={repo}
+          onRepoChange={(nextRepo: RepoId | null) => setSearch({ repo: nextRepo })}
+        />
       }
     >
       {snapshot !== null ? <PipelineStatus snapshot={snapshot} now={now} /> : null}

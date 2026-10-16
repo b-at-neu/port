@@ -14,7 +14,7 @@ export function SidebarScreens() {
   const count = snapshot.data !== undefined ? needsYouItems(snapshot.data, new Date()).length : 0
 
   return (
-    <div className="flex flex-col gap-0.5 px-2 py-1">
+    <div className="flex flex-col gap-0.5 py-1">
       <Link to={ROUTE_IDS.needsYou} className={ROW_CLASS} activeProps={{ className: 'active' }}>
         <Inbox className="size-4 shrink-0" />
         <span className="flex-1 truncate">Needs you</span>
