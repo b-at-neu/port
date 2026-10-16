@@ -123,5 +123,32 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     if (!violated) ok();
   }
 
+  // pin: packaged `SCREENSHOT_DIR` ↔ desktop-package.yml's artifact name/path, CONTRIBUTING.md, docs/TESTING.md
+  {
+    const targetsText = readFileSync(join(root, 'apps/desktop/tests/visual/targets.mts'), 'utf8');
+    const workflowText = readFileSync(join(root, '.github/workflows/desktop-package.yml'), 'utf8');
+    const contributingText = readFileSync(join(root, 'CONTRIBUTING.md'), 'utf8');
+    const testingText = readFileSync(join(root, 'docs/TESTING.md'), 'utf8');
+
+    let violated = false;
+    if (!targetsText.includes("'out/screenshots-packaged'")) {
+      violated = true;
+      fail('desktop-visual', "tests/visual/targets.mts no longer pins its packaged SCREENSHOT_DIR branch to 'out/screenshots-packaged'");
+    }
+    if (!workflowText.includes('packaged-screenshots-${{ runner.os }}') || !workflowText.includes('apps/desktop/out/screenshots-packaged/')) {
+      violated = true;
+      fail('desktop-visual', ".github/workflows/desktop-package.yml no longer pins 'packaged-screenshots-${{ runner.os }}' / 'apps/desktop/out/screenshots-packaged/' together");
+    }
+    if (!contributingText.includes('out/screenshots-packaged/')) {
+      violated = true;
+      fail('desktop-visual', "CONTRIBUTING.md no longer names 'out/screenshots-packaged/'");
+    }
+    if (!testingText.includes('packaged-screenshots-<os>')) {
+      violated = true;
+      fail('desktop-visual', "docs/TESTING.md no longer names the 'packaged-screenshots-<os>' artifact");
+    }
+    if (!violated) ok();
+  }
+
   note(`desktop-visual: scanned ${walk(join(root, FIXTURES_DIR)).length} fixture files`);
 }
