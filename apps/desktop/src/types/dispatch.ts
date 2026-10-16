@@ -1,7 +1,7 @@
 import type { BoardSnapshot } from '@/types/board'
 import type { RegistryDeps } from '@/types/registry'
 import type { AutoApprovePlanParams, ReadyEntry, EscalateToHumanParams, EscalateToHumanResult, ApplyObservationParams, ApplyObservationResult, ApplyItemActionParams } from '@/types/actions'
-import type { TickActionable, EndedStage, DispatchLedger, RefreshMemo, TickObservation } from '@/types/tick'
+import type { TickActionable, EndedStage, DispatchLedger, RefreshMemo, TickObservation, ForceDispatch } from '@/types/tick'
 import type { HostedStore } from '@/types/hosting'
 import type { FetchItemsByNumberParams, ItemsByNumberFetch } from '@/types/github'
 import type { ReposListResponse } from '@/types/ipc'
@@ -253,6 +253,8 @@ export interface CreateDispatcherParams {
   readonly escalate: (params: EscalateToHumanParams) => Promise<EscalateToHumanResult>
   readonly writeObservation: (params: ApplyObservationParams) => Promise<ApplyObservationResult>
   readonly refreshMemo: RefreshMemo
+  /** Cleared for `(repoId, candidate.number)` once a forced launch succeeds — `main/tick/plan.ts`'s own consumer of the same memo, never a second instance. */
+  readonly forceDispatch: ForceDispatch
   readonly dirs: { readonly audit: string; readonly scratch: string }
   readonly onChange: () => void
   readonly now: () => Date

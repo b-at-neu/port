@@ -112,6 +112,7 @@ function baseDeps(overrides: Partial<CreateDispatcherParams> = {}): CreateDispat
     launch: null,
     ledger: { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined, observeUnmatched: () => ({ class: 'no-record' }) },
     refreshMemo: { get: () => undefined, set: vi.fn(), clear: vi.fn() },
+    forceDispatch: { has: () => false, set: vi.fn(), clear: vi.fn(), prune: vi.fn() },
     writeObservation: () => {
       throw new Error('writeObservation should not be invoked unless a test wires its own')
     },
@@ -291,6 +292,21 @@ describe('createDispatcher — launching', () => {
     const { dispatcher } = readyToDispatch({ launch })
     await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
     expect(dispatcher.status()[0]?.state).toEqual({ kind: 'at-capacity', limit: 4, waiting: 1 })
+  })
+
+  it('clears the forceDispatch entry once a forced candidate launches', async () => {
+    const forceDispatch = { has: () => false, set: vi.fn(), clear: vi.fn(), prune: vi.fn() }
+    const { dispatcher } = readyToDispatch({ forceDispatch })
+    await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
+    expect(forceDispatch.clear).toHaveBeenCalledWith(REPO_ID, 52)
+  })
+
+  it('an at-capacity launch leaves the forceDispatch entry in place', async () => {
+    const launch = fakeLauncher(() => Promise.resolve({ ok: false, kind: 'at-capacity', limit: 4 }))
+    const forceDispatch = { has: () => false, set: vi.fn(), clear: vi.fn(), prune: vi.fn() }
+    const { dispatcher } = readyToDispatch({ launch, forceDispatch })
+    await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
+    expect(forceDispatch.clear).not.toHaveBeenCalled()
   })
 
   it('a launch that throws records a failed entry and never stops the loop', async () => {

@@ -1,4 +1,4 @@
-import type { DispatchLedger, UnknownStreaks, RefreshMemo } from '@/types/tick'
+import type { DispatchLedger, UnknownStreaks, RefreshMemo, ForceDispatch } from '@/types/tick'
 
 // planTick — one RepositoryState to one TickReport. Pure: no gh, no timer, no write. This app
 // computes the decision and the report; it never writes the escalation itself.
@@ -44,6 +44,8 @@ interface PlanTickParams {
   readonly stageLiveness?: { readonly live: readonly string[]; readonly interrupted: readonly string[] } | null
   /** This app's own ended stage-session records for this repository, newest per number — `main/tick/repair.ts`'s session-shape evidence. `undefined`/`[]` is byte-identical: no session shape ever fires. */
   readonly endedStages?: readonly EndedStage[]
+  /** The Needs-you "Dispatch anyway" override. `undefined` behaves exactly as today: no candidate ever bypasses the contention gate. */
+  readonly forceDispatch?: ForceDispatch
 }
 
 function emptyReport(repoId: RepoId, displayName: string, blind: TickBlind): TickReport {
@@ -125,6 +127,7 @@ function actionableAndHeld(
   repoId: RepoId,
   unknownStreaks: UnknownStreaks,
   holdSessionRequired: boolean,
+  forceDispatch: ForceDispatch | undefined,
 ): { readonly actionable: readonly TickActionable[]; readonly held: readonly TickHeld[] } {
   const held: TickHeld[] = []
   const refreshBranchNumbers = numbersCarrying(items, 'refreshBranch')
@@ -220,7 +223,16 @@ function actionableAndHeld(
     structuredMeta.set(item.number, { kind: item.kind, trigger })
   }
 
-  const gated = gateCandidates(structuredCandidates, occupiedSet, concurrency.sharedFiles, concurrency.overlapThreshold)
+  const forcedNumbers = new Set(structuredCandidates.filter((c) => forceDispatch?.has(repoId, c.item) ?? false).map((c) => c.item))
+  const gateInput = structuredCandidates.filter((c) => !forcedNumbers.has(c.item))
+
+  const forcedActionable: TickActionable[] = [...forcedNumbers].map((number) => {
+    const meta = structuredMeta.get(number)
+    if (meta === undefined) throw new Error(`forceDispatch carried #${String(number)}, which was never a structured candidate`)
+    return { number, kind: meta.kind, trigger: meta.trigger, agent: 'impl', unchecked: false, cycle: null }
+  })
+
+  const gated = gateCandidates(gateInput, occupiedSet, concurrency.sharedFiles, concurrency.overlapThreshold)
 
   const gatedActionable: TickActionable[] = gated.dispatch.map((number) => {
     const meta = structuredMeta.get(number)
@@ -242,7 +254,9 @@ function actionableAndHeld(
     })
   }
 
-  return { actionable: [...ungated, ...gatedActionable], held }
+  forceDispatch?.prune(repoId, new Set(structuredCandidates.map((c) => c.item)))
+
+  return { actionable: [...ungated, ...forcedActionable, ...gatedActionable], held }
 }
 
 function claimsOf(
@@ -322,7 +336,7 @@ export function planTick(params: PlanTickParams): TickReport {
     }
   }
 
-  const { actionable, held } = actionableAndHeld(repository.items, repository.viewer, repository.concurrency, reviewCycleCap, repository.repoId, unknownStreaks, holdSessionRequired)
+  const { actionable, held } = actionableAndHeld(repository.items, repository.viewer, repository.concurrency, reviewCycleCap, repository.repoId, unknownStreaks, holdSessionRequired, params.forceDispatch)
   const claims = claimsOf(repository.items, repository.repoId, ledger, startedTasks, readAt, holdSessionRequired, stageLiveness)
 
   const liveNumbers = new Set(startedTasks.map((description) => Number(description.split('#')[1])).filter((n) => !Number.isNaN(n)))

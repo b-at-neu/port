@@ -3,7 +3,7 @@ import type { RepoId } from '@/utils/repos'
 import type { ItemStatus, PipelineState, ReconciledItem, RepositoryState, StageLabel } from '@/types/state'
 import type { ActionAvailability, DecisionAvailability, ItemActionResult, OperatorAction, OperatorDecision } from '@/types/actions'
 import type { StageAgent, TickClaim, TickHeld, TickLabelRepair, TickReport } from '@/types/tick'
-import type { BudgetNote, RepoDispatchStatus, RunStatesSnapshot } from '@/types/dispatch'
+import type { BudgetNote, DispatchOwner, RepoDispatchStatus, RunStatesSnapshot } from '@/types/dispatch'
 import type { SessionKey } from '@/types/hosting'
 import type { AskQuestion } from '@/utils/hosting/controls'
 import type { StageDenial, InterruptedStage } from '@/types/stage'
@@ -165,7 +165,8 @@ export type NeedsYouItem =
   | (NeedsYouItemBase & { readonly kind: 'needs-human'; readonly row: BoardItemRow })
   | (NeedsYouItemBase & { readonly kind: 'blocked'; readonly row: BoardItemRow })
   | (NeedsYouItemBase & { readonly kind: 'budget'; readonly note: BudgetNote })
-  | (NeedsYouItemBase & { readonly kind: 'held'; readonly held: TickHeld })
+  /** `owner` is this held item's own repository's `RepoDispatchStatus.owner` — `null` only when the repository reported none (never rendered: `heldAction` reads it only for a `contended` hold, which never arises on an unready repository). */
+  | (NeedsYouItemBase & { readonly kind: 'held'; readonly held: TickHeld; readonly owner: DispatchOwner | null })
   | (NeedsYouItemBase & { readonly kind: 'stalled'; readonly claim: TickClaim })
   | (NeedsYouItemBase & { readonly kind: 'stage-question'; readonly sessionKey: SessionKey; readonly permissionId: string; readonly questions: readonly AskQuestion[] })
   | (NeedsYouItemBase & { readonly kind: 'stage-questions' | 'stage-blocked'; readonly sessionKey: SessionKey; readonly text: string | null })

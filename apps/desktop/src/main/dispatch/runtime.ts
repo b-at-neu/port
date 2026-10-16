@@ -1,9 +1,9 @@
-import type { DispatchLedger, UnknownStreaks, RefreshMemo } from '@/types/tick'
+import type { DispatchLedger, UnknownStreaks, RefreshMemo, ForceDispatch } from '@/types/tick'
 import type { Dispatcher, AutoPlanner, CreateDispatcherParams, AutoPlannerDeps } from '@/types/dispatch'
 
 // Bundles the dispatch loop's own process-lifetime state so main/ipc.ts creates one thing
 // instead of wiring several by hand.
-import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
+import { createDispatchLedger, createForceDispatch, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
 
 import type { RepoId } from '@/utils/repos'
 import type { RepoDispatchStatus } from '@/types/dispatch'
@@ -21,6 +21,7 @@ interface WatcherDeps {
   readonly ledger: DispatchLedger
   readonly unknownStreaks: UnknownStreaks
   readonly refreshMemo: RefreshMemo
+  readonly forceDispatch: ForceDispatch
   readonly startedTasks: (repoId: RepoId) => readonly string[]
   readonly dispatchStatus: () => readonly RepoDispatchStatus[]
   readonly holdSessionRequired: (repoId: RepoId) => boolean
@@ -33,6 +34,7 @@ interface DispatchRuntime {
   readonly unknownStreaks: UnknownStreaks
   readonly refreshMemo: RefreshMemo
   readonly dispatcher: Dispatcher
+  readonly forceDispatch: ForceDispatch
   /** The auto-plan swap's own snapshot consumer, gated on this app owning the repository. */
   readonly autoPlanner: AutoPlanner
   readonly watcherDeps: WatcherDeps
@@ -42,12 +44,13 @@ interface DispatchRuntime {
   readonly shutdown: () => void
 }
 
-export function createDispatchRuntime(deps: Omit<CreateDispatcherParams, 'ledger' | 'onChange' | 'budget' | 'escalate' | 'writeObservation' | 'refreshMemo'>): DispatchRuntime {
+export function createDispatchRuntime(deps: Omit<CreateDispatcherParams, 'ledger' | 'onChange' | 'budget' | 'escalate' | 'writeObservation' | 'refreshMemo' | 'forceDispatch'>): DispatchRuntime {
   const ledger = createDispatchLedger()
   const unknownStreaks = createUnknownStreaks()
   const refreshMemo = createRefreshMemo()
+  const forceDispatch = createForceDispatch()
   let republishFn: (() => void) | null = null
-  const dispatcher = createDispatcher({ ...deps, ledger, refreshMemo, budget: createBudgetGate(), escalate: escalateToHuman, writeObservation: applyObservation, onChange: () => republishFn?.() })
+  const dispatcher = createDispatcher({ ...deps, ledger, refreshMemo, forceDispatch, budget: createBudgetGate(), escalate: escalateToHuman, writeObservation: applyObservation, onChange: () => republishFn?.() })
   const autoPlannerDeps: AutoPlannerDeps = {
     listRepositories: deps.listRepositories,
     registryDeps: deps.registryDeps,
@@ -63,11 +66,13 @@ export function createDispatchRuntime(deps: Omit<CreateDispatcherParams, 'ledger
     unknownStreaks,
     refreshMemo,
     dispatcher,
+    forceDispatch,
     autoPlanner,
     watcherDeps: {
       ledger,
       unknownStreaks,
       refreshMemo,
+      forceDispatch,
       startedTasks: (repoId) => dispatcher.liveStages(repoId),
       dispatchStatus: () => dispatcher.status(),
       holdSessionRequired: (repoId) => dispatcher.holdsSessionRequired(repoId),

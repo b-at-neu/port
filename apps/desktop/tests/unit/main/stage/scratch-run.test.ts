@@ -20,7 +20,7 @@ import { createStageRegistry } from '@/main/stage/registry'
 import { createDispatcher } from '@/main/dispatch/dispatcher'
 import type { Dispatcher } from '@/types/dispatch'
 import type { StageDenial } from '@/types/stage'
-import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
+import { createDispatchLedger, createForceDispatch, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
 import { planTick } from '@/main/tick/plan'
 import { reconcileRepository } from '@/main/state/reconcile'
 import type { ReadyEntry } from '@/types/actions'
@@ -304,6 +304,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
     const ledger = createDispatchLedger()
     const unknownStreaks = createUnknownStreaks()
     const refreshMemo = createRefreshMemo()
+    const forceDispatch = createForceDispatch()
 
     const dispatcher = createDispatcher({
       store,
@@ -333,6 +334,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
         throw new Error('writeObservation should not be invoked in this scenario')
       },
       refreshMemo,
+      forceDispatch,
       dirs: { audit: '/audit', scratch: '/scratch' },
       onChange: () => undefined,
       now: () => new Date(NOW_ISO),

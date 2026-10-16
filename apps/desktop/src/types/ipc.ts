@@ -341,7 +341,17 @@ export interface IpcMap {
     request: { id: string }
     response: StageRestartResult
   }
+  /** The held row's own "Dispatch anyway" — records the override memo, so the next tick dispatches
+   *  that one contended item once. Scoped to `reason: 'contended'` holds the app itself owns. */
+  'held:force-dispatch': {
+    request: { repoId: RepoId; number: number }
+    response: HeldForceDispatchResult
+  }
 }
+
+/** `'held:force-dispatch'`'s own result. `not-held` covers both "never held" and "held for a
+ *  reason other than `contended`" — the renderer never needs to tell the two apart. */
+export type HeldForceDispatchResult = { readonly kind: 'ok' } | { readonly kind: 'not-held' } | { readonly kind: 'not-owned' }
 
 export const IPC_CHANNELS = [
   'app:info',
@@ -400,6 +410,7 @@ export const IPC_CHANNELS = [
   'stage:dismiss-denial',
   'stage:resume',
   'stage:restart',
+  'held:force-dispatch',
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]
