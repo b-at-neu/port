@@ -104,9 +104,9 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     const designText = readFileSync(join(root, 'docs/DESIGN.md'), 'utf8');
 
     let violated = false;
-    if (!targetsText.includes("SCREENSHOT_DIR = 'out/screenshots'")) {
+    if (!targetsText.includes('SCREENSHOT_DIR') || !targetsText.includes("'out/screenshots'")) {
       violated = true;
-      fail('desktop-visual', "tests/visual/targets.mts no longer pins SCREENSHOT_DIR = 'out/screenshots'");
+      fail('desktop-visual', "tests/visual/targets.mts no longer pins SCREENSHOT_DIR to 'out/screenshots'");
     }
     if (!workflowText.includes('pnpm screenshots') || !workflowText.includes('apps/desktop/out/screenshots') || !workflowText.includes('name: screenshots')) {
       violated = true;

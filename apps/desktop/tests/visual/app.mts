@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url'
 import { _electron } from 'playwright-core'
 import type { ElectronApplication, Page } from 'playwright-core'
 import { FIXTURE_ENV } from '../../src/main/fixtures/mode'
+import { packagedExecutable, SMOKE_DIST_DIR } from '../smoke/binary.mjs'
 // `.mjs`, matching this `.mts` file's own emitted-ESM specifier rules — a
 // relative import from a `.mts` module must name the extension Node would
 // actually resolve, not the source extension.
@@ -36,7 +37,9 @@ export interface FixtureApp {
 /** Fails fast with the actual remedy rather than a Playwright launch error
  *  an agent would have to decode. `scenario` defaults to `populated`. */
 export async function launchFixtureApp(scenario: 'populated' | 'empty' = 'populated'): Promise<FixtureApp> {
-  if (!existsSync(MAIN_ENTRY)) {
+  const packaged = process.env['PORT_VISUAL_PACKAGED'] === '1'
+
+  if (!packaged && !existsSync(MAIN_ENTRY)) {
     throw new Error('Built app not found. Run `pnpm screenshots`, which builds first.')
   }
 
@@ -60,16 +63,29 @@ export async function launchFixtureApp(scenario: 'populated' | 'empty' = 'popula
   // resolution `scripts/ensure-electron.mjs` already relies on.
   const electronBinary = createRequire(import.meta.url)('electron') as unknown as string
 
-  const electronApp = await _electron.launch({
-    executablePath: electronBinary,
-    args: ['--force-device-scale-factor=1', MAIN_ENTRY],
-    env,
-  })
+  const electronApp = packaged
+    ? await _electron.launch({
+        executablePath: packagedExecutable(SMOKE_DIST_DIR),
+        args: ['--force-device-scale-factor=1', ...(process.platform === 'linux' ? ['--no-sandbox'] : [])],
+        env,
+      })
+    : await _electron.launch({
+        executablePath: electronBinary,
+        args: ['--force-device-scale-factor=1', MAIN_ENTRY],
+        env,
+      })
 
   const page = await electronApp.firstWindow()
   await electronApp.evaluate(({ BrowserWindow }: typeof import('electron')) => {
     BrowserWindow.getAllWindows()[0]?.setContentSize(1280, 800)
   })
+
+  if (packaged) {
+    const isPackaged = await electronApp.evaluate(({ app }: typeof import('electron')) => app.isPackaged)
+    if (!isPackaged) {
+      throw new Error('launchFixtureApp: PORT_VISUAL_PACKAGED=1 but the launched app reports app.isPackaged === false')
+    }
+  }
 
   return {
     app: electronApp,

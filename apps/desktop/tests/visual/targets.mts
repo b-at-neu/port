@@ -10,8 +10,10 @@ export const ROUTE_KEYS = ['board', 'repos', 'repo', 'history', 'search', 'trans
 
 // Resolved against `process.cwd()` at the point of use (`screens.spec.mts`),
 // never here — this stays the bare, pinned literal `scripts/checks/
-// desktop-visual.ts` and `docs/DESIGN.md` §7 both check against.
-export const SCREENSHOT_DIR = 'out/screenshots'
+// desktop-visual.ts` and `docs/DESIGN.md` §7 both check against. A packaged
+// run writes to its own directory so it never collides with a local
+// `pnpm screenshots` run's output.
+export const SCREENSHOT_DIR = process.env['PORT_VISUAL_PACKAGED'] === '1' ? 'out/screenshots-packaged' : 'out/screenshots'
 
 export const THEMES = ['light', 'dark'] as const
 export type Theme = (typeof THEMES)[number]

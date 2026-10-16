@@ -18,10 +18,10 @@ function parseScenario(raw: string | undefined): FixtureScenario | 'invalid' {
   return 'invalid'
 }
 
-/** `off` unless the flag is exactly `'1'`. `ignored` in a packaged build regardless of the flag. `invalid` fails closed rather than guessing a directory or scenario. */
-export function fixtureMode(env: Readonly<Record<string, string | undefined>>, isPackaged: boolean, isAbsolute: (path: string) => boolean): FixtureModeResult {
+/** `off` unless the flag is exactly `'1'`. `ignored` in a packaged build unless `allowPackaged` (the `--mode smoke` build flag) is set. `invalid` fails closed rather than guessing a directory or scenario. */
+export function fixtureMode(env: Readonly<Record<string, string | undefined>>, isPackaged: boolean, allowPackaged: boolean, isAbsolute: (path: string) => boolean): FixtureModeResult {
   if (env[FIXTURE_ENV.flag] !== '1') return { kind: 'off' }
-  if (isPackaged) return { kind: 'ignored' }
+  if (isPackaged && !allowPackaged) return { kind: 'ignored' }
 
   const userData = env[FIXTURE_ENV.userData]
   if (userData === undefined || userData === '' || !isAbsolute(userData)) {

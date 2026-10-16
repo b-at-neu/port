@@ -5,9 +5,11 @@ import tailwindcss from '@tailwindcss/vite'
 
 const alias = { '@': fileURLToPath(new URL('./src', import.meta.url)) }
 
-export default defineConfig({
+// `--mode smoke` is the one build that honours `PORT_FIXTURES` even when packaged; every other mode compiles the flag to `false`.
+export default defineConfig(({ mode }) => ({
   main: {
     resolve: { alias },
+    define: { __PORT_PACKAGED_FIXTURES__: JSON.stringify(mode === 'smoke') },
     plugins: [externalizeDepsPlugin()]
   },
   preload: {
@@ -18,4 +20,4 @@ export default defineConfig({
     resolve: { alias },
     plugins: [react(), tailwindcss()]
   }
-})
+}))

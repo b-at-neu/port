@@ -42,7 +42,7 @@ const sandboxConfigured = configureSandboxSwitch()
 
 // An `on` result relocates `userData` before the single-instance lock is ever requested, so a
 // fixture run never contends for the operator's own lock or touches their real profile.
-const fixture = fixtureMode(process.env, app.isPackaged, isAbsolute)
+const fixture = fixtureMode(process.env, app.isPackaged, __PORT_PACKAGED_FIXTURES__, isAbsolute)
 const e2e = e2eMode(process.env, app.isPackaged, isAbsolute)
 
 if (fixture.kind === 'invalid') {
