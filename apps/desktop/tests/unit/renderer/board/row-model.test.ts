@@ -5,7 +5,7 @@ import type { BoardItemRow } from '@/types/board'
 import type { AttachedAgent, AttachedSession, ReconciledItem, StageLabel } from '@/types/state'
 import type { RepoId } from '@/utils/repos'
 import type { DispatchRecord } from '@/types/dispatch'
-import { agentSummaryOf, decisionNoteFor, nextActionFor, operatorJoinedOf, ownershipNoteFor, pillStatusFor, stopAttachedAgentNote } from '@/renderer/board/row-model'
+import { agentSummaryOf, decisionNoteFor, nextActionFor, operatorJoinedOf, ownershipNoteFor, pillStatusFor, stageKeyOf, stopAttachedAgentNote } from '@/renderer/board/row-model'
 
 const NO_ACTIONS = Object.fromEntries(OPERATOR_ACTIONS.map((a): [OperatorAction, ActionAvailability] => [a, { available: false, reason: 'not-applicable' }])) as Record<OperatorAction, ActionAvailability>
 const NO_DECISIONS = Object.fromEntries(OPERATOR_DECISIONS.map((d): [OperatorDecision, DecisionAvailability] => [d, { available: false, reason: 'not-applicable' }])) as Record<OperatorDecision, DecisionAvailability>
@@ -133,6 +133,22 @@ describe('stopAttachedAgentNote', () => {
 
   it('null when nothing is attached', () => {
     expect(stopAttachedAgentNote(row({}))).toBeNull()
+  })
+})
+
+describe('stageKeyOf', () => {
+  const stages: readonly StageLabel[] = [{ key: 'inProgress' as never, name: 'in progress', role: 'inProgress' }]
+
+  it('resolves the winning stage key', () => {
+    expect(stageKeyOf(stages, 'inProgress')).toBe('inProgress')
+  })
+
+  it('null when stage is null', () => {
+    expect(stageKeyOf(stages, null)).toBeNull()
+  })
+
+  it('null when no stage label has the given role', () => {
+    expect(stageKeyOf(stages, 'planReview')).toBeNull()
   })
 })
 
