@@ -1,5 +1,4 @@
-// The one session ordering rule — pinned sessions first, then the rest, each group in list
-// order — shared by the sidebar, the keymap and the main-process menu so all three always agree.
+// The one session ordering rule, shared by the sidebar, the keymap and the main-process menu.
 // Imports types only, so this is renderer-safe.
 import type { HostedSessionSnapshot, SessionMarks } from '@/types/hosting'
 
@@ -10,8 +9,7 @@ function isPinned(session: HostedSessionSnapshot, marks: SessionMarks | undefine
   return session.claudeSessionId !== null && (marks?.pinned.includes(session.claudeSessionId) ?? false)
 }
 
-/** User sessions only (`phase !== 'ended' && stage === null`) — stage sessions never appear here.
- *  Pinned ones come first, then the rest, each group keeping `sessions`' own order. Undefined
+/** User sessions only, pinned ones first, each group keeping `sessions`' own order. Undefined
  *  `marks` (not loaded yet) leaves the plain list order unchanged. */
 export function orderSessions(sessions: readonly HostedSessionSnapshot[], marks: SessionMarks | undefined): readonly HostedSessionSnapshot[] {
   const live = sessions.filter((session) => session.phase !== 'ended' && session.stage === null)
