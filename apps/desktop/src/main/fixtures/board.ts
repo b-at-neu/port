@@ -2,7 +2,7 @@
 import { labelName } from '@/utils/labels/vocabulary'
 import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
-import type { PipelineFetch, PipelineItem, QueriedLabel } from '@/types/github'
+import type { LabelEventNode, PipelineFetch, PipelineItem, QueriedLabel } from '@/types/github'
 import type { AgentRecord } from '@/types/sessions'
 import { DEFAULT_POLL_POLICY, SOURCE_BASE_INTERVAL_MS } from '@/types/board'
 import type { BoardSnapshot, RepositoryHealth, SourceKind } from '@/types/board'
@@ -46,6 +46,12 @@ function repositoryHealth(repoId: RepoId, now: Date): RepositoryHealth {
   return { repoId, github: source('github'), sessions: source('sessions'), worktrees: source('worktrees'), denials: source('denials') }
 }
 
+interface StageMove {
+  readonly key: LabelKey
+  readonly actor: string
+  readonly offsetMinutes: number
+}
+
 interface ItemSeed {
   readonly kind: 'issue' | 'pull-request'
   readonly number: number
@@ -53,6 +59,10 @@ interface ItemSeed {
   readonly stageKey: LabelKey
   // Defaults to [VIEWER] — only the unowned-held seed overrides it.
   readonly assignees?: readonly string[]
+  // Defaults to a single move onto stageKey — the pagination item below walks a realistic multi-stage path instead.
+  readonly history?: readonly StageMove[]
+  // Minutes-ago offset for updatedAt — defaults to the last history entry's own offset.
+  readonly updatedMinutesAgo?: number
 }
 
 /** One item per stage family the board groups by, so the screenshot shows every group non-empty, plus two seeds for the Needs you screen's own label-kinds. */
@@ -60,7 +70,22 @@ const POPULATED_ITEM_SEEDS: readonly ItemSeed[] = [
   { kind: 'issue', number: 41, title: 'Add CSV export to the reports page', stageKey: 'planReview' },
   { kind: 'issue', number: 38, title: 'Retry failed webhook deliveries', stageKey: 'inProgress' },
   { kind: 'issue', number: 44, title: 'Show the build number in the footer', stageKey: 'ready' },
-  { kind: 'pull-request', number: 36, title: 'Paginate the audit log', stageKey: 'approved' },
+  {
+    kind: 'pull-request',
+    number: 36,
+    title: 'Paginate the audit log',
+    stageKey: 'approved',
+    // A realistic multi-stage walk, so R7/R8 have a non-trivial phase history to render.
+    history: [
+      { key: 'ready', actor: 'octo-dev', offsetMinutes: -180 },
+      { key: 'planning', actor: 'port-bot', offsetMinutes: -170 },
+      { key: 'planReview', actor: 'port-bot', offsetMinutes: -150 },
+      { key: 'planApproved', actor: 'octo-dev', offsetMinutes: -140 },
+      { key: 'inProgress', actor: 'port-bot', offsetMinutes: -130 },
+      { key: 'prOpened', actor: 'port-bot', offsetMinutes: -60 },
+      { key: 'approved', actor: 'octo-dev', offsetMinutes: -10 },
+    ],
+  },
   { kind: 'pull-request', number: 35, title: 'Cache avatar thumbnails', stageKey: 'needsRevision' },
   { kind: 'issue', number: 50, title: 'Rotate the webhook signing secret', stageKey: 'needsHuman' },
   { kind: 'issue', number: 51, title: 'Backfill order totals for Q3', stageKey: 'blocked' },
@@ -79,11 +104,19 @@ function itemSeedsFor(scenario: FixtureScenario): readonly ItemSeed[] {
   return scenario === 'empty' ? EMPTY_ITEM_SEEDS : POPULATED_ITEM_SEEDS
 }
 
-function pipelineItemsFor(vocabulary: LabelVocabulary, seeds: readonly ItemSeed[]): readonly PipelineItem[] {
+function pipelineItemsFor(now: Date, vocabulary: LabelVocabulary, seeds: readonly ItemSeed[]): readonly PipelineItem[] {
   return seeds.map((seed) => {
     const matchedKeys: readonly LabelKey[] = ['marker', seed.stageKey]
     const labels = matchedKeys.map((key) => labelName(vocabulary, key)).filter((name): name is string => name !== undefined)
     const isPr = seed.kind === 'pull-request'
+    const history = seed.history ?? [{ key: seed.stageKey, actor: VIEWER, offsetMinutes: -10 }]
+    const labelEvents: readonly LabelEventNode[] = history
+      .map((move): { label: string; actor: string | null; at: string } | undefined => {
+        const name = labelName(vocabulary, move.key)
+        return name === undefined ? undefined : { label: name, actor: move.actor, at: offsetMinutes(now, move.offsetMinutes) }
+      })
+      .filter((event): event is LabelEventNode => event !== undefined)
+    const updatedAt = offsetMinutes(now, seed.updatedMinutesAgo ?? (history[history.length - 1]?.offsetMinutes ?? -10))
     return {
       repo: 'acme/widgets',
       kind: seed.kind,
@@ -93,9 +126,11 @@ function pipelineItemsFor(vocabulary: LabelVocabulary, seeds: readonly ItemSeed[
       body: '',
       state: 'OPEN',
       mergedAt: null,
+      updatedAt,
       assignees: seed.assignees ?? [VIEWER],
       labels,
       matchedKeys,
+      labelEvents,
       headRefOid: isPr ? `fixture-sha-${String(seed.number)}` : null,
       mergeable: isPr ? 'MERGEABLE' : null,
       reviews: isPr ? [] : null,
@@ -112,7 +147,7 @@ function queriedLabelsFor(vocabulary: LabelVocabulary): readonly QueriedLabel[] 
 function readyRepositoryState(now: Date, scenario: FixtureScenario): RepositoryState {
   const entry = widgetsEntry()
   const vocabulary = entry.config.vocabulary
-  const items = pipelineItemsFor(vocabulary, itemSeedsFor(scenario))
+  const items = pipelineItemsFor(now, vocabulary, itemSeedsFor(scenario))
 
   const pipelineFetch: PipelineFetch = {
     ok: true,

@@ -116,6 +116,48 @@ describe('mapPipelineItems', () => {
     expect(items[0]?.reviews).toBeNull()
     expect(items[0]?.comments).toBeNull()
   })
+
+  it('carries updatedAt and null when missing or non-string', () => {
+    const withUpdated = { number: 1, title: 'T', url: 'u', body: '', state: 'OPEN', updatedAt: '2026-01-01T00:00:00Z', assignees: { nodes: [] }, labels: { nodes: [] } }
+    const withoutUpdated = { number: 2, title: 'T', url: 'u', body: '', state: 'OPEN', updatedAt: 123, assignees: { nodes: [] }, labels: { nodes: [] } }
+    const aliases = [queriedLabel('ready', 0)]
+    const items = mapPipelineItems({ i0: { totalCount: 2, nodes: [withUpdated, withoutUpdated] }, p0: { totalCount: 0, nodes: [] } }, aliases, 'r')
+    expect(items.find((i) => i.number === 1)?.updatedAt).toBe('2026-01-01T00:00:00Z')
+    expect(items.find((i) => i.number === 2)?.updatedAt).toBeNull()
+  })
+
+  it('maps a good labeled-event node, drops a malformed one, and reads a null actor through', () => {
+    const node = {
+      number: 1,
+      title: 'T',
+      url: 'u',
+      body: '',
+      state: 'OPEN',
+      assignees: { nodes: [] },
+      labels: { nodes: [] },
+      timelineItems: {
+        nodes: [
+          { createdAt: '2026-01-01T00:00:00Z', actor: { login: 'octo-dev' }, label: { name: 'ready' } },
+          { createdAt: '2026-01-02T00:00:00Z', actor: null, label: { name: 'in progress' } },
+          { createdAt: '2026-01-03T00:00:00Z', actor: { login: 'x' } },
+          { actor: { login: 'x' }, label: { name: 'ready' } },
+        ],
+      },
+    }
+    const aliases = [queriedLabel('ready', 0)]
+    const items = mapPipelineItems({ i0: { totalCount: 1, nodes: [node] }, p0: { totalCount: 0, nodes: [] } }, aliases, 'r')
+    expect(items[0]?.labelEvents).toEqual([
+      { label: 'ready', actor: 'octo-dev', at: '2026-01-01T00:00:00Z' },
+      { label: 'in progress', actor: null, at: '2026-01-02T00:00:00Z' },
+    ])
+  })
+
+  it('an absent timelineItems connection maps to an empty labelEvents array', () => {
+    const node = { number: 1, title: 'T', url: 'u', body: '', state: 'OPEN', assignees: { nodes: [] }, labels: { nodes: [] } }
+    const aliases = [queriedLabel('ready', 0)]
+    const items = mapPipelineItems({ i0: { totalCount: 1, nodes: [node] }, p0: { totalCount: 0, nodes: [] } }, aliases, 'r')
+    expect(items[0]?.labelEvents).toEqual([])
+  })
 })
 
 describe('applyItemStates', () => {

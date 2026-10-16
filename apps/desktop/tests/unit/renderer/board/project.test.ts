@@ -33,6 +33,8 @@ function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
     worktrees: [],
     state: 'OPEN',
     mergedAt: null,
+    updatedAt: null,
+    stageHistory: [],
     matchedKeys: ['ready'],
     sources: ['github'],
     claimedFiles: null,

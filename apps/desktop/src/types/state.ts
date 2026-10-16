@@ -18,6 +18,13 @@ export interface StageLabel {
   readonly role: LabelRole
 }
 
+/** One resolved label-add event, oldest first — keyed by `LabelKey`, never by phase, so `renderer/board/phase-model.ts` stays the one place a key becomes a phase. */
+export interface StageEntry {
+  readonly key: LabelKey
+  readonly actor: string | null
+  readonly at: string
+}
+
 /** `stageOf`'s result. `stage: null` is a real state, never an error. `stageAmbiguous` is `true` when more than one distinct role is present; the precedence still resolves `stage`, it never hides the co-presence. */
 export interface StageResult {
   readonly stages: readonly StageLabel[]
@@ -110,6 +117,10 @@ export interface ReconciledItem {
   readonly worktrees: readonly AttachedWorktree[]
   readonly state: string
   readonly mergedAt: string | null
+  /** Copied straight off `PipelineItem.updatedAt` — Needs you's own newest-first sort key. */
+  readonly updatedAt: string | null
+  /** Resolved from `PipelineItem.labelEvents` against this repository's vocabulary, oldest first — unknown names and marker keys already dropped. */
+  readonly stageHistory: readonly StageEntry[]
   readonly matchedKeys: readonly LabelKey[]
   readonly sources: readonly ('github' | 'itemStates' | 'sessions' | 'worktrees' | 'denials')[]
   /** The plan's own ` ```files ` fence, parsed for issues only. `null` is "no file list" (dispatches unchecked); `[]` is a fence that parsed to nothing — the two are never collapsed. */
