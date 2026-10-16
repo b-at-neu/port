@@ -92,7 +92,7 @@ The dark `brand` tile's `#4b5f8f` border measures 3.0 against `sidebar`, enough 
 | Token | Value | Used for |
 | --- | --- | --- |
 | Grid | 4px | Every margin, padding and gap is a multiple of 4 (2px allowed only inside pills and the phase bar) |
-| Panel padding | 16px | Main area, detail pane |
+| Panel padding | 16px | Every screen body, through the shared `Screen` layout (§4). The main area itself has no outer padding: headers and lists run edge to edge, and list rows carry their own 16px inset |
 | Screen header height | 44px | The bar at the top of each screen |
 | List row height | 36px | Board, Backlog, Needs you |
 | Group header height | 32px | "Waiting on you", "In progress", … |
@@ -108,16 +108,17 @@ The dark `brand` tile's `#4b5f8f` border measures 3.0 against `sidebar`, enough 
 
 | Use | Family | Size | Weight |
 | --- | --- | --- | --- |
-| Body, list rows | Inter | 13px / line height 1.5 (conversation text 1.6) | 400 |
-| Secondary text, buttons, tags | Inter | 12px | 400 / 500 |
-| Metadata, section labels, pills | Inter | 11px | 500 |
-| Panel and screen titles | Inter | 15px | 600 |
-| Code, paths, commands, diffs, branch names | JetBrains Mono | 12px | 400 |
+| Body, list rows | Inter | 14px / line height 1.5 (conversation text 1.6) | 400 |
+| Secondary text, buttons, tags | Inter | 13px | 400 / 500 |
+| Metadata, section labels, pills | Inter | 12px | 500 |
+| Panel and screen titles | Inter | 16px | 600 |
+| Code, paths, commands, diffs, branch names | JetBrains Mono | 13px | 400 |
 
 - Only weights 400, 500 and 600.
-- Nothing below 11px.
+- Nothing below 12px.
 - Counts, costs, durations and ticket numbers use tabular figures (`font-variant-numeric: tabular-nums`).
-- Section labels are sentence case at 11px/500, not uppercase.
+- Section labels are sentence case at 12px/500, not uppercase.
+- Sidebar: screen, repo and session rows at 14px; sessions nested under a repo and the footer at 13px.
 
 ## 3. Layout
 
@@ -193,6 +194,7 @@ Scoping epics, releases and analytics are out of scope for the first release.
 
 | Component | Treatment |
 | --- | --- |
+| `Screen`, `ScreenBody` | The layout every screen is built from: a 44px `ScreenHeader`, then one body variant: `list` (edge to edge, rows inset themselves), `page` (16px padding), `form` (16px padding, 512px column), `conversation` (16px padding, centred 680px column). A screen never sets its own outer padding |
 | `StatusPill` | Dot, then label, using the status roles. With a menu it shows a chevron: the repo run state is `● Running ▾` with Run, Drain and Pause, each with a one-line hint (Drain "finish in-flight", Pause "stop now") |
 | `PhaseBar` | Six 10×4px segments with a 2px gap, for plan, plan review, implement, review, revision, merge. Finished segments use the `working` pill background, the current one the `working` dot, waiting-on-you `attention`, complete `success`, the rest `accent`. Tooltip names the phase |
 | `PhaseList` | Vertical version for the detail pane: an 8px dot per phase, with who and when ("Plan approved by you · 2h ago") and live cost and time on the current phase |
@@ -280,7 +282,8 @@ The markers `marker` and `autoPlan` are never shown as phases; `autoPlan` appear
 - [ ] Colour only through the §1 roles. No hex, no Tailwind arbitrary colours, no new role without changing this document.
 - [ ] Status colour follows §1's status table. Anything waiting on the operator is `attention`, and nothing else is.
 - [ ] No `muted-foreground` text on `muted`/`accent` surfaces, and no `faint` text anywhere.
-- [ ] Sizes from §1 and §2 only: 4px grid, 36px rows, 44px headers, 13/12/11/15px type, weights 400/500/600, tabular figures for numbers.
+- [ ] Sizes from §1 and §2 only: 4px grid, 36px rows, 44px headers, 14/13/12/16px type, weights 400/500/600, tabular figures for numbers.
+- [ ] Every screen uses `Screen`/`ScreenBody`.
 - [ ] shadcn primitives first, then the shared port components in §4. A pattern used twice becomes a shared component.
 - [ ] lucide icons only: 16px in the interface, 14px inline in text, one stroke width.
 - [ ] Every data region has loading, empty, error and stale states (§4).

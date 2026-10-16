@@ -1,10 +1,11 @@
-// The Board's own header — title, freshness indicator, the Phase/Repo
-// toggle, the repo filter, and Refresh.
+// The Board's own header — title, the Phase/Repo toggle, the repo filter,
+// and Refresh. The freshness indicator renders below as its own strip.
 import { RefreshCw } from 'lucide-react'
 import { Button } from '@/renderer/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/renderer/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/renderer/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
+import { ScreenHeader } from '@/renderer/components/screen-header'
 import type { RepoId } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
 import type { RepositoryState } from '@/types/state'
@@ -13,7 +14,6 @@ import { freshnessIndicator } from '@/renderer/board/copy'
 
 interface BoardHeaderProps {
   readonly snapshot: BoardSnapshot | null
-  readonly now: Date
   readonly refreshing: boolean
   readonly onRefresh: () => void
   readonly group: BoardGroupBy
@@ -22,28 +22,13 @@ interface BoardHeaderProps {
   readonly onRepoChange: (repo: RepoId | null) => void
 }
 
-export function BoardHeader({ snapshot, now, refreshing, onRefresh, group, onGroupChange, repo, onRepoChange }: BoardHeaderProps) {
+export function BoardHeader({ snapshot, refreshing, onRefresh, group, onGroupChange, repo, onRepoChange }: BoardHeaderProps) {
   const readyRepos = snapshot !== null ? snapshot.state.repositories.filter((r): r is Extract<RepositoryState, { readonly ok: true }> => r.ok) : []
-  const indicator = snapshot !== null ? freshnessIndicator(snapshot, now) : null
 
   return (
-    <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-      <h1 className="text-title font-semibold text-foreground">Board</h1>
+    <ScreenHeader className="justify-between gap-2">
+      <span>Board</span>
       <div className="flex items-center gap-2">
-        {indicator !== null ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span tabIndex={0} className="text-meta text-attention-dot">
-                {indicator.label}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>
-              {indicator.lines.map((line) => (
-                <div key={line}>{line}</div>
-              ))}
-            </TooltipContent>
-          </Tooltip>
-        ) : null}
         <Tabs value={group} onValueChange={(value) => onGroupChange(value as BoardGroupBy)}>
           <TabsList>
             <TabsTrigger value="phase">Phase</TabsTrigger>
@@ -68,6 +53,28 @@ export function BoardHeader({ snapshot, now, refreshing, onRefresh, group, onGro
           Refresh
         </Button>
       </div>
+    </ScreenHeader>
+  )
+}
+
+export function FreshnessStrip({ snapshot, now }: { readonly snapshot: BoardSnapshot; readonly now: Date }) {
+  const indicator = freshnessIndicator(snapshot, now)
+  if (indicator === null) return null
+
+  return (
+    <div className="border-b border-border px-4 py-2">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span tabIndex={0} className="text-meta text-attention-dot">
+            {indicator.label}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>
+          {indicator.lines.map((line) => (
+            <div key={line}>{line}</div>
+          ))}
+        </TooltipContent>
+      </Tooltip>
     </div>
   )
 }

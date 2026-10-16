@@ -2,6 +2,7 @@
 // New sessions, About.
 import { Link } from '@tanstack/react-router'
 import { ScreenHeader } from '@/renderer/components/screen-header'
+import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { ThemeSection } from '@/renderer/settings/theme-section'
 import { RuntimeSection } from '@/renderer/settings/runtime-section'
 import { GhSection } from '@/renderer/settings/gh-section'
@@ -24,15 +25,14 @@ function AboutSection() {
 
 export function SettingsScreen() {
   return (
-    <div className="flex h-full flex-col">
-      <ScreenHeader>Settings</ScreenHeader>
-      <div className="flex max-w-md flex-col gap-6 p-4 text-left">
+    <Screen header={<ScreenHeader>Settings</ScreenHeader>}>
+      <ScreenBody variant="form">
         <ThemeSection />
         <RuntimeSection />
         <GhSection />
         <SessionDefaultsSection />
         <AboutSection />
-      </div>
-    </div>
+      </ScreenBody>
+    </Screen>
   )
 }

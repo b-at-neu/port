@@ -8,6 +8,7 @@ import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { EmptyState } from '@/renderer/components/empty-state'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { ScreenHeader } from '@/renderer/components/screen-header'
+import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { useIpcQuery } from '@/renderer/data/query'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { relativeTime } from '@/renderer/lib/relative-time'
@@ -47,7 +48,8 @@ export function HistoryScreen() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-3">
+    <Screen
+      header={
       <ScreenHeader className="justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <span>History</span>
@@ -79,35 +81,38 @@ export function HistoryScreen() {
           </Button>
         </div>
       </ScreenHeader>
-
-      {scan.status === 'pending' ? (
-        <div className="flex flex-col gap-1 px-4">
-          <Skeleton className="h-9 w-full" />
-          <Skeleton className="h-9 w-full" />
-          <Skeleton className="h-9 w-full" />
-        </div>
-      ) : scan.status === 'error' ? (
-        <ErrorBanner message="Could not reach the main process." className="mx-4" />
-      ) : !scan.data.ok ? (
-        <ErrorBanner message={failureCopy(scan.data.kind, scan.data.message)} className="mx-4" />
-      ) : (
-        <>
-          {marks.status === 'error' ? <ErrorBanner message="Couldn't load pins and archives. Rescan to try again." className="mx-4" /> : null}
-          <HistoryList
-            repo={search.repo ?? null}
-            sessions={scan.data.sessions}
-            agents={scan.data.agents}
-            unresolved={scan.data.unresolved.length}
-            unreadable={scan.data.unreadable.length}
-            repos={readyRepos}
-            marks={marks.data}
-            showArchived={showArchived}
-            onShowArchived={() => void navigate({ to: ROUTE_IDS.history, search: { ...search, archived: true } })}
-            onOpen={openTranscript}
-          />
-        </>
-      )}
-    </div>
+      }
+    >
+      <ScreenBody variant="list">
+        {scan.status === 'pending' ? (
+          <div className="flex flex-col gap-1 px-4 py-2">
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-9 w-full" />
+          </div>
+        ) : scan.status === 'error' ? (
+          <ErrorBanner message="Could not reach the main process." className="mx-4 my-2" />
+        ) : !scan.data.ok ? (
+          <ErrorBanner message={failureCopy(scan.data.kind, scan.data.message)} className="mx-4 my-2" />
+        ) : (
+          <>
+            {marks.status === 'error' ? <ErrorBanner message="Couldn't load pins and archives. Rescan to try again." className="mx-4 my-2" /> : null}
+            <HistoryList
+              repo={search.repo ?? null}
+              sessions={scan.data.sessions}
+              agents={scan.data.agents}
+              unresolved={scan.data.unresolved.length}
+              unreadable={scan.data.unreadable.length}
+              repos={readyRepos}
+              marks={marks.data}
+              showArchived={showArchived}
+              onShowArchived={() => void navigate({ to: ROUTE_IDS.history, search: { ...search, archived: true } })}
+              onOpen={openTranscript}
+            />
+          </>
+        )}
+      </ScreenBody>
+    </Screen>
   )
 }
 
@@ -163,7 +168,7 @@ function HistoryList({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+    <div className="flex flex-col">
       {groupList.map((group) => (
         <div key={group.kind} data-slot={`history-group-${group.kind}`}>
           {showHeaders ? <div className="px-4 py-2 text-meta font-medium text-muted-foreground">{groupHeader(group.kind)}</div> : null}

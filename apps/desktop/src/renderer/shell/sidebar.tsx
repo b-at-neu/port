@@ -73,7 +73,7 @@ export function Sidebar() {
     <aside className="flex h-full w-[248px] shrink-0 flex-col border-r border-border bg-sidebar">
       <div className="flex h-11 shrink-0 items-center gap-2 px-3">
         <PortMark />
-        <span className="flex-1 text-title font-semibold">port</span>
+        <span className="flex-1 text-body font-semibold">port</span>
         <Tooltip>
           <TooltipTrigger asChild>
             <button type="button" onClick={toggle} className="flex size-6 items-center justify-center rounded-md hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Hide sidebar">

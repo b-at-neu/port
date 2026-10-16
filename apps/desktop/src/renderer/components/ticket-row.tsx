@@ -67,7 +67,7 @@ export function TicketRow({ row, selected, onSelect, operatorJoined = false }: T
       tabIndex={0}
       onClick={onSelect}
       onKeyDown={handleKeyDown}
-      className={cn('flex h-9 items-center gap-2 px-4 text-small outline-none', selected && 'bg-selection ring-2 ring-ring ring-inset')}
+      className={cn('flex h-9 items-center gap-2 px-4 text-body outline-none', selected && 'bg-selection ring-2 ring-ring ring-inset')}
     >
       <span className="w-10 shrink-0 font-mono tabular-nums text-muted-foreground">#{item.number}</span>
       <span className="min-w-0 flex-1 truncate text-foreground">{item.title}</span>

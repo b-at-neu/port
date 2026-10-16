@@ -42,7 +42,7 @@ export function NeedsYouItem({
 }: NeedsYouItemProps) {
   return (
     <div data-slot="needs-you-item" className="flex flex-col border-b border-border">
-      <div className="flex h-9 items-center gap-2 px-4 text-small">
+      <div className="flex h-9 items-center gap-2 px-4 text-body">
         <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-attention-dot animate-pulse" />
         {expandable ? (
           <button type="button" onClick={onToggleExpand} className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent" aria-label={expanded ? 'Collapse details' : 'Expand details'}>

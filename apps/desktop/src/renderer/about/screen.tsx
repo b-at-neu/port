@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { ScreenHeader } from '@/renderer/components/screen-header'
+import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { useIpcQuery } from '@/renderer/data/query'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { ABOUT_NOTICE, ABOUT_POWERED_BY } from '@/utils/about/copy'
@@ -18,21 +19,24 @@ export function AboutScreen() {
   const navigate = useNavigate()
 
   return (
-    <div className="flex h-full flex-col">
-      <ScreenHeader className="justify-between">
-        <span>About</span>
-        <Button variant="ghost" size="small" onClick={() => void navigate({ to: ROUTE_IDS.settings })}>
-          ‹ Settings
-        </Button>
-      </ScreenHeader>
-      <div className="flex max-w-md flex-col gap-2 p-4 text-left">
+    <Screen
+      header={
+        <ScreenHeader className="justify-between">
+          <span>About</span>
+          <Button variant="ghost" size="small" onClick={() => void navigate({ to: ROUTE_IDS.settings })}>
+            ‹ Settings
+          </Button>
+        </ScreenHeader>
+      }
+    >
+      <ScreenBody variant="form">
         <p className="text-body font-semibold text-foreground">port</p>
         <VersionLine />
         <p data-about-notice className="text-body text-foreground">
           {ABOUT_POWERED_BY}
         </p>
         <p className="text-body text-foreground">{ABOUT_NOTICE}</p>
-      </div>
-    </div>
+      </ScreenBody>
+    </Screen>
   )
 }

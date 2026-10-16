@@ -18,7 +18,7 @@ export function ShellLayout() {
   return (
     <>
       <Sidebar />
-      <main id="main-area" className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-auto px-8 py-6">
+      <main id="main-area" className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">
         <Outlet />
       </main>
       <CommandPalette />

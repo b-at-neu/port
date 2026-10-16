@@ -8,6 +8,7 @@ import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { ScreenHeader } from '@/renderer/components/screen-header'
+import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { StatusPill } from '@/renderer/components/status-pill'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { ipcQueryOptions, useIpcMutation, useIpcQuery } from '@/renderer/data/query'
@@ -108,9 +109,8 @@ export function SetupScreen() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <ScreenHeader>Set up port</ScreenHeader>
-      <div className="flex max-w-md flex-col gap-4 p-4 text-left">
+    <Screen header={<ScreenHeader>Set up port</ScreenHeader>}>
+      <ScreenBody variant="form">
         <p className="text-small text-foreground-secondary">port runs your own installed Claude Code and gh under your own accounts. Finish these steps to start.</p>
         {anyErrored ? <ErrorBanner message="Couldn't reach the main process to check setup. Restart port to try again." /> : null}
         <div className="flex flex-col divide-y divide-border">
@@ -158,7 +158,7 @@ export function SetupScreen() {
             Skip for now
           </Button>
         </div>
-      </div>
-    </div>
+      </ScreenBody>
+    </Screen>
   )
 }
