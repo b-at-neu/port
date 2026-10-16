@@ -39,17 +39,21 @@ function rowKey(repoId: RepoId, number: number): string {
   return `${repoId}:${String(number)}`
 }
 
-function compareItems(a: NeedsYouItem, b: NeedsYouItem, displayNameOf: ReadonlyMap<RepoId, string>): number {
-  const atA = a.at !== null ? Date.parse(a.at) : null
-  const atB = b.at !== null ? Date.parse(b.at) : null
-  if (atA !== null && atB !== null) return atB - atA
-  if (atA !== null) return -1
-  if (atB !== null) return 1
-
+function compareByRepoThenNumber(a: NeedsYouItem, b: NeedsYouItem, displayNameOf: ReadonlyMap<RepoId, string>): number {
   const nameA = a.repoId !== null ? (displayNameOf.get(a.repoId) ?? '') : ''
   const nameB = b.repoId !== null ? (displayNameOf.get(b.repoId) ?? '') : ''
   if (nameA !== nameB) return nameA < nameB ? -1 : 1
   return (b.number ?? 0) - (a.number ?? 0)
+}
+
+function compareItems(a: NeedsYouItem, b: NeedsYouItem, displayNameOf: ReadonlyMap<RepoId, string>): number {
+  const atA = a.at !== null ? Date.parse(a.at) : null
+  const atB = b.at !== null ? Date.parse(b.at) : null
+  if (atA !== null && atB !== null) return atA === atB ? compareByRepoThenNumber(a, b, displayNameOf) : atB - atA
+  if (atA !== null) return -1
+  if (atB !== null) return 1
+
+  return compareByRepoThenNumber(a, b, displayNameOf)
 }
 
 const STAGE_HANDBACK_TEXT_CAP = 120
@@ -59,7 +63,7 @@ function stageHandbackText(result: HostedSessionSnapshot['lastResult']): string 
   return result.text.length > STAGE_HANDBACK_TEXT_CAP ? `${result.text.slice(0, STAGE_HANDBACK_TEXT_CAP)}…` : result.text
 }
 
-/** One entry per (repoId, number, kind), newest `at` first where known, then by repo then number descending. `sessions` is `session:list`'s own read — `[]` when the caller has none (the empty default keeps every pre-existing call site byte-identical). */
+/** One entry per (repoId, number, kind), newest `at` first where known, then by repo then number descending. Session and dispatch kinds keep their own event time; row kinds and held/stalled/budget/half-labelled fall back to the matched item's `updatedAt`, or `null` when there is no matched row. `sessions` is `session:list`'s own read — `[]` when the caller has none (the empty default keeps every pre-existing call site byte-identical). */
 export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: readonly HostedSessionSnapshot[] = []): readonly NeedsYouItem[] {
   const projection = projectBoard({ snapshot, groupBy: 'repo', now })
   const rows = projection.groups.flatMap((group) => group.rows)
@@ -141,7 +145,7 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
     if (kind === undefined) continue
     const viewer = viewerByRepo.get(row.item.repoId) ?? null
     if (viewer !== null && !row.item.assignees.includes(viewer)) continue
-    items.push({ kind, repoId: row.item.repoId, repo: row.item.repo, number: row.item.number, title: row.item.title, url: row.item.url, at: null, matchedRow: row, row })
+    items.push({ kind, repoId: row.item.repoId, repo: row.item.repo, number: row.item.number, title: row.item.title, url: row.item.url, at: row.item.updatedAt, matchedRow: row, row })
   }
 
   for (const report of snapshot.tick) {
@@ -155,7 +159,7 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
         number: held.number,
         title: matched?.item.title ?? null,
         url: matched?.item.url ?? null,
-        at: null,
+        at: matched?.item.updatedAt ?? null,
         matchedRow: matched,
         held,
         owner: ownerByRepo.get(report.repoId) ?? null,
@@ -164,7 +168,7 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
     for (const claim of report.claims) {
       if (claim.class !== 'stalled-confirmed') continue
       const matched = rowByKey.get(rowKey(report.repoId, claim.number)) ?? null
-      items.push({ kind: 'stalled', repoId: report.repoId, repo: matched?.item.repo ?? report.displayName, number: claim.number, title: matched?.item.title ?? null, url: matched?.item.url ?? null, at: null, matchedRow: matched, claim })
+      items.push({ kind: 'stalled', repoId: report.repoId, repo: matched?.item.repo ?? report.displayName, number: claim.number, title: matched?.item.title ?? null, url: matched?.item.url ?? null, at: matched?.item.updatedAt ?? null, matchedRow: matched, claim })
     }
   }
 
@@ -173,7 +177,7 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
     for (const note of dispatch.budget.notes) {
       if (!BUDGET_KINDS.has(note.kind)) continue
       const matched = rowByKey.get(rowKey(dispatch.repoId, note.number)) ?? null
-      items.push({ kind: 'budget', repoId: dispatch.repoId, repo: matched?.item.repo ?? null, number: note.number, title: matched?.item.title ?? null, url: matched?.item.url ?? null, at: null, matchedRow: matched, note })
+      items.push({ kind: 'budget', repoId: dispatch.repoId, repo: matched?.item.repo ?? null, number: note.number, title: matched?.item.title ?? null, url: matched?.item.url ?? null, at: matched?.item.updatedAt ?? null, matchedRow: matched, note })
     }
   }
 
@@ -187,7 +191,7 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
         number: repair.number,
         title: matched?.item.title ?? null,
         url: matched?.item.url ?? null,
-        at: null,
+        at: matched?.item.updatedAt ?? null,
         matchedRow: matched,
         repair,
       })

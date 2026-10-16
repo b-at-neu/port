@@ -360,6 +360,40 @@ describe('needsYouItems', () => {
   })
 })
 
+describe('needsYouItems sort order', () => {
+  it('mixed kinds come out strictly newest first', () => {
+    const row = item({ number: 10, updatedAt: '2026-01-01T00:30:00.000Z', stages: [{ key: 'planReview', name: 'plan review', role: 'gate' }] })
+    const heldMatch = item({ number: 11, updatedAt: '2026-01-01T00:45:00.000Z', stage: 'trigger', stages: [{ key: 'readyForReview', name: 'ready for review', role: 'trigger' }] })
+    const repo = readyRepo({ items: [row, heldMatch] })
+    const held = [{ number: 11, kind: 'pull-request' as const, trigger: 'readyForReview' as const, reason: 'conflicting' as const, contention: null, escalation: null }]
+    const claims = [{ number: 12, kind: 'issue' as const, inFlight: 'inProgress' as const, class: 'stalled-confirmed' as const, retryKey: 'inProgress' as const }]
+    const denial = { id: 'd1', repoId: 'repo-a' as RepoId, agent: 'impl' as const, number: 300, toolName: 'Bash', inputSummary: 'x', rule: 'Bash(x)', at: '2026-01-01T00:50:00.000Z' }
+    const items = needsYouItems(snapshotOf([repo], { tick: [tickReport({ held, claims })], dispatch: [dispatchStatus({ denials: [denial] })] }), NOW)
+    expect(items.map((i) => i.number)).toEqual([300, 11, 10, 12])
+  })
+
+  it('an item with a null updatedAt sorts after every timed item', () => {
+    const timed = item({ number: 1, updatedAt: '2026-01-01T00:30:00.000Z' })
+    const untimed = item({ number: 2, updatedAt: null })
+    const repo = readyRepo({ items: [timed, untimed] })
+    const items = needsYouItems(snapshotOf([repo]), NOW)
+    expect(items.map((i) => i.number)).toEqual([1, 2])
+  })
+
+  it('equal timestamps fall back to repo name, then number descending', () => {
+    const repoA = readyRepo({ repoId: 'repo-a' as RepoId, items: [item({ repoId: 'repo-a' as RepoId, number: 1, updatedAt: '2026-01-01T00:30:00.000Z' }), item({ repoId: 'repo-a' as RepoId, number: 3, updatedAt: '2026-01-01T00:30:00.000Z' })] })
+    const items = needsYouItems(snapshotOf([repoA]), NOW)
+    expect(items.map((i) => i.number)).toEqual([3, 1])
+  })
+
+  it('held and stalled items with no matched row keep at: null', () => {
+    const held = [{ number: 1, kind: 'pull-request' as const, trigger: 'readyForReview' as const, reason: 'conflicting' as const, contention: null, escalation: null }]
+    const claims = [{ number: 2, kind: 'issue' as const, inFlight: 'inProgress' as const, class: 'stalled-confirmed' as const, retryKey: 'inProgress' as const }]
+    const items = needsYouItems(snapshotOf([], { tick: [tickReport({ held, claims })] }), NOW)
+    expect(items.every((i) => i.at === null)).toBe(true)
+  })
+})
+
 describe('needsYouCount / repoNeedsYou', () => {
   it("counts the full list and one repository's own slice", () => {
     const repoA = readyRepo({ repoId: 'repo-a' as RepoId, items: [item({ repoId: 'repo-a' as RepoId, number: 1 })] })

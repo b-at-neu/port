@@ -63,6 +63,8 @@ interface ItemSeed {
   readonly history?: readonly StageMove[]
   // Minutes-ago offset for updatedAt — defaults to the last history entry's own offset.
   readonly updatedMinutesAgo?: number
+  // A pull request's mergeability — defaults to 'MERGEABLE'; ignored for issues.
+  readonly mergeable?: 'MERGEABLE' | 'CONFLICTING'
 }
 
 /** One item per stage family the board groups by, so the screenshot shows every group non-empty, plus two seeds for the Needs you screen's own label-kinds. */
@@ -91,6 +93,10 @@ const POPULATED_ITEM_SEEDS: readonly ItemSeed[] = [
   { kind: 'issue', number: 51, title: 'Backfill order totals for Q3', stageKey: 'blocked' },
   // Unassigned and queued, so planTick's ownership partition holds it with reason 'unowned' — the Board's "Waiting on you" row needs one.
   { kind: 'issue', number: 52, title: 'Add a dark-mode icon for the tray', stageKey: 'ready', assignees: [] },
+  // Conflicting against the base branch, so planTick's mergeability gate surfaces it as a Needs-you 'held' item.
+  { kind: 'pull-request', number: 53, title: 'Upgrade the PDF renderer', stageKey: 'readyForReview', mergeable: 'CONFLICTING', updatedMinutesAgo: -5 },
+  // No attached agent, so the dispatch ledger's unmatched read reaches the Needs-you 'stalled' classification.
+  { kind: 'issue', number: 54, title: 'Migrate session storage to Redis', stageKey: 'inProgress', updatedMinutesAgo: -40 },
 ]
 
 // Keeps only the routine, non-"needs you" seeds, so the Needs you screen renders its empty state while the Board stays non-empty.
@@ -132,7 +138,7 @@ function pipelineItemsFor(now: Date, vocabulary: LabelVocabulary, seeds: readonl
       matchedKeys,
       labelEvents,
       headRefOid: isPr ? `fixture-sha-${String(seed.number)}` : null,
-      mergeable: isPr ? 'MERGEABLE' : null,
+      mergeable: isPr ? (seed.mergeable ?? 'MERGEABLE') : null,
       reviews: isPr ? [] : null,
       comments: isPr ? [] : null,
       checkRollup: isPr ? [] : null,
@@ -263,6 +269,9 @@ export function fixtureBoardSnapshot(now: Date, scenario: FixtureScenario = 'pop
   const unknownStreaks = createUnknownStreaks()
   const refreshMemo = createRefreshMemo()
   const nextDecisionAt = new Date(now.getTime() + SOURCE_BASE_INTERVAL_MS.github)
+
+  // Stands in for the earlier tick a fresh ledger never saw, so the stalled seed's first observation here classifies as a reset rather than a first sighting.
+  if (scenario !== 'empty') ledger.advance(WIDGETS_ID, 54, { nextState: 'suspect', nextResets: 0 })
 
   const tickParams = { ledger, unknownStreaks, nextDecisionAt, now: () => now, reviewCycleCap: readyEntry.config.reviewCycleCap, startedTasks: [], refreshMemo, checkDispositions: readyEntry.config.checkDispositions, holdSessionRequired: true }
   const gadgetsTickParams = { ...tickParams, reviewCycleCap: gadgetsEntryConfig.config.reviewCycleCap, checkDispositions: gadgetsEntryConfig.config.checkDispositions }
