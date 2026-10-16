@@ -143,9 +143,9 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
     expect(report.orphanDirs).toHaveLength(1)
   })
 
-  it.runIf(scenario === 'populated')('reports session:list with six snapshots covering streaming, ended, starting, a question, a plan, and a resumed session', () => {
+  it.runIf(scenario === 'populated')('reports session:list with seven snapshots covering streaming, ended, starting, a question, a plan, a stage session, and a resumed session', () => {
     const snapshots = handlers['session:list'](undefined)
-    expect(snapshots.map((s) => s.phase).sort()).toEqual(['ended', 'ready', 'starting', 'streaming', 'streaming', 'streaming'])
+    expect(snapshots.map((s) => s.phase).sort()).toEqual(['ended', 'ready', 'starting', 'streaming', 'streaming', 'streaming', 'streaming'])
     expect(snapshots.find((s) => s.phase === 'ended')?.end?.diagnosis).not.toBeNull()
     expect(snapshots.filter((s) => s.pendingPermissions.some((p) => p.interaction?.kind === 'question'))).toHaveLength(1)
     expect(snapshots.filter((s) => s.pendingPermissions.some((p) => p.interaction?.kind === 'plan'))).toHaveLength(1)

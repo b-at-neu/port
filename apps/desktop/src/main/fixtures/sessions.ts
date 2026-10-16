@@ -8,6 +8,9 @@ import type { AgentRecord, SessionRecord, SessionScan } from '@/types/sessions'
 import { WIDGETS_ID } from '@/main/fixtures/repos'
 import { fixtureAttachEntries, fixtureHistoryEntries } from '@/main/fixtures/entries'
 
+/** Matches the board fixture's `fixture-stage-impl-38` dispatch record, so that item's current-phase line shows live elapsed time and cost. */
+export const STAGE_IMPL_38_KEY = 'fixture-stage-impl-38' as SessionKey
+
 export const STREAMING_KEY = 'fixture-session-streaming' as SessionKey
 export const PERMISSION_KEY = 'fixture-session-permission' as SessionKey
 export const ENDED_KEY = 'fixture-session-ended' as SessionKey
@@ -267,6 +270,29 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       stage: null,
       lastResult: null,
       operatorJoinedAt: null,
+    },
+    {
+      sessionKey: STAGE_IMPL_38_KEY,
+      claudeSessionId: 'fixture-session-impl-38',
+      repoId: WIDGETS_ID,
+      workspace: WORKTREE_WORKSPACE,
+      phase: 'streaming',
+      origin: { kind: 'fresh' },
+      startedAt: t(2),
+      queuedAfterInterrupt: null,
+      end: null,
+      titled: null,
+      pendingPermissions: [],
+      capabilities,
+      title: '#38 retry failed webhook deliveries',
+      rateLimit: null,
+      controls: FIXTURE_CONTROLS,
+      models: FIXTURE_MODELS,
+      usage: { ...FIXTURE_USAGE, costUsd: 0.42, observedAt: t(0) },
+      backgroundTasks: [],
+      stage: { agent: 'impl', number: 38, kind: 'issue', trigger: 'inProgress' },
+      lastResult: null,
+      operatorJoinedAt: t(1),
     },
     {
       sessionKey: RESUMED_KEY,

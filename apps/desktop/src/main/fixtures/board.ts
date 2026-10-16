@@ -68,7 +68,19 @@ interface ItemSeed {
 /** One item per stage family the board groups by, so the screenshot shows every group non-empty, plus two seeds for the Needs you screen's own label-kinds. */
 const POPULATED_ITEM_SEEDS: readonly ItemSeed[] = [
   { kind: 'issue', number: 41, title: 'Add CSV export to the reports page', stageKey: 'planReview' },
-  { kind: 'issue', number: 38, title: 'Retry failed webhook deliveries', stageKey: 'inProgress' },
+  {
+    kind: 'issue',
+    number: 38,
+    title: 'Retry failed webhook deliveries',
+    stageKey: 'inProgress',
+    // A multi-phase walk, so R6's phase list has every finished line plus a live current one to render.
+    history: [
+      { key: 'planning', actor: 'port-bot', offsetMinutes: -45 },
+      { key: 'planReview', actor: 'port-bot', offsetMinutes: -40 },
+      { key: 'planApproved', actor: VIEWER, offsetMinutes: -35 },
+      { key: 'inProgress', actor: 'port-bot', offsetMinutes: -2 },
+    ],
+  },
   { kind: 'issue', number: 44, title: 'Show the build number in the footer', stageKey: 'ready' },
   {
     kind: 'pull-request',

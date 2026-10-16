@@ -12,6 +12,8 @@ import type { ActionPlan, ActionRefusal, ItemActionResult, OperatorAction, Opera
 import type { Conflict } from '@/types/writes'
 import type { StageLink } from '@/types/board'
 import { worstHealth } from '@/renderer/board/project'
+import type { LabelKey } from '@/utils/labels/vocabulary'
+import { PHASE_NAMES } from '@/renderer/lib/phase'
 
 const STAGE_NAME: Readonly<Record<StageLink['agent'], string>> = { plan: 'Planning', impl: 'Implementing', review: 'Reviewing', revise: 'Revising' }
 
@@ -198,6 +200,36 @@ export function freshnessIndicator(snapshot: BoardSnapshot, now: Date): { readon
   const rateLimitText = rateLimit !== null ? rateLimitCopy(null, rateLimit.remaining, rateLimit.resetAt) : null
 
   return { label, lines: rateLimitText !== null ? [...sourceLines, rateLimitText] : sourceLines }
+}
+
+// --- The phase list's history lines (R6) -----------------------------------
+
+const PHASE_EVENT_VERB: Readonly<Partial<Record<LabelKey, string>>> = {
+  ready: 'Queued for planning',
+  planning: 'Planning started',
+  planChangesRequested: 'Plan changes requested',
+  planReview: 'Plan ready for review',
+  planApproved: 'Plan approved',
+  inProgress: 'Implementation started',
+  readyForReview: 'Ready for review',
+  reviewing: 'Review started',
+  needsRevision: 'Changes requested',
+  revising: 'Revision started',
+  approved: 'Approved',
+  refreshBranch: 'Branch refresh requested',
+  refreshing: 'Branch refresh started',
+  needsHuman: 'Escalated to you',
+  blocked: 'Blocked',
+}
+
+/** One phase history line's leading verb — falls back to `PHASE_NAMES` for a key with no dedicated event phrasing. */
+export function phaseEventVerb(key: LabelKey): string {
+  return PHASE_EVENT_VERB[key] ?? PHASE_NAMES[key] ?? key
+}
+
+/** `you` when `actor` is the signed-in viewer (case-insensitive), else `@login`. */
+export function actorName(actor: string, viewer: string | null): string {
+  return viewer !== null && actor.toLowerCase() === viewer.toLowerCase() ? 'you' : `@${actor}`
 }
 
 // --- The plan gate (#92) ----------------------------------------------------
