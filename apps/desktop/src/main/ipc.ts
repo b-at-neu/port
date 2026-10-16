@@ -1,5 +1,4 @@
-import { app, BrowserWindow, ipcMain, Notification } from 'electron'
-import type { IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, ipcMain, Notification, type IpcMainInvokeEvent } from 'electron'
 import { join } from 'node:path'
 import { IPC_CHANNELS, type IpcChannel, type IpcEvent, type IpcEventMap, type IpcMap } from '@/types/ipc'
 import type { WorktreesReport } from '@/types/reclaimer'

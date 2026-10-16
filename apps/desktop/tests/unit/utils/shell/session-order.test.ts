@@ -3,7 +3,6 @@ import { MAX_JUMP_SESSIONS, orderSessions } from '@/utils/shell/session-order'
 import type { HostedSessionSnapshot, SessionKey, SessionMarks } from '@/types/hosting'
 import type { SessionControls, SessionModels } from '@/utils/hosting/controls'
 import type { RepoId } from '@/utils/repos'
-import type { StageTag } from '@/types/stage-session'
 
 const REPO_ID = 'repo-1' as RepoId
 const TEST_CONTROLS: SessionControls = { permissionMode: 'default', model: null, effort: null }
@@ -52,7 +51,7 @@ describe('orderSessions', () => {
   it('excludes ended and stage sessions', () => {
     const live = snapshot({ sessionKey: 'live' as SessionKey })
     const ended = snapshot({ sessionKey: 'ended' as SessionKey, phase: 'ended' })
-    const stage = snapshot({ sessionKey: 'stage' as SessionKey, stage: { agent: 'impl', number: 1, kind: 'issue', trigger: 'planApproved' } as StageTag })
+    const stage = snapshot({ sessionKey: 'stage' as SessionKey, stage: { agent: 'impl', number: 1, kind: 'issue', trigger: 'planApproved' } })
     const ordered = orderSessions([live, ended, stage], undefined)
     expect(ordered.map((s) => s.sessionKey)).toEqual(['live'])
   })

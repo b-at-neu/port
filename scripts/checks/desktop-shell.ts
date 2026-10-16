@@ -126,7 +126,7 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     if (!violated) ok();
   }
 
-  // --- guard: main/menu.ts's jump items source their accelerator from APP_COMMANDS' jump-to-session kinds
+  // --- guard: main/menu.ts's jump items source their accelerator from APP_COMMANDS' jump-to-session kinds (see PR Notes)
   // Can't import menu.ts here (its '@/' imports don't resolve under plain Node) — asserted against source text.
   {
     const file = join(root, 'apps/desktop/src/main/menu.ts');
