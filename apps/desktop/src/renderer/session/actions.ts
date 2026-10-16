@@ -6,7 +6,8 @@ import { ROUTE_IDS } from '@/renderer/router/routes'
 import { ipcQueryOptions } from '@/renderer/data/query'
 import { invoke } from '@/renderer/data/invoke'
 import type { RepoId } from '@/utils/repos'
-import type { HostedSessionSnapshot, SessionDismissResult, SessionKey, SessionStartResult, SessionTaskStopResult, WorktreeChoice } from '@/types/hosting'
+import type { HostedSessionSnapshot, SessionDismissResult, SessionKey, SessionMarks, SessionStartResult, SessionTaskStopResult, WorktreeChoice } from '@/types/hosting'
+import { orderSessions } from '@/utils/shell/session-order'
 import type { PlanAnswerResult, PlanDecision, QuestionAnswerResult, SessionControls, SessionEffort, SetControlsResult } from '@/utils/hosting/controls'
 import type { ComposerAttachment } from '@/utils/hosting/attachments'
 import type { FolderId } from '@/types/workspace'
@@ -24,6 +25,10 @@ export function setSessionsQueryClient(client: QueryClient): void {
 
 function sessionListKey() {
   return ipcQueryOptions('session:list').queryKey
+}
+
+function sessionMarksKey() {
+  return ipcQueryOptions('session:marks').queryKey
 }
 
 /** Adopts a snapshot into the `session:list` cache — the restore banner's own resumes use this too. */
@@ -51,8 +56,9 @@ function removeSession(key: SessionKey): void {
 }
 
 export function liveSessionKeys(): readonly SessionKey[] {
-  const data = queryClient?.getQueryData<readonly HostedSessionSnapshot[]>(sessionListKey()) ?? []
-  return data.filter((snapshot) => snapshot.phase !== 'ended').map((snapshot) => snapshot.sessionKey)
+  const sessions = queryClient?.getQueryData<readonly HostedSessionSnapshot[]>(sessionListKey()) ?? []
+  const marks = queryClient?.getQueryData<SessionMarks>(sessionMarksKey())
+  return orderSessions(sessions, marks).map((snapshot) => snapshot.sessionKey)
 }
 
 function handleStartResult(result: SessionStartResult): void {

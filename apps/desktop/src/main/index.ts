@@ -136,7 +136,10 @@ if (fixture.kind === 'invalid') {
       // `before-quit` below no-ops for them.
       if (fixture.kind === 'on') {
         registerFixtureIpc(fixture.scenario)
+        // The fixture case only needs the menu to render — no store to read sessions or marks from.
+        Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform, app.isPackaged, [], broadcastAppCommand)))
       } else {
+        // registerIpc builds the real initial menu itself, from the hosted store it just created.
         const registered = registerIpc()
         watcher = registered.watcher
         hostedStore = registered.hostedStore
@@ -144,7 +147,6 @@ if (fixture.kind === 'invalid') {
         shutdownDispatch = registered.shutdownDispatch
         stageRegistry = registered.stageRegistry
       }
-      Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform, app.isPackaged, broadcastAppCommand)))
       createWindow()
 
       app.on('activate', () => {
