@@ -7,6 +7,7 @@ import type { RepositoryState } from '@/types/state'
 import type { TickHeld } from '@/types/tick'
 import { projectBoard } from '@/renderer/board/project'
 import type { BoardItemRow, BoardSnapshot, NeedsYouItem } from '@/types/board'
+import { classifyHandbackText } from '@/utils/stage/handback-text'
 
 /** The four label-keyed kinds, each carrying the row they came from. */
 type RowNeedsYouKind = 'plan-review' | 'ready-to-merge' | 'needs-human' | 'blocked'
@@ -93,7 +94,9 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
 
   for (const session of sessions) {
     if (session.stage === null || session.repoId === null || session.phase === 'ended') continue
-    const outcomeKind = session.lastResult?.text?.startsWith('BLOCKED:') === true ? 'stage-blocked' : session.lastResult?.text?.includes('QUESTIONS FOR HUMAN:') === true ? 'stage-questions' : null
+    if (session.lastResult === null || session.lastResult.isError) continue
+    const handback = classifyHandbackText(session.lastResult.text ?? '')
+    const outcomeKind = handback?.kind === 'blocked' ? 'stage-blocked' : handback?.kind === 'questions' ? 'stage-questions' : null
     if (outcomeKind === null) continue
     if (stageQuestionNumbers.has(`${session.repoId}:${String(session.stage.number)}`)) continue
     const matched = rowByKey.get(rowKey(session.repoId, session.stage.number)) ?? null

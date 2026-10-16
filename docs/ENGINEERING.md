@@ -131,7 +131,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 **`apps/desktop/src/main/stage/`** (#327)
 - implements `main/dispatch/launch.ts`'s `StageLauncher` seam: a session worktree, a hosted session started with the `agent:` option, the prompt sent, and the hand-back watched
 - `agents.ts`'s `STAGE_AGENT_NAMES` is the only place a bare `StageAgent` key becomes an `agent:` value — instructions come from the plugin agent file itself, never a second system prompt
-- `handback.ts`'s `classifyHandback` is pure; its `QUESTIONS FOR HUMAN:`/`BLOCKED:` prefixes are pinned against the pipeline skill's own completion text
+- `handback.ts`'s `classifyHandback` is pure, built on `utils/stage/handback-text.ts`'s `classifyHandbackText`, which also backs `renderer/board/needs-you.ts`; its `QUESTIONS FOR HUMAN:`/`BLOCKED:` prefixes live there and are pinned against the pipeline skill's own completion text
 - removes a worktree only on `completed`, never forced; every other outcome keeps it
 - writes no label itself (phase 1) — stage sessions still write their own, the same way a terminal-dispatched agent does
 - "operator joined" is stamped by the hosted handle (`main/hosting/handle.ts`) on the first `session:send` into a stage session carrying `source: 'operator'`; the launcher's own prompt send never counts

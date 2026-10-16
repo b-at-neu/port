@@ -371,24 +371,24 @@ export default async function ({ expect, fail, ok }: Reporter) {
     }
   }
 
-  // --- main/stage/handback.ts's QUESTIONS FOR HUMAN:/BLOCKED: prefixes each appear verbatim in
+  // --- utils/stage/handback-text.ts's QUESTIONS FOR HUMAN:/BLOCKED: prefixes each appear verbatim in
   // the pipeline skill's own completion-handling text, both sides of the same contract. ---
   {
-    const handbackFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/main/stage/handback.ts');
+    const handbackFile = allFiles.find((f) => relOf(f) === 'apps/desktop/src/utils/stage/handback-text.ts');
     if (!handbackFile) {
-      fail('desktop-dispatch', 'apps/desktop/src/main/stage/handback.ts does not exist');
+      fail('desktop-dispatch', 'apps/desktop/src/utils/stage/handback-text.ts does not exist');
     } else {
       const text = readFileSync(handbackFile, 'utf8');
       const questionsMatch = /QUESTIONS_PREFIX\s*=\s*'([^']+)'/.exec(text);
       const blockedMatch = /BLOCKED_PREFIX\s*=\s*'([^']+)'/.exec(text);
       if (!questionsMatch || !blockedMatch) {
-        fail('desktop-dispatch', "apps/desktop/src/main/stage/handback.ts does not declare both QUESTIONS_PREFIX and BLOCKED_PREFIX as string literals");
+        fail('desktop-dispatch', "apps/desktop/src/utils/stage/handback-text.ts does not declare both QUESTIONS_PREFIX and BLOCKED_PREFIX as string literals");
       } else {
         const skillText = pipelineSkillText();
         const questionsOk = skillText.includes(questionsMatch[1]);
         const blockedOk = skillText.includes(blockedMatch[1]);
-        if (!questionsOk) fail('desktop-dispatch', `pipeline skill text never carries handback.ts's QUESTIONS_PREFIX ('${questionsMatch[1]}') verbatim`);
-        if (!blockedOk) fail('desktop-dispatch', `pipeline skill text never carries handback.ts's BLOCKED_PREFIX ('${blockedMatch[1]}') verbatim`);
+        if (!questionsOk) fail('desktop-dispatch', `handback-text.ts's QUESTIONS_PREFIX ('${questionsMatch[1]}') never appears verbatim in the pipeline skill text`);
+        if (!blockedOk) fail('desktop-dispatch', `handback-text.ts's BLOCKED_PREFIX ('${blockedMatch[1]}') never appears verbatim in the pipeline skill text`);
         if (questionsOk && blockedOk) ok();
       }
     }
