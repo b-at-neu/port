@@ -252,6 +252,8 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
       ['plugins/port/agents/impl-agent.md', implAgent],
     ]) {
       expect(text.includes('operator-only'), 'session-required-scan', `${rel} never mentions 'operator-only' — one file defines the prefix, the other must act on it`);
+      expect(text.includes('.agents/cockpit.json'), 'session-required-scan', `${rel} never mentions '.agents/cockpit.json' — the app-owned clause must read the ownership record`);
+      expect(text.toLowerCase().includes('app-owned'), 'session-required-scan', `${rel} never mentions 'app-owned' — the clause must not silently vanish`);
     }
   }
 

@@ -94,27 +94,36 @@ export function allowMatchers(settingsFiles) {
 /** Forward-slashed, so a substring test matches on Windows too. */
 const toPosix = (p) => (typeof p === 'string' ? p.split('\\').join('/') : p);
 
-/** Identifies whether `payload` is from a dispatched subagent, plus `isOperatorWorktree`
- *  (exempted by cockpit rules) and `isManagedWorktree` (never exempted, for installs). */
+/** Identifies whether `payload` is from a dispatched subagent, plus `isOperatorWorktree`,
+ *  `isManagedWorktree`, and `isTopLevelAgent` — `agent_type` without `agent_id` per the SDK's own `BaseHookInput` contract, vetoed by the subagent-transcript/worktree signals. */
 
 export function callerKind(payload) {
   const cwd = toPosix(payload?.cwd);
   const isOperatorWorktree = typeof cwd === 'string' && cwd.includes('/.claude/worktrees/impl-');
   const isManagedWorktree = typeof cwd === 'string' && cwd.includes('/.claude/worktrees/');
+  const transcriptForTopLevel = toPosix(payload?.transcript_path);
+  const looksLikeSubagentTranscript =
+    typeof transcriptForTopLevel === 'string' && transcriptForTopLevel.includes('/subagents/agent-');
+  const isTopLevelAgent =
+    typeof payload?.agent_type === 'string' &&
+    payload.agent_type.length > 0 &&
+    !payload?.agent_id &&
+    !looksLikeSubagentTranscript &&
+    !(typeof cwd === 'string' && cwd.includes('/.claude/worktrees/agent-'));
 
   if (payload?.agent_type || payload?.agent_id) {
-    return { isSubagent: true, isOperatorWorktree, isManagedWorktree, agent: payload.agent_type ?? null, signal: 'agent_type' };
+    return { isSubagent: true, isOperatorWorktree, isManagedWorktree, isTopLevelAgent, agent: payload.agent_type ?? null, signal: 'agent_type' };
   }
   const transcript = toPosix(payload?.transcript_path);
   if (typeof transcript === 'string' && transcript.includes('/subagents/agent-')) {
-    return { isSubagent: true, isOperatorWorktree, isManagedWorktree, agent: null, signal: 'transcript' };
+    return { isSubagent: true, isOperatorWorktree, isManagedWorktree, isTopLevelAgent: false, agent: null, signal: 'transcript' };
   }
   // Only a dispatched agent's own `agent-<hash>` worktree is in scope here — `/port:implement`'s
   // `impl-<n>` worktrees are the operator's own session and must never match.
   if (typeof cwd === 'string' && cwd.includes('/.claude/worktrees/agent-')) {
-    return { isSubagent: true, isOperatorWorktree, isManagedWorktree, agent: null, signal: 'worktree' };
+    return { isSubagent: true, isOperatorWorktree, isManagedWorktree, isTopLevelAgent: false, agent: null, signal: 'worktree' };
   }
-  return { isSubagent: false, isOperatorWorktree, isManagedWorktree, agent: null, signal: null };
+  return { isSubagent: false, isOperatorWorktree, isManagedWorktree, isTopLevelAgent: false, agent: null, signal: null };
 }
 
 /** True when `jsonlText` carries the harness's slash-command expansion wrapper around
@@ -283,6 +292,10 @@ export function decide({
     const globs = sessionRequiredPaths ?? [];
     const matched = globs.some((glob) => globToRegExp(glob).test(relPath));
     if (!matched) return { decision: 'allow', who, subject: relPath };
+    // App-owned pass-through: no hook decision, so the SDK's canUseTool → stagePolicy pause runs.
+    if (ownership?.kind === 'app' && who.isTopLevelAgent) {
+      return { decision: 'pass', who, subject: relPath };
+    }
     return {
       decision: 'deny',
       who,

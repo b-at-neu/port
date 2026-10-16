@@ -3,7 +3,7 @@
 
 /** The closed set the guard hook actually writes, pinned against its `log()` call sites and
  *  apps/desktop's `CURRENT_DECISIONS`. A decision outside this set is `unknown`, never silently folded into `deny`. */
-export const DENIAL_DECISIONS = new Set(['deny', 'miss', 'gate-clear', 'hook-error']);
+export const DENIAL_DECISIONS = new Set(['deny', 'miss', 'gate-clear', 'hook-error', 'protected-pass']);
 
 /** Parses one denials.log line into its four tab-separated fields. Fewer than two fields →
  *  `{ malformed: true }`; a decision outside `DENIAL_DECISIONS` → `{ unknown: true, ... }`. */

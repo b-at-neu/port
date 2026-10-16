@@ -48,6 +48,18 @@ export const managedWorktreePayload = (overrides = {}) => ({
   ...overrides,
 });
 
+// The main thread of an app-launched `agent:`-option stage session: `agent_type` present,
+// `agent_id` absent, a non-subagent transcript, cwd under the app's own `session-` worktree.
+export const topLevelAgentPayload = (overrides = {}) => ({
+  cwd: '/home/operator/some-project/.claude/worktrees/session-abc123',
+  session_id: 'sess-toplevel',
+  transcript_path: '/home/operator/.claude/projects/some-project/sess-toplevel.jsonl',
+  agent_type: 'port:impl-agent',
+  tool_name: 'Edit',
+  tool_input: { file_path: '.claude/port.config.json' },
+  ...overrides,
+});
+
 /** `check(label, result, expected)`, bound to a module's own `fail`/`ok`. */
 export const makeCheck = (fail: (check: string, detail: string) => void, ok: () => void) => (label: string, result: { decision: string }, expected: string) => {
   if (result.decision !== expected) {
