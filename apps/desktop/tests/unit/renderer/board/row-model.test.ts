@@ -137,10 +137,10 @@ describe('stopAttachedAgentNote', () => {
 })
 
 describe('stageKeyOf', () => {
-  const stages: readonly StageLabel[] = [{ key: 'inProgress' as never, name: 'in progress', role: 'inProgress' }]
+  const stages: readonly StageLabel[] = [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }]
 
   it('resolves the winning stage key', () => {
-    expect(stageKeyOf(stages, 'inProgress')).toBe('inProgress')
+    expect(stageKeyOf(stages, 'in-flight')).toBe('inProgress')
   })
 
   it('null when stage is null', () => {
@@ -148,7 +148,7 @@ describe('stageKeyOf', () => {
   })
 
   it('null when no stage label has the given role', () => {
-    expect(stageKeyOf(stages, 'planReview')).toBeNull()
+    expect(stageKeyOf(stages, 'gate')).toBeNull()
   })
 })
 
