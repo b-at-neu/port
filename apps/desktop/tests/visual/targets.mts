@@ -127,7 +127,15 @@ export const SCREENSHOT_TARGETS: Readonly<Record<(typeof ROUTE_KEYS)[number], Ta
   },
   settings: { hash: '#/settings', container: '#app', ready: '#app h2' },
   backlog: { hash: '#/backlog', container: '#app', ready: '[data-slot="backlog-row"]' },
-  needsYou: { hash: '#/needs-you', container: '#app', ready: '[data-slot="needs-you-item"]' },
+  needsYou: {
+    hash: '#/needs-you',
+    container: '#app',
+    ready: '[data-slot="needs-you-item"]',
+    variants: [
+      { name: 'held', ready: 'text=its branch conflicts with the base branch' },
+      { name: 'stalled', ready: 'text=its agent stopped responding' },
+    ],
+  },
   setup: { hash: '#/setup', container: '#app', ready: '#app [data-step]' },
   about: { hash: '#/about', container: '#app', ready: '#app [data-about-notice]' },
 }

@@ -115,6 +115,14 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
       const report = snapshot.tick.find((r) => r.held.some((h) => h.number === 52))
       expect(report?.held.find((h) => h.number === 52)?.reason).toBe('unowned')
     })
+
+    it.runIf(scenario === 'populated')('carries a held #53 (conflicting) and a stalled #54 in the Needs you list', () => {
+      const items = needsYouItems(snapshot, now)
+      const held = items.find((i) => i.kind === 'held' && i.number === 53)
+      const stalled = items.find((i) => i.kind === 'stalled' && i.number === 54)
+      expect(held).toMatchObject({ held: { reason: 'conflicting' } })
+      expect(stalled).toBeDefined()
+    })
   })
 
   it('reports gate:preflight as answerable, with a plan body carrying a heading, list, code, table and link', () => {
