@@ -2,10 +2,7 @@
 import type { SessionEnd, SessionRateLimit } from '@/types/hosting'
 import type { SessionResult, StageOutcome } from '@/types/stage-session'
 import type { SessionUsage } from '@/utils/hosting/usage'
-
-/** Pinned byte-identical to `plugins/port/skills/pipeline/SKILL.md`'s own completion-handling prefixes, by the `desktop-dispatch` check. */
-export const QUESTIONS_PREFIX = 'QUESTIONS FOR HUMAN:'
-export const BLOCKED_PREFIX = 'BLOCKED:'
+import { classifyHandbackText } from '@/utils/stage/handback-text'
 
 export interface ClassifyHandbackParams {
   readonly lastResult: SessionResult | null
@@ -14,30 +11,6 @@ export interface ClassifyHandbackParams {
   readonly usage: SessionUsage | null
   readonly phase: 'starting' | 'ready' | 'streaming' | 'interrupting' | 'closing' | 'ended'
   readonly operatorJoinedAt: string | null
-}
-
-/** The text's last non-blank paragraph — paragraphs split on a blank line, since the prefix sits at the very end of the final message. */
-function lastParagraph(text: string): string {
-  const paragraphs = text.split(/\n\s*\n/).map((p) => p.trim())
-  for (let i = paragraphs.length - 1; i >= 0; i--) {
-    const p = paragraphs[i]
-    if (p !== undefined && p !== '') return p
-  }
-  return ''
-}
-
-/** A `BLOCKED:` line at line start, outside a fenced code block — a block is any line pair of ``` markers, closed or not. */
-function blockedLineOutsideFence(text: string): string | null {
-  const lines = text.split('\n')
-  let inFence = false
-  for (const line of lines) {
-    if (/^```/.test(line.trim())) {
-      inFence = !inFence
-      continue
-    }
-    if (!inFence && line.startsWith(BLOCKED_PREFIX)) return line
-  }
-  return null
 }
 
 /** `null` means still working — no outcome has been reached yet. */
@@ -58,13 +31,12 @@ export function classifyHandback(params: ClassifyHandbackParams): StageOutcome |
 
   if (params.lastResult !== null) {
     const text = params.lastResult.text ?? ''
-    const paragraph = lastParagraph(text)
-    if (paragraph.startsWith(QUESTIONS_PREFIX)) {
+    const handback = classifyHandbackText(text)
+    if (handback?.kind === 'questions') {
       return { kind: 'questions', detail: null, costUsd, resetsAt: null, worktree: 'kept', operatorJoined }
     }
-    const blocked = blockedLineOutsideFence(text)
-    if (blocked !== null) {
-      return { kind: 'blocked', detail: blocked, costUsd, resetsAt: null, worktree: 'kept', operatorJoined }
+    if (handback?.kind === 'blocked') {
+      return { kind: 'blocked', detail: handback.line, costUsd, resetsAt: null, worktree: 'kept', operatorJoined }
     }
     return { kind: 'completed', detail: null, costUsd, resetsAt: null, worktree: 'removed', operatorJoined }
   }
