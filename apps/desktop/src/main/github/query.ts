@@ -8,11 +8,16 @@ const REPO_LABEL_PAGE_SIZE = 100
 const ASSIGNEE_PAGE_SIZE = 20
 const ITEM_LABEL_PAGE_SIZE = 20
 const BLOCKER_PAGE_SIZE = 20
+const LABEL_EVENT_PAGE_SIZE = 20
 
 /** A valid GraphQL StringValue for every escape `JSON.stringify` emits. */
 export function graphqlStringLiteral(value: string): string {
   return JSON.stringify(value)
 }
+
+// Shared by both fragments — Needs you's newest-first sort key, and the stage-move history
+// reconcile.ts resolves into stageHistory.
+const LABEL_EVENTS_FIELD = `timelineItems(last: ${LABEL_EVENT_PAGE_SIZE}, itemTypes: [LABELED_EVENT]) { nodes { ... on LabeledEvent { createdAt actor { login } label { name } } } }`
 
 const ISSUE_FRAGMENT = `fragment IssueFields on Issue {
   number
@@ -20,8 +25,10 @@ const ISSUE_FRAGMENT = `fragment IssueFields on Issue {
   url
   body
   state
+  updatedAt
   assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } }
   labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }
+  ${LABEL_EVENTS_FIELD}
 }`
 
 // reviews/comments page sizes match scripts/port-tick/query.ts's own bound, for the cycle cap
@@ -33,12 +40,14 @@ const PULL_REQUEST_FRAGMENT = `fragment PullRequestFields on PullRequest {
   body
   state
   mergedAt
+  updatedAt
   headRefOid
   mergeable
   assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } }
   labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }
   reviews(first: 30) { totalCount nodes { body submittedAt commit { oid } } }
   comments(last: 20) { totalCount nodes { body createdAt } }
+  ${LABEL_EVENTS_FIELD}
 }`
 
 // The statusCheckRollup selection the approval-withdrawal observation reads. Spread only into

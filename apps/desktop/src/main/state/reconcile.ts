@@ -17,9 +17,12 @@ import type {
   OrphanReason,
   ReconciledItem,
   RepositoryState,
+  StageEntry,
   StatusEvidence,
   WaitingOn,
 } from '@/types/state'
+import type { LabelEventNode } from '@/types/github'
+import type { LabelVocabulary } from '@/utils/labels/vocabulary'
 import { attachAgents, attachSessions, attachWorktrees, collectOrphanNumbers } from '@/main/state/attach'
 import { closingReference, IMPLEMENTATION_PLAN_HEADING, sessionRequiredAt } from '@/main/state/link'
 import { stageOf } from '@/main/state/stage'
@@ -64,6 +67,18 @@ function statusOf(
   if (agents.length === 0 && sessions.some((s) => s.activity !== 'dormant')) return { status: 'in-flight', statusEvidence: 'session-active' }
   if (agents.length > 0 || sessions.length > 0) return { status: 'stalled', statusEvidence: 'all-dormant' }
   return { status: 'stalled', statusEvidence: 'no-claimant' }
+}
+
+/** Resolves raw label names to keys against this repository's vocabulary, oldest first — an unrecognised name is dropped, and so are `marker`/`autoPlan`. */
+function stageHistoryOf(labelEvents: readonly LabelEventNode[], vocabulary: LabelVocabulary): readonly StageEntry[] {
+  const byName = new Map(vocabulary.labels.map((label) => [label.name, label.key]))
+  const out: StageEntry[] = []
+  for (const event of labelEvents) {
+    const key = byName.get(event.label)
+    if (key === undefined || key === 'marker' || key === 'autoPlan') continue
+    out.push({ key, actor: event.actor, at: event.at })
+  }
+  return out.sort((a, b) => a.at.localeCompare(b.at))
 }
 
 /** Whichever source named the number first. A failed re-check yields `recheck-unavailable`, never collapsed into `number-not-found`. */
@@ -149,6 +164,8 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
     // `null` for a pull request — a `## Changes` block is prose, never this heading.
     const planPresent = item.kind === 'issue' ? item.body.split(/\r?\n/).some((line) => line.trim() === IMPLEMENTATION_PLAN_HEADING) : null
 
+    const stageHistory = stageHistoryOf(item.labelEvents, vocabulary)
+
     return {
       repoId,
       repo: item.repo,
@@ -173,6 +190,8 @@ export function reconcileRepository(input: ReconcileRepositoryInput): Repository
       worktrees: worktreeAttachments,
       state: item.state,
       mergedAt: item.mergedAt,
+      updatedAt: item.updatedAt,
+      stageHistory,
       matchedKeys: item.matchedKeys,
       sources,
       claimedFiles,

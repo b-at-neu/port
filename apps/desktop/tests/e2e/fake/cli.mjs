@@ -153,6 +153,7 @@ function nodeOf(kind, item) {
     state: item.state ?? 'OPEN',
     closedAt: item.closedAt ?? null,
     mergedAt: kind === 'pull-request' ? (item.mergedAt ?? null) : undefined,
+    updatedAt: item.updatedAt ?? '2024-01-01T00:00:00Z',
     headRefOid: item.headRefOid ?? 'deadbeef',
     mergeable: item.mergeable ?? 'MERGEABLE',
     assignees: { nodes: (item.assignees ?? []).map((login) => ({ login })) },
@@ -160,6 +161,7 @@ function nodeOf(kind, item) {
     blockedBy: { totalCount: (item.blockedBy ?? []).length, nodes: item.blockedBy ?? [] },
     reviews: { totalCount: 0, nodes: [] },
     comments: { totalCount: (item.comments ?? []).length, nodes: (item.comments ?? []).map((body) => ({ body, createdAt: new Date().toISOString() })) },
+    timelineItems: { nodes: item.labelEvents ?? [] },
   }
 }
 

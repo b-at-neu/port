@@ -29,6 +29,8 @@ export function reconciledItem(overrides: Partial<ReconciledItem> = {}): Reconci
     worktrees: [],
     state: 'OPEN',
     mergedAt: null,
+    updatedAt: null,
+    stageHistory: [],
     matchedKeys: ['ready'],
     sources: ['github'],
     claimedFiles: null,

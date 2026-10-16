@@ -44,9 +44,11 @@ function item(overrides: Partial<PipelineItem> = {}): PipelineItem {
     body: 'body text',
     state: 'OPEN',
     mergedAt: null,
+    updatedAt: null,
     assignees: ['op'],
     labels: ['ready'],
     matchedKeys: ['ready'],
+    labelEvents: [],
     headRefOid: null,
     mergeable: null,
     reviews: null,
@@ -410,6 +412,44 @@ describe('reconcileRepository — worktreeTotals (#80 Decision 6)', () => {
     })
     if (!state.ok) throw new Error('unreachable')
     expect(state.worktreeTotals).toEqual({ registered: 3, attached: 1, uncorrelated: 1 })
+  })
+})
+
+describe('reconcileRepository — updatedAt/stageHistory', () => {
+  it('copies updatedAt straight through', () => {
+    const state = reconcile([item({ updatedAt: '2026-01-05T00:00:00Z' })])
+    if (!state.ok) throw new Error('unreachable')
+    expect(state.items[0]?.updatedAt).toBe('2026-01-05T00:00:00Z')
+  })
+
+  it('resolves label names to keys, sorted oldest first', () => {
+    const labelEvents = [
+      { label: 'in progress', actor: 'b', at: '2026-01-02T00:00:00Z' },
+      { label: 'ready', actor: 'a', at: '2026-01-01T00:00:00Z' },
+    ]
+    const state = reconcile([item({ labelEvents })])
+    if (!state.ok) throw new Error('unreachable')
+    expect(state.items[0]?.stageHistory).toEqual([
+      { key: 'ready', actor: 'a', at: '2026-01-01T00:00:00Z' },
+      { key: 'inProgress', actor: 'b', at: '2026-01-02T00:00:00Z' },
+    ])
+  })
+
+  it('drops an event whose label name matches no vocabulary label', () => {
+    const labelEvents = [{ label: 'renamed-away', actor: 'a', at: '2026-01-01T00:00:00Z' }]
+    const state = reconcile([item({ labelEvents })])
+    if (!state.ok) throw new Error('unreachable')
+    expect(state.items[0]?.stageHistory).toEqual([])
+  })
+
+  it('drops marker and autoPlan events — they are not stages', () => {
+    const labelEvents = [
+      { label: 'claude', actor: 'a', at: '2026-01-01T00:00:00Z' },
+      { label: 'auto plan', actor: 'a', at: '2026-01-01T00:00:01Z' },
+    ]
+    const state = reconcile([item({ labelEvents })])
+    if (!state.ok) throw new Error('unreachable')
+    expect(state.items[0]?.stageHistory).toEqual([])
   })
 })
 

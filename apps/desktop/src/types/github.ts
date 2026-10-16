@@ -32,6 +32,13 @@ export interface PullRequestCommentNode {
   readonly createdAt: string
 }
 
+/** One `timelineItems` `LabeledEvent` node — the raw label name, unresolved; `reconcile.ts` is the one place it becomes a `LabelKey`. */
+export interface LabelEventNode {
+  readonly label: string
+  readonly actor: string | null
+  readonly at: string
+}
+
 /** GitHub's own mergeability enum, mapped verbatim — `null` for an issue. `UNKNOWN` never blocks the caller: reading it is what triggers GitHub to compute it. */
 export type Mergeable = 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN' | null
 
@@ -59,9 +66,13 @@ export interface PipelineItem {
   readonly body: string
   readonly state: string
   readonly mergedAt: string | null
+  /** `null` when GitHub's own value is missing or non-string — never a guess. */
+  readonly updatedAt: string | null
   readonly assignees: readonly string[]
   readonly labels: readonly string[]
   readonly matchedKeys: readonly LabelKey[]
+  /** Raw `LABELED_EVENT` timeline nodes, newest-truncated at 20 — `reconcile.ts` resolves names to keys and drops non-vocabulary entries. */
+  readonly labelEvents: readonly LabelEventNode[]
   readonly headRefOid: string | null
   readonly mergeable: Mergeable
   readonly reviews: readonly ReviewNode[] | null

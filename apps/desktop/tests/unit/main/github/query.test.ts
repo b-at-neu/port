@@ -98,6 +98,17 @@ describe('buildPipelineQuery', () => {
     expect(fragment).toContain('reviews(first: 30)')
     expect(fragment).toContain('comments(last: 20)')
   })
+
+  it('both the IssueFields and PullRequestFields fragments request updatedAt and a LABELED_EVENT timeline', () => {
+    const vocabulary = resolveVocabulary({})
+    const { document } = buildPipelineQuery(vocabulary)
+    const issueFragment = document.slice(document.indexOf('fragment IssueFields'), document.indexOf('fragment PullRequestFields'))
+    const prFragment = document.slice(document.indexOf('fragment PullRequestFields'))
+    for (const fragment of [issueFragment, prFragment]) {
+      expect(fragment).toContain('updatedAt')
+      expect(fragment).toContain('itemTypes: [LABELED_EVENT]')
+    }
+  })
 })
 
 describe('buildItemStatesQuery', () => {

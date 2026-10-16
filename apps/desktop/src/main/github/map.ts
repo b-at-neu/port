@@ -1,7 +1,7 @@
 // Nodes → PipelineItem, merging by kind + number and unioning matchedKeys. Never reconstruct a
 // label key by comparing strings — matchedKeys comes from the alias table query.ts built.
 import type { LabelKey } from '@/utils/labels/vocabulary'
-import type { CheckContext, ItemState, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, QueriedLabel, ReviewNode } from '@/types/github'
+import type { CheckContext, ItemState, LabelEventNode, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, QueriedLabel, ReviewNode } from '@/types/github'
 
 interface ConnectionLike {
   readonly totalCount?: unknown
@@ -19,6 +19,7 @@ interface RawNode {
   readonly body?: unknown
   readonly state?: unknown
   readonly mergedAt?: unknown
+  readonly updatedAt?: unknown
   readonly assignees?: unknown
   readonly labels?: unknown
   readonly headRefOid?: unknown
@@ -26,6 +27,7 @@ interface RawNode {
   readonly reviews?: unknown
   readonly comments?: unknown
   readonly commits?: unknown
+  readonly timelineItems?: unknown
 }
 
 function isRawNode(value: unknown): value is RawNode {
@@ -127,6 +129,27 @@ function commentNodesOf(value: unknown): readonly PullRequestCommentNode[] {
   return out
 }
 
+/** `LabeledEvent` nodes, raw label name unresolved — a node missing `createdAt`/`label.name` is
+ *  dropped; a ghost/deleted `actor` reads as `null`, never dropped. Absent `timelineItems` → `[]`. */
+function labelEventsOf(value: unknown): readonly LabelEventNode[] {
+  const connection = asConnection(value)
+  const nodes = connection?.nodes
+  if (!Array.isArray(nodes)) return []
+  const out: LabelEventNode[] = []
+  for (const node of nodes) {
+    if (typeof node !== 'object' || node === null) continue
+    const raw = node as Record<string, unknown>
+    if (typeof raw.createdAt !== 'string') continue
+    const label = typeof raw.label === 'object' && raw.label !== null ? (raw.label as Record<string, unknown>) : undefined
+    const labelName = typeof label?.name === 'string' ? label.name : undefined
+    if (labelName === undefined) continue
+    const actor = typeof raw.actor === 'object' && raw.actor !== null ? (raw.actor as Record<string, unknown>) : undefined
+    const login = typeof actor?.login === 'string' ? actor.login : null
+    out.push({ label: labelName, actor: login, at: raw.createdAt })
+  }
+  return out
+}
+
 function nodeToItem(node: RawNode, kind: PipelineItemKind, repo: string, key: LabelKey): PipelineItem | undefined {
   const number = numberField(node.number)
   if (number === undefined) return undefined
@@ -140,9 +163,11 @@ function nodeToItem(node: RawNode, kind: PipelineItemKind, repo: string, key: La
     body: stringField(node.body),
     state: stringField(node.state),
     mergedAt: typeof node.mergedAt === 'string' ? node.mergedAt : null,
+    updatedAt: typeof node.updatedAt === 'string' ? node.updatedAt : null,
     assignees: fieldListOf(node.assignees, 'login'),
     labels: fieldListOf(node.labels, 'name'),
     matchedKeys: [key],
+    labelEvents: labelEventsOf(node.timelineItems),
     headRefOid: isPullRequest && typeof node.headRefOid === 'string' ? node.headRefOid : null,
     mergeable: isPullRequest ? mergeableOf(node.mergeable) : null,
     reviews: isPullRequest ? reviewNodesOf(node.reviews) : null,
