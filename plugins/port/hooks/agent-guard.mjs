@@ -1,5 +1,5 @@
-// PreToolUse hook: denies a subagent call missing the allowlist or targeting a
-// sessionRequiredPaths path, plus rules for any caller. No-ops outside a port-managed repository.
+// PreToolUse hook: denies a subagent call missing the allowlist or targeting a sessionRequiredPaths
+// path, plus rules for any caller — except an app-owned top-level agent's protected edit, passed through with no decision. No-ops outside a port-managed repository.
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -79,10 +79,12 @@ if (configRoot) {
       typeof payload?.tool_input?.file_path === 'string' &&
       payload.tool_input.file_path.length > 0 &&
       realCanonical(resolve(configRoot, payload.tool_input.file_path)) === realCanonical(cockpitFilePath);
+    const writeFromTopLevelAgent = isWriteToolCall && callerKind(payload).isTopLevelAgent;
 
-    // Reads and classifies the ownership record for an Agent call or a write targeting it.
+    // Reads and classifies the ownership record for an Agent call, a write targeting it, or a
+    // write-tool call from a top-level agent session (needed for the protected-path pass-through).
     let ownership;
-    if (payload?.tool_name === 'Agent' || writeTargetsCockpitFile) {
+    if (payload?.tool_name === 'Agent' || writeTargetsCockpitFile || writeFromTopLevelAgent) {
       const exists = existsSync(cockpitFilePath);
       const text = exists ? readFileSync(cockpitFilePath, 'utf8') : '';
       ownership = classifyOwnership(exists, text, config?.repo);
@@ -155,6 +157,10 @@ if (configRoot) {
       // Allowed — no stdout, so the call proceeds — but logged as the
       // auditable record of a human gate being removed.
       log(logDir, 'gate-clear', actor, result.subject);
+    } else if (result.decision === 'pass') {
+      // Allowed — no stdout, so the SDK's canUseTool → stagePolicy pause runs — but logged so
+      // the audit trail shows a protected edit went through to the app's permission handler.
+      log(logDir, 'protected-pass', actor, result.subject);
     }
     // 'allow' — nothing to log, nothing to emit.
   } catch {

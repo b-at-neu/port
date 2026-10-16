@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { root } from '#lib/files.ts';
-import { resolveMatchers, subagentPayload, makeCheck, makeDecide } from '#lib/guard-fixtures.ts';
+import { resolveMatchers, subagentPayload, topLevelAgentPayload, makeCheck, makeDecide } from '#lib/guard-fixtures.ts';
 import type { Reporter } from '#lib/report.ts';
 
 export default async function ({ fail, ok, expect }: Reporter) {
@@ -95,6 +95,60 @@ export default async function ({ fail, ok, expect }: Reporter) {
   // still resolves via the agent_type signal.
   if (!callerKind({ agent_type: 'port:plan-agent' }).isSubagent) {
     fail('guard-classifier', 'callerKind missed a namespaced agent_type');
+  }
+  ok();
+
+  // --- App-owned pass-through: a top-level agent session's protected edit gets 'pass' only on
+  // verdict 'app'; every other verdict, and every other caller, still denies. ---
+  const protectedWrite = { sessionRequiredPaths: ['.claude/**'], matchers };
+
+  check(
+    'top-level agent + app owner → pass',
+    gate({ ...protectedWrite, payload: topLevelAgentPayload(), ownership: { kind: 'app', since: 'x' } }),
+    'pass',
+  );
+  for (const ownership of [{ kind: 'absent' }, { kind: 'terminal', since: 'x' }, { kind: 'unreadable', message: 'x' }]) {
+    check(
+      `top-level agent + ${ownership.kind} owner → deny`,
+      gate({ ...protectedWrite, payload: topLevelAgentPayload(), ownership }),
+      'deny',
+    );
+  }
+  check(
+    'terminal subagent (agent_id present) + app owner → deny',
+    gate({
+      ...protectedWrite,
+      payload: topLevelAgentPayload({ agent_id: 'agent-1' }),
+      ownership: { kind: 'app', since: 'x' },
+    }),
+    'deny',
+  );
+  check(
+    'transcript-signal subagent + app owner → deny',
+    gate({
+      ...protectedWrite,
+      payload: topLevelAgentPayload({ transcript_path: '/home/x/.claude/subagents/agent-abc123.jsonl' }),
+      ownership: { kind: 'app', since: 'x' },
+    }),
+    'deny',
+  );
+  check(
+    'top-level agent + app owner, non-protected path → allow',
+    gate({
+      ...protectedWrite,
+      payload: topLevelAgentPayload({ tool_input: { file_path: 'plugins/port/x.md' } }),
+      ownership: { kind: 'app', since: 'x' },
+    }),
+    'allow',
+  );
+
+  // callerKind: agent_type without agent_id → isSubagent and isTopLevelAgent both true;
+  // with agent_id → isTopLevelAgent false.
+  if (!callerKind({ agent_type: 'port:impl-agent' }).isTopLevelAgent) {
+    fail('guard-classifier', 'callerKind missed isTopLevelAgent for agent_type without agent_id');
+  }
+  if (callerKind({ agent_type: 'port:impl-agent', agent_id: 'agent-1' }).isTopLevelAgent) {
+    fail('guard-classifier', 'callerKind set isTopLevelAgent despite agent_id being present');
   }
   ok();
 

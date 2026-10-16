@@ -65,7 +65,7 @@ export type WorktreesRead =
     }
 
 /** The four-field current form's own vocabulary. A legacy three-field line carries no decision, so `DenialEntry.decision` is `null` for one. */
-export type DenialDecision = 'deny' | 'miss' | 'gate-clear' | 'hook-error'
+export type DenialDecision = 'deny' | 'miss' | 'gate-clear' | 'hook-error' | 'protected-pass'
 
 /** Attribution is partly reliable: a `stage-agent` or `subagent` actor is attributable, a `session` or `unattributed` actor never is. */
 export type DenialActor =

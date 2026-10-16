@@ -25,7 +25,7 @@ const DEFAULT_LIMIT = 500
 type FileFailureKindExcludingHandled = Exclude<FileFailureKind, 'not-found' | 'unparseable'>
 export const _kindsCoverFileFailureKind: AssertEqual<DenialsFailureKind, FileFailureKindExcludingHandled> = true
 
-const CURRENT_DECISIONS: ReadonlySet<DenialDecision> = new Set(['deny', 'miss', 'gate-clear', 'hook-error'])
+const CURRENT_DECISIONS: ReadonlySet<DenialDecision> = new Set(['deny', 'miss', 'gate-clear', 'hook-error', 'protected-pass'])
 
 function isDenialDecision(value: string): value is DenialDecision {
   return CURRENT_DECISIONS.has(value as DenialDecision)
