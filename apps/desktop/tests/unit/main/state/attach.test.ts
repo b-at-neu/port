@@ -48,6 +48,7 @@ describe('attachAgents', () => {
     const attached = attachAgents({ number: 79, linked: null }, [agent()])
     expect(attached).toHaveLength(1)
     expect(attached[0]?.match).toBe('direct')
+    expect(attached[0]?.sessionId).toBe('s1')
   })
 
   it('a review #<pr> agent attaches to the issue via linked, with match: linked', () => {

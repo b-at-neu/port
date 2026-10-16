@@ -43,7 +43,7 @@ export function HistoryScreen() {
   const showArchived = search.archived ?? false
 
   function openTranscript(sessionId: string, agentId: string | null, title: string): void {
-    void navigate({ to: ROUTE_IDS.transcript, params: { sessionId }, search: { agentId, from: 'history', focusIndex: null, title } })
+    void navigate({ to: ROUTE_IDS.transcript, params: { sessionId }, search: { agentId, from: 'history', focusIndex: null, title, item: null } })
   }
 
   return (

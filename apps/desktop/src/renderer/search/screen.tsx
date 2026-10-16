@@ -113,7 +113,7 @@ function SearchResults({ data }: { readonly data: Extract<SearchResult, { readon
                     void navigate({
                       to: ROUTE_IDS.transcript,
                       params: { sessionId: group.sessionId },
-                      search: { agentId: group.agentId, from: 'search', focusIndex: hit.entryIndex, title: group.label },
+                      search: { agentId: group.agentId, from: 'search', focusIndex: hit.entryIndex, title: group.label, item: null },
                     })
                   }
                   className="flex flex-col items-start gap-0.5 rounded-md px-2 py-1 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
