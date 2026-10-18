@@ -6,6 +6,7 @@ import { registerFixtureIpc } from '@/main/fixtures'
 import { fixtureMode } from '@/main/fixtures/mode'
 import { e2eMode } from '@/main/e2e/mode'
 import { setE2ERoute } from '@/main/platform/run'
+import { applyLoginShellPath } from '@/main/platform/shell-env'
 import { statOwnerMode, pathExists } from '@/main/platform/files'
 import type { PipelineWatcher } from '@/types/state'
 import type { HostedStore } from '@/types/hosting'
@@ -156,6 +157,8 @@ if (fixture.kind === 'invalid') {
         // The fixture case only needs the menu to render — no store to read sessions or marks from.
         Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform, app.isPackaged, [], broadcastAppCommand)))
       } else {
+        // Bounded by its own timeout; a failure or skip leaves `claude` resolution unaffected.
+        await applyLoginShellPath({ platform: process.platform, env: process.env, isPackagedFixtureOrE2E: e2e.kind === 'on' })
         // registerIpc builds the real initial menu itself, from the hosted store it just created.
         const registered = registerIpc()
         watcher = registered.watcher
