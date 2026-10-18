@@ -158,7 +158,7 @@ if (fixture.kind === 'invalid') {
         Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform, app.isPackaged, [], broadcastAppCommand)))
       } else {
         // Bounded by its own timeout; a failure or skip leaves `claude` resolution unaffected.
-        await applyLoginShellPath({ platform: process.platform, env: process.env, isPackagedFixtureOrE2E: e2e.kind === 'on' })
+        await applyLoginShellPath({ platform: process.platform, env: process.env, isE2E: e2e.kind === 'on' })
         // registerIpc builds the real initial menu itself, from the hosted store it just created.
         const registered = registerIpc()
         watcher = registered.watcher

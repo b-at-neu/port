@@ -8,16 +8,15 @@ const END_SENTINEL = '__PORT_PATH_END__'
 export interface ShouldProbeShellOptions {
   readonly platform: NodeJS.Platform
   readonly env: NodeJS.ProcessEnv
-  readonly isPackagedFixtureOrE2E: boolean
+  readonly isE2E: boolean
 }
 
 export type ShellEnvSkipReason = 'win32' | 'no-shell' | 'relative-shell' | 'has-term' | 'fixture-or-e2e'
 
-/** Pure: whether probing the login shell is worth the cost at all. A GUI launch has no `TERM`;
- *  a terminal launch does, and its environment is already complete. */
+/** Pure: whether probing is worth it — a GUI launch has no `TERM`, a terminal launch's env is already complete. */
 export function shouldProbeShell(options: ShouldProbeShellOptions): ShellEnvSkipReason | null {
   if (options.platform === 'win32') return 'win32'
-  if (options.isPackagedFixtureOrE2E) return 'fixture-or-e2e'
+  if (options.isE2E) return 'fixture-or-e2e'
   const shell = options.env.SHELL
   if (shell === undefined || shell === '') return 'no-shell'
   if (!isAbsolute(shell)) return 'relative-shell'
@@ -36,8 +35,7 @@ export interface ProbeLoginShellOptions {
   readonly run?: typeof runExecutable
 }
 
-/** Pure: the text strictly between the *last* BEGIN and the following END, so rc-file noise
- *  printed before or after the sentinels is never mistaken for the PATH. */
+/** Pure: text strictly between the *last* BEGIN and following END, so rc-file noise can't be mistaken for the PATH. */
 export function parseSentinelPath(stdout: string): string | null {
   const beginAt = stdout.lastIndexOf(BEGIN_SENTINEL)
   if (beginAt === -1) return null
@@ -47,8 +45,7 @@ export function parseSentinelPath(stdout: string): string | null {
   return stdout.slice(afterBegin, endAt)
 }
 
-/** Runs the user's login shell once to read its resolved `PATH`. Sentinels bracket the output so
- *  anything an rc file prints to stdout is ignored rather than corrupting the parse. */
+/** Runs the login shell once to read its resolved `PATH`; sentinels keep rc-file stdout noise out of the parse. */
 export async function probeLoginShellPath(options: ProbeLoginShellOptions): Promise<ProbeLoginShellResult> {
   const run = options.run ?? runExecutable
   const script = `printf '%s' '${BEGIN_SENTINEL}'; printf '%s' "$PATH"; printf '%s' '${END_SENTINEL}'`
@@ -67,8 +64,7 @@ export async function probeLoginShellPath(options: ProbeLoginShellOptions): Prom
   return { ok: true, path }
 }
 
-/** Pure: login entries first, then inherited entries not already present. Order is otherwise
- *  preserved and empty segments (a trailing/doubled delimiter) are dropped. */
+/** Pure: login entries first, then inherited entries not already present; empty segments are dropped. */
 export function mergePath(loginPath: string, inheritedPath: string, delimiter: string): string {
   const seen = new Set<string>()
   const merged: string[] = []
@@ -83,14 +79,13 @@ export function mergePath(loginPath: string, inheritedPath: string, delimiter: s
 export interface ApplyLoginShellPathDeps {
   readonly platform: NodeJS.Platform
   readonly env: NodeJS.ProcessEnv
-  readonly isPackagedFixtureOrE2E: boolean
+  readonly isE2E: boolean
   readonly timeoutMs?: number
   readonly run?: typeof runExecutable
   readonly delimiter?: string
 }
 
-/** Mutates `env.PATH` in place — every PATH-sensitive read holds a reference to this object.
- *  Never throws: a failure or skip leaves the inherited PATH standing. */
+/** Mutates `env.PATH` in place (every PATH-sensitive read holds a reference); never throws. */
 export async function applyLoginShellPath(deps: ApplyLoginShellPathDeps): Promise<void> {
   const skip = shouldProbeShell(deps)
   if (skip !== null) return

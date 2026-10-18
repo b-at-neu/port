@@ -6,27 +6,27 @@ const BASE_ENV = { SHELL: '/bin/bash', PATH: '/usr/bin' }
 
 describe('shouldProbeShell', () => {
   it('skips on win32', () => {
-    expect(shouldProbeShell({ platform: 'win32', env: BASE_ENV, isPackagedFixtureOrE2E: false })).toBe('win32')
+    expect(shouldProbeShell({ platform: 'win32', env: BASE_ENV, isE2E: false })).toBe('win32')
   })
 
   it('skips when SHELL is unset', () => {
-    expect(shouldProbeShell({ platform: 'linux', env: {}, isPackagedFixtureOrE2E: false })).toBe('no-shell')
+    expect(shouldProbeShell({ platform: 'linux', env: {}, isE2E: false })).toBe('no-shell')
   })
 
   it('skips when SHELL is relative', () => {
-    expect(shouldProbeShell({ platform: 'linux', env: { SHELL: 'bash' }, isPackagedFixtureOrE2E: false })).toBe('relative-shell')
+    expect(shouldProbeShell({ platform: 'linux', env: { SHELL: 'bash' }, isE2E: false })).toBe('relative-shell')
   })
 
   it('skips when TERM is set — a terminal launch already has a complete environment', () => {
-    expect(shouldProbeShell({ platform: 'linux', env: { ...BASE_ENV, TERM: 'xterm-256color' }, isPackagedFixtureOrE2E: false })).toBe('has-term')
+    expect(shouldProbeShell({ platform: 'linux', env: { ...BASE_ENV, TERM: 'xterm-256color' }, isE2E: false })).toBe('has-term')
   })
 
   it('skips in fixture or e2e mode', () => {
-    expect(shouldProbeShell({ platform: 'linux', env: BASE_ENV, isPackagedFixtureOrE2E: true })).toBe('fixture-or-e2e')
+    expect(shouldProbeShell({ platform: 'linux', env: BASE_ENV, isE2E: true })).toBe('fixture-or-e2e')
   })
 
   it('probes a desktop-like launch — absolute SHELL, no TERM, not fixture/e2e', () => {
-    expect(shouldProbeShell({ platform: 'linux', env: BASE_ENV, isPackagedFixtureOrE2E: false })).toBeNull()
+    expect(shouldProbeShell({ platform: 'linux', env: BASE_ENV, isE2E: false })).toBeNull()
   })
 })
 
@@ -120,7 +120,7 @@ describe('applyLoginShellPath', () => {
     await applyLoginShellPath({
       platform: 'linux',
       env,
-      isPackagedFixtureOrE2E: false,
+      isE2E: false,
       run: () => Promise.resolve({ ok: false, kind: 'timeout', timeoutMs: 5_000, stderr: '' }),
     })
     expect(env.PATH).toBe('/usr/bin')
@@ -131,7 +131,7 @@ describe('applyLoginShellPath', () => {
     await applyLoginShellPath({
       platform: 'linux',
       env,
-      isPackagedFixtureOrE2E: false,
+      isE2E: false,
       run: () => Promise.resolve({ ok: false, kind: 'nonzero', code: 1, stdout: '', stderr: '' }),
     })
     expect(env.PATH).toBe('/usr/bin')
@@ -142,7 +142,7 @@ describe('applyLoginShellPath', () => {
     await applyLoginShellPath({
       platform: 'linux',
       env,
-      isPackagedFixtureOrE2E: false,
+      isE2E: false,
       run: () => Promise.resolve(ok('__PORT_PATH_BEGIN__/home/u/.nvm/bin__PORT_PATH_END__')),
     })
     expect(env.PATH).toBe('/home/u/.nvm/bin:/usr/bin')
@@ -154,7 +154,7 @@ describe('applyLoginShellPath', () => {
       applyLoginShellPath({
         platform: 'linux',
         env,
-        isPackagedFixtureOrE2E: false,
+        isE2E: false,
         run: () => Promise.reject(new Error('spawn exploded')),
       }),
     ).resolves.toBeUndefined()
@@ -167,7 +167,7 @@ describe('applyLoginShellPath', () => {
     await applyLoginShellPath({
       platform: 'linux',
       env,
-      isPackagedFixtureOrE2E: false,
+      isE2E: false,
       run: () => {
         ran = true
         return Promise.resolve(ok('__PORT_PATH_BEGIN__/x__PORT_PATH_END__'))
