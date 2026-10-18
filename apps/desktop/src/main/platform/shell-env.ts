@@ -89,8 +89,7 @@ export interface ApplyLoginShellPathDeps {
   readonly delimiter?: string
 }
 
-/** Composes the probe and merge above and mutates `env.PATH` in place — the whole fix, since
- *  every PATH-sensitive read (`which`, the SDK child) holds a reference to this same object.
+/** Mutates `env.PATH` in place — every PATH-sensitive read holds a reference to this object.
  *  Never throws: a failure or skip leaves the inherited PATH standing. */
 export async function applyLoginShellPath(deps: ApplyLoginShellPathDeps): Promise<void> {
   const skip = shouldProbeShell(deps)
