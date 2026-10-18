@@ -65,7 +65,41 @@ interface ItemSeed {
   readonly updatedMinutesAgo?: number
   // A pull request's mergeability — defaults to 'MERGEABLE'; ignored for issues.
   readonly mergeable?: 'MERGEABLE' | 'CONFLICTING'
+  // A pull request's comments — defaults to none; ignored for issues.
+  readonly comments?: readonly { readonly body: string; readonly offsetMinutes: number }[]
 }
+
+const CURRENCY_ESCALATION = [
+  '## Pipeline Escalation',
+  '3 conflicts — 1 resolved automatically, 2 need a decision',
+  '',
+  '### Auto-resolved (reapplied on the next attempt)',
+  '- `pnpm-lock.yaml` — regenerated from the base',
+  '',
+  '### D1 — `src/money.ts`',
+  '**Ours:** rounds half-up in `roundCents`',
+  '**Theirs:** rounds half-even in `roundCents`',
+  '',
+  '| Option | Keeps | Loses |',
+  '| --- | --- | --- |',
+  '| **A take ours** | half-up rounding | the base branch\'s half-even change |',
+  '| **B take theirs** | half-even rounding | this PR\'s half-up change |',
+  '| **C keep both** | both behaviours behind a flag | a single code path |',
+  '',
+  '**Recommendation: B** — the base already ships half-even to callers.',
+  '',
+  '### D2 — `src/format.ts`',
+  '**Ours:** formats totals with two decimals',
+  '**Theirs:** formats totals with the locale default',
+  '',
+  '| Option | Keeps | Loses |',
+  '| --- | --- | --- |',
+  '| **A take ours** | fixed two decimals | locale-aware formatting |',
+  '| **B take theirs** | locale-aware formatting | fixed two decimals |',
+  '| **C keep both rounding modes** | a `mode` argument on `formatTotal` | the one-argument signature |',
+  '',
+  '**Recommendation: C** — callers on both sides still need their own mode.',
+].join('\n')
 
 /** One item per stage family the board groups by, so the screenshot shows every group non-empty, plus two seeds for the Needs you screen's own label-kinds. */
 const POPULATED_ITEM_SEEDS: readonly ItemSeed[] = [
@@ -101,6 +135,8 @@ const POPULATED_ITEM_SEEDS: readonly ItemSeed[] = [
     ],
   },
   { kind: 'pull-request', number: 35, title: 'Cache avatar thumbnails', stageKey: 'needsRevision' },
+  // A rebase escalation with two decisions, so the Needs you screen's Unblock dialog has picks to show.
+  { kind: 'pull-request', number: 37, title: 'Normalize currency rounding', stageKey: 'needsHuman', comments: [{ body: CURRENCY_ESCALATION, offsetMinutes: -8 }] },
   { kind: 'issue', number: 50, title: 'Rotate the webhook signing secret', stageKey: 'needsHuman' },
   { kind: 'issue', number: 51, title: 'Backfill order totals for Q3', stageKey: 'blocked' },
   // Unassigned and queued, so planTick's ownership partition holds it with reason 'unowned' — the Board's "Waiting on you" row needs one.
@@ -152,7 +188,7 @@ function pipelineItemsFor(now: Date, vocabulary: LabelVocabulary, seeds: readonl
       headRefOid: isPr ? `fixture-sha-${String(seed.number)}` : null,
       mergeable: isPr ? (seed.mergeable ?? 'MERGEABLE') : null,
       reviews: isPr ? [] : null,
-      comments: isPr ? [] : null,
+      comments: isPr ? (seed.comments ?? []).map((c) => ({ body: c.body, createdAt: offsetMinutes(now, c.offsetMinutes) })) : null,
       checkRollup: isPr ? [] : null,
     }
   })

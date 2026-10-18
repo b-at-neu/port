@@ -114,6 +114,7 @@ export default async function ({ expect, fail, ok }: Reporter) {
       GATE_CLEARED_HEADING: string;
       PIPELINE_ESCALATION_HEADING: string;
       changesRequestedBody: (headRefOid: string, note: string) => string;
+      gateClearedBody: (route: 'revision' | 'review', opts?: { rebaseDecisions?: { id: string; path: string; letter: string; label: string }[] }) => string;
     };
     const artifacts = (await import(pathToFileURL(join(root, 'plugins/port/bin/artifacts.mjs')).href)) as {
       CHANGES_REQUESTED_HEADING: string;
@@ -127,6 +128,28 @@ export default async function ({ expect, fail, ok }: Reporter) {
 
     const formatsText = readFileSync(join(root, formatsFile), 'utf8');
     expect(formatsText.includes('Requested by the operator on `<head-sha>`, after approval:'), 'desktop-actions', `${formatsFile}'s "Changes requested" fence no longer names the exact line ${bodiesFile}'s changesRequestedBody renders`);
+
+    // The decision line is quoted verbatim by the cockpit skill and revise-agent, which parses it back.
+    const decisionLineShape = '- D<n> `path` — **<letter> <label>**';
+    const gateCleared = bodies.gateClearedBody('revision', {
+      rebaseDecisions: [
+        { id: 'D1', path: 'src/money.ts', letter: 'B', label: 'take theirs' },
+        { id: 'D2', path: 'src/format.ts', letter: 'C', label: 'keep both rounding modes' },
+      ],
+    });
+    const decisionLines = gateCleared.split('\n').filter((line) => line.startsWith('- D'));
+    expect(
+      decisionLines.length === 2 && decisionLines.every((line) => /^- D\d+ `[^`]+` — \*\*[A-Z] [^*]+\*\*$/.test(line)),
+      'desktop-actions',
+      `${bodiesFile}'s gateClearedBody no longer renders each rebase decision as '${decisionLineShape}'`,
+    );
+    for (const quoted of ['plugins/port/skills/pipeline/SKILL.md', 'plugins/port/agents/revise-agent.md']) {
+      expect(
+        readFileSync(join(root, quoted), 'utf8').includes(decisionLineShape),
+        'desktop-actions',
+        `${quoted} no longer quotes '${decisionLineShape}' — the decision line ${bodiesFile}'s gateClearedBody renders`,
+      );
+    }
 
     const portTickGatesText = readFileSync(join(root, scriptsPortTickGatesFile), 'utf8');
     const portTickGatesMatch = /GATE_CLEARED_PREFIX\s*=\s*'([^']+)'/.exec(portTickGatesText);

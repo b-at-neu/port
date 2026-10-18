@@ -22,7 +22,7 @@ describe('needsYouLeadCopy', () => {
     const item = {
       ...base({ number: 33 }),
       kind: 'needs-human',
-      matchedRow: { decisions: { unblock: { available: true, context: { reason: 'budget exceeded', cyclesUsed: 0, cap: 5 } } } },
+      matchedRow: { decisions: { unblock: { available: true, context: { reason: 'budget exceeded', cyclesUsed: 0, cap: 5, decisions: [] } } } },
       row: {} as never,
     } as unknown as NeedsYouItem
     expect(needsYouLeadCopy(item)).toBe('Unblock #33: budget exceeded')

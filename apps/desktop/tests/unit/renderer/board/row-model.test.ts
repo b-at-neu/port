@@ -185,7 +185,7 @@ describe('nextActionFor', () => {
   })
 
   it('the decision label when a decision is available', () => {
-    const r = row({ stageKey: 'needsHuman', decisions: { unblock: { available: true, context: { reason: null, cyclesUsed: 1, cap: 5 } } } })
+    const r = row({ stageKey: 'needsHuman', decisions: { unblock: { available: true, context: { reason: null, cyclesUsed: 1, cap: 5, decisions: [] } } } })
     expect(nextActionFor(r)).toEqual({ kind: 'decision', label: 'Unblock', decision: 'unblock' })
   })
 

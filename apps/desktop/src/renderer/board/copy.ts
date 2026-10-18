@@ -266,7 +266,7 @@ export function decisionRefusalNote(decision: OperatorDecision, reason: string, 
     return `PR #${n} has used all its review cycles. Sending it back would escalate straight to "${labelNameOf('needsHuman')}". Merge it and open a follow-up, or raise reviewCycleCap.`
   }
   if (reason === 'rebase-decisions') {
-    return `PR #${n} is waiting on rebase decisions. port can't record them yet — answer them with unblock #${n} in the cockpit.`
+    return `PR #${n} is waiting on rebase decisions port couldn't read — answer them with unblock #${n} in the cockpit.`
   }
   void decision
   return null

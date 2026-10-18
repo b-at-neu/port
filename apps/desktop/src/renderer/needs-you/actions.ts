@@ -29,7 +29,7 @@ function disabledReasonCopy(reason: DecisionRefusal): string {
     case 'cycle-cap':
       return 'Already at the review cycle cap — unblocking would only escalate it straight back.'
     case 'rebase-decisions':
-      return "There's an open rebase escalation this app can't record a decision against."
+      return "This rebase escalation's decisions couldn't be read. Answer them with unblock #N in the cockpit."
     case 'not-applicable':
       return "This action doesn't apply here."
   }

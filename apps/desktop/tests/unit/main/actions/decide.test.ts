@@ -74,7 +74,7 @@ describe('applyItemDecision — moved', () => {
   it('refuses moved when the item is gone from the snapshot', async () => {
     const snapshot = snapshotOf([repoState([])])
     const result = await applyItemDecision(
-      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
       depsWith({}),
     )
     expect(result).toEqual({ ok: false, reason: 'moved', expected: 'needs human', observed: 'no longer tracked' })
@@ -83,7 +83,7 @@ describe('applyItemDecision — moved', () => {
   it('refuses moved when the current stage disagrees with expectedStage', async () => {
     const snapshot = snapshotOf([repoState([item({ stages: [stageLabel('approved', 'terminal')], stage: 'terminal' })])])
     const result = await applyItemDecision(
-      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
       depsWith({}),
     )
     expect(result).toEqual({ ok: false, reason: 'moved', expected: 'needs human', observed: 'approved' })
@@ -100,7 +100,7 @@ describe('applyItemDecision — moved', () => {
       fetchItemsByNumber: fetchReturning({ ok: true, resolved: [resolvedItem({ labels: ['needs revision'] })], unavailable: [], fetchedAt: NOW().toISOString() }),
     })
     const result = await applyItemDecision(
-      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
       deps,
     )
     expect(result.ok).toBe(false)
@@ -113,7 +113,7 @@ describe('applyItemDecision — refusals', () => {
   it('refuses not-owned', async () => {
     const snapshot = snapshotOf([repoState([item({ assignees: ['other'] })], { viewer: 'op' })])
     const result = await applyItemDecision(
-      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
       depsWith({}),
     )
     expect(result).toEqual({ ok: false, reason: 'not-owned', owners: ['other'] })
@@ -122,7 +122,7 @@ describe('applyItemDecision — refusals', () => {
   it('refuses cycle-cap for revise at the cap', async () => {
     const snapshot = snapshotOf([repoState([item({ stage: 'terminal', stages: [stageLabel('approved', 'terminal')], reviewCycleCount: 5 })], { reviewCycleCap: 5 })])
     const result = await applyItemDecision(
-      { request: { repoId: REPO_ID, number: 300, decision: 'revise', expectedStage: 'approved', route: null, note: 'change it', skipComment: false }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      { request: { repoId: REPO_ID, number: 300, decision: 'revise', expectedStage: 'approved', route: null, note: 'change it', skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
       depsWith({}),
     )
     expect(result).toEqual({ ok: false, reason: 'refused', refusal: 'cycle-cap' })
@@ -131,7 +131,7 @@ describe('applyItemDecision — refusals', () => {
   it('refuses note-invalid for an empty revise note, before any read or write', async () => {
     const snapshot = snapshotOf([repoState([item({ stage: 'terminal', stages: [stageLabel('approved', 'terminal')] })])])
     const result = await applyItemDecision(
-      { request: { repoId: REPO_ID, number: 300, decision: 'revise', expectedStage: 'approved', route: null, note: '  ', skipComment: false }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      { request: { repoId: REPO_ID, number: 300, decision: 'revise', expectedStage: 'approved', route: null, note: '  ', skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
       depsWith({}),
     )
     expect(result).toEqual({ ok: false, reason: 'refused', refusal: 'note-invalid', problem: 'empty' })
@@ -151,7 +151,7 @@ describe('applyItemDecision — comment then swap', () => {
       fetchItemsByNumber: fetchReturning({ ok: true, resolved: [resolvedItem()], unavailable: [], fetchedAt: NOW().toISOString() }),
     })
     const result = await applyItemDecision(
-      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
       deps,
     )
     expect(result.ok).toBe(false)
@@ -171,7 +171,7 @@ describe('applyItemDecision — comment then swap', () => {
       fetchItemsByNumber: fetchReturning({ ok: true, resolved: [resolvedItem()], unavailable: [], fetchedAt: NOW().toISOString() }),
     })
     const result = await applyItemDecision(
-      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: true }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: true, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
       deps,
     )
     expect(result).toEqual({ ok: true, comment: null, labels: { kind: 'applied', argv: [] } })
@@ -193,7 +193,7 @@ describe('applyItemDecision — comment then swap', () => {
       fetchItemsByNumber: fetchReturning({ ok: true, resolved: [resolvedItem()], unavailable: [], fetchedAt: NOW().toISOString() }),
     })
     const result = await applyItemDecision(
-      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
       deps,
     )
     expect(result).toEqual({ ok: true, comment: { kind: 'applied', argv: [] }, labels: { kind: 'applied', argv: [] } })
@@ -213,7 +213,7 @@ describe('applyItemDecision — comment then swap', () => {
       fetchItemsByNumber: fetchReturning({ ok: true, resolved: [resolvedItem()], unavailable: [], fetchedAt: NOW().toISOString() }),
     })
     await applyItemDecision(
-      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
       deps,
     )
     expect(body).toContain('### Cycle grant')
@@ -232,10 +232,103 @@ describe('applyItemDecision — comment then swap', () => {
       fetchItemsByNumber: fetchReturning({ ok: true, resolved: [resolvedItem()], unavailable: [], fetchedAt: NOW().toISOString() }),
     })
     await applyItemDecision(
-      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
       deps,
     )
     expect(body).not.toContain('### Cycle grant')
+  })
+})
+
+const TWO_DECISION_ESCALATION = [
+  '## Pipeline Escalation',
+  '3 conflicts — 1 resolved automatically, 2 need a decision',
+  '',
+  '### D1 — `src/money.ts`',
+  '**Ours:** half-up',
+  '',
+  '| Option | Keeps | Loses |',
+  '| --- | --- | --- |',
+  '| **A take ours** | half-up | half-even |',
+  '| **B take theirs** | half-even | half-up |',
+  '',
+  '**Recommendation: B** — base ships half-even.',
+  '',
+  '### D2 — `src/format.ts`',
+  '',
+  '| Option | Keeps | Loses |',
+  '| --- | --- | --- |',
+  '| **A take ours** | two decimals | locale |',
+  '| **B take theirs** | locale | two decimals |',
+  '| **C keep both rounding modes** | a mode argument | one signature |',
+].join('\n')
+
+describe('applyItemDecision — rebase decisions', () => {
+  const comments = [{ body: TWO_DECISION_ESCALATION, createdAt: '2026-01-01T00:00:00Z' }]
+  const request = (overrides: Partial<Parameters<typeof applyItemDecision>[0]['request']>) => ({
+    repoId: REPO_ID,
+    number: 300,
+    decision: 'unblock' as const,
+    expectedStage: 'needsHuman' as const,
+    route: 'revision' as const,
+    note: null,
+    skipComment: false,
+    picks: [
+      { id: 'D1', letter: 'B' },
+      { id: 'D2', letter: 'C' },
+    ],
+    ...overrides,
+  })
+
+  it('posts the terminal path comment, then swaps needsHuman for needsRevision', async () => {
+    const snapshot = snapshotOf([repoState([item({ comments })])])
+    const calls: string[] = []
+    let body = ''
+    let labels: { readonly add: readonly string[]; readonly remove: readonly string[] } | null = null
+    const deps = depsWith({
+      postComment: (params) => {
+        calls.push('comment')
+        body = params.request.body
+        return Promise.resolve({ kind: 'applied', argv: [] })
+      },
+      applyLabels: (params) => {
+        calls.push('labels')
+        labels = params.request
+        return Promise.resolve({ kind: 'applied', argv: [] })
+      },
+      fetchItemsByNumber: fetchReturning({ ok: true, resolved: [resolvedItem()], unavailable: [], fetchedAt: NOW().toISOString() }),
+    })
+    const result = await applyItemDecision({ request: request({}), snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' }, deps)
+    expect(result.ok).toBe(true)
+    expect(calls).toEqual(['comment', 'labels'])
+    expect(body).toBe(
+      '## Gate cleared\nCleared by the operator in port: back to revision.\n\n### Rebase decisions\n- D1 `src/money.ts` — **B take theirs**\n- D2 `src/format.ts` — **C keep both rounding modes**',
+    )
+    expect(labels).toMatchObject({ add: ['needsRevision'], remove: ['needsHuman'] })
+  })
+
+  it.each([
+    ['a missing pick', { picks: [{ id: 'D1', letter: 'B' }] }, 'missing D2'],
+    ['no picks at all', { picks: null }, 'missing D1'],
+    ['an unknown id', { picks: [{ id: 'D1', letter: 'B' }, { id: 'D2', letter: 'C' }, { id: 'D9', letter: 'A' }] }, 'unknown D9'],
+    ['an off-menu letter', { picks: [{ id: 'D1', letter: 'C' }, { id: 'D2', letter: 'C' }] }, 'off-menu D1'],
+    ['the review route', { route: 'review' as const }, 'route'],
+  ])('refuses %s with picks-invalid and writes nothing', async (_name, overrides, problem) => {
+    const snapshot = snapshotOf([repoState([item({ comments })])])
+    const result = await applyItemDecision({ request: request(overrides), snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' }, depsWith({}))
+    expect(result).toEqual({ ok: false, reason: 'refused', refusal: 'picks-invalid', problem })
+  })
+
+  it('refuses picks on an escalation that carries no decisions', async () => {
+    const snapshot = snapshotOf([repoState([item({ comments: [{ body: '## Pipeline Escalation\nreason', createdAt: '2026-01-01T00:00:00Z' }] })])])
+    const result = await applyItemDecision({ request: request({}), snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' }, depsWith({}))
+    expect(result).toEqual({ ok: false, reason: 'refused', refusal: 'picks-invalid', problem: 'unexpected' })
+  })
+
+  it('still refuses rebase-decisions when a block cannot be parsed', async () => {
+    const unreadable = [{ body: '## Pipeline Escalation\n1 conflict\n### D1 — `a.ts`\nno table', createdAt: '2026-01-01T00:00:00Z' }]
+    const snapshot = snapshotOf([repoState([item({ comments: unreadable })])])
+    const result = await applyItemDecision({ request: request({}), snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' }, depsWith({}))
+    expect(result).toEqual({ ok: false, reason: 'refused', refusal: 'rebase-decisions' })
   })
 })
 
@@ -257,7 +350,7 @@ describe('applyItemDecision — real writers', () => {
     const snapshot = snapshotOf([repoState([item()])])
     const result = await applyItemDecision(
       {
-        request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false },
+        request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null },
         snapshot,
         entry: entry({ path: repoRoot }),
         auditDir,

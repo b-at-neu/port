@@ -123,6 +123,20 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
       expect(held).toMatchObject({ held: { reason: 'conflicting' } })
       expect(stalled).toBeDefined()
     })
+
+    it.runIf(scenario === 'populated')('carries #37 at needs human with an Unblock that lists its two rebase decisions', () => {
+      const item = needsYouItems(snapshot, now).find((i) => i.kind === 'needs-human' && i.number === 37)
+      const unblock = item !== undefined && item.kind === 'needs-human' ? item.matchedRow?.decisions.unblock : undefined
+      expect(unblock).toMatchObject({
+        available: true,
+        context: {
+          decisions: [
+            { id: 'D1', path: 'src/money.ts', recommended: 'B' },
+            { id: 'D2', path: 'src/format.ts', recommended: 'C' },
+          ],
+        },
+      })
+    })
   })
 
   it('reports gate:preflight as answerable, with a plan body carrying a heading, list, code, table and link', () => {

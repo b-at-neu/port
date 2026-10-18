@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { PullRequestCommentNode } from '@/types/github'
 import type { ReconciledItem, StageLabel } from '@/types/state'
-import { decisionPlan, decisionsFor, escalationOf, reviseNoteProblem } from '@/utils/actions/decide'
+import { decisionPlan, decisionsFor, escalationOf, pickList, picksProblem, rebaseDecisionsOf, reviseNoteProblem } from '@/utils/actions/decide'
 
 function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
   return {
@@ -53,7 +53,7 @@ describe('decisionsFor — unblock', () => {
   it('is available on a pull request whose only role-bearing label is needsHuman', () => {
     const it1 = item({ stages: [stageLabel('needsHuman', 'gate')] })
     const result = decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5 })
-    expect(result.unblock).toEqual({ available: true, context: { reason: null, cyclesUsed: 0, cap: 5 } })
+    expect(result.unblock).toEqual({ available: true, context: { reason: null, cyclesUsed: 0, cap: 5, decisions: [] } })
   })
 
   it('carries the newest escalation reason', () => {
@@ -63,13 +63,21 @@ describe('decisionsFor — unblock', () => {
     ]
     const it1 = item({ stages: [stageLabel('needsHuman', 'gate')], comments })
     const result = decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5 })
-    expect(result.unblock).toEqual({ available: true, context: { reason: 'newer reason', cyclesUsed: 0, cap: 5 } })
+    expect(result.unblock).toEqual({ available: true, context: { reason: 'newer reason', cyclesUsed: 0, cap: 5, decisions: [] } })
   })
 
-  it('refuses rebase-decisions when the escalation carries open D<n> blocks', () => {
+  it('refuses rebase-decisions when the escalation carries D<n> blocks it cannot parse', () => {
     const comments: readonly PullRequestCommentNode[] = [{ body: '## Pipeline Escalation\n2 conflicts\n### D1 — `a.ts`\n### D2 — `b.ts`', createdAt: '2026-01-01T00:00:00Z' }]
     const it1 = item({ stages: [stageLabel('needsHuman', 'gate')], comments })
     expect(decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5 }).unblock).toEqual({ available: false, reason: 'rebase-decisions' })
+  })
+
+  it('is available with the parsed decisions when every D<n> block parses', () => {
+    const comments: readonly PullRequestCommentNode[] = [{ body: TWO_DECISIONS, createdAt: '2026-01-01T00:00:00Z' }]
+    const it1 = item({ stages: [stageLabel('needsHuman', 'gate')], comments })
+    const result = decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5 })
+    expect(result.unblock).toMatchObject({ available: true, context: { reason: '3 conflicts — 1 resolved automatically, 2 need a decision' } })
+    if (result.unblock.available && 'decisions' in result.unblock.context) expect(result.unblock.context.decisions.map((d) => d.id)).toEqual(['D1', 'D2'])
   })
 
   it('raises the cap by one grant comment', () => {
@@ -78,7 +86,7 @@ describe('decisionsFor — unblock', () => {
     ]
     const it1 = item({ stages: [stageLabel('needsHuman', 'gate')], comments })
     const result = decisionsFor({ item: it1, viewer: 'op', reviewCycleCap: 5 })
-    expect(result.unblock).toEqual({ available: true, context: { reason: null, cyclesUsed: 0, cap: 6 } })
+    expect(result.unblock).toEqual({ available: true, context: { reason: null, cyclesUsed: 0, cap: 6, decisions: [] } })
   })
 
   it('is not-applicable on an issue, or with a second role-bearing label present', () => {
@@ -130,16 +138,132 @@ describe('decisionsFor — ownership', () => {
 })
 
 describe('escalationOf', () => {
-  it('returns null reason and zero rebaseDecisions with no comments', () => {
-    expect(escalationOf(null)).toEqual({ reason: null, rebaseDecisions: 0 })
+  it('returns null reason and no rebaseDecisions with no comments', () => {
+    expect(escalationOf(null)).toEqual({ reason: null, rebaseDecisions: [] })
   })
 
-  it('counts D<n> blocks in the newest escalation only', () => {
+  it('reads D<n> blocks from the newest escalation only', () => {
     const comments: readonly PullRequestCommentNode[] = [
       { body: '## Pipeline Escalation\nreason\n### D1 — `a.ts`', createdAt: '2026-01-01T00:00:00Z' },
       { body: '## Pipeline Escalation\nnewer reason', createdAt: '2026-01-02T00:00:00Z' },
     ]
-    expect(escalationOf(comments)).toEqual({ reason: 'newer reason', rebaseDecisions: 0 })
+    expect(escalationOf(comments)).toEqual({ reason: 'newer reason', rebaseDecisions: [] })
+  })
+})
+
+const TWO_DECISIONS = [
+  '## Pipeline Escalation',
+  '3 conflicts — 1 resolved automatically, 2 need a decision',
+  '',
+  '### Auto-resolved (reapplied on the next attempt)',
+  '- `pnpm-lock.yaml` — regenerated',
+  '',
+  '### D1 — `src/money.ts`',
+  '**Ours:** half-up',
+  '**Theirs:** half-even',
+  '',
+  '| Option | Keeps | Loses |',
+  '| --- | --- | --- |',
+  '| **A take ours** | half-up | half-even |',
+  '| **B** take theirs | half-even | half-up |',
+  '| C — keep both | a flag | one path |',
+  '',
+  '**Recommendation: B** — base ships half-even.',
+  '',
+  '### D2 — `src/format.ts`',
+  '',
+  '| Option | Keeps | Loses |',
+  '| --- | --- | --- |',
+  '| **A take ours** | one | two |',
+  '| **B take theirs** | locale | decimals |',
+].join('\n')
+
+describe('rebaseDecisionsOf', () => {
+  it('parses two decisions with their options, summaries and recommendations', () => {
+    expect(rebaseDecisionsOf(TWO_DECISIONS)).toEqual([
+      {
+        id: 'D1',
+        path: 'src/money.ts',
+        summary: '**Ours:** half-up',
+        options: [
+          { letter: 'A', label: 'take ours' },
+          { letter: 'B', label: 'take theirs' },
+          { letter: 'C', label: 'keep both' },
+        ],
+        recommended: 'B',
+      },
+      expect.anything(),
+    ])
+  })
+
+  it.each([
+    ['a bold letter alone with its label in the same cell', '| **A take ours** | x | y |', 'take ours'],
+    ['a bold letter followed by a bare label', '| **A** take ours | x | y |', 'take ours'],
+    ['a bare letter, dash, and label', '| A — take ours | x | y |', 'take ours'],
+  ])('reads %s', (_name, row, label) => {
+    const body = `## Pipeline Escalation\nreason\n### D1 — \`a.ts\`\n| Option | Keeps | Loses |\n| --- | --- | --- |\n${row}\n| **B take theirs** | x | y |`
+    const decisions = rebaseDecisionsOf(body)
+    expect(decisions === 'unparseable' ? null : decisions[0]?.options[0]).toEqual({ letter: 'A', label })
+  })
+
+  it('leaves recommended null when the block names none, or one the options lack', () => {
+    const none = '## Pipeline Escalation\nr\n### D1 — `a.ts`\n| h | h |\n| --- | --- |\n| **A x** | k |\n| **B y** | k |'
+    const decisions = rebaseDecisionsOf(none)
+    expect(decisions === 'unparseable' ? 'unparseable' : decisions[0]?.recommended).toBeNull()
+    const offMenu = `${none}\n**Recommendation: Z** — nope`
+    const again = rebaseDecisionsOf(offMenu)
+    expect(again === 'unparseable' ? 'unparseable' : again[0]?.recommended).toBeNull()
+  })
+
+  it('gives a null summary when a block has only its table', () => {
+    const decisions = rebaseDecisionsOf(TWO_DECISIONS)
+    expect(decisions === 'unparseable' ? 'unparseable' : decisions[1]?.summary).toBeNull()
+  })
+
+  it.each([
+    ['a missing path', '### D1 — no path here\n| h | h |\n| --- | --- |\n| **A x** | k |\n| **B y** | k |'],
+    ['a single option', '### D1 — `a.ts`\n| h | h |\n| --- | --- |\n| **A x** | k |'],
+    ['duplicate letters', '### D1 — `a.ts`\n| h | h |\n| --- | --- |\n| **A x** | k |\n| **A y** | k |'],
+    ['an option row it cannot read', '### D1 — `a.ts`\n| h | h |\n| --- | --- |\n| **A x** | k |\n| take theirs | k |'],
+    ['no options table at all', '### D1 — `a.ts`\nsome prose'],
+    ['a repeated decision id', '### D1 — `a.ts`\n| h | h |\n| --- | --- |\n| **A x** | k |\n| **B y** | k |\n### D1 — `b.ts`\n| h | h |\n| --- | --- |\n| **A x** | k |\n| **B y** | k |'],
+  ])('is unparseable with %s', (_name, blocks) => {
+    expect(rebaseDecisionsOf(`## Pipeline Escalation\nreason\n${blocks}`)).toBe('unparseable')
+  })
+
+  it('returns no decisions for an escalation without D<n> blocks', () => {
+    expect(rebaseDecisionsOf('## Pipeline Escalation\n5 review cycles reached the cap of 5')).toEqual([])
+  })
+})
+
+describe('picksProblem', () => {
+  const decisions = rebaseDecisionsOf(TWO_DECISIONS)
+  if (decisions === 'unparseable') throw new Error('fixture escalation must parse')
+
+  it('accepts exactly one offered pick per decision', () => {
+    expect(
+      picksProblem(decisions, [
+        { id: 'D1', letter: 'B' },
+        { id: 'D2', letter: 'A' },
+      ]),
+    ).toBeNull()
+  })
+
+  it.each([
+    ['a missing decision', [{ id: 'D1', letter: 'B' }], 'missing D2'],
+    ['an unknown id', [{ id: 'D1', letter: 'B' }, { id: 'D2', letter: 'A' }, { id: 'D3', letter: 'A' }], 'unknown D3'],
+    ['a duplicate id', [{ id: 'D1', letter: 'B' }, { id: 'D1', letter: 'A' }, { id: 'D2', letter: 'A' }], 'duplicate D1'],
+    ['a letter off the menu', [{ id: 'D1', letter: 'B' }, { id: 'D2', letter: 'C' }], 'off-menu D2'],
+  ])('reports %s', (_name, picks, problem) => {
+    expect(picksProblem(decisions, picks)).toBe(problem)
+  })
+})
+
+describe('pickList', () => {
+  it('lists chosen letters in decision order and skips undecided ones', () => {
+    const decisions = rebaseDecisionsOf(TWO_DECISIONS)
+    if (decisions === 'unparseable') throw new Error('fixture escalation must parse')
+    expect(pickList(decisions, { D2: 'B' })).toEqual([{ id: 'D2', letter: 'B' }])
   })
 })
 
