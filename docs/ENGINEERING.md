@@ -104,6 +104,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 **`apps/desktop/src/main/platform/`**
 - only importer of `node:child_process` / `node:fs` under `apps/desktop/src/`
 - spawnables a literal union (`KNOWN_COMMANDS`); paths via `pathKey`/`contains`, never `startsWith`
+- `shell-env.ts` resolves the login shell's PATH once at startup, merges only PATH into `process.env`, and never blocks startup past its timeout
 
 **`apps/desktop/src/main/reclaimer/`**
 - drives the shipped `worktrees.mjs` script; never re-implements its classification
