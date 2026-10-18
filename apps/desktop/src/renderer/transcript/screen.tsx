@@ -48,7 +48,7 @@ function TicketAside({ repoId, number }: { readonly repoId: RepoId; readonly num
       <p className="mb-3 text-small font-medium">
         #{foundItem.number} {foundItem.title}
       </p>
-      <PhaseList stageKey={stageKey} kind={foundItem.kind} merged={foundItem.mergedAt !== null} currentDetail={agentSummaryOf(foundItem.agents, foundItem.sessions)} />
+      <PhaseList stageKey={stageKey} kind={foundItem.kind} merged={foundItem.mergedAt !== null} details={{}} extraCurrentLine={agentSummaryOf(foundItem.agents, foundItem.sessions)} />
     </div>
   )
 }
