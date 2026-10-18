@@ -62,7 +62,7 @@ function HistorySection({ history, dividerLabel }: { readonly history: SessionHi
           <Link
             to={ROUTE_IDS.transcript}
             params={{ sessionId: history.sourceSessionId }}
-            search={{ agentId: null, from: 'history', focusIndex: null, title: '' }}
+            search={{ agentId: null, from: 'history', focusIndex: null, title: '', item: null }}
             className="text-primary-text hover:underline"
           >
             Open the full transcript

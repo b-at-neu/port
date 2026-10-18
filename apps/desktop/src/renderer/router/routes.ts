@@ -26,7 +26,7 @@ const BOARD_ITEM_RE = /^(.+):(\d+)$/
 
 /** `item` is the `<repoId>:<number>` URL string on a fresh parse, or an already-typed
  *  `BoardItemRef` when `validateSearch` re-runs on an in-app `navigate()`'s own result. */
-function parseBoardItemRef(item: unknown): BoardItemRef | null {
+export function parseBoardItemRef(item: unknown): BoardItemRef | null {
   if (typeof item === 'string') {
     const match = BOARD_ITEM_RE.exec(item)
     return match !== null && match[1] !== undefined && match[2] !== undefined ? { repoId: match[1] as RepoId, number: Number(match[2]) } : null
@@ -72,11 +72,12 @@ export function sessionSearchFromRaw(search: Readonly<Record<string, unknown>>):
 
 /** A malformed `focusIndex` becomes `null`; a malformed `from` becomes `'history'`. */
 export function transcriptSearchFromRaw(search: Readonly<Record<string, unknown>>): TranscriptSearch {
-  const { agentId, from, focusIndex, title } = search
+  const { agentId, from, focusIndex, title, item } = search
   return {
     agentId: typeof agentId === 'string' ? agentId : null,
-    from: from === 'search' ? 'search' : from === 'board' ? 'board' : 'history',
+    from: from === 'search' ? 'search' : from === 'board' ? 'board' : from === 'pipeline' ? 'pipeline' : 'history',
     focusIndex: typeof focusIndex === 'number' && Number.isFinite(focusIndex) ? focusIndex : null,
     title: typeof title === 'string' ? title : '',
+    item: parseBoardItemRef(item),
   }
 }

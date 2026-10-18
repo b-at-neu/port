@@ -169,7 +169,7 @@ describe('haltDispatch', () => {
 
   it('names an attached agent without failing the stop itself', async () => {
     const { runStates } = fakeRunStates()
-    const attached = item({ agents: [{ agentId: 'a1', agentType: 'review-agent', stage: 'review-agent', model: null, activity: 'active', idleMs: 1000, lastActivityAt: '2026-01-01T00:00:00Z', match: 'direct' }] })
+    const attached = item({ agents: [{ agentId: 'a1', agentType: 'review-agent', stage: 'review-agent', model: null, activity: 'active', idleMs: 1000, lastActivityAt: '2026-01-01T00:00:00Z', match: 'direct', sessionId: 's1' }] })
     const report = await haltDispatch(
       { snapshot: snapshotOf([repoState([attached])]), entries: [entry()], runStates, repoIds: [REPO_ID], auditDir: '/audit', now: NOW },
       { applyItemAction: () => Promise.resolve({ ok: true, outcome: { kind: 'applied', argv: [] } }) },

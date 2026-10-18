@@ -15,11 +15,18 @@ describe('transcriptSearchFromRaw', () => {
   it('reads an invalid from as history', () => {
     expect(transcriptSearchFromRaw({ from: 'nowhere' }).from).toBe('history')
     expect(transcriptSearchFromRaw({ from: 'search' }).from).toBe('search')
+    expect(transcriptSearchFromRaw({ from: 'pipeline' }).from).toBe('pipeline')
   })
 
   it('reads a non-string agentId/title as null/empty', () => {
     expect(transcriptSearchFromRaw({ agentId: 42 }).agentId).toBeNull()
     expect(transcriptSearchFromRaw({ title: 42 }).title).toBe('')
+  })
+
+  it('parses a valid item ref, null when malformed or absent', () => {
+    expect(transcriptSearchFromRaw({ item: 'repo-a:41' }).item).toEqual({ repoId: 'repo-a', number: 41 })
+    expect(transcriptSearchFromRaw({ item: 'not-an-item-ref' }).item).toBeNull()
+    expect(transcriptSearchFromRaw({}).item).toBeNull()
   })
 })
 
