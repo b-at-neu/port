@@ -13,6 +13,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { needsYouItems } from '@/renderer/board/needs-you'
 import type { NeedsYouItem as NeedsYouItemModel } from '@/types/board'
 import { registerListNavigator } from '@/renderer/shell/stores'
+import { useListSelection } from '@/renderer/shell/list-selection'
 import { needsYouLeadCopy } from '@/renderer/needs-you/copy'
 import { actionFor, runAction, runSecondaryAction } from '@/renderer/needs-you/actions'
 import { toast } from 'sonner'
@@ -98,19 +99,18 @@ export function NeedsYouScreen() {
   const snapshotQuery = useIpcQuery('board:snapshot')
   const sessionsQuery = useIpcQuery('session:list')
   const queryClient = useQueryClient()
-  const [selection, setSelection] = useState(0)
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
   const [pendingKey, setPendingKey] = useState<string | null>(null)
   const now = new Date()
 
   const items = snapshotQuery.data !== undefined ? needsYouItems(snapshotQuery.data, now, sessionsQuery.data ?? []) : []
-  const clampedSelection = items.length === 0 ? 0 : Math.min(selection, items.length - 1)
+  const selection = useListSelection(items.map(itemKey))
 
   registerListNavigator('needsYou', {
-    next: () => setSelection((s) => Math.min(s + 1, Math.max(items.length - 1, 0))),
-    prev: () => setSelection((s) => Math.max(s - 1, 0)),
+    next: () => selection.next(),
+    prev: () => selection.prev(),
     open: () => {
-      const item = items[clampedSelection]
+      const item = items.find((candidate) => itemKey(candidate) === selection.selectedKey)
       if (item !== undefined) runRowAction(item)
     },
   })
@@ -156,39 +156,41 @@ export function NeedsYouScreen() {
       }
     >
       <ScreenBody variant="list">
-        {snapshotQuery.status === 'pending' ? (
-          <div className="flex flex-col gap-1 px-4 py-2">
-            <Skeleton className="h-5 w-full" />
-            <Skeleton className="h-5 w-full" />
-            <Skeleton className="h-5 w-full" />
-          </div>
-        ) : snapshotQuery.status === 'error' ? (
-          <div className="px-4 py-2">
-            <ErrorBanner message="Can't read the pipeline state. Check that gh is signed in." />
-          </div>
-        ) : (
-          <>
-            {items.length === 0 ? (
-              <EmptyState icon={Inbox} message="Nothing needs you right now." className="px-4 py-6" data-slot="needs-you-empty" />
-            ) : (
-              items.map((item, index) => {
-                const key = itemKey(item)
-                return (
-                  <Row
-                    key={key}
-                    item={item}
-                    selected={index === clampedSelection}
-                    now={now}
-                    expanded={expandedKey === key}
-                    pending={pendingKey === key}
-                    onToggle={() => setExpandedKey((c) => (c === key ? null : key))}
-                    onAction={() => runRowAction(item)}
-                  />
-                )
-              })
-            )}
-          </>
-        )}
+        <div>
+          {snapshotQuery.status === 'pending' ? (
+            <div className="flex flex-col gap-1 px-4 py-2">
+              <Skeleton className="h-5 w-full" />
+              <Skeleton className="h-5 w-full" />
+              <Skeleton className="h-5 w-full" />
+            </div>
+          ) : snapshotQuery.status === 'error' ? (
+            <div className="px-4 py-2">
+              <ErrorBanner message="Can't read the pipeline state. Check that gh is signed in." />
+            </div>
+          ) : (
+            <>
+              {items.length === 0 ? (
+                <EmptyState icon={Inbox} message="Nothing needs you right now." className="px-4 py-6" data-slot="needs-you-empty" />
+              ) : (
+                items.map((item) => {
+                  const key = itemKey(item)
+                  return (
+                    <Row
+                      key={key}
+                      item={item}
+                      rowProps={selection.rowProps(key)}
+                      now={now}
+                      expanded={expandedKey === key}
+                      pending={pendingKey === key}
+                      onToggle={() => setExpandedKey((c) => (c === key ? null : key))}
+                      onAction={() => runRowAction(item)}
+                    />
+                  )
+                })
+              )}
+            </>
+          )}
+        </div>
       </ScreenBody>
     </Screen>
   )
@@ -196,7 +198,7 @@ export function NeedsYouScreen() {
 
 function Row({
   item,
-  selected,
+  rowProps,
   now,
   expanded,
   pending,
@@ -204,7 +206,7 @@ function Row({
   onAction,
 }: {
   readonly item: NeedsYouItemModel
-  readonly selected: boolean
+  readonly rowProps: ReturnType<ReturnType<typeof useListSelection>['rowProps']>
   readonly now: Date
   readonly expanded: boolean
   readonly pending: boolean
@@ -213,7 +215,7 @@ function Row({
 }) {
   const action = actionFor(item)
   return (
-    <div className={selected ? 'ring-2 ring-ring ring-inset' : ''}>
+    <div {...rowProps}>
       <NeedsYouItem
         leadCopy={needsYouLeadCopy(item)}
         repo={item.repo}

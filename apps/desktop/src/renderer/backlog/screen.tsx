@@ -15,6 +15,7 @@ import { ipcQueryOptions, useIpcQuery } from '@/renderer/data/query'
 import { openClaimDialogFor } from '@/renderer/claim/controller'
 import { PLAN_GATE_OPTIONS } from '@/renderer/claim/copy'
 import { registerListNavigator } from '@/renderer/shell/stores'
+import { useListSelection } from '@/renderer/shell/list-selection'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { buildBacklogGroup, relativeAge, exactTime, staleSinceAt } from '@/renderer/backlog/group'
 import type { BacklogGroupView, BacklogRowView } from '@/types/backlog'
@@ -68,22 +69,19 @@ function WorkOnMenu({ row, open, onOpenChange }: { readonly row: BacklogRowView;
 
 function BacklogRow({
   row,
-  selected,
+  rowProps,
   menuOpen,
   onMenuOpenChange,
   now,
 }: {
   readonly row: BacklogRowView
-  readonly selected: boolean
+  readonly rowProps: ReturnType<ReturnType<typeof useListSelection>['rowProps']>
   readonly menuOpen: boolean
   readonly onMenuOpenChange: (open: boolean) => void
   readonly now: Date
 }) {
   return (
-    <div
-      data-slot="backlog-row"
-      className={`flex h-9 items-center gap-2 px-4 text-body ${selected ? 'ring-2 ring-ring ring-inset' : ''}`}
-    >
+    <div data-slot="backlog-row" {...rowProps} className={`flex h-9 items-center gap-2 px-4 text-body ${rowProps.className}`}>
       <span className="w-12 shrink-0 font-mono tabular-nums text-muted-foreground">#{row.number}</span>
       <a href={row.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-foreground hover:underline">
         {row.title}
@@ -109,7 +107,7 @@ function GroupHeader({ repo, count }: { readonly repo: string; readonly count: n
   )
 }
 
-function GroupBody({ group, now, selection, menuOpenKey, setMenuOpenKey, flatStart }: { readonly group: BacklogGroupView; readonly now: Date; readonly selection: number | null; readonly menuOpenKey: string | null; readonly setMenuOpenKey: (key: string | null) => void; readonly flatStart: number }) {
+function GroupBody({ group, now, rowPropsFor, menuOpenKey, setMenuOpenKey }: { readonly group: BacklogGroupView; readonly now: Date; readonly rowPropsFor: (key: string) => ReturnType<ReturnType<typeof useListSelection>['rowProps']>; readonly menuOpenKey: string | null; readonly setMenuOpenKey: (key: string | null) => void }) {
   if (group.kind === 'loading') {
     return (
       <div className="flex flex-col gap-1 px-4 py-2">
@@ -132,14 +130,14 @@ function GroupBody({ group, now, selection, menuOpenKey, setMenuOpenKey, flatSta
   return (
     <div>
       {group.truncatedNote !== null ? <p className="px-4 py-1 text-meta text-muted-foreground">{group.truncatedNote}</p> : null}
-      {group.items.map((row, index) => {
+      {group.items.map((row) => {
         const key = rowKey(row.repoId, row.number)
         return (
           <BacklogRow
             key={key}
             row={row}
             now={now}
-            selected={flatStart + index === selection}
+            rowProps={rowPropsFor(key)}
             menuOpen={menuOpenKey === key}
             onMenuOpenChange={(open) => setMenuOpenKey(open ? key : null)}
           />
@@ -152,9 +150,6 @@ function GroupBody({ group, now, selection, menuOpenKey, setMenuOpenKey, flatSta
 export function BacklogScreen() {
   const reposQuery = useIpcQuery('repos:list')
   const navigate = useNavigate()
-  // `null` until the operator actually navigates the list — a default of 0 would ring-highlight
-  // the first row before any keyboard input, which reads as already selected.
-  const [selection, setSelection] = useState<number | null>(null)
   const [menuOpenKey, setMenuOpenKey] = useState<string | null>(null)
   const now = new Date()
 
@@ -169,14 +164,14 @@ export function BacklogScreen() {
   })
 
   const flatRows: BacklogRowView[] = groups.flatMap((g) => (g.kind === 'loaded' ? g.items : []))
-  const clampedSelection = selection === null || flatRows.length === 0 ? null : Math.min(selection, flatRows.length - 1)
+  const flatKeys = flatRows.map((row) => rowKey(row.repoId, row.number))
+  const selection = useListSelection(flatKeys)
 
   registerListNavigator('backlog', {
-    next: () => setSelection((s) => Math.min((s ?? -1) + 1, Math.max(flatRows.length - 1, 0))),
-    prev: () => setSelection((s) => Math.max((s ?? 0) - 1, 0)),
+    next: () => selection.next(),
+    prev: () => selection.prev(),
     open: () => {
-      const row = clampedSelection === null ? undefined : flatRows[clampedSelection]
-      if (row !== undefined) setMenuOpenKey(rowKey(row.repoId, row.number))
+      if (selection.selectedKey !== null) setMenuOpenKey(selection.selectedKey)
     },
   })
 
@@ -186,13 +181,6 @@ export function BacklogScreen() {
 
   const stale = staleSinceAt(queries.map((q) => ({ query: { status: q.status, data: q.data, isError: q.isError, dataUpdatedAt: q.dataUpdatedAt } })))
   const isFetching = queries.some((q) => q.isFetching)
-
-  let flatStart = 0
-  const groupStarts = groups.map((g) => {
-    const start = flatStart
-    if (g.kind === 'loaded') flatStart += g.items.length
-    return start
-  })
 
   return (
     <Screen
@@ -210,26 +198,28 @@ export function BacklogScreen() {
       }
     >
       <ScreenBody variant="list">
-        {reposQuery.status === 'pending' ? (
-          <div className="flex flex-col gap-1 px-4 py-2">
-            <Skeleton className="h-5 w-full" />
-            <Skeleton className="h-5 w-full" />
-          </div>
-        ) : readyRepos.length === 0 ? (
-          <EmptyState icon={ListTodo} message="Register a repository to see its open tickets." action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.repos }) }} className="px-4 py-6" />
-        ) : (
-          groups.map((group, index) => (
-            <div key={group.repoId}>
-              <GroupHeader repo={group.repo} count={group.kind === 'loaded' ? group.items.length : null} />
-              <GroupBody group={group} now={now} selection={clampedSelection} menuOpenKey={menuOpenKey} setMenuOpenKey={setMenuOpenKey} flatStart={groupStarts[index] ?? 0} />
+        <div>
+          {reposQuery.status === 'pending' ? (
+            <div className="flex flex-col gap-1 px-4 py-2">
+              <Skeleton className="h-5 w-full" />
+              <Skeleton className="h-5 w-full" />
             </div>
-          ))
-        )}
-        {notReadyRepos.map((entry) => (
-          <p key={entry.id} className="px-4 py-1 text-meta text-muted-foreground">
-            {backlogNotReadyCopy(entry.displayName)}
-          </p>
-        ))}
+          ) : readyRepos.length === 0 ? (
+            <EmptyState icon={ListTodo} message="Register a repository to see its open tickets." action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.repos }) }} className="px-4 py-6" />
+          ) : (
+            groups.map((group) => (
+              <div key={group.repoId}>
+                <GroupHeader repo={group.repo} count={group.kind === 'loaded' ? group.items.length : null} />
+                <GroupBody group={group} now={now} rowPropsFor={(key) => selection.rowProps(key)} menuOpenKey={menuOpenKey} setMenuOpenKey={setMenuOpenKey} />
+              </div>
+            ))
+          )}
+          {notReadyRepos.map((entry) => (
+            <p key={entry.id} className="px-4 py-1 text-meta text-muted-foreground">
+              {backlogNotReadyCopy(entry.displayName)}
+            </p>
+          ))}
+        </div>
       </ScreenBody>
     </Screen>
   )

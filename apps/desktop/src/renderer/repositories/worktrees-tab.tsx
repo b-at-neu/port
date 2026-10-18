@@ -16,6 +16,7 @@ import { ipcQueryOptions, useIpcQuery } from '@/renderer/data/query'
 import { invoke } from '@/renderer/data/invoke'
 import type { InspectedWorktree, WorktreesReport } from '@/types/reclaimer'
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
+import { useListSelection } from '@/renderer/shell/list-selection'
 import {
   failureCopy,
   needsAttentionCount,
@@ -42,16 +43,17 @@ function issueUrl(repo: string, issue: number): string {
   return `https://github.com/${repo}/issues/${String(issue)}`
 }
 
-function WorktreeRow({ worktree, repo, selected, onSelect }: { readonly worktree: InspectedWorktree; readonly repo: string; readonly selected: boolean; readonly onSelect: () => void }) {
+function WorktreeRow({
+  worktree,
+  repo,
+  rowProps,
+}: {
+  readonly worktree: InspectedWorktree
+  readonly repo: string
+  readonly rowProps: ReturnType<ReturnType<typeof useListSelection>['rowProps']>
+}) {
   return (
-    <div
-      data-slot="worktree-row"
-      role="button"
-      tabIndex={0}
-      onClick={onSelect}
-      onKeyDown={(event) => event.key === 'Enter' && onSelect()}
-      className={`flex h-9 cursor-pointer items-center gap-3 px-4 text-body outline-none ${selected ? 'bg-selection ring-2 ring-ring ring-inset' : ''}`}
-    >
+    <div data-slot="worktree-row" role="button" {...rowProps} className={`flex h-9 cursor-pointer items-center gap-3 px-4 text-body ${rowProps.className}`}>
       <span className="w-40 shrink-0 truncate font-mono text-foreground">{worktree.pathBasename}</span>
       <StatusPill status={PILL_STATUS[worktree.state]} label={worktree.state} />
       {worktree.branch !== null ? <span className="truncate font-mono text-meta text-muted-foreground">{worktree.branch}</span> : null}
@@ -98,12 +100,13 @@ function WorktreeDetailPane({
 export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; readonly entry: RepositoryEntry }) {
   const commandsWorktrees = 'config' in entry ? entry.config.commands.worktrees : null
   const repo = 'config' in entry ? entry.config.repo : ''
-  const [selected, setSelected] = useState<string | null>(null)
   const [confirmIssue, setConfirmIssue] = useState<number | 'all' | null>(null)
   const [reclaiming, setReclaiming] = useState(false)
   const snapshotQuery = useIpcQuery('board:snapshot')
   const worktreesLastSuccessAt = snapshotQuery.data?.health.find((h) => h.repoId === repoId)?.worktrees.lastSuccessAt ?? null
   const query = useQuery(ipcQueryOptions('worktrees:report', { id: repoId }, [worktreesLastSuccessAt]))
+  const worktreePaths = query.data?.ok === true ? query.data.worktrees.map((w) => w.path) : []
+  const selection = useListSelection(worktreePaths)
 
   if (commandsWorktrees === null) {
     return (
@@ -140,7 +143,7 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
 
   const reclaimableRows = report.worktrees.filter((w) => w.reclaimable)
   const reclaimableCount = reclaimableRows.length
-  const selectedWorktree = report.worktrees.find((w) => w.path === selected) ?? null
+  const selectedWorktree = report.worktrees.find((w) => w.path === selection.selectedKey) ?? null
 
   async function runReclaim(issue: number | null): Promise<void> {
     setReclaiming(true)
@@ -154,7 +157,7 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
     }
     setReclaiming(false)
     setConfirmIssue(null)
-    setSelected(null)
+    selection.clear()
   }
 
   const confirmTarget =
@@ -201,9 +204,7 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
         {report.worktrees.length === 0 ? (
           <EmptyState icon={RefreshCw} message="No linked worktrees. Only the main checkout is registered." className="p-6" />
         ) : (
-          report.worktrees.map((worktree) => (
-            <WorktreeRow key={worktree.path} worktree={worktree} repo={repo} selected={worktree.path === selected} onSelect={() => setSelected(worktree.path)} />
-          ))
+          report.worktrees.map((worktree) => <WorktreeRow key={worktree.path} worktree={worktree} repo={repo} rowProps={selection.rowProps(worktree.path)} />)
         )}
         {report.orphanDirs.length > 0 ? (
           <div className="flex flex-col gap-1 px-4 py-3">
@@ -219,7 +220,7 @@ export function WorktreesTab({ repoId, entry }: { readonly repoId: RepoId; reado
       {selectedWorktree !== null ? (
         <WorktreeDetailPane
           worktree={selectedWorktree}
-          onClose={() => setSelected(null)}
+          onClose={() => selection.clear()}
           onReclaim={selectedWorktree.reclaimable && selectedWorktree.issue !== null ? () => setConfirmIssue(selectedWorktree.issue) : null}
         />
       ) : null}
