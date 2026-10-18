@@ -61,6 +61,7 @@ function row(overrides: {
     stageLabel,
     actions: { ...NO_ACTIONS, ...overrides.actions },
     decisions: { ...NO_DECISIONS, ...overrides.decisions },
+    viewer: null,
   }
 }
 

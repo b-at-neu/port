@@ -59,6 +59,7 @@ function row(overrides: {
     stageLabel,
     actions: NO_ACTIONS,
     decisions: NO_DECISIONS,
+    viewer: null,
   }
 }
 

@@ -102,7 +102,7 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
       const ds: DisplayStatus = interruptedKeys.has(`${repo.repoId}:${String(item.number)}`)
         ? { status: 'interrupted', staleGithub: false, githubAgeMs: null }
         : displayStatus(item, health, repo.freshness, now)
-      rows.push({ item, displayStatus: ds, stageLabel: stageLabelOf(item), actions, decisions })
+      rows.push({ item, displayStatus: ds, stageLabel: stageLabelOf(item), actions, decisions, viewer: repo.viewer })
     }
   }
   rows.sort((a, b) => compareRows(a, b, displayNameOf))

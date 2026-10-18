@@ -108,6 +108,8 @@ export interface BoardItemRow {
   readonly actions: Readonly<Record<OperatorAction, ActionAvailability>>
   /** `decisionsFor`'s own result for this item, same rule as `actions` above. */
   readonly decisions: Readonly<Record<OperatorDecision, DecisionAvailability>>
+  /** This item's repository's own `RepositoryState.viewer`, copied onto the row so `phase-history.ts`'s "you" resolution never needs a second repository lookup. */
+  readonly viewer: string | null
 }
 
 export interface BoardGroup {
@@ -179,6 +181,12 @@ export const PHASE_KEYS = ['plan', 'planReview', 'implement', 'review', 'revisio
 export type PhaseKey = (typeof PHASE_KEYS)[number]
 
 export type PhaseSegmentState = 'finished' | 'current-working' | 'current-attention' | 'complete' | 'pending'
+
+/** One phase's "who and when" line — `phase-history.ts`'s own result shape, `null` `at` for a current phase whose only line is a cost reading with no entry behind it. */
+export interface PhaseDetail {
+  readonly line: string
+  readonly at: string | null
+}
 
 export type BoardGroupBy = 'phase' | 'repo'
 

@@ -36,10 +36,15 @@ interface PhaseModelParams {
   readonly merged: boolean
 }
 
+/** `needsHuman`/`blocked` resolve by item kind; every other key is a plain `STAGE_PHASE` lookup. The one place a `LabelKey` becomes a `PhaseKey` — `currentPhaseFor` and `phase-history.ts` both delegate to it. */
+export function phaseOfStage(key: LabelKey, kind: PipelineItemKind): PhaseKey | null {
+  if (key === 'needsHuman' || key === 'blocked') return kind === 'issue' ? 'implement' : 'review'
+  return STAGE_PHASE[key] ?? null
+}
+
 export function currentPhaseFor(params: Pick<PhaseModelParams, 'stageKey' | 'kind'>): PhaseKey | null {
   const { stageKey, kind } = params
-  if (stageKey === 'needsHuman' || stageKey === 'blocked') return kind === 'issue' ? 'implement' : 'review'
-  return stageKey !== null ? (STAGE_PHASE[stageKey] ?? null) : null
+  return stageKey !== null ? phaseOfStage(stageKey, kind) : null
 }
 
 export function phaseSegmentsFor(params: PhaseModelParams): readonly PhaseSegment[] {
