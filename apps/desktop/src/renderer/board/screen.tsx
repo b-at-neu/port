@@ -77,11 +77,12 @@ export function BoardScreen() {
   const repo = search.repo ?? null
 
   const projection = snapshot !== null ? projectBoard({ snapshot, groupBy: group === 'repo' ? 'repo' : 'stage', now }) : null
-  // Ungated rows are the banner's alone — excluded here so a row is never
-  // mounted twice, and placed first in `flatRows` to match the banner above.
+  // Ungated rows are the banner's alone, scoped to `repo` like `sectionRows`
+  // below so J/K and the ring never reach another repository's row.
+  const ungatedRows = projection !== null ? (repo === null ? projection.ungated : projection.ungated.filter((row) => row.item.repoId === repo)) : []
   const sections = projection !== null ? boardSections(projection.rows.filter((row) => !row.actions.gate.available), { group, repo }) : []
   const sectionRows = sections.flatMap((section) => section.subGroups.flatMap((g) => g.rows))
-  const flatRows = projection !== null ? [...projection.ungated, ...sectionRows] : []
+  const flatRows = projection !== null ? [...ungatedRows, ...sectionRows] : []
 
   // An item that no longer matches any row closes the pane silently.
   const itemRef = search.item ?? null
@@ -135,10 +136,10 @@ export function BoardScreen() {
               </div>
             ) : projection !== null ? (
               <>
-                <BoardBanners projection={projection} selection={selection} />
+                <BoardBanners projection={projection} ungated={ungatedRows} selection={selection} />
                 {snapshot.state.repositories.length === 0 ? (
                   <EmptyState icon={LayoutGrid} message="Add a repository to see its pipeline." action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.repos }) }} className="px-4 py-6" />
-                ) : sections.length === 0 ? (
+                ) : flatRows.length === 0 ? (
                   <EmptyState
                     icon={LayoutGrid}
                     message={repo !== null ? "Nothing in this repository's pipeline." : 'Nothing in the pipeline.'}

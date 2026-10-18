@@ -2,13 +2,16 @@
 // Ungated PRs.
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { TicketRow } from '@/renderer/components/ticket-row'
-import type { BoardProjection } from '@/types/board'
+import type { BoardItemRow, BoardProjection } from '@/types/board'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import { notReadyCopy } from '@/renderer/board/copy'
 import { useListSelection } from '@/renderer/shell/list-selection'
 
 interface BoardBannersProps {
   readonly projection: BoardProjection
+  // Already scoped to the selected repo, same as the main sections — see
+  // `screen.tsx`.
+  readonly ungated: readonly BoardItemRow[]
   readonly selection: ReturnType<typeof useListSelection>
 }
 
@@ -26,17 +29,17 @@ function NotReadingBanner({ projection }: { readonly projection: BoardProjection
 
 // Excluded from the main sections (`screen.tsx`), so this is each row's one
 // mount — same `selection` and bare `data-row-key` a section row would use.
-function UngatedBanner({ projection, selection }: { readonly projection: BoardProjection; readonly selection: ReturnType<typeof useListSelection> }) {
-  if (projection.ungated.length === 0) return null
+function UngatedBanner({ rows, selection }: { readonly rows: readonly BoardItemRow[]; readonly selection: ReturnType<typeof useListSelection> }) {
+  if (rows.length === 0) return null
   const markerName = LABEL_DEFAULTS.find((def) => def.key === 'marker')?.name ?? 'marker'
   return (
     <div className="flex flex-col gap-1 px-4 pt-3">
-      <div className="text-small font-medium text-foreground">Ungated pull requests · {projection.ungated.length}</div>
+      <div className="text-small font-medium text-foreground">Ungated pull requests · {rows.length}</div>
       <p className="text-meta text-muted-foreground">
         These carry a pipeline label but not &quot;{markerName}&quot;, so CI can&apos;t tell them from a human pull request and the merge gate is inactive.
       </p>
       <div>
-        {projection.ungated.map((row) => (
+        {rows.map((row) => (
           <TicketRow key={`${row.item.repoId}:${String(row.item.number)}`} row={row} rowProps={selection.rowProps(`${row.item.repoId}:${String(row.item.number)}`)} />
         ))}
       </div>
@@ -44,11 +47,11 @@ function UngatedBanner({ projection, selection }: { readonly projection: BoardPr
   )
 }
 
-export function BoardBanners({ projection, selection }: BoardBannersProps) {
+export function BoardBanners({ projection, ungated, selection }: BoardBannersProps) {
   return (
     <>
       <NotReadingBanner projection={projection} />
-      <UngatedBanner projection={projection} selection={selection} />
+      <UngatedBanner rows={ungated} selection={selection} />
     </>
   )
 }
