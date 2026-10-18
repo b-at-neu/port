@@ -16,7 +16,7 @@ const NOW = new Date('2026-01-01T01:00:00.000Z')
 const REPO_ID = 'repo-a' as RepoId
 
 function agent(overrides: Partial<AttachedAgent> = {}): AttachedAgent {
-  return { agentId: 'a1', agentType: 'impl-agent', stage: 'impl-agent', model: 'sonnet', activity: 'active', idleMs: 0, lastActivityAt: NOW.toISOString(), match: 'direct', ...overrides }
+  return { agentId: 'a1', agentType: 'impl-agent', stage: 'impl-agent', model: 'sonnet', activity: 'active', idleMs: 0, lastActivityAt: NOW.toISOString(), match: 'direct', sessionId: 'sess-1', ...overrides }
 }
 
 function item(overrides: Partial<ReconciledItem> = {}): ReconciledItem {
@@ -151,7 +151,9 @@ describe('pipelinesModel', () => {
     const dormant = item({ number: 43, agents: [agent({ activity: 'dormant' })] })
     const snapshot = snapshotOf([readyRepoState({ items: [live, dormant] })])
     const row = assertReady(pipelinesModel([readyEntry()], snapshot)[0])
-    expect(row.sessions).toEqual([{ key: `${REPO_ID}-42`, number: 42, label: '#42 Implementing', dot: 'working', sessionKey: null }])
+    expect(row.sessions).toEqual([
+      { key: `${REPO_ID}-42`, repoId: REPO_ID, number: 42, label: '#42 Implementing', dot: 'working', sessionKey: null, transcript: { sessionId: 'sess-1', agentId: 'a1' } },
+    ])
   })
 
   it('marks a session attention when its item needs the operator', () => {
@@ -191,6 +193,19 @@ describe('pipelinesModel', () => {
     const row = assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [stageSnapshot])[0])
     expect(row.sessions).toHaveLength(1)
     expect(row.sessions[0]).toMatchObject({ number: 42, sessionKey: 'hosted-1' })
+  })
+
+  it('transcript target prefers the live agent, falling back to the live session', () => {
+    const agentOnly = item({ agents: [agent()] })
+    const sessionOnly = item({
+      number: 43,
+      agents: [],
+      sessions: [{ sessionId: 'sess-2', role: 'implement', roleEvidence: 'worktree-name', activity: 'active', idleMs: 0, lastActivityAt: NOW.toISOString(), match: 'direct' }],
+    })
+    const snapshot = snapshotOf([readyRepoState({ items: [agentOnly, sessionOnly] })])
+    const row = assertReady(pipelinesModel([readyEntry()], snapshot)[0])
+    expect(row.sessions.find((s) => s.number === 42)?.transcript).toEqual({ sessionId: 'sess-1', agentId: 'a1' })
+    expect(row.sessions.find((s) => s.number === 43)?.transcript).toEqual({ sessionId: 'sess-2', agentId: null })
   })
 
   it('reads the persisted run state into the pill', () => {

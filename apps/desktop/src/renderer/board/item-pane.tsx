@@ -75,7 +75,7 @@ export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps
     void navigate({
       to: ROUTE_IDS.transcript,
       params: { sessionId: link.sessionId },
-      search: { agentId: null, from: 'board', focusIndex: null, title: item.title },
+      search: { agentId: null, from: 'board', focusIndex: null, title: item.title, item: null },
     })
   }
 

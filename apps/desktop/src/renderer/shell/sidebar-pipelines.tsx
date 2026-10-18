@@ -44,12 +44,7 @@ function RunStateMenu({ row }: { readonly row: Extract<PipelineRow, { readonly r
           label: 'Drain',
           hint: 'finish in-flight',
           current: row.pill.label === 'Draining',
-          disabledReason:
-            row.pill.label === 'Draining'
-              ? 'Already draining'
-              : row.pill.label === 'Paused' && row.inFlight === 0
-                ? 'Nothing is in flight to finish'
-                : ownershipReason,
+          disabledReason: row.pill.label === 'Draining' ? 'Already draining' : row.pill.label === 'Paused' ? 'Already paused' : ownershipReason,
           onSelect: () => runState.drain(row.repoId, row.name),
         },
         { key: 'pause', label: 'Pause', hint: 'stop now', current: row.pill.label === 'Paused', disabledReason: row.pill.label === 'Paused' ? 'Already paused' : null, onSelect: () => runState.requestPause(row.repoId, row.name, row.inFlight) },
@@ -91,8 +86,15 @@ function RepoRow({ row, collapsed, onToggle }: { readonly row: PipelineRow; read
           {row.sessions.map((session) => (
             <Link
               key={session.key}
-              to={session.sessionKey !== null ? ROUTE_IDS.session : ROUTE_IDS.board}
-              search={session.sessionKey !== null ? { key: session.sessionKey } : undefined}
+              to={session.sessionKey !== null ? ROUTE_IDS.session : ROUTE_IDS.transcript}
+              params={session.transcript !== null ? { sessionId: session.transcript.sessionId } : undefined}
+              search={
+                session.sessionKey !== null
+                  ? { key: session.sessionKey }
+                  : session.transcript !== null
+                    ? { agentId: session.transcript.agentId, from: 'pipeline', focusIndex: null, title: session.label, item: { repoId: session.repoId, number: session.number } }
+                    : undefined
+              }
               className="flex h-6.5 items-center gap-1.5 rounded-md py-0 pr-2 pl-8 text-small text-foreground-secondary hover:bg-accent"
             >
               <span

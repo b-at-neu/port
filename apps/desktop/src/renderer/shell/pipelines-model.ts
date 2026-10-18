@@ -6,6 +6,7 @@ import type { DispatchOwner } from '@/types/dispatch'
 import type { ReconciledItem } from '@/types/state'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import { needsYouItems, repoNeedsYou } from '@/renderer/board/needs-you'
+import { stageKeyOf } from '@/renderer/board/row-model'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
 import type { PillStatus } from '@/types/components'
 import type { PipelineRow, PipelineSessionRow } from '@/types/shell'
@@ -17,23 +18,25 @@ function sessionsFor(repoId: RepoId, items: readonly ReconciledItem[], needsYouN
     const liveSession = item.sessions.find((s) => s.activity !== 'dormant')
     if (liveAgent === undefined && liveSession === undefined) continue
 
-    const stageKey = item.stages.find((label) => label.role === item.stage)?.key ?? null
+    const stageKey = stageKeyOf(item.stages, item.stage)
     const phaseName = stageKey !== null ? (PHASE_NAMES[stageKey] ?? stageKey) : 'Unstaged'
     const activity = liveAgent?.activity ?? liveSession?.activity ?? 'dormant'
     const dot: PipelineSessionRow['dot'] = needsYouNumbers.has(item.number) ? 'attention' : activity === 'active' ? 'working' : 'idle'
+    const transcript: PipelineSessionRow['transcript'] =
+      liveAgent !== undefined ? { sessionId: liveAgent.sessionId, agentId: liveAgent.agentId } : liveSession !== undefined ? { sessionId: liveSession.sessionId, agentId: null } : null
 
-    rows.push({ key: `${repoId}-${item.number}`, number: item.number, label: `#${item.number} ${phaseName}`, dot, sessionKey: null })
+    rows.push({ key: `${repoId}-${item.number}`, repoId, number: item.number, label: `#${item.number} ${phaseName}`, dot, sessionKey: null, transcript })
   }
   return rows
 }
 
-/** A live stage session's own row, following `sidebar-sessions.tsx`'s own dot rules. */
-function stageRowFor(session: HostedSessionSnapshot): PipelineSessionRow {
+/** A live stage session's own row, following `sidebar-sessions.tsx`'s own dot rules. `repoId` is passed in rather than read off `session` — this is only ever called once `session.repoId` has already been narrowed to match it. */
+function stageRowFor(repoId: RepoId, session: HostedSessionSnapshot): PipelineSessionRow {
   const stage = session.stage
   if (stage === null) throw new Error('stageRowFor called with a non-stage snapshot')
   const phaseName = PHASE_NAMES[stage.trigger] ?? stage.agent
   const dot: PipelineSessionRow['dot'] = session.pendingPermissions.length > 0 ? 'attention' : session.phase === 'starting' || session.phase === 'streaming' ? 'working' : 'idle'
-  return { key: session.sessionKey, number: stage.number, label: `#${String(stage.number)} ${phaseName}`, dot, sessionKey: session.sessionKey }
+  return { key: session.sessionKey, repoId, number: stage.number, label: `#${String(stage.number)} ${phaseName}`, dot, sessionKey: session.sessionKey, transcript: null }
 }
 
 /** Ownership gates the pill ahead of run state — `terminal`/`unreadable` each have their
@@ -80,7 +83,7 @@ export function pipelinesModel(
     const owner: DispatchOwner = dispatchStatus?.owner ?? 'none'
 
     const itemRows = sessionsFor(entry.id, items, numbers)
-    const stageRows = sessions.filter((s) => s.phase !== 'ended' && s.stage !== null && s.repoId === entry.id).map(stageRowFor)
+    const stageRows = sessions.filter((s) => s.phase !== 'ended' && s.stage !== null && s.repoId === entry.id).map((s) => stageRowFor(entry.id, s))
     const stageNumbers = new Set(stageRows.map((r) => r.number))
 
     return {

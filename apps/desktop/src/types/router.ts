@@ -41,7 +41,9 @@ export interface SessionSearch {
 
 export interface TranscriptSearch {
   readonly agentId: string | null
-  readonly from: 'history' | 'search' | 'board'
+  readonly from: 'history' | 'search' | 'board' | 'pipeline'
   readonly focusIndex: number | null
   readonly title: string
+  /** The ticket this transcript belongs to — set only from a pipeline sidebar row, so the Transcript screen can show its phase list. `null` elsewhere. */
+  readonly item: BoardItemRef | null
 }
