@@ -77,8 +77,11 @@ export function BoardScreen() {
   const repo = search.repo ?? null
 
   const projection = snapshot !== null ? projectBoard({ snapshot, groupBy: group === 'repo' ? 'repo' : 'stage', now }) : null
-  const sections = projection !== null ? boardSections(projection.rows, { group, repo }) : []
-  const flatRows = sections.flatMap((section) => section.subGroups.flatMap((g) => g.rows))
+  // Ungated rows are the banner's alone — excluded here so a row is never
+  // mounted twice, and placed first in `flatRows` to match the banner above.
+  const sections = projection !== null ? boardSections(projection.rows.filter((row) => !row.actions.gate.available), { group, repo }) : []
+  const sectionRows = sections.flatMap((section) => section.subGroups.flatMap((g) => g.rows))
+  const flatRows = projection !== null ? [...projection.ungated, ...sectionRows] : []
 
   // An item that no longer matches any row closes the pane silently.
   const itemRef = search.item ?? null

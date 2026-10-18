@@ -5,7 +5,7 @@ import { TicketRow } from '@/renderer/components/ticket-row'
 import type { BoardProjection } from '@/types/board'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import { notReadyCopy } from '@/renderer/board/copy'
-import { listRowClass, useListSelection } from '@/renderer/shell/list-selection'
+import { useListSelection } from '@/renderer/shell/list-selection'
 
 interface BoardBannersProps {
   readonly projection: BoardProjection
@@ -24,8 +24,8 @@ function NotReadingBanner({ projection }: { readonly projection: BoardProjection
   )
 }
 
-// These rows are also mounted in the main sections, so each gets a
-// `banner:`-prefixed `data-row-key` while sharing the one `selection`.
+// Excluded from the main sections (`screen.tsx`), so this is each row's one
+// mount — same `selection` and bare `data-row-key` a section row would use.
 function UngatedBanner({ projection, selection }: { readonly projection: BoardProjection; readonly selection: ReturnType<typeof useListSelection> }) {
   if (projection.ungated.length === 0) return null
   const markerName = LABEL_DEFAULTS.find((def) => def.key === 'marker')?.name ?? 'marker'
@@ -36,24 +36,9 @@ function UngatedBanner({ projection, selection }: { readonly projection: BoardPr
         These carry a pipeline label but not &quot;{markerName}&quot;, so CI can&apos;t tell them from a human pull request and the merge gate is inactive.
       </p>
       <div>
-        {projection.ungated.map((row) => {
-          const key = `${row.item.repoId}:${String(row.item.number)}`
-          // This item is also mounted under the bare key in its phase
-          // section, which `selectedKey` always matches — so this copy never rings.
-          return (
-            <TicketRow
-              key={key}
-              row={row}
-              rowProps={{
-                'data-row-key': `banner:${key}`,
-                tabIndex: 0,
-                onFocus: () => selection.select(key),
-                onMouseDown: () => selection.select(key),
-                className: listRowClass(selection.selectedKey === `banner:${key}`),
-              }}
-            />
-          )
-        })}
+        {projection.ungated.map((row) => (
+          <TicketRow key={`${row.item.repoId}:${String(row.item.number)}`} row={row} rowProps={selection.rowProps(`${row.item.repoId}:${String(row.item.number)}`)} />
+        ))}
       </div>
     </div>
   )
