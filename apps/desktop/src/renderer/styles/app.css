@@ -57,9 +57,7 @@ body {
   }
 }
 
-/* Tailwind v4 dropped the default pointer cursor on buttons; restore it for
- * every interactive control by element and ARIA role so new components get
- * it for free. Base layer so a deliberate cursor-* utility still wins. */
+/* Tailwind v4 dropped the default pointer cursor; restore it by element/role so new controls get it free. */
 @layer base {
   button:not(:disabled),
   [role='button']:not([aria-disabled='true']),
