@@ -82,9 +82,8 @@ export default {
     target: ['AppImage', 'deb'],
     executableName: 'port-desktop',
     category: 'Development',
-    // A directory of per-size PNGs (scripts/icon.mjs), not the flat 1024px build/icon.png —
-    // hicolor's own index.theme only declares sizes up to 512x512, so a single 1024px file
-    // installs into a directory GTK's icon-theme lookup never scans and never resolves.
+    // Per-size PNGs (scripts/icon.mjs) — hicolor only declares up to 512x512,
+    // so the flat 1024px build/icon.png would land in a dir it never scans.
     icon: 'build/icons',
     maintainer: `${author.name} <${author.email}>`,
     // Matches the installed `.desktop` filename to `desktopName` (package.json), which doubles

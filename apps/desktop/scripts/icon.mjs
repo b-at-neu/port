@@ -1,25 +1,5 @@
-// Renders docs/design/port-app-icon.svg (DESIGN §8: platform icons are
-// generated, never hand-edited) to build/icon.png at 1024px wide — the size
-// electron-builder's own icon pipeline derives the macOS .icns and Windows
-// .ico from. Linux doesn't use that pipeline: electron-builder installs
-// `linux.icon` verbatim into hicolor's `<size>x<size>/apps/`, and the
-// system's hicolor theme only declares sizes up to 512x512 (see
-// /usr/share/icons/hicolor/index.theme) — a single 1024px file lands in a
-// directory GTK's icon-theme lookup never scans, so the launcher and window
-// icon silently fall back to generic, regardless of any app-id/WM_CLASS
-// fix. So Linux also gets a `build/icons/<size>x<size>.png` set at every
-// size hicolor actually declares.
-//
-// The source art is a full-bleed rounded square (DESIGN §8 — no transparent
-// margin), which is correct for macOS/Windows: both auto-mask/inset
-// third-party icons themselves, so they expect edge-to-edge art. GNOME does
-// no such inset, so the same full-bleed render sits visibly larger than
-// neighboring icons that do ship their own padding. The Linux set is
-// rendered from a copy scaled down and centered on a transparent canvas to
-// match.
-//
-// Also renders a 64px favicon for the renderer, so dev runs and the browser
-// tab both show the real icon, not Electron's/the browser's default.
+// Renders docs/design/port-app-icon.svg (DESIGN §8) to build/icon.png, a
+// padded Linux icon set at every hicolor size, and a renderer favicon.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Resvg } from '@resvg/resvg-js'
