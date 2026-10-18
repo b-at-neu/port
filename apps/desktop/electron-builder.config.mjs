@@ -72,13 +72,23 @@ export default {
   files: ['out/**/*', ...forbidden.map((pkg) => `!**/node_modules/${pkg}{,/**}`)],
   asar: true,
   npmRebuild: false,
-  extraResources: [{ from: 'NOTICE.txt', to: 'NOTICE.txt' }],
+  extraResources: [
+    { from: 'NOTICE.txt', to: 'NOTICE.txt' },
+    // A packaged Linux window reads its own icon from here at runtime — electron-builder's
+    // derived .desktop/exe icons never set the X11/Wayland window icon.
+    { from: 'build/icon.png', to: 'icon.png' },
+  ],
   linux: {
     target: ['AppImage', 'deb'],
     executableName: 'port-desktop',
     category: 'Development',
-    icon: 'build/icon.png',
+    // Per-size PNGs (scripts/icon.mjs) — hicolor only declares up to 512x512,
+    // so the flat 1024px build/icon.png would land in a dir it never scans.
+    icon: 'build/icons',
     maintainer: `${author.name} <${author.email}>`,
+    // Matches the installed `.desktop` filename to `desktopName` (package.json), which doubles
+    // as Electron's runtime app_id/WM_CLASS — otherwise desktop environments can't find the icon.
+    syncDesktopName: true,
   },
   mac: {
     target: 'dmg',

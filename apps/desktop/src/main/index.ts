@@ -1,11 +1,12 @@
 import { app, BrowserWindow, Menu } from 'electron'
 import { isAbsolute, join } from 'node:path'
+import { devDockIconPath, windowIconPath } from '@/main/icon'
 import { registerIpc, broadcastAppCommand } from '@/main/ipc'
 import { registerFixtureIpc } from '@/main/fixtures'
 import { fixtureMode } from '@/main/fixtures/mode'
 import { e2eMode } from '@/main/e2e/mode'
 import { setE2ERoute } from '@/main/platform/run'
-import { statOwnerMode } from '@/main/platform/files'
+import { statOwnerMode, pathExists } from '@/main/platform/files'
 import type { PipelineWatcher } from '@/types/state'
 import type { HostedStore } from '@/types/hosting'
 import { createQuitGuard } from '@/main/dispatch/quit'
@@ -39,6 +40,13 @@ async function configureSandboxSwitch(): Promise<void> {
 
 // Resolved before `app.whenReady()` below — `commandLine.appendSwitch` is a no-op once ready.
 const sandboxConfigured = configureSandboxSwitch()
+
+// `app.setName()` changes Electron's own Linux app_id/WM_CLASS at runtime — `syncDesktopName`
+// only renames the *installed* `.desktop` file, which `pnpm dev` never touches.
+const defaultUserDataPath = app.getPath('userData')
+app.setName('port')
+// Renaming moves the default `userData` path too, so the pre-rename path is pinned back right away.
+app.setPath('userData', defaultUserDataPath)
 
 // An `on` result relocates `userData` before the single-instance lock is ever requested, so a
 // fixture run never contends for the operator's own lock or touches their real profile.
@@ -84,7 +92,12 @@ if (fixture.kind === 'invalid') {
       mainWindow.focus()
     })
 
-    function createWindow(): void {
+    async function createWindow(): Promise<void> {
+      const iconPath = windowIconPath({ platform: process.platform, isPackaged: app.isPackaged, mainDir: __dirname, resourcesPath: process.resourcesPath })
+      // A missing file (e.g. `electron-vite dev` run directly, skipping `icon.mjs`) must not
+      // crash dev — fall back to Electron's own default icon, silently.
+      const icon = iconPath !== null && (await pathExists(iconPath)) ? iconPath : null
+
       const window = new BrowserWindow({
         width: 1200,
         height: 800,
@@ -92,6 +105,7 @@ if (fixture.kind === 'invalid') {
         minHeight: 600,
         title: 'port',
         show: false,
+        ...(icon !== null ? { icon } : {}),
         webPreferences: {
           preload: join(__dirname, '../preload/index.js'),
           contextIsolation: true,
@@ -127,10 +141,13 @@ if (fixture.kind === 'invalid') {
       }
     }
 
-    void sandboxConfigured.then(() => app.whenReady()).then(() => {
-      // Never `app.setName('port')` here — that would move the dev
-      // `userData` directory away from the operator's real profile.
+    void sandboxConfigured.then(() => app.whenReady()).then(async () => {
       app.setAboutPanelOptions({ applicationName: 'port', applicationVersion: app.getVersion(), credits: [ABOUT_POWERED_BY, ABOUT_NOTICE].join('\n') })
+
+      const dockIconPath = devDockIconPath({ platform: process.platform, isPackaged: app.isPackaged, mainDir: __dirname, resourcesPath: process.resourcesPath })
+      if (dockIconPath !== null && (await pathExists(dockIconPath))) {
+        app.dock?.setIcon(dockIconPath)
+      }
 
       // Fixture mode starts neither a watcher nor a hosted-session store — both stay `null`, so
       // `before-quit` below no-ops for them.
@@ -147,10 +164,11 @@ if (fixture.kind === 'invalid') {
         shutdownDispatch = registered.shutdownDispatch
         stageRegistry = registered.stageRegistry
       }
-      createWindow()
+      Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform, app.isPackaged, [], broadcastAppCommand)))
+      void createWindow()
 
       app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) createWindow()
+        if (BrowserWindow.getAllWindows().length === 0) void createWindow()
       })
     })
 

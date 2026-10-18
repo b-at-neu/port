@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain, Notification, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
+import type { IpcMainInvokeEvent } from 'electron'
 import { join } from 'node:path'
 import { IPC_CHANNELS, type IpcChannel, type IpcEvent, type IpcEventMap, type IpcMap } from '@/types/ipc'
 import type { WorktreesReport } from '@/types/reclaimer'
@@ -69,7 +70,8 @@ import type { PipelineWatcher } from '@/types/state'
 import { runtimePreflight } from '@/main/runtime/preflight'
 import { createHostedStore, defaultHostedStoreDeps } from '@/main/hosting/store'
 import { createHostingPersistence } from '@/main/hosting/persist'
-import { createNotifier } from '@/main/hosting/notify'
+
+import { createAppNotifier } from '@/main/hosting/notify'
 import { createStageRegistry } from '@/main/stage/registry'
 import type { StageRegistry } from '@/types/stage'
 import { readJsonFile, writeJsonFileAtomic } from '@/main/platform/files'
@@ -250,24 +252,7 @@ export function registerIpc(): RegisteredIpc {
 
   // One hosted-session store for the process lifetime, created before the watcher — the dispatcher
   // sits between the two and needs this store first.
-  const notifier = createNotifier({
-    isAppFocused: () => BrowserWindow.getFocusedWindow() !== null,
-    repoLabel: (snapshot) => String(snapshot.repoId),
-    show: (notification, snapshot) => {
-      if (!Notification.isSupported()) return
-      const native = new Notification({ title: notification.title, body: notification.body })
-      native.on('click', () => {
-        const [window] = BrowserWindow.getAllWindows()
-        if (window !== undefined) {
-          if (window.isMinimized()) window.restore()
-          window.show()
-          window.focus()
-        }
-        broadcast('app:command', { kind: 'open-session', sessionKey: snapshot.sessionKey })
-      })
-      native.show()
-    },
-  })
+  const notifier = createAppNotifier({ registryDeps, broadcast: (command) => broadcast('app:command', command) })
 
   // Assigned right after createDispatchRuntime below — stageLauncher's onOutcome closes over it,
   // so construction order between the launcher and the dispatcher that owns recordOutcome stays acyclic.
