@@ -1,9 +1,4 @@
-// One selection model for every row list (Backlog, Needs you, Board,
-// Repositories, Worktrees, Denials): selected by row key, not index, so a
-// reorder keeps the right row selected. No `useEffect`: reconcile runs in
-// render and DOM focus is driven from the handler that moved selection, by
-// looking up the row element on the document — only one row list is ever
-// mounted and focusable at a time, so no container scoping is needed.
+// One selection model for every row list, keyed by row key so a reorder keeps the right row selected. No `useEffect`.
 import { useState } from 'react'
 
 export function nextKey(keys: readonly string[], selected: string | null): string | null {
