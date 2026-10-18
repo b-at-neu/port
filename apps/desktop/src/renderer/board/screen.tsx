@@ -16,6 +16,7 @@ import { projectBoard } from '@/renderer/board/project'
 import type { BoardItemRow } from '@/types/board'
 import type { RepoId } from '@/utils/repos'
 import { registerListNavigator } from '@/renderer/shell/stores'
+import { useListSelection } from '@/renderer/shell/list-selection'
 import { pruneItemActionStates } from '@/renderer/board/actions'
 import { BoardBanners } from '@/renderer/board/banners'
 import { BoardHeader } from '@/renderer/board/header'
@@ -83,20 +84,15 @@ export function BoardScreen() {
   const itemRef = search.item ?? null
   const selectedRow = itemRef !== null ? (flatRows.find((row) => sameItem(row, itemRef)) ?? null) : null
 
+  const selection = useListSelection(flatRows.map(rowKey), {
+    value: selectedRow !== null ? rowKey(selectedRow) : null,
+    onChange: (key) => selectRow(key !== null ? (flatRows.find((row) => rowKey(row) === key) ?? null) : null),
+  })
+
   registerListNavigator('board', {
-    next: () => {
-      if (flatRows.length === 0) return
-      const index = selectedRow !== null ? flatRows.findIndex((row) => row === selectedRow) : -1
-      const nextRow = flatRows[Math.min(index + 1, flatRows.length - 1)]
-      if (nextRow !== undefined) selectRow(nextRow)
-    },
-    prev: () => {
-      if (flatRows.length === 0) return
-      const index = selectedRow !== null ? flatRows.findIndex((row) => row === selectedRow) : 0
-      const prevRow = flatRows[Math.max(index - 1, 0)]
-      if (prevRow !== undefined) selectRow(prevRow)
-    },
-    // J/K already opens the pane on every move (below); Enter on an
+    next: () => selection.next(),
+    prev: () => selection.prev(),
+    // J/K already opens the pane on every move (above); Enter on an
     // already-selected row has nothing further to do.
     open: () => undefined,
   })
@@ -127,49 +123,45 @@ export function BoardScreen() {
       {snapshot !== null ? <PipelineStatus snapshot={snapshot} now={now} /> : null}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <ScreenBody variant="list" className="flex-1">
-          {snapshot === null ? (
-            <div className="flex flex-col gap-1 px-4 py-2">
-              <Skeleton className="h-9 w-full" />
-              <Skeleton className="h-9 w-full" />
-              <Skeleton className="h-9 w-full" />
-            </div>
-          ) : projection !== null ? (
-            <>
-              <BoardBanners projection={projection} onSelectRow={selectRow} />
-              {snapshot.state.repositories.length === 0 ? (
-                <EmptyState icon={LayoutGrid} message="Add a repository to see its pipeline." action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.repos }) }} className="px-4 py-6" />
-              ) : sections.length === 0 ? (
-                <EmptyState
-                  icon={LayoutGrid}
-                  message={repo !== null ? "Nothing in this repository's pipeline." : 'Nothing in the pipeline.'}
-                  action={repo !== null ? { label: 'Show all repositories', onClick: () => setSearch({ repo: null }) } : undefined}
-                  className="px-4 py-6"
-                />
-              ) : (
-                sections.map((section) => (
-                  <div key={section.key}>
-                    <div className="bg-sidebar px-4 py-1 text-small font-medium text-foreground-secondary">
-                      {section.name} · {section.count}
-                    </div>
-                    {section.subGroups.map((group) => (
-                      <div key={group.key}>
-                        <div className="px-4 py-0.5 text-meta text-muted-foreground">{group.name}</div>
-                        {group.rows.map((row) => (
-                          <TicketRow
-                            key={rowKey(row)}
-                            row={row}
-                            selected={row === selectedRow}
-                            onSelect={() => selectRow(row)}
-                            operatorJoined={operatorJoinedOf(recordsFor(row.item.repoId), row)}
-                          />
-                        ))}
+          <div>
+            {snapshot === null ? (
+              <div className="flex flex-col gap-1 px-4 py-2">
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-full" />
+              </div>
+            ) : projection !== null ? (
+              <>
+                <BoardBanners projection={projection} onSelectRow={selectRow} />
+                {snapshot.state.repositories.length === 0 ? (
+                  <EmptyState icon={LayoutGrid} message="Add a repository to see its pipeline." action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.repos }) }} className="px-4 py-6" />
+                ) : sections.length === 0 ? (
+                  <EmptyState
+                    icon={LayoutGrid}
+                    message={repo !== null ? "Nothing in this repository's pipeline." : 'Nothing in the pipeline.'}
+                    action={repo !== null ? { label: 'Show all repositories', onClick: () => setSearch({ repo: null }) } : undefined}
+                    className="px-4 py-6"
+                  />
+                ) : (
+                  sections.map((section) => (
+                    <div key={section.key}>
+                      <div className="bg-sidebar px-4 py-1 text-small font-medium text-foreground-secondary">
+                        {section.name} · {section.count}
                       </div>
-                    ))}
-                  </div>
-                ))
-              )}
-            </>
-          ) : null}
+                      {section.subGroups.map((group) => (
+                        <div key={group.key}>
+                          <div className="px-4 py-0.5 text-meta text-muted-foreground">{group.name}</div>
+                          {group.rows.map((row) => (
+                            <TicketRow key={rowKey(row)} row={row} rowProps={selection.rowProps(rowKey(row))} operatorJoined={operatorJoinedOf(recordsFor(row.item.repoId), row)} />
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  ))
+                )}
+              </>
+            ) : null}
+          </div>
         </ScreenBody>
         {selectedRow !== null ? <ItemPane row={selectedRow} report={report} owner={owner} records={recordsFor(selectedRow.item.repoId)} onClose={() => selectRow(null)} /> : null}
       </div>

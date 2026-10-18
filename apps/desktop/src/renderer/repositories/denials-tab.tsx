@@ -13,6 +13,7 @@ import type { ActorGroup, ShapeGroup } from '@/types/local'
 import type { RepoId } from '@/utils/repos'
 import type { DenialsGroup } from '@/types/router'
 import { actorAttributionPill, attributionLineCopy, burstPillCopy, cappedLineCopy, emptyLogCopy, metaStripCopy, noEntriesCopy, readFailedCopy } from '@/renderer/repositories/denials-copy'
+import { useListSelection } from '@/renderer/shell/list-selection'
 
 function relativeOrDash(iso: string | null, now: Date): string {
   if (iso === null) return '—'
@@ -32,21 +33,9 @@ function absoluteOrDash(iso: string | null): string {
   return Number.isNaN(parsed) ? '—' : new Date(parsed).toLocaleString()
 }
 
-function ShapeRow({ group, now, selected, onSelect }: { readonly group: ShapeGroup; readonly now: Date; readonly selected: boolean; readonly onSelect: () => void }) {
+function ShapeRow({ group, now, rowProps }: { readonly group: ShapeGroup; readonly now: Date; readonly rowProps: ReturnType<ReturnType<typeof useListSelection>['rowProps']> }) {
   return (
-    <div
-      data-slot="denial-shape-row"
-      role="button"
-      tabIndex={0}
-      onClick={onSelect}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          onSelect()
-        }
-      }}
-      className={`flex h-9 cursor-pointer items-center gap-3 px-4 text-body outline-none ${selected ? 'bg-selection ring-2 ring-ring ring-inset' : ''}`}
-    >
+    <div data-slot="denial-shape-row" role="button" {...rowProps} className={`flex h-9 cursor-pointer items-center gap-3 px-4 text-body ${rowProps.className}`}>
       <span className="w-56 shrink-0 truncate font-mono text-foreground">{group.shape}</span>
       <span className="shrink-0 text-meta text-muted-foreground">
         {group.counts.deny} denied · {group.counts.miss} missed
@@ -58,22 +47,10 @@ function ShapeRow({ group, now, selected, onSelect }: { readonly group: ShapeGro
   )
 }
 
-function ActorRow({ group, now, selected, onSelect }: { readonly group: ActorGroup; readonly now: Date; readonly selected: boolean; readonly onSelect: () => void }) {
+function ActorRow({ group, now, rowProps }: { readonly group: ActorGroup; readonly now: Date; readonly rowProps: ReturnType<ReturnType<typeof useListSelection>['rowProps']> }) {
   const pill = actorAttributionPill(group.actor, group.attribution)
   return (
-    <div
-      data-slot="denial-actor-row"
-      role="button"
-      tabIndex={0}
-      onClick={onSelect}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          onSelect()
-        }
-      }}
-      className={`flex h-9 cursor-pointer items-center gap-3 px-4 text-body outline-none ${selected ? 'bg-selection ring-2 ring-ring ring-inset' : ''}`}
-    >
+    <div data-slot="denial-actor-row" role="button" {...rowProps} className={`flex h-9 cursor-pointer items-center gap-3 px-4 text-body ${rowProps.className}`}>
       <span className="w-48 shrink-0 truncate font-mono text-foreground">{group.key}</span>
       {pill !== null ? <StatusPill status={pill.tone} label={pill.label} /> : null}
       <span className="shrink-0 text-meta text-muted-foreground">
@@ -178,6 +155,14 @@ function DenialsInspector({
 }) {
   const [selectedShape, setSelectedShape] = useState<string | null>(null)
   const [selectedActor, setSelectedActor] = useState<string | null>(null)
+  const shapeSelection = useListSelection(
+    inspection.byShape.map((s) => s.shape),
+    { value: selectedShape, onChange: setSelectedShape },
+  )
+  const actorSelection = useListSelection(
+    inspection.byActor.map((a) => a.key),
+    { value: selectedActor, onChange: setSelectedActor },
+  )
   const attributionLine = attributionLineCopy(inspection.attribution)
   const selectedShapeGroup = selectedShape !== null ? (inspection.byShape.find((s) => s.shape === selectedShape) ?? null) : null
   const selectedActorGroup = selectedActor !== null ? (inspection.byActor.find((a) => a.key === selectedActor) ?? null) : null
@@ -199,16 +184,14 @@ function DenialsInspector({
             </TabsList>
           </Tabs>
         </div>
-        {group === 'command'
-          ? inspection.byShape.map((shapeGroup) => (
-              <ShapeRow key={shapeGroup.shape} group={shapeGroup} now={now} selected={shapeGroup.shape === selectedShape} onSelect={() => setSelectedShape(shapeGroup.shape)} />
-            ))
-          : inspection.byActor.map((actorGroup) => (
-              <ActorRow key={actorGroup.key} group={actorGroup} now={now} selected={actorGroup.key === selectedActor} onSelect={() => setSelectedActor(actorGroup.key)} />
-            ))}
+        <div>
+          {group === 'command'
+            ? inspection.byShape.map((shapeGroup) => <ShapeRow key={shapeGroup.shape} group={shapeGroup} now={now} rowProps={shapeSelection.rowProps(shapeGroup.shape)} />)
+            : inspection.byActor.map((actorGroup) => <ActorRow key={actorGroup.key} group={actorGroup} now={now} rowProps={actorSelection.rowProps(actorGroup.key)} />)}
+        </div>
       </div>
-      {group === 'command' && selectedShapeGroup !== null ? <ShapeDetailPane group={selectedShapeGroup} onClose={() => setSelectedShape(null)} /> : null}
-      {group === 'actor' && selectedActorGroup !== null ? <ActorDetailPane group={selectedActorGroup} onClose={() => setSelectedActor(null)} /> : null}
+      {group === 'command' && selectedShapeGroup !== null ? <ShapeDetailPane group={selectedShapeGroup} onClose={() => shapeSelection.clear()} /> : null}
+      {group === 'actor' && selectedActorGroup !== null ? <ActorDetailPane group={selectedActorGroup} onClose={() => actorSelection.clear()} /> : null}
     </div>
   )
 }

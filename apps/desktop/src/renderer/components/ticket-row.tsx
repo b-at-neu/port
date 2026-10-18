@@ -10,11 +10,11 @@ import { openReviewDialog } from '@/renderer/gate/controller'
 import { openDecision } from '@/renderer/decision/controller'
 import { PhaseBar } from '@/renderer/components/phase-bar'
 import { StatusPill } from '@/renderer/components/status-pill'
+import type { useListSelection } from '@/renderer/shell/list-selection'
 
 interface TicketRowProps {
   readonly row: BoardItemRow
-  readonly selected: boolean
-  readonly onSelect: () => void
+  readonly rowProps: ReturnType<ReturnType<typeof useListSelection>['rowProps']>
   /** `true` when an operator has typed into one of this item's stage sessions — renders an `Operator joined` tag after the phase pill. */
   readonly operatorJoined?: boolean
 }
@@ -53,22 +53,15 @@ function NextActionLink({ row }: { readonly row: BoardItemRow }) {
   )
 }
 
-export function TicketRow({ row, selected, onSelect, operatorJoined = false }: TicketRowProps) {
+export function TicketRow({ row, rowProps, operatorJoined = false }: TicketRowProps) {
   const { item } = row
 
   function handleKeyDown(event: KeyboardEvent): void {
-    if (event.key === 'Enter') onSelect()
+    if (event.key === 'Enter') rowProps.onFocus()
   }
 
   return (
-    <div
-      data-slot="ticket-row"
-      role="button"
-      tabIndex={0}
-      onClick={onSelect}
-      onKeyDown={handleKeyDown}
-      className={cn('flex h-9 items-center gap-2 px-4 text-body outline-none', selected && 'bg-selection ring-2 ring-ring ring-inset')}
-    >
+    <div data-slot="ticket-row" role="button" {...rowProps} onKeyDown={handleKeyDown} className={cn('flex h-9 items-center gap-2 px-4 text-body', rowProps.className)}>
       <span className="w-10 shrink-0 font-mono tabular-nums text-muted-foreground">#{item.number}</span>
       <span className="min-w-0 flex-1 truncate text-foreground">{item.title}</span>
       <span className="shrink-0 text-meta text-muted-foreground">{item.repo}</span>

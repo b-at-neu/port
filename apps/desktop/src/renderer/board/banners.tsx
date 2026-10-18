@@ -5,6 +5,7 @@ import { TicketRow } from '@/renderer/components/ticket-row'
 import type { BoardItemRow, BoardProjection } from '@/types/board'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import { notReadyCopy } from '@/renderer/board/copy'
+import { listRowClass } from '@/renderer/shell/list-selection'
 
 interface BoardBannersProps {
   readonly projection: BoardProjection
@@ -33,9 +34,16 @@ function UngatedBanner({ projection, onSelectRow }: { readonly projection: Board
         These carry a pipeline label but not &quot;{markerName}&quot;, so CI can&apos;t tell them from a human pull request and the merge gate is inactive.
       </p>
       <div>
-        {projection.ungated.map((row) => (
-          <TicketRow key={`${row.item.repoId}:${String(row.item.number)}`} row={row} selected={false} onSelect={() => onSelectRow(row)} />
-        ))}
+        {projection.ungated.map((row) => {
+          const key = `${row.item.repoId}:${String(row.item.number)}`
+          return (
+            <TicketRow
+              key={key}
+              row={row}
+              rowProps={{ 'data-row-key': key, tabIndex: 0, onFocus: () => onSelectRow(row), onMouseDown: () => onSelectRow(row), className: listRowClass(false) }}
+            />
+          )
+        })}
       </div>
     </div>
   )
