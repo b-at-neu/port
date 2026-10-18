@@ -38,6 +38,8 @@ function UngatedBanner({ projection, selection }: { readonly projection: BoardPr
       <div>
         {projection.ungated.map((row) => {
           const key = `${row.item.repoId}:${String(row.item.number)}`
+          // This item is also mounted under the bare key in its phase
+          // section, which `selectedKey` always matches — so this copy never rings.
           return (
             <TicketRow
               key={key}
@@ -47,7 +49,7 @@ function UngatedBanner({ projection, selection }: { readonly projection: BoardPr
                 tabIndex: 0,
                 onFocus: () => selection.select(key),
                 onMouseDown: () => selection.select(key),
-                className: listRowClass(selection.selectedKey === key),
+                className: listRowClass(selection.selectedKey === `banner:${key}`),
               }}
             />
           )
