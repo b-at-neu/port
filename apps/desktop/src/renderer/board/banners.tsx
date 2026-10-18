@@ -2,14 +2,14 @@
 // Ungated PRs.
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { TicketRow } from '@/renderer/components/ticket-row'
-import type { BoardItemRow, BoardProjection } from '@/types/board'
+import type { BoardProjection } from '@/types/board'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
 import { notReadyCopy } from '@/renderer/board/copy'
-import { listRowClass } from '@/renderer/shell/list-selection'
+import { listRowClass, useListSelection } from '@/renderer/shell/list-selection'
 
 interface BoardBannersProps {
   readonly projection: BoardProjection
-  readonly onSelectRow: (row: BoardItemRow) => void
+  readonly selection: ReturnType<typeof useListSelection>
 }
 
 function NotReadingBanner({ projection }: { readonly projection: BoardProjection }) {
@@ -24,7 +24,9 @@ function NotReadingBanner({ projection }: { readonly projection: BoardProjection
   )
 }
 
-function UngatedBanner({ projection, onSelectRow }: { readonly projection: BoardProjection; readonly onSelectRow: (row: BoardItemRow) => void }) {
+// These rows are also mounted in the main sections, so each gets a
+// `banner:`-prefixed `data-row-key` while sharing the one `selection`.
+function UngatedBanner({ projection, selection }: { readonly projection: BoardProjection; readonly selection: ReturnType<typeof useListSelection> }) {
   if (projection.ungated.length === 0) return null
   const markerName = LABEL_DEFAULTS.find((def) => def.key === 'marker')?.name ?? 'marker'
   return (
@@ -40,7 +42,13 @@ function UngatedBanner({ projection, onSelectRow }: { readonly projection: Board
             <TicketRow
               key={key}
               row={row}
-              rowProps={{ 'data-row-key': key, tabIndex: 0, onFocus: () => onSelectRow(row), onMouseDown: () => onSelectRow(row), className: listRowClass(false) }}
+              rowProps={{
+                'data-row-key': `banner:${key}`,
+                tabIndex: 0,
+                onFocus: () => selection.select(key),
+                onMouseDown: () => selection.select(key),
+                className: listRowClass(selection.selectedKey === key),
+              }}
             />
           )
         })}
@@ -49,11 +57,11 @@ function UngatedBanner({ projection, onSelectRow }: { readonly projection: Board
   )
 }
 
-export function BoardBanners({ projection, onSelectRow }: BoardBannersProps) {
+export function BoardBanners({ projection, selection }: BoardBannersProps) {
   return (
     <>
       <NotReadingBanner projection={projection} />
-      <UngatedBanner projection={projection} onSelectRow={onSelectRow} />
+      <UngatedBanner projection={projection} selection={selection} />
     </>
   )
 }

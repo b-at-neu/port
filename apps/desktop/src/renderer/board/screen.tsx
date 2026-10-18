@@ -132,7 +132,7 @@ export function BoardScreen() {
               </div>
             ) : projection !== null ? (
               <>
-                <BoardBanners projection={projection} onSelectRow={selectRow} />
+                <BoardBanners projection={projection} selection={selection} />
                 {snapshot.state.repositories.length === 0 ? (
                   <EmptyState icon={LayoutGrid} message="Add a repository to see its pipeline." action={{ label: 'Open Repositories', onClick: () => void navigate({ to: ROUTE_IDS.repos }) }} className="px-4 py-6" />
                 ) : sections.length === 0 ? (

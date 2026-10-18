@@ -47,7 +47,13 @@ function NextActionLink({ row }: { readonly row: BoardItemRow }) {
   }
 
   return (
-    <button type="button" onClick={handleClick} className="shrink-0 text-small text-primary-text hover:underline">
+    <button
+      type="button"
+      onMouseDown={(event) => event.stopPropagation()}
+      onFocus={(event) => event.stopPropagation()}
+      onClick={handleClick}
+      className="shrink-0 text-small text-primary-text hover:underline"
+    >
       {action.label}
     </button>
   )
