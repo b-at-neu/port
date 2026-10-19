@@ -150,7 +150,7 @@ describe('pipelinesModel', () => {
       stageSession({ key: 'other', repoId: REPO_ID, stage: { ...stage, number: 46 } }),
     ]
     const [row] = pipelinesModel([notReadyEntry()], undefined, NOW, sessions)
-    expect(row).toMatchObject({ ready: false, sessions: [{ key: 'live', number: 44, label: '#44 Planning', sessionKey: 'live', dot: 'working' }] })
+    expect(row).toMatchObject({ ready: false, sessions: [{ key: 'live', number: 44, label: '#44', sessionKey: 'live', dot: 'working' }] })
   })
 
   it('reads a ready repository as paused with no snapshot yet', () => {
@@ -164,7 +164,7 @@ describe('pipelinesModel', () => {
     const snapshot = snapshotOf([readyRepoState({ items: [live, dormant] })])
     const row = assertReady(pipelinesModel([readyEntry()], snapshot)[0])
     expect(row.sessions).toEqual([
-      { key: `${REPO_ID}-42`, repoId: REPO_ID, number: 42, label: '#42 Implementing', dot: 'working', sessionKey: null, transcript: { sessionId: 'sess-1', agentId: 'a1' } },
+      { key: `${REPO_ID}-42`, repoId: REPO_ID, number: 42, label: '#42 a ticket', dot: 'working', sessionKey: null, transcript: { sessionId: 'sess-1', agentId: 'a1' } },
     ])
   })
 
@@ -207,12 +207,29 @@ describe('pipelinesModel', () => {
     expect(row.sessions[0]).toMatchObject({ number: 42, sessionKey: 'hosted-1' })
   })
 
-  it('names a ready repository stage row after the agent, not the trigger label', () => {
+  it('labels a stage row with the session title, falling back to the ticket label, never the phase', () => {
     const queued = item({ stage: 'trigger', stages: [{ key: 'planApproved', name: 'plan approved', role: 'trigger' }], agents: [agent({ activity: 'active' })] })
     const snapshot = snapshotOf([readyRepoState({ items: [queued] })])
-    const session = stageSession({ key: 'hosted-impl', repoId: REPO_ID, stage: { agent: 'impl', number: 42, kind: 'issue', trigger: 'planApproved' } })
-    expect(assertReady(pipelinesModel([readyEntry()], snapshot)[0]).sessions[0]?.label).toBe('#42 Plan approved')
-    expect(assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [session])[0]).sessions[0]?.label).toBe('#42 Implementing')
+    const stage = { agent: 'impl', number: 42, kind: 'issue', trigger: 'planApproved' } as const
+    const untitled = stageSession({ key: 'hosted-impl', repoId: REPO_ID, stage })
+    const titled = { ...untitled, title: '#42 a titled ticket' }
+    expect(assertReady(pipelinesModel([readyEntry()], snapshot)[0]).sessions[0]?.label).toBe('#42 a ticket')
+    expect(assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [titled])[0]).sessions[0]?.label).toBe('#42 a titled ticket')
+    expect(assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [untitled])[0]).sessions[0]?.label).toBe('#42 a ticket')
+  })
+
+  it("resolves a revise session on a pull request to its ticket's number and keeps the ticket as one row", () => {
+    const linked = [item({ number: 46, title: 'the ticket', linked: 47, agents: [agent({ activity: 'active' })] }), item({ number: 47, kind: 'pull-request', title: 'the pull request', linked: 46 })]
+    const snapshot = snapshotOf([readyRepoState({ items: linked })])
+    const revise = { ...stageSession({ key: 'hosted-revise', repoId: REPO_ID, stage: { agent: 'revise', number: 47, kind: 'pull-request', trigger: 'needsRevision' } }), title: '#46 the ticket' }
+    const row = assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [revise])[0])
+    expect(row.sessions).toEqual([{ key: 'hosted-revise', repoId: REPO_ID, number: 46, label: '#46 the ticket', dot: 'working', sessionKey: 'hosted-revise', transcript: null }])
+  })
+
+  it('shows a ticket with a linked pull request as one item row, never a second for the pull request', () => {
+    const linked = [item({ number: 46, title: 'the ticket', linked: 47 }), item({ number: 47, kind: 'pull-request', title: 'the pull request', linked: 46, agents: [agent({ activity: 'active' })] })]
+    const row = assertReady(pipelinesModel([readyEntry()], snapshotOf([readyRepoState({ items: linked })]))[0])
+    expect(row.sessions.map((s) => [s.number, s.label])).toEqual([[46, '#46 the ticket']])
   })
 
   it('transcript target prefers the live agent, falling back to the live session', () => {

@@ -3,8 +3,8 @@ import type { RepoId } from '@/utils/repos'
 import type { NeedsYouItem } from '@/types/board'
 import { blockerSendError, blockerSentToast, needsYouLeadCopy, refreshedToast } from '@/renderer/needs-you/copy'
 
-function base(overrides: Partial<NeedsYouItem> = {}): Pick<NeedsYouItem, 'repoId' | 'repo' | 'number' | 'title' | 'url' | 'at' | 'matchedRow'> {
-  return { repoId: 'repo-a' as RepoId, repo: 'o/a', number: 41, title: 't', url: 'https://github.com/o/a/issues/41', at: null, matchedRow: null, ...overrides }
+function base(overrides: Partial<NeedsYouItem> = {}): Pick<NeedsYouItem, 'repoId' | 'repo' | 'number' | 'title' | 'url' | 'ticket' | 'at' | 'matchedRow'> {
+  return { repoId: 'repo-a' as RepoId, repo: 'o/a', number: 41, title: 't', url: 'https://github.com/o/a/issues/41', ticket: null, at: null, matchedRow: null, ...overrides }
 }
 
 describe('needsYouLeadCopy', () => {

@@ -174,11 +174,12 @@ async function runLabelAction(item: NeedsYouItem, action: 'retry' | 'refresh', d
   if (item.repoId === null || item.number === null) return
   const kind = item.matchedRow?.item.kind ?? 'pull-request'
   const expectedStage = item.matchedRow?.stageLabel?.key ?? null
+  const shown = String(item.ticket?.number ?? item.number)
   try {
     const result = await window.port.itemAction({ repoId: item.repoId, kind, number: item.number, action, expectedStage })
-    deps.onToast(result.ok ? `${action === 'retry' ? 'Retried' : 'Refreshed'} #${String(item.number)}.` : `Couldn't ${action} #${String(item.number)}: ${result.reason}.`)
+    deps.onToast(result.ok ? `${action === 'retry' ? 'Retried' : 'Refreshed'} #${shown}.` : `Couldn't ${action} #${shown}: ${result.reason}.`)
   } catch (error) {
     console.error(`Failed to reach the main process while applying ${action}`, error)
-    deps.onToast(`Couldn't reach the main process to ${action} #${String(item.number)}.`)
+    deps.onToast(`Couldn't reach the main process to ${action} #${shown}.`)
   }
 }

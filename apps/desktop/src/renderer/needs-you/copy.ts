@@ -5,7 +5,8 @@ import type { StageAgent } from '@/types/tick'
 
 const STAGE_PHASE_NAME: Readonly<Record<StageAgent, string>> = { plan: 'Planning', impl: 'Implementing', review: 'Reviewing', revise: 'Revising' }
 
-function labelOf(item: Pick<NeedsYouItem, 'number'>): string {
+function labelOf(item: Pick<NeedsYouItem, 'number' | 'ticket'>): string {
+  if (item.ticket !== null) return `${item.ticket.kind === 'issue' ? '#' : 'PR#'}${String(item.ticket.number)}`
   return item.number !== null ? `#${String(item.number)}` : 'this item'
 }
 

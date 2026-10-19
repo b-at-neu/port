@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { OPERATOR_ACTIONS, OPERATOR_DECISIONS } from '@/types/actions'
 import type { ActionAvailability, DecisionAvailability, OperatorAction, OperatorDecision } from '@/types/actions'
-import type { BoardItemRow, LiveStage } from '@/types/board'
+import type { BoardItemRow, ItemActionState, LiveStage } from '@/types/board'
 import type { AttachedAgent, AttachedSession, ReconciledItem, StageLabel } from '@/types/state'
 import type { RepoId } from '@/utils/repos'
 import type { SessionKey } from '@/types/hosting'
 import type { DispatchRecord } from '@/types/dispatch'
-import { agentSummaryOf, decisionNoteFor, isDispatchedRow, nextActionFor, operatorJoinedOf, ownershipNoteFor, phaseLabelFor, pillStatusFor, stageKeyOf, stopAttachedAgentNote } from '@/renderer/board/row-model'
+import type { Ticket } from '@/types/ticket'
+import { ticketIndex } from '@/utils/tickets/ticket'
+import { actionNoteFor, agentSummaryOf, decisionNoteFor, isDispatchedRow, nextActionFor, operatorJoinedOf, ownershipNoteFor, phaseLabelFor, pillStatusFor, stageKeyOf, stopAttachedAgentNote } from '@/renderer/board/row-model'
 
 const LIVE_PLAN: LiveStage = { agent: 'plan', trigger: 'ready', sessionKey: 'hosted-1' as SessionKey }
 
@@ -61,6 +63,7 @@ function row(overrides: {
   } as unknown as ReconciledItem
   return {
     item,
+    ticket: ticketIndex([item]).tickets[0] as Ticket,
     displayStatus: { status: overrides.status ?? 'waiting', staleGithub: false, githubAgeMs: null },
     liveStage: overrides.liveStage ?? null,
     stageLabel,
@@ -116,6 +119,24 @@ describe('ownershipNoteFor', () => {
 
   it('null when every refusal is not-applicable', () => {
     expect(ownershipNoteFor(NO_ACTIONS, { number: 41, assignees: [] })).toBeNull()
+  })
+})
+
+describe('actionNoteFor', () => {
+  it('names the ticket number, not the status source, in the ownership note', () => {
+    const base = row({ kind: 'pull-request', actions: { pause: { available: false, reason: 'not-owned' } } })
+    const r: BoardItemRow = { ...base, ticket: { ...base.ticket, ref: { ...base.ticket.ref, number: 464 } } }
+    const note = actionNoteFor(r, undefined)
+    expect(note).toContain('owns #464')
+    expect(note).toContain('work on #464')
+    expect(note).not.toContain('#41')
+  })
+
+  it('names the ticket number in an action result', () => {
+    const base = row({ kind: 'pull-request' })
+    const r: BoardItemRow = { ...base, ticket: { ...base.ticket, ref: { ...base.ticket.ref, number: 464 } } }
+    const state = { kind: 'result', action: 'retry', result: { ok: false, reason: 'no-pause-record' } } as unknown as ItemActionState
+    expect(actionNoteFor(r, state)).toContain('#464')
   })
 })
 

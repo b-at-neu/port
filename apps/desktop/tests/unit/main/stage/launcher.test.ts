@@ -10,7 +10,7 @@ import type { StartSessionParams } from '@/types/hosting'
 const ENTRY = FIXTURE_REPOSITORIES.find((r) => r.id === WIDGETS_ID) as ReadyEntry
 
 function request(overrides: Partial<StageLaunchRequest> = {}): StageLaunchRequest {
-  return { entry: ENTRY, agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved', model: 'sonnet', prompt: 'Run your pipeline stage for #52.', ...overrides }
+  return { entry: ENTRY, agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved', model: 'sonnet', prompt: 'Run your pipeline stage for #52.', title: '#52 Add a dark-mode icon for the tray', ...overrides }
 }
 
 function baseSnapshot(overrides: Partial<HostedSessionSnapshot> = {}): HostedSessionSnapshot {
@@ -71,6 +71,13 @@ describe('createStageLauncher.launch', () => {
       }),
     )
     expect(deps.send).toHaveBeenCalledWith('hosted-1', 'Run your pipeline stage for #52.')
+  })
+
+  it('titles a review launch with the ticket label it was given', async () => {
+    const deps = fakeDeps()
+    const launcher = createStageLauncher({ ...deps, git: vi.fn() as never, now: () => new Date() })
+    await launcher.launch(request({ agent: 'review', number: 47, kind: 'pull-request', trigger: 'readyForReview', title: '#46 Show the last sync time in the header' }))
+    expect(deps.start).toHaveBeenCalledWith(expect.objectContaining({ initialTitle: '#46 Show the last sync time in the header' }))
   })
 
   it('removes the worktree and returns failed when the worktree itself cannot be created', async () => {

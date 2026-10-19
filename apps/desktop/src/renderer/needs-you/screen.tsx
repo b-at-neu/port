@@ -24,7 +24,7 @@ import { invoke } from '@/renderer/data/invoke'
 import { QUESTION_SKIPPED_MESSAGE } from '@/renderer/session/interaction-copy'
 
 function itemKey(item: NeedsYouItemModel): string {
-  return `${item.kind}:${String(item.repoId)}:${String(item.number)}`
+  return `${item.kind}:${String(item.repoId)}:${String(item.ticket?.number ?? item.number)}`
 }
 
 function hasDetail(item: NeedsYouItemModel): boolean {

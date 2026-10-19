@@ -211,6 +211,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     const mode = params.mode
     const queryFn: HostedQueryFn = (queryParams) => sdk.query(queryParams)
     const initialTitle = params.initialTitle ?? null
+    const stage = params.stage ?? null
 
     function onSessionId(claudeSessionId: string): void {
       restorable = dropAdopted(restorable, claudeSessionId)
@@ -219,6 +220,12 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
           { parentSessionId: mode.sessionId, forkedSessionId: claudeSessionId, cwd },
           { listSessions: deps.listSessionsForFork, renameSession: sdk.renameSession },
         ).then((titled) => handles.get(sessionKey)?.setTitled(titled))
+      }
+      if (stage !== null && initialTitle !== null) {
+        void sdk.renameSession(claudeSessionId, initialTitle, { dir: cwd }).then(
+          () => handles.get(sessionKey)?.setTitled(true),
+          () => handles.get(sessionKey)?.setTitled(false),
+        )
       }
       persistSave()
     }
@@ -243,7 +250,7 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
         initialTitle,
         defaults,
         history,
-        stage: params.stage ?? null,
+        stage,
       },
       queryFn,
     )

@@ -256,6 +256,15 @@ export function openPrButtonLabel(): string {
   return 'Open PR'
 }
 
+export function openTicketLinkLabel(): string {
+  return 'Open ticket'
+}
+
+/** `Open PR #<n>` beside a ticket link, bare `Open PR` for a pull request that is the whole item. */
+export function openPrLinkLabel(number: number | null): string {
+  return number === null ? openPrButtonLabel() : `${openPrButtonLabel()} #${String(number)}`
+}
+
 /** #313: the row tag for an `autoPlan` issue, at any phase — `docs/DESIGN.md`
  *  §6's own "Auto-plan" tag sentence, pinned by `scripts/checks/desktop-board.ts`. */
 export function autoPlanTagLabel(): string {
@@ -264,6 +273,15 @@ export function autoPlanTagLabel(): string {
 
 export function autoPlanTagTitle(): string {
   return 'Opted in with auto-approve: its plan is approved without a review.'
+}
+
+/** The tag on a pull request that closes no ticket — `docs/DESIGN.md` §6's own "No ticket" tag sentence, pinned by `scripts/checks/desktop-board.ts`. */
+export function noTicketTagLabel(): string {
+  return 'No ticket'
+}
+
+export function noTicketTagTitle(): string {
+  return "This PR doesn't close a ticket. Add `Closes #N` to its description to link it."
 }
 
 // --- The operator decisions --------------------------------------------

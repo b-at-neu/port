@@ -297,6 +297,43 @@ describe('needsYouItems', () => {
     })
   })
 
+  describe('a ticket with a linked pull request', () => {
+    const pair = (issueOverrides: Partial<ReconciledItem> = {}) => [
+      item({ number: 464, title: 'the ticket', linked: 537, ...issueOverrides }),
+      item({ number: 537, kind: 'pull-request', title: 'the pull request', url: 'https://github.com/o/a/pull/537', linked: 464, stage: 'trigger', stages: [{ key: 'reviewing', name: 'reviewing', role: 'trigger' }], status: 'in-flight' }),
+    ]
+    const reviewSession = (text: string) =>
+      stageSession({
+        repoId: 'repo-a' as RepoId,
+        stage: { agent: 'review', number: 537, kind: 'pull-request', trigger: 'readyForReview' },
+        phase: 'ready',
+        lastResult: { subtype: 'success', isError: false, text, at: NOW.toISOString() },
+      })
+
+    it("lands a review session's hand-back on the ticket row, carrying the ticket and keeping the pull request as the action target", () => {
+      const items = needsYouItems(snapshotOf([readyRepo({ items: pair() })]), NOW, [reviewSession('BLOCKED: no checks ran')])
+      expect(items).toHaveLength(1)
+      expect(items[0]).toMatchObject({ kind: 'stage-blocked', number: 537, title: 'the pull request' })
+      expect(items[0]?.ticket).toMatchObject({ kind: 'issue', number: 464, title: 'the ticket' })
+      expect(items[0]?.matchedRow?.ticket.ref.number).toBe(464)
+    })
+
+    it("merges a blocked label on the ticket with its review session's hand-back into one row", () => {
+      const blocked = pair({ stage: 'gate', stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }], matchedKeys: ['blocked'] })
+      blocked[1] = { ...blocked[1], stage: 'gate', stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }] } as ReconciledItem
+      const items = needsYouItems(snapshotOf([readyRepo({ items: blocked })]), NOW, [reviewSession('BLOCKED: no checks ran')])
+      expect(items.map((i) => i.kind)).toEqual(['stage-blocked'])
+    })
+
+    it('carries the ticket on a label-keyed row, whose number stays the pull request it writes to', () => {
+      const approved = pair()
+      approved[1] = { ...approved[1], stage: 'terminal', stages: [{ key: 'approved', name: 'approved', role: 'terminal' }] } as ReconciledItem
+      const [row] = needsYouItems(snapshotOf([readyRepo({ items: approved })]), NOW)
+      expect(row).toMatchObject({ kind: 'ready-to-merge', number: 537 })
+      expect(row?.ticket?.number).toBe(464)
+    })
+  })
+
   it('an error-result hand-back does not produce a stage-blocked item', () => {
     const session = {
       sessionKey: 'hosted-4' as SessionKey,

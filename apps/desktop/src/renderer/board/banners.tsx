@@ -40,7 +40,7 @@ function UngatedBanner({ rows, selection }: { readonly rows: readonly BoardItemR
       </p>
       <div>
         {rows.map((row) => (
-          <TicketRow key={`${row.item.repoId}:${String(row.item.number)}`} row={row} rowProps={selection.rowProps(`${row.item.repoId}:${String(row.item.number)}`)} />
+          <TicketRow key={`${row.item.repoId}:${String(row.ticket.ref.number)}`} row={row} rowProps={selection.rowProps(`${row.item.repoId}:${String(row.ticket.ref.number)}`)} />
         ))}
       </div>
     </div>

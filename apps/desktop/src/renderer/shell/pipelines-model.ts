@@ -3,41 +3,39 @@
 import type { RepoId, RepositoryEntry } from '@/utils/repos'
 import type { BoardSnapshot } from '@/types/board'
 import type { DispatchOwner } from '@/types/dispatch'
-import type { ReconciledItem } from '@/types/state'
 import type { HostedSessionSnapshot } from '@/types/hosting'
+import type { TicketIndex } from '@/types/ticket'
 import { needsYouItems, repoNeedsYou } from '@/renderer/board/needs-you'
-import { stageKeyOf } from '@/renderer/board/row-model'
-import { stageAgentPhaseName } from '@/renderer/board/copy'
-import { PHASE_NAMES } from '@/renderer/lib/phase'
+import { ticketIndex, ticketLabel } from '@/utils/tickets/ticket'
 import type { PillStatus } from '@/types/components'
 import type { PipelineRow, PipelineSessionRow } from '@/types/shell'
 
-function sessionsFor(repoId: RepoId, items: readonly ReconciledItem[], needsYouNumbers: ReadonlySet<number>): PipelineSessionRow[] {
+function sessionsFor(repoId: RepoId, index: TicketIndex, needsYouNumbers: ReadonlySet<number>): PipelineSessionRow[] {
   const rows: PipelineSessionRow[] = []
-  for (const item of items) {
+  for (const ticket of index.tickets) {
+    const item = ticket.primary
     const liveAgent = item.agents.find((a) => a.activity !== 'dormant')
     const liveSession = item.sessions.find((s) => s.activity !== 'dormant')
     if (liveAgent === undefined && liveSession === undefined) continue
 
-    const stageKey = stageKeyOf(item.stages, item.stage)
-    const phaseName = stageKey !== null ? (PHASE_NAMES[stageKey] ?? stageKey) : 'Unstaged'
     const activity = liveAgent?.activity ?? liveSession?.activity ?? 'dormant'
-    const dot: PipelineSessionRow['dot'] = needsYouNumbers.has(item.number) ? 'attention' : activity === 'active' ? 'working' : 'idle'
+    const dot: PipelineSessionRow['dot'] = needsYouNumbers.has(ticket.ref.number) ? 'attention' : activity === 'active' ? 'working' : 'idle'
     const transcript: PipelineSessionRow['transcript'] =
       liveAgent !== undefined ? { sessionId: liveAgent.sessionId, agentId: liveAgent.agentId } : liveSession !== undefined ? { sessionId: liveSession.sessionId, agentId: null } : null
 
-    rows.push({ key: `${repoId}-${item.number}`, repoId, number: item.number, label: `#${item.number} ${phaseName}`, dot, sessionKey: null, transcript })
+    rows.push({ key: `${repoId}-${ticket.ref.number}`, repoId, number: ticket.ref.number, label: ticketLabel(ticket.ref), dot, sessionKey: null, transcript })
   }
   return rows
 }
 
 /** A live stage session's own row, following `sidebar-sessions.tsx`'s own dot rules. `repoId` is passed in rather than read off `session` — this is only ever called once `session.repoId` has already been narrowed to match it. */
-function stageRowFor(repoId: RepoId, session: HostedSessionSnapshot): PipelineSessionRow {
+function stageRowFor(repoId: RepoId, session: HostedSessionSnapshot, index: TicketIndex): PipelineSessionRow {
   const stage = session.stage
   if (stage === null) throw new Error('stageRowFor called with a non-stage snapshot')
-  const phaseName = stageAgentPhaseName(stage.agent)
+  const ticket = index.byNumber.get(stage.number)
+  const label = session.title ?? (ticket !== undefined ? ticketLabel(ticket.ref) : `#${String(stage.number)}`)
   const dot: PipelineSessionRow['dot'] = session.pendingPermissions.length > 0 ? 'attention' : session.phase === 'starting' || session.phase === 'streaming' ? 'working' : 'idle'
-  return { key: session.sessionKey, repoId, number: stage.number, label: `#${String(stage.number)} ${phaseName}`, dot, sessionKey: session.sessionKey, transcript: null }
+  return { key: session.sessionKey, repoId, number: ticket?.ref.number ?? stage.number, label, dot, sessionKey: session.sessionKey, transcript: null }
 }
 
 /** Ownership gates the pill ahead of run state — `terminal`/`unreadable` each have their
@@ -67,24 +65,25 @@ export function pipelinesModel(
   const needsYou = snapshot !== undefined ? needsYouItems(snapshot, now) : []
   const needsYouNumbers = new Map<RepoId, Set<number>>()
   for (const item of needsYou) {
-    if (item.repoId === null || item.number === null) continue
+    const number = item.ticket?.number ?? item.number
+    if (item.repoId === null || number === null) continue
     const numbers = needsYouNumbers.get(item.repoId) ?? new Set<number>()
-    numbers.add(item.number)
+    numbers.add(number)
     needsYouNumbers.set(item.repoId, numbers)
   }
 
   return repos.map((entry): PipelineRow => {
-    const stageRows = sessions.filter((s) => s.phase !== 'ended' && s.stage !== null && s.repoId === entry.id).map((s) => stageRowFor(entry.id, s))
+    const repoState = snapshot?.state.repositories.find((r) => r.repoId === entry.id)
+    const index = ticketIndex(repoState !== undefined && repoState.ok ? repoState.items : [])
+    const stageRows = sessions.filter((s) => s.phase !== 'ended' && s.stage !== null && s.repoId === entry.id).map((s) => stageRowFor(entry.id, s, index))
     if (!('config' in entry)) return { ready: false, repoId: entry.id, name: entry.displayName, sessions: stageRows }
 
-    const repoState = snapshot?.state.repositories.find((r) => r.repoId === entry.id)
-    const items = repoState !== undefined && repoState.ok ? repoState.items : []
     const tick = snapshot?.tick.find((t) => t.repoId === entry.id)
     const numbers = needsYouNumbers.get(entry.id) ?? new Set<number>()
     const dispatchStatus = snapshot?.dispatch.find((d) => d.repoId === entry.id)
     const owner: DispatchOwner = dispatchStatus?.owner ?? 'none'
 
-    const itemRows = sessionsFor(entry.id, items, numbers)
+    const itemRows = sessionsFor(entry.id, index, numbers)
     const stageNumbers = new Set(stageRows.map((r) => r.number))
 
     return {

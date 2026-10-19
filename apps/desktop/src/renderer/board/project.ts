@@ -5,7 +5,8 @@ import { inspectDenials } from '@/renderer/local/inspect'
 import { actionsFor } from '@/utils/actions/plan'
 import { decisionsFor } from '@/utils/actions/decide'
 import type { RepoId } from '@/utils/repos'
-import type { RepositoryFreshness, RepositoryState, StageLabel } from '@/types/state'
+import { ticketIndex } from '@/utils/tickets/ticket'
+import type { ReconciledItem, RepositoryFreshness, RepositoryState, StageLabel } from '@/types/state'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/types/board'
 import type { BoardGroup, BoardItemRow, BoardProjection, BoardRepositorySummary, BoardSnapshot, DisplayStatus, GroupBy, LiveStage, RepositoryHealth, SourceHealth, SourceKind } from '@/types/board'
 import type { HostedSessionSnapshot } from '@/types/hosting'
@@ -75,7 +76,7 @@ function compareRows(a: BoardItemRow, b: BoardItemRow, displayNameOf: ReadonlyMa
   const nameA = displayNameOf.get(a.item.repoId) ?? ''
   const nameB = displayNameOf.get(b.item.repoId) ?? ''
   if (nameA !== nameB) return nameA < nameB ? -1 : 1
-  return a.item.number - b.item.number
+  return a.ticket.ref.number - b.ticket.ref.number
 }
 
 interface ProjectBoardParams {
@@ -108,6 +109,14 @@ function liveStagesOf(sessions: readonly HostedSessionSnapshot[]): ReadonlyMap<s
   return live
 }
 
+function newestLive(candidates: readonly (LiveStageEntry | undefined)[]): LiveStageEntry | undefined {
+  let newest: LiveStageEntry | undefined
+  for (const candidate of candidates) {
+    if (candidate !== undefined && (newest === undefined || Date.parse(candidate.startedAt) > Date.parse(newest.startedAt))) newest = candidate
+  }
+  return newest
+}
+
 /** Everything the board renders, computed once. Pure over an already-built
  *  `BoardSnapshot` — no IPC, no timer, no DOM. */
 export function projectBoard(params: ProjectBoardParams): BoardProjection {
@@ -124,16 +133,18 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
   const rows: BoardItemRow[] = []
   for (const repo of readyRepos) {
     const health = healthByRepo.get(repo.repoId)
-    for (const item of repo.items) {
+    for (const ticket of ticketIndex(repo.items).tickets) {
+      const item = ticket.primary
+      const members = [ticket.issue, ticket.pullRequest].filter((member): member is ReconciledItem => member !== null)
       const actions = actionsFor({ item, viewer: repo.viewer, approvalGate: repo.approvalGate })
-      const found = liveStages.get(liveStageKey(repo.repoId, item.kind, item.number))
+      const found = newestLive(members.map((member) => liveStages.get(liveStageKey(repo.repoId, member.kind, member.number))))
       const liveStage: LiveStage | null = found === undefined ? null : { agent: found.agent, trigger: found.trigger, sessionKey: found.sessionKey }
       const decisions = decisionsFor({ item, viewer: repo.viewer, reviewCycleCap: repo.reviewCycleCap, liveStage: liveStage !== null })
       let ds: DisplayStatus
-      if (interruptedKeys.has(`${repo.repoId}:${String(item.number)}`)) ds = { status: 'interrupted', staleGithub: false, githubAgeMs: null }
+      if (members.some((member) => interruptedKeys.has(`${repo.repoId}:${String(member.number)}`))) ds = { status: 'interrupted', staleGithub: false, githubAgeMs: null }
       else if (found?.working === true && item.status === 'waiting') ds = { status: 'in-flight', staleGithub: false, githubAgeMs: null }
       else ds = displayStatus(item, health, repo.freshness, now)
-      rows.push({ item, displayStatus: ds, liveStage, stageLabel: stageLabelOf(item), actions, decisions, viewer: repo.viewer })
+      rows.push({ item, ticket, displayStatus: ds, liveStage, stageLabel: stageLabelOf(item), actions, decisions, viewer: repo.viewer })
     }
   }
   rows.sort((a, b) => compareRows(a, b, displayNameOf))

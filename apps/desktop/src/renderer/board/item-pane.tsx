@@ -21,8 +21,8 @@ import { ROUTE_IDS } from '@/renderer/router/routes'
 import { openDecision } from '@/renderer/decision/controller'
 import { openReviewDialog } from '@/renderer/gate/controller'
 import { itemActionState, runItemAction, subscribeItemActions } from '@/renderer/board/actions'
-import { actionButtonLabel, actionPendingLabel, actionResultCopy, decisionButtonLabel, reviewPlanButtonLabel, stageLinkLabel, stageSessionsSectionLabel } from '@/renderer/board/copy'
-import { actionNoteFor, agentSummaryOf, decisionNoteFor, pillStatusFor } from '@/renderer/board/row-model'
+import { actionButtonLabel, actionPendingLabel, actionResultCopy, decisionButtonLabel, openPrLinkLabel, openTicketLinkLabel, reviewPlanButtonLabel, stageLinkLabel, stageSessionsSectionLabel } from '@/renderer/board/copy'
+import { actionNoteFor, agentSummaryOf, decisionNoteFor, pillStatusFor, stageTargetsOf } from '@/renderer/board/row-model'
 import { itemDetailLines } from '@/renderer/board/tick'
 import { phaseDetailsFor } from '@/renderer/board/phase-history'
 import { useIpcQuery } from '@/renderer/data/query'
@@ -41,7 +41,7 @@ function phaseLabel(row: BoardItemRow): string {
 }
 
 export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps) {
-  const { item } = row
+  const { item, ticket } = row
   const navigate = useNavigate()
   const state = useSyncExternalStore(subscribeItemActions, () => itemActionState(item.repoId, item.number))
   const pendingAction = state?.kind === 'pending' ? state.action : null
@@ -50,7 +50,7 @@ export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps
   const availableActions = OPERATOR_ACTIONS.filter((action) => row.actions[action].available)
   const availableDecisions = OPERATOR_DECISIONS.filter((decision) => row.decisions[decision].available)
   const agentSummary = agentSummaryOf(item.agents, item.sessions)
-  const stageLinks = stageLinksFor(records, item.number, item.kind)
+  const stageLinks = stageLinksFor(records, stageTargetsOf(row))
 
   const sessions = useIpcQuery('session:list')
   const liveLink = stageLinks.find((link): link is Extract<StageLink, { readonly kind: 'live' }> => link.kind === 'live')
@@ -75,7 +75,7 @@ export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps
     void navigate({
       to: ROUTE_IDS.transcript,
       params: { sessionId: link.sessionId },
-      search: { agentId: null, from: 'board', focusIndex: null, title: item.title, item: null },
+      search: { agentId: null, from: 'board', focusIndex: null, title: ticket.ref.title, item: null },
     })
   }
 
@@ -87,7 +87,7 @@ export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps
       toast(
         actionResultCopy({
           action,
-          number: item.number,
+          number: ticket.ref.number,
           plan: availability.available ? availability.plan : null,
           currentStageName: row.stageLabel?.name ?? null,
           result: result.result,
@@ -103,14 +103,26 @@ export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps
   return (
     <DetailPane onClose={onClose}>
       <div className="flex flex-col gap-1">
-        <h2 className="text-title font-semibold text-foreground">{item.title}</h2>
+        <h2 className="text-title font-semibold text-foreground">{ticket.ref.title}</h2>
         <div className="flex items-center gap-2 text-small text-muted-foreground">
-          <span>#{item.number}</span>
+          <span>
+            {ticket.ref.kind === 'issue' ? '#' : 'PR#'}
+            {ticket.ref.number}
+          </span>
           <span>{item.repo}</span>
         </div>
-        <a href={item.url} target="_blank" rel="noreferrer" className="text-small text-primary-text hover:underline">
-          {item.kind === 'issue' ? 'Open ticket' : 'Open PR'}
-        </a>
+        <div className="flex items-center gap-3 text-small">
+          {ticket.issue !== null ? (
+            <a href={ticket.issue.url} target="_blank" rel="noreferrer" className="text-primary-text hover:underline">
+              {openTicketLinkLabel()}
+            </a>
+          ) : null}
+          {ticket.pullRequest !== null ? (
+            <a href={ticket.pullRequest.url} target="_blank" rel="noreferrer" className="text-primary-text hover:underline">
+              {openPrLinkLabel(ticket.issue !== null ? ticket.pullRequest.number : null)}
+            </a>
+          ) : null}
+        </div>
       </div>
       <StatusPill status={pillStatusFor(row)} label={phaseLabel(row)} />
       <PhaseList stageKey={row.stageLabel?.key ?? null} kind={item.kind} merged={item.mergedAt !== null} details={phaseDetails} extraCurrentLine={agentSummary} />
@@ -148,7 +160,7 @@ export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps
                   </Button>
                 </span>
               </TooltipTrigger>
-              {pendingAction !== null && pendingAction !== action ? <TooltipContent>Another action on #{item.number} is already in progress.</TooltipContent> : null}
+              {pendingAction !== null && pendingAction !== action ? <TooltipContent>Another action on #{ticket.ref.number} is already in progress.</TooltipContent> : null}
             </Tooltip>
           ))}
           {availableDecisions.map((decision) => {

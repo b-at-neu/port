@@ -16,6 +16,7 @@ import { dispatchableFrom, observableFrom } from '@/main/tick/dispatchable'
 
 
 import { labelName } from '@/utils/labels/vocabulary'
+import { ticketIndex, ticketLabelFor } from '@/utils/tickets/ticket'
 import { runObservationPass } from '@/main/dispatch/observe-pass'
 import { commentFailureMessage, selectDispatches, survived } from '@/main/dispatch/select'
 import { budgetLiveSets, budgetRoute, escalationBody, sumCostUsd } from '@/main/dispatch/budget'
@@ -311,6 +312,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
       return
     }
 
+    const index = ticketIndex(snapshotRepoState(entry.id)?.items ?? [])
     let waiting = 0
     await serialize(async () => {
       const limit = (await deps.store.capacity()).limit
@@ -326,7 +328,16 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
           continue
         }
         try {
-          const result = await launch.launch({ entry, agent: candidate.agent, number: candidate.number, kind: candidate.kind, trigger: candidate.trigger, model: entry.config.models[candidate.agent], prompt: promptFor(candidate) })
+          const result = await launch.launch({
+            entry,
+            agent: candidate.agent,
+            number: candidate.number,
+            kind: candidate.kind,
+            trigger: candidate.trigger,
+            model: entry.config.models[candidate.agent],
+            prompt: promptFor(candidate),
+            title: ticketLabelFor(index, candidate.number, candidate.kind),
+          })
           const at = deps.now().toISOString()
           if (result.ok) {
             if (stopped) {

@@ -202,6 +202,52 @@ describe('projectBoard — grouping', () => {
   })
 })
 
+describe('projectBoard — one row per ticket', () => {
+  const REVIEWING = { stage: 'trigger', stages: [{ key: 'reviewing', name: 'reviewing', role: 'trigger' }], status: 'in-flight' } as const
+  const linkedPair = (issueOverrides: Partial<ReconciledItem> = {}) => [
+    item({ number: 464, title: 'the ticket', stage: null, stages: [], status: 'unstaged', linked: 537, ...issueOverrides }),
+    item({ number: 537, kind: 'pull-request', title: 'the pull request', url: 'https://github.com/o/a/pull/537', linked: 464, ...REVIEWING }),
+  ]
+  const project = (items: readonly ReconciledItem[], sessions: Parameters<typeof projectBoard>[0]['sessions'] = []) =>
+    projectBoard({ snapshot: snapshotOf([readyRepo({ items })], [health()]), groupBy: 'stage', now: NOW, sessions })
+
+  it('shows an unlabelled issue and its reviewing pull request as one row with the review status, never Unstaged', () => {
+    const projection = project(linkedPair())
+    expect(projection.rows).toHaveLength(1)
+    const [row] = projection.rows
+    expect(row?.ticket.ref).toMatchObject({ kind: 'issue', number: 464, title: 'the ticket', pullRequest: { number: 537 } })
+    expect(row?.item.number).toBe(537)
+    expect(row?.stageLabel?.key).toBe('reviewing')
+    expect(row?.displayStatus.status).toBe('in-flight')
+    expect(projection.groups.map((group) => group.key)).toEqual(['reviewing'])
+  })
+
+  it('keeps a pull request with no ticket as a row of its own, keyed as a pull request', () => {
+    const [row] = project([item({ number: 35, kind: 'pull-request', linked: null })]).rows
+    expect(row?.ticket.ref.kind).toBe('unlinked-pr')
+    expect(row?.ticket.ref.number).toBe(35)
+  })
+
+  it('marks the row interrupted when either the issue or the pull request is', () => {
+    const snapshot = snapshotOf([readyRepo({ items: linkedPair() })], [health()])
+    const interrupted = { repoId: 'repo-a' as RepoId, number: 464 }
+    const withInterrupted = { ...snapshot, dispatch: [{ repoId: 'repo-a' as RepoId, interrupted: [interrupted] }] } as unknown as BoardSnapshot
+    expect(projectBoard({ snapshot: withInterrupted, groupBy: 'stage', now: NOW }).rows[0]?.displayStatus.status).toBe('interrupted')
+  })
+
+  it("matches a live session on either of the ticket's numbers", () => {
+    const review = stageSession({ repoId: 'repo-a' as RepoId, key: 'hosted-review', stage: { agent: 'review', number: 537, kind: 'pull-request', trigger: 'readyForReview' } })
+    expect(project(linkedPair(), [review]).rows[0]?.liveStage?.sessionKey).toBe('hosted-review')
+    const plan = stageSession({ repoId: 'repo-a' as RepoId, key: 'hosted-plan', stage: { agent: 'plan', number: 464, kind: 'issue', trigger: 'ready' } })
+    expect(project(linkedPair(), [plan]).rows[0]?.liveStage?.sessionKey).toBe('hosted-plan')
+  })
+
+  it('sorts rows by the ticket number', () => {
+    const rows = project([item({ number: 9 }), ...linkedPair(), item({ number: 700 })]).rows
+    expect(rows.map((row) => row.ticket.ref.number)).toEqual([9, 464, 700])
+  })
+})
+
 describe('projectBoard — live stage sessions', () => {
   const REPO = 'repo-a' as RepoId
   const planSession = (overrides: Partial<Parameters<typeof stageSession>[0]> = {}) =>

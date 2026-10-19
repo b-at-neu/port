@@ -50,6 +50,14 @@ describe('notificationFor', () => {
     expect(result?.body).toContain('Bash')
   })
 
+  it("names a stage session's ticket in the notification title", () => {
+    const stage = { agent: 'review', number: 47, kind: 'pull-request', trigger: 'readyForReview' } as const
+    const permission = { permissionId: 'p1', toolName: 'Bash', input: {}, title: null, displayName: null, description: null, decisionReason: null, blockedPath: null, protectedPath: null, agentId: null, requestedAt: 't', sessionGrant: null, interaction: null }
+    const previous = snapshot({ stage, title: '#46 Show the last sync time' })
+    const next = snapshot({ stage, title: '#46 Show the last sync time', pendingPermissions: [permission] })
+    expect(notificationFor(previous, next, 'widgets')?.title).toBe('widgets · #46 Show the last sync time')
+  })
+
   it('notifies finished when streaming ends with no pending permissions', () => {
     const previous = snapshot({ phase: 'streaming' })
     const next = snapshot({ phase: 'ready' })

@@ -108,15 +108,17 @@ export default async function ({ expect, fail, ok }: Reporter) {
     if (!found) ok();
   }
 
-  // pin: `renderer/board/copy.ts`'s `autoPlanTagLabel()` ↔ `docs/DESIGN.md` §6's "Auto-plan" tag sentence
+  // pin: `renderer/board/copy.ts`'s tag labels ↔ `docs/DESIGN.md` §6's tag sentences
   {
     const copyFile = join(root, rendererBoardDir, 'copy.ts');
     const copyText = readFileSync(copyFile, 'utf8');
-    const labelMatch = /function autoPlanTagLabel\(\): string \{\s*return '([^']+)'/.exec(copyText);
     const designText = readFileSync(join(root, 'docs/DESIGN.md'), 'utf8');
-    if (!labelMatch) {
-      fail('desktop-board', `${rendererBoardDir}/copy.ts has no autoPlanTagLabel() returning a string literal`);
-    } else expect(designText.includes(`"${labelMatch[1]}" tag`), 'desktop-board', `docs/DESIGN.md §6 no longer names the "${labelMatch[1]}" tag — ${rendererBoardDir}/copy.ts's autoPlanTagLabel() has drifted from it`);
+    for (const fn of ['autoPlanTagLabel', 'noTicketTagLabel']) {
+      const labelMatch = new RegExp(`function ${fn}\\(\\): string \\{\\s*return '([^']+)'`).exec(copyText);
+      if (!labelMatch) {
+        fail('desktop-board', `${rendererBoardDir}/copy.ts has no ${fn}() returning a string literal`);
+      } else expect(designText.includes(`"${labelMatch[1]}" tag`), 'desktop-board', `docs/DESIGN.md §6 no longer names the "${labelMatch[1]}" tag — ${rendererBoardDir}/copy.ts's ${fn}() has drifted from it`);
+    }
   }
 }
 
