@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/u
 import { cn } from '@/renderer/lib/utils'
 import { needsYouItems } from '@/renderer/board/needs-you'
 import { useIpcQuery } from '@/renderer/data/query'
+import { IconButton } from '@/renderer/components/icon-button'
 import { PortMark } from '@/renderer/components/port-mark'
 import { SidebarScreens } from '@/renderer/shell/sidebar-screens'
 import { SidebarPipelines } from '@/renderer/shell/sidebar-pipelines'
@@ -74,14 +75,9 @@ export function Sidebar() {
       <div className="flex h-11 shrink-0 items-center gap-2 px-3">
         <PortMark />
         <span className="flex-1 text-body font-semibold">port</span>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button type="button" onClick={toggle} className="flex size-6 items-center justify-center rounded-md hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Hide sidebar">
-              <PanelLeftClose className="size-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Hide sidebar · Ctrl+B</TooltipContent>
-        </Tooltip>
+        <IconButton label="Hide sidebar" tooltip="Hide sidebar · Ctrl+B" onClick={toggle}>
+          <PanelLeftClose />
+        </IconButton>
       </div>
       <div className={cn('flex flex-1 flex-col gap-3 overflow-y-auto py-2')}>
         <SidebarScreens />

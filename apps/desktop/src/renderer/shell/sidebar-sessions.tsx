@@ -4,6 +4,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { History, Plus } from 'lucide-react'
 import { cn } from '@/renderer/lib/utils'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
+import { IconButton } from '@/renderer/components/icon-button'
 import { Input } from '@/renderer/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { toast } from 'sonner'
@@ -109,36 +110,26 @@ export function SidebarSessions() {
 
   return (
     <div>
-      <div className="px-2 py-1.5 text-meta font-medium text-muted-foreground">Your sessions</div>
+      <div className="flex h-7 items-center gap-1 pl-2 pr-1">
+        <span className="flex-1 text-meta font-medium text-muted-foreground">Your sessions</span>
+        <IconButton label="New session" onClick={() => openNewSessionDialog()}>
+          <Plus />
+        </IconButton>
+        <IconButton label="History" onClick={() => void navigate({ to: ROUTE_IDS.history, search: {} })}>
+          <History />
+        </IconButton>
+      </div>
       {sessions.status === 'pending' ? (
         <div className="px-2">
           <Skeleton className="h-7 w-full" />
         </div>
       ) : sessions.status === 'error' ? (
-        <p className="px-2 py-1 text-small text-muted-foreground">Couldn&apos;t load your sessions.</p>
+        <p className="px-2 py-1 text-meta text-muted-foreground">Couldn&apos;t load your sessions.</p>
       ) : live.length === 0 ? (
-        <p className="px-2 py-1 text-small text-muted-foreground">No sessions open.</p>
+        <p className="px-2 py-1 text-meta text-muted-foreground">No sessions open.</p>
       ) : (
         live.map((session) => <SessionRow key={session.sessionKey} session={session} repos={repos.data?.ok === true ? repos.data.repositories : undefined} marks={marks.data} selected={session.sessionKey === selectedKey} />)
       )}
-
-      <button
-        type="button"
-        onClick={() => openNewSessionDialog()}
-        className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-body text-foreground-secondary hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <Plus className="size-4 shrink-0" />
-        New session
-      </button>
-
-      <button
-        type="button"
-        onClick={() => void navigate({ to: ROUTE_IDS.history, search: {} })}
-        className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-body text-foreground-secondary hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <History className="size-4 shrink-0" />
-        History…
-      </button>
     </div>
   )
 }

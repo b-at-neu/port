@@ -25,7 +25,7 @@ Components use roles, never values. Tailwind arbitrary colour values (`bg-[#…]
 | `foreground` | `#18181b` | `#fafafa` | Primary text |
 | `foreground-secondary` | `#3f3f46` | `#d4d4d8` | Sidebar items, secondary labels |
 | `muted-foreground` | `#71717a` | `#a1a1aa` | Metadata, ticket numbers, section labels, timestamps |
-| `faint` | `#a1a1aa` | `#71717a` | **Non-text only**: idle dots, disabled glyphs, decorative strokes |
+| `faint` | `#a1a1aa` | `#71717a` | **Non-text only**: idle dots, disabled glyphs, decorative strokes, scroll bar thumbs |
 | `primary` | `#172554` | `#e2e8f5` | Primary button fill and the send button. Dark mode inverts it to a pale navy tint, because navy fill on a near-black background does not read as a button |
 | `primary-foreground` | `#ffffff` | `#172554` | Text and icons on `primary` |
 | `primary-text` | `#172554` | `#a5b8e3` | Links, row actions, `ContextMeter` fill |
@@ -133,7 +133,7 @@ The dark `brand` tile's `#4b5f8f` border measures 3.0 against `sidebar`, enough 
    - its run-state `StatusPill` menu (§4).
 
    The repo's live stage sessions are nested under it, labelled `#N <phase>`. A collapsed repo with a session that needs you shows an amber dot next to its name.
-4. **Your sessions:** your own live sessions, **New session**, and **History…**.
+4. **Your sessions:** a header with **New session** and **History** as icon buttons on its right, then your own live sessions.
 5. **Footer:** Settings, plus one status dot for the `claude` CLI and `gh`, red when either is missing or signed out.
 
 **Screens in the first release:**
@@ -200,9 +200,9 @@ Scoping epics, releases and analytics are out of scope for the first release.
 | `PhaseBar` | Six 10×4px segments with a 2px gap, for plan, plan review, implement, review, revision, merge. Finished segments use the `working` pill background, the current one the `working` dot, waiting-on-you `attention`, complete `success`, the rest `accent`. Tooltip names the phase |
 | `PhaseList` | Vertical version for the detail pane: an 8px dot per phase, with who and when ("Plan approved by you · 2h ago") and live cost and time on the current phase |
 | `TicketRow`, `RepoPipelineRow`, `SessionRow`, `NeedsYouItem` | The list rows (§3) |
-| `ToolCallRow`, `DiffView`, `Markdown`, `CodeBlock`, `Composer`, `ContextMeter` | Session pieces. `ContextMeter` is a 56×4px bar plus a percentage. `ToolCallRow` carries a per-tool one-line summary and default-open rule (edits with a diff, TodoWrite, a running subagent, a failed Bash); its body delegates to `ToolCallDetail`'s Bash/TodoWrite/Task/lookup views. A subagent's children nest recursively under its row, indented with a `border-l` rule; an orphaned child (its parent row evicted from the window) carries the label "Subagent · parent call not shown" |
+| `ToolCallRow`, `DiffView`, `Markdown`, `CodeBlock`, `Composer`, `ContextMeter` | Session pieces. `ContextMeter` is a `Context` label, a 56×4px bar and a percentage, with token counts in its tooltip. `ToolCallRow` carries a per-tool one-line summary and default-open rule (edits with a diff, TodoWrite, a running subagent, a failed Bash); its body delegates to `ToolCallDetail`'s Bash/TodoWrite/Task/lookup views. A subagent's children nest recursively under its row, indented with a `border-l` rule; an orphaned child (its parent row evicted from the window) carries the label "Subagent · parent call not shown" |
 | `BackgroundTasksPanel` | A `border` card between the command strip and composer, hidden when empty. Header `Background tasks · N`; each 36px row shows a type icon, a truncating description with a tooltip, a mono type tag, and a `Stop` ghost button that opens a confirm dialog |
-| `DetailPane`, `EmptyState`, `ErrorBanner` | Layout and states |
+| `DetailPane`, `EmptyState`, `ErrorBanner`, `IconButton` | Layout and states. `IconButton` is a 24px ghost icon button with a tooltip and an accessible name |
 
 **If a pattern appears twice, it becomes a shared component.** One-off styling inside a screen file is a finding.
 
