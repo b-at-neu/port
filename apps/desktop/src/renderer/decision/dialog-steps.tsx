@@ -44,7 +44,7 @@ export function ConfirmUnblockStep({ state }: { readonly state: Extract<Decision
   return (
     <>
       <DialogHeader>
-        <DialogTitle>{dialogTitle('unblock', state.number)}</DialogTitle>
+        <DialogTitle>{dialogTitle('unblock', state.number, state.context.target)}</DialogTitle>
       </DialogHeader>
       <p className="text-small text-muted-foreground">{unblockReasonLine(state.context)}</p>
       <RebaseDecisionFields decisions={decisions} picks={state.picks} />
@@ -55,14 +55,20 @@ export function ConfirmUnblockStep({ state }: { readonly state: Extract<Decision
         <Button variant="outline" onClick={closeDecisionDialog}>
           Cancel
         </Button>
-        {decisions.length === 0 ? (
-          <Button variant="outline" onClick={() => submitUnblock('review')}>
-            Send to review
-          </Button>
-        ) : null}
-        <Button onClick={() => submitUnblock('revision')} disabled={picksInvalid}>
-          Send to revision
-        </Button>
+        {state.context.target === 'issue' ? (
+          <Button onClick={() => submitUnblock('implementation')}>Send back to implementation</Button>
+        ) : (
+          <>
+            {decisions.length === 0 ? (
+              <Button variant="outline" onClick={() => submitUnblock('review')}>
+                Send to review
+              </Button>
+            ) : null}
+            <Button onClick={() => submitUnblock('revision')} disabled={picksInvalid}>
+              Send to revision
+            </Button>
+          </>
+        )}
       </DialogFooter>
     </>
   )

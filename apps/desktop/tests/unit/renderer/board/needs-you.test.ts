@@ -7,6 +7,7 @@ import type { SessionKey } from '@/types/hosting'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/types/board'
 import type { BoardSnapshot } from '@/types/board'
 import { needsYouCount, needsYouItems, repoNeedsYou } from '@/renderer/board/needs-you'
+import { stageSession } from '../../../fixtures/stage-session'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 
@@ -256,6 +257,44 @@ describe('needsYouItems', () => {
     const items = needsYouItems(snapshotOf([]), NOW, [session])
     expect(items).toHaveLength(1)
     expect(items[0]).toMatchObject({ kind: 'stage-blocked', number: 302 })
+  })
+
+  describe('a blocked label and its live session', () => {
+    const blockedItem = (overrides: Partial<ReconciledItem> = {}) =>
+      item({ number: 51, stage: 'gate', stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }], matchedKeys: ['blocked'], ...overrides })
+    const blockedSession = (text = 'BLOCKED: The ledger export has no currency column.') =>
+      stageSession({
+        repoId: 'repo-a' as RepoId,
+        stage: { agent: 'impl', number: 51, kind: 'issue', trigger: 'planApproved' },
+        phase: 'ready',
+        lastResult: { subtype: 'success', isError: false, text, at: NOW.toISOString() },
+      })
+
+    it('merges into one stage-blocked row that keeps the matched row and strips the prefix', () => {
+      const items = needsYouItems(snapshotOf([readyRepo({ items: [blockedItem()] })]), NOW, [blockedSession()])
+      expect(items).toHaveLength(1)
+      expect(items[0]).toMatchObject({ kind: 'stage-blocked', number: 51, text: 'The ledger export has no currency column.', title: 'a ticket' })
+      expect(items[0]?.matchedRow).not.toBeNull()
+    })
+
+    it('keeps one blocked row, with Unblock available for the owner, when no session is live', () => {
+      const items = needsYouItems(snapshotOf([readyRepo({ items: [blockedItem()] })]), NOW, [])
+      expect(items).toHaveLength(1)
+      expect(items[0]).toMatchObject({ kind: 'blocked', number: 51 })
+      expect(items[0]?.matchedRow?.decisions.unblock).toMatchObject({ available: true, context: { target: 'issue' } })
+    })
+
+    it('shows one row when the hand-back lands before the label swap', () => {
+      const inProgress = blockedItem({ stage: 'in-flight', stages: [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }], status: 'in-flight', matchedKeys: ['inProgress'] })
+      const items = needsYouItems(snapshotOf([readyRepo({ items: [inProgress] })]), NOW, [blockedSession()])
+      expect(items.map((i) => i.kind)).toEqual(['stage-blocked'])
+    })
+
+    it('still shows a blocked row for another number', () => {
+      const other = blockedItem({ number: 52 })
+      const items = needsYouItems(snapshotOf([readyRepo({ items: [other] })]), NOW, [blockedSession()])
+      expect(items.map((i) => i.kind).sort()).toEqual(['blocked', 'stage-blocked'])
+    })
   })
 
   it('an error-result hand-back does not produce a stage-blocked item', () => {

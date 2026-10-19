@@ -18,6 +18,7 @@
     "src/preload/index.d.ts",
     "tests/unit/renderer/**/*",
     "tests/unit/utils/**/*",
+    "tests/fixtures/stage-session.ts",
     "../../scripts/port-tick/liveness.ts",
     "../../scripts/port-tick/overrides.ts",
     "../../scripts/port-tick/gates.ts"

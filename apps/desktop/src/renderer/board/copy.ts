@@ -17,6 +17,11 @@ import { PHASE_NAMES } from '@/renderer/lib/phase'
 
 const STAGE_NAME: Readonly<Record<StageLink['agent'], string>> = { plan: 'Planning', impl: 'Implementing', review: 'Reviewing', revise: 'Revising' }
 
+/** The phase name a dispatched stage shows before its agent has swapped a label. */
+export function stageAgentPhaseName(agent: StageLink['agent']): string {
+  return STAGE_NAME[agent]
+}
+
 function timeOf(iso: string): string {
   const parsed = new Date(iso)
   return Number.isNaN(parsed.getTime()) ? iso : parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -43,6 +48,15 @@ export function operatorJoinedTagLabel(): string {
 
 export function operatorJoinedTagTitle(): string {
   return "A person typed into this ticket's stage session"
+}
+
+/** The board row's "Dispatched" tag label and its accessible tooltip. */
+export function dispatchedTagLabel(): string {
+  return 'Dispatched'
+}
+
+export function dispatchedTagTitle(): string {
+  return 'port started this stage. The label updates when the agent claims it.'
 }
 
 export function statusWord(status: ItemStatus): string {
@@ -258,10 +272,13 @@ export function decisionButtonLabel(decision: OperatorDecision): string {
   return decision === 'unblock' ? 'Unblock' : 'Request changes'
 }
 
-/** The row's own note for a `cycle-cap`/`rebase-decisions` refusal — every
+/** The row's own note for a `cycle-cap`/`rebase-decisions`/`agent-live` refusal — every
  *  other refusal is silent, the same as `actionRefusalNote`'s own rule. */
 export function decisionRefusalNote(decision: OperatorDecision, reason: string, number: number): string | null {
   const n = String(number)
+  if (reason === 'agent-live') {
+    return `#${n}'s agent is still waiting in its session. Answer it there and it clears the block itself.`
+  }
   if (reason === 'cycle-cap') {
     return `PR #${n} has used all its review cycles. Sending it back would escalate straight to "${labelNameOf('needsHuman')}". Merge it and open a follow-up, or raise reviewCycleCap.`
   }

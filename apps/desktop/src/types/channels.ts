@@ -2,7 +2,7 @@ import type { GatePreflightParams, GateAnswerParams, ApplyItemDecisionParams, It
 import type { GatePreflightResponse, GateAnswerResponse } from '@/types/gate'
 import type { IpcMap } from '@/types/ipc'
 import type { BoardSnapshot } from '@/types/board'
-import type { HostedStore, SessionStartTarget, SessionStartMode } from '@/types/hosting'
+import type { HostedSessionSnapshot, HostedStore, SessionStartTarget, SessionStartMode } from '@/types/hosting'
 import type { ResolveStartTargetDeps, RemoveSessionWorktreeOutcome, ResolvedStartTarget } from '@/types/workspace'
 import type { DirEntry, FileResult, GitLinesResult, RunCommandOptions } from '@/types/platform'
 
@@ -44,6 +44,7 @@ export interface HostingChannelDeps {
 export interface ItemDecisionDeps {
   readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>
   readonly applyItemDecision: (params: ApplyItemDecisionParams) => Promise<ItemDecisionResult>
+  readonly sessions: () => readonly HostedSessionSnapshot[]
   readonly snapshot: () => BoardSnapshot
   readonly refresh: (request: IpcMap['board:refresh']['request']) => Promise<BoardSnapshot>
 }

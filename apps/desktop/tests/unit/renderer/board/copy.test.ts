@@ -4,7 +4,7 @@ import type { RepoId } from '@/utils/repos'
 import type { PipelineState, RepositoryState } from '@/types/state'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS, initialHealth } from '@/types/board'
 import type { BoardSnapshot, RepositoryHealth } from '@/types/board'
-import { decisionRefusalNote, freshnessIndicator } from '@/renderer/board/copy'
+import { decisionRefusalNote, dispatchedTagLabel, dispatchedTagTitle, freshnessIndicator, stageAgentPhaseName } from '@/renderer/board/copy'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 
@@ -119,5 +119,29 @@ describe('decisionRefusalNote', () => {
     expect(note).toContain("couldn't read")
     expect(note).toContain('unblock #37')
     expect(note).not.toContain("can't record")
+  })
+
+  it('tells the operator to answer a live agent in its session', () => {
+    expect(decisionRefusalNote('unblock', 'agent-live', 51)).toBe("#51's agent is still waiting in its session. Answer it there and it clears the block itself.")
+  })
+
+  it('stays silent for an ordinary refusal', () => {
+    expect(decisionRefusalNote('unblock', 'not-applicable', 51)).toBeNull()
+  })
+})
+
+describe('dispatched tag and stage phase names', () => {
+  it('explains the tag', () => {
+    expect(dispatchedTagLabel()).toBe('Dispatched')
+    expect(dispatchedTagTitle()).toBe('port started this stage. The label updates when the agent claims it.')
+  })
+
+  it.each([
+    ['plan', 'Planning'],
+    ['impl', 'Implementing'],
+    ['review', 'Reviewing'],
+    ['revise', 'Revising'],
+  ] as const)('names the %s stage %s', (agent, name) => {
+    expect(stageAgentPhaseName(agent)).toBe(name)
   })
 })

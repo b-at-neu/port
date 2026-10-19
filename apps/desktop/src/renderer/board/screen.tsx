@@ -49,6 +49,7 @@ export function BoardScreen() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const query = useIpcQuery('board:snapshot')
+  const sessions = useIpcQuery('session:list')
   const [refreshing, setRefreshing] = useState(false)
   const now = new Date()
 
@@ -76,7 +77,7 @@ export function BoardScreen() {
   const group: BoardGroupBy = search.group === 'repo' ? 'repo' : 'phase'
   const repo = search.repo ?? null
 
-  const projection = snapshot !== null ? projectBoard({ snapshot, groupBy: group === 'repo' ? 'repo' : 'stage', now }) : null
+  const projection = snapshot !== null ? projectBoard({ snapshot, groupBy: group === 'repo' ? 'repo' : 'stage', now, sessions: sessions.data ?? [] }) : null
   // Ungated rows are the banner's alone, scoped to `repo` like `sectionRows`
   // below so J/K and the ring never reach another repository's row.
   const ungatedRows = projection !== null ? (repo === null ? projection.ungated : projection.ungated.filter((row) => row.item.repoId === repo)) : []

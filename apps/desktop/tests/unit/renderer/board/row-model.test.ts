@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { OPERATOR_ACTIONS, OPERATOR_DECISIONS } from '@/types/actions'
 import type { ActionAvailability, DecisionAvailability, OperatorAction, OperatorDecision } from '@/types/actions'
-import type { BoardItemRow } from '@/types/board'
+import type { BoardItemRow, LiveStage } from '@/types/board'
 import type { AttachedAgent, AttachedSession, ReconciledItem, StageLabel } from '@/types/state'
 import type { RepoId } from '@/utils/repos'
+import type { SessionKey } from '@/types/hosting'
 import type { DispatchRecord } from '@/types/dispatch'
-import { agentSummaryOf, decisionNoteFor, nextActionFor, operatorJoinedOf, ownershipNoteFor, pillStatusFor, stageKeyOf, stopAttachedAgentNote } from '@/renderer/board/row-model'
+import { agentSummaryOf, decisionNoteFor, isDispatchedRow, nextActionFor, operatorJoinedOf, ownershipNoteFor, phaseLabelFor, pillStatusFor, stageKeyOf, stopAttachedAgentNote } from '@/renderer/board/row-model'
+
+const LIVE_PLAN: LiveStage = { agent: 'plan', trigger: 'ready', sessionKey: 'hosted-1' as SessionKey }
 
 const NO_ACTIONS = Object.fromEntries(OPERATOR_ACTIONS.map((a): [OperatorAction, ActionAvailability] => [a, { available: false, reason: 'not-applicable' }])) as Record<OperatorAction, ActionAvailability>
 const NO_DECISIONS = Object.fromEntries(OPERATOR_DECISIONS.map((d): [OperatorDecision, DecisionAvailability] => [d, { available: false, reason: 'not-applicable' }])) as Record<OperatorDecision, DecisionAvailability>
@@ -18,6 +21,7 @@ function row(overrides: {
   readonly decisions?: Partial<Record<OperatorDecision, DecisionAvailability>>
   readonly agents?: readonly AttachedAgent[]
   readonly sessions?: readonly AttachedSession[]
+  readonly liveStage?: LiveStage | null
 }): BoardItemRow {
   const stageLabel: StageLabel | null = overrides.stageKey != null ? { key: overrides.stageKey as never, name: overrides.stageKey, role: 'trigger' } : null
   const item = {
@@ -33,7 +37,7 @@ function row(overrides: {
     stageAmbiguous: false,
     marked: true,
     autoPlan: false,
-    status: 'waiting',
+    status: overrides.status ?? 'waiting',
     statusEvidence: null,
     waitingOn: null,
     sessionRequired: false,
@@ -58,6 +62,7 @@ function row(overrides: {
   return {
     item,
     displayStatus: { status: overrides.status ?? 'waiting', staleGithub: false, githubAgeMs: null },
+    liveStage: overrides.liveStage ?? null,
     stageLabel,
     actions: { ...NO_ACTIONS, ...overrides.actions },
     decisions: { ...NO_DECISIONS, ...overrides.decisions },
@@ -120,8 +125,38 @@ describe('decisionNoteFor', () => {
     expect(decisionNoteFor(r)).toContain('used all its review cycles')
   })
 
+  it('surfaces an agent-live refusal', () => {
+    const r = row({ kind: 'issue', decisions: { unblock: { available: false, reason: 'agent-live' } } })
+    expect(decisionNoteFor(r)).toBe("#41's agent is still waiting in its session. Answer it there and it clears the block itself.")
+  })
+
   it('null when no decision carries an actionable refusal', () => {
     expect(decisionNoteFor(row({}))).toBeNull()
+  })
+})
+
+describe('phaseLabelFor', () => {
+  it('Interrupted wins over a live session', () => {
+    const base = row({ stageKey: 'ready', liveStage: LIVE_PLAN })
+    expect(phaseLabelFor({ ...base, displayStatus: { status: 'interrupted', staleGithub: false, githubAgeMs: null } })).toBe('Interrupted')
+  })
+
+  it("names the dispatched stage while the label still says it's queued", () => {
+    expect(phaseLabelFor(row({ stageKey: 'ready', status: 'waiting', liveStage: LIVE_PLAN }))).toBe('Planning')
+  })
+
+  it("falls back to the label's own phase once the item is in flight, or with no live session", () => {
+    expect(phaseLabelFor(row({ stageKey: 'inProgress', status: 'in-flight', liveStage: LIVE_PLAN }))).toBe('Implementing')
+    expect(phaseLabelFor(row({ stageKey: 'ready', status: 'waiting' }))).toBe('Queued')
+    expect(phaseLabelFor(row({ stageKey: null }))).toBe('Unstaged')
+  })
+})
+
+describe('isDispatchedRow', () => {
+  it('is true only for a live session on a still-queued item', () => {
+    expect(isDispatchedRow(row({ stageKey: 'ready', status: 'waiting', liveStage: LIVE_PLAN }))).toBe(true)
+    expect(isDispatchedRow(row({ stageKey: 'inProgress', status: 'in-flight', liveStage: LIVE_PLAN }))).toBe(false)
+    expect(isDispatchedRow(row({ stageKey: 'ready', status: 'waiting' }))).toBe(false)
   })
 })
 
@@ -185,7 +220,7 @@ describe('nextActionFor', () => {
   })
 
   it('the decision label when a decision is available', () => {
-    const r = row({ stageKey: 'needsHuman', decisions: { unblock: { available: true, context: { reason: null, cyclesUsed: 1, cap: 5, decisions: [] } } } })
+    const r = row({ stageKey: 'needsHuman', decisions: { unblock: { available: true, context: { target: 'pull-request', reason: null, cyclesUsed: 1, cap: 5, decisions: [] } } } })
     expect(nextActionFor(r)).toEqual({ kind: 'decision', label: 'Unblock', decision: 'unblock' })
   })
 

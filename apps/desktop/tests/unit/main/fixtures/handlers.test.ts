@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { IPC_CHANNELS } from '@/types/ipc'
 import type { IpcChannel } from '@/types/ipc'
 import { needsYouItems } from '@/renderer/board/needs-you'
+import { projectBoard } from '@/renderer/board/project'
 import type { RepoId } from '@/utils/repos'
 import { fixtureHandlers } from '@/main/fixtures/handlers'
 import { RESUMED_KEY, STREAMING_KEY } from '@/main/fixtures/sessions'
@@ -165,12 +166,30 @@ describe.each(['populated', 'empty'] as const)('fixtureHandlers (%s scenario)', 
     expect(report.orphanDirs).toHaveLength(1)
   })
 
-  it.runIf(scenario === 'populated')('reports session:list with seven snapshots covering streaming, ended, starting, a question, a plan, a stage session, and a resumed session', () => {
+  it.runIf(scenario === 'populated')('reports session:list with nine snapshots covering streaming, ended, starting, a question, a plan, three stage sessions, and a resumed session', () => {
     const snapshots = handlers['session:list'](undefined)
-    expect(snapshots.map((s) => s.phase).sort()).toEqual(['ended', 'ready', 'starting', 'streaming', 'streaming', 'streaming', 'streaming'])
+    expect(snapshots.map((s) => s.phase).sort()).toEqual(['ended', 'ready', 'ready', 'starting', 'streaming', 'streaming', 'streaming', 'streaming', 'streaming'])
     expect(snapshots.find((s) => s.phase === 'ended')?.end?.diagnosis).not.toBeNull()
     expect(snapshots.filter((s) => s.pendingPermissions.some((p) => p.interaction?.kind === 'question'))).toHaveLength(1)
     expect(snapshots.filter((s) => s.pendingPermissions.some((p) => p.interaction?.kind === 'plan'))).toHaveLength(1)
+    expect(snapshots.filter((s) => s.stage !== null).map((s) => s.stage?.number).sort()).toEqual([38, 44, 51])
+  })
+
+  it.runIf(scenario === 'populated')('shows exactly one #51 row in Needs you, carrying the blocker text and its live session', () => {
+    const snapshot = handlers['board:snapshot'](undefined)
+    const items = needsYouItems(snapshot, now, handlers['session:list'](undefined)).filter((i) => i.number === 51)
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ kind: 'stage-blocked', sessionKey: 'fixture-stage-impl-51' })
+    expect(items[0]?.kind === 'stage-blocked' ? items[0].text : null).toMatch(/^The Q3 ledger export has no currency column\./)
+  })
+
+  it.runIf(scenario === 'populated')('dispatches #44 on the Board: in flight, with a live plan stage, before its label moves', () => {
+    const snapshot = handlers['board:snapshot'](undefined)
+    const rows = projectBoard({ snapshot, groupBy: 'repo', now, sessions: handlers['session:list'](undefined) }).rows
+    const row = rows.find((r) => r.item.number === 44)
+    expect(row?.liveStage).toMatchObject({ agent: 'plan', trigger: 'ready' })
+    expect(row?.displayStatus.status).toBe('in-flight')
+    expect(row?.item.status).toBe('waiting')
   })
 
   // The permission dialog is app-wide, so its one fixture session is kept out of the

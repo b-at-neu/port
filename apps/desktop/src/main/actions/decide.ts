@@ -31,13 +31,13 @@ export const defaultApplyItemDecisionDeps: ApplyItemDecisionDeps = { applyLabels
 
 function findItem(repoState: ReturnType<typeof findRepoState>, number: number): ReconciledItem | null {
   if (repoState === null) return null
-  return repoState.items.find((item) => item.kind === 'pull-request' && item.number === number) ?? null
+  return repoState.items.find((item) => item.number === number) ?? null
 }
 
 // Fixed order: find the item, refuse moved, check availability, validate a
 // revise note, re-read fresh, post the comment, then swap the labels.
 export async function applyItemDecision(params: ApplyItemDecisionParams, deps: ApplyItemDecisionDeps = defaultApplyItemDecisionDeps): Promise<ItemDecisionResult> {
-  const { request, snapshot, entry, auditDir, scratchDir } = params
+  const { request, snapshot, entry, auditDir, scratchDir, liveStage } = params
   const repoState = findRepoState(snapshot, entry.id)
   if (repoState === null) return { ok: false, reason: 'repo-unavailable' }
 
@@ -47,14 +47,17 @@ export async function applyItemDecision(params: ApplyItemDecisionParams, deps: A
   const currentStage = stageKeyOf(item)
   if (currentStage !== request.expectedStage) return movedResult(entry.config.vocabulary, request.expectedStage, currentStage)
 
-  const availability = decisionsFor({ item, viewer: repoState.viewer, reviewCycleCap: repoState.reviewCycleCap })[request.decision]
+  const availability = decisionsFor({ item, viewer: repoState.viewer, reviewCycleCap: repoState.reviewCycleCap, liveStage })[request.decision]
   if (!availability.available) {
     if (availability.reason === 'viewer-unknown') return { ok: false, reason: 'viewer-unknown' }
     if (availability.reason === 'not-owned') return { ok: false, reason: 'not-owned', owners: item.assignees }
     if (availability.reason === 'not-applicable') {
-      throw new Error(`'${request.decision}' is not applicable to pull request #${String(request.number)}`)
+      throw new Error(`'${request.decision}' is not applicable to item #${String(request.number)}`)
     }
     return { ok: false, reason: 'refused', refusal: availability.reason }
+  }
+  if (request.decision === 'unblock' && (request.route === 'implementation') !== (item.kind === 'issue')) {
+    throw new Error(`unblock route '${String(request.route)}' does not fit ${item.kind} #${String(request.number)}`)
   }
 
   const headRefOid = 'headRefOid' in availability.context ? availability.context.headRefOid : null
@@ -92,10 +95,10 @@ export async function applyItemDecision(params: ApplyItemDecisionParams, deps: A
     const cycleGrant = request.decision === 'unblock' && request.route === 'revision' && isCycleCapEscalation(item.comments)
     const body =
       request.decision === 'unblock'
-        ? gateClearedBody(request.route === 'revision' ? 'revision' : 'review', { cycleGrant, rebaseDecisions: chosenOptions(decisions, picks) })
+        ? gateClearedBody(request.route ?? 'review', { cycleGrant, rebaseDecisions: chosenOptions(decisions, picks) })
         : changesRequestedBody(headRefOid ?? '', request.note ?? '')
     comment = await deps.postComment({
-      request: { repoId: entry.id, repo: entry.config.repo, kind: 'pull-request', number: request.number, body, action: request.decision, scratchDir },
+      request: { repoId: entry.id, repo: entry.config.repo, kind: item.kind, number: request.number, body, action: request.decision, scratchDir },
       repoRoot: entry.path,
       auditDir,
     })
@@ -103,7 +106,7 @@ export async function applyItemDecision(params: ApplyItemDecisionParams, deps: A
   }
 
   const labels = await deps.applyLabels({
-    request: buildWriteRequest(entry, request.number, plan),
+    request: buildWriteRequest(entry, item.kind, request.number, plan),
     repoRoot: entry.path,
     auditDir,
   })
@@ -125,11 +128,11 @@ function chosenOptions(decisions: readonly RebaseDecision[], picks: readonly Reb
   })
 }
 
-function buildWriteRequest(entry: ReadyEntry, number: number, plan: ReturnType<typeof decisionPlan>): LabelWriteRequest {
+function buildWriteRequest(entry: ReadyEntry, kind: ReconciledItem['kind'], number: number, plan: ReturnType<typeof decisionPlan>): LabelWriteRequest {
   return {
     repoId: entry.id,
     repo: entry.config.repo,
-    kind: 'pull-request',
+    kind,
     number,
     vocabulary: entry.config.vocabulary,
     add: plan.add,

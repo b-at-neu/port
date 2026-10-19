@@ -116,6 +116,7 @@ export async function resolveItemDecision(registryDeps: RegistryDeps, request: I
     entry: found,
     auditDir,
     scratchDir,
+    liveStage: deps.sessions().some((s) => s.repoId === repoId && s.stage?.number === request.number && s.phase !== 'ended'),
   })
 
   const labelsApplied = result.ok && result.labels.kind === 'applied'

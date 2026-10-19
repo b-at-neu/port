@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoId } from '@/utils/repos'
 import type { NeedsYouItem } from '@/types/board'
-import { needsYouLeadCopy } from '@/renderer/needs-you/copy'
+import { blockerSendError, blockerSentToast, needsYouLeadCopy, refreshedToast } from '@/renderer/needs-you/copy'
 
 function base(overrides: Partial<NeedsYouItem> = {}): Pick<NeedsYouItem, 'repoId' | 'repo' | 'number' | 'title' | 'url' | 'at' | 'matchedRow'> {
   return { repoId: 'repo-a' as RepoId, repo: 'o/a', number: 41, title: 't', url: 'https://github.com/o/a/issues/41', at: null, matchedRow: null, ...overrides }
@@ -115,5 +115,34 @@ describe('needsYouLeadCopy', () => {
   it('half-labelled — pr-missing', () => {
     const item = { ...base({ number: 52 }), kind: 'half-labelled', repair: { number: 52, kind: 'issue', shape: 'pr-missing', labels: ['prOpened'], agent: null } } as unknown as NeedsYouItem
     expect(needsYouLeadCopy(item)).toBe('#52 says a pull request is open, but none is. Reopen it or move the issue back.')
+  })
+
+  it('stage-blocked leads with the blocker text, without its BLOCKED: prefix', () => {
+    const item = { ...base({ number: 51 }), kind: 'stage-blocked', sessionKey: 'hosted-1', text: 'The ledger export has no currency column.' } as unknown as NeedsYouItem
+    expect(needsYouLeadCopy(item)).toBe('#51 is blocked: The ledger export has no currency column.')
+  })
+})
+
+describe('blocker answer copy', () => {
+  it('names the agent in the sent toast', () => {
+    expect(blockerSentToast(51)).toBe('Sent your answer to #51\'s agent. It clears "Blocked" itself and carries on.')
+  })
+
+  it.each([
+    ['unknown-session', 'That session has ended. Unblock #51 from its row once the board catches up.'],
+    ['unreachable', "Couldn't reach the main process. Nothing was sent."],
+    ['blocked-command', "That text is a command the session can't run here. Reword your answer."],
+  ] as const)('explains %s', (error, copy) => {
+    expect(blockerSendError(error, 51)).toBe(copy)
+  })
+})
+
+describe('refreshedToast', () => {
+  it.each([
+    [0, 'Refreshed. Nothing needs you.'],
+    [1, 'Refreshed. 1 item needs you.'],
+    [3, 'Refreshed. 3 items need you.'],
+  ])('counts %i', (count, copy) => {
+    expect(refreshedToast(count)).toBe(copy)
   })
 })

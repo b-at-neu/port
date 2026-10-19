@@ -3,6 +3,7 @@ import type { RepoId } from '@/utils/repos'
 import { OPERATOR_ACTIONS, OPERATOR_DECISIONS } from '@/types/actions'
 import type { ActionAvailability, DecisionAvailability, OperatorAction, OperatorDecision } from '@/types/actions'
 import type { BoardItemRow } from '@/types/board'
+import type { SessionKey } from '@/types/hosting'
 import type { ReconciledItem, StageLabel } from '@/types/state'
 import { boardSections } from '@/renderer/board/sections'
 
@@ -56,6 +57,7 @@ function row(overrides: {
   return {
     item,
     displayStatus: { status: overrides.status ?? 'waiting', staleGithub: false, githubAgeMs: null },
+    liveStage: null,
     stageLabel,
     actions: NO_ACTIONS,
     decisions: NO_DECISIONS,
@@ -71,6 +73,17 @@ describe('boardSections', () => {
     expect(sections[0]?.count).toBe(1)
     expect(sections[1]?.count).toBe(1)
     expect(sections[2]?.count).toBe(1)
+  })
+
+  it('puts a dispatched row, still labelled ready, in In progress', () => {
+    const queued = row({ number: 1, stageKey: 'ready', status: 'waiting' })
+    const dispatched: BoardItemRow = {
+      ...queued,
+      displayStatus: { status: 'in-flight', staleGithub: false, githubAgeMs: null },
+      liveStage: { agent: 'plan', trigger: 'ready', sessionKey: 'hosted-1' as SessionKey },
+    }
+    const sections = boardSections([dispatched], { group: 'repo', repo: null })
+    expect(sections.map((s) => s.key)).toEqual(['in-progress'])
   })
 
   it('omits an empty section entirely', () => {

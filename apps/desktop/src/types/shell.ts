@@ -43,6 +43,7 @@ interface NotReadyPipelineRow {
   readonly ready: false
   readonly repoId: RepoId
   readonly name: string
+  readonly sessions: readonly PipelineSessionRow[]
 }
 
 export type PipelineRow = ReadyPipelineRow | NotReadyPipelineRow
