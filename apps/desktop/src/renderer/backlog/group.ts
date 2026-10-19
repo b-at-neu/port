@@ -1,7 +1,8 @@
 // Pure projection from one repository's `backlog:list` query state into what `screen.tsx` renders — no DOM, no IPC call.
-import type { BacklogGroupView, BacklogQueryLike } from '@/types/backlog'
+import type { BacklogGroupView, BacklogLabelFilter, BacklogQueryLike } from '@/types/backlog'
 import type { RepoId } from '@/utils/repos'
 import { backlogFailureCopy, backlogInvokeErrorCopy, backlogTruncatedCopy } from '@/renderer/backlog/copy'
+import { EMPTY_FILTER, applyLabelFilter, labelOptionsOf } from '@/renderer/backlog/filter'
 
 function assigneeLine(assignees: readonly string[], viewer: string | null): string | null {
   const others = assignees.filter((login) => login !== viewer)
@@ -9,7 +10,7 @@ function assigneeLine(assignees: readonly string[], viewer: string | null): stri
   return others.map((login) => `@${login}`).join(', ')
 }
 
-export function buildBacklogGroup(repoId: RepoId, repo: string, query: BacklogQueryLike): BacklogGroupView {
+export function buildBacklogGroup(repoId: RepoId, repo: string, query: BacklogQueryLike, filter: BacklogLabelFilter = EMPTY_FILTER): BacklogGroupView {
   if (query.data === undefined) {
     if (query.status === 'error') return { kind: 'invoke-error', repoId, repo, message: backlogInvokeErrorCopy(repo) }
     return { kind: 'loading', repoId, repo }
@@ -18,7 +19,7 @@ export function buildBacklogGroup(repoId: RepoId, repo: string, query: BacklogQu
   const response = query.data
   if (!response.ok) return { kind: 'read-error', repoId, repo, message: backlogFailureCopy(repo, response.kind, response.message) }
 
-  const items = response.items.map((item) => ({
+  const rows = response.items.map((item) => ({
     repoId,
     repo,
     number: item.number,
@@ -26,9 +27,11 @@ export function buildBacklogGroup(repoId: RepoId, repo: string, query: BacklogQu
     url: item.url,
     assignee: assigneeLine(item.assignees, response.viewer),
     updatedAt: item.updatedAt,
+    labels: item.labels,
+    subIssueCount: item.subIssueCount,
   }))
   const truncatedNote = response.total > response.scanned ? backlogTruncatedCopy(response.scanned) : null
-  return { kind: 'loaded', repoId, repo, items, truncatedNote }
+  return { kind: 'loaded', repoId, repo, items: applyLabelFilter(rows, filter), totalCount: rows.length, labelOptions: labelOptionsOf(rows, filter), truncatedNote }
 }
 
 // The header's `staleSince` line — the earliest read still shown behind a group whose refetch has since failed.

@@ -2,7 +2,7 @@
 import { gh as defaultGh } from '@/main/platform/gh'
 import type { GhResult, GhRunner } from '@/types/platform'
 import type { LabelVocabulary } from '@/utils/labels/vocabulary'
-import type { BacklogItem, BacklogResponse } from '@/types/backlog'
+import type { BacklogItem, BacklogLabel, BacklogResponse } from '@/types/backlog'
 import { classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'
 import type { GitHubRepoRef } from '@/types/github'
@@ -16,6 +16,26 @@ function stdoutOf(result: GhResult): string | undefined {
   return 'stdout' in result ? result.stdout : undefined
 }
 
+const HEX_COLOR = /^[0-9a-f]{6}$/i
+
+function labelsOf(value: unknown): readonly BacklogLabel[] {
+  const nodes = (value as { nodes?: unknown } | null | undefined)?.nodes
+  if (!Array.isArray(nodes)) return []
+  const out: BacklogLabel[] = []
+  for (const node of nodes) {
+    if (typeof node !== 'object' || node === null) continue
+    const { name, color } = node as Record<string, unknown>
+    if (typeof name !== 'string') continue
+    out.push({ name, color: typeof color === 'string' && HEX_COLOR.test(color) ? color.toLowerCase() : null })
+  }
+  return out
+}
+
+function subIssueCountOf(value: unknown): number {
+  const total = (value as { totalCount?: unknown } | null | undefined)?.totalCount
+  return typeof total === 'number' && Number.isInteger(total) && total > 0 ? total : 0
+}
+
 function buildBacklogQuery(): string {
   return [
     'query($owner: String!, $name: String!) {',
@@ -27,7 +47,8 @@ function buildBacklogQuery(): string {
     '        title',
     '        url',
     '        updatedAt',
-    `        labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }`,
+    `        labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name color } }`,
+    '        subIssues { totalCount }',
     `        assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } }`,
     '      }',
     '    }',
@@ -89,14 +110,15 @@ export async function fetchBacklog(params: FetchBacklogParams): Promise<BacklogR
   for (const node of nodes) {
     if (typeof node !== 'object' || node === null) continue
     const issue = node as Record<string, unknown>
-    const labels = fieldListOf(issue.labels, 'name')
-    if (labels.some((name) => vocabularyNames.has(name))) continue
+    if (fieldListOf(issue.labels, 'name').some((name) => vocabularyNames.has(name))) continue
     items.push({
       number: typeof issue.number === 'number' ? issue.number : 0,
       title: typeof issue.title === 'string' ? issue.title : '',
       url: typeof issue.url === 'string' ? issue.url : '',
       updatedAt: typeof issue.updatedAt === 'string' ? issue.updatedAt : '',
       assignees: fieldListOf(issue.assignees, 'login'),
+      labels: labelsOf(issue.labels),
+      subIssueCount: subIssueCountOf(issue.subIssues),
     })
   }
 

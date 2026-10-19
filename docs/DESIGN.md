@@ -12,7 +12,7 @@ Every stage agent working on interface work reads this document, because `docs.d
 
 ### Colour roles
 
-Components use roles, never values. Tailwind arbitrary colour values (`bg-[#…]`) and raw hex in components are not allowed.
+Components use roles, never values. Tailwind arbitrary colour values (`bg-[#…]`) and raw hex in components are not allowed. The one exception is `LabelChip` (§4), which shows a GitHub label's own colour.
 
 | Role | Light | Dark | Used for |
 | --- | --- | --- | --- |
@@ -196,6 +196,7 @@ Scoping epics, releases and analytics are out of scope for the first release.
 | --- | --- |
 | `Screen`, `ScreenBody` | The layout every screen is built from: a 44px `ScreenHeader`, then one body variant: `list` (edge to edge, rows inset themselves), `page` (16px padding), `form` (16px padding, 512px column), `conversation` (16px padding, centred 680px column). A screen never sets its own outer padding |
 | `StatusPill` | Dot, then label, using the status roles. With a menu it shows a chevron: the repo run state is `● Running ▾` with Run, Drain and Pause, each with a one-line hint (Drain "finish in-flight", Pause "stop now") |
+| `LabelChip` | A GitHub label as a full-radius pill: 11px/500, 1px `border` outline, max 8rem and truncating. Its fill is the label's own GitHub colour, which is repository data and not a design token, so this is the one place a hex reaches a component, applied through `style` from `renderer/lib/label-color.ts`. Text is black or white, whichever contrasts more with the fill. A missing or malformed colour falls back to `muted` with `foreground-secondary` text |
 | `PhaseBar` | Six 10×4px segments with a 2px gap, for plan, plan review, implement, review, revision, merge. Finished segments use the `working` pill background, the current one the `working` dot, waiting-on-you `attention`, complete `success`, the rest `accent`. Tooltip names the phase |
 | `PhaseList` | Vertical version for the detail pane: an 8px dot per phase, with who and when ("Plan approved by you · 2h ago") and live cost and time on the current phase |
 | `TicketRow`, `RepoPipelineRow`, `SessionRow`, `NeedsYouItem` | The list rows (§3) |
