@@ -38,6 +38,7 @@ export function createAutoPlanner(deps: AutoPlannerDeps): AutoPlanner {
       const itemsByNumber = new Map(repoState.items.map((item) => [item.number, item] as const))
       const writeAt = attempted(entry.id)
 
+      let applied = 0
       for (const candidate of candidates) {
         const lastAttempt = writeAt.get(candidate.number)
         if (fetchedAt !== null && lastAttempt !== undefined && lastAttempt >= fetchedAt) continue
@@ -47,12 +48,14 @@ export function createAutoPlanner(deps: AutoPlannerDeps): AutoPlanner {
 
         const at = deps.now().toISOString()
         try {
-          await deps.autoApprove({ entry, item: { number: candidate.number, assignees: item.assignees }, auditDir: deps.auditDir })
+          const outcome = await deps.autoApprove({ entry, item: { number: candidate.number, assignees: item.assignees }, auditDir: deps.auditDir })
+          if (outcome.kind === 'applied') applied += 1
         } catch {
           // Swallowed; reattempted on the next fresher GitHub read, never surfaced to the operator.
         }
         writeAt.set(candidate.number, at)
       }
+      if (applied > 0) deps.requestRead(entry.id)
     } finally {
       inFlight.delete(entry.id)
     }

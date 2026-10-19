@@ -1,5 +1,6 @@
 import type { DispatchLedger, UnknownStreaks, RefreshMemo, ForceDispatch } from '@/types/tick'
 import type { Dispatcher, AutoPlanner, CreateDispatcherParams, AutoPlannerDeps } from '@/types/dispatch'
+import type { PipelineWatcher } from '@/types/state'
 
 // Bundles the dispatch loop's own process-lifetime state so main/ipc.ts creates one thing
 // instead of wiring several by hand.
@@ -38,25 +39,28 @@ interface DispatchRuntime {
   /** The auto-plan swap's own snapshot consumer, gated on this app owning the repository. */
   readonly autoPlanner: AutoPlanner
   readonly watcherDeps: WatcherDeps
-  /** Called once, right after the watcher that owns `republish()` is built. */
-  readonly bindWatcher: (republish: () => void) => void
+  /** Called once, right after the watcher that owns `republish()` and `refresh()` is built. */
+  readonly bindWatcher: (watcher: Pick<PipelineWatcher, 'republish' | 'refresh'>) => void
   /** Stops new launches and is called before `hostedStore.closeAll()` on quit. */
   readonly shutdown: () => void
 }
 
-export function createDispatchRuntime(deps: Omit<CreateDispatcherParams, 'ledger' | 'onChange' | 'budget' | 'escalate' | 'writeObservation' | 'refreshMemo' | 'forceDispatch'>): DispatchRuntime {
+export function createDispatchRuntime(deps: Omit<CreateDispatcherParams, 'ledger' | 'onChange' | 'budget' | 'escalate' | 'writeObservation' | 'refreshMemo' | 'forceDispatch' | 'requestRead'>): DispatchRuntime {
   const ledger = createDispatchLedger()
   const unknownStreaks = createUnknownStreaks()
   const refreshMemo = createRefreshMemo()
   const forceDispatch = createForceDispatch()
-  let republishFn: (() => void) | null = null
-  const dispatcher = createDispatcher({ ...deps, ledger, refreshMemo, forceDispatch, budget: createBudgetGate(), escalate: escalateToHuman, writeObservation: applyObservation, onChange: () => republishFn?.() })
+  let bound: Pick<PipelineWatcher, 'republish' | 'refresh'> | null = null
+  // A failed read is retried by the scheduled poll, so it is never surfaced here.
+  const requestRead = (repoId: RepoId): void => void bound?.refresh({ repoId, source: 'github' }).catch(() => undefined)
+  const dispatcher = createDispatcher({ ...deps, ledger, refreshMemo, forceDispatch, requestRead, budget: createBudgetGate(), escalate: escalateToHuman, writeObservation: applyObservation, onChange: () => bound?.republish() })
   const autoPlannerDeps: AutoPlannerDeps = {
     listRepositories: deps.listRepositories,
     registryDeps: deps.registryDeps,
     readOwnership: deps.readOwnership,
     runState: deps.runState,
     autoApprove: autoApprovePlan,
+    requestRead,
     auditDir: deps.dirs.audit,
     now: deps.now,
   }
@@ -79,8 +83,8 @@ export function createDispatchRuntime(deps: Omit<CreateDispatcherParams, 'ledger
       stageLiveness: (repoId) => dispatcher.stageLiveness(repoId),
       endedStages: (repoId) => dispatcher.endedStages(repoId),
     },
-    bindWatcher: (republish) => {
-      republishFn = republish
+    bindWatcher: (watcher) => {
+      bound = watcher
     },
     shutdown: () => dispatcher.shutdown(),
   }

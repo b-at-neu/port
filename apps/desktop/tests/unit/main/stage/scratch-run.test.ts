@@ -339,6 +339,7 @@ describe('scratch run — ready to opened PR through real stage sessions', () =>
       },
       refreshMemo,
       forceDispatch,
+      requestRead: () => undefined,
       dirs: { audit: '/audit', scratch: '/scratch' },
       onChange: () => undefined,
       now: () => new Date(NOW_ISO),

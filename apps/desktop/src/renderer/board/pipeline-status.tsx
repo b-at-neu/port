@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/u
 import type { BoardSnapshot } from '@/types/board'
 import { budgetNoteLines, controlFor, observationClause, observationTitle, ownerLineCopy, runStateSuffix } from '@/renderer/board/owner'
 import { takeOver } from '@/renderer/board/dispatch'
-import { clockLineCopy, repositoryDetailLines, repositoryLineCopy, storeLineFor } from '@/renderer/board/tick'
+import { clockLineCopy, deferralLineCopy, repositoryDetailLines, repositoryLineCopy, storeLineFor } from '@/renderer/board/tick'
 
 interface PipelineStatusProps {
   readonly snapshot: BoardSnapshot
@@ -57,6 +57,10 @@ export function PipelineStatus({ snapshot, now }: PipelineStatusProps) {
         const repoRunState = snapshot.runStates.repositories.find((r) => r.repoId === report.repoId) ?? { repoId: report.repoId, state: 'paused' as const, since: null }
         const details = repositoryDetailLines(report, owner)
         const line = <div>{repositoryLineCopy(report, repoRunState.state, dispatchStatus?.owner)}</div>
+        const deferral = deferralLineCopy(
+          snapshot.health.find((h) => h.repoId === report.repoId),
+          now,
+        )
 
         return (
           <div key={report.repoId} className="flex flex-col gap-0.5">
@@ -72,6 +76,7 @@ export function PipelineStatus({ snapshot, now }: PipelineStatusProps) {
             ) : (
               line
             )}
+            {deferral !== null ? <div className="pl-3 text-meta text-muted-foreground">{deferral}</div> : null}
             <OwnerLine snapshot={snapshot} repoId={report.repoId} repoName={report.displayName} />
           </div>
         )

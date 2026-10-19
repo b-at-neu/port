@@ -7,7 +7,7 @@ import type { GitRunner } from '@/types/platform'
 import { readSessionState } from '@/main/sessions/adapter'
 import type { RepoId } from '@/utils/repos'
 import type { RepositoryEntry } from '@/utils/repos'
-import { DEFAULT_POLL_POLICY, SOURCE_KINDS, initialHealth } from '@/types/board'
+import { DEFAULT_POLL_POLICY, SOURCE_KINDS, initialHealth, isDeferred } from '@/types/board'
 import type { BoardSnapshot, RepositoryHealth, SourceHealth, SourceKind } from '@/types/board'
 import type { RepoDispatchStatus, RunStatesSnapshot } from '@/types/dispatch'
 import { createDispatchLedger, createRefreshMemo, createUnknownStreaks } from '@/main/tick/ledger'
@@ -90,6 +90,8 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
   const health = new Map<RepoId, RepositoryHealth>()
   let sessionsHealth: SourceHealth = initialHealth('sessions')
   const inFlight = new Set<string>()
+  const active = new Map<string, Promise<void>>()
+  const queued = new Map<string, Promise<void>>()
   let repositories: readonly RepositoryEntry[] = Array.isArray(params.repositories) ? params.repositories : []
   let hasListedRepositories = Array.isArray(params.repositories)
   let stopped = false
@@ -207,41 +209,60 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     })
   }
 
-  async function runRepoSource(entry: Extract<RepositoryEntry, { status: 'ready' }>, kind: 'github' | 'worktrees' | 'denials'): Promise<void> {
+  function track(key: string, read: Promise<void>): Promise<void> {
+    const tracked = read.finally(() => {
+      if (active.get(key) === tracked) active.delete(key)
+    })
+    active.set(key, tracked)
+    return tracked
+  }
+
+  /** A forced read that finds one in flight waits for one follow-up read, shared by every forced request meanwhile; an unforced one just skips. */
+  function runRepoSource(entry: Extract<RepositoryEntry, { status: 'ready' }>, kind: 'github' | 'worktrees' | 'denials', forced: boolean): Promise<void> {
     const key = `${entry.id}:${kind}`
-    if (inFlight.has(key)) return
-    inFlight.add(key)
-    try {
-      let outcome: RefreshOutcome
-      if (kind === 'worktrees') {
-        outcome = await refreshWorktrees(cache, { repoId: entry.id, repoRoot: entry.path, git: params.git, now })
-      } else if (kind === 'denials') {
-        outcome = await refreshDenials(cache, { repoId: entry.id, repoRoot: entry.path, git: params.git, now })
-      } else {
-        const worktrees = cache.worktrees.get(entry.id)
-        const worktreeEntries = worktrees?.ok ? worktrees.entries : []
-        const sessions = cache.sessions
-        const agents = sessions?.ok ? sessions.agents.filter((a) => a.repoId === entry.id) : []
-        outcome = await refreshGithub(cache, { repoId: entry.id, repo: repoRefOf(entry), vocabulary: entry.config.vocabulary, worktreeEntries, agents, gh: params.gh, now })
-      }
-      const current = ensureHealth(entry.id)
-      const previous = current[kind]
-      let updated: SourceHealth
-      if (outcome.ok) {
-        updated = afterSuccess(previous, kind, now())
-        if (kind === 'github') {
-          if (outcome.rateLimit) updated = { ...updated, intervalMs: budgetedIntervalMs({ costs: githubCosts(), rateLimit: outcome.rateLimit, now: now() }) }
-          // A known reset instant always beats a doubled guess, even on a success whose own window reports low headroom.
-          const defer = deferredUntil(outcome.rateLimit ?? null, null)
-          if (defer !== null) updated = { ...updated, deferredUntil: defer }
-        }
-      } else {
-        updated = afterFailure(previous, kind, now(), outcome.error ?? 'unknown error', kind === 'github' ? deferredUntil(outcome.rateLimit ?? null, outcome.failureKind ?? null) : null)
-      }
-      health.set(entry.id, { ...current, [kind]: updated })
-    } finally {
-      inFlight.delete(key)
+    const outstanding = active.get(key)
+    if (outstanding === undefined) return track(key, readRepoSource(entry, kind))
+    if (!forced) return Promise.resolve()
+    const waiting = queued.get(key)
+    if (waiting !== undefined) return waiting
+    const followUp = outstanding
+      .catch(() => undefined)
+      .then(() => {
+        queued.delete(key)
+        return track(key, readRepoSource(entry, kind))
+      })
+    queued.set(key, followUp)
+    return followUp
+  }
+
+  async function readRepoSource(entry: Extract<RepositoryEntry, { status: 'ready' }>, kind: 'github' | 'worktrees' | 'denials'): Promise<void> {
+    let outcome: RefreshOutcome
+    if (kind === 'worktrees') {
+      outcome = await refreshWorktrees(cache, { repoId: entry.id, repoRoot: entry.path, git: params.git, now })
+    } else if (kind === 'denials') {
+      outcome = await refreshDenials(cache, { repoId: entry.id, repoRoot: entry.path, git: params.git, now })
+    } else {
+      const worktrees = cache.worktrees.get(entry.id)
+      const worktreeEntries = worktrees?.ok ? worktrees.entries : []
+      const sessions = cache.sessions
+      const agents = sessions?.ok ? sessions.agents.filter((a) => a.repoId === entry.id) : []
+      outcome = await refreshGithub(cache, { repoId: entry.id, repo: repoRefOf(entry), vocabulary: entry.config.vocabulary, worktreeEntries, agents, gh: params.gh, now })
     }
+    const current = ensureHealth(entry.id)
+    const previous = current[kind]
+    let updated: SourceHealth
+    if (outcome.ok) {
+      updated = afterSuccess(previous, kind, now())
+      if (kind === 'github') {
+        if (outcome.rateLimit) updated = { ...updated, intervalMs: budgetedIntervalMs({ costs: githubCosts(), rateLimit: outcome.rateLimit, now: now() }) }
+        // A known reset instant always beats a doubled guess, even on a success whose own window reports low headroom.
+        const defer = deferredUntil(outcome.rateLimit ?? null, null)
+        if (defer !== null) updated = { ...updated, deferredUntil: defer }
+      }
+    } else {
+      updated = afterFailure(previous, kind, now(), outcome.error ?? 'unknown error', kind === 'github' ? deferredUntil(outcome.rateLimit ?? null, outcome.failureKind ?? null) : null)
+    }
+    health.set(entry.id, { ...current, [kind]: updated })
   }
 
   async function runSessions(readyEntries: readonly Extract<RepositoryEntry, { status: 'ready' }>[]): Promise<void> {
@@ -287,11 +308,13 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       const entryHealth = ensureHealth(entry.id)
       const toRun = new Set<SourceKind>(dueSources(entryHealth, now()))
       for (const kind of SOURCE_KINDS) {
-        if (kind !== 'sessions' && isForced(request, kind, entry.id)) toRun.add(kind)
+        if (kind === 'sessions' || !isForced(request, kind, entry.id)) continue
+        if (kind === 'github' && isDeferred(entryHealth.github, now())) continue
+        toRun.add(kind)
       }
       const ordered = [...toRun].filter((kind) => kind !== 'sessions').sort((a, b) => (a === 'github' ? 1 : b === 'github' ? -1 : 0))
       for (const kind of ordered) {
-        await runRepoSource(entry, kind)
+        await runRepoSource(entry, kind, isForced(request, kind, entry.id))
       }
     }
   }

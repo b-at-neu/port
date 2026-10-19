@@ -25,7 +25,7 @@ import { withDenial, withoutDenialId, withoutDenialRule } from '@/main/dispatch/
 import { boundRecords, endedStagesOf, freeSlots, refreshRecords } from '@/main/dispatch/launch'
 
 
-import type { EndedStage, TickActionable, TickReport } from '@/types/tick'
+import type { EndedStage, TickActionable } from '@/types/tick'
 import type { StageOutcome } from '@/types/stage-session'
 import type { Dispatcher, CreateDispatcherParams } from '@/types/dispatch'
 
@@ -86,6 +86,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
   const repoStates = new Map<RepoId, RepoDispatcherState>()
   const repoNames = new Map<RepoId, string>()
   const inFlight = new Set<RepoId>()
+  const pending = new Map<RepoId, ReadyEntry>()
   let stopped = false
   // Serializes every repository's own launch section so two repositories never race for the same free slot.
   let launchQueue: Promise<void> = Promise.resolve()
@@ -139,6 +140,7 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     next[idx] = { ...existing, outcome }
     state.records = next
     deps.onChange()
+    if (outcome.kind === 'completed') deps.requestRead(repoId)
   }
   function holdsSessionRequired(repoId: RepoId): boolean {
     return stateFor(repoId).owner !== 'app'
@@ -158,11 +160,25 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     deps.onChange()
   }
 
-  async function considerRepo(entry: ReadyEntry, tick: TickReport | undefined, viewer: string | null): Promise<void> {
+  /** A request made during a pass is coalesced into one follow-up pass on the newest snapshot, never dropped. */
+  async function considerRepo(entry: ReadyEntry): Promise<void> {
     if (stopped) return
-    if (inFlight.has(entry.id)) return
+    if (inFlight.has(entry.id)) {
+      pending.set(entry.id, entry)
+      return
+    }
     inFlight.add(entry.id)
+    await passRepo(entry)
+    const next = pending.get(entry.id)
+    pending.delete(entry.id)
+    if (next !== undefined) await considerRepo(next)
+  }
+
+  /** Reads its tick and viewer when the pass starts, never from the snapshot that requested it; releases the in-flight mark itself. */
+  async function passRepo(entry: ReadyEntry): Promise<void> {
     repoNames.set(entry.id, entry.config.repo)
+    const tick = lastSnapshot?.tick.find((t) => t.repoId === entry.id)
+    const viewer = snapshotRepoState(entry.id)?.viewer ?? null
     try {
       const runState = deps.runState(entry.id)
       let ownership = await deps.readOwnership({ repoRoot: entry.path, repo: entry.config.repo, now: deps.now })
@@ -359,22 +375,20 @@ export function createDispatcher(deps: CreateDispatcherParams): Dispatcher {
     }
   }
 
-  // Resolved lazily from the most recent consider() call's own snapshot, as a tiny cache.
-  let lastRepoStates: BoardSnapshot['state']['repositories'] = []
+  // The most recent consider() call's own snapshot, the one a pass reads when it starts.
+  let lastSnapshot: BoardSnapshot | null = null
   function snapshotRepoState(repoId: RepoId): Extract<BoardSnapshot['state']['repositories'][number], { readonly ok: true }> | undefined {
-    const found = lastRepoStates.find((r) => r.ok && r.repoId === repoId)
+    const found = lastSnapshot?.state.repositories.find((r) => r.ok && r.repoId === repoId)
     return found?.ok ? found : undefined
   }
 
   async function consider(snapshot: BoardSnapshot): Promise<void> {
     if (stopped) return
-    lastRepoStates = snapshot.state.repositories
+    lastSnapshot = snapshot
     const list = await deps.listRepositories(deps.registryDeps)
     if (!list.ok) return
     const readyEntries = list.repositories.filter((entry): entry is ReadyEntry => 'config' in entry)
-    const tickByRepo = new Map(snapshot.tick.map((t) => [t.repoId, t] as const))
-    const viewerByRepo = new Map(snapshot.state.repositories.filter((r): r is Extract<typeof r, { readonly ok: true }> => r.ok).map((r) => [r.repoId, r.viewer] as const))
-    await Promise.all(readyEntries.map((entry) => considerRepo(entry, tickByRepo.get(entry.id), viewerByRepo.get(entry.id) ?? null)))
+    await Promise.all(readyEntries.map((entry) => considerRepo(entry)))
   }
 
   function status(): readonly RepoDispatchStatus[] {

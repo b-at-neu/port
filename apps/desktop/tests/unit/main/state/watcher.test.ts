@@ -162,52 +162,102 @@ describe('createPipelineWatcher — budgeted interval', () => {
   })
 })
 
-describe('createPipelineWatcher — in-flight guard', () => {
-  it('a tick firing during an outstanding read skips rather than stacks', async () => {
-    const now = () => new Date('2026-01-01T00:00:00.000Z')
-    const timer = makeFakeTimer()
-    const waiter = makeSnapshotWaiter()
-    const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
-    let ghCalls = 0
-    const pending: { resolve: (() => void) | null } = { resolve: null }
-    const gh = (): Promise<GhResult> => {
-      ghCalls += 1
-      // The first call resolves right away; every call after hangs until the test resolves it by hand.
-      if (ghCalls === 1) return Promise.resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' })
-      return new Promise((resolve) => {
-        pending.resolve = () => resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' })
-      })
-    }
+const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
 
-    const watcher = createPipelineWatcher({
-      repositories: [readyEntry('repo-a', root, 'o/a')],
-      onSnapshot: waiter.onSnapshot,
-      now,
-      setTimer: timer.factory,
-      git: fakeGit({ worktreeList: 0 }),
-      gh,
-      sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+/** A watcher whose first `gh` call answers at once and every later one hangs until the test releases it by hand. */
+async function watcherWithHungReads(now: () => Date, timer: ReturnType<typeof makeFakeTimer>): Promise<{ readonly watcher: ReturnType<typeof createPipelineWatcher>; readonly release: (index: number) => void; readonly calls: () => number }> {
+  const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
+  const hung: (() => void)[] = []
+  let ghCalls = 0
+  const gh = (): Promise<GhResult> => {
+    ghCalls += 1
+    if (ghCalls === 1) return Promise.resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' })
+    return new Promise((resolve) => {
+      hung.push(() => resolve({ ok: true, stdout: EMPTY_PIPELINE_STDOUT, stderr: '' }))
     })
+  }
+  const watcher = createPipelineWatcher({
+    repositories: [readyEntry('repo-a', root, 'o/a')],
+    onSnapshot: () => undefined,
+    now,
+    setTimer: timer.factory,
+    git: fakeGit({ worktreeList: 0 }),
+    gh,
+    sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+  })
+  // Prime every source once, so the race in each test is isolated to `github` alone.
+  await watcher.refresh()
+  return { watcher, release: (index) => hung[index]?.(), calls: () => ghCalls }
+}
 
-    // Prime every source once, so the in-flight race below is isolated to `github` alone.
-    await watcher.refresh()
-    expect(ghCalls).toBe(1)
+describe('createPipelineWatcher — in-flight reads', () => {
+  it('two forced github refreshes during a hung read share exactly one follow-up read', async () => {
+    const { watcher, release, calls } = await watcherWithHungReads(() => new Date('2026-01-01T00:00:00.000Z'), makeFakeTimer())
+    expect(calls()).toBe(1)
 
     const p1 = watcher.refresh({ source: 'github' })
     const p2 = watcher.refresh({ source: 'github' })
+    await flush()
+    expect(calls()).toBe(2)
 
-    // Whichever of the two reaches the github read first performs it; the
-    // other sees the in-flight key and skips its own read immediately.
-    await p2
-    expect(ghCalls).toBe(2)
+    release(0)
+    await flush()
+    expect(calls()).toBe(3)
 
-    pending.resolve?.()
-    await p1
-    expect(ghCalls).toBe(2)
+    release(1)
+    await Promise.all([p1, p2])
+    expect(calls()).toBe(3)
+  })
+
+  it('an unforced due read during a hung read still skips', async () => {
+    let currentMs = Date.parse('2026-01-01T00:00:00.000Z')
+    const timer = makeFakeTimer()
+    const { watcher, release, calls } = await watcherWithHungReads(() => new Date(currentMs), timer)
+
+    currentMs += 60_000
+    timer.fire()
+    // The due local reads run first, so the hung github read starts a few turns later.
+    for (let turn = 0; turn < 50 && calls() < 2; turn++) await flush()
+    expect(calls()).toBe(2)
+
+    await watcher.refresh({ source: 'worktrees' })
+    expect(calls()).toBe(2)
+
+    release(0)
+    await flush()
+    expect(calls()).toBe(2)
   })
 })
 
-describe('createPipelineWatcher — refresh() bypasses backoff, not the in-flight guard', () => {
+describe('createPipelineWatcher — rate-limit deferral', () => {
+  it('a forced github refresh makes no gh call while the repository is deferred', async () => {
+    const now = () => new Date('2026-01-01T00:00:00.000Z')
+    const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
+    let ghCalls = 0
+    const limited = JSON.stringify({ data: { repository: { issues: connection([]), pullRequests: connection([]) }, rateLimit: { ...RATE_LIMIT_REPLY, remaining: 10, resetAt: '2026-01-01T01:00:00Z' } } })
+    const watcher = createPipelineWatcher({
+      repositories: [readyEntry('repo-a', root, 'o/a')],
+      onSnapshot: () => undefined,
+      now,
+      setTimer: makeFakeTimer().factory,
+      git: fakeGit({ worktreeList: 0 }),
+      gh: () => {
+        ghCalls += 1
+        return Promise.resolve({ ok: true, stdout: limited, stderr: '' } satisfies GhResult)
+      },
+      sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+    })
+
+    const first = await watcher.refresh()
+    expect(first.health[0]?.github.deferredUntil).toBe('2026-01-01T01:00:00Z')
+    expect(ghCalls).toBe(1)
+
+    await watcher.refresh({ repoId: 'repo-a' as RepositoryEntry['id'], source: 'github' })
+    expect(ghCalls).toBe(1)
+  })
+})
+
+describe('createPipelineWatcher — refresh() bypasses backoff', () => {
   it('forces an immediate re-read of the named source even though its interval has not elapsed', async () => {
     const now = () => new Date('2026-01-01T00:00:00.000Z')
     const timer = makeFakeTimer()
