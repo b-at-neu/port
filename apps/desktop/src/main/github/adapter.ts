@@ -1,13 +1,11 @@
-import type { EnvelopeFailureKind, GraphQLErrorEntry, AliasInfo } from '@/types/github'
+import type { EnvelopeFailureKind, GraphQLErrorEntry } from '@/types/github'
 
-// The public logic behind fetchPipelineItems/fetchItemStates: building the document, calling the
-// injected gh, then composing envelope.ts and map.ts. The caller supplies the LabelVocabulary.
+// The public logic behind fetchItemStates and the other point reads: building the document, calling
+// the injected gh, then composing envelope.ts and map.ts. The pipeline sweep lives in pipeline.ts.
 import type { GhResult, GhRunner } from '@/types/platform'
 import { gh as defaultGh } from '@/main/platform/gh'
 import type { FetchItemsByNumberParams } from '@/types/github'
 
-import { verifyVocabulary } from '@/utils/labels/vocabulary'
-import type { LabelVocabulary, RepoLabels } from '@/utils/labels/vocabulary'
 import type { AssertEqual } from '@/types/assert-type'
 import type {
   BlockerRead,
@@ -19,70 +17,19 @@ import type {
   ItemState,
   ItemStatesFetch,
   PipelineFailureKind,
-  PipelineFetch,
   PipelineItemKind,
-  RateLimitInfo,
   GitHubRepoRef,
   ResolvedItem,
 } from '@/types/github'
-import { classifyFailure, collectTruncated, collectUnavailable, parseEnvelope } from '@/main/github/envelope'
+import { classifyFailure, parseEnvelope, stdoutOf } from '@/main/github/envelope'
 
-import { applyItemStates, fieldListOf, mapPipelineItems } from '@/main/github/map'
-import { buildClaimPreflightQuery, buildItemStatesQuery, buildItemsByNumberQuery, buildPipelineQuery } from '@/main/github/query'
+import { applyItemStates, fieldListOf } from '@/main/github/map'
+import { buildClaimPreflightQuery, buildItemStatesQuery, buildItemsByNumberQuery } from '@/main/github/query'
 
 /** Fails to compile if a failure kind is added to the platform layer or `envelope.ts` without the
  *  hand-maintained, renderer-safe `PipelineFailureKind` growing to match. */
 type GhResultFailureKind = Exclude<GhResult, { ok: true }>['kind']
 export const _kindsCoverGhResult: AssertEqual<PipelineFailureKind, GhResultFailureKind | EnvelopeFailureKind> = true
-
-function toRateLimit(value: unknown): RateLimitInfo {
-  if (typeof value !== 'object' || value === null) return { cost: 0, remaining: 0, resetAt: '' }
-  const raw = value as Record<string, unknown>
-  return {
-    cost: typeof raw.cost === 'number' ? raw.cost : 0,
-    remaining: typeof raw.remaining === 'number' ? raw.remaining : 0,
-    resetAt: typeof raw.resetAt === 'string' ? raw.resetAt : '',
-  }
-}
-
-/** `null`, never a guess, when the alias is absent, malformed, or named in `errors[].path`.
- *  Unlike `fetchClaimPreflight`'s `viewerLogin`, this never fails the whole fetch. */
-function toViewer(value: unknown, errors: readonly GraphQLErrorEntry[] | undefined): string | null {
-  if ((errors ?? []).some((error) => error.path?.[0] === 'viewer')) return null
-  if (typeof value !== 'object' || value === null) return null
-  const login = (value as Record<string, unknown>).login
-  return typeof login === 'string' && login !== '' ? login : null
-}
-
-interface RepoLabelsConnection {
-  readonly totalCount?: unknown
-  readonly nodes?: unknown
-}
-
-/** `repoLabels` truncation is reported as `unverified`, never as a confidently-short list. */
-function toRepoLabels(value: unknown): RepoLabels {
-  if (typeof value !== 'object' || value === null) return { ok: false, reason: 'repoLabels alias missing from the response' }
-  const connection = value as RepoLabelsConnection
-  const totalCount = connection.totalCount
-  const nodes = connection.nodes
-  if (typeof totalCount !== 'number' || !Array.isArray(nodes)) {
-    return { ok: false, reason: 'repoLabels alias malformed' }
-  }
-  if (totalCount > nodes.length) {
-    return { ok: false, reason: `label list truncated at ${nodes.length} of ${totalCount}` }
-  }
-  const names: string[] = []
-  for (const node of nodes) {
-    if (typeof node === 'object' && node !== null && typeof (node as Record<string, unknown>).name === 'string') {
-      names.push((node as Record<string, unknown>).name as string)
-    }
-  }
-  return { ok: true, names }
-}
-
-function stdoutOf(result: GhResult): string | undefined {
-  return 'stdout' in result ? result.stdout : undefined
-}
 
 /** Every `errors[].path` entry beside `"repository"`, as the set of unusable alias names. */
 function unavailableAliasNames(errors: readonly GraphQLErrorEntry[] | undefined): ReadonlySet<string> {
@@ -92,68 +39,6 @@ function unavailableAliasNames(errors: readonly GraphQLErrorEntry[] | undefined)
     if (typeof alias === 'string') names.add(alias)
   }
   return names
-}
-
-interface FetchPipelineItemsParams {
-  readonly repo: GitHubRepoRef
-  readonly vocabulary: LabelVocabulary
-  readonly gh?: GhRunner
-  readonly now?: () => Date
-}
-
-/** One `gh api graphql` round trip returning every pipeline item, the repository's real label
- *  list, and the rate-limit budget together. Never filters the reply server-side. */
-export async function fetchPipelineItems(params: FetchPipelineItemsParams): Promise<PipelineFetch> {
-  const runner = params.gh ?? defaultGh
-  const now = params.now ?? (() => new Date())
-  const fetchedAt = now().toISOString()
-
-  const { document, aliases } = buildPipelineQuery(params.vocabulary)
-  const ghResult = await runner(['api', 'graphql', '-f', `query=${document}`, '-f', `owner=${params.repo.owner}`, '-f', `name=${params.repo.name}`])
-
-  const stdout = stdoutOf(ghResult)
-  const parsed = stdout !== undefined ? parseEnvelope(stdout) : undefined
-  const verdict = classifyFailure(ghResult, parsed)
-
-  if (verdict.kind !== 'ok') {
-    return { ok: false, kind: verdict.kind, message: verdict.message, fetchedAt }
-  }
-  // Re-checked here rather than asserted, so a contract violation is a reported value, never thrown.
-  if (parsed === undefined || !parsed.ok) {
-    return { ok: false, kind: 'no-data', message: 'internal: an ok verdict without a parsed envelope', fetchedAt }
-  }
-  const body = parsed.value
-  if (body.data === undefined || body.data === null || body.data.repository === undefined || body.data.repository === null) {
-    return { ok: false, kind: 'no-data', message: 'internal: an ok verdict without usable repository data', fetchedAt }
-  }
-  const repository = body.data.repository as Readonly<Record<string, unknown>>
-
-  const aliasIndex = new Map<string, AliasInfo>()
-  for (const alias of aliases) {
-    aliasIndex.set(alias.issueAlias, { key: alias.key, name: alias.name, surface: 'issue' })
-    aliasIndex.set(alias.prAlias, { key: alias.key, name: alias.name, surface: 'pull-request' })
-  }
-
-  const unavailable = collectUnavailable(body.errors, aliasIndex)
-  const truncated = collectTruncated(repository, aliasIndex)
-  const repo = `${params.repo.owner}/${params.repo.name}`
-  const items = mapPipelineItems(repository, aliases, repo)
-  const vocabulary = verifyVocabulary(params.vocabulary, toRepoLabels(repository.repoLabels))
-  const rateLimit = toRateLimit(body.data.rateLimit)
-  const viewer = toViewer(body.data.viewer, body.errors)
-
-  return {
-    ok: true,
-    items,
-    queried: aliases,
-    disabled: params.vocabulary.disabled,
-    vocabulary,
-    unavailable,
-    truncated,
-    rateLimit,
-    viewer,
-    fetchedAt,
-  }
 }
 
 interface FetchItemStatesParams {

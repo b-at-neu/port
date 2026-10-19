@@ -181,17 +181,21 @@ function handleGraphQL() {
   const state = loadState()
   const repository = {}
 
-  for (const match of matchAll('(\\w+):\\s*issues\\(states:\\s*OPEN,\\s*first:\\s*\\d+,\\s*labels:\\s*\\[("(?:[^"\\\\]|\\\\.)*")\\]\\)', document)) {
-    const [, alias, literal] = match
-    const label = JSON.parse(literal)
-    const nodes = state.issues.filter((i) => (i.labels ?? []).includes(label) && (i.state ?? 'OPEN') === 'OPEN').map((i) => nodeOf('issue', i))
-    repository[alias] = { totalCount: nodes.length, nodes }
+  // The pipeline sweep's one multi-label connection per surface: `labels:` matches any listed name,
+  // and every match comes back on a single, final page.
+  const sweepPattern = (surface) => `(\\w+):\\s*${surface}\\(states:\\s*OPEN,\\s*first:\\s*\\d+,\\s*labels:\\s*\\[((?:"(?:[^"\\\\]|\\\\.)*"(?:,\\s*)?)*)\\]`
+  const lastPage = { hasNextPage: false, endCursor: null }
+  for (const match of matchAll(sweepPattern('issues'), document)) {
+    const [, alias, list] = match
+    const labels = JSON.parse(`[${list}]`)
+    const nodes = state.issues.filter((i) => (i.labels ?? []).some((name) => labels.includes(name)) && (i.state ?? 'OPEN') === 'OPEN').map((i) => nodeOf('issue', i))
+    repository[alias] = { totalCount: nodes.length, pageInfo: lastPage, nodes }
   }
-  for (const match of matchAll('(\\w+):\\s*pullRequests\\(states:\\s*OPEN,\\s*first:\\s*\\d+,\\s*labels:\\s*\\[("(?:[^"\\\\]|\\\\.)*")\\]\\)', document)) {
-    const [, alias, literal] = match
-    const label = JSON.parse(literal)
-    const nodes = state.pulls.filter((p) => (p.labels ?? []).includes(label) && (p.state ?? 'OPEN') === 'OPEN').map((p) => nodeOf('pull-request', p))
-    repository[alias] = { totalCount: nodes.length, nodes }
+  for (const match of matchAll(sweepPattern('pullRequests'), document)) {
+    const [, alias, list] = match
+    const labels = JSON.parse(`[${list}]`)
+    const nodes = state.pulls.filter((p) => (p.labels ?? []).some((name) => labels.includes(name)) && (p.state ?? 'OPEN') === 'OPEN').map((p) => nodeOf('pull-request', p))
+    repository[alias] = { totalCount: nodes.length, pageInfo: lastPage, nodes }
   }
   for (const match of matchAll('(\\w+):\\s*issueOrPullRequest\\(number:\\s*(\\d+)\\)', document)) {
     const [, alias, numberText] = match
@@ -225,7 +229,7 @@ function handleGraphQL() {
   }
 
   const data = { repository }
-  if (document.includes('rateLimit {')) data.rateLimit = { cost: 1, remaining: 4999, resetAt: new Date(Date.now() + 3600_000).toISOString() }
+  if (document.includes('rateLimit {')) data.rateLimit = { cost: 1, remaining: 4999, resetAt: new Date(Date.now() + 3600_000).toISOString(), limit: 5000 }
   if (document.includes('viewer {')) data.viewer = { login: state.viewer }
 
   process.stdout.write(JSON.stringify({ data }))

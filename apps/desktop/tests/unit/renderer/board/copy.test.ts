@@ -22,7 +22,7 @@ function readyRepo(overrides: Partial<Extract<RepositoryState, { ok: true }>> = 
     vocabulary: { verdict: 'verified', present: [], missing: [], problems: [], repoLabels: { ok: true, names: [] } },
     unavailable: [],
     truncated: [],
-    rateLimit: { cost: 1, remaining: 4812, resetAt: '2026-01-01T14:05:00Z' },
+    rateLimit: { cost: 1, remaining: 4812, resetAt: '2026-01-01T14:05:00Z', limit: 5000 },
     freshness: {
       github: { at: NOW.toISOString() },
       itemStates: { unavailable: 'no re-check needed' },

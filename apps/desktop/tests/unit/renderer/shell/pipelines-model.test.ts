@@ -74,7 +74,7 @@ function readyRepoState(overrides: Partial<Extract<RepositoryState, { ok: true }
     vocabulary: { verdict: 'verified', present: [], missing: [], problems: [], repoLabels: { ok: true, names: [] } },
     unavailable: [],
     truncated: [],
-    rateLimit: { cost: 1, remaining: 4999, resetAt: '2026-01-01T02:00:00Z' },
+    rateLimit: { cost: 1, remaining: 4999, resetAt: '2026-01-01T02:00:00Z', limit: 5000 },
     freshness: {
       github: { at: NOW.toISOString() },
       itemStates: { unavailable: 'no re-check needed' },

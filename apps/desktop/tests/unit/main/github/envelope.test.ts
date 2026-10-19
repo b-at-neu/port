@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { classifyFailure, collectTruncated, collectUnavailable, parseEnvelope } from '@/main/github/envelope'
-import type { AliasInfo } from '@/types/github'
+import { classifyFailure, collectUnavailable, parseEnvelope } from '@/main/github/envelope'
+import type { AliasInfo, SweepAlias } from '@/types/github'
 import type { GhResult } from '@/types/platform'
 
 // Captured live: a nonexistent aliased issue(number: 999999) beside three intact aliases, gh api
@@ -102,37 +102,31 @@ describe('classifyFailure', () => {
 type FailureCase = readonly [GhResult, ReturnType<typeof parseEnvelope> | undefined]
 
 describe('collectUnavailable', () => {
-  const aliasIndex = new Map<string, AliasInfo>([['s0', { key: 'ready', name: 'ready', surface: 'issue' }]])
+  const aliasIndex = new Map<SweepAlias, AliasInfo>([
+    ['issues', { surface: 'issue' }],
+    ['pullRequests', { surface: 'pull-request' }],
+  ])
 
-  it('maps errors[].path to the alias table, deduplicated', () => {
+  it('maps errors[].path to the surface, deduplicated', () => {
+    const errors = [{ path: ['repository', 'pullRequests'] }, { path: ['repository', 'pullRequests', 'nodes', 0] }, { path: ['repository', 'issues'] }]
+    expect(collectUnavailable(errors, aliasIndex)).toEqual([
+      { alias: 'pullRequests', surface: 'pull-request' },
+      { alias: 'issues', surface: 'issue' },
+    ])
+  })
+
+  it('ignores an error whose path does not name a sweep connection', () => {
+    expect(collectUnavailable([{ path: ['repository', 'unknownAlias'] }, { path: ['viewer'] }], aliasIndex)).toEqual([])
+  })
+
+  it('reads the captured partial-error fixture as no sweep connection unavailable', () => {
     const parsed = parseEnvelope(PARTIAL_ERROR_FIXTURE)
     expect(parsed.ok).toBe(true)
     if (!parsed.ok) return
-    const unavailable = collectUnavailable(parsed.value.errors, aliasIndex)
-    expect(unavailable).toEqual([{ alias: 's0', key: 'ready', surface: 'issue', name: 'ready' }])
-  })
-
-  it('ignores an error whose path does not name a known alias', () => {
-    const unavailable = collectUnavailable([{ path: ['repository', 'unknownAlias'] }], aliasIndex)
-    expect(unavailable).toEqual([])
+    expect(collectUnavailable(parsed.value.errors, aliasIndex)).toEqual([])
   })
 
   it('returns an empty list with no errors', () => {
     expect(collectUnavailable(undefined, aliasIndex)).toEqual([])
-  })
-})
-
-describe('collectTruncated', () => {
-  const aliasIndex = new Map<string, AliasInfo>([['i0', { key: 'ready', name: 'ready', surface: 'issue' }]])
-
-  it('reports a connection whose totalCount exceeds its nodes length', () => {
-    const nodes = Array.from({ length: 100 }, (_, i) => ({ number: i }))
-    const repository = { i0: { totalCount: 150, nodes } }
-    expect(collectTruncated(repository, aliasIndex)).toEqual([{ alias: 'i0', key: 'ready', surface: 'issue', totalCount: 150, received: 100 }])
-  })
-
-  it('reports nothing when totalCount matches nodes length', () => {
-    const repository = { i0: { totalCount: 2, nodes: [{}, {}] } }
-    expect(collectTruncated(repository, aliasIndex)).toEqual([])
   })
 })

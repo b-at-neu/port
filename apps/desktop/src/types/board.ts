@@ -27,6 +27,12 @@ export const BACKOFF_CEILING_MS = 15 * 60 * 1000
 /** Below this many points remaining, the GitHub source defers to the window's own `resetAt` instead of a doubled guess. */
 export const RATE_LIMIT_FLOOR = 200
 
+/** The share of the hourly GraphQL limit the app's own polling may use, across every registered repository. */
+export const BUDGET_SHARE = 0.5
+
+/** Used when a read reports no `limit`; 5,000 is the smallest standard hourly budget. */
+export const DEFAULT_GRAPHQL_LIMIT = 5000
+
 /** A `stalled` verdict renders as `stalled` only when the GitHub read behind it is within `githubIntervalMs + STALE_GRACE_MS`, wide enough to absorb ordinary poll jitter. */
 export const STALE_GRACE_MS = 30_000
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { BACKOFF_CEILING_MS, SOURCE_BASE_INTERVAL_MS, initialHealth } from '@/types/board'
 import type { SourceHealth } from '@/types/board'
-import { afterFailure, afterSuccess, deferredUntil, dueSources, nextDueAt } from '@/main/state/schedule'
+import { afterFailure, afterSuccess, budgetedIntervalMs, deferredUntil, dueSources, nextDueAt } from '@/main/state/schedule'
 
 const NOW = new Date('2026-01-01T00:10:00.000Z')
 
@@ -36,19 +36,56 @@ describe('afterSuccess / afterFailure', () => {
   })
 })
 
+describe('budgetedIntervalMs', () => {
+  const window = { cost: 5, remaining: 4999, resetAt: '2026-01-01T01:00:00.000Z', limit: 5000 }
+
+  it('a cheap poll keeps the base interval', () => {
+    expect(budgetedIntervalMs({ costs: [5], rateLimit: window, now: NOW })).toBe(SOURCE_BASE_INTERVAL_MS.github)
+  })
+
+  it('an expensive poll stretches to its share of the hourly limit', () => {
+    expect(budgetedIntervalMs({ costs: [146], rateLimit: window, now: NOW })).toBe(210_240)
+  })
+
+  it('every repository counts against the one budget', () => {
+    expect(budgetedIntervalMs({ costs: [50, 50, 50], rateLimit: window, now: NOW })).toBe(216_000)
+  })
+
+  it('low headroom near the reset stretches past the share', () => {
+    expect(budgetedIntervalMs({ costs: [5], rateLimit: { ...window, remaining: 300 }, now: NOW })).toBe(150_000)
+  })
+
+  it('is capped at the backoff ceiling', () => {
+    expect(budgetedIntervalMs({ costs: [5], rateLimit: { ...window, remaining: 201 }, now: NOW })).toBe(BACKOFF_CEILING_MS)
+  })
+
+  it('an unreadable limit reads as 5,000', () => {
+    expect(budgetedIntervalMs({ costs: [146], rateLimit: { ...window, limit: 0 }, now: NOW })).toBe(210_240)
+  })
+
+  it('no positive known cost keeps the base interval', () => {
+    expect(budgetedIntervalMs({ costs: [], rateLimit: window, now: NOW })).toBe(SOURCE_BASE_INTERVAL_MS.github)
+    expect(budgetedIntervalMs({ costs: [0], rateLimit: window, now: NOW })).toBe(SOURCE_BASE_INTERVAL_MS.github)
+  })
+
+  it('a reset already past adds no headroom term', () => {
+    expect(budgetedIntervalMs({ costs: [5], rateLimit: { ...window, remaining: 300, resetAt: '2026-01-01T00:00:00.000Z' }, now: NOW })).toBe(SOURCE_BASE_INTERVAL_MS.github)
+  })
+})
+
 describe('deferredUntil', () => {
   it('a rate-limited failure defers to resetAt rather than doubling', () => {
-    const rateLimit = { cost: 1, remaining: 500, resetAt: '2026-01-01T02:00:00.000Z' }
+    const rateLimit = { cost: 1, remaining: 500, resetAt: '2026-01-01T02:00:00.000Z', limit: 5000 }
     expect(deferredUntil(rateLimit, 'rate-limited')).toBe('2026-01-01T02:00:00.000Z')
   })
 
   it('remaining under the floor defers even on an otherwise-ok read', () => {
-    const rateLimit = { cost: 1, remaining: 50, resetAt: '2026-01-01T02:00:00.000Z' }
+    const rateLimit = { cost: 1, remaining: 50, resetAt: '2026-01-01T02:00:00.000Z', limit: 5000 }
     expect(deferredUntil(rateLimit, null)).toBe('2026-01-01T02:00:00.000Z')
   })
 
   it('an ordinary failure with headroom to spare defers to nothing', () => {
-    const rateLimit = { cost: 1, remaining: 4999, resetAt: '2026-01-01T02:00:00.000Z' }
+    const rateLimit = { cost: 1, remaining: 4999, resetAt: '2026-01-01T02:00:00.000Z', limit: 5000 }
     expect(deferredUntil(rateLimit, 'network')).toBeNull()
   })
 

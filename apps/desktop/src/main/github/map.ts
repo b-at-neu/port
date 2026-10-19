@@ -1,7 +1,6 @@
-// Nodes → PipelineItem, merging by kind + number and unioning matchedKeys. Never reconstruct a
-// label key by comparing strings — matchedKeys comes from the alias table query.ts built.
-import type { LabelKey } from '@/utils/labels/vocabulary'
-import type { CheckContext, ItemState, LabelEventNode, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, QueriedLabel, ReviewNode } from '@/types/github'
+// Nodes → PipelineItem. matchedKeys is bucketed here, client-side, against the resolved vocabulary.
+import type { LabelKey, LabelVocabulary } from '@/utils/labels/vocabulary'
+import type { CheckContext, ItemDetail, ItemState, LabelEventNode, Mergeable, PipelineItem, PipelineItemKind, PullRequestCommentNode, ReviewNode } from '@/types/github'
 
 interface ConnectionLike {
   readonly totalCount?: unknown
@@ -150,9 +149,18 @@ function labelEventsOf(value: unknown): readonly LabelEventNode[] {
   return out
 }
 
-function nodeToItem(node: RawNode, kind: PipelineItemKind, repo: string, key: LabelKey): PipelineItem | undefined {
+/** The vocabulary keys, in vocabulary order, whose name matches one of `labels` — case-insensitively, as GitHub's own `labels:` filter does. */
+function matchedKeysOf(labels: readonly string[], vocabulary: LabelVocabulary): readonly LabelKey[] {
+  const present = new Set(labels.map((label) => label.toLowerCase()))
+  return vocabulary.labels.filter((label) => present.has(label.name.toLowerCase())).map((label) => label.key)
+}
+
+function nodeToItem(node: RawNode, kind: PipelineItemKind, repo: string, vocabulary: LabelVocabulary): PipelineItem | undefined {
   const number = numberField(node.number)
   if (number === undefined) return undefined
+  const labels = fieldListOf(node.labels, 'name')
+  const matchedKeys = matchedKeysOf(labels, vocabulary)
+  if (matchedKeys.length === 0) return undefined
   const isPullRequest = kind === 'pull-request'
   return {
     repo,
@@ -165,53 +173,45 @@ function nodeToItem(node: RawNode, kind: PipelineItemKind, repo: string, key: La
     mergedAt: typeof node.mergedAt === 'string' ? node.mergedAt : null,
     updatedAt: typeof node.updatedAt === 'string' ? node.updatedAt : null,
     assignees: fieldListOf(node.assignees, 'login'),
-    labels: fieldListOf(node.labels, 'name'),
-    matchedKeys: [key],
-    labelEvents: labelEventsOf(node.timelineItems),
+    labels,
+    matchedKeys,
+    labelEvents: [],
     headRefOid: isPullRequest && typeof node.headRefOid === 'string' ? node.headRefOid : null,
     mergeable: isPullRequest ? mergeableOf(node.mergeable) : null,
-    reviews: isPullRequest ? reviewNodesOf(node.reviews) : null,
-    comments: isPullRequest ? commentNodesOf(node.comments) : null,
-    checkRollup: isPullRequest ? checkRollupOf(node) : null,
+    reviews: isPullRequest ? [] : null,
+    comments: isPullRequest ? [] : null,
+    checkRollup: null,
   }
 }
 
-/** Merging by `kind + number` is why an item returned by three aliases appears exactly once,
- *  with the union of their `matchedKeys`. */
-export function mapPipelineItems(repository: Readonly<Record<string, unknown>>, aliases: readonly QueriedLabel[], repo: string): readonly PipelineItem[] {
-  const merged = new Map<string, PipelineItem>()
+/** Sweep nodes of one surface → light items; an item seen on two pages is kept once, and a node
+ *  matching no vocabulary label is dropped. */
+export function mapPipelineItems(nodes: readonly unknown[], kind: PipelineItemKind, vocabulary: LabelVocabulary, repo: string): readonly PipelineItem[] {
+  const byNumber = new Map<number, PipelineItem>()
+  for (const raw of nodes) {
+    if (!isRawNode(raw)) continue
+    const item = nodeToItem(raw, kind, repo, vocabulary)
+    if (item) byNumber.set(item.number, item)
+  }
+  return [...byNumber.values()]
+}
 
-  function ingest(aliasName: string, kind: PipelineItemKind, key: LabelKey): void {
-    const connection = asConnection(repository[aliasName])
-    const nodes = connection?.nodes
-    if (!Array.isArray(nodes)) return
-    for (const raw of nodes) {
-      if (!isRawNode(raw)) continue
-      const item = nodeToItem(raw, kind, repo, key)
-      if (!item) continue
-      const mapKey = `${kind}:${item.number}`
-      const existing = merged.get(mapKey)
-      if (!existing) {
-        merged.set(mapKey, item)
-        continue
-      }
-      // The cross-alias merge keeps whichever copy of checkRollup is non-null.
-      if (!existing.matchedKeys.includes(key) || existing.checkRollup === null) {
-        merged.set(mapKey, {
-          ...existing,
-          matchedKeys: existing.matchedKeys.includes(key) ? existing.matchedKeys : [...existing.matchedKeys, key],
-          checkRollup: existing.checkRollup ?? item.checkRollup,
-        })
-      }
+/** Overlays the detail read onto the swept items. An item with no detail keeps its placeholders —
+ *  `fetchPipelineItems` fails the whole read before that can reach a caller. */
+export function applyItemDetails(items: readonly PipelineItem[], details: readonly ItemDetail[]): readonly PipelineItem[] {
+  const byKey = new Map(details.map((detail) => [`${detail.kind}:${detail.number}`, detail.node]))
+  return items.map((item) => {
+    const node = byKey.get(`${item.kind}:${item.number}`)
+    if (!isRawNode(node)) return item
+    const isPullRequest = item.kind === 'pull-request'
+    return {
+      ...item,
+      labelEvents: labelEventsOf(node.timelineItems),
+      reviews: isPullRequest ? reviewNodesOf(node.reviews) : null,
+      comments: isPullRequest ? commentNodesOf(node.comments) : null,
+      checkRollup: isPullRequest ? checkRollupOf(node) : null,
     }
-  }
-
-  for (const alias of aliases) {
-    ingest(alias.issueAlias, 'issue', alias.key)
-    ingest(alias.prAlias, 'pull-request', alias.key)
-  }
-
-  return [...merged.values()]
+  })
 }
 
 /** Overlays `fetchItemStates` results onto an already-mapped item list. An item with no matching

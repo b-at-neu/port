@@ -1,12 +1,15 @@
 // Pure envelope parse and failure classification — no I/O. gh api graphql exits non-zero whenever
 // the response carries errors, even when data is still usable, so the envelope itself decides.
 import type { GhResult } from '@/types/platform'
-import type { TruncatedSet, UnavailableAlias } from '@/types/github'
-import type { AliasInfo, EnvelopeFailureKind, GraphQLErrorEntry } from '@/types/github'
+import type { AliasInfo, EnvelopeFailureKind, GraphQLErrorEntry, SweepAlias, UnavailableAlias } from '@/types/github'
 
-interface GraphQLEnvelope {
+export interface GraphQLEnvelope {
   readonly data?: Readonly<Record<string, unknown>> | null
   readonly errors?: readonly GraphQLErrorEntry[]
+}
+
+export function stdoutOf(result: GhResult): string | undefined {
+  return 'stdout' in result ? result.stdout : undefined
 }
 
 type ParsedEnvelope = { readonly ok: true; readonly value: GraphQLEnvelope } | { readonly ok: false }
@@ -78,44 +81,19 @@ export function classifyFailure(ghResult: GhResult, envelope: ParsedEnvelope | u
 }
 
 /** Maps `errors[].path` to the alias table built alongside the query, so a partial failure
- *  names the label and surface rather than a bare alias string. */
-export function collectUnavailable(errors: readonly GraphQLErrorEntry[] | undefined, aliasIndex: ReadonlyMap<string, AliasInfo>): readonly UnavailableAlias[] {
+ *  names the surface rather than a bare alias string. */
+export function collectUnavailable(errors: readonly GraphQLErrorEntry[] | undefined, aliasIndex: ReadonlyMap<SweepAlias, AliasInfo>): readonly UnavailableAlias[] {
   if (!errors) return []
-  const seen = new Set<string>()
+  const seen = new Set<SweepAlias>()
   const result: UnavailableAlias[] = []
   for (const error of errors) {
     const alias = error.path?.[1]
-    if (typeof alias !== 'string' || seen.has(alias)) continue
+    if (alias !== 'issues' && alias !== 'pullRequests') continue
+    if (seen.has(alias)) continue
     const info = aliasIndex.get(alias)
     if (!info) continue
     seen.add(alias)
-    result.push({ alias, key: info.key, surface: info.surface, name: info.name })
-  }
-  return result
-}
-
-interface ConnectionLike {
-  readonly totalCount?: unknown
-  readonly nodes?: unknown
-}
-
-function isConnectionLike(value: unknown): value is ConnectionLike {
-  return typeof value === 'object' && value !== null
-}
-
-/** Compares every aliased connection's `totalCount` against its `nodes` length — the only
- *  truncation signal there is, since the query never paginates. */
-export function collectTruncated(repository: Readonly<Record<string, unknown>>, aliasIndex: ReadonlyMap<string, AliasInfo>): readonly TruncatedSet[] {
-  const result: TruncatedSet[] = []
-  for (const [alias, info] of aliasIndex) {
-    const connection: unknown = repository[alias]
-    if (!isConnectionLike(connection)) continue
-    const totalCount = connection.totalCount
-    const nodes = connection.nodes
-    if (typeof totalCount !== 'number' || !Array.isArray(nodes)) continue
-    if (totalCount > nodes.length) {
-      result.push({ alias, key: info.key, surface: info.surface, totalCount, received: nodes.length })
-    }
+    result.push({ alias, surface: info.surface })
   }
   return result
 }

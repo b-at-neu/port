@@ -63,7 +63,7 @@ function readyRepo(overrides: Partial<Extract<RepositoryState, { ok: true }>> = 
     vocabulary: { verdict: 'verified', present: [], missing: [], problems: [], repoLabels: { ok: true, names: [] } },
     unavailable: [],
     truncated: [],
-    rateLimit: { cost: 1, remaining: 4999, resetAt: '2026-01-01T02:00:00Z' },
+    rateLimit: { cost: 1, remaining: 4999, resetAt: '2026-01-01T02:00:00Z', limit: 5000 },
     freshness: {
       github: { at: NOW.toISOString() },
       itemStates: { unavailable: 'no re-check needed' },
@@ -139,6 +139,13 @@ describe('displayStatus — Decision 5 suppression', () => {
     const freshness = { ...readyRepo().freshness, github: { at: boundaryAt } }
     const result = displayStatus(item({ status: 'stalled' }), health(), freshness, NOW)
     expect(result.status).toBe('stalled')
+  })
+
+  it('a stall read 3 minutes ago, under a 5-minute stretched interval, still renders stalled', () => {
+    const stretched = health({ github: { ...initialHealth('github'), intervalMs: 300_000 } })
+    const freshness = { ...readyRepo().freshness, github: { at: new Date(NOW.getTime() - 180_000).toISOString() } }
+    expect(displayStatus(item({ status: 'stalled' }), stretched, freshness, NOW).status).toBe('stalled')
+    expect(displayStatus(item({ status: 'stalled' }), health(), freshness, NOW).status).toBe('in-flight')
   })
 })
 

@@ -1,12 +1,13 @@
-// Pure GraphQL document builders — no network, no config read, no gh. One alias per (label ×
-// surface); GraphQL `search` is never used since it is index-backed with ingestion lag.
+// Pure GraphQL document builders — no network, no config read, no gh. GraphQL `search` is never
+// used since it is index-backed with ingestion lag.
 import type { LabelVocabulary, ResolvedLabel } from '@/utils/labels/vocabulary'
-import type { ItemRef, PipelineItemKind, QueriedLabel } from '@/types/github'
+import type { ItemRef, PipelineItemKind, SweepAlias, SweepPage } from '@/types/github'
 
 const PAGE_SIZE = 100
 const REPO_LABEL_PAGE_SIZE = 100
 const ASSIGNEE_PAGE_SIZE = 20
 const ITEM_LABEL_PAGE_SIZE = 20
+const SWEEP_LABEL_PAGE_SIZE = 100
 const BLOCKER_PAGE_SIZE = 20
 const LABEL_EVENT_PAGE_SIZE = 20
 
@@ -19,39 +20,17 @@ export function graphqlStringLiteral(value: string): string {
 // reconcile.ts resolves into stageHistory.
 const LABEL_EVENTS_FIELD = `timelineItems(last: ${LABEL_EVENT_PAGE_SIZE}, itemTypes: [LABELED_EVENT]) { nodes { ... on LabeledEvent { createdAt actor { login } label { name } } } }`
 
-const ISSUE_FRAGMENT = `fragment IssueFields on Issue {
-  number
-  title
-  url
-  body
-  state
-  updatedAt
-  assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } }
-  labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }
-  ${LABEL_EVENTS_FIELD}
-}`
+const ISSUE_SWEEP_FIELDS = `number title url body state updatedAt assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } } labels(first: ${SWEEP_LABEL_PAGE_SIZE}) { totalCount nodes { name } }`
+
+// mergeable is the mergeability precondition mergeabilityRoute reads.
+const PULL_REQUEST_SWEEP_FIELDS = `${ISSUE_SWEEP_FIELDS} mergedAt headRefOid mergeable`
 
 // reviews/comments page sizes match scripts/port-tick/query.ts's own bound, for the cycle cap
-// and zero-diff gate. mergeable is the mergeability precondition mergeabilityRoute reads.
-const PULL_REQUEST_FRAGMENT = `fragment PullRequestFields on PullRequest {
-  number
-  title
-  url
-  body
-  state
-  mergedAt
-  updatedAt
-  headRefOid
-  mergeable
-  assignees(first: ${ASSIGNEE_PAGE_SIZE}) { nodes { login } }
-  labels(first: ${ITEM_LABEL_PAGE_SIZE}) { nodes { name } }
-  reviews(first: 30) { totalCount nodes { body submittedAt commit { oid } } }
-  comments(last: 20) { totalCount nodes { body createdAt } }
-  ${LABEL_EVENTS_FIELD}
-}`
+// and zero-diff gate.
+const PULL_REQUEST_DETAIL_FIELDS = `reviews(first: 30) { totalCount nodes { body submittedAt commit { oid } } } comments(last: 20) { totalCount nodes { body createdAt } } ${LABEL_EVENTS_FIELD}`
 
 // The statusCheckRollup selection the approval-withdrawal observation reads. Spread only into
-// the pull-request alias whose label key is approved.
+// the detail alias of a pull request at the approved stage.
 const CHECK_ROLLUP_FRAGMENT = `fragment CheckRollupFields on PullRequest {
   commits(last: 1) {
     nodes {
@@ -71,50 +50,78 @@ const CHECK_ROLLUP_FRAGMENT = `fragment CheckRollupFields on PullRequest {
   }
 }`
 
-interface PipelineQuery {
-  readonly document: string
-  readonly aliases: readonly QueriedLabel[]
+export const FIRST_SWEEP_PAGE: SweepPage = { issues: true, pulls: true, issuesAfter: null, pullsAfter: null }
+
+function sweepConnection(alias: SweepAlias, field: string, names: string, after: string | null, fields: string): string {
+  const cursor = after === null ? 'null' : graphqlStringLiteral(after)
+  return `  ${alias}: ${field}(states: OPEN, first: ${PAGE_SIZE}, labels: [${names}], after: ${cursor}, orderBy: {field: CREATED_AT, direction: ASC}) { totalCount pageInfo { hasNextPage endCursor } nodes { ${fields} } }`
 }
 
-/** One `issues`/`pullRequests` alias pair per enabled label. `<idx>` is the position, never
- *  derived from the label's own name, since a label name is arbitrary operator input. */
-export function buildPipelineQuery(vocabulary: LabelVocabulary): PipelineQuery {
-  const aliases: QueriedLabel[] = []
-  const connections: string[] = []
-  // GraphQL rejects a document declaring a fragment nothing spreads, so this is tracked to append
-  // CHECK_ROLLUP_FRAGMENT only when an approved label actually exists this pass.
-  let usesCheckRollup = false
+/** One connection per surface whatever the label count; `labels:` matches any listed name. Only
+ *  page one carries `repoLabels`/`viewer`, and `rateLimit` rides every page so cost sums. */
+export function buildPipelineQuery(vocabulary: LabelVocabulary, page: SweepPage): string {
+  const names = vocabulary.labels.map((label: ResolvedLabel) => graphqlStringLiteral(label.name)).join(', ')
+  const first = page.issuesAfter === null && page.pullsAfter === null
+  const repositoryFields = [
+    ...(page.issues ? [sweepConnection('issues', 'issues', names, page.issuesAfter, ISSUE_SWEEP_FIELDS)] : []),
+    ...(page.pulls ? [sweepConnection('pullRequests', 'pullRequests', names, page.pullsAfter, PULL_REQUEST_SWEEP_FIELDS)] : []),
+    ...(first ? [`    repoLabels: labels(first: ${REPO_LABEL_PAGE_SIZE}) { totalCount nodes { name } }`] : []),
+  ]
+  // Top-level, deliberately outside repository — resolving the signed-in login is never scoped
+  // to one repository.
+  return [
+    'query($owner: String!, $name: String!) {',
+    '  repository(owner: $owner, name: $name) {',
+    ...repositoryFields,
+    '  }',
+    '  rateLimit { cost remaining resetAt limit }',
+    ...(first ? ['  viewer { login }'] : []),
+    '}',
+  ].join('\n')
+}
 
-  vocabulary.labels.forEach((label: ResolvedLabel, idx: number) => {
-    const issueAlias = `i${idx}`
-    const prAlias = `p${idx}`
-    const literal = graphqlStringLiteral(label.name)
-    // The approved alias alone also spreads CheckRollupFields; every other alias never selects it.
-    const isApproved = label.key === 'approved'
-    if (isApproved) usesCheckRollup = true
-    const prFields = isApproved ? '...PullRequestFields ...CheckRollupFields' : '...PullRequestFields'
-    connections.push(
-      `  ${issueAlias}: issues(states: OPEN, first: ${PAGE_SIZE}, labels: [${literal}]) { totalCount nodes { ...IssueFields } }`,
-      `  ${prAlias}: pullRequests(states: OPEN, first: ${PAGE_SIZE}, labels: [${literal}]) { totalCount nodes { ${prFields} } }`,
-    )
-    aliases.push({ key: label.key, name: label.name, source: label.source, issueAlias, prAlias })
+/** `rollup` is true only for a pull request at the approved stage. */
+export interface ItemDetailRef {
+  readonly kind: PipelineItemKind
+  readonly number: number
+  readonly rollup: boolean
+}
+
+interface ItemDetailAlias extends ItemDetailRef {
+  readonly alias: string
+}
+
+interface ItemDetailsQuery {
+  readonly document: string
+  readonly aliases: readonly ItemDetailAlias[]
+}
+
+/** The heavy fields the sweep leaves out, one aliased lookup per item — priced per real item, not
+ *  per page. `<idx>` is the position, since the number alone cannot name an issue and a pull request. */
+export function buildItemDetailsQuery(refs: readonly ItemDetailRef[]): ItemDetailsQuery {
+  const aliases: ItemDetailAlias[] = []
+  const fields: string[] = []
+
+  refs.forEach((ref, idx) => {
+    const alias = `d${idx}`
+    if (ref.kind === 'issue') {
+      fields.push(`  ${alias}: issue(number: ${ref.number}) { ${LABEL_EVENTS_FIELD} }`)
+    } else {
+      const rollup = ref.rollup ? ' ...CheckRollupFields' : ''
+      fields.push(`  ${alias}: pullRequest(number: ${ref.number}) { ${PULL_REQUEST_DETAIL_FIELDS}${rollup} }`)
+    }
+    aliases.push({ ...ref, alias })
   })
 
+  // GraphQL rejects a document declaring a fragment nothing spreads.
+  const usesCheckRollup = refs.some((ref) => ref.rollup)
   const document = [
     'query($owner: String!, $name: String!) {',
     '  repository(owner: $owner, name: $name) {',
-    ...connections,
-    `    repoLabels: labels(first: ${REPO_LABEL_PAGE_SIZE}) { totalCount nodes { name } }`,
+    ...fields,
     '  }',
-    '  rateLimit { cost remaining resetAt }',
-    // Top-level, deliberately outside repository — resolving the signed-in login is never scoped
-    // to one repository.
-    '  viewer { login }',
+    '  rateLimit { cost remaining resetAt limit }',
     '}',
-    '',
-    ISSUE_FRAGMENT,
-    '',
-    PULL_REQUEST_FRAGMENT,
     ...(usesCheckRollup ? ['', CHECK_ROLLUP_FRAGMENT] : []),
   ].join('\n')
 
