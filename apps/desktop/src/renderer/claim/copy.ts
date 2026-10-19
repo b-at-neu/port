@@ -82,11 +82,15 @@ export function refusalCopy(repo: string, number: number, verdict: Refusal): { r
   }
 }
 
+export function claimedTitle(number: number): string {
+  return `#${String(number)} claimed and assigned to you.`
+}
+
 /** One line per `WriteOutcome` arm. `terminal-owned` and `ownership-unreadable` are named for exhaustiveness, though a claim only writes while this app owns the repository. */
 export function writeOutcomeCopy(number: number, outcome: WriteOutcome): { readonly line: string; readonly note: string | null } {
   switch (outcome.kind) {
     case 'applied':
-      return { line: `#${String(number)} claimed and assigned to you.`, note: null }
+      return { line: claimedTitle(number), note: null }
     case 'no-op':
       return { line: `#${String(number)} already carries those labels.`, note: 'Nothing was written.' }
     case 'precondition-failed': {
@@ -124,7 +128,7 @@ export function claimedToast(params: { readonly repo: string; readonly number: n
   const { repo, number, verdict, status } = params
   const advisory = advisoryLine(verdict)
   const dispatch = dispatchLine(repo, status)
-  return { tone: 'success', title: writeOutcomeCopy(number, { kind: 'applied', argv: [] }).line, description: advisory === null ? dispatch : `${dispatch} ${advisory}` }
+  return { tone: 'success', title: claimedTitle(number), description: advisory === null ? dispatch : `${dispatch} ${advisory}` }
 }
 
 export function applyResponseToast(repo: string, number: number, response: ClaimApplyResponse): ClaimToast {

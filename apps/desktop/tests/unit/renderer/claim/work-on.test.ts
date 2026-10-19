@@ -186,6 +186,6 @@ describe('workOn', () => {
     expect(calls).toHaveLength(3)
     for (const [, options] of calls) expect(options).toMatchObject({ id: ID })
     expect(vi.mocked(toast.success).mock.calls[0]?.[1]).toMatchObject({ action: undefined, cancel: undefined, duration: undefined })
-    expect(vi.mocked(toast.loading).mock.calls[0]?.[1]).toMatchObject({ action: undefined, cancel: undefined, duration: undefined })
+    expect(vi.mocked(toast.loading).mock.calls[0]?.[1]).toMatchObject({ action: undefined, cancel: undefined, duration: undefined, description: undefined })
   })
 })

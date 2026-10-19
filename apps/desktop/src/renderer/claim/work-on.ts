@@ -47,7 +47,7 @@ async function dispatchStatusOf(repoId: RepoId): Promise<RepoDispatchStatus | un
 async function apply(params: ApplyParams): Promise<void> {
   const { repoId, repo, number, planGate, confirmedAssignees, verdict, takeOver, onClaimed } = params
   const id = toastId(repoId, number)
-  if (takeOver) toast.loading(`Taking over #${String(number)}…`, { ...FRESH, id })
+  if (takeOver) toast.loading(`Taking over #${String(number)}…`, { ...FRESH, id, description: undefined })
   let response: ClaimApplyResponse
   try {
     response = await invoke('claim:apply', { repoId, number, planGate, confirmedAssignees })
