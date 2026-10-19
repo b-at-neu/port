@@ -27,10 +27,7 @@ function setState(next: GateState): void {
   notify()
 }
 
-/** The same indirection `claim/controller.ts`'s own `getState` documents —
- *  a `let` read directly after an `await` still carries the narrowing from a
- *  guard earlier in the same function, even though `setState` may have
- *  reassigned it in between. */
+/** Reads `state` through a call, because TypeScript keeps a pre-`await` narrowing on a `let` read directly after the `await`. */
 export function getState(): GateState {
   return state
 }

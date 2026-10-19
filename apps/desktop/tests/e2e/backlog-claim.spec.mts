@@ -11,7 +11,10 @@ test.beforeEach(async () => {
     state: sandboxState({
       viewer: 'octocat',
       repo: 'acme/widgets',
-      issues: [{ number: 101, title: 'Fix the thing', labels: [] }],
+      issues: [
+        { number: 101, title: 'Fix the thing', labels: [] },
+        { number: 102, title: 'Tidy the other thing', labels: [], assignees: ['alice'] },
+      ],
     }),
   })
 })
@@ -21,12 +24,16 @@ test.afterEach(async ({}) => {
   await harness.close()
 })
 
-test('claims an unlabelled backlog issue, and the first row starts unhighlighted', async () => {
+function editCallsFor(calls: Awaited<ReturnType<E2EApp['calls']>>, number: string) {
+  return calls.filter((call) => call.command === 'gh' && call.args[0] === 'issue' && call.args[1] === 'edit' && call.args[2] === number)
+}
+
+test('claims an unlabelled backlog issue with a toast and no dialog, and the first row starts unhighlighted', async () => {
   const { page } = harness
 
   await page.getByRole('link', { name: 'Backlog', exact: true }).click()
 
-  const row = page.locator('[data-slot="backlog-row"]').first()
+  const row = page.locator('[data-slot="backlog-row"]', { hasText: '#101' })
   await row.waitFor({ state: 'visible' })
 
   // The regression: before any keyboard input, nothing in the list is focus-highlighted.
@@ -35,16 +42,12 @@ test('claims an unlabelled backlog issue, and the first row starts unhighlighted
   await row.getByRole('button', { name: 'Work on' }).click()
   await page.getByRole('menuitem', { name: 'Review the plan' }).click()
 
-  await expect(page.getByRole('dialog')).toContainText('#101')
-  await page.getByRole('button', { name: 'Claim', exact: true }).click()
-
-  await expect(page.getByRole('dialog')).toContainText('claimed')
-  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).first().click()
-  await expect(page.getByRole('dialog')).toBeHidden()
-  await expect(page.locator('[data-slot="backlog-row"]')).toHaveCount(0)
+  await expect(page.locator('[data-sonner-toast]')).toContainText('#101 claimed')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.locator('[data-slot="backlog-row"]', { hasText: '#101' })).toHaveCount(0)
 
   const calls = await harness.calls()
-  const editCalls = calls.filter((call) => call.command === 'gh' && call.args[0] === 'issue' && call.args[1] === 'edit' && call.args[2] === '101')
+  const editCalls = editCallsFor(calls, '101')
   expect(editCalls).toHaveLength(1)
   expect(editCalls[0]?.args).toContain('--add-label')
 
@@ -52,4 +55,32 @@ test('claims an unlabelled backlog issue, and the first row starts unhighlighted
   const issue = state.issues.find((i) => i.number === 101)
   expect(issue?.labels).toContain('ready')
   expect(issue?.labels).toContain('claude')
+})
+
+test('takes over an issue assigned to someone else only after one explicit click', async () => {
+  const { page } = harness
+
+  await page.getByRole('link', { name: 'Backlog', exact: true }).click()
+
+  const row = page.locator('[data-slot="backlog-row"]', { hasText: '#102' })
+  await row.waitFor({ state: 'visible' })
+  await row.getByRole('button', { name: 'Work on' }).click()
+  await page.getByRole('menuitem', { name: 'Auto-approve the plan' }).click()
+
+  const toast = page.locator('[data-sonner-toast]')
+  await expect(toast).toContainText('#102 is assigned to @alice.')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  expect(editCallsFor(await harness.calls(), '102')).toHaveLength(0)
+
+  await toast.getByRole('button', { name: 'Take over' }).click()
+  await expect(page.locator('[data-slot="backlog-row"]', { hasText: '#102' })).toHaveCount(0)
+
+  const editCalls = editCallsFor(await harness.calls(), '102')
+  expect(editCalls).toHaveLength(1)
+  expect(editCalls[0]?.args).toContain('--remove-assignee')
+
+  const state = await harness.state()
+  const issue = state.issues.find((i) => i.number === 102)
+  expect(issue?.labels).toEqual(expect.arrayContaining(['claude', 'ready', 'auto plan']))
+  expect(issue?.assignees).toEqual(['octocat'])
 })

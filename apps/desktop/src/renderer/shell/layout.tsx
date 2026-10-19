@@ -5,7 +5,6 @@ import { CommandPalette } from '@/renderer/shell/palette'
 import { PauseConfirmDialog } from '@/renderer/shell/pause-confirm'
 import { TakeOverConfirmDialog } from '@/renderer/shell/take-over-confirm'
 import { Toaster } from '@/renderer/components/ui/sonner'
-import { ClaimDialog } from '@/renderer/claim/dialog'
 import { GateDialog } from '@/renderer/gate/dialog'
 import { DecisionDialog } from '@/renderer/decision/dialog'
 import { PermissionDialog } from '@/renderer/permission/dialog'
@@ -24,7 +23,6 @@ export function ShellLayout() {
       <CommandPalette />
       <PauseConfirmDialog />
       <TakeOverConfirmDialog />
-      <ClaimDialog />
       <GateDialog />
       <DecisionDialog />
       <PermissionDialog />

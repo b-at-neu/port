@@ -112,6 +112,10 @@ function handleEdit(kind) {
   for (const label of addLabels) labels.add(label)
   for (const label of removeLabels) labels.delete(label)
   found.item.labels = [...labels]
+  const assignees = new Set(found.item.assignees ?? [])
+  for (const login of flagValues('--add-assignee')) assignees.add(login)
+  for (const login of flagValues('--remove-assignee')) assignees.delete(login)
+  found.item.assignees = [...assignees]
   saveState(state)
   process.stdout.write('')
   return process.exit(0)
