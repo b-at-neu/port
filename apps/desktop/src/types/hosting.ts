@@ -481,7 +481,7 @@ export interface StartSessionParams {
   readonly mode: SessionStartMode
   /** Resolved by the caller, never re-derived here — `workspace.folder` is this session's `cwd`. */
   readonly workspace: SessionWorkspace
-  /** The restore path's own resolved title — omitted for every other start path. */
+  /** The restore path's own resolved title, or a stage launch's ticket title — omitted for every other start path. */
   readonly initialTitle?: string | null
   /** Non-null only for a stage launch — passed straight through to the handle; `main/stage/` is the only caller that sets it. `onDeny` fires once per denied tool call, never for a protected-path or interaction `ask`. */
   readonly stage?: { readonly tag: StageTag; readonly agentName: string; readonly model: string; readonly sessionRequiredPaths: readonly string[]; readonly onDeny?: (toolName: string, input: Readonly<Record<string, unknown>>) => void } | null

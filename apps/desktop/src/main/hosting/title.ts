@@ -21,6 +21,11 @@ export function promptTitle(text: string, firstAttachmentName: string | null = n
   return firstAttachmentName === null ? null : normalize(firstAttachmentName)
 }
 
+/** A stage session's title source: the ticket label the dispatcher resolved, same normalization. */
+export function stageTitle(text: string): string | null {
+  return normalize(text)
+}
+
 /** A resumed or forked session's title source: the disk record's own
  *  `customTitle ?? summary ?? firstPrompt`, same normalization. */
 export function recordTitle(record: Pick<RawSession, 'customTitle' | 'summary' | 'firstPrompt'>): string | null {

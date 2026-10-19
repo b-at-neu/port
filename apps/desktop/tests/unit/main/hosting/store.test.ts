@@ -211,6 +211,49 @@ describe('createHostedStore', () => {
     expect(renameSession).toHaveBeenCalledWith('fork-session-1', 'Parent title (fork)', { dir: '/repo' })
   })
 
+  describe('a titled start renames on disk once init reports the id', () => {
+    const STAGE = { tag: { agent: 'review', number: 47, kind: 'pull-request', trigger: 'readyForReview' }, agentName: 'port:review-agent', model: 'sonnet', sessionRequiredPaths: [] } as const
+
+    async function startThenInit(params: { readonly stage?: typeof STAGE; readonly initialTitle?: string }, renameSession: () => Promise<undefined>) {
+      const box: { deliver: ((message: unknown) => void) | null } = { deliver: null }
+      const query = (): HostedQuery =>
+        ({
+          interrupt: vi.fn(),
+          close: vi.fn(),
+          [Symbol.asyncIterator]() {
+            return { next: () => new Promise<IteratorResult<unknown>>((resolve) => (box.deliver = (message) => resolve({ done: false, value: message }))) }
+          },
+        }) as unknown as HostedQuery
+      const store = createHostedStore(baseDeps({ getSdk: () => Promise.resolve({ query, renameSession }) }))
+      const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE, ...params })
+      if (!started.ok) throw new Error('unreachable')
+      box.deliver?.({ type: 'system', subtype: 'init', session_id: 'stage-session-1' })
+      await flush()
+      return { store, sessionKey: started.snapshot.sessionKey }
+    }
+
+    it('renames a stage session with its ticket title, and marks it titled', async () => {
+      const renameSession = vi.fn(() => Promise.resolve(undefined))
+      const { store, sessionKey } = await startThenInit({ stage: STAGE, initialTitle: '#46 Show the last sync time' }, renameSession)
+      expect(renameSession).toHaveBeenCalledTimes(1)
+      expect(renameSession).toHaveBeenCalledWith('stage-session-1', '#46 Show the last sync time', { dir: '/repo' })
+      expect(store.snapshotOf(sessionKey)).toMatchObject({ title: '#46 Show the last sync time', titled: true })
+    })
+
+    it('carries on, marked untitled, when the rename is rejected', async () => {
+      const renameSession = vi.fn(() => Promise.reject(new Error('disk full')))
+      const { store, sessionKey } = await startThenInit({ stage: STAGE, initialTitle: '#46 Show the last sync time' }, renameSession)
+      expect(renameSession).toHaveBeenCalledTimes(1)
+      expect(store.snapshotOf(sessionKey)).toMatchObject({ title: '#46 Show the last sync time', titled: false })
+    })
+
+    it('does not rename an operator session, even one started with a title', async () => {
+      const renameSession = vi.fn(() => Promise.resolve(undefined))
+      await startThenInit({ initialTitle: 'Restored title' }, renameSession)
+      expect(renameSession).not.toHaveBeenCalled()
+    })
+  })
+
   it('refuses already-open for a resume whose sessionId a handle is already resuming (before init)', async () => {
     const store = createHostedStore(baseDeps())
     const first = await store.start({ repoId: REPO_ID, mode: { kind: 'resume', sessionId: 'parent-1' }, workspace: WORKSPACE })

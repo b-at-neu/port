@@ -13,6 +13,7 @@ import type { StageDenial } from '@/types/stage'
 import { proposedRule } from '@/main/stage/rule'
 import { STAGE_AGENT_NAMES } from '@/main/stage/agents'
 import { classifyHandback } from '@/main/stage/handback'
+import { stageTitle } from '@/main/hosting/title'
 
 import { inFlightKeyFor } from '@/main/tick/routing'
 import type { StageLauncherHandle } from '@/types/stage'
@@ -88,6 +89,7 @@ export function createStageLauncher(params: CreateStageLauncherParams): StageLau
     const startResult = await params.store.start({
       repoId: request.entry.id,
       mode: { kind: 'fresh' },
+      initialTitle: stageTitle(request.title),
       workspace: { folder: wt.path, root: request.entry.path, worktree: { path: wt.path, branch: wt.branch }, base: { sha: wt.baseSha, label: wt.branch } },
       stage: {
         tag: { agent: request.agent, number: request.number, kind: request.kind, trigger: request.trigger },

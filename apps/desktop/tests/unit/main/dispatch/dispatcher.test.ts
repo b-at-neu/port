@@ -281,6 +281,27 @@ describe('createDispatcher — launching', () => {
     ])
   })
 
+  it('titles a launch for a number outside the sweep with its bare number', async () => {
+    const { dispatcher, launched } = readyToDispatch()
+    await dispatcher.consider(snapshotWith([tickReport({ actionable: ACTIONABLE })]))
+    expect(launched[0]?.title).toBe('#52')
+  })
+
+  it("titles a review launch on a pull request with its issue's number and title", async () => {
+    const review = [{ number: 47, kind: 'pull-request' as const, trigger: 'readyForReview' as const, agent: 'review' as const, unchecked: false, cycle: null }]
+    const items = [
+      { kind: 'issue', number: 46, title: 'Show the last sync time', url: 'u', linked: 47 },
+      { kind: 'pull-request', number: 47, title: 'Sync time pull request', url: 'u', linked: 46 },
+    ]
+    const snapshot = snapshotWith([tickReport({ actionable: review })])
+    const withItems = { ...snapshot, state: { ...snapshot.state, repositories: [{ ok: true, repoId: REPO_ID, repo: 'o/a', displayName: 'o/a', viewer: 'op', items } as never] } }
+    const { dispatcher, launched } = readyToDispatch({
+      fetchItemsByNumber: () => Promise.resolve({ ok: true, resolved: [{ number: 47, kind: 'pull-request', state: 'OPEN', mergedAt: null, closedAt: null, title: 't', url: 'u', labels: ['ready for review'], assignees: ['op'] }], unavailable: [], fetchedAt: 'r' }),
+    })
+    await dispatcher.consider(withItems)
+    expect(launched[0]).toMatchObject({ agent: 'review', number: 47, title: '#46 Show the last sync time' })
+  })
+
   it('calls ledger.record only after a launch returns ok', async () => {
     const ledger = { record: vi.fn(), advance: vi.fn(), rowFor: () => undefined, observeUnmatched: () => ({ class: 'no-record' as const }) }
     const { dispatcher } = readyToDispatch({ ledger })

@@ -3,7 +3,8 @@
 import type { KeyboardEvent, MouseEvent } from 'react'
 import { cn } from '@/renderer/lib/utils'
 import type { BoardItemRow } from '@/types/board'
-import { autoPlanTagLabel, autoPlanTagTitle, dispatchedTagLabel, dispatchedTagTitle, operatorJoinedTagLabel, operatorJoinedTagTitle } from '@/renderer/board/copy'
+import { autoPlanTagLabel, autoPlanTagTitle, dispatchedTagLabel, dispatchedTagTitle, noTicketTagLabel, noTicketTagTitle, operatorJoinedTagLabel, operatorJoinedTagTitle } from '@/renderer/board/copy'
+import { prSuffixOf } from '@/utils/tickets/ticket'
 import { isDispatchedRow, nextActionFor, phaseLabelFor, pillStatusFor } from '@/renderer/board/row-model'
 import { openReviewDialog } from '@/renderer/gate/controller'
 import { openDecision } from '@/renderer/decision/controller'
@@ -55,6 +56,8 @@ function NextActionLink({ row }: { readonly row: BoardItemRow }) {
 
 export function TicketRow({ row, rowProps, operatorJoined = false }: TicketRowProps) {
   const { item } = row
+  const ref = row.ticket.ref
+  const prSuffix = prSuffixOf(ref)
 
   function handleKeyDown(event: KeyboardEvent): void {
     if (event.key === 'Enter') rowProps.onFocus()
@@ -62,8 +65,18 @@ export function TicketRow({ row, rowProps, operatorJoined = false }: TicketRowPr
 
   return (
     <div data-slot="ticket-row" role="button" {...rowProps} onKeyDown={handleKeyDown} className={cn('flex h-9 items-center gap-2 px-4 text-body', rowProps.className)}>
-      <span className="w-10 shrink-0 font-mono tabular-nums text-muted-foreground">#{item.number}</span>
-      <span className="min-w-0 flex-1 truncate text-foreground">{item.title}</span>
+      <span className="min-w-10 shrink-0 font-mono tabular-nums text-muted-foreground">
+        {ref.kind === 'issue' ? '#' : 'PR#'}
+        {ref.number}
+      </span>
+      <span className="min-w-0 truncate text-foreground">{ref.title}</span>
+      {prSuffix !== null ? <span className="shrink-0 tabular-nums text-muted-foreground">{prSuffix}</span> : null}
+      <span className="flex-1" />
+      {ref.kind === 'unlinked-pr' ? (
+        <span title={noTicketTagTitle()} className="shrink-0 rounded-full bg-accent px-1.5 py-0.5 text-meta text-foreground-secondary">
+          {noTicketTagLabel()}
+        </span>
+      ) : null}
       <span className="shrink-0 text-meta text-muted-foreground">{item.repo}</span>
       {item.autoPlan ? (
         <span title={autoPlanTagTitle()} className="shrink-0 rounded-full bg-accent px-1.5 py-0.5 text-meta text-foreground-secondary">

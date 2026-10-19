@@ -16,7 +16,7 @@ vi.mock('@/renderer/data/invoke', () => ({ invoke: vi.fn() }))
 const { actionFor, runSecondaryAction } = await import('@/renderer/needs-you/actions')
 
 function stageBlocked(): NeedsYouItem {
-  return { kind: 'stage-blocked', repoId: 'repo-a' as RepoId, repo: 'o/a', number: 51, title: 't', url: null, at: null, matchedRow: null, sessionKey: 'hosted-51' as SessionKey, text: 'BLOCKED: x' }
+  return { kind: 'stage-blocked', repoId: 'repo-a' as RepoId, repo: 'o/a', number: 51, title: 't', url: null, ticket: null, at: null, matchedRow: null, sessionKey: 'hosted-51' as SessionKey, text: 'BLOCKED: x' }
 }
 
 describe('actionFor — stage-blocked', () => {

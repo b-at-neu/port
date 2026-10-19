@@ -37,11 +37,12 @@ export function connectItemActionPruning(client: QueryClient): () => void {
 }
 
 function rowKey(row: BoardItemRow): string {
-  return `${row.item.repoId}:${String(row.item.number)}`
+  return `${row.item.repoId}:${String(row.ticket.ref.number)}`
 }
 
+// A pull request number still selects its ticket, so an older `?item=` link resolves.
 function sameItem(row: BoardItemRow, ref: BoardItemRef): boolean {
-  return row.item.repoId === ref.repoId && row.item.number === ref.number
+  return row.item.repoId === ref.repoId && (row.ticket.ref.number === ref.number || row.ticket.pullRequest?.number === ref.number)
 }
 
 export function BoardScreen() {
@@ -60,7 +61,7 @@ export function BoardScreen() {
   }
 
   function selectRow(row: BoardItemRow | null): void {
-    setSearch({ item: row !== null ? { repoId: row.item.repoId, number: row.item.number } : null })
+    setSearch({ item: row !== null ? { repoId: row.item.repoId, number: row.ticket.ref.number } : null })
   }
 
   async function handleRefresh(): Promise<void> {

@@ -75,7 +75,11 @@ function blockedText(line: string): string {
 export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: readonly HostedSessionSnapshot[] = []): readonly NeedsYouItem[] {
   const projection = projectBoard({ snapshot, groupBy: 'repo', now, sessions })
   const rows = projection.groups.flatMap((group) => group.rows)
-  const rowByKey = new Map<string, BoardItemRow>(rows.map((row) => [rowKey(row.item.repoId, row.item.number), row]))
+  // Both of a ticket's numbers resolve to its one row, so a session or note on the pull request still lands on the ticket.
+  const rowByKey = new Map<string, BoardItemRow>(
+    rows.flatMap((row) => [row.ticket.issue, row.ticket.pullRequest].filter((member) => member !== null).map((member): [string, BoardItemRow] => [rowKey(row.item.repoId, member.number), row])),
+  )
+  const ticketNumberOf = (repoId: RepoId, number: number): number => rowByKey.get(rowKey(repoId, number))?.ticket.ref.number ?? number
   const viewerByRepo = new Map<RepoId, string | null>(readyRepos(snapshot).map((repo) => [repo.repoId, repo.viewer]))
   const displayNameOf = new Map<RepoId, string>(readyRepos(snapshot).map((repo) => [repo.repoId, repo.displayName]))
   const ownerByRepo = new Map(snapshot.dispatch.map((d) => [d.repoId, d.owner] as const))
@@ -88,7 +92,7 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
     if (session.stage === null || session.repoId === null) continue
     const oldest = [...session.pendingPermissions].sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))[0]
     if (oldest === undefined || oldest.interaction?.kind !== 'question') continue
-    stageQuestionNumbers.add(`${session.repoId}:${String(session.stage.number)}`)
+    stageQuestionNumbers.add(rowKey(session.repoId, ticketNumberOf(session.repoId, session.stage.number)))
     const matched = rowByKey.get(rowKey(session.repoId, session.stage.number)) ?? null
     items.push({
       kind: 'stage-question',
@@ -97,6 +101,7 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
       number: session.stage.number,
       title: matched?.item.title ?? null,
       url: matched?.item.url ?? null,
+      ticket: matched?.ticket.ref ?? null,
       at: oldest.requestedAt,
       matchedRow: matched,
       sessionKey: session.sessionKey,
@@ -113,8 +118,9 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
     const handback = classifyHandbackText(session.lastResult.text ?? '')
     const outcomeKind = handback?.kind === 'blocked' ? 'stage-blocked' : handback?.kind === 'questions' ? 'stage-questions' : null
     if (outcomeKind === null) continue
-    if (stageQuestionNumbers.has(`${session.repoId}:${String(session.stage.number)}`)) continue
-    if (outcomeKind === 'stage-blocked') stageBlockedKeys.add(rowKey(session.repoId, session.stage.number))
+    const ticketKey = rowKey(session.repoId, ticketNumberOf(session.repoId, session.stage.number))
+    if (stageQuestionNumbers.has(ticketKey)) continue
+    if (outcomeKind === 'stage-blocked') stageBlockedKeys.add(ticketKey)
     const matched = rowByKey.get(rowKey(session.repoId, session.stage.number)) ?? null
     items.push({
       kind: outcomeKind,
@@ -123,6 +129,7 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
       number: session.stage.number,
       title: matched?.item.title ?? null,
       url: matched?.item.url ?? null,
+      ticket: matched?.ticket.ref ?? null,
       at: session.lastResult?.at ?? null,
       matchedRow: matched,
       sessionKey: session.sessionKey,
@@ -133,7 +140,18 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
   for (const dispatch of snapshot.dispatch) {
     for (const denial of dispatch.denials) {
       const matched = rowByKey.get(rowKey(dispatch.repoId, denial.number)) ?? null
-      items.push({ kind: 'stage-denial', repoId: dispatch.repoId, repo: matched?.item.repo ?? null, number: denial.number, title: matched?.item.title ?? null, url: matched?.item.url ?? null, at: denial.at, matchedRow: matched, denial })
+      items.push({
+        kind: 'stage-denial',
+        repoId: dispatch.repoId,
+        repo: matched?.item.repo ?? null,
+        number: denial.number,
+        title: matched?.item.title ?? null,
+        url: matched?.item.url ?? null,
+        ticket: matched?.ticket.ref ?? null,
+        at: denial.at,
+        matchedRow: matched,
+        denial,
+      })
     }
     for (const interrupted of dispatch.interrupted) {
       const matched = rowByKey.get(rowKey(dispatch.repoId, interrupted.number)) ?? null
@@ -144,6 +162,7 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
         number: interrupted.number,
         title: matched?.item.title ?? null,
         url: matched?.item.url ?? null,
+        ticket: matched?.ticket.ref ?? null,
         at: interrupted.startedAt,
         matchedRow: matched,
         interrupted,
@@ -154,10 +173,10 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
   for (const row of rows) {
     const kind = needsYouReasonOf(row.stageLabel?.key)
     if (kind === undefined) continue
-    if (kind === 'blocked' && stageBlockedKeys.has(rowKey(row.item.repoId, row.item.number))) continue
+    if (kind === 'blocked' && stageBlockedKeys.has(rowKey(row.item.repoId, row.ticket.ref.number))) continue
     const viewer = viewerByRepo.get(row.item.repoId) ?? null
     if (viewer !== null && !row.item.assignees.includes(viewer)) continue
-    items.push({ kind, repoId: row.item.repoId, repo: row.item.repo, number: row.item.number, title: row.item.title, url: row.item.url, at: row.item.updatedAt, matchedRow: row, row })
+    items.push({ kind, repoId: row.item.repoId, repo: row.item.repo, number: row.item.number, title: row.item.title, url: row.item.url, ticket: row.ticket.ref, at: row.item.updatedAt, matchedRow: row, row })
   }
 
   for (const report of snapshot.tick) {
@@ -171,6 +190,7 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
         number: held.number,
         title: matched?.item.title ?? null,
         url: matched?.item.url ?? null,
+        ticket: matched?.ticket.ref ?? null,
         at: matched?.item.updatedAt ?? null,
         matchedRow: matched,
         held,
@@ -180,7 +200,18 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
     for (const claim of report.claims) {
       if (claim.class !== 'stalled-confirmed') continue
       const matched = rowByKey.get(rowKey(report.repoId, claim.number)) ?? null
-      items.push({ kind: 'stalled', repoId: report.repoId, repo: matched?.item.repo ?? report.displayName, number: claim.number, title: matched?.item.title ?? null, url: matched?.item.url ?? null, at: matched?.item.updatedAt ?? null, matchedRow: matched, claim })
+      items.push({
+        kind: 'stalled',
+        repoId: report.repoId,
+        repo: matched?.item.repo ?? report.displayName,
+        number: claim.number,
+        title: matched?.item.title ?? null,
+        url: matched?.item.url ?? null,
+        ticket: matched?.ticket.ref ?? null,
+        at: matched?.item.updatedAt ?? null,
+        matchedRow: matched,
+        claim,
+      })
     }
   }
 
@@ -189,7 +220,18 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
     for (const note of dispatch.budget.notes) {
       if (!BUDGET_KINDS.has(note.kind)) continue
       const matched = rowByKey.get(rowKey(dispatch.repoId, note.number)) ?? null
-      items.push({ kind: 'budget', repoId: dispatch.repoId, repo: matched?.item.repo ?? null, number: note.number, title: matched?.item.title ?? null, url: matched?.item.url ?? null, at: matched?.item.updatedAt ?? null, matchedRow: matched, note })
+      items.push({
+        kind: 'budget',
+        repoId: dispatch.repoId,
+        repo: matched?.item.repo ?? null,
+        number: note.number,
+        title: matched?.item.title ?? null,
+        url: matched?.item.url ?? null,
+        ticket: matched?.ticket.ref ?? null,
+        at: matched?.item.updatedAt ?? null,
+        matchedRow: matched,
+        note,
+      })
     }
   }
 
@@ -203,6 +245,7 @@ export function needsYouItems(snapshot: BoardSnapshot, now: Date, sessions: read
         number: repair.number,
         title: matched?.item.title ?? null,
         url: matched?.item.url ?? null,
+        ticket: matched?.ticket.ref ?? null,
         at: matched?.item.updatedAt ?? null,
         matchedRow: matched,
         repair,

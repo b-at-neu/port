@@ -8,6 +8,8 @@ import type { SessionKey } from '@/types/hosting'
 import type { AskQuestion } from '@/utils/hosting/controls'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { StageDenial, InterruptedStage } from '@/types/stage'
+import type { Ticket, TicketRef } from '@/types/ticket'
+import type { PipelineItemKind } from '@/types/github'
 
 /** The four sources the watcher polls independently; `itemStates` is a dependent re-check fired internally, never independently schedulable. */
 export const SOURCE_KINDS = ['github', 'sessions', 'worktrees', 'denials'] as const
@@ -120,7 +122,9 @@ export interface LiveStage {
 }
 
 export interface BoardItemRow {
+  /** The ticket's status source — the pull request once it carries a stage label, else the issue. Every action and decision acts on this item; every display reads `ticket`. */
   readonly item: ReconciledItem
+  readonly ticket: Ticket
   readonly displayStatus: DisplayStatus
   /** `null` when no live stage session matches this item's repository, kind and number. */
   readonly liveStage: LiveStage | null
@@ -172,9 +176,12 @@ export type ItemActionState = { readonly kind: 'pending'; readonly action: Opera
 interface NeedsYouItemBase {
   readonly repoId: RepoId | null
   readonly repo: string | null
+  /** The action target — the pull request or issue this row writes to, never the ticket's number. */
   readonly number: number | null
   readonly title: string | null
   readonly url: string | null
+  /** The ticket this row belongs to, for display; `null` when no board row matches `number`. */
+  readonly ticket: TicketRef | null
   /** `null` for every current kind — no kind left carries a real timestamp. */
   readonly at: string | null
   /** The board row at this (repoId, number), when one exists — lets `held`/`stalled` reuse its `decisions.unblock` too. */
@@ -210,6 +217,12 @@ export interface PhaseDetail {
 }
 
 export type BoardGroupBy = 'phase' | 'repo'
+
+/** One (number, kind) a ticket answers to — its issue or its pull request. */
+export interface StageLinkTarget {
+  readonly number: number
+  readonly kind: PipelineItemKind
+}
 
 export type StageLink =
   | { readonly kind: 'live'; readonly agent: StageAgent; readonly sessionKey: SessionKey; readonly at: string; readonly operatorJoined: boolean }

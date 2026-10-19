@@ -10,7 +10,7 @@ import type { AttachedAgent, AttachedSession, StageLabel } from '@/types/state'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { LabelRole } from '@/utils/labels/defaults'
 import type { PillStatus } from '@/types/components'
-import type { ItemActionState } from '@/types/board'
+import type { ItemActionState, StageLinkTarget } from '@/types/board'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
 import { actionRefusalNote, actionResultCopy, decisionButtonLabel, decisionRefusalNote, openPrButtonLabel, reviewPlanButtonLabel, stageAgentPhaseName } from '@/renderer/board/copy'
 
@@ -40,9 +40,14 @@ export function phaseLabelFor(row: BoardItemRow): string {
   return row.stageLabel !== null ? (PHASE_NAMES[row.stageLabel.key] ?? row.stageLabel.key) : 'Unstaged'
 }
 
-/** `stage-links.ts`'s own `operatorJoinedOf`, re-exported for the row — `true` when any dispatch record for this item carries an operator join. */
+/** Every (number, kind) the row's ticket answers to — its issue and its pull request. */
+export function stageTargetsOf(row: BoardItemRow): readonly StageLinkTarget[] {
+  return [row.ticket.issue, row.ticket.pullRequest].filter((member) => member !== null).map((member) => ({ number: member.number, kind: member.kind }))
+}
+
+/** `stage-links.ts`'s own `operatorJoinedOf`, re-exported for the row — `true` when any dispatch record for this ticket carries an operator join. */
 export function operatorJoinedOf(records: readonly DispatchRecord[], row: BoardItemRow): boolean {
-  return operatorJoinedOfRecords(records, row.item.number, row.item.kind)
+  return operatorJoinedOfRecords(records, stageTargetsOf(row))
 }
 
 export function agentSummaryOf(agents: readonly AttachedAgent[], sessions: readonly AttachedSession[]): string | null {
@@ -64,7 +69,7 @@ export function decisionNoteFor(row: BoardItemRow): string | null {
   for (const decision of OPERATOR_DECISIONS) {
     const availability = row.decisions[decision]
     if (!availability.available && (availability.reason === 'cycle-cap' || availability.reason === 'rebase-decisions' || availability.reason === 'agent-live')) {
-      return decisionRefusalNote(decision, availability.reason, row.item.number)
+      return decisionRefusalNote(decision, availability.reason, row.ticket.ref.number)
     }
   }
   return null

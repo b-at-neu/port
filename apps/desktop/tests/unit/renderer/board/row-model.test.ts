@@ -6,6 +6,8 @@ import type { AttachedAgent, AttachedSession, ReconciledItem, StageLabel } from 
 import type { RepoId } from '@/utils/repos'
 import type { SessionKey } from '@/types/hosting'
 import type { DispatchRecord } from '@/types/dispatch'
+import type { Ticket } from '@/types/ticket'
+import { ticketIndex } from '@/utils/tickets/ticket'
 import { agentSummaryOf, decisionNoteFor, isDispatchedRow, nextActionFor, operatorJoinedOf, ownershipNoteFor, phaseLabelFor, pillStatusFor, stageKeyOf, stopAttachedAgentNote } from '@/renderer/board/row-model'
 
 const LIVE_PLAN: LiveStage = { agent: 'plan', trigger: 'ready', sessionKey: 'hosted-1' as SessionKey }
@@ -61,6 +63,7 @@ function row(overrides: {
   } as unknown as ReconciledItem
   return {
     item,
+    ticket: ticketIndex([item]).tickets[0] as Ticket,
     displayStatus: { status: overrides.status ?? 'waiting', staleGithub: false, githubAgeMs: null },
     liveStage: overrides.liveStage ?? null,
     stageLabel,

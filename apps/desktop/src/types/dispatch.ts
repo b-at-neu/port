@@ -319,6 +319,8 @@ export interface StageLaunchRequest {
   readonly trigger: LabelKey
   readonly model: string
   readonly prompt: string
+  /** The ticket label (`#<issue> <issue title>`) the session is titled with. */
+  readonly title: string
 }
 
 /** Every `TickObservation` kind this module writes — excludes the one report-only kind, `refresh-deferred`. */

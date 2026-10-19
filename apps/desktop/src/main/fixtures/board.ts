@@ -57,6 +57,8 @@ interface ItemSeed {
   readonly number: number
   readonly title: string
   readonly stageKey: LabelKey
+  // Defaults to empty — a pull request's closing keyword is what links it to its issue.
+  readonly body?: string
   // Defaults to [VIEWER] — only the unowned-held seed overrides it.
   readonly assignees?: readonly string[]
   // Defaults to a single move onto stageKey — the pagination item below walks a realistic multi-stage path instead.
@@ -135,6 +137,9 @@ const POPULATED_ITEM_SEEDS: readonly ItemSeed[] = [
     ],
   },
   { kind: 'pull-request', number: 35, title: 'Cache avatar thumbnails', stageKey: 'needsRevision' },
+  // An issue and the pull request that closes it, so the Board folds them into one row; the unlabelled-body pull request above stays the one with no ticket.
+  { kind: 'issue', number: 46, title: 'Show the last sync time in the header', stageKey: 'prOpened' },
+  { kind: 'pull-request', number: 47, title: 'Show the last sync time in the header', stageKey: 'reviewing', body: 'Closes #46' },
   // A rebase escalation with two decisions, so the Needs you screen's Unblock dialog has picks to show.
   { kind: 'pull-request', number: 37, title: 'Normalize currency rounding', stageKey: 'needsHuman', comments: [{ body: CURRENCY_ESCALATION, offsetMinutes: -8 }] },
   { kind: 'issue', number: 50, title: 'Rotate the webhook signing secret', stageKey: 'needsHuman' },
@@ -177,7 +182,7 @@ function pipelineItemsFor(now: Date, vocabulary: LabelVocabulary, seeds: readonl
       number: seed.number,
       title: seed.title,
       url: `https://github.com/acme/widgets/${isPr ? 'pull' : 'issues'}/${String(seed.number)}`,
-      body: '',
+      body: seed.body ?? '',
       state: 'OPEN',
       mergedAt: null,
       updatedAt,

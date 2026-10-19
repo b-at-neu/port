@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { promptTitle, recordTitle, resolveStartTitle } from '@/main/hosting/title'
+import { promptTitle, recordTitle, resolveStartTitle, stageTitle } from '@/main/hosting/title'
 import type { SessionReader } from '@/types/sessions'
 
 function session(overrides: Partial<{ sessionId: string; customTitle: string | null; summary: string | null; firstPrompt: string | null }> = {}) {
@@ -40,6 +40,24 @@ describe('promptTitle', () => {
 
   it('returns null when both the text and the attachment name are empty', () => {
     expect(promptTitle('', null)).toBeNull()
+  })
+})
+
+describe('stageTitle', () => {
+  it('keeps a short ticket label as is', () => {
+    expect(stageTitle('#464 Unblock a pull request')).toBe('#464 Unblock a pull request')
+  })
+
+  it('collapses whitespace and strips control characters', () => {
+    expect(stageTitle('  #464   Unblock\n\ta pull\u0007 request  ')).toBe('#464 Unblock a pull request')
+  })
+
+  it('caps at 60 characters with an ellipsis', () => {
+    expect(stageTitle(`#464 ${'x'.repeat(100)}`)).toBe(`#464 ${'x'.repeat(55)}…`)
+  })
+
+  it('returns null for an empty label', () => {
+    expect(stageTitle('   ')).toBeNull()
   })
 })
 
