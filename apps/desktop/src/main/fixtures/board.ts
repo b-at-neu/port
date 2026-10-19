@@ -195,7 +195,7 @@ function pipelineItemsFor(now: Date, vocabulary: LabelVocabulary, seeds: readonl
 }
 
 function queriedLabelsFor(vocabulary: LabelVocabulary): readonly QueriedLabel[] {
-  return vocabulary.labels.map((label, index) => ({ key: label.key, name: label.name, source: label.source, issueAlias: `i${String(index)}`, prAlias: `p${String(index)}` }))
+  return vocabulary.labels.map((label) => ({ key: label.key, name: label.name, source: label.source }))
 }
 
 function readyRepositoryState(now: Date, scenario: FixtureScenario): RepositoryState {
@@ -211,7 +211,7 @@ function readyRepositoryState(now: Date, scenario: FixtureScenario): RepositoryS
     vocabulary: WIDGETS_VOCABULARY_REPORT,
     unavailable: [],
     truncated: [],
-    rateLimit: { cost: 1, remaining: 4999, resetAt: offsetMinutes(now, 60) },
+    rateLimit: { cost: 1, remaining: 4999, resetAt: offsetMinutes(now, 60), limit: 5000 },
     viewer: VIEWER,
     fetchedAt: now.toISOString(),
   }
@@ -290,7 +290,7 @@ function gadgetsRepositoryState(now: Date): RepositoryState {
     vocabulary: GADGETS_VOCABULARY_REPORT,
     unavailable: [],
     truncated: [],
-    rateLimit: { cost: 1, remaining: 4987, resetAt: offsetMinutes(now, 60) },
+    rateLimit: { cost: 1, remaining: 4987, resetAt: offsetMinutes(now, 60), limit: 5000 },
     viewer: VIEWER,
     fetchedAt: now.toISOString(),
   }

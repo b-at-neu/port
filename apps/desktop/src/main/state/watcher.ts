@@ -18,7 +18,7 @@ import { buildDesktopTickEvent, recordTick as defaultRecordTick } from '@/main/t
 import type { DesktopTickEvent } from '@/types/trajectory'
 import type { RecordTickDeps } from '@/types/trajectory'
 import { isReady, projectFromCache } from '@/main/state/read'
-import { afterFailure, afterSuccess, deferredUntil, dueSources, nextDueAt } from '@/main/state/schedule'
+import { afterFailure, afterSuccess, budgetedIntervalMs, deferredUntil, dueSources, nextDueAt } from '@/main/state/schedule'
 import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/state/sources'
 
 import type { PipelineWatcher, RefreshRequest } from '@/types/state'
@@ -199,6 +199,14 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
     return latest
   }
 
+  /** The latest successful poll cost of every ready repository — the entry just written included. */
+  function githubCosts(): readonly number[] {
+    return repositories.filter(isReady).flatMap((entry) => {
+      const read = cache.github.get(entry.id)
+      return read?.ok ? [read.rateLimit.cost] : []
+    })
+  }
+
   async function runRepoSource(entry: Extract<RepositoryEntry, { status: 'ready' }>, kind: 'github' | 'worktrees' | 'denials'): Promise<void> {
     const key = `${entry.id}:${kind}`
     if (inFlight.has(key)) return
@@ -221,8 +229,9 @@ export function createPipelineWatcher(params: CreatePipelineWatcherParams): Pipe
       let updated: SourceHealth
       if (outcome.ok) {
         updated = afterSuccess(previous, kind, now())
-        // A known reset instant always beats a doubled guess, even on a success whose own window reports low headroom.
         if (kind === 'github') {
+          if (outcome.rateLimit) updated = { ...updated, intervalMs: budgetedIntervalMs({ costs: githubCosts(), rateLimit: outcome.rateLimit, now: now() }) }
+          // A known reset instant always beats a doubled guess, even on a success whose own window reports low headroom.
           const defer = deferredUntil(outcome.rateLimit ?? null, null)
           if (defer !== null) updated = { ...updated, deferredUntil: defer }
         }

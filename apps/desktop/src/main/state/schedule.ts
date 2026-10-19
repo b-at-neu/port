@@ -1,5 +1,5 @@
 // Pure, clock passed in, no timer of its own — this module only ever answers "when is X next due" and "how does a read change X's health".
-import { BACKOFF_CEILING_MS, RATE_LIMIT_FLOOR, SOURCE_BASE_INTERVAL_MS, SOURCE_KINDS } from '@/types/board'
+import { BACKOFF_CEILING_MS, BUDGET_SHARE, DEFAULT_GRAPHQL_LIMIT, RATE_LIMIT_FLOOR, SOURCE_BASE_INTERVAL_MS, SOURCE_KINDS } from '@/types/board'
 import type { SourceHealth, SourceKind } from '@/types/board'
 import type { RateLimitInfo } from '@/types/github'
 
@@ -28,6 +28,27 @@ export function afterFailure(health: SourceHealth, kind: SourceKind, at: Date, m
     intervalMs: Math.min(health.intervalMs * 2, BACKOFF_CEILING_MS),
     deferredUntil: deferUntil,
   }
+}
+
+interface BudgetedIntervalParams {
+  /** The latest successful `rateLimit.cost` of every ready repository. */
+  readonly costs: readonly number[]
+  readonly rateLimit: RateLimitInfo
+  readonly now: Date
+}
+
+const HOUR_MS = 3_600_000
+
+/** The GitHub interval that keeps projected hourly use, across every repository, under `BUDGET_SHARE` of the limit, and that spreads the headroom left above the floor over the time until reset. Base when no positive cost is known. */
+export function budgetedIntervalMs(params: BudgetedIntervalParams): number {
+  const total = params.costs.reduce((sum, cost) => sum + Math.max(0, cost), 0)
+  if (total <= 0) return SOURCE_BASE_INTERVAL_MS.github
+  const limit = params.rateLimit.limit > 0 ? params.rateLimit.limit : DEFAULT_GRAPHQL_LIMIT
+  const shareMs = (HOUR_MS * total) / (BUDGET_SHARE * limit)
+  const msUntilReset = Date.parse(params.rateLimit.resetAt) - params.now.getTime()
+  const headroom = params.rateLimit.remaining - RATE_LIMIT_FLOOR
+  const headroomMs = msUntilReset > 0 && headroom > 0 ? (msUntilReset * total) / headroom : 0
+  return Math.min(BACKOFF_CEILING_MS, Math.max(SOURCE_BASE_INTERVAL_MS.github, shareMs, headroomMs))
 }
 
 /** Set whenever the failure was `rate-limited`, or the rate-limit window already reports `remaining` under the floor on an otherwise-ok read. */

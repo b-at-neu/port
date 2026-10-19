@@ -133,7 +133,7 @@ function buildPipelineFetch(vocabulary: LabelVocabulary, labels: LabelMap, prs: 
     vocabulary: verifyVocabulary(vocabulary, { ok: true, names: vocabulary.labels.map((label) => label.name) }),
     unavailable: [],
     truncated: [],
-    rateLimit: { cost: 1, remaining: 4999, resetAt: NOW_ISO },
+    rateLimit: { cost: 1, remaining: 4999, resetAt: NOW_ISO, limit: 5000 },
     viewer: VIEWER,
     fetchedAt: NOW_ISO,
   }

@@ -67,7 +67,7 @@ function fetchOf(items: readonly PipelineItem[]): PipelineFetch {
     vocabulary: { verdict: 'verified', present: [], missing: [], problems: [], repoLabels: { ok: true, names: [] } },
     unavailable: [],
     truncated: [],
-    rateLimit: { cost: 1, remaining: 4999, resetAt: '2026-01-01T00:00:00Z' },
+    rateLimit: { cost: 1, remaining: 4999, resetAt: '2026-01-01T00:00:00Z', limit: 5000 },
     viewer: 'op',
     fetchedAt: '2026-01-01T00:00:00Z',
   }

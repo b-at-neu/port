@@ -22,7 +22,8 @@ export function displayStatus(item: { readonly status: string }, repoHealth: Rep
   const readAt = Date.parse(githubEntry.at)
   const githubAgeMs = Number.isNaN(readAt) ? null : now.getTime() - readAt
   const githubHealthy = repoHealth === undefined || repoHealth.github.consecutiveFailures === 0
-  const withinGrace = githubAgeMs !== null && githubAgeMs <= SOURCE_BASE_INTERVAL_MS.github + STALE_GRACE_MS
+  const githubIntervalMs = repoHealth?.github.intervalMs ?? SOURCE_BASE_INTERVAL_MS.github
+  const withinGrace = githubAgeMs !== null && githubAgeMs <= githubIntervalMs + STALE_GRACE_MS
 
   if (githubHealthy && withinGrace) {
     return { status: 'stalled', staleGithub: false, githubAgeMs }

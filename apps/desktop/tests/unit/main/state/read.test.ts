@@ -9,6 +9,7 @@ import type { RepositoryEntry } from '@/utils/repos'
 import { resolveVocabulary } from '@/utils/labels/vocabulary'
 import { readPipelineState } from '@/main/state/read'
 import { makeTempDir } from '../../../fixtures/fs'
+import { EMPTY_PIPELINE_STDOUT } from '../../../fixtures/pipeline-reply'
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -55,7 +56,6 @@ function readyEntry(id: string, path: string, repo: string): Extract<RepositoryE
 }
 
 /** `mapPipelineItems` reads an unrecognised alias as `undefined` and skips it, so this is a valid "no items" response regardless of the vocabulary. */
-const EMPTY_PIPELINE_STDOUT = JSON.stringify({ data: { repository: {}, rateLimit: { cost: 1, remaining: 4999, resetAt: '2026-01-01T00:00:00Z' } } })
 
 function fakeGit(): (args: readonly string[], cwd: string) => Promise<CommandResult> {
   return (args, cwd) => {

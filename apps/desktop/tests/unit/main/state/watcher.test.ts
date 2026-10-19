@@ -7,40 +7,27 @@ import type { RepositoryEntry } from '@/utils/repos'
 import type { CommandResult } from '@/types/platform'
 import type { GhResult } from '@/types/platform'
 import type { BoardSnapshot } from '@/types/board'
-import { buildPipelineQuery } from '@/main/github/query'
 import { createPipelineWatcher } from '@/main/state/watcher'
 import type { TimerFactory, TimerHandle } from '@/main/state/watcher'
+import { EMPTY_PIPELINE_STDOUT, RATE_LIMIT_REPLY, connection } from '../../../fixtures/pipeline-reply'
 
-const EMPTY_PIPELINE_STDOUT = JSON.stringify({ data: { repository: {}, rateLimit: { cost: 1, remaining: 4999, resetAt: '2026-01-01T00:00:00Z' } } })
-
-/** Built off the same `buildPipelineQuery` the adapter uses, so this fixture can never drift from the alias layout a real response carries. */
-function readyItemStdout(signedInLogin: string, assignees: readonly string[]): string {
-  const { aliases } = buildPipelineQuery(resolveVocabulary({}))
-  const repository: Record<string, unknown> = {}
-  for (const alias of aliases) {
-    const isReadyAlias = alias.key === 'ready'
-    repository[alias.issueAlias] = isReadyAlias
-      ? {
-          totalCount: 1,
-          nodes: [
-            {
-              number: 42,
-              title: 'a ticket',
-              url: 'https://github.com/o/a/issues/42',
-              body: '',
-              state: 'OPEN',
-              assignees: { nodes: assignees.map((login) => ({ login })) },
-              labels: { nodes: [{ name: 'ready' }] },
-            },
-          ],
-        }
-      : { totalCount: 0, nodes: [] }
-    repository[alias.prAlias] = { totalCount: 0, nodes: [] }
+/** One ready issue: the sweep reply names it, and the detail read (`d0`) answers with an empty timeline. */
+function readyItemGh(signedInLogin: string, assignees: readonly string[], rateLimit: unknown = RATE_LIMIT_REPLY): (args: readonly string[]) => Promise<GhResult> {
+  const issue = {
+    number: 42,
+    title: 'a ticket',
+    url: 'https://github.com/o/a/issues/42',
+    body: '',
+    state: 'OPEN',
+    assignees: { nodes: assignees.map((login) => ({ login })) },
+    labels: { nodes: [{ name: 'ready' }] },
   }
-  repository.repoLabels = { totalCount: 0, nodes: [] }
-  return JSON.stringify({
-    data: { repository, rateLimit: { cost: 1, remaining: 4999, resetAt: '2026-01-01T00:00:00Z' }, viewer: { login: signedInLogin } },
-  })
+  const sweep = { repository: { issues: connection([issue]), pullRequests: connection([]), repoLabels: { totalCount: 0, nodes: [] } }, rateLimit, viewer: { login: signedInLogin } }
+  const detail = { repository: { d0: { timelineItems: { nodes: [] } } }, rateLimit }
+  return (args) => {
+    const document = args.find((arg) => arg.startsWith('query=')) ?? ''
+    return Promise.resolve({ ok: true, stdout: JSON.stringify({ data: document.includes('d0:') ? detail : sweep }), stderr: '' })
+  }
 }
 
 function readyEntry(id: string, path: string, repo: string): Extract<RepositoryEntry, { status: 'ready' }> {
@@ -147,6 +134,31 @@ describe('createPipelineWatcher — cadence', () => {
 
     expect(gitCounts.worktreeList).toBe(4)
     expect(ghCalls).toBe(1)
+  })
+})
+
+describe('createPipelineWatcher — budgeted interval', () => {
+  it('a costly poll stretches the GitHub interval from the reported budget, a cheap one keeps the base', async () => {
+    const now = () => new Date('2026-01-01T00:00:00.000Z')
+    const root = await mkdtemp(join(tmpdir(), 'port-watcher-'))
+    const intervalFor = async (cost: number): Promise<number | undefined> => {
+      const watcher = createPipelineWatcher({
+        repositories: [readyEntry('repo-a', root, 'o/a')],
+        onSnapshot: () => undefined,
+        now,
+        setTimer: makeFakeTimer().factory,
+        git: fakeGit({ worktreeList: 0 }),
+        gh: readyItemGh('op', ['op'], { ...RATE_LIMIT_REPLY, cost, resetAt: '2026-01-01T00:00:10Z' }),
+        sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
+      })
+      const snap = await watcher.refresh()
+      watcher.stop()
+      return snap.health[0]?.github.intervalMs
+    }
+
+    // Two round trips per poll (sweep, then detail) each report the cost, so a poll costs twice it.
+    expect(await intervalFor(73)).toBe(210_240)
+    expect(await intervalFor(1)).toBe(60_000)
   })
 })
 
@@ -300,7 +312,7 @@ describe('createPipelineWatcher — tick wiring (#105)', () => {
       now,
       setTimer: timer.factory,
       git: fakeGit({ worktreeList: 0 }),
-      gh: () => Promise.resolve({ ok: true, stdout: readyItemStdout('op', ['op']), stderr: '' } satisfies GhResult),
+      gh: readyItemGh('op', ['op']),
       sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
     })
 
@@ -324,7 +336,7 @@ describe('createPipelineWatcher — tick wiring (#105)', () => {
       now,
       setTimer: timer.factory,
       git: fakeGit({ worktreeList: 0 }),
-      gh: () => Promise.resolve({ ok: true, stdout: readyItemStdout('op', []), stderr: '' } satisfies GhResult),
+      gh: readyItemGh('op', []),
       sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
     })
 
@@ -348,7 +360,7 @@ describe('createPipelineWatcher — trajectory wiring (#111)', () => {
       now,
       setTimer: timer.factory,
       git: fakeGit({ worktreeList: 0 }),
-      gh: () => Promise.resolve({ ok: true, stdout: readyItemStdout('op', ['op']), stderr: '' } satisfies GhResult),
+      gh: readyItemGh('op', ['op']),
       sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
       recordTick: (repoRoot, event) => {
         calls.push({ repoRoot, event })
@@ -383,7 +395,7 @@ describe('createPipelineWatcher — trajectory wiring (#111)', () => {
       now,
       setTimer: timer.factory,
       git: fakeGit({ worktreeList: 0 }),
-      gh: () => Promise.resolve({ ok: true, stdout: readyItemStdout('op', ['op']), stderr: '' } satisfies GhResult),
+      gh: readyItemGh('op', ['op']),
       sessionReader: () => Promise.resolve({ ok: true, sessions: [] }),
       recordTick: () =>
         new Promise((resolve) => {

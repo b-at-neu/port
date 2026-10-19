@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { resolveVocabulary, type LabelVocabulary } from '@/utils/labels/vocabulary'
-import { buildClaimPreflightQuery, buildGatePreflightQuery, buildItemStatesQuery, buildItemsByNumberQuery, buildPipelineQuery, graphqlStringLiteral } from '@/main/github/query'
+import {
+  FIRST_SWEEP_PAGE,
+  buildClaimPreflightQuery,
+  buildGatePreflightQuery,
+  buildItemDetailsQuery,
+  buildItemStatesQuery,
+  buildItemsByNumberQuery,
+  buildPipelineQuery,
+  graphqlStringLiteral,
+} from '@/main/github/query'
 
 describe('graphqlStringLiteral', () => {
   it('round-trips a name containing a double quote, a backslash, and a newline', () => {
@@ -16,10 +25,38 @@ describe('graphqlStringLiteral', () => {
   })
 })
 
+function countOf(document: string, needle: string): number {
+  return document.split(needle).length - 1
+}
+
 describe('buildPipelineQuery', () => {
-  it('emits two aliases per enabled label and none for a disabled one', () => {
-    // No shipped label is module-gated any more, so this builds a LabelVocabulary by hand to keep
-    // buildPipelineQuery's handling of `disabled` under test rather than dropping the case.
+  it('has one issues and one pullRequests connection whatever the label count', () => {
+    const two: LabelVocabulary = {
+      labels: [
+        { key: 'ready', name: 'ready', source: 'default', module: 'core', role: 'trigger' },
+        { key: 'blocked', name: 'blocked', source: 'default', module: 'core', role: 'gate' },
+      ],
+      disabled: [],
+      problems: [],
+    }
+    const all = resolveVocabulary({})
+    expect(all.labels.length).toBeGreaterThan(two.labels.length)
+    for (const vocabulary of [two, all]) {
+      const document = buildPipelineQuery(vocabulary, FIRST_SWEEP_PAGE)
+      expect(countOf(document, 'issues(')).toBe(1)
+      expect(countOf(document, 'pullRequests(')).toBe(1)
+    }
+  })
+
+  it('two vocabularies differ only inside the labels list', () => {
+    const base = resolveVocabulary({})
+    const fewer: LabelVocabulary = { ...base, labels: base.labels.slice(0, 2) }
+    const withoutList = (document: string): string => document.replace(/labels: \[[^\]]*\]/g, 'labels: []')
+    expect(withoutList(buildPipelineQuery(base, FIRST_SWEEP_PAGE))).toBe(withoutList(buildPipelineQuery(fewer, FIRST_SWEEP_PAGE)))
+    expect(buildPipelineQuery(base, FIRST_SWEEP_PAGE)).not.toBe(buildPipelineQuery(fewer, FIRST_SWEEP_PAGE))
+  })
+
+  it('lists every enabled name and none for a disabled one', () => {
     const vocabulary: LabelVocabulary = {
       labels: [
         { key: 'ready', name: 'ready', source: 'default', module: 'core', role: 'trigger' },
@@ -28,51 +65,48 @@ describe('buildPipelineQuery', () => {
       disabled: ['refreshBranch', 'refreshing'],
       problems: [],
     }
-    const { document, aliases } = buildPipelineQuery(vocabulary)
-
-    expect(aliases.length).toBe(vocabulary.labels.length)
-    expect(vocabulary.disabled.length).toBeGreaterThan(0)
-    for (const disabledKey of vocabulary.disabled) {
-      expect(aliases.some((a) => a.key === disabledKey)).toBe(false)
-    }
-    for (const alias of aliases) {
-      expect(document).toContain(`${alias.issueAlias}: issues(`)
-      expect(document).toContain(`${alias.prAlias}: pullRequests(`)
-    }
+    const document = buildPipelineQuery(vocabulary, FIRST_SWEEP_PAGE)
+    expect(document).toContain('labels: ["ready", "blocked"]')
+    expect(document).not.toContain('refresh')
   })
 
-  it('aliases are unique, GraphQL-name-shaped, and independent of the label text', () => {
-    const vocabulary = resolveVocabulary({ labels: { ready: 'a name with spaces & symbols!' } })
-    const { aliases } = buildPipelineQuery(vocabulary)
-    const seen = new Set<string>()
-    for (const alias of aliases) {
-      for (const name of [alias.issueAlias, alias.prAlias]) {
-        expect(seen.has(name)).toBe(false)
-        seen.add(name)
-        expect(/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)).toBe(true)
-      }
-    }
+  it('a label name containing a double quote round-trips through the built document', () => {
+    const vocabulary = resolveVocabulary({ labels: { ready: 'weird "quoted" label' } })
+    expect(buildPipelineQuery(vocabulary, FIRST_SWEEP_PAGE)).toContain(graphqlStringLiteral('weird "quoted" label'))
   })
 
-  it('every connection carries totalCount', () => {
-    const vocabulary = resolveVocabulary({})
-    const { document } = buildPipelineQuery(vocabulary)
-    const connectionLines = document.split('\n').filter((line) => /^\s*(i\d+|p\d+|repoLabels):/.test(line))
-    expect(connectionLines.length).toBeGreaterThan(0)
-    for (const line of connectionLines) {
-      expect(line).toContain('totalCount')
-    }
+  it('every connection carries totalCount, and each sweep connection its pageInfo', () => {
+    const document = buildPipelineQuery(resolveVocabulary({}), FIRST_SWEEP_PAGE)
+    const lines = document.split('\n').filter((line) => /^\s*(issues|pullRequests|repoLabels):/.test(line))
+    expect(lines).toHaveLength(3)
+    for (const line of lines) expect(line).toContain('totalCount')
+    for (const line of lines.filter((l) => !l.includes('repoLabels'))) expect(line).toContain('pageInfo { hasNextPage endCursor }')
   })
 
   it('never uses GraphQL search', () => {
-    const vocabulary = resolveVocabulary({})
-    const { document } = buildPipelineQuery(vocabulary)
-    expect(document).not.toContain('search(')
+    expect(buildPipelineQuery(resolveVocabulary({}), FIRST_SWEEP_PAGE)).not.toContain('search(')
   })
 
-  it('requests viewer as a top-level field, outside repository (#94)', () => {
-    const vocabulary = resolveVocabulary({})
-    const { document } = buildPipelineQuery(vocabulary)
+  it('holds none of the heavy fields the detail read owns', () => {
+    const document = buildPipelineQuery(resolveVocabulary({}), FIRST_SWEEP_PAGE)
+    for (const heavy of ['reviews', 'comments', 'timelineItems', 'commits', 'statusCheckRollup']) expect(document).not.toContain(heavy)
+  })
+
+  it('carries the light fields both stages read, and the pull request extras only on pullRequests', () => {
+    const document = buildPipelineQuery(resolveVocabulary({}), FIRST_SWEEP_PAGE)
+    const issues = document.split('\n').find((line) => line.includes('issues(')) ?? ''
+    const pulls = document.split('\n').find((line) => line.includes('pullRequests(')) ?? ''
+    for (const line of [issues, pulls]) {
+      for (const field of ['updatedAt', 'assignees(first: 20)', 'labels(first: 100)']) expect(line).toContain(field)
+    }
+    for (const field of ['headRefOid', 'mergeable', 'mergedAt']) {
+      expect(pulls).toContain(field)
+      expect(issues).not.toContain(field)
+    }
+  })
+
+  it('requests viewer as a top-level field, outside repository', () => {
+    const document = buildPipelineQuery(resolveVocabulary({}), FIRST_SWEEP_PAGE)
     const repositoryStart = document.indexOf('repository(owner:')
     const viewerIndex = document.indexOf('viewer { login }')
     expect(viewerIndex).toBeGreaterThan(-1)
@@ -80,34 +114,67 @@ describe('buildPipelineQuery', () => {
     expect(viewerIndex).toBeGreaterThan(closeIndex)
   })
 
-  it('a label name containing a double quote round-trips through the built document', () => {
-    const vocabulary = resolveVocabulary({ labels: { ready: 'weird "quoted" label' } })
-    const { document } = buildPipelineQuery(vocabulary)
-    expect(document).toContain(graphqlStringLiteral('weird "quoted" label'))
+  it('a later page omits repoLabels and viewer, keeps rateLimit, and asks only for the surface still paging', () => {
+    const vocabulary = resolveVocabulary({})
+    const document = buildPipelineQuery(vocabulary, { issues: false, pulls: true, issuesAfter: null, pullsAfter: 'cursor-1' })
+    expect(document).not.toContain('repoLabels')
+    expect(document).not.toContain('viewer')
+    expect(document).not.toContain('issues(')
+    expect(document).toContain('rateLimit { cost remaining resetAt limit }')
+    expect(document).toContain('pullRequests(states: OPEN, first: 100')
+    expect(document).toContain('after: "cursor-1"')
   })
 
-  // headRefOid/reviews/comments feed the cycle-cap and zero-diff gates, requested once on the
-  // PullRequestFields fragment; mergeable feeds the mergeability gate the same way.
-  it('the PullRequestFields fragment carries headRefOid, mergeable, reviews, and comments', () => {
-    const vocabulary = resolveVocabulary({})
-    const { document } = buildPipelineQuery(vocabulary)
-    const fragmentStart = document.indexOf('fragment PullRequestFields')
-    const fragment = document.slice(fragmentStart)
-    expect(fragment).toContain('headRefOid')
-    expect(fragment).toContain('mergeable')
-    expect(fragment).toContain('reviews(first: 30)')
-    expect(fragment).toContain('comments(last: 20)')
+  it('the first page passes a null cursor and orders oldest first', () => {
+    const document = buildPipelineQuery(resolveVocabulary({}), FIRST_SWEEP_PAGE)
+    expect(document).toContain('after: null')
+    expect(document).toContain('orderBy: {field: CREATED_AT, direction: ASC}')
+  })
+})
+
+describe('buildItemDetailsQuery', () => {
+  it('emits one aliased lookup per item, in order, by kind', () => {
+    const { document, aliases } = buildItemDetailsQuery([
+      { kind: 'issue', number: 7, rollup: false },
+      { kind: 'pull-request', number: 9, rollup: false },
+    ])
+    expect(aliases).toEqual([
+      { alias: 'd0', kind: 'issue', number: 7, rollup: false },
+      { alias: 'd1', kind: 'pull-request', number: 9, rollup: false },
+    ])
+    expect(document).toContain('d0: issue(number: 7)')
+    expect(document).toContain('d1: pullRequest(number: 9)')
   })
 
-  it('both the IssueFields and PullRequestFields fragments request updatedAt and a LABELED_EVENT timeline', () => {
-    const vocabulary = resolveVocabulary({})
-    const { document } = buildPipelineQuery(vocabulary)
-    const issueFragment = document.slice(document.indexOf('fragment IssueFields'), document.indexOf('fragment PullRequestFields'))
-    const prFragment = document.slice(document.indexOf('fragment PullRequestFields'))
-    for (const fragment of [issueFragment, prFragment]) {
-      expect(fragment).toContain('updatedAt')
-      expect(fragment).toContain('itemTypes: [LABELED_EVENT]')
-    }
+  it('an issue reads only its label timeline; a pull request also reads reviews and comments', () => {
+    const { document } = buildItemDetailsQuery([
+      { kind: 'issue', number: 7, rollup: false },
+      { kind: 'pull-request', number: 9, rollup: false },
+    ])
+    const issue = document.split('\n').find((line) => line.includes('d0:')) ?? ''
+    const pull = document.split('\n').find((line) => line.includes('d1:')) ?? ''
+    expect(issue).toContain('itemTypes: [LABELED_EVENT]')
+    expect(issue).not.toContain('reviews')
+    expect(pull).toContain('itemTypes: [LABELED_EVENT]')
+    expect(pull).toContain('reviews(first: 30)')
+    expect(pull).toContain('comments(last: 20)')
+  })
+
+  it('spreads CheckRollupFields, and declares it, only when a pull request asks for the rollup', () => {
+    const without = buildItemDetailsQuery([{ kind: 'pull-request', number: 9, rollup: false }]).document
+    expect(without).not.toContain('CheckRollupFields')
+    const withRollup = buildItemDetailsQuery([
+      { kind: 'pull-request', number: 9, rollup: false },
+      { kind: 'pull-request', number: 10, rollup: true },
+    ]).document
+    expect(withRollup).toContain('d1: pullRequest(number: 10) {')
+    expect(withRollup).toContain('...CheckRollupFields')
+    expect(countOf(withRollup, '...CheckRollupFields')).toBe(1)
+    expect(withRollup).toContain('fragment CheckRollupFields on PullRequest')
+  })
+
+  it('carries rateLimit, so every round trip reports its own cost', () => {
+    expect(buildItemDetailsQuery([{ kind: 'issue', number: 1, rollup: false }]).document).toContain('rateLimit { cost remaining resetAt limit }')
   })
 })
 

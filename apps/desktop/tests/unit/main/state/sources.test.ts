@@ -6,8 +6,7 @@ import type { CommandResult } from '@/types/platform'
 import type { GhResult } from '@/types/platform'
 import type { RepoId } from '@/utils/repos'
 import { createSourceCache, refreshDenials, refreshGithub, refreshSessions, refreshWorktrees } from '@/main/state/sources'
-
-const EMPTY_PIPELINE_STDOUT = JSON.stringify({ data: { repository: {}, rateLimit: { cost: 1, remaining: 4999, resetAt: '2026-01-01T00:00:00Z' } } })
+import { EMPTY_PIPELINE_STDOUT } from '../../../fixtures/pipeline-reply'
 
 const REPO_1 = 'repo-1' as RepoId
 const REPO_2 = 'repo-2' as RepoId

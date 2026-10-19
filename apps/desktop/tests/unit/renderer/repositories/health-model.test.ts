@@ -46,7 +46,7 @@ function readyState(vocabulary: LabelVocabulary, verdict: ReturnType<typeof veri
     vocabulary: verdict,
     unavailable: [],
     truncated: [],
-    rateLimit: { cost: 1, remaining: 4987, resetAt: '2026-01-01T01:00:00.000Z' },
+    rateLimit: { cost: 1, remaining: 4987, resetAt: '2026-01-01T01:00:00.000Z', limit: 5000 },
     freshness: {
       github: { at: NOW.toISOString() },
       sessions: { at: NOW.toISOString() },

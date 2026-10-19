@@ -1,5 +1,6 @@
 // One refresh primitive per source, each keeping the previous good value in place on a failed attempt. `watcher.ts` decides *when* to call these; no file here names a timer.
-import { fetchItemsByNumber, fetchPipelineItems } from '@/main/github/adapter'
+import { fetchItemsByNumber } from '@/main/github/adapter'
+import { fetchPipelineItems } from '@/main/github/pipeline'
 import type { GhRunner } from '@/types/platform'
 import { collectOrphanNumbers } from '@/main/state/attach'
 import { readDenials } from '@/main/local/denials'

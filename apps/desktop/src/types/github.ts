@@ -86,22 +86,35 @@ export interface QueriedLabel {
   readonly key: LabelKey
   readonly name: string
   readonly source: LabelSource
-  readonly issueAlias: string
-  readonly prAlias: string
 }
 
-/** One entry per alias named in a partial response's `errors[].path`. Never read as empty — excluded from any "nothing at this stage" claim. */
+/** The two connections the pipeline sweep reads. */
+export type SweepAlias = 'issues' | 'pullRequests'
+
+/** Which sweep connections a page requests and where each resumes; a later page asks only for the surface still paging. */
+export interface SweepPage {
+  readonly issues: boolean
+  readonly pulls: boolean
+  readonly issuesAfter: string | null
+  readonly pullsAfter: string | null
+}
+
+/** One detail-read alias's reply node, keyed by the item it was asked about. */
+export interface ItemDetail {
+  readonly kind: PipelineItemKind
+  readonly number: number
+  readonly node: unknown
+}
+
+/** One entry per sweep connection named in a partial response's `errors[].path`. Never read as empty — excluded from any "nothing at this stage" claim. */
 export interface UnavailableAlias {
-  readonly alias: string
-  readonly key: LabelKey
+  readonly alias: SweepAlias
   readonly surface: PipelineItemKind
-  readonly name: string
 }
 
-/** One entry per connection whose `totalCount` exceeds its `nodes` length. Deliberately not paginated. */
+/** One entry per sweep connection that still had pages left when the page cap stopped the read. */
 export interface TruncatedSet {
-  readonly alias: string
-  readonly key: LabelKey
+  readonly alias: SweepAlias
   readonly surface: PipelineItemKind
   readonly totalCount: number
   readonly received: number
@@ -111,6 +124,8 @@ export interface RateLimitInfo {
   readonly cost: number
   readonly remaining: number
   readonly resetAt: string
+  /** The account's hourly point budget; `0` when unreadable, like the other fields. */
+  readonly limit: number
 }
 
 export interface ItemRef {
@@ -266,8 +281,6 @@ export interface FetchItemsByNumberParams {
 }
 
 export interface AliasInfo {
-  readonly key: LabelKey
-  readonly name: string
   readonly surface: PipelineItemKind
 }
 
