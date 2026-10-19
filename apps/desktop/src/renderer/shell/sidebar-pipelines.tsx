@@ -2,7 +2,8 @@
 import { useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { cn } from '@/renderer/lib/utils'
+import { NEEDS_YOU_TONE } from '@/renderer/lib/phase-tone'
+import { PhaseDot } from '@/renderer/components/phase-dot'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { EmptyState } from '@/renderer/components/empty-state'
 import { ErrorBanner } from '@/renderer/components/error-banner'
@@ -74,12 +75,9 @@ function SessionLinks({ sessions }: { readonly sessions: readonly PipelineSessio
           }
           className="flex h-6.5 items-center gap-1.5 rounded-md py-0 pr-2 pl-8 text-small text-foreground-secondary hover:bg-accent"
         >
-          <span
-            aria-hidden="true"
-            className={cn('size-1.5 shrink-0 rounded-full', session.dot === 'attention' ? 'bg-attention-dot animate-pulse' : session.dot === 'working' ? 'bg-working-dot' : 'bg-idle-dot')}
-          />
+          <PhaseDot tone={session.tone} />
           <span className="truncate">{session.label}</span>
-          <span className="sr-only">{session.dot === 'attention' ? 'Needs you' : session.dot === 'working' ? 'Working' : 'Idle'}</span>
+          <span className="sr-only">{session.statusText}</span>
         </Link>
       ))}
     </div>
@@ -111,7 +109,7 @@ function RepoRow({ row, collapsed, onToggle }: { readonly row: PipelineRow; read
         <span className="flex-1 truncate" title={row.name}>
           {row.name}
         </span>
-        {collapsed && row.needsYou ? <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-attention-dot animate-pulse" /> : null}
+        {collapsed && row.needsYou ? <PhaseDot tone={NEEDS_YOU_TONE} /> : null}
         <RunStateMenu row={row} />
       </div>
       {!collapsed ? <SessionLinks sessions={row.sessions} /> : null}

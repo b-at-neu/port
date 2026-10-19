@@ -1,11 +1,16 @@
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { PipelineItemKind } from '@/types/github'
-import type { PhaseKey, PhaseSegmentState } from '@/types/board'
+import type { PhaseKey, PhaseSegment } from '@/types/board'
 import { PHASE_KEYS } from '@/types/board'
+import { paletteOf, type LabelPalette } from '@/utils/labels/defaults'
 
-interface PhaseSegment {
-  readonly phase: PhaseKey
-  readonly state: PhaseSegmentState
+const SEGMENT_PALETTE: Readonly<Record<PhaseKey, LabelPalette>> = {
+  plan: 'plan',
+  planReview: 'plan',
+  implement: 'implement',
+  review: 'review',
+  revision: 'revise',
+  merge: 'done',
 }
 
 // needsHuman/blocked are resolved by item kind in currentPhaseFor, never
@@ -49,16 +54,17 @@ export function currentPhaseFor(params: Pick<PhaseModelParams, 'stageKey' | 'kin
 
 export function phaseSegmentsFor(params: PhaseModelParams): readonly PhaseSegment[] {
   const { stageKey, kind, merged } = params
-  if (merged) return PHASE_KEYS.map((phase) => ({ phase, state: 'complete' as const }))
+  if (merged) return PHASE_KEYS.map((phase) => ({ phase, state: 'complete' as const, palette: 'done' as const }))
 
   const attention = stageKey === 'needsHuman' || stageKey === 'blocked'
   const current = currentPhaseFor({ stageKey, kind })
   const currentPos = current !== null ? phaseIndex(current) : -1
+  const currentPalette: LabelPalette | null = attention ? 'needs-you' : stageKey !== null ? paletteOf(stageKey) : null
 
   return PHASE_KEYS.map((phase, index): PhaseSegment => {
-    if (current === null) return { phase, state: 'pending' }
-    if (index < currentPos) return { phase, state: 'finished' }
-    if (index > currentPos) return { phase, state: 'pending' }
-    return { phase, state: attention ? 'current-attention' : 'current-working' }
+    if (current === null) return { phase, state: 'pending', palette: null }
+    if (index < currentPos) return { phase, state: 'finished', palette: SEGMENT_PALETTE[phase] }
+    if (index > currentPos) return { phase, state: 'pending', palette: null }
+    return { phase, state: attention ? 'current-attention' : 'current-working', palette: currentPalette }
   })
 }

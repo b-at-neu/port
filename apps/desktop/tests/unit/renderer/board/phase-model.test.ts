@@ -72,3 +72,38 @@ describe('phaseSegmentsFor', () => {
     expect(statesOf('prOpened')).toEqual(PHASE_KEYS.map(() => 'pending'))
   })
 })
+
+describe('phaseSegmentsFor palettes', () => {
+  function palettesOf(stageKey: LabelKey | null, kind: 'issue' | 'pull-request' = 'issue', merged = false) {
+    return phaseSegmentsFor({ stageKey, kind, merged }).map((s) => s.palette)
+  }
+
+  it('finished segments take their own phase palette, the current one the stage palette, the rest none', () => {
+    expect(palettesOf('inProgress')).toEqual(['plan', 'plan', 'implement', null, null, null])
+    expect(palettesOf('revising', 'pull-request')).toEqual(['plan', 'plan', 'implement', 'review', 'revise', null])
+  })
+
+  it('the plan-review gate is the plan palette', () => {
+    expect(palettesOf('planReview')).toEqual(['plan', 'plan', null, null, null, null])
+  })
+
+  it('a refresh stage paints the last segment grey after every earlier phase', () => {
+    expect(palettesOf('refreshing', 'pull-request')).toEqual(['plan', 'plan', 'implement', 'review', 'revise', 'refresh'])
+  })
+
+  it('a ready-to-merge pull request ends in the done palette', () => {
+    expect(palettesOf('approved', 'pull-request')[PHASE_KEYS.indexOf('merge')]).toBe('done')
+  })
+
+  it('needs-you replaces the current segment palette only', () => {
+    expect(palettesOf('needsHuman', 'issue')).toEqual(['plan', 'plan', 'needs-you', null, null, null])
+  })
+
+  it('a merged pull request is every segment done', () => {
+    expect(palettesOf('needsRevision', 'pull-request', true)).toEqual(PHASE_KEYS.map(() => 'done'))
+  })
+
+  it('an unstaged row has no palette on any segment', () => {
+    expect(palettesOf(null)).toEqual(PHASE_KEYS.map(() => null))
+  })
+})

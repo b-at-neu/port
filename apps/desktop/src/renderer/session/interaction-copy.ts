@@ -1,4 +1,5 @@
 // Every copy string for the controls bar, question card, and plan card.
+import type { HostedSessionSnapshot } from '@/types/hosting'
 
 export const QUESTION_HEADING = 'Claude is asking'
 export const QUESTION_SEND = 'Send answers'
@@ -46,4 +47,11 @@ export const MODELS_LOADING = 'Loading models…'
 
 export function sidebarDotLabel(interactionKind: 'question' | 'plan'): string {
   return interactionKind === 'question' ? 'Claude is asking a question' : 'Plan ready for review'
+}
+
+/** What a session is waiting on, from its oldest pending question or plan, else a bare permission prompt; `null` when it waits on nothing. */
+export function waitingLabelOf(session: Pick<HostedSessionSnapshot, 'pendingPermissions'>): string | null {
+  const oldest = session.pendingPermissions.filter((permission) => permission.interaction !== null).sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))[0]
+  if (oldest?.interaction) return sidebarDotLabel(oldest.interaction.kind)
+  return session.pendingPermissions.length > 0 ? 'Waiting for your permission' : null
 }

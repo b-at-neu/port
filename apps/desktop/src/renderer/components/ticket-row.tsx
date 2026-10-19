@@ -5,11 +5,11 @@ import { cn } from '@/renderer/lib/utils'
 import type { BoardItemRow } from '@/types/board'
 import { autoPlanTagLabel, autoPlanTagTitle, dispatchedTagLabel, dispatchedTagTitle, noTicketTagLabel, noTicketTagTitle, operatorJoinedTagLabel, operatorJoinedTagTitle } from '@/renderer/board/copy'
 import { prSuffixOf } from '@/utils/tickets/ticket'
-import { isDispatchedRow, nextActionFor, phaseLabelFor, pillStatusFor } from '@/renderer/board/row-model'
+import { isDispatchedRow, nextActionFor, phaseLabelFor, phaseToneFor } from '@/renderer/board/row-model'
 import { openReviewDialog } from '@/renderer/gate/controller'
 import { openDecision } from '@/renderer/decision/controller'
 import { PhaseBar } from '@/renderer/components/phase-bar'
-import { StatusPill } from '@/renderer/components/status-pill'
+import { PhasePill } from '@/renderer/components/phase-pill'
 import type { useListSelection } from '@/renderer/shell/list-selection'
 
 interface TicketRowProps {
@@ -84,7 +84,7 @@ export function TicketRow({ row, rowProps, operatorJoined = false }: TicketRowPr
         </span>
       ) : null}
       <PhaseBar stageKey={row.stageLabel?.key ?? null} kind={item.kind} merged={item.mergedAt !== null} className="shrink-0" />
-      <StatusPill status={pillStatusFor(row)} label={phaseLabelFor(row)} className="shrink-0" />
+      <PhasePill tone={phaseToneFor(row)} label={phaseLabelFor(row)} className="shrink-0" />
       {isDispatchedRow(row) ? (
         <span title={dispatchedTagTitle()} aria-label={dispatchedTagTitle()} className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-meta text-foreground-secondary">
           {dispatchedTagLabel()}

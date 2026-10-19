@@ -7,8 +7,17 @@ import type { HostedSessionSnapshot } from '@/types/hosting'
 import type { TicketIndex } from '@/types/ticket'
 import { needsYouItems, repoNeedsYou } from '@/renderer/board/needs-you'
 import { ticketIndex, ticketLabel } from '@/utils/tickets/ticket'
-import type { PillStatus } from '@/types/components'
+import type { PhaseTone, PillStatus } from '@/types/components'
 import type { PipelineRow, PipelineSessionRow } from '@/types/shell'
+import { stageKeyOf } from '@/renderer/board/row-model'
+import { stageAgentPhaseName } from '@/renderer/board/copy'
+import { PHASE_NAMES } from '@/renderer/lib/phase'
+import { phaseTone } from '@/renderer/lib/phase-tone'
+import { classifyHandbackText } from '@/utils/stage/handback-text'
+
+function statusTextOf(tone: PhaseTone, phaseName: string): string {
+  return tone.palette === 'needs-you' ? 'Needs you' : phaseName
+}
 
 function sessionsFor(repoId: RepoId, index: TicketIndex, needsYouNumbers: ReadonlySet<number>): PipelineSessionRow[] {
   const rows: PipelineSessionRow[] = []
@@ -19,23 +28,26 @@ function sessionsFor(repoId: RepoId, index: TicketIndex, needsYouNumbers: Readon
     if (liveAgent === undefined && liveSession === undefined) continue
 
     const activity = liveAgent?.activity ?? liveSession?.activity ?? 'dormant'
-    const dot: PipelineSessionRow['dot'] = needsYouNumbers.has(ticket.ref.number) ? 'attention' : activity === 'active' ? 'working' : 'idle'
+    const stageKey = stageKeyOf(item.stages, item.stage)
+    const tone = phaseTone({ stageKey, active: activity === 'active', waitingOnYou: needsYouNumbers.has(ticket.ref.number), operatorNeeded: false })
     const transcript: PipelineSessionRow['transcript'] =
       liveAgent !== undefined ? { sessionId: liveAgent.sessionId, agentId: liveAgent.agentId } : liveSession !== undefined ? { sessionId: liveSession.sessionId, agentId: null } : null
 
-    rows.push({ key: `${repoId}-${ticket.ref.number}`, repoId, number: ticket.ref.number, label: ticketLabel(ticket.ref), dot, sessionKey: null, transcript })
+    const statusText = statusTextOf(tone, stageKey !== null ? (PHASE_NAMES[stageKey] ?? stageKey) : 'Unstaged')
+    rows.push({ key: `${repoId}-${ticket.ref.number}`, repoId, number: ticket.ref.number, label: ticketLabel(ticket.ref), tone, statusText, sessionKey: null, transcript })
   }
   return rows
 }
 
-/** A live stage session's own row, following `sidebar-sessions.tsx`'s own dot rules. `repoId` is passed in rather than read off `session` — this is only ever called once `session.repoId` has already been narrowed to match it. */
+/** A live stage session's own row. A permission prompt or a `QUESTIONS FOR HUMAN:`/`BLOCKED:` hand-back means the operator is needed, whatever phase it is in. `repoId` is passed in rather than read off `session` — this is only ever called once `session.repoId` has already been narrowed to match it. */
 function stageRowFor(repoId: RepoId, session: HostedSessionSnapshot, index: TicketIndex): PipelineSessionRow {
   const stage = session.stage
   if (stage === null) throw new Error('stageRowFor called with a non-stage snapshot')
   const ticket = index.byNumber.get(stage.number)
   const label = session.title ?? (ticket !== undefined ? ticketLabel(ticket.ref) : `#${String(stage.number)}`)
-  const dot: PipelineSessionRow['dot'] = session.pendingPermissions.length > 0 ? 'attention' : session.phase === 'starting' || session.phase === 'streaming' ? 'working' : 'idle'
-  return { key: session.sessionKey, repoId, number: ticket?.ref.number ?? stage.number, label, dot, sessionKey: session.sessionKey, transcript: null }
+  const operatorNeeded = session.pendingPermissions.length > 0 || classifyHandbackText(session.lastResult?.text ?? '') !== null
+  const tone = phaseTone({ stageKey: stage.trigger, active: true, waitingOnYou: false, operatorNeeded })
+  return { key: session.sessionKey, repoId, number: ticket?.ref.number ?? stage.number, label, tone, statusText: statusTextOf(tone, stageAgentPhaseName(stage.agent)), sessionKey: session.sessionKey, transcript: null }
 }
 
 /** Ownership gates the pill ahead of run state — `terminal`/`unreadable` each have their

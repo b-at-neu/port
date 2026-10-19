@@ -1,5 +1,6 @@
 // Shared view-model types for components/ and their renderer callers — multi-file or test-only.
 import type { ReactNode } from 'react'
+import type { LabelPalette } from '@/utils/labels/defaults'
 import type { FileDiff, ToolDetail, TranscriptEntry } from '@/utils/sessions/transcript'
 
 export interface ComposerAttachmentChip {
@@ -48,3 +49,10 @@ export interface SuggestionRow {
 }
 
 export type PillStatus = 'working' | 'attention' | 'success' | 'danger' | 'idle'
+
+/** How a phase indicator paints: a palette (or `unstaged`), a ring for queued versus filled for in flight, and whether it pulses for the operator. */
+export interface PhaseTone {
+  readonly palette: LabelPalette | 'unstaged'
+  readonly fill: 'queued' | 'active'
+  readonly pulse: boolean
+}

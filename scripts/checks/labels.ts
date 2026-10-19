@@ -186,8 +186,28 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
     }
   }
 
-  // --- Label colours are well-formed and distinct — every label's position within its role
-  // ramp depends on a unique hex; a duplicate collapses two labels pixel-identical, silently. ---
+  // --- Desktop app's LABEL_PALETTES matches labels.json's palette field, both directions — hand-
+  // maintained in utils/labels/defaults.ts for the same widening reason, so it must agree with every distinct palette labels.json uses. ---
+  {
+    const rel = 'apps/desktop/src/utils/labels/defaults.ts';
+    const text = readFileSync(join(root, rel), 'utf8');
+    const m = /LABEL_PALETTES\s*=\s*\[([^\]]*)\]\s*as const/.exec(text);
+    if (!m) {
+      fail('labels', `${rel} has no 'LABEL_PALETTES = [...] as const' array`);
+    } else {
+      const declared = new Set([...m[1].matchAll(/'([^']+)'/g)].map((t) => t[1]));
+      const real = new Set<string>(readJson('plugins/port/data/labels.json').labels.map((l: any) => l.palette).filter((p: unknown) => p !== null));
+      for (const p of declared) {
+        if (!real.has(p)) fail('labels', `${rel}'s LABEL_PALETTES has '${p}', which no labels.json entry uses`);
+      }
+      for (const p of real) {
+        if (!declared.has(p)) fail('labels', `labels.json uses palette '${p}', missing from ${rel}'s LABEL_PALETTES`);
+      }
+      ok();
+    }
+  }
+
+  // --- Label colours are well-formed and distinct — a shared colour collapses two labels pixel-identical, and previousColors entries must be well-formed too ---
   {
     const labels = readJson('plugins/port/data/labels.json').labels;
     const seen = new Map();
@@ -200,6 +220,27 @@ export default async function ({ expect, fail, note, ok }: Reporter) {
         fail('label-colors', `'${l.key}' and '${seen.get(l.color)}' share color '${l.color}'`);
       } else {
         seen.set(l.color, l.key);
+      }
+      if (!Array.isArray(l.previousColors)) {
+        fail('label-colors', `'${l.key}' has no previousColors array — use [] when port never shipped another colour for it`);
+        continue;
+      }
+      for (const previous of l.previousColors) {
+        if (typeof previous !== 'string' || !/^[0-9A-F]{6}$/.test(previous)) {
+          fail('label-colors', `'${l.key}' has a malformed previousColors entry ${JSON.stringify(previous)}, expected six uppercase hex digits`);
+        }
+      }
+    }
+    ok();
+  }
+
+  // --- Every label carries a palette — null for a marker and a phase for everything else, so a new label cannot ship uncoloured by phase ---
+  {
+    const labels = readJson('plugins/port/data/labels.json').labels;
+    for (const l of labels) {
+      const expectsNull = l.role === 'marker';
+      if (expectsNull !== (l.palette === null)) {
+        fail('label-colors', `'${l.key}' (role ${l.role}) has palette ${JSON.stringify(l.palette)} — ${expectsNull ? 'a marker has none' : 'every non-marker label belongs to a phase palette'}`);
       }
     }
     ok();

@@ -9,7 +9,8 @@ import type { DispatchRecord } from '@/types/dispatch'
 import type { AttachedAgent, AttachedSession, StageLabel } from '@/types/state'
 import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { LabelRole } from '@/utils/labels/defaults'
-import type { PillStatus } from '@/types/components'
+import type { PhaseTone } from '@/types/components'
+import { phaseTone } from '@/renderer/lib/phase-tone'
 import type { ItemActionState, StageLinkTarget } from '@/types/board'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
 import { actionRefusalNote, actionResultCopy, decisionButtonLabel, decisionRefusalNote, openPrButtonLabel, reviewPlanButtonLabel, stageAgentPhaseName } from '@/renderer/board/copy'
@@ -19,14 +20,16 @@ export function stageKeyOf(stages: readonly StageLabel[], stage: LabelRole | nul
   return stages.find((label) => label.role === stage)?.key ?? null
 }
 
-// Mirrors board/sections.ts's own waiting-on-you predicate, so a row's
-// section and its pill colour can never disagree.
-export function pillStatusFor(row: BoardItemRow): PillStatus {
-  if (row.displayStatus.status === 'interrupted') return 'attention'
-  if (needsYouReasonOf(row.stageLabel?.key) !== undefined) return 'attention'
-  if (row.displayStatus.status === 'stalled') return 'danger'
-  if (row.displayStatus.status === 'in-flight') return 'working'
-  return 'idle'
+// `waitingOnYou` mirrors board/sections.ts's own waiting-on-you predicate, so a row's
+// section and its pulse can never disagree.
+export function phaseToneFor(row: BoardItemRow): PhaseTone {
+  const status = row.displayStatus.status
+  return phaseTone({
+    stageKey: row.stageLabel?.key ?? null,
+    active: status === 'in-flight',
+    waitingOnYou: needsYouReasonOf(row.stageLabel?.key) !== undefined,
+    operatorNeeded: status === 'interrupted' || status === 'stalled',
+  })
 }
 
 /** A live stage session exists but the label still says the item is only queued — the `Dispatched` window before the agent's first label swap. */

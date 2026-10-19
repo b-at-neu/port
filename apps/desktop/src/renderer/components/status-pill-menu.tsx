@@ -9,7 +9,7 @@ import type { PillStatus } from '@/types/components'
 
 const DOT_CLASS: Readonly<Record<PillStatus, string>> = {
   working: 'bg-working-dot',
-  attention: 'bg-attention-dot animate-pulse',
+  attention: 'bg-attention-dot',
   success: 'bg-success-dot',
   danger: 'bg-danger-dot',
   idle: 'bg-idle-dot',

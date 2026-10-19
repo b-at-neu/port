@@ -260,7 +260,7 @@ The users of this system are operators reading GitHub and a terminal, so "user-f
 
 Narrow but real, because the pipeline's whole visible state is a set of GitHub labels.
 
-**Label colour encodes role by hue and position by lightness.** Triggers blue, in-flight amber, gates red, terminal green, each an ordered Primer ramp in pipeline order, so position within a role is legible from colour alone. Gates step two shades at a time rather than one, "so severity reads from a large lightness delta rather than hue alone — legible under red-green colour vision deficiency" (`labels.json`'s own `$comment`). Every colour is a well-formed six-digit uppercase hex and no two labels share one ("Label colours are well-formed and distinct").
+**Label colour encodes the pipeline phase by hue and position by lightness.** One palette per phase (plan, implement, review, revise, refresh, needs-you, done), the same hue on GitHub, the Board pill and the sidebar dot. Within a phase a queued trigger is the lighter shade and the in-flight label the full colour, which is exactly the app's light-theme dot. Needs-you gates step two shades apart (`DC2626` → `991B1B`), so the pair still separates by lightness under red-green colour vision deficiency. `scripts/checks/phase-palette.ts` pins `labels.json`, `theme.css` and DESIGN §1 together and enforces the hue, lightness and contrast rules. Every colour is a well-formed six-digit uppercase hex and no two labels share one ("Label colours are well-formed and distinct").
 
 **Severity is never colour-only.** Review findings carry both an emoji and the word: 🔴 Critical · 🟠 Medium · 🟡 Low · ⚪ Nit.
 

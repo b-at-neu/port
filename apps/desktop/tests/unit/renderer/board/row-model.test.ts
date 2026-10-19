@@ -8,7 +8,7 @@ import type { SessionKey } from '@/types/hosting'
 import type { DispatchRecord } from '@/types/dispatch'
 import type { Ticket } from '@/types/ticket'
 import { ticketIndex } from '@/utils/tickets/ticket'
-import { actionNoteFor, agentSummaryOf, decisionNoteFor, isDispatchedRow, nextActionFor, operatorJoinedOf, ownershipNoteFor, phaseLabelFor, pillStatusFor, stageKeyOf, stopAttachedAgentNote } from '@/renderer/board/row-model'
+import { actionNoteFor, agentSummaryOf, decisionNoteFor, isDispatchedRow, nextActionFor, operatorJoinedOf, ownershipNoteFor, phaseLabelFor, phaseToneFor, stageKeyOf, stopAttachedAgentNote } from '@/renderer/board/row-model'
 
 const LIVE_PLAN: LiveStage = { agent: 'plan', trigger: 'ready', sessionKey: 'hosted-1' as SessionKey }
 
@@ -18,7 +18,7 @@ const NO_DECISIONS = Object.fromEntries(OPERATOR_DECISIONS.map((d): [OperatorDec
 function row(overrides: {
   readonly kind?: 'issue' | 'pull-request'
   readonly stageKey?: string | null
-  readonly status?: 'waiting' | 'in-flight' | 'stalled' | 'gated' | 'terminal' | 'unstaged'
+  readonly status?: 'waiting' | 'in-flight' | 'stalled' | 'interrupted' | 'gated' | 'terminal' | 'unstaged'
   readonly actions?: Partial<Record<OperatorAction, ActionAvailability>>
   readonly decisions?: Partial<Record<OperatorDecision, DecisionAvailability>>
   readonly agents?: readonly AttachedAgent[]
@@ -208,21 +208,41 @@ describe('stageKeyOf', () => {
   })
 })
 
-describe('pillStatusFor', () => {
-  it('attention when waiting on you (a needs-you stage)', () => {
-    expect(pillStatusFor(row({ stageKey: 'planReview' }))).toBe('attention')
+describe('phaseToneFor', () => {
+  it('a plan gate pulses in the plan colour', () => {
+    expect(phaseToneFor(row({ stageKey: 'planReview' }))).toEqual({ palette: 'plan', fill: 'active', pulse: true })
   })
 
-  it('working when in-flight', () => {
-    expect(pillStatusFor(row({ stageKey: 'inProgress', status: 'in-flight' }))).toBe('working')
+  it('a ready-to-merge row pulses in the done colour', () => {
+    expect(phaseToneFor(row({ stageKey: 'approved', kind: 'pull-request' }))).toEqual({ palette: 'done', fill: 'active', pulse: true })
   })
 
-  it('danger when stalled', () => {
-    expect(pillStatusFor(row({ stageKey: 'inProgress', status: 'stalled' }))).toBe('danger')
+  it.each(['blocked', 'needsHuman'])('%s is red and pulsing', (stageKey) => {
+    expect(phaseToneFor(row({ stageKey }))).toEqual({ palette: 'needs-you', fill: 'active', pulse: true })
   })
 
-  it('idle for everything else (queued)', () => {
-    expect(pillStatusFor(row({ stageKey: 'ready', status: 'waiting' }))).toBe('idle')
+  it('an in-flight stage is filled in its phase colour', () => {
+    expect(phaseToneFor(row({ stageKey: 'inProgress', status: 'in-flight' }))).toEqual({ palette: 'implement', fill: 'active', pulse: false })
+  })
+
+  it('a queued trigger is a ring in its phase colour', () => {
+    expect(phaseToneFor(row({ stageKey: 'ready', status: 'waiting' }))).toEqual({ palette: 'plan', fill: 'queued', pulse: false })
+  })
+
+  it('a trigger whose agent is already running is filled', () => {
+    expect(phaseToneFor(row({ stageKey: 'readyForReview', status: 'in-flight' }))).toEqual({ palette: 'review', fill: 'active', pulse: false })
+  })
+
+  it('a refresh stage is grey', () => {
+    expect(phaseToneFor(row({ stageKey: 'refreshing', status: 'in-flight' })).palette).toBe('refresh')
+  })
+
+  it.each(['stalled', 'interrupted'] as const)('a %s row is red and pulsing over its phase colour', (status) => {
+    expect(phaseToneFor(row({ stageKey: 'inProgress', status }))).toEqual({ palette: 'needs-you', fill: 'active', pulse: true })
+  })
+
+  it('an unstaged row is the idle grey', () => {
+    expect(phaseToneFor(row({ stageKey: null, status: 'unstaged' }))).toEqual({ palette: 'unstaged', fill: 'active', pulse: false })
   })
 })
 
