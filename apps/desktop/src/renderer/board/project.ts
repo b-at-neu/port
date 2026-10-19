@@ -1,5 +1,6 @@
 // The pure board projection — everything the screen decides lives here, testable under `environment: 'node'` with no jsdom dependency.
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
+import { isLiveStageSession } from '@/utils/stage/live'
 import { inspectDenials } from '@/renderer/local/inspect'
 import { actionsFor } from '@/utils/actions/plan'
 import { decisionsFor } from '@/utils/actions/decide'
@@ -88,15 +89,20 @@ function liveStageKey(repoId: RepoId, kind: string, number: number): string {
   return `${repoId}:${kind}:${String(number)}`
 }
 
-/** The newest not-ended, not-closing stage session per (repo, kind, number). */
-function liveStagesOf(sessions: readonly HostedSessionSnapshot[]): ReadonlyMap<string, LiveStage & { readonly startedAt: string }> {
-  const live = new Map<string, LiveStage & { readonly startedAt: string }>()
+interface LiveStageEntry extends LiveStage {
+  readonly startedAt: string
+  readonly working: boolean
+}
+
+/** The newest live stage session per (repo, kind, number). */
+function liveStagesOf(sessions: readonly HostedSessionSnapshot[]): ReadonlyMap<string, LiveStageEntry> {
+  const live = new Map<string, LiveStageEntry>()
   for (const s of sessions) {
-    if (s.stage === null || s.repoId === null || s.phase === 'ended' || s.phase === 'closing') continue
+    if (s.stage === null || s.repoId === null || !isLiveStageSession(s)) continue
     const key = liveStageKey(s.repoId, s.stage.kind, s.stage.number)
     const current = live.get(key)
     if (current === undefined || Date.parse(s.startedAt) > Date.parse(current.startedAt)) {
-      live.set(key, { agent: s.stage.agent, trigger: s.stage.trigger, sessionKey: s.sessionKey, startedAt: s.startedAt })
+      live.set(key, { agent: s.stage.agent, trigger: s.stage.trigger, sessionKey: s.sessionKey, startedAt: s.startedAt, working: s.phase === 'starting' || s.phase === 'streaming' })
     }
   }
   return live
@@ -125,7 +131,7 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
       const decisions = decisionsFor({ item, viewer: repo.viewer, reviewCycleCap: repo.reviewCycleCap, liveStage: liveStage !== null })
       let ds: DisplayStatus
       if (interruptedKeys.has(`${repo.repoId}:${String(item.number)}`)) ds = { status: 'interrupted', staleGithub: false, githubAgeMs: null }
-      else if (liveStage !== null && item.status === 'waiting') ds = { status: 'in-flight', staleGithub: false, githubAgeMs: null }
+      else if (found?.working === true && item.status === 'waiting') ds = { status: 'in-flight', staleGithub: false, githubAgeMs: null }
       else ds = displayStatus(item, health, repo.freshness, now)
       rows.push({ item, displayStatus: ds, liveStage, stageLabel: stageLabelOf(item), actions, decisions, viewer: repo.viewer })
     }

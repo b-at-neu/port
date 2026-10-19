@@ -207,6 +207,14 @@ describe('pipelinesModel', () => {
     expect(row.sessions[0]).toMatchObject({ number: 42, sessionKey: 'hosted-1' })
   })
 
+  it('names a ready repository stage row after the agent, not the trigger label', () => {
+    const queued = item({ stage: 'trigger', stages: [{ key: 'planApproved', name: 'plan approved', role: 'trigger' }], agents: [agent({ activity: 'active' })] })
+    const snapshot = snapshotOf([readyRepoState({ items: [queued] })])
+    const session = stageSession({ key: 'hosted-impl', repoId: REPO_ID, stage: { agent: 'impl', number: 42, kind: 'issue', trigger: 'planApproved' } })
+    expect(assertReady(pipelinesModel([readyEntry()], snapshot)[0]).sessions[0]?.label).toBe('#42 Plan approved')
+    expect(assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [session])[0]).sessions[0]?.label).toBe('#42 Implementing')
+  })
+
   it('transcript target prefers the live agent, falling back to the live session', () => {
     const agentOnly = item({ agents: [agent()] })
     const sessionOnly = item({

@@ -8,6 +8,7 @@ import { MAX_REVISE_NOTE_CHARS } from '@/types/actions'
 import type { BoardSnapshot } from '@/types/board'
 import type { IpcMap } from '@/types/ipc'
 import type { RegistryDeps } from '@/types/registry'
+import { isLiveStageSession } from '@/utils/stage/live'
 import { listRepositories, requireReadyRepo, requireRepoId } from '@/main/registry'
 
 
@@ -116,7 +117,7 @@ export async function resolveItemDecision(registryDeps: RegistryDeps, request: I
     entry: found,
     auditDir,
     scratchDir,
-    liveStage: deps.sessions().some((s) => s.repoId === repoId && s.stage?.number === request.number && s.phase !== 'ended'),
+    liveStage: deps.sessions().some((s) => s.repoId === repoId && s.stage?.number === request.number && isLiveStageSession(s)),
   })
 
   const labelsApplied = result.ok && result.labels.kind === 'applied'

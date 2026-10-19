@@ -222,6 +222,12 @@ describe('projectBoard — live stage sessions', () => {
     expect(row?.displayStatus.status).toBe('waiting')
   })
 
+  it.each([['ready'], ['interrupting']] as const)('keeps a waiting item waiting while its %s session is not working, liveStage still set', (phase) => {
+    const [row] = project([item()], [planSession({ phase })]).rows
+    expect(row?.liveStage).not.toBeNull()
+    expect(row?.displayStatus.status).toBe('waiting')
+  })
+
   it('does not match a session for the same number of the other kind', () => {
     const session = planSession({ stage: { agent: 'plan', number: 1, kind: 'pull-request', trigger: 'ready' } })
     expect(project([item()], [session]).rows[0]?.liveStage).toBeNull()

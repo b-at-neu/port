@@ -103,7 +103,7 @@ function connectSessionListCache(client: QueryClient, subscriptions: Subscriptio
   })
 }
 
-/** `repos:list` is read once at boot, but the dispatcher re-lists repositories every pass. A repository the board reports as ok while the cache still lists it as not ready means the cache is stale. One-directional, so a repository that fails its own read never loops. */
+// One-directional on purpose: a repository that fails its own read must never trigger a loop.
 function reposListIsStale(client: QueryClient, snapshot: BoardSnapshot): boolean {
   const cached = client.getQueryData<ReposListResponse>(ipcQueryOptions('repos:list').queryKey)
   if (cached === undefined || !cached.ok) return false

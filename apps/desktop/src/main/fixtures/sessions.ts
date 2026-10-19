@@ -16,7 +16,7 @@ export const STAGE_IMPL_51_KEY = 'fixture-stage-impl-51' as SessionKey
 /** A live plan session for the board fixture's queued item, dispatched before its agent swaps a label. */
 export const STAGE_PLAN_44_KEY = 'fixture-stage-plan-44' as SessionKey
 
-export const STREAMING_KEY ='fixture-session-streaming' as SessionKey
+export const STREAMING_KEY = 'fixture-session-streaming' as SessionKey
 export const PERMISSION_KEY = 'fixture-session-permission' as SessionKey
 export const ENDED_KEY = 'fixture-session-ended' as SessionKey
 export const STARTING_KEY = 'fixture-session-starting' as SessionKey
