@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { contextMeterLabel, restoreBannerLine, restoreOpenedLine, restorePartialLine, restoreUnavailableLine, usageNoticeLines, usageSessionsLine, usageValue } from '@/renderer/session/rail-copy'
+import { CONTEXT_METER_LABEL, contextMeterLabel, restoreBannerLine, restoreOpenedLine, restorePartialLine, restoreUnavailableLine, usageNoticeLines, usageSessionsLine, usageValue } from '@/renderer/session/rail-copy'
 import type { UsageNotice } from '@/types/session'
 import type { SessionUsage } from '@/utils/hosting/usage'
 
@@ -71,6 +71,12 @@ describe('usageSessionsLine', () => {
   it('pluralizes', () => {
     expect(usageSessionsLine(1)).toBe('1 session with a reading')
     expect(usageSessionsLine(2)).toBe('2 sessions with a reading')
+  })
+})
+
+describe('CONTEXT_METER_LABEL', () => {
+  it('names the meter as context usage', () => {
+    expect(CONTEXT_METER_LABEL).toBe('Context')
   })
 })
 

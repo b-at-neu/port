@@ -57,6 +57,14 @@ body {
   }
 }
 
+/* `scrollbar-width` is not inherited, so the rule has to reach every element. */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-faint) transparent;
+  }
+}
+
 /* Tailwind v4 dropped the default pointer cursor; restore it by element/role so new controls get it free. */
 @layer base {
   button:not(:disabled),

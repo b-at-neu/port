@@ -78,6 +78,7 @@ export const USAGE_THIS_SESSION = 'This session'
 export const USAGE_ALL_SESSIONS = 'All sessions'
 export const USAGE_NONE = 'No usage reported yet.'
 export const CONTEXT_UNKNOWN = 'No context reading yet.'
+export const CONTEXT_METER_LABEL = 'Context'
 
 export function usageValue(totals: UsageTotals): string {
   return `${formatCost(totals.costUsd)} · ${formatTokens(totals.totalTokens)} tokens`
