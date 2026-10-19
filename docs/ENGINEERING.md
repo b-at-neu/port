@@ -65,6 +65,8 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `dispatcher.ts` is the main-process stage-session loop's own composition root; reads `main/dispatch/ownership.ts`'s record for ownership, no hosted Claude session of its own
 - launches go through `launch.ts`'s `StageLauncher` seam (#327 implements it); `launch: null` until then reports `no-launcher` rather than idling silently
 - fires from `main/ipc.ts`'s `onTick:` only — a fresh poll, never `onSnapshot:`'s own republish, which would retrigger the loop off its own state change
+- a pass requested while one is in flight is coalesced into one follow-up on the newest snapshot, never dropped
+- a `completed` hand-back or an applied auto-approve requests one github-scoped read through the watcher, never a second clock, and the dispatch still comes from `onTick`
 - capacity comes from the hosted-session store (`launch.ts`'s `freeSlots`); launches across every repository are serialized into one promise chain so two repositories never race for a slot
 - `ledger.record` only after a launch returns `ok`; the budget gate is the last veto before it
 - `quit.ts` is the quit warning's own pure copy and guard; `main/dialogs.ts`'s `confirmQuit` is its one native dialog

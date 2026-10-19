@@ -58,6 +58,11 @@ export function initialHealth(kind: SourceKind): SourceHealth {
   }
 }
 
+/** An unparseable instant reads as not deferred, so a read that is really limited fails cleanly and sets a fresh `deferredUntil`. */
+export function isDeferred(health: SourceHealth, now: Date): boolean {
+  return health.deferredUntil !== null && Date.parse(health.deferredUntil) > now.getTime()
+}
+
 /** One repository's own health across all four sources; `sessions` is the one machine-wide scan's health, copied onto every repository. */
 export interface RepositoryHealth {
   readonly repoId: RepoId

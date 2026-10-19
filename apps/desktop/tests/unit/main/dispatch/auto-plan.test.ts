@@ -114,6 +114,7 @@ function deps(overrides: Partial<AutoPlannerDeps> = {}): AutoPlannerDeps {
     readOwnership: () => Promise.resolve(OWNED_BY_APP),
     runState: () => 'dispatching',
     autoApprove: () => Promise.resolve(APPLIED),
+    requestRead: () => undefined,
     auditDir: '/audit',
     now: () => new Date('2026-01-01T00:00:01Z'),
     ...overrides,
@@ -169,5 +170,26 @@ describe('createAutoPlanner', () => {
   it('swallows a throw from autoApprove and still records the attempt', async () => {
     const planner = createAutoPlanner(deps({ autoApprove: () => Promise.reject(new Error('boom')) }))
     await expect(planner.consider(snapshotWith([tickReport()], [item()]))).resolves.toBeUndefined()
+  })
+
+  it('requests one read for the repository after two applied approvals', async () => {
+    const reads: RepoId[] = []
+    const planner = createAutoPlanner(deps({ requestRead: (repoId) => reads.push(repoId) }))
+    await planner.consider(snapshotWith([tickReport({ autoApprovals: [{ number: 7 }, { number: 8 }] })], [item(), item({ number: 8 })]))
+    expect(reads).toEqual([REPO_ID])
+  })
+
+  it('requests no read for a no-op write', async () => {
+    const reads: RepoId[] = []
+    const planner = createAutoPlanner(deps({ autoApprove: () => Promise.resolve({ kind: 'no-op' }), requestRead: (repoId) => reads.push(repoId) }))
+    await planner.consider(snapshotWith([tickReport()], [item()]))
+    expect(reads).toEqual([])
+  })
+
+  it('requests no read for a rejected write', async () => {
+    const reads: RepoId[] = []
+    const planner = createAutoPlanner(deps({ autoApprove: () => Promise.reject(new Error('boom')), requestRead: (repoId) => reads.push(repoId) }))
+    await planner.consider(snapshotWith([tickReport()], [item()]))
+    expect(reads).toEqual([])
   })
 })

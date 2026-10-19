@@ -328,7 +328,7 @@ export function registerIpc(): RegisteredIpc {
       void dispatcher.consider(snapshot)
     },
   })
-  bindWatcher(() => watcher.republish())
+  bindWatcher(watcher)
 
   handle('board:snapshot', (_event, request) => {
     if (request !== undefined) {

@@ -3,6 +3,7 @@
 // same rule `board/copy.ts`'s own header states. `board/pipeline-status.tsx`
 // renders this through `repositoryDetailLines`/`itemDetailLines` below,
 // re-reading on every poll so the countdown and the hover detail stay live.
+import { isDeferred } from '@/types/board'
 import type { RepositoryHealth } from '@/types/board'
 import type { DispatchOwner, RunState, RunStatesSnapshot } from '@/types/dispatch'
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
@@ -34,6 +35,13 @@ export function clockLineCopy(nextWakeupAt: string | null, health: readonly Repo
   const minutes = Math.floor(totalSeconds / 60)
   const seconds = totalSeconds % 60
   return `Next wakeup in ${String(minutes)}:${String(seconds).padStart(2, '0')}`
+}
+
+/** Under a repository's tick line while its GitHub reads are deferred — muted, since the operator has nothing to do. */
+export function deferralLineCopy(health: RepositoryHealth | undefined, now: Date): string | null {
+  if (health === undefined || !isDeferred(health.github, now)) return null
+  const label = new Date(Date.parse(health.github.deferredUntil ?? '')).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return `GitHub's rate limit is spent until ${label}. Reads and dispatch wait until then.`
 }
 
 /** The store line, directly above the clock line (#110, #314's own **UX

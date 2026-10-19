@@ -8,7 +8,7 @@ import type { RepositoryHealth } from '@/types/board'
 import { initialHealth } from '@/types/board'
 import type { TickActionable, TickClaim, TickHeld, TickObservation, TickReport } from '@/types/tick'
 import type { RunState } from '@/types/dispatch'
-import { clockLineCopy, cycleDetailCopy, heldDetailCopy, itemDetailLines, observationDetailCopy, repositoryDetailLines, repositoryLineCopy, stalledDetailCopy, storeLineFor, uncheckedDetailCopy } from '@/renderer/board/tick'
+import { clockLineCopy, cycleDetailCopy, deferralLineCopy, heldDetailCopy, itemDetailLines, observationDetailCopy, repositoryDetailLines, repositoryLineCopy, stalledDetailCopy, storeLineFor, uncheckedDetailCopy } from '@/renderer/board/tick'
 
 const NOW = new Date('2026-01-01T00:00:00.000Z')
 const DISPATCHING: RunState = 'dispatching'
@@ -39,6 +39,29 @@ describe('clockLineCopy', () => {
     const dueAt = new Date(NOW.getTime() + 3_600_000)
     const h = health({ github: { ...initialHealth('github'), deferredUntil: dueAt.toISOString() } })
     expect(clockLineCopy(dueAt.toISOString(), [h], NOW)).toContain('waiting out the GitHub rate-limit window')
+  })
+})
+
+describe('deferralLineCopy', () => {
+  const githubDeferredUntil = (deferredUntil: string | null): RepositoryHealth => health({ github: { ...initialHealth('github'), deferredUntil } })
+
+  it('is null without a deferral, or without a health entry', () => {
+    expect(deferralLineCopy(health(), NOW)).toBeNull()
+    expect(deferralLineCopy(undefined, NOW)).toBeNull()
+  })
+
+  it('names the reset time while the deferral is in the future', () => {
+    const dueAt = new Date(NOW.getTime() + 3_600_000)
+    const label = dueAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    expect(deferralLineCopy(githubDeferredUntil(dueAt.toISOString()), NOW)).toBe(`GitHub's rate limit is spent until ${label}. Reads and dispatch wait until then.`)
+  })
+
+  it('is null once the deferral has passed', () => {
+    expect(deferralLineCopy(githubDeferredUntil(new Date(NOW.getTime() - 1).toISOString()), NOW)).toBeNull()
+  })
+
+  it('is null for an unparseable instant', () => {
+    expect(deferralLineCopy(githubDeferredUntil('not a date'), NOW)).toBeNull()
   })
 })
 

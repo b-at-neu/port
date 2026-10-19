@@ -185,6 +185,8 @@ export interface AutoPlannerDeps {
   /** The same per-repository run state `main/dispatch/dispatcher.ts` reads, never a second store. */
   readonly runState: (repoId: RepoId) => RunState
   readonly autoApprove: (params: AutoApprovePlanParams) => Promise<WriteOutcome>
+  /** Asks for one GitHub read of this repository alone, so the next stage sees the label just written. */
+  readonly requestRead: (repoId: RepoId) => void
   readonly auditDir: string
   readonly now: () => Date
 }
@@ -255,6 +257,8 @@ export interface CreateDispatcherParams {
   readonly refreshMemo: RefreshMemo
   /** Cleared for `(repoId, candidate.number)` once a forced launch succeeds — `main/tick/plan.ts`'s own consumer of the same memo, never a second instance. */
   readonly forceDispatch: ForceDispatch
+  /** Asks for one GitHub read of this repository alone — never another source, never another repository. */
+  readonly requestRead: (repoId: RepoId) => void
   readonly dirs: { readonly audit: string; readonly scratch: string }
   readonly onChange: () => void
   readonly now: () => Date
