@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { historyFor, MAX_ENTRIES, NOT_RECALLING, recallNewer, recallOlder, recallText, recordSent } from '@/renderer/session/prompt-history'
-import type { PromptHistoryStorage } from '@/types/session'
+import type { KeyValueStorage } from '@/types/storage'
 import type { RepoId } from '@/utils/repos'
 
 const REPO = 'repo-1' as RepoId
 const OTHER_REPO = 'repo-2' as RepoId
 
-function fakeStorage(): PromptHistoryStorage {
+function fakeStorage(): KeyValueStorage {
   const map = new Map<string, string>()
   return {
     getItem: (key) => map.get(key) ?? null,

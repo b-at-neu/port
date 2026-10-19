@@ -1,6 +1,7 @@
 // Per-repository prompt history — sent text only, newest first, capped and duplicate-collapsed, persisted in localStorage.
 import type { RepoId } from '@/utils/repos'
-import type { PromptHistoryStorage, RecallState } from '@/types/session'
+import type { RecallState } from '@/types/session'
+import type { KeyValueStorage } from '@/types/storage'
 
 export const MAX_ENTRIES = 100
 
@@ -12,11 +13,11 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string')
 }
 
-function defaultStorage(): PromptHistoryStorage {
+function defaultStorage(): KeyValueStorage {
   return window.localStorage
 }
 
-function readAll(storage: PromptHistoryStorage): HistoryByRepo {
+function readAll(storage: KeyValueStorage): HistoryByRepo {
   try {
     const raw = storage.getItem(STORAGE_KEY)
     if (raw === null) return {}
@@ -32,7 +33,7 @@ function readAll(storage: PromptHistoryStorage): HistoryByRepo {
   }
 }
 
-function writeAll(storage: PromptHistoryStorage, all: HistoryByRepo): void {
+function writeAll(storage: KeyValueStorage, all: HistoryByRepo): void {
   try {
     storage.setItem(STORAGE_KEY, JSON.stringify(all))
   } catch {
@@ -41,12 +42,12 @@ function writeAll(storage: PromptHistoryStorage, all: HistoryByRepo): void {
 }
 
 /** Reads this repository's own history, newest first. */
-export function historyFor(repoId: RepoId, storage: PromptHistoryStorage = defaultStorage()): readonly string[] {
+export function historyFor(repoId: RepoId, storage: KeyValueStorage =defaultStorage()): readonly string[] {
   return readAll(storage)[repoId] ?? []
 }
 
 /** Prepends `text` unless it equals the newest entry (collapsing consecutive duplicates), capped at `MAX_ENTRIES`. */
-export function recordSent(repoId: RepoId, text: string, storage: PromptHistoryStorage = defaultStorage()): void {
+export function recordSent(repoId: RepoId, text: string, storage: KeyValueStorage =defaultStorage()): void {
   if (text === '') return
   const all = readAll(storage)
   const existing = all[repoId] ?? []

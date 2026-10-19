@@ -19,12 +19,6 @@ export type RenderableStartFailure = Extract<SessionStartResult, { readonly ok: 
 
 export type NewSessionPreselect = { readonly kind: 'repo'; readonly repoId: RepoId } | { readonly kind: 'path'; readonly path: string } | null
 
-/** Injectable so tests exercise this against a plain fake, never a jsdom `window`. */
-export interface PromptHistoryStorage {
-  getItem(key: string): string | null
-  setItem(key: string, value: string): void
-}
-
 export interface RecallState {
   /** `null` means not currently recalling — the draft is the operator's own typed text. */
   readonly index: number | null

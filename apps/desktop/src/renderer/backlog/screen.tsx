@@ -18,10 +18,17 @@ import { registerListNavigator } from '@/renderer/shell/stores'
 import { useListSelection } from '@/renderer/shell/list-selection'
 import { ROUTE_IDS } from '@/renderer/router/routes'
 import { buildBacklogGroup, relativeAge, exactTime, staleSinceAt } from '@/renderer/backlog/group'
-import type { BacklogGroupView, BacklogRowView } from '@/types/backlog'
-import { backlogEmptyGroupCopy, backlogNotReadyCopy } from '@/renderer/backlog/copy'
+import type { BacklogGroupView, BacklogLabelFilter, BacklogRowView } from '@/types/backlog'
+import { BACKLOG_FILTER_CLEAR, backlogCountCopy, backlogEmptyGroupCopy, backlogFilteredEmptyCopy, backlogNotReadyCopy, backlogParentCopy } from '@/renderer/backlog/copy'
+import { EMPTY_FILTER } from '@/renderer/backlog/filter'
+import { readBacklogFilters, setBacklogFilter } from '@/renderer/backlog/prefs'
+import { LabelFilterMenu } from '@/renderer/backlog/label-filter-menu'
+import { LabelChip } from '@/renderer/components/label-chip'
 import { isReadyRepo } from '@/utils/repos'
 import type { RepoId } from '@/utils/repos'
+
+const MAX_CHIPS = 3
+const FOCUS_RING = 'outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
 
 interface ReadyRepo {
   readonly id: RepoId
@@ -43,6 +50,22 @@ function WorkOnMenu({ row, open, onOpenChange }: { readonly row: BacklogRowView;
       planGate,
       onClaimed: () => void queryClient.invalidateQueries({ queryKey: ['backlog:list'] }),
     })
+  }
+
+  if (row.subIssueCount > 0) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span tabIndex={0} className={`inline-flex rounded-md ${FOCUS_RING}`}>
+            <Button variant="ghost" size="small" disabled data-slot="backlog-work-on">
+              Work on
+              <ChevronDown aria-hidden="true" className="size-3.5" />
+            </Button>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{backlogParentCopy(row.subIssueCount)}</TooltipContent>
+      </Tooltip>
+    )
   }
 
   return (
@@ -83,9 +106,29 @@ function BacklogRow({
   return (
     <div data-slot="backlog-row" {...rowProps} className={`flex h-9 items-center gap-2 px-4 text-body ${rowProps.className}`}>
       <span className="w-12 shrink-0 font-mono tabular-nums text-muted-foreground">#{row.number}</span>
-      <a href={row.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-foreground hover:underline">
+      <a href={row.url} target="_blank" rel="noreferrer" className="min-w-24 flex-1 truncate text-foreground hover:underline">
         {row.title}
       </a>
+      {row.labels.length > 0 ? (
+        <div className="flex min-w-0 max-w-48 gap-1">
+          {row.labels.slice(0, MAX_CHIPS).map((label) => (
+            <LabelChip key={label.name} label={label} />
+          ))}
+          {row.labels.length > MAX_CHIPS ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span tabIndex={0} className={`shrink-0 rounded-full bg-muted px-1.5 text-meta font-medium text-foreground-secondary ${FOCUS_RING}`}>+{row.labels.length - MAX_CHIPS}</span>
+              </TooltipTrigger>
+              <TooltipContent>
+                {row.labels
+                  .slice(MAX_CHIPS)
+                  .map((label) => label.name)
+                  .join(', ')}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+        </div>
+      ) : null}
       {row.assignee !== null ? <span className="shrink-0 text-meta text-muted-foreground">{row.assignee}</span> : null}
       <Tooltip>
         <TooltipTrigger asChild>
@@ -98,16 +141,30 @@ function BacklogRow({
   )
 }
 
-function GroupHeader({ repo, count }: { readonly repo: string; readonly count: number | null }) {
+function GroupHeader({ group, filter, onFilterChange }: { readonly group: BacklogGroupView; readonly filter: BacklogLabelFilter; readonly onFilterChange: (filter: BacklogLabelFilter) => void }) {
   return (
-    <div className="flex h-8 items-center bg-sidebar px-4 text-small font-medium text-foreground-secondary">
-      {repo}
-      {count !== null ? ` · ${String(count)}` : ''}
+    <div className="flex h-8 items-center justify-between bg-sidebar px-4 text-small font-medium text-foreground-secondary">
+      <span>{group.kind === 'loaded' ? backlogCountCopy(group.repo, group.items.length, group.totalCount) : group.repo}</span>
+      {group.kind === 'loaded' && group.labelOptions.length > 0 ? <LabelFilterMenu options={group.labelOptions} filter={filter} onChange={onFilterChange} /> : null}
     </div>
   )
 }
 
-function GroupBody({ group, now, rowPropsFor, menuOpenKey, setMenuOpenKey }: { readonly group: BacklogGroupView; readonly now: Date; readonly rowPropsFor: (key: string) => ReturnType<ReturnType<typeof useListSelection>['rowProps']>; readonly menuOpenKey: string | null; readonly setMenuOpenKey: (key: string | null) => void }) {
+function GroupBody({
+  group,
+  now,
+  rowPropsFor,
+  menuOpenKey,
+  setMenuOpenKey,
+  onClearFilter,
+}: {
+  readonly group: BacklogGroupView
+  readonly now: Date
+  readonly rowPropsFor: (key: string) => ReturnType<ReturnType<typeof useListSelection>['rowProps']>
+  readonly menuOpenKey: string | null
+  readonly setMenuOpenKey: (key: string | null) => void
+  readonly onClearFilter: () => void
+}) {
   if (group.kind === 'loading') {
     return (
       <div className="flex flex-col gap-1 px-4 py-2">
@@ -125,6 +182,9 @@ function GroupBody({ group, now, rowPropsFor, menuOpenKey, setMenuOpenKey }: { r
     )
   }
   if (group.items.length === 0) {
+    if (group.totalCount > 0) {
+      return <EmptyState icon={ListTodo} message={backlogFilteredEmptyCopy(group.repo)} action={{ label: BACKLOG_FILTER_CLEAR, onClick: onClearFilter }} className="px-4" />
+    }
     return <EmptyState icon={ListTodo} message={backlogEmptyGroupCopy(group.repo)} className="px-4" />
   }
   return (
@@ -151,6 +211,7 @@ export function BacklogScreen() {
   const reposQuery = useIpcQuery('repos:list')
   const navigate = useNavigate()
   const [menuOpenKey, setMenuOpenKey] = useState<string | null>(null)
+  const [filters, setFilters] = useState<ReadonlyMap<RepoId, BacklogLabelFilter>>(() => readBacklogFilters())
   const now = new Date()
 
   const readyRepos: readonly ReadyRepo[] = reposQuery.data?.ok === true ? reposQuery.data.repositories.filter(isReadyRepo).map((e) => ({ id: e.id, repo: e.config.repo })) : []
@@ -158,9 +219,15 @@ export function BacklogScreen() {
 
   const queries = useQueries({ queries: readyRepos.map((r) => ipcQueryOptions('backlog:list', { repoId: r.id })) })
 
+  const filterOf = (repoId: RepoId): BacklogLabelFilter => filters.get(repoId) ?? EMPTY_FILTER
+  function changeFilter(repoId: RepoId, filter: BacklogLabelFilter): void {
+    setFilters((previous) => new Map(previous).set(repoId, filter))
+    setBacklogFilter(repoId, filter)
+  }
+
   const groups: BacklogGroupView[] = readyRepos.map((r, i) => {
     const q = queries[i]
-    return buildBacklogGroup(r.id, r.repo, { status: q?.status ?? 'pending', data: q?.data, isError: q?.isError ?? false, dataUpdatedAt: q?.dataUpdatedAt ?? 0 })
+    return buildBacklogGroup(r.id, r.repo, { status: q?.status ?? 'pending', data: q?.data, isError: q?.isError ?? false, dataUpdatedAt: q?.dataUpdatedAt ?? 0 }, filterOf(r.id))
   })
 
   const flatRows: BacklogRowView[] = groups.flatMap((g) => (g.kind === 'loaded' ? g.items : []))
@@ -171,7 +238,8 @@ export function BacklogScreen() {
     next: () => selection.next(),
     prev: () => selection.prev(),
     open: () => {
-      if (selection.selectedKey !== null) setMenuOpenKey(selection.selectedKey)
+      const selected = flatRows.find((row) => rowKey(row.repoId, row.number) === selection.selectedKey)
+      if (selected !== undefined && selected.subIssueCount === 0) setMenuOpenKey(rowKey(selected.repoId, selected.number))
     },
   })
 
@@ -209,8 +277,8 @@ export function BacklogScreen() {
           ) : (
             groups.map((group) => (
               <div key={group.repoId}>
-                <GroupHeader repo={group.repo} count={group.kind === 'loaded' ? group.items.length : null} />
-                <GroupBody group={group} now={now} rowPropsFor={(key) => selection.rowProps(key)} menuOpenKey={menuOpenKey} setMenuOpenKey={setMenuOpenKey} />
+                <GroupHeader group={group} filter={filterOf(group.repoId)} onFilterChange={(filter) => changeFilter(group.repoId, filter)} />
+                <GroupBody group={group} now={now} rowPropsFor={(key) => selection.rowProps(key)} menuOpenKey={menuOpenKey} setMenuOpenKey={setMenuOpenKey} onClearFilter={() => changeFilter(group.repoId, EMPTY_FILTER)} />
               </div>
             ))
           )}

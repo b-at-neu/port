@@ -13,8 +13,8 @@ function query(overrides: Partial<BacklogQueryLike> = {}): BacklogQueryLike {
 const OK_RESPONSE: Extract<BacklogResponse, { ok: true }> = {
   ok: true,
   items: [
-    { number: 47, title: 'Add dark mode', url: 'https://github.com/acme/widgets/issues/47', updatedAt: '2026-01-01T00:00:00Z', assignees: [] },
-    { number: 45, title: 'Document retries', url: 'https://github.com/acme/widgets/issues/45', updatedAt: '2026-01-01T00:00:00Z', assignees: ['alice'] },
+    { number: 47, title: 'Add dark mode', url: 'https://github.com/acme/widgets/issues/47', updatedAt: '2026-01-01T00:00:00Z', assignees: [], labels: [{ name: 'bug', color: 'd73a4a' }], subIssueCount: 0 },
+    { number: 45, title: 'Document retries', url: 'https://github.com/acme/widgets/issues/45', updatedAt: '2026-01-01T00:00:00Z', assignees: ['alice'], labels: [{ name: 'docs', color: null }], subIssueCount: 2 },
   ],
   scanned: 2,
   total: 2,
@@ -53,6 +53,24 @@ describe('buildBacklogGroup', () => {
     const group = buildBacklogGroup(REPO_ID, 'acme/widgets', query({ data: { ...OK_RESPONSE, total: 50 } }))
     expect(group.kind).toBe('loaded')
     if (group.kind === 'loaded') expect(group.truncatedNote).toContain('2')
+  })
+
+  it('passes labels and the sub-issue count through to each row', () => {
+    const group = buildBacklogGroup(REPO_ID, 'acme/widgets', query({ data: OK_RESPONSE }))
+    if (group.kind !== 'loaded') throw new Error('expected loaded')
+    expect(group.items[0]?.labels).toEqual([{ name: 'bug', color: 'd73a4a' }])
+    expect(group.items[1]?.subIssueCount).toBe(2)
+  })
+
+  it('applies the filter to items while totalCount and labelOptions stay unfiltered', () => {
+    const group = buildBacklogGroup(REPO_ID, 'acme/widgets', query({ data: OK_RESPONSE }), { include: ['bug'], exclude: [] })
+    if (group.kind !== 'loaded') throw new Error('expected loaded')
+    expect(group.items.map((row) => row.number)).toEqual([47])
+    expect(group.totalCount).toBe(2)
+    expect(group.labelOptions.map((option) => [option.label.name, option.count, option.state])).toEqual([
+      ['bug', 1, 'only'],
+      ['docs', 1, 'any'],
+    ])
   })
 
   it('never drops the viewer\'s own assignee off a claimable item silently — unassigned stays null', () => {

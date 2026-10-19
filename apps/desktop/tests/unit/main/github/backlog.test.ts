@@ -30,10 +30,45 @@ describe('fetchBacklog', () => {
     const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, gh: fakeRunner({ ok: true, stdout, stderr: '' }) })
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(result.items).toEqual([{ number: 47, title: 'Add dark mode', url: 'u47', updatedAt: '2026-01-01T00:00:00Z', assignees: [] }])
+    expect(result.items).toEqual([{ number: 47, title: 'Add dark mode', url: 'u47', updatedAt: '2026-01-01T00:00:00Z', assignees: [], labels: [], subIssueCount: 0 }])
     expect(result.scanned).toBe(2)
     expect(result.total).toBe(2)
     expect(result.viewer).toBe('octo-dev')
+  })
+
+  it('carries each label with a lowercased colour, null when missing or malformed, and the sub-issue count', async () => {
+    const stdout = JSON.stringify({
+      data: {
+        repository: {
+          issues: {
+            totalCount: 3,
+            nodes: [
+              {
+                number: 1,
+                title: 'parent',
+                url: 'u1',
+                updatedAt: 'x',
+                labels: { nodes: [{ name: 'bug', color: 'D73A4A' }, { name: 'odd', color: 'xyz' }, { name: 'bare' }, { color: 'ffffff' }] },
+                assignees: { nodes: [] },
+                subIssues: { totalCount: 3 },
+              },
+              { number: 2, title: 'no field', url: 'u2', updatedAt: 'x', labels: { nodes: [] }, assignees: { nodes: [] } },
+              { number: 3, title: 'bad count', url: 'u3', updatedAt: 'x', labels: { nodes: [] }, assignees: { nodes: [] }, subIssues: { totalCount: -1 } },
+            ],
+          },
+        },
+        viewer: { login: 'octo-dev' },
+      },
+    })
+    const result = await fetchBacklog({ repo: { owner: 'o', name: 'r' }, vocabulary: VOCABULARY, gh: fakeRunner({ ok: true, stdout, stderr: '' }) })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.items[0]?.labels).toEqual([
+      { name: 'bug', color: 'd73a4a' },
+      { name: 'odd', color: null },
+      { name: 'bare', color: null },
+    ])
+    expect(result.items.map((item) => item.subIssueCount)).toEqual([3, 0, 0])
   })
 
   it('reports scanned/total divergence as truncation, never as complete', async () => {
