@@ -1,8 +1,8 @@
 // Per-repository Backlog label filter, persisted in localStorage; a malformed value reads as no filter.
 import type { RepoId } from '@/utils/repos'
 import type { BacklogLabelFilter } from '@/types/backlog'
-import type { PromptHistoryStorage } from '@/types/session'
-import { EMPTY_FILTER, activeCount } from '@/renderer/backlog/filter'
+import type { KeyValueStorage } from '@/types/storage'
+import { activeCount } from '@/renderer/backlog/filter'
 
 const STORAGE_KEY = 'port.backlogFilters.v1'
 
@@ -12,7 +12,7 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
 }
 
-function readAll(storage: PromptHistoryStorage): FiltersByRepo {
+function readAll(storage: KeyValueStorage): FiltersByRepo {
   try {
     const raw = storage.getItem(STORAGE_KEY)
     if (raw === null) return {}
@@ -30,12 +30,12 @@ function readAll(storage: PromptHistoryStorage): FiltersByRepo {
   }
 }
 
-export function backlogFilterFor(repoId: RepoId, storage: PromptHistoryStorage = window.localStorage): BacklogLabelFilter {
-  return readAll(storage)[repoId] ?? EMPTY_FILTER
+export function readBacklogFilters(storage: KeyValueStorage = window.localStorage): ReadonlyMap<RepoId, BacklogLabelFilter> {
+  return new Map(Object.entries(readAll(storage)) as [RepoId, BacklogLabelFilter][])
 }
 
 // An empty filter removes the repository's entry.
-export function setBacklogFilter(repoId: RepoId, filter: BacklogLabelFilter, storage: PromptHistoryStorage = window.localStorage): void {
+export function setBacklogFilter(repoId: RepoId, filter: BacklogLabelFilter, storage: KeyValueStorage = window.localStorage): void {
   const others = Object.fromEntries(Object.entries(readAll(storage)).filter(([key]) => key !== repoId))
   const next = activeCount(filter) === 0 ? others : { ...others, [repoId]: filter }
   try {

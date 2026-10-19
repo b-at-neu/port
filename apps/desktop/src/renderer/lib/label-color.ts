@@ -1,5 +1,5 @@
 // A GitHub label's colour is repository data, so this is the one place a hex becomes a style.
-const HEX_COLOR = /^[0-9a-f]{6}$/i
+import { isHexColor } from '@/utils/hex-color'
 
 function channel(hex: string, start: number): number {
   const value = parseInt(hex.slice(start, start + 2), 16) / 255
@@ -12,7 +12,7 @@ function luminance(hex: string): number {
 
 // Whichever of black and white contrasts more is always at least 4.5:1.
 export function labelChipColors(color: string | null): { readonly background: string; readonly text: 'black' | 'white' } | null {
-  if (color === null || !HEX_COLOR.test(color)) return null
+  if (color === null || !isHexColor(color)) return null
   const fill = luminance(color)
   const againstBlack = (fill + 0.05) / 0.05
   const againstWhite = 1.05 / (fill + 0.05)

@@ -6,6 +6,7 @@ import type { BacklogItem, BacklogLabel, BacklogResponse } from '@/types/backlog
 import { classifyFailure, parseEnvelope } from '@/main/github/envelope'
 import { fieldListOf } from '@/main/github/map'
 import type { GitHubRepoRef } from '@/types/github'
+import { isHexColor } from '@/utils/hex-color'
 
 
 const PAGE_SIZE = 100
@@ -16,8 +17,6 @@ function stdoutOf(result: GhResult): string | undefined {
   return 'stdout' in result ? result.stdout : undefined
 }
 
-const HEX_COLOR = /^[0-9a-f]{6}$/i
-
 function labelsOf(value: unknown): readonly BacklogLabel[] {
   const nodes = (value as { nodes?: unknown } | null | undefined)?.nodes
   if (!Array.isArray(nodes)) return []
@@ -26,7 +25,7 @@ function labelsOf(value: unknown): readonly BacklogLabel[] {
     if (typeof node !== 'object' || node === null) continue
     const { name, color } = node as Record<string, unknown>
     if (typeof name !== 'string') continue
-    out.push({ name, color: typeof color === 'string' && HEX_COLOR.test(color) ? color.toLowerCase() : null })
+    out.push({ name, color: typeof color === 'string' && isHexColor(color) ? color.toLowerCase() : null })
   }
   return out
 }

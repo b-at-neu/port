@@ -21,13 +21,14 @@ import { buildBacklogGroup, relativeAge, exactTime, staleSinceAt } from '@/rende
 import type { BacklogGroupView, BacklogLabelFilter, BacklogRowView } from '@/types/backlog'
 import { BACKLOG_FILTER_CLEAR, backlogCountCopy, backlogEmptyGroupCopy, backlogFilteredEmptyCopy, backlogNotReadyCopy, backlogParentCopy } from '@/renderer/backlog/copy'
 import { EMPTY_FILTER } from '@/renderer/backlog/filter'
-import { backlogFilterFor, setBacklogFilter } from '@/renderer/backlog/prefs'
+import { readBacklogFilters, setBacklogFilter } from '@/renderer/backlog/prefs'
 import { LabelFilterMenu } from '@/renderer/backlog/label-filter-menu'
 import { LabelChip } from '@/renderer/components/label-chip'
 import { isReadyRepo } from '@/utils/repos'
 import type { RepoId } from '@/utils/repos'
 
 const MAX_CHIPS = 3
+const FOCUS_RING = 'outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
 
 interface ReadyRepo {
   readonly id: RepoId
@@ -55,7 +56,7 @@ function WorkOnMenu({ row, open, onOpenChange }: { readonly row: BacklogRowView;
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span tabIndex={0} className="inline-flex rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+          <span tabIndex={0} className={`inline-flex rounded-md ${FOCUS_RING}`}>
             <Button variant="ghost" size="small" disabled data-slot="backlog-work-on">
               Work on
               <ChevronDown aria-hidden="true" className="size-3.5" />
@@ -105,18 +106,18 @@ function BacklogRow({
   return (
     <div data-slot="backlog-row" {...rowProps} className={`flex h-9 items-center gap-2 px-4 text-body ${rowProps.className}`}>
       <span className="w-12 shrink-0 font-mono tabular-nums text-muted-foreground">#{row.number}</span>
-      <a href={row.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-foreground hover:underline">
+      <a href={row.url} target="_blank" rel="noreferrer" className="min-w-24 flex-1 truncate text-foreground hover:underline">
         {row.title}
       </a>
       {row.labels.length > 0 ? (
-        <div className="flex shrink-0 gap-1">
+        <div className="flex min-w-0 max-w-48 gap-1">
           {row.labels.slice(0, MAX_CHIPS).map((label) => (
             <LabelChip key={label.name} label={label} />
           ))}
           {row.labels.length > MAX_CHIPS ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="rounded-full bg-muted px-1.5 text-meta font-medium text-foreground-secondary">+{row.labels.length - MAX_CHIPS}</span>
+                <span tabIndex={0} className={`shrink-0 rounded-full bg-muted px-1.5 text-meta font-medium text-foreground-secondary ${FOCUS_RING}`}>+{row.labels.length - MAX_CHIPS}</span>
               </TooltipTrigger>
               <TooltipContent>
                 {row.labels
@@ -210,7 +211,7 @@ export function BacklogScreen() {
   const reposQuery = useIpcQuery('repos:list')
   const navigate = useNavigate()
   const [menuOpenKey, setMenuOpenKey] = useState<string | null>(null)
-  const [filters, setFilters] = useState<ReadonlyMap<RepoId, BacklogLabelFilter>>(() => new Map())
+  const [filters, setFilters] = useState<ReadonlyMap<RepoId, BacklogLabelFilter>>(() => readBacklogFilters())
   const now = new Date()
 
   const readyRepos: readonly ReadyRepo[] = reposQuery.data?.ok === true ? reposQuery.data.repositories.filter(isReadyRepo).map((e) => ({ id: e.id, repo: e.config.repo })) : []
@@ -218,7 +219,7 @@ export function BacklogScreen() {
 
   const queries = useQueries({ queries: readyRepos.map((r) => ipcQueryOptions('backlog:list', { repoId: r.id })) })
 
-  const filterOf = (repoId: RepoId): BacklogLabelFilter => filters.get(repoId) ?? backlogFilterFor(repoId)
+  const filterOf = (repoId: RepoId): BacklogLabelFilter => filters.get(repoId) ?? EMPTY_FILTER
   function changeFilter(repoId: RepoId, filter: BacklogLabelFilter): void {
     setFilters((previous) => new Map(previous).set(repoId, filter))
     setBacklogFilter(repoId, filter)
