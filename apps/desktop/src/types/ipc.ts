@@ -127,12 +127,12 @@ export interface IpcMap {
     request: { repoId?: RepoId; source?: SourceKind }
     response: BoardSnapshot
   }
-  /** The claim dialog's read — resolves one issue's kind, labels, assignees, blockers, and the viewer's login, and classifies it, all server-side. */
+  /** Work on's claim read — resolves one issue's kind, labels, assignees, blockers, and the viewer's login, and classifies it, all server-side. */
   'claim:preflight': {
     request: { repoId: RepoId; number: number }
     response: ClaimPreflightResponse
   }
-  /** The claim dialog's write. A fresh read that disagrees with `confirmedAssignees` refuses as `moved` rather than applying an unconfirmed take-over. */
+  /** Work on's claim write. A fresh read that disagrees with `confirmedAssignees` refuses as `moved` rather than applying an unconfirmed take-over. */
   'claim:apply': {
     request: { repoId: RepoId; number: number; planGate: PlanGateChoice; confirmedAssignees: readonly string[] }
     response: ClaimApplyResponse

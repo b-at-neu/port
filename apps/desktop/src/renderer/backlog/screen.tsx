@@ -1,8 +1,8 @@
-// The Backlog screen — open, unclaimed issues per ready repo; Work on reuses the claim dialog. No `useEffect`: the list navigator is registered directly in the render body.
+// The Backlog screen — open, unclaimed issues per ready repo; Work on claims at once and reports by toast. No `useEffect`: the list navigator is registered directly in the render body.
 import { useState } from 'react'
 import { useQueries, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { RefreshCw, ListTodo, ChevronDown } from 'lucide-react'
+import { RefreshCw, ListTodo, ChevronDown, Loader2 } from 'lucide-react'
 import { Button } from '@/renderer/components/ui/button'
 import { Skeleton } from '@/renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
@@ -12,7 +12,7 @@ import { Screen, ScreenBody } from '@/renderer/components/screen'
 import { EmptyState } from '@/renderer/components/empty-state'
 import { ErrorBanner } from '@/renderer/components/error-banner'
 import { ipcQueryOptions, useIpcQuery } from '@/renderer/data/query'
-import { openClaimDialogFor } from '@/renderer/claim/controller'
+import { workOn } from '@/renderer/claim/work-on'
 import { PLAN_GATE_OPTIONS } from '@/renderer/claim/copy'
 import { registerListNavigator } from '@/renderer/shell/stores'
 import { useListSelection } from '@/renderer/shell/list-selection'
@@ -41,15 +41,17 @@ function rowKey(repoId: RepoId, number: number): string {
 
 function WorkOnMenu({ row, open, onOpenChange }: { readonly row: BacklogRowView; readonly open: boolean; readonly onOpenChange: (open: boolean) => void }) {
   const queryClient = useQueryClient()
+  const [pending, setPending] = useState(false)
 
   function pick(planGate: 'review' | 'auto'): void {
-    openClaimDialogFor({
+    setPending(true)
+    void workOn({
       repoId: row.repoId,
       repo: row.repo,
       number: row.number,
       planGate,
       onClaimed: () => void queryClient.invalidateQueries({ queryKey: ['backlog:list'] }),
-    })
+    }).finally(() => setPending(false))
   }
 
   if (row.subIssueCount > 0) {
@@ -71,9 +73,9 @@ function WorkOnMenu({ row, open, onOpenChange }: { readonly row: BacklogRowView;
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="small" data-slot="backlog-work-on">
+        <Button variant="ghost" size="small" data-slot="backlog-work-on" disabled={pending}>
           Work on
-          <ChevronDown aria-hidden="true" className="size-3.5" />
+          {pending ? <Loader2 aria-hidden="true" className="size-3.5 animate-spin" /> : <ChevronDown aria-hidden="true" className="size-3.5" />}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

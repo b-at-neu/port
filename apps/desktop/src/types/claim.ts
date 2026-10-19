@@ -1,6 +1,6 @@
 import type { ApplyLabelsParams } from '@/types/writes'
 
-// Renderer-safe contract for the claim dialog (the "work on #N" flow). No import here may reach a Node builtin — only `main/claim.ts` resolves a repository, spawns `gh`, or writes a label.
+// Renderer-safe contract for Work on's claim (the "work on #N" flow). No import here may reach a Node builtin — only `main/claim.ts` resolves a repository, spawns `gh`, or writes a label.
 import type { BlockerRead, ClaimPreflightFetch, GitHubRepoRef, PipelineItemKind } from '@/types/github'
 import type { WriteOutcome } from '@/types/writes'
 import type { GhRunner } from '@/types/platform'
@@ -50,6 +50,13 @@ export type ClaimApplyResponse =
   | { readonly kind: 'refused'; readonly verdict: Exclude<ClaimVerdict, { kind: 'claimable' }> }
   | { readonly kind: 'preflight-failed'; readonly message: string }
   | { readonly kind: 'write'; readonly outcome: WriteOutcome }
+
+/** What one Work on outcome shows as a toast. */
+export interface ClaimToast {
+  readonly tone: 'success' | 'error'
+  readonly title: string
+  readonly description: string | null
+}
 
 export interface ClaimDeps {
   readonly listRepositories: (deps: RegistryDeps) => Promise<ReposListResponse>

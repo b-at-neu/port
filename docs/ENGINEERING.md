@@ -56,7 +56,7 @@ Sorted by path. Insert a new entry at its alphabetical slot, never at the end.
 - `items.ts` (#312) holds `item:action` and `item:decide` — moved out of `main/ipc.ts` verbatim, the same split every other topic here already follows
 
 **`apps/desktop/src/main/claim.ts`**
-- the claim dialog's only composition root
+- Work on's only claim composition root
 - re-runs the preflight on apply; never trusts what the renderer already confirmed
 - no `gh` import — reads via `./github`, writes via `./writes`
 
