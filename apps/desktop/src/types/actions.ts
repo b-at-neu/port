@@ -32,6 +32,27 @@ export interface ItemActionRequest {
   readonly expectedStage: LabelKey | null
 }
 
+/** One option of a rebase decision, as the escalation's options table lists it. */
+export interface RebaseOption {
+  readonly letter: string
+  readonly label: string
+}
+
+/** One `### D<n>` block of a rebase escalation; `recommended` is `null` when the block names none. */
+export interface RebaseDecision {
+  readonly id: string
+  readonly path: string
+  readonly summary: string | null
+  readonly options: readonly RebaseOption[]
+  readonly recommended: string | null
+}
+
+/** The operator's chosen option for one decision; main re-derives the path and label from its own parse. */
+export interface RebasePick {
+  readonly id: string
+  readonly letter: string
+}
+
 export interface ItemDecisionRequest {
   readonly repoId: RepoId
   readonly number: number
@@ -40,6 +61,8 @@ export interface ItemDecisionRequest {
   readonly route: UnblockRoute | null
   readonly note: string | null
   readonly skipComment: boolean
+  /** `null` unless the escalation carries rebase decisions. */
+  readonly picks: readonly RebasePick[] | null
 }
 
 /** The `LabelWriteRequest` key-level shape; the main side supplies the rest from the registry entry, never from a plan a caller could forge. */
@@ -68,14 +91,15 @@ export type ItemActionResult =
   | { readonly ok: false; readonly reason: 'no-pause-record' }
   | { readonly ok: false; readonly reason: 'pause-record-unresolvable' }
 
-/** `cycle-cap`: revise would only escalate straight back. `rebase-decisions`: an open rebase escalation this app can't record. */
+/** `cycle-cap`: revise would only escalate straight back. `rebase-decisions`: an escalation whose decision blocks port can't parse. */
 export type DecisionRefusal = ActionRefusal | 'cycle-cap' | 'rebase-decisions'
 
-/** `null` when no escalation reason was found; the dialog shows the cap warning before a route is picked. */
+/** `null` when no escalation reason was found; the dialog shows the cap warning before a route is picked. `decisions` is empty for a non-rebase escalation. */
 export interface UnblockContext {
   readonly reason: string | null
   readonly cyclesUsed: number
   readonly cap: number
+  readonly decisions: readonly RebaseDecision[]
 }
 
 export interface ReviseContext {
@@ -95,7 +119,7 @@ export type ItemDecisionResult =
   | { readonly ok: false; readonly reason: 'not-owned'; readonly owners: readonly string[] }
   | { readonly ok: false; readonly reason: 'viewer-unknown' }
   | { readonly ok: false; readonly reason: 'repo-unavailable' }
-  | { readonly ok: false; readonly reason: 'refused'; readonly refusal: DecisionRefusal | 'note-invalid'; readonly problem?: string }
+  | { readonly ok: false; readonly reason: 'refused'; readonly refusal: DecisionRefusal | 'note-invalid' | 'picks-invalid'; readonly problem?: string }
   | { readonly ok: false; readonly reason: 'verify-failed'; readonly message: string }
   | { readonly ok: false; readonly reason: 'comment-failed'; readonly comment: WriteOutcome }
 

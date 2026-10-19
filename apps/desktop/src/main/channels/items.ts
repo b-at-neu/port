@@ -67,6 +67,18 @@ function isUnblockRoute(value: unknown): value is UnblockRoute {
   return (UNBLOCK_ROUTES as readonly string[]).includes(value as string)
 }
 
+const MAX_REBASE_PICKS = 20
+
+function isPicksShape(value: unknown): boolean {
+  if (value === null) return true
+  if (!Array.isArray(value) || value.length > MAX_REBASE_PICKS) return false
+  return value.every((pick: unknown) => {
+    if (typeof pick !== 'object' || pick === null) return false
+    const { id, letter } = pick as { id?: unknown; letter?: unknown }
+    return typeof id === 'string' && /^D\d+$/.test(id) && typeof letter === 'string' && /^[A-Z]$/.test(letter)
+  })
+}
+
 // Validates the request and its route/note pair, then forces one refresh
 // on an applied label outcome, the same rule `resolveItemAction` follows.
 export async function resolveItemDecision(registryDeps: RegistryDeps, request: IpcMap['item:decide']['request'], auditDir: string, scratchDir: string, deps: ItemDecisionDeps): Promise<ItemDecisionResult> {
@@ -87,7 +99,9 @@ export async function resolveItemDecision(registryDeps: RegistryDeps, request: I
   if (request.decision === 'unblock') {
     if (!isUnblockRoute(request.route)) throw new Error(`'item:decide' requires 'route' to be one of ${UNBLOCK_ROUTES.join(', ')} for 'unblock'`)
     if (request.note !== null) throw new Error("'item:decide' requires 'note' to be null for 'unblock'")
+    if (!isPicksShape(request.picks)) throw new Error(`'item:decide' requires 'picks' to be null or at most ${String(MAX_REBASE_PICKS)} { id: 'D<n>', letter: 'A'-'Z' } entries for 'unblock'`)
   } else {
+    if (request.picks !== null) throw new Error("'item:decide' requires 'picks' to be null for 'revise'")
     if (request.route !== null) throw new Error("'item:decide' requires 'route' to be null for 'revise'")
     if (typeof request.note !== 'string' || request.note.length > MAX_REVISE_NOTE_CHARS) {
       throw new Error(`'item:decide' requires 'note' to be a string of at most ${String(MAX_REVISE_NOTE_CHARS)} characters for 'revise'`)
@@ -97,7 +111,7 @@ export async function resolveItemDecision(registryDeps: RegistryDeps, request: I
   const found = await requireReadyRepo(registryDeps, "'item:decide'", repoId, deps.listRepositories)
 
   const result = await deps.applyItemDecision({
-    request: { repoId, number: request.number, decision: request.decision, expectedStage: request.expectedStage, route: request.route, note: request.note, skipComment: request.skipComment },
+    request: { repoId, number: request.number, decision: request.decision, expectedStage: request.expectedStage, route: request.route, note: request.note, skipComment: request.skipComment, picks: request.picks },
     snapshot: deps.snapshot(),
     entry: found,
     auditDir,

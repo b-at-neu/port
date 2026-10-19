@@ -1,6 +1,6 @@
 // Every string the decision dialog renders — one function per union, pure.
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
-import type { ItemDecisionResult, OperatorDecision, ReviseContext, UnblockContext, UnblockRoute } from '@/types/actions'
+import type { ItemDecisionResult, OperatorDecision, RebaseDecision, RebaseOption, RebasePick, ReviseContext, UnblockContext, UnblockRoute } from '@/types/actions'
 
 function labelNameOf(key: string): string {
   return LABEL_DEFAULTS.find((def) => def.key === key)?.name ?? key
@@ -14,8 +14,28 @@ export function unblockReasonLine(context: UnblockContext): string {
   return context.reason !== null ? `Why it stopped: ${context.reason}` : "No escalation comment in this PR's last 20 comments. Open the PR to see why it stopped."
 }
 
-export function unblockConsequence(): string {
+export function unblockConsequence(context: UnblockContext): string {
+  if (context.decisions.length > 0) {
+    return `Unblocking records your choices on the PR as "## Gate cleared", removes "${labelNameOf('needsHuman')}", and sends it to revision. Revision redoes the rebase with them on the next tick.`
+  }
   return `Unblocking says you've handled this. port posts "## Gate cleared" on the PR, removes "${labelNameOf('needsHuman')}", and the next tick picks it up.`
+}
+
+export function rebaseLegend(decision: RebaseDecision): string {
+  return `${decision.id} · \`${decision.path}\``
+}
+
+export function rebaseOptionLabel(option: RebaseOption): string {
+  return `${option.letter} — ${option.label}`
+}
+
+export function picksHint(decisions: readonly RebaseDecision[], chosen: Readonly<Record<string, string>>): string | null {
+  const missing = decisions.find((d) => chosen[d.id] === undefined)
+  return missing === undefined ? null : `Pick an option for ${missing.id}.`
+}
+
+export function picksChosenLine(picks: readonly RebasePick[]): string {
+  return picks.map((pick) => `${pick.id} ${pick.letter}`).join(', ')
 }
 
 export function unblockCapNote(context: UnblockContext): string | null {
@@ -34,6 +54,12 @@ export function reviseNoteHint(problem: 'empty' | 'too-long' | 'only-sha' | null
   return null
 }
 
+function refusalNote(response: Extract<ItemDecisionResult, { readonly reason: 'refused' }>): string | null {
+  if (response.refusal === 'note-invalid') return reviseNoteHint(response.problem as Parameters<typeof reviseNoteHint>[0])
+  if (response.refusal === 'picks-invalid') return 'The escalation changed since you opened this. Close and reopen to see the current decisions.'
+  return null
+}
+
 interface DecisionResultCopy {
   readonly line: string
   readonly note: string | null
@@ -42,8 +68,14 @@ interface DecisionResultCopy {
 
 /** The Result step (the plan's own **UX states**) — exhaustive over
  *  `ItemDecisionResult`. `route` disambiguates `unblock`'s own two lines. */
-export function decisionResultCopy(params: { readonly number: number; readonly decision: OperatorDecision; readonly route: UnblockRoute | null; readonly response: ItemDecisionResult }): DecisionResultCopy {
-  const { number, decision, route, response } = params
+export function decisionResultCopy(params: {
+  readonly number: number
+  readonly decision: OperatorDecision
+  readonly route: UnblockRoute | null
+  readonly picks: readonly RebasePick[] | null
+  readonly response: ItemDecisionResult
+}): DecisionResultCopy {
+  const { number, decision, route, picks, response } = params
   const n = String(number)
 
   if (!response.ok) {
@@ -59,7 +91,7 @@ export function decisionResultCopy(params: { readonly number: number; readonly d
       case 'refused':
         return {
           line: `PR #${n} can no longer be ${decision === 'unblock' ? 'unblocked' : 'sent back'} that way.`,
-          note: response.refusal === 'note-invalid' ? reviseNoteHint(response.problem as Parameters<typeof reviseNoteHint>[0]) : null,
+          note: refusalNote(response),
           offerLabelOnly: false,
         }
       case 'verify-failed':
@@ -78,7 +110,8 @@ export function decisionResultCopy(params: { readonly number: number; readonly d
     if (decision === 'unblock') {
       const target = route === 'revision' ? `"${labelNameOf('needsRevision')}"` : `"${labelNameOf('readyForReview')}"`
       const verb = route === 'revision' ? 'dispatches revision' : 'dispatches review'
-      return { line: `PR #${n} is unblocked and at ${target}. "## Gate cleared" is posted; the next tick ${verb}.`, note: null, offerLabelOnly: false }
+      const chosen = picks !== null && picks.length > 0 ? ` with ${picksChosenLine(picks)}` : ''
+      return { line: `PR #${n} is unblocked and at ${target}${chosen}. "## Gate cleared" is posted; the next tick ${verb}.`, note: null, offerLabelOnly: false }
     }
     return {
       line: `PR #${n} is back at "${labelNameOf('needsRevision')}". Your note is posted as "## Changes requested" and the approval is off. The next tick dispatches revision.`,

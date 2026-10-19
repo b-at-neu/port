@@ -168,7 +168,7 @@ describe('resolveItemDecision', () => {
     await expect(
       resolveItemDecision(
         registryDeps,
-        { repoId: undefined as unknown as RepoId, number: 1, decision: 'unblock', expectedStage: null, route: 'revision', note: null, skipComment: false },
+        { repoId: undefined as unknown as RepoId, number: 1, decision: 'unblock', expectedStage: null, route: 'revision', note: null, skipComment: false, picks: null },
         '/audit',
         '/scratch',
         itemDecisionDepsWith({}),
@@ -180,7 +180,7 @@ describe('resolveItemDecision', () => {
     await expect(
       resolveItemDecision(
         registryDeps,
-        { repoId: REPO_ID, number: 1, decision: 'bogus' as never, expectedStage: null, route: null, note: null, skipComment: false },
+        { repoId: REPO_ID, number: 1, decision: 'bogus' as never, expectedStage: null, route: null, note: null, skipComment: false, picks: null },
         '/audit',
         '/scratch',
         itemDecisionDepsWith({}),
@@ -192,7 +192,7 @@ describe('resolveItemDecision', () => {
     await expect(
       resolveItemDecision(
         registryDeps,
-        { repoId: REPO_ID, number: 1, decision: 'unblock', expectedStage: null, route: 'bogus' as never, note: null, skipComment: false },
+        { repoId: REPO_ID, number: 1, decision: 'unblock', expectedStage: null, route: 'bogus' as never, note: null, skipComment: false, picks: null },
         '/audit',
         '/scratch',
         itemDecisionDepsWith({}),
@@ -204,7 +204,7 @@ describe('resolveItemDecision', () => {
     await expect(
       resolveItemDecision(
         registryDeps,
-        { repoId: REPO_ID, number: 1, decision: 'unblock', expectedStage: null, route: 'revision', note: 'oops', skipComment: false },
+        { repoId: REPO_ID, number: 1, decision: 'unblock', expectedStage: null, route: 'revision', note: 'oops', skipComment: false, picks: null },
         '/audit',
         '/scratch',
         itemDecisionDepsWith({}),
@@ -216,7 +216,7 @@ describe('resolveItemDecision', () => {
     await expect(
       resolveItemDecision(
         registryDeps,
-        { repoId: REPO_ID, number: 1, decision: 'revise', expectedStage: null, route: 'revision', note: 'change this', skipComment: false },
+        { repoId: REPO_ID, number: 1, decision: 'revise', expectedStage: null, route: 'revision', note: 'change this', skipComment: false, picks: null },
         '/audit',
         '/scratch',
         itemDecisionDepsWith({}),
@@ -228,7 +228,7 @@ describe('resolveItemDecision', () => {
     await expect(
       resolveItemDecision(
         registryDeps,
-        { repoId: REPO_ID, number: 1, decision: 'revise', expectedStage: null, route: null, note: null, skipComment: false },
+        { repoId: REPO_ID, number: 1, decision: 'revise', expectedStage: null, route: null, note: null, skipComment: false, picks: null },
         '/audit',
         '/scratch',
         itemDecisionDepsWith({}),
@@ -236,12 +236,60 @@ describe('resolveItemDecision', () => {
     ).rejects.toThrow("'item:decide' requires 'note' to be a string of at most 10000 characters for 'revise'")
   })
 
+  it.each([
+    ['a non-array', 'D1' as never],
+    ['an entry with a malformed id', [{ id: 'one', letter: 'A' }] as never],
+    ['an entry with a lowercase letter', [{ id: 'D1', letter: 'a' }] as never],
+    ['more than twenty entries', Array.from({ length: 21 }, (_, i) => ({ id: `D${String(i + 1)}`, letter: 'A' })) as never],
+  ])('rejects unblock with picks that are %s', async (_name, picks) => {
+    await expect(
+      resolveItemDecision(
+        registryDeps,
+        { repoId: REPO_ID, number: 1, decision: 'unblock', expectedStage: null, route: 'revision', note: null, skipComment: false, picks },
+        '/audit',
+        '/scratch',
+        itemDecisionDepsWith({}),
+      ),
+    ).rejects.toThrow("'item:decide' requires 'picks' to be null or at most 20")
+  })
+
+  it('rejects revise carrying picks', async () => {
+    await expect(
+      resolveItemDecision(
+        registryDeps,
+        { repoId: REPO_ID, number: 1, decision: 'revise', expectedStage: null, route: null, note: 'change this', skipComment: false, picks: [{ id: 'D1', letter: 'A' }] },
+        '/audit',
+        '/scratch',
+        itemDecisionDepsWith({}),
+      ),
+    ).rejects.toThrow("'item:decide' requires 'picks' to be null for 'revise'")
+  })
+
+  it('forwards well-formed picks to applyItemDecision', async () => {
+    let forwarded: unknown = null
+    const deps = itemDecisionDepsWith({
+      listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
+      applyItemDecision: (params) => {
+        forwarded = params.request.picks
+        return Promise.resolve({ ok: true, comment: null, labels: { kind: 'no-op' } })
+      },
+    })
+    await resolveItemDecision(
+      registryDeps,
+      { repoId: REPO_ID, number: 148, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: [{ id: 'D1', letter: 'B' }] },
+      '/audit',
+      '/scratch',
+      deps,
+    )
+    expect(forwarded).toEqual([{ id: 'D1', letter: 'B' }])
+  })
+
   it('rejects a non-ready repository', async () => {
     const deps = itemDecisionDepsWith({ listRepositories: () => Promise.resolve({ ok: true, repositories: [NOT_READY_ENTRY] }) })
     await expect(
       resolveItemDecision(
         registryDeps,
-        { repoId: REPO_ID, number: 1, decision: 'unblock', expectedStage: null, route: 'revision', note: null, skipComment: false },
+        { repoId: REPO_ID, number: 1, decision: 'unblock', expectedStage: null, route: 'revision', note: null, skipComment: false, picks: null },
         '/audit',
         '/scratch',
         deps,
@@ -262,7 +310,7 @@ describe('resolveItemDecision', () => {
     })
     const result = await resolveItemDecision(
       registryDeps,
-      { repoId: REPO_ID, number: 148, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false },
+      { repoId: REPO_ID, number: 148, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null },
       '/audit',
       '/scratch',
       deps,
@@ -283,7 +331,7 @@ describe('resolveItemDecision', () => {
     })
     await resolveItemDecision(
       registryDeps,
-      { repoId: REPO_ID, number: 148, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false },
+      { repoId: REPO_ID, number: 148, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null },
       '/audit',
       '/scratch',
       deps,

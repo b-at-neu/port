@@ -4,7 +4,7 @@ import type { RepoId } from '@/utils/repos'
 import type { PipelineState, RepositoryState } from '@/types/state'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS, initialHealth } from '@/types/board'
 import type { BoardSnapshot, RepositoryHealth } from '@/types/board'
-import { freshnessIndicator } from '@/renderer/board/copy'
+import { decisionRefusalNote, freshnessIndicator } from '@/renderer/board/copy'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 
@@ -110,5 +110,14 @@ describe('freshnessIndicator', () => {
     const snapshot = snapshotOf([health({ github: { ...initialHealth('github'), lastSuccessAt: staleAt } })], [])
     const result = freshnessIndicator(snapshot, NOW)
     expect(result?.lines).toHaveLength(4)
+  })
+})
+
+describe('decisionRefusalNote', () => {
+  it('says unreadable decisions go to the cockpit, never that port cannot record them at all', () => {
+    const note = decisionRefusalNote('unblock', 'rebase-decisions', 37)
+    expect(note).toContain("couldn't read")
+    expect(note).toContain('unblock #37')
+    expect(note).not.toContain("can't record")
   })
 })

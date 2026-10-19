@@ -8,7 +8,7 @@ import type { BoardSnapshot, SourceKind } from '@/types/board'
 import type { ClaimApplyResponse, ClaimPreflightResponse, PlanGateChoice } from '@/types/claim'
 import type { GateAnswerResponse, GateDecision, GatePreflightResponse } from '@/types/gate'
 import type { LabelKey } from '@/utils/labels/vocabulary'
-import type { ItemActionResult, ItemDecisionResult, OperatorAction, OperatorDecision, UnblockRoute } from '@/types/actions'
+import type { ItemActionResult, ItemDecisionResult, OperatorAction, OperatorDecision, RebasePick, UnblockRoute } from '@/types/actions'
 import type { DispatchControlResult } from '@/types/dispatch'
 import type { RuntimePreflight, RuntimeProbe } from '@/types/runtime'
 import type { GhStatus } from '@/types/gh'
@@ -145,7 +145,7 @@ export interface IpcMap {
   /** The board's two operator decisions — unblock and revise. `skipComment`
    *  can only ever suppress the comment on a retry, never widen the write. */
   'item:decide': {
-    request: { repoId: RepoId; number: number; decision: OperatorDecision; expectedStage: LabelKey | null; route: UnblockRoute | null; note: string | null; skipComment: boolean }
+    request: { repoId: RepoId; number: number; decision: OperatorDecision; expectedStage: LabelKey | null; route: UnblockRoute | null; note: string | null; skipComment: boolean; picks: readonly RebasePick[] | null }
     response: ItemDecisionResult
   }
   /** Operator control over dispatch. `repoId` is required for every command. `take-over` overwrites a `terminal` ownership record and then runs. */

@@ -1,10 +1,10 @@
 import type { ApplyLabelsParams, PostCommentParams } from '@/types/writes'
 import type { FetchItemsByNumberParams } from '@/types/github'
-import type { ReadyEntry } from '@/types/actions'
+import type { ReadyEntry, RebaseDecision, RebasePick, UnblockRoute } from '@/types/actions'
 
 // applyItemDecision — unblock and revise, the comment-then-swap write
 // `main/actions/gate.ts`'s own `gateAnswer` already establishes.
-import { decisionPlan, decisionsFor, isCycleCapEscalation, reviseNoteProblem } from '@/utils/actions/decide'
+import { decisionPlan, decisionsFor, isCycleCapEscalation, picksProblem, reviseNoteProblem } from '@/utils/actions/decide'
 import { changesRequestedBody, gateClearedBody } from '@/utils/actions/bodies'
 import type { ItemDecisionResult } from '@/types/actions'
 import { stageKeyOf } from '@/utils/actions/plan'
@@ -64,6 +64,11 @@ export async function applyItemDecision(params: ApplyItemDecisionParams, deps: A
     if (problem !== null) return { ok: false, reason: 'refused', refusal: 'note-invalid', problem }
   }
 
+  const decisions = 'decisions' in availability.context ? availability.context.decisions : []
+  const picks = request.picks ?? []
+  const picksIssue = picksRefusal(decisions, picks, request.route)
+  if (picksIssue !== null) return { ok: false, reason: 'refused', refusal: 'picks-invalid', problem: picksIssue }
+
   const viewer = repoState.viewer
   if (viewer === null) return { ok: false, reason: 'viewer-unknown' }
 
@@ -87,7 +92,7 @@ export async function applyItemDecision(params: ApplyItemDecisionParams, deps: A
     const cycleGrant = request.decision === 'unblock' && request.route === 'revision' && isCycleCapEscalation(item.comments)
     const body =
       request.decision === 'unblock'
-        ? gateClearedBody(request.route === 'revision' ? 'revision' : 'review', { cycleGrant })
+        ? gateClearedBody(request.route === 'revision' ? 'revision' : 'review', { cycleGrant, rebaseDecisions: chosenOptions(decisions, picks) })
         : changesRequestedBody(headRefOid ?? '', request.note ?? '')
     comment = await deps.postComment({
       request: { repoId: entry.id, repo: entry.config.repo, kind: 'pull-request', number: request.number, body, action: request.decision, scratchDir },
@@ -103,6 +108,21 @@ export async function applyItemDecision(params: ApplyItemDecisionParams, deps: A
     auditDir,
   })
   return { ok: true, comment, labels }
+}
+
+// Rebase decisions only ever go back to revision, the one stage that applies them.
+function picksRefusal(decisions: readonly RebaseDecision[], picks: readonly RebasePick[], route: UnblockRoute | null): string | null {
+  if (decisions.length === 0) return picks.length === 0 ? null : 'unexpected'
+  if (route !== 'revision') return 'route'
+  return picksProblem(decisions, picks)
+}
+
+// Path and label come from main's own parse; the renderer only ever chose letters.
+function chosenOptions(decisions: readonly RebaseDecision[], picks: readonly RebasePick[]) {
+  return decisions.map((decision) => {
+    const letter = picks.find((pick) => pick.id === decision.id)?.letter ?? ''
+    return { id: decision.id, path: decision.path, letter, label: decision.options.find((option) => option.letter === letter)?.label ?? '' }
+  })
 }
 
 function buildWriteRequest(entry: ReadyEntry, number: number, plan: ReturnType<typeof decisionPlan>): LabelWriteRequest {
