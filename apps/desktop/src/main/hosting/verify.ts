@@ -86,8 +86,19 @@ export function composeInvocation(name: string, args: string): string {
   return trimmed === '' ? `/${name}` : `/${name} ${trimmed}`
 }
 
-/** True for `port:pipeline`, and for a bare `pipeline` only when `hasUnqualifiedPipeline` is false. Never a substring match. */
-export function isPipelineCommand(name: string, hasUnqualifiedPipeline: boolean): boolean {
+interface BlockedCommandContext {
+  readonly stage: boolean
+  /** The reported `port:` command names, qualifier stripped. */
+  readonly portNames: readonly string[]
+  /** The bare names the session reports as its own. */
+  readonly unqualifiedNames: readonly string[]
+}
+
+/** `port:pipeline` and an unreported bare `pipeline` are always blocked; a stage session also blocks every `port:` name and any unreported bare name that is a port command. Exact matches only. */
+export function isBlockedCommand(name: string, context: BlockedCommandContext): boolean {
   if (name === `${PLUGIN_NAME}:pipeline`) return true
-  return name === 'pipeline' && !hasUnqualifiedPipeline
+  if (name === 'pipeline' && !context.unqualifiedNames.includes('pipeline')) return true
+  if (!context.stage) return false
+  if (name.startsWith(`${PLUGIN_NAME}:`)) return true
+  return context.portNames.includes(name) && !context.unqualifiedNames.includes(name)
 }

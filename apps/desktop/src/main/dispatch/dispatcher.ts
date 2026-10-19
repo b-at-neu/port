@@ -26,7 +26,8 @@ import { withDenial, withoutDenialId, withoutDenialRule } from '@/main/dispatch/
 import { boundRecords, endedStagesOf, freeSlots, refreshRecords } from '@/main/dispatch/launch'
 
 
-import type { EndedStage, TickActionable } from '@/types/tick'
+import type { PipelineItemKind } from '@/types/github'
+import type { EndedStage, StageAgent, TickActionable } from '@/types/tick'
 import type { StageOutcome } from '@/types/stage-session'
 import type { Dispatcher, CreateDispatcherParams } from '@/types/dispatch'
 
@@ -34,13 +35,17 @@ const RECENT_LIMIT = 20
 const NOTE_LIMIT = 20
 
 /** Byte-identical to the pipeline skill's own "Dispatching" block, pinned by desktop-dispatch.ts. */
-export const DISPATCH_PROMPT = 'Run your pipeline stage for #<n>. Follow your Pre-flight, Label swap, Work, and Handoff steps exactly.'
-export const REFRESH_PROMPT = 'Run your pipeline stage for pull request #<n> in refresh mode.'
+export const DISPATCH_PROMPT = '<Stage> stage for <kind> #<n>. Run your pipeline stage for #<n>. Follow your Pre-flight, Label swap, Work, and Handoff steps exactly.'
+export const REFRESH_PROMPT = 'Refresh stage for pull request #<n>. Run your pipeline stage for pull request #<n> in refresh mode.'
+
+const STAGE_PROMPT_NAMES: Record<StageAgent, string> = { plan: 'Plan', impl: 'Implementation', review: 'Review', revise: 'Revision' }
+const KIND_PROMPT_NAMES: Record<PipelineItemKind, string> = { issue: 'issue', 'pull-request': 'pull request' }
 
 /** `launch.ts`'s own `StageLaunchRequest.prompt` is filled from this, never re-derived at the launcher. */
-export function promptFor(actionable: Pick<TickActionable, 'trigger' | 'number'>): string {
+export function promptFor(actionable: Pick<TickActionable, 'trigger' | 'number' | 'agent' | 'kind'>): string {
   const n = String(actionable.number)
-  return actionable.trigger === 'refreshBranch' ? REFRESH_PROMPT.replace('<n>', n) : DISPATCH_PROMPT.replace('<n>', n)
+  if (actionable.trigger === 'refreshBranch') return REFRESH_PROMPT.replaceAll('<n>', n)
+  return DISPATCH_PROMPT.replaceAll('<Stage>', STAGE_PROMPT_NAMES[actionable.agent]).replaceAll('<kind>', KIND_PROMPT_NAMES[actionable.kind]).replaceAll('<n>', n)
 }
 
 interface RepoDispatcherState {

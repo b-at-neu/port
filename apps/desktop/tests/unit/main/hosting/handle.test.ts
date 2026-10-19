@@ -184,6 +184,51 @@ describe('createHostedHandle', () => {
     expect(result).toEqual({ ok: false, kind: 'blocked-command', name: 'pipeline' })
   })
 
+  describe('in a stage session', () => {
+    const STAGE = { tag: { agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved' } as const, agentName: 'port:impl-agent', model: 'sonnet', sessionRequiredPaths: [] }
+    const COMMANDS = [
+      { name: 'port:scope', description: 'Scope', argumentHint: '' },
+      { name: 'other:cmd', description: 'Other', argumentHint: '' },
+    ]
+
+    it('refuses /port:scope as blocked-command, pushing nothing', async () => {
+      const fake = fakeQuery({ commands: COMMANDS })
+      const handle = createHostedHandle(baseParams({ stage: STAGE }), () => fake.query)
+      await flush()
+      const before = handle.entriesWindow().entries.length
+      expect(handle.send('/port:scope something')).toEqual({ ok: false, kind: 'blocked-command', name: 'port:scope' })
+      expect(handle.entriesWindow().entries.length).toBe(before)
+    })
+
+    it('accepts plain text and a non-port command', async () => {
+      const fake = fakeQuery({ commands: COMMANDS })
+      const handle = createHostedHandle(baseParams({ stage: STAGE }), () => fake.query)
+      await flush()
+      expect(handle.send('keep going').ok).toBe(true)
+      expect(handle.send('/other:cmd').ok).toBe(true)
+    })
+
+    it('refuses an invoke of a port command as unknown-command', async () => {
+      const fake = fakeQuery({ commands: COMMANDS })
+      const handle = createHostedHandle(baseParams({ stage: STAGE }), () => fake.query)
+      await flush()
+      expect(handle.invoke('scope', '')).toEqual({ ok: false, kind: 'unknown-command', name: 'scope' })
+    })
+  })
+
+  it('an interactive session refuses only /port:pipeline', async () => {
+    const fake = fakeQuery({
+      commands: [
+        { name: 'port:scope', description: 'Scope', argumentHint: '' },
+        { name: 'port:pipeline', description: 'Cockpit', argumentHint: '' },
+      ],
+    })
+    const handle = createHostedHandle(baseParams(), () => fake.query)
+    await flush()
+    expect(handle.send('/port:scope something').ok).toBe(true)
+    expect(handle.send('/port:pipeline')).toEqual({ ok: false, kind: 'blocked-command', name: 'port:pipeline' })
+  })
+
   it('interrupt() moves to interrupting, then records still_queued.length from the receipt', async () => {
     const fake = fakeQuery()
     const handle = createHostedHandle(baseParams(), () => fake.query)

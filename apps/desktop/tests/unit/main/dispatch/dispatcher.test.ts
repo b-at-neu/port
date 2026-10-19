@@ -424,11 +424,34 @@ function promptForActionable(overrides: Partial<TickActionable> = {}): TickActio
 }
 
 describe('promptFor', () => {
-  it('uses DISPATCH_PROMPT for an ordinary trigger, filling in the number', () => {
-    expect(promptFor(promptForActionable())).toBe(DISPATCH_PROMPT.replace('<n>', '52'))
+  const INSTRUCTION = 'Run your pipeline stage for #52. Follow your Pre-flight, Label swap, Work, and Handoff steps exactly.'
+
+  it('names the plan stage and the issue', () => {
+    expect(promptFor(promptForActionable({ trigger: 'ready', agent: 'plan' }))).toBe(`Plan stage for issue #52. ${INSTRUCTION}`)
   })
 
-  it('uses REFRESH_PROMPT for a refreshBranch trigger', () => {
-    expect(promptFor(promptForActionable({ trigger: 'refreshBranch', agent: 'revise' }))).toBe(REFRESH_PROMPT.replace('<n>', '52'))
+  it('names the implementation stage and the issue', () => {
+    expect(promptFor(promptForActionable())).toBe(`Implementation stage for issue #52. ${INSTRUCTION}`)
+  })
+
+  it('names the review stage and the pull request', () => {
+    expect(promptFor(promptForActionable({ kind: 'pull-request', trigger: 'readyForReview', agent: 'review' }))).toBe(`Review stage for pull request #52. ${INSTRUCTION}`)
+  })
+
+  it('names the revision stage and the pull request', () => {
+    expect(promptFor(promptForActionable({ kind: 'pull-request', trigger: 'needsRevision', agent: 'revise' }))).toBe(`Revision stage for pull request #52. ${INSTRUCTION}`)
+  })
+
+  it('fills every placeholder in DISPATCH_PROMPT, with the number twice', () => {
+    const prompt = promptFor(promptForActionable())
+    expect(prompt).not.toMatch(/<[A-Za-z]+>/)
+    expect(prompt.split('#52')).toHaveLength(3)
+    expect(DISPATCH_PROMPT.split('<n>')).toHaveLength(3)
+  })
+
+  it('names the refresh stage and the pull request for a refreshBranch trigger, with the number twice', () => {
+    const prompt = promptFor(promptForActionable({ kind: 'pull-request', trigger: 'refreshBranch', agent: 'revise' }))
+    expect(prompt).toBe('Refresh stage for pull request #52. Run your pipeline stage for pull request #52 in refresh mode.')
+    expect(REFRESH_PROMPT.split('<n>')).toHaveLength(3)
   })
 })
