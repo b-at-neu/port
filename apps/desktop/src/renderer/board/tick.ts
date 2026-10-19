@@ -40,7 +40,7 @@ export function clockLineCopy(nextWakeupAt: string | null, health: readonly Repo
 /** Under a repository's tick line while its GitHub reads are deferred — muted, since the operator has nothing to do. */
 export function deferralLineCopy(health: RepositoryHealth | undefined, now: Date): string | null {
   if (health === undefined || !isDeferred(health.github, now)) return null
-  const label = new Date(Date.parse(health.github.deferredUntil ?? '')).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const label = new Date(health.github.deferredUntil ?? '').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   return `GitHub's rate limit is spent until ${label}. Reads and dispatch wait until then.`
 }
 
