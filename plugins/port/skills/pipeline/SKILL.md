@@ -268,24 +268,26 @@ Agent({
   subagent_type: "<plan-agent|impl-agent|review-agent|revise-agent>",
   model: "<the matching entry from models>",
   run_in_background: true,
-  prompt: "Run your pipeline stage for #<n>. Follow your Pre-flight, Label swap, Work, and Handoff steps exactly."
+  prompt: "<Stage> stage for <kind> #<n>. Run your pipeline stage for #<n>. Follow your Pre-flight, Label swap, Work, and Handoff steps exactly."
 })
 ```
 
-**`model` is the one field you set beyond the stage.** Agent frontmatter is static, so an agent file cannot read `models` from config; passing it here is what honours the configuration, and it takes precedence over the frontmatter default. Everything else — tool scope, permission mode, `maxTurns`, worktree isolation — comes from the agent definition. For a refresh, say so in the `prompt` so the agent takes its refresh path: `Run your pipeline stage for pull request #<n> in refresh mode.` — agent-facing, not operator-facing copy, so `<n>` stays the pull request's own number here: `revise-agent` keys its refresh path off labels, never off this string.
+**`model` is the one field you set beyond the stage.** Agent frontmatter is static, so an agent file cannot read `models` from config; passing it here is what honours the configuration, and it takes precedence over the frontmatter default. Everything else — tool scope, permission mode, `maxTurns`, worktree isolation — comes from the agent definition. For a refresh, say so in the `prompt` so the agent takes its refresh path: `Refresh stage for pull request #<n>. Run your pipeline stage for pull request #<n> in refresh mode.` — agent-facing, not operator-facing copy, so `<n>` stays the pull request's own number here: `revise-agent` keys its refresh path off labels, never off this string.
 
 **Every dispatch updates `.temp/dispatch-log.md`** (Write tool, rewriting the whole file) — add or update the item's row with `State: dispatched` and `Resets` left at whatever it already was (`0` on a first dispatch). This is what lets the liveness cross-check later tell "this session's own dispatch, now dead" apart from "an in-flight label this session never touched."
 
 Stage mapping:
 
-| Trigger | `subagent_type` | Model |
-| --- | --- | --- |
-| Issue at `<labels.ready>` | `plan-agent` (fresh plan) — **after the budget gate** | `models.plan` |
-| Issue at `<labels.planChangesRequested>` | `plan-agent` (revision) — **after the budget gate** | `models.plan` |
-| Issue at `<labels.planApproved>` | `impl-agent` — **unless `SESSION REQUIRED` at its slot: announce, never dispatch**; otherwise **after the budget gate** | `models.impl` |
-| Pull request at `<labels.readyForReview>` | `review-agent` — **unless `mergeable` is `CONFLICTING`: refresh instead, see "Refresh sweep"; or the newest review already covers the current head with no `## Gate cleared` since: escalate instead, see "Zero-diff review gate"; or it also carries `<labels.refreshBranch>`/`<labels.refreshing>`: refresh wins, never dispatch review this tick**; otherwise **after the budget gate** | `models.review` |
-| Pull request at `<labels.needsRevision>` | `revise-agent` — **after the cycle-cap check**; **unless `SESSION REQUIRED` at its slot: announce, never dispatch**; **or it also carries `<labels.refreshBranch>`/`<labels.refreshing>`: refresh wins, never dispatch revision this tick**; otherwise **after the budget gate** | `models.revise` |
-| Pull request at `<labels.refreshBranch>` | `revise-agent` in **refresh mode** — **after the budget gate** | `models.revise` |
+| Trigger | `subagent_type` | Model | Prompt `<Stage>` |
+| --- | --- | --- | --- |
+| Issue at `<labels.ready>` | `plan-agent` (fresh plan) — **after the budget gate** | `models.plan` | `Plan` |
+| Issue at `<labels.planChangesRequested>` | `plan-agent` (revision) — **after the budget gate** | `models.plan` | `Plan` |
+| Issue at `<labels.planApproved>` | `impl-agent` — **unless `SESSION REQUIRED` at its slot: announce, never dispatch**; otherwise **after the budget gate** | `models.impl` | `Implementation` |
+| Pull request at `<labels.readyForReview>` | `review-agent` — **unless `mergeable` is `CONFLICTING`: refresh instead, see "Refresh sweep"; or the newest review already covers the current head with no `## Gate cleared` since: escalate instead, see "Zero-diff review gate"; or it also carries `<labels.refreshBranch>`/`<labels.refreshing>`: refresh wins, never dispatch review this tick**; otherwise **after the budget gate** | `models.review` | `Review` |
+| Pull request at `<labels.needsRevision>` | `revise-agent` — **after the cycle-cap check**; **unless `SESSION REQUIRED` at its slot: announce, never dispatch**; **or it also carries `<labels.refreshBranch>`/`<labels.refreshing>`: refresh wins, never dispatch revision this tick**; otherwise **after the budget gate** | `models.revise` | `Revision` |
+| Pull request at `<labels.refreshBranch>` | `revise-agent` in **refresh mode** — **after the budget gate** | `models.revise` | `Refresh` |
+
+`<kind>` is `issue` for the three issue rows and `pull request` for the three pull-request rows. The refresh row uses its own template, above, which carries no `<kind>`.
 
 **Session-required items never dispatch.** Before dispatching impl or revise, read that item's `body` (already in the trigger query's result — both request `body` — so this costs no extra call) at its **marker slot** — the first non-empty line of the plan block, directly under `## Implementation Plan`, for an issue; the first non-empty line after `Closes #N`, for a pull request. Slot holds `> **SESSION REQUIRED:** <reason>` → announce, do not dispatch. Anything else at the slot, or no slot at all → dispatch normally. **Never search the rest of the body for the literal string** — a ticket that mentions `SESSION REQUIRED` in prose (explaining the mechanism, or why a step is or is not session-required) or inline code is not marked; read the one line at the slot, never a substring anywhere in the body. Full rule: `${CLAUDE_PLUGIN_ROOT}/docs/PIPELINE.md` → "Session-required tickets" → "Detection".
 
