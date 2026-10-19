@@ -14,10 +14,10 @@ export const REBASE_DECISIONS_LINE = '### Rebase decisions'
 // The unblock comment, plus either a `### Cycle grant` block (counted by
 // `cycleGrantCount`) or a `### Rebase decisions` block — never both.
 export function gateClearedBody(
-  route: 'revision' | 'review',
+  route: 'revision' | 'review' | 'implementation',
   opts?: { readonly cycleGrant?: boolean; readonly rebaseDecisions?: readonly { readonly id: string; readonly path: string; readonly letter: string; readonly label: string }[] },
 ): string {
-  const target = route === 'revision' ? 'back to revision.' : 'back to review.'
+  const target = `back to ${route}.`
   const base = `${GATE_CLEARED_HEADING}\nCleared by the operator in port: ${target}`
   const decisions = opts?.rebaseDecisions ?? []
   if (opts?.cycleGrant && decisions.length > 0) throw new Error('a gate-cleared body carries a cycle grant or rebase decisions, never both')

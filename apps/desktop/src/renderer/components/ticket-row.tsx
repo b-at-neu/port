@@ -3,9 +3,8 @@
 import type { KeyboardEvent, MouseEvent } from 'react'
 import { cn } from '@/renderer/lib/utils'
 import type { BoardItemRow } from '@/types/board'
-import { PHASE_NAMES } from '@/renderer/lib/phase'
-import { autoPlanTagLabel, autoPlanTagTitle, operatorJoinedTagLabel, operatorJoinedTagTitle } from '@/renderer/board/copy'
-import { nextActionFor, pillStatusFor } from '@/renderer/board/row-model'
+import { autoPlanTagLabel, autoPlanTagTitle, dispatchedTagLabel, dispatchedTagTitle, operatorJoinedTagLabel, operatorJoinedTagTitle } from '@/renderer/board/copy'
+import { isDispatchedRow, nextActionFor, phaseLabelFor, pillStatusFor } from '@/renderer/board/row-model'
 import { openReviewDialog } from '@/renderer/gate/controller'
 import { openDecision } from '@/renderer/decision/controller'
 import { PhaseBar } from '@/renderer/components/phase-bar'
@@ -17,11 +16,6 @@ interface TicketRowProps {
   readonly rowProps: ReturnType<ReturnType<typeof useListSelection>['rowProps']>
   /** `true` when an operator has typed into one of this item's stage sessions — renders an `Operator joined` tag after the phase pill. */
   readonly operatorJoined?: boolean
-}
-
-function phaseLabel(row: BoardItemRow): string {
-  if (row.displayStatus.status === 'interrupted') return 'Interrupted'
-  return row.stageLabel !== null ? (PHASE_NAMES[row.stageLabel.key] ?? row.stageLabel.key) : 'Unstaged'
 }
 
 function NextActionLink({ row }: { readonly row: BoardItemRow }) {
@@ -77,7 +71,12 @@ export function TicketRow({ row, rowProps, operatorJoined = false }: TicketRowPr
         </span>
       ) : null}
       <PhaseBar stageKey={row.stageLabel?.key ?? null} kind={item.kind} merged={item.mergedAt !== null} className="shrink-0" />
-      <StatusPill status={pillStatusFor(row)} label={phaseLabel(row)} className="shrink-0" />
+      <StatusPill status={pillStatusFor(row)} label={phaseLabelFor(row)} className="shrink-0" />
+      {isDispatchedRow(row) ? (
+        <span title={dispatchedTagTitle()} aria-label={dispatchedTagTitle()} className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-meta text-foreground-secondary">
+          {dispatchedTagLabel()}
+        </span>
+      ) : null}
       {operatorJoined ? (
         <span title={operatorJoinedTagTitle()} aria-label={operatorJoinedTagTitle()} className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-meta text-foreground-secondary">
           {operatorJoinedTagLabel()}

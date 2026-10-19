@@ -14,7 +14,9 @@ import { needsYouItems } from '@/renderer/board/needs-you'
 import type { NeedsYouItem as NeedsYouItemModel } from '@/types/board'
 import { registerListNavigator } from '@/renderer/shell/stores'
 import { useListSelection } from '@/renderer/shell/list-selection'
-import { needsYouLeadCopy } from '@/renderer/needs-you/copy'
+import { REFRESH_FAILED_TOAST, needsYouLeadCopy, refreshedToast } from '@/renderer/needs-you/copy'
+import { BlockerAnswer } from '@/renderer/needs-you/blocker-answer'
+import type { HostedSessionSnapshot } from '@/types/hosting'
 import { actionFor, runAction, runSecondaryAction } from '@/renderer/needs-you/actions'
 import { toast } from 'sonner'
 import { QuestionCard } from '@/renderer/session/question-card'
@@ -29,11 +31,11 @@ function hasDetail(item: NeedsYouItemModel): boolean {
   if (item.kind === 'held') return item.held.reason === 'contended' && item.held.contention !== null
   if (item.kind === 'stage-question') return true
   if (item.kind === 'stage-denial') return true
-  if (item.kind === 'stage-blocked') return item.text !== null
+  if (item.kind === 'stage-blocked') return true
   return false
 }
 
-function DetailBody({ item }: { readonly item: NeedsYouItemModel }) {
+function DetailBody({ item, onSent }: { readonly item: NeedsYouItemModel; readonly onSent: () => void }) {
   if (item.kind === 'held' && item.held.contention !== null) {
     return (
       <div className="border-t border-border px-4 py-2 text-meta text-muted-foreground">
@@ -64,8 +66,13 @@ function DetailBody({ item }: { readonly item: NeedsYouItemModel }) {
       </div>
     )
   }
-  if (item.kind === 'stage-blocked' && item.text !== null) {
-    return <div className="border-t border-border px-4 py-2 font-mono text-meta text-muted-foreground">{item.text}</div>
+  if (item.kind === 'stage-blocked') {
+    return (
+      <>
+        {item.text !== null ? <div className="border-t border-border px-4 py-2 font-mono text-meta text-muted-foreground">{item.text}</div> : null}
+        <BlockerAnswer sessionKey={item.sessionKey} number={item.number} onSent={onSent} />
+      </>
+    )
   }
   return null
 }
@@ -101,6 +108,8 @@ export function NeedsYouScreen() {
   const queryClient = useQueryClient()
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
   const [pendingKey, setPendingKey] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const sessionListKey = ipcQueryOptions('session:list').queryKey
   const now = new Date()
 
   const items = snapshotQuery.data !== undefined ? needsYouItems(snapshotQuery.data, now, sessionsQuery.data ?? []) : []
@@ -115,13 +124,21 @@ export function NeedsYouScreen() {
     },
   })
 
-  async function refresh(): Promise<void> {
+  async function refresh({ announce }: { readonly announce: boolean }): Promise<void> {
+    setRefreshing(true)
     try {
-      const snapshot = await window.port.boardRefresh({})
-      queryClient.setQueryData(ipcQueryOptions('board:snapshot').queryKey, snapshot)
+      const fresh = await invoke('board:refresh', {})
+      queryClient.setQueryData(ipcQueryOptions('board:snapshot').queryKey, fresh)
+      await queryClient.refetchQueries({ queryKey: sessionListKey })
+      if (announce) {
+        const sessions = queryClient.getQueryData<readonly HostedSessionSnapshot[]>(sessionListKey) ?? []
+        toast(refreshedToast(needsYouItems(fresh, new Date(), sessions).length))
+      }
     } catch (error) {
       console.error('Failed to refresh the board', error)
-      toast('Failed to reach the main process.')
+      toast(REFRESH_FAILED_TOAST)
+    } finally {
+      setRefreshing(false)
     }
   }
 
@@ -129,11 +146,12 @@ export function NeedsYouScreen() {
     const key = itemKey(item)
     const action = actionFor(item)
     if (action.kind === 'retry' || action.kind === 'refresh') setPendingKey(key)
+    if (action.kind === 'answer') setExpandedKey(key)
     runAction(item, {
       onToast: (message) => {
         setPendingKey((current) => (current === key ? null : current))
         toast(message)
-        void refresh()
+        void refresh({ announce: false })
       },
     })
   }
@@ -147,8 +165,13 @@ export function NeedsYouScreen() {
           <span>Needs you</span>
           <div className="flex items-center gap-2">
             {isStale ? <span className="text-meta font-normal text-attention-dot">Updated {Math.round((now.getTime() - snapshotQuery.dataUpdatedAt) / 60_000)}m ago</span> : null}
-            <button type="button" onClick={() => void refresh()} className="flex h-7 items-center gap-1.5 rounded-md px-2 text-small text-foreground-secondary hover:bg-accent">
-              <RefreshCw aria-hidden="true" className="size-3.5" />
+            <button
+              type="button"
+              onClick={() => void refresh({ announce: true })}
+              disabled={refreshing}
+              className="flex h-7 items-center gap-1.5 rounded-md px-2 text-small text-foreground-secondary hover:bg-accent disabled:opacity-50"
+            >
+              <RefreshCw aria-hidden="true" className={refreshing ? 'size-3.5 animate-spin' : 'size-3.5'} />
               Refresh
             </button>
           </div>
@@ -231,7 +254,7 @@ function Row({
         expanded={expanded}
         onToggleExpand={onToggle}
       >
-        <DetailBody item={item} />
+        <DetailBody item={item} onSent={onToggle} />
       </NeedsYouItem>
     </div>
   )

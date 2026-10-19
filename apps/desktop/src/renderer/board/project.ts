@@ -1,12 +1,14 @@
 // The pure board projection — everything the screen decides lives here, testable under `environment: 'node'` with no jsdom dependency.
 import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
+import { isLiveStageSession } from '@/utils/stage/live'
 import { inspectDenials } from '@/renderer/local/inspect'
 import { actionsFor } from '@/utils/actions/plan'
 import { decisionsFor } from '@/utils/actions/decide'
 import type { RepoId } from '@/utils/repos'
 import type { RepositoryFreshness, RepositoryState, StageLabel } from '@/types/state'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/types/board'
-import type { BoardGroup, BoardItemRow, BoardProjection, BoardRepositorySummary, BoardSnapshot, DisplayStatus, GroupBy, RepositoryHealth, SourceHealth, SourceKind } from '@/types/board'
+import type { BoardGroup, BoardItemRow, BoardProjection, BoardRepositorySummary, BoardSnapshot, DisplayStatus, GroupBy, LiveStage, RepositoryHealth, SourceHealth, SourceKind } from '@/types/board'
+import type { HostedSessionSnapshot } from '@/types/hosting'
 
 /** The eventual-consistency suppression; `item.status` is never rewritten. Fails toward under-reporting — renders `in-flight` rather than a possibly-phantom `stalled`. */
 export function displayStatus(item: { readonly status: string }, repoHealth: RepositoryHealth | undefined, freshness: RepositoryFreshness, now: Date): DisplayStatus {
@@ -80,12 +82,37 @@ interface ProjectBoardParams {
   readonly snapshot: BoardSnapshot
   readonly groupBy: GroupBy
   readonly now: Date
+  readonly sessions?: readonly HostedSessionSnapshot[]
+}
+
+function liveStageKey(repoId: RepoId, kind: string, number: number): string {
+  return `${repoId}:${kind}:${String(number)}`
+}
+
+interface LiveStageEntry extends LiveStage {
+  readonly startedAt: string
+  readonly working: boolean
+}
+
+/** The newest live stage session per (repo, kind, number). */
+function liveStagesOf(sessions: readonly HostedSessionSnapshot[]): ReadonlyMap<string, LiveStageEntry> {
+  const live = new Map<string, LiveStageEntry>()
+  for (const s of sessions) {
+    if (s.stage === null || s.repoId === null || !isLiveStageSession(s)) continue
+    const key = liveStageKey(s.repoId, s.stage.kind, s.stage.number)
+    const current = live.get(key)
+    if (current === undefined || Date.parse(s.startedAt) > Date.parse(current.startedAt)) {
+      live.set(key, { agent: s.stage.agent, trigger: s.stage.trigger, sessionKey: s.sessionKey, startedAt: s.startedAt, working: s.phase === 'starting' || s.phase === 'streaming' })
+    }
+  }
+  return live
 }
 
 /** Everything the board renders, computed once. Pure over an already-built
  *  `BoardSnapshot` — no IPC, no timer, no DOM. */
 export function projectBoard(params: ProjectBoardParams): BoardProjection {
-  const { snapshot, groupBy, now } = params
+  const { snapshot, groupBy, now, sessions = [] } = params
+  const liveStages = liveStagesOf(sessions)
   const healthByRepo = new Map<RepoId, RepositoryHealth>(snapshot.health.map((h) => [h.repoId, h]))
   const notReady = snapshot.state.repositories.filter((r): r is Extract<RepositoryState, { readonly ok: false }> => !r.ok)
   const readyRepos = snapshot.state.repositories.filter((r): r is Extract<RepositoryState, { readonly ok: true }> => r.ok)
@@ -99,11 +126,14 @@ export function projectBoard(params: ProjectBoardParams): BoardProjection {
     const health = healthByRepo.get(repo.repoId)
     for (const item of repo.items) {
       const actions = actionsFor({ item, viewer: repo.viewer, approvalGate: repo.approvalGate })
-      const decisions = decisionsFor({ item, viewer: repo.viewer, reviewCycleCap: repo.reviewCycleCap })
-      const ds: DisplayStatus = interruptedKeys.has(`${repo.repoId}:${String(item.number)}`)
-        ? { status: 'interrupted', staleGithub: false, githubAgeMs: null }
-        : displayStatus(item, health, repo.freshness, now)
-      rows.push({ item, displayStatus: ds, stageLabel: stageLabelOf(item), actions, decisions, viewer: repo.viewer })
+      const found = liveStages.get(liveStageKey(repo.repoId, item.kind, item.number))
+      const liveStage: LiveStage | null = found === undefined ? null : { agent: found.agent, trigger: found.trigger, sessionKey: found.sessionKey }
+      const decisions = decisionsFor({ item, viewer: repo.viewer, reviewCycleCap: repo.reviewCycleCap, liveStage: liveStage !== null })
+      let ds: DisplayStatus
+      if (interruptedKeys.has(`${repo.repoId}:${String(item.number)}`)) ds = { status: 'interrupted', staleGithub: false, githubAgeMs: null }
+      else if (found?.working === true && item.status === 'waiting') ds = { status: 'in-flight', staleGithub: false, githubAgeMs: null }
+      else ds = displayStatus(item, health, repo.freshness, now)
+      rows.push({ item, displayStatus: ds, liveStage, stageLabel: stageLabelOf(item), actions, decisions, viewer: repo.viewer })
     }
   }
   rows.sort((a, b) => compareRows(a, b, displayNameOf))

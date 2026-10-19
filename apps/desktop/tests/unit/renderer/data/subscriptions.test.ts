@@ -4,6 +4,7 @@ import { connectQueryCache, createSubscriptions } from '@/renderer/data/subscrip
 import type { SubscribableEvent, SubscriptionBridge } from '@/types/data'
 import { ipcQueryOptions } from '@/renderer/data/query'
 import type { BoardSnapshot } from '@/types/board'
+import type { ReposListResponse } from '@/types/ipc'
 import type { HostedSessionSnapshot, SessionEntriesDelta } from '@/types/hosting'
 import type { AppCommand } from '@/utils/shell/commands'
 
@@ -107,5 +108,43 @@ describe('connectQueryCache', () => {
     const key = ipcQueryOptions('board:snapshot').queryKey
     expect(cancelSpy).toHaveBeenCalledWith({ queryKey: key })
     expect(setSpy).toHaveBeenCalledWith(key, { snapshot: true })
+  })
+
+  describe('repos:list invalidation', () => {
+    const reposKey = ipcQueryOptions('repos:list').queryKey
+    const notReady = { id: 'repo-a', path: '/a', displayName: 'o/a', problem: { kind: 'directory-missing' }, diagnostics: [] }
+    const ready = { id: 'repo-a', path: '/a', displayName: 'o/a', status: 'ready', config: {}, diagnostics: [] }
+    const snapshotWith = (ok: boolean) => ({ state: { repositories: [ok ? { ok: true, repoId: 'repo-a' } : { ok: false, repoId: 'repo-a', reason: 'not-ready' }] } })
+
+    function pushWith(cached: unknown, ok: boolean): number {
+      const client = new QueryClient()
+      if (cached !== undefined) client.setQueryData(reposKey, cached as ReposListResponse)
+      const invalidate = vi.spyOn(client, 'invalidateQueries').mockResolvedValue(undefined)
+      const bridge = fakeBridge()
+      connectQueryCache(client, createSubscriptions(bridge))
+      bridge.fire('board:update', snapshotWith(ok))
+      return invalidate.mock.calls.filter(([filter]) => JSON.stringify(filter?.queryKey) === JSON.stringify(reposKey)).length
+    }
+
+    it('invalidates when the board reports a repository ok that the cache still lists as not ready', () => {
+      expect(pushWith({ ok: true, repositories: [notReady] }, true)).toBe(1)
+    })
+
+    it('invalidates when the cache does not list the repository at all', () => {
+      expect(pushWith({ ok: true, repositories: [] }, true)).toBe(1)
+    })
+
+    it('leaves a matching cache alone', () => {
+      expect(pushWith({ ok: true, repositories: [ready] }, true)).toBe(0)
+    })
+
+    it('never invalidates for a repository whose own read failed', () => {
+      expect(pushWith({ ok: true, repositories: [notReady] }, false)).toBe(0)
+    })
+
+    it('does nothing before repos:list has been read, or after it failed to load', () => {
+      expect(pushWith(undefined, true)).toBe(0)
+      expect(pushWith({ ok: false, kind: 'registry-unreadable', message: 'x' }, true)).toBe(0)
+    })
   })
 })

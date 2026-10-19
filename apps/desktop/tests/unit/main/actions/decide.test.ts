@@ -74,7 +74,7 @@ describe('applyItemDecision — moved', () => {
   it('refuses moved when the item is gone from the snapshot', async () => {
     const snapshot = snapshotOf([repoState([])])
     const result = await applyItemDecision(
-      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch', liveStage: false },
       depsWith({}),
     )
     expect(result).toEqual({ ok: false, reason: 'moved', expected: 'needs human', observed: 'no longer tracked' })
@@ -83,7 +83,7 @@ describe('applyItemDecision — moved', () => {
   it('refuses moved when the current stage disagrees with expectedStage', async () => {
     const snapshot = snapshotOf([repoState([item({ stages: [stageLabel('approved', 'terminal')], stage: 'terminal' })])])
     const result = await applyItemDecision(
-      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch', liveStage: false },
       depsWith({}),
     )
     expect(result).toEqual({ ok: false, reason: 'moved', expected: 'needs human', observed: 'approved' })
@@ -100,7 +100,7 @@ describe('applyItemDecision — moved', () => {
       fetchItemsByNumber: fetchReturning({ ok: true, resolved: [resolvedItem({ labels: ['needs revision'] })], unavailable: [], fetchedAt: NOW().toISOString() }),
     })
     const result = await applyItemDecision(
-      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch', liveStage: false },
       deps,
     )
     expect(result.ok).toBe(false)
@@ -113,7 +113,7 @@ describe('applyItemDecision — refusals', () => {
   it('refuses not-owned', async () => {
     const snapshot = snapshotOf([repoState([item({ assignees: ['other'] })], { viewer: 'op' })])
     const result = await applyItemDecision(
-      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch', liveStage: false },
       depsWith({}),
     )
     expect(result).toEqual({ ok: false, reason: 'not-owned', owners: ['other'] })
@@ -122,7 +122,7 @@ describe('applyItemDecision — refusals', () => {
   it('refuses cycle-cap for revise at the cap', async () => {
     const snapshot = snapshotOf([repoState([item({ stage: 'terminal', stages: [stageLabel('approved', 'terminal')], reviewCycleCount: 5 })], { reviewCycleCap: 5 })])
     const result = await applyItemDecision(
-      { request: { repoId: REPO_ID, number: 300, decision: 'revise', expectedStage: 'approved', route: null, note: 'change it', skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      { request: { repoId: REPO_ID, number: 300, decision: 'revise', expectedStage: 'approved', route: null, note: 'change it', skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch', liveStage: false },
       depsWith({}),
     )
     expect(result).toEqual({ ok: false, reason: 'refused', refusal: 'cycle-cap' })
@@ -131,7 +131,7 @@ describe('applyItemDecision — refusals', () => {
   it('refuses note-invalid for an empty revise note, before any read or write', async () => {
     const snapshot = snapshotOf([repoState([item({ stage: 'terminal', stages: [stageLabel('approved', 'terminal')] })])])
     const result = await applyItemDecision(
-      { request: { repoId: REPO_ID, number: 300, decision: 'revise', expectedStage: 'approved', route: null, note: '  ', skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      { request: { repoId: REPO_ID, number: 300, decision: 'revise', expectedStage: 'approved', route: null, note: '  ', skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch', liveStage: false },
       depsWith({}),
     )
     expect(result).toEqual({ ok: false, reason: 'refused', refusal: 'note-invalid', problem: 'empty' })
@@ -151,7 +151,7 @@ describe('applyItemDecision — comment then swap', () => {
       fetchItemsByNumber: fetchReturning({ ok: true, resolved: [resolvedItem()], unavailable: [], fetchedAt: NOW().toISOString() }),
     })
     const result = await applyItemDecision(
-      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch', liveStage: false },
       deps,
     )
     expect(result.ok).toBe(false)
@@ -171,7 +171,7 @@ describe('applyItemDecision — comment then swap', () => {
       fetchItemsByNumber: fetchReturning({ ok: true, resolved: [resolvedItem()], unavailable: [], fetchedAt: NOW().toISOString() }),
     })
     const result = await applyItemDecision(
-      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: true, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: true, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch', liveStage: false },
       deps,
     )
     expect(result).toEqual({ ok: true, comment: null, labels: { kind: 'applied', argv: [] } })
@@ -193,7 +193,7 @@ describe('applyItemDecision — comment then swap', () => {
       fetchItemsByNumber: fetchReturning({ ok: true, resolved: [resolvedItem()], unavailable: [], fetchedAt: NOW().toISOString() }),
     })
     const result = await applyItemDecision(
-      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch', liveStage: false },
       deps,
     )
     expect(result).toEqual({ ok: true, comment: { kind: 'applied', argv: [] }, labels: { kind: 'applied', argv: [] } })
@@ -213,7 +213,7 @@ describe('applyItemDecision — comment then swap', () => {
       fetchItemsByNumber: fetchReturning({ ok: true, resolved: [resolvedItem()], unavailable: [], fetchedAt: NOW().toISOString() }),
     })
     await applyItemDecision(
-      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch', liveStage: false },
       deps,
     )
     expect(body).toContain('### Cycle grant')
@@ -232,7 +232,7 @@ describe('applyItemDecision — comment then swap', () => {
       fetchItemsByNumber: fetchReturning({ ok: true, resolved: [resolvedItem()], unavailable: [], fetchedAt: NOW().toISOString() }),
     })
     await applyItemDecision(
-      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' },
+      { request: { repoId: REPO_ID, number: 300, decision: 'unblock', expectedStage: 'needsHuman', route: 'revision', note: null, skipComment: false, picks: null }, snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch', liveStage: false },
       deps,
     )
     expect(body).not.toContain('### Cycle grant')
@@ -297,7 +297,7 @@ describe('applyItemDecision — rebase decisions', () => {
       },
       fetchItemsByNumber: fetchReturning({ ok: true, resolved: [resolvedItem()], unavailable: [], fetchedAt: NOW().toISOString() }),
     })
-    const result = await applyItemDecision({ request: request({}), snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' }, deps)
+    const result = await applyItemDecision({ request: request({}), snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch', liveStage: false }, deps)
     expect(result.ok).toBe(true)
     expect(calls).toEqual(['comment', 'labels'])
     expect(body).toBe(
@@ -314,21 +314,82 @@ describe('applyItemDecision — rebase decisions', () => {
     ['the review route', { route: 'review' as const }, 'route'],
   ])('refuses %s with picks-invalid and writes nothing', async (_name, overrides, problem) => {
     const snapshot = snapshotOf([repoState([item({ comments })])])
-    const result = await applyItemDecision({ request: request(overrides), snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' }, depsWith({}))
+    const result = await applyItemDecision({ request: request(overrides), snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch', liveStage: false }, depsWith({}))
     expect(result).toEqual({ ok: false, reason: 'refused', refusal: 'picks-invalid', problem })
   })
 
   it('refuses picks on an escalation that carries no decisions', async () => {
     const snapshot = snapshotOf([repoState([item({ comments: [{ body: '## Pipeline Escalation\nreason', createdAt: '2026-01-01T00:00:00Z' }] })])])
-    const result = await applyItemDecision({ request: request({}), snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' }, depsWith({}))
+    const result = await applyItemDecision({ request: request({}), snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch', liveStage: false }, depsWith({}))
     expect(result).toEqual({ ok: false, reason: 'refused', refusal: 'picks-invalid', problem: 'unexpected' })
   })
 
   it('still refuses rebase-decisions when a block cannot be parsed', async () => {
     const unreadable = [{ body: '## Pipeline Escalation\n1 conflict\n### D1 — `a.ts`\nno table', createdAt: '2026-01-01T00:00:00Z' }]
     const snapshot = snapshotOf([repoState([item({ comments: unreadable })])])
-    const result = await applyItemDecision({ request: request({}), snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch' }, depsWith({}))
+    const result = await applyItemDecision({ request: request({}), snapshot, entry: entry(), auditDir: '/audit', scratchDir: '/scratch', liveStage: false }, depsWith({}))
     expect(result).toEqual({ ok: false, reason: 'refused', refusal: 'rebase-decisions' })
+  })
+})
+
+describe('applyItemDecision — blocked issue', () => {
+  const blockedIssue = () => item({ kind: 'issue', number: 51, stage: 'gate', stages: [stageLabel('blocked', 'gate')], matchedKeys: ['blocked'], headRefOid: null })
+  const request = (overrides: Partial<Parameters<typeof applyItemDecision>[0]['request']> = {}) => ({
+    repoId: REPO_ID,
+    number: 51,
+    decision: 'unblock' as const,
+    expectedStage: 'blocked' as const,
+    route: 'implementation' as const,
+    note: null,
+    skipComment: false,
+    picks: null,
+    ...overrides,
+  })
+  const params = (liveStage: boolean, overrides: Partial<Parameters<typeof applyItemDecision>[0]['request']> = {}) => ({
+    request: request(overrides),
+    snapshot: snapshotOf([repoState([blockedIssue()])]),
+    entry: entry(),
+    auditDir: '/audit',
+    scratchDir: '/scratch',
+    liveStage,
+  })
+
+  it('posts on the issue, then swaps blocked for planApproved with kind issue', async () => {
+    const calls: string[] = []
+    let comment: { readonly kind: string; readonly body: string } | null = null
+    let write: { readonly kind: string; readonly add: readonly string[]; readonly remove: readonly string[] } | null = null
+    const deps = depsWith({
+      postComment: (p) => {
+        calls.push('comment')
+        comment = p.request
+        return Promise.resolve({ kind: 'applied', argv: [] })
+      },
+      applyLabels: (p) => {
+        calls.push('labels')
+        write = p.request
+        return Promise.resolve({ kind: 'applied', argv: [] })
+      },
+      fetchItemsByNumber: fetchReturning({ ok: true, resolved: [resolvedItem({ number: 51, kind: 'issue', labels: ['blocked'] })], unavailable: [], fetchedAt: NOW().toISOString() }),
+    })
+    const result = await applyItemDecision(params(false), deps)
+    expect(result.ok).toBe(true)
+    expect(calls).toEqual(['comment', 'labels'])
+    expect(comment).toMatchObject({ kind: 'issue', body: '## Gate cleared\nCleared by the operator in port: back to implementation.' })
+    expect(write).toMatchObject({ kind: 'issue', add: ['planApproved'], remove: ['blocked'] })
+  })
+
+  it('refuses agent-live and writes nothing while a stage session is live', async () => {
+    const result = await applyItemDecision(params(true), depsWith({}))
+    expect(result).toEqual({ ok: false, reason: 'refused', refusal: 'agent-live' })
+  })
+
+  it('throws when an issue is unblocked with a pull-request route', async () => {
+    await expect(applyItemDecision(params(false, { route: 'review' }), depsWith({}))).rejects.toThrow(/does not fit issue #51/)
+  })
+
+  it('throws when a pull request is unblocked with the implementation route', async () => {
+    const pr = { ...params(false, { number: 300, expectedStage: 'needsHuman' as const }), snapshot: snapshotOf([repoState([item()])]) }
+    await expect(applyItemDecision(pr, depsWith({}))).rejects.toThrow(/does not fit pull-request #300/)
   })
 })
 
@@ -355,6 +416,7 @@ describe('applyItemDecision — real writers', () => {
         entry: entry({ path: repoRoot }),
         auditDir,
         scratchDir,
+        liveStage: false,
       },
       {
         applyLabels: (params) => defaultApplyItemDecisionDeps.applyLabels({ ...params, gh, now: NOW, fetchItemsByNumber }),

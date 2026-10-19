@@ -6,6 +6,7 @@ import { resolveItemAction, resolveItemDecision } from '@/main/channels/items'
 import type { ItemActionDeps } from '@/main/channels/items'
 import type { ItemDecisionDeps } from '@/types/channels'
 import type { RegistryDeps } from '@/types/registry'
+import { stageSession } from '../../../fixtures/stage-session'
 
 const REPO_ID = 'repo-1' as unknown as RepoId
 
@@ -155,6 +156,7 @@ function itemDecisionDepsWith(overrides: Partial<ItemDecisionDeps>): ItemDecisio
     applyItemDecision: () => {
       throw new Error('applyItemDecision should not be invoked in this case')
     },
+    sessions: () => [],
     snapshot: () => EMPTY_SNAPSHOT,
     refresh: () => {
       throw new Error('refresh should not be invoked in this case')
@@ -197,7 +199,51 @@ describe('resolveItemDecision', () => {
         '/scratch',
         itemDecisionDepsWith({}),
       ),
-    ).rejects.toThrow("'item:decide' requires 'route' to be one of revision, review for 'unblock'")
+    ).rejects.toThrow("'item:decide' requires 'route' to be one of revision, review, implementation for 'unblock'")
+  })
+
+  it('accepts the implementation route', async () => {
+    let forwarded: unknown = null
+    const deps = itemDecisionDepsWith({
+      listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
+      applyItemDecision: (params) => {
+        forwarded = params.request.route
+        return Promise.resolve({ ok: true, comment: null, labels: { kind: 'no-op' } })
+      },
+    })
+    await resolveItemDecision(
+      registryDeps,
+      { repoId: REPO_ID, number: 51, decision: 'unblock', expectedStage: 'blocked', route: 'implementation', note: null, skipComment: false, picks: null },
+      '/audit',
+      '/scratch',
+      deps,
+    )
+    expect(forwarded).toBe('implementation')
+  })
+
+  it.each([
+    ['a live session for this number', [stageSession({ repoId: REPO_ID, stage: { agent: 'impl', number: 51, kind: 'issue', trigger: 'planApproved' } })], true],
+    ['an ended session for this number', [stageSession({ repoId: REPO_ID, phase: 'ended', stage: { agent: 'impl', number: 51, kind: 'issue', trigger: 'planApproved' } })], false],
+    ['a live session for another number', [stageSession({ repoId: REPO_ID, stage: { agent: 'impl', number: 52, kind: 'issue', trigger: 'planApproved' } })], false],
+    ['a live session in another repository', [stageSession({ repoId: 'repo-2' as unknown as RepoId, stage: { agent: 'impl', number: 51, kind: 'issue', trigger: 'planApproved' } })], false],
+  ])('reads liveStage from the hosted store: %s', async (_name, sessions, expected) => {
+    let liveStage: boolean | null = null
+    const deps = itemDecisionDepsWith({
+      listRepositories: () => Promise.resolve({ ok: true, repositories: [READY_ENTRY] }),
+      sessions: () => sessions,
+      applyItemDecision: (params) => {
+        liveStage = params.liveStage
+        return Promise.resolve({ ok: true, comment: null, labels: { kind: 'no-op' } })
+      },
+    })
+    await resolveItemDecision(
+      registryDeps,
+      { repoId: REPO_ID, number: 51, decision: 'unblock', expectedStage: 'blocked', route: 'implementation', note: null, skipComment: false, picks: null },
+      '/audit',
+      '/scratch',
+      deps,
+    )
+    expect(liveStage).toBe(expected)
   })
 
   it('rejects unblock carrying a note', async () => {

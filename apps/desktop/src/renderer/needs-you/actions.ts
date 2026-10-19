@@ -32,6 +32,8 @@ function disabledReasonCopy(reason: DecisionRefusal): string {
       return "This rebase escalation's decisions couldn't be read. Answer them with unblock #N in the cockpit."
     case 'not-applicable':
       return "This action doesn't apply here."
+    case 'agent-live':
+      return "This item's agent is still waiting in its session. Answer it there and it clears the block itself."
   }
 }
 
@@ -73,8 +75,9 @@ export function actionFor(item: NeedsYouItem): NeedsYouAction {
     case 'stage-question':
       return { label: 'Answer', kind: 'answer', disabledReason: null }
     case 'stage-questions':
-    case 'stage-blocked':
       return { label: 'Open session', kind: 'open', disabledReason: null }
+    case 'stage-blocked':
+      return { label: 'Unblock', kind: 'answer', disabledReason: null, secondaryLabel: 'Open session' }
     case 'stage-denial':
       return { label: 'Allow from now on', kind: 'allow', disabledReason: null }
     case 'stage-interrupted':
@@ -138,6 +141,7 @@ export function runAction(item: NeedsYouItem, deps: RunActionDeps): void {
 export function runSecondaryAction(item: NeedsYouItem, deps: RunActionDeps): void {
   const action = actionFor(item)
   if (action.kind === 'resume' && item.kind === 'stage-interrupted') openRestartDialog(item.interrupted)
+  if (action.kind === 'answer' && item.kind === 'stage-blocked') void router.navigate({ to: ROUTE_IDS.session, search: { key: item.sessionKey } })
   void deps
 }
 

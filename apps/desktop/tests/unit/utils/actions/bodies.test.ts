@@ -10,6 +10,10 @@ describe('gateClearedBody', () => {
     expect(gateClearedBody('review')).toBe(`${GATE_CLEARED_HEADING}\nCleared by the operator in port: back to review.`)
   })
 
+  it('names implementation for the implementation route', () => {
+    expect(gateClearedBody('implementation')).toBe(`${GATE_CLEARED_HEADING}\nCleared by the operator in port: back to implementation.`)
+  })
+
   it('omits the cycle-grant block by default', () => {
     expect(gateClearedBody('revision')).not.toContain(CYCLE_GRANT_LINE)
   })

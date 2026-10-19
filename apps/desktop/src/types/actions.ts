@@ -20,7 +20,7 @@ export const OPERATOR_DECISIONS = ['unblock', 'revise'] as const
 export type OperatorDecision = (typeof OPERATOR_DECISIONS)[number]
 
 /** Unblock's own fork — which trigger the cleared item goes back to. */
-export const UNBLOCK_ROUTES = ['revision', 'review'] as const
+export const UNBLOCK_ROUTES = ['revision', 'review', 'implementation'] as const
 export type UnblockRoute = (typeof UNBLOCK_ROUTES)[number]
 
 export interface ItemActionRequest {
@@ -91,11 +91,12 @@ export type ItemActionResult =
   | { readonly ok: false; readonly reason: 'no-pause-record' }
   | { readonly ok: false; readonly reason: 'pause-record-unresolvable' }
 
-/** `cycle-cap`: revise would only escalate straight back. `rebase-decisions`: an escalation whose decision blocks port can't parse. */
-export type DecisionRefusal = ActionRefusal | 'cycle-cap' | 'rebase-decisions'
+/** `cycle-cap`: revise would only escalate straight back. `rebase-decisions`: an escalation whose decision blocks port can't parse. `agent-live`: a stage session is still waiting on this blocked issue, so the answer belongs in that session. */
+export type DecisionRefusal = ActionRefusal | 'cycle-cap' | 'rebase-decisions' | 'agent-live'
 
-/** `null` when no escalation reason was found; the dialog shows the cap warning before a route is picked. `decisions` is empty for a non-rebase escalation. */
+/** `null` when no escalation reason was found; the dialog shows the cap warning before a route is picked. `decisions` is empty for a non-rebase escalation. An issue carries neither a reason nor a cap. */
 export interface UnblockContext {
+  readonly target: 'pull-request' | 'issue'
   readonly reason: string | null
   readonly cyclesUsed: number
   readonly cap: number
@@ -141,6 +142,8 @@ export interface ApplyItemDecisionParams {
   readonly entry: ReadyEntry
   readonly auditDir: string
   readonly scratchDir: string
+  /** Whether a live hosted stage session exists for this item, read from the hosted store, never from the renderer's request. */
+  readonly liveStage: boolean
 }
 
 export interface EscalateToHumanResult {

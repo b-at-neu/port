@@ -3,7 +3,8 @@
 // all subscribe through this module instead of the bridge directly, so a
 // pushed event is attached once no matter how many screens care about it.
 import type { QueryClient } from '@tanstack/react-query'
-import type { IpcEventMap } from '@/types/ipc'
+import type { IpcEventMap, ReposListResponse } from '@/types/ipc'
+import type { BoardSnapshot } from '@/types/board'
 import type { HostedSessionSnapshot } from '@/types/hosting'
 import type { EventListener, SubscribableEvent, SubscriptionBridge, Subscriptions } from '@/types/data'
 import { ipcQueryOptions } from '@/renderer/data/query'
@@ -102,11 +103,20 @@ function connectSessionListCache(client: QueryClient, subscriptions: Subscriptio
   })
 }
 
+// One-directional on purpose: a repository that fails its own read must never trigger a loop.
+function reposListIsStale(client: QueryClient, snapshot: BoardSnapshot): boolean {
+  const cached = client.getQueryData<ReposListResponse>(ipcQueryOptions('repos:list').queryKey)
+  if (cached === undefined || !cached.ok) return false
+  const ready = new Set(cached.repositories.filter((entry) => 'config' in entry).map((entry) => entry.id))
+  return snapshot.state.repositories.some((repo) => repo.ok && !ready.has(repo.repoId))
+}
+
 export function connectQueryCache(client: QueryClient, subscriptions: Subscriptions = sharedSubscriptions()): () => void {
   const key = ipcQueryOptions('board:snapshot').queryKey
   const detachBoard = subscriptions.subscribe('board:update', (snapshot) => {
     void client.cancelQueries({ queryKey: key })
     client.setQueryData(key, snapshot)
+    if (reposListIsStale(client, snapshot)) void client.invalidateQueries({ queryKey: ipcQueryOptions('repos:list').queryKey })
   })
   const detachSessions = connectSessionListCache(client, subscriptions)
   return () => {

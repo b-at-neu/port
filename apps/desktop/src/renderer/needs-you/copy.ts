@@ -102,3 +102,19 @@ export function needsYouLeadCopy(item: NeedsYouItem): string {
       return halfLabelledCopy(item, label)
   }
 }
+
+export function refreshedToast(count: number): string {
+  return count === 0 ? 'Refreshed. Nothing needs you.' : `Refreshed. ${String(count)} item${count === 1 ? '' : 's'} need${count === 1 ? 's' : ''} you.`
+}
+
+export const REFRESH_FAILED_TOAST = "Couldn't reach the main process. Nothing was refreshed."
+
+export function blockerSentToast(number: number | null): string {
+  return `Sent your answer to ${number !== null ? `#${String(number)}'s` : 'the'} agent. It clears "Blocked" itself and carries on.`
+}
+
+export function blockerSendError(error: 'unknown-session' | 'blocked-command' | 'unreachable', number: number | null): string {
+  if (error === 'unreachable') return "Couldn't reach the main process. Nothing was sent."
+  if (error === 'blocked-command') return "That text is a command the session can't run here. Reword your answer."
+  return `That session has ended. Unblock ${number !== null ? `#${String(number)}` : 'the item'} from its row once the board catches up.`
+}

@@ -11,7 +11,8 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { LabelRole } from '@/utils/labels/defaults'
 import type { PillStatus } from '@/types/components'
 import type { ItemActionState } from '@/types/board'
-import { actionRefusalNote, actionResultCopy, decisionButtonLabel, decisionRefusalNote, openPrButtonLabel, reviewPlanButtonLabel } from '@/renderer/board/copy'
+import { PHASE_NAMES } from '@/renderer/lib/phase'
+import { actionRefusalNote, actionResultCopy, decisionButtonLabel, decisionRefusalNote, openPrButtonLabel, reviewPlanButtonLabel, stageAgentPhaseName } from '@/renderer/board/copy'
 
 /** The current winning stage's own `LabelKey`, or `null` when `stage` resolves to nothing — the one place an item's `stages`/`stage` pair becomes a single phase key. */
 export function stageKeyOf(stages: readonly StageLabel[], stage: LabelRole | null): LabelKey | null {
@@ -26,6 +27,17 @@ export function pillStatusFor(row: BoardItemRow): PillStatus {
   if (row.displayStatus.status === 'stalled') return 'danger'
   if (row.displayStatus.status === 'in-flight') return 'working'
   return 'idle'
+}
+
+/** A live stage session exists but the label still says the item is only queued — the `Dispatched` window before the agent's first label swap. */
+export function isDispatchedRow(row: BoardItemRow): boolean {
+  return row.liveStage !== null && row.item.status === 'waiting'
+}
+
+export function phaseLabelFor(row: BoardItemRow): string {
+  if (row.displayStatus.status === 'interrupted') return 'Interrupted'
+  if (row.liveStage !== null && isDispatchedRow(row)) return stageAgentPhaseName(row.liveStage.agent)
+  return row.stageLabel !== null ? (PHASE_NAMES[row.stageLabel.key] ?? row.stageLabel.key) : 'Unstaged'
 }
 
 /** `stage-links.ts`'s own `operatorJoinedOf`, re-exported for the row — `true` when any dispatch record for this item carries an operator join. */
@@ -51,7 +63,7 @@ export function agentSummaryOf(agents: readonly AttachedAgent[], sessions: reado
 export function decisionNoteFor(row: BoardItemRow): string | null {
   for (const decision of OPERATOR_DECISIONS) {
     const availability = row.decisions[decision]
-    if (!availability.available && (availability.reason === 'cycle-cap' || availability.reason === 'rebase-decisions')) {
+    if (!availability.available && (availability.reason === 'cycle-cap' || availability.reason === 'rebase-decisions' || availability.reason === 'agent-live')) {
       return decisionRefusalNote(decision, availability.reason, row.item.number)
     }
   }

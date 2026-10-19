@@ -6,6 +6,7 @@ import type { HostedSessionSnapshot } from '@/types/hosting'
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS } from '@/types/board'
 import type { PipelineRow, ReadyPipelineRow } from '@/types/shell'
 import { pipelinesModel } from '@/renderer/shell/pipelines-model'
+import { stageSession } from '../../../fixtures/stage-session'
 
 function assertReady(row: PipelineRow | undefined): ReadyPipelineRow {
   if (row === undefined || !row.ready) throw new Error('expected a ready row')
@@ -138,7 +139,18 @@ function readyEntry(): RepositoryEntry {
 describe('pipelinesModel', () => {
   it('renders a bare not-ready row with no sessions', () => {
     const rows = pipelinesModel([notReadyEntry()], undefined)
-    expect(rows).toEqual([{ ready: false, repoId: 'repo-b', name: 'o/b' }])
+    expect(rows).toEqual([{ ready: false, repoId: 'repo-b', name: 'o/b', sessions: [] }])
+  })
+
+  it('lists a live stage session under a not-ready repository, never an ended one or another repository\'s', () => {
+    const stage = { agent: 'plan', number: 44, kind: 'issue', trigger: 'ready' } as const
+    const sessions = [
+      stageSession({ key: 'live', repoId: 'repo-b' as RepoId, stage }),
+      stageSession({ key: 'ended', repoId: 'repo-b' as RepoId, phase: 'ended', stage: { ...stage, number: 45 } }),
+      stageSession({ key: 'other', repoId: REPO_ID, stage: { ...stage, number: 46 } }),
+    ]
+    const [row] = pipelinesModel([notReadyEntry()], undefined, NOW, sessions)
+    expect(row).toMatchObject({ ready: false, sessions: [{ key: 'live', number: 44, label: '#44 Planning', sessionKey: 'live', dot: 'working' }] })
   })
 
   it('reads a ready repository as paused with no snapshot yet', () => {
@@ -193,6 +205,14 @@ describe('pipelinesModel', () => {
     const row = assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [stageSnapshot])[0])
     expect(row.sessions).toHaveLength(1)
     expect(row.sessions[0]).toMatchObject({ number: 42, sessionKey: 'hosted-1' })
+  })
+
+  it('names a ready repository stage row after the agent, not the trigger label', () => {
+    const queued = item({ stage: 'trigger', stages: [{ key: 'planApproved', name: 'plan approved', role: 'trigger' }], agents: [agent({ activity: 'active' })] })
+    const snapshot = snapshotOf([readyRepoState({ items: [queued] })])
+    const session = stageSession({ key: 'hosted-impl', repoId: REPO_ID, stage: { agent: 'impl', number: 42, kind: 'issue', trigger: 'planApproved' } })
+    expect(assertReady(pipelinesModel([readyEntry()], snapshot)[0]).sessions[0]?.label).toBe('#42 Plan approved')
+    expect(assertReady(pipelinesModel([readyEntry()], snapshot, NOW, [session])[0]).sessions[0]?.label).toBe('#42 Implementing')
   })
 
   it('transcript target prefers the live agent, falling back to the live session', () => {

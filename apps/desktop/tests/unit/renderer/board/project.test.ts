@@ -5,6 +5,7 @@ import type { PipelineState, ReconciledItem, RepositoryState } from '@/types/sta
 import { SOURCE_BASE_INTERVAL_MS, STALE_GRACE_MS, initialHealth } from '@/types/board'
 import type { BoardSnapshot, RepositoryHealth } from '@/types/board'
 import { boardSignature, displayStatus, projectBoard, stageLabelOf } from '@/renderer/board/project'
+import { stageSession } from '../../../fixtures/stage-session'
 
 const NOW = new Date('2026-01-01T01:00:00.000Z')
 
@@ -198,6 +199,65 @@ describe('projectBoard — grouping', () => {
     const notReady: RepositoryState = { ok: false, repoId: 'repo-bad' as RepoId, displayName: 'o/bad', reason: 'not-ready', problem: { kind: 'not-a-git-repository' } }
     const projection = projectBoard({ snapshot: snapshotOf([notReady], []), groupBy: 'stage', now: NOW })
     expect(projection.notReady).toHaveLength(1)
+  })
+})
+
+describe('projectBoard — live stage sessions', () => {
+  const REPO = 'repo-a' as RepoId
+  const planSession = (overrides: Partial<Parameters<typeof stageSession>[0]> = {}) =>
+    stageSession({ repoId: REPO, stage: { agent: 'plan', number: 1, kind: 'issue', trigger: 'ready' }, ...overrides })
+  const project = (items: readonly ReconciledItem[], sessions: Parameters<typeof projectBoard>[0]['sessions']) =>
+    projectBoard({ snapshot: snapshotOf([readyRepo({ items })], [health()]), groupBy: 'stage', now: NOW, sessions })
+
+  it('marks a queued item with a streaming stage session as in flight, with liveStage set', () => {
+    const [row] = project([item()], [planSession({ key: 'hosted-plan' })]).rows
+    expect(row?.liveStage).toEqual({ agent: 'plan', trigger: 'ready', sessionKey: 'hosted-plan' })
+    expect(row?.displayStatus.status).toBe('in-flight')
+    expect(row?.item.status).toBe('waiting')
+  })
+
+  it.each([['ended'], ['closing']] as const)('ignores a %s session', (phase) => {
+    const [row] = project([item()], [planSession({ phase })]).rows
+    expect(row?.liveStage).toBeNull()
+    expect(row?.displayStatus.status).toBe('waiting')
+  })
+
+  it.each([['ready'], ['interrupting']] as const)('keeps a waiting item waiting while its %s session is not working, liveStage still set', (phase) => {
+    const [row] = project([item()], [planSession({ phase })]).rows
+    expect(row?.liveStage).not.toBeNull()
+    expect(row?.displayStatus.status).toBe('waiting')
+  })
+
+  it('does not match a session for the same number of the other kind', () => {
+    const session = planSession({ stage: { agent: 'plan', number: 1, kind: 'pull-request', trigger: 'ready' } })
+    expect(project([item()], [session]).rows[0]?.liveStage).toBeNull()
+  })
+
+  it('does not match a session from another repository', () => {
+    expect(project([item()], [planSession({ repoId: 'repo-b' as RepoId })]).rows[0]?.liveStage).toBeNull()
+  })
+
+  it('keeps the newest of two live sessions for one item', () => {
+    const older = planSession({ key: 'older', startedAt: '2026-01-01T00:00:00.000Z' })
+    const newer = planSession({ key: 'newer', startedAt: '2026-01-01T00:30:00.000Z' })
+    expect(project([item()], [newer, older]).rows[0]?.liveStage?.sessionKey).toBe('newer')
+  })
+
+  it('leaves an in-flight item in flight, with liveStage still set', () => {
+    const inFlight = item({ status: 'in-flight', stage: 'in-flight', stages: [{ key: 'inProgress', name: 'in progress', role: 'in-flight' }] })
+    const [row] = project([inFlight], [planSession()]).rows
+    expect(row?.displayStatus.status).toBe('in-flight')
+    expect(row?.liveStage).not.toBeNull()
+  })
+
+  it('defaults to no sessions', () => {
+    expect(project([item()], undefined).rows[0]?.liveStage).toBeNull()
+  })
+
+  it('refuses unblock with agent-live for a blocked issue that has a live session', () => {
+    const blocked = item({ status: 'gated', stage: 'gate', stages: [{ key: 'blocked', name: 'blocked', role: 'gate' }] })
+    expect(project([blocked], [planSession()]).rows[0]?.decisions.unblock).toEqual({ available: false, reason: 'agent-live' })
+    expect(project([blocked], []).rows[0]?.decisions.unblock).toMatchObject({ available: true })
   })
 })
 

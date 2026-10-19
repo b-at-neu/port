@@ -6,6 +6,7 @@ import type { StageAgent, TickClaim, TickHeld, TickLabelRepair, TickReport } fro
 import type { BudgetNote, DispatchOwner, RepoDispatchStatus, RunStatesSnapshot } from '@/types/dispatch'
 import type { SessionKey } from '@/types/hosting'
 import type { AskQuestion } from '@/utils/hosting/controls'
+import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { StageDenial, InterruptedStage } from '@/types/stage'
 
 /** The four sources the watcher polls independently; `itemStates` is a dependent re-check fired internally, never independently schedulable. */
@@ -111,9 +112,18 @@ export interface DisplayStatus {
   readonly githubAgeMs: number | null
 }
 
+/** A live hosted stage session for this row's item — the app's own dispatch evidence, independent of whether the agent has swapped a label yet. */
+export interface LiveStage {
+  readonly agent: StageAgent
+  readonly trigger: LabelKey
+  readonly sessionKey: SessionKey
+}
+
 export interface BoardItemRow {
   readonly item: ReconciledItem
   readonly displayStatus: DisplayStatus
+  /** `null` when no live stage session matches this item's repository, kind and number. */
+  readonly liveStage: LiveStage | null
   readonly stageLabel: StageLabel | null
   /** `actionsFor`'s own result for this item, so the row renders from one already-computed value, never a second derivation client-side. */
   readonly actions: Readonly<Record<OperatorAction, ActionAvailability>>

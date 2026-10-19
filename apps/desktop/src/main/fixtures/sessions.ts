@@ -11,6 +11,11 @@ import { fixtureAttachEntries, fixtureHistoryEntries } from '@/main/fixtures/ent
 /** Matches the board fixture's `fixture-stage-impl-38` dispatch record, so that item's current-phase line shows live elapsed time and cost. */
 export const STAGE_IMPL_38_KEY = 'fixture-stage-impl-38' as SessionKey
 
+/** A live implementation session for the board fixture's blocked item, carrying its `BLOCKED:` hand-back. */
+export const STAGE_IMPL_51_KEY = 'fixture-stage-impl-51' as SessionKey
+/** A live plan session for the board fixture's queued item, dispatched before its agent swaps a label. */
+export const STAGE_PLAN_44_KEY = 'fixture-stage-plan-44' as SessionKey
+
 export const STREAMING_KEY = 'fixture-session-streaming' as SessionKey
 export const PERMISSION_KEY = 'fixture-session-permission' as SessionKey
 export const ENDED_KEY = 'fixture-session-ended' as SessionKey
@@ -103,6 +108,30 @@ const FIXTURE_USAGE = {
 export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapshot[] {
   const t = (minutesAgo: number) => new Date(now.getTime() - minutesAgo * MINUTE).toISOString()
   const capabilities = { kind: 'ready', request: { source: 'installed' }, commands: [], agents: [], plugin: { kind: 'loaded', path: '/home/you/.claude/plugins/port', version: '0.2.1' }, components: { kind: 'complete' }, slashCommands: [] } as const
+
+  const stageImpl38: HostedSessionSnapshot = {
+    sessionKey: STAGE_IMPL_38_KEY,
+    claudeSessionId: 'fixture-session-impl-38',
+    repoId: WIDGETS_ID,
+    workspace: WORKTREE_WORKSPACE,
+    phase: 'streaming',
+    origin: { kind: 'fresh' },
+    startedAt: t(2),
+    queuedAfterInterrupt: null,
+    end: null,
+    titled: null,
+    pendingPermissions: [],
+    capabilities,
+    title: '#38 retry failed webhook deliveries',
+    rateLimit: null,
+    controls: FIXTURE_CONTROLS,
+    models: FIXTURE_MODELS,
+    usage: { ...FIXTURE_USAGE, costUsd: 0.42, observedAt: t(0) },
+    backgroundTasks: [],
+    stage: { agent: 'impl', number: 38, kind: 'issue', trigger: 'inProgress' },
+    lastResult: null,
+    operatorJoinedAt: t(1),
+  }
 
   return [
     {
@@ -271,28 +300,32 @@ export function fixtureSessionSnapshots(now: Date): readonly HostedSessionSnapsh
       lastResult: null,
       operatorJoinedAt: null,
     },
+    stageImpl38,
     {
-      sessionKey: STAGE_IMPL_38_KEY,
-      claudeSessionId: 'fixture-session-impl-38',
-      repoId: WIDGETS_ID,
-      workspace: WORKTREE_WORKSPACE,
-      phase: 'streaming',
-      origin: { kind: 'fresh' },
-      startedAt: t(2),
-      queuedAfterInterrupt: null,
-      end: null,
-      titled: null,
-      pendingPermissions: [],
-      capabilities,
-      title: '#38 retry failed webhook deliveries',
-      rateLimit: null,
-      controls: FIXTURE_CONTROLS,
-      models: FIXTURE_MODELS,
-      usage: { ...FIXTURE_USAGE, costUsd: 0.42, observedAt: t(0) },
-      backgroundTasks: [],
-      stage: { agent: 'impl', number: 38, kind: 'issue', trigger: 'inProgress' },
-      lastResult: null,
-      operatorJoinedAt: t(1),
+      ...stageImpl38,
+      sessionKey: STAGE_IMPL_51_KEY,
+      claudeSessionId: 'fixture-session-impl-51',
+      phase: 'ready',
+      title: '#51 backfill order totals for Q3',
+      usage: null,
+      stage: { agent: 'impl', number: 51, kind: 'issue', trigger: 'planApproved' },
+      lastResult: {
+        subtype: 'success',
+        isError: false,
+        text: "BLOCKED: The Q3 ledger export has no currency column. Should totals use the account's default currency or skip mixed-currency orders?",
+        at: t(1),
+      },
+      operatorJoinedAt: null,
+    },
+    {
+      ...stageImpl38,
+      sessionKey: STAGE_PLAN_44_KEY,
+      claudeSessionId: 'fixture-session-plan-44',
+      startedAt: t(0),
+      title: '#44 show the build number in the footer',
+      usage: null,
+      stage: { agent: 'plan', number: 44, kind: 'issue', trigger: 'ready' },
+      operatorJoinedAt: null,
     },
     {
       sessionKey: RESUMED_KEY,

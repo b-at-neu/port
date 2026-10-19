@@ -124,12 +124,14 @@ export interface DecisionsForParams {
   readonly item: ReconciledItem
   readonly viewer: string | null
   readonly reviewCycleCap: number
+  /** Whether a live hosted stage session exists for this item — a blocked issue then belongs to that session's own answer path. */
+  readonly liveStage: boolean
 }
 
 /** Ownership requires exactly `[viewer]` — unlike `actionsFor`, no
  *  unassigned exception for these two consequential writes. */
 export function decisionsFor(params: DecisionsForParams): Readonly<Record<OperatorDecision, DecisionAvailability>> {
-  const { item, viewer, reviewCycleCap } = params
+  const { item, viewer, reviewCycleCap, liveStage } = params
   if (viewer === null) return { unblock: refused('viewer-unknown'), revise: refused('viewer-unknown') }
   if (!(item.assignees.length === 1 && item.assignees[0] === viewer)) return { unblock: refused('not-owned'), revise: refused('not-owned') }
 
@@ -137,14 +139,16 @@ export function decisionsFor(params: DecisionsForParams): Readonly<Record<Operat
   const effectiveCap = reviewCycleCap + cycleGrantCount(item.comments ?? undefined)
 
   let unblock: DecisionAvailability
-  if (item.kind !== 'pull-request' || !onlyStage(item, 'needsHuman')) {
+  if (item.kind === 'issue' && onlyStage(item, 'blocked')) {
+    unblock = liveStage ? refused('agent-live') : { available: true, context: { target: 'issue', reason: null, cyclesUsed: 0, cap: 0, decisions: [] } }
+  } else if (item.kind !== 'pull-request' || !onlyStage(item, 'needsHuman')) {
     unblock = refused('not-applicable')
   } else {
     const escalation = escalationOf(item.comments)
     unblock =
       escalation.rebaseDecisions === 'unparseable'
         ? refused('rebase-decisions')
-        : { available: true, context: { reason: escalation.reason, cyclesUsed, cap: effectiveCap, decisions: escalation.rebaseDecisions } }
+        : { available: true, context: { target: 'pull-request', reason: escalation.reason, cyclesUsed, cap: effectiveCap, decisions: escalation.rebaseDecisions } }
   }
 
   let revise: DecisionAvailability
@@ -171,6 +175,9 @@ function exactAssignees(viewer: string): AssigneeExpectation {
 /** Call only once `decisionsFor` reports `available: true` for this item. */
 export function decisionPlan(decision: OperatorDecision, item: ReconciledItem, route: UnblockRoute | null, viewer: string): DecisionPlan {
   if (decision === 'unblock') {
+    if (route === 'implementation') {
+      return { add: ['planApproved'], remove: ['blocked'], expect: { present: ['blocked'], absent: [], assignees: exactAssignees(viewer) }, action: 'unblock' }
+    }
     const add: LabelKey = route === 'revision' ? 'needsRevision' : 'readyForReview'
     return { add: [add], remove: ['needsHuman'], expect: { present: ['needsHuman'], absent: [], assignees: exactAssignees(viewer) }, action: 'unblock' }
   }

@@ -9,7 +9,7 @@ import { ErrorBanner } from '@/renderer/components/error-banner'
 import { StatusPillMenu } from '@/renderer/components/status-pill-menu'
 import { useIpcQuery } from '@/renderer/data/query'
 import { pipelinesModel } from '@/renderer/shell/pipelines-model'
-import type { PipelineRow } from '@/types/shell'
+import type { PipelineRow, PipelineSessionRow } from '@/types/shell'
 import { useRunStateCommand } from '@/renderer/shell/run-state-command'
 import { shellPrefs, setRepoCollapsed } from '@/renderer/shell/prefs'
 import { ROUTE_IDS } from '@/renderer/router/routes'
@@ -56,16 +56,49 @@ function RunStateMenu({ row }: { readonly row: Extract<PipelineRow, { readonly r
   )
 }
 
+function SessionLinks({ sessions }: { readonly sessions: readonly PipelineSessionRow[] }) {
+  if (sessions.length === 0) return null
+  return (
+    <div className="flex flex-col">
+      {sessions.map((session) => (
+        <Link
+          key={session.key}
+          to={session.sessionKey !== null ? ROUTE_IDS.session : ROUTE_IDS.transcript}
+          params={session.transcript !== null ? { sessionId: session.transcript.sessionId } : undefined}
+          search={
+            session.sessionKey !== null
+              ? { key: session.sessionKey }
+              : session.transcript !== null
+                ? { agentId: session.transcript.agentId, from: 'pipeline', focusIndex: null, title: session.label, item: { repoId: session.repoId, number: session.number } }
+                : undefined
+          }
+          className="flex h-6.5 items-center gap-1.5 rounded-md py-0 pr-2 pl-8 text-small text-foreground-secondary hover:bg-accent"
+        >
+          <span
+            aria-hidden="true"
+            className={cn('size-1.5 shrink-0 rounded-full', session.dot === 'attention' ? 'bg-attention-dot animate-pulse' : session.dot === 'working' ? 'bg-working-dot' : 'bg-idle-dot')}
+          />
+          <span className="truncate">{session.label}</span>
+          <span className="sr-only">{session.dot === 'attention' ? 'Needs you' : session.dot === 'working' ? 'Working' : 'Idle'}</span>
+        </Link>
+      ))}
+    </div>
+  )
+}
+
 function RepoRow({ row, collapsed, onToggle }: { readonly row: PipelineRow; readonly collapsed: boolean; readonly onToggle: () => void }) {
   if (!row.ready) {
     return (
-      <Link to={ROUTE_IDS.repos} className="flex h-7 items-center gap-1.5 rounded-md px-2 text-body text-foreground-secondary hover:bg-accent">
-        <span className="w-3.5 shrink-0" />
-        <span className="flex-1 truncate" title={row.name}>
-          {row.name}
-        </span>
-        <span className="rounded-full bg-idle-pill px-1.5 py-0.5 text-meta text-idle-pill-foreground">Not ready</span>
-      </Link>
+      <div>
+        <Link to={ROUTE_IDS.repos} className="flex h-7 items-center gap-1.5 rounded-md px-2 text-body text-foreground-secondary hover:bg-accent">
+          <span className="w-3.5 shrink-0" />
+          <span className="flex-1 truncate" title={row.name}>
+            {row.name}
+          </span>
+          <span className="rounded-full bg-idle-pill px-1.5 py-0.5 text-meta text-idle-pill-foreground">Not ready</span>
+        </Link>
+        <SessionLinks sessions={row.sessions} />
+      </div>
     )
   }
 
@@ -81,35 +114,7 @@ function RepoRow({ row, collapsed, onToggle }: { readonly row: PipelineRow; read
         {collapsed && row.needsYou ? <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-attention-dot animate-pulse" /> : null}
         <RunStateMenu row={row} />
       </div>
-      {!collapsed && row.sessions.length > 0 ? (
-        <div className="flex flex-col">
-          {row.sessions.map((session) => (
-            <Link
-              key={session.key}
-              to={session.sessionKey !== null ? ROUTE_IDS.session : ROUTE_IDS.transcript}
-              params={session.transcript !== null ? { sessionId: session.transcript.sessionId } : undefined}
-              search={
-                session.sessionKey !== null
-                  ? { key: session.sessionKey }
-                  : session.transcript !== null
-                    ? { agentId: session.transcript.agentId, from: 'pipeline', focusIndex: null, title: session.label, item: { repoId: session.repoId, number: session.number } }
-                    : undefined
-              }
-              className="flex h-6.5 items-center gap-1.5 rounded-md py-0 pr-2 pl-8 text-small text-foreground-secondary hover:bg-accent"
-            >
-              <span
-                aria-hidden="true"
-                className={cn(
-                  'size-1.5 shrink-0 rounded-full',
-                  session.dot === 'attention' ? 'bg-attention-dot animate-pulse' : session.dot === 'working' ? 'bg-working-dot' : 'bg-idle-dot',
-                )}
-              />
-              <span className="truncate">{session.label}</span>
-              <span className="sr-only">{session.dot === 'attention' ? 'Needs you' : session.dot === 'working' ? 'Working' : 'Idle'}</span>
-            </Link>
-          ))}
-        </div>
-      ) : null}
+      {!collapsed ? <SessionLinks sessions={row.sessions} /> : null}
     </div>
   )
 }

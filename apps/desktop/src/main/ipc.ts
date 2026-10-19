@@ -375,6 +375,7 @@ export function registerIpc(): RegisteredIpc {
     resolveItemDecision(registryDeps, request, app.getPath('userData'), app.getPath('temp'), {
       listRepositories,
       applyItemDecision,
+      sessions: () => hostedStore.list(),
       snapshot: watcher.snapshot,
       refresh: watcher.refresh,
     } satisfies ItemDecisionDeps),
