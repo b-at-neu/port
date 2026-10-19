@@ -151,6 +151,15 @@ export default async function ({ expect, fail, ok }: Reporter) {
       );
     }
 
+    const reviseAgentText = readFileSync(join(root, 'plugins/port/agents/revise-agent.md'), 'utf8');
+    for (const escalationLiteral of ['### D<n> — \\`path\\`', '**Recommendation: <letter>**']) {
+      expect(
+        reviseAgentText.includes(escalationLiteral),
+        'desktop-actions',
+        `plugins/port/agents/revise-agent.md no longer writes '${escalationLiteral}' — the escalation shape utils/actions/decide.ts's rebaseDecisionsOf parses`,
+      );
+    }
+
     const portTickGatesText = readFileSync(join(root, scriptsPortTickGatesFile), 'utf8');
     const portTickGatesMatch = /GATE_CLEARED_PREFIX\s*=\s*'([^']+)'/.exec(portTickGatesText);
     if (!portTickGatesMatch) {

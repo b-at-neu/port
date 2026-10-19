@@ -9,8 +9,9 @@ import { closeDecisionDialog, retryLabelOnly, setPick, setReviseText, submitRevi
 import { decisionResultCopy, dialogTitle, picksHint, rebaseLegend, rebaseOptionLabel, reviseConsequence, reviseNoteHint, unblockCapNote, unblockConsequence, unblockReasonLine } from '@/renderer/decision/copy'
 
 function RebaseDecisionFields({ decisions, picks }: { readonly decisions: readonly RebaseDecision[]; readonly picks: Readonly<Record<string, string>> }) {
+  if (decisions.length === 0) return null
   return (
-    <>
+    <div className="flex max-h-[50vh] flex-col gap-3 overflow-y-auto p-1">
       {decisions.map((decision) => (
         <fieldset key={decision.id} className="flex flex-col gap-1.5">
           <legend className="text-small font-medium">{rebaseLegend(decision)}</legend>
@@ -31,7 +32,7 @@ function RebaseDecisionFields({ decisions, picks }: { readonly decisions: readon
           ))}
         </fieldset>
       ))}
-    </>
+    </div>
   )
 }
 
