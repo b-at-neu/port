@@ -51,6 +51,29 @@
   --idle-pill-foreground: var(--foreground-secondary);
   --idle-dot: var(--faint);
 
+  /* Phase palette: one set per pipeline phase */
+  --phase-plan-pill: #ede9fe;
+  --phase-plan-pill-foreground: #5b21b6;
+  --phase-plan-dot: #7c3aed;
+  --phase-implement-pill: var(--working-pill);
+  --phase-implement-pill-foreground: var(--working-pill-foreground);
+  --phase-implement-dot: var(--working-dot);
+  --phase-review-pill: #ccfbf1;
+  --phase-review-pill-foreground: #115e59;
+  --phase-review-dot: #0d9488;
+  --phase-revise-pill: #ffedd5;
+  --phase-revise-pill-foreground: #9a3412;
+  --phase-revise-dot: #ea580c;
+  --phase-refresh-pill: var(--idle-pill);
+  --phase-refresh-pill-foreground: var(--idle-pill-foreground);
+  --phase-refresh-dot: #71717a;
+  --phase-needs-you-pill: var(--danger-pill);
+  --phase-needs-you-pill-foreground: var(--danger-pill-foreground);
+  --phase-needs-you-dot: var(--danger-dot);
+  --phase-done-pill: var(--success-pill);
+  --phase-done-pill-foreground: var(--success-pill-foreground);
+  --phase-done-dot: var(--success-dot);
+
   /* Diffs */
   --diff-added: #f0fdf4;
   --diff-added-foreground: #166534;
@@ -122,6 +145,28 @@
   --idle-pill-foreground: var(--foreground-secondary);
   --idle-dot: var(--faint);
 
+  --phase-plan-pill: #2e1065;
+  --phase-plan-pill-foreground: #c4b5fd;
+  --phase-plan-dot: #8b5cf6;
+  --phase-implement-pill: var(--working-pill);
+  --phase-implement-pill-foreground: var(--working-pill-foreground);
+  --phase-implement-dot: var(--working-dot);
+  --phase-review-pill: #042f2e;
+  --phase-review-pill-foreground: #5eead4;
+  --phase-review-dot: #14b8a6;
+  --phase-revise-pill: #431407;
+  --phase-revise-pill-foreground: #fdba74;
+  --phase-revise-dot: #f97316;
+  --phase-refresh-pill: var(--idle-pill);
+  --phase-refresh-pill-foreground: var(--idle-pill-foreground);
+  --phase-refresh-dot: #a1a1aa;
+  --phase-needs-you-pill: var(--danger-pill);
+  --phase-needs-you-pill-foreground: var(--danger-pill-foreground);
+  --phase-needs-you-dot: var(--danger-dot);
+  --phase-done-pill: var(--success-pill);
+  --phase-done-pill-foreground: var(--success-pill-foreground);
+  --phase-done-dot: var(--success-dot);
+
   --diff-added: #06240f;
   --diff-added-foreground: #86efac;
   --diff-removed: #2a0b0b;
@@ -189,6 +234,28 @@
   --color-idle-pill: var(--idle-pill);
   --color-idle-pill-foreground: var(--idle-pill-foreground);
   --color-idle-dot: var(--idle-dot);
+
+  --color-phase-plan-pill: var(--phase-plan-pill);
+  --color-phase-plan-pill-foreground: var(--phase-plan-pill-foreground);
+  --color-phase-plan-dot: var(--phase-plan-dot);
+  --color-phase-implement-pill: var(--phase-implement-pill);
+  --color-phase-implement-pill-foreground: var(--phase-implement-pill-foreground);
+  --color-phase-implement-dot: var(--phase-implement-dot);
+  --color-phase-review-pill: var(--phase-review-pill);
+  --color-phase-review-pill-foreground: var(--phase-review-pill-foreground);
+  --color-phase-review-dot: var(--phase-review-dot);
+  --color-phase-revise-pill: var(--phase-revise-pill);
+  --color-phase-revise-pill-foreground: var(--phase-revise-pill-foreground);
+  --color-phase-revise-dot: var(--phase-revise-dot);
+  --color-phase-refresh-pill: var(--phase-refresh-pill);
+  --color-phase-refresh-pill-foreground: var(--phase-refresh-pill-foreground);
+  --color-phase-refresh-dot: var(--phase-refresh-dot);
+  --color-phase-needs-you-pill: var(--phase-needs-you-pill);
+  --color-phase-needs-you-pill-foreground: var(--phase-needs-you-pill-foreground);
+  --color-phase-needs-you-dot: var(--phase-needs-you-dot);
+  --color-phase-done-pill: var(--phase-done-pill);
+  --color-phase-done-pill-foreground: var(--phase-done-pill-foreground);
+  --color-phase-done-dot: var(--phase-done-dot);
 
   --color-diff-added: var(--diff-added);
   --color-diff-added-foreground: var(--diff-added-foreground);

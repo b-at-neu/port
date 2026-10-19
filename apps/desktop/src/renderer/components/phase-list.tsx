@@ -5,16 +5,9 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { PipelineItemKind } from '@/types/github'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
 import { phaseSegmentsFor } from '@/renderer/board/phase-model'
-import type { PhaseDetail, PhaseKey, PhaseSegmentState } from '@/types/board'
+import type { PhaseDetail, PhaseKey } from '@/types/board'
+import { segmentClass } from '@/renderer/components/phase-classes'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
-
-const DOT_CLASS: Readonly<Record<PhaseSegmentState, string>> = {
-  finished: 'bg-working-pill',
-  'current-working': 'bg-working-dot',
-  'current-attention': 'bg-attention-dot',
-  complete: 'bg-success-pill',
-  pending: 'bg-accent',
-}
 
 // One representative LabelKey per phase group, for every row but the
 // current one — read through PHASE_NAMES, never a second copy table.
@@ -54,7 +47,7 @@ export function PhaseList({ stageKey, kind, merged, details, extraCurrentLine, c
         const detail = details[segment.phase] ?? null
         return (
           <div key={segment.phase} className="flex items-start gap-2">
-            <span aria-hidden="true" className={cn('mt-1 size-2 shrink-0 rounded-full', DOT_CLASS[segment.state])} />
+            <span aria-hidden="true" className={cn('mt-1 size-2 shrink-0 rounded-full', segmentClass(segment))} />
             <div className="flex flex-col">
               <span className={cn('text-small', isCurrent ? 'font-medium text-foreground' : 'text-muted-foreground')}>{labelFor(segment.phase, isCurrent, stageKey)}</span>
               {detail !== null ? (

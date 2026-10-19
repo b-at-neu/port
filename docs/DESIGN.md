@@ -49,12 +49,32 @@ Status colour is separate from the accent and means the same thing on every scre
 | Status | Means | Pill background / text (light) | Pill background / text (dark) | Dot (light / dark) |
 | --- | --- | --- | --- | --- |
 | `working` | Claude is doing something | `#dbeafe` / `#1d4ed8` | `#0f2a5c` / `#93c5fd` | `#2563eb` / `#3b82f6` |
-| `attention` | **Needs you**, or draining | `#fef3c7` / `#92400e` | `#3b2506` / `#fcd34d` | `#d97706` / `#f59e0b` |
+| `attention` | Caution: draining, stale data, a warning | `#fef3c7` / `#92400e` | `#3b2506` / `#fcd34d` | `#d97706` / `#f59e0b` |
 | `success` | Done, passing, running pipeline | `#dcfce7` / `#166534` | `#052e16` / `#86efac` | `#16a34a` / `#22c55e` |
 | `danger` | Failed, conflict, red check | `#fee2e2` / `#991b1b` | `#3b0d0d` / `#fca5a5` | `#dc2626` / `#ef4444` |
 | `idle` | Paused, queued, nothing happening | `muted` / `foreground-secondary` | `muted` / `foreground-secondary` | `faint` |
 
-**Amber always means "needs you".** It is never decoration, and nothing that needs you is shown in any other colour.
+**Red always means "needs you".** It is never decoration, and nothing that needs you is shown in any other colour. Amber is caution only and never pulses.
+
+### Phase palette
+
+Where a status colour says what is happening, a phase colour says which pipeline phase an item is in. One palette per phase is used on GitHub's labels, the Board's pills and `PhaseBar`, and the sidebar's session dots. Components use the `--phase-<palette>-*` roles, never a status role, for anything phase-shaped.
+
+| Phase | Palette | Label keys | Pill bg / text (light) | Pill bg / text (dark) | Dot (light / dark) |
+| --- | --- | --- | --- | --- | --- |
+| Plan | `plan` | `ready`, `planChangesRequested`, `planning`, `planReview` | `#ede9fe` / `#5b21b6` | `#2e1065` / `#c4b5fd` | `#7c3aed` / `#8b5cf6` |
+| Implement | `implement` | `planApproved`, `inProgress` | `#dbeafe` / `#1d4ed8` | `#0f2a5c` / `#93c5fd` | `#2563eb` / `#3b82f6` |
+| Review | `review` | `readyForReview`, `reviewing` | `#ccfbf1` / `#115e59` | `#042f2e` / `#5eead4` | `#0d9488` / `#14b8a6` |
+| Revise | `revise` | `needsRevision`, `revising` | `#ffedd5` / `#9a3412` | `#431407` / `#fdba74` | `#ea580c` / `#f97316` |
+| Refresh | `refresh` | `refreshBranch`, `refreshing` | `#f4f4f5` / `#3f3f46` | `#1c1c1f` / `#d4d4d8` | `#71717a` / `#a1a1aa` |
+| Needs you | `needs-you` | `blocked`, `needsHuman` | `#fee2e2` / `#991b1b` | `#3b0d0d` / `#fca5a5` | `#dc2626` / `#ef4444` |
+| Done | `done` | `prOpened`, `approved` | `#dcfce7` / `#166534` | `#052e16` / `#86efac` | `#16a34a` / `#22c55e` |
+
+- **Queued is a ring, in flight is filled.** A queued trigger label draws its dot as a 1px ring and an in-flight one as a filled dot. The same split holds on GitHub: a trigger is a lighter shade than its in-flight label.
+- **GitHub's in-flight label is the light dot.** Each palette's in-flight label uses exactly its light-theme dot colour, and its triggers sit lighter. Gate and terminal labels sit deeper still. `refresh` is grey, and the markers `claude` and `auto plan` stay neutral off the palette.
+- **Waiting on you pulses.** A gate that needs the operator (`planReview`, `approved`) pulses in its own phase colour.
+- **`needs-you` overrides.** A gate label, a stalled or interrupted item, and a live stage session waiting on a permission prompt, a question or a `BLOCKED:` hand-back show the `needs-you` palette and pulse, whatever phase they are in. Once the operator answers, the dot goes back to its phase colour.
+- **Aliases.** `implement`, `needs-you` and `done` reuse the `working`, `danger` and `success` values, and `refresh` reuses `idle`. Only the dot of `refresh` is its own, because `faint` fails 3:1.
 
 **Diffs:** added lines `#f0fdf4` / `#166534` (dark `#06240f` / `#86efac`); removed lines `#fef2f2` / `#991b1b` (dark `#2a0b0b` / `#fca5a5`).
 
@@ -74,6 +94,10 @@ WCAG ratios for the pairings the interface uses. The requirement itself is in `E
 | `primary-text` on `selection` | 13.0 | 10.1 |
 | `working` pill text on its background | 5.5 | 7.7 |
 | Status pill text on its background | 6.4 – 6.8 | 8.9 – 10.6 |
+| Phase pill text on its pill | 5.5 – 9.5 | 7.7 – 11.5 |
+| Phase dot on `background` | 3.3 – 5.7 | 4.7 – 8.7 |
+| Phase dot on `sidebar` | 3.2 – 5.5 | 4.4 – 8.3 |
+| Phase dot on its own pill | 3.0 – 4.8 | 3.6 – 6.6 |
 | Diff text on its background | 6.8 / 7.6 | 11.8 / 9.6 |
 | `syntax-keyword` on `muted` | 5.3 | 7.9 |
 | `syntax-string` on `muted` | 12.9 | 11.2 |
@@ -126,13 +150,13 @@ The dark `brand` tile's `#4b5f8f` border measures 3.0 against `sidebar`, enough 
 
 **Sidebar, top to bottom:**
 1. **Mark and wordmark.**
-2. **Screens:** Needs you (amber count), Board, Backlog, Repositories.
+2. **Screens:** Needs you (red count), Board, Backlog, Repositories.
 3. **Pipelines:** one row per registered repo. Each row has:
    - a caret that collapses it, with the state remembered;
    - the repo name;
    - its run-state `StatusPill` menu (§4).
 
-   The repo's live stage sessions are nested under it, labelled `#N <phase>`. A collapsed repo with a session that needs you shows an amber dot next to its name.
+   The repo's live stage sessions are nested under it, labelled `#N <title>`. Each has a `PhaseDot` in its phase colour, so the colour alone says which phase it is in; it turns red and pulses while the session needs you. A collapsed repo with a session that needs you shows a red dot next to its name.
 4. **Your sessions:** a header with **New session** and **History** as icon buttons on its right, then your own live sessions.
 5. **Footer:** Settings, plus one status dot for the `claude` CLI and `gh`, red when either is missing or signed out.
 
@@ -197,8 +221,9 @@ Scoping epics, releases and analytics are out of scope for the first release.
 | `Screen`, `ScreenBody` | The layout every screen is built from: a 44px `ScreenHeader`, then one body variant: `list` (edge to edge, rows inset themselves), `page` (16px padding), `form` (16px padding, 512px column), `conversation` (16px padding, centred 680px column). A screen never sets its own outer padding |
 | `StatusPill` | Dot, then label, using the status roles. With a menu it shows a chevron: the repo run state is `● Running ▾` with Run, Drain and Pause, each with a one-line hint (Drain "finish in-flight", Pause "stop now") |
 | `LabelChip` | A GitHub label as a full-radius pill: 11px/500, 1px `border` outline, max 8rem and truncating. Its fill is the label's own GitHub colour, which is repository data and not a design token, so this is the one place a hex reaches a component, applied through `style` from `renderer/lib/label-color.ts`. Text is black or white, whichever contrasts more with the fill. A missing or malformed colour falls back to `muted` with `foreground-secondary` text |
-| `PhaseBar` | Six 10×4px segments with a 2px gap, for plan, plan review, implement, review, revision, merge. Finished segments use the `working` pill background, the current one the `working` dot, waiting-on-you `attention`, complete `success`, the rest `accent`. Tooltip names the phase |
-| `PhaseList` | Vertical version for the detail pane: an 8px dot per phase, with who and when ("Plan approved by you · 2h ago") and live cost and time on the current phase |
+| `PhasePill`, `PhaseDot` | A `StatusPill`'s anatomy painted from the phase palette (§1). `PhaseDot` is a ring while the stage is queued and filled while it is in flight, and pulses while the stage waits on you. Unstaged items use the `idle` role. The `needs-you` palette overrides the phase colour for anything that needs the operator |
+| `PhaseBar` | Six 10×4px segments with a 2px gap, for plan, plan review, implement, review, revision, merge. Finished segments use their own phase's pill colour, the current one the current stage's phase dot colour, or `needs-you` when it waits on you, complete `done`, the rest `accent`. Tooltip names the phase |
+| `PhaseList` | Vertical version for the detail pane: an 8px dot per phase in the same colours as `PhaseBar`, with who and when ("Plan approved by you · 2h ago") and live cost and time on the current phase |
 | `TicketRow`, `RepoPipelineRow`, `SessionRow`, `NeedsYouItem` | The list rows (§3) |
 | `ToolCallRow`, `DiffView`, `Markdown`, `CodeBlock`, `Composer`, `ContextMeter` | Session pieces. `ContextMeter` is a `Context` label, a 56×4px bar and a percentage, with token counts in its tooltip. `ToolCallRow` carries a per-tool one-line summary and default-open rule (edits with a diff, TodoWrite, a running subagent, a failed Bash); its body delegates to `ToolCallDetail`'s Bash/TodoWrite/Task/lookup views. A subagent's children nest recursively under its row, indented with a `border-l` rule; an orphaned child (its parent row evicted from the window) carries the label "Subagent · parent call not shown" |
 | `BackgroundTasksPanel` | A `border` card between the command strip and composer, hidden when empty. Header `Background tasks · N`; each 36px row shows a type icon, a truncating description with a tooltip, a mono type tag, and a `Stop` ghost button that opens a confirm dialog |
@@ -225,7 +250,7 @@ Scoping epics, releases and analytics are out of scope for the first release.
 ## 5. Motion and feedback
 
 - Popovers, menus, the detail pane and dialogs enter and leave with a 150ms ease-out fade and a 4px slide.
-- The only continuous animation is a soft 2s pulse on the dot of something that needs you.
+- The only continuous animation is a soft 2s pulse on the dot of something that needs you: red for anything that needs the operator, or the phase's own colour for a gate such as plan review. Amber never pulses.
 - Streaming text appears as it arrives, with no typing effect.
 - Under the OS reduce-motion setting, every transition is instant and the pulse stops.
 
@@ -283,7 +308,7 @@ The markers `marker` and `autoPlan` are never shown as phases; `autoPlan` appear
 ## 7. Agent quick reference
 
 - [ ] Colour only through the §1 roles. No hex, no Tailwind arbitrary colours, no new role without changing this document.
-- [ ] Status colour follows §1's status table. Anything waiting on the operator is `attention`, and nothing else is.
+- [ ] Status colour follows §1's status table, and a pipeline phase follows its palette. Red (`needs-you`) means the operator is needed and nothing else does; amber is caution only.
 - [ ] No `muted-foreground` text on `muted`/`accent` surfaces, and no `faint` text anywhere.
 - [ ] Sizes from §1 and §2 only: 4px grid, 36px rows, 44px headers, 14/13/12/16px type, weights 400/500/600, tabular figures for numbers.
 - [ ] Every screen uses `Screen`/`ScreenBody`.

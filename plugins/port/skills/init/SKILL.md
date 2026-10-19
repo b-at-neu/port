@@ -29,16 +29,18 @@ Stop if this is not a git repository, or has no GitHub remote.
 
 **If a `port.config.json` exists at the repository root instead**, it predates the move into `.claude/`. Migrate it with `git mv port.config.json .claude/port.config.json` so history follows the file, say that you did, and continue into the **verify-only** pass below from the migrated config. Nothing reads the root location any more, so leaving it there would silently break every agent.
 
-**If `.claude/port.config.json` already exists, this repository is already configured — run verify-only.** Read-only, writes nothing, and stops unless the operator chooses otherwise. Report three facts:
+**If `.claude/port.config.json` already exists, this repository is already configured — run verify-only.** Read-only, writes nothing, and stops unless the operator chooses otherwise. Report four facts:
 
 - **The committed marketplace entry** — `.claude/settings.json`'s `extraKnownMarketplaces.port`: present, `source.ref` set, `autoUpdate: true`.
 - **The committed `ref` against the newest release** — resolve the newest published tag with step 4's own `gh api repos/b-at-neu/port/releases/latest --jq .tag_name` and its fallback rules, and compare it to the committed `ref`.
 - **This machine against the committed pin** — §9.5's machine facts, read-only; nothing is written from here.
+- **Label colours** — how many pipeline labels still carry a colour listed in their `previousColors`, read once with `gh label list --json name,color --limit 200`, with each label's name resolved from config. A label on any other colour is the repository's own and is not counted.
 
 Then ask one `AskUserQuestion` (header `Already configured`):
 
 - **Stop here** *(recommended unless the machine drifted)* — ends the run; nothing is written.
 - **Fix this machine only** *(offered only when the machine disagrees with the committed pin and that pin is `main` or a `v<semver>` tag; recommended whenever offered)* — runs §9.5 against the committed ref and writes nothing in the repository.
+- **Recolour labels** *(offered only when the label-colour count is above zero)* — runs only step 5's recolour branch against the labels on GitHub and writes nothing in the repository.
 - **Reconcile, rewrite settings** — continues into step 1, exactly like today's full run.
 
 Do not silently overwrite an existing configuration — writing anything still needs the explicit **Reconcile** choice.
@@ -198,11 +200,24 @@ A command matches only if it **starts with an allowlisted binary**. `Bash(npm *)
 
 Read `${CLAUDE_PLUGIN_ROOT}/data/labels.json` and create the subset whose `module` is `core` or an **enabled** module. Use the configured name from `labels` where the repository overrode it.
 
-```bash
-gh label create "<name>" --color "<color>" --description "<description>"
-```
+Read the existing colours **once**, up front: `gh label list --json name,color --limit 200`. Then, for each label, matched case-insensitively by its resolved name:
 
-**Leave same-named existing labels alone** — do not recolour or re-describe a label the repository already uses for its own purposes. Report created and skipped separately.
+- **Absent** — create it:
+
+  ```bash
+  gh label create "<name>" --color "<color>" --description "<description>"
+  ```
+
+- **Present, colour equals the current default** (case-insensitive) — report `already current`.
+- **Present, colour is in the entry's `previousColors`** — port coloured it, so recolour it and report `recoloured`:
+
+  ```bash
+  gh label edit "<name>" --color "<color>"
+  ```
+
+- **Present with any other colour** — the repository coloured it itself. Leave it alone and report `custom colour kept`, with the `gh label edit "<name>" --color "<color>"` line that adopts the palette.
+
+**Never touch a description**, and never recolour a label port did not colour — a repository's own same-named label keeps its colour. Every name comes from the resolved configuration, never a literal. Report created, recoloured, already current, and custom colour kept separately.
 
 ## 6. Install the CI gate
 
@@ -308,7 +323,7 @@ Frontmatter `allowed-tools` grants exactly `Bash(claude plugin marketplace remov
 
 ## 10. Report, including what you did not do
 
-Summarize: the config written, permissions added versus already present, labels created versus skipped, whether the workflow was installed, and files touched.
+Summarize: the config written, permissions added versus already present, labels created, recoloured, already current, and custom colour kept, whether the workflow was installed, and files touched.
 
 **Report what step 3.5 found.** No `CLAUDE.md` at all → say every overridable category runs on the port default. Otherwise → list every `port-overrides` entry written this run with the port default it replaced, and every line refused with its reason.
 

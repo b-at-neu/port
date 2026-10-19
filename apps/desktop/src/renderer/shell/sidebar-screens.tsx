@@ -1,4 +1,4 @@
-// The Screens section — Needs you (amber count), Board, Backlog, Repositories.
+// The Screens section — Needs you (red count), Board, Backlog, Repositories.
 import { Link } from '@tanstack/react-router'
 import { FolderGit2, Inbox, LayoutList, ListTodo } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
@@ -21,7 +21,7 @@ export function SidebarScreens() {
         {count > 0 ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="rounded-full bg-attention-pill px-1.5 py-0.5 text-meta font-medium tabular-nums text-attention-pill-foreground">{count}</span>
+              <span className="rounded-full bg-phase-needs-you-pill px-1.5 py-0.5 text-meta font-medium tabular-nums text-phase-needs-you-pill-foreground">{count}</span>
             </TooltipTrigger>
             <TooltipContent>
               {count} waiting on you

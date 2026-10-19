@@ -4,6 +4,8 @@ import type { ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/renderer/lib/utils'
 import { Button } from '@/renderer/components/ui/button'
+import { PhaseDot } from '@/renderer/components/phase-dot'
+import { NEEDS_YOU_TONE } from '@/renderer/lib/phase-tone'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { exactTime, relativeAge } from '@/renderer/backlog/group'
 
@@ -43,7 +45,7 @@ export function NeedsYouItem({
   return (
     <div data-slot="needs-you-item" className="flex flex-col border-b border-border">
       <div className="flex h-9 items-center gap-2 px-4 text-body">
-        <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-attention-dot animate-pulse" />
+        <PhaseDot tone={NEEDS_YOU_TONE} />
         {expandable ? (
           <button type="button" onClick={onToggleExpand} className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent" aria-label={expanded ? 'Collapse details' : 'Expand details'}>
             <ChevronRight aria-hidden="true" className={cn('size-3.5 transition-transform', expanded && 'rotate-90')} />

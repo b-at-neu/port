@@ -7,6 +7,7 @@ import type { BudgetNote, DispatchOwner, RepoDispatchStatus, RunStatesSnapshot }
 import type { SessionKey } from '@/types/hosting'
 import type { AskQuestion } from '@/utils/hosting/controls'
 import type { LabelKey } from '@/utils/labels/vocabulary'
+import type { LabelPalette } from '@/utils/labels/defaults'
 import type { StageDenial, InterruptedStage } from '@/types/stage'
 import type { Ticket, TicketRef } from '@/types/ticket'
 import type { PipelineItemKind } from '@/types/github'
@@ -209,6 +210,13 @@ export const PHASE_KEYS = ['plan', 'planReview', 'implement', 'review', 'revisio
 export type PhaseKey = (typeof PHASE_KEYS)[number]
 
 export type PhaseSegmentState = 'finished' | 'current-working' | 'current-attention' | 'complete' | 'pending'
+
+/** One of the six phases as `PhaseBar`/`PhaseList` paint it; `palette` is `null` for a pending phase, which has no colour yet. */
+export interface PhaseSegment {
+  readonly phase: PhaseKey
+  readonly state: PhaseSegmentState
+  readonly palette: LabelPalette | null
+}
 
 /** One phase's "who and when" line — `phase-history.ts`'s own result shape, `null` `at` for a current phase whose only line is a cost reading with no entry behind it. */
 export interface PhaseDetail {

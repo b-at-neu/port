@@ -1,6 +1,4 @@
-// DESIGN §4 StatusPill — dot then label, the dot `aria-hidden` since status
-// is never colour-only (ENGINEERING §5). No menu: the repo run-state pill
-// with Run/Pause/Drain belongs to #314/#318, not this ticket.
+// DESIGN §4 StatusPill — dot then label, the dot `aria-hidden` since status is never colour-only.
 import { cn } from '@/renderer/lib/utils'
 import type { PillStatus } from '@/types/components'
 
@@ -12,10 +10,7 @@ interface StatusPillProps {
 
 const DOT_CLASS: Readonly<Record<PillStatus, string>> = {
   working: 'bg-working-dot',
-  // DESIGN §5: the one continuous animation — a soft 2s pulse — and only on
-  // what needs the operator. `prefers-reduced-motion` turns it off globally
-  // (app.css).
-  attention: 'bg-attention-dot animate-pulse',
+  attention: 'bg-attention-dot',
   success: 'bg-success-dot',
   danger: 'bg-danger-dot',
   idle: 'bg-idle-dot',

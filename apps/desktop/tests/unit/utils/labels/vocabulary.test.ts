@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import template from '../../../../../../plugins/port/data/labels.json'
-import { LABEL_DEFAULTS } from '@/utils/labels/defaults'
+import { LABEL_DEFAULTS, paletteOf } from '@/utils/labels/defaults'
 import { LABEL_KEYS, labelName, resolveVocabulary, verifyVocabulary, type RepoLabels } from '@/utils/labels/vocabulary'
 
 // Anti-drift invariant: LABEL_KEYS and LABEL_DEFAULTS agree with the template, both directions.
@@ -35,6 +35,32 @@ describe('LABEL_KEYS / LABEL_DEFAULTS match the shipped template', () => {
     for (const def of LABEL_DEFAULTS) {
       expect(def.role).toBe(byKey.get(def.key)?.role)
     }
+  })
+
+  it("carries every LABEL_DEFAULTS entry's palette equal to the template's, and none for a marker", () => {
+    const byKey = new Map(template.labels.map((l) => [l.key, l]))
+    for (const def of LABEL_DEFAULTS) {
+      expect(def.palette).toBe(byKey.get(def.key)?.palette)
+      if (def.role === 'marker') expect(def.palette).toBeNull()
+      else expect(def.palette).not.toBeNull()
+    }
+  })
+})
+
+describe('paletteOf', () => {
+  it.each([
+    ['ready', 'plan'],
+    ['planReview', 'plan'],
+    ['inProgress', 'implement'],
+    ['reviewing', 'review'],
+    ['revising', 'revise'],
+    ['refreshing', 'refresh'],
+    ['needsHuman', 'needs-you'],
+    ['prOpened', 'done'],
+    ['marker', null],
+    ['autoPlan', null],
+  ] as const)('%s belongs to %s', (key, palette) => {
+    expect(paletteOf(key)).toBe(palette)
   })
 })
 

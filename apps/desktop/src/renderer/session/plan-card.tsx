@@ -3,6 +3,8 @@ import { useState } from 'react'
 import { Button } from '@/renderer/components/ui/button'
 import { Textarea } from '@/renderer/components/ui/textarea'
 import { Markdown } from '@/renderer/components/markdown'
+import { PhaseDot } from '@/renderer/components/phase-dot'
+import { NEEDS_YOU_TONE } from '@/renderer/lib/phase-tone'
 import { PLAN_APPROVE_ACCEPT_EDITS, PLAN_APPROVE_ASK, PLAN_EMPTY, PLAN_FEEDBACK_PLACEHOLDER, PLAN_HEADING, PLAN_KEEP_PLANNING, PLAN_SENDING, planAnswerFailed } from '@/renderer/session/interaction-copy'
 
 interface PlanCardProps {
@@ -19,7 +21,7 @@ export function PlanCard({ plan, sending, error, onApprove, onKeepPlanning }: Pl
   return (
     <div data-slot="plan-card" className="flex flex-col gap-3 rounded-[10px] border border-border bg-card p-3">
       <div className="flex items-center gap-2">
-        <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-attention-dot" />
+        <PhaseDot tone={NEEDS_YOU_TONE} className="size-2" />
         <h3 className="text-body font-semibold">{PLAN_HEADING}</h3>
       </div>
       <div className="max-h-[60vh] overflow-y-auto rounded-md bg-muted p-3">{plan !== null && plan !== '' ? <Markdown source={plan} /> : <p className="text-small text-muted-foreground">{PLAN_EMPTY}</p>}</div>

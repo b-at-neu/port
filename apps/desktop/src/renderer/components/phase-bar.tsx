@@ -5,16 +5,7 @@ import type { LabelKey } from '@/utils/labels/vocabulary'
 import type { PipelineItemKind } from '@/types/github'
 import { PHASE_NAMES } from '@/renderer/lib/phase'
 import { phaseSegmentsFor } from '@/renderer/board/phase-model'
-import type { PhaseSegmentState } from '@/types/board'
-
-// -dot marks the current segment, -pill a decided one (finished/complete).
-const SEGMENT_CLASS: Readonly<Record<PhaseSegmentState, string>> = {
-  finished: 'bg-working-pill',
-  'current-working': 'bg-working-dot',
-  'current-attention': 'bg-attention-dot',
-  complete: 'bg-success-pill',
-  pending: 'bg-accent',
-}
+import { segmentClass } from '@/renderer/components/phase-classes'
 
 interface PhaseBarProps {
   readonly stageKey: LabelKey | null
@@ -38,7 +29,7 @@ export function PhaseBar({ stageKey, kind, merged, className }: PhaseBarProps) {
       <TooltipTrigger asChild>
         <div className={cn('flex gap-0.5', className)} role="img" aria-label={`Phase: ${name}`}>
           {segments.map((segment) => (
-            <span key={segment.phase} aria-hidden="true" className={cn('h-1 w-2.5 rounded-[1px]', SEGMENT_CLASS[segment.state])} />
+            <span key={segment.phase} aria-hidden="true" className={cn('h-1 w-2.5 rounded-[1px]', segmentClass(segment))} />
           ))}
         </div>
       </TooltipTrigger>

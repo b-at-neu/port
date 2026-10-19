@@ -7,6 +7,8 @@ import { cn } from '@/renderer/lib/utils'
 import { needsYouItems } from '@/renderer/board/needs-you'
 import { useIpcQuery } from '@/renderer/data/query'
 import { IconButton } from '@/renderer/components/icon-button'
+import { PhaseDot } from '@/renderer/components/phase-dot'
+import { NEEDS_YOU_TONE } from '@/renderer/lib/phase-tone'
 import { PortMark } from '@/renderer/components/port-mark'
 import { SidebarScreens } from '@/renderer/shell/sidebar-screens'
 import { SidebarPipelines } from '@/renderer/shell/sidebar-pipelines'
@@ -39,7 +41,7 @@ function Rail({ onExpand, needsYouCount }: { readonly onExpand: () => void; read
             <TooltipTrigger asChild>
               <Link to={to} className="relative flex size-8 items-center justify-center rounded-md hover:bg-accent outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={label}>
                 <Icon className="size-4" />
-                {label === 'Needs you' && needsYouCount > 0 ? <span aria-hidden="true" className="absolute top-1 right-1 size-1.5 rounded-full bg-attention-dot animate-pulse" /> : null}
+                {label === 'Needs you' && needsYouCount > 0 ? <PhaseDot tone={NEEDS_YOU_TONE} className="absolute top-1 right-1" /> : null}
               </Link>
             </TooltipTrigger>
             <TooltipContent>{label}</TooltipContent>

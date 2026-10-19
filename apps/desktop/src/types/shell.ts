@@ -1,7 +1,7 @@
 import type { SessionKey } from '@/types/hosting'
 import type { RepoId } from '@/utils/repos'
 import type { DispatchOwner } from '@/types/dispatch'
-import type { PillStatus } from '@/types/components'
+import type { PhaseTone, PillStatus } from '@/types/components'
 
 export interface KeyboardDeps {
   readonly openPalette: (page: 'root') => void
@@ -19,7 +19,9 @@ export interface PipelineSessionRow {
   readonly repoId: RepoId
   readonly number: number
   readonly label: string
-  readonly dot: 'attention' | 'working' | 'idle'
+  readonly tone: PhaseTone
+  /** The dot's screen-reader text: `Needs you`, or the phase name. */
+  readonly statusText: string
   /** Non-`null` for a row backed by one of this app's own stage sessions — the row then links to that session, not the board. */
   readonly sessionKey: SessionKey | null
   /** Non-`null` for a detected row (no app-hosted session) — the row then links to that session's live Transcript. Exactly one of `sessionKey`/`transcript` is non-null. */

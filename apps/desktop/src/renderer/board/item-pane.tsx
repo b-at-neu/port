@@ -8,7 +8,7 @@ import { Button } from '@/renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
 import { DetailPane } from '@/renderer/components/detail-pane'
 import { PhaseList } from '@/renderer/components/phase-list'
-import { StatusPill } from '@/renderer/components/status-pill'
+import { PhasePill } from '@/renderer/components/phase-pill'
 import { OPERATOR_ACTIONS, OPERATOR_DECISIONS } from '@/types/actions'
 import type { OperatorAction } from '@/types/actions'
 import type { BoardItemRow } from '@/types/board'
@@ -22,7 +22,7 @@ import { openDecision } from '@/renderer/decision/controller'
 import { openReviewDialog } from '@/renderer/gate/controller'
 import { itemActionState, runItemAction, subscribeItemActions } from '@/renderer/board/actions'
 import { actionButtonLabel, actionPendingLabel, actionResultCopy, decisionButtonLabel, openPrLinkLabel, openTicketLinkLabel, reviewPlanButtonLabel, stageLinkLabel, stageSessionsSectionLabel } from '@/renderer/board/copy'
-import { actionNoteFor, agentSummaryOf, decisionNoteFor, pillStatusFor, stageTargetsOf } from '@/renderer/board/row-model'
+import { actionNoteFor, agentSummaryOf, decisionNoteFor, phaseToneFor, stageTargetsOf } from '@/renderer/board/row-model'
 import { itemDetailLines } from '@/renderer/board/tick'
 import { phaseDetailsFor } from '@/renderer/board/phase-history'
 import { useIpcQuery } from '@/renderer/data/query'
@@ -124,7 +124,7 @@ export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps
           ) : null}
         </div>
       </div>
-      <StatusPill status={pillStatusFor(row)} label={phaseLabel(row)} />
+      <PhasePill tone={phaseToneFor(row)} label={phaseLabel(row)} />
       <PhaseList stageKey={row.stageLabel?.key ?? null} kind={item.kind} merged={item.mergedAt !== null} details={phaseDetails} extraCurrentLine={agentSummary} />
       {stageLinks.length > 0 ? (
         <div className="flex flex-col gap-1">
