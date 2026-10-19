@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { editAllowGlobs, readStageEditAllow } from '@/main/hosting/stage-allow'
+import { pathOps } from '@/main/platform/paths'
 
 describe('editAllowGlobs', () => {
   it('reads a bare edit tool as every path', () => {
@@ -27,7 +28,7 @@ describe('editAllowGlobs', () => {
 describe('readStageEditAllow', () => {
   it('reads permissions.allow from the worktree settings file', async () => {
     const readJsonFile = (path: string) => {
-      expect(path).toBe('/repo/.claude/settings.json')
+      expect(path).toBe(pathOps.join('/repo', '.claude', 'settings.json'))
       return Promise.resolve({ ok: true, value: { permissions: { allow: ['Edit(apps/**)', 'Bash(git *)'] } } } as never)
     }
     await expect(readStageEditAllow('/repo', { readJsonFile })).resolves.toEqual(['apps/**'])
