@@ -49,6 +49,7 @@ import { createHostedSdk } from '@/main/hosting/sdk'
 import { readHistory } from '@/main/hosting/history'
 import { defaultForkListSessions, titleFork } from '@/main/hosting/fork'
 import { defaultReadExpectedComponentsDeps, readExpectedComponents, resolvePluginRequest } from '@/main/hosting/plugin'
+import { readStageEditAllow } from '@/main/hosting/stage-allow'
 import { resolveStartTitle } from '@/main/hosting/title'
 import { createInMemoryHostingPersistence, DEFAULT_SESSION_LIMIT, SESSION_LIMIT_CEILING } from '@/main/hosting/persist'
 
@@ -83,9 +84,11 @@ export interface HostedStoreDeps {
   readonly onStatus: (snapshot: HostedSessionSnapshot) => void
   /** Forwarded verbatim to every handle's own `onEntries`. */
   readonly onEntries: (delta: SessionEntriesDelta) => void
-  /** Resolved once per `start()`, after the executable and before a key is minted. */
+  /** Resolved once per operator `start()`, after the executable and before a key is minted; a stage start always requests the installed plugin and never calls it. */
   readonly resolvePluginRequest: (repoRoot: string, deps?: { readonly readJsonFile: <T>(path: string) => Promise<FileResult<T>> }) => Promise<PluginRequest>
   readonly readExpectedComponents: (pluginPath: string, deps?: { readonly listDirectory: (path: string) => Promise<FileResult<readonly DirEntry[]>> }) => Promise<ExpectedComponents | null>
+  /** A stage start's own edit-allow globs, read from the stage worktree. */
+  readonly readStageEditAllow: (cwd: string) => Promise<readonly string[]>
   readonly samePath: (a: string, b: string) => boolean
   /** `main/ipc.ts` supplies the real file-backed one; the default here is disk-free, for tests. */
   readonly persistence: HostingPersistence
@@ -107,6 +110,7 @@ export const defaultHostedStoreDeps: HostedStoreDeps = {
   onEntries: () => undefined,
   resolvePluginRequest,
   readExpectedComponents: (pluginPath: string) => readExpectedComponents(pluginPath, defaultReadExpectedComponentsDeps),
+  readStageEditAllow: (cwd: string) => readStageEditAllow(cwd),
   samePath: (a: string, b: string) => pathOps.samePath(a, b),
   persistence: createInMemoryHostingPersistence(),
   removeWorktree: (path, force) => removeSessionWorktreeAt({ path, force, git: defaultGitRunner() }),
@@ -205,13 +209,16 @@ export function createHostedStore(deps: HostedStoreDeps = defaultHostedStoreDeps
     }
 
     const cwd = params.workspace.folder
-    const [credentials, sdk, plugin, history] = await Promise.all([deps.readCredentialsTell(), deps.getSdk(), deps.resolvePluginRequest(cwd), deps.readHistory(params.mode)])
+    const stageParams = params.stage ?? null
+    const pluginRequest: Promise<PluginRequest> = stageParams === null ? deps.resolvePluginRequest(cwd) : Promise.resolve({ source: 'installed' })
+    const editAllowRead: Promise<readonly string[]> = stageParams === null ? Promise.resolve([]) : deps.readStageEditAllow(cwd)
+    const [credentials, sdk, plugin, history, editAllow] = await Promise.all([deps.readCredentialsTell(), deps.getSdk(), pluginRequest, deps.readHistory(params.mode), editAllowRead])
     const sessionKey = toSessionKey(nextId)
     nextId += 1
     const mode = params.mode
     const queryFn: HostedQueryFn = (queryParams) => sdk.query(queryParams)
     const initialTitle = params.initialTitle ?? null
-    const stage = params.stage ?? null
+    const stage = stageParams === null ? null : { ...stageParams, editAllow }
 
     function onSessionId(claudeSessionId: string): void {
       restorable = dropAdopted(restorable, claudeSessionId)

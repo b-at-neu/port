@@ -5,8 +5,8 @@ import type { StagePolicyParams } from '@/main/hosting/stage-policy'
 
 const posixOps = createPathOps('posix', { home: '/home/op' })
 
-function policy(sessionRequiredPaths: readonly string[] = ['CLAUDE.md', '.claude/**'], pathOps: StagePolicyParams['pathOps'] = posixOps) {
-  return stagePolicy({ cwd: '/repo', sessionRequiredPaths, pathOps })
+function policy(sessionRequiredPaths: readonly string[] = ['CLAUDE.md', '.claude/**'], pathOps: StagePolicyParams['pathOps'] = posixOps, editAllow: readonly string[] = []) {
+  return stagePolicy({ cwd: '/repo', sessionRequiredPaths, editAllow, pathOps })
 }
 
 describe('stagePolicy', () => {
@@ -44,7 +44,28 @@ describe('stagePolicy', () => {
 
   it('matches Windows separators the same way, via win32 path ops', () => {
     const winOps = createPathOps('win32', { home: 'C:\\Users\\op' })
-    const winPolicy = stagePolicy({ cwd: 'C:\\repo', sessionRequiredPaths: ['.claude/**'], pathOps: winOps })
+    const winPolicy = stagePolicy({ cwd: 'C:\\repo', sessionRequiredPaths: ['.claude/**'], editAllow: [], pathOps: winOps })
     expect(winPolicy('Write', { file_path: 'C:\\repo\\.claude\\settings.json' })).toEqual({ kind: 'ask', protectedPath: '.claude/settings.json' })
+  })
+
+  describe('an in-worktree edit the repository allowlist already covers', () => {
+    it('pauses as protected instead of denying', () => {
+      expect(policy([], posixOps, ['**'])('Edit', { file_path: '/repo/plugins/port/data/labels.json' })).toEqual({ kind: 'ask', protectedPath: 'plugins/port/data/labels.json' })
+    })
+
+    it('still denies an edit the allowlist does not cover', () => {
+      expect(policy([], posixOps, ['apps/**'])('Edit', { file_path: '/repo/plugins/port/data/labels.json' }).kind).toBe('deny')
+    })
+
+    it('denies an edit outside the worktree even when the allowlist is **', () => {
+      expect(policy([], posixOps, ['**'])('Edit', { file_path: '/elsewhere/labels.json' }).kind).toBe('deny')
+    })
+
+    it('matches under win32 path ops too', () => {
+      const winOps = createPathOps('win32', { home: 'C:\\Users\\op' })
+      const winPolicy = stagePolicy({ cwd: 'C:\\repo', sessionRequiredPaths: [], editAllow: ['plugins/**'], pathOps: winOps })
+      expect(winPolicy('Write', { file_path: 'C:\\repo\\plugins\\port\\data\\labels.json' })).toEqual({ kind: 'ask', protectedPath: 'plugins/port/data/labels.json' })
+      expect(winPolicy('Write', { file_path: 'C:\\repo\\apps\\a.ts' }).kind).toBe('deny')
+    })
   })
 })
