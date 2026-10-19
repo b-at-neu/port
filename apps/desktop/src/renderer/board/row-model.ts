@@ -89,7 +89,7 @@ export function stopAttachedAgentNote(row: BoardItemRow): string | null {
   const agent = row.item.agents[0]
   const name = agent !== undefined ? (agent.stage ?? agent.agentType) : (row.item.sessions.find((s) => s.role === 'implement') !== undefined ? '/port:implement session' : null)
   if (name === null) return null
-  const n = String(row.item.number)
+  const n = String(row.ticket.ref.number)
   return `A ${name} is attached to #${n}. This app didn't dispatch it, so it can't stop it — stop it in the session that did, or run stop #${n} in the cockpit.`
 }
 
@@ -98,7 +98,7 @@ export function actionNoteFor(row: BoardItemRow, state: ItemActionState | undefi
     const availability = row.actions[state.action]
     const base = actionResultCopy({
       action: state.action,
-      number: row.item.number,
+      number: row.ticket.ref.number,
       plan: availability.available ? availability.plan : null,
       currentStageName: row.stageLabel?.name ?? null,
       result: state.result,
@@ -110,7 +110,7 @@ export function actionNoteFor(row: BoardItemRow, state: ItemActionState | undefi
     }
     return base
   }
-  return ownershipNoteFor(row.actions, row.item)
+  return ownershipNoteFor(row.actions, { number: row.ticket.ref.number, assignees: row.item.assignees })
 }
 
 type NextAction =

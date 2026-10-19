@@ -87,7 +87,7 @@ export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps
       toast(
         actionResultCopy({
           action,
-          number: item.number,
+          number: ticket.ref.number,
           plan: availability.available ? availability.plan : null,
           currentStageName: row.stageLabel?.name ?? null,
           result: result.result,
@@ -160,7 +160,7 @@ export function ItemPane({ row, report, owner, records, onClose }: ItemPaneProps
                   </Button>
                 </span>
               </TooltipTrigger>
-              {pendingAction !== null && pendingAction !== action ? <TooltipContent>Another action on #{item.number} is already in progress.</TooltipContent> : null}
+              {pendingAction !== null && pendingAction !== action ? <TooltipContent>Another action on #{ticket.ref.number} is already in progress.</TooltipContent> : null}
             </Tooltip>
           ))}
           {availableDecisions.map((decision) => {
