@@ -1,4 +1,4 @@
-// Pure routing for a stage session's `canUseTool`: `AskUserQuestion`/`ExitPlanMode` always pause, an edit under `sessionRequiredPaths` pauses as protected, and everything else the repository's own allowlist did not already auto-approve is denied at once.
+// Pure routing for a stage session's `canUseTool`: `AskUserQuestion`/`ExitPlanMode` always pause, an edit under `sessionRequiredPaths` or on the worktree's own edit allowlist pauses as protected, and everything else the repository's own allowlist did not already auto-approve is denied at once.
 import type { PathOps } from '@/types/platform'
 import type { StagePolicyDecision } from '@/types/hosting'
 
@@ -24,6 +24,8 @@ export const STAGE_DENY_MESSAGE = "This tool call isn't on this repository's all
 export interface StagePolicyParams {
   readonly cwd: string
   readonly sessionRequiredPaths: readonly string[]
+  /** Edit globs the worktree's own settings already allow; one that still reaches `canUseTool` is a Claude Code safety check, so it pauses rather than denies. */
+  readonly editAllow: readonly string[]
   readonly pathOps: Pick<PathOps, 'contains' | 'resolveFrom' | 'toPosix'>
 }
 
@@ -36,7 +38,7 @@ function editPathOf(toolName: string, input: Readonly<Record<string, unknown>>):
   return typeof raw === 'string' && raw.length > 0 ? raw : null
 }
 
-/** `stagePolicy({ cwd, sessionRequiredPaths, pathOps })` returns the one function a stage session's `canUseTool` consults first. The fail direction is deny — an unrecognized edit shape is never paused, since a pause stalls a slot until an operator notices, and a path outside `cwd` is never protected-ask, since the worktree is the stage's whole world. */
+/** `stagePolicy({ cwd, sessionRequiredPaths, editAllow, pathOps })` returns the one function a stage session's `canUseTool` consults first. The fail direction is deny — an unrecognized edit shape is never paused, since a pause stalls a slot until an operator notices, and a path outside `cwd` is never protected-ask, since the worktree is the stage's whole world. */
 export function stagePolicy(params: StagePolicyParams): (toolName: string, input: Readonly<Record<string, unknown>>) => StagePolicyDecision {
   return (toolName, input) => {
     if (INTERACTION_TOOLS.has(toolName)) return { kind: 'ask', protectedPath: null }
@@ -49,6 +51,8 @@ export function stagePolicy(params: StagePolicyParams): (toolName: string, input
       const relPath = params.pathOps.toPosix(resolved).slice(params.pathOps.toPosix(params.cwd).length + 1)
       const matched = params.sessionRequiredPaths.some((glob) => globToRegExp(glob).test(relPath))
       if (matched) return { kind: 'ask', protectedPath: relPath }
+      const allowlisted = params.editAllow.some((glob) => globToRegExp(glob).test(relPath))
+      if (allowlisted) return { kind: 'ask', protectedPath: relPath }
       return { kind: 'deny', message: STAGE_DENY_MESSAGE }
     }
 

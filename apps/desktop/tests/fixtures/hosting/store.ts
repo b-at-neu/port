@@ -41,6 +41,7 @@ export function baseDeps(overrides: Partial<HostedStoreDeps> = {}): HostedStoreD
     onEntries: vi.fn(),
     resolvePluginRequest: () => Promise.resolve({ source: 'installed' }),
     readExpectedComponents: () => Promise.resolve(null),
+    readStageEditAllow: () => Promise.resolve([]),
     samePath: (a: string, b: string) => a === b,
     persistence: createInMemoryHostingPersistence(),
     removeWorktree: () => Promise.resolve({ outcome: 'removed' }),

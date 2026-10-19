@@ -90,6 +90,31 @@ describe('createHostedStore', () => {
     expect(capturedOptions?.plugins).toEqual([{ type: 'local', path: '/repo/plugins/port' }])
   })
 
+  it('a stage start requests the installed plugin and never resolves a repository one from its own worktree', async () => {
+    const resolvePluginRequest = vi.fn(() => Promise.resolve({ source: 'repository' as const, path: '/repo/plugins/port' }))
+    const readStageEditAllow = vi.fn(() => Promise.resolve(['**']))
+    let capturedOptions: { plugins?: unknown } | undefined
+    const query = (queryParams: { options?: { plugins?: unknown } }): HostedQuery => {
+      capturedOptions = queryParams.options
+      return idleQuery()
+    }
+    const store = createHostedStore(baseDeps({ resolvePluginRequest, readStageEditAllow, getSdk: () => Promise.resolve({ query, renameSession: vi.fn(() => Promise.resolve(undefined)) }) }))
+    const stage = { tag: { agent: 'impl', number: 550, kind: 'issue', trigger: 'planApproved' }, agentName: 'port:impl-agent', model: 'sonnet', sessionRequiredPaths: [] } as const
+    const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE, stage })
+    if (!started.ok) throw new Error('unreachable')
+    expect(resolvePluginRequest).not.toHaveBeenCalled()
+    expect(capturedOptions?.plugins).toBeUndefined()
+    expect(started.snapshot.capabilities.request).toEqual({ source: 'installed' })
+    expect(readStageEditAllow).toHaveBeenCalledWith('/repo')
+  })
+
+  it('an operator start never reads the edit allowlist', async () => {
+    const readStageEditAllow = vi.fn(() => Promise.resolve(['**']))
+    const store = createHostedStore(baseDeps({ readStageEditAllow }))
+    await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
+    expect(readStageEditAllow).not.toHaveBeenCalled()
+  })
+
   it('answerPermission on a live session delegates to that handle, refusing an unknown permission id', async () => {
     const store = createHostedStore(baseDeps())
     const started = await store.start({ repoId: REPO_ID, mode: { kind: 'fresh' }, workspace: WORKSPACE })
