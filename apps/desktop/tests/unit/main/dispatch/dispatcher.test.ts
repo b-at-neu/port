@@ -218,7 +218,7 @@ describe('createDispatcher — stageLiveness', () => {
   })
 
   it('reports live and interrupted descriptions once this app owns the repository', async () => {
-    const interrupted = [{ id: 'i1', repoId: REPO_ID, agent: 'plan' as const, number: 7, kind: 'issue' as const, trigger: 'ready' as const, inFlight: 'planning' as const, model: 'opus', claudeSessionId: null, worktree: { path: '/wt', branch: 'b', baseSha: 's' }, startedAt: 't', reason: 'crash' as const, detail: null, resetsAt: null, costUsd: null }]
+    const interrupted = [{ id: 'i1', repoId: REPO_ID, agent: 'plan' as const, number: 7, kind: 'issue' as const, trigger: 'ready' as const, inFlight: 'planning' as const, model: 'opus', claudeSessionId: null, worktree: { path: '/wt', branch: 'b', baseSha: 's' }, startedAt: 't', interruptedAt: 't', reason: 'crash' as const, detail: null, resetsAt: null, costUsd: null }]
     const dispatcher = createDispatcher(baseDeps({ readOwnership: () => Promise.resolve(OWNED_BY_APP), interrupted: () => interrupted }))
     await dispatcher.consider(snapshotWith([tickReport()]))
     expect(dispatcher.stageLiveness(REPO_ID)).toEqual({ live: [], interrupted: ['plan #7'] })

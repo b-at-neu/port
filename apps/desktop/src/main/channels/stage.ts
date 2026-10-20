@@ -8,6 +8,7 @@ import type { RegistryDeps } from '@/types/registry'
 import { requireReadyRepo } from '@/main/registry'
 import { allowRule } from '@/main/stage/allowlist'
 import { resumeStage, restartStage } from '@/main/stage/recover'
+import { createInterruptedSweeper } from '@/main/stage/sweep'
 
 
 
@@ -56,6 +57,7 @@ function recoverDepsOf(registryDeps: RegistryDeps, roots: ReadonlyMap<RepoId, Re
   return {
     registry: deps.registry,
     store: deps.store,
+    resume: deps.launcher.resume,
     removeWorktree: deps.removeWorktree,
     resolveEntry: (repoId) => roots.get(repoId) ?? null,
     applyRetry: async (interrupted) => {
@@ -78,6 +80,17 @@ export async function resolveStageResume(registryDeps: RegistryDeps, request: Ip
   if (typeof request?.id !== 'string' || request.id === '') throw new Error("'stage:resume' requires a non-empty 'id'")
   const roots = await readyRootsOf(registryDeps, deps)
   return resumeStage(recoverDepsOf(registryDeps, roots, deps), request.id)
+}
+
+/** The sweeper resumes through `resolveStageResume`, so the capacity and root checks exist once. */
+export function createStageSweeper(registryDeps: RegistryDeps, deps: StageChannelDeps, hooks: Pick<Parameters<typeof createInterruptedSweeper>[0], 'fetchItemsByNumber' | 'onChange'>): ReturnType<typeof createInterruptedSweeper> {
+  return createInterruptedSweeper({
+    registry: deps.registry,
+    removeWorktree: deps.removeWorktree,
+    resume: (id) => resolveStageResume(registryDeps, { id }, deps),
+    now: () => new Date(),
+    ...hooks,
+  })
 }
 
 export async function resolveStageRestart(registryDeps: RegistryDeps, request: IpcMap['stage:restart']['request'], deps: StageChannelDeps): Promise<StageRestartResult> {
